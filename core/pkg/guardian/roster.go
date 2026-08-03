@@ -67,8 +67,7 @@ func (r GateRoster) Hash() (string, error) {
 }
 
 // GateRoster reports the gates injected into g. A gate is Active when its
-// dependency is non-nil — exactly the condition each call site tests before
-// running it.
+// dependency or explicit configuration causes its call site to run.
 func (g *Guardian) GateRoster() GateRoster {
 	injected := map[GateID]bool{
 		GateAgentKillSwitch:    g.agentKillSwitch != nil,
@@ -92,7 +91,7 @@ func (g *Guardian) GateRoster() GateRoster {
 		GateScopedStop:         g.scopedStopReader != nil,
 		GateSessionRisk:        g.sessionRiskMemory != nil,
 		GateTemporal:           g.temporal != nil,
-		GateThreat:             g.threatScanner != nil,
+		GateThreat:             g.threatScanner != nil || g.semanticEscalationThresholdBP > 0,
 		GateWarmLease:          g.warmLeaseMgr != nil,
 	}
 

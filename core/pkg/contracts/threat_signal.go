@@ -34,6 +34,10 @@ const (
 	ThreatClassModelManipulation   ThreatClass = "MODEL_MANIPULATION_PATTERN"
 	ThreatClassContextAbuse        ThreatClass = "CONTEXT_ABUSE_PATTERN"
 	ThreatClassIndirectInjection   ThreatClass = "INDIRECT_INJECTION_PATTERN"
+
+	// ThreatClassSemanticSimilarity is an advisory similarity signal. It is
+	// intentionally INFO-only and must never be treated as direct DENY authority.
+	ThreatClassSemanticSimilarity ThreatClass = "SEMANTIC_SIMILARITY_PATTERN"
 )
 
 // ThreatSeverity grades the confidence/impact of a finding.
@@ -137,6 +141,28 @@ type ThreatScanResult struct {
 	// Content hashes for evidence/replay binding
 	RawInputHash        string `json:"raw_input_hash"`
 	NormalizedInputHash string `json:"normalized_input_hash"`
+
+	// Semantic is the deterministic advisory classifier assessment. It is
+	// present even when the classifier is unavailable so evidence never turns
+	// a missing or mismatched model into silent success.
+	Semantic *SemanticThreatAssessment `json:"semantic,omitempty"`
+}
+
+// SemanticThreatAssessment binds deterministic advisory similarity evidence.
+// Scores are integer cosine similarity in basis points (0..10000).
+//
+//nolint:govet // fieldalignment: struct layout matches JSON display order
+type SemanticThreatAssessment struct {
+	Available         bool   `json:"available"`
+	ModelVersion      string `json:"model_version,omitempty"`
+	ModelHash         string `json:"model_hash,omitempty"`
+	ExpectedModelHash string `json:"expected_model_hash,omitempty"`
+	FailureReason     string `json:"failure_reason,omitempty"`
+	ThresholdBP       int    `json:"threshold_bp"`
+	MaxBP             int    `json:"max_bp"`
+	NearestClass      string `json:"nearest_class,omitempty"`
+	Flagged           bool   `json:"flagged"`
+	InputTruncated    bool   `json:"input_truncated,omitempty"`
 }
 
 // NormalizationEvidence records how Unicode normalization transformed the input.
@@ -195,20 +221,67 @@ func (t InputTrustLevel) IsTainted() bool {
 // ThreatScanRef is a lightweight reference to a ThreatScanResult for
 // embedding in EvidencePacks and Receipts without duplicating the full result.
 type ThreatScanRef struct {
-	ScanID       string          `json:"scan_id"`
-	MaxSeverity  ThreatSeverity  `json:"max_severity"`
-	FindingCount int             `json:"finding_count"`
-	TrustLevel   InputTrustLevel `json:"trust_level"`
-	InputHash    string          `json:"input_hash"`
+	ScanID       string                    `json:"scan_id"`
+	MaxSeverity  ThreatSeverity            `json:"max_severity"`
+	FindingCount int                       `json:"finding_count"`
+	TrustLevel   InputTrustLevel           `json:"trust_level"`
+	InputHash    string                    `json:"input_hash"`
+	Semantic     *SemanticThreatAssessment `json:"semantic,omitempty"`
 }
 
 // Ref produces a ThreatScanRef from a ThreatScanResult.
 func (r *ThreatScanResult) Ref() ThreatScanRef {
+	var semantic *SemanticThreatAssessment
+	if r.Semantic != nil {
+		copy := *r.Semantic
+		semantic = &copy
+	}
 	return ThreatScanRef{
 		ScanID:       r.ScanID,
 		MaxSeverity:  r.MaxSeverity,
 		FindingCount: r.FindingCount,
 		TrustLevel:   r.TrustLevel,
 		InputHash:    r.RawInputHash,
+		Semantic:     semantic,
 	}
+}
+
+// PolicyContext returns a CEL-compatible representation of trusted scan
+// evidence. Semantic fields are flattened under threat_scan so policy authors
+// can use stable expressions such as threat_scan.semantic_max_bp >= 7000.
+func (r ThreatScanRef) PolicyContext() map[string]any {
+	context := map[string]any{
+		"scan_id":       r.ScanID,
+		"max_severity":  string(r.MaxSeverity),
+		"finding_count": r.FindingCount,
+		"trust_level":   string(r.TrustLevel),
+		"input_hash":    r.InputHash,
+	}
+	if r.Semantic == nil {
+		return context
+	}
+	semantic := map[string]any{
+		"available":           r.Semantic.Available,
+		"model_version":       r.Semantic.ModelVersion,
+		"model_hash":          r.Semantic.ModelHash,
+		"expected_model_hash": r.Semantic.ExpectedModelHash,
+		"failure_reason":      r.Semantic.FailureReason,
+		"threshold_bp":        r.Semantic.ThresholdBP,
+		"max_bp":              r.Semantic.MaxBP,
+		"nearest_class":       r.Semantic.NearestClass,
+		"flagged":             r.Semantic.Flagged,
+		"input_truncated":     r.Semantic.InputTruncated,
+	}
+	context["semantic"] = semantic
+	context["semantic_available"] = r.Semantic.Available
+	context["semantic_model_version"] = r.Semantic.ModelVersion
+	context["semantic_model_hash"] = r.Semantic.ModelHash
+	context["semantic_expected_model_hash"] = r.Semantic.ExpectedModelHash
+	context["semantic_failure_reason"] = r.Semantic.FailureReason
+	context["semantic_threshold_bp"] = r.Semantic.ThresholdBP
+	context["semantic_max_bp"] = r.Semantic.MaxBP
+	context["semantic_nearest_class"] = r.Semantic.NearestClass
+	context["semantic_flagged"] = r.Semantic.Flagged
+	context["semantic_input_truncated"] = r.Semantic.InputTruncated
+	return context
 }

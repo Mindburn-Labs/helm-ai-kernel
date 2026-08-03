@@ -2,6 +2,8 @@ package guardian
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -24,17 +26,19 @@ const (
 	ContextSourceChannel   = "source_channel"
 	ContextTrustLevel      = "trust_level"
 	ContextDestination     = "destination"
+	ContextThreatScan      = "threat_scan"
 	// ContextAllowTaintedEgress requests a tainted-egress override. It is a
 	// security decision and is honored only with an out-of-band trusted marker;
 	// it must never be passed as a caller argument.
 	ContextAllowTaintedEgress = "allow_tainted_egress"
+	semanticScannerMissing    = "SCANNER_UNAVAILABLE"
 )
 
 // IsReservedSecurityContextKey identifies context keys whose values must be
 // bound by a trusted transport or adapter boundary, never by caller arguments.
 func IsReservedSecurityContextKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextDestination, ContextAllowTaintedEgress:
+	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextDestination, ContextThreatScan, ContextAllowTaintedEgress:
 		return true
 	default:
 		return false
@@ -101,6 +105,10 @@ func (c *InterceptorChain) Execute(ctx context.Context, evalCtx *EvaluationConte
 
 // signDecisionWithContext binds runtime policy details and signs a DecisionRecord using the Guardian's signer.
 func (g *Guardian) signDecisionWithContext(decision *contracts.DecisionRecord, evalCtx *EvaluationContext) error {
+	if evalCtx != nil && evalCtx.ThreatScanResult != nil {
+		ref := evalCtx.ThreatScanResult.Ref()
+		decision.ThreatScan = &ref
+	}
 	bindRuntimePolicyDecision(decision, evalCtx.ActiveSnapshot, evalCtx.PolicyVersion)
 	return g.signer.SignDecision(decision)
 }
@@ -351,6 +359,11 @@ func NewPDPInterceptor(g *Guardian) *PDPInterceptor {
 }
 
 func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContext, next Handler) (*contracts.DecisionRecord, error) {
+	// Threat evidence is reserved for the scanner boundary. Remove any caller
+	// value before an earlier gate or policy implementation can observe it.
+	delete(evalCtx.Request.Context, ContextThreatScan)
+	channel, trustLevel := trustedInputProvenance(evalCtx.Request.Context)
+
 	// Gate 2: Agent identity isolation — deny if credential reuse detected
 	if p.g.isolationChecker != nil && evalCtx.Request.Principal != "" {
 		credHash, ok := trustedContextString(evalCtx.Request.Context, ContextCredentialHash)
@@ -371,10 +384,37 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 		}
 	}
 
-	// Gate 4: Threat signal scan — scan untrusted textual inputs
-	if p.g.threatScanner != nil {
-		channel, trustLevel := trustedInputProvenance(evalCtx.Request.Context)
+	// Gate 4: Threat signal scan — scan untrusted textual inputs. A configured
+	// semantic escalation without a scanner emits explicit unavailable evidence
+	// instead of silently treating the missing scanner as a clean scan.
+	if p.g.threatScanner == nil && p.g.semanticEscalationThresholdBP > 0 {
+		for _, key := range []string{"user_input", "text", "content"} {
+			textToScan, ok := evalCtx.Request.Context[key].(string)
+			if !ok || textToScan == "" {
+				continue
+			}
+			sum := sha256.Sum256([]byte(textToScan))
+			inputHash := "sha256:" + hex.EncodeToString(sum[:])
+			evalCtx.ThreatScanResult = &contracts.ThreatScanResult{
+				ScanID:              "scan-unavailable-" + hex.EncodeToString(sum[:8]),
+				Timestamp:           p.g.clock.Now(),
+				SourceChannel:       channel,
+				TrustLevel:          trustLevel,
+				MaxSeverity:         contracts.ThreatSeverityInfo,
+				FindingCount:        0,
+				RawInputHash:        inputHash,
+				NormalizedInputHash: inputHash,
+				Semantic: &contracts.SemanticThreatAssessment{
+					Available:     false,
+					FailureReason: semanticScannerMissing,
+					ThresholdBP:   p.g.semanticEscalationThresholdBP,
+				},
+			}
+			break
+		}
+	}
 
+	if p.g.threatScanner != nil {
 		// Every scannable text field must be inspected: first-match-only
 		// scanning lets a payload in a secondary field bypass the gate.
 		for _, key := range []string{"user_input", "text", "content"} {
@@ -383,14 +423,13 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				continue
 			}
 			scanResult := p.g.threatScanner.ScanInput(textToScan, channel, trustLevel)
-			if evalCtx.ThreatScanResult == nil || scanResult.FindingCount > 0 {
-				evalCtx.ThreatScanResult = scanResult
-			}
+			evalCtx.ThreatScanResult = preferredThreatScanResult(evalCtx.ThreatScanResult, scanResult)
+			selectedScan := evalCtx.ThreatScanResult
 
-			if scanResult.FindingCount > 0 && trustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(scanResult) {
+			if selectedScan.FindingCount > 0 && trustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(selectedScan) {
 				now := p.g.clock.Now()
 				reasonCode := contracts.ReasonTaintedInputDeny
-				for _, f := range scanResult.Findings {
+				for _, f := range selectedScan.Findings {
 					switch f.Class {
 					case contracts.ThreatClassPromptInjection:
 						reasonCode = contracts.ReasonPromptInjectionDetected
@@ -404,15 +443,16 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 						reasonCode = contracts.ReasonTaintedEgressDeny
 					}
 				}
+				selectedRef := selectedScan.Ref()
 
 				decision := &contracts.DecisionRecord{
 					ID:         newDecisionID(),
 					Timestamp:  now,
 					Verdict:    string(contracts.VerdictDeny),
 					ReasonCode: string(reasonCode),
-					Reason:     fmt.Sprintf("%s: %d findings (max=%s) from %s source", reasonCode, scanResult.FindingCount, scanResult.MaxSeverity, trustLevel),
+					Reason:     fmt.Sprintf("%s: %d findings (max=%s) from %s source", reasonCode, selectedScan.FindingCount, selectedScan.MaxSeverity, trustLevel),
 					InputContext: map[string]any{
-						"threat_scan": scanResult.Ref(),
+						ContextThreatScan: selectedRef.PolicyContext(),
 					},
 				}
 				if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
@@ -422,9 +462,48 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 					decisionBytes, _ := canonicalize.JCS(decision)
 					_, _ = p.g.auditLog.Append("guardian", "THREAT_DENY", decision.ID, string(decisionBytes))
 				}
-				p.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", scanResult.FindingCount))
+				p.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventThreatDetected, fmt.Sprintf("threat scan: %d findings", selectedScan.FindingCount))
 				return decision, nil
 			}
+		}
+	}
+
+	if evalCtx.ThreatScanResult != nil {
+		if evalCtx.Request.Context == nil {
+			evalCtx.Request.Context = make(map[string]interface{})
+		}
+		ref := evalCtx.ThreatScanResult.Ref()
+		evalCtx.Request.Context[ContextThreatScan] = ref.PolicyContext()
+
+		semantic := evalCtx.ThreatScanResult.Semantic
+		thresholdBP := p.g.semanticEscalationThresholdBP
+		if thresholdBP > 0 && semantic != nil && (!semantic.Available || semantic.InputTruncated || semantic.MaxBP >= thresholdBP) {
+			reason := fmt.Sprintf("%s: semantic score %d bp meets tenant escalation threshold %d bp; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.MaxBP, thresholdBP, semantic.ModelHash)
+			if !semantic.Available {
+				if semantic.FailureReason == semanticScannerMissing {
+					reason = fmt.Sprintf("%s: configured semantic scanner is unavailable; failure=%s", contracts.ReasonSemanticThreatEscalate, semantic.FailureReason)
+				} else {
+					reason = fmt.Sprintf("%s: configured semantic model is unavailable; failure=%s model=%s expected=%s", contracts.ReasonSemanticThreatEscalate, semantic.FailureReason, semantic.ModelHash, semantic.ExpectedModelHash)
+				}
+			} else if semantic.InputTruncated {
+				reason = fmt.Sprintf("%s: input exceeds the deterministic semantic coverage bound; model=%s", contracts.ReasonSemanticThreatEscalate, semantic.ModelHash)
+			}
+			decision := &contracts.DecisionRecord{
+				ID:           newDecisionID(),
+				Timestamp:    p.g.clock.Now(),
+				Verdict:      string(contracts.VerdictEscalate),
+				ReasonCode:   string(contracts.ReasonSemanticThreatEscalate),
+				Reason:       reason,
+				InputContext: evalCtx.Request.Context,
+			}
+			if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
+				return nil, fmt.Errorf("failed to sign semantic-escalation decision: %w", err)
+			}
+			if p.g.auditLog != nil {
+				decisionBytes, _ := canonicalize.JCS(decision)
+				_, _ = p.g.auditLog.Append("guardian", "SEMANTIC_THREAT_ESCALATE", decision.ID, string(decisionBytes))
+			}
+			return decision, nil
 		}
 	}
 
@@ -613,6 +692,72 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 	}
 
 	return next(ctx, evalCtx)
+}
+
+// preferredThreatScanResult selects a deterministic, safety-preserving result
+// across multiple caller-controlled text fields. Literal high risk wins;
+// otherwise unavailable or truncated semantic coverage wins before score.
+func preferredThreatScanResult(current, candidate *contracts.ThreatScanResult) *contracts.ThreatScanResult {
+	if current == nil {
+		return candidate
+	}
+	if candidate == nil {
+		return current
+	}
+	currentHighRisk := current.TrustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(current)
+	candidateHighRisk := candidate.TrustLevel.IsTainted() && threatscan.ContainsHighRiskFindings(candidate)
+	if currentHighRisk != candidateHighRisk {
+		if candidateHighRisk {
+			return candidate
+		}
+		return current
+	}
+	currentSemanticSafety := semanticSafetyPriority(current)
+	candidateSemanticSafety := semanticSafetyPriority(candidate)
+	if currentSemanticSafety != candidateSemanticSafety {
+		if candidateSemanticSafety > currentSemanticSafety {
+			return candidate
+		}
+		return current
+	}
+	currentSemanticBP := semanticMaxBP(current)
+	candidateSemanticBP := semanticMaxBP(candidate)
+	if currentSemanticBP != candidateSemanticBP {
+		if candidateSemanticBP > currentSemanticBP {
+			return candidate
+		}
+		return current
+	}
+	if current.FindingCount != candidate.FindingCount {
+		if candidate.FindingCount > current.FindingCount {
+			return candidate
+		}
+		return current
+	}
+	if candidate.RawInputHash < current.RawInputHash {
+		return candidate
+	}
+	return current
+}
+
+func semanticSafetyPriority(result *contracts.ThreatScanResult) int {
+	if result == nil || result.Semantic == nil {
+		return 0
+	}
+	if !result.Semantic.Available {
+		return 2
+	}
+	if result.Semantic.InputTruncated {
+		return 1
+	}
+	return 0
+}
+
+func semanticMaxBP(result *contracts.ThreatScanResult) int {
+	if result == nil || result.Semantic == nil || !result.Semantic.Available {
+		return 0
+	}
+	return result.Semantic.MaxBP
 }
 
 func (p *PDPInterceptor) deny(evalCtx *EvaluationContext, reasonCode contracts.ReasonCode, reason string) (*contracts.DecisionRecord, error) {

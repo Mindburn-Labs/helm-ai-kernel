@@ -143,6 +143,7 @@ func TestClosing_ReasonCode_ThreatSignal(t *testing.T) {
 		ReasonUnicodeObfuscationDetected, ReasonTaintedCredentialDeny,
 		ReasonTaintedPublishDeny, ReasonTaintedInvokeDeny,
 		ReasonTaintedEgressDeny, ReasonTaintedEscalate,
+		ReasonSemanticThreatEscalate,
 	} {
 		t.Run(string(rc), func(t *testing.T) {
 			if !IsCanonicalReasonCode(string(rc)) {

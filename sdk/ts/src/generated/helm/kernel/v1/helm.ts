@@ -96,6 +96,7 @@ export enum ReasonCode {
   REASON_CODE_VERIFICATION_FAILURE = 15,
   REASON_CODE_TENANT_ISOLATION = 16,
   REASON_CODE_JURISDICTION_VIOLATION = 17,
+  REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED = 18,
   UNRECOGNIZED = -1,
 }
 
@@ -155,6 +156,9 @@ export function reasonCodeFromJSON(object: any): ReasonCode {
     case 17:
     case "REASON_CODE_JURISDICTION_VIOLATION":
       return ReasonCode.REASON_CODE_JURISDICTION_VIOLATION;
+    case 18:
+    case "REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED":
+      return ReasonCode.REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -200,6 +204,8 @@ export function reasonCodeToJSON(object: ReasonCode): string {
       return "REASON_CODE_TENANT_ISOLATION";
     case ReasonCode.REASON_CODE_JURISDICTION_VIOLATION:
       return "REASON_CODE_JURISDICTION_VIOLATION";
+    case ReasonCode.REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED:
+      return "REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED";
     case ReasonCode.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -212,6 +218,37 @@ export interface Effect {
   /** JSON-encoded parameters */
   params: Uint8Array;
   budgetId: string;
+}
+
+/**
+ * Deterministic advisory-classifier evidence. This is informational by
+ * default; a Guardian policy may only escalate an explicitly configured score,
+ * coverage, or availability condition.
+ */
+export interface SemanticThreatAssessment {
+  available: boolean;
+  modelVersion: string;
+  modelHash: string;
+  expectedModelHash: string;
+  failureReason: string;
+  thresholdBp: number;
+  maxBp: number;
+  nearestClass: string;
+  flagged: boolean;
+  inputTruncated: boolean;
+}
+
+/**
+ * Guardian-owned threat evidence bound by decision_record.v3 whenever it is
+ * present. The input hash is a reference, never caller-controlled policy data.
+ */
+export interface ThreatScanReference {
+  scanId: string;
+  maxSeverity: string;
+  findingCount: number;
+  trustLevel: string;
+  inputHash: string;
+  semantic: SemanticThreatAssessment | undefined;
 }
 
 export interface DecisionRecord {
@@ -233,10 +270,11 @@ export interface DecisionRecord {
    * evidence. Optional; outside the decision signature until HELM-303.
    */
   correlationId: string;
-  /** HELM-303 decision.v2 signing envelope fields. */
+  /** HELM-303 decision.v2 / decision.v3 signing envelope fields. */
   signatureVersion: string;
   phenotypeHash: string;
   policyContentHash: string;
+  threatScan: ThreatScanReference | undefined;
 }
 
 export interface AuthorizedExecutionIntent {
@@ -476,6 +514,415 @@ export const Effect: MessageFns<Effect> = {
   },
 };
 
+function createBaseSemanticThreatAssessment(): SemanticThreatAssessment {
+  return {
+    available: false,
+    modelVersion: "",
+    modelHash: "",
+    expectedModelHash: "",
+    failureReason: "",
+    thresholdBp: 0,
+    maxBp: 0,
+    nearestClass: "",
+    flagged: false,
+    inputTruncated: false,
+  };
+}
+
+export const SemanticThreatAssessment: MessageFns<SemanticThreatAssessment> = {
+  encode(message: SemanticThreatAssessment, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.available !== false) {
+      writer.uint32(8).bool(message.available);
+    }
+    if (message.modelVersion !== "") {
+      writer.uint32(18).string(message.modelVersion);
+    }
+    if (message.modelHash !== "") {
+      writer.uint32(26).string(message.modelHash);
+    }
+    if (message.expectedModelHash !== "") {
+      writer.uint32(34).string(message.expectedModelHash);
+    }
+    if (message.failureReason !== "") {
+      writer.uint32(42).string(message.failureReason);
+    }
+    if (message.thresholdBp !== 0) {
+      writer.uint32(48).uint32(message.thresholdBp);
+    }
+    if (message.maxBp !== 0) {
+      writer.uint32(56).uint32(message.maxBp);
+    }
+    if (message.nearestClass !== "") {
+      writer.uint32(66).string(message.nearestClass);
+    }
+    if (message.flagged !== false) {
+      writer.uint32(72).bool(message.flagged);
+    }
+    if (message.inputTruncated !== false) {
+      writer.uint32(80).bool(message.inputTruncated);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SemanticThreatAssessment {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSemanticThreatAssessment();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.available = reader.bool();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.modelVersion = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.modelHash = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.expectedModelHash = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.failureReason = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.thresholdBp = reader.uint32();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.maxBp = reader.uint32();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.nearestClass = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.flagged = reader.bool();
+          continue;
+        }
+        case 10: {
+          if (tag !== 80) {
+            break;
+          }
+
+          message.inputTruncated = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SemanticThreatAssessment {
+    return {
+      available: isSet(object.available) ? globalThis.Boolean(object.available) : false,
+      modelVersion: isSet(object.modelVersion)
+        ? globalThis.String(object.modelVersion)
+        : isSet(object.model_version)
+        ? globalThis.String(object.model_version)
+        : "",
+      modelHash: isSet(object.modelHash)
+        ? globalThis.String(object.modelHash)
+        : isSet(object.model_hash)
+        ? globalThis.String(object.model_hash)
+        : "",
+      expectedModelHash: isSet(object.expectedModelHash)
+        ? globalThis.String(object.expectedModelHash)
+        : isSet(object.expected_model_hash)
+        ? globalThis.String(object.expected_model_hash)
+        : "",
+      failureReason: isSet(object.failureReason)
+        ? globalThis.String(object.failureReason)
+        : isSet(object.failure_reason)
+        ? globalThis.String(object.failure_reason)
+        : "",
+      thresholdBp: isSet(object.thresholdBp)
+        ? globalThis.Number(object.thresholdBp)
+        : isSet(object.threshold_bp)
+        ? globalThis.Number(object.threshold_bp)
+        : 0,
+      maxBp: isSet(object.maxBp)
+        ? globalThis.Number(object.maxBp)
+        : isSet(object.max_bp)
+        ? globalThis.Number(object.max_bp)
+        : 0,
+      nearestClass: isSet(object.nearestClass)
+        ? globalThis.String(object.nearestClass)
+        : isSet(object.nearest_class)
+        ? globalThis.String(object.nearest_class)
+        : "",
+      flagged: isSet(object.flagged) ? globalThis.Boolean(object.flagged) : false,
+      inputTruncated: isSet(object.inputTruncated)
+        ? globalThis.Boolean(object.inputTruncated)
+        : isSet(object.input_truncated)
+        ? globalThis.Boolean(object.input_truncated)
+        : false,
+    };
+  },
+
+  toJSON(message: SemanticThreatAssessment): unknown {
+    const obj: any = {};
+    if (message.available !== false) {
+      obj.available = message.available;
+    }
+    if (message.modelVersion !== "") {
+      obj.modelVersion = message.modelVersion;
+    }
+    if (message.modelHash !== "") {
+      obj.modelHash = message.modelHash;
+    }
+    if (message.expectedModelHash !== "") {
+      obj.expectedModelHash = message.expectedModelHash;
+    }
+    if (message.failureReason !== "") {
+      obj.failureReason = message.failureReason;
+    }
+    if (message.thresholdBp !== 0) {
+      obj.thresholdBp = Math.round(message.thresholdBp);
+    }
+    if (message.maxBp !== 0) {
+      obj.maxBp = Math.round(message.maxBp);
+    }
+    if (message.nearestClass !== "") {
+      obj.nearestClass = message.nearestClass;
+    }
+    if (message.flagged !== false) {
+      obj.flagged = message.flagged;
+    }
+    if (message.inputTruncated !== false) {
+      obj.inputTruncated = message.inputTruncated;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SemanticThreatAssessment>, I>>(base?: I): SemanticThreatAssessment {
+    return SemanticThreatAssessment.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SemanticThreatAssessment>, I>>(object: I): SemanticThreatAssessment {
+    const message = createBaseSemanticThreatAssessment();
+    message.available = object.available ?? false;
+    message.modelVersion = object.modelVersion ?? "";
+    message.modelHash = object.modelHash ?? "";
+    message.expectedModelHash = object.expectedModelHash ?? "";
+    message.failureReason = object.failureReason ?? "";
+    message.thresholdBp = object.thresholdBp ?? 0;
+    message.maxBp = object.maxBp ?? 0;
+    message.nearestClass = object.nearestClass ?? "";
+    message.flagged = object.flagged ?? false;
+    message.inputTruncated = object.inputTruncated ?? false;
+    return message;
+  },
+};
+
+function createBaseThreatScanReference(): ThreatScanReference {
+  return { scanId: "", maxSeverity: "", findingCount: 0, trustLevel: "", inputHash: "", semantic: undefined };
+}
+
+export const ThreatScanReference: MessageFns<ThreatScanReference> = {
+  encode(message: ThreatScanReference, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.scanId !== "") {
+      writer.uint32(10).string(message.scanId);
+    }
+    if (message.maxSeverity !== "") {
+      writer.uint32(18).string(message.maxSeverity);
+    }
+    if (message.findingCount !== 0) {
+      writer.uint32(24).uint32(message.findingCount);
+    }
+    if (message.trustLevel !== "") {
+      writer.uint32(34).string(message.trustLevel);
+    }
+    if (message.inputHash !== "") {
+      writer.uint32(42).string(message.inputHash);
+    }
+    if (message.semantic !== undefined) {
+      SemanticThreatAssessment.encode(message.semantic, writer.uint32(50).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ThreatScanReference {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseThreatScanReference();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.scanId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.maxSeverity = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.findingCount = reader.uint32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.trustLevel = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.inputHash = reader.string();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.semantic = SemanticThreatAssessment.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ThreatScanReference {
+    return {
+      scanId: isSet(object.scanId)
+        ? globalThis.String(object.scanId)
+        : isSet(object.scan_id)
+        ? globalThis.String(object.scan_id)
+        : "",
+      maxSeverity: isSet(object.maxSeverity)
+        ? globalThis.String(object.maxSeverity)
+        : isSet(object.max_severity)
+        ? globalThis.String(object.max_severity)
+        : "",
+      findingCount: isSet(object.findingCount)
+        ? globalThis.Number(object.findingCount)
+        : isSet(object.finding_count)
+        ? globalThis.Number(object.finding_count)
+        : 0,
+      trustLevel: isSet(object.trustLevel)
+        ? globalThis.String(object.trustLevel)
+        : isSet(object.trust_level)
+        ? globalThis.String(object.trust_level)
+        : "",
+      inputHash: isSet(object.inputHash)
+        ? globalThis.String(object.inputHash)
+        : isSet(object.input_hash)
+        ? globalThis.String(object.input_hash)
+        : "",
+      semantic: isSet(object.semantic) ? SemanticThreatAssessment.fromJSON(object.semantic) : undefined,
+    };
+  },
+
+  toJSON(message: ThreatScanReference): unknown {
+    const obj: any = {};
+    if (message.scanId !== "") {
+      obj.scanId = message.scanId;
+    }
+    if (message.maxSeverity !== "") {
+      obj.maxSeverity = message.maxSeverity;
+    }
+    if (message.findingCount !== 0) {
+      obj.findingCount = Math.round(message.findingCount);
+    }
+    if (message.trustLevel !== "") {
+      obj.trustLevel = message.trustLevel;
+    }
+    if (message.inputHash !== "") {
+      obj.inputHash = message.inputHash;
+    }
+    if (message.semantic !== undefined) {
+      obj.semantic = SemanticThreatAssessment.toJSON(message.semantic);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ThreatScanReference>, I>>(base?: I): ThreatScanReference {
+    return ThreatScanReference.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ThreatScanReference>, I>>(object: I): ThreatScanReference {
+    const message = createBaseThreatScanReference();
+    message.scanId = object.scanId ?? "";
+    message.maxSeverity = object.maxSeverity ?? "";
+    message.findingCount = object.findingCount ?? 0;
+    message.trustLevel = object.trustLevel ?? "";
+    message.inputHash = object.inputHash ?? "";
+    message.semantic = (object.semantic !== undefined && object.semantic !== null)
+      ? SemanticThreatAssessment.fromPartial(object.semantic)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseDecisionRecord(): DecisionRecord {
   return {
     id: "",
@@ -494,6 +941,7 @@ function createBaseDecisionRecord(): DecisionRecord {
     signatureVersion: "",
     phenotypeHash: "",
     policyContentHash: "",
+    threatScan: undefined,
   };
 }
 
@@ -546,6 +994,9 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     }
     if (message.policyContentHash !== "") {
       writer.uint32(130).string(message.policyContentHash);
+    }
+    if (message.threatScan !== undefined) {
+      ThreatScanReference.encode(message.threatScan, writer.uint32(138).fork()).join();
     }
     return writer;
   },
@@ -685,6 +1136,14 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
           message.policyContentHash = reader.string();
           continue;
         }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.threatScan = ThreatScanReference.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -756,6 +1215,11 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.policy_content_hash)
         ? globalThis.String(object.policy_content_hash)
         : "",
+      threatScan: isSet(object.threatScan)
+        ? ThreatScanReference.fromJSON(object.threatScan)
+        : isSet(object.threat_scan)
+        ? ThreatScanReference.fromJSON(object.threat_scan)
+        : undefined,
     };
   },
 
@@ -809,6 +1273,9 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.policyContentHash !== "") {
       obj.policyContentHash = message.policyContentHash;
     }
+    if (message.threatScan !== undefined) {
+      obj.threatScan = ThreatScanReference.toJSON(message.threatScan);
+    }
     return obj;
   },
 
@@ -833,6 +1300,9 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.signatureVersion = object.signatureVersion ?? "";
     message.phenotypeHash = object.phenotypeHash ?? "";
     message.policyContentHash = object.policyContentHash ?? "";
+    message.threatScan = (object.threatScan !== undefined && object.threatScan !== null)
+      ? ThreatScanReference.fromPartial(object.threatScan)
+      : undefined;
     return message;
   },
 };

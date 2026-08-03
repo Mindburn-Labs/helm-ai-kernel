@@ -254,6 +254,22 @@ type decisionV2SigningEnvelope struct {
 	EffectDigest      string `json:"effect_digest"`
 }
 
+// decisionV3SigningEnvelope extends the V2 signed view with a digest of the
+// complete Guardian-owned typed threat reference. The reference is
+// canonicalized separately so the decision preimage remains compact and never
+// exports semantic source material through a signature payload.
+type decisionV3SigningEnvelope struct {
+	SignatureVersion  string `json:"signature_version"`
+	ID                string `json:"id"`
+	Verdict           string `json:"verdict"`
+	ReasonCode        string `json:"reason_code"`
+	ReasonHash        string `json:"reason_hash"`
+	PhenotypeHash     string `json:"phenotype_hash"`
+	PolicyContentHash string `json:"policy_content_hash"`
+	EffectDigest      string `json:"effect_digest"`
+	ThreatScanHash    string `json:"threat_scan_hash"`
+}
+
 // HashReason is the digest under which free-text Reason is attested in the V2
 // decision preimage.
 //
@@ -299,6 +315,39 @@ func CanonicalizeDecisionV2(id, verdict, reason, reasonCode, phenotypeHash, poli
 	payload = appendJCSQuotedString(payload, verdict)
 	payload = append(payload, '}')
 	return payload, nil
+}
+
+func decisionThreatScanHash(ref *contracts.ThreatScanRef) (string, error) {
+	if ref == nil {
+		return "", fmt.Errorf("decision.v3 requires threat scan evidence")
+	}
+	payload, err := canonicalize.JCS(ref)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize decision threat scan: %w", err)
+	}
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// CanonicalizeDecisionV3 binds the V2 governance fields and the canonical
+// Guardian threat reference. Its presence is intentional: V3 is used only for
+// evidence-bearing decisions, while existing decisions retain their V2 bytes.
+func CanonicalizeDecisionV3(id, verdict, reason, reasonCode, phenotypeHash, policyContentHash, effectDigest string, threatScan *contracts.ThreatScanRef) ([]byte, error) {
+	threatScanHash, err := decisionThreatScanHash(threatScan)
+	if err != nil {
+		return nil, err
+	}
+	return canonicalize.JCS(decisionV3SigningEnvelope{
+		SignatureVersion:  contracts.DecisionRecordSignatureV3,
+		ID:                id,
+		Verdict:           verdict,
+		ReasonCode:        reasonCode,
+		ReasonHash:        HashReason(reason),
+		PhenotypeHash:     phenotypeHash,
+		PolicyContentHash: policyContentHash,
+		EffectDigest:      effectDigest,
+		ThreatScanHash:    threatScanHash,
+	})
 }
 
 // appendJCSQuotedString appends an RFC 8785 JSON string. The V2 decision
@@ -348,6 +397,10 @@ func DecisionSigningPayload(d *contracts.DecisionRecord) ([]byte, error) {
 	if d == nil {
 		return nil, fmt.Errorf("decision is nil")
 	}
+	if d.ThreatScan != nil {
+		d.SignatureVersion = contracts.DecisionRecordSignatureV3
+		return CanonicalizeDecisionV3(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.ThreatScan)
+	}
 	d.SignatureVersion = contracts.DecisionRecordSignatureV2
 	return CanonicalizeDecisionV2(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
 }
@@ -363,6 +416,8 @@ func DecisionVerifyPayload(d *contracts.DecisionRecord) ([]byte, error) {
 		return []byte(CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)), nil
 	case contracts.DecisionRecordSignatureV2:
 		return CanonicalizeDecisionV2(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
+	case contracts.DecisionRecordSignatureV3:
+		return CanonicalizeDecisionV3(d.ID, d.Verdict, d.Reason, d.ReasonCode, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest, d.ThreatScan)
 	default:
 		return nil, fmt.Errorf("unsupported decision signature version %q", d.SignatureVersion)
 	}

@@ -27,6 +27,7 @@
         "rust-sdk",
         "java-sdk",
         "json-schemas",
+        "contract-breaking-self-test",
         "proto-breaking",
         "openapi-breaking"
       ]
@@ -62,6 +63,7 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
+        "contract-breaking-self-test",
         "proto-breaking",
         "deployment-smoke",
         "release-smoke"
@@ -97,7 +99,8 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
-        "proto-breaking",
+        "contract-breaking-self-test",
+        "contract-breaking-release",
         "benchmark-report",
         "release-readiness",
         "reproducible-binaries",
@@ -507,6 +510,38 @@
       "paths": [
         "protocols/policy-schema/**",
         "buf.yaml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "contract-breaking-self-test",
+      "title": "Contract-breaking gate regression test",
+      "description": "Proves unavailable bases and differ execution failures fail closed, while mutable label-style input cannot override a break.",
+      "command": "make test-contract-breaking",
+      "timeout_seconds": 120,
+      "paths": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        "scripts/ci/contract_breaking.sh",
+        "scripts/ci/test_contract_breaking.sh",
+        "scripts/ci/quality-gates.json",
+        "scripts/ci/quality.py",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "contract-breaking-release",
+      "title": "Prior-release contract-breaking check",
+      "description": "Diffs OpenAPI and policy-schema contracts against the commit resolved from the immutable prior release tag.",
+      "command": "make contract-breaking-release",
+      "timeout_seconds": 600,
+      "paths": [
+        ".github/workflows/release.yml",
+        "api/openapi/**",
+        "protocols/specs/effects/openapi.yaml",
+        "protocols/policy-schema/**",
+        "VERSION",
+        "scripts/ci/contract_breaking.sh",
         "Makefile"
       ]
     },

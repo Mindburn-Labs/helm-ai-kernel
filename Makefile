@@ -1,5 +1,6 @@
 .PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 .PHONY: test-generated-spec-approval-ceremony-postgres
+.PHONY: contract-breaking-release test-contract-breaking
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -182,6 +183,13 @@ proto-breaking:
 openapi-breaking:
 	bash scripts/ci/contract_breaking.sh openapi
 
+contract-breaking-release:
+	bash scripts/ci/contract_breaking.sh openapi release
+	bash scripts/ci/contract_breaking.sh proto release
+
+test-contract-breaking:
+	bash scripts/ci/test_contract_breaking.sh
+
 docker-verify:
 	docker build -f Dockerfile -t helm-ai-kernel:verify-root .
 	docker build -f Dockerfile.slim -t helm-ai-kernel:verify-slim .
@@ -189,7 +197,7 @@ docker-verify:
 	docker build -f core/Dockerfile.api -t helm-ai-kernel:verify-core-api .
 	docker build -f oss-fuzz/Dockerfile -t helm-ai-kernel:verify-oss-fuzz oss-fuzz
 
-release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone sdk-examples-smoke proto-lint proto-breaking docker-verify conformance-release-gate deployment-smoke release-smoke
+release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone sdk-examples-smoke proto-lint contract-breaking-release docker-verify conformance-release-gate deployment-smoke release-smoke
 	@echo "✅ Release readiness gate passed"
 
 crucible: build

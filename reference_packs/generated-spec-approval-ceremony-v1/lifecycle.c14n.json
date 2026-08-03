@@ -1,0 +1,1 @@
+{"approval_id":"approval-42424242424242424242424242424242","first_consume_version":5,"recovery_matches_consumption":true,"replay_expected_error":"transition_conflict","states":["HOLD_PENDING","CHALLENGE_ISSUED","QUORUM_VERIFIED","GRANT_ISSUED","CONSUMED"]}

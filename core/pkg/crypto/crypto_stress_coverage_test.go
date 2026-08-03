@@ -1,3 +1,5 @@
+// quantum_posture: test-only coverage of existing cryptographic code paths;
+// it makes no production deployment, hybrid, or post-quantum assurance claim.
 package crypto
 
 import (
@@ -94,7 +96,7 @@ func TestStress_KeyRing20Keys(t *testing.T) {
 		ring.AddKey(signer)
 	}
 	d := &contracts.DecisionRecord{ID: "d-1", Verdict: "ALLOW", Reason: "ok"}
-	if err := ring.SignDecision(d); err != nil {
+	if err := ring.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("sign decision: %v", err)
 	}
 	if d.Signature == "" {
@@ -108,7 +110,7 @@ func TestStress_KeyRingRevoke(t *testing.T) {
 	ring.AddKey(signer)
 	ring.RevokeKey("revoke-key")
 	d := &contracts.DecisionRecord{ID: "d-2", Verdict: "DENY", Reason: "test"}
-	err := ring.SignDecision(d)
+	err := ring.SignDecision(testDecisionV4Authority(d))
 	if err == nil {
 		t.Fatal("signing with empty ring should fail")
 	}
@@ -215,7 +217,7 @@ func TestStress_HSM10CertKeys(t *testing.T) {
 func TestStress_Ed25519SignDecision(t *testing.T) {
 	signer, _ := NewEd25519Signer("ed-dec")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
-	if err := signer.SignDecision(d); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("sign decision: %v", err)
 	}
 	ok, _ := signer.VerifyDecision(d)
@@ -253,7 +255,7 @@ func TestStress_Ed25519SignReceipt(t *testing.T) {
 func TestStress_MLDSASignDecision(t *testing.T) {
 	signer, _ := NewMLDSASigner("pq-dec")
 	d := &contracts.DecisionRecord{ID: "d2", Verdict: "DENY", Reason: "blocked"}
-	if err := signer.SignDecision(d); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("sign decision: %v", err)
 	}
 }
@@ -363,7 +365,7 @@ func TestStress_Ed25519FromKey(t *testing.T) {
 func TestStress_KeyRingEmpty(t *testing.T) {
 	ring := NewKeyRing()
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW"}
-	err := ring.SignDecision(d)
+	err := ring.SignDecision(testDecisionV4Authority(d))
 	if err == nil {
 		t.Fatal("empty ring should fail signing")
 	}
@@ -409,7 +411,7 @@ func TestStress_HSMKeyDir(t *testing.T) {
 func TestStress_VerifierDecision(t *testing.T) {
 	signer, _ := NewEd25519Signer("vd-key")
 	d := &contracts.DecisionRecord{ID: "d-vd", Verdict: "ALLOW", Reason: "ok"}
-	_ = signer.SignDecision(d)
+	_ = signer.SignDecision(testDecisionV4Authority(d))
 	verifier, _ := NewEd25519Verifier(signer.PublicKeyBytes())
 	ok, err := verifier.VerifyDecision(d)
 	if err != nil || !ok {

@@ -61,8 +61,8 @@
   "api_contract": {
     "schema_version": 1,
     "source_path": "api/openapi/helm.openapi.yaml",
-    "content_sha256": "sha256:52d13961a0658dcd436031e6aa99585094517d0b4c5cb4f97a6b42e510952a58",
-    "git_blob_sha1": "06b64e22ab7f97298a72b016587ea604fd2a7181",
+    "content_sha256": "sha256:58db17bc5abe0b852c88c9c6a90d5d7311136faba1b1e9deebd5f725a9c0b087",
+    "git_blob_sha1": "72b26799609ae8f72cc596c2b2ffe4caf65f2f9b",
     "public_operations": [
       {"method": "GET", "path": "/api/health", "operation_id": "getPublicDemoHealth"},
       {"method": "POST", "path": "/api/demo/run", "operation_id": "runPublicDemo"},

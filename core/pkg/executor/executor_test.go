@@ -34,6 +34,25 @@ func (staticDriver) Execute(context.Context, string, map[string]any) (any, error
 	return "result", nil
 }
 
+// testDecisionAuthority makes test-created signed decisions explicit about
+// their evaluated authority tuple. Runtime callers must supply their own
+// actual tuple before a V4 signature can be issued.
+func testDecisionAuthority(decision *contracts.DecisionRecord) *contracts.DecisionRecord {
+	if decision == nil {
+		return nil
+	}
+	if decision.SubjectID == "" {
+		decision.SubjectID = "test:executor"
+	}
+	if decision.Action == "" {
+		decision.Action = "EXECUTE_TOOL"
+	}
+	if decision.Resource == "" {
+		decision.Resource = "test:executor-resource"
+	}
+	return decision
+}
+
 // MemoryReceiptStore for tests
 type MemoryReceiptStore struct {
 	receipts map[string]*contracts.Receipt
@@ -320,7 +339,7 @@ func TestSafeExecutor_Gating(t *testing.T) {
 		EffectDigest:      testEffectDigest(t, effect),
 	}
 	// Sign the decision so it passes signature validation
-	if err := signer.SignDecision(validDec); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(validDec)); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
 	}
 
@@ -372,6 +391,57 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 }
 
+func TestSafeExecutorRejectsLegacyDecisionAuthorityAfterVerification(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("legacy-authority")
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver := &MockDriver{}
+	executor := NewSafeExecutor(signer, signer, driver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil)
+	effect := &contracts.Effect{
+		EffectID:   "effect-legacy-authority",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "github.create_issue"},
+	}
+	legacy := &contracts.DecisionRecord{
+		ID:               "decision-legacy-authority",
+		Verdict:          string(contracts.VerdictAllow),
+		Reason:           "historical allow",
+		EffectDigest:     testEffectDigest(t, effect),
+		SignatureVersion: contracts.DecisionRecordSignatureV2,
+		SignatureType:    crypto.SigPrefixEd25519 + crypto.SigSeparator + "legacy-authority",
+	}
+	payload, err := crypto.CanonicalizeDecisionV2(legacy.ID, legacy.Verdict, legacy.Reason, legacy.ReasonCode, legacy.PhenotypeHash, legacy.PolicyContentHash, legacy.EffectDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy.Signature, err = signer.Sign(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid, err := signer.VerifyDecision(legacy); err != nil || !valid {
+		t.Fatalf("legacy decision no longer verifies: valid=%t err=%v", valid, err)
+	}
+
+	intent := &contracts.AuthorizedExecutionIntent{
+		ID:               "intent-legacy-authority",
+		DecisionID:       legacy.ID,
+		EffectDigestHash: legacy.EffectDigest,
+		ExpiresAt:        time.Now().Add(time.Hour),
+		AllowedTool:      "github.create_issue",
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := executor.Execute(context.Background(), effect, legacy, intent); err == nil || !strings.Contains(err.Error(), contracts.DecisionRecordSignatureV4) {
+		t.Fatalf("legacy decision crossed execution boundary: %v", err)
+	}
+	if driver.Called {
+		t.Fatal("legacy decision dispatched an effect")
+	}
+}
+
 func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	signer, err := crypto.NewEd25519Signer("tenant-scope-key")
 	if err != nil {
@@ -399,7 +469,7 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 			"tenant_id":  "tenant-before-mutation",
 		},
 	}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	// InputContext falls outside the decision signature, so this mutation must
@@ -452,7 +522,7 @@ func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "tenant-scope-session"},
 	}
-	if err := signer.SignDecision(blockedDecision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(blockedDecision)); err != nil {
 		t.Fatal(err)
 	}
 	blockedIntent := &contracts.AuthorizedExecutionIntent{
@@ -509,7 +579,7 @@ func TestSafeExecutorScopesIdempotencyToAuthenticatedTenant(t *testing.T) {
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "tenant-idempotency-session"},
 	}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -568,7 +638,7 @@ func TestSafeExecutorTenantQualifiedReceiptIdentityAvoidsCollisionAndRetriesIdem
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "shared-session"},
 	}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -628,7 +698,7 @@ func TestSafeExecutorRejectsAuthenticatedUnscopedCausalStoreBeforeDispatch(t *te
 		EffectDigest:      testEffectDigest(t, effect),
 		InputContext:      map[string]any{"session_id": "unscoped-causal-session"},
 	}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -676,7 +746,7 @@ func TestSafeExecutorChainsReceiptsBySignedSessionID(t *testing.T) {
 			InputContext:      map[string]any{"session_id": sessionID},
 			EffectDigest:      testEffectDigest(t, effect),
 		}
-		if err := signer.SignDecision(decision); err != nil {
+		if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 			t.Fatalf("sign decision %s: %v", decisionID, err)
 		}
 		intent := &contracts.AuthorizedExecutionIntent{
@@ -751,7 +821,7 @@ func TestSafeExecutorAllocatesConcurrentReceiptChainsAtomically(t *testing.T) {
 			InputContext:      map[string]any{"session_id": sessionID},
 			EffectDigest:      testEffectDigest(t, effect),
 		}
-		if err := signer.SignDecision(decision); err != nil {
+		if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 			t.Fatalf("sign decision %s: %v", id, err)
 		}
 		intent := &contracts.AuthorizedExecutionIntent{
@@ -840,7 +910,7 @@ func TestSafeExecutorRejectsRuntimeEffectDigestMismatch(t *testing.T) {
 		Verdict:      string(contracts.VerdictAllow),
 		EffectDigest: testEffectDigest(t, approvedEffect),
 	}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -882,7 +952,7 @@ func TestSafeExecutorSafeDepGateBlocksBeforeOutboxAndDispatch(t *testing.T) {
 			}, nil
 		}))
 	decision := &contracts.DecisionRecord{ID: "dec-safedep-block", Verdict: string(contracts.VerdictAllow)}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, ExpiresAt: time.Now().Add(time.Hour)}
@@ -907,7 +977,7 @@ func TestSafeExecutorSafeDepGateRequired(t *testing.T) {
 		ID:      "dec-safedep-gate-required",
 		Verdict: string(contracts.VerdictAllow),
 	}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, ExpiresAt: time.Now().Add(time.Hour)}
@@ -951,7 +1021,7 @@ func TestSafeExecutorBindsVerifiedEmergencyAuthorityToReceipt(t *testing.T) {
 		}))
 	effect := &contracts.Effect{EffectID: "eff-safedep-allow", Params: map[string]any{"tool_name": "ls"}}
 	decision := &contracts.DecisionRecord{ID: "dec-safedep-allow", Verdict: string(contracts.VerdictAllow), EffectDigest: testEffectDigest(t, effect)}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -1008,7 +1078,7 @@ func TestSafeExecutorRejectsSafeDepActivationBindingMismatch(t *testing.T) {
 		}))
 	effect := &contracts.Effect{EffectID: "eff-safedep-mismatch", Params: map[string]any{"tool_name": "ls"}}
 	decision := &contracts.DecisionRecord{ID: "dec-safedep-mismatch", Verdict: string(contracts.VerdictAllow), EffectDigest: testEffectDigest(t, effect)}
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
 		t.Fatal(err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -1054,7 +1124,7 @@ func TestSafeExecutor_WithClock(t *testing.T) {
 		Verdict:      string(contracts.VerdictAllow),
 		EffectDigest: testEffectDigest(t, effect),
 	}
-	if err := signer.SignDecision(dec); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(dec)); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{
@@ -1092,7 +1162,7 @@ func TestSafeExecutor_ExpiredIntent(t *testing.T) {
 		Verdict:      string(contracts.VerdictAllow),
 		EffectDigest: testEffectDigest(t, effect),
 	}
-	if err := signer.SignDecision(dec); err != nil {
+	if err := signer.SignDecision(testDecisionAuthority(dec)); err != nil {
 		t.Fatalf("Failed to sign decision: %v", err)
 	}
 	intent := &contracts.AuthorizedExecutionIntent{

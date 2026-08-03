@@ -115,7 +115,7 @@ class ThreatScanReference(_message.Message):
     def __init__(self, scan_id: _Optional[str] = ..., max_severity: _Optional[str] = ..., finding_count: _Optional[int] = ..., trust_level: _Optional[str] = ..., input_hash: _Optional[str] = ..., semantic: _Optional[_Union[SemanticThreatAssessment, _Mapping]] = ...) -> None: ...
 
 class DecisionRecord(_message.Message):
-    __slots__ = ("id", "timestamp", "verdict", "reason", "reason_code", "effect_digest", "requirement_set_hash", "signature", "signer_key_id", "policy_ref", "policy_decision_hash", "input_context", "correlation_id", "signature_version", "phenotype_hash", "policy_content_hash", "threat_scan")
+    __slots__ = ("id", "timestamp", "verdict", "reason", "reason_code", "effect_digest", "requirement_set_hash", "signature", "signer_key_id", "policy_ref", "policy_decision_hash", "input_context", "correlation_id", "signature_version", "phenotype_hash", "policy_content_hash", "threat_scan", "subject_id", "action", "resource", "signature_type", "reason_code_text")
     ID_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     VERDICT_FIELD_NUMBER: _ClassVar[int]
@@ -133,6 +133,11 @@ class DecisionRecord(_message.Message):
     PHENOTYPE_HASH_FIELD_NUMBER: _ClassVar[int]
     POLICY_CONTENT_HASH_FIELD_NUMBER: _ClassVar[int]
     THREAT_SCAN_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_TYPE_FIELD_NUMBER: _ClassVar[int]
+    REASON_CODE_TEXT_FIELD_NUMBER: _ClassVar[int]
     id: str
     timestamp: _timestamp_pb2.Timestamp
     verdict: Verdict
@@ -150,7 +155,12 @@ class DecisionRecord(_message.Message):
     phenotype_hash: str
     policy_content_hash: str
     threat_scan: ThreatScanReference
-    def __init__(self, id: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., reason: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., effect_digest: _Optional[str] = ..., requirement_set_hash: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., policy_ref: _Optional[str] = ..., policy_decision_hash: _Optional[str] = ..., input_context: _Optional[bytes] = ..., correlation_id: _Optional[str] = ..., signature_version: _Optional[str] = ..., phenotype_hash: _Optional[str] = ..., policy_content_hash: _Optional[str] = ..., threat_scan: _Optional[_Union[ThreatScanReference, _Mapping]] = ...) -> None: ...
+    subject_id: str
+    action: str
+    resource: str
+    signature_type: str
+    reason_code_text: str
+    def __init__(self, id: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., reason: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., effect_digest: _Optional[str] = ..., requirement_set_hash: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., policy_ref: _Optional[str] = ..., policy_decision_hash: _Optional[str] = ..., input_context: _Optional[bytes] = ..., correlation_id: _Optional[str] = ..., signature_version: _Optional[str] = ..., phenotype_hash: _Optional[str] = ..., policy_content_hash: _Optional[str] = ..., threat_scan: _Optional[_Union[ThreatScanReference, _Mapping]] = ..., subject_id: _Optional[str] = ..., action: _Optional[str] = ..., resource: _Optional[str] = ..., signature_type: _Optional[str] = ..., reason_code_text: _Optional[str] = ...) -> None: ...
 
 class AuthorizedExecutionIntent(_message.Message):
     __slots__ = ("intent_id", "decision_id", "effect_id", "issued_at", "expires_at", "signature", "signer_key_id", "principal")

@@ -4,6 +4,7 @@ package contracts
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -79,7 +80,9 @@ type DecisionRecord struct {
 	// DecisionRecordSignatureV2 signs the machine-readable ReasonCode instead
 	// of prose: the field every downstream consumer keys on is the one the
 	// signature attests. DecisionRecordSignatureV3 additionally binds typed
-	// Guardian threat evidence when it is present.
+	// Guardian threat evidence when it is present. DecisionRecordSignatureV4
+	// retains those facts and also binds the evaluated authority tuple and
+	// signer metadata.
 	SignatureVersion string    `json:"signature_version,omitempty"`
 	Timestamp        time.Time `json:"timestamp"`
 
@@ -163,6 +166,38 @@ const DecisionRecordSignatureV2 = "decision_record.v2"
 // decision contains it. Records without threat evidence remain on V2 so
 // historical and ordinary decisions preserve their established preimage.
 const DecisionRecordSignatureV3 = "decision_record.v3"
+
+// DecisionRecordSignatureV4 is the current decision preimage. It retains the
+// V2 reason digest and the V3 typed threat-evidence digest, then binds the
+// evaluated authorization tuple and selected signature algorithm before any
+// signature is created.
+const DecisionRecordSignatureV4 = "decision_record.v4"
+
+// ValidateDecisionAuthorityForUse restricts execution authority to the V4
+// decision contract. Historical V2/V3 records remain verifiable as evidence,
+// but lack the request and signer bindings needed to grant a new effect.
+func ValidateDecisionAuthorityForUse(decision *DecisionRecord) error {
+	if decision == nil {
+		return fmt.Errorf("decision is required")
+	}
+	if decision.SignatureVersion != DecisionRecordSignatureV4 {
+		return fmt.Errorf("execution authority requires %s, got %q", DecisionRecordSignatureV4, decision.SignatureVersion)
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"subject ID", decision.SubjectID},
+		{"action", decision.Action},
+		{"resource", decision.Resource},
+		{"signature type", decision.SignatureType},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return fmt.Errorf("execution authority missing %s", field.name)
+		}
+	}
+	return nil
+}
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

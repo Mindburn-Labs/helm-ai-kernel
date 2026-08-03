@@ -38,6 +38,12 @@ func (s *testSigner) SignDecision(d *contracts.DecisionRecord) error {
 	if s.fail {
 		return errSignerBroken
 	}
+	if d.SignatureVersion == "" {
+		d.SignatureVersion = contracts.DecisionRecordSignatureV4
+	}
+	if d.SignatureType == "" {
+		d.SignatureType = "test:signer"
+	}
 	d.Signature = "test_sig"
 	return nil
 }

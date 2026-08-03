@@ -1,3 +1,5 @@
+// quantum_posture: test-only coverage of existing cryptographic code paths;
+// it makes no production deployment, hybrid, or post-quantum assurance claim.
 package crypto
 
 import (
@@ -77,7 +79,7 @@ func TestExt2_MLDSADeterministicSig(t *testing.T) {
 func TestExt2_MLDSASignDecisionType(t *testing.T) {
 	s, _ := NewMLDSASigner("pq1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW"}
-	s.SignDecision(d)
+	s.SignDecision(testDecisionV4Authority(d))
 	if d.SignatureType != "ml-dsa-65:pq1" {
 		t.Fatalf("expected ml-dsa-65:pq1, got %s", d.SignatureType)
 	}
@@ -88,7 +90,7 @@ func TestExt2_MLDSASignDecisionType(t *testing.T) {
 func TestExt2_MLDSAVerifyDecisionRoundTrip(t *testing.T) {
 	s, _ := NewMLDSASigner("pq1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "DENY", Reason: "test"}
-	s.SignDecision(d)
+	s.SignDecision(testDecisionV4Authority(d))
 	ok, err := s.VerifyDecision(d)
 	if err != nil || !ok {
 		t.Fatalf("VerifyDecision round trip failed: ok=%v err=%v", ok, err)

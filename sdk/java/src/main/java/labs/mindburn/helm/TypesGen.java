@@ -63282,12 +63282,12 @@ public static class TransitionApprovalCeremonyRequest {
   }
 
    /**
-   * Current ceremony hash returned by the most recent approval read; prevents stale transitions.
+   * Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.
    * @return expectedCeremonyHash
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_EXPECTED_CEREMONY_HASH)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getExpectedCeremonyHash() {
     return expectedCeremonyHash;
@@ -63295,7 +63295,7 @@ public static class TransitionApprovalCeremonyRequest {
 
 
   @JsonProperty(JSON_PROPERTY_EXPECTED_CEREMONY_HASH)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setExpectedCeremonyHash(String expectedCeremonyHash) {
     this.expectedCeremonyHash = expectedCeremonyHash;
   }

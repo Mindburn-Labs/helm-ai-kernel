@@ -139,7 +139,7 @@ func TestHybridSigner_SignDecision(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	err = signer.SignDecision(d)
+	err = signer.SignDecision(testDecisionV4Authority(d))
 	require.NoError(t, err)
 
 	// Signature must be hybrid format

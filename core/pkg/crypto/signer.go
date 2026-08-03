@@ -190,8 +190,7 @@ func (s *Ed25519Signer) Verify(message []byte, signature []byte) bool {
 
 // SignDecision signs a DecisionRecord
 func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
-	// Canonicalize for signing
-	payload, err := DecisionSigningPayload(d)
+	payload, err := prepareDecisionForSigning(d, SigPrefixEd25519+SigSeparator+s.KeyID)
 	if err != nil {
 		return err
 	}
@@ -200,7 +199,6 @@ func (s *Ed25519Signer) SignDecision(d *contracts.DecisionRecord) error {
 		return err
 	}
 	d.Signature = sig
-	d.SignatureType = SigPrefixEd25519 + SigSeparator + s.KeyID
 	return nil
 }
 

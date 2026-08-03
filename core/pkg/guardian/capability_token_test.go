@@ -64,6 +64,7 @@ func TestCapabilityGate_ValidTokenEnrichesAndConsumes(t *testing.T) {
 	req := &DecisionRequest{
 		Principal: "agent-1",
 		Action:    "dispatch",
+		Resource:  "gui-action",
 		Context: map[string]interface{}{
 			ContextKeyCapabilityID:    "helm.cap.gui.gelab.tap",
 			ContextKeyTaskID:          "task-1",
@@ -99,6 +100,7 @@ func TestEvaluateDecision_TokenTaskMismatchDeniesWithoutLeak(t *testing.T) {
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
 		Principal: "agent-1",
 		Action:    "dispatch",
+		Resource:  "gui-action",
 		Context: map[string]interface{}{
 			ContextKeyCapabilityID:    "helm.cap.gui.gelab.tap",
 			ContextKeyTaskID:          "task-B",
@@ -133,7 +135,9 @@ func TestEvaluateDecision_RevokedAndMalformedTokensDeny(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
-				Action: "dispatch",
+				Principal: "agent-1",
+				Action:    "dispatch",
+				Resource:  "gui-action",
 				Context: map[string]interface{}{
 					ContextKeyCapabilityID:    "helm.cap.gui.gelab.tap",
 					ContextKeyTaskID:          "task-1",
@@ -160,7 +164,9 @@ func TestCapabilityGate_PresentedTokenWithoutVerifierDenies(t *testing.T) {
 	)
 
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
-		Action: "dispatch",
+		Principal: "agent-1",
+		Action:    "dispatch",
+		Resource:  "gui-action",
 		Context: map[string]interface{}{
 			ContextKeyCapabilityID:    "helm.cap.gui.gelab.tap",
 			ContextKeyTaskID:          "task-1",

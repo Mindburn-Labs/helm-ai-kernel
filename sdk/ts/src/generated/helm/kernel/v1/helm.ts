@@ -274,7 +274,22 @@ export interface DecisionRecord {
   signatureVersion: string;
   phenotypeHash: string;
   policyContentHash: string;
-  threatScan: ThreatScanReference | undefined;
+  threatScan:
+    | ThreatScanReference
+    | undefined;
+  /**
+   * decision_record.v4 authorization and signer bindings. These are appended
+   * so current V3 Guardian threat evidence keeps its established wire field.
+   */
+  subjectId: string;
+  action: string;
+  resource: string;
+  signatureType: string;
+  /**
+   * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+   * legacy reason_code field above remains a closed enum for compatibility.
+   */
+  reasonCodeText: string;
 }
 
 export interface AuthorizedExecutionIntent {
@@ -942,6 +957,11 @@ function createBaseDecisionRecord(): DecisionRecord {
     phenotypeHash: "",
     policyContentHash: "",
     threatScan: undefined,
+    subjectId: "",
+    action: "",
+    resource: "",
+    signatureType: "",
+    reasonCodeText: "",
   };
 }
 
@@ -997,6 +1017,21 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     }
     if (message.threatScan !== undefined) {
       ThreatScanReference.encode(message.threatScan, writer.uint32(138).fork()).join();
+    }
+    if (message.subjectId !== "") {
+      writer.uint32(146).string(message.subjectId);
+    }
+    if (message.action !== "") {
+      writer.uint32(154).string(message.action);
+    }
+    if (message.resource !== "") {
+      writer.uint32(162).string(message.resource);
+    }
+    if (message.signatureType !== "") {
+      writer.uint32(170).string(message.signatureType);
+    }
+    if (message.reasonCodeText !== "") {
+      writer.uint32(178).string(message.reasonCodeText);
     }
     return writer;
   },
@@ -1144,6 +1179,46 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
           message.threatScan = ThreatScanReference.decode(reader, reader.uint32());
           continue;
         }
+        case 18: {
+          if (tag !== 146) {
+            break;
+          }
+
+          message.subjectId = reader.string();
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.action = reader.string();
+          continue;
+        }
+        case 20: {
+          if (tag !== 162) {
+            break;
+          }
+
+          message.resource = reader.string();
+          continue;
+        }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.signatureType = reader.string();
+          continue;
+        }
+        case 22: {
+          if (tag !== 178) {
+            break;
+          }
+
+          message.reasonCodeText = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1220,6 +1295,23 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
         : isSet(object.threat_scan)
         ? ThreatScanReference.fromJSON(object.threat_scan)
         : undefined,
+      subjectId: isSet(object.subjectId)
+        ? globalThis.String(object.subjectId)
+        : isSet(object.subject_id)
+        ? globalThis.String(object.subject_id)
+        : "",
+      action: isSet(object.action) ? globalThis.String(object.action) : "",
+      resource: isSet(object.resource) ? globalThis.String(object.resource) : "",
+      signatureType: isSet(object.signatureType)
+        ? globalThis.String(object.signatureType)
+        : isSet(object.signature_type)
+        ? globalThis.String(object.signature_type)
+        : "",
+      reasonCodeText: isSet(object.reasonCodeText)
+        ? globalThis.String(object.reasonCodeText)
+        : isSet(object.reason_code_text)
+        ? globalThis.String(object.reason_code_text)
+        : "",
     };
   },
 
@@ -1276,6 +1368,21 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     if (message.threatScan !== undefined) {
       obj.threatScan = ThreatScanReference.toJSON(message.threatScan);
     }
+    if (message.subjectId !== "") {
+      obj.subjectId = message.subjectId;
+    }
+    if (message.action !== "") {
+      obj.action = message.action;
+    }
+    if (message.resource !== "") {
+      obj.resource = message.resource;
+    }
+    if (message.signatureType !== "") {
+      obj.signatureType = message.signatureType;
+    }
+    if (message.reasonCodeText !== "") {
+      obj.reasonCodeText = message.reasonCodeText;
+    }
     return obj;
   },
 
@@ -1303,6 +1410,11 @@ export const DecisionRecord: MessageFns<DecisionRecord> = {
     message.threatScan = (object.threatScan !== undefined && object.threatScan !== null)
       ? ThreatScanReference.fromPartial(object.threatScan)
       : undefined;
+    message.subjectId = object.subjectId ?? "";
+    message.action = object.action ?? "";
+    message.resource = object.resource ?? "";
+    message.signatureType = object.signatureType ?? "";
+    message.reasonCodeText = object.reasonCodeText ?? "";
     return message;
   },
 };

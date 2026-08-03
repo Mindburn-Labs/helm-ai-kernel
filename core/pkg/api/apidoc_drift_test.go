@@ -184,3 +184,85 @@ func TestEvaluateRequestOpenAPISessionRequirement(t *testing.T) {
 		}
 	}
 }
+
+// TestOpenAPIApprovalAndProofGraphCompatibility ensures the schema remains
+// source-compatible with v0.7.5 clients while the runtime continues to own
+// the fail-closed checks. Old approval transition bodies are accepted by the
+// schema only; the route returns 428 and changes no state without the reviewed
+// ceremony hash.
+func TestOpenAPIApprovalAndProofGraphCompatibility(t *testing.T) {
+	spec, _ := loadKernelOpenAPISpec(t)
+	paths, ok := spec["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("OpenAPI paths missing")
+	}
+
+	approvalPath, ok := paths["/api/v1/approvals/{approval_id}/{action}"].(map[string]any)
+	if !ok {
+		t.Fatal("approval transition path missing")
+	}
+	post, ok := approvalPath["post"].(map[string]any)
+	if !ok {
+		t.Fatal("approval transition operation missing")
+	}
+	requestBody, ok := post["requestBody"].(map[string]any)
+	if !ok {
+		t.Fatal("approval transition request body missing")
+	}
+	content, ok := requestBody["content"].(map[string]any)
+	if !ok {
+		t.Fatal("approval transition request content missing")
+	}
+	jsonContent, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatal("approval transition JSON schema missing")
+	}
+	transitionSchema, ok := jsonContent["schema"].(map[string]any)
+	if !ok {
+		t.Fatal("approval transition schema missing")
+	}
+	if required, ok := transitionSchema["required"].([]any); ok {
+		for _, field := range required {
+			if field == "expected_ceremony_hash" {
+				t.Fatal("approval transition schema must accept the v0.7.5 body without expected_ceremony_hash")
+			}
+		}
+	}
+	responses, ok := post["responses"].(map[string]any)
+	if !ok {
+		t.Fatal("approval transition responses missing")
+	}
+	if _, ok := responses["428"]; !ok {
+		t.Fatal("approval transition must document the no-transition 428 compatibility response")
+	}
+
+	proofgraphPath, ok := paths["/api/v1/proofgraph/sessions/{session_id}/receipts"].(map[string]any)
+	if !ok {
+		t.Fatal("proofgraph session route missing")
+	}
+	get, ok := proofgraphPath["get"].(map[string]any)
+	if !ok {
+		t.Fatal("proofgraph session operation missing")
+	}
+	parameters, ok := get["parameters"].([]any)
+	if !ok {
+		t.Fatal("proofgraph session parameters missing")
+	}
+	for _, rawParameter := range parameters {
+		parameter, ok := rawParameter.(map[string]any)
+		if !ok || parameter["name"] != "session_id" || parameter["in"] != "path" {
+			continue
+		}
+		schema, ok := parameter["schema"].(map[string]any)
+		if !ok || schema["type"] != "string" {
+			t.Fatalf("proofgraph session compatibility schema = %#v, want unconstrained string", parameter["schema"])
+		}
+		for _, constrained := range []string{"$ref", "minLength", "pattern"} {
+			if _, ok := schema[constrained]; ok {
+				t.Fatalf("proofgraph session schema unexpectedly exposes %q: %#v", constrained, schema)
+			}
+		}
+		return
+	}
+	t.Fatal("proofgraph session_id path parameter missing")
+}

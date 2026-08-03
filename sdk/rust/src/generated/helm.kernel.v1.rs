@@ -94,6 +94,20 @@ pub struct DecisionRecord {
     pub policy_content_hash: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "17")]
     pub threat_scan: ::core::option::Option<ThreatScanReference>,
+    /// decision_record.v4 authorization and signer bindings. These are appended
+    /// so current V3 Guardian threat evidence keeps its established wire field.
+    #[prost(string, tag = "18")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "19")]
+    pub action: ::prost::alloc::string::String,
+    #[prost(string, tag = "20")]
+    pub resource: ::prost::alloc::string::String,
+    #[prost(string, tag = "21")]
+    pub signature_type: ::prost::alloc::string::String,
+    /// The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+    /// legacy reason_code field above remains a closed enum for compatibility.
+    #[prost(string, tag = "22")]
+    pub reason_code_text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizedExecutionIntent {

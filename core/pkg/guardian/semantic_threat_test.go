@@ -55,8 +55,8 @@ func TestGuardianSemanticThreatIsAdvisoryByDefault(t *testing.T) {
 	if decision.Verdict != string(contracts.VerdictAllow) {
 		t.Fatalf("semantic-only signal changed default verdict: %+v", decision)
 	}
-	if decision.SignatureVersion != contracts.DecisionRecordSignatureV3 || decision.ThreatScan == nil || decision.ThreatScan.Semantic == nil {
-		t.Fatalf("typed threat evidence was not V3-bound: %+v", decision)
+	if decision.SignatureVersion != contracts.DecisionRecordSignatureV4 || decision.ThreatScan == nil || decision.ThreatScan.Semantic == nil {
+		t.Fatalf("typed threat evidence was not V4-bound: %+v", decision)
 	}
 	if !decision.ThreatScan.Semantic.Flagged || decision.ThreatScan.MaxSeverity != contracts.ThreatSeverityInfo {
 		t.Fatalf("semantic evidence is not INFO-only: %+v", decision.ThreatScan)
@@ -149,7 +149,7 @@ func TestGuardianConfiguredSemanticPolicyEscalatesWithoutScanner(t *testing.T) {
 		t.Fatalf("missing scanner verdict = %+v, want ESCALATE", decision)
 	}
 	if decision.ThreatScan == nil || decision.ThreatScan.MaxSeverity != contracts.ThreatSeverityInfo || decision.ThreatScan.Semantic == nil || decision.ThreatScan.Semantic.FailureReason != semanticScannerMissing {
-		t.Fatalf("missing scanner evidence was not truthfully V3-bound: %+v", decision.ThreatScan)
+		t.Fatalf("missing scanner evidence was not truthfully V4-bound: %+v", decision.ThreatScan)
 	}
 	if !strings.Contains(decision.Reason, "scanner is unavailable") || strings.Contains(decision.Reason, "model is unavailable") {
 		t.Fatalf("missing scanner reason is misleading: %q", decision.Reason)
@@ -170,7 +170,7 @@ func TestGuardianConfiguredSemanticPolicyEscalatesModelFailure(t *testing.T) {
 		t.Fatalf("configured model failure verdict = %+v, want ESCALATE", decision)
 	}
 	if decision.ThreatScan == nil || decision.ThreatScan.Semantic == nil || decision.ThreatScan.Semantic.Available || decision.ThreatScan.Semantic.FailureReason != "MODEL_UNAVAILABLE" {
-		t.Fatalf("model failure evidence was not V3-bound: %+v", decision.ThreatScan)
+		t.Fatalf("model failure evidence was not V4-bound: %+v", decision.ThreatScan)
 	}
 
 	advisory, err := semanticGuardian(t, WithThreatScanner(scanner)).EvaluateDecision(context.Background(), semanticRequest("ordinary input"))

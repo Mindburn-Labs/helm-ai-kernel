@@ -135,8 +135,10 @@ func TestCapabilityGateRunsAfterSnapshotAndSafeDep(t *testing.T) {
 		WithPolicySnapshots(policyreconcile.NewAtomicSnapshotStore(), scope),
 	)
 	decision, err := snapshotGuardian.EvaluateDecision(context.Background(), DecisionRequest{
-		Action:  "dispatch",
-		Context: map[string]interface{}{ContextKeyCapabilityID: "helm.cap.does.not.exist"},
+		Principal: "agent-1",
+		Action:    "dispatch",
+		Resource:  "gui-action",
+		Context:   map[string]interface{}{ContextKeyCapabilityID: "helm.cap.does.not.exist"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, string(contracts.ReasonPolicyNotReady), decision.ReasonCode)
@@ -151,8 +153,9 @@ func TestCapabilityGateRunsAfterSnapshotAndSafeDep(t *testing.T) {
 		WithSafeDepController(safedep.NewController(safedep.ControllerConfig{Clock: clock.Now})),
 	)
 	decision, err = safeDepGuardian.EvaluateDecision(context.Background(), DecisionRequest{
-		Action:   "WRITE",
-		Resource: "connector",
+		Principal: "agent-1",
+		Action:    "WRITE",
+		Resource:  "connector",
 		Context: map[string]interface{}{
 			ContextKeyCapabilityID:            "helm.cap.does.not.exist",
 			"safe_deprecation_hazard_code":    string(contracts.HazardDeadManExpired),
@@ -184,8 +187,10 @@ func TestCapabilityShortCircuitBindsActiveSnapshot(t *testing.T) {
 		WithPolicySnapshots(store, scope),
 	)
 	decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
-		Action:  "dispatch",
-		Context: map[string]interface{}{ContextKeyCapabilityID: "helm.cap.does.not.exist"},
+		Principal: "agent-1",
+		Action:    "dispatch",
+		Resource:  "gui-action",
+		Context:   map[string]interface{}{ContextKeyCapabilityID: "helm.cap.does.not.exist"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "sha256:capability-snapshot", decision.PolicyContentHash)

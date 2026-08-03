@@ -2202,8 +2202,8 @@ paths:
         - name: session_id
           in: path
           required: true
-          schema:
-            $ref: '#/components/schemas/NonBlankSessionID'
+          schema: { type: string }
+          description: Compatibility path parameter. The runtime rejects blank, slash, backslash, and NUL values before any receipt lookup.
       responses:
         '200':
           description: List of receipts in session
@@ -3785,7 +3785,6 @@ paths:
           application/json:
             schema:
               type: object
-              required: [expected_ceremony_hash]
               properties:
                 actor: { type: string }
                 receipt_id: { type: string }
@@ -3793,7 +3792,7 @@ paths:
                 expected_ceremony_hash:
                   type: string
                   minLength: 1
-                  description: Current ceremony hash returned by the most recent approval read; prevents stale transitions.
+                  description: Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.
       responses:
         '200':
           description: Approval ceremony
@@ -3802,6 +3801,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApprovalCeremony'
         '400':
+          $ref: '#/components/responses/HelmError'
+        '428':
           $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'

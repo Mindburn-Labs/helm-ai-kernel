@@ -429,6 +429,20 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 }
 
 func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, ruleGraph *prg.Graph) error {
+	if decision == nil {
+		return fmt.Errorf("decision is required")
+	}
+	// This public signing path has no DecisionRequest argument, so it can only
+	// accept an authority tuple the caller supplied explicitly. Reusing the
+	// request binder makes blank tuple fields fail closed consistently with the
+	// evaluated-request path below.
+	if err := bindDecisionRequest(decision, DecisionRequest{
+		Principal: decision.SubjectID,
+		Action:    decision.Action,
+		Resource:  decision.Resource,
+	}); err != nil {
+		return fmt.Errorf("bind decision authority: %w", err)
+	}
 	// Bind the canonical effect digest before any signing path: the decision
 	// signature covers EffectDigest (crypto.CanonicalizeDecision), and intent
 	// issuance / execution verify the binding fail-closed. Without this, a
@@ -604,6 +618,9 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	}
 	if valid, err := verifier.VerifyDecision(decision); err != nil || !valid {
 		return nil, fmt.Errorf("invalid decision signature: %w", err)
+	}
+	if err := contracts.ValidateDecisionAuthorityForUse(decision); err != nil {
+		return nil, fmt.Errorf("cannot issue execution intent: %w", err)
 	}
 
 	if g.snapshotStore != nil {
@@ -878,7 +895,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				InputContext:  req.Context,
 				PolicyVersion: "unavailable",
 			}
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := g.signDecisionForRequest(decision, req, nil, "unavailable"); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
 			return decision, nil
@@ -893,8 +910,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				InputContext:  req.Context,
 				PolicyVersion: snapshot.PolicyHash,
 			}
-			bindRuntimePolicyDecision(decision, snapshot, snapshot.PolicyHash)
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := g.signDecisionForRequest(decision, req, snapshot, snapshot.PolicyHash); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
 			return decision, nil
@@ -932,8 +948,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					InputContext:  req.Context,
 					PolicyVersion: policyVersion,
 				}
-				bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := g.signDecisionForRequest(decision, req, activeSnapshot, policyVersion); signErr != nil {
 					return nil, fmt.Errorf("failed to sign safe-deprecation decision: %w", signErr)
 				}
 				return decision, nil
@@ -990,8 +1005,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				SessionCentroidHash:    snapshot.SessionCentroidHash,
 				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
 			}
-			bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := g.signDecisionForRequest(decision, req, activeSnapshot, policyVersion); signErr != nil {
 				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
 			}
 			if g.auditLog != nil {
@@ -1103,6 +1117,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		decision := &contracts.DecisionRecord{
 			ID:             newDecisionID(),
 			Timestamp:      g.clock.Now(),
+			SubjectID:      req.Principal,
+			Action:         req.Action,
+			Resource:       req.Resource,
 			Verdict:        string(contracts.VerdictDeny), // Default deny
 			EffectDigest:   effectDigest,
 			InputContext:   req.Context,
@@ -1143,7 +1160,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				decision.Verdict = string(contracts.VerdictDeny)
 				decision.ReasonCode = "COMPLIANCE_ERROR"
 				decision.Reason = fmt.Sprintf("compliance check error: %v", compErr)
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
 					return nil, fmt.Errorf("failed to sign compliance-error decision: %w", signErr)
 				}
 				return decision, nil
@@ -1152,7 +1169,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				decision.Verdict = string(contracts.VerdictDeny)
 				decision.ReasonCode = "COMPLIANCE_VIOLATION"
 				decision.Reason = fmt.Sprintf("compliance violation: %s (obligations: %v)", compResult.Reason, compResult.ViolatedObligations)
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
 					return nil, fmt.Errorf("failed to sign compliance-deny decision: %w", signErr)
 				}
 				g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "compliance violation")
@@ -1160,6 +1177,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			}
 		}
 
+		if err := bindDecisionRequest(decision, req); err != nil {
+			return nil, fmt.Errorf("bind evaluated decision request: %w", err)
+		}
 		err = g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph)
 		if err != nil {
 			return nil, err

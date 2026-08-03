@@ -19,7 +19,7 @@ func TestSigner_Integrity(t *testing.T) {
 	}
 
 	// 1. Sign
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(decision)); err != nil {
 		t.Fatalf("Sign failed: %v", err)
 	}
 	if decision.Signature == "" {

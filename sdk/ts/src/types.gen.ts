@@ -18852,18 +18852,17 @@ export interface TransitionApprovalCeremonyRequest {
      */
     reason?: string;
     /**
-     * Current ceremony hash returned by the most recent approval read; prevents stale transitions.
+     * Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.
      * @type {string}
      * @memberof TransitionApprovalCeremonyRequest
      */
-    expected_ceremony_hash: string;
+    expected_ceremony_hash?: string;
 }
 
 /**
  * Check if a given object implements the TransitionApprovalCeremonyRequest interface.
  */
 export function instanceOfTransitionApprovalCeremonyRequest(value: object): boolean {
-    if (!('expected_ceremony_hash' in value)) return false;
     return true;
 }
 
@@ -18880,7 +18879,7 @@ export function TransitionApprovalCeremonyRequestFromJSONTyped(json: any, ignore
         'actor': json['actor'] == null ? undefined : json['actor'],
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'reason': json['reason'] == null ? undefined : json['reason'],
-        'expected_ceremony_hash': json['expected_ceremony_hash'],
+        'expected_ceremony_hash': json['expected_ceremony_hash'] == null ? undefined : json['expected_ceremony_hash'],
     };
 }
 

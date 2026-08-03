@@ -475,8 +475,17 @@ type DecisionRecord struct {
 	PhenotypeHash     string               `protobuf:"bytes,15,opt,name=phenotype_hash,json=phenotypeHash,proto3" json:"phenotype_hash,omitempty"`
 	PolicyContentHash string               `protobuf:"bytes,16,opt,name=policy_content_hash,json=policyContentHash,proto3" json:"policy_content_hash,omitempty"`
 	ThreatScan        *ThreatScanReference `protobuf:"bytes,17,opt,name=threat_scan,json=threatScan,proto3" json:"threat_scan,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// decision_record.v4 authorization and signer bindings. These are appended
+	// so current V3 Guardian threat evidence keeps its established wire field.
+	SubjectId     string `protobuf:"bytes,18,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	Action        string `protobuf:"bytes,19,opt,name=action,proto3" json:"action,omitempty"`
+	Resource      string `protobuf:"bytes,20,opt,name=resource,proto3" json:"resource,omitempty"`
+	SignatureType string `protobuf:"bytes,21,opt,name=signature_type,json=signatureType,proto3" json:"signature_type,omitempty"`
+	// The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+	// legacy reason_code field above remains a closed enum for compatibility.
+	ReasonCodeText string `protobuf:"bytes,22,opt,name=reason_code_text,json=reasonCodeText,proto3" json:"reason_code_text,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DecisionRecord) Reset() {
@@ -626,6 +635,41 @@ func (x *DecisionRecord) GetThreatScan() *ThreatScanReference {
 		return x.ThreatScan
 	}
 	return nil
+}
+
+func (x *DecisionRecord) GetSubjectId() string {
+	if x != nil {
+		return x.SubjectId
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetSignatureType() string {
+	if x != nil {
+		return x.SignatureType
+	}
+	return ""
+}
+
+func (x *DecisionRecord) GetReasonCodeText() string {
+	if x != nil {
+		return x.ReasonCodeText
+	}
+	return ""
 }
 
 type AuthorizedExecutionIntent struct {
@@ -1588,7 +1632,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"trustLevel\x12\x1d\n" +
 	"\n" +
 	"input_hash\x18\x05 \x01(\tR\tinputHash\x12D\n" +
-	"\bsemantic\x18\x06 \x01(\v2(.helm.kernel.v1.SemanticThreatAssessmentR\bsemantic\"\xe2\x05\n" +
+	"\bsemantic\x18\x06 \x01(\v2(.helm.kernel.v1.SemanticThreatAssessmentR\bsemantic\"\x86\a\n" +
 	"\x0eDecisionRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x121\n" +
@@ -1610,7 +1654,13 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\x0ephenotype_hash\x18\x0f \x01(\tR\rphenotypeHash\x12.\n" +
 	"\x13policy_content_hash\x18\x10 \x01(\tR\x11policyContentHash\x12D\n" +
 	"\vthreat_scan\x18\x11 \x01(\v2#.helm.kernel.v1.ThreatScanReferenceR\n" +
-	"threatScan\"\xca\x02\n" +
+	"threatScan\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x12 \x01(\tR\tsubjectId\x12\x16\n" +
+	"\x06action\x18\x13 \x01(\tR\x06action\x12\x1a\n" +
+	"\bresource\x18\x14 \x01(\tR\bresource\x12%\n" +
+	"\x0esignature_type\x18\x15 \x01(\tR\rsignatureType\x12(\n" +
+	"\x10reason_code_text\x18\x16 \x01(\tR\x0ereasonCodeText\"\xca\x02\n" +
 	"\x19AuthorizedExecutionIntent\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +

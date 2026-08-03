@@ -668,7 +668,8 @@ func (s *AtomicSnapshotStore) Invalidate(scope PolicyScope, reason string) (*Eff
 		return nil, false
 	}
 	invalidated := *snapshot
-	invalidated.Validation = ValidationStatus{Status: StatusInvalid, Reason: strings.TrimSpace(reason), Hash: snapshot.PolicyHash}
+	invalidated.Validation.Status = StatusInvalid
+	invalidated.Validation.Reason = strings.TrimSpace(reason)
 	invalidated.Graph = nil
 	invalidated.PDP = nil
 	invalidated.PolicyLayers = nil

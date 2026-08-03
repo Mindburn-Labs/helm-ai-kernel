@@ -570,6 +570,8 @@ func TestReconcilerSourceFaultExpiresLastKnownGoodFailClosed(t *testing.T) {
 	if !ok {
 		t.Fatal("initial snapshot missing")
 	}
+	const validationHash = "sha256:cpi-validation-result"
+	current.Validation.Hash = validationHash
 	current.PDP = pdp.NewHelmPDP("test", nil)
 	current.PolicyLayers = []cpi.PolicyLayer{{Name: "P0"}}
 
@@ -582,6 +584,9 @@ func TestReconcilerSourceFaultExpiresLastKnownGoodFailClosed(t *testing.T) {
 	current, ok = store.Get(scope)
 	if !ok || !strings.Contains(current.Validation.Reason, lkgExpiredReasonText) {
 		t.Fatalf("expired LKG was not recorded as invalid: %+v", current)
+	}
+	if current.Validation.Hash != validationHash {
+		t.Fatalf("invalidated LKG changed CPI validation hash: got %q want %q", current.Validation.Hash, validationHash)
 	}
 	assertInvalidSnapshot(t, current)
 

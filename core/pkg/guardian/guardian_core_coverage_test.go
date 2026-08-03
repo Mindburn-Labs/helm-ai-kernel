@@ -69,7 +69,8 @@ func (s *guardianCoverageSnapshotStore) Invalidate(scope policyreconcile.PolicyS
 		return nil, false
 	}
 	invalidated := *snapshot
-	invalidated.Validation = policyreconcile.ValidationStatus{Status: policyreconcile.StatusInvalid, Reason: strings.TrimSpace(reason), Hash: snapshot.PolicyHash}
+	invalidated.Validation.Status = policyreconcile.StatusInvalid
+	invalidated.Validation.Reason = strings.TrimSpace(reason)
 	invalidated.Graph = nil
 	invalidated.PDP = nil
 	invalidated.PolicyLayers = nil

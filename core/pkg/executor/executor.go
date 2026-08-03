@@ -124,6 +124,14 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	if err := e.validateGating(decision, intent, effect); err != nil {
 		return nil, nil, err
 	}
+	// Keep the verified authority snapshot for the remainder of execution. The
+	// caller and SafeDep are both outside this verified pointer's ownership, so
+	// neither can change a signature-bound emergency field after verification.
+	verifiedIntent, err := cloneAuthorizedExecutionIntent(intent)
+	if err != nil {
+		return nil, nil, fmt.Errorf("execution blocked: snapshot verified execution intent: %w", err)
+	}
+	intent = verifiedIntent
 	tenantID, tenantErr := authenticatedTenantID(ctx)
 	if _, scoped := e.receiptStore.(tenantScopedCausalReceiptAppender); scoped && tenantErr != nil {
 		return nil, nil, fmt.Errorf("execution blocked: %w", tenantErr)
@@ -176,7 +184,14 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 	if e.safeDepGate == nil {
 		return nil, nil, fmt.Errorf("%w: %s: safe deprecation gate unavailable", safedep.ErrDispatchBlocked, contracts.ReasonAttestationResultRequired)
 	}
-	req.Intent = intent
+	// SafeDep receives an independent copy. A gate may inspect its intent, but
+	// any mutation cannot change the verified authority snapshot used for the
+	// outbox, dispatch receipt, or post-gate binding check.
+	gateIntent, err := cloneAuthorizedExecutionIntent(intent)
+	if err != nil {
+		return nil, nil, fmt.Errorf("execution blocked: snapshot SafeDep gate intent: %w", err)
+	}
+	req.Intent = gateIntent
 	req.DecisionID = decision.ID
 	req.EffectID = effect.EffectID
 	req.EffectType = effect.EffectType
@@ -195,6 +210,9 @@ func (e *SafeExecutor) Execute(ctx context.Context, effect *contracts.Effect, de
 			reason = string(gateResult.ReasonCode)
 		}
 		return nil, nil, fmt.Errorf("%w: %s", safedep.ErrDispatchBlocked, reason)
+	}
+	if err := validateSafeDepIntentBinding(intent, gateResult); err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", safedep.ErrDispatchBlocked, err)
 	}
 	safeDepResult = &gateResult
 
@@ -424,6 +442,69 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 	return nil
 }
 
+func cloneAuthorizedExecutionIntent(intent *contracts.AuthorizedExecutionIntent) (*contracts.AuthorizedExecutionIntent, error) {
+	if intent == nil {
+		return nil, nil
+	}
+	clone := *intent
+	clone.Taint = append([]string(nil), intent.Taint...)
+	if intent.EffectBinding != nil {
+		binding, err := contracts.NormalizeEffectDigestBinding(intent.EffectBinding)
+		if err != nil {
+			return nil, fmt.Errorf("clone effect binding: %w", err)
+		}
+		clone.EffectBinding = binding
+	}
+	return &clone, nil
+}
+
+// validateSafeDepIntentBinding makes a runtime emergency activation usable only
+// when its evidence agrees with a fully populated V2 intent binding that was
+// verified before SafeDep ran. Receipt V5 deliberately continues to use its
+// existing durable preimage; the emergency values recorded on it come only
+// from this verified V2 snapshot.
+func validateSafeDepIntentBinding(intent *contracts.AuthorizedExecutionIntent, result safedep.GateResult) error {
+	if intent == nil {
+		return errors.New("safe dep execution intent is missing")
+	}
+
+	hasSignedBinding := intent.EmergencyActivationID != "" ||
+		intent.EmergencyDelegationSessionID != "" ||
+		intent.EmergencyScopeHash != ""
+	hasRuntimeActivation := result.ActivationReceipt != nil || result.Classification.State == contracts.SafeDepDegradedNarrowing
+	if !hasSignedBinding && !hasRuntimeActivation {
+		return nil
+	}
+	if !hasSignedBinding {
+		return errors.New("safe dep activation evidence has no signed emergency binding")
+	}
+	if strings.TrimSpace(intent.EmergencyActivationID) == "" ||
+		strings.TrimSpace(intent.EmergencyDelegationSessionID) == "" ||
+		strings.TrimSpace(intent.EmergencyScopeHash) == "" {
+		return errors.New("safe dep signed emergency binding is incomplete")
+	}
+	if result.Classification.State != contracts.SafeDepDegradedNarrowing {
+		return fmt.Errorf("safe dep signed emergency binding requires degraded narrowing, got %q", result.Classification.State)
+	}
+	if result.ActivationReceipt == nil {
+		return errors.New("safe dep degraded narrowing allowed without activation evidence")
+	}
+	activation := result.ActivationReceipt
+	if strings.TrimSpace(activation.ActivationID) == "" || strings.TrimSpace(activation.DelegationSessionID) == "" || strings.TrimSpace(result.EmergencyScopeHash) == "" {
+		return errors.New("safe dep activation evidence is incomplete")
+	}
+	if intent.EmergencyActivationID != activation.ActivationID {
+		return fmt.Errorf("safe dep activation %q does not match signed intent binding %q", activation.ActivationID, intent.EmergencyActivationID)
+	}
+	if intent.EmergencyDelegationSessionID != activation.DelegationSessionID {
+		return fmt.Errorf("safe dep delegation session %q does not match signed intent binding %q", activation.DelegationSessionID, intent.EmergencyDelegationSessionID)
+	}
+	if intent.EmergencyScopeHash != result.EmergencyScopeHash {
+		return fmt.Errorf("safe dep scope %q does not match signed intent binding %q", result.EmergencyScopeHash, intent.EmergencyScopeHash)
+	}
+	return nil
+}
+
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
 	return contracts.CanonicalEffectDigest(effect)
 }
@@ -543,10 +624,6 @@ func (e *SafeExecutor) createReceipt(ctx context.Context, decision *contracts.De
 		if safeDepResult != nil && safeDepResult.Classification.HazardCode != "" {
 			receipt.SafeDepState = string(safeDepResult.Classification.State)
 			receipt.SafeDepReasonCode = string(safeDepResult.ReasonCode)
-			if safeDepResult.ActivationReceipt != nil && receipt.EmergencyActivationID == "" {
-				receipt.EmergencyActivationID = safeDepResult.ActivationReceipt.ActivationID
-				receipt.EmergencyDelegationSessionID = safeDepResult.ActivationReceipt.DelegationSessionID
-			}
 		}
 		if causal {
 			// AppendCausal validates the signed V5 session scope after this

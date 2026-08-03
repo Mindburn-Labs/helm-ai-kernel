@@ -353,16 +353,44 @@ func TestGatewayDecisionReceiptPreimageBindsArguments(t *testing.T) {
 	}
 }
 
-func TestDeployedMCPRoutesRequireAdminAuthentication(t *testing.T) {
+func TestDeployedMCPRouteRegistryMatchesHandlerAuthentication(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", "test-admin-key")
 	mux := http.NewServeMux()
 	registerDeployedMCPRoutes(mux, mcppkg.NewGateway(mcppkg.NewToolCatalog(), mcppkg.GatewayConfig{}))
 
-	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated MCP route status = %d body=%s", rec.Code, rec.Body.String())
+	registered := make(map[string]RouteAuth, len(RuntimeRouteSpecs()))
+	for _, spec := range RuntimeRouteSpecs() {
+		registered[spec.Method+" "+spec.Path] = spec.Auth
+	}
+
+	for _, tc := range []struct {
+		name, method, path, body string
+		wantAuth                 RouteAuth
+		protected                bool
+	}{
+		{name: "mcp transport get", method: http.MethodGet, path: "/mcp", wantAuth: RouteAuthAdmin, protected: true},
+		{name: "mcp transport post", method: http.MethodPost, path: "/mcp", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, wantAuth: RouteAuthAdmin, protected: true},
+		{name: "mcp capabilities", method: http.MethodGet, path: "/mcp/v1/capabilities", wantAuth: RouteAuthAdmin, protected: true},
+		{name: "mcp execute", method: http.MethodPost, path: "/mcp/v1/execute", body: `{"method":"missing"}`, wantAuth: RouteAuthAdmin, protected: true},
+		{name: "mcp protected-resource metadata", method: http.MethodGet, path: "/.well-known/oauth-protected-resource/mcp", wantAuth: RouteAuthPublic},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key := tc.method + " " + tc.path
+			if got, ok := registered[key]; !ok {
+				t.Fatalf("route %s is missing from the runtime registry", key)
+			} else if got != tc.wantAuth {
+				t.Fatalf("route %s registry auth = %q, want %q", key, got, tc.wantAuth)
+			}
+
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body)))
+			if tc.protected && rec.Code != http.StatusUnauthorized {
+				t.Fatalf("unauthenticated protected route %s status = %d body=%s", key, rec.Code, rec.Body.String())
+			}
+			if !tc.protected && rec.Code == http.StatusUnauthorized {
+				t.Fatalf("public route %s was unexpectedly authenticated", key)
+			}
+		})
 	}
 }
 

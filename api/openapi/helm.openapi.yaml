@@ -1893,6 +1893,8 @@ paths:
       description: |
         Returns JSON discovery metadata by default.
         When `Accept: text/event-stream` is used, responds with an SSE primer event.
+      security:
+        - AdminBearerAuth: []
       responses:
         '200':
           description: MCP discovery metadata or SSE primer
@@ -1903,6 +1905,8 @@ paths:
             text/event-stream:
               schema:
                 type: string
+        '401':
+          $ref: '#/components/responses/HelmError'
     post:
       operationId: postMCPJSONRPC
       tags: [mcp]
@@ -1910,6 +1914,8 @@ paths:
       description: |
         Supports `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`.
         Protocol negotiation happens on `initialize`; later requests SHOULD include `MCP-Protocol-Version`.
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -1929,6 +1935,8 @@ paths:
             text/plain:
               schema:
                 type: string
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /.well-known/oauth-protected-resource/mcp:
     get:
@@ -3326,6 +3334,8 @@ paths:
       operationId: listMCPCapabilities
       tags: [proxy]
       summary: List governed MCP tools
+      security:
+        - AdminBearerAuth: []
       responses:
         '200':
           description: MCP capability manifest
@@ -3333,12 +3343,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MCPCapabilityManifest'
+        '401':
+          $ref: '#/components/responses/HelmError'
 
   /mcp/v1/execute:
     post:
       operationId: executeMCPTool
       tags: [proxy]
       summary: Execute a governed MCP tool call
+      security:
+        - AdminBearerAuth: []
       requestBody:
         required: true
         content:
@@ -3357,6 +3371,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/MCPToolCallResponse'
         '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'

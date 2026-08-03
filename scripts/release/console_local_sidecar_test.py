@@ -28,8 +28,8 @@ SOURCE = {
 }
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_SOURCE_PIN = {
-    "commit": "8965520b71f4d23c0974b176f0e1cbb3877d5c33",
-    "tree": "fa89304740e04f079d28bb507c86b6a1716484da",
+    "commit": "d5382a39af34652d4c04cf17b24133c762ee9ce7",
+    "tree": "f18cd7367be0f2a9452e1081f23112c3ec9c0348",
     "version": "0.2.1",
     "package_lock_sha256": "1028990307789189333657942de79d11e6889ef47dc539f77e0a9c94c26a2076",
 }

@@ -49,7 +49,7 @@ const (
 	localConsoleReleaseComponent                = "app-helm-console"
 	localConsoleReleaseRepository               = "Mindburn-Labs/app-helm-console"
 	localConsoleCosignIssuer                    = "https://token.actions.githubusercontent.com"
-	localConsoleCosignIdentity                  = "https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/heads/main"
+	localConsoleCosignIdentityPrefix            = "https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@"
 	localConsoleInventoryMaxBytes               = 16 * 1024 * 1024
 	localConsoleBundleMaxBytes            int64 = 512 * 1024 * 1024
 	localConsoleReadyPath                       = "/api/runtime/local-sidecar-ready"
@@ -63,8 +63,6 @@ const (
 	localConsoleReadyTimeout                    = 5 * time.Second
 	localConsoleReadyRetry                      = 50 * time.Millisecond
 	localConsoleStopTimeout                     = 3 * time.Second
-	localConsolePeerReplayTTL                   = 10 * time.Minute
-	localConsolePeerReplayLimit                 = 4096
 )
 
 var (
@@ -282,12 +280,11 @@ func validateLocalConsoleReleaseManifest(manifest localConsoleReleaseManifest, r
 	if !validLocalConsoleSource(manifest.Source) {
 		return localConsoleReleaseTarget{}, fmt.Errorf("local Console release manifest source is invalid")
 	}
-	if manifest.OuterSignature != (localConsoleOuterSignature{
-		SignedFile:          localConsoleReleaseManifestFile,
-		Bundle:              localConsoleReleaseManifestBundleFile,
-		Issuer:              localConsoleCosignIssuer,
-		CertificateIdentity: localConsoleCosignIdentity,
-	}) {
+	outerSignature := manifest.OuterSignature
+	if outerSignature.SignedFile != localConsoleReleaseManifestFile ||
+		outerSignature.Bundle != localConsoleReleaseManifestBundleFile ||
+		outerSignature.Issuer != localConsoleCosignIssuer ||
+		!validLocalConsoleCosignIdentity(outerSignature.CertificateIdentity) {
 		return localConsoleReleaseTarget{}, fmt.Errorf("local Console release manifest outer signature contract is invalid")
 	}
 	expectedTargets := []string{"linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64"}
@@ -364,6 +361,26 @@ func validLocalConsoleSemver(value string) bool {
 func validLocalConsoleSource(source localConsoleSource) bool {
 	return validLowerHex(source.Commit, 20) && validLowerHex(source.Tree, 20) &&
 		validLocalConsoleSemver(source.Version) && validLowerHex(source.PackageLockSHA256, sha256.Size)
+}
+
+func validLocalConsoleCosignIdentity(value string) bool {
+	workflowRef, ok := strings.CutPrefix(value, localConsoleCosignIdentityPrefix)
+	return ok && validLocalConsoleWorkflowRef(workflowRef)
+}
+
+func validLocalConsoleWorkflowRef(value string) bool {
+	const prefix = "refs/tags/"
+	tag, ok := strings.CutPrefix(value, prefix)
+	if !ok || tag == "" {
+		return false
+	}
+	for index, character := range tag {
+		if (index == 0 && !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9'))) ||
+			!((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '-' || character == '.' || character == '_' || character == '/' || character == '+') {
+			return false
+		}
+	}
+	return true
 }
 
 func validateLocalConsoleReleaseLayout(consoleRoot string, manifest localConsoleReleaseManifest) error {
@@ -1025,41 +1042,23 @@ func validLocalConsoleSecret(secret string) bool {
 
 type localConsolePeerProof struct {
 	secret string
-
-	mu   sync.Mutex
-	used map[string]time.Time
 }
 
 func newLocalConsolePeerProof(secret string) (*localConsolePeerProof, error) {
 	if !validLocalConsoleSecret(secret) {
 		return nil, fmt.Errorf("local Console peer secret is invalid")
 	}
-	return &localConsolePeerProof{secret: secret, used: make(map[string]time.Time)}, nil
+	return &localConsolePeerProof{secret: secret}, nil
 }
 
 func (p *localConsolePeerProof) prove(nonce string) (string, bool) {
 	if p == nil || !validLocalConsoleReadyNonce(nonce) {
 		return "", false
 	}
-	now := time.Now().UTC()
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.used == nil {
-		p.used = make(map[string]time.Time)
-	}
-	for previousNonce, issuedAt := range p.used {
-		if now.Sub(issuedAt) >= localConsolePeerReplayTTL {
-			delete(p.used, previousNonce)
-		}
-	}
-	if _, seen := p.used[nonce]; seen || len(p.used) >= localConsolePeerReplayLimit {
-		return "", false
-	}
 	proof := localConsolePeerProofValue(p.secret, nonce)
 	if proof == "" {
 		return "", false
 	}
-	p.used[nonce] = now
 	return proof, true
 }
 

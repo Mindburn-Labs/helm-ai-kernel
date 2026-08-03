@@ -13,6 +13,7 @@
 # Caller: Makefile target `verify-cosign`. Documented in docs/VERIFICATION.md.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIR="${1:-dist}"
 DEFAULT_IDENTITY_REGEX='^https://github\.com/Mindburn-Labs/helm-ai-kernel/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+.*)$'
 IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-$DEFAULT_IDENTITY_REGEX}"
@@ -20,7 +21,7 @@ ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 CONSOLE_MANIFEST="helm-console-local-sidecar-release-manifest.json"
 CONSOLE_PRODUCER_BUNDLE="${CONSOLE_MANIFEST}.cosign.bundle"
 KERNEL_MANIFEST_BUNDLE="helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle"
-CONSOLE_PRODUCER_IDENTITY="https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/heads/main"
+CONSOLE_PRODUCER_IDENTITY=""
 KERNEL_RELEASE_IDENTITY=""
 
 if ! printf '%s' "$IDENTITY_REGEX" | grep -Eq '^\^https://github\\?\.com/Mindburn-Labs/helm-ai-kernel/\\?\.github/workflows/[A-Za-z0-9_.-]+\\?\.ya?ml@refs/'; then
@@ -74,6 +75,16 @@ PY
         exit 1
     fi
     KERNEL_RELEASE_IDENTITY="https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${kernel_release_tag}"
+    if ! console_workflow_ref="$(
+        python3 "$ROOT/scripts/release/console_local_sidecar.py" pin \
+            --pins "$ROOT/release/console-local-sidecar-pins.json" \
+            --kernel-release "$kernel_release_tag" | \
+            python3 -c 'import json, sys; print(json.load(sys.stdin)["workflow_ref"])'
+    )"; then
+        echo "::error::Console release verification requires an immutable workflow_ref in the checked-in source pin"
+        exit 1
+    fi
+    CONSOLE_PRODUCER_IDENTITY="https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@${console_workflow_ref}"
 fi
 
 ok=0
@@ -81,8 +92,8 @@ fail=0
 while IFS= read -r bundle; do
     case "$(basename "$bundle")" in
         "$CONSOLE_PRODUCER_BUNDLE")
-            # The Console source tuple is immutable, while its producer
-            # workflow is protected-main trust. The tag-bound Kernel bundle
+            # The Console source tuple and its producer workflow ref are
+            # both checked-in immutable pins. The tag-bound Kernel bundle
             # below is the public-release binding for this manifest.
             if [ -z "$KERNEL_RELEASE_IDENTITY" ]; then
                 echo "::error::Console producer bundle requires an exact Kernel release identity"

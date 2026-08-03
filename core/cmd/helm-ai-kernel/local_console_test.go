@@ -385,7 +385,7 @@ func TestLocalConsoleReadinessRequiresHMACWithoutCredentialsOnWire(t *testing.T)
 	}
 }
 
-func TestLocalConsolePeerProofRouteRequiresFreshLoopbackNonceWithoutBearer(t *testing.T) {
+func TestLocalConsolePeerProofRouteRequiresValidLoopbackNonceWithoutBearer(t *testing.T) {
 	secret := strings.Repeat("a", 64)
 	peer, err := newLocalConsolePeerProof(secret)
 	if err != nil {
@@ -424,12 +424,17 @@ func TestLocalConsolePeerProofRouteRequiresFreshLoopbackNonceWithoutBearer(t *te
 		t.Fatalf("peer proof = %q, want %q", got, wantProof)
 	}
 
-	// A proof nonce is one-time: replayed proof requests fail closed instead of
-	// becoming a reusable peer-authentication oracle.
+	// The Console verifier owns CSPRNG nonce freshness and validates the shared
+	// secret HMAC. The Kernel must not reserve unauthenticated nonce slots.
 	replay := httptest.NewRecorder()
 	mux.ServeHTTP(replay, request)
-	if replay.Code != http.StatusNotFound || replay.Header().Get(localConsolePeerProofHeader) != "" {
+	if replay.Code != http.StatusOK || !hmac.Equal([]byte(replay.Header().Get(localConsolePeerProofHeader)), []byte(wantProof)) {
 		t.Fatalf("replayed peer proof = status %d headers %#v", replay.Code, replay.Header())
+	}
+	for i := 0; i <= 4096; i++ {
+		if _, ok := peer.prove(fmt.Sprintf("%064x", i)); !ok {
+			t.Fatalf("valid peer nonce %d was rejected", i)
+		}
 	}
 
 	head := httptest.NewRequest(http.MethodHead, localConsolePeerProofPath, nil)
@@ -468,6 +473,23 @@ func TestLocalConsolePeerProofRouteRequiresFreshLoopbackNonceWithoutBearer(t *te
 				t.Fatalf("peer proof = status %d body %q headers %#v", rec.Code, rec.Body.String(), rec.Header())
 			}
 		})
+	}
+}
+
+func TestLocalConsoleCosignIdentityRequiresImmutableConsoleWorkflowTag(t *testing.T) {
+	valid := localConsoleCosignIdentityPrefix + "refs/tags/helm-console-sidecar-v0.8.0"
+	if !validLocalConsoleCosignIdentity(valid) {
+		t.Fatalf("valid Console workflow identity rejected: %q", valid)
+	}
+	for _, identity := range []string{
+		localConsoleCosignIdentityPrefix + "main",
+		localConsoleCosignIdentityPrefix + "refs/heads/main",
+		localConsoleCosignIdentityPrefix + "refs/tags/.mutable",
+		"https://github.com/Mindburn-Labs/other/.github/workflows/release-local-sidecar.yml@refs/tags/helm-console-sidecar-v0.8.0",
+	} {
+		if validLocalConsoleCosignIdentity(identity) {
+			t.Fatalf("mutable or foreign Console workflow identity accepted: %q", identity)
+		}
 	}
 }
 
@@ -1170,7 +1192,7 @@ func writeTrustedLocalConsoleRelease(t *testing.T, executable, runtimeTarget str
 			SignedFile:          localConsoleReleaseManifestFile,
 			Bundle:              localConsoleReleaseManifestBundleFile,
 			Issuer:              localConsoleCosignIssuer,
-			CertificateIdentity: localConsoleCosignIdentity,
+			CertificateIdentity: localConsoleCosignIdentityPrefix + "refs/tags/test-console-source",
 		},
 	}
 	var selected localConsoleBundle

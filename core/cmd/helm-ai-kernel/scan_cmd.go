@@ -44,6 +44,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		upload       bool
 		uploadURL    string
 		yes          bool
+		noUserConfig bool
 		previews     scanPreviewFlags
 	)
 	cmd.StringVar(&rootPath, "path", ".", "Directory to scan")
@@ -53,6 +54,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&envelopePath, "risk-envelope", "", "Write anonymized RiskEnvelope JSON")
 	cmd.Var(&previews, "preview", "Write local preview (.md or .html); may be repeated")
 	cmd.StringVar(&evidencePack, "evidence-pack", "", "Write anonymized scan EvidencePack tar")
+	cmd.BoolVar(&noUserConfig, "no-user-config", false, "Do not inspect user-level Claude, Codex, or desktop MCP config")
 	cmd.BoolVar(&upload, "upload", false, "Upload anonymized RiskEnvelope JSON")
 	cmd.StringVar(&uploadURL, "upload-url", "", "Explicit upload endpoint for --upload")
 	cmd.BoolVar(&yes, "yes", false, "Confirm upload after local preview is printed")
@@ -74,9 +76,10 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "loading scan salt"))
 	}
 	opts := riskscan.BuildOptions{
-		Salt:   salt,
-		Cohort: riskenvelope.CohortBucket(cohort),
-		Now:    time.Now().UTC(),
+		Salt:              salt,
+		Cohort:            riskenvelope.CohortBucket(cohort),
+		Now:               time.Now().UTC(),
+		IncludeUserConfig: !noUserConfig,
 	}
 	var envelope riskenvelope.RiskEnvelope
 	if strings.TrimSpace(receiptsPath) != "" {
@@ -120,6 +123,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "RiskEnvelope: %s\n", envelope.EnvelopeID)
 	fmt.Fprintf(stdout, "Content hash: %s\n", envelope.EnvelopeContentHash)
 	fmt.Fprintf(stdout, "Findings: %d\n", len(envelope.Findings))
+	fmt.Fprintf(stdout, "MCP servers detected: %d\n", envelope.Posture.MCPServerCount)
 	fmt.Fprintf(stdout, "Static config files read: %d\n", envelope.Posture.StaticConfigFilesRead)
 
 	if upload {

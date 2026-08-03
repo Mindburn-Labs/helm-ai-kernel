@@ -13,7 +13,6 @@
         ".devcontainer/devcontainer.json",
         ".gitleaks.toml",
         "AGENTS.md",
-        "CODEOWNERS",
         "agent.yaml",
         "catalog-info.yaml",
         "renovate.json",

@@ -1,3 +1,5 @@
+// quantum_posture: generated-contract test only; it round-trips signature
+// metadata without signing and makes no quantum-assurance claim.
 package kernelv1
 
 import (

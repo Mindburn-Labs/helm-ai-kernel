@@ -2137,6 +2137,15 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 		}
 	case cmd.Name == "git":
 		c.matchGit(args)
+	case cmd.Name == "dropdb":
+		c.recordDestructiveEffect()
+		c.decide("dropdb destroys a database")
+	case cmd.Name == "psql" || cmd.Name == "mysql":
+		c.matchDatabaseClient(cmd.Name, args)
+	case cmd.Name == "terraform":
+		c.matchTerraform(args)
+	case cmd.Name == "aws":
+		c.matchAWS(args)
 	case cmd.Name == "kubectl":
 		sub, _, dynamic, found := firstSubcommand(args[1:], kubectlValueFlags, kubectlBoolFlags)
 		if dynamic {
@@ -2348,6 +2357,18 @@ var dockerValueFlags = map[string]bool{
 	"-H": true, "--host": true, "--context": true, "--config": true, "--log-level": true,
 }
 
+var awsValueFlags = map[string]bool{
+	"--profile": true, "--region": true, "--output": true, "--endpoint-url": true,
+	"--ca-bundle": true, "--cli-read-timeout": true, "--cli-connect-timeout": true,
+	"--color": true, "--query": true,
+}
+
+var awsBoolFlags = map[string]bool{
+	"--debug": true, "--no-verify-ssl": true, "--no-paginate": true,
+	"--no-sign-request": true, "--no-cli-pager": true, "--cli-auto-prompt": true,
+	"--no-cli-auto-prompt": true,
+}
+
 // firstSubcommand finds the first positional token, skipping flags and the
 // values of known value-flags. dynamic is true when scanning hit a word that
 // cannot be resolved statically (the subcommand may be hidden).
@@ -2368,6 +2389,9 @@ func firstSubcommand(args []wordTok, vals, bools map[string]bool) (sub string, i
 		}
 		if strings.HasPrefix(tok.text, "-") && tok.text != "-" {
 			if vals[tok.text] {
+				if i+1 >= len(args) || args[i+1].dynamic {
+					return "", -1, true, false
+				}
 				i++
 				continue
 			}
@@ -2476,7 +2500,165 @@ func (c *collector) matchGit(args []wordTok) {
 			c.recordDestructiveEffect()
 			c.decide("git clean with forced directory delete")
 		}
+	case "push":
+		c.matchGitPush(rest[subIndex+1:])
 	}
+}
+
+// matchGitPush handles every statically visible force-push form. A lease
+// based on a mutable remote-tracking ref is not an immutable proof, so even
+// explicit --force-with-lease forms must reach the signed decision path.
+func (c *collector) matchGitPush(args []wordTok) {
+	for _, tok := range args {
+		if tok.dynamic {
+			c.decide("git push with unresolvable arguments (fail-closed)")
+			return
+		}
+		if strings.HasPrefix(tok.text, "--force") || strings.HasPrefix("--force", tok.text) {
+			c.recordDestructiveEffect()
+			c.decide("git push force option requires a decision")
+			return
+		}
+		if strings.HasPrefix(tok.text, "-") && !strings.HasPrefix(tok.text, "--") {
+			for _, flag := range tok.text[1:] {
+				if flag == 'f' {
+					c.recordDestructiveEffect()
+					c.decide("git push force option requires a decision")
+					return
+				}
+			}
+		}
+		if strings.HasPrefix(tok.text, "+") {
+			c.recordDestructiveEffect()
+			c.decide("git push forced refspec requires a decision")
+			return
+		}
+	}
+}
+
+func (c *collector) matchTerraform(args []wordTok) {
+	sub, subIndex, dynamic, found := firstSubcommand(args[1:], nil, nil)
+	if dynamic {
+		c.decide("terraform invocation with a dynamic subcommand (fail-closed)")
+		return
+	}
+	if !found {
+		return
+	}
+	rest := args[subIndex+2:]
+	for _, tok := range rest {
+		if tok.dynamic {
+			c.decide("terraform " + sub + " with unresolvable arguments (fail-closed)")
+			return
+		}
+	}
+	switch sub {
+	case "destroy":
+		c.recordDestructiveEffect()
+		c.decide("terraform destroy")
+	case "apply":
+		for _, tok := range rest {
+			if tok.text == "-destroy" || tok.text == "--destroy" || strings.HasPrefix(tok.text, "-destroy=") || strings.HasPrefix(tok.text, "--destroy=") {
+				c.recordDestructiveEffect()
+				c.decide("terraform apply -destroy")
+				return
+			}
+		}
+	}
+}
+
+func (c *collector) matchAWS(args []wordTok) {
+	service, serviceIndex, dynamic, found := firstSubcommand(args[1:], awsValueFlags, awsBoolFlags)
+	if dynamic {
+		c.decide("aws invocation with a dynamic service (fail-closed)")
+		return
+	}
+	if !found || service != "s3" {
+		return
+	}
+	operation, _, dynamic, found := firstSubcommand(args[serviceIndex+2:], nil, nil)
+	if dynamic {
+		c.decide("aws s3 invocation with a dynamic operation (fail-closed)")
+		return
+	}
+	if found && operation == "rm" {
+		c.recordDestructiveEffect()
+		c.decide("aws s3 rm")
+	}
+}
+
+func (c *collector) matchDatabaseClient(name string, args []wordTok) {
+	foundQuery := false
+	for i := 1; i < len(args); i++ {
+		tok := args[i]
+		if tok.dynamic {
+			c.decide(name + " with an unresolvable argument (fail-closed)")
+			return
+		}
+		query := ""
+		switch {
+		case tok.text == "-c" || tok.text == "--command" || tok.text == "-e" || tok.text == "--execute":
+			if i+1 >= len(args) || args[i+1].dynamic {
+				c.decide(name + " with an unresolvable query (fail-closed)")
+				return
+			}
+			query = args[i+1].text
+			i++
+		case strings.HasPrefix(tok.text, "--command="):
+			query = strings.TrimPrefix(tok.text, "--command=")
+		case strings.HasPrefix(tok.text, "--execute="):
+			query = strings.TrimPrefix(tok.text, "--execute=")
+		}
+		if query == "" {
+			continue
+		}
+		foundQuery = true
+		if sqlHasDropDatabase(query) {
+			c.recordDestructiveEffect()
+			c.decide(name + " DROP DATABASE")
+			return
+		}
+	}
+	if !foundQuery && !databaseClientHelpOnly(args) {
+		c.decide(name + " input cannot be resolved statically (fail-closed)")
+	}
+}
+
+func databaseClientHelpOnly(args []wordTok) bool {
+	return len(args) == 2 && !args[1].dynamic && (args[1].text == "--help" || args[1].text == "--version" || args[1].text == "-?")
+}
+
+func sqlHasDropDatabase(query string) bool {
+	words := strings.FieldsFunc(stripSQLComments(strings.ToLower(query)), func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_')
+	})
+	for i := 0; i+1 < len(words); i++ {
+		if words[i] == "drop" && words[i+1] == "database" {
+			return true
+		}
+	}
+	return false
+}
+
+func stripSQLComments(query string) string {
+	for {
+		start := strings.Index(query, "/*")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(query[start+2:], "*/")
+		if end < 0 {
+			return query[:start]
+		}
+		query = query[:start] + " " + query[start+end+4:]
+	}
+	lines := strings.Split(query, "\n")
+	for i, line := range lines {
+		if comment := strings.Index(line, "--"); comment >= 0 {
+			lines[i] = line[:comment]
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func gitConfigEntries(args []wordTok) ([]wordTok, bool) {

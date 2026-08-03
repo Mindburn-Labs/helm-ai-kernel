@@ -41,6 +41,16 @@ type Command struct {
 	Dynamic bool     // true when any token could not be resolved statically
 }
 
+// EffectFact is a statically derived effect that callers can route to its
+// governed policy class. Target is intentionally raw in memory only; receipt
+// writers must bind it before persistence.
+type EffectFact struct {
+	Class  string
+	Action string
+	Target string
+	Reason string
+}
+
 // Result is the advisory classification of one raw shell command string.
 type Result struct {
 	// Decide is true when the command must be routed through the kernel's
@@ -50,6 +60,13 @@ type Result struct {
 	ParseOK  bool
 	Commands []Command
 	Signals  []string
+	// RequiresShellDecision distinguishes an existing generic shell decision
+	// from a recognized effect fact. It prevents callers from widening a
+	// network or secret-read fact back into shell-operate by default.
+	RequiresShellDecision bool
+	// EffectFacts are additive AST-derived network and secret-read facts.
+	// Callers must not persist Fact.Target verbatim.
+	EffectFacts []EffectFact
 	// SensitiveTarget is the static sensitive target that caused routing to
 	// the signed decision path. Callers must avoid persisting it verbatim.
 	SensitiveTarget string
@@ -121,14 +138,346 @@ func ClassifyAt(raw, cwd string) Result {
 	}
 	c.classifyString(trimmed, "", 0)
 
-	res.Decide = c.decideFlag
+	effectFacts := classifyEffectFacts(c.commands)
+	res.Decide = c.decideFlag || len(effectFacts) > 0
 	res.Reason = strings.Join(c.reasons, "; ")
+	if res.Reason == "" && len(effectFacts) > 0 {
+		res.Reason = effectFacts[0].Reason
+	}
 	res.Commands = c.commands
 	res.Signals = c.signalList()
 	res.ParseOK = c.parseOK
+	res.RequiresShellDecision = c.decideFlag
+	res.EffectFacts = effectFacts
 	res.SensitiveTarget = c.sensitiveTarget
 	res.RequiresShellPermission = c.requiresShellPermission
 	return res
+}
+
+var networkEgressCommands = map[string]bool{
+	"aria2c": true,
+	"curl":   true,
+	"ftp":    true,
+	"http":   true,
+	"httpie": true,
+	"lftp":   true,
+	"nc":     true,
+	"ncat":   true,
+	"netcat": true,
+	"rsync":  true,
+	"scp":    true,
+	"sftp":   true,
+	"socat":  true,
+	"telnet": true,
+	"wget":   true,
+}
+
+var secretReadCommands = map[string]bool{
+	".":      true,
+	"awk":    true,
+	"cat":    true,
+	"egrep":  true,
+	"fgrep":  true,
+	"gawk":   true,
+	"grep":   true,
+	"head":   true,
+	"less":   true,
+	"mawk":   true,
+	"more":   true,
+	"nawk":   true,
+	"sed":    true,
+	"source": true,
+	"tail":   true,
+}
+
+var transferReadCommands = map[string]bool{
+	"cp":    true,
+	"rsync": true,
+	"scp":   true,
+}
+
+var secretReadPathNeedles = []string{
+	".env",
+	".pem",
+	".p12",
+	".key",
+	"id_rsa",
+	"id_ed25519",
+	"id_ecdsa",
+	".ssh/",
+	".aws/credentials",
+	".config/gcloud",
+	".kube/config",
+	".netrc",
+	".npmrc",
+	".pypirc",
+	".docker/config.json",
+}
+
+// classifyEffectFacts derives narrowly-scoped facts from commands that the
+// shell parser already resolved. It deliberately never tokenizes raw shell
+// source, so wrapper, background, and subshell behavior stays owned by the
+// AST traversal above.
+func classifyEffectFacts(commands []Command) []EffectFact {
+	facts := make([]EffectFact, 0)
+	seen := make(map[string]bool)
+	for _, command := range commands {
+		for _, target := range secretReadTargets(command) {
+			facts = appendEffectFact(facts, seen, EffectFact{
+				Class:  "secret",
+				Action: "secret_read",
+				Target: target,
+				Reason: "secret read via " + command.Name,
+			})
+		}
+		if networkEgressCommands[command.Name] {
+			if target, ok := networkEgressTarget(command); ok {
+				reason := "network egress via " + command.Name
+				if target == command.Name {
+					reason += " with an unresolved destination"
+				}
+				facts = appendEffectFact(facts, seen, EffectFact{
+					Class:  "network",
+					Action: "network_egress",
+					Target: target,
+					Reason: reason,
+				})
+			}
+		}
+	}
+	return facts
+}
+
+func appendEffectFact(facts []EffectFact, seen map[string]bool, fact EffectFact) []EffectFact {
+	key := fact.Class + "\x00" + fact.Action + "\x00" + fact.Target
+	if seen[key] {
+		return facts
+	}
+	seen[key] = true
+	return append(facts, fact)
+}
+
+func networkEgressTarget(command Command) (string, bool) {
+	remoteTarget := ""
+	bareHost := ""
+	for _, token := range command.Tokens[1:] {
+		for _, candidate := range networkTokenCandidates(token) {
+			if strings.Contains(candidate, "://") {
+				return candidate, true
+			}
+			if remoteTarget == "" && isRemotePathSpec(candidate) {
+				remoteTarget = candidate
+			}
+			if bareHost == "" && isBareNetworkHost(candidate) {
+				bareHost = candidate
+			}
+		}
+	}
+	if remoteTarget != "" {
+		return remoteTarget, true
+	}
+	if bareHost != "" {
+		return bareHost, true
+	}
+	if networkCommandMayEgress(command) {
+		// A dynamic or nonstandard destination cannot make the operation
+		// ungoverned. Bind the command identity rather than guessing a target.
+		return command.Name, true
+	}
+	return "", false
+}
+
+func networkTokenCandidates(token string) []string {
+	candidates := []string{token}
+	if strings.HasPrefix(token, "-") {
+		if index := strings.IndexByte(token, '='); index >= 0 && index+1 < len(token) {
+			candidates = append(candidates, token[index+1:])
+		}
+	}
+	return candidates
+}
+
+func networkCommandMayEgress(command Command) bool {
+	for _, token := range command.Tokens[1:] {
+		if token == "" {
+			continue
+		}
+		if token == "-h" || token == "--help" || token == "-V" || token == "--version" {
+			continue
+		}
+		if strings.HasPrefix(token, "-") && token != "-" {
+			continue
+		}
+		return true
+	}
+	return command.Dynamic
+}
+
+func isBareNetworkHost(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.Contains(value, "://") || isRemotePathSpec(value) {
+		return false
+	}
+	if strings.HasPrefix(value, "-") || strings.ContainsAny(value, `/\\@`) {
+		return false
+	}
+	return value == "localhost" || strings.Contains(value, ".") || strings.Count(value, ":") > 1
+}
+
+// isRemotePathSpec recognizes the scp/rsync host:path notation while keeping
+// URLs and Windows drive paths out of local-secret classification.
+func isRemotePathSpec(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.Contains(value, "://") || strings.HasPrefix(value, "/") ||
+		strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") || strings.HasPrefix(value, "~") {
+		return false
+	}
+	separator := strings.IndexByte(value, ':')
+	if separator <= 0 {
+		return false
+	}
+	host := value[:separator]
+	if len(host) == 1 && ((host[0] >= 'a' && host[0] <= 'z') || (host[0] >= 'A' && host[0] <= 'Z')) {
+		return false // Windows drive path.
+	}
+	return !strings.ContainsAny(host, `/\\`)
+}
+
+func secretReadTargets(command Command) []string {
+	var targets []string
+	switch {
+	case secretReadCommands[command.Name]:
+		targets = append(targets, secretReaderTargets(command.Tokens[1:])...)
+	case command.Name == "curl":
+		targets = append(targets, curlSecretReadTargets(command.Tokens[1:])...)
+	case transferReadCommands[command.Name]:
+		targets = append(targets, transferSecretReadTargets(command.Tokens[1:])...)
+	}
+	return targets
+}
+
+func secretReaderTargets(tokens []string) []string {
+	var targets []string
+	endOptions := false
+	for _, token := range tokens {
+		if !endOptions && token == "--" {
+			endOptions = true
+			continue
+		}
+		if !endOptions && strings.HasPrefix(token, "-") && token != "-" {
+			if index := strings.IndexByte(token, '='); index >= 0 {
+				targets = appendLocalSecretTarget(targets, token[index+1:])
+			}
+			continue
+		}
+		targets = appendLocalSecretTarget(targets, token)
+	}
+	return targets
+}
+
+func curlSecretReadTargets(tokens []string) []string {
+	var targets []string
+	for index, token := range tokens {
+		targets = appendLocalSecretTarget(targets, curlInlineSecretPath(token))
+		if index+1 >= len(tokens) {
+			continue
+		}
+		switch token {
+		case "-d", "--data", "--data-binary", "--data-ascii":
+			targets = appendLocalSecretTarget(targets, curlAtPath(tokens[index+1]))
+		case "-F", "--form":
+			targets = appendLocalSecretTarget(targets, curlFormPath(tokens[index+1]))
+		case "-T", "--upload-file":
+			targets = appendLocalSecretTarget(targets, tokens[index+1])
+		}
+	}
+	return targets
+}
+
+func curlInlineSecretPath(token string) string {
+	switch {
+	case strings.HasPrefix(token, "-d@"):
+		return strings.TrimPrefix(token, "-d@")
+	case strings.HasPrefix(token, "--data=@"):
+		return strings.TrimPrefix(token, "--data=@")
+	case strings.HasPrefix(token, "--data-binary=@"):
+		return strings.TrimPrefix(token, "--data-binary=@")
+	case strings.HasPrefix(token, "--data-ascii=@"):
+		return strings.TrimPrefix(token, "--data-ascii=@")
+	case strings.HasPrefix(token, "-T") && len(token) > len("-T"):
+		return strings.TrimPrefix(token, "-T")
+	case strings.HasPrefix(token, "--upload-file="):
+		return strings.TrimPrefix(token, "--upload-file=")
+	case strings.HasPrefix(token, "-F") && len(token) > len("-F"):
+		return curlFormPath(strings.TrimPrefix(token, "-F"))
+	case strings.HasPrefix(token, "--form="):
+		return curlFormPath(strings.TrimPrefix(token, "--form="))
+	default:
+		return curlAtPath(token)
+	}
+}
+
+func curlAtPath(value string) string {
+	if strings.HasPrefix(value, "@") {
+		return strings.TrimPrefix(value, "@")
+	}
+	return ""
+}
+
+func curlFormPath(value string) string {
+	separator := strings.IndexByte(value, '@')
+	if separator < 0 {
+		return ""
+	}
+	pathValue := value[separator+1:]
+	if option := strings.IndexByte(pathValue, ';'); option >= 0 {
+		pathValue = pathValue[:option]
+	}
+	return pathValue
+}
+
+func transferSecretReadTargets(tokens []string) []string {
+	operands := make([]string, 0, len(tokens))
+	endOptions := false
+	for _, token := range tokens {
+		if !endOptions && token == "--" {
+			endOptions = true
+			continue
+		}
+		if !endOptions && strings.HasPrefix(token, "-") && token != "-" {
+			continue
+		}
+		operands = append(operands, token)
+	}
+	if len(operands) < 2 {
+		return nil
+	}
+	var targets []string
+	for _, source := range operands[:len(operands)-1] {
+		targets = appendLocalSecretTarget(targets, source)
+	}
+	return targets
+}
+
+func appendLocalSecretTarget(targets []string, value string) []string {
+	if isLocalSecretPath(value) {
+		return append(targets, value)
+	}
+	return targets
+}
+
+func isLocalSecretPath(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.Contains(value, "://") || isRemotePathSpec(value) {
+		return false
+	}
+	normalized := strings.ToLower(strings.ReplaceAll(value, `\\`, "/"))
+	for _, needle := range secretReadPathNeedles {
+		if strings.Contains(normalized, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 type collector struct {

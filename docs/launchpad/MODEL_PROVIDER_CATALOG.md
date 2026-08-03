@@ -4,7 +4,7 @@ Launchpad BYO model egress is governed by `core/pkg/launchpad/modelproviders/cat
 
 The catalog records the provider id, jurisdiction region, API protocol, runtime env names, required env groups, HTTPS base URLs, dynamic base URL envs, egress host suffixes, and official source URLs for primary US, EU, and China LLM API providers. Local-container egress preflight rejects model-provider destinations that are not in this catalog.
 
-The scheduled `Launchpad Model Provider Catalog` workflow runs `scripts/launch/update_model_provider_catalog.py` daily. It normalizes the catalog, checks official source URLs, and opens a PR if the canonical catalog changes.
+The scheduled `Launchpad Model Provider Catalog` workflow runs `scripts/launch/update_model_provider_catalog.py` daily. Scheduled runs produce review evidence only: when a refresh changes the catalog, the workflow captures a reviewable patch and changed-paths artifact; it never creates a branch, commit, or pull request. A human can download the candidate from a manually dispatched run, apply it in an owned branch, and review it through the normal pull-request workflow.
 When run with `--network --write`, the updater also regenerates
 `core/pkg/launchpad/modelproviders/source_fingerprints.json`. That file stores
 stable SHA-256 fingerprints for the official provider docs listed in

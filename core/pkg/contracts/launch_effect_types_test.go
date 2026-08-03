@@ -465,6 +465,25 @@ func TestLaunchEffectPreviewEnvelopeAndReceiptSchemas(t *testing.T) {
 	}
 }
 
+func TestLaunchProviderV1InputsRemainDualReadCompatible(t *testing.T) {
+	for _, fixture := range launchInputFixtures() {
+		if !launchTestEffectRequiresProviderRoute(fixture.effectID) {
+			continue
+		}
+		t.Run(fixture.effectID, func(t *testing.T) {
+			legacy := cloneLaunchInput(t, fixture.input)
+			delete(legacy, "provider_offering_id")
+			delete(legacy, "provider_destination_hash")
+			if err := validateAgainstSchema(t, compileSchema(t, fixture.schema), legacy); err != nil {
+				t.Fatalf("legacy v1 input rejected by %s: %v", fixture.schema, err)
+			}
+			if err := contracts.ValidateLaunchEffectInputSemantics(fixture.effectID, legacy); err != nil {
+				t.Fatalf("legacy v1 input rejected by semantic validation: %v", err)
+			}
+		})
+	}
+}
+
 func TestLaunchEffectSchemasAdvertisePreviewOnly(t *testing.T) {
 	root := repoRoot(t)
 	for _, fixture := range launchInputFixtures() {

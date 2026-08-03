@@ -500,7 +500,7 @@ func ValidateLaunchProviderPayloadSet(value LaunchProviderPayloadSet) error {
 	previous := ""
 	for _, entry := range value.Entries {
 		key := launchTupleKey(entry.PlacementID, entry.EffectID, entry.ProviderActionURN)
-		if entry.PlacementID == "" || entry.EffectID == "" || entry.ProviderActionURN == "" || key <= previous || !validLaunchSHA256(entry.DestinationHash) || !validLaunchSHA256(entry.PayloadHash) {
+		if entry.PlacementID == "" || entry.EffectID == "" || entry.ProviderActionURN == "" || key <= previous || (entry.DestinationHash != "" && !validLaunchSHA256(entry.DestinationHash)) || !validLaunchSHA256(entry.PayloadHash) {
 			return errors.New("launch provider payload entries must be complete, unique, and sorted")
 		}
 		previous = key

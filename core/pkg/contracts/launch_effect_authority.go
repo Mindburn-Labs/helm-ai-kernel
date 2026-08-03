@@ -208,17 +208,25 @@ type LaunchEmergencyFenceSnapshot struct {
 // LaunchEffectEnvelopeVerificationContext supplies independently resolved
 // source truth. Values copied from the envelope are not valid inputs here.
 type LaunchEffectEnvelopeVerificationContext struct {
-	Now                            time.Time
-	ResolveInputSchema             func(schemaRef string) ([]byte, error)
-	ValidateInput                  func(schemaRef, schemaHash string, input map[string]any) error
-	ResolveRouteBinding            func(routeRef string) (LaunchRouteBinding, error)
-	RouteArtifacts                 LaunchRouteArtifactResolver
-	ResolveApprovalAuthority       func(grantRef, grantHash, consumptionRef, consumptionHash string) (LaunchEffectApprovalAuthority, error)
-	VerifyApprovalAuthority        func(LaunchEffectApprovalAuthority) error
-	VerifyDependencyState          func(dependencySetRef, dependencySetHash string) error
-	ExpectedPolicyEpoch            string
-	MaximumPermitTTL               time.Duration
-	ResolveVerdictKey              func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error)
+	Now                      time.Time
+	ResolveInputSchema       func(schemaRef string) ([]byte, error)
+	ValidateInput            func(schemaRef, schemaHash string, input map[string]any) error
+	ResolveRouteBinding      func(routeRef string) (LaunchRouteBinding, error)
+	RouteArtifacts           LaunchRouteArtifactResolver
+	ResolveApprovalAuthority func(grantRef, grantHash, consumptionRef, consumptionHash string) (LaunchEffectApprovalAuthority, error)
+	VerifyApprovalAuthority  func(LaunchEffectApprovalAuthority) error
+	VerifyDependencyState    func(dependencySetRef, dependencySetHash string) error
+	// ExpectedRequestBodyHash and ExpectedArgsC14NHash are retained for v1
+	// source compatibility. When supplied, preflight binds them exactly; the
+	// finalizer still independently resolves the immutable dispatch bytes.
+	ExpectedRequestBodyHash string
+	ExpectedArgsC14NHash    string
+	ExpectedPolicyEpoch     string
+	MaximumPermitTTL        time.Duration
+	// ResolveVerdictKey is the v1 resolver shape. New callers should prefer
+	// ResolveVerdictKeyForTrustRoot so the trust root is explicit at lookup.
+	ResolveVerdictKey              func(signerKeyID string) (ed25519.PublicKey, error)
+	ResolveVerdictKeyForTrustRoot  func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error)
 	ResolveEmergencyFence          func(tenantID, workspaceID string) (LaunchEmergencyFenceSnapshot, error)
 	ResolveDispatchRequest         func(LaunchEffectPermitBinding) (LaunchEffectDispatchRequest, error)
 	ResolveDispatchTime            func() (time.Time, error)
@@ -240,7 +248,12 @@ type LaunchEffectEnvelopeVerificationContext struct {
 	// StartDispatch is the bounded last pre-effect seam. It must enforce the
 	// approved Destination tuple; it may not derive or substitute an endpoint.
 	StartDispatch func(expected LaunchEffectPermitBinding, request LaunchEffectDispatchRequest) error
-	Permit        LaunchEffectPermitBinding
+	// FinalizeDispatch is retained for v1 source compatibility only. It cannot
+	// prove the durable STARTED reservation or invoke the bounded connector
+	// interlock, so VerifyLaunchEffectAuthorizationEnvelope fails closed before
+	// relying on this callback.
+	FinalizeDispatch func(expected LaunchEffectPermitBinding) error
+	Permit           LaunchEffectPermitBinding
 }
 
 // LaunchEffectVerdictSigningBytes returns the RFC 8785 payload signed by the
@@ -266,17 +279,29 @@ func SignLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnv
 	return envelope, nil
 }
 
-// VerifyLaunchEffectAuthorizationEnvelope performs non-authorizing preflight.
-// Crossing a connector seam requires StartLaunchEffectAuthorizationEnvelope.
+// VerifyLaunchEffectAuthorizationEnvelope is the v1 authorizing final gate.
+// A successful return proves a source-owned atomic permit consumption and
+// durable STARTED reservation immediately before the bounded connector seam.
 func VerifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	return authorizeLaunchEffectAuthorizationEnvelope(envelope, ctx)
+}
+
+// StartLaunchEffectAuthorizationEnvelope is an explicit alias for the v1
+// authorizing gate. It never returns a reusable dispatch grant.
+func StartLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	return authorizeLaunchEffectAuthorizationEnvelope(envelope, ctx)
+}
+
+// PreflightLaunchEffectAuthorizationEnvelope validates signed, source-owned
+// launch evidence without consuming a permit or crossing a connector seam.
+// It is safe for reading or replaying legacy v1 artifacts, but it grants no
+// execution authority.
+func PreflightLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
 	return verifyLaunchEffectAuthorizationEnvelope(envelope, ctx)
 }
 
-// StartLaunchEffectAuthorizationEnvelope crosses the connector's last
-// pre-effect seam inside the source-owned atomic finalizer. It never returns a
-// reusable dispatch grant.
-func StartLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
-	if err := verifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+func authorizeLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	if err := PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		return err
 	}
 	return startLaunchEffectAuthorizationEnvelope(envelope, ctx)
@@ -305,6 +330,9 @@ func verifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	if envelope.ConnectorID != contract.ConnectorID || envelope.ActionURN != contract.ActionURN {
 		return errors.New("launch authorization envelope connector action is not admitted for effect")
 	}
+	if err := verifyLaunchLegacyDispatchHashBindings(envelope, ctx); err != nil {
+		return err
+	}
 	if ctx.ExpectedPolicyEpoch == "" || envelope.PolicyEpoch != ctx.ExpectedPolicyEpoch {
 		return errors.New("launch authorization envelope policy epoch is stale")
 	}
@@ -313,17 +341,11 @@ func verifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	}
 	// Verify the Kernel signature before any source-owned route or registry
 	// resolution to avoid unsigned tenancy probes and expensive-work oracles.
-	if ctx.ResolveVerdictKey == nil {
-		return errors.New("launch authorization envelope requires a verdict trust-root resolver")
-	}
-	verdictPublicKey, err := ctx.ResolveVerdictKey(envelope.KernelTrustRootID, envelope.KernelVerdictSignerKey)
+	verdictPublicKey, err := resolveLaunchVerdictKey(envelope, ctx)
 	if err != nil {
-		return fmt.Errorf("resolve launch authorization envelope verdict key: %w", err)
-	}
-	if err := verifyLaunchVerdictSignature(envelope, verdictPublicKey); err != nil {
 		return err
 	}
-	if err := verifyLaunchEmergencyFence(envelope, ctx); err != nil {
+	if err := verifyLaunchVerdictSignature(envelope, verdictPublicKey); err != nil {
 		return err
 	}
 	if ctx.ResolveInputSchema == nil || ctx.ValidateInput == nil {
@@ -342,17 +364,14 @@ func verifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	if err := verifyLaunchEnvelopeTimes(envelope, ctx); err != nil {
 		return err
 	}
-	if err := verifyLaunchPermitBinding(envelope, ctx.Permit); err != nil {
-		return err
-	}
-	if _, _, _, err := resolveAndVerifyLaunchDispatchRequest(envelope, ctx.Permit, ctx); err != nil {
+	if err := verifyLaunchPermitPreflightBinding(envelope, ctx.Permit); err != nil {
 		return err
 	}
 	if err := verifyLaunchCanonicalApproval(envelope, ctx); err != nil {
 		return err
 	}
 	if launchEffectRequiresProviderRoute(envelope.EffectID) {
-		if err := verifyLaunchProviderRouteBinding(envelope, ctx); err != nil {
+		if err := verifyLaunchProviderRouteBinding(envelope, ctx, false); err != nil {
 			return fmt.Errorf("launch authorization envelope provider route validation failed: %w", err)
 		}
 	}
@@ -365,9 +384,46 @@ func verifyLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationE
 	return nil
 }
 
+func verifyLaunchLegacyDispatchHashBindings(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+	if ctx.ExpectedRequestBodyHash != "" && !launchConstantEqual(envelope.RequestBodyHash, ctx.ExpectedRequestBodyHash) {
+		return errors.New("launch authorization envelope request body hash does not match canonical request")
+	}
+	if ctx.ExpectedArgsC14NHash != "" && !launchConstantEqual(envelope.ArgsC14NHash, ctx.ExpectedArgsC14NHash) {
+		return errors.New("launch authorization envelope canonical arguments hash does not match connector arguments")
+	}
+	if (ctx.ExpectedRequestBodyHash == "") != (ctx.ExpectedArgsC14NHash == "") {
+		return errors.New("launch authorization envelope requires both legacy exact dispatch hashes when either is supplied")
+	}
+	return nil
+}
+
+func resolveLaunchVerdictKey(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) (ed25519.PublicKey, error) {
+	if ctx.ResolveVerdictKeyForTrustRoot != nil {
+		publicKey, err := ctx.ResolveVerdictKeyForTrustRoot(envelope.KernelTrustRootID, envelope.KernelVerdictSignerKey)
+		if err != nil {
+			return nil, fmt.Errorf("resolve launch authorization envelope verdict key: %w", err)
+		}
+		return publicKey, nil
+	}
+	if ctx.ResolveVerdictKey == nil {
+		return nil, errors.New("launch authorization envelope requires a verdict trust-root resolver")
+	}
+	publicKey, err := ctx.ResolveVerdictKey(envelope.KernelVerdictSignerKey)
+	if err != nil {
+		return nil, fmt.Errorf("resolve launch authorization envelope verdict key: %w", err)
+	}
+	return publicKey, nil
+}
+
 func startLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
 	if ctx.FinalizeAndStartDispatch == nil || ctx.StartDispatch == nil {
+		if ctx.FinalizeDispatch != nil {
+			return errors.New("launch authorization envelope v1 FinalizeDispatch cannot prove atomic permit consumption, durable STARTED reservation, and connector start interlock")
+		}
 		return errors.New("launch authorization envelope requires atomic finalization and connector start interlock")
+	}
+	if ctx.VerifyDispatchCommit == nil {
+		return errors.New("launch authorization envelope requires source-owned permit consumption and STARTED reservation proof")
 	}
 	expected, err := launchDispatchFinalization(envelope, ctx.Permit)
 	if err != nil {
@@ -472,12 +528,9 @@ func resolveAndVerifyLaunchDispatchFinalizationObservation(
 	if err := verifyLaunchPermitBinding(envelope, permit); err != nil {
 		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, err
 	}
-	if fresh.ResolveVerdictKey == nil {
-		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, errors.New("launch authorization envelope finalization requires a verdict trust-root resolver")
-	}
-	verdictPublicKey, err := fresh.ResolveVerdictKey(envelope.KernelTrustRootID, envelope.KernelVerdictSignerKey)
+	verdictPublicKey, err := resolveLaunchVerdictKey(envelope, fresh)
 	if err != nil {
-		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, fmt.Errorf("resolve launch authorization envelope finalization verdict key: %w", err)
+		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, err
 	}
 	if err := verifyLaunchVerdictSignature(envelope, verdictPublicKey); err != nil {
 		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, err
@@ -493,7 +546,7 @@ func resolveAndVerifyLaunchDispatchFinalizationObservation(
 		return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, err
 	}
 	if launchEffectRequiresProviderRoute(envelope.EffectID) {
-		if err := verifyLaunchProviderRouteBinding(envelope, fresh); err != nil {
+		if err := verifyLaunchProviderRouteBinding(envelope, fresh, true); err != nil {
 			return LaunchEffectDispatchFinalizationObservation{}, LaunchEffectDispatchRequest{}, fmt.Errorf("launch authorization envelope provider route changed before atomic dispatch finalization: %w", err)
 		}
 	}
@@ -837,7 +890,7 @@ func launchApprovalActionForEffect(effectID string) (string, error) {
 	}
 }
 
-func verifyLaunchProviderRouteBinding(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext) error {
+func verifyLaunchProviderRouteBinding(envelope LaunchEffectAuthorizationEnvelope, ctx LaunchEffectEnvelopeVerificationContext, requireDispatchAuthority bool) error {
 	if ctx.ResolveRouteBinding == nil || ctx.RouteArtifacts == nil {
 		return errors.New("source-owned route binding and artifact resolver are required")
 	}
@@ -862,6 +915,9 @@ func verifyLaunchProviderRouteBinding(envelope LaunchEffectAuthorizationEnvelope
 	// certification is still resolved, signature-verified, and checked current
 	// by ValidateLaunchRouteBinding; the Kernel boundary remains the separate
 	// fail-closed execution interlock.
+	// Route artifacts remain preview-capable and do not promote the launch
+	// preview effect IDs into the production catalog here. Execution adds the
+	// destination requirement below without changing that catalog boundary.
 	if err := ValidateLaunchRouteBinding(route, ctx.RouteArtifacts, ctx.Now, false); err != nil {
 		return err
 	}
@@ -928,12 +984,20 @@ func verifyLaunchProviderRouteBinding(envelope LaunchEffectAuthorizationEnvelope
 			}
 		}
 		if action == nil ||
-			!launchInputMatchesString(envelope.Input, "provider_offering_id", placement.OfferingID) ||
 			!launchInputMatchesString(envelope.Input, "region", placement.RegionID) ||
 			!launchInputMatchesString(envelope.Input, "provider_action_urn", action.ProviderActionURN) ||
-			!launchInputMatchesString(envelope.Input, "provider_destination_hash", action.ProviderDestinationHash) ||
 			!launchInputMatchesString(envelope.Input, "provider_payload_hash", action.ProviderPayloadHash) {
-			return errors.New("launch provider input destination, action, or payload is absent from route placement")
+			return errors.New("launch provider input action or payload is absent from route placement")
+		}
+		if requireDispatchAuthority {
+			if !validLaunchSHA256(action.ProviderDestinationHash) ||
+				!launchInputMatchesString(envelope.Input, "provider_offering_id", placement.OfferingID) ||
+				!launchInputMatchesString(envelope.Input, "provider_destination_hash", action.ProviderDestinationHash) {
+				return errors.New("launch provider input lacks destination-bound execution authority")
+			}
+		} else if !launchInputMatchesStringIfPresent(envelope.Input, "provider_offering_id", placement.OfferingID) ||
+			!launchInputMatchesStringIfPresent(envelope.Input, "provider_destination_hash", action.ProviderDestinationHash) {
+			return errors.New("launch provider input optional destination binding does not match route placement")
 		}
 	}
 	return nil
@@ -998,6 +1062,13 @@ func verifyLaunchRouteCommercialBindings(envelope LaunchEffectAuthorizationEnvel
 func launchInputMatchesString(input map[string]any, field, expected string) bool {
 	actual, ok := input[field].(string)
 	return ok && actual != "" && launchConstantEqual(actual, expected)
+}
+
+func launchInputMatchesStringIfPresent(input map[string]any, field, expected string) bool {
+	if _, present := input[field]; !present {
+		return true
+	}
+	return launchInputMatchesString(input, field, expected)
 }
 
 func launchInputMatchesInteger(input map[string]any, field string, expected int64) bool {
@@ -1121,7 +1192,7 @@ func verifyLaunchEnvelopeTimes(envelope LaunchEffectAuthorizationEnvelope, ctx L
 	return nil
 }
 
-func verifyLaunchPermitBinding(envelope LaunchEffectAuthorizationEnvelope, permit LaunchEffectPermitBinding) error {
+func verifyLaunchPermitPreflightBinding(envelope LaunchEffectAuthorizationEnvelope, permit LaunchEffectPermitBinding) error {
 	if !permit.SingleUse {
 		return errors.New("launch authorization envelope permit is not single-use")
 	}
@@ -1200,6 +1271,13 @@ func verifyLaunchPermitBinding(envelope LaunchEffectAuthorizationEnvelope, permi
 		!verdictIssuedAt.Equal(permit.KernelVerdictIssuedAt) || !verdictExpiry.Equal(permit.KernelVerdictExpiry) ||
 		!deadline.Equal(permit.DispatchDeadline) {
 		return errors.New("launch authorization envelope permit time binding mismatch")
+	}
+	return nil
+}
+
+func verifyLaunchPermitBinding(envelope LaunchEffectAuthorizationEnvelope, permit LaunchEffectPermitBinding) error {
+	if err := verifyLaunchPermitPreflightBinding(envelope, permit); err != nil {
+		return err
 	}
 	if launchEffectIsProviderMutation(envelope.EffectID) {
 		providerBindings := []struct {

@@ -431,7 +431,7 @@ func ValidateLaunchProviderCapabilityProfile(profile LaunchProviderCapabilityPro
 	}
 	previous = ""
 	for _, action := range profile.Actions {
-		if action.EffectID == "" || action.EffectID <= previous || !launchEffectIsProviderMutation(action.EffectID) || action.ActionURN == "" || !validLaunchSHA256(action.ProviderDestinationHash) {
+		if action.EffectID == "" || action.EffectID <= previous || !launchEffectIsProviderMutation(action.EffectID) || action.ActionURN == "" || (action.ProviderDestinationHash != "" && !validLaunchSHA256(action.ProviderDestinationHash)) {
 			return errors.New("launch provider actions must be registered, unique, and sorted by effect_id")
 		}
 		previous = action.EffectID
@@ -810,20 +810,34 @@ func validateLaunchPlacementActions(placement LaunchRoutePlacement, profile Laun
 	}
 	previous := ""
 	for _, binding := range placement.ActionBindings {
-		if binding.EffectID == "" || binding.EffectID <= previous || binding.ProviderActionURN == "" || !validLaunchSHA256(binding.ProviderDestinationHash) || !validLaunchSHA256(binding.ProviderPayloadHash) {
+		if binding.EffectID == "" || binding.EffectID <= previous || binding.ProviderActionURN == "" || (binding.ProviderDestinationHash != "" && !validLaunchSHA256(binding.ProviderDestinationHash)) || !validLaunchSHA256(binding.ProviderPayloadHash) {
 			return fmt.Errorf("launch route placement %s actions must be complete, unique, and sorted", placement.PlacementID)
+		}
+		if requireDispatchAuthority && !validLaunchSHA256(binding.ProviderDestinationHash) {
+			return fmt.Errorf("launch route placement %s action %s lacks destination-bound execution authority", placement.PlacementID, binding.EffectID)
 		}
 		previous = binding.EffectID
 		if requireDispatchAuthority && LookupEffectType(binding.EffectID) == nil {
 			return fmt.Errorf("launch effect %s is not registered in the canonical dispatch catalog", binding.EffectID)
 		}
 		action, ok := profileActions[binding.EffectID]
-		if !ok || action.ActionURN != binding.ProviderActionURN || !launchConstantEqual(action.ProviderDestinationHash, binding.ProviderDestinationHash) {
+		if !ok || action.ActionURN != binding.ProviderActionURN {
 			return fmt.Errorf("launch route action %s is absent from provider profile", binding.EffectID)
 		}
 		entry, ok := payloadEntries[launchTupleKey(binding.EffectID, binding.ProviderActionURN)]
-		if !ok || !launchConstantEqual(entry.DestinationHash, binding.ProviderDestinationHash) || !launchConstantEqual(entry.PayloadHash, binding.ProviderPayloadHash) {
+		if !ok || !launchConstantEqual(entry.PayloadHash, binding.ProviderPayloadHash) {
 			return fmt.Errorf("launch route action %s does not bind the provider payload set", binding.EffectID)
+		}
+		if requireDispatchAuthority || action.ProviderDestinationHash != "" || binding.ProviderDestinationHash != "" || entry.DestinationHash != "" {
+			if !validLaunchSHA256(action.ProviderDestinationHash) || !validLaunchSHA256(binding.ProviderDestinationHash) || !validLaunchSHA256(entry.DestinationHash) {
+				return fmt.Errorf("launch route action %s does not bind one exact provider destination", binding.EffectID)
+			}
+			if !launchConstantEqual(action.ProviderDestinationHash, binding.ProviderDestinationHash) {
+				return fmt.Errorf("launch route action %s is absent from provider profile", binding.EffectID)
+			}
+			if !launchConstantEqual(entry.DestinationHash, binding.ProviderDestinationHash) {
+				return fmt.Errorf("launch route action %s does not bind one exact provider destination", binding.EffectID)
+			}
 		}
 	}
 	if len(payloadEntries) != len(placement.ActionBindings) {

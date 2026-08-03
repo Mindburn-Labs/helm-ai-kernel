@@ -8,10 +8,10 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "effect_id", "tenant_id", "workspace_id", "mission_id", "effect_ordinal",
-    "provider", "provider_account_ref", "provider_account_hash", "region", "provider_offering_id", "jurisdiction",
+    "provider", "provider_account_ref", "provider_account_hash", "region", "jurisdiction",
     "workload_graph_ref", "workload_graph_hash", "route_binding_ref", "route_binding_hash", "route_placement_id",
     "provider_capability_profile_ref", "provider_capability_profile_hash", "provider_certification_ref", "provider_certification_hash",
-    "provider_connector_id", "provider_connector_contract_hash", "provider_action_urn", "provider_destination_hash", "provider_payload_hash",
+    "provider_connector_id", "provider_connector_contract_hash", "provider_action_urn", "provider_payload_hash",
     "provision_receipt_ref", "provision_receipt_hash", "origin_activation_receipt_ref", "origin_activation_receipt_hash",
     "resource_graph_ref", "resource_graph_hash", "resource_ownership_hash", "compensation_class",
     "source_state_ref", "source_state_hash", "target_state_ref", "target_state_hash",

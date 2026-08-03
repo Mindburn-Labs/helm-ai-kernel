@@ -30,10 +30,10 @@ func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryAuthorityBinding(t *testi
 	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected: %v", err)
 	}
-	if envelope.KernelVerdictHash != "sha256:05ee191a24158900e59080084d6b75be3e5f87275d3171fcd42180b5e621b29a" {
+	if envelope.KernelVerdictHash != "sha256:bbffc2499e6099e2a911d5162806341a35e772a2741af36f3e46a069717519a5" {
 		t.Fatalf("launch verdict hash = %s, want committed golden", envelope.KernelVerdictHash)
 	}
-	if envelope.KernelVerdictSignature != "ed25519:b42862e4496f3f51844618a6945c986f55cfb3c0d3149fbdaf2057d84d000435eb607d4f34d0dca70d2e8400a023910fe703e6b732289f4abb20a9edf42f7e05" {
+	if envelope.KernelVerdictSignature != "ed25519:008f1e9102d12a36474eda46ace72efeafc0d3057b975007b56343679e4799e47f8f4010879284787488ca4afe73f60f02f149238586e1dae420e02c88c0dc06" {
 		t.Fatalf("launch verdict signature = %s, want committed golden", envelope.KernelVerdictSignature)
 	}
 	if len(publicKey) != ed25519.PublicKeySize {
@@ -153,7 +153,7 @@ func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
 			ctx.Now = launchRoutingNow.Add(7 * time.Minute)
 		}},
 		{name: "untrusted verdict signer", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
-			ctx.ResolveVerdictKey = func(string, string) (ed25519.PublicKey, error) { return nil, fmt.Errorf("key absent from trust root") }
+			ctx.ResolveVerdictKeyForTrustRoot = func(string, string) (ed25519.PublicKey, error) { return nil, fmt.Errorf("key absent from trust root") }
 		}},
 		{name: "missing exact dispatch bytes", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
 			ctx.ResolveDispatchRequest = nil
@@ -288,13 +288,13 @@ func TestLaunchEffectAuthorizationRejectsUnsignedRouteProbes(t *testing.T) {
 	}
 }
 
-func TestLaunchEffectAuthorizationEnvelopeConsumesPermitAtomically(t *testing.T) {
+func TestVerifyLaunchEffectAuthorizationEnvelopeConsumesPermitAtomically(t *testing.T) {
 	envelope, ctx, _, _ := launchAuthorizationFixture(t)
-	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
-		t.Fatalf("first dispatch start failed: %v", err)
+	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("first v1 verification/finalization failed: %v", err)
 	}
-	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil {
-		t.Fatal("replayed launch effect permit was accepted")
+	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil {
+		t.Fatal("replayed v1 verification/finalization was accepted")
 	}
 }
 
@@ -326,11 +326,130 @@ func TestLaunchEffectAuthorizationEnvelopePreflightGrantsNoNetworkAuthority(t *t
 		networkStarted.Store(true)
 		return nil
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		t.Fatalf("launch authorization preflight rejected: %v", err)
 	}
 	if finalized.Load() || networkStarted.Load() {
 		t.Fatal("non-authorizing preflight finalized or started a connector effect")
+	}
+}
+
+func TestLegacyV1ProviderInputCanPreflightButCannotAuthorizeDispatch(t *testing.T) {
+	envelope, ctx, privateKey, _ := launchAuthorizationFixture(t)
+	delete(envelope.Input, "provider_offering_id")
+	delete(envelope.Input, "provider_destination_hash")
+	key, err := contracts.DeriveLaunchEffectIdempotencyKey(envelope.EffectID, envelope.Input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope.InputHash = key
+	envelope.IdempotencyKey = key
+	authority, approvalConsumptionRef := launchCanonicalApprovalAuthority(
+		t,
+		envelope.EffectID,
+		envelope.Input,
+		envelope.PlanHash,
+		key,
+		ctx.Now,
+		envelope.Principal,
+		envelope.Audience,
+		envelope.KernelTrustRootID,
+	)
+	envelope.ApprovalArtifactRef = authority.Grant.GrantID
+	envelope.ApprovalArtifactHash = authority.Grant.GrantHash
+	envelope.ApprovalConsumptionRef = approvalConsumptionRef
+	envelope.ApprovalConsumptionHash = authority.Consumption.ConsumptionHash
+	envelope.DispatchAdmissionRef = authority.DispatchAdmission.AdmissionID
+	envelope.DispatchAdmissionHash = authority.DispatchAdmission.AdmissionHash
+	envelope.ConnectorAuthorityRef = authority.Grant.ConnectorAuthority.BindingRef
+	envelope.ConnectorAuthorityHash = authority.Grant.ConnectorAuthority.AuthorityHash
+	envelope, err = contracts.SignLaunchEffectAuthorizationEnvelope(envelope, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	legacyPermit := ctx.Permit
+	legacyPermit.InputHash = envelope.InputHash
+	legacyPermit.IdempotencyKey = envelope.IdempotencyKey
+	legacyPermit.ApprovalArtifactRef = envelope.ApprovalArtifactRef
+	legacyPermit.ApprovalArtifactHash = envelope.ApprovalArtifactHash
+	legacyPermit.ApprovalConsumptionRef = envelope.ApprovalConsumptionRef
+	legacyPermit.ApprovalConsumptionHash = envelope.ApprovalConsumptionHash
+	legacyPermit.DispatchAdmissionRef = envelope.DispatchAdmissionRef
+	legacyPermit.DispatchAdmissionHash = envelope.DispatchAdmissionHash
+	legacyPermit.ConnectorAuthorityRef = envelope.ConnectorAuthorityRef
+	legacyPermit.ConnectorAuthorityHash = envelope.ConnectorAuthorityHash
+	legacyPermit.KernelVerdictHash = envelope.KernelVerdictHash
+	legacyPermit.OfferingID = ""
+	legacyPermit.ProviderDestinationHash = ""
+	ctx.Permit = legacyPermit
+	ctx.ResolvePermitBinding = func(effectPermitRef, effectPermitHash string) (contracts.LaunchEffectPermitBinding, error) {
+		if effectPermitRef != legacyPermit.EffectPermitRef || effectPermitHash != legacyPermit.EffectPermitHash {
+			return contracts.LaunchEffectPermitBinding{}, fmt.Errorf("legacy permit binding not found")
+		}
+		return legacyPermit, nil
+	}
+	ctx.ResolveApprovalAuthority = func(grantRef, grantHash, consumptionRef, consumptionHash string) (contracts.LaunchEffectApprovalAuthority, error) {
+		if grantRef != authority.Grant.GrantID || grantHash != authority.Grant.GrantHash || consumptionRef != approvalConsumptionRef || consumptionHash != authority.Consumption.ConsumptionHash {
+			return contracts.LaunchEffectApprovalAuthority{}, fmt.Errorf("legacy approval authority not found")
+		}
+		return authority, nil
+	}
+	var started atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		_ contracts.LaunchEffectDispatchFinalization,
+		validate func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		start func() error,
+	) error {
+		if _, err := validate(); err != nil {
+			return err
+		}
+		return start()
+	}
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+		started.Store(true)
+		return nil
+	}
+
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("legacy v1 provider input was not readable during preflight: %v", err)
+	}
+	err = contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx)
+	if err == nil || !strings.Contains(err.Error(), "provider_offering_id") {
+		t.Fatalf("legacy v1 provider input acquired dispatch authority: %v", err)
+	}
+	if started.Load() {
+		t.Fatal("legacy v1 provider input reached connector start")
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeV1ContextFailsClosedWithoutFinalizer(t *testing.T) {
+	envelope, ctx, _, _ := launchAuthorizationFixture(t)
+	var legacyFinalizeCalled atomic.Bool
+	ctx.ResolveVerdictKeyForTrustRoot = nil
+	ctx.ResolveEmergencyFence = nil
+	ctx.ResolveDispatchRequest = nil
+	ctx.ResolveDispatchTime = nil
+	ctx.ResolvePermitBinding = nil
+	ctx.ResolvePolicyEpoch = nil
+	ctx.ResolveCurrentConnectorRelease = nil
+	ctx.VerifyCurrentConnectorRelease = nil
+	ctx.VerifyDispatchCommit = nil
+	ctx.FinalizeAndStartDispatch = nil
+	ctx.StartDispatch = nil
+	ctx.FinalizeDispatch = func(contracts.LaunchEffectPermitBinding) error {
+		legacyFinalizeCalled.Store(true)
+		return nil
+	}
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("v1-compatible evidence preflight rejected: %v", err)
+	}
+	err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx)
+	if err == nil || !strings.Contains(err.Error(), "v1 FinalizeDispatch cannot prove") {
+		t.Fatalf("v1 context received execution success without finalizer proof: %v", err)
+	}
+	if legacyFinalizeCalled.Load() {
+		t.Fatal("legacy finalizer was called even though it cannot prove STARTED/interlock authority")
 	}
 }
 
@@ -340,7 +459,7 @@ func TestLaunchEffectAuthorizationEnvelopeRejectsDestinationDriftAtFinalConnecto
 	var reads atomic.Int32
 	ctx.ResolveDispatchRequest = func(permit contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
 		request, err := resolve(permit)
-		if reads.Add(1) == 3 {
+		if reads.Add(1) == 2 {
 			request.Destination.EndpointURI = "https://api.other-cloud.invalid/v1"
 		}
 		return request, err
@@ -1179,9 +1298,17 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 			}
 			return nil
 		},
-		ExpectedPolicyEpoch: envelope.PolicyEpoch,
-		MaximumPermitTTL:    45 * time.Second,
-		ResolveVerdictKey: func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error) {
+		ExpectedRequestBodyHash: envelope.RequestBodyHash,
+		ExpectedArgsC14NHash:    envelope.ArgsC14NHash,
+		ExpectedPolicyEpoch:     envelope.PolicyEpoch,
+		MaximumPermitTTL:        45 * time.Second,
+		ResolveVerdictKey: func(signerKeyID string) (ed25519.PublicKey, error) {
+			if signerKeyID != envelope.KernelVerdictSignerKey {
+				return nil, fmt.Errorf("unknown verdict signer key")
+			}
+			return publicKey, nil
+		},
+		ResolveVerdictKeyForTrustRoot: func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error) {
 			if kernelTrustRootID != trustRootID || signerKeyID != envelope.KernelVerdictSignerKey {
 				return nil, fmt.Errorf("unknown verdict signer key")
 			}

@@ -107,8 +107,8 @@ func TestWorkloadKindsAndRelationshipsAreProviderExtensible(t *testing.T) {
 	missingDestination := profile
 	missingDestination.Actions = append([]contracts.LaunchProviderAction(nil), profile.Actions...)
 	missingDestination.Actions[0].ProviderDestinationHash = ""
-	if err := contracts.ValidateLaunchProviderCapabilityProfile(missingDestination); err == nil {
-		t.Fatal("provider profile action without a certified destination was accepted")
+	if err := contracts.ValidateLaunchProviderCapabilityProfile(missingDestination); err != nil {
+		t.Fatalf("legacy v1 provider profile without a destination was not readable: %v", err)
 	}
 	if _, err := contracts.ProjectLaunchBlueprint(graph, launchConstraintSet()); err == nil || !strings.Contains(err.Error(), "non-portable") {
 		t.Fatalf("clean-room fork copied unregistered vendor semantics: %v", err)
@@ -117,6 +117,69 @@ func TestWorkloadKindsAndRelationshipsAreProviderExtensible(t *testing.T) {
 	profile.Regions[0].Offerings[0].SupportedWorkloads = []string{"unknown"}
 	if err := contracts.ValidateLaunchProviderCapabilityProfile(profile); err == nil {
 		t.Fatal("provider profile claimed analyzer uncertainty as executable workload support")
+	}
+}
+
+func TestLegacyV1ProviderArtifactsRemainReadableButNotExecutable(t *testing.T) {
+	profile := launchProviderProfile("legacy-cloud", "legacy-connector", "eu-legacy-1", "legacy-app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "legacy")
+	for index := range profile.Actions {
+		profile.Actions[index].ProviderDestinationHash = ""
+	}
+	if err := contracts.ValidateLaunchProviderCapabilityProfile(profile); err != nil {
+		t.Fatalf("legacy v1 provider profile was not readable: %v", err)
+	}
+	fixture := singleLaunchRouteFixture(t, profile, true)
+	if err := contracts.ValidateLaunchProviderPayloadSet(fixture.payloads); err != nil {
+		t.Fatalf("legacy v1 payload set was not readable: %v", err)
+	}
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, false); err != nil {
+		t.Fatalf("legacy v1 route was not readable: %v", err)
+	}
+	if err := contracts.ValidateLaunchRouteBinding(fixture.route, fixture.resolver, launchRoutingNow, true); err == nil || !strings.Contains(err.Error(), "destination-bound execution authority") {
+		t.Fatalf("legacy v1 route gained execution authority without a destination binding: %v", err)
+	}
+}
+
+func TestLegacyV1ProviderArtifactSchemasRemainReadable(t *testing.T) {
+	profile := launchProviderProfile("legacy-schema-cloud", "legacy-schema-connector", "eu-legacy-1", "legacy-schema-app", []string{"http_service"}, []string{"health-check", "https-endpoint", "stateless-runtime"}, []string{contracts.LaunchLifecycleEphemeral}, "legacy-schema")
+	fixture := singleLaunchRouteFixture(t, profile, false)
+	for schema, value := range map[string]any{
+		"effects/launch/provider_capability_profile.v1.json": profile,
+		"effects/launch/provider_payload_set.v1.json":        fixture.payloads,
+		"effects/launch/route_binding.v1.json":               fixture.route,
+	} {
+		legacy := launchLegacyJSONWithoutDestinationHash(t, value)
+		if err := validateAgainstSchema(t, compileSchema(t, schema), legacy); err != nil {
+			t.Fatalf("legacy v1 artifact rejected by %s: %v", schema, err)
+		}
+	}
+}
+
+func launchLegacyJSONWithoutDestinationHash(t *testing.T, value any) any {
+	t.Helper()
+	data, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	stripLaunchDestinationHash(raw)
+	return raw
+}
+
+func stripLaunchDestinationHash(value any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		delete(typed, "provider_destination_hash")
+		for _, child := range typed {
+			stripLaunchDestinationHash(child)
+		}
+	case []any:
+		for _, child := range typed {
+			stripLaunchDestinationHash(child)
+		}
 	}
 }
 

@@ -17,7 +17,7 @@
       "type": "array", "minItems": 1,
       "items": {
         "type": "object", "additionalProperties": false,
-        "required": ["placement_id", "effect_id", "provider_action_urn", "provider_destination_hash", "payload_hash"],
+        "required": ["placement_id", "effect_id", "provider_action_urn", "payload_hash"],
         "properties": {
           "placement_id": { "$ref": "#/$defs/non_empty" },
           "effect_id": { "enum": ["PROVIDER_PROVISION", "DEPLOY_PRODUCTION_ACTIVATE", "PROVIDER_ROLLBACK", "PROVIDER_TEARDOWN"] },

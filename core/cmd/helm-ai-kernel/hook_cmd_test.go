@@ -381,6 +381,27 @@ func TestClassifyPreToolPayloadsRetainsCompoundShellPermission(t *testing.T) {
 	}
 }
 
+func TestClassifyPreToolPayloadsRetainsGenericDecisionAcrossIndirection(t *testing.T) {
+	command := "bash -c 'curl https://api.github.com/repos/Mindburn-Labs/helm'"
+	classifications := classifyPreToolPayloads(preToolPayload{
+		ToolName:  "Bash",
+		ToolInput: map[string]any{"command": command},
+	})
+	if len(classifications) != 2 {
+		t.Fatalf("classifications = %+v, want network egress plus generic shell decision", classifications)
+	}
+	first, second := classifications[0], classifications[1]
+	if first.Class != "network" || first.Target != "https://api.github.com/repos/Mindburn-Labs/helm" || first.Action != "network_egress" {
+		t.Fatalf("first classification = %+v, want static network fact", first)
+	}
+	if second.Class != "shell-operate" || second.Target != command || second.Action != "shell_operate" {
+		t.Fatalf("second classification = %+v, want generic indirection decision", second)
+	}
+	if first.Metadata["shellscan.parse_ok"] != "true" || second.Metadata["shellscan.commands"] != first.Metadata["shellscan.commands"] {
+		t.Fatalf("scanner metadata was not preserved across indirection decisions: %+v / %+v", first.Metadata, second.Metadata)
+	}
+}
+
 func TestBuildHookDecisionReceiptBindsMCPInputWithoutPersistingIt(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)

@@ -458,6 +458,7 @@ func TestClassifyCollectsASTEffectFacts(t *testing.T) {
 		command        string
 		want           []EffectFact
 		wantCommandVia string
+		wantGeneric    bool
 	}{
 		{
 			name:    "background egress",
@@ -477,6 +478,7 @@ func TestClassifyCollectsASTEffectFacts(t *testing.T) {
 			name:           "wrapped egress",
 			command:        "sudo -u root bash -c 'curl https://api.github.com/repos/Mindburn-Labs/helm'",
 			wantCommandVia: "sudo > bash -c",
+			wantGeneric:    true,
 			want: []EffectFact{{
 				Class: "network", Action: "network_egress", Target: "https://api.github.com/repos/Mindburn-Labs/helm",
 			}},
@@ -526,8 +528,8 @@ func TestClassifyCollectsASTEffectFacts(t *testing.T) {
 			if !res.ParseOK || !res.Decide {
 				t.Fatalf("Classify(%q) = %+v, want parsed decision", tc.command, res)
 			}
-			if res.RequiresShellDecision {
-				t.Fatalf("Classify(%q) unexpectedly widened recognized facts into a generic shell decision: %+v", tc.command, res)
+			if res.RequiresShellDecision != tc.wantGeneric {
+				t.Fatalf("Classify(%q).RequiresShellDecision = %t, want %t (%+v)", tc.command, res.RequiresShellDecision, tc.wantGeneric, res)
 			}
 			if len(res.EffectFacts) != len(tc.want) {
 				t.Fatalf("Classify(%q) facts = %+v, want %+v", tc.command, res.EffectFacts, tc.want)
@@ -549,6 +551,30 @@ func TestClassifyCollectsASTEffectFacts(t *testing.T) {
 				if !found {
 					t.Fatalf("Classify(%q) commands = %+v, want curl via %q", tc.command, res.Commands, tc.wantCommandVia)
 				}
+			}
+		})
+	}
+}
+
+func TestClassifyEffectFactsRetainGenericDecisionAcrossIndirection(t *testing.T) {
+	cases := []struct {
+		name    string
+		command string
+	}{
+		{"dynamic expansion", `curl "$URL"`},
+		{"command substitution", `echo "$(curl https://api.github.com/repos/Mindburn-Labs/helm)"`},
+		{"eval payload", `eval 'curl https://api.github.com/repos/Mindburn-Labs/helm'`},
+		{"sourced secret", "source .env"},
+		{"function body", "fetch() { curl https://api.github.com/repos/Mindburn-Labs/helm; }; echo safe"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Classify(tc.command)
+			if !res.ParseOK || !res.Decide || !res.RequiresShellDecision || len(res.EffectFacts) == 0 {
+				t.Fatalf("Classify(%q) = %+v, want facts plus a generic fail-closed decision", tc.command, res)
+			}
+			if !strings.Contains(res.Reason, "indirection boundary") {
+				t.Fatalf("Classify(%q).Reason = %q, want indirection boundary", tc.command, res.Reason)
 			}
 		})
 	}

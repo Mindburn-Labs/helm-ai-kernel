@@ -41,9 +41,10 @@ type Command struct {
 	Dynamic bool     // true when any token could not be resolved statically
 }
 
-// EffectFact is a statically derived effect that callers can route to its
-// governed policy class. Target is intentionally raw in memory only; receipt
-// writers must bind it before persistence.
+// EffectFact is a static-syntax indicator that callers can route to its
+// governed policy class; it is not evidence that a runtime effect occurred.
+// Target is intentionally raw in memory only; receipt writers must bind it
+// before persistence.
 type EffectFact struct {
 	Class  string
 	Action string
@@ -138,7 +139,14 @@ func ClassifyAt(raw, cwd string) Result {
 	}
 	c.classifyString(trimmed, "", 0)
 
-	effectFacts := classifyEffectFacts(c.commands)
+	effectFacts, factCrossesIndirection := classifyEffectFacts(c.commands)
+	if len(effectFacts) > 0 && (c.hasIndirection || factCrossesIndirection) {
+		// Parsed syntax can identify a potential effect, but it cannot prove
+		// runtime execution across expansion, eval, wrappers, or functions.
+		// Preserve the generic path for that uncertainty instead of upgrading
+		// the fact into a runtime claim.
+		c.decide("shell effect crosses an indirection boundary (fail-closed)")
+	}
 	res.Decide = c.decideFlag || len(effectFacts) > 0
 	res.Reason = strings.Join(c.reasons, "; ")
 	if res.Reason == "" && len(effectFacts) > 0 {
@@ -218,10 +226,12 @@ var secretReadPathNeedles = []string{
 // shell parser already resolved. It deliberately never tokenizes raw shell
 // source, so wrapper, background, and subshell behavior stays owned by the
 // AST traversal above.
-func classifyEffectFacts(commands []Command) []EffectFact {
+func classifyEffectFacts(commands []Command) ([]EffectFact, bool) {
 	facts := make([]EffectFact, 0)
 	seen := make(map[string]bool)
+	factCrossesIndirection := false
 	for _, command := range commands {
+		factCount := len(facts)
 		for _, target := range secretReadTargets(command) {
 			facts = appendEffectFact(facts, seen, EffectFact{
 				Class:  "secret",
@@ -244,8 +254,11 @@ func classifyEffectFacts(commands []Command) []EffectFact {
 				})
 			}
 		}
+		if len(facts) > factCount && (command.Dynamic || command.Via != "") {
+			factCrossesIndirection = true
+		}
 	}
-	return facts
+	return facts, factCrossesIndirection
 }
 
 func appendEffectFact(facts []EffectFact, seen map[string]bool, fact EffectFact) []EffectFact {
@@ -481,11 +494,12 @@ func isLocalSecretPath(value string) bool {
 }
 
 type collector struct {
-	decideFlag bool
-	reasons    []string
-	commands   []Command
-	signals    map[string]bool
-	parseOK    bool
+	decideFlag     bool
+	reasons        []string
+	commands       []Command
+	signals        map[string]bool
+	parseOK        bool
+	hasIndirection bool
 
 	writtenPaths            map[string]bool
 	cwd                     string
@@ -570,6 +584,9 @@ func (c *collector) classifyString(src, via string, depth int) {
 			}
 		case *syntax.CmdSubst, *syntax.ProcSubst:
 			c.signal(SignalCommandSubstitution)
+			c.hasIndirection = true
+		case *syntax.FuncDecl:
+			c.hasIndirection = true
 		case *syntax.Redirect:
 			c.classifyRedirect(n)
 		case *syntax.CallExpr:
@@ -1918,6 +1935,7 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.classifyTrap(args, via, depth)
 			return
 		case name == "." || name == "source":
+			c.hasIndirection = true
 			if len(args) < 2 {
 				c.decide(name + " without a script path (fail-closed)")
 				return

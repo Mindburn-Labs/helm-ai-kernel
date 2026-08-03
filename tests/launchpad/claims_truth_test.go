@@ -132,6 +132,16 @@ func TestLaunchpadAutomationDoesNotCreateRefsOrPullRequests(t *testing.T) {
 	requireContains(t, catalogWorkflow, "reviewable catalog refresh candidate")
 	requireContains(t, catalogWorkflow, "Upload catalog refresh candidate")
 
+	catalogDoc := readDoc(t, root, "docs/launchpad/MODEL_PROVIDER_CATALOG.md")
+	requireNotContains(t, catalogDoc, "opens a PR if the canonical catalog changes", "docs/launchpad/MODEL_PROVIDER_CATALOG.md")
+	for _, want := range []string{
+		"Scheduled runs produce review evidence only",
+		"it never creates a branch, commit, or pull request",
+		"A human can download the candidate from a manually dispatched run",
+	} {
+		requireContains(t, catalogDoc, want)
+	}
+
 	artifactWorkflow := readDoc(t, root, ".github/workflows/launchpad-artifacts.yml")
 	for _, forbidden := range []string{
 		"git push",

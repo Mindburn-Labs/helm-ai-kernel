@@ -82,8 +82,8 @@ canonical bestpractices.dev project badge.
   the build twice on independent runners and diffs the SHA-256 set.
 - **Supply-chain hygiene** — pinned tool versions in `.github/workflows/`,
   per-release benchmark snapshots pinned by `scripts/release/pin_benchmarks.sh`,
-  Scorecard CI in `.github/workflows/scorecard.yml`, and pull-request
-  Scorecard SARIF category normalization in `scripts/ci/normalize_scorecard_sarif.py`.
+  and Scorecard CI in `.github/workflows/scorecard.yml`, where pull-request runs
+  stay read-only and retain SARIF as artifact evidence.
 
 ## Analysis (Gold-only Additions)
 

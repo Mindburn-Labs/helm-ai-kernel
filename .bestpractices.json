@@ -19,7 +19,6 @@
     "quality_workflow": ".github/workflows/ci.yml",
     "code_scanning": ".github/workflows/codeql.yml",
     "scorecard": ".github/workflows/scorecard.yml",
-    "scorecard_sarif_normalization": "scripts/ci/normalize_scorecard_sarif.py",
     "slsa_provenance": ".github/workflows/slsa-provenance.yml",
     "release_asset_staging": "scripts/release/stage_release_assets.sh",
     "fuzzing": "oss-fuzz/project.yaml",

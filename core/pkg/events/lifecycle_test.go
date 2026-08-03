@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -206,6 +207,90 @@ func TestRequestCompletedProjectsExecutionAndTokens(t *testing.T) {
 	}
 }
 
+// #5 is the one projection whose argument can contradict it. An escalation
+// event built from an ALLOW asserts a human approval step that never happened —
+// the event stream would then disagree with the decision it exists to explain,
+// which is exactly what projecting rather than re-deriving is meant to prevent.
+func TestEscalationTriggeredRejectsNonEscalateVerdict(t *testing.T) {
+	const correlationID = "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+
+	for _, verdict := range []contracts.Verdict{contracts.VerdictAllow, contracts.VerdictDeny} {
+		t.Run(string(verdict), func(t *testing.T) {
+			decision := contracts.DecisionRecord{
+				ID:            "dec_1",
+				CorrelationID: correlationID,
+				Action:        "payments.refund",
+				Resource:      "orders/42",
+				Verdict:       string(verdict),
+			}
+
+			event, err := NewEscalationTriggered(testMeta(correlationID), decision)
+			if err == nil {
+				t.Fatalf("projected a %s decision into an escalation event: %v", verdict, event.Fields)
+			}
+			if !errors.Is(err, ErrNotEscalation) {
+				t.Errorf("err = %v, want ErrNotEscalation so callers can branch on it", err)
+			}
+			if event.Meta.EventType != "" {
+				t.Errorf("emitted event_type %q alongside the error; a rejected projection must emit nothing",
+					event.Meta.EventType)
+			}
+		})
+	}
+
+	escalate := contracts.DecisionRecord{
+		ID:            "dec_1",
+		CorrelationID: correlationID,
+		Action:        "payments.refund",
+		Resource:      "orders/42",
+		Verdict:       string(contracts.VerdictEscalate),
+		ReasonCode:    string(contracts.ReasonApprovalRequired),
+	}
+
+	event, err := NewEscalationTriggered(testMeta(correlationID), escalate)
+	if err != nil {
+		t.Fatalf("rejected a genuine ESCALATE decision: %v", err)
+	}
+	if event.Meta.EventType != EscalationTriggered {
+		t.Errorf("event_type = %q, want %q", event.Meta.EventType, EscalationTriggered)
+	}
+	if got := event.Fields["reason_code"]; got != string(contracts.ReasonApprovalRequired) {
+		t.Errorf("reason_code = %v, want the decision's registry code", got)
+	}
+}
+
+// #7 is the event a failing request always emits, so it is the one most likely
+// to be handed prose describing what went wrong. §6 prohibits free text in
+// exported events for the same reason it keeps request-scoped values out of
+// metric labels: the stream is retained and shipped off-box, and prose is where
+// customer data rides along. reason_code is the registry code downstream keys
+// on — the same swap HELM-303 made in the signing preimage.
+func TestRequestFailedOmitsFreeTextReason(t *testing.T) {
+	event := NewRequestFailed(
+		testMeta("3f2504e0-4f89-41d3-9a0c-0305e82c3301"),
+		string(contracts.ReasonBudgetExceeded),
+		2,
+	)
+
+	if event.Meta.EventType != RequestFailed {
+		t.Errorf("event_type = %q, want %q", event.Meta.EventType, RequestFailed)
+	}
+	if got := event.Fields["reason_code"]; got != string(contracts.ReasonBudgetExceeded) {
+		t.Errorf("reason_code = %v, want the machine-readable registry code", got)
+	}
+	if got := event.Fields["retry_number"]; got != 2 {
+		t.Errorf("retry_number = %v, want 2", got)
+	}
+
+	// Named prose carriers, not just "reason": renaming the field would move
+	// the leak rather than close it.
+	for _, key := range []string{"reason", "message", "detail", "error", "failure_reason"} {
+		if value, present := event.Fields[key]; present {
+			t.Errorf("field %q exported (%v); §6 prohibits free-text prose in the event stream", key, value)
+		}
+	}
+}
+
 // TestCompletenessInvariant is §5.1 and the reason the catalog is worth having:
 // a request that never closed must be detectable. Silent loss is the failure
 // mode an event stream is supposed to rule out.
@@ -255,6 +340,21 @@ func TestSequenceRejectsMixedCorrelationIDs(t *testing.T) {
 	}
 }
 
+// An empty correlation_id joins nothing: every such sequence collides with
+// every other one. Accepting it looks like a valid single request while
+// actually asserting no identity at all — worse than the mixed-id case above,
+// which at least fails loudly.
+func TestSequenceRejectsEmptyCorrelationID(t *testing.T) {
+	events := []LifecycleEvent{
+		{Meta: EventMeta{EventType: RequestReceived}},
+		{Meta: EventMeta{EventType: RequestCompleted}},
+	}
+
+	if err := ValidateRequestSequence(events); err == nil {
+		t.Error("accepted a sequence with an empty correlation id; an unjoinable sequence is not a request story")
+	}
+}
+
 // TestSyntheticRequestSequences walks the five shapes a governed request can
 // take, built with the real constructors rather than hand-written envelopes.
 // This is the half of HELM-290 §11 that had no build owner and could not be
@@ -275,6 +375,16 @@ func TestSyntheticRequestSequences(t *testing.T) {
 		}
 	}
 	execution := contracts.EvidencePackExecution{ExecutionID: "exec_1", Status: "success"}
+	// #5 is the only fallible constructor, so it cannot be called inline in the
+	// literal below; the walk still uses the real one rather than a stand-in.
+	escalation := func(decision contracts.DecisionRecord) LifecycleEvent {
+		t.Helper()
+		event, err := NewEscalationTriggered(base(), decision)
+		if err != nil {
+			t.Fatalf("escalation projection rejected a genuine ESCALATE decision: %v", err)
+		}
+		return event
+	}
 
 	sequences := map[string][]LifecycleEvent{
 		"ALLOW dispatched and completed": {
@@ -290,19 +400,19 @@ func TestSyntheticRequestSequences(t *testing.T) {
 			NewRequestClassified(base(), "financial.write", "high"),
 			NewPolicyApplied(base(), decision(contracts.VerdictDeny), []string{"rule.spend.cap"}),
 			NewDecisionMade(base(), decision(contracts.VerdictDeny)),
-			NewRequestFailed(base(), "over limit", "SPEND_LIMIT_EXCEEDED", 0),
+			NewRequestFailed(base(), string(contracts.ReasonBudgetExceeded), 0),
 		},
 		"ESCALATE then approved and completed": {
 			NewRequestReceived(base(), "payments.refund", "orders/42"),
 			NewDecisionMade(base(), decision(contracts.VerdictEscalate)),
-			NewEscalationTriggered(base(), decision(contracts.VerdictEscalate)),
+			escalation(decision(contracts.VerdictEscalate)),
 			NewDispatchCompleted(base(), contracts.Receipt{ID: "rec_1", Status: "applied"}, "sha256:intent"),
 			NewRequestCompleted(base(), execution, nil),
 		},
 		"execution failure": {
 			NewRequestReceived(base(), "payments.refund", "orders/42"),
 			NewDecisionMade(base(), decision(contracts.VerdictAllow)),
-			NewRequestFailed(base(), "upstream timeout", "EXECUTION_FAILED", 2),
+			NewRequestFailed(base(), string(contracts.ReasonComputeTimeExhausted), 2),
 		},
 		"read-only request completes without dispatch": {
 			NewRequestReceived(base(), "receipts.list", "receipts"),

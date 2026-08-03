@@ -107,14 +107,28 @@ func NewDecisionMade(meta EventMeta, decision contracts.DecisionRecord) Lifecycl
 	})
 }
 
-// NewEscalationTriggered projects #5 from an ESCALATE verdict.
-func NewEscalationTriggered(meta EventMeta, decision contracts.DecisionRecord) LifecycleEvent {
+// ErrNotEscalation reports a decision that cannot be projected into #5.
+var ErrNotEscalation = errors.New("decision verdict is not ESCALATE")
+
+// NewEscalationTriggered projects #5 from an ESCALATE verdict. Alone among the
+// eight it has a precondition its argument can violate: the others project
+// whatever the struct holds and so cannot be wrong, but an escalation event
+// built from an ALLOW asserts a human approval step that never happened. That
+// is the one way a projection could still disagree with the decision it
+// explains, so it returns an error rather than emitting the wrong event.
+func NewEscalationTriggered(meta EventMeta, decision contracts.DecisionRecord) (LifecycleEvent, error) {
+	if decision.Verdict != string(contracts.VerdictEscalate) {
+		return LifecycleEvent{}, fmt.Errorf(
+			"%w: decision %s has verdict %q", ErrNotEscalation, decision.ID, decision.Verdict,
+		)
+	}
+
 	return newEvent(meta, EscalationTriggered, map[string]any{
 		"decision_id": decision.ID,
 		"reason_code": decision.ReasonCode,
 		"action":      decision.Action,
 		"resource":    decision.Resource,
-	})
+	}), nil
 }
 
 // NewDispatchCompleted projects #6 from the receipt the PEP wrote.
@@ -128,9 +142,15 @@ func NewDispatchCompleted(meta EventMeta, receipt contracts.Receipt, intentHash 
 
 // NewRequestFailed projects #7 from a denied or failed attempt. It is one of
 // the two terminal events.
-func NewRequestFailed(meta EventMeta, reason, reasonCode string, retryNumber int) LifecycleEvent {
+//
+// It takes no free-text reason on purpose. §6 prohibits prose in exported
+// events alongside the request-scoped values it keeps out of metric labels:
+// this stream is retained and shipped off-box, and prose is where customer data
+// rides along. reasonCode is the registry code every consumer keys on anyway —
+// the same swap HELM-303 made in the signing preimage. Prose describing one
+// failure belongs in the evidence pack, which is not exported.
+func NewRequestFailed(meta EventMeta, reasonCode string, retryNumber int) LifecycleEvent {
 	return newEvent(meta, RequestFailed, map[string]any{
-		"reason":       reason,
 		"reason_code":  reasonCode,
 		"retry_number": retryNumber,
 	})
@@ -163,8 +183,10 @@ func NewRequestCompleted(meta EventMeta, execution contracts.EvidencePackExecuti
 // request — rather than silence. A monitor that only counts emitted events
 // cannot tell "nothing went wrong" from "the process died mid-request".
 //
-// All events must also share one correlation_id; a sequence spanning two would
-// silently merge two requests into one story.
+// All events must also share one non-empty correlation_id; a sequence spanning
+// two would silently merge two requests into one story, and an empty one is
+// worse: it joins nothing, so every such sequence collides with every other.
+// Checking the anchor is enough — the others are required to equal it.
 func ValidateRequestSequence(sequence []LifecycleEvent) error {
 	if len(sequence) == 0 {
 		return errors.New("empty sequence: a request must emit at least received and one terminal event")
@@ -179,6 +201,9 @@ func ValidateRequestSequence(sequence []LifecycleEvent) error {
 	for i, event := range sequence {
 		if i == 0 {
 			correlationID = event.Meta.CorrelationID
+			if correlationID == "" {
+				return errors.New("sequence has an empty correlation id: an unjoinable sequence is not a request story")
+			}
 		} else if event.Meta.CorrelationID != correlationID {
 			return fmt.Errorf(
 				"sequence spans correlation ids %q and %q: these are two requests, not one",

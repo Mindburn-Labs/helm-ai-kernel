@@ -5,6 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/scripts/release/release_evidence_trust.sh"
 # A detached checkout has no local mise trust record. Keep direct tool paths
 # but remove only its dispatcher shims so staging never needs `mise trust`.
 SANITIZED_PATH=""
@@ -141,6 +142,10 @@ log_step "building release inputs from detached source snapshot $SOURCE_COMMIT"
 make -C "$SNAPSHOT_ROOT" docs-truth docs-openapi-parity release-binaries-reproducible mcp-pack sbom vex
 require_source_snapshot_current
 
+if ! helm_release_evidence_prepare "$SNAPSHOT_ROOT/bin/helm-ai-kernel" "$TMP_DIR/release-evidence-trust" "scripts/release/stage_release_assets.sh"; then
+    exit 1
+fi
+
 for artifact in \
     bin/helm-ai-kernel-linux-amd64 \
     bin/helm-ai-kernel-linux-arm64 \
@@ -230,7 +235,9 @@ conformance_report="$conformance_dir/conform_report.json"
 HELM_CONFORMANCE_ARTIFACTS_DIR="$SNAPSHOT_ROOT/artifacts" bash "$SNAPSHOT_ROOT/scripts/release/prepare_conformance_release_inputs.sh"
 if ! (
     cd "$SNAPSHOT_ROOT"
-    HELM_RELEASE_EVIDENCE_RECEIPT=1 "$SNAPSHOT_ROOT/bin/helm-ai-kernel" conform --profile SMB --gate G0 --signed --output "$conformance_dir"
+    HELM_DATA_DIR="$HELM_RELEASE_EVIDENCE_PREPARED_DATA_DIR" \
+        HELM_RELEASE_EVIDENCE_RECEIPT=1 \
+        "$SNAPSHOT_ROOT/bin/helm-ai-kernel" conform --profile SMB --gate G0 --signed --output "$conformance_dir"
 ) > "$TMP_DIR/conformance-run.log"; then
 	echo "::error file=scripts/release/stage_release_assets.sh::conformance failed during release asset staging" >&2
 	if [ -f "$conformance_report" ]; then
@@ -252,7 +259,12 @@ fi
 (
     cd "$SNAPSHOT_ROOT"
     "$SNAPSHOT_ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar"
-    "$SNAPSHOT_ROOT/bin/helm-ai-kernel" verify "$ASSETS_DIR/evidence-pack.tar"
+    HELM_DATA_DIR="$HELM_RELEASE_EVIDENCE_PREPARED_DATA_DIR" \
+        "$SNAPSHOT_ROOT/bin/helm-ai-kernel" verify \
+        --profile "$HELM_RELEASE_EVIDENCE_PREPARED_PROFILE" \
+        --config "$HELM_RELEASE_EVIDENCE_PREPARED_CONFIG_PATH" \
+        --storage-receipt "$HELM_RELEASE_EVIDENCE_PREPARED_STORAGE_RECEIPT_PATH" \
+        "$ASSETS_DIR/evidence-pack.tar"
 )
 tampered_pack="$TMP_DIR/evidence-pack-tampered.tar"
 python3 - "$ASSETS_DIR/evidence-pack.tar" "$tampered_pack" <<'PY'
@@ -288,7 +300,12 @@ with tarfile.open(src, "r:*") as inp, tarfile.open(dst, "w") as out:
 PY
 if (
     cd "$SNAPSHOT_ROOT"
-    "$SNAPSHOT_ROOT/bin/helm-ai-kernel" verify "$tampered_pack"
+    HELM_DATA_DIR="$HELM_RELEASE_EVIDENCE_PREPARED_DATA_DIR" \
+        "$SNAPSHOT_ROOT/bin/helm-ai-kernel" verify \
+        --profile "$HELM_RELEASE_EVIDENCE_PREPARED_PROFILE" \
+        --config "$HELM_RELEASE_EVIDENCE_PREPARED_CONFIG_PATH" \
+        --storage-receipt "$HELM_RELEASE_EVIDENCE_PREPARED_STORAGE_RECEIPT_PATH" \
+        "$tampered_pack"
 ) > "$TMP_DIR/tampered-verify.log" 2>&1; then
     echo "::error file=scripts/release/stage_release_assets.sh::tampered release EvidencePack unexpectedly verified" >&2
     cat "$TMP_DIR/tampered-verify.log" >&2

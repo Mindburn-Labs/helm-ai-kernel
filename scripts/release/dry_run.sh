@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+source "$ROOT/scripts/release/release_evidence_trust.sh"
 
 VERSION="$(cat VERSION)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-release-dry-run.XXXXXX")"
@@ -65,7 +66,27 @@ chmod 700 "$SENTINEL_PATH"
 
 # Invoke the stage script directly: a matching ignored root binary must never
 # become a release asset because every build input comes from its snapshot.
-RELEASE_ASSETS_DIR="$ASSETS_DIR" bash "$ROOT/scripts/release/stage_release_assets.sh" >/dev/null
+release_stage_log="$TMP_DIR/release-stage.log"
+if ! helm_release_evidence_contract_complete; then
+  if RELEASE_ASSETS_DIR="$ASSETS_DIR" bash "$ROOT/scripts/release/stage_release_assets.sh" >"$release_stage_log" 2>&1; then
+    echo "release stage unexpectedly succeeded without explicit EvidencePack trust inputs" >&2
+    exit 1
+  fi
+  if ! rg -q "explicit release EvidencePack trust is required" "$release_stage_log"; then
+    cat "$release_stage_log" >&2
+    echo "release stage failed without the expected fail-closed trust error" >&2
+    exit 1
+  fi
+  if [[ -e "$ASSETS_DIR/evidence-pack.tar" ]]; then
+    echo "fail-closed trust path must not publish evidence-pack.tar" >&2
+    exit 1
+  fi
+  restore_sentinel
+  echo "✅ Release dry run confirmed fail-closed EvidencePack trust gating"
+  exit 0
+fi
+
+RELEASE_ASSETS_DIR="$ASSETS_DIR" bash "$ROOT/scripts/release/stage_release_assets.sh" >"$release_stage_log"
 if cmp -s "$SENTINEL_PATH" "$ASSETS_DIR/helm-ai-kernel-linux-amd64"; then
   echo "release stage consumed the ignored root binary sentinel" >&2
   exit 1
@@ -120,7 +141,15 @@ if [[ ! -x "$staged_verifier" ]]; then
   echo "missing executable staged verifier: $staged_verifier" >&2
   exit 1
 fi
-"$staged_verifier" verify "$ASSETS_DIR/evidence-pack.tar" >/dev/null
+
+if ! helm_release_evidence_prepare "$staged_verifier" "$TMP_DIR/dry-run-release-evidence-trust" "scripts/release/dry_run.sh"; then
+  exit 1
+fi
+"$staged_verifier" verify \
+  --profile "$HELM_RELEASE_EVIDENCE_PREPARED_PROFILE" \
+  --config "$HELM_RELEASE_EVIDENCE_PREPARED_CONFIG_PATH" \
+  --storage-receipt "$HELM_RELEASE_EVIDENCE_PREPARED_STORAGE_RECEIPT_PATH" \
+  "$ASSETS_DIR/evidence-pack.tar" >/dev/null
 
 python3 - "$ASSETS_DIR" "$VERSION" "$ROOT" <<'PY'
 import hashlib

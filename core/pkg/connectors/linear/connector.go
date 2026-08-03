@@ -471,8 +471,9 @@ func isStringSlice(value any) bool {
 	}
 }
 
-// NOTE: The default replay tracker retains nonces only until each permit
-// expires. Multi-replica deployments need a shared durable replay store.
+// NOTE: This is an in-process replay tracker that retains nonces only until
+// each permit expires. Cross-replica deployments need a shared/durable store
+// or equivalent strategy.
 func (c *Connector) reservePermitNonce(nonce string, expiresAt time.Time) error {
 	c.nonceMu.Lock()
 	defer c.nonceMu.Unlock()

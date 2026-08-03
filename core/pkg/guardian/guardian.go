@@ -279,6 +279,14 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		slog.Warn("[guardian] no authority clock injected; falling back to wall clock (KERNEL_TCB §3) — inject WithClock in production")
 		g.clock = wallClock{}
 	}
+
+	if !taintEgressEnforcementEnabled() {
+		// Logged once here rather than per-decision: the check sits on the hot
+		// path, but a disabled security boundary must never be silent. This
+		// state contradicts TaintSafeEgress in proofs/GuardianPipeline.tla.
+		slog.Warn("[guardian] tainted-egress enforcement DISABLED by HELM_TAINT_TRACKING; TAINTED_DATA_EGRESS_DENY will not fire (contradicts proofs/GuardianPipeline.tla TaintSafeEgress)")
+	}
+
 	g.boundaryChain = []BoundaryInterceptor{
 		g.zeroidInterceptor,
 		NewTemporalInterceptor(g),
@@ -770,6 +778,26 @@ type DecisionRequest struct {
 	SessionHistory []SessionAction        `json:"session_history,omitempty"`
 }
 
+type trustedTaintedEgressOverrideContextKey struct{}
+
+// WithTrustedTaintedEgressOverride marks a request context after an in-process
+// transport or adapter has independently approved tainted egress. The marker is
+// deliberately outside DecisionRequest.Context so caller JSON cannot self-approve.
+func WithTrustedTaintedEgressOverride(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, trustedTaintedEgressOverrideContextKey{}, true)
+}
+
+func trustedTaintedEgressOverride(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	approved, _ := ctx.Value(trustedTaintedEgressOverrideContextKey{}).(bool)
+	return approved
+}
+
 // SessionAction represents a previous action in the current session.
 // Per arXiv 2603.16586, path-based policies evaluate the full execution
 // history, catching multi-step attack chains that stateless checks miss.
@@ -1179,23 +1207,34 @@ func stringContextValue(ctx map[string]any, keys ...string) (string, bool) {
 	return "", false
 }
 
-func taintTrackingEnabled() bool {
+// taintEgressEnforcementEnabled reports whether the built-in tainted-egress deny
+// is active. Taint *labelling* always runs; this gates only enforcement.
+//
+// Enforcement defaults to ON. proofs/GuardianPipeline.tla:52-53 states
+// TaintSafeEgress unconditionally, it is listed in Safety and enforced as an
+// INVARIANT in guardian.cfg, and it is model-checked on every PR. A default of
+// off left the implementation weaker than its own proof: with the variable
+// unset, the && at the call site short-circuited and TAINTED_DATA_EGRESS_DENY
+// never evaluated.
+//
+// Only an explicit "0" or "false" disables it — an unset or unparseable value
+// enforces, so a typo cannot silently open the boundary. Disabling is intended
+// for incident response and is logged once at construction.
+func taintEgressEnforcementEnabled() bool {
 	v := strings.TrimSpace(os.Getenv("HELM_TAINT_TRACKING"))
-	return v == "1" || strings.EqualFold(v, "true")
+	return !(v == "0" || strings.EqualFold(v, "false"))
 }
 
-func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
-	if len(labels) == 0 || ctx == nil {
+func taintedEgressDenied(requestCtx context.Context, values map[string]interface{}, labels []string) bool {
+	if len(labels) == 0 || values == nil {
 		return false
 	}
-	// The egress override is a security decision: honor it only when the
-	// context was bound by a trusted transport/adapter boundary, never from
-	// caller-supplied arguments (otherwise any agent can self-approve
-	// PII/credential/secret egress).
-	if approved, ok := ctx["allow_tainted_egress"].(bool); ok && approved && trustedSecurityContext(ctx) {
+	// The egress override is a security decision. Context values are often
+	// caller-controlled, so only an in-process trusted marker may authorize it.
+	if approved, ok := values[ContextAllowTaintedEgress].(bool); ok && approved && trustedTaintedEgressOverride(requestCtx) {
 		return false
 	}
-	destination, _ := ctx["destination"].(string)
+	destination, _ := values[ContextDestination].(string)
 	if strings.TrimSpace(destination) == "" {
 		return false
 	}

@@ -923,17 +923,26 @@ func TestSafeExecutorSafeDepGateRequired(t *testing.T) {
 	}
 }
 
-func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
+func TestSafeExecutorBindsVerifiedEmergencyAuthorityToReceipt(t *testing.T) {
 	signer, _ := crypto.NewEd25519Signer("test-key")
 	mockDriver := &MockDriver{}
+	var gateIntent *contracts.AuthorizedExecutionIntent
 	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil).
 		WithSafeDepGate(safeDepGateFunc(func(_ context.Context, req safedep.GateRequest) (safedep.GateResult, error) {
-			req.Intent.EmergencyActivationID = "act-1"
-			req.Intent.EmergencyDelegationSessionID = "session-1"
-			req.Intent.EmergencyScopeHash = "sha256:scope"
+			gateIntent = req.Intent
+			// A gate implementation cannot alter the verified snapshot retained by
+			// the executor, even if it attempts to rewrite its own copy.
+			req.Intent.EmergencyActivationID = "act-attacker"
+			req.Intent.EmergencyDelegationSessionID = "session-attacker"
+			req.Intent.EmergencyScopeHash = "sha256:attacker"
 			return safedep.GateResult{
-				DispatchAllowed: true,
-				ReasonCode:      contracts.ReasonSafeDepDegradedNarrowing,
+				DispatchAllowed:    true,
+				ReasonCode:         contracts.ReasonSafeDepDegradedNarrowing,
+				EmergencyScopeHash: "sha256:scope",
+				ActivationReceipt: &contracts.ActivationReceipt{
+					ActivationID:        "act-1",
+					DelegationSessionID: "session-1",
+				},
 				Classification: contracts.HazardClassification{
 					HazardCode: contracts.HazardCredentialExpired,
 					State:      contracts.SafeDepDegradedNarrowing,
@@ -945,7 +954,14 @@ func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
 	if err := signer.SignDecision(decision); err != nil {
 		t.Fatal(err)
 	}
-	intent := &contracts.AuthorizedExecutionIntent{DecisionID: decision.ID, EffectDigestHash: decision.EffectDigest, ExpiresAt: time.Now().Add(time.Hour)}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:                   decision.ID,
+		EffectDigestHash:             decision.EffectDigest,
+		ExpiresAt:                    time.Now().Add(time.Hour),
+		EmergencyActivationID:        "act-1",
+		EmergencyDelegationSessionID: "session-1",
+		EmergencyScopeHash:           "sha256:scope",
+	}
 	if err := signer.SignIntent(intent); err != nil {
 		t.Fatal(err)
 	}
@@ -953,11 +969,71 @@ func TestSafeExecutorCopiesEmergencyAuthorityToReceipt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if gateIntent == intent {
+		t.Fatal("SafeDep gate received the executor's verified intent pointer")
+	}
+	if valid, verifyErr := signer.VerifyIntent(intent); verifyErr != nil || !valid {
+		t.Fatalf("SafeDep changed the signed intent: valid=%v err=%v", valid, verifyErr)
+	}
 	if receipt.EmergencyActivationID != "act-1" || receipt.EmergencyDelegationSessionID != "session-1" || receipt.EmergencyScopeHash != "sha256:scope" {
 		t.Fatalf("receipt missing emergency authority fields: %+v", receipt)
 	}
 	if receipt.SafeDepState != string(contracts.SafeDepDegradedNarrowing) || receipt.SafeDepReasonCode != string(contracts.ReasonSafeDepDegradedNarrowing) {
 		t.Fatalf("receipt missing SafeDep state: %+v", receipt)
+	}
+}
+
+func TestSafeExecutorRejectsSafeDepActivationBindingMismatch(t *testing.T) {
+	signer, _ := crypto.NewEd25519Signer("test-key")
+	mockDriver := &MockDriver{}
+	outbox := &recordingOutboxStore{}
+	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, outbox, "", nil, nil, nil, nil).
+		WithSafeDepGate(safeDepGateFunc(func(_ context.Context, req safedep.GateRequest) (safedep.GateResult, error) {
+			req.Intent.EmergencyActivationID = "act-attacker"
+			req.Intent.EmergencyDelegationSessionID = "session-attacker"
+			req.Intent.EmergencyScopeHash = "sha256:attacker"
+			return safedep.GateResult{
+				DispatchAllowed:    true,
+				ReasonCode:         contracts.ReasonSafeDepDegradedNarrowing,
+				EmergencyScopeHash: "sha256:attacker",
+				ActivationReceipt: &contracts.ActivationReceipt{
+					ActivationID:        "act-attacker",
+					DelegationSessionID: "session-attacker",
+				},
+				Classification: contracts.HazardClassification{
+					HazardCode: contracts.HazardCredentialExpired,
+					State:      contracts.SafeDepDegradedNarrowing,
+				},
+			}, nil
+		}))
+	effect := &contracts.Effect{EffectID: "eff-safedep-mismatch", Params: map[string]any{"tool_name": "ls"}}
+	decision := &contracts.DecisionRecord{ID: "dec-safedep-mismatch", Verdict: string(contracts.VerdictAllow), EffectDigest: testEffectDigest(t, effect)}
+	if err := signer.SignDecision(decision); err != nil {
+		t.Fatal(err)
+	}
+	intent := &contracts.AuthorizedExecutionIntent{
+		DecisionID:                   decision.ID,
+		EffectDigestHash:             decision.EffectDigest,
+		ExpiresAt:                    time.Now().Add(time.Hour),
+		EmergencyActivationID:        "act-signed",
+		EmergencyDelegationSessionID: "session-signed",
+		EmergencyScopeHash:           "sha256:signed",
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := executor.Execute(context.Background(), effect, decision, intent); err == nil || !strings.Contains(err.Error(), "safe dep activation") {
+		t.Fatalf("expected SafeDep binding mismatch denial, got %v", err)
+	}
+	if mockDriver.Called || outbox.scheduleCalls != 0 {
+		t.Fatalf("SafeDep mismatch crossed an execution boundary: driver=%v outbox=%d", mockDriver.Called, outbox.scheduleCalls)
+	}
+	if intent.EmergencyActivationID != "act-signed" || intent.EmergencyDelegationSessionID != "session-signed" || intent.EmergencyScopeHash != "sha256:signed" {
+		t.Fatalf("SafeDep mutated original signed intent: %+v", intent)
+	}
+	if valid, verifyErr := signer.VerifyIntent(intent); verifyErr != nil || !valid {
+		t.Fatalf("original intent no longer verifies: valid=%v err=%v", valid, verifyErr)
 	}
 }
 

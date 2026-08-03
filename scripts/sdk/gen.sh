@@ -592,6 +592,37 @@ s = must_replace(
     "rewrite union validation note",
 )
 
+# Models with `additionalProperties: true` are emitted as HashMap subclasses.
+# That makes Jackson serialize the model as a bare map and lose its declared
+# accessor-backed fields. Retain the generated @JsonAnyGetter/@JsonAnySetter
+# container, but make these models ordinary beans. Each paired super call is
+# asserted so an upstream generator shape change cannot silently regress this
+# mapping contract.
+s = must_replace(
+    s,
+    " extends HashMap<String, Object> {",
+    " {",
+    "remove HashMap superclass from additional-properties models",
+)
+s = must_replace(
+    s,
+    " &&\n        super.equals(o);",
+    ";",
+    "remove HashMap superclass equality",
+)
+s = must_replace(
+    s,
+    ", super.hashCode()",
+    "",
+    "remove HashMap superclass hash",
+)
+s = must_replace(
+    s,
+    '    sb.append("    ").append(toIndentedString(super.toString())).append("\\n");\n',
+    "",
+    "remove HashMap superclass string rendering",
+)
+
 # openapi-generator emits map query values twice: a raw value that has no
 # matching format placeholder, followed by the URL-encoded value that should
 # fill the final placeholder. Remove the raw argument for every generated map

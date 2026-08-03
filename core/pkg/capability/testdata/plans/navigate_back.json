@@ -1,0 +1,14 @@
+{
+  "schema_version": "rollback-plan/v1",
+  "plan_id": "plans/gui-navigate-back.v1",
+  "strategy": "compensating_action",
+  "applies_to": { "capability_id": "helm.cap.gui.gelab.tap" },
+  "steps": [
+    {
+      "order": 1,
+      "action_ref": "helm.cap.gui.gelab.tap",
+      "description": "Tap the system back control to return to the prior screen state."
+    }
+  ],
+  "verification": { "method": "receipt_pairing" }
+}

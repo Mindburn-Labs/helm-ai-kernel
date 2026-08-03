@@ -259,6 +259,17 @@ fi
 (
     cd "$SNAPSHOT_ROOT"
     "$SNAPSHOT_ROOT/bin/helm-ai-kernel" export --audit --evidence "$pack_root" --out "$ASSETS_DIR/evidence-pack.tar"
+)
+pack_subject_root="$(helm_release_evidence_subject_root "$pack_root")"
+if ! helm_release_evidence_write_storage_receipt \
+    "$ASSETS_DIR/evidence-pack.tar" \
+    "$pack_subject_root" \
+    "$TMP_DIR/release-evidence-trust/storage-receipt.json" \
+    "scripts/release/stage_release_assets.sh"; then
+    exit 1
+fi
+(
+    cd "$SNAPSHOT_ROOT"
     HELM_DATA_DIR="$HELM_RELEASE_EVIDENCE_PREPARED_DATA_DIR" \
         "$SNAPSHOT_ROOT/bin/helm-ai-kernel" verify \
         --profile "$HELM_RELEASE_EVIDENCE_PREPARED_PROFILE" \

@@ -72,12 +72,12 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("HELM_RELEASE_EVIDENCE_ANCHOR_TYPE: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_TYPE }}", binaries)
         self.assertIn("HELM_RELEASE_EVIDENCE_ANCHOR_URI: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_URI }}", binaries)
         self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_URI: ${{ vars.HELM_RELEASE_EVIDENCE_STORAGE_URI }}", binaries)
-        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_JSON: ${{ secrets.HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_JSON }}", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND: ${{ secrets.HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND }}", binaries)
         self.assertIn("HELM_EVIDENCE_KMS_KEY_ID: ${{ secrets.HELM_EVIDENCE_KMS_KEY_ID }}", binaries)
         self.assertIn("HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX: ${{ secrets.HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX }}", binaries)
         self.assertIn("HELM_EVIDENCE_KMS_SIGN_COMMAND: ${{ secrets.HELM_EVIDENCE_KMS_SIGN_COMMAND }}", binaries)
         self.assertIn("name: Require explicit external release EvidencePack trust", binaries)
-        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_JSON", binaries)
+        self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND", binaries)
         self.assertLess(
             binaries.index("Require explicit external release EvidencePack trust"),
             binaries.index("Build and stage release assets"),

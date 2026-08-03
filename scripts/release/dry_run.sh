@@ -145,6 +145,13 @@ fi
 if ! helm_release_evidence_prepare "$staged_verifier" "$TMP_DIR/dry-run-release-evidence-trust" "scripts/release/dry_run.sh"; then
   exit 1
 fi
+if ! helm_release_evidence_write_storage_receipt \
+  "$ASSETS_DIR/evidence-pack.tar" \
+  "$(helm_release_evidence_subject_root "$ASSETS_DIR/evidence-pack.tar")" \
+  "$TMP_DIR/dry-run-release-evidence-trust/storage-receipt.json" \
+  "scripts/release/dry_run.sh"; then
+  exit 1
+fi
 "$staged_verifier" verify \
   --profile "$HELM_RELEASE_EVIDENCE_PREPARED_PROFILE" \
   --config "$HELM_RELEASE_EVIDENCE_PREPARED_CONFIG_PATH" \

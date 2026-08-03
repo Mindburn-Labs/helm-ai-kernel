@@ -55,6 +55,7 @@
               "properties": {
                 "effect_id": { "$ref": "#/$defs/provider_effect_id" },
                 "provider_action_urn": { "$ref": "#/$defs/non_empty" },
+                "provider_destination_hash": { "$ref": "#/$defs/hash" },
                 "provider_payload_hash": { "$ref": "#/$defs/hash" }
               }
             }

@@ -5,6 +5,7 @@ package contracts_test
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,20 +19,21 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	connectorregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
 )
 
-func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryAuthorityBinding(t *testing.T) {
+func TestLaunchEffectAuthorizationEnvelopePreflightVerifiesEveryAuthorityBinding(t *testing.T) {
 	envelope, ctx, _, publicKey := launchAuthorizationFixture(t)
 	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/launch_effect_envelope.v1.json"), envelope); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected by schema: %v", err)
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected: %v", err)
 	}
-	if envelope.KernelVerdictHash != "sha256:3c25da9dd9ac006c0d14ea6d6563f3733ff60276adb114689c20d4a3a254e5d6" {
+	if envelope.KernelVerdictHash != "sha256:bbffc2499e6099e2a911d5162806341a35e772a2741af36f3e46a069717519a5" {
 		t.Fatalf("launch verdict hash = %s, want committed golden", envelope.KernelVerdictHash)
 	}
-	if envelope.KernelVerdictSignature != "ed25519:0424ab282768263a3d7247041a1e566d5177b3029488b7be73b64aa4b89bee125773efc0b99aae8f92078da18fc9c661c9ecbcd458f11e65b87ef6c7c4890e0a" {
+	if envelope.KernelVerdictSignature != "ed25519:008f1e9102d12a36474eda46ace72efeafc0d3057b975007b56343679e4799e47f8f4010879284787488ca4afe73f60f02f149238586e1dae420e02c88c0dc06" {
 		t.Fatalf("launch verdict signature = %s, want committed golden", envelope.KernelVerdictSignature)
 	}
 	if len(publicKey) != ed25519.PublicKeySize {
@@ -151,13 +153,15 @@ func TestLaunchEffectAuthorizationEnvelopeFailsClosed(t *testing.T) {
 			ctx.Now = launchRoutingNow.Add(7 * time.Minute)
 		}},
 		{name: "untrusted verdict signer", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
-			ctx.ResolveVerdictKey = func(string) (ed25519.PublicKey, error) { return nil, fmt.Errorf("key absent from trust root") }
+			ctx.ResolveVerdictKeyForTrustRoot = func(string, string) (ed25519.PublicKey, error) { return nil, fmt.Errorf("key absent from trust root") }
 		}},
-		{name: "missing atomic dispatch finalizer", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
-			ctx.FinalizeDispatch = nil
+		{name: "missing exact dispatch bytes", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.ResolveDispatchRequest = nil
 		}},
-		{name: "active scoped stop at dispatch", mutate: func(_ *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
-			ctx.FinalizeDispatch = func(contracts.LaunchEffectPermitBinding) error { return fmt.Errorf("scoped stop active") }
+		{name: "active scoped stop at dispatch", mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, ctx *contracts.LaunchEffectEnvelopeVerificationContext) {
+			ctx.ResolveEmergencyFence = func(string, string) (contracts.LaunchEmergencyFenceSnapshot, error) {
+				return contracts.LaunchEmergencyFenceSnapshot{TenantID: envelope.TenantID, WorkspaceID: envelope.WorkspaceID, EffectiveEpoch: envelope.EmergencyFenceEpoch, Active: true}, nil
+			}
 		}},
 		{name: "signature", mutate: func(envelope *contracts.LaunchEffectAuthorizationEnvelope, _ *contracts.LaunchEffectEnvelopeVerificationContext) {
 			envelope.KernelVerdictSignature = "ed25519:" + strings.Repeat("0", 128)
@@ -284,13 +288,46 @@ func TestLaunchEffectAuthorizationRejectsUnsignedRouteProbes(t *testing.T) {
 	}
 }
 
-func TestLaunchEffectAuthorizationEnvelopeConsumesPermitAtomically(t *testing.T) {
-	envelope, ctx, _, _ := launchAuthorizationFixture(t)
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
-		t.Fatalf("first dispatch verification failed: %v", err)
+func TestVerifyAndStartLaunchEffectAuthorizationEnvelopeRejectEveryPreviewBeforeDispatch(t *testing.T) {
+	authorizers := map[string]func(contracts.LaunchEffectAuthorizationEnvelope, contracts.LaunchEffectEnvelopeVerificationContext) error{
+		"verify": contracts.VerifyLaunchEffectAuthorizationEnvelope,
+		"start":  contracts.StartLaunchEffectAuthorizationEnvelope,
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil {
-		t.Fatal("replayed launch effect permit was accepted")
+	for index, fixture := range launchInputFixtures() {
+		index, fixture := index, fixture
+		for name, authorize := range authorizers {
+			name, authorize := name, authorize
+			t.Run(fixture.effectID+"/"+name, func(t *testing.T) {
+				envelope, ctx, _, _ := launchAuthorizationFixtureAt(t, index)
+				var finalized atomic.Bool
+				var commitVerified atomic.Bool
+				var started atomic.Bool
+				ctx.FinalizeAndStartDispatch = func(
+					contracts.LaunchEffectDispatchFinalization,
+					func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+					func() error,
+				) error {
+					finalized.Store(true)
+					return nil
+				}
+				ctx.VerifyDispatchCommit = func(contracts.LaunchEffectDispatchFinalization, contracts.LaunchEffectDispatchFinalizationObservation) error {
+					commitVerified.Store(true)
+					return nil
+				}
+				ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+					started.Store(true)
+					return nil
+				}
+
+				err := authorize(envelope, ctx)
+				if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+					t.Fatalf("preview %s reached an authorizing path: %v", fixture.effectID, err)
+				}
+				if finalized.Load() || commitVerified.Load() || started.Load() {
+					t.Fatal("preview effect reached finalization, commit proof, or connector start")
+				}
+			})
+		}
 	}
 }
 
@@ -301,12 +338,227 @@ func TestLaunchEffectAuthorizationEnvelopeDoesNotConsumeAfterFailedVerification(
 	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(tampered, ctx); err == nil {
 		t.Fatal("tampered verdict unexpectedly verified")
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
-		t.Fatalf("failed verification consumed the permit: %v", err)
+	var finalized atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		contracts.LaunchEffectDispatchFinalization,
+		func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		func() error,
+	) error {
+		finalized.Store(true)
+		return nil
+	}
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview launch effect unexpectedly reached atomic dispatch: %v", err)
+	}
+	if finalized.Load() {
+		t.Fatal("failed verification or preview admission reached finalization")
 	}
 }
 
-func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryPreviewEffect(t *testing.T) {
+func TestLaunchEffectAuthorizationEnvelopePreflightGrantsNoNetworkAuthority(t *testing.T) {
+	envelope, ctx, _, _ := launchAuthorizationFixture(t)
+	var finalized atomic.Bool
+	var networkStarted atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		contracts.LaunchEffectDispatchFinalization,
+		func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		func() error,
+	) error {
+		finalized.Store(true)
+		return nil
+	}
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+		networkStarted.Store(true)
+		return nil
+	}
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("launch authorization preflight rejected: %v", err)
+	}
+	if finalized.Load() || networkStarted.Load() {
+		t.Fatal("non-authorizing preflight finalized or started a connector effect")
+	}
+}
+
+func TestLegacyV1ProviderInputCanPreflightButCannotAuthorizeDispatch(t *testing.T) {
+	envelope, ctx, privateKey, _ := launchAuthorizationFixture(t)
+	delete(envelope.Input, "provider_offering_id")
+	delete(envelope.Input, "provider_destination_hash")
+	key, err := contracts.DeriveLaunchEffectIdempotencyKey(envelope.EffectID, envelope.Input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope.InputHash = key
+	envelope.IdempotencyKey = key
+	authority, approvalConsumptionRef := launchCanonicalApprovalAuthority(
+		t,
+		envelope.EffectID,
+		envelope.Input,
+		envelope.PlanHash,
+		key,
+		ctx.Now,
+		envelope.Principal,
+		envelope.Audience,
+		envelope.KernelTrustRootID,
+	)
+	envelope.ApprovalArtifactRef = authority.Grant.GrantID
+	envelope.ApprovalArtifactHash = authority.Grant.GrantHash
+	envelope.ApprovalConsumptionRef = approvalConsumptionRef
+	envelope.ApprovalConsumptionHash = authority.Consumption.ConsumptionHash
+	envelope.DispatchAdmissionRef = authority.DispatchAdmission.AdmissionID
+	envelope.DispatchAdmissionHash = authority.DispatchAdmission.AdmissionHash
+	envelope.ConnectorAuthorityRef = authority.Grant.ConnectorAuthority.BindingRef
+	envelope.ConnectorAuthorityHash = authority.Grant.ConnectorAuthority.AuthorityHash
+	envelope, err = contracts.SignLaunchEffectAuthorizationEnvelope(envelope, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	legacyPermit := ctx.Permit
+	legacyPermit.InputHash = envelope.InputHash
+	legacyPermit.IdempotencyKey = envelope.IdempotencyKey
+	legacyPermit.ApprovalArtifactRef = envelope.ApprovalArtifactRef
+	legacyPermit.ApprovalArtifactHash = envelope.ApprovalArtifactHash
+	legacyPermit.ApprovalConsumptionRef = envelope.ApprovalConsumptionRef
+	legacyPermit.ApprovalConsumptionHash = envelope.ApprovalConsumptionHash
+	legacyPermit.DispatchAdmissionRef = envelope.DispatchAdmissionRef
+	legacyPermit.DispatchAdmissionHash = envelope.DispatchAdmissionHash
+	legacyPermit.ConnectorAuthorityRef = envelope.ConnectorAuthorityRef
+	legacyPermit.ConnectorAuthorityHash = envelope.ConnectorAuthorityHash
+	legacyPermit.KernelVerdictHash = envelope.KernelVerdictHash
+	legacyPermit.OfferingID = ""
+	legacyPermit.ProviderDestinationHash = ""
+	ctx.Permit = legacyPermit
+	ctx.ResolvePermitBinding = func(effectPermitRef, effectPermitHash string) (contracts.LaunchEffectPermitBinding, error) {
+		if effectPermitRef != legacyPermit.EffectPermitRef || effectPermitHash != legacyPermit.EffectPermitHash {
+			return contracts.LaunchEffectPermitBinding{}, fmt.Errorf("legacy permit binding not found")
+		}
+		return legacyPermit, nil
+	}
+	ctx.ResolveApprovalAuthority = func(grantRef, grantHash, consumptionRef, consumptionHash string) (contracts.LaunchEffectApprovalAuthority, error) {
+		if grantRef != authority.Grant.GrantID || grantHash != authority.Grant.GrantHash || consumptionRef != approvalConsumptionRef || consumptionHash != authority.Consumption.ConsumptionHash {
+			return contracts.LaunchEffectApprovalAuthority{}, fmt.Errorf("legacy approval authority not found")
+		}
+		return authority, nil
+	}
+	var started atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		_ contracts.LaunchEffectDispatchFinalization,
+		validate func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		start func() error,
+	) error {
+		if _, err := validate(); err != nil {
+			return err
+		}
+		return start()
+	}
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+		started.Store(true)
+		return nil
+	}
+
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("legacy v1 provider input was not readable during preflight: %v", err)
+	}
+	err = contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx)
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("legacy v1 provider input acquired dispatch authority: %v", err)
+	}
+	if started.Load() {
+		t.Fatal("legacy v1 provider input reached connector start")
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeV1ContextPreflightsButPreviewCannotAuthorize(t *testing.T) {
+	envelope, ctx, _, _ := launchAuthorizationFixture(t)
+	var legacyFinalizeCalled atomic.Bool
+	ctx.ResolveVerdictKeyForTrustRoot = nil
+	ctx.ResolveEmergencyFence = nil
+	ctx.ResolveDispatchRequest = nil
+	ctx.ResolveDispatchTime = nil
+	ctx.ResolvePermitBinding = nil
+	ctx.ResolvePolicyEpoch = nil
+	ctx.ResolveCurrentConnectorRelease = nil
+	ctx.VerifyCurrentConnectorRelease = nil
+	ctx.VerifyDispatchCommit = nil
+	ctx.FinalizeAndStartDispatch = nil
+	ctx.StartDispatch = nil
+	ctx.FinalizeDispatch = func(contracts.LaunchEffectPermitBinding) error {
+		legacyFinalizeCalled.Store(true)
+		return nil
+	}
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+		t.Fatalf("v1-compatible evidence preflight rejected: %v", err)
+	}
+	err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx)
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview v1 context received execution authority: %v", err)
+	}
+	if legacyFinalizeCalled.Load() {
+		t.Fatal("legacy finalizer was called even though it cannot prove STARTED/interlock authority")
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeRejectsPreviewBeforeFinalConnectorSeam(t *testing.T) {
+	envelope, ctx, _, _ := launchAuthorizationFixtureAt(t, 0)
+	var reads atomic.Int32
+	ctx.ResolveDispatchRequest = func(contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
+		reads.Add(1)
+		return contracts.LaunchEffectDispatchRequest{}, fmt.Errorf("preview dispatch bytes must not be read")
+	}
+	var finalized atomic.Bool
+	var networkStarted atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		contracts.LaunchEffectDispatchFinalization,
+		func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		func() error,
+	) error {
+		finalized.Store(true)
+		return nil
+	}
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+		networkStarted.Store(true)
+		return nil
+	}
+	err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx)
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview connector-seam rejection error = %v", err)
+	}
+	if reads.Load() != 0 || finalized.Load() || networkStarted.Load() {
+		t.Fatal("preview effect reached dispatch bytes, finalization, or connector start")
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopeRejectsPreviewBeforeCommitProof(t *testing.T) {
+	envelope, ctx, _, _ := launchAuthorizationFixture(t)
+	var finalized atomic.Bool
+	var commitVerified atomic.Bool
+	var networkStarted atomic.Bool
+	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+		networkStarted.Store(true)
+		return nil
+	}
+	ctx.FinalizeAndStartDispatch = func(
+		contracts.LaunchEffectDispatchFinalization,
+		func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		func() error,
+	) error {
+		finalized.Store(true)
+		return nil
+	}
+	ctx.VerifyDispatchCommit = func(contracts.LaunchEffectDispatchFinalization, contracts.LaunchEffectDispatchFinalizationObservation) error {
+		commitVerified.Store(true)
+		return nil
+	}
+	err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx)
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview commit-proof rejection error = %v", err)
+	}
+	if finalized.Load() || commitVerified.Load() || networkStarted.Load() {
+		t.Fatal("preview effect reached finalization, commit proof, or connector start")
+	}
+}
+
+func TestLaunchEffectAuthorizationEnvelopePreflightVerifiesEveryPreviewEffect(t *testing.T) {
 	for index, fixture := range launchInputFixtures() {
 		index, fixture := index, fixture
 		t.Run(fixture.effectID, func(t *testing.T) {
@@ -314,8 +566,8 @@ func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryPreviewEffect(t *testing.
 			if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/launch_effect_envelope.v1.json"), envelope); err != nil {
 				t.Fatalf("launch authorization envelope rejected by schema: %v", err)
 			}
-			if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
-				t.Fatalf("launch authorization envelope rejected: %v", err)
+			if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+				t.Fatalf("launch authorization envelope preflight rejected: %v", err)
 			}
 		})
 	}
@@ -900,6 +1152,36 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 	audience := "launch.dispatch"
 	trustRootID := "kernel-root-1"
 	authority, approvalConsumptionRef := launchCanonicalApprovalAuthority(t, fixture.effectID, input, input["plan_hash"].(string), key, now, principal, audience, trustRootID)
+	dispatchRequest := contracts.LaunchEffectDispatchRequest{
+		RequestBody: []byte(`{"effect_id":"` + fixture.effectID + `","mission_id":"mission-1"}`),
+		ArgsC14N:    []byte(`{"effect_id":"` + fixture.effectID + `","workspace_id":"workspace-1"}`),
+	}
+	if launchTestProviderMutation(fixture.effectID) {
+		dispatchRequest.ProviderPayload = launchProviderPayloadFixture(fixture.effectID)
+		dispatchRequest.Destination = contracts.LaunchEffectDispatchDestination{
+			EndpointURI:             launchProviderDestinationFixture(launchInputString(input, "provider")),
+			RouteBindingRef:         launchInputString(input, "route_binding_ref"),
+			RouteBindingHash:        launchInputString(input, "route_binding_hash"),
+			RoutePlacementID:        launchInputString(input, "route_placement_id"),
+			ProviderID:              launchInputString(input, "provider"),
+			ProviderAccountRef:      launchInputString(input, "provider_account_ref"),
+			ProviderAccountHash:     launchInputString(input, "provider_account_hash"),
+			RegionID:                launchInputString(input, "region"),
+			OfferingID:              launchInputString(input, "provider_offering_id"),
+			ProviderConnectorID:     launchInputString(input, "provider_connector_id"),
+			ProviderConnectorHash:   launchInputString(input, "provider_connector_contract_hash"),
+			ProviderActionURN:       launchInputString(input, "provider_action_urn"),
+			ProviderDestinationHash: launchInputString(input, "provider_destination_hash"),
+		}
+	}
+	expectedProviderDestinationHash := ""
+	if dispatchRequest.Destination.EndpointURI != "" {
+		expectedProviderDestinationHash = canonicalize.ComputeArtifactHash([]byte(dispatchRequest.Destination.EndpointURI))
+	}
+	expectedProviderPayloadHash := ""
+	if len(dispatchRequest.ProviderPayload) != 0 {
+		expectedProviderPayloadHash = canonicalize.ComputeArtifactHash(dispatchRequest.ProviderPayload)
+	}
 	envelope := contracts.LaunchEffectAuthorizationEnvelope{
 		SchemaVersion:           contracts.LaunchEffectEnvelopeSchemaVersion,
 		EffectID:                fixture.effectID,
@@ -943,8 +1225,8 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 		ConnectorAuthorityRef:   authority.Grant.ConnectorAuthority.BindingRef,
 		ConnectorAuthorityHash:  authority.Grant.ConnectorAuthority.AuthorityHash,
 		ActionURN:               contract.ActionURN,
-		RequestBodyHash:         launchHash("1"),
-		ArgsC14NHash:            launchHash("2"),
+		RequestBodyHash:         canonicalize.ComputeArtifactHash(dispatchRequest.RequestBody),
+		ArgsC14NHash:            canonicalize.ComputeArtifactHash(dispatchRequest.ArgsC14N),
 		DispatchDeadline:        deadline.Format(time.RFC3339Nano),
 		ReplayHint:              "single_use_permit",
 	}
@@ -998,10 +1280,40 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 		DispatchDeadline:        deadline,
 		SingleUse:               true,
 	}
+	if launchTestProviderMutation(fixture.effectID) {
+		permit.RouteBindingRef = launchInputString(envelope.Input, "route_binding_ref")
+		permit.RouteBindingHash = launchInputString(envelope.Input, "route_binding_hash")
+		permit.RoutePlacementID = launchInputString(envelope.Input, "route_placement_id")
+		permit.ProviderID = launchInputString(envelope.Input, "provider")
+		permit.ProviderAccountRef = launchInputString(envelope.Input, "provider_account_ref")
+		permit.ProviderAccountHash = launchInputString(envelope.Input, "provider_account_hash")
+		permit.RegionID = launchInputString(envelope.Input, "region")
+		permit.OfferingID = launchInputString(envelope.Input, "provider_offering_id")
+		permit.ProviderConnectorID = launchInputString(envelope.Input, "provider_connector_id")
+		permit.ProviderConnectorHash = launchInputString(envelope.Input, "provider_connector_contract_hash")
+		permit.ProviderActionURN = launchInputString(envelope.Input, "provider_action_urn")
+		permit.ProviderDestinationHash = launchInputString(envelope.Input, "provider_destination_hash")
+		permit.ProviderPayloadHash = launchInputString(envelope.Input, "provider_payload_hash")
+	}
 	var consumed atomic.Bool
 	approvalPrivateKey := launchApprovalPrivateKey()
 	approvalPublicKey := approvalPrivateKey.Public().(ed25519.PublicKey)
 	approvalVerifier, err := approvalceremony.NewEd25519GrantSignatureVerifier(approvalPublicKey, "approval-key-1", trustRootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releasePublicKey, releasePrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentRelease := launchCurrentConnectorReleaseFixture(t, authority.Grant.ConnectorAuthority, now, releasePrivateKey)
+	releaseVerifier, err := connectorregistry.NewEd25519ReleaseAuthorityVerifier(
+		currentRelease.Authority.AuthorityID,
+		[]connectorregistry.TrustedReleaseAuthorityKey{{
+			AuthorityID: currentRelease.Authority.AuthorityID, SigningKeyRef: currentRelease.Authority.SigningKeyRef,
+			PublicKey: releasePublicKey, Enabled: true, NotBefore: now.Add(-10 * time.Minute), NotAfter: now.Add(10 * time.Minute),
+		}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1050,12 +1362,84 @@ func launchAuthorizationFixtureAt(t *testing.T, fixtureIndex int) (contracts.Lau
 			}
 			return publicKey, nil
 		},
-		FinalizeDispatch: func(expected contracts.LaunchEffectPermitBinding) error {
-			if expected != permit {
+		ResolveVerdictKeyForTrustRoot: func(kernelTrustRootID, signerKeyID string) (ed25519.PublicKey, error) {
+			if kernelTrustRootID != trustRootID || signerKeyID != envelope.KernelVerdictSignerKey {
+				return nil, fmt.Errorf("unknown verdict signer key")
+			}
+			return publicKey, nil
+		},
+		ResolveEmergencyFence: func(tenantID, workspaceID string) (contracts.LaunchEmergencyFenceSnapshot, error) {
+			return contracts.LaunchEmergencyFenceSnapshot{TenantID: tenantID, WorkspaceID: workspaceID, EffectiveEpoch: envelope.EmergencyFenceEpoch}, nil
+		},
+		ResolveDispatchTime: func() (time.Time, error) { return now, nil },
+		ResolvePermitBinding: func(effectPermitRef, effectPermitHash string) (contracts.LaunchEffectPermitBinding, error) {
+			if effectPermitRef != permit.EffectPermitRef || effectPermitHash != permit.EffectPermitHash {
+				return contracts.LaunchEffectPermitBinding{}, fmt.Errorf("permit binding not found")
+			}
+			return permit, nil
+		},
+		ResolveDispatchRequest: func(expected contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
+			if expected.EffectPermitRef != permit.EffectPermitRef || expected.EffectPermitHash != permit.EffectPermitHash {
+				return contracts.LaunchEffectDispatchRequest{}, fmt.Errorf("dispatch request permit binding mismatch")
+			}
+			return dispatchRequest, nil
+		},
+		ResolvePolicyEpoch: func(tenantID, workspaceID string) (string, error) {
+			if tenantID != envelope.TenantID || workspaceID != envelope.WorkspaceID {
+				return "", fmt.Errorf("policy scope not found")
+			}
+			return envelope.PolicyEpoch, nil
+		},
+		ResolveCurrentConnectorRelease: func(candidate contracts.ApprovalConnectorAuthority) (contracts.ConnectorReleaseAuthorityEnvelope, error) {
+			if candidate.AuthorityHash != authority.Grant.ConnectorAuthority.AuthorityHash {
+				return contracts.ConnectorReleaseAuthorityEnvelope{}, fmt.Errorf("connector release not found")
+			}
+			return currentRelease, nil
+		},
+		VerifyCurrentConnectorRelease: func(release contracts.ConnectorReleaseAuthorityEnvelope, observedAt time.Time) error {
+			return releaseVerifier.VerifyCurrentCertifiedAt(release, observedAt)
+		},
+		VerifyDispatchCommit: func(expected contracts.LaunchEffectDispatchFinalization, observation contracts.LaunchEffectDispatchFinalizationObservation) error {
+			if !consumed.Load() {
+				return fmt.Errorf("permit consumption or STARTED reservation not found")
+			}
+			if expected.Permit != permit || observation.ObservedAuthority != permit || observation.ObservedAt.Before(now) {
+				return fmt.Errorf("dispatch commit binding mismatch")
+			}
+			if observation.RequestBodyHash != permit.RequestBodyHash || observation.ArgsC14NHash != permit.ArgsC14NHash || observation.ProviderDestinationHash != expectedProviderDestinationHash || observation.ProviderPayloadHash != expectedProviderPayloadHash {
+				return fmt.Errorf("dispatch commit payload binding mismatch")
+			}
+			return nil
+		},
+		FinalizeAndStartDispatch: func(
+			expected contracts.LaunchEffectDispatchFinalization,
+			validate func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+			start func() error,
+		) error {
+			if expected.Permit != permit {
 				return fmt.Errorf("permit compare-and-swap binding mismatch")
+			}
+			if !now.Before(expected.MustStartBefore) {
+				return fmt.Errorf("dispatch authority expired")
+			}
+			observation, err := validate()
+			if err != nil {
+				return err
+			}
+			if observation.ObservedAuthority != permit || !observation.ObservedAt.Equal(now) {
+				return fmt.Errorf("source-owned validation observation mismatch")
 			}
 			if !consumed.CompareAndSwap(false, true) {
 				return fmt.Errorf("permit already consumed")
+			}
+			return start()
+		},
+		StartDispatch: func(expected contracts.LaunchEffectPermitBinding, request contracts.LaunchEffectDispatchRequest) error {
+			if expected != permit {
+				return fmt.Errorf("connector start permit binding mismatch")
+			}
+			if !bytes.Equal(request.RequestBody, dispatchRequest.RequestBody) || !bytes.Equal(request.ArgsC14N, dispatchRequest.ArgsC14N) || !bytes.Equal(request.ProviderPayload, dispatchRequest.ProviderPayload) || request.Destination != dispatchRequest.Destination {
+				return fmt.Errorf("connector start dispatch bytes mismatch")
 			}
 			return nil
 		},
@@ -1077,7 +1461,7 @@ func launchCanonicalApprovalAuthority(t *testing.T, effectID string, input map[s
 	t.Helper()
 	action := launchTestApprovalAction(effectID)
 	policyHash := launchHash("6")
-	connectorAuthority := launchTestConnectorAuthority(t, effectID, input, planHash, effectHash, policyHash)
+	connectorAuthority := launchTestConnectorAuthority(t, effectID, input, planHash, effectHash, policyHash, now)
 	grant, err := (contracts.ApprovalGrant{
 		SchemaVersion: contracts.ApprovalGrantSchemaV1, ContractVersion: contracts.ApprovalGrantContractV1,
 		GrantID: "launch-grant-" + effectID, TenantID: "tenant-1", WorkspaceID: "workspace-1", Audience: audience,
@@ -1136,7 +1520,7 @@ func launchCanonicalApprovalAuthority(t *testing.T, effectID string, input map[s
 	}, "approval-consumption:" + grant.GrantID
 }
 
-func launchTestConnectorAuthority(t *testing.T, effectID string, input map[string]any, planHash, effectHash, policyHash string) contracts.ApprovalConnectorAuthority {
+func launchTestConnectorAuthority(t *testing.T, effectID string, input map[string]any, planHash, effectHash, policyHash string, now time.Time) contracts.ApprovalConnectorAuthority {
 	t.Helper()
 	contract := contracts.LookupLaunchMissionEffectPreview(effectID)
 	if contract == nil {
@@ -1165,22 +1549,73 @@ func launchTestConnectorAuthority(t *testing.T, effectID string, input map[strin
 			t.Fatal("provider mutation fixture has no provider connector action")
 		}
 	}
+	release := launchConnectorReleaseFixture(t, effectID, connectorID, certificationRef, certificationHash, now)
 	authority, err := (contracts.ApprovalConnectorAuthority{
 		SchemaVersion: contracts.ApprovalConnectorAuthoritySchemaV1, ContractVersion: contracts.ApprovalConnectorAuthorityContractV1,
 		State: contracts.ApprovalConnectorAuthorityStateV1, BindingRef: "launch-connector-authority-" + effectID,
 		TenantID: "tenant-1", WorkspaceID: "workspace-1", PackID: "mission-1", PackVersion: contracts.LaunchEffectCatalogVersion,
 		PackManifestHash: planHash, Action: launchTestApprovalAction(effectID), ConnectorAction: connectorAction, EffectHash: effectHash, PolicyHash: policyHash,
-		ConnectorID: connectorID, ConnectorVersion: "1.0.0", ReleaseScopeKind: contracts.ConnectorReleaseAuthorityScopeGlobal,
-		ReleaseAuthorityID: "launch-release-authority-" + effectID, ReleaseRegistryRevision: 1, ReleaseAuthorityHash: launchHash("3"),
-		ConnectorExecutorKind: "digital", ConnectorBinaryHash: launchHash("a"),
-		ConnectorSignatureRef: "sigstore://launch/connector/1.0.0", ConnectorSignatureHash: launchHash("b"), ConnectorSignerID: "mindburn-release",
-		ConnectorSandboxProfile: "launch-provider-route-v1", ConnectorDriftPolicyRef: "policy://launch/connector-drift/v1",
-		CertificationRef: certificationRef, CertificationHash: certificationHash, CertificationAuthority: "spiffe://helm/certification-service",
+		ConnectorID: release.ConnectorID, ConnectorVersion: release.ConnectorVersion, ReleaseScopeKind: release.ScopeKind,
+		ReleaseAuthorityID: release.AuthorityID, ReleaseRegistryRevision: release.RegistryRevision, ReleaseAuthorityHash: release.AuthorityHash,
+		ConnectorExecutorKind: release.ConnectorExecutorKind, ConnectorBinaryHash: release.ConnectorBinaryHash,
+		ConnectorSignatureRef: release.ConnectorSignatureRef, ConnectorSignatureHash: release.ConnectorSignatureHash, ConnectorSignerID: release.ConnectorSignerID,
+		ConnectorSandboxProfile: release.ConnectorSandboxProfile, ConnectorDriftPolicyRef: release.ConnectorDriftPolicyRef,
+		CertificationRef: release.CertificationRef, CertificationHash: release.CertificationHash, CertificationAuthority: release.CertificationAuthority,
 	}).Seal()
 	if err != nil {
 		t.Fatal(err)
 	}
 	return authority
+}
+
+func launchConnectorReleaseFixture(t *testing.T, effectID, connectorID, certificationRef, certificationHash string, now time.Time) contracts.ConnectorReleaseAuthority {
+	t.Helper()
+	validUntil := now.Add(10 * time.Minute)
+	release, err := (contracts.ConnectorReleaseAuthority{
+		SchemaVersion: contracts.ConnectorReleaseAuthoritySchemaV1, ContractVersion: contracts.ConnectorReleaseAuthorityContractV1,
+		AuthorityID: "launch-release-authority-" + effectID, SigningKeyRef: "connector-release-key-1",
+		Algorithm: contracts.ConnectorReleaseAuthorityAlgorithmV1, RegistryRevision: 1,
+		ScopeKind: contracts.ConnectorReleaseAuthorityScopeGlobal, ConnectorID: connectorID, ConnectorVersion: "1.0.0",
+		State: contracts.ConnectorReleaseAuthorityStateCertified, ConnectorExecutorKind: "digital",
+		ConnectorSandboxProfile: "launch-provider-route-v1", ConnectorDriftPolicyRef: "policy://launch/connector-drift/v1",
+		ConnectorBinaryHash: launchHash("a"), ConnectorSignatureRef: "sigstore://launch/connector/1.0.0",
+		ConnectorSignatureHash: launchHash("b"), ConnectorSignerID: "mindburn-release",
+		CertificationRef: certificationRef, CertificationHash: certificationHash, CertificationAuthority: "spiffe://helm/certification-service",
+		SignedAt: now.Add(-5 * time.Minute), ValidFrom: now.Add(-5 * time.Minute), ValidUntil: &validUntil,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return release
+}
+
+func launchCurrentConnectorReleaseFixture(t *testing.T, authority contracts.ApprovalConnectorAuthority, now time.Time, privateKey ed25519.PrivateKey) contracts.ConnectorReleaseAuthorityEnvelope {
+	t.Helper()
+	validUntil := now.Add(10 * time.Minute)
+	release, err := (contracts.ConnectorReleaseAuthority{
+		SchemaVersion: contracts.ConnectorReleaseAuthoritySchemaV1, ContractVersion: contracts.ConnectorReleaseAuthorityContractV1,
+		AuthorityID: authority.ReleaseAuthorityID, SigningKeyRef: "connector-release-key-1",
+		Algorithm: contracts.ConnectorReleaseAuthorityAlgorithmV1, RegistryRevision: authority.ReleaseRegistryRevision,
+		ScopeKind: authority.ReleaseScopeKind, ConnectorID: authority.ConnectorID, ConnectorVersion: authority.ConnectorVersion,
+		State: contracts.ConnectorReleaseAuthorityStateCertified, ConnectorExecutorKind: authority.ConnectorExecutorKind,
+		ConnectorSandboxProfile: authority.ConnectorSandboxProfile, ConnectorDriftPolicyRef: authority.ConnectorDriftPolicyRef,
+		ConnectorBinaryHash: authority.ConnectorBinaryHash, ConnectorSignatureRef: authority.ConnectorSignatureRef,
+		ConnectorSignatureHash: authority.ConnectorSignatureHash, ConnectorSignerID: authority.ConnectorSignerID,
+		CertificationRef: authority.CertificationRef, CertificationHash: authority.CertificationHash,
+		CertificationAuthority: authority.CertificationAuthority,
+		SignedAt:               now.Add(-5 * time.Minute), ValidFrom: now.Add(-5 * time.Minute), ValidUntil: &validUntil,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release.AuthorityHash != authority.ReleaseAuthorityHash {
+		t.Fatalf("connector release fixture hash = %s, approval binds %s", release.AuthorityHash, authority.ReleaseAuthorityHash)
+	}
+	payload, err := connectorregistry.ConnectorReleaseAuthoritySigningPayload(release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return contracts.ConnectorReleaseAuthorityEnvelope{Authority: release, Signature: hex.EncodeToString(ed25519.Sign(privateKey, payload))}
 }
 
 func launchTestProviderMutation(effectID string) bool {
@@ -1244,6 +1679,7 @@ func bindLaunchInputToRoute(t *testing.T, input map[string]any, effectID string,
 	for _, action := range placement.ActionBindings {
 		if action.EffectID == effectID {
 			setLaunchInputIfPresent(input, "provider_action_urn", action.ProviderActionURN)
+			setLaunchInputIfPresent(input, "provider_destination_hash", action.ProviderDestinationHash)
 			setLaunchInputIfPresent(input, "provider_payload_hash", action.ProviderPayloadHash)
 			return
 		}
@@ -1255,6 +1691,11 @@ func setLaunchInputIfPresent(input map[string]any, field string, value any) {
 	if _, ok := input[field]; ok {
 		input[field] = value
 	}
+}
+
+func launchInputString(input map[string]any, field string) string {
+	value, _ := input[field].(string)
+	return value
 }
 
 func launchTestEffectRequiresProviderRoute(effectID string) bool {

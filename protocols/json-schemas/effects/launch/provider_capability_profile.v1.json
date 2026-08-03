@@ -48,6 +48,7 @@
         "properties": {
           "effect_id": { "$ref": "#/$defs/provider_effect_id" },
           "action_urn": { "$ref": "#/$defs/non_empty" },
+          "provider_destination_hash": { "$ref": "#/$defs/hash" },
           "reconciliation_mode": { "enum": ["READ_AFTER_WRITE", "OPERATION_POLL", "EVENT_AND_READ"] },
           "idempotency_mode": { "enum": ["NATIVE_KEY", "RECONCILE_BEFORE_RETRY", "COMPARE_AND_SET"] },
           "supported_transition_classes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/transition_class" } },

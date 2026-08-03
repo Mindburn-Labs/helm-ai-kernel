@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
@@ -111,6 +112,7 @@ type GovernedBridge struct {
 	permitTTL    time.Duration
 	issuerID     string
 	now          func() time.Time
+	permitSeq    atomic.Uint64
 }
 
 // BridgeConfig configures a GovernedBridge.
@@ -170,6 +172,11 @@ func NewGovernedBridge(cfg BridgeConfig) *GovernedBridge {
 	ttl := cfg.PermitTTL
 	if ttl <= 0 {
 		ttl = 5 * time.Minute
+	}
+	if provider, ok := cfg.Connector.(interface{ MaxPermitTTL() time.Duration }); ok {
+		if maxTTL := provider.MaxPermitTTL(); maxTTL > 0 && ttl > maxTTL {
+			ttl = maxTTL
+		}
 	}
 	issuer := cfg.IssuerID
 	if issuer == "" {
@@ -307,11 +314,9 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 		}
 		base.Approval = &approval
 	}
-	// ALLOW: mint a permit bound to the verdict. The nonce is deterministic over
-	// (intent, verdict, tool) — NOT the clock — so an identical request always
-	// yields the same nonce and can be recognized as a replay regardless of when
-	// it arrives.
-	permit, err := b.mintPermit(req, inputHash, receipt, now, permitScope)
+	// ALLOW: writes get deterministic nonces so an identical approved effect is
+	// a replay; reads get distinct single-use permits so safe retries can run.
+	permit, err := b.mintPermit(req, inputHash, receipt, now, permitScope, isWrite)
 	if err != nil {
 		base.Verdict = contracts.VerdictDeny
 		base.ReasonCode = string(contracts.ReasonPDPError)
@@ -731,16 +736,18 @@ func effectTypeRequiresApproval(effectType effects.EffectType) bool {
 	return effectType != effects.EffectTypeRead
 }
 
-func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHash string, receipt *contracts.WorkstationPolicyDecisionReceipt, now time.Time, resolution permitScopeResolution) (*effects.EffectPermit, error) {
+func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHash string, receipt *contracts.WorkstationPolicyDecisionReceipt, now time.Time, resolution permitScopeResolution, isWrite bool) (*effects.EffectPermit, error) {
 	verdictHash, err := canonicalize.CanonicalHash(receipt)
 	if err != nil {
 		return nil, fmt.Errorf("mcp bridge: verdict hash: %w", err)
 	}
-	// Nonce binds the permit to its intent, verdict, and tool — deterministically,
-	// with NO clock component — so an identical approved write always produces the
-	// same nonce and its second dispatch is caught as a replay. inputHash and
-	// verdictHash are hex, so the "|" join is unambiguous.
-	nonceSum := sha256.Sum256([]byte(strings.Join([]string{inputHash, verdictHash, req.ToolName}, "|")))
+	// Writes keep a deterministic nonce. Reads add a per-bridge sequence so the
+	// connector can consume each permit once without blocking a safe read retry.
+	nonceParts := []string{inputHash, verdictHash, req.ToolName}
+	if !isWrite {
+		nonceParts = append(nonceParts, fmt.Sprintf("read:%d", b.permitSeq.Add(1)))
+	}
+	nonceSum := sha256.Sum256([]byte(strings.Join(nonceParts, "|")))
 	permit := &effects.EffectPermit{
 		PermitID:    "permit-" + hex.EncodeToString(nonceSum[:8]),
 		IntentHash:  inputHash,

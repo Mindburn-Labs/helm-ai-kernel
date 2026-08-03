@@ -8173,18 +8173,18 @@ pub struct TransitionApprovalCeremonyRequest {
     pub receipt_id: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    /// Current ceremony hash returned by the most recent approval read; prevents stale transitions.
-    #[serde(rename = "expected_ceremony_hash")]
-    pub expected_ceremony_hash: String,
+    /// Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.
+    #[serde(rename = "expected_ceremony_hash", skip_serializing_if = "Option::is_none")]
+    pub expected_ceremony_hash: Option<String>,
 }
 
 impl TransitionApprovalCeremonyRequest {
-    pub fn new(expected_ceremony_hash: String) -> TransitionApprovalCeremonyRequest {
+    pub fn new() -> TransitionApprovalCeremonyRequest {
         TransitionApprovalCeremonyRequest {
             actor: None,
             receipt_id: None,
             reason: None,
-            expected_ceremony_hash,
+            expected_ceremony_hash: None,
         }
     }
 }

@@ -17146,7 +17146,7 @@ class TransitionApprovalCeremonyRequest(BaseModel):
     actor: Optional[StrictStr] = None
     receipt_id: Optional[StrictStr] = None
     reason: Optional[StrictStr] = None
-    expected_ceremony_hash: Annotated[str, Field(min_length=1, strict=True)] = Field(description="Current ceremony hash returned by the most recent approval read; prevents stale transitions.")
+    expected_ceremony_hash: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.")
     __properties: ClassVar[List[str]] = ["actor", "receipt_id", "reason", "expected_ceremony_hash"]
 
     model_config = ConfigDict(

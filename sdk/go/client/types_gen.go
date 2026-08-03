@@ -45039,19 +45039,16 @@ type TransitionApprovalCeremonyRequest struct {
 	Actor     *string `json:"actor,omitempty"`
 	ReceiptId *string `json:"receipt_id,omitempty"`
 	Reason    *string `json:"reason,omitempty"`
-	// Current ceremony hash returned by the most recent approval read; prevents stale transitions.
-	ExpectedCeremonyHash string `json:"expected_ceremony_hash"`
+	// Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.
+	ExpectedCeremonyHash *string `json:"expected_ceremony_hash,omitempty"`
 }
-
-type _TransitionApprovalCeremonyRequest TransitionApprovalCeremonyRequest
 
 // NewTransitionApprovalCeremonyRequest instantiates a new TransitionApprovalCeremonyRequest object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewTransitionApprovalCeremonyRequest(expectedCeremonyHash string) *TransitionApprovalCeremonyRequest {
+func NewTransitionApprovalCeremonyRequest() *TransitionApprovalCeremonyRequest {
 	this := TransitionApprovalCeremonyRequest{}
-	this.ExpectedCeremonyHash = expectedCeremonyHash
 	return &this
 }
 
@@ -45159,28 +45156,36 @@ func (o *TransitionApprovalCeremonyRequest) SetReason(v string) {
 	o.Reason = &v
 }
 
-// GetExpectedCeremonyHash returns the ExpectedCeremonyHash field value
+// GetExpectedCeremonyHash returns the ExpectedCeremonyHash field value if set, zero value otherwise.
 func (o *TransitionApprovalCeremonyRequest) GetExpectedCeremonyHash() string {
-	if o == nil {
+	if o == nil || IsNil(o.ExpectedCeremonyHash) {
 		var ret string
 		return ret
 	}
-
-	return o.ExpectedCeremonyHash
+	return *o.ExpectedCeremonyHash
 }
 
-// GetExpectedCeremonyHashOk returns a tuple with the ExpectedCeremonyHash field value
+// GetExpectedCeremonyHashOk returns a tuple with the ExpectedCeremonyHash field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *TransitionApprovalCeremonyRequest) GetExpectedCeremonyHashOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.ExpectedCeremonyHash) {
 		return nil, false
 	}
-	return &o.ExpectedCeremonyHash, true
+	return o.ExpectedCeremonyHash, true
 }
 
-// SetExpectedCeremonyHash sets field value
+// HasExpectedCeremonyHash returns a boolean if a field has been set.
+func (o *TransitionApprovalCeremonyRequest) HasExpectedCeremonyHash() bool {
+	if o != nil && !IsNil(o.ExpectedCeremonyHash) {
+		return true
+	}
+
+	return false
+}
+
+// SetExpectedCeremonyHash gets a reference to the given string and assigns it to the ExpectedCeremonyHash field.
 func (o *TransitionApprovalCeremonyRequest) SetExpectedCeremonyHash(v string) {
-	o.ExpectedCeremonyHash = v
+	o.ExpectedCeremonyHash = &v
 }
 
 func (o TransitionApprovalCeremonyRequest) MarshalJSON() ([]byte, error) {
@@ -45202,45 +45207,10 @@ func (o TransitionApprovalCeremonyRequest) ToMap() (map[string]interface{}, erro
 	if !IsNil(o.Reason) {
 		toSerialize["reason"] = o.Reason
 	}
-	toSerialize["expected_ceremony_hash"] = o.ExpectedCeremonyHash
+	if !IsNil(o.ExpectedCeremonyHash) {
+		toSerialize["expected_ceremony_hash"] = o.ExpectedCeremonyHash
+	}
 	return toSerialize, nil
-}
-
-func (o *TransitionApprovalCeremonyRequest) UnmarshalJSON(data []byte) (err error) {
-	// This validates that all required properties are included in the JSON object
-	// by unmarshalling the object into a generic map with string keys and checking
-	// that every required field exists as a key in the generic map.
-	requiredProperties := []string{
-		"expected_ceremony_hash",
-	}
-
-	allProperties := make(map[string]interface{})
-
-	err = json.Unmarshal(data, &allProperties)
-
-	if err != nil {
-		return err
-	}
-
-	for _, requiredProperty := range requiredProperties {
-		if _, exists := allProperties[requiredProperty]; !exists {
-			return fmt.Errorf("no value given for required property %v", requiredProperty)
-		}
-	}
-
-	varTransitionApprovalCeremonyRequest := _TransitionApprovalCeremonyRequest{}
-
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&varTransitionApprovalCeremonyRequest)
-
-	if err != nil {
-		return err
-	}
-
-	*o = TransitionApprovalCeremonyRequest(varTransitionApprovalCeremonyRequest)
-
-	return err
 }
 
 type NullableTransitionApprovalCeremonyRequest struct {

@@ -232,7 +232,13 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/proofgraph/sessions/")
 		sessionID, ok := strings.CutSuffix(suffix, "/receipts")
-		if !ok || strings.TrimSpace(sessionID) == "" || strings.Contains(sessionID, "/") {
+		if !ok {
+			api.WriteNotFound(w, "proofgraph session route not found")
+			return
+		}
+		var err error
+		sessionID, err = api.NormalizePublicSessionID(sessionID)
+		if err != nil {
 			api.WriteNotFound(w, "proofgraph session route not found")
 			return
 		}
@@ -1357,7 +1363,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		if strings.TrimSpace(req.ExpectedCeremonyHash) == "" {
-			api.WriteBadRequest(w, "expected_ceremony_hash is required; refresh and review the approval before transitioning it")
+			api.WriteError(w, http.StatusPreconditionRequired, "Precondition Required", "expected_ceremony_hash is required; refresh and review the approval before transitioning it")
 			return
 		}
 		state := contracts.ApprovalCeremonyPending

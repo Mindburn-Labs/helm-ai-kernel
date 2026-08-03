@@ -2,13 +2,13 @@
   "files": [
     {
       "path": "client/types_gen.go",
-      "sha256": "bcfe4885d7fbaf240ff9c45cddf2718b550eb455985d7d34363f00f941a105c5"
+      "sha256": "300609dbb6913ce40b39b6e2ee3d820c78f99a8ee3f6eaf286661a66e09dfc28"
     }
   ],
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",
   "sdk": "go",
   "source": {
-    "sha256": "52d13961a0658dcd436031e6aa99585094517d0b4c5cb4f97a6b42e510952a58",
+    "sha256": "58db17bc5abe0b852c88c9c6a90d5d7311136faba1b1e9deebd5f725a9c0b087",
     "spec": "api/openapi/helm.openapi.yaml"
   }
 }

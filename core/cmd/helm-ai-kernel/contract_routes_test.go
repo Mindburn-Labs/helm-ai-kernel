@@ -649,6 +649,9 @@ func TestStandaloneExecutorReceiptIsRetrievableAndExportableBySignedSession(t *t
 	}
 	decision := &contracts.DecisionRecord{
 		ID:                "decision-standalone-route",
+		SubjectID:         "standalone-route",
+		Action:            "EXECUTE_TOOL",
+		Resource:          "tool:ls",
 		Verdict:           string(contracts.VerdictAllow),
 		ReasonCode:        "ALLOW_BY_POLICY",
 		PolicyContentHash: "policy-standalone-route",
@@ -1169,6 +1172,8 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 func TestApprovalRouteDerivesActorAndRejectsStaleCeremony(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
+	registry := boundarypkg.NewSurfaceRegistry(time.Now)
+	svc.BoundarySurfaces = registry
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
@@ -1213,8 +1218,46 @@ func TestApprovalRouteDerivesActorAndRejectsStaleCeremony(t *testing.T) {
 	authorizeTestRequest(missingHashReq)
 	missingHashRec := httptest.NewRecorder()
 	mux.ServeHTTP(missingHashRec, missingHashReq)
-	if missingHashRec.Code != http.StatusBadRequest || !strings.Contains(missingHashRec.Body.String(), "expected_ceremony_hash") {
+	if missingHashRec.Code != http.StatusPreconditionRequired || !strings.Contains(missingHashRec.Body.String(), "expected_ceremony_hash") {
 		t.Fatalf("missing-hash transition status=%d body=%s", missingHashRec.Code, missingHashRec.Body.String())
+	}
+	approvals := registry.ListApprovals()
+	var transitioned *contracts.ApprovalCeremony
+	for index := range approvals {
+		if approvals[index].ApprovalID == created.ApprovalID {
+			transitioned = &approvals[index]
+			break
+		}
+	}
+	if transitioned == nil || transitioned.State != contracts.ApprovalCeremonyAllowed {
+		t.Fatalf("missing ceremony hash changed approval state: %+v", approvals)
+	}
+}
+
+func TestProofGraphSessionRouteRejectsUnsafeCompatibilityValues(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	for name, path := range map[string]string{
+		"blank":     "/api/v1/proofgraph/sessions/%20/receipts",
+		"slash":     "/api/v1/proofgraph/sessions/bad%2Fsession/receipts",
+		"backslash": "/api/v1/proofgraph/sessions/bad%5Csession/receipts",
+		"nul":       "/api/v1/proofgraph/sessions/bad%00session/receipts",
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			authorizeTestRequest(req)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("unsafe proofgraph session route status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), "rcpt-test") {
+				t.Fatalf("unsafe session route exposed receipt data: %s", rec.Body.String())
+			}
+		})
 	}
 }
 

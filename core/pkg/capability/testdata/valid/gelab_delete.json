@@ -1,0 +1,17 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.gui.gelab.delete",
+  "name": "gelab-delete",
+  "version": "1.0.0",
+  "description": "Delete a previously uploaded object (compensating action target for rollback plan fixtures).",
+  "protocol": "gui-action",
+  "binding": { "kind": "gui_action_primitive", "ref": "delete" },
+  "effect_class": "write_external",
+  "reversibility": "none",
+  "data_boundary": "org_boundary",
+  "risk_score": 30,
+  "required_permit_level": "none",
+  "rollback": { "required": false },
+  "receipts": { "required": true },
+  "memory_access": { "user_domain": "none", "agent_domain": "write", "cross_domain_read": false }
+}

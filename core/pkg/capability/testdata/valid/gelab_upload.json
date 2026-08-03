@@ -1,0 +1,17 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.gui.gelab.upload-photo",
+  "name": "gelab-upload-photo",
+  "version": "1.0.0",
+  "description": "Upload a photo from the device to an external service (reversible-external fixture).",
+  "protocol": "gui-action",
+  "binding": { "kind": "gui_action_primitive", "ref": "upload-photo" },
+  "effect_class": "write_external",
+  "reversibility": "compensating_action",
+  "data_boundary": "org_boundary",
+  "risk_score": 70,
+  "required_permit_level": "single_approval",
+  "rollback": { "required": true, "plan_ref": "plans/gui-delete-upload.v1" },
+  "receipts": { "required": true },
+  "memory_access": { "user_domain": "read", "agent_domain": "write", "cross_domain_read": false }
+}

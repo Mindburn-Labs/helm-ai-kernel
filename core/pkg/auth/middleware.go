@@ -1,3 +1,8 @@
+// quantum_posture: JWT validation here delegates signature verification to the
+// injected identity.KeySet, so the algorithms in use are classical and are
+// chosen by that provider rather than fixed in this file. Any hybrid or
+// post-quantum migration lands in the key set, not in this middleware.
+
 package auth
 
 import (

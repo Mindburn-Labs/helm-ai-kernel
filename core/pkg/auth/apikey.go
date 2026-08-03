@@ -1,3 +1,8 @@
+// quantum_posture: this path performs no signature verification. The shared
+// admin key is compared with crypto/subtle.ConstantTimeCompare, a symmetric
+// secret comparison with no public-key algorithm to migrate; the JWT mention
+// below is describing the alternative mechanism, not using one.
+//
 // Package auth — apikey.go provides pre-shared API key authentication middleware.
 //
 // This is the recommended auth mechanism for OSS standalone deployments without

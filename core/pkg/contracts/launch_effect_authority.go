@@ -304,6 +304,9 @@ func authorizeLaunchEffectAuthorizationEnvelope(envelope LaunchEffectAuthorizati
 	if err := PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		return err
 	}
+	if LookupEffectType(envelope.EffectID) == nil {
+		return fmt.Errorf("launch authorization envelope effect %q is not registered in the canonical dispatch catalog", envelope.EffectID)
+	}
 	return startLaunchEffectAuthorizationEnvelope(envelope, ctx)
 }
 

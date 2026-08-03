@@ -22,12 +22,12 @@ import (
 	connectorregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
 )
 
-func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryAuthorityBinding(t *testing.T) {
+func TestLaunchEffectAuthorizationEnvelopePreflightVerifiesEveryAuthorityBinding(t *testing.T) {
 	envelope, ctx, _, publicKey := launchAuthorizationFixture(t)
 	if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/launch_effect_envelope.v1.json"), envelope); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected by schema: %v", err)
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+	if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
 		t.Fatalf("signed launch authorization envelope rejected: %v", err)
 	}
 	if envelope.KernelVerdictHash != "sha256:bbffc2499e6099e2a911d5162806341a35e772a2741af36f3e46a069717519a5" {
@@ -288,13 +288,46 @@ func TestLaunchEffectAuthorizationRejectsUnsignedRouteProbes(t *testing.T) {
 	}
 }
 
-func TestVerifyLaunchEffectAuthorizationEnvelopeConsumesPermitAtomically(t *testing.T) {
-	envelope, ctx, _, _ := launchAuthorizationFixture(t)
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
-		t.Fatalf("first v1 verification/finalization failed: %v", err)
+func TestVerifyAndStartLaunchEffectAuthorizationEnvelopeRejectEveryPreviewBeforeDispatch(t *testing.T) {
+	authorizers := map[string]func(contracts.LaunchEffectAuthorizationEnvelope, contracts.LaunchEffectEnvelopeVerificationContext) error{
+		"verify": contracts.VerifyLaunchEffectAuthorizationEnvelope,
+		"start":  contracts.StartLaunchEffectAuthorizationEnvelope,
 	}
-	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil {
-		t.Fatal("replayed v1 verification/finalization was accepted")
+	for index, fixture := range launchInputFixtures() {
+		index, fixture := index, fixture
+		for name, authorize := range authorizers {
+			name, authorize := name, authorize
+			t.Run(fixture.effectID+"/"+name, func(t *testing.T) {
+				envelope, ctx, _, _ := launchAuthorizationFixtureAt(t, index)
+				var finalized atomic.Bool
+				var commitVerified atomic.Bool
+				var started atomic.Bool
+				ctx.FinalizeAndStartDispatch = func(
+					contracts.LaunchEffectDispatchFinalization,
+					func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+					func() error,
+				) error {
+					finalized.Store(true)
+					return nil
+				}
+				ctx.VerifyDispatchCommit = func(contracts.LaunchEffectDispatchFinalization, contracts.LaunchEffectDispatchFinalizationObservation) error {
+					commitVerified.Store(true)
+					return nil
+				}
+				ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
+					started.Store(true)
+					return nil
+				}
+
+				err := authorize(envelope, ctx)
+				if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+					t.Fatalf("preview %s reached an authorizing path: %v", fixture.effectID, err)
+				}
+				if finalized.Load() || commitVerified.Load() || started.Load() {
+					t.Fatal("preview effect reached finalization, commit proof, or connector start")
+				}
+			})
+		}
 	}
 }
 
@@ -305,8 +338,20 @@ func TestLaunchEffectAuthorizationEnvelopeDoesNotConsumeAfterFailedVerification(
 	if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(tampered, ctx); err == nil {
 		t.Fatal("tampered verdict unexpectedly verified")
 	}
-	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
-		t.Fatalf("failed verification consumed the permit: %v", err)
+	var finalized atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		contracts.LaunchEffectDispatchFinalization,
+		func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		func() error,
+	) error {
+		finalized.Store(true)
+		return nil
+	}
+	if err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx); err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview launch effect unexpectedly reached atomic dispatch: %v", err)
+	}
+	if finalized.Load() {
+		t.Fatal("failed verification or preview admission reached finalization")
 	}
 }
 
@@ -415,7 +460,7 @@ func TestLegacyV1ProviderInputCanPreflightButCannotAuthorizeDispatch(t *testing.
 		t.Fatalf("legacy v1 provider input was not readable during preflight: %v", err)
 	}
 	err = contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx)
-	if err == nil || !strings.Contains(err.Error(), "provider_offering_id") {
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
 		t.Fatalf("legacy v1 provider input acquired dispatch authority: %v", err)
 	}
 	if started.Load() {
@@ -423,7 +468,7 @@ func TestLegacyV1ProviderInputCanPreflightButCannotAuthorizeDispatch(t *testing.
 	}
 }
 
-func TestLaunchEffectAuthorizationEnvelopeV1ContextFailsClosedWithoutFinalizer(t *testing.T) {
+func TestLaunchEffectAuthorizationEnvelopeV1ContextPreflightsButPreviewCannotAuthorize(t *testing.T) {
 	envelope, ctx, _, _ := launchAuthorizationFixture(t)
 	var legacyFinalizeCalled atomic.Bool
 	ctx.ResolveVerdictKeyForTrustRoot = nil
@@ -445,66 +490,75 @@ func TestLaunchEffectAuthorizationEnvelopeV1ContextFailsClosedWithoutFinalizer(t
 		t.Fatalf("v1-compatible evidence preflight rejected: %v", err)
 	}
 	err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx)
-	if err == nil || !strings.Contains(err.Error(), "v1 FinalizeDispatch cannot prove") {
-		t.Fatalf("v1 context received execution success without finalizer proof: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview v1 context received execution authority: %v", err)
 	}
 	if legacyFinalizeCalled.Load() {
 		t.Fatal("legacy finalizer was called even though it cannot prove STARTED/interlock authority")
 	}
 }
 
-func TestLaunchEffectAuthorizationEnvelopeRejectsDestinationDriftAtFinalConnectorSeam(t *testing.T) {
+func TestLaunchEffectAuthorizationEnvelopeRejectsPreviewBeforeFinalConnectorSeam(t *testing.T) {
 	envelope, ctx, _, _ := launchAuthorizationFixtureAt(t, 0)
-	resolve := ctx.ResolveDispatchRequest
 	var reads atomic.Int32
-	ctx.ResolveDispatchRequest = func(permit contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
-		request, err := resolve(permit)
-		if reads.Add(1) == 2 {
-			request.Destination.EndpointURI = "https://api.other-cloud.invalid/v1"
-		}
-		return request, err
+	ctx.ResolveDispatchRequest = func(contracts.LaunchEffectPermitBinding) (contracts.LaunchEffectDispatchRequest, error) {
+		reads.Add(1)
+		return contracts.LaunchEffectDispatchRequest{}, fmt.Errorf("preview dispatch bytes must not be read")
 	}
+	var finalized atomic.Bool
 	var networkStarted atomic.Bool
+	ctx.FinalizeAndStartDispatch = func(
+		contracts.LaunchEffectDispatchFinalization,
+		func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		func() error,
+	) error {
+		finalized.Store(true)
+		return nil
+	}
 	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
 		networkStarted.Store(true)
 		return nil
 	}
 	err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx)
-	if err == nil || !strings.Contains(err.Error(), "provider destination URI") {
-		t.Fatalf("final connector-seam destination drift error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview connector-seam rejection error = %v", err)
 	}
-	if networkStarted.Load() {
-		t.Fatal("destination drift crossed the network seam")
+	if reads.Load() != 0 || finalized.Load() || networkStarted.Load() {
+		t.Fatal("preview effect reached dispatch bytes, finalization, or connector start")
 	}
 }
 
-func TestLaunchEffectAuthorizationEnvelopeRejectsStartWithoutCommitProof(t *testing.T) {
+func TestLaunchEffectAuthorizationEnvelopeRejectsPreviewBeforeCommitProof(t *testing.T) {
 	envelope, ctx, _, _ := launchAuthorizationFixture(t)
+	var finalized atomic.Bool
+	var commitVerified atomic.Bool
 	var networkStarted atomic.Bool
 	ctx.StartDispatch = func(contracts.LaunchEffectPermitBinding, contracts.LaunchEffectDispatchRequest) error {
 		networkStarted.Store(true)
 		return nil
 	}
 	ctx.FinalizeAndStartDispatch = func(
-		_ contracts.LaunchEffectDispatchFinalization,
-		validate func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
-		start func() error,
+		contracts.LaunchEffectDispatchFinalization,
+		func() (contracts.LaunchEffectDispatchFinalizationObservation, error),
+		func() error,
 	) error {
-		if _, err := validate(); err != nil {
-			return err
-		}
-		return start()
+		finalized.Store(true)
+		return nil
+	}
+	ctx.VerifyDispatchCommit = func(contracts.LaunchEffectDispatchFinalization, contracts.LaunchEffectDispatchFinalizationObservation) error {
+		commitVerified.Store(true)
+		return nil
 	}
 	err := contracts.StartLaunchEffectAuthorizationEnvelope(envelope, ctx)
-	if err == nil || !strings.Contains(err.Error(), "permit consumption or STARTED reservation not found") {
-		t.Fatalf("missing commit-proof error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "canonical dispatch catalog") {
+		t.Fatalf("preview commit-proof rejection error = %v", err)
 	}
-	if networkStarted.Load() {
-		t.Fatal("uncommitted dispatch crossed the network seam")
+	if finalized.Load() || commitVerified.Load() || networkStarted.Load() {
+		t.Fatal("preview effect reached finalization, commit proof, or connector start")
 	}
 }
 
-func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryPreviewEffect(t *testing.T) {
+func TestLaunchEffectAuthorizationEnvelopePreflightVerifiesEveryPreviewEffect(t *testing.T) {
 	for index, fixture := range launchInputFixtures() {
 		index, fixture := index, fixture
 		t.Run(fixture.effectID, func(t *testing.T) {
@@ -512,8 +566,8 @@ func TestLaunchEffectAuthorizationEnvelopeVerifiesEveryPreviewEffect(t *testing.
 			if err := validateAgainstSchema(t, compileSchema(t, "effects/launch/launch_effect_envelope.v1.json"), envelope); err != nil {
 				t.Fatalf("launch authorization envelope rejected by schema: %v", err)
 			}
-			if err := contracts.VerifyLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
-				t.Fatalf("launch authorization envelope rejected: %v", err)
+			if err := contracts.PreflightLaunchEffectAuthorizationEnvelope(envelope, ctx); err != nil {
+				t.Fatalf("launch authorization envelope preflight rejected: %v", err)
 			}
 		})
 	}

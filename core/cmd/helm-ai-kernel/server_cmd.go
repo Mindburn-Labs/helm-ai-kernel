@@ -29,6 +29,7 @@ func runServerCommand(name string, args []string, stdout, stderr io.Writer) int 
 	cmd.StringVar(&opts.BindAddr, "addr", "", "Bind address")
 	cmd.IntVar(&opts.Port, "port", 0, "Listen port")
 	cmd.StringVar(&opts.DataDir, "data-dir", "", "Data directory for local SQLite state and keys")
+	cmd.BoolVar(&opts.DesktopTransportV1, "desktop-transport-v1", false, "Enable the packaged Desktop transport (requires transport-v1 environment values)")
 	cmd.BoolVar(&opts.JSON, "json", false, "Print startup status as JSON")
 
 	if err := cmd.Parse(args); err != nil {

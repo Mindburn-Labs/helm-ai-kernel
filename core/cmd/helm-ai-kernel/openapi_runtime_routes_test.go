@@ -411,6 +411,24 @@ func TestLocalConsolePeerProofRoutesHaveExactInternalRegistryMetadata(t *testing
 	}
 }
 
+func TestDesktopTransportProofRouteHasExactInternalRegistryMetadata(t *testing.T) {
+	want := RuntimeRouteSpec{Method: http.MethodGet, Path: desktopTransportV1ProofPath, MuxPattern: desktopTransportV1ProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "proveDesktopTransport", Owner: "core/cmd/helm-ai-kernel"}
+	for _, got := range RuntimeRouteSpecs() {
+		if got.Method == want.Method && got.Path == want.Path {
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("desktop transport proof route metadata = %+v, want %+v", got, want)
+			}
+			for _, public := range PublicRuntimeRouteSpecs() {
+				if public.Path == desktopTransportV1ProofPath {
+					t.Fatalf("desktop transport proof route must remain internal, not public: %+v", public)
+				}
+			}
+			return
+		}
+	}
+	t.Fatalf("desktop transport proof route %s is missing from the runtime registry", want.Path)
+}
+
 func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 	registered := map[string]RuntimeRouteSpec{}
 	for _, spec := range RuntimeRouteSpecs() {

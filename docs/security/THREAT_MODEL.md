@@ -40,7 +40,7 @@ Review Date: 2026-08-03
 - Signing keys, KMS references, local development signing keys, secret refs, sandbox mounts, environment variables, and external anchor credentials.
 - Credential material must never be stored in receipts, EvidencePacks, fixtures, transcripts, or test golden files.
 
-### Desktop local sidecar transport (`transport-v1`, Desktop source implemented — Kernel support absent on current `main`)
+### Desktop local sidecar transport (`transport-v1`, source support)
 
 `transport-v1` defends the local Desktop composition against a distinct local
 process squatting a known port and receiving a credential-bearing Console
@@ -56,15 +56,15 @@ Status, read back from source on 2026-08-03:
   `/api/v1/desktop/transport/proof` before starting Console. On a handoff
   timeout it fails closed (`transport_timeout`); there is no fixed Kernel-port
   fallback in that handoff path.
-- **`helm-ai-kernel` current `main` — not implemented.** `serve` retains its
-  normal `127.0.0.1:7714` default (`core/cmd/helm-ai-kernel/server_cmd.go`),
-  and this repository has no `HELM_DESKTOP_TRANSPORT_V1` configuration,
-  transport record, or proof route.
+- **`helm-ai-kernel` — source support.** An explicit
+  `server --desktop-transport-v1` requires the three transport environment
+  values, atomically binds `127.0.0.1:0`, writes one bounded authenticated
+  direct-child record, and exposes the no-bearer loopback proof route. Ordinary
+  fixed-port CLI behavior remains unchanged when the flag is absent.
 
-Until the Kernel half lands on `main`, the Desktop source reaches its handoff
-timeout and refuses rather than degrading to a fixed Kernel endpoint. That is
-the fail-closed source behavior, not package, runtime, or release proof of a
-working governed boundary.
+This source change is not package, native-runtime, release, or security-
+certification proof. Those remain separate evidence gates for the full Desktop
+composition.
 
 Before any Desktop use of this path can claim a governed local boundary,
 `transport-v1` must fail closed:
@@ -94,8 +94,8 @@ For a complete transport-v1 design, `helm-desktop` owns the per-launch
 nonce/HMAC, direct-child record validation, health check, and sidecar
 lifecycle; `helm-ai-kernel` owns the atomic dynamic bind and bounded transport
 record; `app-helm-console` owns origin rejection before bearer forwarding and
-browser non-exposure. No runtime code or public API in this repository
-implements the Kernel transport-v1 half yet.
+browser non-exposure. The Kernel proof route is internal and opt-in; it creates
+no public API, runtime, or release claim by itself.
 
 ## Effect Classes
 

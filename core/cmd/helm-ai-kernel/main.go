@@ -51,21 +51,22 @@ func main() {
 var startServer = runServer
 
 type serverOptions struct {
-	Mode             string
-	BindAddr         string
-	Port             int
-	DataDir          string
-	SQLitePath       string
-	PolicyPath       string
-	Quickstart       *quickstartRuntime
-	ConsoleMode      bool
-	ConsolePeerProof *localConsolePeerProof
-	OnReady          func(bindAddr string, port int) error
-	OnShutdown       func()
-	RuntimeExit      <-chan struct{}
-	JSON             bool
-	Stdout           io.Writer
-	Stderr           io.Writer
+	Mode               string
+	BindAddr           string
+	Port               int
+	DataDir            string
+	SQLitePath         string
+	PolicyPath         string
+	DesktopTransportV1 bool
+	Quickstart         *quickstartRuntime
+	ConsoleMode        bool
+	ConsolePeerProof   *localConsolePeerProof
+	OnReady            func(bindAddr string, port int) error
+	OnShutdown         func()
+	RuntimeExit        <-chan struct{}
+	JSON               bool
+	Stdout             io.Writer
+	Stderr             io.Writer
 }
 
 // utcRuntimeClock is the shared runtime clock for reconciliation and Guardian.
@@ -205,6 +206,10 @@ func runServerWithOptions(opts serverOptions) error {
 	// Consume the Desktop launch secret before any optional runtime setup can
 	// spawn a subprocess. The route retains only the in-memory copy below.
 	desktopReadyToken := takeDesktopReadyToken()
+	desktopTransport, transportErr := desktopTransportV1ForOptions(opts)
+	if transportErr != nil {
+		return fmt.Errorf("desktop transport v1 configuration: %w", transportErr)
+	}
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
@@ -230,10 +235,37 @@ func runServerWithOptions(opts serverOptions) error {
 			port = p
 		}
 	}
+	healthPort := 8081
+	if envHP := os.Getenv("HELM_HEALTH_PORT"); envHP != "" {
+		if p, err := strconv.Atoi(envHP); err == nil {
+			healthPort = p
+		}
+	}
+	metricsPort := envInt("HELM_METRICS_PORT", healthPort)
+	metricsEnabled := envBool("HELM_METRICS_ENABLED")
+	suppressAuxiliaryHealth, healthConfigErr := desktopTransportV1SuppressesAuxiliaryHealth(desktopTransport, healthPort, metricsEnabled)
+	if healthConfigErr != nil {
+		return fmt.Errorf("desktop transport v1 configuration: %w", healthConfigErr)
+	}
 	apiAddr := net.JoinHostPort(bindAddr, strconv.Itoa(port))
-	apiListener, listenErr := net.Listen("tcp", apiAddr)
-	if listenErr != nil {
-		return fmt.Errorf("bind API server at %s: %w", apiAddr, listenErr)
+	var (
+		apiListener net.Listener
+		apiOrigin   string
+	)
+	if desktopTransport != nil {
+		apiListener, apiOrigin, transportErr = desktopTransport.bind()
+		if transportErr != nil {
+			return transportErr
+		}
+		bindAddr = "127.0.0.1"
+		port = apiListener.Addr().(*net.TCPAddr).Port
+		apiAddr = net.JoinHostPort(bindAddr, strconv.Itoa(port))
+	} else {
+		var listenErr error
+		apiListener, listenErr = net.Listen("tcp", apiAddr)
+		if listenErr != nil {
+			return fmt.Errorf("bind API server at %s: %w", apiAddr, listenErr)
+		}
 	}
 	defer func() { _ = apiListener.Close() }()
 
@@ -506,6 +538,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// cannot advertise a Kernel endpoint that failed to claim its port.
 	mux := http.NewServeMux()
 	registerDesktopReadyRoute(mux, desktopReadyToken)
+	registerDesktopTransportV1ProofRoute(mux, desktopTransport, apiOrigin)
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}
@@ -533,40 +566,39 @@ func runServerWithOptions(opts serverOptions) error {
 			logger.Error("API server failed", "error", err)
 		}
 	}()
+	if desktopTransport != nil {
+		if err := desktopTransport.writeReadinessRecord(opts.Stdout, apiOrigin); err != nil {
+			return err
+		}
+	}
 
-	// Health Server
-	healthPort := 8081
-	if envHP := os.Getenv("HELM_HEALTH_PORT"); envHP != "" {
-		if p, err := strconv.Atoi(envHP); err == nil {
-			healthPort = p
+	var healthServer *http.Server
+	if !suppressAuxiliaryHealth {
+		healthMux := http.NewServeMux()
+		healthHandler := func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
 		}
-	}
-	healthMux := http.NewServeMux()
-	healthHandler := func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	}
-	healthMux.HandleFunc("/health", healthHandler)
-	healthMux.HandleFunc("/healthz", healthHandler)
-	metricsPort := envInt("HELM_METRICS_PORT", healthPort)
-	metricsEnabled := envBool("HELM_METRICS_ENABLED")
-	if metricsEnabled && metricsPort == healthPort {
-		healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
-	}
-	healthServer := &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
-		Handler:           healthMux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
-		IdleTimeout:       30 * time.Second,
-	}
-	go func() {
-		log.Printf("[helm] health server: %s:%d", bindAddr, healthPort)
-		if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("[helm] health server error: %v", err)
+		healthMux.HandleFunc("/health", healthHandler)
+		healthMux.HandleFunc("/healthz", healthHandler)
+		if metricsEnabled && metricsPort == healthPort {
+			healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
 		}
-	}()
+		healthServer = &http.Server{
+			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
+			Handler:           healthMux,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       5 * time.Second,
+			WriteTimeout:      5 * time.Second,
+			IdleTimeout:       30 * time.Second,
+		}
+		go func() {
+			log.Printf("[helm] health server: %s:%d", bindAddr, healthPort)
+			if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[helm] health server error: %v", err)
+			}
+		}()
+	}
 	var metricsServer *http.Server
 	if metricsEnabled && metricsPort != healthPort {
 		metricsMux := http.NewServeMux()
@@ -598,8 +630,10 @@ func runServerWithOptions(opts serverOptions) error {
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			log.Printf("[helm] API server shutdown error: %v", err)
 		}
-		if err := healthServer.Shutdown(shutdownCtx); err != nil {
-			log.Printf("[helm] health server shutdown error: %v", err)
+		if healthServer != nil {
+			if err := healthServer.Shutdown(shutdownCtx); err != nil {
+				log.Printf("[helm] health server shutdown error: %v", err)
+			}
 		}
 		if metricsServer != nil {
 			if err := metricsServer.Shutdown(shutdownCtx); err != nil {

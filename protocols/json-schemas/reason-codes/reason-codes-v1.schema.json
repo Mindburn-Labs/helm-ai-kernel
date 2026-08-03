@@ -50,6 +50,7 @@
             "custom",
             "agent_lifecycle",
             "approval",
+            "capability",
             "compute",
             "connector",
             "connector.ton.acton",

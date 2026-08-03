@@ -22,26 +22,27 @@ import (
 type GateID string
 
 const (
-	GateAgentKillSwitch GateID = "agent_kill_switch"
-	GateAssumption      GateID = "assumption_observer"
-	GateAudit           GateID = "audit"
-	GateBehavioralTrust GateID = "behavioral_trust"
-	GateBudget          GateID = "budget"
-	GateCompliance      GateID = "compliance"
-	GateContext         GateID = "context"
-	GateDelegation      GateID = "delegation"
-	GateEgress          GateID = "egress"
-	GateFreeze          GateID = "freeze"
-	GateIsolation       GateID = "isolation"
-	GatePDP             GateID = "pdp"
-	GatePolicySnapshots GateID = "policy_snapshots"
-	GatePrivilege       GateID = "privilege"
-	GateSafeDeprecation GateID = "safe_deprecation"
-	GateScopedStop      GateID = "scoped_stop"
-	GateSessionRisk     GateID = "session_risk"
-	GateTemporal        GateID = "temporal"
-	GateThreat          GateID = "threat"
-	GateWarmLease       GateID = "warm_lease"
+	GateAgentKillSwitch    GateID = "agent_kill_switch"
+	GateAssumption         GateID = "assumption_observer"
+	GateAudit              GateID = "audit"
+	GateBehavioralTrust    GateID = "behavioral_trust"
+	GateBudget             GateID = "budget"
+	GateCapabilityRegistry GateID = "capability_registry"
+	GateCompliance         GateID = "compliance"
+	GateContext            GateID = "context"
+	GateDelegation         GateID = "delegation"
+	GateEgress             GateID = "egress"
+	GateFreeze             GateID = "freeze"
+	GateIsolation          GateID = "isolation"
+	GatePDP                GateID = "pdp"
+	GatePolicySnapshots    GateID = "policy_snapshots"
+	GatePrivilege          GateID = "privilege"
+	GateSafeDeprecation    GateID = "safe_deprecation"
+	GateScopedStop         GateID = "scoped_stop"
+	GateSessionRisk        GateID = "session_risk"
+	GateTemporal           GateID = "temporal"
+	GateThreat             GateID = "threat"
+	GateWarmLease          GateID = "warm_lease"
 )
 
 // GateRoster records which gates a Guardian will run and which it will skip.
@@ -68,26 +69,27 @@ func (r GateRoster) Hash() (string, error) {
 // running it.
 func (g *Guardian) GateRoster() GateRoster {
 	injected := map[GateID]bool{
-		GateAgentKillSwitch: g.agentKillSwitch != nil,
-		GateAssumption:      g.assumptionObserver != nil,
-		GateAudit:           g.auditLog != nil,
-		GateBehavioralTrust: g.behavioralScorer != nil,
-		GateBudget:          g.tracker != nil,
-		GateCompliance:      g.complianceChecker != nil,
-		GateContext:         g.contextGuard != nil,
-		GateDelegation:      g.delegationStore != nil,
-		GateEgress:          g.egressChecker != nil,
-		GateFreeze:          g.freezeCtrl != nil,
-		GateIsolation:       g.isolationChecker != nil,
-		GatePDP:             g.pdp != nil,
-		GatePolicySnapshots: g.snapshotStore != nil,
-		GatePrivilege:       g.privilegeResolver != nil,
-		GateSafeDeprecation: g.safeDepController != nil,
-		GateScopedStop:      g.scopedStopReader != nil,
-		GateSessionRisk:     g.sessionRiskMemory != nil,
-		GateTemporal:        g.temporal != nil,
-		GateThreat:          g.threatScanner != nil,
-		GateWarmLease:       g.warmLeaseMgr != nil,
+		GateAgentKillSwitch:    g.agentKillSwitch != nil,
+		GateAssumption:         g.assumptionObserver != nil,
+		GateAudit:              g.auditLog != nil,
+		GateBehavioralTrust:    g.behavioralScorer != nil,
+		GateBudget:             g.tracker != nil,
+		GateCapabilityRegistry: g.capabilityRegistry != nil,
+		GateCompliance:         g.complianceChecker != nil,
+		GateContext:            g.contextGuard != nil,
+		GateDelegation:         g.delegationStore != nil,
+		GateEgress:             g.egressChecker != nil,
+		GateFreeze:             g.freezeCtrl != nil,
+		GateIsolation:          g.isolationChecker != nil,
+		GatePDP:                g.pdp != nil,
+		GatePolicySnapshots:    g.snapshotStore != nil,
+		GatePrivilege:          g.privilegeResolver != nil,
+		GateSafeDeprecation:    g.safeDepController != nil,
+		GateScopedStop:         g.scopedStopReader != nil,
+		GateSessionRisk:        g.sessionRiskMemory != nil,
+		GateTemporal:           g.temporal != nil,
+		GateThreat:             g.threatScanner != nil,
+		GateWarmLease:          g.warmLeaseMgr != nil,
 	}
 
 	roster := GateRoster{Active: []GateID{}, Inactive: []GateID{}}
@@ -107,6 +109,7 @@ func (g *Guardian) GateRoster() GateRoster {
 func AllGateIDs() []GateID {
 	ids := []GateID{
 		GateAgentKillSwitch, GateAssumption, GateAudit, GateBehavioralTrust, GateBudget,
+		GateCapabilityRegistry,
 		GateCompliance, GateContext, GateDelegation, GateEgress, GateFreeze,
 		GateIsolation, GatePDP, GatePolicySnapshots, GatePrivilege,
 		GateSafeDeprecation, GateScopedStop, GateSessionRisk, GateTemporal,

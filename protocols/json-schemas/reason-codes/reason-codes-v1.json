@@ -730,6 +730,20 @@
       "domain": "safe-deprecation",
       "description": "Dev, audit, mock, software-key, env-fallback, or unsigned overlay path is enabled",
       "since": "1.7.0"
+    },
+    {
+      "code": "CAPABILITY_UNKNOWN",
+      "applies_to": ["ESCALATE"],
+      "domain": "capability",
+      "description": "Dispatched capability_id is not registered and is quarantined for review",
+      "since": "1.7.0"
+    },
+    {
+      "code": "CAPABILITY_MANIFEST_DRIFT",
+      "applies_to": ["DENY"],
+      "domain": "capability",
+      "description": "Caller-pinned capability manifest hash does not match the registry revision",
+      "since": "1.7.0"
     }
   ]
 }

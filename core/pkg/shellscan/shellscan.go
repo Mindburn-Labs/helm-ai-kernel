@@ -2136,7 +2136,7 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 			}
 		}
 	case cmd.Name == "git":
-		c.matchGit(args)
+		c.matchGit(args, depth)
 	case cmd.Name == "dropdb":
 		c.recordDestructiveEffect()
 		c.decide("dropdb destroys a database")
@@ -2408,7 +2408,7 @@ func firstSubcommand(args []wordTok, vals, bools map[string]bool) (sub string, i
 	return "", -1, false, false
 }
 
-func (c *collector) matchGit(args []wordTok) {
+func (c *collector) matchGit(args []wordTok, depth int) {
 	sub, subIndex, dynamic, found := firstSubcommand(args[1:], gitValueFlags, gitBoolFlags)
 	if dynamic {
 		c.decide("git invocation with a dynamic subcommand (fail-closed)")
@@ -2437,10 +2437,21 @@ func (c *collector) matchGit(args []wordTok) {
 				cleanForceDisabled = true
 			}
 		}
-		if strings.TrimPrefix(key, "alias.") == strings.ToLower(sub) && strings.HasPrefix(value, "!") {
-			c.classifyString(strings.TrimPrefix(value, "!"), "git alias "+sub, 1)
+		if strings.TrimPrefix(key, "alias.") == strings.ToLower(sub) {
+			if strings.HasPrefix(value, "!") {
+				c.classifyString(strings.TrimPrefix(value, "!"), "git alias "+sub, depth+1)
+				if c.decideFlag {
+					c.decide("git shell alias requires a decision")
+				}
+				return
+			}
+			// Ordinary Git aliases expand to Git arguments rather than a shell
+			// snippet. Preserve the Git command so force-push and other native
+			// rules classify the expanded invocation instead of treating "push"
+			// as an unknown executable.
+			c.classifyString("git "+value, "git alias "+sub, depth+1)
 			if c.decideFlag {
-				c.decide("git shell alias requires a decision")
+				c.decide("git alias requires a decision")
 			}
 			return
 		}
@@ -2629,15 +2640,39 @@ func databaseClientHelpOnly(args []wordTok) bool {
 }
 
 func sqlHasDropDatabase(query string) bool {
-	words := strings.FieldsFunc(stripSQLComments(strings.ToLower(query)), func(r rune) bool {
-		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_')
-	})
+	query = strings.ToLower(query)
+	if sqlHasDropDatabaseWords(query) || sqlHasDropDatabaseWords(stripSQLComments(query)) {
+		return true
+	}
+	// SQL dialects support several string and quoting forms. If a query has a
+	// DROP token and comment syntax that this lightweight normalizer cannot
+	// prove is inert, send it to the decision path instead of risking a bypass.
+	return (strings.Contains(query, "--") || strings.Contains(query, "/*")) && sqlHasDropWord(query)
+}
+
+func sqlHasDropDatabaseWords(query string) bool {
+	words := sqlWords(query)
 	for i := 0; i+1 < len(words); i++ {
 		if words[i] == "drop" && words[i+1] == "database" {
 			return true
 		}
 	}
 	return false
+}
+
+func sqlHasDropWord(query string) bool {
+	for _, word := range sqlWords(query) {
+		if word == "drop" {
+			return true
+		}
+	}
+	return false
+}
+
+func sqlWords(query string) []string {
+	return strings.FieldsFunc(query, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_')
+	})
 }
 
 func stripSQLComments(query string) string {

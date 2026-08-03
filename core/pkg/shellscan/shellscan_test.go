@@ -31,6 +31,8 @@ var decideCases = []struct {
 	{"regression-drop-database", `psql -c "DROP DATABASE production"`, "DROP DATABASE"},
 	{"regression-drop-database-whitespace", "psql -c 'DROP\nDATABASE production'", "DROP DATABASE"},
 	{"regression-drop-database-comment", "psql -c 'DROP /* production */ DATABASE production'", "DROP DATABASE"},
+	{"regression-drop-database-line-comment", "psql -c 'DROP -- production\n DATABASE production'", "DROP DATABASE"},
+	{"regression-drop-database-quoted-comment", "psql -c \"SELECT '--not a comment'; DROP -- production\\n DATABASE production\"", "DROP DATABASE"},
 	{"regression-dropdb", "dropdb production", "dropdb"},
 	{"regression-terraform-destroy", "terraform destroy -auto-approve", "terraform destroy"},
 	{"regression-terraform-apply-destroy", "terraform apply -destroy", "terraform apply -destroy"},
@@ -40,6 +42,7 @@ var decideCases = []struct {
 	{"regression-git-push-forced-refspec", "git push origin +main", "forced refspec"},
 	{"regression-git-push-force-with-lease", "git push --force-with-lease origin main", "force option"},
 	{"regression-git-push-explicit-lease", "git push --force-with-lease=refs/heads/main:deadbeef origin main", "force option"},
+	{"regression-git-push-ordinary-alias", `git -c alias.rewrite='push --force' rewrite origin main`, "force option"},
 
 	// Evasion: flag splitting / reordering / long flags.
 	{"evasion-rm-split-flags", "rm -r -f /tmp/x", "recursive rm"},
@@ -339,6 +342,7 @@ var passCases = []struct {
 	{"safe-terraform-plan", "terraform plan"},
 	{"safe-aws-s3-ls", "aws s3 ls s3://backups"},
 	{"safe-database-query", "psql -c 'SELECT 1'"},
+	{"safe-database-quoted-comment", `psql -c "SELECT '--not a comment'"`},
 	{"safe-dd-no-if", "dd of=/tmp/out bs=1k count=1"},
 	{"safe-docker-ps", "docker ps -a"},
 	{"safe-docker-attached-context", "docker --context=prod ps"},

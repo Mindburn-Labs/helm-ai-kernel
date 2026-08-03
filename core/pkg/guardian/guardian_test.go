@@ -63,6 +63,12 @@ func (m *MockSigner) SignDecision(d *contracts.DecisionRecord) error {
 	if m.FailSign {
 		return errors.New("signer broken")
 	}
+	if d.SignatureVersion == "" {
+		d.SignatureVersion = contracts.DecisionRecordSignatureV4
+	}
+	if d.SignatureType == "" {
+		d.SignatureType = "mock:signer"
+	}
 	d.Signature = "mock_decision_sig"
 	return nil
 }

@@ -375,7 +375,7 @@ func TestExt_IssueIntentPropagatesTaint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec := &contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: digest}
+	dec := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: digest})
 	intent, err := g.IssueExecutionIntent(context.Background(), dec, effect)
 	if err != nil {
 		t.Fatalf("IssueExecutionIntent failed: %v", err)

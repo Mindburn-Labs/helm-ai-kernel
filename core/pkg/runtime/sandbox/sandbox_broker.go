@@ -406,6 +406,9 @@ func (b *SandboxBroker) verifySandboxAuthority(verdict *effectgraph.NodeVerdict)
 	if !verified {
 		return fmt.Errorf("sandbox decision signature verification failed")
 	}
+	if err := contracts.ValidateDecisionAuthorityForUse(decision); err != nil {
+		return fmt.Errorf("sandbox execution authority is invalid: %w", err)
+	}
 	verified, err = b.verifier.VerifyIntent(intent)
 	if err != nil {
 		return fmt.Errorf("sandbox execution intent signature verification failed: %w", err)

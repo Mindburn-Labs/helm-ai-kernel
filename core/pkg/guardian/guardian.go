@@ -619,6 +619,9 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	if valid, err := verifier.VerifyDecision(decision); err != nil || !valid {
 		return nil, fmt.Errorf("invalid decision signature: %w", err)
 	}
+	if err := contracts.ValidateDecisionAuthorityForUse(decision); err != nil {
+		return nil, fmt.Errorf("cannot issue execution intent: %w", err)
+	}
 
 	if g.snapshotStore != nil {
 		scope := g.policyScopeFromContext(decision.InputContext)

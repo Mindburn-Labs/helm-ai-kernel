@@ -391,6 +391,57 @@ func TestSafeExecutor_Gating(t *testing.T) {
 	}
 }
 
+func TestSafeExecutorRejectsLegacyDecisionAuthorityAfterVerification(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("legacy-authority")
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver := &MockDriver{}
+	executor := NewSafeExecutor(signer, signer, driver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil)
+	effect := &contracts.Effect{
+		EffectID:   "effect-legacy-authority",
+		EffectType: "EXECUTE_TOOL",
+		Params:     map[string]any{"tool_name": "github.create_issue"},
+	}
+	legacy := &contracts.DecisionRecord{
+		ID:               "decision-legacy-authority",
+		Verdict:          string(contracts.VerdictAllow),
+		Reason:           "historical allow",
+		EffectDigest:     testEffectDigest(t, effect),
+		SignatureVersion: contracts.DecisionRecordSignatureV2,
+		SignatureType:    crypto.SigPrefixEd25519 + crypto.SigSeparator + "legacy-authority",
+	}
+	payload, err := crypto.CanonicalizeDecisionV2(legacy.ID, legacy.Verdict, legacy.Reason, legacy.ReasonCode, legacy.PhenotypeHash, legacy.PolicyContentHash, legacy.EffectDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy.Signature, err = signer.Sign(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid, err := signer.VerifyDecision(legacy); err != nil || !valid {
+		t.Fatalf("legacy decision no longer verifies: valid=%t err=%v", valid, err)
+	}
+
+	intent := &contracts.AuthorizedExecutionIntent{
+		ID:               "intent-legacy-authority",
+		DecisionID:       legacy.ID,
+		EffectDigestHash: legacy.EffectDigest,
+		ExpiresAt:        time.Now().Add(time.Hour),
+		AllowedTool:      "github.create_issue",
+	}
+	if err := signer.SignIntent(intent); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := executor.Execute(context.Background(), effect, legacy, intent); err == nil || !strings.Contains(err.Error(), contracts.DecisionRecordSignatureV4) {
+		t.Fatalf("legacy decision crossed execution boundary: %v", err)
+	}
+	if driver.Called {
+		t.Fatal("legacy decision dispatched an effect")
+	}
+}
+
 func TestSafeExecutorScopesTenantFromAuthenticatedContext(t *testing.T) {
 	signer, err := crypto.NewEd25519Signer("tenant-scope-key")
 	if err != nil {

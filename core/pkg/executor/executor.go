@@ -421,6 +421,9 @@ func (e *SafeExecutor) validateGating(decision *contracts.DecisionRecord, intent
 	} else if !valid {
 		return errors.New("execution blocked: invalid decision signature")
 	}
+	if err := contracts.ValidateDecisionAuthorityForUse(decision); err != nil {
+		return fmt.Errorf("execution blocked: %w", err)
+	}
 
 	// 2. Verify Intent Signature (Authorization)
 	if valid, err := e.verifier.VerifyIntent(intent); err != nil {

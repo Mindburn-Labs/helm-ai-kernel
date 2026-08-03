@@ -89,6 +89,20 @@ func TestExecuteRejectsIntentExpiringDuringRunnerValidation(t *testing.T) {
 	}
 }
 
+func TestPrepareExecutionRejectsLegacyDecisionAuthority(t *testing.T) {
+	broker, leaseManager, runner := setupBroker()
+	execLease := acquireLease(t, leaseManager)
+	verdict := authorizedVerdict(t, execLease, testWorkload())
+	verdict.Decision.SignatureVersion = contracts.DecisionRecordSignatureV3
+
+	if _, err := broker.PrepareExecutionWithWorkload(ctx, execLease, verdict, testWorkload()); err == nil || !strings.Contains(err.Error(), contracts.DecisionRecordSignatureV4) {
+		t.Fatalf("legacy decision reached sandbox authority use: %v", err)
+	}
+	if runner.validateCalled || runner.runCalled {
+		t.Fatalf("legacy decision reached sandbox runner: validate=%v run=%v", runner.validateCalled, runner.runCalled)
+	}
+}
+
 func (m *mockRunner) RunWithCredentials(spec *pkg_sandbox.SandboxSpec, credentials []sandbox_runtime.SandboxCredentialMaterial) (*pkg_sandbox.Result, *pkg_sandbox.ExecutionReceipt, error) {
 	m.lastCredentials = append([]sandbox_runtime.SandboxCredentialMaterial(nil), credentials...)
 	if m.credentialCheck != nil {
@@ -181,13 +195,15 @@ func testVerdict() *effectgraph.NodeVerdict {
 	return &effectgraph.NodeVerdict{
 		StepID: "step-1",
 		Decision: &contracts.DecisionRecord{
-			ID:           "decision-step-1",
-			SubjectID:    "agent:sandbox-test",
-			Action:       contracts.EffectTypeRunSandboxedCode,
-			Resource:     "sandbox:step-1",
-			EffectDigest: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			Verdict:      string(contracts.VerdictAllow),
-			InputContext: map[string]any{},
+			ID:               "decision-step-1",
+			SubjectID:        "agent:sandbox-test",
+			Action:           contracts.EffectTypeRunSandboxedCode,
+			Resource:         "sandbox:step-1",
+			EffectDigest:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Verdict:          string(contracts.VerdictAllow),
+			SignatureVersion: contracts.DecisionRecordSignatureV4,
+			SignatureType:    "test:sandbox-authority",
+			InputContext:     map[string]any{},
 		},
 		Intent: &contracts.AuthorizedExecutionIntent{
 			ID:               "intent-step-1",

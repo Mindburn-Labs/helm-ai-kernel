@@ -944,7 +944,7 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowDecision := &contracts.DecisionRecord{ID: "dec-intent", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: allowDigest}
+	allowDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-intent", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: allowDigest})
 	if _, err := NewGuardian(&guardianCoverageSignOnly{}, nil, nil, WithClock(clock)).IssueExecutionIntent(ctx, allowDecision, allowEffect); err == nil || !strings.Contains(err.Error(), "VerifyDecision") {
 		t.Fatalf("expected missing verifier error, got %v", err)
 	}
@@ -957,14 +957,14 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 
 	scope := policyreconcile.DefaultScope
 	missingSnapshotGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithPolicySnapshots(&guardianCoverageSnapshotStore{}, scope))
-	snapshotBoundDecision := &contracts.DecisionRecord{
+	snapshotBoundDecision := testDecisionAuthority(&contracts.DecisionRecord{
 		ID:                "dec-snapshot-missing",
 		Verdict:           string(contracts.VerdictAllow),
 		Signature:         "sig",
 		InputContext:      map[string]any{},
 		PolicyEpoch:       "1",
 		PolicyContentHash: "sha256:policy",
-	}
+	})
 	if _, err := missingSnapshotGuardian.IssueExecutionIntent(ctx, snapshotBoundDecision, allowEffect); err == nil || !strings.Contains(err.Error(), string(contracts.ReasonPolicyEpochChanged)) {
 		t.Fatalf("expected missing snapshot epoch error, got %v", err)
 	}
@@ -973,12 +973,12 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 	if err := snapshotStore.Swap(scope, &policyreconcile.EffectivePolicySnapshot{PolicyHash: "sha256:policy", PolicyEpoch: 1, Validation: policyreconcile.ValidationStatus{Status: policyreconcile.StatusActive}}); err != nil {
 		t.Fatal(err)
 	}
-	missingBindingDecision := &contracts.DecisionRecord{ID: "dec-missing-binding", Verdict: string(contracts.VerdictAllow), Signature: "sig", InputContext: map[string]any{}, PolicyEpoch: "not-a-number"}
+	missingBindingDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-missing-binding", Verdict: string(contracts.VerdictAllow), Signature: "sig", InputContext: map[string]any{}, PolicyEpoch: "not-a-number"})
 	if _, err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithPolicySnapshots(snapshotStore, scope)).IssueExecutionIntent(ctx, missingBindingDecision, allowEffect); err == nil || !strings.Contains(err.Error(), "missing policy hash/epoch") {
 		t.Fatalf("expected missing policy binding error, got %v", err)
 	}
 
-	safeDepDecision := &contracts.DecisionRecord{
+	safeDepDecision := testDecisionAuthority(&contracts.DecisionRecord{
 		ID:        "dec-safedep-intent",
 		Verdict:   string(contracts.VerdictAllow),
 		Signature: "sig",
@@ -987,7 +987,7 @@ func TestCoverageGuardianHelperAndIntentEdges(t *testing.T) {
 			"safe_deprecation_delegation_session_id": "delegation-1",
 			"safe_deprecation_scope_hash":            "sha256:scope",
 		},
-	}
+	})
 	safeDepEffect := &contracts.Effect{EffectID: "effect-safedep", EffectType: "CUSTOM_TOOL"}
 	safeDepDigest, err := canonicalEffectDigest(safeDepEffect)
 	if err != nil {
@@ -1012,12 +1012,12 @@ func TestIssueExecutionIntentRejectsEffectDigestMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decision := &contracts.DecisionRecord{
+	decision := testDecisionAuthority(&contracts.DecisionRecord{
 		ID:           "dec-approved",
 		Verdict:      string(contracts.VerdictAllow),
 		Signature:    "sig",
 		EffectDigest: approvedDigest,
-	}
+	})
 	substitutedEffect := &contracts.Effect{
 		EffectID:   "effect-substituted",
 		EffectType: "EXECUTE_TOOL",

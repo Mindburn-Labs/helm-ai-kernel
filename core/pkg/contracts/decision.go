@@ -4,6 +4,7 @@ package contracts
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -171,6 +172,32 @@ const DecisionRecordSignatureV3 = "decision_record.v3"
 // evaluated authorization tuple and selected signature algorithm before any
 // signature is created.
 const DecisionRecordSignatureV4 = "decision_record.v4"
+
+// ValidateDecisionAuthorityForUse restricts execution authority to the V4
+// decision contract. Historical V2/V3 records remain verifiable as evidence,
+// but lack the request and signer bindings needed to grant a new effect.
+func ValidateDecisionAuthorityForUse(decision *DecisionRecord) error {
+	if decision == nil {
+		return fmt.Errorf("decision is required")
+	}
+	if decision.SignatureVersion != DecisionRecordSignatureV4 {
+		return fmt.Errorf("execution authority requires %s, got %q", DecisionRecordSignatureV4, decision.SignatureVersion)
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"subject ID", decision.SubjectID},
+		{"action", decision.Action},
+		{"resource", decision.Resource},
+		{"signature type", decision.SignatureType},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return fmt.Errorf("execution authority missing %s", field.name)
+		}
+	}
+	return nil
+}
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

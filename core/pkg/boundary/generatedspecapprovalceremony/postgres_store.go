@@ -32,13 +32,20 @@ created_at, updated_at, expires_at, consumed_at, consumed_by, version
 // binding/authority identity, transport, Control Plane projection, or approval
 // route activation.
 type PostgresStore struct {
-	db       *sql.DB
-	verifier GrantSignatureVerifier
-	clock    func() time.Time
+	db                   *sql.DB
+	verifier             GrantSignatureVerifier
+	clock                func() time.Time
+	maxChallengeLifetime time.Duration
 }
 
 func NewPostgresStore(db *sql.DB, verifier GrantSignatureVerifier) *PostgresStore {
 	return &PostgresStore{db: db, verifier: verifier, clock: time.Now}
+}
+
+func (s *PostgresStore) setMaxChallengeLifetime(value time.Duration) {
+	if s != nil {
+		s.maxChallengeLifetime = value
+	}
 }
 
 // Init installs this package's isolated schema. It intentionally does not
@@ -390,7 +397,7 @@ func (s *PostgresStore) Deny(ctx context.Context, tenantID, workspaceID, approva
 		if err := next.validate(); err != nil {
 			return Record{}, err
 		}
-		return s.updateTerminal(ctx, tx, current, StateDenied, deniedAt)
+		return s.updateTerminal(ctx, tx, current, StateDenied, current.ExpiresAt, deniedAt)
 	})
 }
 
@@ -404,33 +411,42 @@ func (s *PostgresStore) Expire(ctx context.Context, tenantID, workspaceID, appro
 		if err != nil {
 			return Record{}, err
 		}
+		next := current
 		switch current.State {
+		case StateHoldPending:
+			if s.maxChallengeLifetime <= 0 {
+				return Record{}, ErrTransitionConflict
+			}
+			deadline := current.HoldStartedAt.Add(s.maxChallengeLifetime)
+			if expiredAt.Before(deadline) {
+				return Record{}, ErrTransitionConflict
+			}
+			next.ExpiresAt = &deadline
 		case StateChallengeIssued, StateQuorumVerified, StateGrantIssued:
+			if current.ExpiresAt == nil || expiredAt.Before(*current.ExpiresAt) {
+				return Record{}, ErrTransitionConflict
+			}
 		default:
 			return Record{}, ErrTransitionConflict
 		}
-		if current.ExpiresAt == nil || expiredAt.Before(*current.ExpiresAt) {
-			return Record{}, ErrTransitionConflict
-		}
-		next := current
 		next.State = StateExpired
 		next.UpdatedAt = expiredAt
 		next.Version++
 		if err := next.validate(); err != nil {
 			return Record{}, err
 		}
-		return s.updateTerminal(ctx, tx, current, StateExpired, expiredAt)
+		return s.updateTerminal(ctx, tx, current, StateExpired, next.ExpiresAt, expiredAt)
 	})
 }
 
-func (s *PostgresStore) updateTerminal(ctx context.Context, tx *sql.Tx, current Record, state State, updatedAt time.Time) (Record, error) {
+func (s *PostgresStore) updateTerminal(ctx context.Context, tx *sql.Tx, current Record, state State, expiresAt *time.Time, updatedAt time.Time) (Record, error) {
 	updated, err := scanGeneratedSpecApprovalRecord(tx.QueryRowContext(ctx, `
 		UPDATE generated_spec_approval_ceremonies
-		SET state = $4, updated_at = $5, version = version + 1
+		SET state = $4, expires_at = $5, updated_at = $6, version = version + 1
 		WHERE tenant_id = $1 AND workspace_id = $2 AND approval_id = $3
-			AND state = $6 AND version = $7
+			AND state = $7 AND version = $8
 		RETURNING `+generatedSpecApprovalRecordColumns,
-		current.TenantID, current.WorkspaceID, current.ApprovalID, state, updatedAt,
+		current.TenantID, current.WorkspaceID, current.ApprovalID, state, expiresAt, updatedAt,
 		current.State, current.Version,
 	))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -508,7 +524,7 @@ func (s *PostgresStore) validateLoaded(record Record) (Record, error) {
 		return Record{}, err
 	}
 	if record.SignedGrant != nil {
-		if err := s.verifier.VerifyGrant(*record.SignedGrant, record.SignedGrant.Grant.IssuedAt); err != nil {
+		if err := s.verifier.VerifyGrantSignature(*record.SignedGrant); err != nil {
 			return Record{}, err
 		}
 	}

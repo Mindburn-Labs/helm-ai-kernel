@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS generated_spec_approval_ceremonies (
         OR
         (state = 'DENIED' AND consumption_json IS NULL)
         OR
-        (state = 'EXPIRED' AND challenge_json IS NOT NULL AND consumption_json IS NULL AND expires_at IS NOT NULL)
+        (state = 'EXPIRED' AND consumption_json IS NULL AND expires_at IS NOT NULL)
     )
 );
 
@@ -310,7 +310,7 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
-    IF (OLD.state = 'HOLD_PENDING' AND NEW.state NOT IN ('CHALLENGE_ISSUED', 'DENIED'))
+    IF (OLD.state = 'HOLD_PENDING' AND NEW.state NOT IN ('CHALLENGE_ISSUED', 'DENIED', 'EXPIRED'))
         OR (OLD.state = 'CHALLENGE_ISSUED' AND NEW.state NOT IN ('QUORUM_VERIFIED', 'DENIED', 'EXPIRED'))
         OR (OLD.state = 'QUORUM_VERIFIED' AND NEW.state NOT IN ('GRANT_ISSUED', 'DENIED', 'EXPIRED'))
         OR (OLD.state = 'GRANT_ISSUED' AND NEW.state NOT IN ('CONSUMED', 'DENIED', 'EXPIRED'))

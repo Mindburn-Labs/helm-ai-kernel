@@ -197,6 +197,20 @@ func TestPostgresLifecycleSingleIssueConsumeAndFence(t *testing.T) {
 		t.Fatalf("RecoverGrantConsumption() record=%+v error=%v", recovered, err)
 	}
 
+	pending, err := service.BeginHold(ctx, fixture.binding.BindingRef)
+	if err != nil {
+		t.Fatalf("BeginHold() for expiry proof error = %v", err)
+	}
+	fixture.advance(fixture.config.MaxChallengeLifetime)
+	expired, err := service.Expire(ctx, pending.ApprovalID)
+	if err != nil || expired.State != StateExpired || expired.ExpiresAt == nil || !expired.ExpiresAt.Equal(pending.HoldStartedAt.Add(fixture.config.MaxChallengeLifetime)) {
+		t.Fatalf("Expire(unissued hold) record=%+v error=%v", expired, err)
+	}
+	recoveredAfterExpiry, err := service.RecoverGrantConsumption(ctx, granted.ApprovalID, granted.SignedGrant.Grant.GrantID, granted.SignedGrant.Grant.GrantHash, granted.SignedGrant.Grant.Nonce)
+	if err != nil || recoveredAfterExpiry.SignedConsumption == nil || recoveredAfterExpiry.SignedConsumption.Consumption.ConsumptionHash != consumed.SignedConsumption.Consumption.ConsumptionHash {
+		t.Fatalf("RecoverGrantConsumption(after grant expiry) record=%+v error=%v", recoveredAfterExpiry, err)
+	}
+
 	fencedGrant := issueGeneratedSpecApprovalPostgresGrant(t, ctx, service, fixture)
 	if _, replayed, err := stopStore.Fence(ctx, generatedSpecApprovalFenceCommand(kernel.StopScope{
 		TenantID: fencedGrant.TenantID, WorkspaceID: fencedGrant.WorkspaceID,

@@ -89,9 +89,10 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.8.0] - 2026-08-04
+## [0.8.0] - pending tag
 
-Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.0>.
+Release preparation only: the immutable `v0.8.0` tag and its source-owned
+artifacts are not published yet.
 
 <!-- quantum_posture: v0.8.0 continues classical Ed25519 (and optional ML-DSA-65 hybrid) signatures and SHA-256 content hashes; no new post-quantum cryptographic control is added. -->
 
@@ -101,8 +102,9 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
   discovery modes, `--quickstart` local first-run proof path (Claude Code,
   Codex, MCP, and OpenAI-compatible profiles), and `setup install`, `status`,
   `repair`, and `remove` leaf commands with idempotent repair and removal.
-- Verified local Policies and Receipts Console: `setup --quickstart --console`
-  serves the pinned, digest-verified Console sidecar against the local kernel.
+- Release-gated local Policies and Receipts Console packaging: a
+  Console-including artifact can serve the pinned, digest-verified sidecar
+  against the loopback Kernel; source and headless packages fail closed.
 - `decision_record.v4` signing preimage binding the evaluated authorization
   tuple (subject, action, resource) and the selected signature algorithm;
   execution authority is restricted to V4 decisions while V2/V3 records remain
@@ -111,8 +113,9 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
   durable chain hashes, tenant-scoped reads, and semantic `decision_hash`
   persistence; older rows recover only from already-stored trusted metadata and
   otherwise fail closed.
-- EventMeta v2 with the eight lifecycle event types for governed execution
-  telemetry.
+- EventMeta v2 catalog and source-projection helpers for the eight lifecycle
+  event types. Runtime emission and telemetry export are not claimed by this
+  release entry.
 - Deterministic semantic threat-advisory classifier for `threatscan`
   (advisory-only; no policy verdict depends on it).
 - Governed capability registry enforcement in Guardian: undeclared

@@ -62,6 +62,18 @@ func TestPostgresStoreRequiresDatabaseAndVerifier(t *testing.T) {
 	}
 }
 
+func TestPostgresSchemaKeepsOneActiveCeremonyPerBinding(t *testing.T) {
+	for _, required := range []string{
+		"CREATE UNIQUE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_active_binding_ref_uq",
+		"ON generated_spec_approval_ceremonies (tenant_id, workspace_id, binding_ref)",
+		"WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED')",
+	} {
+		if !strings.Contains(generatedSpecApprovalPostgresSchema, required) {
+			t.Fatalf("generated spec approval schema missing %q", required)
+		}
+	}
+}
+
 // TestPostgresLifecycleSingleIssueConsumeAndFence is a source-owned real-
 // Postgres proof. It intentionally skips until the caller supplies a database
 // URL; it never falls back to SQLite or a missing emergency-stop table.
@@ -200,6 +212,9 @@ func TestPostgresLifecycleSingleIssueConsumeAndFence(t *testing.T) {
 	pending, err := service.BeginHold(ctx, fixture.binding.BindingRef)
 	if err != nil {
 		t.Fatalf("BeginHold() for expiry proof error = %v", err)
+	}
+	if _, err := service.BeginHold(ctx, fixture.binding.BindingRef); !errors.Is(err, ErrTransitionConflict) {
+		t.Fatalf("second active BeginHold() error = %v, want ErrTransitionConflict", err)
 	}
 	fixture.advance(fixture.config.MaxChallengeLifetime)
 	expired, err := service.Expire(ctx, pending.ApprovalID)

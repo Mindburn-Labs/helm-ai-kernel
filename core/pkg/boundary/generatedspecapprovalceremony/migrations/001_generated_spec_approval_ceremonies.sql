@@ -201,6 +201,9 @@ CREATE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_active_scope_idx
     WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED');
 CREATE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_binding_ref_idx
     ON generated_spec_approval_ceremonies (tenant_id, workspace_id, binding_ref);
+CREATE UNIQUE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_active_binding_ref_uq
+    ON generated_spec_approval_ceremonies (tenant_id, workspace_id, binding_ref)
+    WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED');
 CREATE UNIQUE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_challenge_id_uq
     ON generated_spec_approval_ceremonies (tenant_id, workspace_id, challenge_id)
     WHERE challenge_id IS NOT NULL;

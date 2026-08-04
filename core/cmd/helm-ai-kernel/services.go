@@ -60,13 +60,14 @@ type Services struct {
 	MemoryAPI *api.MemoryService
 
 	// --- Kernel & Execution ---
-	BoundaryEnforcer    *boundary.PerimeterEnforcer
-	BoundarySurfaces    *boundary.SurfaceRegistry
-	MerkleTree          *merkle.MerkleTree
-	Sandbox             sandbox.Sandbox
-	Obligation          *obligation.ObligationEngine
-	EmergencyStops      *kernel.ScopedStopStore
-	ApprovalConsumption *approvalConsumptionRuntime
+	BoundaryEnforcer      *boundary.PerimeterEnforcer
+	BoundarySurfaces      *boundary.SurfaceRegistry
+	MerkleTree            *merkle.MerkleTree
+	Sandbox               sandbox.Sandbox
+	Obligation            *obligation.ObligationEngine
+	EmergencyStops        *kernel.ScopedStopStore
+	ApprovalConsumption   *approvalConsumptionRuntime
+	GeneratedSpecApproval *generatedSpecApprovalRuntime
 
 	// --- Evidence ---
 	Evidence          *evidence.DefaultExporter

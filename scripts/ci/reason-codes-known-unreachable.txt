@@ -38,20 +38,18 @@ ReasonTONVerifyBytecodeMismatch              ERR_TON_VERIFY_BYTECODE_MISMATCH
 ReasonTONVerifyDryRunRequired                ERR_TON_VERIFY_DRY_RUN_REQUIRED
 ReasonTONWalletRefRequired                   ERR_TON_WALLET_REF_REQUIRED
 
-# ── Harness Engineering v1.4 (8 of the 10-code block) — specified, unbuilt ──
-# Declared with conformance vectors in core/pkg/conformance/negative_vectors.go
-# and never emitted.
+# ── Harness Engineering v1.4 (6 of the 10-code block) — specified, unbuilt ──
+# These remaining codes are declared with conformance vectors in
+# core/pkg/conformance/negative_vectors.go and never emitted.
 # NOTE: ReasonPlanTransactionConflict is NOT listed here because it IS emitted --
 # at core/pkg/runtimeadapters/mcp/bridge.go:371, for nonce replay rather than a
 # plan-transaction conflict. Reachability cannot catch a miscoded emission.
 ReasonGUIPostconditionUnverified             ERR_GUI_POSTCONDITION_UNVERIFIED
 ReasonGreenTestScopeMissing                  ERR_GREEN_TEST_SCOPE_MISSING
 ReasonGroundedActionRefRequired              ERR_GROUNDED_ACTION_REF_REQUIRED
-ReasonHarnessChangeContractInvalid           ERR_HARNESS_CHANGE_CONTRACT_INVALID
 ReasonHarnessMutationRequiresApproval        ERR_HARNESS_MUTATION_REQUIRES_APPROVAL
 ReasonHarnessTraceRequired                   ERR_HARNESS_TRACE_REQUIRED
 ReasonPlanTransactionRequired                ERR_PLAN_TRANSACTION_REQUIRED
-ReasonVerificationScopeRequired              ERR_VERIFICATION_SCOPE_REQUIRED
 
 # ── Tainted-flow (2) — shadowed by core/pkg/conform/reason_codes.go ─────────
 # The conform package declares untyped string constants with identical Go

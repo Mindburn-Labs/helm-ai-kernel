@@ -663,10 +663,10 @@ func extractTarPack(t *testing.T, packPath string) string {
 			t.Fatalf("read tar: %v", err)
 		}
 		name := filepath.FromSlash(filepath.Clean(header.Name))
-		if filepath.IsAbs(name) || strings.HasPrefix(name, "..") {
+		target := filepath.Join(dir, name)
+		if filepath.IsAbs(name) || target == dir || !strings.HasPrefix(target, dir+string(os.PathSeparator)) {
 			t.Fatalf("pack entry escapes destination: %s", header.Name)
 		}
-		target := filepath.Join(dir, name)
 		if header.Typeflag == tar.TypeDir {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				t.Fatal(err)

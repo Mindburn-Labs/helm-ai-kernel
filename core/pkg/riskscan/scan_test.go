@@ -645,10 +645,16 @@ func extractTar(t *testing.T, data []byte, dir string) {
 		if err != nil {
 			t.Fatalf("read tar: %v", err)
 		}
-		path := filepath.Join(dir, filepath.FromSlash(filepath.Clean(header.Name)))
-		if path == dir || !strings.HasPrefix(path, dir+string(os.PathSeparator)) {
+		name := filepath.FromSlash(header.Name)
+		if name == "" || filepath.IsAbs(name) {
 			t.Fatalf("tar entry escapes destination: %s", header.Name)
 		}
+		for _, comp := range strings.Split(name, string(os.PathSeparator)) {
+			if comp == ".." {
+				t.Fatalf("tar entry escapes destination: %s", header.Name)
+			}
+		}
+		path := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}

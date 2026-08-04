@@ -89,29 +89,104 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-### Pending v0.8 source target
+## [0.8.0] - pending tag
 
-- First-party SDKs use the canonical typed `EvaluateRequest` and
-  `EvaluateResponse` contract. Direct-daemon `action`/`resource` compatibility
-  remains bounded and is not an SDK contract.
-- Receipt reads are tenant-scoped. Session streams retain scalar Lamport
-  cursors, while tenant-wide continuation uses an opaque versioned keyset
-  cursor so equal clocks across sessions are not lost.
-- Signed `receipt.v5` persistence includes the semantic `decision_hash`; older
-  rows recover only from an already-stored trusted metadata value and otherwise
-  fail closed.
+Release preparation only: the immutable `v0.8.0` tag and its source-owned
+artifacts are not published yet.
 
-- Fixed the deployed MCP gateway to enforce the reconciled policy snapshot, so
-  mounted reference-pack `runtime_actions` compile into ALLOW rules on the
-  served enforcement path instead of staying fail-closed `NO_POLICY_DEFINED`
+<!-- quantum_posture: v0.8.0 continues classical Ed25519 (and optional ML-DSA-65 hybrid) signatures and SHA-256 content hashes; no new post-quantum cryptographic control is added. -->
+
+### Added
+
+- Guided first-run journey: `helm-ai-kernel setup` front door with read-only
+  discovery modes, `--quickstart` local first-run proof path (Claude Code,
+  Codex, MCP, and OpenAI-compatible profiles), and `setup install`, `status`,
+  `repair`, and `remove` leaf commands with idempotent repair and removal.
+- Release-gated local Policies and Receipts Console packaging: a
+  Console-including artifact can serve the pinned, digest-verified sidecar
+  against the loopback Kernel; source and headless packages fail closed.
+- `decision_record.v4` signing preimage binding the evaluated authorization
+  tuple (subject, action, resource) and the selected signature algorithm;
+  execution authority is restricted to V4 decisions while V2/V3 records remain
+  verifiable as evidence.
+- Signed `receipt.v5` contract: session-scoped causal receipt chains with
+  durable chain hashes, tenant-scoped reads, and semantic `decision_hash`
+  persistence; older rows recover only from already-stored trusted metadata and
+  otherwise fail closed.
+- EventMeta v2 catalog and source-projection helpers for the eight lifecycle
+  event types. Runtime emission and telemetry export are not claimed by this
+  release entry.
+- Deterministic semantic threat-advisory classifier for `threatscan`
+  (advisory-only; no policy verdict depends on it).
+- Governed capability registry enforcement in Guardian: undeclared
+  capabilities cannot execute.
+- Desktop authenticated transport v1 for local client integrations.
+- Model-actionable deny feedback: ActionInbox deny receipts carry structured
+  remediation, cascade-reject, and a doom-loop breaker for repeated denied
+  retries.
+
+### Changed
+
+- Every command and subcommand serves side-effect-free `-h`/`--help`; help,
+  preview, and dry-run paths cannot mutate state; destructive actions require
+  explicit, unambiguous targets and never execute from typo or missing
+  authority.
+- Human terminal output uses the accessible HELM terminal design system;
+  non-TTY, `NO_COLOR`, `TERM=dumb`, and `--json` outputs remain plain and
+  stable for automation.
+- First-party SDKs (Go, TypeScript, Python, Java, Rust) regenerate from the
+  v0.8.0 contract; the served evaluate envelope preserves both the v0.7.5
+  `action`/`resource` shape and the V5 `tool`/`effect_level` shape, so v0.7.5
+  clients keep working unchanged.
+- Kernel library packages no longer pull the OpenTelemetry SDK; correlation
+  uses a narrow internal package (HELM-460).
+- The canonical executable is `helm-ai-kernel`; release artifacts, the
+  Homebrew formula, and documentation do not ship a `helm` executable, so the
+  binary cannot collide with Kubernetes Helm on PATH.
+
+### Fixed
+
+- Workstation guard governs previously missed destructive paths, and SafeDep
+  emergency activation is bound to the verified execution intent snapshot.
+- Deployed MCP gateway enforces the reconciled policy snapshot, so mounted
+  reference-pack `runtime_actions` compile into ALLOW rules on the served
+  enforcement path instead of staying fail-closed `NO_POLICY_DEFINED`
   (HELM-362).
-- Fixed the deployed MCP gateway to persist a signed receipt for every governed
-  decision (ALLOW and DENY) into the same store `GET /api/v1/receipts` reads
+- Deployed MCP gateway persists a signed receipt for every governed decision
+  (ALLOW and DENY) into the same store `GET /api/v1/receipts` reads
   (HELM-363).
-- Fixed MCP OAuth scope enforcement to apply only when the gateway runs an
-  OAuth channel; with `auth_mode: none` the scoped governance tools
-  (`helm.verify`, `helm.evaluate`) are reachable and policy remains the
-  fail-closed enforcement boundary (HELM-364).
+- MCP OAuth scope enforcement applies only when the gateway runs an OAuth
+  channel; with `auth_mode: none` the scoped governance tools (`helm.verify`,
+  `helm.evaluate`) are reachable and policy remains the fail-closed enforcement
+  boundary (HELM-364).
+- Contract-breaking CI gates fail closed instead of skipping on
+  misconfiguration.
+
+## [0.7.5] - 2026-07-23
+
+Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.5>.
+
+<!-- quantum_posture: v0.7.5 records use classical Ed25519 signatures and SHA-256 content hashes; none add a post-quantum cryptographic control. -->
+
+This section was backfilled during v0.8.0 release preparation; v0.7.5 shipped
+without a changelog entry.
+
+### Added
+
+- `correlation_id` identity slice of the telemetry contract with otelhttp
+  edges and a context-aware structured-log handler (HELM-325, HELM-333).
+
+### Changed
+
+- `golang.org/x/text` updated to v0.39.0 across the module graph (HELM-354).
+- Receipt integrity documentation separates receipt integrity from signer
+  trust (HELM-231).
+
+### Fixed
+
+- Workstation signer setup fails closed (previously could proceed unsigned).
+- Release-permit workflow accepts a pinned workflow SHA.
+- Proxy SSE correlation echo and observability follow-ups (HELM-325/333/345).
 
 ## [0.7.4] - 2026-07-21
 

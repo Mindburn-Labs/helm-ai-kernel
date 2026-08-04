@@ -30,6 +30,8 @@ podSecurityContext:
   runAsNonRoot: true
   runAsUser: 65534
   runAsGroup: 65534
+  # Supported Kubernetes volumes use this group to make the mounted data and
+  # signing Secret accessible to the non-root runtimeInit and kernel.
   fsGroup: 65534
   seccompProfile:
     type: RuntimeDefault
@@ -42,6 +44,14 @@ securityContext:
       - ALL
   seccompProfile:
     type: RuntimeDefault
+
+# One-shot authority materializer. It runs as the same restricted identity as
+# the kernel and uses the Pod fsGroup-managed mounts to copy the signing Secret
+# into the data volume. A changed durable root key fails closed rather than
+# being silently overwritten by a Secret update.
+runtimeInit:
+  image: "docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2"
+  pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP

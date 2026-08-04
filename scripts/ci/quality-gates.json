@@ -122,7 +122,9 @@
         "dependency-hygiene",
         "mutation-core",
         "flake-core",
-        "benchmark-report"
+        "benchmark-report",
+        "invariant-constitution",
+        "concept-change-marker"
       ]
     },
     "typecheck": {
@@ -588,6 +590,9 @@
       "command": "python3 scripts/ci/check_helm_smoke_hardening.py",
       "timeout_seconds": 120,
       "paths": [
+        "deploy/helm-chart/templates/deployment.yaml",
+        "deploy/helm-chart/values.yaml",
+        "deploy/helm-chart/values.schema.json",
         "scripts/ci/kind_smoke.sh",
         "scripts/ci/helm_chart_smoke.sh",
         "scripts/ci/check_helm_smoke_hardening.py",
@@ -769,6 +774,31 @@
         "core/pkg/crypto/**",
         "core/pkg/store/**",
         "core/pkg/guardian/**"
+      ]
+    },
+    {
+      "id": "invariant-constitution",
+      "title": "Invariant constitution hints resolve",
+      "description": "Self-tests on synthetic controls, then checks that every INV-NNN in HELM_INVARIANTS.md carries a verify: hint whose repo paths, Go test names, and make targets resolve.",
+      "command": "make inv-check",
+      "timeout_seconds": 180,
+      "advisory": true,
+      "paths": [
+        "HELM_INVARIANTS.md",
+        "tools/invcheck/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "concept-change-marker",
+      "title": "Invariant amendment marker",
+      "description": "Requires a CONCEPT-CHANGE(INV-NNN) commit marker naming every invariant added, edited, or retired in the range.",
+      "command": "make concept-gate",
+      "timeout_seconds": 120,
+      "advisory": true,
+      "paths": [
+        "HELM_INVARIANTS.md",
+        "tools/invcheck/**"
       ]
     }
   ]

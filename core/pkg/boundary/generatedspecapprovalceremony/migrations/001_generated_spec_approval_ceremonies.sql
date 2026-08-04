@@ -196,11 +196,50 @@ CREATE TABLE IF NOT EXISTS generated_spec_approval_ceremonies (
     )
 );
 
+-- Fail closed before enforcing one active binding for legacy rows.
+DO $$
+DECLARE
+    has_duplicate_active_binding BOOLEAN;
+BEGIN
+    IF NOT pg_catalog.has_table_privilege(
+        current_user,
+        'generated_spec_approval_ceremonies'::regclass,
+        'SELECT'
+    ) THEN
+        RAISE EXCEPTION 'generated spec approval ceremony migration blocked: migration role lacks SELECT privilege for legacy active-binding preflight'
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    PERFORM pg_catalog.set_config('row_security', 'off', true);
+    BEGIN
+        SELECT EXISTS (
+            SELECT 1
+            FROM generated_spec_approval_ceremonies
+            WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED')
+            GROUP BY tenant_id, workspace_id, binding_ref
+            HAVING COUNT(*) > 1
+        ) INTO has_duplicate_active_binding;
+    EXCEPTION
+        WHEN insufficient_privilege THEN
+            RAISE EXCEPTION 'generated spec approval ceremony migration blocked: row-level security prevents complete legacy active-binding visibility'
+                USING ERRCODE = 'P0001';
+    END;
+
+    IF has_duplicate_active_binding THEN
+        RAISE EXCEPTION 'generated spec approval ceremony migration blocked: duplicate active bindings require operator reconciliation'
+            USING ERRCODE = 'P0001';
+    END IF;
+END
+$$;
+
 CREATE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_active_scope_idx
     ON generated_spec_approval_ceremonies (tenant_id, workspace_id, state, updated_at DESC)
     WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED');
 CREATE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_binding_ref_idx
     ON generated_spec_approval_ceremonies (tenant_id, workspace_id, binding_ref);
+CREATE UNIQUE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_active_binding_ref_uq
+    ON generated_spec_approval_ceremonies (tenant_id, workspace_id, binding_ref)
+    WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED');
 CREATE UNIQUE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_challenge_id_uq
     ON generated_spec_approval_ceremonies (tenant_id, workspace_id, challenge_id)
     WHERE challenge_id IS NOT NULL;

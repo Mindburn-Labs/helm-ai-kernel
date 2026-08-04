@@ -191,6 +191,16 @@ func TestConsumeRejectsWrongConsumerAndReplay(t *testing.T) {
 	if _, err := fixture.service.RecoverGrantConsumption(ctx, consumed.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrConsumerUnavailable) {
 		t.Fatalf("RecoverGrantConsumption(other identity) error = %v, want consumer rejection", err)
 	}
+	fixture.consumer.identity.Subject = consumed.ConsumedBy
+	fixture.consumer.identity.TenantID = "tenant-other"
+	if _, err := fixture.service.RecoverGrantConsumption(ctx, consumed.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("RecoverGrantConsumption(other tenant) error = %v, want not found", err)
+	}
+	fixture.consumer.identity.TenantID = consumed.TenantID
+	fixture.consumer.identity.WorkspaceID = "workspace-other"
+	if _, err := fixture.service.RecoverGrantConsumption(ctx, consumed.ApprovalID, grant.GrantID, grant.GrantHash, grant.Nonce); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("RecoverGrantConsumption(other workspace) error = %v, want not found", err)
+	}
 }
 
 func TestConsumeGrantSealerPinsCallerScope(t *testing.T) {

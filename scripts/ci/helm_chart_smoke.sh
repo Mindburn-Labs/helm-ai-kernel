@@ -108,6 +108,47 @@ assert_not_contains "$default_rendered" "configmap-reload"
 assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
+assert_contains "$default_rendered" "name: prepare-authority-state"
+assert_contains "$default_rendered" "HELM_AUTHORITY_DATA_DIR"
+assert_contains "$default_rendered" "/var/run/helm-signing-key"
+assert_contains "$default_rendered" "defaultMode: 256"
+assert_contains "$default_rendered" "runAsNonRoot: true"
+assert_contains "$default_rendered" "runAsUser: 65534"
+assert_contains "$default_rendered" "runAsGroup: 65534"
+authority_init_security="$RENDER_DIR/rendered-authority-init-security.yaml"
+awk '/name: prepare-authority-state/{capture=1} capture{print} capture && /^[[:space:]]+command:/{exit}' "$default_rendered" >"$authority_init_security"
+assert_contains "$authority_init_security" "drop:"
+assert_contains "$authority_init_security" "ALL"
+assert_not_contains "$authority_init_security" "add:"
+assert_not_contains "$authority_init_security" "CHOWN"
+assert_not_contains "$authority_init_security" "runAsNonRoot: false"
+assert_not_contains "$authority_init_security" "runAsUser: 0"
+assert_not_contains "$authority_init_security" "runAsGroup: 0"
+assert_contains "$default_rendered" "refusing silent rotation"
+assert_contains "$default_rendered" "authority data volume is not writable by the restricted runtime identity"
+assert_not_contains "$default_rendered" "subPath: root.key"
+assert_not_contains "$default_rendered" "mountPath: /data/root.key"
+
+runtime_init_fail_log="$RENDER_DIR/runtime-init-unpinned-image.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set runtimeInit.image=alpine:3.20 >"$RENDER_DIR/runtime-init-unpinned-image.yaml" 2>"$runtime_init_fail_log"; then
+    echo "::error::chart render with an unpinned authority init image unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$runtime_init_fail_log" "runtimeInit.image"
+
+authority_identity_rendered="$RENDER_DIR/rendered-authority-identity.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set podSecurityContext.runAsUser=12345 \
+    --set podSecurityContext.runAsGroup=12346 \
+    --set podSecurityContext.fsGroup=12346 >"$authority_identity_rendered"
+authority_identity_security="$RENDER_DIR/rendered-authority-identity-security.yaml"
+awk '/name: prepare-authority-state/{capture=1} capture{print} capture && /^[[:space:]]+command:/{exit}' "$authority_identity_rendered" >"$authority_identity_security"
+assert_contains "$authority_identity_security" "runAsNonRoot: true"
+assert_contains "$authority_identity_security" "runAsUser: 12345"
+assert_contains "$authority_identity_security" "runAsGroup: 12346"
 
 lkg_rendered="$RENDER_DIR/rendered-lkg-policy.yaml"
 helm_runner template "$RELEASE" "$CHART" \

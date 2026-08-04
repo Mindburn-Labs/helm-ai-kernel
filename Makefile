@@ -502,6 +502,19 @@ docs-truth:
 docs-openapi-parity:
 	cd core && go test ./cmd/helm-ai-kernel -run '^TestPublicDocsOpenAPIContract$$' -count=1
 
+.PHONY: inv-check concept-gate
+
+# CONCEPT_RANGE selects the commits the amendment gate inspects.
+CONCEPT_RANGE ?= origin/main..HEAD
+
+# inv-check self-tests against synthetic bad input before it reads
+# HELM_INVARIANTS.md, and fails itself if a control comes back wrong.
+inv-check:
+	go run tools/invcheck/main.go verify
+
+concept-gate:
+	go run tools/invcheck/main.go concept-gate -range "$(CONCEPT_RANGE)"
+
 .PHONY: launchpad-promotion-check
 launchpad-promotion-check:
 	cd core && go run ./cmd/helm-ai-kernel launch promote --apps openclaw,hermes --sync-derived --check

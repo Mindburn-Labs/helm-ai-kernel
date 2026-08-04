@@ -23,8 +23,9 @@ const (
 	BalanceMovementPromoCredit BalanceMovementType = "PROMO_CREDIT"
 	// BalanceMovementRefund returns funds for a reversed/failed usage debit.
 	BalanceMovementRefund BalanceMovementType = "REFUND"
-	// BalanceMovementCorrection is an append-only manual adjustment that requires
-	// an approval ceremony. It never edits prior history.
+	// BalanceMovementCorrection is an append-only manual adjustment. Production
+	// execution requires a source-owned, single-use approval grant; legacy
+	// ApprovalCeremony values are non-authoritative and fail closed.
 	BalanceMovementCorrection BalanceMovementType = "CORRECTION"
 	// BalanceMovementProviderCostAccrual accrues raw provider cost for export.
 	BalanceMovementProviderCostAccrual BalanceMovementType = "PROVIDER_COST_ACCRUAL"
@@ -37,6 +38,12 @@ const (
 	// bookkeeping-only and never moves the cash balance.
 	BalanceMovementTaxAccrual BalanceMovementType = "TAX_ACCRUAL"
 )
+
+// ErrLegacyApprovalCeremonyUnsupported reports that a caller tried to
+// authorize an economic correction with the legacy descriptive ceremony.
+// Corrections remain unavailable until the Kernel can atomically consume a
+// source-owned, single-use approval grant.
+var ErrLegacyApprovalCeremonyUnsupported = errors.New("balance_movement_receipt: legacy approval ceremony cannot authorize a correction; source-owned grant consumption is unavailable")
 
 // fundingDirection reports the credit/debit direction a funding movement posts
 // when the caller does not override it. Funding movements (top-up, promo,
@@ -68,30 +75,15 @@ func (t BalanceMovementType) LedgerEntryType() UsageLedgerEntryType {
 	}
 }
 
-// correctionApproved reports whether a sealed approval ceremony actually
-// authorizes a manual correction under dual control: the ceremony must be
-// approved and at least one approver must differ from the requester.
+// correctionApproved rejects the legacy ceremony as an authority source. The
+// argument remains in the wire contract for compatibility while the canonical
+// grant-consumption path is introduced, but no caller-provided ceremony can
+// authorize a balance mutation.
 func correctionApproved(a *contracts.ApprovalCeremony) error {
 	if a == nil {
 		return errors.New("balance_movement_receipt: correction requires an approval ceremony")
 	}
-	if err := a.Validate(); err != nil {
-		return err
-	}
-	if a.State != contracts.ApprovalCeremonyAllowed {
-		return errors.New("balance_movement_receipt: correction approval ceremony is not approved")
-	}
-	distinct := false
-	for _, approver := range a.Approvers {
-		if approver != "" && approver != a.RequestedBy {
-			distinct = true
-			break
-		}
-	}
-	if !distinct {
-		return errors.New("balance_movement_receipt: correction requires an approver distinct from the requester (dual control)")
-	}
-	return nil
+	return ErrLegacyApprovalCeremonyUnsupported
 }
 
 // BalanceMovementReceipt is the content-addressed receipt for one non-usage
@@ -110,7 +102,8 @@ type BalanceMovementReceipt struct {
 	Reason           string              `json:"reason,omitempty"`
 	// SourceReceiptHash links a REFUND back to the UsageReceipt it reverses.
 	SourceReceiptHash string `json:"source_receipt_hash,omitempty"`
-	// Approval is required for CORRECTION movements (the approval ceremony).
+	// Approval is retained for legacy decoding and evidence binding only. It is
+	// never executable authority for CORRECTION movements.
 	Approval        *contracts.ApprovalCeremony `json:"approval,omitempty"`
 	EvidencePackRef string                      `json:"evidence_pack_ref"`
 	CreatedAt       time.Time                   `json:"created_at"`

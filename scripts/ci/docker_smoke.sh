@@ -20,10 +20,13 @@ HEALTH_PORT="${HELM_SMOKE_HEALTH_PORT:-18081}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 CONTAINER_NAME="${HELM_SMOKE_CONTAINER_NAME:-helm-ai-kernel-smoke}"
-DATA_DIR="${HELM_SMOKE_DATA_DIR:-}"
+RUNTIME_DATA_DIR="${HELM_SMOKE_DATA_DIR:-}"
+ARTIFACT_DIR="${HELM_SMOKE_ARTIFACT_DIR:-}"
 COMPOSE_PROJECT="${HELM_SMOKE_COMPOSE_PROJECT:-helmoss_smoke}"
 COMPOSE_FILE="${HELM_SMOKE_COMPOSE_FILE:-docker-compose.yml}"
-cleanup_data=0
+AUTHORITY_INIT_IMAGE="docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662"
+cleanup_runtime_data=0
+cleanup_artifacts=0
 
 BUILD_VERSION="${HELM_BUILD_VERSION:-$(cat "$ROOT/VERSION" 2>/dev/null || echo dev)}"
 BUILD_COMMIT="${HELM_BUILD_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}"
@@ -36,9 +39,17 @@ require() {
     }
 }
 
+require_pinned_authority_init_image() {
+    if [[ ! "$AUTHORITY_INIT_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+        echo "::error::AUTHORITY_INIT_IMAGE must be pinned by immutable sha256 digest"
+        exit 1
+    fi
+}
+
 require docker
 require curl
 require python3
+require_pinned_authority_init_image
 
 random_key() {
     python3 - <<'PY'
@@ -51,15 +62,32 @@ ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-$(random_key)}"
 SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-$(random_key)}"
 EVIDENCE_SIGNING_KEY="${HELM_SMOKE_EVIDENCE_SIGNING_KEY:-$(random_key)}"
 
-if [ -z "$DATA_DIR" ]; then
+if [ -z "$RUNTIME_DATA_DIR" ]; then
     mkdir -p "$ROOT/tmp"
-    DATA_DIR="$(mktemp -d "$ROOT/tmp/helm-ai-kernel-docker-smoke.XXXXXX")"
-    cleanup_data=1
+    RUNTIME_DATA_DIR="$(mktemp -d "$ROOT/tmp/helm-ai-kernel-docker-runtime.XXXXXX")"
+    cleanup_runtime_data=1
 fi
-mkdir -p "$DATA_DIR"
-# The runtime image runs as distroless nonroot (65532). Bind-mounted smoke
-# directories must be writable by that UID across Linux and Docker Desktop.
-chmod 0777 "$DATA_DIR"
+mkdir -p "$RUNTIME_DATA_DIR"
+RUNTIME_DATA_DIR="$(cd "$RUNTIME_DATA_DIR" && pwd -P)"
+
+if [ -z "$ARTIFACT_DIR" ]; then
+    mkdir -p "$ROOT/tmp"
+    ARTIFACT_DIR="$(mktemp -d "$ROOT/tmp/helm-ai-kernel-docker-artifacts.XXXXXX")"
+    cleanup_artifacts=1
+fi
+mkdir -p "$ARTIFACT_DIR"
+ARTIFACT_DIR="$(cd "$ARTIFACT_DIR" && pwd -P)"
+
+prepare_direct_runtime_data_dir() {
+    # The runtime rejects group/world-writable or foreign-owned authority
+    # state. Prepare only the mounted state directory; smoke artifacts stay
+    # outside that authority boundary.
+    docker run --rm --user 0:0 \
+        --mount "type=bind,source=$RUNTIME_DATA_DIR,target=/runtime-data" \
+        "$AUTHORITY_INIT_IMAGE" \
+        sh -ec 'chown 65532:65532 /runtime-data && chmod 0700 /runtime-data' \
+        >/dev/null
+}
 
 cleanup() {
     if [ "$MODE" = "compose" ]; then
@@ -67,25 +95,67 @@ cleanup() {
     else
         docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
     fi
-    if [ "$cleanup_data" = "1" ]; then
+    if [ "$cleanup_runtime_data" = "1" ]; then
         # The container ran as distroless nonroot (UID 65532) and may have
-        # written files under $DATA_DIR/keys/ with mode 0700 (KMS keystore).
-        # The host user can't traverse that directory, so delegate the
-        # recursive delete to a short-lived root container with the same
-        # mount. Falling through to the host rm afterwards picks up the
-        # now-empty $DATA_DIR plus anything the cleanup container missed.
-        if [ -d "$DATA_DIR" ]; then
-            docker run --rm \
-                --mount "type=bind,source=$DATA_DIR,target=/cleanup" \
-                busybox:1.36.1 \
+        # written files under $RUNTIME_DATA_DIR/keys/ with mode 0700 (KMS
+        # keystore). The host user can't traverse that directory, so delegate
+        # the recursive delete to a short-lived root container with the same
+        # mount. Falling through to the host rm afterwards picks up the now-
+        # empty directory plus anything the cleanup container missed.
+        if [ -d "$RUNTIME_DATA_DIR" ]; then
+            docker run --rm --user 0:0 \
+                --mount "type=bind,source=$RUNTIME_DATA_DIR,target=/cleanup" \
+                "$AUTHORITY_INIT_IMAGE" \
                 sh -c 'rm -rf /cleanup/..?* /cleanup/.[!.]* /cleanup/* 2>/dev/null || true' \
                 >/dev/null 2>&1 || true
         fi
-        rm -rf "$DATA_DIR" 2>/dev/null || true
+        rm -rf "$RUNTIME_DATA_DIR" 2>/dev/null || true
+    fi
+    if [ "$cleanup_artifacts" = "1" ]; then
+        rm -rf "$ARTIFACT_DIR" 2>/dev/null || true
+    fi
+    if [ "$cleanup_runtime_data" = "1" ] || [ "$cleanup_artifacts" = "1" ]; then
         rmdir "$ROOT/tmp" >/dev/null 2>&1 || true
     fi
 }
-trap cleanup EXIT
+
+diagnose_runtime_failure() {
+    echo "::group::docker smoke diagnostics"
+    echo "runtime diagnostics omit inspect and environment output so credentials are not exposed"
+    if [ "$MODE" = "compose" ]; then
+        (cd "$ROOT" && docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" ps) || true
+        (cd "$ROOT" && docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" logs --no-color --tail 200 helm authority-state) || true
+    else
+        docker ps -a --filter "name=^/$CONTAINER_NAME$" --format '{{.Names}} {{.Status}}' || true
+        docker logs --tail 200 "$CONTAINER_NAME" || true
+    fi
+    echo "::endgroup::"
+}
+
+on_exit() {
+    status=$?
+    if [ "$status" -ne 0 ]; then
+        diagnose_runtime_failure
+    fi
+    cleanup
+    return "$status"
+}
+
+runtime_file_exists() {
+    docker run --rm --user 0:0 \
+        --mount "type=bind,source=$RUNTIME_DATA_DIR,target=/runtime-data,readonly" \
+        "$AUTHORITY_INIT_IMAGE" \
+        test -f "/runtime-data/$1"
+}
+
+root_key_hash() {
+    docker run --rm --user 0:0 \
+        --mount "type=bind,source=$RUNTIME_DATA_DIR,target=/runtime-data,readonly" \
+        "$AUTHORITY_INIT_IMAGE" \
+        sha256sum /runtime-data/root.key | awk '{print $1}'
+}
+
+trap on_exit EXIT
 
 wait_http() {
     url="$1"
@@ -115,6 +185,7 @@ auth_headers=(
 
 start_docker() {
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    prepare_direct_runtime_data_dir
     docker run -d --name "$CONTAINER_NAME" \
         -p "127.0.0.1:${API_PORT}:8080" \
         -p "127.0.0.1:${HEALTH_PORT}:8081" \
@@ -124,7 +195,7 @@ start_docker() {
         -e HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
         -e EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
         -e HELM_HEALTH_PORT=8081 \
-        -v "${DATA_DIR}:/var/lib/helm-ai-kernel" \
+        -v "${RUNTIME_DATA_DIR}:/var/lib/helm-ai-kernel" \
         "$IMAGE" >/dev/null
 }
 
@@ -135,7 +206,7 @@ start_compose() {
     HELM_RUNTIME_TENANT_ID="$TENANT_ID" \
     HELM_RUNTIME_PRINCIPAL_ID="$AGENT_ID" \
     EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY" \
-    HELM_SMOKE_DATA_DIR="$DATA_DIR" \
+    HELM_SMOKE_DATA_DIR="$RUNTIME_DATA_DIR" \
     HELM_SMOKE_API_PORT="$API_PORT" \
     HELM_SMOKE_HEALTH_PORT="$HEALTH_PORT" \
     HELM_BUILD_VERSION="$BUILD_VERSION" \
@@ -158,8 +229,8 @@ assert_compose_build_metadata() {
     if [ "$MODE" != "compose" ]; then
         return
     fi
-    curl -fsS "$(base_url)/version" >"$DATA_DIR/version.json"
-    python3 - "$DATA_DIR/version.json" "$BUILD_COMMIT" <<'PY'
+    curl -fsS "$(base_url)/version" >"$ARTIFACT_DIR/version.json"
+    python3 - "$ARTIFACT_DIR/version.json" "$BUILD_COMMIT" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 expected_commit = sys.argv[2]
@@ -185,22 +256,14 @@ stop_runtime() {
     fi
 }
 
-root_key_hash() {
-    if shasum -a 256 "$DATA_DIR/root.key" >/dev/null 2>&1; then
-        shasum -a 256 "$DATA_DIR/root.key" | awk '{print $1}'
-        return
-    fi
-    docker run --rm -v "${DATA_DIR}:/data:ro" busybox:1.36.1 sha256sum /data/root.key | awk '{print $1}'
-}
-
 evaluate_unknown_tool() {
     curl -fsS -X POST "$(base_url)/api/v1/evaluate" \
         -H 'Content-Type: application/json' \
         "${auth_headers[@]}" \
-        --data-binary @- >"$DATA_DIR/decision.json" <<JSON
+        --data-binary @- >"$ARTIFACT_DIR/decision.json" <<JSON
 {"principal":"${AGENT_ID}","action":"EXECUTE_TOOL","resource":"unknown.tool.smoke","context":{"session_id":"${AGENT_ID}","destination":"blocked.smoke.local","payload_size":1}}
 JSON
-    python3 - "$DATA_DIR/decision.json" <<'PY'
+    python3 - "$ARTIFACT_DIR/decision.json" <<'PY'
 import json, sys
 decision = json.load(open(sys.argv[1]))
 verdict = str(decision.get("verdict", "")).upper()
@@ -212,8 +275,8 @@ PY
 }
 
 list_receipts() {
-    curl -fsS "$(base_url)/api/v1/receipts?limit=10" "${auth_headers[@]}" >"$DATA_DIR/receipts.json"
-    python3 - "$DATA_DIR/receipts.json" <<'PY'
+    curl -fsS "$(base_url)/api/v1/receipts?limit=10" "${auth_headers[@]}" >"$ARTIFACT_DIR/receipts.json"
+    python3 - "$ARTIFACT_DIR/receipts.json" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
 receipts = payload.get("receipts") or []
@@ -228,20 +291,20 @@ PY
 
 fetch_receipt() {
     receipt_id="$1"
-    curl -fsS "$(base_url)/api/v1/receipts/${receipt_id}" "${auth_headers[@]}" >"$DATA_DIR/receipt.json"
+    curl -fsS "$(base_url)/api/v1/receipts/${receipt_id}" "${auth_headers[@]}" >"$ARTIFACT_DIR/receipt.json"
 }
 
 assert_authz_negative() {
-    status="$(curl -sS -o "$DATA_DIR/no-auth.json" -w '%{http_code}' "$(base_url)/api/v1/receipts?limit=1")"
+    status="$(curl -sS -o "$ARTIFACT_DIR/no-auth.json" -w '%{http_code}' "$(base_url)/api/v1/receipts?limit=1")"
     if [ "$status" != "401" ]; then
         echo "::error::expected missing auth to return 401, got $status"
-        cat "$DATA_DIR/no-auth.json"
+        cat "$ARTIFACT_DIR/no-auth.json"
         exit 1
     fi
-    status="$(curl -sS -o "$DATA_DIR/no-tenant.json" -w '%{http_code}' "$(base_url)/api/v1/receipts?limit=1" -H "Authorization: Bearer ${ADMIN_KEY}")"
+    status="$(curl -sS -o "$ARTIFACT_DIR/no-tenant.json" -w '%{http_code}' "$(base_url)/api/v1/receipts?limit=1" -H "Authorization: Bearer ${ADMIN_KEY}")"
     if [ "$status" != "403" ]; then
         echo "::error::expected missing tenant to return 403, got $status"
-        cat "$DATA_DIR/no-tenant.json"
+        cat "$ARTIFACT_DIR/no-tenant.json"
         exit 1
     fi
 }
@@ -251,16 +314,16 @@ export_and_verify_evidence() {
         "${auth_headers[@]}" \
         -H 'Content-Type: application/json' \
         --data-binary "{\"session_id\":\"${AGENT_ID}\",\"format\":\"tar.gz\"}" \
-        -o "$DATA_DIR/evidence.tar.gz"
-    test -s "$DATA_DIR/evidence.tar.gz"
+        -o "$ARTIFACT_DIR/evidence.tar.gz"
+    test -s "$ARTIFACT_DIR/evidence.tar.gz"
 
     curl -fsS -X POST "$(base_url)/api/v1/evidence/verify" \
         -H 'Content-Type: application/octet-stream' \
-        --data-binary "@$DATA_DIR/evidence.tar.gz" >"$DATA_DIR/evidence-verify.json"
+        --data-binary "@$ARTIFACT_DIR/evidence.tar.gz" >"$ARTIFACT_DIR/evidence-verify.json"
     curl -fsS -X POST "$(base_url)/api/v1/replay/verify" \
         -H 'Content-Type: application/octet-stream' \
-        --data-binary "@$DATA_DIR/evidence.tar.gz" >"$DATA_DIR/replay-verify.json"
-    python3 - "$DATA_DIR/evidence-verify.json" "$DATA_DIR/replay-verify.json" <<'PY'
+        --data-binary "@$ARTIFACT_DIR/evidence.tar.gz" >"$ARTIFACT_DIR/replay-verify.json"
+    python3 - "$ARTIFACT_DIR/evidence-verify.json" "$ARTIFACT_DIR/replay-verify.json" <<'PY'
 import json, sys
 for path in sys.argv[1:]:
     payload = json.load(open(path))
@@ -274,21 +337,21 @@ PY
 }
 
 assert_persistence_files() {
-    test -f "$DATA_DIR/root.key" || { echo "::error::root.key missing from durable data dir"; exit 1; }
-    test -f "$DATA_DIR/helm.db" || { echo "::error::helm.db missing from durable data dir"; exit 1; }
-    root_key_hash >"$DATA_DIR/root-key.before"
+    runtime_file_exists root.key || { echo "::error::root.key missing from durable data dir"; exit 1; }
+    runtime_file_exists helm.db || { echo "::error::helm.db missing from durable data dir"; exit 1; }
+    root_key_hash >"$ARTIFACT_DIR/root-key.before"
 }
 
 assert_persistence_after_restart() {
-    root_key_hash >"$DATA_DIR/root-key.after"
-    diff "$DATA_DIR/root-key.before" "$DATA_DIR/root-key.after" >/dev/null || {
+    root_key_hash >"$ARTIFACT_DIR/root-key.after"
+    diff "$ARTIFACT_DIR/root-key.before" "$ARTIFACT_DIR/root-key.after" >/dev/null || {
         echo "::error::root key changed across restart"
         exit 1
     }
     list_receipts >/dev/null
 }
 
-echo "docker smoke mode=$MODE image=$IMAGE api_port=$API_PORT health_port=$HEALTH_PORT data_dir=$DATA_DIR"
+echo "docker smoke mode=$MODE image=$IMAGE api_port=$API_PORT health_port=$HEALTH_PORT runtime_data_dir=$RUNTIME_DATA_DIR artifact_dir=$ARTIFACT_DIR"
 start_runtime
 assert_compose_build_metadata
 evaluate_unknown_tool

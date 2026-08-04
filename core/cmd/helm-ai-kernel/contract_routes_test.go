@@ -785,15 +785,43 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 	authorizeTestRequest(approveReq)
 	approveRec := httptest.NewRecorder()
 	mux.ServeHTTP(approveRec, approveReq)
-	if approveRec.Code != http.StatusOK {
+	if approveRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("approve status=%d body=%s", approveRec.Code, approveRec.Body.String())
 	}
-	var approval map[string]any
-	if err := json.Unmarshal(approveRec.Body.Bytes(), &approval); err != nil {
+	if contentType := approveRec.Header().Get("Content-Type"); !strings.Contains(contentType, "application/problem+json") {
+		t.Fatalf("approve content type = %q", contentType)
+	}
+	var approvalProblem struct {
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(approveRec.Body.Bytes(), &approvalProblem); err != nil {
 		t.Fatal(err)
 	}
-	if approval["state"] != "approved" {
-		t.Fatalf("approval state = %+v", approval)
+	if approvalProblem.Detail != boundarypkg.ErrApprovalVerificationUnavailable.Error() {
+		t.Fatalf("approve detail = %q", approvalProblem.Detail)
+	}
+
+	pathApproveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/srv-1/approve", strings.NewReader(`{"approver_id":"user:alice","approval_receipt_id":"approval-r1","reason":"reviewed"}`))
+	authorizeTestRequest(pathApproveReq)
+	pathApproveRec := httptest.NewRecorder()
+	mux.ServeHTTP(pathApproveRec, pathApproveReq)
+	if pathApproveRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("path approve status=%d body=%s", pathApproveRec.Code, pathApproveRec.Body.String())
+	}
+
+	getAfterApproveReq := httptest.NewRequest(http.MethodGet, "/api/v1/mcp/registry/srv-1", nil)
+	authorizeTestRequest(getAfterApproveReq)
+	getAfterApproveRec := httptest.NewRecorder()
+	mux.ServeHTTP(getAfterApproveRec, getAfterApproveReq)
+	if getAfterApproveRec.Code != http.StatusOK {
+		t.Fatalf("registry get status=%d body=%s", getAfterApproveRec.Code, getAfterApproveRec.Body.String())
+	}
+	var quarantined map[string]any
+	if err := json.Unmarshal(getAfterApproveRec.Body.Bytes(), &quarantined); err != nil {
+		t.Fatal(err)
+	}
+	if quarantined["state"] == "approved" {
+		t.Fatalf("caller-body approve minted authority: %+v", quarantined)
 	}
 
 	sandboxReq := httptest.NewRequest(http.MethodGet, "/api/v1/sandbox/grants/inspect?runtime=wazero", nil)
@@ -837,6 +865,26 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
+	// The caller-body HTTP approve path fails closed now, so approval
+	// authority reaches the API only as persisted state written by the
+	// governed receipt-backed path. Seed the approved record and let route
+	// registration hydrate the quarantine registry from it.
+	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
+	if _, err := surfaces.PutMCPServer(mcppkg.ServerQuarantineRecord{
+		ServerID:          "api-fixture",
+		ToolNames:         []string{"local.echo"},
+		ApprovedToolNames: []string{"local.echo"},
+		Risk:              "high",
+		State:             mcppkg.QuarantineApproved,
+		DiscoveredAt:      time.Now().UTC(),
+		ApprovedAt:        time.Now().UTC(),
+		ApprovedBy:        "user:alice",
+		ApprovalReceiptID: "approval-r1",
+		Reason:            "reviewed",
+	}); err != nil {
+		t.Fatalf("seed approved mcp server: %v", err)
+	}
+	svc.BoundarySurfaces = surfaces
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
@@ -861,22 +909,6 @@ func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 	}, http.StatusForbidden)
 	if unknownServer["verdict"] != "DENY" && unknownServer["verdict"] != "ESCALATE" {
 		t.Fatalf("unknown server verdict = %+v", unknownServer)
-	}
-
-	discoverReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry", strings.NewReader(`{"server_id":"api-fixture","tool_names":["local.echo"],"risk":"high"}`))
-	authorizeTestRequest(discoverReq)
-	discoverRec := httptest.NewRecorder()
-	mux.ServeHTTP(discoverRec, discoverReq)
-	if discoverRec.Code != http.StatusAccepted {
-		t.Fatalf("discover status=%d body=%s", discoverRec.Code, discoverRec.Body.String())
-	}
-
-	approveReq := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/registry/api-fixture/approve", strings.NewReader(`{"approver_id":"user:alice","approval_receipt_id":"approval-r1","reason":"reviewed","tool_names":["local.echo"]}`))
-	authorizeTestRequest(approveReq)
-	approveRec := httptest.NewRecorder()
-	mux.ServeHTTP(approveRec, approveReq)
-	if approveRec.Code != http.StatusOK {
-		t.Fatalf("approve status=%d body=%s", approveRec.Code, approveRec.Body.String())
 	}
 
 	unknownTool := postMCPAuthorizeForTest(t, mux, map[string]any{
@@ -1123,13 +1155,19 @@ func TestTrustedEvidenceBundleSealSignerRejectsUnsupportedRuntimeProfiles(t *tes
 	}
 }
 
-func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
-	svc, cleanup := newContractRouteTestServices(t)
-	defer cleanup()
-	mux := http.NewServeMux()
-	registerContractRoutes(mux, svc)
+// routeApprovalAssertionVerifier is a test double for the credential verifier
+// consulted by the WebAuthn assert route.
+type routeApprovalAssertionVerifier struct {
+	err error
+}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(`{"approval_id":"approval-webauthn","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`))
+func (v *routeApprovalAssertionVerifier) VerifyApprovalAssertion(contracts.ApprovalWebAuthnChallenge, contracts.ApprovalWebAuthnAssertion) error {
+	return v.err
+}
+
+func webAuthnRouteChallengeID(t *testing.T, mux *http.ServeMux, approvalID string) string {
+	t.Helper()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(fmt.Sprintf(`{"approval_id":%q,"subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`, approvalID)))
 	authorizeTestRequest(createReq)
 	createRec := httptest.NewRecorder()
 	mux.ServeHTTP(createRec, createReq)
@@ -1137,7 +1175,7 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 		t.Fatalf("create approval status=%d body=%s", createRec.Code, createRec.Body.String())
 	}
 
-	challengeReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/webauthn/challenge", strings.NewReader(`{"method":"passkey","ttl_ms":60000}`))
+	challengeReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/"+approvalID+"/webauthn/challenge", strings.NewReader(`{"method":"passkey","ttl_ms":60000}`))
 	authorizeTestRequest(challengeReq)
 	challengeRec := httptest.NewRecorder()
 	mux.ServeHTTP(challengeRec, challengeReq)
@@ -1152,6 +1190,77 @@ func TestApprovalRoutesSupportWebAuthnChallengeAssertion(t *testing.T) {
 	if challengeID == "" {
 		t.Fatalf("challenge missing id: %+v", challenge)
 	}
+	return challengeID
+}
+
+func TestApprovalWebAuthnAssertFailsClosedWithoutVerifier(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	challengeID := webAuthnRouteChallengeID(t, mux, "approval-webauthn")
+
+	assertReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/webauthn/assert", strings.NewReader(fmt.Sprintf(`{"challenge_id":%q,"actor":"user:alice","assertion":"signed-client-data","receipt_id":"rcpt-approval"}`, challengeID)))
+	authorizeTestRequest(assertReq)
+	assertRec := httptest.NewRecorder()
+	mux.ServeHTTP(assertRec, assertReq)
+	if assertRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("assert status=%d body=%s", assertRec.Code, assertRec.Body.String())
+	}
+	if contentType := assertRec.Header().Get("Content-Type"); !strings.Contains(contentType, "application/problem+json") {
+		t.Fatalf("assert content type = %q", contentType)
+	}
+	var problem struct {
+		Title  string `json:"title"`
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(assertRec.Body.Bytes(), &problem); err != nil {
+		t.Fatal(err)
+	}
+	if problem.Title != "Approval verification unavailable" || !strings.Contains(problem.Detail, boundarypkg.ErrApprovalVerificationUnavailable.Error()) {
+		t.Fatalf("assert problem = %+v", problem)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/approvals", nil)
+	authorizeTestRequest(listReq)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK || strings.Contains(listRec.Body.String(), `"approval_id":"approval-webauthn","state":"approved"`) {
+		t.Fatalf("unverified assertion minted approval authority: status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+}
+
+func TestApprovalWebAuthnAssertRejectsFailedVerification(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	registry := boundarypkg.NewSurfaceRegistry(time.Now)
+	registry.SetApprovalAssertionVerifier(&routeApprovalAssertionVerifier{err: fmt.Errorf("signature does not match registered credential")})
+	svc.BoundarySurfaces = registry
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	challengeID := webAuthnRouteChallengeID(t, mux, "approval-webauthn-reject")
+
+	assertReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn-reject/webauthn/assert", strings.NewReader(fmt.Sprintf(`{"challenge_id":%q,"actor":"user:alice","assertion":"garbage","receipt_id":"rcpt-approval"}`, challengeID)))
+	authorizeTestRequest(assertReq)
+	assertRec := httptest.NewRecorder()
+	mux.ServeHTTP(assertRec, assertReq)
+	if assertRec.Code != http.StatusBadRequest || !strings.Contains(assertRec.Body.String(), "approval assertion rejected") {
+		t.Fatalf("rejected assert status=%d body=%s", assertRec.Code, assertRec.Body.String())
+	}
+}
+
+func TestApprovalRoutesSupportWebAuthnChallengeAssertionWithVerifier(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	registry := boundarypkg.NewSurfaceRegistry(time.Now)
+	registry.SetApprovalAssertionVerifier(&routeApprovalAssertionVerifier{})
+	svc.BoundarySurfaces = registry
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	challengeID := webAuthnRouteChallengeID(t, mux, "approval-webauthn")
 
 	assertReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals/approval-webauthn/webauthn/assert", strings.NewReader(fmt.Sprintf(`{"challenge_id":%q,"actor":"user:alice","assertion":"signed-client-data","receipt_id":"rcpt-approval"}`, challengeID)))
 	authorizeTestRequest(assertReq)

@@ -508,6 +508,10 @@ func runServerWithOptions(opts serverOptions) error {
 		if err != nil {
 			log.Fatalf("Failed to initialize approval grant consumption runtime: %v", err)
 		}
+		services.GeneratedSpecApproval, err = newGeneratedSpecApprovalRuntime(ctx, db, databaseMode, signer, services.EmergencyStops)
+		if err != nil {
+			log.Fatalf("Failed to initialize GeneratedSpec approval runtime: %v", err)
+		}
 
 		// Receipt transparency log: anchor decision-record receipt hashes at
 		// issuance (see persistDecisionReceipt -> anchorReceiptTransparency). The
@@ -697,7 +701,7 @@ func writeServerReady(opts serverOptions, bindAddr string, port int) error {
 }
 
 func servicesInitFailureIsFatal() bool {
-	return envBool("HELM_PRODUCTION") || emergencyStopFenceEnabled() || envBool(approvalConsumptionEnabledEnv)
+	return envBool("HELM_PRODUCTION") || emergencyStopFenceEnabled() || envBool(approvalConsumptionEnabledEnv) || envBool(generatedSpecApprovalEnabledEnv)
 }
 
 func envBool(key string) bool {

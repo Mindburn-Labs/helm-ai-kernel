@@ -93,12 +93,31 @@
     "podSecurityContext": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Pod-level securityContext. Defaults run the kernel as non-root (UID/GID 65534, nobody) with fsGroup so the data volume is writable, and set seccompProfile RuntimeDefault so pods are admitted under PodSecurity \"restricted\"."
+      "description": "Pod-level securityContext. Defaults run the kernel as non-root (UID/GID 65534, nobody) with fsGroup so supported data and Secret volumes are accessible to the same restricted runtimeInit identity, and set seccompProfile RuntimeDefault so pods are admitted under PodSecurity \"restricted\"."
     },
     "securityContext": {
       "type": "object",
       "additionalProperties": true,
       "description": "Container-level securityContext. Defaults drop ALL Linux capabilities, disable privilege escalation, mount the root filesystem read-only (helm.dataDir is the only writable path), and set seccompProfile RuntimeDefault so pods are admitted under PodSecurity \"restricted\"."
+    },
+    "runtimeInit": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One-shot init container that runs as the restricted kernel identity and copies the signing Secret into helm.dataDir as a private root key. It fails closed when the Pod fsGroup-managed data volume is not writable. The image must be immutable because it establishes local signing authority before the kernel starts.",
+      "properties": {
+        "image": {
+          "type": "string",
+          "pattern": "^.+@sha256:[0-9a-f]{64}$",
+          "default": "docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2",
+          "description": "Digest-pinned image used only by the authority-state init container. A mirror is allowed only when referenced by immutable sha256 digest."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent",
+          "description": "Image pull policy for the authority-state init container."
+        }
+      }
     },
     "service": {
       "type": "object",

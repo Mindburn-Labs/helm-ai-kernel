@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -185,9 +186,107 @@ func TestApprovalTransitionEnforcesQuorumAndTimelock(t *testing.T) {
 	}
 }
 
-func TestApprovalChallengeAssertionBindsPasskeyEvidence(t *testing.T) {
+// approvalAssertionVerifierFunc adapts a function to ApprovalAssertionVerifier
+// for tests.
+type approvalAssertionVerifierFunc func(challenge contracts.ApprovalWebAuthnChallenge, assertion contracts.ApprovalWebAuthnAssertion) error
+
+func (f approvalAssertionVerifierFunc) VerifyApprovalAssertion(challenge contracts.ApprovalWebAuthnChallenge, assertion contracts.ApprovalWebAuthnAssertion) error {
+	return f(challenge, assertion)
+}
+
+func TestApprovalChallengeAssertionFailsClosedWithoutVerifier(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })
+	challenge, err := registry.CreateApprovalChallenge("approval-bootstrap", "passkey", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertion := contracts.ApprovalWebAuthnAssertion{
+		ChallengeID: challenge.ChallengeID,
+		Actor:       "user:alice",
+		Assertion:   "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0In0.valid-looking-opaque-signature",
+		ReceiptID:   "rcpt-passkey",
+		Reason:      "passkey assertion",
+	}
+	for _, name := range []string{"first attempt", "repeated request"} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := registry.AssertApprovalChallenge(assertion); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+				t.Fatalf("assertion error = %v, want %v", err, ErrApprovalVerificationUnavailable)
+			}
+			approval := registry.approvals["approval-bootstrap"]
+			if approval.State != contracts.ApprovalCeremonyPending {
+				t.Fatalf("approval state = %q, want pending", approval.State)
+			}
+			if approval.AuthMethod != "" || approval.ChallengeID != "" || approval.ChallengeHash != "" || approval.AssertionHash != "" {
+				t.Fatalf("approval claimed unverified passkey evidence: %+v", approval)
+			}
+			persisted := registry.challenges[challenge.ChallengeID]
+			if persisted.Verified || persisted.AssertionHash != "" {
+				t.Fatalf("challenge claimed verification: %+v", persisted)
+			}
+		})
+	}
+}
+
+func TestApprovalChallengeAssertionRejectedByVerifierDoesNotTransition(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	registry.SetApprovalAssertionVerifier(approvalAssertionVerifierFunc(func(contracts.ApprovalWebAuthnChallenge, contracts.ApprovalWebAuthnAssertion) error {
+		return errors.New("signature does not match registered credential")
+	}))
+	challenge, err := registry.CreateApprovalChallenge("approval-bootstrap", "passkey", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = registry.AssertApprovalChallenge(contracts.ApprovalWebAuthnAssertion{
+		ChallengeID: challenge.ChallengeID,
+		Actor:       "user:alice",
+		Assertion:   "garbage-signature",
+	})
+	if err == nil || errors.Is(err, ErrApprovalVerificationUnavailable) || !strings.Contains(err.Error(), "approval assertion rejected") {
+		t.Fatalf("rejected assertion error = %v, want rejection distinct from unavailability", err)
+	}
+	if approval := registry.approvals["approval-bootstrap"]; approval.State != contracts.ApprovalCeremonyPending {
+		t.Fatalf("rejected assertion transitioned approval: %+v", approval)
+	}
+	if persisted := registry.challenges[challenge.ChallengeID]; persisted.Verified || persisted.AssertionHash != "" {
+		t.Fatalf("rejected assertion marked challenge verified: %+v", persisted)
+	}
+}
+
+func TestApprovalChallengeAssertionVerifierUnavailableForCredentialFailsClosed(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	registry.SetApprovalAssertionVerifier(approvalAssertionVerifierFunc(func(challenge contracts.ApprovalWebAuthnChallenge, _ contracts.ApprovalWebAuthnAssertion) error {
+		return fmt.Errorf("no verifier registered for method %q: %w", challenge.Method, ErrApprovalVerificationUnavailable)
+	}))
+	challenge, err := registry.CreateApprovalChallenge("approval-bootstrap", "hardware-token", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.AssertApprovalChallenge(contracts.ApprovalWebAuthnAssertion{
+		ChallengeID: challenge.ChallengeID,
+		Actor:       "user:alice",
+		Assertion:   "assertion-for-unsupported-method",
+	}); !errors.Is(err, ErrApprovalVerificationUnavailable) {
+		t.Fatalf("assertion error = %v, want %v", err, ErrApprovalVerificationUnavailable)
+	}
+	if approval := registry.approvals["approval-bootstrap"]; approval.State != contracts.ApprovalCeremonyPending {
+		t.Fatalf("unavailable verifier transitioned approval: %+v", approval)
+	}
+}
+
+func TestApprovalChallengeAssertionBindsPasskeyEvidenceWithVerifier(t *testing.T) {
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry := NewSurfaceRegistry(func() time.Time { return now })
+	var verified int
+	registry.SetApprovalAssertionVerifier(approvalAssertionVerifierFunc(func(challenge contracts.ApprovalWebAuthnChallenge, assertion contracts.ApprovalWebAuthnAssertion) error {
+		verified++
+		if challenge.ApprovalID != "approval-bootstrap" || assertion.Assertion != "signed-client-data" {
+			return errors.New("unexpected verification input")
+		}
+		return nil
+	}))
 	challenge, err := registry.CreateApprovalChallenge("approval-bootstrap", "passkey", time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -202,11 +301,17 @@ func TestApprovalChallengeAssertionBindsPasskeyEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if verified != 1 {
+		t.Fatalf("verifier consulted %d times, want 1", verified)
+	}
 	if approval.State != contracts.ApprovalCeremonyAllowed || approval.AuthMethod != "passkey" {
 		t.Fatalf("passkey approval not bound: %+v", approval)
 	}
 	if approval.ChallengeHash == "" || approval.AssertionHash == "" {
 		t.Fatalf("challenge/assertion hashes missing: %+v", approval)
+	}
+	if persisted := registry.challenges[challenge.ChallengeID]; !persisted.Verified || persisted.AssertionHash != approval.AssertionHash {
+		t.Fatalf("verified challenge not recorded: %+v", persisted)
 	}
 }
 

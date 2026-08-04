@@ -848,36 +848,12 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var req struct {
-			ServerID          string   `json:"server_id"`
-			ApproverID        string   `json:"approver_id"`
-			ApprovalReceiptID string   `json:"approval_receipt_id"`
-			Reason            string   `json:"reason"`
-			ToolNames         []string `json:"tool_names"`
-			Effects           []string `json:"effects"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid MCP approval request")
-			return
-		}
-		record, err := mcpQuarantine.Approve(r.Context(), mcppkg.ApprovalDecision{
-			ServerID:          req.ServerID,
-			ApproverID:        req.ApproverID,
-			ApprovalReceiptID: req.ApprovalReceiptID,
-			ApprovedAt:        time.Now().UTC(),
-			Reason:            req.Reason,
-			ToolNames:         req.ToolNames,
-			Effects:           req.Effects,
-		})
-		if err != nil {
-			api.WriteBadRequest(w, err.Error())
-			return
-		}
-		if _, err := surfaces.PutMCPServer(record); err != nil {
-			api.WriteInternal(w, err)
-			return
-		}
-		writeContractJSON(w, http.StatusOK, record)
+		// MCP approval authority must come from a credential-verified approval
+		// ceremony, never from caller-supplied body fields. Do not parse the
+		// opaque metadata first: it must never influence an approval result or
+		// change the public 503 contract. Local operators keep the
+		// receipt-backed `helm-ai-kernel mcp approve` CLI path.
+		api.WriteError(w, http.StatusServiceUnavailable, "MCP approval verification unavailable", boundarypkg.ErrApprovalVerificationUnavailable.Error())
 	}))
 
 	mux.HandleFunc("/api/v1/mcp/registry/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -901,35 +877,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			}
 			writeContractJSON(w, http.StatusOK, record)
 		case action == "approve" && r.Method == http.MethodPost:
-			var req struct {
-				ApproverID        string   `json:"approver_id"`
-				ApprovalReceiptID string   `json:"approval_receipt_id"`
-				Reason            string   `json:"reason"`
-				ToolNames         []string `json:"tool_names"`
-				Effects           []string `json:"effects"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				api.WriteBadRequest(w, "Invalid MCP approval request")
-				return
-			}
-			record, err := mcpQuarantine.Approve(r.Context(), mcppkg.ApprovalDecision{
-				ServerID:          serverID,
-				ApproverID:        req.ApproverID,
-				ApprovalReceiptID: req.ApprovalReceiptID,
-				ApprovedAt:        time.Now().UTC(),
-				Reason:            req.Reason,
-				ToolNames:         req.ToolNames,
-				Effects:           req.Effects,
-			})
-			if err != nil {
-				api.WriteBadRequest(w, err.Error())
-				return
-			}
-			if _, err := surfaces.PutMCPServer(record); err != nil {
-				api.WriteInternal(w, err)
-				return
-			}
-			writeContractJSON(w, http.StatusOK, record)
+			// See the collection endpoint: the path-scoped variant must also
+			// reject without parsing or trusting caller-provided approval
+			// fields.
+			api.WriteError(w, http.StatusServiceUnavailable, "MCP approval verification unavailable", boundarypkg.ErrApprovalVerificationUnavailable.Error())
 		case action == "revoke" && r.Method == http.MethodPost:
 			var req struct {
 				Reason string `json:"reason"`
@@ -1348,6 +1299,10 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			}
 			approval, err := surfaces.AssertApprovalChallenge(req)
 			if err != nil {
+				if errors.Is(err, boundarypkg.ErrApprovalVerificationUnavailable) {
+					api.WriteError(w, http.StatusServiceUnavailable, "Approval verification unavailable", err.Error())
+					return
+				}
 				api.WriteBadRequest(w, err.Error())
 				return
 			}

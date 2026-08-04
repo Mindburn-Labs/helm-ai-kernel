@@ -60,11 +60,11 @@ surface for the `helm-ai-kernel` project.
   container images, SBOM, VEX, attestations, SDK packages, signatures, and
   `version-status.json`.
 - `scorecard.yml` carries only the trusted `main` and scheduled runs that
-  publish Scorecard results; `scorecard-pr.yml` keeps pull-request analysis
-  read-only and retains SARIF as artifact evidence. The OpenSSF results
-  webapp rejects a publishing workflow that defines any other job, so the
-  lanes live in separate files with unchanged job names
-  SARIF through OIDC and code-scanning authority.
+  publish Scorecard SARIF through OIDC and code-scanning authority;
+  `scorecard-pr.yml` keeps pull-request analysis read-only and retains SARIF
+  as artifact evidence. The OpenSSF results webapp rejects a publishing
+  workflow that defines any other job, so the lanes live in separate files
+  with unchanged job names.
 - `slsa-provenance.yml` is a manual repair workflow that re-attests the
   checksum-covered assets already attached to a published release. Normal tag
   releases generate SLSA provenance from `release.yml`.

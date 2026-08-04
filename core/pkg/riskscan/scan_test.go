@@ -643,3 +643,84 @@ func tarNames(t *testing.T, data []byte) []string {
 		}
 	}
 }
+
+// extractTarPack unpacks a pack archive produced by WriteEvidencePack in this
+// test into a fresh directory and returns that directory.
+func extractTarPack(t *testing.T, packPath string) string {
+	t.Helper()
+	data, err := os.ReadFile(packPath)
+	if err != nil {
+		t.Fatalf("read pack: %v", err)
+	}
+	dir := t.TempDir()
+	tr := tar.NewReader(bytes.NewReader(data))
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return dir
+		}
+		if err != nil {
+			t.Fatalf("read tar: %v", err)
+		}
+		name := filepath.FromSlash(filepath.Clean(header.Name))
+		if filepath.IsAbs(name) || strings.HasPrefix(name, "..") {
+			t.Fatalf("pack entry escapes destination: %s", header.Name)
+		}
+		target := filepath.Join(dir, name)
+		if header.Typeflag == tar.TypeDir {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		payload, err := io.ReadAll(tr)
+		if err != nil {
+			t.Fatalf("read tar entry %s: %v", header.Name, err)
+		}
+		if err := os.WriteFile(target, payload, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// The seal must bind to this machine's own file-dev key. Verifying with the
+// sealing data dir succeeds; verifying the same pack against a data dir that
+// never held the key must fail closed as self-attested (F-02).
+func TestVerifyEvidencePackTrustsOnlyLocalSealKey(t *testing.T) {
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
+	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", "")
+	t.Setenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX", "")
+
+	result, err := ScanWithEvidence(fixtureRoot(t), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	dataDir := t.TempDir()
+	pack := filepath.Join(t.TempDir(), "pack.tar")
+	if err := WriteEvidencePack(pack, result, nil, EvidencePackOptions{DataDir: dataDir, Now: fixedTime()}); err != nil {
+		t.Fatalf("write pack: %v", err)
+	}
+	packDir := extractTarPack(t, pack)
+
+	local := VerifyEvidencePack(packDir, VerifyEvidencePackOptions{DataDir: dataDir})
+	if !local.Verified {
+		t.Fatalf("pack sealed by the local key should verify: %+v", local)
+	}
+
+	foreign := VerifyEvidencePack(packDir, VerifyEvidencePackOptions{DataDir: t.TempDir()})
+	if foreign.Verified {
+		t.Fatal("pack sealed by another data dir's key must not verify without an explicit opt-in")
+	}
+	found := false
+	for _, msg := range foreign.Errors {
+		if strings.Contains(msg, "self-attested") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a self-attested trust error, got %+v", foreign.Errors)
+	}
+}

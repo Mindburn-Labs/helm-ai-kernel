@@ -201,8 +201,17 @@ DO $$
 DECLARE
     has_duplicate_active_binding BOOLEAN;
 BEGIN
+    IF NOT pg_catalog.has_table_privilege(
+        current_user,
+        'generated_spec_approval_ceremonies'::regclass,
+        'SELECT'
+    ) THEN
+        RAISE EXCEPTION 'generated spec approval ceremony migration blocked: migration role lacks SELECT privilege for legacy active-binding preflight'
+            USING ERRCODE = 'P0001';
+    END IF;
+
+    PERFORM pg_catalog.set_config('row_security', 'off', true);
     BEGIN
-        PERFORM set_config('row_security', 'off', true);
         SELECT EXISTS (
             SELECT 1
             FROM generated_spec_approval_ceremonies
@@ -212,7 +221,7 @@ BEGIN
         ) INTO has_duplicate_active_binding;
     EXCEPTION
         WHEN insufficient_privilege THEN
-            RAISE EXCEPTION 'generated spec approval ceremony migration blocked: cannot inspect legacy active bindings with complete visibility'
+            RAISE EXCEPTION 'generated spec approval ceremony migration blocked: row-level security prevents complete legacy active-binding visibility'
                 USING ERRCODE = 'P0001';
     END;
 

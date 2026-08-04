@@ -137,9 +137,9 @@ Release target: <https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0
   clients keep working unchanged.
 - Kernel library packages no longer pull the OpenTelemetry SDK; correlation
   uses a narrow internal package (HELM-460).
-- The `helm` executable alias is deprecated in favor of the canonical
-  `helm-ai-kernel` binary because it collides with Kubernetes Helm; the alias
-  remains through the v0.8 deprecation window.
+- The canonical executable is `helm-ai-kernel`; release artifacts, the
+  Homebrew formula, and documentation do not ship a `helm` executable, so the
+  binary cannot collide with Kubernetes Helm on PATH.
 
 ### Fixed
 

@@ -253,6 +253,41 @@ func TestPreimageTreatsAbsenceAsState(t *testing.T) {
 	}
 }
 
+func TestCapturePreimagePreservesWhitespacePath(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepo(t)
+	base := headSHA(t, repo)
+	const name = "two words.txt"
+	patch := capturePatch(t, repo, base, func(dir string) {
+		writeFile(t, filepath.Join(dir, name), []byte("created\n"))
+	})
+
+	pre, err := CapturePreimage(context.Background(), repo, patch)
+	if err != nil {
+		t.Fatalf("CapturePreimage: %v", err)
+	}
+	if got, ok := pre.Entries[name]; !ok || got != absentMarker {
+		t.Fatalf("preimage[%q] = %q, %v; want absent marker", name, got, ok)
+	}
+}
+
+func TestParseNumstatPathsRejectsMalformedAndRenameForms(t *testing.T) {
+	root := t.TempDir()
+	for _, tc := range []struct {
+		name string
+		out  string
+	}{
+		{"missing tab delimiters", "1 0 file.txt\n"},
+		{"rename", "0\t0\told.txt => new.txt\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseNumstatPaths(root, tc.out); err == nil {
+				t.Fatal("expected malformed numstat to be refused")
+			}
+		})
+	}
+}
+
 // The preimage digest is order-independent, so two captures of the same state
 // compare equal.
 func TestPreimageDigestIsStable(t *testing.T) {

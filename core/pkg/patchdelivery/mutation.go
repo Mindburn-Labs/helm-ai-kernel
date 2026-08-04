@@ -243,18 +243,29 @@ func patchPaths(ctx context.Context, root string, patch []byte) ([]string, error
 	if len(patch) == 0 {
 		return nil, nil
 	}
-	out, err := gitApply(ctx, root, patch, "--numstat")
+	out, diagnostic, err := gitApplyNumstat(ctx, root, patch)
 	if err != nil {
-		return nil, fmt.Errorf("delivery: cannot read patch contents: %s", oneLine(out))
+		return nil, fmt.Errorf("delivery: cannot read patch contents: %s", oneLine(diagnostic))
 	}
+	return parseNumstatPaths(root, out)
+}
+
+func parseNumstatPaths(root, out string) ([]string, error) {
+	if out == "" {
+		return nil, errors.New("delivery: patch numstat listed no paths")
+	}
+
 	seen := make(map[string]struct{})
 	var paths []string
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) < 3 {
-			continue
+	for _, line := range strings.Split(strings.TrimSuffix(out, "\n"), "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) != 3 || !isNumstatCount(fields[0]) || !isNumstatCount(fields[1]) || fields[2] == "" {
+			return nil, fmt.Errorf("delivery: malformed patch numstat: %q", line)
 		}
-		p := fields[len(fields)-1]
+		p := fields[2]
+		if strings.Contains(p, " => ") {
+			return nil, fmt.Errorf("delivery: unmodelled rename or copy in patch numstat: %q", p)
+		}
 		// The patch is attacker-influenced input. git apply refuses to escape the
 		// tree, but this code also reads and hashes these paths directly, so it
 		// validates containment itself rather than inheriting the guarantee.
@@ -269,6 +280,21 @@ func patchPaths(ctx context.Context, root string, patch []byte) ([]string, error
 	}
 	sort.Strings(paths)
 	return paths, nil
+}
+
+func isNumstatCount(value string) bool {
+	if value == "-" {
+		return true
+	}
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func snapshot(root string, paths []string) (Preimage, error) {
@@ -319,6 +345,20 @@ func gitApply(ctx context.Context, dir string, patch []byte, extra ...string) (s
 	cmd.Stderr = &out
 	err := cmd.Run()
 	return out.String(), err
+}
+
+// gitApplyNumstat keeps the machine-readable numstat stream separate from
+// diagnostics. A valid patch may warn about trailing whitespace; treating that
+// stderr text as a numstat record would make the preimage path parser reject it.
+func gitApplyNumstat(ctx context.Context, dir string, patch []byte) (string, string, error) {
+	cmd := exec.CommandContext(ctx, "git", "apply", "--binary", "--numstat", "-")
+	cmd.Dir = dir
+	cmd.Stdin = bytes.NewReader(patch)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
 }
 
 func withinRoot(path, root string) bool {

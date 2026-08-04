@@ -297,8 +297,14 @@ func TestClaudeReadonlyProbeFailsClosedWhenHelpFails(t *testing.T) {
 }
 
 func TestRunRefusesUnresolvableBinary(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "no-such-vendor-cli")
-	spec := RunSpec{Tree: t.TempDir(), Prompt: "hi", Access: AccessWorkspaceWrite}
+	runtime := t.TempDir()
+	missing := filepath.Join(runtime, "no-such-vendor-cli")
+	spec := RunSpec{
+		Tree:    filepath.Join(runtime, "tree"),
+		HomeDir: filepath.Join(runtime, "home"),
+		Prompt:  "hi",
+		Access:  AccessWorkspaceWrite,
+	}
 
 	claude := &ClaudeAdapter{Binary: missing}
 	if _, err := claude.Run(context.Background(), spec); !errors.Is(err, ErrAdapterNotFound) {
@@ -307,6 +313,40 @@ func TestRunRefusesUnresolvableBinary(t *testing.T) {
 	codex := &CodexAdapter{Binary: missing}
 	if _, err := codex.Run(context.Background(), spec); !errors.Is(err, ErrAdapterNotFound) {
 		t.Errorf("codex err = %v, want ErrAdapterNotFound", err)
+	}
+}
+
+func TestAdaptersRefuseInvalidScopedHomeBeforeBinaryResolution(t *testing.T) {
+	runtime := t.TempDir()
+	tree := filepath.Join(runtime, "tree")
+	missing := filepath.Join(runtime, "no-such-vendor-cli")
+	adapters := []Adapter{
+		&ClaudeAdapter{Binary: missing},
+		&CodexAdapter{Binary: missing},
+	}
+	for _, tc := range []struct {
+		name string
+		spec RunSpec
+		want error
+	}{
+		{
+			name: "missing home",
+			spec: RunSpec{Tree: tree, Prompt: "hi", Access: AccessWorkspaceWrite},
+			want: ErrHomeDirRequired,
+		},
+		{
+			name: "home inside tree",
+			spec: RunSpec{Tree: tree, HomeDir: filepath.Join(tree, "home"), Prompt: "hi", Access: AccessWorkspaceWrite},
+			want: ErrHomeDirInsideTree,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, adapter := range adapters {
+				if _, err := adapter.Run(context.Background(), tc.spec); !errors.Is(err, tc.want) {
+					t.Errorf("%s Run error = %v, want %v", adapter.ID(), err, tc.want)
+				}
+			}
+		})
 	}
 }
 

@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -165,11 +166,14 @@ func TestComposeEnvFencesTheUnselectedProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := ComposeEnv(seededProviderEnv(), RunSpec{
+			env, err := ComposeEnv(seededProviderEnv(), RunSpec{
 				Tree:       "/runtime/tree",
 				HomeDir:    "/runtime/home",
 				Credential: tt.route,
 			})
+			if err != nil {
+				t.Fatalf("ComposeEnv: %v", err)
+			}
 
 			secret, ok := lookup(env, tt.wantVar)
 			if !ok {
@@ -194,10 +198,13 @@ func TestComposeEnvFencesTheUnselectedProvider(t *testing.T) {
 }
 
 func TestComposeEnvAppliesScopedHome(t *testing.T) {
-	env := ComposeEnv([]string{"HOME=/Users/operator", "PATH=/bin"}, RunSpec{
+	env, err := ComposeEnv([]string{"HOME=/Users/operator", "PATH=/bin"}, RunSpec{
 		Tree:    "/runtime/tree",
 		HomeDir: "/runtime/home",
 	})
+	if err != nil {
+		t.Fatalf("ComposeEnv: %v", err)
+	}
 
 	want := map[string]string{
 		"HOME":              "/runtime/home",
@@ -220,7 +227,7 @@ func TestComposeEnvAppliesScopedHome(t *testing.T) {
 // TestComposeEnvScrubsExtraEnv keeps ExtraEnv from becoming the hole in the
 // fence: the credential route is the only sanctioned way in.
 func TestComposeEnvScrubsExtraEnv(t *testing.T) {
-	env := ComposeEnv([]string{"PATH=/bin"}, RunSpec{
+	env, err := ComposeEnv([]string{"PATH=/bin"}, RunSpec{
 		Tree:    "/runtime/tree",
 		HomeDir: "/runtime/home",
 		ExtraEnv: map[string]string{
@@ -230,6 +237,9 @@ func TestComposeEnvScrubsExtraEnv(t *testing.T) {
 		},
 		Credential: CredentialRoute{ID: "route-anthropic", EnvVar: "ANTHROPIC_API_KEY", Secret: "sk-routed"},
 	})
+	if err != nil {
+		t.Fatalf("ComposeEnv: %v", err)
+	}
 
 	if _, present := lookup(env, "OPENAI_API_KEY"); present {
 		t.Error("ExtraEnv smuggled an unselected provider credential past the fence")
@@ -239,6 +249,12 @@ func TestComposeEnvScrubsExtraEnv(t *testing.T) {
 	}
 	if value, ok := lookup(env, "HELM_RUN_ID"); !ok || value != "run-1" {
 		t.Error("ExtraEnv dropped a non-credential variable")
+	}
+}
+
+func TestComposeEnvRejectsMissingScopedHome(t *testing.T) {
+	if _, err := ComposeEnv([]string{"PATH=/bin"}, RunSpec{}); !errors.Is(err, ErrHomeDirRequired) {
+		t.Errorf("err = %v, want ErrHomeDirRequired", err)
 	}
 }
 

@@ -160,16 +160,16 @@ func CleanEnv() []string {
 // scopedHomeEnv mirrors worktree.Envelope.Env: the four variables that move a
 // vendor CLI's sessions, config, and credential cache out of the operator's
 // real HOME and into the run's scoped one.
-func scopedHomeEnv(homeDir string) map[string]string {
+func scopedHomeEnv(homeDir string) (map[string]string, error) {
 	if strings.TrimSpace(homeDir) == "" {
-		return nil
+		return nil, ErrHomeDirRequired
 	}
 	return map[string]string{
 		"HOME":              homeDir,
 		"XDG_CONFIG_HOME":   filepath.Join(homeDir, ".config"),
 		"CLAUDE_CONFIG_DIR": filepath.Join(homeDir, ".claude"),
 		"CODEX_HOME":        filepath.Join(homeDir, ".codex"),
-	}
+	}, nil
 }
 
 // ComposeEnv builds the child environment in the one order that keeps the
@@ -183,10 +183,13 @@ func scopedHomeEnv(homeDir string) map[string]string {
 // Step 3 is scrubbed for the same reason step 1 is. ExtraEnv is a convenience
 // channel, and letting a provider key through it would mean the fence held
 // everywhere except the place a caller in a hurry would reach for.
-func ComposeEnv(base []string, spec RunSpec) []string {
+func ComposeEnv(base []string, spec RunSpec) ([]string, error) {
 	env := ScrubProviderEnv(base)
 
-	scoped := scopedHomeEnv(spec.HomeDir)
+	scoped, err := scopedHomeEnv(spec.HomeDir)
+	if err != nil {
+		return nil, err
+	}
 	for _, name := range sortedKeys(scoped) {
 		env = setEnv(env, name, scoped[name])
 	}
@@ -202,7 +205,7 @@ func ComposeEnv(base []string, spec RunSpec) []string {
 	if name := strings.TrimSpace(spec.Credential.EnvVar); name != "" {
 		env = setEnv(env, name, spec.Credential.Secret)
 	}
-	return env
+	return env, nil
 }
 
 // setEnv replaces an assignment in place, or appends it. Replacing in place

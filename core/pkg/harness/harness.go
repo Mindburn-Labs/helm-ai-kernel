@@ -47,6 +47,18 @@ var (
 	// exists to provide.
 	ErrTreeRequired = errors.New("harness: run spec requires an execution tree")
 
+	// ErrHomeDirRequired reports a RunSpec with no scoped HOME. Omitting it
+	// would let a vendor CLI fall back to the operator's credential state.
+	ErrHomeDirRequired = errors.New("harness: run spec requires a scoped home directory")
+
+	// ErrHomeDirInsideTree reports a scoped HOME that would be captured in the
+	// worktree diff together with vendor session and credential files.
+	ErrHomeDirInsideTree = errors.New("harness: scoped home directory is inside the execution tree")
+
+	// ErrHomeDirNotSibling reports a scoped HOME that is not the execution
+	// tree's sibling, the placement contract produced by worktree.Envelope.
+	ErrHomeDirNotSibling = errors.New("harness: scoped home directory must be a sibling of the execution tree")
+
 	// ErrPromptRequired reports a RunSpec with neither prompt nor instructions.
 	ErrPromptRequired = errors.New("harness: run spec requires a prompt")
 )
@@ -343,6 +355,23 @@ func validateRunSpec(spec RunSpec, caps CapabilityProfile) error {
 	if strings.TrimSpace(spec.Tree) == "" {
 		return ErrTreeRequired
 	}
+	if strings.TrimSpace(spec.HomeDir) == "" {
+		return ErrHomeDirRequired
+	}
+	treePath, err := filepath.Abs(spec.Tree)
+	if err != nil {
+		return fmt.Errorf("%w: resolve execution tree: %v", ErrTreeRequired, err)
+	}
+	homePath, err := filepath.Abs(spec.HomeDir)
+	if err != nil {
+		return fmt.Errorf("%w: resolve scoped home: %v", ErrHomeDirRequired, err)
+	}
+	if pathWithin(homePath, treePath) {
+		return ErrHomeDirInsideTree
+	}
+	if filepath.Dir(homePath) != filepath.Dir(treePath) {
+		return ErrHomeDirNotSibling
+	}
 	if strings.TrimSpace(spec.Prompt) == "" && strings.TrimSpace(spec.Instructions) == "" {
 		return ErrPromptRequired
 	}
@@ -350,6 +379,14 @@ func validateRunSpec(spec RunSpec, caps CapabilityProfile) error {
 		return fmt.Errorf("%w: %q", ErrAccessUnsupported, spec.Access)
 	}
 	return nil
+}
+
+func pathWithin(path, base string) bool {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // composePrompt folds Instructions into the prompt.

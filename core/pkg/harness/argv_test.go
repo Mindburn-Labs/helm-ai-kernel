@@ -309,10 +309,52 @@ func TestValidateRunSpecRejectsMissingTreeAndPrompt(t *testing.T) {
 	if err := validateRunSpec(RunSpec{Prompt: "hi", Access: AccessReadonly}, caps); !errors.Is(err, ErrTreeRequired) {
 		t.Errorf("err = %v, want ErrTreeRequired", err)
 	}
-	if err := validateRunSpec(RunSpec{Tree: "/t", Access: AccessReadonly}, caps); !errors.Is(err, ErrPromptRequired) {
+	if err := validateRunSpec(RunSpec{Tree: "/t", HomeDir: "/home", Access: AccessReadonly}, caps); !errors.Is(err, ErrPromptRequired) {
 		t.Errorf("err = %v, want ErrPromptRequired", err)
 	}
-	if err := validateRunSpec(RunSpec{Tree: "/t", Prompt: "hi", Access: "nope"}, caps); !errors.Is(err, ErrAccessUnsupported) {
+	if err := validateRunSpec(RunSpec{Tree: "/t", HomeDir: "/home", Prompt: "hi", Access: "nope"}, caps); !errors.Is(err, ErrAccessUnsupported) {
 		t.Errorf("err = %v, want ErrAccessUnsupported", err)
+	}
+}
+
+func TestValidateRunSpecRequiresScopedSiblingHome(t *testing.T) {
+	caps := claudeCapabilities()
+	for _, tc := range []struct {
+		name string
+		spec RunSpec
+		want error
+	}{
+		{
+			name: "missing home",
+			spec: RunSpec{Tree: "/runtime/tree", Prompt: "hi", Access: AccessReadonly},
+			want: ErrHomeDirRequired,
+		},
+		{
+			name: "home inside tree",
+			spec: RunSpec{Tree: "/runtime/tree", HomeDir: "/runtime/tree/home", Prompt: "hi", Access: AccessReadonly},
+			want: ErrHomeDirInsideTree,
+		},
+		{
+			name: "home outside sibling pair",
+			spec: RunSpec{Tree: "/runtime/tree", HomeDir: "/other/home", Prompt: "hi", Access: AccessReadonly},
+			want: ErrHomeDirNotSibling,
+		},
+		{
+			name: "sibling home",
+			spec: RunSpec{Tree: "/runtime/tree", HomeDir: "/runtime/home", Prompt: "hi", Access: AccessReadonly},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateRunSpec(tc.spec, caps)
+			if tc.want == nil {
+				if err != nil {
+					t.Fatalf("validateRunSpec: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, tc.want) {
+				t.Errorf("err = %v, want %v", err, tc.want)
+			}
+		})
 	}
 }

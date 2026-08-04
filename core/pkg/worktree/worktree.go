@@ -82,11 +82,11 @@ func Create(opts Options) (*Envelope, error) {
 		return nil, fmt.Errorf("%w: attempt id %q", ErrUnsafeSegment, opts.AttemptID)
 	}
 
-	runtimeRoot, err := filepath.Abs(opts.RuntimeRoot)
+	runtimeRoot, err := resolvePath(opts.RuntimeRoot)
 	if err != nil {
 		return nil, fmt.Errorf("worktree: resolve runtime root: %w", err)
 	}
-	repoRoot, err := filepath.Abs(opts.RepoRoot)
+	repoRoot, err := resolvePath(opts.RepoRoot)
 	if err != nil {
 		return nil, fmt.Errorf("worktree: resolve repo root: %w", err)
 	}
@@ -96,11 +96,17 @@ func Create(opts Options) (*Envelope, error) {
 		return nil, fmt.Errorf("worktree: runtime root %q is inside repo root %q", runtimeRoot, repoRoot)
 	}
 
-	root := filepath.Join(runtimeRoot, "workspaces", opts.RunID, opts.AttemptID)
+	root, err := resolvePath(filepath.Join(runtimeRoot, "workspaces", opts.RunID, opts.AttemptID))
+	if err != nil {
+		return nil, fmt.Errorf("worktree: resolve envelope root: %w", err)
+	}
 	// Defence in depth: even with validated segments, confirm the join landed
 	// under the intended base before any mkdir.
 	if !isWithin(root, runtimeRoot) {
 		return nil, fmt.Errorf("%w: resolved path escapes runtime root", ErrUnsafeSegment)
+	}
+	if isWithin(root, repoRoot) {
+		return nil, fmt.Errorf("worktree: runtime root %q is inside repo root %q", runtimeRoot, repoRoot)
 	}
 
 	baseRef := opts.BaseRef
@@ -198,6 +204,42 @@ func gitOutput(dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// resolvePath returns an absolute path with every existing component resolved.
+// A runtime root may not exist yet, so its nearest existing parent is resolved
+// before the missing suffix is reattached. Containment checks must use this
+// effective path: filepath.Abs alone leaves a symlinked runtime root looking
+// safely outside the live repository when it is not.
+func resolvePath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+
+	current := abs
+	var suffix []string
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
+			}
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return resolved, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("no existing parent for %q", abs)
+		}
+		suffix = append(suffix, filepath.Base(current))
+		current = parent
+	}
 }
 
 // isWithin reports whether path is base or lives under it, comparing cleaned

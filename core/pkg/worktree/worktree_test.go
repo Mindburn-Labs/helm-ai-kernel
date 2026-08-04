@@ -212,6 +212,26 @@ func TestCreateRejectsRuntimeRootInsideRepo(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsSymlinkedRuntimeRootInsideRepo(t *testing.T) {
+	repo := newRepo(t)
+	runtimeLink := filepath.Join(t.TempDir(), "runtime")
+	if err := os.Symlink(repo, runtimeLink); err != nil {
+		t.Skipf("create runtime symlink: %v", err)
+	}
+	runtime := filepath.Join(runtimeLink, "new-runtime")
+
+	if _, err := Create(Options{
+		RepoRoot:    repo,
+		RunID:       "run01",
+		AttemptID:   "a01",
+		RuntimeRoot: runtime,
+	}); err == nil {
+		t.Fatal("expected a refusal for a runtime root symlinked into the repo")
+	} else if !strings.Contains(err.Error(), "inside repo root") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // The live project tree must be untouched by isolated work — that is the whole
 // isolation claim.
 func TestLiveTreeUnaffected(t *testing.T) {

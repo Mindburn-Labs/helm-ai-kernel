@@ -86,12 +86,16 @@ func (a *CodexAdapter) Run(ctx context.Context, spec RunSpec) (<-chan Event, err
 	if err != nil {
 		return nil, err
 	}
+	env, err := ComposeEnv(CleanEnv(), spec)
+	if err != nil {
+		return nil, err
+	}
 
 	return runProcess(ctx, processSpec{
 		binary:          binary,
 		args:            args,
 		dir:             spec.Tree,
-		env:             ComposeEnv(CleanEnv(), spec),
+		env:             env,
 		credentialRoute: spec.Credential.ID,
 		parse:           parseCodexLine,
 	}), nil

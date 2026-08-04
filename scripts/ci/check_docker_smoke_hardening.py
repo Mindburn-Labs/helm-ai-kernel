@@ -39,6 +39,12 @@ def check_docker_smoke(path: Path) -> None:
         'HELM_ADMIN_API_KEY="$ADMIN_KEY"',
         'HELM_SERVICE_API_KEY="$SERVICE_KEY"',
         'EVIDENCE_SIGNING_KEY="$EVIDENCE_SIGNING_KEY"',
+        'AUTHORITY_INIT_IMAGE="docker.io/library/busybox@sha256:',
+        "require_pinned_authority_init_image()",
+        'chown 65532:65532 /runtime-data && chmod 0700 /runtime-data',
+        "ARTIFACT_DIR=",
+        "diagnose_runtime_failure()",
+        'docker logs --tail 200 "$CONTAINER_NAME"',
     ]:
         require(text, token, path)
 
@@ -50,6 +56,8 @@ def check_docker_smoke(path: Path) -> None:
         '-p "${HEALTH_PORT}:8081"',
         '-p "0.0.0.0:${API_PORT}:8080"',
         '-p "0.0.0.0:${HEALTH_PORT}:8081"',
+        'chmod 0777 "$DATA_DIR"',
+        'busybox:1.36.1',
     ]:
         forbid(text, token, path)
 
@@ -62,6 +70,16 @@ def check_compose(path: Path) -> None:
     forbid(text, '"${HELM_SMOKE_HEALTH_PORT:-8081}:8081"', path)
     forbid(text, '"0.0.0.0:${HELM_SMOKE_API_PORT:-8080}:8080"', path)
     forbid(text, '"0.0.0.0:${HELM_SMOKE_HEALTH_PORT:-8081}:8081"', path)
+    for token in [
+        "authority-state:",
+        "image: docker.io/library/busybox@sha256:",
+        'user: "0:0"',
+        "chown 65532:65532 /var/lib/helm-ai-kernel",
+        "chmod 0700 /var/lib/helm-ai-kernel",
+        "condition: service_completed_successfully",
+    ]:
+        require(text, token, path)
+    forbid(text, "image: busybox:1.36.1", path)
 
 
 def main() -> None:

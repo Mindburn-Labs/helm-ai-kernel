@@ -46,6 +46,15 @@ type EvidencePackOptions struct {
 	Now     time.Time
 }
 
+// VerifyEvidencePackOptions locates the local trust material used while
+// verifying a sealed scan pack.
+type VerifyEvidencePackOptions struct {
+	// DataDir is the HELM local directory holding this machine's file-dev
+	// evidence key. When empty, HELM_DATA_DIR and then ~/.helm are used, the
+	// same resolution WriteEvidencePack applies while sealing.
+	DataDir string
+}
+
 // EvidencePackVerification is intentionally limited to offline artifact
 // integrity. A successful result never verifies runtime receipt provenance,
 // agent authorization, execution, or live posture.
@@ -389,6 +398,31 @@ func resolveScanEvidenceDataDir(dataDir string) (string, error) {
 	return filepath.Join(home, ".helm"), nil
 }
 
+// localScanTrustConfig trusts exactly one seal key: this machine's own
+// file-dev evidence key, when one already exists under the resolved data dir.
+// Verification never creates a key, and a pack sealed by any other key stays
+// self-attested so the shared seal verifier can fail closed on it (F-02).
+func localScanTrustConfig(dataDir string) *evidencepkg.EvidencePackTrustConfig {
+	trust := &evidencepkg.EvidencePackTrustConfig{ActiveProfile: evidencepkg.EvidenceTrustProfileDevLocal}
+	resolved, err := resolveScanEvidenceDataDir(dataDir)
+	if err != nil {
+		return trust
+	}
+	if _, err := os.Stat(evidencepkg.FileDevEvidenceKeyPath(resolved)); err != nil {
+		return trust
+	}
+	signer, err := evidencepkg.NewFileDevEvidenceSigner(resolved)
+	if err != nil {
+		return trust
+	}
+	trust.Signer = evidencepkg.EvidencePackTrustSigner{
+		Type:      signer.SignerType(),
+		KeyID:     signer.KeyID(),
+		PublicKey: signer.PublicKeyHex(),
+	}
+	return trust
+}
+
 // IsEvidencePack reports whether a directory declares the risk-scan/v1
 // profile. It is used to keep the generic verifier from treating this local
 // integrity artifact as a receipt-backed EvidencePack.
@@ -404,7 +438,12 @@ func IsEvidencePack(packDir string) bool {
 // VerifyEvidencePack verifies only the profile's sealed, offline artifact
 // contract. It deliberately reports receipt provenance as unverified or not
 // applicable instead of treating a local scan as proof of governed execution.
-func VerifyEvidencePack(packDir string) EvidencePackVerification {
+//
+// Seal trust is limited to this machine's own file-dev evidence key (resolved
+// through opts.DataDir). A pack sealed by any other key is self-attested and
+// fails closed unless the operator opts in through the standard evidence
+// trust environment variables (F-02).
+func VerifyEvidencePack(packDir string, opts VerifyEvidencePackOptions) EvidencePackVerification {
 	result := EvidencePackVerification{
 		Profile:           ScanEvidencePackProfile,
 		VerificationScope: scanEvidencePackScope,
@@ -425,10 +464,9 @@ func VerifyEvidencePack(packDir string) EvidencePackVerification {
 			result.Errors = append(result.Errors, err.Error())
 		}
 	}
-	trust := &evidencepkg.EvidencePackTrustConfig{ActiveProfile: evidencepkg.EvidenceTrustProfileDevLocal}
 	seal := evidencepkg.VerifyEvidencePackSeal(packDir, evidencepkg.VerifyEvidencePackSealOptions{
 		Profile:     evidencepkg.EvidenceTrustProfileDevLocal,
-		TrustConfig: trust,
+		TrustConfig: localScanTrustConfig(opts.DataDir),
 	})
 	result.SealState = seal.State
 	if seal.State != "valid" || !seal.SignatureValid {

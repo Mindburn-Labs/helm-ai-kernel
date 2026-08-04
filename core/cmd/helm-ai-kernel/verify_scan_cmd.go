@@ -17,8 +17,10 @@ func runVerifyScanCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("verify scan", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 	var bundle string
+	var dataDir string
 	var jsonOutput bool
 	cmd.StringVar(&bundle, "bundle", "", "Path to a risk-scan/v1 EvidencePack directory or archive")
+	cmd.StringVar(&dataDir, "data-dir", "", "HELM local directory holding the local scan evidence seal key")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output the offline integrity result as JSON")
 	normalized, err := normalizeVerifyArgs(args)
 	if err != nil {
@@ -62,7 +64,7 @@ func runVerifyScanCmd(args []string, stdout, stderr io.Writer) int {
 		}
 		verifyTarget = tempDir
 	}
-	result := riskscan.VerifyEvidencePack(verifyTarget)
+	result := riskscan.VerifyEvidencePack(verifyTarget, riskscan.VerifyEvidencePackOptions{DataDir: dataDir})
 	if jsonOutput {
 		data, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {

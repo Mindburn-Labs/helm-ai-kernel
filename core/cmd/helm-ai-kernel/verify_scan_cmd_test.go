@@ -13,9 +13,15 @@ import (
 )
 
 // writeTestScanPack scans a small synthetic workspace and returns the path to a
-// risk-scan/v1 EvidencePack archive.
-func writeTestScanPack(t *testing.T, dir string) string {
+// risk-scan/v1 EvidencePack archive. The sealing key's data dir is exported via
+// HELM_DATA_DIR so that verification in the same test trusts this machine's own
+// file-dev key instead of relying on self-attestation (F-02).
+func writeTestScanPack(t *testing.T, dir string) (string, string) {
 	t.Helper()
+	dataDir := t.TempDir()
+	t.Setenv("HELM_DATA_DIR", dataDir)
+	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", "")
+	t.Setenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX", "")
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{"mcpServers":{"prod":{"command":"deploy-production"}}}`), 0o644); err != nil {
 		t.Fatal(err)
@@ -38,19 +44,48 @@ func writeTestScanPack(t *testing.T, dir string) string {
 		t.Fatalf("scan: %v", err)
 	}
 	pack := filepath.Join(dir, "pack.tar")
-	if err := riskscan.WriteEvidencePack(pack, result, nil, riskscan.EvidencePackOptions{DataDir: t.TempDir(), Now: now}); err != nil {
+	if err := riskscan.WriteEvidencePack(pack, result, nil, riskscan.EvidencePackOptions{DataDir: dataDir, Now: now}); err != nil {
 		t.Fatalf("write pack: %v", err)
 	}
-	return pack
+	return pack, dataDir
+}
+
+// A pack sealed by another machine's key must fail closed: the local data dir
+// holds no matching trusted key, and self-attestation requires an explicit
+// opt-in (F-02).
+func TestCLI_VerifyScan_ForeignSealFailsClosedWithoutOptIn(t *testing.T) {
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
+	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", "")
+	t.Setenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX", "")
+	dir := t.TempDir()
+	pack, _ := writeTestScanPack(t, dir)
+	// Re-point the local trust root at an empty data dir, as on a machine that
+	// merely received the archive.
+	t.Setenv("HELM_DATA_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	if rc := runVerifyScanCmd([]string{"--bundle", pack}, &stdout, &stderr); rc != 1 {
+		t.Fatalf("expected rc=1 for a foreign seal, got %d (out=%s)", rc, stdout.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte("self-attested")) {
+		t.Fatalf("expected a self-attested trust error, got %s", stdout.String())
+	}
+
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
+	stdout.Reset()
+	stderr.Reset()
+	if rc := runVerifyScanCmd([]string{"--bundle", pack}, &stdout, &stderr); rc != 0 {
+		t.Fatalf("explicit opt-in should verify integrity: rc=%d out=%s", rc, stdout.String())
+	}
 }
 
 func TestCLI_VerifyScan_ArchiveAndDirectory(t *testing.T) {
 	dir := t.TempDir()
-	pack := writeTestScanPack(t, dir)
+	pack, dataDir := writeTestScanPack(t, dir)
 
 	// Archive input, routed through the top-level verify command to exercise dispatch.
 	var stdout, stderr bytes.Buffer
-	if rc := runVerifyCmd([]string{"scan", "--bundle", pack}, &stdout, &stderr); rc != 0 {
+	if rc := runVerifyCmd([]string{"scan", "--bundle", pack, "--data-dir", dataDir}, &stdout, &stderr); rc != 0 {
 		t.Fatalf("archive rc=%d stderr=%s out=%s", rc, stderr.String(), stdout.String())
 	}
 	if !bytes.Contains(stdout.Bytes(), []byte("VERIFIED")) {
@@ -64,17 +99,17 @@ func TestCLI_VerifyScan_ArchiveAndDirectory(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if rc := runVerifyScanCmd([]string{extracted}, &stdout, &stderr); rc != 0 {
+	if rc := runVerifyScanCmd([]string{"--data-dir", dataDir, extracted}, &stdout, &stderr); rc != 0 {
 		t.Fatalf("directory rc=%d stderr=%s out=%s", rc, stderr.String(), stdout.String())
 	}
 }
 
 func TestCLI_VerifyScan_JSONOutput(t *testing.T) {
 	dir := t.TempDir()
-	pack := writeTestScanPack(t, dir)
+	pack, dataDir := writeTestScanPack(t, dir)
 
 	var stdout, stderr bytes.Buffer
-	if rc := runVerifyScanCmd([]string{"--bundle", pack, "--json"}, &stdout, &stderr); rc != 0 {
+	if rc := runVerifyScanCmd([]string{"--bundle", pack, "--json", "--data-dir", dataDir}, &stdout, &stderr); rc != 0 {
 		t.Fatalf("rc=%d stderr=%s", rc, stderr.String())
 	}
 	var res riskscan.EvidencePackVerification
@@ -91,7 +126,7 @@ func TestCLI_VerifyScan_JSONOutput(t *testing.T) {
 // is computed, in riskscan.TestVerifyScanEvidenceSummaryRejectsTrailingData.
 func TestCLI_VerifyScan_TamperedPackFails(t *testing.T) {
 	dir := t.TempDir()
-	pack := writeTestScanPack(t, dir)
+	pack, dataDir := writeTestScanPack(t, dir)
 	extracted := t.TempDir()
 	if err := extractEvidenceArchive(pack, extracted); err != nil {
 		t.Fatalf("extract: %v", err)
@@ -106,7 +141,7 @@ func TestCLI_VerifyScan_TamperedPackFails(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	if rc := runVerifyScanCmd([]string{extracted}, &stdout, &stderr); rc != 1 {
+	if rc := runVerifyScanCmd([]string{"--data-dir", dataDir, extracted}, &stdout, &stderr); rc != 1 {
 		t.Fatalf("expected rc=1 for a tampered pack, got %d (out=%s)", rc, stdout.String())
 	}
 	if !bytes.Contains(stdout.Bytes(), []byte("FAILED")) {
@@ -134,7 +169,7 @@ func TestCLI_VerifyScan_UsageErrors(t *testing.T) {
 // a real pack the command would otherwise succeed and silently ignore the extra.
 func TestCLI_VerifyScan_RejectsExtraPositionalWithBundleFlag(t *testing.T) {
 	dir := t.TempDir()
-	pack := writeTestScanPack(t, dir)
+	pack, _ := writeTestScanPack(t, dir)
 
 	var stdout, stderr bytes.Buffer
 	if rc := runVerifyScanCmd([]string{"--bundle", pack, "extra"}, &stdout, &stderr); rc != 2 {
@@ -144,7 +179,7 @@ func TestCLI_VerifyScan_RejectsExtraPositionalWithBundleFlag(t *testing.T) {
 
 func TestCLI_Verify_RejectsRiskScanPack(t *testing.T) {
 	dir := t.TempDir()
-	pack := writeTestScanPack(t, dir)
+	pack, _ := writeTestScanPack(t, dir)
 	extracted := t.TempDir()
 	if err := extractEvidenceArchive(pack, extracted); err != nil {
 		t.Fatalf("extract: %v", err)

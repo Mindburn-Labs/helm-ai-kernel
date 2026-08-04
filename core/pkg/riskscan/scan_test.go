@@ -117,6 +117,34 @@ func TestEvidencePackTarUsesCurrentContract(t *testing.T) {
 	if result := VerifyEvidencePack(extracted); !result.Verified {
 		t.Fatalf("verify evidence pack: %+v", result)
 	}
+	packPath := filepath.Join(extracted, riskScanEvidencePackFile)
+	packJSON, err := os.ReadFile(packPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(packJSON, &document); err != nil {
+		t.Fatal(err)
+	}
+	var attestation map[string]json.RawMessage
+	if err := json.Unmarshal(document["attestation"], &attestation); err != nil {
+		t.Fatal(err)
+	}
+	delete(attestation, "pack_hash")
+	document["attestation"], err = json.Marshal(attestation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packJSON, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(packPath, append(packJSON, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := VerifyEvidencePack(extracted); result.Verified || !strings.Contains(strings.Join(result.Errors, "\n"), "attestation.pack_hash is required") {
+		t.Fatalf("missing pack hash verified: %+v", result)
+	}
 	if err := os.WriteFile(filepath.Join(extracted, "unexpected.json"), []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -85,7 +84,7 @@ func TestScanProjectionPreviewsAndPackOmitRawInputs(t *testing.T) {
 	}
 }
 
-func TestEvidencePackTarIsDeterministicAndLimited(t *testing.T) {
+func TestEvidencePackTarUsesCurrentContract(t *testing.T) {
 	envelope, err := Scan(fixtureRoot(t), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
 	if err != nil {
 		t.Fatalf("scan: %v", err)
@@ -95,33 +94,34 @@ func TestEvidencePackTarIsDeterministicAndLimited(t *testing.T) {
 	previews := map[string][]byte{"preview/report.html": html, "preview/report.md": md}
 
 	first := filepath.Join(t.TempDir(), "a.tar")
-	second := filepath.Join(t.TempDir(), "b.tar")
 	if err := WriteEvidencePack(first, envelope, previews); err != nil {
 		t.Fatalf("write first: %v", err)
 	}
-	if err := WriteEvidencePack(second, envelope, previews); err != nil {
-		t.Fatalf("write second: %v", err)
-	}
 	firstBytes, _ := os.ReadFile(first)
-	secondBytes, _ := os.ReadFile(second)
-	if !bytes.Equal(firstBytes, secondBytes) {
-		t.Fatal("evidence pack tar should be deterministic")
-	}
 
 	names := tarNames(t, firstBytes)
 	want := []string{
-		"preview/report.html",
-		"preview/report.md",
-		"privacy-manifest.json",
+		"evidence-pack.json",
+		"previews/report.html",
+		"previews/report.md",
 		"risk-envelope.json",
-		"schema-validation.json",
-		"source-pack-hash.json",
 	}
-	if !reflect.DeepEqual(names, want) {
+	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("pack names mismatch\ngot:  %#v\nwant: %#v", names, want)
 	}
 	if bytes.Contains(firstBytes, []byte("scan_salt")) || bytes.Contains(firstBytes, []byte("customer/private-game")) {
 		t.Fatal("pack contains local salt metadata or raw source identity")
+	}
+	extracted := t.TempDir()
+	extractTar(t, firstBytes, extracted)
+	if result := VerifyEvidencePack(extracted); !result.Verified {
+		t.Fatalf("verify evidence pack: %+v", result)
+	}
+	if err := os.WriteFile(filepath.Join(extracted, "unexpected.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := VerifyEvidencePack(extracted); result.Verified {
+		t.Fatalf("unexpected evidence entry verified: %+v", result)
 	}
 }
 
@@ -632,4 +632,34 @@ func tarNames(t *testing.T, data []byte) []string {
 			names = append(names, header.Name)
 		}
 	}
+}
+
+func extractTar(t *testing.T, data []byte, dir string) {
+	t.Helper()
+	tr := tar.NewReader(bytes.NewReader(data))
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			t.Fatalf("read tar: %v", err)
+		}
+		path := filepath.Join(dir, header.Name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, mustReadAll(t, tr), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func mustReadAll(t *testing.T, reader io.Reader) []byte {
+	t.Helper()
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

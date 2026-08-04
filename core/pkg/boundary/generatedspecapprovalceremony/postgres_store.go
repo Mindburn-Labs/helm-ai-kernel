@@ -97,7 +97,7 @@ func (s *PostgresStore) CreateHold(ctx context.Context, record Record) (Record, 
 				$22, $23, $24,
 				$25, $26, $27, $28
 			)
-			ON CONFLICT (tenant_id, workspace_id, approval_id) DO NOTHING
+			ON CONFLICT DO NOTHING
 			RETURNING `+generatedSpecApprovalRecordColumns,
 			record.TenantID, record.WorkspaceID, record.ApprovalID, record.State,
 			string(bindingJSON), record.Binding.BindingRef, record.Binding.Audience, record.Binding.GeneratedSpecID,

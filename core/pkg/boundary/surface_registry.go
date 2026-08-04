@@ -34,6 +34,11 @@ type SurfaceRegistry struct {
 	db   *sql.DB
 	ctx  context.Context
 
+	// assertionVerifier is nil until runtime wiring registers a credential
+	// verifier; while nil, AssertApprovalChallenge fails closed with
+	// ErrApprovalVerificationUnavailable.
+	assertionVerifier ApprovalAssertionVerifier
+
 	records            map[string]contracts.ExecutionBoundaryRecord
 	checkpoints        map[string]contracts.BoundaryCheckpoint
 	approvals          map[string]contracts.ApprovalCeremony
@@ -59,6 +64,21 @@ type SurfaceRegistry struct {
 // reviewed its sealed ceremony hash. Callers must load the current ceremony
 // and require a new review before trying again.
 var ErrApprovalTransitionConflict = errors.New("approval ceremony changed")
+
+// ErrApprovalVerificationUnavailable keeps approval assertions fail-closed:
+// without a registered credential verifier an opaque assertion string must
+// never transition a ceremony to allowed. Routes map this error to an RFC 7807
+// problem-details 503 response.
+var ErrApprovalVerificationUnavailable = errors.New("approval verification unavailable")
+
+// ApprovalAssertionVerifier verifies a WebAuthn/passkey approval assertion
+// against a registered credential before any ceremony transition. A verifier
+// that cannot handle the ceremony's credential or method must return an error
+// wrapping ErrApprovalVerificationUnavailable so the surface stays fail-closed
+// instead of degrading into acceptance.
+type ApprovalAssertionVerifier interface {
+	VerifyApprovalAssertion(challenge contracts.ApprovalWebAuthnChallenge, assertion contracts.ApprovalWebAuthnAssertion) error
+}
 
 func NewSurfaceRegistry(now func() time.Time) *SurfaceRegistry {
 	r := newSurfaceRegistry(now)
@@ -643,6 +663,21 @@ func (r *SurfaceRegistry) CreateApprovalChallenge(approvalID, method string, ttl
 	return record, nil
 }
 
+// SetApprovalAssertionVerifier registers the credential verifier consulted by
+// AssertApprovalChallenge before any ceremony transition. Passing nil returns
+// the surface to its fail-closed default, where assertions cannot transition
+// ceremonies at all.
+func (r *SurfaceRegistry) SetApprovalAssertionVerifier(v ApprovalAssertionVerifier) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.assertionVerifier = v
+}
+
+// AssertApprovalChallenge binds a WebAuthn/passkey assertion to an approval
+// ceremony. The assertion is verified against the registered credential
+// verifier before any transition: with no verifier registered the surface
+// fails closed with ErrApprovalVerificationUnavailable, and a rejected
+// assertion never mutates the ceremony or the challenge record.
 func (r *SurfaceRegistry) AssertApprovalChallenge(assertion contracts.ApprovalWebAuthnAssertion) (contracts.ApprovalCeremony, error) {
 	if strings.TrimSpace(assertion.ChallengeID) == "" || strings.TrimSpace(assertion.Actor) == "" || strings.TrimSpace(assertion.Assertion) == "" {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("challenge_id, actor, and assertion are required")
@@ -663,6 +698,17 @@ func (r *SurfaceRegistry) AssertApprovalChallenge(assertion contracts.ApprovalWe
 	}
 	if r.now().UTC().After(challenge.ExpiresAt) {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("approval challenge expired")
+	}
+	if r.assertionVerifier == nil {
+		// Fail closed: an opaque assertion string must never mint approval
+		// authority. Hashing the assertion is bookkeeping, not verification.
+		return contracts.ApprovalCeremony{}, fmt.Errorf("cannot verify assertion for challenge %q: %w", assertion.ChallengeID, ErrApprovalVerificationUnavailable)
+	}
+	if err := r.assertionVerifier.VerifyApprovalAssertion(challenge, assertion); err != nil {
+		if errors.Is(err, ErrApprovalVerificationUnavailable) {
+			return contracts.ApprovalCeremony{}, err
+		}
+		return contracts.ApprovalCeremony{}, fmt.Errorf("approval assertion rejected: %w", err)
 	}
 	approval, err := r.transitionApprovalLocked(challenge.ApprovalID, contracts.ApprovalCeremonyAllowed, assertion.Actor, assertion.ReceiptID, assertion.Reason, "")
 	if err != nil {

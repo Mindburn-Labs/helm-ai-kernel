@@ -5,39 +5,10 @@ on:
     - cron: "0 6 * * 1"
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 permissions: read-all
 
 jobs:
-  pull-request-analysis:
-    name: OpenSSF Scorecard
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          persist-credentials: false
-
-      - name: Run analysis
-        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
-        with:
-          results_file: results.sarif
-          results_format: sarif
-          publish_results: false
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: scorecard-pr-results
-          path: results.sarif
-          retention-days: 14
-
   trusted-analysis:
     name: OpenSSF Scorecard
     if: github.event_name == 'push' || github.event_name == 'schedule'
@@ -71,21 +42,3 @@ jobs:
         uses: github/codeql-action/upload-sarif@7fd177fa680c9881b53cdab4d346d32574c9f7f4 # v3
         with:
           sarif_file: results.sarif
-
-  pull-request-evidence:
-    # Keep the legacy check label while this job verifies evidence only.
-    name: Upload pull request SARIF
-    if: github.event_name == 'pull_request'
-    needs: pull-request-analysis
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Download Scorecard SARIF
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: scorecard-pr-results
-          path: scorecard-pr-results
-
-      - name: Confirm Scorecard evidence
-        run: test -s scorecard-pr-results/results.sarif

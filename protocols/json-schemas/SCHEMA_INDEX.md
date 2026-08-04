@@ -49,6 +49,14 @@
 | `posture_attestation.v1.schema.json` | L2 | preview | Live OS posture attestation (MATCH/DRIFT, fail-closed on drift) |
 | `update_bundle_manifest.v1.schema.json` | L2 | preview | Signed offline update-bundle manifest (format + verifier only) |
 
+### Capability (`capability/`)
+
+| Schema | Conformance | Status | Description |
+| --- | --- | --- | --- |
+| `capability_manifest.v1.json` | L2 | preview | Governed atomic capability manifest for the capability registry (effect class, reversibility, data boundary, permit level, rollback, receipts, memory access, routing) |
+| `rollback_plan.v1.json` | L2 | preview | Machine-checkable rollback plan bound to a capability or effect receipt |
+| `capability_token.v1.json` | L2 | preview | Task-bound, TTL-limited, hash-pinned runtime capability grant with revocation receipts |
+
 ### Policy (`policy/`)
 
 | Schema                               | Conformance | Status    | Description                 |
@@ -120,11 +128,12 @@ FX, tax, and credit evidence and recompute gross exposure using conservative
 integer arithmetic. Workload kinds and graph relationships remain extensible
 tokens rather than a website-only Kernel enum. Schema presence or a candidate
 provider profile grants no execution authority.
-The effect envelope and receipt files in this directory define preview wire
-shapes only. Their identifiers remain absent from the executable catalog until
-base-effect expansion, policy and Kernel boundary consumers, connector
-certification, cryptographic verification, and committed cross-language
-reference packs are promoted together.
+The effect envelope and receipt files now have a deterministic Go verifier and
+an independent cross-language reference pack, but remain non-executable preview
+contracts. Their identifiers remain absent from the executable catalog until
+base-effect expansion, every policy and Kernel boundary consumer, connector
+certification, durable effect reservation, start interlock, reconciliation, and
+signed closure are promoted together through the deployed Data Plane.
 
 ### Evidence (`evidence/`)
 
@@ -234,6 +243,19 @@ reference packs are promoted together.
 | -------------------------------------------------- | ----------- | --------- | --------------------------------------- |
 | `authority_evaluation.v1.schema.json`              | L2          | normative | Authority evaluation request/decision   |
 | `side_effect_authority_record.schema.json`         | L2          | preview   | Registered side-effect authority record |
+
+`fixtures/` holds reference instances of `side_effect_authority_record`, not
+schemas. They fix the vocabulary of an action — action URN, executor kind,
+effect class, risk class, receipt type — so consumers read those values instead
+of inventing them. Their `schema_hash`, `policy_hash` and `signer_id` are
+deployment-owned and ship explicitly unbound, and the records ship with status
+`stale`: a fixture is a shape, never a grant. Binding one is a deliberate act at
+registration time, and a registry that loads a fixture verbatim refuses to
+dispatch.
+
+| Fixture                                             | Action URN                                  |
+| --------------------------------------------------- | ------------------------------------------- |
+| `fixtures/telephony_originate_call.authority_record.json` | `urn:helm:effect:telephony:originate_call` |
 
 ### Reason Codes (`reason-codes/`)
 

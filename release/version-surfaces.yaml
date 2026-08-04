@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "quantum_posture": "quantum_posture: release version metadata records classical signature-adjacent assets only; no post-quantum assurance",
   "source_version_file": "VERSION",
   "tag_prefix": "v",
   "local_surfaces": [
@@ -368,6 +369,34 @@
       "replacement": "sdk/go/v{version}"
     },
     {
+      "id": "sdk-index-source-target-heading",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "## Source-target v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+) Coordinates",
+      "replacement": "## Source-target v{version} Coordinates"
+    },
+    {
+      "id": "sdk-index-source-target-version",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "coordinates target source version `(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`; registry availability is not claimed\\.",
+      "replacement": "coordinates target source version `{version}`; registry availability is not claimed."
+    },
+    {
+      "id": "sdk-index-npm-install-version",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "@mindburn/helm-ai-kernel@(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "@mindburn/helm-ai-kernel@{version}"
+    },
+    {
+      "id": "sdk-index-pip-install-version",
+      "path": "docs/sdks/00_INDEX.md",
+      "kind": "regex",
+      "pattern": "helm-sdk==(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "helm-sdk=={version}"
+    },
+    {
       "id": "sdk-index-source-version-claims",
       "path": "docs/sdks/00_INDEX.md",
       "kind": "regex",
@@ -380,6 +409,34 @@
       "kind": "regex",
       "pattern": "<version>(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)</version>",
       "replacement": "<version>{version}</version>"
+    },
+    {
+      "id": "implementation-partner-guide-packaged-surface",
+      "path": "docs/guides/implementation-partner.md",
+      "kind": "regex",
+      "pattern": "HELM AI Kernel v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+) source target",
+      "replacement": "HELM AI Kernel v{version} source target"
+    },
+    {
+      "id": "implementation-partner-guide-expected-release",
+      "path": "docs/guides/implementation-partner.md",
+      "kind": "regex",
+      "pattern": "The expected source release target for this packet is `(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)`",
+      "replacement": "The expected source release target for this packet is `{version}`"
+    },
+    {
+      "id": "implementation-partner-guide-release-link-text",
+      "path": "docs/guides/implementation-partner.md",
+      "kind": "regex",
+      "pattern": "\\[v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+) release\\]",
+      "replacement": "[v{version} release]"
+    },
+    {
+      "id": "implementation-partner-guide-release-url",
+      "path": "docs/guides/implementation-partner.md",
+      "kind": "regex",
+      "pattern": "releases/tag/v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "releases/tag/v{version}"
     },
     {
       "id": "examples-java-coordinate",
@@ -587,6 +644,44 @@
       "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}",
       "required_assets": [
         "multiple.intoto.jsonl"
+      ]
+    },
+    {
+      "id": "github-release-console-local-sidecar",
+      "kind": "github_release_assets",
+      "introduced_in": "0.8.0",
+      "url": "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel/releases/tags/v{version}",
+      "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}",
+      "required_assets": [
+        "helm-console-local-sidecar-release-manifest.json",
+        "helm-console-local-sidecar-release-manifest.json.cosign.bundle",
+        "helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle",
+        "CONSOLE-SHA256SUMS.txt",
+        "CONSOLE-SHA256SUMS.txt.cosign.bundle",
+        "helm-console-local-sidecar-linux-amd64.tar.gz",
+        "helm-console-local-sidecar-linux-amd64.tar.gz.sha256",
+        "helm-console-local-sidecar-linux-amd64.tar.gz.inventory.sha256",
+        "helm-console-local-sidecar-linux-amd64.tar.gz.provenance.json",
+        "helm-console-local-sidecar-linux-arm64.tar.gz",
+        "helm-console-local-sidecar-linux-arm64.tar.gz.sha256",
+        "helm-console-local-sidecar-linux-arm64.tar.gz.inventory.sha256",
+        "helm-console-local-sidecar-linux-arm64.tar.gz.provenance.json",
+        "helm-console-local-sidecar-darwin-amd64.tar.gz",
+        "helm-console-local-sidecar-darwin-amd64.tar.gz.sha256",
+        "helm-console-local-sidecar-darwin-amd64.tar.gz.inventory.sha256",
+        "helm-console-local-sidecar-darwin-amd64.tar.gz.provenance.json",
+        "helm-console-local-sidecar-darwin-arm64.tar.gz",
+        "helm-console-local-sidecar-darwin-arm64.tar.gz.sha256",
+        "helm-console-local-sidecar-darwin-arm64.tar.gz.inventory.sha256",
+        "helm-console-local-sidecar-darwin-arm64.tar.gz.provenance.json",
+        "helm-ai-kernel-linux-amd64-console.tar.gz",
+        "helm-ai-kernel-linux-amd64-console.tar.gz.cosign.bundle",
+        "helm-ai-kernel-linux-arm64-console.tar.gz",
+        "helm-ai-kernel-linux-arm64-console.tar.gz.cosign.bundle",
+        "helm-ai-kernel-darwin-amd64-console.tar.gz",
+        "helm-ai-kernel-darwin-amd64-console.tar.gz.cosign.bundle",
+        "helm-ai-kernel-darwin-arm64-console.tar.gz",
+        "helm-ai-kernel-darwin-arm64-console.tar.gz.cosign.bundle"
       ]
     },
     {

@@ -138,7 +138,7 @@ func writeSidecarReceipt(dir, launchID, verdict, reason string, subject map[stri
 		subject = map[string]any{}
 	}
 	subject["reason"] = reason
-	receipt := receipts.NewReceipt("launchpad.egress_proxy", launchID, verdict, subject)
+	receipt := receipts.NewReceiptForSession("launchpad.egress_proxy", launchID+":egress-proxy:"+reason, launchID, verdict, subject)
 	data, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {
 		return receipt.ReceiptID, ""

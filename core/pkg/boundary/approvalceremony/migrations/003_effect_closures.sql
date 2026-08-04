@@ -1,3 +1,4 @@
+-- Irreversible migration: replaces lifecycle CHECK constraints in place; no down migration is supplied.
 ALTER TABLE approval_effect_reservation_events
     ADD COLUMN IF NOT EXISTS close_prior_state TEXT,
     ADD COLUMN IF NOT EXISTS acknowledgement_hash TEXT,

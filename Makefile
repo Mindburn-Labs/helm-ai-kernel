@@ -1,4 +1,6 @@
-.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres test-effect-reservation-postgres verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: test-generated-spec-approval-ceremony-postgres
+.PHONY: contract-breaking-release test-contract-breaking
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -6,7 +8,9 @@ VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 PREPARE_VERSION := $(if $(filter command line,$(origin VERSION)),$(VERSION),$(RELEASE_VERSION))
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME)
+CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256 ?=
+CONSOLE_LOCAL_SIDECAR_MANIFEST_LDFLAG := $(if $(strip $(CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256)),-X main.consoleLocalSidecarManifestSHA256=$(CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256))
+LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(BUILD_TIME) $(CONSOLE_LOCAL_SIDECAR_MANIFEST_LDFLAG)
 QUALITY := python3 scripts/ci/quality.py
 PYTHON ?= python3
 
@@ -30,6 +34,13 @@ test-approval-ceremony-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresLifecycleSingleIssueAndConsume -count=10
 
+test-receipt-store-postgres-migration:
+	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
+	cd core && go test -race ./pkg/store -run '^TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash$$' -count=1
+test-generated-spec-approval-ceremony-postgres:
+	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
+	cd core && go test -race ./pkg/boundary/generatedspecapprovalceremony -run TestPostgresLifecycleSingleIssueConsumeAndFence -count=10
+
 test-connector-release-authority-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/registry/connectors -run TestPostgresReleaseAuthorityAppendOnlyCurrentStateAndIsolation -count=10
@@ -46,6 +57,10 @@ verify-approval-ceremony-vectors:
 	python3 reference_packs/approval/verify_approval_vectors.py
 	python3 reference_packs/approval-consumption-v1/verify_vectors.py
 	python3 reference_packs/approval-dispatch-admission-v1/verify_vectors.py
+
+verify-generated-spec-approval-ceremony-vectors:
+	cd core && go test ./pkg/boundary/generatedspecapprovalceremony -run TestGeneratedSpecApprovalCeremonyReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/generated-spec-approval-ceremony-v1/verify_vectors.py
 
 verify-connector-release-authority-vectors:
 	cd core && go test ./pkg/registry/connectors -run 'TestConnectorReleaseAuthority(ReferencePackMatchesGoImplementation|Schemas)' -count=1
@@ -69,6 +84,12 @@ verify-update-bundle-vectors:
 	cd core && go test ./pkg/boundary/profile -run TestUpdateBundleManifestSchema -count=1
 	python3 reference_packs/update-bundle-v1/verify_vectors.py
 
+.PHONY: verify-launch-mission-vectors
+
+verify-launch-mission-vectors:
+	cd core && go test ./pkg/contracts -run TestLaunchMissionReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/launch-mission-v1/verify_vectors.py
+
 test-sdk-go-standalone:
 	cd sdk/go && GOWORK=off go test ./...
 
@@ -87,6 +108,15 @@ test-sdk-java:
 sdk-openapi-check:
 	bash scripts/sdk/openapi_check.sh
 
+sdk-gen-check:
+	bash scripts/sdk/check_drift.sh
+
+sdk-manifest-verify:
+	bash scripts/sdk/check_drift.sh --verify-only
+
+test-sdk-manifest:
+	python3 -m unittest discover -s scripts/sdk/tests -v
+
 sdk-examples-smoke:
 	bash scripts/sdk/examples_smoke.sh
 
@@ -96,11 +126,13 @@ verify-fixtures:
 	cd core && go test ./pkg/canonicalize -run TestExtauthzGoldenVectorsAreCanonical -count=1
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
 	$(MAKE) verify-approval-ceremony-vectors
+	$(MAKE) verify-generated-spec-approval-ceremony-vectors
 	$(MAKE) verify-connector-release-authority-vectors
 	$(MAKE) verify-effect-close-vectors
 	$(MAKE) verify-effect-disposition-vectors
 	$(MAKE) verify-boundary-profile-vectors
 	$(MAKE) verify-update-bundle-vectors
+	$(MAKE) verify-launch-mission-vectors
 	python3 reference_packs/extauthz/verify_extauthz_vectors.py
 	python3 reference_packs/approval/verify_approval_vectors.py
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto
@@ -125,6 +157,23 @@ lint: docs-coverage docs-truth
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
 
+# lint-security runs golangci-lint with gosec over the trusted computing base.
+#
+# .golangci.yml has existed for some time but nothing ever executed it: `lint`
+# above runs only go vet and gofmt, and no workflow invokes golangci-lint. gosec
+# was absent entirely (F-14). This target makes both runnable.
+#
+# It is NOT yet wired into CI: as of 2026-07-25 it reports 14 findings across the
+# TCB packages, of which several are gosec false positives (e.g. G101 firing on
+# the map-key constant ContextCredentialHash). Promoting it to a blocking gate
+# requires triaging those first — tracked in
+# docs/security/kernel-security-remediation-ledger.md.
+.PHONY: lint-security
+lint-security:
+	cd core && golangci-lint run --enable gosec --timeout 10m \
+		./pkg/crypto/... ./pkg/guardian/... ./pkg/executor/... ./pkg/pdp/... \
+		./pkg/verifier/... ./pkg/evidence/... ./pkg/boundary/...
+
 proto-lint:
 	buf lint protocols/policy-schema
 
@@ -134,6 +183,13 @@ proto-breaking:
 openapi-breaking:
 	bash scripts/ci/contract_breaking.sh openapi
 
+contract-breaking-release:
+	bash scripts/ci/contract_breaking.sh openapi release
+	bash scripts/ci/contract_breaking.sh proto release
+
+test-contract-breaking:
+	bash scripts/ci/test_contract_breaking.sh
+
 docker-verify:
 	docker build -f Dockerfile -t helm-ai-kernel:verify-root .
 	docker build -f Dockerfile.slim -t helm-ai-kernel:verify-slim .
@@ -141,7 +197,7 @@ docker-verify:
 	docker build -f core/Dockerfile.api -t helm-ai-kernel:verify-core-api .
 	docker build -f oss-fuzz/Dockerfile -t helm-ai-kernel:verify-oss-fuzz oss-fuzz
 
-release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone proto-lint proto-breaking docker-verify conformance-release-gate deployment-smoke release-smoke
+release-readiness: version-drift verify-boundary docs-truth test-sdk-go-standalone sdk-examples-smoke proto-lint contract-breaking-release docker-verify conformance-release-gate deployment-smoke release-smoke
 	@echo "✅ Release readiness gate passed"
 
 crucible: build
@@ -175,6 +231,7 @@ kind-smoke: docker
 deployment-smoke: docker-smoke compose-smoke helm-chart-smoke
 
 release-smoke:
+	python3 scripts/release/console_local_sidecar_test.py
 	bash scripts/ci/release_smoke.sh
 
 version-drift:
@@ -330,7 +387,7 @@ SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date -u +%s)
 VEX_FILE := release/vex/v$(VERSION).openvex.json
 VEX_SOURCE_DATE_EPOCH := $(if $(filter undefined,$(SOURCE_DATE_EPOCH_ORIGIN)),$(shell python3 -c 'import datetime,json,sys; data=json.load(open(sys.argv[1])); print(int(datetime.datetime.fromisoformat(data["timestamp"].replace("Z","+00:00")).timestamp()))' "$(VEX_FILE)" 2>/dev/null || printf '%s' "$(SOURCE_DATE_EPOCH)"),$(SOURCE_DATE_EPOCH))
 REPRO_BUILD_TIME := $(shell { date -u -r $(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$(SOURCE_DATE_EPOCH)" +%Y-%m-%dT%H:%M:%SZ; })
-REPRO_LDFLAGS := -s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(REPRO_BUILD_TIME)
+REPRO_LDFLAGS := -s -w -buildid= -X main.version=$(VERSION) -X main.commit=$(GIT_COMMIT) -X main.buildTime=$(REPRO_BUILD_TIME) $(CONSOLE_LOCAL_SIDECAR_MANIFEST_LDFLAG)
 REPRO_GOFLAGS := -trimpath -buildvcs=false
 
 release-binaries-reproducible:
@@ -353,8 +410,9 @@ vex:
 	@SOURCE_DATE_EPOCH=$(VEX_SOURCE_DATE_EPOCH) HELM_VERSION=$(VERSION) bash scripts/release/generate_vex.sh
 
 # Verify the cosign signature of a local artifact tree (smoke / docs example).
+COSIGN_ARTIFACT_DIR ?= dist
 verify-cosign:
-	@bash scripts/release/verify_cosign.sh
+	@bash scripts/release/verify_cosign.sh "$(COSIGN_ARTIFACT_DIR)"
 
 # Pin the latest benchmark report to a per-release file under benchmarks/results/.
 bench-pin:
@@ -390,6 +448,7 @@ codegen-java:
 	@mkdir -p sdk/java/src/main/java
 	protoc --java_out=sdk/java/src/main/java \
 		-I$(PROTO_DIR) $(PROTO_FILES)
+	@find sdk/java/src/main/java -name '*.java' -print0 | xargs -0 perl -pi -e 's/[ \t]+$$//'
 
 codegen-rust:
 	cd sdk/rust && CARGO_HTTP_MULTIPLEXING=false cargo build --features codegen
@@ -406,16 +465,42 @@ codegen-check: codegen
 verify-boundary:
 	bash tools/verify-boundary.sh
 
+# Declared here rather than appended to the .PHONY line at the top of this file.
+# That line is a single ~1500-character string, so every branch that touches it
+# conflicts with every other one: adding two names there newly conflicted six
+# open pull requests, four of which were mergeable before. .PHONY is additive,
+# so a second declaration costs nothing.
+.PHONY: manifest test-boundary install-merge-drivers
+
+manifest:
+	bash tools/boundary/generate-manifest.sh
+
+# Asserts the gate fails on every known way of breaking the boundary. Needs a
+# clean tree: it mutates the working tree per case and restores after each.
+test-boundary:
+	bash tools/boundary/boundary_test.sh
+
+# Registers the merge driver referenced by .gitattributes. Git stores merge
+# drivers in local config, never in the repository, so every clone runs this
+# once. Skipping it is safe: the manifest just conflicts the old way.
+install-merge-drivers:
+	git config merge.helm-derived.name "derived file: resolve to ours, regenerate, CI verifies"
+	git config merge.helm-derived.driver true
+	@echo "Merge driver 'helm-derived' registered. Run 'make manifest' after any merge that touched a protected file."
+
 clean:
 	rm -rf bin/ dist/ sbom.json deps.txt helm-mcp-plugin/ benchmarks/results/*.json
 
-.PHONY: docs-coverage docs-truth
+.PHONY: docs-coverage docs-truth docs-openapi-parity
 
 docs-coverage:
 	python3 scripts/check_documentation_coverage.py
 
 docs-truth:
 	python3 scripts/check_documentation_truth.py
+
+docs-openapi-parity:
+	cd core && go test ./cmd/helm-ai-kernel -run '^TestPublicDocsOpenAPIContract$$' -count=1
 
 .PHONY: launchpad-promotion-check
 launchpad-promotion-check:

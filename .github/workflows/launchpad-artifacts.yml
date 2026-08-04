@@ -21,6 +21,11 @@ on:
         required: false
         default: false
         type: boolean
+      generate_promotion_candidate:
+        description: Generate a human-reviewed promotion patch after live conformance; never pushes a ref or opens a pull request
+        required: false
+        default: false
+        type: boolean
   push:
     branches: ["main"]
     paths:
@@ -920,14 +925,16 @@ jobs:
           name: launchpad-promotion-manifest
           path: /tmp/launchpad-promotion/launchpad-promotion-manifest.json
 
-  promotion-pr:
-    name: Open Launchpad promotion PR
+  # Artifact evidence on main must not create a second automation branch. A
+  # deliberately dispatched, live-conformance-backed run can only attach a
+  # review patch; a human owns any resulting branch and pull request.
+  promotion-candidate:
+    name: Generate Launchpad promotion candidate
     runs-on: ubuntu-latest
     needs: live-conformance
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_conformance && inputs.generate_promotion_candidate }}
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
@@ -940,9 +947,7 @@ jobs:
         with:
           name: launchpad-promotion-manifest
           path: /tmp/launchpad-promotion
-      - name: Promote verified images and open a reference update PR
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Generate human-reviewed promotion candidate
         run: |
           set -euo pipefail
           manifest=/tmp/launchpad-promotion/launchpad-promotion-manifest.json
@@ -967,8 +972,7 @@ jobs:
             deploy/helm-chart/values.yaml
           )
           if git diff --quiet -- "${changed_paths[@]}"; then
-            echo "Launchpad promoted refs already current — no PR needed."
-            exit 0
+            echo "Launchpad promoted refs are already current."
           fi
 
           manifest_hash="$(jq -r '.manifest_hash' "${result}")"
@@ -987,41 +991,34 @@ jobs:
               | "| egress-proxy | `\(.image)` | `\(.digest)` | `\(.signature_ref)` | `\(.sbom_ref)` | `\(.provenance_ref)` |"' "${manifest}"
           } > /tmp/launchpad-digest-table.md
 
-          cat > /tmp/launchpad-promotion-pr.md <<EOF
-          Automated Launchpad promotion from a verified CI manifest.
+          git diff --check -- "${changed_paths[@]}"
+          git diff --binary -- "${changed_paths[@]}" > /tmp/launchpad-promotion/launchpad-promotion.patch
+          git diff --name-only -- "${changed_paths[@]}" > /tmp/launchpad-promotion/launchpad-promotion.changed-paths.txt
 
-          Source SHA: \`${source_sha}\`
-          Source tree SHA256: \`${source_tree_sha256}\`
-          Workflow ref: \`${workflow_ref}\`
-          Workflow run: ${run_url}
-          Promotion manifest hash: \`${manifest_hash}\`
-
-          ## Image refs
-          EOF
-          cat /tmp/launchpad-digest-table.md >> /tmp/launchpad-promotion-pr.md
-          cat >> /tmp/launchpad-promotion-pr.md <<'EOF'
-
-          ## Validation
-          - `go run ./core/cmd/helm-ai-kernel launch promote --manifest <manifest> --apps openclaw,hermes --write --sync-derived --check --json`
-          - `make launchpad-promotion-check`
-          - `go test ./tests/launchpad/... -run TestLiveModelProviderLocalContainerConformance -count=1 -timeout 30m -v`
-
-          Promotion commits update committed AppSpec evidence plus generated refs only. They intentionally do not retrigger the producer image build workflow.
-          EOF
-
-          branch="automation/launchpad-promotion-${GITHUB_RUN_ID}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "${branch}"
-          git add "${changed_paths[@]}"
-          git commit -m "ci(launchpad): promote signed launchpad image refs"
-          git push origin "${branch}"
-          if gh pr create \
-            --title "ci(launchpad): promote signed launchpad image refs" \
-            --body-file /tmp/launchpad-promotion-pr.md \
-            --base main \
-            --head "${branch}"; then
-            exit 0
-          fi
-
-          echo "::warning::Launchpad promotion branch was pushed as ${branch}, but this workflow token could not create a PR. Open the PR manually from the pushed branch."
+          {
+            echo "## Human-reviewed Launchpad promotion candidate"
+            echo
+            echo "Source SHA: \`${source_sha}\`"
+            echo "Source tree SHA256: \`${source_tree_sha256}\`"
+            echo "Workflow ref: \`${workflow_ref}\`"
+            echo "Workflow run: ${run_url}"
+            echo "Promotion manifest hash: \`${manifest_hash}\`"
+            echo
+            cat /tmp/launchpad-digest-table.md
+            echo
+            if [ -s /tmp/launchpad-promotion/launchpad-promotion.patch ]; then
+              echo "The attached patch passed \`make launchpad-promotion-check\`. A human must review and apply it in an owned branch."
+            else
+              echo "Promoted refs are already current; the attached patch is empty."
+            fi
+            echo "This workflow never creates Git refs, commits, or pull requests."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload promotion candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: launchpad-promotion-candidate
+          path: |
+            /tmp/launchpad-promotion/launchpad-promotion-manifest.json
+            /tmp/launchpad-promotion/launchpad-promotion.patch
+            /tmp/launchpad-promotion/launchpad-promotion.changed-paths.txt
+            /tmp/launchpad-promotion-result.json

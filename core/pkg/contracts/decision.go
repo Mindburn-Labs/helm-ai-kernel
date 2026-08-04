@@ -4,6 +4,7 @@ package contracts
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -52,15 +53,38 @@ type DecisionRecord struct {
 	Reason         string         `json:"reason"`                  // Human-readable explanation
 	ReasonCode     string         `json:"reason_code,omitempty"`   // Machine-readable registry code
 	InputContext   map[string]any `json:"input_context,omitempty"` // For explainability
+	// ThreatScan is Guardian-owned typed threat evidence. Decisions with this
+	// field use the V3 preimage, which binds the complete canonical reference
+	// (including semantic model, score, and failure state).
+	ThreatScan *ThreatScanRef `json:"threat_scan,omitempty"`
 	// Session Risk Memory fields bind trajectory-level authorization state to the signed decision.
 	TrajectoryRiskScore    float64 `json:"trajectory_risk_score,omitempty"`
 	SessionCentroidHash    string  `json:"session_centroid_hash,omitempty"`
 	RiskAccumulationWindow int     `json:"risk_accumulation_window,omitempty"`
 	// RequirementSetHash links this decision to the specific Proof Requirement Graph rules satisfied.
-	RequirementSetHash string    `json:"requirement_set_hash,omitempty"`
-	Signature          string    `json:"signature"`
-	SignatureType      string    `json:"signature_type"`
-	Timestamp          time.Time `json:"timestamp"`
+	RequirementSetHash string `json:"requirement_set_hash,omitempty"`
+	// GateRosterHash digests the Guardian gate roster (guardian.GateRoster)
+	// that produced this verdict, so evidence states which gates ran instead
+	// of leaving that to code review. An uninjected gate is skipped rather
+	// than refused, so two kernels can return the same verdict from different
+	// enforcement: without this the difference is invisible downstream.
+	// NOTE: still outside the decision signature. DecisionRecordSignatureV2
+	// (HELM-303) swapped free-text Reason for ReasonCode, and V3 binds typed
+	// threat evidence; binding this roster needs a further preimage revision.
+	// It remains tamper-evident via the receipt envelope chain hash.
+	GateRosterHash string `json:"gate_roster_hash,omitempty"`
+	Signature      string `json:"signature"`
+	SignatureType  string `json:"signature_type"`
+	// SignatureVersion names the signing-preimage revision. Empty = legacy
+	// (free-text Reason in the preimage, ReasonCode absent).
+	// DecisionRecordSignatureV2 signs the machine-readable ReasonCode instead
+	// of prose: the field every downstream consumer keys on is the one the
+	// signature attests. DecisionRecordSignatureV3 additionally binds typed
+	// Guardian threat evidence when it is present. DecisionRecordSignatureV4
+	// retains those facts and also binds the evaluated authority tuple and
+	// signer metadata.
+	SignatureVersion string    `json:"signature_version,omitempty"`
+	Timestamp        time.Time `json:"timestamp"`
 
 	// Intervention Metadata (Temporal Guardian)
 	Intervention *InterventionMetadata `json:"intervention,omitempty"`
@@ -133,6 +157,47 @@ const VerdictPending = "PENDING"
 // AuthorizedExecutionIntentSignatureV2 binds the full authority window and
 // portable effect semantics. Unversioned legacy intents are never executable.
 const AuthorizedExecutionIntentSignatureV2 = "authorized_execution_intent.v2"
+
+// DecisionRecordSignatureV2 marks the HELM-303 decision preimage: ReasonCode
+// replaces free-text Reason in the signed payload.
+const DecisionRecordSignatureV2 = "decision_record.v2"
+
+// DecisionRecordSignatureV3 binds Guardian-owned typed threat evidence when a
+// decision contains it. Records without threat evidence remain on V2 so
+// historical and ordinary decisions preserve their established preimage.
+const DecisionRecordSignatureV3 = "decision_record.v3"
+
+// DecisionRecordSignatureV4 is the current decision preimage. It retains the
+// V2 reason digest and the V3 typed threat-evidence digest, then binds the
+// evaluated authorization tuple and selected signature algorithm before any
+// signature is created.
+const DecisionRecordSignatureV4 = "decision_record.v4"
+
+// ValidateDecisionAuthorityForUse restricts execution authority to the V4
+// decision contract. Historical V2/V3 records remain verifiable as evidence,
+// but lack the request and signer bindings needed to grant a new effect.
+func ValidateDecisionAuthorityForUse(decision *DecisionRecord) error {
+	if decision == nil {
+		return fmt.Errorf("decision is required")
+	}
+	if decision.SignatureVersion != DecisionRecordSignatureV4 {
+		return fmt.Errorf("execution authority requires %s, got %q", DecisionRecordSignatureV4, decision.SignatureVersion)
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"subject ID", decision.SubjectID},
+		{"action", decision.Action},
+		{"resource", decision.Resource},
+		{"signature type", decision.SignatureType},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return fmt.Errorf("execution authority missing %s", field.name)
+		}
+	}
+	return nil
+}
 
 // AuthorizedExecutionIntent represents a derived, signed intent to execute a specific effect.
 // It decouples the "Permission" (Decision) from "Action" (Execution). (Sequence 8)

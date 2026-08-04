@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -170,11 +171,28 @@ func (c *HelmClient) ChatCompletionsWithReceipt(req ChatCompletionRequest) (*Cha
 	}, nil
 }
 
-// EvaluateDecision calls POST /api/v1/evaluate.
+// EvaluateDecision calls POST /api/v1/evaluate with the legacy dynamic request and response.
+// Deprecated: use EvaluateDecisionV5 for the typed V5 contract.
 func (c *HelmClient) EvaluateDecision(req any) (map[string]any, error) {
 	var out map[string]any
 	err := c.do("POST", "/api/v1/evaluate", req, &out)
 	return out, err
+}
+
+// EvaluateDecisionV5 calls POST /api/v1/evaluate with the canonical V5 request.
+func (c *HelmClient) EvaluateDecisionV5(req EvaluateRequest) (*EvaluateResponse, error) {
+	if strings.TrimSpace(req.GetTool()) == "" {
+		return nil, fmt.Errorf("evaluate decision requires a non-blank tool")
+	}
+	if strings.TrimSpace(req.GetEffectLevel()) == "" {
+		return nil, fmt.Errorf("evaluate decision requires a non-blank effect_level")
+	}
+	if strings.TrimSpace(req.GetSessionId()) == "" {
+		return nil, fmt.Errorf("evaluate decision requires a non-blank session_id")
+	}
+	var out EvaluateResponse
+	err := c.do("POST", "/api/v1/evaluate", req, &out)
+	return &out, err
 }
 
 // RunPublicDemo calls POST /api/demo/run.

@@ -1,0 +1,17 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.fs.read",
+  "name": "fs-read",
+  "version": "0.2.1",
+  "description": "Read a file inside the workspace.",
+  "protocol": "syscall",
+  "binding": { "kind": "cli_command", "ref": "fs.read" },
+  "effect_class": "read_only",
+  "reversibility": "none",
+  "data_boundary": "local_only",
+  "risk_score": 5,
+  "required_permit_level": "none",
+  "rollback": { "required": false },
+  "receipts": { "required": true },
+  "memory_access": { "user_domain": "read", "agent_domain": "none", "cross_domain_read": false }
+}

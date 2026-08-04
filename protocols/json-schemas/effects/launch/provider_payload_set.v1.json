@@ -22,6 +22,7 @@
           "placement_id": { "$ref": "#/$defs/non_empty" },
           "effect_id": { "enum": ["PROVIDER_PROVISION", "DEPLOY_PRODUCTION_ACTIVATE", "PROVIDER_ROLLBACK", "PROVIDER_TEARDOWN"] },
           "provider_action_urn": { "$ref": "#/$defs/non_empty" },
+          "provider_destination_hash": { "$ref": "#/$defs/hash" },
           "payload_hash": { "$ref": "#/$defs/hash" }
         }
       }

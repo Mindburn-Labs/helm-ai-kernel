@@ -27,15 +27,33 @@ Systems that contribute to HELM AI Kernel execution truth must enforce:
 
 ## CI Branch Protection Baseline
 
-The following jobs should pass before merging to `main` unless a tracked
-Advisory suppression explicitly explains the risk:
+The `main protection` ruleset is the enforcing source. This section describes
+it; it does not define it. Read the live list rather than trusting this copy:
 
-1. `quality-pr` / `make quality-pr`
-2. `hygiene`
-3. `kernel`
-4. `contract-drift`
-5. `deployment-smoke` and `release-smoke`
-6. `codeql` and `scorecard`
+```bash
+gh api /repos/Mindburn-Labs/helm-ai-kernel/rulesets/16024605 \
+  --jq '.rules[]
+        | select(.type=="pull_request" or .type=="required_status_checks")
+        | {type, parameters}'
+```
+
+As inspected on 2026-08-03 the ruleset is `active` on `refs/heads/main`,
+requires a pull request with all review threads resolved (and zero required
+approvals), requires linear history, blocks deletion and non-fast-forward
+pushes, and requires these 18 status checks in strict mode, so a branch must
+also be up to date with `main` before it can merge:
+
+`Quality PR profile`, `hygiene`, `kernel`, `contract-drift`, `python-sdk`,
+`ts-sdk`, `rust-sdk`, `java-sdk`, `deployment-smoke`, `kind-smoke`,
+`release-smoke`, `Coverage and truth`, `OpenSSF Scorecard`, `CodeQL (go)`,
+`CodeQL (javascript-typescript)`, `CodeQL (python)`, `CodeQL (java-kotlin)`,
+`Rust audit`.
+
+These are not waivable. The ruleset's `bypass_actors` list is empty, so no
+role — maintainer, admin, or app — can merge past a red required check.
+Advisory suppression operates inside the quality profiles, on individual checks
+that have not been promoted to blocking; it is not a route around the contexts
+above.
 
 Nightly runs `make quality-nightly`. New noisy gates remain Advisory until
 their baselines are clean or `QUALITY_STRICT=1` promotes them to blocking.

@@ -1,5 +1,8 @@
 name: Launchpad Model Provider Catalog
 
+# Scheduled runs intentionally produce evidence only. They never create a
+# branch, commit, or pull request; a human can download the candidate patch
+# from a manually dispatched run and review it in a normal owned change.
 on:
   workflow_dispatch:
   schedule:
@@ -14,7 +17,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -72,43 +74,42 @@ jobs:
       - name: Ensure generated catalog artifacts are committed
         run: git diff --exit-code -- core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
 
-  open-refresh-pr:
+  capture-refresh-candidate:
+    name: Capture catalog refresh candidate
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          fetch-depth: 0
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
-      - name: Refresh catalog source fingerprints
-        run: python3 scripts/launch/update_model_provider_catalog.py --network --write
+      - name: Generate reviewable catalog refresh candidate
+        run: |
+          set -euo pipefail
+          python3 scripts/launch/update_model_provider_catalog.py --network --write
+          changed_paths=(
+            core/pkg/launchpad/modelproviders/catalog.json
+            core/pkg/launchpad/modelproviders/source_fingerprints.json
+            scripts/launch/update_model_provider_catalog.py
+            tools/launchpad/artifacts/model-gateway-check.sh
+          )
+          git diff --check -- "${changed_paths[@]}"
+          git diff --binary -- "${changed_paths[@]}" > model-provider-catalog-refresh.patch
+          git diff --name-only -- "${changed_paths[@]}" > model-provider-catalog-refresh.changed-paths.txt
       - name: Summarize catalog coverage
         run: python3 scripts/launch/update_model_provider_catalog.py --summary >> "$GITHUB_STEP_SUMMARY"
-      - name: Open refresh PR
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Record candidate disposition
         run: |
-          if git diff --quiet -- core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh; then
-            echo "Catalog is already current."
-            exit 0
+          set -euo pipefail
+          if [ -s model-provider-catalog-refresh.patch ]; then
+            echo "A reviewable catalog candidate was attached; a human must apply it in an owned branch." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Catalog source fingerprints are already current." >> "$GITHUB_STEP_SUMMARY"
           fi
-          branch="automation/model-provider-catalog-${GITHUB_RUN_ID}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$branch"
-          git add core/pkg/launchpad/modelproviders/catalog.json core/pkg/launchpad/modelproviders/source_fingerprints.json scripts/launch/update_model_provider_catalog.py tools/launchpad/artifacts/model-gateway-check.sh
-          git commit -m "chore: refresh Launchpad model provider catalog"
-          git push origin "$branch"
-          if gh pr create \
-            --title "chore: refresh Launchpad model provider catalog" \
-            --body "Automated Launchpad BYO model provider catalog refresh." \
-            --base main \
-            --head "$branch"; then
-            exit 0
-          fi
-          echo "::warning::Catalog refresh branch was pushed as ${branch}, but this workflow token could not create a PR. Open the PR manually from the pushed branch."
+      - name: Upload catalog refresh candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: model-provider-catalog-refresh-candidate
+          path: |
+            model-provider-catalog-refresh.patch
+            model-provider-catalog-refresh.changed-paths.txt

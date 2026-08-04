@@ -6,7 +6,7 @@ const { HelmClient, HelmApiError } = await import(`${process.cwd()}/sdk/ts/dist/
 
 const CANONICAL_VERDICTS = new Set(['ALLOW', 'DENY', 'ESCALATE']);
 
-function requireVerdict(record: SurfaceRecord, expected: string, label: string): string {
+function requireVerdict(record: { verdict?: unknown }, expected: string, label: string): string {
   const verdict = String(record.verdict ?? '');
   if (!CANONICAL_VERDICTS.has(verdict)) {
     throw new Error(`${label}: non-canonical verdict ${verdict}`);
@@ -55,19 +55,20 @@ const helm = new HelmClient({
   baseUrl: helmUrl,
   apiKey: process.env.HELM_ADMIN_API_KEY,
   tenantId: process.env.HELM_TENANT_ID ?? 'sdk-ts-example',
+  principalId: process.env.HELM_PRINCIPAL_ID ?? 'system-admin',
 });
 
-const allowed = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
-  action: 'read-ticket',
-  resource: 'ticket:SDK-200',
-  context: { example: 'ts-sdk' },
+const allowed = await helm.evaluateDecisionV5({
+  tool: 'read-ticket',
+  effect_level: 'ticket:SDK-200',
+  session_id: 'ts-sdk-example',
+  args: { example: 'ts-sdk' },
 });
-const denied = await helm.evaluateDecision({
-  principal: 'sdk-ts-agent',
-  action: 'dangerous-shell',
-  resource: 'system:shell',
-  context: { example: 'ts-sdk' },
+const denied = await helm.evaluateDecisionV5({
+  tool: 'dangerous-shell',
+  effect_level: 'system:shell',
+  session_id: 'ts-sdk-example',
+  args: { example: 'ts-sdk' },
 });
 requireVerdict(allowed, 'ALLOW', 'allowed tool call');
 requireVerdict(denied, 'DENY', 'denied dangerous action');
@@ -89,7 +90,7 @@ const preflight = await helm.preflightSandboxGrant({
 });
 requireVerdict(preflight, 'ALLOW', 'sandbox preflight');
 
-const evidence = await helm.exportEvidence('sdk-ts-agent');
+const evidence = await helm.exportEvidence('ts-sdk-example');
 const evidenceResult = await helm.verifyEvidence(evidence);
 if (evidenceResult.verdict !== 'PASS') {
   throw new Error(`evidence verification failed: ${JSON.stringify(evidenceResult)}`);

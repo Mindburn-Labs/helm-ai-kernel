@@ -39,8 +39,8 @@ Doctrine invariant, stated once and relied on everywhere:
                  │  └─────────────────┘     (oneshot, CAP_NET_ADMIN,           │    │
                  │        workloads         attest --enforce, fail closed)     │    │
                  │                                                             │    │
-                 │  nftables table inet helm_boundary: output policy drop ◄────┘    │
-                 │  (lo + established + compiled CIDR/port allows only)             │
+                 │  nftables table inet helm_boundary: output + forward       ◄──┘  │
+                 │  policy drop (lo + established + compiled CIDR/port allows)      │
                  └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -52,6 +52,13 @@ Doctrine invariant, stated once and relied on everywhere:
   allows loopback, established flows, and the profile's CIDR/known-protocol
   ports — nothing else. An **empty allowlist compiles to pure default-drop**,
   the same fail-closed semantics the gateway's `EgressChecker` enforces at L7.
+- Both egress paths are policed. The table carries an `output` chain (traffic
+  from host processes) **and** a `forward` chain (traffic routed on behalf of
+  another network namespace — any container on a bridge). A workload in its own
+  netns never traverses the output hook, so an output-only table would leave it
+  unpoliced while still reporting default-drop egress. A drop in any base chain
+  at a hook is final, so these chains stay authoritative alongside a container
+  runtime's own accepting FORWARD rules.
 - If anyone loosens an OS rule to open a side channel, the next posture
   attestation reports DRIFT and the gateway refuses to (re)start.
 
@@ -129,10 +136,15 @@ attest-oneshot dependency and the compiled per-profile drop-in.
 
 ## 3. First boot, governance side
 
-The boundary profile seals the box; governance still starts explicitly:
+The boundary profile seals the box; governance still starts explicitly. Start
+Quickstart in one terminal and leave it running; run the governance sequence
+from a second terminal:
 
 ```bash
-helm-ai-kernel onboard                      # store + keys + config
+# Terminal 1: guided store + keys + config; this foreground server stays running.
+helm-ai-kernel setup --quickstart --profile mcp --yes  # guided store + keys + config
+
+# Terminal 2: run these while Quickstart is still running.
 helm-ai-kernel autoconfigure scan           # deterministic agent-surface inventory
 helm-ai-kernel autoconfigure draft-policy   # default-deny policy draft
 helm-ai-kernel autoconfigure simulate       # blast-radius preview
@@ -188,6 +200,18 @@ trust anchor is the Ed25519 signature and nothing here imports cosign.
   continuously. A timer-detected DRIFT emits a sealed receipt (drift is
   evidence) but does not stop an already-running gateway unless the operator
   wires `OnFailure=` themselves.
+- **Container workloads are policed by interface-agnostic destination rules,
+  not by identity.** The `forward` chain matches on destination CIDR/port, so
+  it governs *all* forwarded traffic on the host uniformly — it cannot single
+  out one container. Per-workload scoping exists only for systemd units
+  (`IPAddressAllow=`, cgroup-scoped). nftables' `socket cgroupv2` match is
+  rejected by the kernel on the forward hook, so no cgroup-scoped alternative
+  is available for bridged containers.
+- **Rootless container runtimes invert this.** Under slirp4netns/pasta the
+  container's egress leaves as ordinary locally-generated traffic of the
+  userspace proxy process, so the `output` chain governs it and the `forward`
+  chain sees nothing — correct either way here, but attribution is to the proxy
+  process, not the container.
 - **Domains vs CIDRs:** `allowed_domains` cannot become nftables rules (nft
   is L3/L4). Domains are enforced by the gateway's L7 `EgressChecker` only;
   the compiler refuses a policy that allows domains with no CIDRs unless the

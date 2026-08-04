@@ -35,7 +35,7 @@ func (m *ext2ComplianceChecker) CheckCompliance(_ context.Context, _, _ string, 
 func TestExt2_ComplianceCheckerAllowPath(t *testing.T) {
 	cc := &ext2ComplianceChecker{compliant: true}
 	g := newMinimalGuardian(WithComplianceChecker(cc))
-	dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestExt2_ComplianceCheckerAllowPath(t *testing.T) {
 func TestExt2_ComplianceCheckerDenyPath(t *testing.T) {
 	cc := &ext2ComplianceChecker{compliant: false, reason: "GDPR", violatedObligations: []string{"OB-1"}}
 	g := newMinimalGuardian(WithComplianceChecker(cc))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if dec.ReasonCode != "COMPLIANCE_VIOLATION" {
 		t.Fatalf("expected COMPLIANCE_VIOLATION, got %s", dec.ReasonCode)
 	}
@@ -60,7 +60,7 @@ func TestExt2_ComplianceCheckerDenyPath(t *testing.T) {
 func TestExt2_ComplianceCheckerErrorFailsClosed(t *testing.T) {
 	cc := &ext2ComplianceChecker{returnErr: errorf("db down")}
 	g := newMinimalGuardian(WithComplianceChecker(cc))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if dec.Verdict != string(contracts.VerdictDeny) || dec.ReasonCode != "COMPLIANCE_ERROR" {
 		t.Fatalf("expected DENY/COMPLIANCE_ERROR, got %s/%s", dec.Verdict, dec.ReasonCode)
 	}
@@ -71,7 +71,7 @@ func TestExt2_ComplianceCheckerErrorFailsClosed(t *testing.T) {
 func TestExt2_BehavioralScoreRecordedOnAllow(t *testing.T) {
 	scorer := trust.NewBehavioralTrustScorer()
 	g := newMinimalGuardian(WithBehavioralTrustScorer(scorer))
-	g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x"})
+	g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x", Resource: "test-resource"})
 	score := scorer.GetScore("agent-1")
 	if score.Score == 500 {
 		// Score should have changed from default (event recorded)
@@ -89,7 +89,7 @@ func TestExt2_BehavioralScoreRecordedOnComplianceDeny(t *testing.T) {
 	scorer := trust.NewBehavioralTrustScorer()
 	cc := &ext2ComplianceChecker{compliant: false, reason: "blocked"}
 	g := newMinimalGuardian(WithBehavioralTrustScorer(scorer), WithComplianceChecker(cc))
-	g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-2", Action: "x"})
+	g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-2", Action: "x", Resource: "test-resource"})
 	score := scorer.GetScore("agent-2")
 	if score.Score >= 500 {
 		t.Fatalf("expected score below 500 after compliance violation, got %d", score.Score)
@@ -119,7 +119,7 @@ func TestExt2_PrivilegeTierDenyInsufficient(t *testing.T) {
 	resolver := NewStaticPrivilegeResolver(TierRestricted)
 	g := newMinimalGuardian(WithPrivilegeResolver(resolver))
 	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{
-		Principal: "agent-1", Action: "INFRA_DESTROY",
+		Principal: "agent-1", Action: "INFRA_DESTROY", Resource: "test-resource",
 	})
 	if dec.Verdict != string(contracts.VerdictDeny) || dec.ReasonCode != string(contracts.ReasonInsufficientPrivilege) {
 		t.Fatalf("expected DENY/INSUFFICIENT_PRIVILEGE, got %s/%s", dec.Verdict, dec.ReasonCode)
@@ -132,7 +132,7 @@ func TestExt2_PrivilegeTierAllowSystem(t *testing.T) {
 	resolver := NewStaticPrivilegeResolver(TierSystem)
 	g := newMinimalGuardian(WithPrivilegeResolver(resolver))
 	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{
-		Principal: "agent-1", Action: "INFRA_DESTROY",
+		Principal: "agent-1", Action: "INFRA_DESTROY", Resource: "test-resource",
 	})
 	// Should NOT be denied for privilege (may be denied for other reasons like no policy)
 	if dec.ReasonCode == string(contracts.ReasonInsufficientPrivilege) {
@@ -148,7 +148,7 @@ func TestExt2_FreezeAndKillSwitchBothActive(t *testing.T) {
 	ks := kernel.NewAgentKillSwitch()
 	ks.Kill("agent-1", "admin", "bad")
 	g := newMinimalGuardian(WithFreezeController(fc), WithAgentKillSwitch(ks))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x", Resource: "test-resource"})
 	// Gate 0 (freeze) fires before gate 0.5 (kill switch)
 	if dec.ReasonCode != string(contracts.ReasonSystemFrozen) {
 		t.Fatalf("expected SYSTEM_FROZEN (freeze takes precedence), got %s", dec.ReasonCode)
@@ -162,7 +162,7 @@ func TestExt2_KillSwitchBeforeContextGuard(t *testing.T) {
 	ks.Kill("agent-1", "admin", "test")
 	cg := kernel.NewContextGuardWithFingerprint("mismatch-fp")
 	g := newMinimalGuardian(WithAgentKillSwitch(ks), WithContextGuard(cg))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x", Resource: "test-resource"})
 	if dec.ReasonCode != string(contracts.ReasonAgentKilled) {
 		t.Fatalf("expected AGENT_KILLED before CONTEXT_MISMATCH, got %s", dec.ReasonCode)
 	}
@@ -198,7 +198,7 @@ func TestExt2_EvaluateOutputCleanOnEmpty(t *testing.T) {
 
 func TestExt2_ComplianceCheckerNilSafety(t *testing.T) {
 	g := newMinimalGuardian() // no compliance checker set
-	dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestExt2_ComplianceCheckerNilSafety(t *testing.T) {
 func TestExt2_BehavioralTrustInjectedIntoContext(t *testing.T) {
 	scorer := trust.NewBehavioralTrustScorer()
 	g := newMinimalGuardian(WithBehavioralTrustScorer(scorer))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "agent-1", Action: "x", Resource: "test-resource"})
 	if dec.InputContext == nil {
 		t.Fatal("expected InputContext")
 	}

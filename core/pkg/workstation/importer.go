@@ -327,7 +327,11 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 
 	for i, event := range events {
 		normalizeEvent(&event, i)
-		verdict, reasonCode, reason := EvaluateEvent(profile, event)
+		evaluatedVerdict, evaluatedReasonCode, evaluatedReason := EvaluateEvent(profile, event)
+		verdict, reasonCode, reason := evaluatedVerdict, evaluatedReasonCode, evaluatedReason
+		// The declared verdict and reason code below record the observed event,
+		// but are untrusted. A complete learning receipt is emitted only when the
+		// recorded code agrees with the evaluation that produced it.
 		if event.Verdict != "" {
 			verdict = strings.ToUpper(event.Verdict)
 		}
@@ -373,7 +377,7 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 			recurringEffects = append(recurringEffects, loop)
 		}
 		if verdict == contracts.WorkstationVerdictDeny {
-			deniedEffects = append(deniedEffects, contracts.AgentDeniedEffect{
+			denied := contracts.AgentDeniedEffect{
 				EffectID:   event.EventID,
 				EffectType: event.EffectType,
 				ToolID:     event.ToolID,
@@ -381,7 +385,11 @@ func normalizeEvents(profile contracts.WorkstationPolicyProfile, events []ToolEv
 				ReasonCode: reasonCode,
 				Reason:     firstNonEmpty(event.Reason, reason),
 				OccurredAt: event.OccurredAt,
-			})
+			}
+			if evaluatedVerdict == contracts.WorkstationVerdictDeny && reasonCode == evaluatedReasonCode {
+				denied = evaluatedDeniedEffect(profile, event, evaluatedReasonCode, evaluatedReason)
+			}
+			deniedEffects = append(deniedEffects, denied)
 		}
 	}
 	return toolActions, memoryEffects, recurringEffects, deniedEffects
@@ -392,6 +400,11 @@ func EvaluateEvent(profile contracts.WorkstationPolicyProfile, event ToolEvent) 
 		return contracts.WorkstationVerdictDeny, "TAINTED_CONTEXT_REQUIRES_DENY", "tainted context cannot authorize operate-class effects"
 	}
 	if event.EffectType == contracts.EffectTypeWorkstationFileWrite || event.EffectType == contracts.EffectTypeWorkstationFileDraft || event.Type == "file_write" || event.Type == "draft_edit" {
+		if event.EffectMode == contracts.WorkstationEffectModeOperate {
+			if verdict, reasonCode, reason := evaluateOperatePermission(profile, event); verdict != contracts.WorkstationVerdictAllow {
+				return verdict, reasonCode, reason
+			}
+		}
 		if !draftTargetAllowed(profile.Draft.WorkspaceRoots, event.Target) {
 			return contracts.WorkstationVerdictDeny, "DRAFT_TARGET_OUTSIDE_WORKSPACE_SCOPE", "draft target is outside the configured workspace scope"
 		}
@@ -909,6 +922,8 @@ func workstationPermissionForEffect(effectType, eventType, action string) string
 	switch effectType {
 	case contracts.EffectTypeWorkstationNetworkEgress:
 		return contracts.WorkstationPermissionNetworkEgress
+	case contracts.EffectTypeWorkstationFileDraft, contracts.EffectTypeWorkstationFileWrite:
+		return contracts.WorkstationPermissionFileWrite
 	case contracts.EffectTypeWorkstationMCPToolCall:
 		return contracts.WorkstationPermissionMCPMutate
 	case contracts.EffectTypeWorkstationMemoryWrite:
@@ -929,6 +944,8 @@ func workstationPermissionForEffect(effectType, eventType, action string) string
 	switch eventType {
 	case "network_egress":
 		return contracts.WorkstationPermissionNetworkEgress
+	case "file_write", "draft_edit":
+		return contracts.WorkstationPermissionFileWrite
 	case "mcp_tool_call":
 		return contracts.WorkstationPermissionMCPMutate
 	case "memory_write":

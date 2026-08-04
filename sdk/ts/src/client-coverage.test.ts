@@ -26,6 +26,7 @@ describe("HelmClient coverage matrix", () => {
       baseUrl: "http://helm.test/",
       apiKey: "token",
       tenantId: "tenant-a",
+      principalId: "principal-a",
       timeout: 5_000,
     });
   });
@@ -43,7 +44,8 @@ describe("HelmClient coverage matrix", () => {
 
   it("exercises every JSON endpoint wrapper", async () => {
     const calls: Array<[string, unknown[]]> = [
-      ["evaluateDecision", [{ effect: "read" }]],
+      ["evaluateDecision", [{ action: "read_file", resource: "read_file", context: { session_id: "legacy-session" } }]],
+      ["evaluateDecisionV5", [{ tool: "read_file", effect_level: "read_file", session_id: "current-session" }]],
       ["runPublicDemo", ["read_ticket", { id: 1 }]],
       ["verifyPublicDemoReceipt", [{ receipt_id: "r1" }, "hash"]],
       ["approveIntent", [{ intent_hash: "h", signature_b64: "sig", public_key_b64: "pk" }]],
@@ -119,6 +121,7 @@ describe("HelmClient coverage matrix", () => {
     expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("runtime=runtime&profile=profile&policy_epoch=epoch"))).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers.Authorization === "Bearer token")).toBe(true);
     expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Tenant-ID"] === "tenant-a")).toBe(true);
+    expect(fetchSpy.mock.calls.every(([, init]) => init.headers["X-Helm-Principal-ID"] === "principal-a")).toBe(true);
   });
 
   it("extracts governance headers and default values", async () => {
@@ -145,6 +148,58 @@ describe("HelmClient coverage matrix", () => {
     await expect(client.chatCompletionsWithReceipt({ model: "gpt", messages: [] })).resolves.toMatchObject({
       governance: { receiptId: "", lamportClock: 0, toolCalls: 0 },
     });
+  });
+
+  it("retains the legacy dynamic evaluate request and response", async () => {
+    const response = { decision_id: "decision-legacy" };
+    fetchSpy.mockResolvedValueOnce(jsonResponse(response));
+
+    const result = await client.evaluateDecision({
+      action: "read_file",
+      resource: "read_file",
+      context: { session_id: "legacy-session" },
+    });
+    expect(result.decision_id).toBe("decision-legacy");
+    expect(JSON.parse(String((fetchSpy.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+      action: "read_file",
+      resource: "read_file",
+      context: { session_id: "legacy-session" },
+    });
+  });
+
+  it("uses the canonical V5 evaluate request and response", async () => {
+    const response = {
+      allow: true,
+      verdict: "ALLOW",
+      receipt_id: "receipt-1",
+      decision_id: "decision-1",
+      decision_hash: "sha256:decision",
+      reason_code: "",
+      policy_ref: "helm:test",
+      lamport_clock: 1,
+    };
+    fetchSpy.mockResolvedValueOnce(jsonResponse(response));
+
+    const result = await client.evaluateDecisionV5({
+      tool: "read_file",
+      effect_level: "read_file",
+      session_id: "current-session",
+    });
+    expect(result.decision_id).toBe("decision-1");
+    expect(JSON.parse(String((fetchSpy.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+      tool: "read_file",
+      effect_level: "read_file",
+      session_id: "current-session",
+    });
+  });
+
+  it("rejects blank canonical evaluate fields before making a request", async () => {
+    await expect(client.evaluateDecisionV5({
+      tool: "read_file",
+      effect_level: "read_file",
+      session_id: "  ",
+    })).rejects.toThrow("non-blank session_id");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("covers binary and form endpoints including error branches", async () => {

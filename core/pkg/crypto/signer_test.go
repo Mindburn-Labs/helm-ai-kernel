@@ -19,7 +19,7 @@ func TestSigner_Integrity(t *testing.T) {
 	}
 
 	// 1. Sign
-	if err := signer.SignDecision(decision); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(decision)); err != nil {
 		t.Fatalf("Sign failed: %v", err)
 	}
 	if decision.Signature == "" {
@@ -35,10 +35,20 @@ func TestSigner_Integrity(t *testing.T) {
 		t.Error("Valid decision rejected")
 	}
 
-	// 3. Verify Tampered
+	// HELM-303 (preimage V2): ReasonCode is attested, and free-text Reason
+	// stays attested as reason_hash — rewriting the emitted explanation must
+	// still break the signature.
 	decision.Reason = "I changed this"
+	valid, err = signer.VerifyDecision(decision)
+	if err != nil {
+		t.Fatalf("VerifyDecision after Reason mutation: %v", err)
+	}
+	if valid {
+		t.Error("Reason is bound via reason_hash; mutating it must invalidate the V2 signature")
+	}
+	decision.ReasonCode = "TAMPERED_CODE"
 	valid, _ = signer.VerifyDecision(decision)
 	if valid {
-		t.Error("Tampered decision accepted")
+		t.Error("Tampered ReasonCode accepted")
 	}
 }

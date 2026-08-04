@@ -1,0 +1,14 @@
+# tools/boundary/protected.manifest is a generated, sorted SHA256 index of the
+# protected surface. Two branches that each touch a protected file produce
+# different hash sets, and git cannot meaningfully three-way-merge a sorted hash
+# list — so every such pair conflicted. That single file accounted for most of
+# the conflicted pull requests in this repository.
+#
+# The resolution is always the same and never a judgement call: take either
+# side, then regenerate. This driver takes ours and marks the path resolved;
+# CI's `make verify-boundary` is the authority and fails on any drift, so a
+# stale intermediate cannot reach main.
+#
+# Install the driver once with `make install-merge-drivers`. Without it git
+# falls back to a normal conflict, which is safe — just noisier.
+tools/boundary/protected.manifest merge=helm-derived

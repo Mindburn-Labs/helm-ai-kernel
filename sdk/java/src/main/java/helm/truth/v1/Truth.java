@@ -324,7 +324,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         epoch_ = s;
@@ -340,7 +340,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getEpochBytes() {
       java.lang.Object ref = epoch_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         epoch_ = b;
@@ -363,7 +363,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         label_ = s;
@@ -379,7 +379,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getLabelBytes() {
       java.lang.Object ref = label_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         label_ = b;
@@ -897,7 +897,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getEpochBytes() {
         java.lang.Object ref = epoch_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           epoch_ = b;
@@ -969,7 +969,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getLabelBytes() {
         java.lang.Object ref = label_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           label_ = b;
@@ -1698,7 +1698,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp last_validated = 1;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetLastValidatedFieldBuilder() {
         if (lastValidatedBuilder_ == null) {
           lastValidatedBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -1819,7 +1819,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp valid_until = 2;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetValidUntilFieldBuilder() {
         if (validUntilBuilder_ == null) {
           validUntilBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -2044,7 +2044,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         deprecatedSince_ = s;
@@ -2060,7 +2060,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getDeprecatedSinceBytes() {
       java.lang.Object ref = deprecatedSince_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         deprecatedSince_ = b;
@@ -2083,7 +2083,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         replacedBy_ = s;
@@ -2099,7 +2099,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getReplacedByBytes() {
       java.lang.Object ref = replacedBy_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         replacedBy_ = b;
@@ -2583,7 +2583,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getDeprecatedSinceBytes() {
         java.lang.Object ref = deprecatedSince_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           deprecatedSince_ = b;
@@ -2655,7 +2655,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getReplacedByBytes() {
         java.lang.Object ref = replacedBy_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           replacedBy_ = b;
@@ -2962,7 +2962,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         authorId_ = s;
@@ -2978,7 +2978,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getAuthorIdBytes() {
       java.lang.Object ref = authorId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         authorId_ = b;
@@ -3001,7 +3001,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         sourceRef_ = s;
@@ -3017,7 +3017,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getSourceRefBytes() {
       java.lang.Object ref = sourceRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         sourceRef_ = b;
@@ -3040,7 +3040,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         tool_ = s;
@@ -3056,7 +3056,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getToolBytes() {
       java.lang.Object ref = tool_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         tool_ = b;
@@ -3433,7 +3433,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getAuthorIdBytes() {
         java.lang.Object ref = authorId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           authorId_ = b;
@@ -3505,7 +3505,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getSourceRefBytes() {
         java.lang.Object ref = sourceRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           sourceRef_ = b;
@@ -3577,7 +3577,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getToolBytes() {
         java.lang.Object ref = tool_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           tool_ = b;
@@ -3881,7 +3881,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         objectId_ = s;
@@ -3897,7 +3897,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getObjectIdBytes() {
       java.lang.Object ref = objectId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         objectId_ = b;
@@ -3938,7 +3938,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         name_ = s;
@@ -3954,7 +3954,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getNameBytes() {
       java.lang.Object ref = name_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         name_ = b;
@@ -4014,7 +4014,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         contentHash_ = s;
@@ -4030,7 +4030,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getContentHashBytes() {
       java.lang.Object ref = contentHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         contentHash_ = b;
@@ -4157,7 +4157,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signature_ = s;
@@ -4173,7 +4173,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getSignatureBytes() {
       java.lang.Object ref = signature_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signature_ = b;
@@ -4816,7 +4816,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getObjectIdBytes() {
         java.lang.Object ref = objectId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           objectId_ = b;
@@ -4940,7 +4940,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getNameBytes() {
         java.lang.Object ref = name_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           name_ = b;
@@ -5095,7 +5095,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.helm.truth.v1.VersionScope version = 4;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.truth.v1.Truth.VersionScope, helm.truth.v1.Truth.VersionScope.Builder, helm.truth.v1.Truth.VersionScopeOrBuilder> 
+          helm.truth.v1.Truth.VersionScope, helm.truth.v1.Truth.VersionScope.Builder, helm.truth.v1.Truth.VersionScopeOrBuilder>
           internalGetVersionFieldBuilder() {
         if (versionBuilder_ == null) {
           versionBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -5165,7 +5165,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getContentHashBytes() {
         java.lang.Object ref = contentHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           contentHash_ = b;
@@ -5320,7 +5320,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.helm.truth.v1.FreshnessInfo freshness = 7;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.truth.v1.Truth.FreshnessInfo, helm.truth.v1.Truth.FreshnessInfo.Builder, helm.truth.v1.Truth.FreshnessInfoOrBuilder> 
+          helm.truth.v1.Truth.FreshnessInfo, helm.truth.v1.Truth.FreshnessInfo.Builder, helm.truth.v1.Truth.FreshnessInfoOrBuilder>
           internalGetFreshnessFieldBuilder() {
         if (freshnessBuilder_ == null) {
           freshnessBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -5441,7 +5441,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.helm.truth.v1.CompatibilityInfo compatibility = 8;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.truth.v1.Truth.CompatibilityInfo, helm.truth.v1.Truth.CompatibilityInfo.Builder, helm.truth.v1.Truth.CompatibilityInfoOrBuilder> 
+          helm.truth.v1.Truth.CompatibilityInfo, helm.truth.v1.Truth.CompatibilityInfo.Builder, helm.truth.v1.Truth.CompatibilityInfoOrBuilder>
           internalGetCompatibilityFieldBuilder() {
         if (compatibilityBuilder_ == null) {
           compatibilityBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -5562,7 +5562,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.helm.truth.v1.ProvenanceInfo provenance = 9;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.truth.v1.Truth.ProvenanceInfo, helm.truth.v1.Truth.ProvenanceInfo.Builder, helm.truth.v1.Truth.ProvenanceInfoOrBuilder> 
+          helm.truth.v1.Truth.ProvenanceInfo, helm.truth.v1.Truth.ProvenanceInfo.Builder, helm.truth.v1.Truth.ProvenanceInfoOrBuilder>
           internalGetProvenanceFieldBuilder() {
         if (provenanceBuilder_ == null) {
           provenanceBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -5683,7 +5683,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp registered_at = 10;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetRegisteredAtFieldBuilder() {
         if (registeredAtBuilder_ == null) {
           registeredAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -5721,7 +5721,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getSignatureBytes() {
         java.lang.Object ref = signature_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signature_ = b;
@@ -5972,7 +5972,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         entryId_ = s;
@@ -5988,7 +5988,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getEntryIdBytes() {
       java.lang.Object ref = entryId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         entryId_ = b;
@@ -6011,7 +6011,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         objectId_ = s;
@@ -6027,7 +6027,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getObjectIdBytes() {
       java.lang.Object ref = objectId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         objectId_ = b;
@@ -6050,7 +6050,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         parentId_ = s;
@@ -6066,7 +6066,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getParentIdBytes() {
       java.lang.Object ref = parentId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         parentId_ = b;
@@ -6089,7 +6089,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         relation_ = s;
@@ -6105,7 +6105,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getRelationBytes() {
       java.lang.Object ref = relation_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         relation_ = b;
@@ -6128,7 +6128,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         annotation_ = s;
@@ -6144,7 +6144,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getAnnotationBytes() {
       java.lang.Object ref = annotation_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         annotation_ = b;
@@ -6193,7 +6193,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         recordedBy_ = s;
@@ -6209,7 +6209,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getRecordedByBytes() {
       java.lang.Object ref = recordedBy_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         recordedBy_ = b;
@@ -6703,7 +6703,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getEntryIdBytes() {
         java.lang.Object ref = entryId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           entryId_ = b;
@@ -6775,7 +6775,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getObjectIdBytes() {
         java.lang.Object ref = objectId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           objectId_ = b;
@@ -6847,7 +6847,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getParentIdBytes() {
         java.lang.Object ref = parentId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           parentId_ = b;
@@ -6919,7 +6919,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getRelationBytes() {
         java.lang.Object ref = relation_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           relation_ = b;
@@ -6991,7 +6991,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getAnnotationBytes() {
         java.lang.Object ref = annotation_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           annotation_ = b;
@@ -7146,7 +7146,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp recorded_at = 6;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetRecordedAtFieldBuilder() {
         if (recordedAtBuilder_ == null) {
           recordedAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -7184,7 +7184,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getRecordedByBytes() {
         java.lang.Object ref = recordedBy_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           recordedBy_ = b;
@@ -7354,7 +7354,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         objectId_ = s;
@@ -7370,7 +7370,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getObjectIdBytes() {
       java.lang.Object ref = objectId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         objectId_ = b;
@@ -7699,7 +7699,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getObjectIdBytes() {
         java.lang.Object ref = objectId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           objectId_ = b;
@@ -7899,7 +7899,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         name_ = s;
@@ -7915,7 +7915,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
         getNameBytes() {
       java.lang.Object ref = name_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         name_ = b;
@@ -8318,7 +8318,7 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
           getNameBytes() {
         java.lang.Object ref = name_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           name_ = b;
@@ -8418,42 +8418,42 @@ public final class Truth extends com.google.protobuf.GeneratedFile {
 
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_VersionScope_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_VersionScope_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_FreshnessInfo_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_FreshnessInfo_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_CompatibilityInfo_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_CompatibilityInfo_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_ProvenanceInfo_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_ProvenanceInfo_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_TruthObject_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_TruthObject_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_LineageEntry_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_LineageEntry_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_GetTruthRequest_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_GetTruthRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_truth_v1_GetLatestTruthRequest_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_truth_v1_GetLatestTruthRequest_fieldAccessorTable;
 

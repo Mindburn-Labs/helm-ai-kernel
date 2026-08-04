@@ -1,6 +1,11 @@
 // Package contracts defines the Autonomy Envelope — the signed, versioned
 // runtime boundary contract that bounds every autonomous run.
 //
+// quantum_posture: this file declares wire shapes only. The signature
+// algorithm names it carries (ED25519, ECDSA-P256, RSA-PSS-2048) are classical
+// string values; no cryptography is implemented here and no hybrid or
+// post-quantum claim is made.
+//
 // Per HELM 2030 Spec Section 2 — Autonomy Envelope:
 //   - Signed, versioned, and attached to every autonomous run
 //   - Declares jurisdiction scope, data handling, allowed effects, budgets,
@@ -116,11 +121,53 @@ type EnvelopeBudgets struct {
 	ComputeUnitsCap int64 `json:"compute_units_cap,omitempty"`
 }
 
-// RateLimit constrains per-resource throughput.
+// RateLimit constrains per-resource throughput inside bounded time windows.
+//
+// A limit binds to a resource name. The reserved name "*" ("RateLimitResourceAny")
+// matches every effect, which is how a single run-wide ceiling is expressed.
+//
+// At least one window must be positive; a window left at zero is not
+// "unlimited", it is "not declared". Windows are tumbling and anchored in UTC:
+// the minute window resets on the minute, the day window resets at UTC
+// midnight. When both are declared, MaxPerDay must be greater than or equal to
+// MaxPerMinute — a day ceiling below the minute ceiling can never bind and is
+// rejected as incoherent rather than silently ignored.
 type RateLimit struct {
-	Resource     string `json:"resource"`
-	MaxPerMinute int    `json:"max_per_minute"`
+	// Resource names what the limit applies to, or "*" for every effect.
+	Resource string `json:"resource"`
+
+	// MaxPerMinute caps reservations inside one UTC minute.
+	MaxPerMinute int `json:"max_per_minute"`
+
+	// MaxPerDay caps reservations inside one UTC calendar day.
+	//
+	// Optional and omitted when zero, so envelopes written before this field
+	// existed hash and validate exactly as before.
+	//
+	// MaxPerDay may be lower than MaxPerMinute. That is a conservative policy,
+	// not a contradiction: the minute window simply never binds first.
+	MaxPerDay int `json:"max_per_day,omitempty"`
+
+	// PerInstance gives every concrete instance of the resource its own
+	// window instead of pooling them into one.
+	//
+	// This is what lets a fleet of like things share one declared ceiling: a
+	// pool of outbound numbers is one rate limit at 125 dials per number per
+	// day, not one limit per number. Rotating a number in or out of the pool
+	// then changes no envelope field, so it does not invalidate a signed
+	// envelope.
+	//
+	// An effect that names a per-instance resource without naming which
+	// instance it consumes cannot be counted, and is denied rather than
+	// admitted uncounted. PerInstance is meaningless on the wildcard resource
+	// and is rejected there.
+	PerInstance bool `json:"per_instance,omitempty"`
 }
+
+// RateLimitResourceAny is the reserved rate-limit resource that matches every
+// effect, used to express a ceiling over a run as a whole rather than over one
+// named resource.
+const RateLimitResourceAny = "*"
 
 // EvidenceRequirement specifies what must be proven per action class.
 type EvidenceRequirement struct {

@@ -1,5 +1,12 @@
 # HELM Chart
 
+<!-- quantum_posture: Helm values can configure classical Ed25519 policy
+verification; chart rendering makes no post-quantum resistance claim. -->
+
+<!-- quantum_posture: Emergency-stop replay configuration carries only pinned
+Ed25519 public verification material. It never supplies a private signing key,
+creates a cryptographic fallback, or changes the Kernel acknowledgement profile. -->
+
 This chart deploys the retained OSS kernel from source in this repository.
 The chart name is `helm-ai-kernel`. Values remain under the `.Values.helm`
 root for one compatibility window.
@@ -69,6 +76,8 @@ flowchart TD
 | `helm.auth.existingSecret` | empty | Existing secret containing auth key entries. |
 | `helm.auth.tenantID` | `default` | Server-bound tenant for tenant-scoped runtime routes; request tenant headers must match. |
 | `helm.auth.principalID` | `system-admin` | Server-bound principal for tenant-scoped runtime routes; request principal headers must match. |
+| `helm.emergencyStop.commandReplayKeyring` | empty | Optional strict JSON FENCE replay-authority keyring. Use only during a deliberate command key/audience rotation. |
+| `helm.emergencyStop.commandReplayKeyringSecretKey` | empty | Optional key in `helm.emergencyStop.existingSecret` containing the replay keyring; choose this or the direct value, not both. |
 | `helm.storage.type` | `sqlite` | `sqlite` or `postgres`. |
 | `helm.storage.postgres.existingSecret` | empty | Existing secret containing `DATABASE_URL`; required for production Postgres. |
 | `helm.storage.postgres.sslMode` | `require` | PostgreSQL TLS mode. Production requires `require`, `verify-ca`, or `verify-full`. |
@@ -83,6 +92,8 @@ flowchart TD
 | `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime reconciler polling interval. Lost hints are recovered by polling. |
+| `helm.policy.failClosed.onInvalidUpdate` | `keepLastKnownGood` | Retain only a snapshot with a fresh successful source verification after a fault, or `deny` to invalidate immediately. |
+| `helm.policy.failClosed.lastKnownGoodMaxAge` | `10m` | Positive maximum age since the last successful source verification after a source fault. |
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |
 | `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for canonical policy bundle signatures. |
 | `helm.policy.signature.existingSecret` | empty | Existing secret containing `HELM_POLICY_TRUST_PUBLIC_KEY`. |
@@ -103,6 +114,11 @@ flowchart TD
 - Set `helm.auth.tenantID` and `helm.auth.principalID` to the runtime identity
   expected by tenant-scoped API clients. Caller-supplied tenant and principal
   headers are accepted only when they match these server-bound values.
+- Keep `helm.emergencyStop.commandReplayKeyring` empty unless the Control Plane
+  has queued signed FENCE envelopes across a deliberate key or audience
+  rotation. Prefer `helm.emergencyStop.existingSecret` plus
+  `commandReplayKeyringSecretKey` for deployment configuration; the chart
+  rejects a direct value and secret key together.
 - Prefer `helm.policy.source.kind=controlplane` for production deployments.
   The chart configures where policy truth is published; the runtime still
   polls, verifies hash/signature/provenance, compiles, and atomically swaps

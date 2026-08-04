@@ -1,3 +1,4 @@
+// quantum_posture: this test imports receipt signing only to construct chain-integrity fixtures; production signer posture is assessed in receipts.
 package session
 
 import (
@@ -11,7 +12,9 @@ import (
 
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/receipts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier"
 )
 
 func TestMain(m *testing.M) {
@@ -98,7 +101,11 @@ func TestExecutorRecordsRuntimeHandleBeforeRunning(t *testing.T) {
 	if !strings.Contains(run.VerificationCommand, ".tar") {
 		t.Fatalf("verification command must point to sealed archive: %s", run.VerificationCommand)
 	}
-	archivePath := strings.TrimPrefix(run.VerificationCommand, "helm-ai-kernel verify --bundle ")
+	_, archivePath, ok := strings.Cut(run.VerificationCommand, "--bundle ")
+	if !ok {
+		t.Fatalf("verification command missing bundle: %s", run.VerificationCommand)
+	}
+	archivePath = strings.Fields(archivePath)[0]
 	assertTarContains(t, archivePath, "07_ATTESTATIONS/evidence_pack.sig")
 }
 
@@ -317,12 +324,17 @@ func TestExecutorWritesRuntimeTelemetryEvidence(t *testing.T) {
 }
 
 func TestExecutorBundlesEgressProxyReceiptOnRuntimeFailure(t *testing.T) {
+	p := allowPlan()
 	receiptPath := filepath.Join(t.TempDir(), "egress-receipt.json")
-	if err := os.WriteFile(receiptPath, []byte(`{"receipt_id":"receipt:egress","subject":{"proxy_image":"proxy@sha256:abc"}}`+"\n"), 0o600); err != nil {
+	receipt := receipts.NewReceiptForSession("launchpad.egress_proxy", p.LaunchID+":egress-proxy", p.LaunchID, "ALLOW", map[string]any{"proxy_image": "proxy@sha256:abc"})
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(receiptPath, append(data, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	store := NewStore(t.TempDir())
-	p := allowPlan()
 	p.NetworkAllowlist = []string{"openrouter.ai:443"}
 	run, err := NewExecutor(store).ExecuteLaunch(p, ExecuteOptions{
 		Reason:         "test",
@@ -342,6 +354,19 @@ func TestExecutorBundlesEgressProxyReceiptOnRuntimeFailure(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(run.EvidencePackRefs[0], "02_PROOFGRAPH/receipts/launchpad-egress-proxy.json")); err != nil {
 		t.Fatalf("egress proxy receipt was not bundled: %v", err)
+	}
+	report, err := verifier.VerifyLocallyProducedBundle(run.EvidencePackRefs[0])
+	if err != nil || !report.Verified {
+		t.Fatalf("bundled egress receipt did not verify: report=%+v err=%v", report, err)
+	}
+	for _, name := range []string{"chain_integrity", "lamport_monotonicity"} {
+		for _, check := range report.Checks {
+			if check.Name == name && check.Pass {
+				goto nextCheck
+			}
+		}
+		t.Fatalf("missing passing %s check: %+v", name, report.Checks)
+	nextCheck:
 	}
 	var runtimeEnv map[string]any
 	readJSON(t, filepath.Join(run.EvidencePackRefs[0], "04_EXPORTS/runtime_environment.json"), &runtimeEnv)

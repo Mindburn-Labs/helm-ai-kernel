@@ -22,10 +22,11 @@ import (
 )
 
 type BuildOptions struct {
-	Root   string
-	Salt   []byte
-	Cohort riskenvelope.CohortBucket
-	Now    time.Time
+	Root              string
+	Salt              []byte
+	Cohort            riskenvelope.CohortBucket
+	Now               time.Time
+	IncludeUserConfig bool
 }
 
 type ConfigObservation struct {
@@ -34,7 +35,17 @@ type ConfigObservation struct {
 	ManagedSettingsPresent bool
 	MCPServerCount         int
 	StaticConfigFilesRead  int
+
+	permissionModeScope configScope
+	permissionModeSet   bool
 }
+
+type configScope uint8
+
+const (
+	configScopeUser configScope = iota
+	configScopeProject
+)
 
 type SchemaValidation struct {
 	Schema              string `json:"schema"`
@@ -97,7 +108,7 @@ func ScanWithEvidence(root string, opts BuildOptions) (ScanResult, error) {
 		}
 		return ScanResult{}, err
 	}
-	obs, err := collectConfigObservation(root, true)
+	obs, err := collectConfigObservation(root, true, opts.IncludeUserConfig)
 	if err != nil {
 		return ScanResult{}, err
 	}
@@ -106,10 +117,10 @@ func ScanWithEvidence(root string, opts BuildOptions) (ScanResult, error) {
 }
 
 func CollectConfigObservation(root string) (ConfigObservation, error) {
-	return collectConfigObservation(root, false)
+	return collectConfigObservation(root, false, false)
 }
 
-func collectConfigObservation(root string, requireComplete bool) (ConfigObservation, error) {
+func collectConfigObservation(root string, requireComplete, includeUserConfig bool) (ConfigObservation, error) {
 	obs := ConfigObservation{
 		AgentSurface:   riskenvelope.AgentSurfaceUnknown,
 		PermissionMode: riskenvelope.PermissionModeUnknown,
@@ -117,6 +128,31 @@ func collectConfigObservation(root string, requireComplete bool) (ConfigObservat
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return obs, err
+	}
+	userConfigPaths := map[string]struct{}{}
+	userEnabledPlugins := map[string]bool{}
+	projectEnabledPlugins := map[string]bool{}
+	userHome := ""
+	if includeUserConfig {
+		var err error
+		userHome, err = os.UserHomeDir()
+		if err != nil {
+			if requireComplete {
+				return obs, scanCoverageError("user configuration coverage could not be completed")
+			}
+			return obs, err
+		}
+		paths := knownUserConfigPaths(userHome)
+		for _, path := range paths {
+			path = filepath.Clean(path)
+			userConfigPaths[path] = struct{}{}
+			if pathWithinRoot(path, absRoot) {
+				continue
+			}
+			if err := observeConfigFile(&obs, path, configScopeUser, requireComplete, userEnabledPlugins); err != nil {
+				return obs, err
+			}
+		}
 	}
 	err = filepath.WalkDir(absRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -137,22 +173,15 @@ func collectConfigObservation(root string, requireComplete bool) (ConfigObservat
 			}
 			return nil
 		}
-		kind, ok := configKind(path)
-		if !ok {
-			return nil
+		scope := configScopeProject
+		if _, ok := userConfigPaths[filepath.Clean(path)]; ok {
+			scope = configScopeUser
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			if requireComplete {
-				return scanCoverageError("recognized configuration could not be read")
-			}
-			return nil
+		enabledPlugins := projectEnabledPlugins
+		if scope == configScopeUser {
+			enabledPlugins = userEnabledPlugins
 		}
-		obs.StaticConfigFilesRead++
-		if err := applyConfigObservation(&obs, kind, data); err != nil && requireComplete {
-			return scanCoverageError("recognized configuration is invalid")
-		}
-		return nil
+		return observeConfigFile(&obs, path, scope, requireComplete, enabledPlugins)
 	})
 	if err != nil {
 		if requireComplete && !errors.Is(err, ErrScanCoverageIncomplete) {
@@ -160,7 +189,186 @@ func collectConfigObservation(root string, requireComplete bool) (ConfigObservat
 		}
 		return obs, err
 	}
+	if includeUserConfig {
+		enabledPlugins := make(map[string]bool, len(userEnabledPlugins)+len(projectEnabledPlugins))
+		for pluginID, enabled := range userEnabledPlugins {
+			enabledPlugins[pluginID] = enabled
+		}
+		for pluginID, enabled := range projectEnabledPlugins {
+			enabledPlugins[pluginID] = enabled
+		}
+		if err := applyClaudePluginConfigs(&obs, userHome, absRoot, enabledPlugins, requireComplete); err != nil {
+			return obs, err
+		}
+	}
 	return obs, nil
+}
+
+func knownUserConfigPaths(home string) []string {
+	return []string{
+		filepath.Join(home, ".claude.json"),
+		filepath.Join(home, ".claude", "settings.json"),
+		filepath.Join(home, ".claude", "settings.local.json"),
+		filepath.Join(home, ".codex", "config.toml"),
+		filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+		filepath.Join(home, ".config", "Claude", "claude_desktop_config.json"),
+	}
+}
+
+func pathWithinRoot(path, root string) bool {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func observeConfigFile(obs *ConfigObservation, path string, scope configScope, requireComplete bool, enabledPlugins map[string]bool) error {
+	kind, ok := configKind(path)
+	if !ok {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil || info.IsDir() {
+		if requireComplete {
+			return scanCoverageError("recognized configuration could not be read")
+		}
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if requireComplete {
+			return scanCoverageError("recognized configuration could not be read")
+		}
+		return nil
+	}
+	obs.StaticConfigFilesRead++
+	if err := applyConfigObservation(obs, kind, data, scope); err != nil && requireComplete {
+		return scanCoverageError("recognized configuration is invalid")
+	}
+	if enabledPlugins != nil && isClaudeSettingsConfig(path) {
+		if err := mergeClaudeEnabledPlugins(enabledPlugins, data); err != nil && requireComplete {
+			return scanCoverageError("recognized configuration is invalid")
+		}
+	}
+	return nil
+}
+
+func isClaudeSettingsConfig(path string) bool {
+	base := strings.ToLower(filepath.Base(path))
+	parent := strings.ToLower(filepath.Base(filepath.Dir(path)))
+	return parent == ".claude" && strings.HasPrefix(base, "settings") && strings.HasSuffix(base, ".json")
+}
+
+func mergeClaudeEnabledPlugins(dst map[string]bool, data []byte) error {
+	var settings struct {
+		EnabledPlugins map[string]bool `json:"enabledPlugins"`
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return err
+	}
+	for pluginID, enabled := range settings.EnabledPlugins {
+		dst[pluginID] = enabled
+	}
+	return nil
+}
+
+type claudePluginInstall struct {
+	InstallPath string `json:"installPath"`
+	LastUpdated string `json:"lastUpdated"`
+}
+
+func applyClaudePluginConfigs(obs *ConfigObservation, home, absRoot string, enabledPlugins map[string]bool, requireComplete bool) error {
+	hasEnabledPlugin := false
+	for _, enabled := range enabledPlugins {
+		if enabled {
+			hasEnabledPlugin = true
+			break
+		}
+	}
+	if !hasEnabledPlugin {
+		return nil
+	}
+
+	registryPath := filepath.Join(home, ".claude", "plugins", "installed_plugins.json")
+	data, err := os.ReadFile(registryPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		if requireComplete {
+			return scanCoverageError("enabled plugin inventory could not be read")
+		}
+		return nil
+	}
+	obs.StaticConfigFilesRead++
+	var registry struct {
+		Plugins map[string][]claudePluginInstall `json:"plugins"`
+	}
+	if err := json.Unmarshal(data, &registry); err != nil {
+		if requireComplete {
+			return scanCoverageError("enabled plugin inventory is invalid")
+		}
+		return nil
+	}
+
+	seen := map[string]bool{}
+	for pluginID, enabled := range enabledPlugins {
+		if !enabled {
+			continue
+		}
+		installs := registry.Plugins[pluginID]
+		if len(installs) == 0 {
+			continue
+		}
+		install, err := latestClaudePluginInstall(installs)
+		if err != nil {
+			if requireComplete {
+				return scanCoverageError("enabled plugin inventory is invalid")
+			}
+			return nil
+		}
+		if strings.TrimSpace(install.InstallPath) == "" || !filepath.IsAbs(install.InstallPath) {
+			if requireComplete {
+				return scanCoverageError("enabled plugin inventory is invalid")
+			}
+			return nil
+		}
+		manifestPath := filepath.Clean(filepath.Join(install.InstallPath, ".mcp.json"))
+		if seen[manifestPath] || pathWithinRoot(manifestPath, absRoot) {
+			continue
+		}
+		seen[manifestPath] = true
+		if err := observeConfigFile(obs, manifestPath, configScopeUser, requireComplete, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func latestClaudePluginInstall(installs []claudePluginInstall) (claudePluginInstall, error) {
+	latest := installs[0]
+	if len(installs) == 1 {
+		return latest, nil
+	}
+	updatedAt, err := time.Parse(time.RFC3339Nano, latest.LastUpdated)
+	if err != nil {
+		return claudePluginInstall{}, err
+	}
+	for _, candidate := range installs[1:] {
+		candidateUpdatedAt, err := time.Parse(time.RFC3339Nano, candidate.LastUpdated)
+		if err != nil {
+			return claudePluginInstall{}, err
+		}
+		if candidateUpdatedAt.After(updatedAt) {
+			latest = candidate
+			updatedAt = candidateUpdatedAt
+		}
+	}
+	return latest, nil
 }
 
 func scanCoverageError(reason string) error {
@@ -448,14 +656,26 @@ func resolveAgentSurface(report *shadow.Report, obs ConfigObservation) riskenvel
 	return riskenvelope.AgentSurfaceUnknown
 }
 
-func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) error {
+func applyConfigObservation(obs *ConfigObservation, kind string, data []byte, scope configScope) error {
 	switch kind {
 	case "claude_json":
 		obs.AgentSurface = riskenvelope.AgentSurfaceClaudeCode
-		obs.ManagedSettingsPresent = true
-		return applyJSONConfig(obs, data)
+		if scope == configScopeProject {
+			obs.ManagedSettingsPresent = true
+		}
+		return applyJSONConfig(obs, data, scope)
+	case "claude_desktop_json":
+		obs.AgentSurface = riskenvelope.AgentSurfaceClaudeCode
+		return applyJSONConfig(obs, data, scope)
 	case "mcp_json":
-		if err := applyJSONConfig(obs, data); err != nil {
+		if err := applyMCPJSONConfig(obs, data, scope, false); err != nil {
+			return err
+		}
+		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
+			obs.AgentSurface = riskenvelope.AgentSurfaceMCP
+		}
+	case "plugin_mcp_json":
+		if err := applyMCPJSONConfig(obs, data, scope, true); err != nil {
 			return err
 		}
 		if obs.AgentSurface == riskenvelope.AgentSurfaceUnknown {
@@ -463,55 +683,119 @@ func applyConfigObservation(obs *ConfigObservation, kind string, data []byte) er
 		}
 	case "codex_toml":
 		obs.AgentSurface = riskenvelope.AgentSurfaceCodex
-		return applyTOMLConfig(obs, data)
+		return applyTOMLConfig(obs, data, scope)
 	}
 	return nil
 }
 
-func applyJSONConfig(obs *ConfigObservation, data []byte) error {
-	var raw any
+func applyMCPJSONConfig(obs *ConfigObservation, data []byte, scope configScope, allowDirect bool) error {
+	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	obs.MCPServerCount += countMap(raw, "mcpServers")
+	if raw == nil {
+		return fmt.Errorf("MCP configuration must be an object")
+	}
+	servers, ok := raw["mcpServers"]
+	if ok {
+		if _, ok := servers.(map[string]any); !ok {
+			return fmt.Errorf("mcpServers must be an object")
+		}
+	} else if !allowDirect {
+		return fmt.Errorf("mcpServers is required")
+	} else {
+		for _, server := range raw {
+			if _, ok := server.(map[string]any); !ok {
+				return fmt.Errorf("plugin MCP server configuration must be an object")
+			}
+		}
+		obs.MCPServerCount += len(raw)
+		if mode := findString(raw, "permissionMode", "defaultMode", "approval_policy", "approvalPolicy"); mode != "" {
+			obs.setPermissionMode(normalizePermissionMode(mode), scope)
+		}
+		return nil
+	}
+	return applyJSONValue(obs, raw, scope)
+}
+
+func applyJSONConfig(obs *ConfigObservation, data []byte, scope configScope) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		return fmt.Errorf("agent configuration must be an object")
+	}
+	return applyJSONValue(obs, raw, scope)
+}
+
+func applyJSONValue(obs *ConfigObservation, raw map[string]any, scope configScope) error {
+	mcpServerCount, err := countMap(raw, "mcpServers")
+	if err != nil {
+		return err
+	}
+	obs.MCPServerCount += mcpServerCount
 	if mode := findString(raw, "permissionMode", "defaultMode", "approval_policy", "approvalPolicy"); mode != "" {
-		obs.PermissionMode = normalizePermissionMode(mode)
+		obs.setPermissionMode(normalizePermissionMode(mode), scope)
 	}
 	return nil
 }
 
-func applyTOMLConfig(obs *ConfigObservation, data []byte) error {
+func applyTOMLConfig(obs *ConfigObservation, data []byte, scope configScope) error {
 	var raw map[string]any
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	mcpServerCount, err := countMap(raw, "mcp_servers")
+	if err != nil {
+		return err
+	}
+	obs.MCPServerCount += mcpServerCount
 	if mode := findString(raw, "approval_policy", "approvalPolicy", "permission_mode", "permissionMode"); mode != "" {
-		obs.PermissionMode = normalizePermissionMode(mode)
+		obs.setPermissionMode(normalizePermissionMode(mode), scope)
 	}
 	return nil
 }
 
-func countMap(v any, key string) int {
+func (obs *ConfigObservation) setPermissionMode(mode riskenvelope.PermissionMode, scope configScope) {
+	if !obs.permissionModeSet || scope >= obs.permissionModeScope {
+		obs.PermissionMode = mode
+		obs.permissionModeScope = scope
+		obs.permissionModeSet = true
+	}
+}
+
+func countMap(v any, key string) (int, error) {
 	switch typed := v.(type) {
 	case map[string]any:
 		total := 0
 		for k, child := range typed {
 			if k == key {
-				if m, ok := child.(map[string]any); ok {
-					total += len(m)
+				m, ok := child.(map[string]any)
+				if !ok {
+					return 0, fmt.Errorf("%s must be an object", key)
 				}
+				total += len(m)
 			}
-			total += countMap(child, key)
+			count, err := countMap(child, key)
+			if err != nil {
+				return 0, err
+			}
+			total += count
 		}
-		return total
+		return total, nil
 	case []any:
 		total := 0
 		for _, child := range typed {
-			total += countMap(child, key)
+			count, err := countMap(child, key)
+			if err != nil {
+				return 0, err
+			}
+			total += count
 		}
-		return total
+		return total, nil
 	default:
-		return 0
+		return 0, nil
 	}
 }
 
@@ -562,8 +846,14 @@ func configKind(path string) (string, bool) {
 	base := strings.ToLower(filepath.Base(path))
 	parent := strings.ToLower(filepath.Base(filepath.Dir(path)))
 	switch {
-	case base == ".mcp.json" || base == "mcp.json" || base == "claude_desktop_config.json":
+	case base == ".mcp.json" && isClaudePluginMCPConfig(path):
+		return "plugin_mcp_json", true
+	case base == ".mcp.json" || base == "mcp.json":
 		return "mcp_json", true
+	case base == ".claude.json":
+		return "claude_json", true
+	case base == "claude_desktop_config.json":
+		return "claude_desktop_json", true
 	case parent == ".claude" && strings.HasPrefix(base, "settings") && strings.HasSuffix(base, ".json"):
 		return "claude_json", true
 	case parent == ".codex" && base == "config.toml":
@@ -571,6 +861,11 @@ func configKind(path string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func isClaudePluginMCPConfig(path string) bool {
+	info, err := os.Stat(filepath.Join(filepath.Dir(path), ".claude-plugin", "plugin.json"))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func shouldSkipDir(name string) bool {

@@ -1,5 +1,8 @@
 package evidence
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 import (
 	"context"
 	"crypto/ed25519"
@@ -156,7 +159,10 @@ func TestEvidenceTrustConfigKMSAndHelperBranches(t *testing.T) {
 	if ProfileRequiresExternalTrust(EvidenceTrustProfileTeam) {
 		t.Fatal("team profile should not require external trust")
 	}
-	if got := BuildEvidencePackVerifyCommand("bundle.tar", EvidenceTrustProfileCustomer, "storage.json"); !strings.Contains(got, "--profile customer") || !strings.Contains(got, "--storage-receipt storage.json") {
+	if got := BuildEvidencePackVerifyCommand("bundle.tar", EvidenceTrustProfileDevLocal, ""); strings.Contains(got, "--allow-self-attested") || strings.Contains(got, "--profile") {
+		t.Fatalf("dev-local verify command must require an explicit trust opt-in: %s", got)
+	}
+	if got := BuildEvidencePackVerifyCommand("bundle.tar", EvidenceTrustProfileCustomer, "storage.json"); !strings.Contains(got, "--profile customer") || !strings.Contains(got, "--storage-receipt storage.json") || strings.Contains(got, "--allow-self-attested") {
 		t.Fatalf("customer verify command missing flags: %s", got)
 	}
 	if got := BuildEvidencePackVerifyCommand("bundle.tar", EvidenceTrustProfileTeam, "storage.json"); strings.Contains(got, "--profile") {
@@ -195,7 +201,7 @@ func TestEvidenceSealValidationAndKeyEdges(t *testing.T) {
 	}
 
 	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", publicKeyHex)
-	trusted, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileTeam)
+	trusted, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileTeam, false)
 	if err != nil {
 		t.Fatalf("trusted key env fallback: %v", err)
 	}
@@ -203,7 +209,7 @@ func TestEvidenceSealValidationAndKeyEdges(t *testing.T) {
 		t.Fatalf("trusted key = %x, want %s", trusted, publicKeyHex)
 	}
 	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", strings.Repeat("0", ed25519.PublicKeySize*2))
-	if _, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileTeam); err == nil {
+	if _, err := trustedPublicKeyForSeal(seal, nil, EvidenceTrustProfileTeam, false); err == nil {
 		t.Fatal("trusted key mismatch should fail")
 	}
 

@@ -152,7 +152,7 @@ func (c *ToolCatalog) RegisterGovernanceTools() {
 		{
 			Name:        "helm.evaluate",
 			Title:       "Evaluate A2A Envelope",
-			Description: "Negotiate A2A protocol features and verify envelope signatures for cross-agent communication. Returns negotiation result with agreed features and trust assessment.",
+			Description: "Negotiate A2A protocol features for cross-agent communication. Returns the fail-closed negotiation result with agreed features.",
 			ServerID:    "helm-governance",
 			Schema: map[string]any{
 				"type": "object",

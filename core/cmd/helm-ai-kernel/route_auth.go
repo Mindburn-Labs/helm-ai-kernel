@@ -10,6 +10,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
@@ -62,11 +63,11 @@ func requireRuntimeAdmin(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		principal, detail, ok := helmauth.AdminPrincipalFromRequest(r, adminKey)
 		if !ok {
-			api.WriteUnauthorized(w, detail)
+			httperr.WriteUnauthorized(w, detail)
 			return
 		}
 		if expired, configured := quickstartSessionExpired(time.Now()); configured && expired {
-			api.WriteUnauthorized(w, "Local quickstart session expired")
+			httperr.WriteUnauthorized(w, "Local quickstart session expired")
 			return
 		}
 		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))
@@ -78,11 +79,11 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		adminPrincipal, detail, ok := helmauth.AdminPrincipalFromRequest(r, adminKey)
 		if !ok {
-			api.WriteUnauthorized(w, detail)
+			httperr.WriteUnauthorized(w, detail)
 			return
 		}
 		if expired, configured := quickstartSessionExpired(time.Now()); configured && expired {
-			api.WriteUnauthorized(w, "Local quickstart session expired")
+			httperr.WriteUnauthorized(w, "Local quickstart session expired")
 			return
 		}
 
@@ -164,16 +165,16 @@ func requireRuntimeService(handler http.HandlerFunc) http.HandlerFunc {
 	serviceKey := os.Getenv(serviceAPIKeyEnv)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if serviceKey == "" {
-			api.WriteUnauthorized(w, "Service API key not configured (set HELM_SERVICE_API_KEY)")
+			httperr.WriteUnauthorized(w, "Service API key not configured (set HELM_SERVICE_API_KEY)")
 			return
 		}
 		token, detail, ok := helmauth.BearerToken(r)
 		if !ok {
-			api.WriteUnauthorized(w, detail)
+			httperr.WriteUnauthorized(w, detail)
 			return
 		}
 		if subtle.ConstantTimeCompare([]byte(token), []byte(serviceKey)) != 1 {
-			api.WriteUnauthorized(w, "Invalid service API key")
+			httperr.WriteUnauthorized(w, "Invalid service API key")
 			return
 		}
 

@@ -2,11 +2,12 @@
 //! Minimal deps: reqwest + serde.
 
 use reqwest::blocking::Client;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-pub mod client;
 pub mod canonical;
+pub mod client;
 pub mod types_gen;
 pub use types_gen::*;
 
@@ -213,10 +214,43 @@ pub struct HelmClient {
 impl HelmClient {
     /// Create a new client.
     pub fn new(base_url: &str) -> Self {
+        Self::with_auth(base_url, None, None, None)
+    }
+
+    /// Create a client with optional API key, tenant, and principal headers for protected routes.
+    pub fn with_auth(
+        base_url: &str,
+        api_key: Option<&str>,
+        tenant_id: Option<&str>,
+        principal_id: Option<&str>,
+    ) -> Self {
+        let mut headers = HeaderMap::new();
+        if let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {api_key}"))
+                    .expect("HELM API key must be a valid HTTP header value"),
+            );
+        }
+        if let Some(tenant_id) = tenant_id.filter(|value| !value.trim().is_empty()) {
+            headers.insert(
+                "X-Helm-Tenant-ID",
+                HeaderValue::from_str(tenant_id)
+                    .expect("HELM tenant ID must be a valid HTTP header value"),
+            );
+        }
+        if let Some(principal_id) = principal_id.filter(|value| !value.trim().is_empty()) {
+            headers.insert(
+                "X-Helm-Principal-ID",
+                HeaderValue::from_str(principal_id)
+                    .expect("HELM principal ID must be a valid HTTP header value"),
+            );
+        }
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             client: Client::builder()
                 .timeout(Duration::from_secs(30))
+                .default_headers(headers)
                 .build()
                 .expect("failed to build HTTP client"),
         }
@@ -388,12 +422,49 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/evaluate
+    /// POST /api/v1/evaluate using the legacy dynamic contract.
+    #[deprecated(note = "use evaluate_decision_v5 for the typed V5 contract")]
     pub fn evaluate_decision<T: Serialize>(
         &self,
         req: &T,
     ) -> Result<serde_json::Value, HelmApiError> {
         self.post_value("/api/v1/evaluate", req)
+    }
+
+    /// POST /api/v1/evaluate using the canonical V5 request and response.
+    pub fn evaluate_decision_v5(
+        &self,
+        req: &EvaluateRequest,
+    ) -> Result<EvaluateResponse, HelmApiError> {
+        for (field, value) in [
+            ("tool", req.tool.as_deref()),
+            ("effect_level", req.effect_level.as_deref()),
+            ("session_id", req.session_id.as_deref()),
+        ] {
+            if value.map(str::trim).is_none_or(str::is_empty) {
+                return Err(HelmApiError {
+                    status: 0,
+                    message: format!("evaluate_decision_v5 requires a non-blank {field}"),
+                    reason_code: ReasonCode::ErrorInternal,
+                });
+            }
+        }
+        let resp = self
+            .client
+            .post(self.url("/api/v1/evaluate"))
+            .json(req)
+            .send()
+            .map_err(|e| HelmApiError {
+                status: 0,
+                message: e.to_string(),
+                reason_code: ReasonCode::ErrorInternal,
+            })?;
+        let resp = self.check(resp)?;
+        resp.json().map_err(|e| HelmApiError {
+            status: 0,
+            message: e.to_string(),
+            reason_code: ReasonCode::ErrorInternal,
+        })
     }
 
     /// POST /api/v1/kernel/approve
@@ -1090,6 +1161,8 @@ fn encode_query(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
 
     #[test]
     fn test_client_creation() {
@@ -1097,10 +1170,82 @@ mod tests {
     }
 
     #[test]
+    fn test_authenticated_client_sends_context_headers() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 1024];
+            while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                let count = stream.read(&mut buffer).unwrap();
+                assert!(count > 0, "connection closed before HTTP headers arrived");
+                request.extend_from_slice(&buffer[..count]);
+            }
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                .unwrap();
+            String::from_utf8(request).unwrap()
+        });
+
+        let client = HelmClient::with_auth(
+            &format!("http://{address}"),
+            Some("test-api-key"),
+            Some("tenant-a"),
+            Some("principal-a"),
+        );
+        assert_eq!(client.health().unwrap(), serde_json::json!({}));
+
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.contains("authorization: bearer test-api-key"));
+        assert!(request.contains("x-helm-tenant-id: tenant-a"));
+        assert!(request.contains("x-helm-principal-id: principal-a"));
+    }
+
+    #[test]
     fn test_reason_code_serde() {
         let code = ReasonCode::DenyToolNotFound;
         let json = serde_json::to_string(&code).unwrap();
         assert_eq!(json, "\"DENY_TOOL_NOT_FOUND\"");
+    }
+
+    #[test]
+    fn test_evaluate_decision_v5_requires_canonical_request() {
+        let request = EvaluateRequest {
+            tool: Some("read_file".to_string()),
+            effect_level: Some("read".to_string()),
+            session_id: Some("session-test".to_string()),
+            ..EvaluateRequest::new()
+        };
+        let encoded = serde_json::to_value(&request).unwrap();
+        assert_eq!(encoded["tool"], "read_file");
+        assert_eq!(encoded["effect_level"], "read");
+        assert_eq!(encoded["session_id"], "session-test");
+
+        let client = HelmClient::new("http://127.0.0.1:1");
+        let blank = EvaluateRequest {
+            tool: Some("read_file".to_string()),
+            effect_level: Some("read".to_string()),
+            session_id: Some(" ".to_string()),
+            ..EvaluateRequest::new()
+        };
+        let err = client.evaluate_decision_v5(&blank).unwrap_err();
+        assert_eq!(err.status, 0);
+        assert!(err.message.contains("non-blank session_id"));
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn test_legacy_evaluate_decision_accepts_dynamic_request() {
+        let client = HelmClient::new("http://127.0.0.1:1");
+        let err = client
+            .evaluate_decision(&serde_json::json!({
+                "action": "read_file",
+                "resource": "read",
+                "context": {"session_id": "legacy-session"},
+            }))
+            .unwrap_err();
+        assert_eq!(err.status, 0);
     }
 
     #[test]

@@ -29,6 +29,7 @@ type Gateway struct {
 	config   GatewayConfig
 	bridge   *bridge.KernelBridge // governance bridge (optional)
 	exec     ToolExecutor
+	governed bool
 	sessions *SessionStore // HTTP session store for /mcp transport
 }
 
@@ -49,6 +50,15 @@ func WithBridge(kb *bridge.KernelBridge) GatewayOption {
 func WithExecutor(exec ToolExecutor) GatewayOption {
 	return func(g *Gateway) {
 		g.exec = exec
+		g.governed = false
+	}
+}
+
+// WithGovernedExecutor wires an executor already wrapped by GovernanceFirewall.
+func WithGovernedExecutor(exec GovernedExecutor) GatewayOption {
+	return func(g *Gateway) {
+		g.exec = exec.execute
+		g.governed = exec.execute != nil
 	}
 }
 
@@ -300,7 +310,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if !hasAllOAuthScopes(r.Context(), tool.RequiredScopes) {
+	if !g.hasRequiredScopes(r.Context(), tool) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
@@ -515,7 +525,7 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if !ok {
 			return writeError(-32602, fmt.Sprintf("tool %q not found", req.Name))
 		}
-		if !hasAllOAuthScopes(ctx, tool.RequiredScopes) {
+		if !g.hasRequiredScopes(ctx, tool) {
 			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
 		}
 		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
@@ -551,6 +561,24 @@ func (g *Gateway) authMode() string {
 		return "none"
 	}
 	return g.config.AuthMode
+}
+
+// hasRequiredScopes enforces a tool's OAuth scopes whenever the configured
+// authentication channel claims a client identity. Anonymous local mode may
+// execute scoped tools only through an explicitly policy-governed executor,
+// while static-header authentication must not promote possession of an API key
+// into every delegated OAuth scope.
+func (g *Gateway) hasRequiredScopes(ctx context.Context, tool ToolRef) bool {
+	switch g.authMode() {
+	case "oauth":
+		return hasAllOAuthScopes(ctx, tool.RequiredScopes)
+	case "none":
+		return len(tool.RequiredScopes) == 0 || g.governed
+	case "static-header":
+		return len(tool.RequiredScopes) == 0
+	default:
+		return false
+	}
 }
 
 func findToolRef(c Catalog, name string) (ToolRef, bool) {

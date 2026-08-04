@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 func TestDoctorDoesNotLeakRootKeySeed(t *testing.T) {
@@ -29,5 +31,27 @@ func TestDoctorDoesNotLeakRootKeySeed(t *testing.T) {
 		if !strings.Contains(out, "public_key_hash") {
 			t.Fatalf("doctor output should use public key hash detail for args %v: %s", args, out)
 		}
+	}
+}
+
+func TestDoctorRenderTextHonorsSharedNoColorCapability(t *testing.T) {
+	results := []CheckResult{{
+		Name:       "crypto_keys",
+		Status:     statusFail,
+		Message:    "No keypair found",
+		Suggestion: "Run: helm-ai-kernel init",
+	}}
+	summary := doctorSummary{Fail: 1}
+	caps := ui.CapabilitiesFor(true, true, ui.TerminalOptions{
+		NoColor: true,
+		Term:    "xterm-256color",
+		Width:   80,
+	})
+	var out bytes.Buffer
+	if code := renderTextWithCaps(&out, results, summary, false, caps); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Fatalf("doctor output should not contain ANSI under NO_COLOR: %q", out.String())
 	}
 }

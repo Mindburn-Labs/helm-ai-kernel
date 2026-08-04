@@ -436,7 +436,9 @@ func parseEvidenceJSONArgs(args []string) (bool, []string, error) {
 func inspectEvidenceBundle(bundle string) (evidenceInspectReport, error) {
 	var out evidenceInspectReport
 	err := withEvidenceBundleDir(bundle, func(dir string) error {
-		report, err := verifier.VerifyBundle(dir)
+		// Pack was sealed by this process, so its dev-local self-attested
+		// seal carries no provenance question (F-02).
+		report, err := verifier.VerifyLocallyProducedBundle(dir)
 		if err != nil {
 			return err
 		}

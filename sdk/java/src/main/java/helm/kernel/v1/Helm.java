@@ -238,6 +238,10 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
      * <code>REASON_CODE_JURISDICTION_VIOLATION = 17;</code>
      */
     REASON_CODE_JURISDICTION_VIOLATION(17),
+    /**
+     * <code>REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED = 18;</code>
+     */
+    REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED(18),
     UNRECOGNIZED(-1),
     ;
 
@@ -322,6 +326,10 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
      * <code>REASON_CODE_JURISDICTION_VIOLATION = 17;</code>
      */
     public static final int REASON_CODE_JURISDICTION_VIOLATION_VALUE = 17;
+    /**
+     * <code>REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED = 18;</code>
+     */
+    public static final int REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED_VALUE = 18;
 
 
     public final int getNumber() {
@@ -366,6 +374,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         case 15: return REASON_CODE_VERIFICATION_FAILURE;
         case 16: return REASON_CODE_TENANT_ISOLATION;
         case 17: return REASON_CODE_JURISDICTION_VIOLATION;
+        case 18: return REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED;
         default: return null;
       }
     }
@@ -531,7 +540,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectType_ = s;
@@ -547,7 +556,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getEffectTypeBytes() {
       java.lang.Object ref = effectType_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectType_ = b;
@@ -570,7 +579,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectId_ = s;
@@ -586,7 +595,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getEffectIdBytes() {
       java.lang.Object ref = effectId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectId_ = b;
@@ -624,7 +633,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         budgetId_ = s;
@@ -640,7 +649,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getBudgetIdBytes() {
       java.lang.Object ref = budgetId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         budgetId_ = b;
@@ -1040,7 +1049,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getEffectTypeBytes() {
         java.lang.Object ref = effectType_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectType_ = b;
@@ -1112,7 +1121,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getEffectIdBytes() {
         java.lang.Object ref = effectId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectId_ = b;
@@ -1228,7 +1237,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getBudgetIdBytes() {
         java.lang.Object ref = budgetId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           budgetId_ = b;
@@ -1321,6 +1330,2737 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
 
     @java.lang.Override
     public helm.kernel.v1.Helm.Effect getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface SemanticThreatAssessmentOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:helm.kernel.v1.SemanticThreatAssessment)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>bool available = 1;</code>
+     * @return The available.
+     */
+    boolean getAvailable();
+
+    /**
+     * <code>string model_version = 2;</code>
+     * @return The modelVersion.
+     */
+    java.lang.String getModelVersion();
+    /**
+     * <code>string model_version = 2;</code>
+     * @return The bytes for modelVersion.
+     */
+    com.google.protobuf.ByteString
+        getModelVersionBytes();
+
+    /**
+     * <code>string model_hash = 3;</code>
+     * @return The modelHash.
+     */
+    java.lang.String getModelHash();
+    /**
+     * <code>string model_hash = 3;</code>
+     * @return The bytes for modelHash.
+     */
+    com.google.protobuf.ByteString
+        getModelHashBytes();
+
+    /**
+     * <code>string expected_model_hash = 4;</code>
+     * @return The expectedModelHash.
+     */
+    java.lang.String getExpectedModelHash();
+    /**
+     * <code>string expected_model_hash = 4;</code>
+     * @return The bytes for expectedModelHash.
+     */
+    com.google.protobuf.ByteString
+        getExpectedModelHashBytes();
+
+    /**
+     * <code>string failure_reason = 5;</code>
+     * @return The failureReason.
+     */
+    java.lang.String getFailureReason();
+    /**
+     * <code>string failure_reason = 5;</code>
+     * @return The bytes for failureReason.
+     */
+    com.google.protobuf.ByteString
+        getFailureReasonBytes();
+
+    /**
+     * <code>uint32 threshold_bp = 6;</code>
+     * @return The thresholdBp.
+     */
+    int getThresholdBp();
+
+    /**
+     * <code>uint32 max_bp = 7;</code>
+     * @return The maxBp.
+     */
+    int getMaxBp();
+
+    /**
+     * <code>string nearest_class = 8;</code>
+     * @return The nearestClass.
+     */
+    java.lang.String getNearestClass();
+    /**
+     * <code>string nearest_class = 8;</code>
+     * @return The bytes for nearestClass.
+     */
+    com.google.protobuf.ByteString
+        getNearestClassBytes();
+
+    /**
+     * <code>bool flagged = 9;</code>
+     * @return The flagged.
+     */
+    boolean getFlagged();
+
+    /**
+     * <code>bool input_truncated = 10;</code>
+     * @return The inputTruncated.
+     */
+    boolean getInputTruncated();
+  }
+  /**
+   * <pre>
+   * Deterministic advisory-classifier evidence. This is informational by
+   * default; a Guardian policy may only escalate an explicitly configured score,
+   * coverage, or availability condition.
+   * </pre>
+   *
+   * Protobuf type {@code helm.kernel.v1.SemanticThreatAssessment}
+   */
+  public static final class SemanticThreatAssessment extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:helm.kernel.v1.SemanticThreatAssessment)
+      SemanticThreatAssessmentOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 34,
+        /* patch= */ 1,
+        /* suffix= */ "",
+        "SemanticThreatAssessment");
+    }
+    // Use SemanticThreatAssessment.newBuilder() to construct.
+    private SemanticThreatAssessment(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private SemanticThreatAssessment() {
+      modelVersion_ = "";
+      modelHash_ = "";
+      expectedModelHash_ = "";
+      failureReason_ = "";
+      nearestClass_ = "";
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_SemanticThreatAssessment_descriptor;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.Descriptor getDescriptorForType() {
+      return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_SemanticThreatAssessment_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_SemanticThreatAssessment_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              helm.kernel.v1.Helm.SemanticThreatAssessment.class, helm.kernel.v1.Helm.SemanticThreatAssessment.Builder.class);
+    }
+
+    public static final int AVAILABLE_FIELD_NUMBER = 1;
+    private boolean available_ = false;
+    /**
+     * <code>bool available = 1;</code>
+     * @return The available.
+     */
+    @java.lang.Override
+    public boolean getAvailable() {
+      return available_;
+    }
+
+    public static final int MODEL_VERSION_FIELD_NUMBER = 2;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object modelVersion_ = "";
+    /**
+     * <code>string model_version = 2;</code>
+     * @return The modelVersion.
+     */
+    @java.lang.Override
+    public java.lang.String getModelVersion() {
+      java.lang.Object ref = modelVersion_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        modelVersion_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string model_version = 2;</code>
+     * @return The bytes for modelVersion.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getModelVersionBytes() {
+      java.lang.Object ref = modelVersion_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        modelVersion_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int MODEL_HASH_FIELD_NUMBER = 3;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object modelHash_ = "";
+    /**
+     * <code>string model_hash = 3;</code>
+     * @return The modelHash.
+     */
+    @java.lang.Override
+    public java.lang.String getModelHash() {
+      java.lang.Object ref = modelHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        modelHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string model_hash = 3;</code>
+     * @return The bytes for modelHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getModelHashBytes() {
+      java.lang.Object ref = modelHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        modelHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int EXPECTED_MODEL_HASH_FIELD_NUMBER = 4;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object expectedModelHash_ = "";
+    /**
+     * <code>string expected_model_hash = 4;</code>
+     * @return The expectedModelHash.
+     */
+    @java.lang.Override
+    public java.lang.String getExpectedModelHash() {
+      java.lang.Object ref = expectedModelHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        expectedModelHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string expected_model_hash = 4;</code>
+     * @return The bytes for expectedModelHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getExpectedModelHashBytes() {
+      java.lang.Object ref = expectedModelHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        expectedModelHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int FAILURE_REASON_FIELD_NUMBER = 5;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object failureReason_ = "";
+    /**
+     * <code>string failure_reason = 5;</code>
+     * @return The failureReason.
+     */
+    @java.lang.Override
+    public java.lang.String getFailureReason() {
+      java.lang.Object ref = failureReason_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        failureReason_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string failure_reason = 5;</code>
+     * @return The bytes for failureReason.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getFailureReasonBytes() {
+      java.lang.Object ref = failureReason_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        failureReason_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int THRESHOLD_BP_FIELD_NUMBER = 6;
+    private int thresholdBp_ = 0;
+    /**
+     * <code>uint32 threshold_bp = 6;</code>
+     * @return The thresholdBp.
+     */
+    @java.lang.Override
+    public int getThresholdBp() {
+      return thresholdBp_;
+    }
+
+    public static final int MAX_BP_FIELD_NUMBER = 7;
+    private int maxBp_ = 0;
+    /**
+     * <code>uint32 max_bp = 7;</code>
+     * @return The maxBp.
+     */
+    @java.lang.Override
+    public int getMaxBp() {
+      return maxBp_;
+    }
+
+    public static final int NEAREST_CLASS_FIELD_NUMBER = 8;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object nearestClass_ = "";
+    /**
+     * <code>string nearest_class = 8;</code>
+     * @return The nearestClass.
+     */
+    @java.lang.Override
+    public java.lang.String getNearestClass() {
+      java.lang.Object ref = nearestClass_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        nearestClass_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string nearest_class = 8;</code>
+     * @return The bytes for nearestClass.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getNearestClassBytes() {
+      java.lang.Object ref = nearestClass_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        nearestClass_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int FLAGGED_FIELD_NUMBER = 9;
+    private boolean flagged_ = false;
+    /**
+     * <code>bool flagged = 9;</code>
+     * @return The flagged.
+     */
+    @java.lang.Override
+    public boolean getFlagged() {
+      return flagged_;
+    }
+
+    public static final int INPUT_TRUNCATED_FIELD_NUMBER = 10;
+    private boolean inputTruncated_ = false;
+    /**
+     * <code>bool input_truncated = 10;</code>
+     * @return The inputTruncated.
+     */
+    @java.lang.Override
+    public boolean getInputTruncated() {
+      return inputTruncated_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (available_ != false) {
+        output.writeBool(1, available_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(modelVersion_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 2, modelVersion_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(modelHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 3, modelHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(expectedModelHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 4, expectedModelHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(failureReason_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 5, failureReason_);
+      }
+      if (thresholdBp_ != 0) {
+        output.writeUInt32(6, thresholdBp_);
+      }
+      if (maxBp_ != 0) {
+        output.writeUInt32(7, maxBp_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(nearestClass_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 8, nearestClass_);
+      }
+      if (flagged_ != false) {
+        output.writeBool(9, flagged_);
+      }
+      if (inputTruncated_ != false) {
+        output.writeBool(10, inputTruncated_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (available_ != false) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(1, available_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(modelVersion_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(2, modelVersion_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(modelHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(3, modelHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(expectedModelHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(4, expectedModelHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(failureReason_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(5, failureReason_);
+      }
+      if (thresholdBp_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeUInt32Size(6, thresholdBp_);
+      }
+      if (maxBp_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeUInt32Size(7, maxBp_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(nearestClass_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(8, nearestClass_);
+      }
+      if (flagged_ != false) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(9, flagged_);
+      }
+      if (inputTruncated_ != false) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(10, inputTruncated_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof helm.kernel.v1.Helm.SemanticThreatAssessment)) {
+        return super.equals(obj);
+      }
+      helm.kernel.v1.Helm.SemanticThreatAssessment other = (helm.kernel.v1.Helm.SemanticThreatAssessment) obj;
+
+      if (getAvailable()
+          != other.getAvailable()) return false;
+      if (!getModelVersion()
+          .equals(other.getModelVersion())) return false;
+      if (!getModelHash()
+          .equals(other.getModelHash())) return false;
+      if (!getExpectedModelHash()
+          .equals(other.getExpectedModelHash())) return false;
+      if (!getFailureReason()
+          .equals(other.getFailureReason())) return false;
+      if (getThresholdBp()
+          != other.getThresholdBp()) return false;
+      if (getMaxBp()
+          != other.getMaxBp()) return false;
+      if (!getNearestClass()
+          .equals(other.getNearestClass())) return false;
+      if (getFlagged()
+          != other.getFlagged()) return false;
+      if (getInputTruncated()
+          != other.getInputTruncated()) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + AVAILABLE_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
+          getAvailable());
+      hash = (37 * hash) + MODEL_VERSION_FIELD_NUMBER;
+      hash = (53 * hash) + getModelVersion().hashCode();
+      hash = (37 * hash) + MODEL_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getModelHash().hashCode();
+      hash = (37 * hash) + EXPECTED_MODEL_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getExpectedModelHash().hashCode();
+      hash = (37 * hash) + FAILURE_REASON_FIELD_NUMBER;
+      hash = (53 * hash) + getFailureReason().hashCode();
+      hash = (37 * hash) + THRESHOLD_BP_FIELD_NUMBER;
+      hash = (53 * hash) + getThresholdBp();
+      hash = (37 * hash) + MAX_BP_FIELD_NUMBER;
+      hash = (53 * hash) + getMaxBp();
+      hash = (37 * hash) + NEAREST_CLASS_FIELD_NUMBER;
+      hash = (53 * hash) + getNearestClass().hashCode();
+      hash = (37 * hash) + FLAGGED_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
+          getFlagged());
+      hash = (37 * hash) + INPUT_TRUNCATED_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
+          getInputTruncated());
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(helm.kernel.v1.Helm.SemanticThreatAssessment prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * <pre>
+     * Deterministic advisory-classifier evidence. This is informational by
+     * default; a Guardian policy may only escalate an explicitly configured score,
+     * coverage, or availability condition.
+     * </pre>
+     *
+     * Protobuf type {@code helm.kernel.v1.SemanticThreatAssessment}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:helm.kernel.v1.SemanticThreatAssessment)
+        helm.kernel.v1.Helm.SemanticThreatAssessmentOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_SemanticThreatAssessment_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_SemanticThreatAssessment_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                helm.kernel.v1.Helm.SemanticThreatAssessment.class, helm.kernel.v1.Helm.SemanticThreatAssessment.Builder.class);
+      }
+
+      // Construct using helm.kernel.v1.Helm.SemanticThreatAssessment.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        available_ = false;
+        modelVersion_ = "";
+        modelHash_ = "";
+        expectedModelHash_ = "";
+        failureReason_ = "";
+        thresholdBp_ = 0;
+        maxBp_ = 0;
+        nearestClass_ = "";
+        flagged_ = false;
+        inputTruncated_ = false;
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_SemanticThreatAssessment_descriptor;
+      }
+
+      @java.lang.Override
+      public helm.kernel.v1.Helm.SemanticThreatAssessment getDefaultInstanceForType() {
+        return helm.kernel.v1.Helm.SemanticThreatAssessment.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public helm.kernel.v1.Helm.SemanticThreatAssessment build() {
+        helm.kernel.v1.Helm.SemanticThreatAssessment result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public helm.kernel.v1.Helm.SemanticThreatAssessment buildPartial() {
+        helm.kernel.v1.Helm.SemanticThreatAssessment result = new helm.kernel.v1.Helm.SemanticThreatAssessment(this);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartial0(helm.kernel.v1.Helm.SemanticThreatAssessment result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.available_ = available_;
+        }
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.modelVersion_ = modelVersion_;
+        }
+        if (((from_bitField0_ & 0x00000004) != 0)) {
+          result.modelHash_ = modelHash_;
+        }
+        if (((from_bitField0_ & 0x00000008) != 0)) {
+          result.expectedModelHash_ = expectedModelHash_;
+        }
+        if (((from_bitField0_ & 0x00000010) != 0)) {
+          result.failureReason_ = failureReason_;
+        }
+        if (((from_bitField0_ & 0x00000020) != 0)) {
+          result.thresholdBp_ = thresholdBp_;
+        }
+        if (((from_bitField0_ & 0x00000040) != 0)) {
+          result.maxBp_ = maxBp_;
+        }
+        if (((from_bitField0_ & 0x00000080) != 0)) {
+          result.nearestClass_ = nearestClass_;
+        }
+        if (((from_bitField0_ & 0x00000100) != 0)) {
+          result.flagged_ = flagged_;
+        }
+        if (((from_bitField0_ & 0x00000200) != 0)) {
+          result.inputTruncated_ = inputTruncated_;
+        }
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof helm.kernel.v1.Helm.SemanticThreatAssessment) {
+          return mergeFrom((helm.kernel.v1.Helm.SemanticThreatAssessment)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(helm.kernel.v1.Helm.SemanticThreatAssessment other) {
+        if (other == helm.kernel.v1.Helm.SemanticThreatAssessment.getDefaultInstance()) return this;
+        if (other.getAvailable() != false) {
+          setAvailable(other.getAvailable());
+        }
+        if (!other.getModelVersion().isEmpty()) {
+          modelVersion_ = other.modelVersion_;
+          bitField0_ |= 0x00000002;
+          onChanged();
+        }
+        if (!other.getModelHash().isEmpty()) {
+          modelHash_ = other.modelHash_;
+          bitField0_ |= 0x00000004;
+          onChanged();
+        }
+        if (!other.getExpectedModelHash().isEmpty()) {
+          expectedModelHash_ = other.expectedModelHash_;
+          bitField0_ |= 0x00000008;
+          onChanged();
+        }
+        if (!other.getFailureReason().isEmpty()) {
+          failureReason_ = other.failureReason_;
+          bitField0_ |= 0x00000010;
+          onChanged();
+        }
+        if (other.getThresholdBp() != 0) {
+          setThresholdBp(other.getThresholdBp());
+        }
+        if (other.getMaxBp() != 0) {
+          setMaxBp(other.getMaxBp());
+        }
+        if (!other.getNearestClass().isEmpty()) {
+          nearestClass_ = other.nearestClass_;
+          bitField0_ |= 0x00000080;
+          onChanged();
+        }
+        if (other.getFlagged() != false) {
+          setFlagged(other.getFlagged());
+        }
+        if (other.getInputTruncated() != false) {
+          setInputTruncated(other.getInputTruncated());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 8: {
+                available_ = input.readBool();
+                bitField0_ |= 0x00000001;
+                break;
+              } // case 8
+              case 18: {
+                modelVersion_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000002;
+                break;
+              } // case 18
+              case 26: {
+                modelHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000004;
+                break;
+              } // case 26
+              case 34: {
+                expectedModelHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000008;
+                break;
+              } // case 34
+              case 42: {
+                failureReason_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000010;
+                break;
+              } // case 42
+              case 48: {
+                thresholdBp_ = input.readUInt32();
+                bitField0_ |= 0x00000020;
+                break;
+              } // case 48
+              case 56: {
+                maxBp_ = input.readUInt32();
+                bitField0_ |= 0x00000040;
+                break;
+              } // case 56
+              case 66: {
+                nearestClass_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000080;
+                break;
+              } // case 66
+              case 72: {
+                flagged_ = input.readBool();
+                bitField0_ |= 0x00000100;
+                break;
+              } // case 72
+              case 80: {
+                inputTruncated_ = input.readBool();
+                bitField0_ |= 0x00000200;
+                break;
+              } // case 80
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private boolean available_ ;
+      /**
+       * <code>bool available = 1;</code>
+       * @return The available.
+       */
+      @java.lang.Override
+      public boolean getAvailable() {
+        return available_;
+      }
+      /**
+       * <code>bool available = 1;</code>
+       * @param value The available to set.
+       * @return This builder for chaining.
+       */
+      public Builder setAvailable(boolean value) {
+
+        available_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bool available = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearAvailable() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        available_ = false;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object modelVersion_ = "";
+      /**
+       * <code>string model_version = 2;</code>
+       * @return The modelVersion.
+       */
+      public java.lang.String getModelVersion() {
+        java.lang.Object ref = modelVersion_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          modelVersion_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string model_version = 2;</code>
+       * @return The bytes for modelVersion.
+       */
+      public com.google.protobuf.ByteString
+          getModelVersionBytes() {
+        java.lang.Object ref = modelVersion_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          modelVersion_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string model_version = 2;</code>
+       * @param value The modelVersion to set.
+       * @return This builder for chaining.
+       */
+      public Builder setModelVersion(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        modelVersion_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string model_version = 2;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearModelVersion() {
+        modelVersion_ = getDefaultInstance().getModelVersion();
+        bitField0_ = (bitField0_ & ~0x00000002);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string model_version = 2;</code>
+       * @param value The bytes for modelVersion to set.
+       * @return This builder for chaining.
+       */
+      public Builder setModelVersionBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        modelVersion_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object modelHash_ = "";
+      /**
+       * <code>string model_hash = 3;</code>
+       * @return The modelHash.
+       */
+      public java.lang.String getModelHash() {
+        java.lang.Object ref = modelHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          modelHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string model_hash = 3;</code>
+       * @return The bytes for modelHash.
+       */
+      public com.google.protobuf.ByteString
+          getModelHashBytes() {
+        java.lang.Object ref = modelHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          modelHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string model_hash = 3;</code>
+       * @param value The modelHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setModelHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        modelHash_ = value;
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string model_hash = 3;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearModelHash() {
+        modelHash_ = getDefaultInstance().getModelHash();
+        bitField0_ = (bitField0_ & ~0x00000004);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string model_hash = 3;</code>
+       * @param value The bytes for modelHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setModelHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        modelHash_ = value;
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object expectedModelHash_ = "";
+      /**
+       * <code>string expected_model_hash = 4;</code>
+       * @return The expectedModelHash.
+       */
+      public java.lang.String getExpectedModelHash() {
+        java.lang.Object ref = expectedModelHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          expectedModelHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string expected_model_hash = 4;</code>
+       * @return The bytes for expectedModelHash.
+       */
+      public com.google.protobuf.ByteString
+          getExpectedModelHashBytes() {
+        java.lang.Object ref = expectedModelHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          expectedModelHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string expected_model_hash = 4;</code>
+       * @param value The expectedModelHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setExpectedModelHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        expectedModelHash_ = value;
+        bitField0_ |= 0x00000008;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string expected_model_hash = 4;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearExpectedModelHash() {
+        expectedModelHash_ = getDefaultInstance().getExpectedModelHash();
+        bitField0_ = (bitField0_ & ~0x00000008);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string expected_model_hash = 4;</code>
+       * @param value The bytes for expectedModelHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setExpectedModelHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        expectedModelHash_ = value;
+        bitField0_ |= 0x00000008;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object failureReason_ = "";
+      /**
+       * <code>string failure_reason = 5;</code>
+       * @return The failureReason.
+       */
+      public java.lang.String getFailureReason() {
+        java.lang.Object ref = failureReason_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          failureReason_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string failure_reason = 5;</code>
+       * @return The bytes for failureReason.
+       */
+      public com.google.protobuf.ByteString
+          getFailureReasonBytes() {
+        java.lang.Object ref = failureReason_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          failureReason_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string failure_reason = 5;</code>
+       * @param value The failureReason to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFailureReason(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        failureReason_ = value;
+        bitField0_ |= 0x00000010;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string failure_reason = 5;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearFailureReason() {
+        failureReason_ = getDefaultInstance().getFailureReason();
+        bitField0_ = (bitField0_ & ~0x00000010);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string failure_reason = 5;</code>
+       * @param value The bytes for failureReason to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFailureReasonBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        failureReason_ = value;
+        bitField0_ |= 0x00000010;
+        onChanged();
+        return this;
+      }
+
+      private int thresholdBp_ ;
+      /**
+       * <code>uint32 threshold_bp = 6;</code>
+       * @return The thresholdBp.
+       */
+      @java.lang.Override
+      public int getThresholdBp() {
+        return thresholdBp_;
+      }
+      /**
+       * <code>uint32 threshold_bp = 6;</code>
+       * @param value The thresholdBp to set.
+       * @return This builder for chaining.
+       */
+      public Builder setThresholdBp(int value) {
+
+        thresholdBp_ = value;
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>uint32 threshold_bp = 6;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearThresholdBp() {
+        bitField0_ = (bitField0_ & ~0x00000020);
+        thresholdBp_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private int maxBp_ ;
+      /**
+       * <code>uint32 max_bp = 7;</code>
+       * @return The maxBp.
+       */
+      @java.lang.Override
+      public int getMaxBp() {
+        return maxBp_;
+      }
+      /**
+       * <code>uint32 max_bp = 7;</code>
+       * @param value The maxBp to set.
+       * @return This builder for chaining.
+       */
+      public Builder setMaxBp(int value) {
+
+        maxBp_ = value;
+        bitField0_ |= 0x00000040;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>uint32 max_bp = 7;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearMaxBp() {
+        bitField0_ = (bitField0_ & ~0x00000040);
+        maxBp_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object nearestClass_ = "";
+      /**
+       * <code>string nearest_class = 8;</code>
+       * @return The nearestClass.
+       */
+      public java.lang.String getNearestClass() {
+        java.lang.Object ref = nearestClass_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          nearestClass_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string nearest_class = 8;</code>
+       * @return The bytes for nearestClass.
+       */
+      public com.google.protobuf.ByteString
+          getNearestClassBytes() {
+        java.lang.Object ref = nearestClass_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          nearestClass_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string nearest_class = 8;</code>
+       * @param value The nearestClass to set.
+       * @return This builder for chaining.
+       */
+      public Builder setNearestClass(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        nearestClass_ = value;
+        bitField0_ |= 0x00000080;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string nearest_class = 8;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearNearestClass() {
+        nearestClass_ = getDefaultInstance().getNearestClass();
+        bitField0_ = (bitField0_ & ~0x00000080);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string nearest_class = 8;</code>
+       * @param value The bytes for nearestClass to set.
+       * @return This builder for chaining.
+       */
+      public Builder setNearestClassBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        nearestClass_ = value;
+        bitField0_ |= 0x00000080;
+        onChanged();
+        return this;
+      }
+
+      private boolean flagged_ ;
+      /**
+       * <code>bool flagged = 9;</code>
+       * @return The flagged.
+       */
+      @java.lang.Override
+      public boolean getFlagged() {
+        return flagged_;
+      }
+      /**
+       * <code>bool flagged = 9;</code>
+       * @param value The flagged to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFlagged(boolean value) {
+
+        flagged_ = value;
+        bitField0_ |= 0x00000100;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bool flagged = 9;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearFlagged() {
+        bitField0_ = (bitField0_ & ~0x00000100);
+        flagged_ = false;
+        onChanged();
+        return this;
+      }
+
+      private boolean inputTruncated_ ;
+      /**
+       * <code>bool input_truncated = 10;</code>
+       * @return The inputTruncated.
+       */
+      @java.lang.Override
+      public boolean getInputTruncated() {
+        return inputTruncated_;
+      }
+      /**
+       * <code>bool input_truncated = 10;</code>
+       * @param value The inputTruncated to set.
+       * @return This builder for chaining.
+       */
+      public Builder setInputTruncated(boolean value) {
+
+        inputTruncated_ = value;
+        bitField0_ |= 0x00000200;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bool input_truncated = 10;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearInputTruncated() {
+        bitField0_ = (bitField0_ & ~0x00000200);
+        inputTruncated_ = false;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:helm.kernel.v1.SemanticThreatAssessment)
+    }
+
+    // @@protoc_insertion_point(class_scope:helm.kernel.v1.SemanticThreatAssessment)
+    private static final helm.kernel.v1.Helm.SemanticThreatAssessment DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new helm.kernel.v1.Helm.SemanticThreatAssessment();
+    }
+
+    public static helm.kernel.v1.Helm.SemanticThreatAssessment getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<SemanticThreatAssessment>
+        PARSER = new com.google.protobuf.AbstractParser<SemanticThreatAssessment>() {
+      @java.lang.Override
+      public SemanticThreatAssessment parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<SemanticThreatAssessment> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<SemanticThreatAssessment> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public helm.kernel.v1.Helm.SemanticThreatAssessment getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface ThreatScanReferenceOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:helm.kernel.v1.ThreatScanReference)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>string scan_id = 1;</code>
+     * @return The scanId.
+     */
+    java.lang.String getScanId();
+    /**
+     * <code>string scan_id = 1;</code>
+     * @return The bytes for scanId.
+     */
+    com.google.protobuf.ByteString
+        getScanIdBytes();
+
+    /**
+     * <code>string max_severity = 2;</code>
+     * @return The maxSeverity.
+     */
+    java.lang.String getMaxSeverity();
+    /**
+     * <code>string max_severity = 2;</code>
+     * @return The bytes for maxSeverity.
+     */
+    com.google.protobuf.ByteString
+        getMaxSeverityBytes();
+
+    /**
+     * <code>uint32 finding_count = 3;</code>
+     * @return The findingCount.
+     */
+    int getFindingCount();
+
+    /**
+     * <code>string trust_level = 4;</code>
+     * @return The trustLevel.
+     */
+    java.lang.String getTrustLevel();
+    /**
+     * <code>string trust_level = 4;</code>
+     * @return The bytes for trustLevel.
+     */
+    com.google.protobuf.ByteString
+        getTrustLevelBytes();
+
+    /**
+     * <code>string input_hash = 5;</code>
+     * @return The inputHash.
+     */
+    java.lang.String getInputHash();
+    /**
+     * <code>string input_hash = 5;</code>
+     * @return The bytes for inputHash.
+     */
+    com.google.protobuf.ByteString
+        getInputHashBytes();
+
+    /**
+     * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+     * @return Whether the semantic field is set.
+     */
+    boolean hasSemantic();
+    /**
+     * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+     * @return The semantic.
+     */
+    helm.kernel.v1.Helm.SemanticThreatAssessment getSemantic();
+    /**
+     * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+     */
+    helm.kernel.v1.Helm.SemanticThreatAssessmentOrBuilder getSemanticOrBuilder();
+  }
+  /**
+   * <pre>
+   * Guardian-owned threat evidence bound by decision_record.v3 whenever it is
+   * present. The input hash is a reference, never caller-controlled policy data.
+   * </pre>
+   *
+   * Protobuf type {@code helm.kernel.v1.ThreatScanReference}
+   */
+  public static final class ThreatScanReference extends
+      com.google.protobuf.GeneratedMessage implements
+      // @@protoc_insertion_point(message_implements:helm.kernel.v1.ThreatScanReference)
+      ThreatScanReferenceOrBuilder {
+  private static final long serialVersionUID = 0L;
+    static {
+      com.google.protobuf.RuntimeVersion.validateProtobufGencodeVersion(
+        com.google.protobuf.RuntimeVersion.RuntimeDomain.PUBLIC,
+        /* major= */ 4,
+        /* minor= */ 34,
+        /* patch= */ 1,
+        /* suffix= */ "",
+        "ThreatScanReference");
+    }
+    // Use ThreatScanReference.newBuilder() to construct.
+    private ThreatScanReference(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+    }
+    private ThreatScanReference() {
+      scanId_ = "";
+      maxSeverity_ = "";
+      trustLevel_ = "";
+      inputHash_ = "";
+    }
+
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_ThreatScanReference_descriptor;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Descriptors.Descriptor getDescriptorForType() {
+      return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_ThreatScanReference_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_ThreatScanReference_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              helm.kernel.v1.Helm.ThreatScanReference.class, helm.kernel.v1.Helm.ThreatScanReference.Builder.class);
+    }
+
+    private int bitField0_;
+    public static final int SCAN_ID_FIELD_NUMBER = 1;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object scanId_ = "";
+    /**
+     * <code>string scan_id = 1;</code>
+     * @return The scanId.
+     */
+    @java.lang.Override
+    public java.lang.String getScanId() {
+      java.lang.Object ref = scanId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        scanId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string scan_id = 1;</code>
+     * @return The bytes for scanId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getScanIdBytes() {
+      java.lang.Object ref = scanId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        scanId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int MAX_SEVERITY_FIELD_NUMBER = 2;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object maxSeverity_ = "";
+    /**
+     * <code>string max_severity = 2;</code>
+     * @return The maxSeverity.
+     */
+    @java.lang.Override
+    public java.lang.String getMaxSeverity() {
+      java.lang.Object ref = maxSeverity_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        maxSeverity_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string max_severity = 2;</code>
+     * @return The bytes for maxSeverity.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getMaxSeverityBytes() {
+      java.lang.Object ref = maxSeverity_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        maxSeverity_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int FINDING_COUNT_FIELD_NUMBER = 3;
+    private int findingCount_ = 0;
+    /**
+     * <code>uint32 finding_count = 3;</code>
+     * @return The findingCount.
+     */
+    @java.lang.Override
+    public int getFindingCount() {
+      return findingCount_;
+    }
+
+    public static final int TRUST_LEVEL_FIELD_NUMBER = 4;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object trustLevel_ = "";
+    /**
+     * <code>string trust_level = 4;</code>
+     * @return The trustLevel.
+     */
+    @java.lang.Override
+    public java.lang.String getTrustLevel() {
+      java.lang.Object ref = trustLevel_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        trustLevel_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string trust_level = 4;</code>
+     * @return The bytes for trustLevel.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getTrustLevelBytes() {
+      java.lang.Object ref = trustLevel_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        trustLevel_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int INPUT_HASH_FIELD_NUMBER = 5;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object inputHash_ = "";
+    /**
+     * <code>string input_hash = 5;</code>
+     * @return The inputHash.
+     */
+    @java.lang.Override
+    public java.lang.String getInputHash() {
+      java.lang.Object ref = inputHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        inputHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string input_hash = 5;</code>
+     * @return The bytes for inputHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getInputHashBytes() {
+      java.lang.Object ref = inputHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        inputHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SEMANTIC_FIELD_NUMBER = 6;
+    private helm.kernel.v1.Helm.SemanticThreatAssessment semantic_;
+    /**
+     * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+     * @return Whether the semantic field is set.
+     */
+    @java.lang.Override
+    public boolean hasSemantic() {
+      return ((bitField0_ & 0x00000001) != 0);
+    }
+    /**
+     * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+     * @return The semantic.
+     */
+    @java.lang.Override
+    public helm.kernel.v1.Helm.SemanticThreatAssessment getSemantic() {
+      return semantic_ == null ? helm.kernel.v1.Helm.SemanticThreatAssessment.getDefaultInstance() : semantic_;
+    }
+    /**
+     * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+     */
+    @java.lang.Override
+    public helm.kernel.v1.Helm.SemanticThreatAssessmentOrBuilder getSemanticOrBuilder() {
+      return semantic_ == null ? helm.kernel.v1.Helm.SemanticThreatAssessment.getDefaultInstance() : semantic_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(scanId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, scanId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(maxSeverity_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 2, maxSeverity_);
+      }
+      if (findingCount_ != 0) {
+        output.writeUInt32(3, findingCount_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(trustLevel_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 4, trustLevel_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(inputHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 5, inputHash_);
+      }
+      if (((bitField0_ & 0x00000001) != 0)) {
+        output.writeMessage(6, getSemantic());
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(scanId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, scanId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(maxSeverity_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(2, maxSeverity_);
+      }
+      if (findingCount_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeUInt32Size(3, findingCount_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(trustLevel_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(4, trustLevel_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(inputHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(5, inputHash_);
+      }
+      if (((bitField0_ & 0x00000001) != 0)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(6, getSemantic());
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof helm.kernel.v1.Helm.ThreatScanReference)) {
+        return super.equals(obj);
+      }
+      helm.kernel.v1.Helm.ThreatScanReference other = (helm.kernel.v1.Helm.ThreatScanReference) obj;
+
+      if (!getScanId()
+          .equals(other.getScanId())) return false;
+      if (!getMaxSeverity()
+          .equals(other.getMaxSeverity())) return false;
+      if (getFindingCount()
+          != other.getFindingCount()) return false;
+      if (!getTrustLevel()
+          .equals(other.getTrustLevel())) return false;
+      if (!getInputHash()
+          .equals(other.getInputHash())) return false;
+      if (hasSemantic() != other.hasSemantic()) return false;
+      if (hasSemantic()) {
+        if (!getSemantic()
+            .equals(other.getSemantic())) return false;
+      }
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + SCAN_ID_FIELD_NUMBER;
+      hash = (53 * hash) + getScanId().hashCode();
+      hash = (37 * hash) + MAX_SEVERITY_FIELD_NUMBER;
+      hash = (53 * hash) + getMaxSeverity().hashCode();
+      hash = (37 * hash) + FINDING_COUNT_FIELD_NUMBER;
+      hash = (53 * hash) + getFindingCount();
+      hash = (37 * hash) + TRUST_LEVEL_FIELD_NUMBER;
+      hash = (53 * hash) + getTrustLevel().hashCode();
+      hash = (37 * hash) + INPUT_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getInputHash().hashCode();
+      if (hasSemantic()) {
+        hash = (37 * hash) + SEMANTIC_FIELD_NUMBER;
+        hash = (53 * hash) + getSemantic().hashCode();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    public static helm.kernel.v1.Helm.ThreatScanReference parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+
+    public static helm.kernel.v1.Helm.ThreatScanReference parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input);
+    }
+    public static helm.kernel.v1.Helm.ThreatScanReference parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessage
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(helm.kernel.v1.Helm.ThreatScanReference prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * <pre>
+     * Guardian-owned threat evidence bound by decision_record.v3 whenever it is
+     * present. The input hash is a reference, never caller-controlled policy data.
+     * </pre>
+     *
+     * Protobuf type {@code helm.kernel.v1.ThreatScanReference}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:helm.kernel.v1.ThreatScanReference)
+        helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_ThreatScanReference_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_ThreatScanReference_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                helm.kernel.v1.Helm.ThreatScanReference.class, helm.kernel.v1.Helm.ThreatScanReference.Builder.class);
+      }
+
+      // Construct using helm.kernel.v1.Helm.ThreatScanReference.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage
+                .alwaysUseFieldBuilders) {
+          internalGetSemanticFieldBuilder();
+        }
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        bitField0_ = 0;
+        scanId_ = "";
+        maxSeverity_ = "";
+        findingCount_ = 0;
+        trustLevel_ = "";
+        inputHash_ = "";
+        semantic_ = null;
+        if (semanticBuilder_ != null) {
+          semanticBuilder_.dispose();
+          semanticBuilder_ = null;
+        }
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return helm.kernel.v1.Helm.internal_static_helm_kernel_v1_ThreatScanReference_descriptor;
+      }
+
+      @java.lang.Override
+      public helm.kernel.v1.Helm.ThreatScanReference getDefaultInstanceForType() {
+        return helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public helm.kernel.v1.Helm.ThreatScanReference build() {
+        helm.kernel.v1.Helm.ThreatScanReference result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public helm.kernel.v1.Helm.ThreatScanReference buildPartial() {
+        helm.kernel.v1.Helm.ThreatScanReference result = new helm.kernel.v1.Helm.ThreatScanReference(this);
+        if (bitField0_ != 0) { buildPartial0(result); }
+        onBuilt();
+        return result;
+      }
+
+      private void buildPartial0(helm.kernel.v1.Helm.ThreatScanReference result) {
+        int from_bitField0_ = bitField0_;
+        if (((from_bitField0_ & 0x00000001) != 0)) {
+          result.scanId_ = scanId_;
+        }
+        if (((from_bitField0_ & 0x00000002) != 0)) {
+          result.maxSeverity_ = maxSeverity_;
+        }
+        if (((from_bitField0_ & 0x00000004) != 0)) {
+          result.findingCount_ = findingCount_;
+        }
+        if (((from_bitField0_ & 0x00000008) != 0)) {
+          result.trustLevel_ = trustLevel_;
+        }
+        if (((from_bitField0_ & 0x00000010) != 0)) {
+          result.inputHash_ = inputHash_;
+        }
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000020) != 0)) {
+          result.semantic_ = semanticBuilder_ == null
+              ? semantic_
+              : semanticBuilder_.build();
+          to_bitField0_ |= 0x00000001;
+        }
+        result.bitField0_ |= to_bitField0_;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof helm.kernel.v1.Helm.ThreatScanReference) {
+          return mergeFrom((helm.kernel.v1.Helm.ThreatScanReference)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(helm.kernel.v1.Helm.ThreatScanReference other) {
+        if (other == helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance()) return this;
+        if (!other.getScanId().isEmpty()) {
+          scanId_ = other.scanId_;
+          bitField0_ |= 0x00000001;
+          onChanged();
+        }
+        if (!other.getMaxSeverity().isEmpty()) {
+          maxSeverity_ = other.maxSeverity_;
+          bitField0_ |= 0x00000002;
+          onChanged();
+        }
+        if (other.getFindingCount() != 0) {
+          setFindingCount(other.getFindingCount());
+        }
+        if (!other.getTrustLevel().isEmpty()) {
+          trustLevel_ = other.trustLevel_;
+          bitField0_ |= 0x00000008;
+          onChanged();
+        }
+        if (!other.getInputHash().isEmpty()) {
+          inputHash_ = other.inputHash_;
+          bitField0_ |= 0x00000010;
+          onChanged();
+        }
+        if (other.hasSemantic()) {
+          mergeSemantic(other.getSemantic());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                scanId_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000001;
+                break;
+              } // case 10
+              case 18: {
+                maxSeverity_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000002;
+                break;
+              } // case 18
+              case 24: {
+                findingCount_ = input.readUInt32();
+                bitField0_ |= 0x00000004;
+                break;
+              } // case 24
+              case 34: {
+                trustLevel_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000008;
+                break;
+              } // case 34
+              case 42: {
+                inputHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000010;
+                break;
+              } // case 42
+              case 50: {
+                input.readMessage(
+                    internalGetSemanticFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                bitField0_ |= 0x00000020;
+                break;
+              } // case 50
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int bitField0_;
+
+      private java.lang.Object scanId_ = "";
+      /**
+       * <code>string scan_id = 1;</code>
+       * @return The scanId.
+       */
+      public java.lang.String getScanId() {
+        java.lang.Object ref = scanId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          scanId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string scan_id = 1;</code>
+       * @return The bytes for scanId.
+       */
+      public com.google.protobuf.ByteString
+          getScanIdBytes() {
+        java.lang.Object ref = scanId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          scanId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string scan_id = 1;</code>
+       * @param value The scanId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setScanId(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        scanId_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string scan_id = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearScanId() {
+        scanId_ = getDefaultInstance().getScanId();
+        bitField0_ = (bitField0_ & ~0x00000001);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string scan_id = 1;</code>
+       * @param value The bytes for scanId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setScanIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        scanId_ = value;
+        bitField0_ |= 0x00000001;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object maxSeverity_ = "";
+      /**
+       * <code>string max_severity = 2;</code>
+       * @return The maxSeverity.
+       */
+      public java.lang.String getMaxSeverity() {
+        java.lang.Object ref = maxSeverity_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          maxSeverity_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string max_severity = 2;</code>
+       * @return The bytes for maxSeverity.
+       */
+      public com.google.protobuf.ByteString
+          getMaxSeverityBytes() {
+        java.lang.Object ref = maxSeverity_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          maxSeverity_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string max_severity = 2;</code>
+       * @param value The maxSeverity to set.
+       * @return This builder for chaining.
+       */
+      public Builder setMaxSeverity(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        maxSeverity_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string max_severity = 2;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearMaxSeverity() {
+        maxSeverity_ = getDefaultInstance().getMaxSeverity();
+        bitField0_ = (bitField0_ & ~0x00000002);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string max_severity = 2;</code>
+       * @param value The bytes for maxSeverity to set.
+       * @return This builder for chaining.
+       */
+      public Builder setMaxSeverityBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        maxSeverity_ = value;
+        bitField0_ |= 0x00000002;
+        onChanged();
+        return this;
+      }
+
+      private int findingCount_ ;
+      /**
+       * <code>uint32 finding_count = 3;</code>
+       * @return The findingCount.
+       */
+      @java.lang.Override
+      public int getFindingCount() {
+        return findingCount_;
+      }
+      /**
+       * <code>uint32 finding_count = 3;</code>
+       * @param value The findingCount to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFindingCount(int value) {
+
+        findingCount_ = value;
+        bitField0_ |= 0x00000004;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>uint32 finding_count = 3;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearFindingCount() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        findingCount_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object trustLevel_ = "";
+      /**
+       * <code>string trust_level = 4;</code>
+       * @return The trustLevel.
+       */
+      public java.lang.String getTrustLevel() {
+        java.lang.Object ref = trustLevel_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          trustLevel_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string trust_level = 4;</code>
+       * @return The bytes for trustLevel.
+       */
+      public com.google.protobuf.ByteString
+          getTrustLevelBytes() {
+        java.lang.Object ref = trustLevel_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          trustLevel_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string trust_level = 4;</code>
+       * @param value The trustLevel to set.
+       * @return This builder for chaining.
+       */
+      public Builder setTrustLevel(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        trustLevel_ = value;
+        bitField0_ |= 0x00000008;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string trust_level = 4;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearTrustLevel() {
+        trustLevel_ = getDefaultInstance().getTrustLevel();
+        bitField0_ = (bitField0_ & ~0x00000008);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string trust_level = 4;</code>
+       * @param value The bytes for trustLevel to set.
+       * @return This builder for chaining.
+       */
+      public Builder setTrustLevelBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        trustLevel_ = value;
+        bitField0_ |= 0x00000008;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object inputHash_ = "";
+      /**
+       * <code>string input_hash = 5;</code>
+       * @return The inputHash.
+       */
+      public java.lang.String getInputHash() {
+        java.lang.Object ref = inputHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          inputHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string input_hash = 5;</code>
+       * @return The bytes for inputHash.
+       */
+      public com.google.protobuf.ByteString
+          getInputHashBytes() {
+        java.lang.Object ref = inputHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          inputHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string input_hash = 5;</code>
+       * @param value The inputHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setInputHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        inputHash_ = value;
+        bitField0_ |= 0x00000010;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string input_hash = 5;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearInputHash() {
+        inputHash_ = getDefaultInstance().getInputHash();
+        bitField0_ = (bitField0_ & ~0x00000010);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string input_hash = 5;</code>
+       * @param value The bytes for inputHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setInputHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        inputHash_ = value;
+        bitField0_ |= 0x00000010;
+        onChanged();
+        return this;
+      }
+
+      private helm.kernel.v1.Helm.SemanticThreatAssessment semantic_;
+      private com.google.protobuf.SingleFieldBuilder<
+          helm.kernel.v1.Helm.SemanticThreatAssessment, helm.kernel.v1.Helm.SemanticThreatAssessment.Builder, helm.kernel.v1.Helm.SemanticThreatAssessmentOrBuilder> semanticBuilder_;
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       * @return Whether the semantic field is set.
+       */
+      public boolean hasSemantic() {
+        return ((bitField0_ & 0x00000020) != 0);
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       * @return The semantic.
+       */
+      public helm.kernel.v1.Helm.SemanticThreatAssessment getSemantic() {
+        if (semanticBuilder_ == null) {
+          return semantic_ == null ? helm.kernel.v1.Helm.SemanticThreatAssessment.getDefaultInstance() : semantic_;
+        } else {
+          return semanticBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       */
+      public Builder setSemantic(helm.kernel.v1.Helm.SemanticThreatAssessment value) {
+        if (semanticBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          semantic_ = value;
+        } else {
+          semanticBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       */
+      public Builder setSemantic(
+          helm.kernel.v1.Helm.SemanticThreatAssessment.Builder builderForValue) {
+        if (semanticBuilder_ == null) {
+          semantic_ = builderForValue.build();
+        } else {
+          semanticBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       */
+      public Builder mergeSemantic(helm.kernel.v1.Helm.SemanticThreatAssessment value) {
+        if (semanticBuilder_ == null) {
+          if (((bitField0_ & 0x00000020) != 0) &&
+            semantic_ != null &&
+            semantic_ != helm.kernel.v1.Helm.SemanticThreatAssessment.getDefaultInstance()) {
+            getSemanticBuilder().mergeFrom(value);
+          } else {
+            semantic_ = value;
+          }
+        } else {
+          semanticBuilder_.mergeFrom(value);
+        }
+        if (semantic_ != null) {
+          bitField0_ |= 0x00000020;
+          onChanged();
+        }
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       */
+      public Builder clearSemantic() {
+        bitField0_ = (bitField0_ & ~0x00000020);
+        semantic_ = null;
+        if (semanticBuilder_ != null) {
+          semanticBuilder_.dispose();
+          semanticBuilder_ = null;
+        }
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       */
+      public helm.kernel.v1.Helm.SemanticThreatAssessment.Builder getSemanticBuilder() {
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return internalGetSemanticFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       */
+      public helm.kernel.v1.Helm.SemanticThreatAssessmentOrBuilder getSemanticOrBuilder() {
+        if (semanticBuilder_ != null) {
+          return semanticBuilder_.getMessageOrBuilder();
+        } else {
+          return semantic_ == null ?
+              helm.kernel.v1.Helm.SemanticThreatAssessment.getDefaultInstance() : semantic_;
+        }
+      }
+      /**
+       * <code>.helm.kernel.v1.SemanticThreatAssessment semantic = 6;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          helm.kernel.v1.Helm.SemanticThreatAssessment, helm.kernel.v1.Helm.SemanticThreatAssessment.Builder, helm.kernel.v1.Helm.SemanticThreatAssessmentOrBuilder>
+          internalGetSemanticFieldBuilder() {
+        if (semanticBuilder_ == null) {
+          semanticBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              helm.kernel.v1.Helm.SemanticThreatAssessment, helm.kernel.v1.Helm.SemanticThreatAssessment.Builder, helm.kernel.v1.Helm.SemanticThreatAssessmentOrBuilder>(
+                  getSemantic(),
+                  getParentForChildren(),
+                  isClean());
+          semantic_ = null;
+        }
+        return semanticBuilder_;
+      }
+
+      // @@protoc_insertion_point(builder_scope:helm.kernel.v1.ThreatScanReference)
+    }
+
+    // @@protoc_insertion_point(class_scope:helm.kernel.v1.ThreatScanReference)
+    private static final helm.kernel.v1.Helm.ThreatScanReference DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new helm.kernel.v1.Helm.ThreatScanReference();
+    }
+
+    public static helm.kernel.v1.Helm.ThreatScanReference getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<ThreatScanReference>
+        PARSER = new com.google.protobuf.AbstractParser<ThreatScanReference>() {
+      @java.lang.Override
+      public ThreatScanReference parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<ThreatScanReference> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ThreatScanReference> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public helm.kernel.v1.Helm.ThreatScanReference getDefaultInstanceForType() {
       return DEFAULT_INSTANCE;
     }
 
@@ -1492,6 +4232,145 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
      */
     com.google.protobuf.ByteString
         getCorrelationIdBytes();
+
+    /**
+     * <pre>
+     * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+     * </pre>
+     *
+     * <code>string signature_version = 14;</code>
+     * @return The signatureVersion.
+     */
+    java.lang.String getSignatureVersion();
+    /**
+     * <pre>
+     * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+     * </pre>
+     *
+     * <code>string signature_version = 14;</code>
+     * @return The bytes for signatureVersion.
+     */
+    com.google.protobuf.ByteString
+        getSignatureVersionBytes();
+
+    /**
+     * <code>string phenotype_hash = 15;</code>
+     * @return The phenotypeHash.
+     */
+    java.lang.String getPhenotypeHash();
+    /**
+     * <code>string phenotype_hash = 15;</code>
+     * @return The bytes for phenotypeHash.
+     */
+    com.google.protobuf.ByteString
+        getPhenotypeHashBytes();
+
+    /**
+     * <code>string policy_content_hash = 16;</code>
+     * @return The policyContentHash.
+     */
+    java.lang.String getPolicyContentHash();
+    /**
+     * <code>string policy_content_hash = 16;</code>
+     * @return The bytes for policyContentHash.
+     */
+    com.google.protobuf.ByteString
+        getPolicyContentHashBytes();
+
+    /**
+     * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+     * @return Whether the threatScan field is set.
+     */
+    boolean hasThreatScan();
+    /**
+     * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+     * @return The threatScan.
+     */
+    helm.kernel.v1.Helm.ThreatScanReference getThreatScan();
+    /**
+     * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+     */
+    helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder getThreatScanOrBuilder();
+
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The subjectId.
+     */
+    java.lang.String getSubjectId();
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The bytes for subjectId.
+     */
+    com.google.protobuf.ByteString
+        getSubjectIdBytes();
+
+    /**
+     * <code>string action = 19;</code>
+     * @return The action.
+     */
+    java.lang.String getAction();
+    /**
+     * <code>string action = 19;</code>
+     * @return The bytes for action.
+     */
+    com.google.protobuf.ByteString
+        getActionBytes();
+
+    /**
+     * <code>string resource = 20;</code>
+     * @return The resource.
+     */
+    java.lang.String getResource();
+    /**
+     * <code>string resource = 20;</code>
+     * @return The bytes for resource.
+     */
+    com.google.protobuf.ByteString
+        getResourceBytes();
+
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The signatureType.
+     */
+    java.lang.String getSignatureType();
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The bytes for signatureType.
+     */
+    com.google.protobuf.ByteString
+        getSignatureTypeBytes();
+
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The reasonCodeText.
+     */
+    java.lang.String getReasonCodeText();
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    com.google.protobuf.ByteString
+        getReasonCodeTextBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.DecisionRecord}
@@ -1527,6 +4406,14 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       policyDecisionHash_ = "";
       inputContext_ = com.google.protobuf.ByteString.EMPTY;
       correlationId_ = "";
+      signatureVersion_ = "";
+      phenotypeHash_ = "";
+      policyContentHash_ = "";
+      subjectId_ = "";
+      action_ = "";
+      resource_ = "";
+      signatureType_ = "";
+      reasonCodeText_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -1561,7 +4448,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         id_ = s;
@@ -1577,7 +4464,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getIdBytes() {
       java.lang.Object ref = id_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         id_ = b;
@@ -1644,7 +4531,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         reason_ = s;
@@ -1660,7 +4547,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getReasonBytes() {
       java.lang.Object ref = reason_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         reason_ = b;
@@ -1701,7 +4588,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectDigest_ = s;
@@ -1717,7 +4604,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getEffectDigestBytes() {
       java.lang.Object ref = effectDigest_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectDigest_ = b;
@@ -1740,7 +4627,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         requirementSetHash_ = s;
@@ -1756,7 +4643,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getRequirementSetHashBytes() {
       java.lang.Object ref = requirementSetHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         requirementSetHash_ = b;
@@ -1779,7 +4666,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signature_ = s;
@@ -1795,7 +4682,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getSignatureBytes() {
       java.lang.Object ref = signature_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signature_ = b;
@@ -1818,7 +4705,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signerKeyId_ = s;
@@ -1834,7 +4721,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getSignerKeyIdBytes() {
       java.lang.Object ref = signerKeyId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signerKeyId_ = b;
@@ -1857,7 +4744,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyRef_ = s;
@@ -1873,7 +4760,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getPolicyRefBytes() {
       java.lang.Object ref = policyRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyRef_ = b;
@@ -1896,7 +4783,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyDecisionHash_ = s;
@@ -1912,7 +4799,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getPolicyDecisionHashBytes() {
       java.lang.Object ref = policyDecisionHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyDecisionHash_ = b;
@@ -1952,7 +4839,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         correlationId_ = s;
@@ -1974,10 +4861,376 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getCorrelationIdBytes() {
       java.lang.Object ref = correlationId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         correlationId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SIGNATURE_VERSION_FIELD_NUMBER = 14;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object signatureVersion_ = "";
+    /**
+     * <pre>
+     * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+     * </pre>
+     *
+     * <code>string signature_version = 14;</code>
+     * @return The signatureVersion.
+     */
+    @java.lang.Override
+    public java.lang.String getSignatureVersion() {
+      java.lang.Object ref = signatureVersion_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        signatureVersion_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+     * </pre>
+     *
+     * <code>string signature_version = 14;</code>
+     * @return The bytes for signatureVersion.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSignatureVersionBytes() {
+      java.lang.Object ref = signatureVersion_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        signatureVersion_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int PHENOTYPE_HASH_FIELD_NUMBER = 15;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object phenotypeHash_ = "";
+    /**
+     * <code>string phenotype_hash = 15;</code>
+     * @return The phenotypeHash.
+     */
+    @java.lang.Override
+    public java.lang.String getPhenotypeHash() {
+      java.lang.Object ref = phenotypeHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        phenotypeHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string phenotype_hash = 15;</code>
+     * @return The bytes for phenotypeHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPhenotypeHashBytes() {
+      java.lang.Object ref = phenotypeHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        phenotypeHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int POLICY_CONTENT_HASH_FIELD_NUMBER = 16;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object policyContentHash_ = "";
+    /**
+     * <code>string policy_content_hash = 16;</code>
+     * @return The policyContentHash.
+     */
+    @java.lang.Override
+    public java.lang.String getPolicyContentHash() {
+      java.lang.Object ref = policyContentHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        policyContentHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string policy_content_hash = 16;</code>
+     * @return The bytes for policyContentHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPolicyContentHashBytes() {
+      java.lang.Object ref = policyContentHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        policyContentHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int THREAT_SCAN_FIELD_NUMBER = 17;
+    private helm.kernel.v1.Helm.ThreatScanReference threatScan_;
+    /**
+     * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+     * @return Whether the threatScan field is set.
+     */
+    @java.lang.Override
+    public boolean hasThreatScan() {
+      return ((bitField0_ & 0x00000002) != 0);
+    }
+    /**
+     * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+     * @return The threatScan.
+     */
+    @java.lang.Override
+    public helm.kernel.v1.Helm.ThreatScanReference getThreatScan() {
+      return threatScan_ == null ? helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance() : threatScan_;
+    }
+    /**
+     * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+     */
+    @java.lang.Override
+    public helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder getThreatScanOrBuilder() {
+      return threatScan_ == null ? helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance() : threatScan_;
+    }
+
+    public static final int SUBJECT_ID_FIELD_NUMBER = 18;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object subjectId_ = "";
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The subjectId.
+     */
+    @java.lang.Override
+    public java.lang.String getSubjectId() {
+      java.lang.Object ref = subjectId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        subjectId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * decision_record.v4 authorization and signer bindings. These are appended
+     * so current V3 Guardian threat evidence keeps its established wire field.
+     * </pre>
+     *
+     * <code>string subject_id = 18;</code>
+     * @return The bytes for subjectId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSubjectIdBytes() {
+      java.lang.Object ref = subjectId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        subjectId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int ACTION_FIELD_NUMBER = 19;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object action_ = "";
+    /**
+     * <code>string action = 19;</code>
+     * @return The action.
+     */
+    @java.lang.Override
+    public java.lang.String getAction() {
+      java.lang.Object ref = action_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        action_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string action = 19;</code>
+     * @return The bytes for action.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getActionBytes() {
+      java.lang.Object ref = action_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        action_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int RESOURCE_FIELD_NUMBER = 20;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object resource_ = "";
+    /**
+     * <code>string resource = 20;</code>
+     * @return The resource.
+     */
+    @java.lang.Override
+    public java.lang.String getResource() {
+      java.lang.Object ref = resource_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        resource_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string resource = 20;</code>
+     * @return The bytes for resource.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getResourceBytes() {
+      java.lang.Object ref = resource_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        resource_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SIGNATURE_TYPE_FIELD_NUMBER = 21;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object signatureType_ = "";
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The signatureType.
+     */
+    @java.lang.Override
+    public java.lang.String getSignatureType() {
+      java.lang.Object ref = signatureType_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        signatureType_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string signature_type = 21;</code>
+     * @return The bytes for signatureType.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSignatureTypeBytes() {
+      java.lang.Object ref = signatureType_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        signatureType_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int REASON_CODE_TEXT_FIELD_NUMBER = 22;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object reasonCodeText_ = "";
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The reasonCodeText.
+     */
+    @java.lang.Override
+    public java.lang.String getReasonCodeText() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        reasonCodeText_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+     * legacy reason_code field above remains a closed enum for compatibility.
+     * </pre>
+     *
+     * <code>string reason_code_text = 22;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getReasonCodeTextBytes() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        reasonCodeText_ = b;
         return b;
       } else {
         return (com.google.protobuf.ByteString) ref;
@@ -2037,6 +5290,33 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
         com.google.protobuf.GeneratedMessage.writeString(output, 13, correlationId_);
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureVersion_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 14, signatureVersion_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(phenotypeHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 15, phenotypeHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(policyContentHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 16, policyContentHash_);
+      }
+      if (((bitField0_ & 0x00000002) != 0)) {
+        output.writeMessage(17, getThreatScan());
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(subjectId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 18, subjectId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(action_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 19, action_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(resource_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 20, resource_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureType_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 21, signatureType_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 22, reasonCodeText_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -2089,6 +5369,34 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
         size += com.google.protobuf.GeneratedMessage.computeStringSize(13, correlationId_);
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureVersion_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(14, signatureVersion_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(phenotypeHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(15, phenotypeHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(policyContentHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(16, policyContentHash_);
+      }
+      if (((bitField0_ & 0x00000002) != 0)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(17, getThreatScan());
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(subjectId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(18, subjectId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(action_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(19, action_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(resource_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(20, resource_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureType_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(21, signatureType_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(22, reasonCodeText_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -2131,6 +5439,27 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           .equals(other.getInputContext())) return false;
       if (!getCorrelationId()
           .equals(other.getCorrelationId())) return false;
+      if (!getSignatureVersion()
+          .equals(other.getSignatureVersion())) return false;
+      if (!getPhenotypeHash()
+          .equals(other.getPhenotypeHash())) return false;
+      if (!getPolicyContentHash()
+          .equals(other.getPolicyContentHash())) return false;
+      if (hasThreatScan() != other.hasThreatScan()) return false;
+      if (hasThreatScan()) {
+        if (!getThreatScan()
+            .equals(other.getThreatScan())) return false;
+      }
+      if (!getSubjectId()
+          .equals(other.getSubjectId())) return false;
+      if (!getAction()
+          .equals(other.getAction())) return false;
+      if (!getResource()
+          .equals(other.getResource())) return false;
+      if (!getSignatureType()
+          .equals(other.getSignatureType())) return false;
+      if (!getReasonCodeText()
+          .equals(other.getReasonCodeText())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -2170,6 +5499,26 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       hash = (53 * hash) + getInputContext().hashCode();
       hash = (37 * hash) + CORRELATION_ID_FIELD_NUMBER;
       hash = (53 * hash) + getCorrelationId().hashCode();
+      hash = (37 * hash) + SIGNATURE_VERSION_FIELD_NUMBER;
+      hash = (53 * hash) + getSignatureVersion().hashCode();
+      hash = (37 * hash) + PHENOTYPE_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getPhenotypeHash().hashCode();
+      hash = (37 * hash) + POLICY_CONTENT_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getPolicyContentHash().hashCode();
+      if (hasThreatScan()) {
+        hash = (37 * hash) + THREAT_SCAN_FIELD_NUMBER;
+        hash = (53 * hash) + getThreatScan().hashCode();
+      }
+      hash = (37 * hash) + SUBJECT_ID_FIELD_NUMBER;
+      hash = (53 * hash) + getSubjectId().hashCode();
+      hash = (37 * hash) + ACTION_FIELD_NUMBER;
+      hash = (53 * hash) + getAction().hashCode();
+      hash = (37 * hash) + RESOURCE_FIELD_NUMBER;
+      hash = (53 * hash) + getResource().hashCode();
+      hash = (37 * hash) + SIGNATURE_TYPE_FIELD_NUMBER;
+      hash = (53 * hash) + getSignatureType().hashCode();
+      hash = (37 * hash) + REASON_CODE_TEXT_FIELD_NUMBER;
+      hash = (53 * hash) + getReasonCodeText().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -2301,6 +5650,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         if (com.google.protobuf.GeneratedMessage
                 .alwaysUseFieldBuilders) {
           internalGetTimestampFieldBuilder();
+          internalGetThreatScanFieldBuilder();
         }
       }
       @java.lang.Override
@@ -2324,6 +5674,19 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         policyDecisionHash_ = "";
         inputContext_ = com.google.protobuf.ByteString.EMPTY;
         correlationId_ = "";
+        signatureVersion_ = "";
+        phenotypeHash_ = "";
+        policyContentHash_ = "";
+        threatScan_ = null;
+        if (threatScanBuilder_ != null) {
+          threatScanBuilder_.dispose();
+          threatScanBuilder_ = null;
+        }
+        subjectId_ = "";
+        action_ = "";
+        resource_ = "";
+        signatureType_ = "";
+        reasonCodeText_ = "";
         return this;
       }
 
@@ -2400,6 +5763,36 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         if (((from_bitField0_ & 0x00001000) != 0)) {
           result.correlationId_ = correlationId_;
         }
+        if (((from_bitField0_ & 0x00002000) != 0)) {
+          result.signatureVersion_ = signatureVersion_;
+        }
+        if (((from_bitField0_ & 0x00004000) != 0)) {
+          result.phenotypeHash_ = phenotypeHash_;
+        }
+        if (((from_bitField0_ & 0x00008000) != 0)) {
+          result.policyContentHash_ = policyContentHash_;
+        }
+        if (((from_bitField0_ & 0x00010000) != 0)) {
+          result.threatScan_ = threatScanBuilder_ == null
+              ? threatScan_
+              : threatScanBuilder_.build();
+          to_bitField0_ |= 0x00000002;
+        }
+        if (((from_bitField0_ & 0x00020000) != 0)) {
+          result.subjectId_ = subjectId_;
+        }
+        if (((from_bitField0_ & 0x00040000) != 0)) {
+          result.action_ = action_;
+        }
+        if (((from_bitField0_ & 0x00080000) != 0)) {
+          result.resource_ = resource_;
+        }
+        if (((from_bitField0_ & 0x00100000) != 0)) {
+          result.signatureType_ = signatureType_;
+        }
+        if (((from_bitField0_ & 0x00200000) != 0)) {
+          result.reasonCodeText_ = reasonCodeText_;
+        }
         result.bitField0_ |= to_bitField0_;
       }
 
@@ -2470,6 +5863,49 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         if (!other.getCorrelationId().isEmpty()) {
           correlationId_ = other.correlationId_;
           bitField0_ |= 0x00001000;
+          onChanged();
+        }
+        if (!other.getSignatureVersion().isEmpty()) {
+          signatureVersion_ = other.signatureVersion_;
+          bitField0_ |= 0x00002000;
+          onChanged();
+        }
+        if (!other.getPhenotypeHash().isEmpty()) {
+          phenotypeHash_ = other.phenotypeHash_;
+          bitField0_ |= 0x00004000;
+          onChanged();
+        }
+        if (!other.getPolicyContentHash().isEmpty()) {
+          policyContentHash_ = other.policyContentHash_;
+          bitField0_ |= 0x00008000;
+          onChanged();
+        }
+        if (other.hasThreatScan()) {
+          mergeThreatScan(other.getThreatScan());
+        }
+        if (!other.getSubjectId().isEmpty()) {
+          subjectId_ = other.subjectId_;
+          bitField0_ |= 0x00020000;
+          onChanged();
+        }
+        if (!other.getAction().isEmpty()) {
+          action_ = other.action_;
+          bitField0_ |= 0x00040000;
+          onChanged();
+        }
+        if (!other.getResource().isEmpty()) {
+          resource_ = other.resource_;
+          bitField0_ |= 0x00080000;
+          onChanged();
+        }
+        if (!other.getSignatureType().isEmpty()) {
+          signatureType_ = other.signatureType_;
+          bitField0_ |= 0x00100000;
+          onChanged();
+        }
+        if (!other.getReasonCodeText().isEmpty()) {
+          reasonCodeText_ = other.reasonCodeText_;
+          bitField0_ |= 0x00200000;
           onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
@@ -2565,6 +6001,53 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
                 bitField0_ |= 0x00001000;
                 break;
               } // case 106
+              case 114: {
+                signatureVersion_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00002000;
+                break;
+              } // case 114
+              case 122: {
+                phenotypeHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00004000;
+                break;
+              } // case 122
+              case 130: {
+                policyContentHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00008000;
+                break;
+              } // case 130
+              case 138: {
+                input.readMessage(
+                    internalGetThreatScanFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                bitField0_ |= 0x00010000;
+                break;
+              } // case 138
+              case 146: {
+                subjectId_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00020000;
+                break;
+              } // case 146
+              case 154: {
+                action_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00040000;
+                break;
+              } // case 154
+              case 162: {
+                resource_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00080000;
+                break;
+              } // case 162
+              case 170: {
+                signatureType_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00100000;
+                break;
+              } // case 170
+              case 178: {
+                reasonCodeText_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00200000;
+                break;
+              } // case 178
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -2607,7 +6090,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getIdBytes() {
         java.lang.Object ref = id_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           id_ = b;
@@ -2762,7 +6245,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp timestamp = 2;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetTimestampFieldBuilder() {
         if (timestampBuilder_ == null) {
           timestampBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -2852,7 +6335,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getReasonBytes() {
         java.lang.Object ref = reason_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           reason_ = b;
@@ -2976,7 +6459,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getEffectDigestBytes() {
         java.lang.Object ref = effectDigest_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectDigest_ = b;
@@ -3048,7 +6531,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getRequirementSetHashBytes() {
         java.lang.Object ref = requirementSetHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           requirementSetHash_ = b;
@@ -3120,7 +6603,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getSignatureBytes() {
         java.lang.Object ref = signature_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signature_ = b;
@@ -3192,7 +6675,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getSignerKeyIdBytes() {
         java.lang.Object ref = signerKeyId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signerKeyId_ = b;
@@ -3264,7 +6747,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getPolicyRefBytes() {
         java.lang.Object ref = policyRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyRef_ = b;
@@ -3336,7 +6819,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getPolicyDecisionHashBytes() {
         java.lang.Object ref = policyDecisionHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyDecisionHash_ = b;
@@ -3452,7 +6935,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getCorrelationIdBytes() {
         java.lang.Object ref = correlationId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           correlationId_ = b;
@@ -3513,6 +6996,773 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         checkByteStringIsUtf8(value);
         correlationId_ = value;
         bitField0_ |= 0x00001000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object signatureVersion_ = "";
+      /**
+       * <pre>
+       * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+       * </pre>
+       *
+       * <code>string signature_version = 14;</code>
+       * @return The signatureVersion.
+       */
+      public java.lang.String getSignatureVersion() {
+        java.lang.Object ref = signatureVersion_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          signatureVersion_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+       * </pre>
+       *
+       * <code>string signature_version = 14;</code>
+       * @return The bytes for signatureVersion.
+       */
+      public com.google.protobuf.ByteString
+          getSignatureVersionBytes() {
+        java.lang.Object ref = signatureVersion_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          signatureVersion_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+       * </pre>
+       *
+       * <code>string signature_version = 14;</code>
+       * @param value The signatureVersion to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureVersion(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        signatureVersion_ = value;
+        bitField0_ |= 0x00002000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+       * </pre>
+       *
+       * <code>string signature_version = 14;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSignatureVersion() {
+        signatureVersion_ = getDefaultInstance().getSignatureVersion();
+        bitField0_ = (bitField0_ & ~0x00002000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * HELM-303 decision.v2 / decision.v3 signing envelope fields.
+       * </pre>
+       *
+       * <code>string signature_version = 14;</code>
+       * @param value The bytes for signatureVersion to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureVersionBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        signatureVersion_ = value;
+        bitField0_ |= 0x00002000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object phenotypeHash_ = "";
+      /**
+       * <code>string phenotype_hash = 15;</code>
+       * @return The phenotypeHash.
+       */
+      public java.lang.String getPhenotypeHash() {
+        java.lang.Object ref = phenotypeHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          phenotypeHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string phenotype_hash = 15;</code>
+       * @return The bytes for phenotypeHash.
+       */
+      public com.google.protobuf.ByteString
+          getPhenotypeHashBytes() {
+        java.lang.Object ref = phenotypeHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          phenotypeHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string phenotype_hash = 15;</code>
+       * @param value The phenotypeHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPhenotypeHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        phenotypeHash_ = value;
+        bitField0_ |= 0x00004000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string phenotype_hash = 15;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearPhenotypeHash() {
+        phenotypeHash_ = getDefaultInstance().getPhenotypeHash();
+        bitField0_ = (bitField0_ & ~0x00004000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string phenotype_hash = 15;</code>
+       * @param value The bytes for phenotypeHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPhenotypeHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        phenotypeHash_ = value;
+        bitField0_ |= 0x00004000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object policyContentHash_ = "";
+      /**
+       * <code>string policy_content_hash = 16;</code>
+       * @return The policyContentHash.
+       */
+      public java.lang.String getPolicyContentHash() {
+        java.lang.Object ref = policyContentHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          policyContentHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string policy_content_hash = 16;</code>
+       * @return The bytes for policyContentHash.
+       */
+      public com.google.protobuf.ByteString
+          getPolicyContentHashBytes() {
+        java.lang.Object ref = policyContentHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          policyContentHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string policy_content_hash = 16;</code>
+       * @param value The policyContentHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPolicyContentHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        policyContentHash_ = value;
+        bitField0_ |= 0x00008000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string policy_content_hash = 16;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearPolicyContentHash() {
+        policyContentHash_ = getDefaultInstance().getPolicyContentHash();
+        bitField0_ = (bitField0_ & ~0x00008000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string policy_content_hash = 16;</code>
+       * @param value The bytes for policyContentHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPolicyContentHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        policyContentHash_ = value;
+        bitField0_ |= 0x00008000;
+        onChanged();
+        return this;
+      }
+
+      private helm.kernel.v1.Helm.ThreatScanReference threatScan_;
+      private com.google.protobuf.SingleFieldBuilder<
+          helm.kernel.v1.Helm.ThreatScanReference, helm.kernel.v1.Helm.ThreatScanReference.Builder, helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder> threatScanBuilder_;
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       * @return Whether the threatScan field is set.
+       */
+      public boolean hasThreatScan() {
+        return ((bitField0_ & 0x00010000) != 0);
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       * @return The threatScan.
+       */
+      public helm.kernel.v1.Helm.ThreatScanReference getThreatScan() {
+        if (threatScanBuilder_ == null) {
+          return threatScan_ == null ? helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance() : threatScan_;
+        } else {
+          return threatScanBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       */
+      public Builder setThreatScan(helm.kernel.v1.Helm.ThreatScanReference value) {
+        if (threatScanBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          threatScan_ = value;
+        } else {
+          threatScanBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00010000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       */
+      public Builder setThreatScan(
+          helm.kernel.v1.Helm.ThreatScanReference.Builder builderForValue) {
+        if (threatScanBuilder_ == null) {
+          threatScan_ = builderForValue.build();
+        } else {
+          threatScanBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00010000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       */
+      public Builder mergeThreatScan(helm.kernel.v1.Helm.ThreatScanReference value) {
+        if (threatScanBuilder_ == null) {
+          if (((bitField0_ & 0x00010000) != 0) &&
+            threatScan_ != null &&
+            threatScan_ != helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance()) {
+            getThreatScanBuilder().mergeFrom(value);
+          } else {
+            threatScan_ = value;
+          }
+        } else {
+          threatScanBuilder_.mergeFrom(value);
+        }
+        if (threatScan_ != null) {
+          bitField0_ |= 0x00010000;
+          onChanged();
+        }
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       */
+      public Builder clearThreatScan() {
+        bitField0_ = (bitField0_ & ~0x00010000);
+        threatScan_ = null;
+        if (threatScanBuilder_ != null) {
+          threatScanBuilder_.dispose();
+          threatScanBuilder_ = null;
+        }
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       */
+      public helm.kernel.v1.Helm.ThreatScanReference.Builder getThreatScanBuilder() {
+        bitField0_ |= 0x00010000;
+        onChanged();
+        return internalGetThreatScanFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       */
+      public helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder getThreatScanOrBuilder() {
+        if (threatScanBuilder_ != null) {
+          return threatScanBuilder_.getMessageOrBuilder();
+        } else {
+          return threatScan_ == null ?
+              helm.kernel.v1.Helm.ThreatScanReference.getDefaultInstance() : threatScan_;
+        }
+      }
+      /**
+       * <code>.helm.kernel.v1.ThreatScanReference threat_scan = 17;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          helm.kernel.v1.Helm.ThreatScanReference, helm.kernel.v1.Helm.ThreatScanReference.Builder, helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder>
+          internalGetThreatScanFieldBuilder() {
+        if (threatScanBuilder_ == null) {
+          threatScanBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              helm.kernel.v1.Helm.ThreatScanReference, helm.kernel.v1.Helm.ThreatScanReference.Builder, helm.kernel.v1.Helm.ThreatScanReferenceOrBuilder>(
+                  getThreatScan(),
+                  getParentForChildren(),
+                  isClean());
+          threatScan_ = null;
+        }
+        return threatScanBuilder_;
+      }
+
+      private java.lang.Object subjectId_ = "";
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @return The subjectId.
+       */
+      public java.lang.String getSubjectId() {
+        java.lang.Object ref = subjectId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          subjectId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @return The bytes for subjectId.
+       */
+      public com.google.protobuf.ByteString
+          getSubjectIdBytes() {
+        java.lang.Object ref = subjectId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          subjectId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @param value The subjectId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectId(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        subjectId_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSubjectId() {
+        subjectId_ = getDefaultInstance().getSubjectId();
+        bitField0_ = (bitField0_ & ~0x00020000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * decision_record.v4 authorization and signer bindings. These are appended
+       * so current V3 Guardian threat evidence keeps its established wire field.
+       * </pre>
+       *
+       * <code>string subject_id = 18;</code>
+       * @param value The bytes for subjectId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        subjectId_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object action_ = "";
+      /**
+       * <code>string action = 19;</code>
+       * @return The action.
+       */
+      public java.lang.String getAction() {
+        java.lang.Object ref = action_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          action_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @return The bytes for action.
+       */
+      public com.google.protobuf.ByteString
+          getActionBytes() {
+        java.lang.Object ref = action_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          action_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @param value The action to set.
+       * @return This builder for chaining.
+       */
+      public Builder setAction(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        action_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearAction() {
+        action_ = getDefaultInstance().getAction();
+        bitField0_ = (bitField0_ & ~0x00040000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string action = 19;</code>
+       * @param value The bytes for action to set.
+       * @return This builder for chaining.
+       */
+      public Builder setActionBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        action_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object resource_ = "";
+      /**
+       * <code>string resource = 20;</code>
+       * @return The resource.
+       */
+      public java.lang.String getResource() {
+        java.lang.Object ref = resource_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          resource_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @return The bytes for resource.
+       */
+      public com.google.protobuf.ByteString
+          getResourceBytes() {
+        java.lang.Object ref = resource_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          resource_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @param value The resource to set.
+       * @return This builder for chaining.
+       */
+      public Builder setResource(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        resource_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearResource() {
+        resource_ = getDefaultInstance().getResource();
+        bitField0_ = (bitField0_ & ~0x00080000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string resource = 20;</code>
+       * @param value The bytes for resource to set.
+       * @return This builder for chaining.
+       */
+      public Builder setResourceBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        resource_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object signatureType_ = "";
+      /**
+       * <code>string signature_type = 21;</code>
+       * @return The signatureType.
+       */
+      public java.lang.String getSignatureType() {
+        java.lang.Object ref = signatureType_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          signatureType_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @return The bytes for signatureType.
+       */
+      public com.google.protobuf.ByteString
+          getSignatureTypeBytes() {
+        java.lang.Object ref = signatureType_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          signatureType_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @param value The signatureType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureType(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        signatureType_ = value;
+        bitField0_ |= 0x00100000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSignatureType() {
+        signatureType_ = getDefaultInstance().getSignatureType();
+        bitField0_ = (bitField0_ & ~0x00100000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string signature_type = 21;</code>
+       * @param value The bytes for signatureType to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureTypeBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        signatureType_ = value;
+        bitField0_ |= 0x00100000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object reasonCodeText_ = "";
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @return The reasonCodeText.
+       */
+      public java.lang.String getReasonCodeText() {
+        java.lang.Object ref = reasonCodeText_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          reasonCodeText_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @return The bytes for reasonCodeText.
+       */
+      public com.google.protobuf.ByteString
+          getReasonCodeTextBytes() {
+        java.lang.Object ref = reasonCodeText_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          reasonCodeText_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @param value The reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeText(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00200000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearReasonCodeText() {
+        reasonCodeText_ = getDefaultInstance().getReasonCodeText();
+        bitField0_ = (bitField0_ & ~0x00200000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+       * legacy reason_code field above remains a closed enum for compatibility.
+       * </pre>
+       *
+       * <code>string reason_code_text = 22;</code>
+       * @param value The bytes for reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeTextBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00200000;
         onChanged();
         return this;
       }
@@ -3736,7 +7986,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         intentId_ = s;
@@ -3752,7 +8002,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getIntentIdBytes() {
       java.lang.Object ref = intentId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         intentId_ = b;
@@ -3775,7 +8025,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         decisionId_ = s;
@@ -3791,7 +8041,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getDecisionIdBytes() {
       java.lang.Object ref = decisionId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         decisionId_ = b;
@@ -3814,7 +8064,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectId_ = s;
@@ -3830,7 +8080,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getEffectIdBytes() {
       java.lang.Object ref = effectId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectId_ = b;
@@ -3905,7 +8155,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signature_ = s;
@@ -3921,7 +8171,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getSignatureBytes() {
       java.lang.Object ref = signature_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signature_ = b;
@@ -3944,7 +8194,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signerKeyId_ = s;
@@ -3960,7 +8210,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getSignerKeyIdBytes() {
       java.lang.Object ref = signerKeyId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signerKeyId_ = b;
@@ -3983,7 +8233,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         principal_ = s;
@@ -3999,7 +8249,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
         getPrincipalBytes() {
       java.lang.Object ref = principal_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         principal_ = b;
@@ -4531,7 +8781,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getIntentIdBytes() {
         java.lang.Object ref = intentId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           intentId_ = b;
@@ -4603,7 +8853,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getDecisionIdBytes() {
         java.lang.Object ref = decisionId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           decisionId_ = b;
@@ -4675,7 +8925,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getEffectIdBytes() {
         java.lang.Object ref = effectId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectId_ = b;
@@ -4830,7 +9080,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp issued_at = 4;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetIssuedAtFieldBuilder() {
         if (issuedAtBuilder_ == null) {
           issuedAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -4951,7 +9201,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
        * <code>.google.protobuf.Timestamp expires_at = 5;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetExpiresAtFieldBuilder() {
         if (expiresAtBuilder_ == null) {
           expiresAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -4989,7 +9239,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getSignatureBytes() {
         java.lang.Object ref = signature_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signature_ = b;
@@ -5061,7 +9311,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getSignerKeyIdBytes() {
         java.lang.Object ref = signerKeyId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signerKeyId_ = b;
@@ -5133,7 +9383,7 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
           getPrincipalBytes() {
         java.lang.Object ref = principal_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           principal_ = b;
@@ -5465,6 +9715,100 @@ java.lang.String defaultValue);
      */
     com.google.protobuf.ByteString
         getCorrelationIdBytes();
+
+    /**
+     * <pre>
+     * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+     * reason_code fields are also signed by receipt.v5.
+     * </pre>
+     *
+     * <code>string signature_version = 18;</code>
+     * @return The signatureVersion.
+     */
+    java.lang.String getSignatureVersion();
+    /**
+     * <pre>
+     * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+     * reason_code fields are also signed by receipt.v5.
+     * </pre>
+     *
+     * <code>string signature_version = 18;</code>
+     * @return The bytes for signatureVersion.
+     */
+    com.google.protobuf.ByteString
+        getSignatureVersionBytes();
+
+    /**
+     * <code>string status = 19;</code>
+     * @return The status.
+     */
+    java.lang.String getStatus();
+    /**
+     * <code>string status = 19;</code>
+     * @return The bytes for status.
+     */
+    com.google.protobuf.ByteString
+        getStatusBytes();
+
+    /**
+     * <code>string output_hash = 20;</code>
+     * @return The outputHash.
+     */
+    java.lang.String getOutputHash();
+    /**
+     * <code>string output_hash = 20;</code>
+     * @return The bytes for outputHash.
+     */
+    com.google.protobuf.ByteString
+        getOutputHashBytes();
+
+    /**
+     * <code>string prev_hash = 21;</code>
+     * @return The prevHash.
+     */
+    java.lang.String getPrevHash();
+    /**
+     * <code>string prev_hash = 21;</code>
+     * @return The bytes for prevHash.
+     */
+    com.google.protobuf.ByteString
+        getPrevHashBytes();
+
+    /**
+     * <code>string args_hash = 22;</code>
+     * @return The argsHash.
+     */
+    java.lang.String getArgsHash();
+    /**
+     * <code>string args_hash = 22;</code>
+     * @return The bytes for argsHash.
+     */
+    com.google.protobuf.ByteString
+        getArgsHashBytes();
+
+    /**
+     * <code>string policy_hash = 23;</code>
+     * @return The policyHash.
+     */
+    java.lang.String getPolicyHash();
+    /**
+     * <code>string policy_hash = 23;</code>
+     * @return The bytes for policyHash.
+     */
+    com.google.protobuf.ByteString
+        getPolicyHashBytes();
+
+    /**
+     * <code>string session_id = 24;</code>
+     * @return The sessionId.
+     */
+    java.lang.String getSessionId();
+    /**
+     * <code>string session_id = 24;</code>
+     * @return The bytes for sessionId.
+     */
+    com.google.protobuf.ByteString
+        getSessionIdBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.Receipt}
@@ -5502,6 +9846,13 @@ java.lang.String defaultValue);
       payloadHash_ = "";
       reasonCode_ = 0;
       correlationId_ = "";
+      signatureVersion_ = "";
+      status_ = "";
+      outputHash_ = "";
+      prevHash_ = "";
+      argsHash_ = "";
+      policyHash_ = "";
+      sessionId_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -5548,7 +9899,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         receiptVersion_ = s;
@@ -5564,7 +9915,7 @@ java.lang.String defaultValue);
         getReceiptVersionBytes() {
       java.lang.Object ref = receiptVersion_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         receiptVersion_ = b;
@@ -5587,7 +9938,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         receiptId_ = s;
@@ -5603,7 +9954,7 @@ java.lang.String defaultValue);
         getReceiptIdBytes() {
       java.lang.Object ref = receiptId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         receiptId_ = b;
@@ -5626,7 +9977,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         decisionId_ = s;
@@ -5642,7 +9993,7 @@ java.lang.String defaultValue);
         getDecisionIdBytes() {
       java.lang.Object ref = decisionId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         decisionId_ = b;
@@ -5665,7 +10016,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         effectId_ = s;
@@ -5681,7 +10032,7 @@ java.lang.String defaultValue);
         getEffectIdBytes() {
       java.lang.Object ref = effectId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         effectId_ = b;
@@ -5722,7 +10073,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         principal_ = s;
@@ -5738,7 +10089,7 @@ java.lang.String defaultValue);
         getPrincipalBytes() {
       java.lang.Object ref = principal_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         principal_ = b;
@@ -5761,7 +10112,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         tool_ = s;
@@ -5777,7 +10128,7 @@ java.lang.String defaultValue);
         getToolBytes() {
       java.lang.Object ref = tool_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         tool_ = b;
@@ -5800,7 +10151,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         action_ = s;
@@ -5816,7 +10167,7 @@ java.lang.String defaultValue);
         getActionBytes() {
       java.lang.Object ref = action_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         action_ = b;
@@ -5876,7 +10227,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         proofgraphNode_ = s;
@@ -5892,7 +10243,7 @@ java.lang.String defaultValue);
         getProofgraphNodeBytes() {
       java.lang.Object ref = proofgraphNode_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         proofgraphNode_ = b;
@@ -5915,7 +10266,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signature_ = s;
@@ -5931,7 +10282,7 @@ java.lang.String defaultValue);
         getSignatureBytes() {
       java.lang.Object ref = signature_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signature_ = b;
@@ -5954,7 +10305,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         signerKeyId_ = s;
@@ -5970,7 +10321,7 @@ java.lang.String defaultValue);
         getSignerKeyIdBytes() {
       java.lang.Object ref = signerKeyId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         signerKeyId_ = b;
@@ -5993,7 +10344,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         payloadHash_ = s;
@@ -6009,7 +10360,7 @@ java.lang.String defaultValue);
         getPayloadHashBytes() {
       java.lang.Object ref = payloadHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         payloadHash_ = b;
@@ -6043,7 +10394,7 @@ java.lang.String defaultValue);
           java.lang.String, java.lang.String> defaultEntry =
               com.google.protobuf.MapEntry
               .<java.lang.String, java.lang.String>newDefaultInstance(
-                  helm.kernel.v1.Helm.internal_static_helm_kernel_v1_Receipt_MetadataEntry_descriptor, 
+                  helm.kernel.v1.Helm.internal_static_helm_kernel_v1_Receipt_MetadataEntry_descriptor,
                   com.google.protobuf.WireFormat.FieldType.STRING,
                   "",
                   com.google.protobuf.WireFormat.FieldType.STRING,
@@ -6134,7 +10485,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         correlationId_ = s;
@@ -6155,10 +10506,293 @@ java.lang.String defaultValue) {
         getCorrelationIdBytes() {
       java.lang.Object ref = correlationId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         correlationId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SIGNATURE_VERSION_FIELD_NUMBER = 18;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object signatureVersion_ = "";
+    /**
+     * <pre>
+     * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+     * reason_code fields are also signed by receipt.v5.
+     * </pre>
+     *
+     * <code>string signature_version = 18;</code>
+     * @return The signatureVersion.
+     */
+    @java.lang.Override
+    public java.lang.String getSignatureVersion() {
+      java.lang.Object ref = signatureVersion_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        signatureVersion_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+     * reason_code fields are also signed by receipt.v5.
+     * </pre>
+     *
+     * <code>string signature_version = 18;</code>
+     * @return The bytes for signatureVersion.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSignatureVersionBytes() {
+      java.lang.Object ref = signatureVersion_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        signatureVersion_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int STATUS_FIELD_NUMBER = 19;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object status_ = "";
+    /**
+     * <code>string status = 19;</code>
+     * @return The status.
+     */
+    @java.lang.Override
+    public java.lang.String getStatus() {
+      java.lang.Object ref = status_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        status_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string status = 19;</code>
+     * @return The bytes for status.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getStatusBytes() {
+      java.lang.Object ref = status_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        status_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int OUTPUT_HASH_FIELD_NUMBER = 20;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object outputHash_ = "";
+    /**
+     * <code>string output_hash = 20;</code>
+     * @return The outputHash.
+     */
+    @java.lang.Override
+    public java.lang.String getOutputHash() {
+      java.lang.Object ref = outputHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        outputHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string output_hash = 20;</code>
+     * @return The bytes for outputHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getOutputHashBytes() {
+      java.lang.Object ref = outputHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        outputHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int PREV_HASH_FIELD_NUMBER = 21;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object prevHash_ = "";
+    /**
+     * <code>string prev_hash = 21;</code>
+     * @return The prevHash.
+     */
+    @java.lang.Override
+    public java.lang.String getPrevHash() {
+      java.lang.Object ref = prevHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        prevHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string prev_hash = 21;</code>
+     * @return The bytes for prevHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPrevHashBytes() {
+      java.lang.Object ref = prevHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        prevHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int ARGS_HASH_FIELD_NUMBER = 22;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object argsHash_ = "";
+    /**
+     * <code>string args_hash = 22;</code>
+     * @return The argsHash.
+     */
+    @java.lang.Override
+    public java.lang.String getArgsHash() {
+      java.lang.Object ref = argsHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        argsHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string args_hash = 22;</code>
+     * @return The bytes for argsHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getArgsHashBytes() {
+      java.lang.Object ref = argsHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        argsHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int POLICY_HASH_FIELD_NUMBER = 23;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object policyHash_ = "";
+    /**
+     * <code>string policy_hash = 23;</code>
+     * @return The policyHash.
+     */
+    @java.lang.Override
+    public java.lang.String getPolicyHash() {
+      java.lang.Object ref = policyHash_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        policyHash_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string policy_hash = 23;</code>
+     * @return The bytes for policyHash.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getPolicyHashBytes() {
+      java.lang.Object ref = policyHash_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        policyHash_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int SESSION_ID_FIELD_NUMBER = 24;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object sessionId_ = "";
+    /**
+     * <code>string session_id = 24;</code>
+     * @return The sessionId.
+     */
+    @java.lang.Override
+    public java.lang.String getSessionId() {
+      java.lang.Object ref = sessionId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        sessionId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string session_id = 24;</code>
+     * @return The bytes for sessionId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSessionIdBytes() {
+      java.lang.Object ref = sessionId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        sessionId_ = b;
         return b;
       } else {
         return (com.google.protobuf.ByteString) ref;
@@ -6233,6 +10867,27 @@ java.lang.String defaultValue) {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
         com.google.protobuf.GeneratedMessage.writeString(output, 17, correlationId_);
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureVersion_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 18, signatureVersion_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(status_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 19, status_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(outputHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 20, outputHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(prevHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 21, prevHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(argsHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 22, argsHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(policyHash_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 23, policyHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(sessionId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 24, sessionId_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -6304,6 +10959,27 @@ java.lang.String defaultValue) {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(correlationId_)) {
         size += com.google.protobuf.GeneratedMessage.computeStringSize(17, correlationId_);
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signatureVersion_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(18, signatureVersion_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(status_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(19, status_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(outputHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(20, outputHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(prevHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(21, prevHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(argsHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(22, argsHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(policyHash_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(23, policyHash_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(sessionId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(24, sessionId_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -6354,6 +11030,20 @@ java.lang.String defaultValue) {
           other.internalGetMetadata())) return false;
       if (!getCorrelationId()
           .equals(other.getCorrelationId())) return false;
+      if (!getSignatureVersion()
+          .equals(other.getSignatureVersion())) return false;
+      if (!getStatus()
+          .equals(other.getStatus())) return false;
+      if (!getOutputHash()
+          .equals(other.getOutputHash())) return false;
+      if (!getPrevHash()
+          .equals(other.getPrevHash())) return false;
+      if (!getArgsHash()
+          .equals(other.getArgsHash())) return false;
+      if (!getPolicyHash()
+          .equals(other.getPolicyHash())) return false;
+      if (!getSessionId()
+          .equals(other.getSessionId())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -6404,6 +11094,20 @@ java.lang.String defaultValue) {
       }
       hash = (37 * hash) + CORRELATION_ID_FIELD_NUMBER;
       hash = (53 * hash) + getCorrelationId().hashCode();
+      hash = (37 * hash) + SIGNATURE_VERSION_FIELD_NUMBER;
+      hash = (53 * hash) + getSignatureVersion().hashCode();
+      hash = (37 * hash) + STATUS_FIELD_NUMBER;
+      hash = (53 * hash) + getStatus().hashCode();
+      hash = (37 * hash) + OUTPUT_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getOutputHash().hashCode();
+      hash = (37 * hash) + PREV_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getPrevHash().hashCode();
+      hash = (37 * hash) + ARGS_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getArgsHash().hashCode();
+      hash = (37 * hash) + POLICY_HASH_FIELD_NUMBER;
+      hash = (53 * hash) + getPolicyHash().hashCode();
+      hash = (37 * hash) + SESSION_ID_FIELD_NUMBER;
+      hash = (53 * hash) + getSessionId().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -6584,6 +11288,13 @@ java.lang.String defaultValue) {
         reasonCode_ = 0;
         internalGetMutableMetadata().clear();
         correlationId_ = "";
+        signatureVersion_ = "";
+        status_ = "";
+        outputHash_ = "";
+        prevHash_ = "";
+        argsHash_ = "";
+        policyHash_ = "";
+        sessionId_ = "";
         return this;
       }
 
@@ -6673,6 +11384,27 @@ java.lang.String defaultValue) {
         if (((from_bitField0_ & 0x00010000) != 0)) {
           result.correlationId_ = correlationId_;
         }
+        if (((from_bitField0_ & 0x00020000) != 0)) {
+          result.signatureVersion_ = signatureVersion_;
+        }
+        if (((from_bitField0_ & 0x00040000) != 0)) {
+          result.status_ = status_;
+        }
+        if (((from_bitField0_ & 0x00080000) != 0)) {
+          result.outputHash_ = outputHash_;
+        }
+        if (((from_bitField0_ & 0x00100000) != 0)) {
+          result.prevHash_ = prevHash_;
+        }
+        if (((from_bitField0_ & 0x00200000) != 0)) {
+          result.argsHash_ = argsHash_;
+        }
+        if (((from_bitField0_ & 0x00400000) != 0)) {
+          result.policyHash_ = policyHash_;
+        }
+        if (((from_bitField0_ & 0x00800000) != 0)) {
+          result.sessionId_ = sessionId_;
+        }
         result.bitField0_ |= to_bitField0_;
       }
 
@@ -6761,6 +11493,41 @@ java.lang.String defaultValue) {
         if (!other.getCorrelationId().isEmpty()) {
           correlationId_ = other.correlationId_;
           bitField0_ |= 0x00010000;
+          onChanged();
+        }
+        if (!other.getSignatureVersion().isEmpty()) {
+          signatureVersion_ = other.signatureVersion_;
+          bitField0_ |= 0x00020000;
+          onChanged();
+        }
+        if (!other.getStatus().isEmpty()) {
+          status_ = other.status_;
+          bitField0_ |= 0x00040000;
+          onChanged();
+        }
+        if (!other.getOutputHash().isEmpty()) {
+          outputHash_ = other.outputHash_;
+          bitField0_ |= 0x00080000;
+          onChanged();
+        }
+        if (!other.getPrevHash().isEmpty()) {
+          prevHash_ = other.prevHash_;
+          bitField0_ |= 0x00100000;
+          onChanged();
+        }
+        if (!other.getArgsHash().isEmpty()) {
+          argsHash_ = other.argsHash_;
+          bitField0_ |= 0x00200000;
+          onChanged();
+        }
+        if (!other.getPolicyHash().isEmpty()) {
+          policyHash_ = other.policyHash_;
+          bitField0_ |= 0x00400000;
+          onChanged();
+        }
+        if (!other.getSessionId().isEmpty()) {
+          sessionId_ = other.sessionId_;
+          bitField0_ |= 0x00800000;
           onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
@@ -6880,6 +11647,41 @@ java.lang.String defaultValue) {
                 bitField0_ |= 0x00010000;
                 break;
               } // case 138
+              case 146: {
+                signatureVersion_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00020000;
+                break;
+              } // case 146
+              case 154: {
+                status_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00040000;
+                break;
+              } // case 154
+              case 162: {
+                outputHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00080000;
+                break;
+              } // case 162
+              case 170: {
+                prevHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00100000;
+                break;
+              } // case 170
+              case 178: {
+                argsHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00200000;
+                break;
+              } // case 178
+              case 186: {
+                policyHash_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00400000;
+                break;
+              } // case 186
+              case 194: {
+                sessionId_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00800000;
+                break;
+              } // case 194
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -6922,7 +11724,7 @@ java.lang.String defaultValue) {
           getReceiptVersionBytes() {
         java.lang.Object ref = receiptVersion_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           receiptVersion_ = b;
@@ -6994,7 +11796,7 @@ java.lang.String defaultValue) {
           getReceiptIdBytes() {
         java.lang.Object ref = receiptId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           receiptId_ = b;
@@ -7066,7 +11868,7 @@ java.lang.String defaultValue) {
           getDecisionIdBytes() {
         java.lang.Object ref = decisionId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           decisionId_ = b;
@@ -7138,7 +11940,7 @@ java.lang.String defaultValue) {
           getEffectIdBytes() {
         java.lang.Object ref = effectId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           effectId_ = b;
@@ -7262,7 +12064,7 @@ java.lang.String defaultValue) {
           getPrincipalBytes() {
         java.lang.Object ref = principal_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           principal_ = b;
@@ -7334,7 +12136,7 @@ java.lang.String defaultValue) {
           getToolBytes() {
         java.lang.Object ref = tool_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           tool_ = b;
@@ -7406,7 +12208,7 @@ java.lang.String defaultValue) {
           getActionBytes() {
         java.lang.Object ref = action_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           action_ = b;
@@ -7561,7 +12363,7 @@ java.lang.String defaultValue) {
        * <code>.google.protobuf.Timestamp timestamp = 9;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetTimestampFieldBuilder() {
         if (timestampBuilder_ == null) {
           timestampBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -7631,7 +12433,7 @@ java.lang.String defaultValue) {
           getProofgraphNodeBytes() {
         java.lang.Object ref = proofgraphNode_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           proofgraphNode_ = b;
@@ -7703,7 +12505,7 @@ java.lang.String defaultValue) {
           getSignatureBytes() {
         java.lang.Object ref = signature_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signature_ = b;
@@ -7775,7 +12577,7 @@ java.lang.String defaultValue) {
           getSignerKeyIdBytes() {
         java.lang.Object ref = signerKeyId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           signerKeyId_ = b;
@@ -7847,7 +12649,7 @@ java.lang.String defaultValue) {
           getPayloadHashBytes() {
         java.lang.Object ref = payloadHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           payloadHash_ = b;
@@ -8108,7 +12910,7 @@ java.lang.String defaultValue) {
           getCorrelationIdBytes() {
         java.lang.Object ref = correlationId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           correlationId_ = b;
@@ -8166,6 +12968,535 @@ java.lang.String defaultValue) {
         checkByteStringIsUtf8(value);
         correlationId_ = value;
         bitField0_ |= 0x00010000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object signatureVersion_ = "";
+      /**
+       * <pre>
+       * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+       * reason_code fields are also signed by receipt.v5.
+       * </pre>
+       *
+       * <code>string signature_version = 18;</code>
+       * @return The signatureVersion.
+       */
+      public java.lang.String getSignatureVersion() {
+        java.lang.Object ref = signatureVersion_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          signatureVersion_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+       * reason_code fields are also signed by receipt.v5.
+       * </pre>
+       *
+       * <code>string signature_version = 18;</code>
+       * @return The bytes for signatureVersion.
+       */
+      public com.google.protobuf.ByteString
+          getSignatureVersionBytes() {
+        java.lang.Object ref = signatureVersion_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          signatureVersion_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+       * reason_code fields are also signed by receipt.v5.
+       * </pre>
+       *
+       * <code>string signature_version = 18;</code>
+       * @param value The signatureVersion to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureVersion(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        signatureVersion_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+       * reason_code fields are also signed by receipt.v5.
+       * </pre>
+       *
+       * <code>string signature_version = 18;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSignatureVersion() {
+        signatureVersion_ = getDefaultInstance().getSignatureVersion();
+        bitField0_ = (bitField0_ & ~0x00020000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+       * reason_code fields are also signed by receipt.v5.
+       * </pre>
+       *
+       * <code>string signature_version = 18;</code>
+       * @param value The bytes for signatureVersion to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSignatureVersionBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        signatureVersion_ = value;
+        bitField0_ |= 0x00020000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object status_ = "";
+      /**
+       * <code>string status = 19;</code>
+       * @return The status.
+       */
+      public java.lang.String getStatus() {
+        java.lang.Object ref = status_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          status_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string status = 19;</code>
+       * @return The bytes for status.
+       */
+      public com.google.protobuf.ByteString
+          getStatusBytes() {
+        java.lang.Object ref = status_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          status_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string status = 19;</code>
+       * @param value The status to set.
+       * @return This builder for chaining.
+       */
+      public Builder setStatus(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        status_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string status = 19;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearStatus() {
+        status_ = getDefaultInstance().getStatus();
+        bitField0_ = (bitField0_ & ~0x00040000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string status = 19;</code>
+       * @param value The bytes for status to set.
+       * @return This builder for chaining.
+       */
+      public Builder setStatusBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        status_ = value;
+        bitField0_ |= 0x00040000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object outputHash_ = "";
+      /**
+       * <code>string output_hash = 20;</code>
+       * @return The outputHash.
+       */
+      public java.lang.String getOutputHash() {
+        java.lang.Object ref = outputHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          outputHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string output_hash = 20;</code>
+       * @return The bytes for outputHash.
+       */
+      public com.google.protobuf.ByteString
+          getOutputHashBytes() {
+        java.lang.Object ref = outputHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          outputHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string output_hash = 20;</code>
+       * @param value The outputHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setOutputHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        outputHash_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string output_hash = 20;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearOutputHash() {
+        outputHash_ = getDefaultInstance().getOutputHash();
+        bitField0_ = (bitField0_ & ~0x00080000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string output_hash = 20;</code>
+       * @param value The bytes for outputHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setOutputHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        outputHash_ = value;
+        bitField0_ |= 0x00080000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object prevHash_ = "";
+      /**
+       * <code>string prev_hash = 21;</code>
+       * @return The prevHash.
+       */
+      public java.lang.String getPrevHash() {
+        java.lang.Object ref = prevHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          prevHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string prev_hash = 21;</code>
+       * @return The bytes for prevHash.
+       */
+      public com.google.protobuf.ByteString
+          getPrevHashBytes() {
+        java.lang.Object ref = prevHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          prevHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string prev_hash = 21;</code>
+       * @param value The prevHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPrevHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        prevHash_ = value;
+        bitField0_ |= 0x00100000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string prev_hash = 21;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearPrevHash() {
+        prevHash_ = getDefaultInstance().getPrevHash();
+        bitField0_ = (bitField0_ & ~0x00100000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string prev_hash = 21;</code>
+       * @param value The bytes for prevHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPrevHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        prevHash_ = value;
+        bitField0_ |= 0x00100000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object argsHash_ = "";
+      /**
+       * <code>string args_hash = 22;</code>
+       * @return The argsHash.
+       */
+      public java.lang.String getArgsHash() {
+        java.lang.Object ref = argsHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          argsHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string args_hash = 22;</code>
+       * @return The bytes for argsHash.
+       */
+      public com.google.protobuf.ByteString
+          getArgsHashBytes() {
+        java.lang.Object ref = argsHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          argsHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string args_hash = 22;</code>
+       * @param value The argsHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setArgsHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        argsHash_ = value;
+        bitField0_ |= 0x00200000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string args_hash = 22;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearArgsHash() {
+        argsHash_ = getDefaultInstance().getArgsHash();
+        bitField0_ = (bitField0_ & ~0x00200000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string args_hash = 22;</code>
+       * @param value The bytes for argsHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setArgsHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        argsHash_ = value;
+        bitField0_ |= 0x00200000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object policyHash_ = "";
+      /**
+       * <code>string policy_hash = 23;</code>
+       * @return The policyHash.
+       */
+      public java.lang.String getPolicyHash() {
+        java.lang.Object ref = policyHash_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          policyHash_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string policy_hash = 23;</code>
+       * @return The bytes for policyHash.
+       */
+      public com.google.protobuf.ByteString
+          getPolicyHashBytes() {
+        java.lang.Object ref = policyHash_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          policyHash_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string policy_hash = 23;</code>
+       * @param value The policyHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPolicyHash(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        policyHash_ = value;
+        bitField0_ |= 0x00400000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string policy_hash = 23;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearPolicyHash() {
+        policyHash_ = getDefaultInstance().getPolicyHash();
+        bitField0_ = (bitField0_ & ~0x00400000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string policy_hash = 23;</code>
+       * @param value The bytes for policyHash to set.
+       * @return This builder for chaining.
+       */
+      public Builder setPolicyHashBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        policyHash_ = value;
+        bitField0_ |= 0x00400000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object sessionId_ = "";
+      /**
+       * <code>string session_id = 24;</code>
+       * @return The sessionId.
+       */
+      public java.lang.String getSessionId() {
+        java.lang.Object ref = sessionId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          sessionId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string session_id = 24;</code>
+       * @return The bytes for sessionId.
+       */
+      public com.google.protobuf.ByteString
+          getSessionIdBytes() {
+        java.lang.Object ref = sessionId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          sessionId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string session_id = 24;</code>
+       * @param value The sessionId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSessionId(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        sessionId_ = value;
+        bitField0_ |= 0x00800000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string session_id = 24;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSessionId() {
+        sessionId_ = getDefaultInstance().getSessionId();
+        bitField0_ = (bitField0_ & ~0x00800000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string session_id = 24;</code>
+       * @param value The bytes for sessionId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSessionIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        sessionId_ = value;
+        bitField0_ |= 0x00800000;
         onChanged();
         return this;
       }
@@ -8890,7 +14221,7 @@ java.lang.String defaultValue) {
        * <code>.helm.kernel.v1.Effect effect = 1;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.kernel.v1.Helm.Effect, helm.kernel.v1.Helm.Effect.Builder, helm.kernel.v1.Helm.EffectOrBuilder> 
+          helm.kernel.v1.Helm.Effect, helm.kernel.v1.Helm.Effect.Builder, helm.kernel.v1.Helm.EffectOrBuilder>
           internalGetEffectFieldBuilder() {
         if (effectBuilder_ == null) {
           effectBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -9011,7 +14342,7 @@ java.lang.String defaultValue) {
        * <code>.helm.kernel.v1.SubjectDescriptor subject = 2;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.kernel.v1.Helm.SubjectDescriptor, helm.kernel.v1.Helm.SubjectDescriptor.Builder, helm.kernel.v1.Helm.SubjectDescriptorOrBuilder> 
+          helm.kernel.v1.Helm.SubjectDescriptor, helm.kernel.v1.Helm.SubjectDescriptor.Builder, helm.kernel.v1.Helm.SubjectDescriptorOrBuilder>
           internalGetSubjectFieldBuilder() {
         if (subjectBuilder_ == null) {
           subjectBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -9132,7 +14463,7 @@ java.lang.String defaultValue) {
        * <code>.helm.kernel.v1.ContextDescriptor context = 3;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.kernel.v1.Helm.ContextDescriptor, helm.kernel.v1.Helm.ContextDescriptor.Builder, helm.kernel.v1.Helm.ContextDescriptorOrBuilder> 
+          helm.kernel.v1.Helm.ContextDescriptor, helm.kernel.v1.Helm.ContextDescriptor.Builder, helm.kernel.v1.Helm.ContextDescriptorOrBuilder>
           internalGetContextFieldBuilder() {
         if (contextBuilder_ == null) {
           contextBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -9308,7 +14639,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         principal_ = s;
@@ -9324,7 +14655,7 @@ java.lang.String defaultValue) {
         getPrincipalBytes() {
       java.lang.Object ref = principal_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         principal_ = b;
@@ -9347,7 +14678,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         tenant_ = s;
@@ -9363,7 +14694,7 @@ java.lang.String defaultValue) {
         getTenantBytes() {
       java.lang.Object ref = tenant_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         tenant_ = b;
@@ -9791,7 +15122,7 @@ java.lang.String defaultValue) {
           getPrincipalBytes() {
         java.lang.Object ref = principal_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           principal_ = b;
@@ -9863,7 +15194,7 @@ java.lang.String defaultValue) {
           getTenantBytes() {
         java.lang.Object ref = tenant_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           tenant_ = b;
@@ -10188,7 +15519,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         jurisdiction_ = s;
@@ -10204,7 +15535,7 @@ java.lang.String defaultValue) {
         getJurisdictionBytes() {
       java.lang.Object ref = jurisdiction_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         jurisdiction_ = b;
@@ -10227,7 +15558,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         environment_ = s;
@@ -10243,7 +15574,7 @@ java.lang.String defaultValue) {
         getEnvironmentBytes() {
       java.lang.Object ref = environment_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         environment_ = b;
@@ -10731,7 +16062,7 @@ java.lang.String defaultValue) {
           getJurisdictionBytes() {
         java.lang.Object ref = jurisdiction_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           jurisdiction_ = b;
@@ -10803,7 +16134,7 @@ java.lang.String defaultValue) {
           getEnvironmentBytes() {
         java.lang.Object ref = environment_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           environment_ = b;
@@ -10958,7 +16289,7 @@ java.lang.String defaultValue) {
        * <code>.google.protobuf.Timestamp time_window_start = 3;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetTimeWindowStartFieldBuilder() {
         if (timeWindowStartBuilder_ == null) {
           timeWindowStartBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -11079,7 +16410,7 @@ java.lang.String defaultValue) {
        * <code>.google.protobuf.Timestamp time_window_end = 4;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetTimeWindowEndFieldBuilder() {
         if (timeWindowEndBuilder_ == null) {
           timeWindowEndBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -11191,7 +16522,7 @@ java.lang.String defaultValue) {
     /**
      * <code>repeated .helm.kernel.v1.Obligation obligations = 5;</code>
      */
-    java.util.List<helm.kernel.v1.Helm.Obligation> 
+    java.util.List<helm.kernel.v1.Helm.Obligation>
         getObligationsList();
     /**
      * <code>repeated .helm.kernel.v1.Obligation obligations = 5;</code>
@@ -11204,7 +16535,7 @@ java.lang.String defaultValue) {
     /**
      * <code>repeated .helm.kernel.v1.Obligation obligations = 5;</code>
      */
-    java.util.List<? extends helm.kernel.v1.Helm.ObligationOrBuilder> 
+    java.util.List<? extends helm.kernel.v1.Helm.ObligationOrBuilder>
         getObligationsOrBuilderList();
     /**
      * <code>repeated .helm.kernel.v1.Obligation obligations = 5;</code>
@@ -11300,7 +16631,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         policyRef_ = s;
@@ -11316,7 +16647,7 @@ java.lang.String defaultValue) {
         getPolicyRefBytes() {
       java.lang.Object ref = policyRef_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         policyRef_ = b;
@@ -11339,7 +16670,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         decisionHash_ = s;
@@ -11355,7 +16686,7 @@ java.lang.String defaultValue) {
         getDecisionHashBytes() {
       java.lang.Object ref = decisionHash_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         decisionHash_ = b;
@@ -11379,7 +16710,7 @@ java.lang.String defaultValue) {
      * <code>repeated .helm.kernel.v1.Obligation obligations = 5;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends helm.kernel.v1.Helm.ObligationOrBuilder> 
+    public java.util.List<? extends helm.kernel.v1.Helm.ObligationOrBuilder>
         getObligationsOrBuilderList() {
       return obligations_;
     }
@@ -11763,7 +17094,7 @@ java.lang.String defaultValue) {
               obligationsBuilder_ = null;
               obligations_ = other.obligations_;
               bitField0_ = (bitField0_ & ~0x00000010);
-              obligationsBuilder_ = 
+              obligationsBuilder_ =
                 com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
                    internalGetObligationsFieldBuilder() : null;
             } else {
@@ -11956,7 +17287,7 @@ java.lang.String defaultValue) {
           getPolicyRefBytes() {
         java.lang.Object ref = policyRef_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           policyRef_ = b;
@@ -12028,7 +17359,7 @@ java.lang.String defaultValue) {
           getDecisionHashBytes() {
         java.lang.Object ref = decisionHash_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           decisionHash_ = b;
@@ -12270,7 +17601,7 @@ java.lang.String defaultValue) {
       /**
        * <code>repeated .helm.kernel.v1.Obligation obligations = 5;</code>
        */
-      public java.util.List<? extends helm.kernel.v1.Helm.ObligationOrBuilder> 
+      public java.util.List<? extends helm.kernel.v1.Helm.ObligationOrBuilder>
            getObligationsOrBuilderList() {
         if (obligationsBuilder_ != null) {
           return obligationsBuilder_.getMessageOrBuilderList();
@@ -12296,12 +17627,12 @@ java.lang.String defaultValue) {
       /**
        * <code>repeated .helm.kernel.v1.Obligation obligations = 5;</code>
        */
-      public java.util.List<helm.kernel.v1.Helm.Obligation.Builder> 
+      public java.util.List<helm.kernel.v1.Helm.Obligation.Builder>
            getObligationsBuilderList() {
         return internalGetObligationsFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilder<
-          helm.kernel.v1.Helm.Obligation, helm.kernel.v1.Helm.Obligation.Builder, helm.kernel.v1.Helm.ObligationOrBuilder> 
+          helm.kernel.v1.Helm.Obligation, helm.kernel.v1.Helm.Obligation.Builder, helm.kernel.v1.Helm.ObligationOrBuilder>
           internalGetObligationsFieldBuilder() {
         if (obligationsBuilder_ == null) {
           obligationsBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
@@ -12480,7 +17811,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         id_ = s;
@@ -12496,7 +17827,7 @@ java.lang.String defaultValue) {
         getIdBytes() {
       java.lang.Object ref = id_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         id_ = b;
@@ -12519,7 +17850,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         type_ = s;
@@ -12535,7 +17866,7 @@ java.lang.String defaultValue) {
         getTypeBytes() {
       java.lang.Object ref = type_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         type_ = b;
@@ -12558,7 +17889,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         description_ = s;
@@ -12574,7 +17905,7 @@ java.lang.String defaultValue) {
         getDescriptionBytes() {
       java.lang.Object ref = description_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         description_ = b;
@@ -13022,7 +18353,7 @@ java.lang.String defaultValue) {
           getIdBytes() {
         java.lang.Object ref = id_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           id_ = b;
@@ -13094,7 +18425,7 @@ java.lang.String defaultValue) {
           getTypeBytes() {
         java.lang.Object ref = type_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           type_ = b;
@@ -13166,7 +18497,7 @@ java.lang.String defaultValue) {
           getDescriptionBytes() {
         java.lang.Object ref = description_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           description_ = b;
@@ -13321,7 +18652,7 @@ java.lang.String defaultValue) {
        * <code>.google.protobuf.Timestamp deadline = 4;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetDeadlineFieldBuilder() {
         if (deadlineBuilder_ == null) {
           deadlineBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -13545,7 +18876,7 @@ java.lang.String defaultValue);
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         principal_ = s;
@@ -13561,7 +18892,7 @@ java.lang.String defaultValue);
         getPrincipalBytes() {
       java.lang.Object ref = principal_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         principal_ = b;
@@ -13577,7 +18908,7 @@ java.lang.String defaultValue);
           java.lang.String, java.lang.String> defaultEntry =
               com.google.protobuf.MapEntry
               .<java.lang.String, java.lang.String>newDefaultInstance(
-                  helm.kernel.v1.Helm.internal_static_helm_kernel_v1_EffectRequest_ContextEntry_descriptor, 
+                  helm.kernel.v1.Helm.internal_static_helm_kernel_v1_EffectRequest_ContextEntry_descriptor,
                   com.google.protobuf.WireFormat.FieldType.STRING,
                   "",
                   com.google.protobuf.WireFormat.FieldType.STRING,
@@ -14158,7 +19489,7 @@ java.lang.String defaultValue) {
        * <code>.helm.kernel.v1.Effect effect = 1;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.kernel.v1.Helm.Effect, helm.kernel.v1.Helm.Effect.Builder, helm.kernel.v1.Helm.EffectOrBuilder> 
+          helm.kernel.v1.Helm.Effect, helm.kernel.v1.Helm.Effect.Builder, helm.kernel.v1.Helm.EffectOrBuilder>
           internalGetEffectFieldBuilder() {
         if (effectBuilder_ == null) {
           effectBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -14196,7 +19527,7 @@ java.lang.String defaultValue) {
           getPrincipalBytes() {
         java.lang.Object ref = principal_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           principal_ = b;
@@ -14584,7 +19915,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         reason_ = s;
@@ -14600,7 +19931,7 @@ java.lang.String defaultValue) {
         getReasonBytes() {
       java.lang.Object ref = reason_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         reason_ = b;
@@ -15212,7 +20543,7 @@ java.lang.String defaultValue) {
           getReasonBytes() {
         java.lang.Object ref = reason_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           reason_ = b;
@@ -15367,7 +20698,7 @@ java.lang.String defaultValue) {
        * <code>.helm.kernel.v1.Receipt receipt = 4;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.kernel.v1.Helm.Receipt, helm.kernel.v1.Helm.Receipt.Builder, helm.kernel.v1.Helm.ReceiptOrBuilder> 
+          helm.kernel.v1.Helm.Receipt, helm.kernel.v1.Helm.Receipt.Builder, helm.kernel.v1.Helm.ReceiptOrBuilder>
           internalGetReceiptFieldBuilder() {
         if (receiptBuilder_ == null) {
           receiptBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -15488,7 +20819,7 @@ java.lang.String defaultValue) {
        * <code>.helm.kernel.v1.AuthorizedExecutionIntent intent = 5;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.kernel.v1.Helm.AuthorizedExecutionIntent, helm.kernel.v1.Helm.AuthorizedExecutionIntent.Builder, helm.kernel.v1.Helm.AuthorizedExecutionIntentOrBuilder> 
+          helm.kernel.v1.Helm.AuthorizedExecutionIntent, helm.kernel.v1.Helm.AuthorizedExecutionIntent.Builder, helm.kernel.v1.Helm.AuthorizedExecutionIntentOrBuilder>
           internalGetIntentFieldBuilder() {
         if (intentBuilder_ == null) {
           intentBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -15666,7 +20997,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         intentId_ = s;
@@ -15682,7 +21013,7 @@ java.lang.String defaultValue) {
         getIntentIdBytes() {
       java.lang.Object ref = intentId_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         intentId_ = b;
@@ -15727,7 +21058,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         errorMessage_ = s;
@@ -15743,7 +21074,7 @@ java.lang.String defaultValue) {
         getErrorMessageBytes() {
       java.lang.Object ref = errorMessage_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         errorMessage_ = b;
@@ -16214,7 +21545,7 @@ java.lang.String defaultValue) {
           getIntentIdBytes() {
         java.lang.Object ref = intentId_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           intentId_ = b;
@@ -16350,7 +21681,7 @@ java.lang.String defaultValue) {
           getErrorMessageBytes() {
         java.lang.Object ref = errorMessage_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           errorMessage_ = b;
@@ -16505,7 +21836,7 @@ java.lang.String defaultValue) {
        * <code>.google.protobuf.Timestamp completed_at = 5;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>
           internalGetCompletedAtFieldBuilder() {
         if (completedAtBuilder_ == null) {
           completedAtBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -16683,7 +22014,7 @@ java.lang.String defaultValue) {
       if (ref instanceof java.lang.String) {
         return (java.lang.String) ref;
       } else {
-        com.google.protobuf.ByteString bs = 
+        com.google.protobuf.ByteString bs =
             (com.google.protobuf.ByteString) ref;
         java.lang.String s = bs.toStringUtf8();
         proofgraphNode_ = s;
@@ -16699,7 +22030,7 @@ java.lang.String defaultValue) {
         getProofgraphNodeBytes() {
       java.lang.Object ref = proofgraphNode_;
       if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
+        com.google.protobuf.ByteString b =
             com.google.protobuf.ByteString.copyFromUtf8(
                 (java.lang.String) ref);
         proofgraphNode_ = b;
@@ -17156,7 +22487,7 @@ java.lang.String defaultValue) {
        * <code>.helm.kernel.v1.Receipt receipt = 1;</code>
        */
       private com.google.protobuf.SingleFieldBuilder<
-          helm.kernel.v1.Helm.Receipt, helm.kernel.v1.Helm.Receipt.Builder, helm.kernel.v1.Helm.ReceiptOrBuilder> 
+          helm.kernel.v1.Helm.Receipt, helm.kernel.v1.Helm.Receipt.Builder, helm.kernel.v1.Helm.ReceiptOrBuilder>
           internalGetReceiptFieldBuilder() {
         if (receiptBuilder_ == null) {
           receiptBuilder_ = new com.google.protobuf.SingleFieldBuilder<
@@ -17194,7 +22525,7 @@ java.lang.String defaultValue) {
           getProofgraphNodeBytes() {
         java.lang.Object ref = proofgraphNode_;
         if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
+          com.google.protobuf.ByteString b =
               com.google.protobuf.ByteString.copyFromUtf8(
                   (java.lang.String) ref);
           proofgraphNode_ = b;
@@ -17294,77 +22625,87 @@ java.lang.String defaultValue) {
 
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_Effect_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_Effect_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_helm_kernel_v1_SemanticThreatAssessment_descriptor;
+  private static final
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_helm_kernel_v1_SemanticThreatAssessment_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_helm_kernel_v1_ThreatScanReference_descriptor;
+  private static final
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_helm_kernel_v1_ThreatScanReference_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_DecisionRecord_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_DecisionRecord_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_AuthorizedExecutionIntent_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_Receipt_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_Receipt_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_Receipt_MetadataEntry_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_Receipt_MetadataEntry_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_PDPRequest_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_PDPRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_SubjectDescriptor_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_SubjectDescriptor_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_ContextDescriptor_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_ContextDescriptor_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_PDPResponse_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_PDPResponse_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_Obligation_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_Obligation_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_EffectRequest_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_EffectRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_EffectRequest_ContextEntry_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_EffectRequest_ContextEntry_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_EffectResponse_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_EffectResponse_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_ExecutionResult_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_ExecutionResult_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_kernel_v1_CompletionReceipt_descriptor;
-  private static final 
+  private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_kernel_v1_CompletionReceipt_fieldAccessorTable;
 
@@ -17380,95 +22721,116 @@ java.lang.String defaultValue) {
       ".v1\032\037google/protobuf/timestamp.proto\"S\n\006" +
       "Effect\022\023\n\013effect_type\030\001 \001(\t\022\021\n\teffect_id" +
       "\030\002 \001(\t\022\016\n\006params\030\003 \001(\014\022\021\n\tbudget_id\030\004 \001(" +
-      "\t\"\366\002\n\016DecisionRecord\022\n\n\002id\030\001 \001(\t\022-\n\ttime" +
-      "stamp\030\002 \001(\0132\032.google.protobuf.Timestamp\022" +
-      "(\n\007verdict\030\003 \001(\0162\027.helm.kernel.v1.Verdic" +
-      "t\022\016\n\006reason\030\004 \001(\t\022/\n\013reason_code\030\005 \001(\0162\032" +
-      ".helm.kernel.v1.ReasonCode\022\025\n\reffect_dig" +
-      "est\030\006 \001(\t\022\034\n\024requirement_set_hash\030\007 \001(\t\022" +
-      "\021\n\tsignature\030\010 \001(\t\022\025\n\rsigner_key_id\030\t \001(" +
-      "\t\022\022\n\npolicy_ref\030\n \001(\t\022\034\n\024policy_decision" +
-      "_hash\030\013 \001(\t\022\025\n\rinput_context\030\014 \001(\014\022\026\n\016co" +
-      "rrelation_id\030\r \001(\t\"\362\001\n\031AuthorizedExecuti" +
-      "onIntent\022\021\n\tintent_id\030\001 \001(\t\022\023\n\013decision_" +
-      "id\030\002 \001(\t\022\021\n\teffect_id\030\003 \001(\t\022-\n\tissued_at" +
-      "\030\004 \001(\0132\032.google.protobuf.Timestamp\022.\n\nex" +
-      "pires_at\030\005 \001(\0132\032.google.protobuf.Timesta" +
-      "mp\022\021\n\tsignature\030\006 \001(\t\022\025\n\rsigner_key_id\030\007" +
-      " \001(\t\022\021\n\tprincipal\030\010 \001(\t\"\205\004\n\007Receipt\022\027\n\017r" +
-      "eceipt_version\030\001 \001(\t\022\022\n\nreceipt_id\030\002 \001(\t" +
-      "\022\023\n\013decision_id\030\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t" +
-      "\022(\n\007verdict\030\005 \001(\0162\027.helm.kernel.v1.Verdi" +
-      "ct\022\021\n\tprincipal\030\006 \001(\t\022\014\n\004tool\030\007 \001(\t\022\016\n\006a" +
-      "ction\030\010 \001(\t\022-\n\ttimestamp\030\t \001(\0132\032.google." +
-      "protobuf.Timestamp\022\017\n\007lamport\030\n \001(\004\022\027\n\017p" +
-      "roofgraph_node\030\013 \001(\t\022\021\n\tsignature\030\014 \001(\t\022" +
-      "\025\n\rsigner_key_id\030\r \001(\t\022\024\n\014payload_hash\030\016" +
-      " \001(\t\022/\n\013reason_code\030\017 \001(\0162\032.helm.kernel." +
-      "v1.ReasonCode\0227\n\010metadata\030\020 \003(\0132%.helm.k" +
-      "ernel.v1.Receipt.MetadataEntry\022\026\n\016correl" +
-      "ation_id\030\021 \001(\t\032/\n\rMetadataEntry\022\013\n\003key\030\001" +
-      " \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\234\001\n\nPDPRequest\022&" +
-      "\n\006effect\030\001 \001(\0132\026.helm.kernel.v1.Effect\0222" +
-      "\n\007subject\030\002 \001(\0132!.helm.kernel.v1.Subject" +
-      "Descriptor\0222\n\007context\030\003 \001(\0132!.helm.kerne" +
-      "l.v1.ContextDescriptor\"E\n\021SubjectDescrip" +
-      "tor\022\021\n\tprincipal\030\001 \001(\t\022\016\n\006tenant\030\002 \001(\t\022\r" +
-      "\n\005roles\030\003 \003(\t\"\252\001\n\021ContextDescriptor\022\024\n\014j" +
-      "urisdiction\030\001 \001(\t\022\023\n\013environment\030\002 \001(\t\0225" +
-      "\n\021time_window_start\030\003 \001(\0132\032.google.proto" +
-      "buf.Timestamp\0223\n\017time_window_end\030\004 \001(\0132\032" +
-      ".google.protobuf.Timestamp\"\251\001\n\013PDPRespon" +
-      "se\022\r\n\005allow\030\001 \001(\010\022/\n\013reason_code\030\002 \001(\0162\032" +
-      ".helm.kernel.v1.ReasonCode\022\022\n\npolicy_ref" +
-      "\030\003 \001(\t\022\025\n\rdecision_hash\030\004 \001(\t\022/\n\013obligat" +
-      "ions\030\005 \003(\0132\032.helm.kernel.v1.Obligation\"i" +
-      "\n\nObligation\022\n\n\002id\030\001 \001(\t\022\014\n\004type\030\002 \001(\t\022\023" +
-      "\n\013description\030\003 \001(\t\022,\n\010deadline\030\004 \001(\0132\032." +
-      "google.protobuf.Timestamp\"\267\001\n\rEffectRequ" +
-      "est\022&\n\006effect\030\001 \001(\0132\026.helm.kernel.v1.Eff" +
-      "ect\022\021\n\tprincipal\030\002 \001(\t\022;\n\007context\030\003 \003(\0132" +
-      "*.helm.kernel.v1.EffectRequest.ContextEn" +
-      "try\032.\n\014ContextEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005valu" +
-      "e\030\002 \001(\t:\0028\001\"\340\001\n\016EffectResponse\022(\n\007verdic" +
-      "t\030\001 \001(\0162\027.helm.kernel.v1.Verdict\022/\n\013reas" +
-      "on_code\030\002 \001(\0162\032.helm.kernel.v1.ReasonCod" +
-      "e\022\016\n\006reason\030\003 \001(\t\022(\n\007receipt\030\004 \001(\0132\027.hel" +
-      "m.kernel.v1.Receipt\0229\n\006intent\030\005 \001(\0132).he" +
-      "lm.kernel.v1.AuthorizedExecutionIntent\"\216" +
-      "\001\n\017ExecutionResult\022\021\n\tintent_id\030\001 \001(\t\022\017\n" +
-      "\007success\030\002 \001(\010\022\016\n\006output\030\003 \001(\014\022\025\n\rerror_" +
-      "message\030\004 \001(\t\0220\n\014completed_at\030\005 \001(\0132\032.go" +
-      "ogle.protobuf.Timestamp\"V\n\021CompletionRec" +
-      "eipt\022(\n\007receipt\030\001 \001(\0132\027.helm.kernel.v1.R" +
-      "eceipt\022\027\n\017proofgraph_node\030\002 \001(\t*]\n\007Verdi" +
-      "ct\022\027\n\023VERDICT_UNSPECIFIED\020\000\022\021\n\rVERDICT_A" +
-      "LLOW\020\001\022\020\n\014VERDICT_DENY\020\002\022\024\n\020VERDICT_ESCA" +
-      "LATE\020\003*\362\004\n\nReasonCode\022\033\n\027REASON_CODE_UNS" +
-      "PECIFIED\020\000\022 \n\034REASON_CODE_POLICY_VIOLATI" +
-      "ON\020\001\022!\n\035REASON_CODE_NO_POLICY_DEFINED\020\002\022" +
-      "$\n REASON_CODE_PRG_EVALUATION_ERROR\020\003\022#\n" +
-      "\037REASON_CODE_MISSING_REQUIREMENT\020\004\022\030\n\024RE" +
-      "ASON_CODE_PDP_DENY\020\005\022\031\n\025REASON_CODE_PDP_" +
-      "ERROR\020\006\022\037\n\033REASON_CODE_BUDGET_EXCEEDED\020\007" +
-      "\022\034\n\030REASON_CODE_BUDGET_ERROR\020\010\022 \n\034REASON" +
-      "_CODE_ENVELOPE_INVALID\020\t\022 \n\034REASON_CODE_" +
-      "SCHEMA_VIOLATION\020\n\022%\n!REASON_CODE_TEMPOR" +
-      "AL_INTERVENTION\020\013\022!\n\035REASON_CODE_TEMPORA" +
-      "L_THROTTLE\020\014\022!\n\035REASON_CODE_SANDBOX_VIOL" +
-      "ATION\020\r\022\"\n\036REASON_CODE_PROVENANCE_FAILUR" +
-      "E\020\016\022$\n REASON_CODE_VERIFICATION_FAILURE\020" +
-      "\017\022 \n\034REASON_CODE_TENANT_ISOLATION\020\020\022&\n\"R" +
-      "EASON_CODE_JURISDICTION_VIOLATION\020\0212a\n\032P" +
-      "olicyDecisionPointService\022C\n\010Evaluate\022\032." +
-      "helm.kernel.v1.PDPRequest\032\033.helm.kernel." +
-      "v1.PDPResponse2\260\001\n\025EffectBoundaryService" +
-      "\022G\n\006Submit\022\035.helm.kernel.v1.EffectReques" +
-      "t\032\036.helm.kernel.v1.EffectResponse\022N\n\010Com" +
-      "plete\022\037.helm.kernel.v1.ExecutionResult\032!" +
-      ".helm.kernel.v1.CompletionReceiptB&Z$hel" +
-      "m.mindburn.run/kernel/v1;kernelv1b\006proto" +
-      "3"
+      "\t\"\364\001\n\030SemanticThreatAssessment\022\021\n\tavaila" +
+      "ble\030\001 \001(\010\022\025\n\rmodel_version\030\002 \001(\t\022\022\n\nmode" +
+      "l_hash\030\003 \001(\t\022\033\n\023expected_model_hash\030\004 \001(" +
+      "\t\022\026\n\016failure_reason\030\005 \001(\t\022\024\n\014threshold_b" +
+      "p\030\006 \001(\r\022\016\n\006max_bp\030\007 \001(\r\022\025\n\rnearest_class" +
+      "\030\010 \001(\t\022\017\n\007flagged\030\t \001(\010\022\027\n\017input_truncat" +
+      "ed\030\n \001(\010\"\270\001\n\023ThreatScanReference\022\017\n\007scan" +
+      "_id\030\001 \001(\t\022\024\n\014max_severity\030\002 \001(\t\022\025\n\rfindi" +
+      "ng_count\030\003 \001(\r\022\023\n\013trust_level\030\004 \001(\t\022\022\n\ni" +
+      "nput_hash\030\005 \001(\t\022:\n\010semantic\030\006 \001(\0132(.helm" +
+      ".kernel.v1.SemanticThreatAssessment\"\350\004\n\016" +
+      "DecisionRecord\022\n\n\002id\030\001 \001(\t\022-\n\ttimestamp\030" +
+      "\002 \001(\0132\032.google.protobuf.Timestamp\022(\n\007ver" +
+      "dict\030\003 \001(\0162\027.helm.kernel.v1.Verdict\022\016\n\006r" +
+      "eason\030\004 \001(\t\022/\n\013reason_code\030\005 \001(\0162\032.helm." +
+      "kernel.v1.ReasonCode\022\025\n\reffect_digest\030\006 " +
+      "\001(\t\022\034\n\024requirement_set_hash\030\007 \001(\t\022\021\n\tsig" +
+      "nature\030\010 \001(\t\022\025\n\rsigner_key_id\030\t \001(\t\022\022\n\np" +
+      "olicy_ref\030\n \001(\t\022\034\n\024policy_decision_hash\030" +
+      "\013 \001(\t\022\025\n\rinput_context\030\014 \001(\014\022\026\n\016correlat" +
+      "ion_id\030\r \001(\t\022\031\n\021signature_version\030\016 \001(\t\022" +
+      "\026\n\016phenotype_hash\030\017 \001(\t\022\033\n\023policy_conten" +
+      "t_hash\030\020 \001(\t\0228\n\013threat_scan\030\021 \001(\0132#.helm" +
+      ".kernel.v1.ThreatScanReference\022\022\n\nsubjec" +
+      "t_id\030\022 \001(\t\022\016\n\006action\030\023 \001(\t\022\020\n\010resource\030\024" +
+      " \001(\t\022\026\n\016signature_type\030\025 \001(\t\022\030\n\020reason_c" +
+      "ode_text\030\026 \001(\t\"\362\001\n\031AuthorizedExecutionIn" +
+      "tent\022\021\n\tintent_id\030\001 \001(\t\022\023\n\013decision_id\030\002" +
+      " \001(\t\022\021\n\teffect_id\030\003 \001(\t\022-\n\tissued_at\030\004 \001" +
+      "(\0132\032.google.protobuf.Timestamp\022.\n\nexpire" +
+      "s_at\030\005 \001(\0132\032.google.protobuf.Timestamp\022\021" +
+      "\n\tsignature\030\006 \001(\t\022\025\n\rsigner_key_id\030\007 \001(\t" +
+      "\022\021\n\tprincipal\030\010 \001(\t\"\224\005\n\007Receipt\022\027\n\017recei" +
+      "pt_version\030\001 \001(\t\022\022\n\nreceipt_id\030\002 \001(\t\022\023\n\013" +
+      "decision_id\030\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t\022(\n\007" +
+      "verdict\030\005 \001(\0162\027.helm.kernel.v1.Verdict\022\021" +
+      "\n\tprincipal\030\006 \001(\t\022\014\n\004tool\030\007 \001(\t\022\016\n\006actio" +
+      "n\030\010 \001(\t\022-\n\ttimestamp\030\t \001(\0132\032.google.prot" +
+      "obuf.Timestamp\022\017\n\007lamport\030\n \001(\004\022\027\n\017proof" +
+      "graph_node\030\013 \001(\t\022\021\n\tsignature\030\014 \001(\t\022\025\n\rs" +
+      "igner_key_id\030\r \001(\t\022\024\n\014payload_hash\030\016 \001(\t" +
+      "\022/\n\013reason_code\030\017 \001(\0162\032.helm.kernel.v1.R" +
+      "easonCode\0227\n\010metadata\030\020 \003(\0132%.helm.kerne" +
+      "l.v1.Receipt.MetadataEntry\022\026\n\016correlatio" +
+      "n_id\030\021 \001(\t\022\031\n\021signature_version\030\022 \001(\t\022\016\n" +
+      "\006status\030\023 \001(\t\022\023\n\013output_hash\030\024 \001(\t\022\021\n\tpr" +
+      "ev_hash\030\025 \001(\t\022\021\n\targs_hash\030\026 \001(\t\022\023\n\013poli" +
+      "cy_hash\030\027 \001(\t\022\022\n\nsession_id\030\030 \001(\t\032/\n\rMet" +
+      "adataEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\002" +
+      "8\001\"\234\001\n\nPDPRequest\022&\n\006effect\030\001 \001(\0132\026.helm" +
+      ".kernel.v1.Effect\0222\n\007subject\030\002 \001(\0132!.hel" +
+      "m.kernel.v1.SubjectDescriptor\0222\n\007context" +
+      "\030\003 \001(\0132!.helm.kernel.v1.ContextDescripto" +
+      "r\"E\n\021SubjectDescriptor\022\021\n\tprincipal\030\001 \001(" +
+      "\t\022\016\n\006tenant\030\002 \001(\t\022\r\n\005roles\030\003 \003(\t\"\252\001\n\021Con" +
+      "textDescriptor\022\024\n\014jurisdiction\030\001 \001(\t\022\023\n\013" +
+      "environment\030\002 \001(\t\0225\n\021time_window_start\030\003" +
+      " \001(\0132\032.google.protobuf.Timestamp\0223\n\017time" +
+      "_window_end\030\004 \001(\0132\032.google.protobuf.Time" +
+      "stamp\"\251\001\n\013PDPResponse\022\r\n\005allow\030\001 \001(\010\022/\n\013" +
+      "reason_code\030\002 \001(\0162\032.helm.kernel.v1.Reaso" +
+      "nCode\022\022\n\npolicy_ref\030\003 \001(\t\022\025\n\rdecision_ha" +
+      "sh\030\004 \001(\t\022/\n\013obligations\030\005 \003(\0132\032.helm.ker" +
+      "nel.v1.Obligation\"i\n\nObligation\022\n\n\002id\030\001 " +
+      "\001(\t\022\014\n\004type\030\002 \001(\t\022\023\n\013description\030\003 \001(\t\022," +
+      "\n\010deadline\030\004 \001(\0132\032.google.protobuf.Times" +
+      "tamp\"\267\001\n\rEffectRequest\022&\n\006effect\030\001 \001(\0132\026" +
+      ".helm.kernel.v1.Effect\022\021\n\tprincipal\030\002 \001(" +
+      "\t\022;\n\007context\030\003 \003(\0132*.helm.kernel.v1.Effe" +
+      "ctRequest.ContextEntry\032.\n\014ContextEntry\022\013" +
+      "\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\340\001\n\016Effec" +
+      "tResponse\022(\n\007verdict\030\001 \001(\0162\027.helm.kernel" +
+      ".v1.Verdict\022/\n\013reason_code\030\002 \001(\0162\032.helm." +
+      "kernel.v1.ReasonCode\022\016\n\006reason\030\003 \001(\t\022(\n\007" +
+      "receipt\030\004 \001(\0132\027.helm.kernel.v1.Receipt\0229" +
+      "\n\006intent\030\005 \001(\0132).helm.kernel.v1.Authoriz" +
+      "edExecutionIntent\"\216\001\n\017ExecutionResult\022\021\n" +
+      "\tintent_id\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\016\n\006out" +
+      "put\030\003 \001(\014\022\025\n\rerror_message\030\004 \001(\t\0220\n\014comp" +
+      "leted_at\030\005 \001(\0132\032.google.protobuf.Timesta" +
+      "mp\"V\n\021CompletionReceipt\022(\n\007receipt\030\001 \001(\013" +
+      "2\027.helm.kernel.v1.Receipt\022\027\n\017proofgraph_" +
+      "node\030\002 \001(\t*]\n\007Verdict\022\027\n\023VERDICT_UNSPECI" +
+      "FIED\020\000\022\021\n\rVERDICT_ALLOW\020\001\022\020\n\014VERDICT_DEN" +
+      "Y\020\002\022\024\n\020VERDICT_ESCALATE\020\003*\243\005\n\nReasonCode" +
+      "\022\033\n\027REASON_CODE_UNSPECIFIED\020\000\022 \n\034REASON_" +
+      "CODE_POLICY_VIOLATION\020\001\022!\n\035REASON_CODE_N" +
+      "O_POLICY_DEFINED\020\002\022$\n REASON_CODE_PRG_EV" +
+      "ALUATION_ERROR\020\003\022#\n\037REASON_CODE_MISSING_" +
+      "REQUIREMENT\020\004\022\030\n\024REASON_CODE_PDP_DENY\020\005\022" +
+      "\031\n\025REASON_CODE_PDP_ERROR\020\006\022\037\n\033REASON_COD" +
+      "E_BUDGET_EXCEEDED\020\007\022\034\n\030REASON_CODE_BUDGE" +
+      "T_ERROR\020\010\022 \n\034REASON_CODE_ENVELOPE_INVALI" +
+      "D\020\t\022 \n\034REASON_CODE_SCHEMA_VIOLATION\020\n\022%\n" +
+      "!REASON_CODE_TEMPORAL_INTERVENTION\020\013\022!\n\035" +
+      "REASON_CODE_TEMPORAL_THROTTLE\020\014\022!\n\035REASO" +
+      "N_CODE_SANDBOX_VIOLATION\020\r\022\"\n\036REASON_COD" +
+      "E_PROVENANCE_FAILURE\020\016\022$\n REASON_CODE_VE" +
+      "RIFICATION_FAILURE\020\017\022 \n\034REASON_CODE_TENA" +
+      "NT_ISOLATION\020\020\022&\n\"REASON_CODE_JURISDICTI" +
+      "ON_VIOLATION\020\021\022/\n+REASON_CODE_SEMANTIC_T" +
+      "HREAT_REVIEW_REQUIRED\020\0222a\n\032PolicyDecisio" +
+      "nPointService\022C\n\010Evaluate\022\032.helm.kernel." +
+      "v1.PDPRequest\032\033.helm.kernel.v1.PDPRespon" +
+      "se2\260\001\n\025EffectBoundaryService\022G\n\006Submit\022\035" +
+      ".helm.kernel.v1.EffectRequest\032\036.helm.ker" +
+      "nel.v1.EffectResponse\022N\n\010Complete\022\037.helm" +
+      ".kernel.v1.ExecutionResult\032!.helm.kernel" +
+      ".v1.CompletionReceiptB&Z$helm.mindburn.r" +
+      "un/kernel/v1;kernelv1b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -17481,24 +22843,36 @@ java.lang.String defaultValue) {
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_Effect_descriptor,
         new java.lang.String[] { "EffectType", "EffectId", "Params", "BudgetId", });
-    internal_static_helm_kernel_v1_DecisionRecord_descriptor =
+    internal_static_helm_kernel_v1_SemanticThreatAssessment_descriptor =
       getDescriptor().getMessageType(1);
+    internal_static_helm_kernel_v1_SemanticThreatAssessment_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_helm_kernel_v1_SemanticThreatAssessment_descriptor,
+        new java.lang.String[] { "Available", "ModelVersion", "ModelHash", "ExpectedModelHash", "FailureReason", "ThresholdBp", "MaxBp", "NearestClass", "Flagged", "InputTruncated", });
+    internal_static_helm_kernel_v1_ThreatScanReference_descriptor =
+      getDescriptor().getMessageType(2);
+    internal_static_helm_kernel_v1_ThreatScanReference_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_helm_kernel_v1_ThreatScanReference_descriptor,
+        new java.lang.String[] { "ScanId", "MaxSeverity", "FindingCount", "TrustLevel", "InputHash", "Semantic", });
+    internal_static_helm_kernel_v1_DecisionRecord_descriptor =
+      getDescriptor().getMessageType(3);
     internal_static_helm_kernel_v1_DecisionRecord_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_DecisionRecord_descriptor,
-        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "CorrelationId", });
+        new java.lang.String[] { "Id", "Timestamp", "Verdict", "Reason", "ReasonCode", "EffectDigest", "RequirementSetHash", "Signature", "SignerKeyId", "PolicyRef", "PolicyDecisionHash", "InputContext", "CorrelationId", "SignatureVersion", "PhenotypeHash", "PolicyContentHash", "ThreatScan", "SubjectId", "Action", "Resource", "SignatureType", "ReasonCodeText", });
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_descriptor =
-      getDescriptor().getMessageType(2);
+      getDescriptor().getMessageType(4);
     internal_static_helm_kernel_v1_AuthorizedExecutionIntent_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_AuthorizedExecutionIntent_descriptor,
         new java.lang.String[] { "IntentId", "DecisionId", "EffectId", "IssuedAt", "ExpiresAt", "Signature", "SignerKeyId", "Principal", });
     internal_static_helm_kernel_v1_Receipt_descriptor =
-      getDescriptor().getMessageType(3);
+      getDescriptor().getMessageType(5);
     internal_static_helm_kernel_v1_Receipt_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_Receipt_descriptor,
-        new java.lang.String[] { "ReceiptVersion", "ReceiptId", "DecisionId", "EffectId", "Verdict", "Principal", "Tool", "Action", "Timestamp", "Lamport", "ProofgraphNode", "Signature", "SignerKeyId", "PayloadHash", "ReasonCode", "Metadata", "CorrelationId", });
+        new java.lang.String[] { "ReceiptVersion", "ReceiptId", "DecisionId", "EffectId", "Verdict", "Principal", "Tool", "Action", "Timestamp", "Lamport", "ProofgraphNode", "Signature", "SignerKeyId", "PayloadHash", "ReasonCode", "Metadata", "CorrelationId", "SignatureVersion", "Status", "OutputHash", "PrevHash", "ArgsHash", "PolicyHash", "SessionId", });
     internal_static_helm_kernel_v1_Receipt_MetadataEntry_descriptor =
       internal_static_helm_kernel_v1_Receipt_descriptor.getNestedType(0);
     internal_static_helm_kernel_v1_Receipt_MetadataEntry_fieldAccessorTable = new
@@ -17506,37 +22880,37 @@ java.lang.String defaultValue) {
         internal_static_helm_kernel_v1_Receipt_MetadataEntry_descriptor,
         new java.lang.String[] { "Key", "Value", });
     internal_static_helm_kernel_v1_PDPRequest_descriptor =
-      getDescriptor().getMessageType(4);
+      getDescriptor().getMessageType(6);
     internal_static_helm_kernel_v1_PDPRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_PDPRequest_descriptor,
         new java.lang.String[] { "Effect", "Subject", "Context", });
     internal_static_helm_kernel_v1_SubjectDescriptor_descriptor =
-      getDescriptor().getMessageType(5);
+      getDescriptor().getMessageType(7);
     internal_static_helm_kernel_v1_SubjectDescriptor_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_SubjectDescriptor_descriptor,
         new java.lang.String[] { "Principal", "Tenant", "Roles", });
     internal_static_helm_kernel_v1_ContextDescriptor_descriptor =
-      getDescriptor().getMessageType(6);
+      getDescriptor().getMessageType(8);
     internal_static_helm_kernel_v1_ContextDescriptor_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_ContextDescriptor_descriptor,
         new java.lang.String[] { "Jurisdiction", "Environment", "TimeWindowStart", "TimeWindowEnd", });
     internal_static_helm_kernel_v1_PDPResponse_descriptor =
-      getDescriptor().getMessageType(7);
+      getDescriptor().getMessageType(9);
     internal_static_helm_kernel_v1_PDPResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_PDPResponse_descriptor,
         new java.lang.String[] { "Allow", "ReasonCode", "PolicyRef", "DecisionHash", "Obligations", });
     internal_static_helm_kernel_v1_Obligation_descriptor =
-      getDescriptor().getMessageType(8);
+      getDescriptor().getMessageType(10);
     internal_static_helm_kernel_v1_Obligation_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_Obligation_descriptor,
         new java.lang.String[] { "Id", "Type", "Description", "Deadline", });
     internal_static_helm_kernel_v1_EffectRequest_descriptor =
-      getDescriptor().getMessageType(9);
+      getDescriptor().getMessageType(11);
     internal_static_helm_kernel_v1_EffectRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_EffectRequest_descriptor,
@@ -17548,19 +22922,19 @@ java.lang.String defaultValue) {
         internal_static_helm_kernel_v1_EffectRequest_ContextEntry_descriptor,
         new java.lang.String[] { "Key", "Value", });
     internal_static_helm_kernel_v1_EffectResponse_descriptor =
-      getDescriptor().getMessageType(10);
+      getDescriptor().getMessageType(12);
     internal_static_helm_kernel_v1_EffectResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_EffectResponse_descriptor,
         new java.lang.String[] { "Verdict", "ReasonCode", "Reason", "Receipt", "Intent", });
     internal_static_helm_kernel_v1_ExecutionResult_descriptor =
-      getDescriptor().getMessageType(11);
+      getDescriptor().getMessageType(13);
     internal_static_helm_kernel_v1_ExecutionResult_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_ExecutionResult_descriptor,
         new java.lang.String[] { "IntentId", "Success", "Output", "ErrorMessage", "CompletedAt", });
     internal_static_helm_kernel_v1_CompletionReceipt_descriptor =
-      getDescriptor().getMessageType(12);
+      getDescriptor().getMessageType(14);
     internal_static_helm_kernel_v1_CompletionReceipt_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_CompletionReceipt_descriptor,

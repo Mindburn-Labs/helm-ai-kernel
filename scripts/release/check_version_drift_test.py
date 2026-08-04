@@ -17,6 +17,7 @@ class VersionDriftMonitorTests(unittest.TestCase):
 
         required = {
             "github-release",
+            "github-release-console-local-sidecar",
             "artifacthub-chart",
             "ghcr-image",
             "ghcr-chart",
@@ -106,6 +107,27 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertTrue(selection.blocking)
         self.assertEqual(selection.actual, ["typo"])
         self.assertIn("unknown --only", selection.detail or "")
+
+    def test_published_surface_is_skipped_before_its_introduced_version(self) -> None:
+        results = drift.check_published(
+            {
+                "published_surfaces": [
+                    {
+                        "id": "console-sidecar",
+                        "kind": "github_release_assets",
+                        "introduced_in": "0.8.0",
+                        "url": "https://example.test/releases/v{version}",
+                        "human_url": "https://example.test/releases/v{version}",
+                        "required_assets": ["sidecar.tar.gz"],
+                    }
+                ]
+            },
+            "0.7.5",
+            set(),
+        )
+        self.assertEqual(results[0].status, "skipped")
+        self.assertFalse(results[0].blocking)
+        self.assertEqual(results[0].detail, "introduced in v0.8.0")
 
     def test_ghcr_tags_check_verifies_required_manifests(self) -> None:
         calls = []
@@ -227,6 +249,29 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertIn("TimeoutError", result.detail or "")
         self.assertEqual(result.expected, "0.5.10")
         self.assertIsNone(result.actual)
+
+    def test_published_value_error_is_reported_as_a_surface_failure(self) -> None:
+        contract = {
+            "published_surfaces": [
+                {"id": "invalid-url", "kind": "example", "url": "https://example.test"},
+            ]
+        }
+        original = drift.PUBLISHED_CHECKS.copy()
+
+        def raise_value_error(_surface, _version):
+            raise ValueError("invalid URL")
+
+        drift.PUBLISHED_CHECKS["example"] = raise_value_error
+        try:
+            results = drift.check_published(contract, "0.5.12", set())
+        finally:
+            drift.PUBLISHED_CHECKS.clear()
+            drift.PUBLISHED_CHECKS.update(original)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].status, "fail")
+        self.assertTrue(results[0].blocking)
+        self.assertIn("ValueError: invalid URL", results[0].detail or "")
 
     def test_status_payload_emits_timeout_failures_without_blocking_advisory(self) -> None:
         blocking = drift.published_error(

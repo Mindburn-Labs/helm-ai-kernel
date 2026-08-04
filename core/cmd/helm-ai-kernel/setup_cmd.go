@@ -8,6 +8,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -15,17 +16,22 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	lpcmd "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/cmd"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 const setupMCPServerName = "helm-ai-kernel-governance"
 
 var (
 	setupRunQuickstart = runQuickstartCmdWithReady
+	setupRunFirstRun   = runQuickstartCmd
 	setupExecCommand   = func(dir, name string, args ...string) error {
 		cmd := exec.Command(name, args...)
 		if dir != "" {
@@ -35,20 +41,41 @@ var (
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}
+	setupFindClient = func(target string) (string, error) {
+		return exec.LookPath(setupClientCommand(target))
+	}
+	setupProbeClient = func(target, dir string) error {
+		client, err := setupFindClient(target)
+		if err != nil {
+			return err
+		}
+		cmd := exec.Command(client, "mcp", "get", setupMCPServerName)
+		cmd.Dir = dir
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		return cmd.Run()
+	}
 )
 
 type setupOptions struct {
-	Target          string
-	Operation       string
-	Scope           string
-	Workspace       string
-	WorkspaceSet    bool
-	Yes             bool
-	DryRun          bool
-	JSON            bool
-	NoQuickstart    bool
-	DataDir         string
-	SigningSeedFile string
+	Target              string
+	Operation           string
+	Scope               string
+	Workspace           string
+	WorkspaceSet        bool
+	Yes                 bool
+	DryRun              bool
+	JSON                bool
+	NoQuickstart        bool
+	Quickstart          bool
+	Console             bool
+	ConsolePort         int
+	NoOpen              bool
+	DataDir             string
+	SigningSeedFile     string
+	PolicyProfile       string
+	PolicyProfileSet    bool
+	PolicyProfileSHA256 string
 }
 
 type setupSummary struct {
@@ -56,6 +83,7 @@ type setupSummary struct {
 	Target           string `json:"target"`
 	Workspace        string `json:"workspace"`
 	BinaryPath       string `json:"binary_path"`
+	ClientBinaryPath string `json:"client_binary_path,omitempty"`
 	ClientConfigPath string `json:"client_config_path"`
 	HookConfigPath   string `json:"hook_config_path"`
 	DataDir          string `json:"data_dir"`
@@ -63,9 +91,15 @@ type setupSummary struct {
 	ScanGrade        string `json:"scan_grade"`
 	DraftPolicyPath  string `json:"draft_policy_path"`
 	UninstallCommand string `json:"uninstall_command"`
+	RecoveryCommand  string `json:"recovery_command"`
 	Scope            string `json:"scope,omitempty"`
-	MCPInstalled     bool   `json:"mcp_installed,omitempty"`
-	HookInstalled    bool   `json:"hook_installed,omitempty"`
+	// MCPInstalled and HookInstalled mean HELM's exact configuration is
+	// present on disk. They do not claim the client has loaded it.
+	MCPInstalled   bool   `json:"mcp_installed,omitempty"`
+	HookInstalled  bool   `json:"hook_installed,omitempty"`
+	ClientDetected bool   `json:"client_detected"`
+	NativeLoaded   bool   `json:"native_loaded"`
+	ClientState    string `json:"client_state,omitempty"`
 	// CodexTrustPending is true when a project-scoped Codex config is written
 	// but the workspace is not recorded as trusted in ~/.codex/config.toml.
 	// Codex ignores project-scoped config until trust is granted, so the
@@ -74,12 +108,13 @@ type setupSummary struct {
 	CodexTrustPending bool     `json:"codex_trust_pending,omitempty"`
 	QuickstartStarted bool     `json:"quickstart_started"`
 	PlannedActions    []string `json:"planned_actions"`
+	RetainedData      bool     `json:"retained_data,omitempty"`
 }
 
 func init() {
 	Register(Subcommand{
 		Name:  "setup",
-		Usage: "Install local Claude Code or Codex MCP/hook integration and start the headless proof path",
+		Usage: "Install local Claude Code or Codex MCP/hook integration",
 		RunFn: runSetupCmd,
 	})
 }
@@ -89,12 +124,18 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 		printSetupUsage(stdout)
 		return 0
 	}
+	if len(args) == 1 && isHelpRequest(args) {
+		printSetupUsage(stdout)
+		return 0
+	}
 	if strings.HasPrefix(args[0], "-") {
 		return runSetupFrontDoorFlags(args, stdout, stderr)
 	}
 	switch args[0] {
 	case "status":
 		return runSetupStatusCmd(args[1:], stdout, stderr)
+	case "repair":
+		return runSetupRepairCmd(args[1:], stdout, stderr)
 	case "remove":
 		return runSetupRemoveCmd(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -106,17 +147,58 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupFrontDoorUsage(stdout)
+		return 0
+	}
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	client := fs.String("client", "", "Client to print config for")
 	printConfig := fs.Bool("print-config", false, "Print config for --client")
 	jsonOut := fs.Bool("json", false, "Print machine-readable support matrix")
+	quickstart := fs.Bool("quickstart", false, "Start the local first-run proof path")
+	profile := fs.String("profile", "mcp", "First-run profile: claude, codex, mcp, openai-compatible")
+	yes := fs.Bool("yes", false, "Confirm first-run changes without prompting")
+	dryRun := fs.Bool("dry-run", false, "Preview first-run changes without writing local state")
+	dataDir := fs.String("data-dir", defaultQuickstartDataDir(), "Directory for local first-run state")
+	console := fs.Bool("console", false, "Start the packaged local Console with Quickstart")
+	consolePort := fs.Int("console-port", 3400, "Local Console port (0 chooses an ephemeral port)")
+	noOpen := fs.Bool("no-open", false, "Do not open the local Console in a browser")
+	offline := fs.Bool("offline", false, "Refuse optional network checks during first run")
+	reset := fs.Bool("reset", false, "Replace HELM-owned first-run state")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 {
 		fmt.Fprintf(stderr, "setup: unexpected argument %q\n", fs.Arg(0))
 		return 2
+	}
+	supplied := make(map[string]bool)
+	consolePortSet := false
+	fs.Visit(func(f *flag.Flag) {
+		supplied[f.Name] = true
+		consolePortSet = consolePortSet || f.Name == "console-port"
+	})
+	if rejectSetupFrontDoorModeFlags(stderr, supplied, *quickstart, *printConfig, *jsonOut) {
+		return 2
+	}
+	if *quickstart {
+		if (*noOpen || consolePortSet) && !*console {
+			fmt.Fprintln(stderr, "setup: --console-port and --no-open require --console")
+			return 2
+		}
+		return runSetupQuickstart(setupQuickstartRequest{
+			Profile:     *profile,
+			Yes:         *yes,
+			DryRun:      *dryRun,
+			JSON:        *jsonOut,
+			DataDir:     *dataDir,
+			Console:     *console,
+			ConsolePort: *consolePort,
+			NoOpen:      *noOpen,
+			Offline:     *offline,
+			Reset:       *reset,
+		}, stdout, stderr)
 	}
 	if *jsonOut {
 		return writeSupportMatrixJSON(stdout)
@@ -132,17 +214,218 @@ func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// rejectSetupFrontDoorModeFlags prevents a parsed option from being silently
+// ignored by a different front-door mode. supplied is built with FlagSet.Visit
+// so default values do not become errors merely because they exist.
+func rejectSetupFrontDoorModeFlags(stderr io.Writer, supplied map[string]bool, quickstart, printConfig, jsonOut bool) bool {
+	quickstartOnly := []string{"profile", "yes", "dry-run", "data-dir", "console", "console-port", "no-open", "offline", "reset"}
+	if quickstart {
+		return rejectSetupFrontDoorFlags(stderr, supplied, "--quickstart", "client", "print-config")
+	}
+	if jsonOut {
+		if rejectSetupFrontDoorFlags(stderr, supplied, "the support-matrix mode", "client", "print-config") {
+			return true
+		}
+		return rejectSetupQuickstartOnlyFlags(stderr, supplied, quickstartOnly)
+	}
+	if printConfig {
+		return rejectSetupQuickstartOnlyFlags(stderr, supplied, quickstartOnly)
+	}
+	if supplied["client"] {
+		fmt.Fprintln(stderr, "setup: --client requires --print-config")
+		return true
+	}
+	return rejectSetupQuickstartOnlyFlags(stderr, supplied, quickstartOnly)
+}
+
+func rejectSetupQuickstartOnlyFlags(stderr io.Writer, supplied map[string]bool, names []string) bool {
+	for _, name := range names {
+		if supplied[name] {
+			fmt.Fprintf(stderr, "setup: --%s requires --quickstart\n", name)
+			return true
+		}
+	}
+	return false
+}
+
+func rejectSetupFrontDoorFlags(stderr io.Writer, supplied map[string]bool, mode string, names ...string) bool {
+	for _, name := range names {
+		if supplied[name] {
+			fmt.Fprintf(stderr, "setup: --%s is not valid with %s\n", name, mode)
+			return true
+		}
+	}
+	return false
+}
+
+type setupQuickstartRequest struct {
+	Profile     string
+	Yes         bool
+	DryRun      bool
+	JSON        bool
+	DataDir     string
+	Console     bool
+	ConsolePort int
+	NoOpen      bool
+	Offline     bool
+	Reset       bool
+}
+
+// runSetupQuickstart keeps the first-run alias behind setup's explicit
+// confirmation contract. It is intentionally only a thin forwarding layer;
+// Quickstart remains the single owner of local-state preparation and reset
+// validation.
+func runSetupQuickstart(request setupQuickstartRequest, stdout, stderr io.Writer) int {
+	if request.NoOpen && !request.Console {
+		fmt.Fprintln(stderr, "setup: --no-open requires --console")
+		return 2
+	}
+	args := setupQuickstartArgs(
+		normalizeSetupQuickstartProfile(request.Profile),
+		request.DataDir,
+		request.Console,
+		request.ConsolePort,
+		request.NoOpen,
+		request.Offline,
+		request.Reset,
+		request.Yes,
+	)
+	if request.DryRun {
+		previewArgs := append([]string(nil), args...)
+		if request.Reset && !request.Yes {
+			previewArgs = append(previewArgs, "--yes")
+		}
+		previewArgs = append(previewArgs, "--dry-run")
+		if request.JSON {
+			previewArgs = append(previewArgs, "--json")
+		}
+		return setupRunFirstRun(previewArgs, stdout, stderr)
+	}
+	if !request.Yes {
+		previewArgs := append([]string(nil), args...)
+		// Quickstart requires --yes before it will inspect a reset target. The
+		// paired --dry-run still makes this authorization read-only, while
+		// letting the preview exercise the same ownership guards as apply.
+		if request.Reset {
+			previewArgs = append(previewArgs, "--yes")
+		}
+		previewArgs = append(previewArgs, "--dry-run")
+		if code := setupRunFirstRun(previewArgs, stdout, stderr); code != 0 {
+			return code
+		}
+		fmt.Fprintf(stderr, "setup: no changes made; rerun `%s` to apply this preview\n", setupQuickstartRerunCommand(request))
+		return 2
+	}
+	if request.JSON {
+		args = append(args, "--json")
+	}
+	return setupRunFirstRun(args, stdout, stderr)
+}
+
+func normalizeSetupQuickstartProfile(profile string) string {
+	if strings.EqualFold(strings.TrimSpace(profile), "claude-code") {
+		return "claude"
+	}
+	return strings.ToLower(strings.TrimSpace(profile))
+}
+
+func setupQuickstartArgs(profile, dataDir string, console bool, consolePort int, noOpen, offline, reset, yes bool) []string {
+	args := []string{"--profile", profile, "--data-dir", dataDir}
+	if console {
+		args = append(args, "--console", "--console-port", strconv.Itoa(consolePort))
+		if noOpen {
+			args = append(args, "--no-open")
+		}
+	}
+	if offline {
+		args = append(args, "--offline")
+	}
+	if reset {
+		args = append(args, "--reset")
+	}
+	if yes {
+		args = append(args, "--yes")
+	}
+	return args
+}
+
+func setupQuickstartRerunCommand(request setupQuickstartRequest) string {
+	args := []string{"helm-ai-kernel", "setup", "--quickstart"}
+	args = append(args, setupQuickstartArgs(
+		normalizeSetupQuickstartProfile(request.Profile),
+		request.DataDir,
+		request.Console,
+		request.ConsolePort,
+		request.NoOpen,
+		request.Offline,
+		request.Reset,
+		true,
+	)...)
+	if request.JSON {
+		args = append(args, "--json")
+	}
+	for index, arg := range args {
+		if index < 3 || strings.HasPrefix(arg, "--") {
+			continue
+		}
+		args[index] = shellQuote(arg)
+	}
+	return strings.Join(args, " ")
+}
+
+func setupConfirmationCapabilities(chrome io.Writer) ui.Capabilities {
+	file, ok := chrome.(*os.File)
+	if !ok {
+		return ui.Capabilities{Width: ui.DefaultTerminalWidth}
+	}
+	return ui.DetectCapabilities(os.Stdin, file, ui.TerminalOptions{
+		Format: ui.FormatText,
+		Color:  ui.ColorAuto,
+	})
+}
+
+func confirmSetupInstall(input io.Reader, chrome io.Writer, caps ui.Capabilities, summary setupSummary, actions []string, apply func() error) error {
+	renderer := ui.NewRenderer(chrome, caps)
+	steps := make([]ui.Step, 0, len(actions))
+	for _, action := range actions {
+		steps = append(steps, ui.Step{Status: ui.StatusWait, Title: action})
+	}
+	renderer.WriteTimeline("HELM setup preview", steps)
+	return renderer.ConfirmDecision(input, ui.DecisionContext{
+		Action:  ui.DecisionApprove,
+		Subject: "setup " + summary.Target,
+		Summary: "Write only the scoped local HELM configuration below.",
+		Details: []ui.KeyValue{
+			{Key: "Scope", Value: summary.Scope},
+			{Key: "Workspace", Value: summary.Workspace},
+			{Key: "MCP config", Value: summary.ClientConfigPath},
+			{Key: "Hook config", Value: summary.HookConfigPath},
+			{Key: "Data dir", Value: summary.DataDir},
+			{Key: "Recovery", Value: summary.RecoveryCommand},
+		},
+	}, apply)
+}
+
 func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInstallUsage(stdout)
+		return 0
+	}
 	opts, code := parseSetupInstallArgs(args, stderr)
 	if code != 0 {
 		return code
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup: policy profile: %v\n", err)
+		return 2
 	}
 	if opts.DryRun {
 		opts.Operation = "preview"
 	} else {
 		opts.Operation = "install"
 	}
-	if !opts.Yes && !opts.DryRun {
+	caps := setupConfirmationCapabilities(stderr)
+	if !opts.Yes && !opts.DryRun && (!caps.Interactive || opts.JSON) {
 		fmt.Fprintln(stderr, "setup: pass --yes to install local config, or --dry-run to preview changes")
 		return 2
 	}
@@ -151,10 +434,36 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup: %v\n", err)
 		return 2
 	}
+	if err := preflightSetup(opts, &summary); err != nil {
+		fmt.Fprintf(stderr, "setup: %v\n", err)
+		return 1
+	}
 	if opts.DryRun {
 		printSetupSummary(stdout, summary, opts.JSON)
 		return 0
 	}
+	if !opts.Yes {
+		confirmed := false
+		if err := confirmSetupInstall(os.Stdin, stderr, caps, summary, setupInstallActions(opts), func() error {
+			confirmed = true
+			return nil
+		}); err != nil {
+			switch {
+			case errors.Is(err, ui.ErrConfirmationRequired):
+				fmt.Fprintln(stderr, "setup: no changes made; rerun and type APPROVE to confirm")
+			case errors.Is(err, ui.ErrNonInteractive):
+				fmt.Fprintln(stderr, "setup: this terminal cannot accept confirmation; use --dry-run or --yes")
+			default:
+				fmt.Fprintf(stderr, "setup: confirmation: %v\n", err)
+			}
+			return 2
+		}
+		if !confirmed {
+			fmt.Fprintln(stderr, "setup: no changes made; confirmation is required")
+			return 2
+		}
+	}
+	printSetupPlan(stderr, summary)
 	if err := os.MkdirAll(opts.DataDir, 0o750); err != nil {
 		fmt.Fprintf(stderr, "setup: create data dir: %v\n", err)
 		return 1
@@ -180,8 +489,13 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.MCPInstalled = true
 	summary.HookInstalled = true
+	summary.ClientDetected = true
+	summary.ClientState = "configured"
 	if opts.Target == "codex" && opts.Scope == "project" {
 		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
+		if summary.CodexTrustPending {
+			summary.ClientState = "trust_pending"
+		}
 	}
 	if opts.NoQuickstart {
 		printSetupSummary(stdout, summary, opts.JSON)
@@ -191,7 +505,7 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout)
 		fmt.Fprintln(stdout, "Leave this terminal open. HELM is starting the local Kernel proof path now.")
 	}
-	quickstartArgs := []string{"--profile", setupQuickstartProfile(opts.Target), "--data-dir", filepath.Join(opts.DataDir, "quickstart")}
+	quickstartArgs := setupQuickstartArgs(setupQuickstartProfile(opts.Target), filepath.Join(opts.DataDir, "quickstart"), opts.Console, opts.ConsolePort, opts.NoOpen, false, false, false)
 	quickstartStdout := stdout
 	if opts.JSON {
 		quickstartStdout = stderr
@@ -213,6 +527,10 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInspectUsage(stdout, "status", false)
+		return 0
+	}
 	opts, code := parseSetupInspectArgs("setup status", args, stderr, false)
 	if code != 0 {
 		return code
@@ -223,11 +541,19 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup status: %v\n", err)
 		return 2
 	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
+		return 2
+	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
-	if opts.Target == "codex" && opts.Scope == "project" && (summary.MCPInstalled || summary.HookInstalled) {
-		summary.CodexTrustPending = codexProjectTrustPending(opts.Workspace)
-	}
+	observeSetupClientState(opts, &summary)
 	if grade := readSetupScanGrade(filepath.Join(opts.DataDir, "autoconfigure", "inventory.json")); grade != "" {
 		summary.ScanGrade = grade
 	}
@@ -240,7 +566,75 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	return 1
 }
 
+func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInspectUsage(stdout, "repair", true)
+		return 0
+	}
+	opts, code := parseSetupInspectArgs("setup repair", args, stderr, true)
+	if code != 0 {
+		return code
+	}
+	if opts.DryRun {
+		opts.Operation = "preview_repair"
+	} else {
+		opts.Operation = "repair"
+	}
+	if !opts.Yes && !opts.DryRun {
+		fmt.Fprintln(stderr, "setup repair: pass --yes to repair HELM-owned config, or --dry-run to preview changes")
+		return 2
+	}
+	summary, err := buildSetupSummary(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup repair: %v\n", err)
+		return 2
+	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup repair: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup repair: policy profile: %v\n", err)
+		return 2
+	}
+	if err := preflightSetup(opts, &summary); err != nil {
+		fmt.Fprintf(stderr, "setup repair: %v\n", err)
+		return 1
+	}
+	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
+	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
+	summary.PlannedActions = setupRepairActions(summary)
+	if opts.DryRun {
+		printSetupSummary(stdout, summary, opts.JSON)
+		return 0
+	}
+	printSetupPlan(stderr, summary)
+	if !summary.MCPInstalled {
+		if err := installSetupMCP(opts, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup repair: install MCP server: %v\n", err)
+			return 1
+		}
+		summary.MCPInstalled = true
+	}
+	if !summary.HookInstalled {
+		if err := installSetupHook(opts, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup repair: install pre-tool hook: %v\n", err)
+			return 1
+		}
+		summary.HookInstalled = true
+	}
+	observeSetupClientState(opts, &summary)
+	printSetupSummary(stdout, summary, opts.JSON)
+	return 0
+}
+
 func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printSetupInspectUsage(stdout, "remove", true)
+		return 0
+	}
 	opts, code := parseSetupInspectArgs("setup remove", args, stderr, true)
 	if code != 0 {
 		return code
@@ -259,24 +653,59 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup remove: %v\n", err)
 		return 2
 	}
+	if !opts.PolicyProfileSet {
+		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
+			fmt.Fprintf(stderr, "setup remove: policy profile: %v\n", err)
+			return 2
+		}
+	}
+	if err := populateSetupPolicyProfileDigest(&opts); err != nil {
+		fmt.Fprintf(stderr, "setup remove: policy profile: %v\n", err)
+		return 2
+	}
+	summary, err = buildSetupSummary(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup remove: %v\n", err)
+		return 2
+	}
+	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
+	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
+	summary.PlannedActions = setupRemoveActions(summary)
+	summary.RetainedData = true
 	if !opts.DryRun {
-		if err := removeSetupHook(opts, summary.BinaryPath); err != nil {
-			fmt.Fprintf(stderr, "setup remove: remove hook: %v\n", err)
-			return 1
+		printSetupPlan(stderr, summary)
+		// Remove the MCP entry before the hook. If the client command cannot
+		// remove an owned MCP entry, the hook remains in place and the setup is
+		// still repairable rather than silently half-removed.
+		if summary.MCPInstalled {
+			if err := removeSetupMCP(opts); err != nil {
+				fmt.Fprintf(stderr, "setup remove: remove MCP server: %v\n", err)
+				return 1
+			}
+			summary.MCPInstalled = false
 		}
-		if err := removeSetupMCP(opts); err != nil {
-			fmt.Fprintf(stderr, "setup remove: remove MCP server: %v\n", err)
-			return 1
+		if summary.HookInstalled {
+			if err := removeSetupHook(opts, summary.BinaryPath); err != nil {
+				fmt.Fprintf(stderr, "setup remove: remove hook: %v\n", err)
+				return 1
+			}
+			summary.HookInstalled = false
 		}
+	}
+	if opts.DryRun {
+		summary.ClientState = "planned_removal"
+	} else {
+		summary.ClientState = "removed"
 	}
 	printSetupSummary(stdout, summary, opts.JSON)
 	return 0
 }
 
 func printSetupUsage(w io.Writer) {
-	fmt.Fprintln(w, "Protect an agent:")
+	fmt.Fprintln(w, "Choose a local agent profile:")
 	fmt.Fprintln(w, "  helm-ai-kernel setup claude-code --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --yes")
+	fmt.Fprintln(w, "  helm-ai-kernel setup --quickstart --profile mcp --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup --client cursor --print-config")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Inspect first:")
@@ -286,15 +715,71 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "Manage:")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --scope project --workspace DIR --dry-run --json")
 	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup repair <claude-code|codex> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "")
 	printSupportMatrix(w)
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "No config is written without --yes.")
+	fmt.Fprintln(w, "Interactive terminals show the scoped preview and require APPROVE; pipes and JSON require --yes. Setup starts Quickstart only with --quickstart.")
+}
+
+func printSetupFrontDoorUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: helm-ai-kernel setup [front-door options]")
+	fmt.Fprintln(w, "Use one read-only discovery mode or start the local first-run proof path.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Modes:")
+	fmt.Fprintln(w, "  --quickstart                                  Start the local first-run proof path")
+	fmt.Fprintln(w, "  --client CLIENT --print-config                Print config for Cursor, Windsurf, or VS Code")
+	fmt.Fprintln(w, "  --json                                        Print the machine-readable support matrix")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Quickstart options:")
+	fmt.Fprintln(w, "  --profile claude|codex|mcp|openai-compatible  First-run profile (default mcp)")
+	fmt.Fprintln(w, "  --data-dir DIR                                Local first-run state directory")
+	fmt.Fprintln(w, "  --console [--console-port PORT] [--no-open]  Start the verified local Policies and Receipts Console")
+	fmt.Fprintln(w, "  --offline | --reset | --dry-run | --json     Constrain, reset, preview, or automate the first run")
+	fmt.Fprintln(w, "  --yes                                         Apply the first run; otherwise HELM previews and exits")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Safety: only --quickstart can make local changes, and it requires --yes. Use --dry-run to inspect its exact plan.")
+}
+
+func printSetupInstallUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: helm-ai-kernel setup <claude-code|codex> [options]")
+	fmt.Fprintln(w, "Install a scoped HELM MCP server and PreToolUse hook for one local coding agent.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Options:")
+	fmt.Fprintln(w, "  --scope user|project                          Install scope (default user)")
+	fmt.Fprintln(w, "  --workspace DIR                               Project-scope workspace (defaults to the current directory)")
+	fmt.Fprintln(w, "  --data-dir DIR                                HELM local state directory")
+	fmt.Fprintln(w, "  --dry-run | --json | --yes                    Preview, automate output, or approve installation")
+	fmt.Fprintln(w, "  --no-quickstart | --quickstart                Keep setup headless (default) or start the proof path")
+	fmt.Fprintln(w, "  --console [--console-port PORT] [--no-open]   Start the verified local Policies and Receipts Console with Quickstart")
+	fmt.Fprintln(w, "  --signing-seed-file FILE | --policy-profile FILE  Supply explicit local signing or policy material")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Safety: --dry-run writes nothing. Interactive terminals require typing APPROVE; pipes and --json require --yes.")
+}
+
+func printSetupInspectUsage(w io.Writer, operation string, includeYes bool) {
+	fmt.Fprintf(w, "Usage: helm-ai-kernel setup %s <claude-code|codex> [options]\n", operation)
+	if operation == "status" {
+		fmt.Fprintln(w, "Inspect the installed local HELM integration without changing configuration.")
+	} else {
+		fmt.Fprintf(w, "%s HELM-owned local integration configuration.\n", strings.ToUpper(operation[:1])+operation[1:])
+	}
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Options:")
+	fmt.Fprintln(w, "  --scope user|project                          Installation scope (default user)")
+	fmt.Fprintln(w, "  --workspace DIR                               Project-scope workspace (defaults to the current directory)")
+	fmt.Fprintln(w, "  --data-dir DIR | --policy-profile FILE        Inspect explicit local state or policy material")
+	fmt.Fprintln(w, "  --dry-run | --json                            Preview or emit machine-readable output")
+	if includeYes {
+		fmt.Fprintln(w, "  --yes                                         Required before repair or removal changes")
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "Safety: --dry-run writes nothing; repair and removal require --yes.")
+	}
 }
 
 func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) {
-	opts := setupOptions{Scope: "user"}
+	opts := setupOptions{Scope: "user", NoQuickstart: true}
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Scope, "scope", opts.Scope, "Install scope: user or project")
@@ -302,17 +787,41 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.Yes, "yes", false, "Install without prompting")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
-	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Install without starting the blocking Quickstart server")
+	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", opts.NoQuickstart, "Install without starting the blocking Quickstart server")
+	fs.BoolVar(&opts.Quickstart, "quickstart", false, "Start the blocking Quickstart server after setup")
+	fs.BoolVar(&opts.Console, "console", false, "Start the packaged local Console with Quickstart")
+	fs.IntVar(&opts.ConsolePort, "console-port", 3400, "Local Console port (0 chooses an ephemeral port)")
+	fs.BoolVar(&opts.NoOpen, "no-open", false, "Do not open the local Console in a browser")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path for installed pre-tool hooks")
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
+	consolePortSet := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "workspace" {
 			opts.WorkspaceSet = true
 		}
+		if f.Name == "console-port" {
+			consolePortSet = true
+		}
 	})
+	if opts.Quickstart {
+		opts.NoQuickstart = false
+	}
+	if opts.NoOpen && !opts.Console {
+		fmt.Fprintln(stderr, "setup: --no-open requires --console")
+		return opts, 2
+	}
+	if consolePortSet && !opts.Console {
+		fmt.Fprintln(stderr, "setup: --console-port requires --console")
+		return opts, 2
+	}
+	if opts.Console && opts.NoQuickstart {
+		fmt.Fprintln(stderr, "setup: --console requires --quickstart")
+		return opts, 2
+	}
 	opts.Target = args[0]
 	return normalizeSetupOptions(opts, stderr)
 }
@@ -332,6 +841,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
+	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path for installed pre-tool hooks")
 	if includeYes {
 		fs.BoolVar(&opts.Yes, "yes", false, "Remove without prompting")
 	}
@@ -339,8 +849,11 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 		return opts, 2
 	}
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "workspace" {
+		switch f.Name {
+		case "workspace":
 			opts.WorkspaceSet = true
+		case "policy-profile":
+			opts.PolicyProfileSet = true
 		}
 	})
 	if fs.NArg() != 0 {
@@ -381,12 +894,17 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 	if abs, err := filepath.Abs(opts.DataDir); err == nil {
 		opts.DataDir = abs
 	}
-	// The seed-file path gets baked into the installed hook command, which
-	// later runs from an arbitrary working directory — a relative path would
-	// resolve against that directory and fail the signer.
+	// These file paths get baked into the installed hook command, which later
+	// runs from an arbitrary working directory. Relative paths would resolve
+	// against that directory instead of the operator's intended files.
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		if abs, err := filepath.Abs(opts.SigningSeedFile); err == nil {
 			opts.SigningSeedFile = abs
+		}
+	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		if abs, err := filepath.Abs(opts.PolicyProfile); err == nil {
+			opts.PolicyProfile = abs
 		}
 	}
 	if opts.Workspace == "" {
@@ -413,6 +931,169 @@ func normalizeSetupOptions(opts setupOptions, stderr io.Writer) (setupOptions, i
 		return opts, 2
 	}
 	return opts, 0
+}
+
+// populateSetupPolicyProfileDigest validates a custom policy before setup
+// writes a hook command, then records the exact raw-file digest that the hook
+// must continue to see on every later decision. Re-running setup is the
+// explicit operator approval path for a changed policy file.
+func populateSetupPolicyProfileDigest(opts *setupOptions) error {
+	opts.PolicyProfileSHA256 = ""
+	if strings.TrimSpace(opts.PolicyProfile) == "" {
+		return nil
+	}
+	_, digest, err := workstation.LoadPolicyProfileFileWithDigest(opts.PolicyProfile)
+	if err != nil {
+		return err
+	}
+	opts.PolicyProfileSHA256 = digest
+	return nil
+}
+
+// discoverSetupStatusPolicyProfile recovers a custom profile only from one
+// matching, statically parseable installed hook. The later status comparison
+// still uses the full current command, including the recomputed digest.
+func discoverSetupStatusPolicyProfile(opts *setupOptions, path, bin string) error {
+	root, err := readJSONObject(path)
+	if err != nil {
+		return fmt.Errorf("read hook config: %w", err)
+	}
+	hooks, ok := root["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	expectedKey := hookCommandKey(setupHookCommand(*opts, bin))
+	var profilePath string
+	matched := false
+	for _, item := range arrayValue(hooks, "PreToolUse") {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, hook := range arrayValue(obj, "hooks") {
+			command := hookCommandFromAny(hook)
+			if command == "" {
+				continue
+			}
+			if hookCommandKey(command) != expectedKey {
+				continue
+			}
+			if matched {
+				return fmt.Errorf("ambiguous matching installed hook commands")
+			}
+			profile, _, custom, err := installedHookPolicyProfile(command)
+			if err != nil {
+				return fmt.Errorf("parse matching installed hook command: %w", err)
+			}
+			matched = true
+			if custom {
+				profilePath = profile
+			}
+		}
+	}
+	if profilePath != "" {
+		opts.PolicyProfile = profilePath
+	}
+	return nil
+}
+
+func installedHookPolicyProfile(command string) (profile, digest string, custom bool, err error) {
+	words, err := staticSetupHookWords(command)
+	if err != nil {
+		return "", "", false, err
+	}
+	seenProfile, seenDigest := false, false
+	for i := 0; i < len(words); i++ {
+		if words[i] != "--policy-profile" && words[i] != "--policy-profile-sha256" {
+			continue
+		}
+		if i+1 == len(words) || words[i+1] == "--policy-profile" || words[i+1] == "--policy-profile-sha256" {
+			return "", "", false, fmt.Errorf("%s requires one static argument", words[i])
+		}
+		i++
+		if words[i-1] == "--policy-profile" {
+			if seenProfile {
+				return "", "", false, errors.New("duplicate --policy-profile")
+			}
+			profile, seenProfile = words[i], true
+		} else {
+			if seenDigest {
+				return "", "", false, errors.New("duplicate --policy-profile-sha256")
+			}
+			digest, seenDigest = words[i], true
+		}
+	}
+	if seenProfile != seenDigest || (seenProfile && (profile == "" || digest == "")) {
+		return "", "", false, errors.New("matching installed hook has unpaired --policy-profile arguments")
+	}
+	return profile, digest, seenProfile, nil
+}
+
+func staticSetupHookWords(command string) ([]string, error) {
+	file, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil, err
+	}
+	if len(file.Stmts) != 1 {
+		return nil, fmt.Errorf("must contain one command")
+	}
+	stmt := file.Stmts[0]
+	if stmt.Negated || stmt.Background || stmt.Coprocess || len(stmt.Redirs) != 0 {
+		return nil, fmt.Errorf("must be a direct command without shell operators")
+	}
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) != 0 {
+		return nil, fmt.Errorf("must be a direct static command")
+	}
+	words := make([]string, 0, len(call.Args))
+	for _, word := range call.Args {
+		value, ok := staticSetupHookWord(word)
+		if !ok {
+			return nil, fmt.Errorf("contains a non-static argument")
+		}
+		words = append(words, value)
+	}
+	return words, nil
+}
+
+func staticSetupHookWord(word *syntax.Word) (string, bool) {
+	var value strings.Builder
+	for _, part := range word.Parts {
+		switch part := part.(type) {
+		case *syntax.Lit:
+			value.WriteString(unescapeSetupHookLiteral(part.Value))
+		case *syntax.SglQuoted:
+			if part.Dollar {
+				return "", false
+			}
+			value.WriteString(part.Value)
+		case *syntax.DblQuoted:
+			if part.Dollar {
+				return "", false
+			}
+			for _, inner := range part.Parts {
+				literal, ok := inner.(*syntax.Lit)
+				if !ok {
+					return "", false
+				}
+				value.WriteString(literal.Value)
+			}
+		default:
+			return "", false
+		}
+	}
+	return value.String(), true
+}
+
+func unescapeSetupHookLiteral(value string) string {
+	var out strings.Builder
+	for i := 0; i < len(value); i++ {
+		if value[i] == '\\' && i+1 < len(value) {
+			i++
+		}
+		out.WriteByte(value[i])
+	}
+	return out.String()
 }
 
 func normalizeSetupTarget(target string) (string, error) {
@@ -446,6 +1127,7 @@ func buildSetupSummary(opts setupOptions) (setupSummary, error) {
 		ScanGrade:         "not_run",
 		DraftPolicyPath:   filepath.Join(opts.DataDir, "autoconfigure", "policy.draft.json"),
 		UninstallCommand:  setupUninstallCommand(opts),
+		RecoveryCommand:   setupRecoveryCommand(opts),
 		Scope:             opts.Scope,
 		QuickstartStarted: false,
 		PlannedActions:    setupPlannedActions(opts),
@@ -455,22 +1137,189 @@ func buildSetupSummary(opts setupOptions) (setupSummary, error) {
 func setupPlannedActions(opts setupOptions) []string {
 	switch opts.Operation {
 	case "preview":
-		actions := []string{
-			"scan selected workspace and write draft-only inventory artifacts",
-			"configure the HELM MCP server with the selected local data directory",
-			"configure the HELM PreToolUse hook for the selected client",
-		}
-		if !opts.NoQuickstart {
-			actions = append(actions, "start the local Quickstart proof path")
-		}
-		return actions
-	case "preview_remove":
-		return []string{
-			"remove the HELM PreToolUse hook from the selected scope",
-			"remove the HELM MCP server from the selected scope",
-		}
+		return setupInstallActions(opts)
 	default:
 		return []string{}
+	}
+}
+
+func setupInstallActions(opts setupOptions) []string {
+	actions := []string{
+		"create or reuse the local receipt signing key under " + filepath.Join(opts.DataDir, workstationSigningKeyDirectory),
+		"write draft-only inventory and policy artifacts under " + filepath.Join(opts.DataDir, "autoconfigure"),
+		"configure the HELM MCP server in " + setupClientConfigPath(opts),
+		"configure the HELM PreToolUse hook in " + setupHookConfigPath(opts),
+	}
+	if !opts.NoQuickstart {
+		action := "start the local Quickstart proof path"
+		if opts.Console {
+			action += " with the packaged local Console"
+		}
+		actions = append(actions, action)
+	}
+	return actions
+}
+
+func setupRepairActions(summary setupSummary) []string {
+	actions := make([]string, 0, 2)
+	if !summary.MCPInstalled {
+		actions = append(actions, "configure the HELM MCP server in "+summary.ClientConfigPath)
+	}
+	if !summary.HookInstalled {
+		actions = append(actions, "configure the HELM PreToolUse hook in "+summary.HookConfigPath)
+	}
+	return actions
+}
+
+func setupRemoveActions(summary setupSummary) []string {
+	actions := make([]string, 0, 2)
+	if summary.MCPInstalled {
+		actions = append(actions, "remove the HELM MCP server from "+summary.ClientConfigPath)
+	}
+	if summary.HookInstalled {
+		actions = append(actions, "remove the HELM PreToolUse hook from "+summary.HookConfigPath)
+	}
+	return actions
+}
+
+func setupClientCommand(target string) string {
+	if target == "claude-code" {
+		return "claude"
+	}
+	return "codex"
+}
+
+func preflightSetup(opts setupOptions, summary *setupSummary) error {
+	if err := preflightSetupDataDir(opts.DataDir); err != nil {
+		return err
+	}
+	client, err := setupFindClient(opts.Target)
+	if err != nil {
+		return fmt.Errorf("%s client is not available on PATH; install %q and retry", opts.Target, setupClientCommand(opts.Target))
+	}
+	summary.ClientBinaryPath = client
+	summary.ClientDetected = true
+	if summary.ClientState == "" {
+		summary.ClientState = "planned"
+	}
+	if err := preflightWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile); err != nil {
+		return fmt.Errorf("validate local receipt signing key: %w", err)
+	}
+	if err := preflightSetupClientConfig(opts); err != nil {
+		return err
+	}
+	if err := preflightSetupHookConfig(opts); err != nil {
+		return err
+	}
+	return nil
+}
+
+func preflightSetupDataDir(dataDir string) error {
+	info, err := os.Lstat(dataDir)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return fmt.Errorf("data directory %q must be a directory, not a symlink or special file", dataDir)
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect data directory %q: %w", dataDir, err)
+	}
+	if _, err := resolvePrivateFileParent(filepath.Dir(dataDir)); err != nil {
+		return fmt.Errorf("inspect data directory parent: %w", err)
+	}
+	return nil
+}
+
+func preflightSetupClientConfig(opts setupOptions) error {
+	path := setupClientConfigPath(opts)
+	if _, err := privateFileWritePath(path, setupPrivateFileRoot(opts)); err != nil {
+		return err
+	}
+	switch opts.Target {
+	case "claude-code":
+		if _, err := readJSONObject(path); err != nil {
+			return fmt.Errorf("parse existing Claude config: %w", err)
+		}
+	case "codex":
+		raw, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			if err := validateCodexProjectTOML(string(raw)); err != nil {
+				return fmt.Errorf("parse existing Codex config: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func preflightSetupHookConfig(opts setupOptions) error {
+	path := setupHookConfigPath(opts)
+	if _, err := privateFileWritePath(path, setupPrivateFileRoot(opts)); err != nil {
+		return err
+	}
+	if _, err := readJSONObject(path); err != nil {
+		return fmt.Errorf("parse existing hook config: %w", err)
+	}
+	return nil
+}
+
+func observeSetupClientState(opts setupOptions, summary *setupSummary) {
+	summary.ClientDetected = false
+	summary.NativeLoaded = false
+	if !summary.MCPInstalled && !summary.HookInstalled {
+		summary.ClientState = "absent"
+		return
+	}
+	if !summary.MCPInstalled || !summary.HookInstalled {
+		summary.ClientState = "degraded"
+		return
+	}
+	if opts.Target == "codex" && opts.Scope == "project" && codexProjectTrustPending(opts.Workspace) {
+		summary.CodexTrustPending = true
+		summary.ClientState = "trust_pending"
+		return
+	}
+	if _, err := setupFindClient(opts.Target); err != nil {
+		summary.ClientState = "configured_client_missing"
+		return
+	}
+	summary.ClientDetected = true
+	// Codex's native `mcp get` command reads the user-level registry, so it
+	// cannot prove that a project-local config is loaded. Keep this state
+	// deliberately conservative instead of borrowing a global success signal.
+	if opts.Target == "codex" && opts.Scope == "project" {
+		summary.ClientState = "configured_unverified"
+		return
+	}
+	if err := setupProbeClient(opts.Target, setupCommandDir(opts)); err != nil {
+		summary.ClientState = "configured_unverified"
+		return
+	}
+	summary.NativeLoaded = true
+	summary.ClientState = "native_loaded"
+}
+
+func printSetupPlan(w io.Writer, summary setupSummary) {
+	actions := summary.PlannedActions
+	if len(actions) == 0 {
+		switch summary.Operation {
+		case "install":
+			actions = []string{
+				"create or reuse local HELM state under " + summary.DataDir,
+				"configure the HELM MCP server in " + summary.ClientConfigPath,
+				"configure the HELM PreToolUse hook in " + summary.HookConfigPath,
+			}
+		case "repair", "remove":
+			actions = []string{"no HELM-owned configuration changes are needed"}
+		}
+	}
+	fmt.Fprintln(w, "Planned changes:")
+	fmt.Fprintf(w, "  Client binary: %s\n", summary.ClientBinaryPath)
+	for _, action := range actions {
+		fmt.Fprintf(w, "  - %s\n", action)
 	}
 }
 
@@ -508,13 +1357,42 @@ func setupUninstallCommand(opts setupOptions) string {
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
 	}
+	policyProfile := ""
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		policyProfile = " --policy-profile " + shellQuote(opts.PolicyProfile)
+	}
 	return fmt.Sprintf(
-		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s",
+		"helm-ai-kernel setup remove %s --scope %s%s --yes --data-dir %s%s%s",
 		opts.Target,
 		opts.Scope,
 		workspace,
 		shellQuote(opts.DataDir),
 		signingSeedFile,
+		policyProfile,
+	)
+}
+
+func setupRecoveryCommand(opts setupOptions) string {
+	workspace := ""
+	if opts.Scope == "project" {
+		workspace = " --workspace " + shellQuote(opts.Workspace)
+	}
+	signingSeedFile := ""
+	if strings.TrimSpace(opts.SigningSeedFile) != "" {
+		signingSeedFile = " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
+	policyProfile := ""
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		policyProfile = " --policy-profile " + shellQuote(opts.PolicyProfile)
+	}
+	return fmt.Sprintf(
+		"helm-ai-kernel setup repair %s --scope %s%s --yes --data-dir %s%s%s",
+		opts.Target,
+		opts.Scope,
+		workspace,
+		shellQuote(opts.DataDir),
+		signingSeedFile,
+		policyProfile,
 	)
 }
 
@@ -528,9 +1406,12 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	fmt.Fprintf(stdout, "  MCP config:    %s\n", summary.ClientConfigPath)
 	fmt.Fprintf(stdout, "  Hook config:   %s\n", summary.HookConfigPath)
 	fmt.Fprintf(stdout, "  Data dir:      %s\n", summary.DataDir)
-	fmt.Fprintf(stdout, "  Kernel:        %s\n", summary.KernelURL)
+	if summary.KernelURL != "" {
+		fmt.Fprintf(stdout, "  Kernel:        %s\n", summary.KernelURL)
+	}
 	fmt.Fprintf(stdout, "  Scan grade:    %s\n", summary.ScanGrade)
 	fmt.Fprintf(stdout, "  Draft policy:  %s\n", summary.DraftPolicyPath)
+	fmt.Fprintf(stdout, "  Recovery:      %s\n", summary.RecoveryCommand)
 	fmt.Fprintf(stdout, "  Uninstall:     %s\n", summary.UninstallCommand)
 	if len(summary.PlannedActions) > 0 {
 		fmt.Fprintln(stdout, "  Planned:")
@@ -539,10 +1420,19 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 		}
 	}
 	if summary.MCPInstalled || summary.HookInstalled {
-		fmt.Fprintf(stdout, "  Installed:     mcp=%v hook=%v\n", summary.MCPInstalled, summary.HookInstalled)
+		fmt.Fprintf(stdout, "  Configured:    mcp=%v hook=%v\n", summary.MCPInstalled, summary.HookInstalled)
+	}
+	if summary.ClientState != "" {
+		fmt.Fprintf(stdout, "  Client state:  %s (detected=%v native_loaded=%v)\n", summary.ClientState, summary.ClientDetected, summary.NativeLoaded)
 	}
 	if summary.CodexTrustPending {
 		fmt.Fprintf(stdout, "  Codex trust:   PENDING — Codex will ignore this project config until you trust the workspace (run `codex` in %s and approve it, or set trust_level=\"trusted\" in ~/.codex/config.toml). Governance is not active until then.\n", summary.Workspace)
+	}
+	if summary.MCPInstalled || summary.HookInstalled {
+		fmt.Fprintf(stdout, "  Next:          restart %s, then run %s\n", summary.Target, summary.RecoveryCommand)
+	}
+	if summary.RetainedData {
+		fmt.Fprintln(stdout, "  Local state:   retained (keys, evidence, and receipts were not removed)")
 	}
 }
 
@@ -650,15 +1540,26 @@ func setupMCPInstalled(opts setupOptions, path, bin string) bool {
 }
 
 func setupHookInstalled(opts setupOptions, path, bin string) bool {
-	root, err := readJSONObject(path)
+	if filepath.Clean(path) != filepath.Clean(setupHookConfigPath(opts)) {
+		return false
+	}
+	readPath := path
+	if root := setupPrivateFileRoot(opts); root != "" {
+		resolved, err := privateFileWritePath(path, root)
+		if err != nil {
+			return false
+		}
+		readPath = resolved
+	}
+	config, err := readJSONObject(readPath)
 	if err != nil {
 		return false
 	}
-	hooks, ok := root["hooks"].(map[string]any)
+	hooks, ok := config["hooks"].(map[string]any)
 	if !ok {
 		return false
 	}
-	return hookCommandPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
+	return hookCommandConfigPresent(arrayValue(hooks, "PreToolUse"), setupHookCommand(opts, bin))
 }
 
 func setupQuickstartProfile(target string) string {
@@ -713,6 +1614,12 @@ func setupHookCommand(opts setupOptions, bin string) string {
 	command := shellQuote(bin) + " hook pre-tool --client " + opts.Target + " --data-dir " + shellQuote(opts.DataDir)
 	if strings.TrimSpace(opts.SigningSeedFile) != "" {
 		command += " --signing-seed-file " + shellQuote(opts.SigningSeedFile)
+	}
+	if strings.TrimSpace(opts.PolicyProfile) != "" {
+		command += " --policy-profile " + shellQuote(opts.PolicyProfile)
+		if strings.TrimSpace(opts.PolicyProfileSHA256) != "" {
+			command += " --policy-profile-sha256 " + shellQuote(opts.PolicyProfileSHA256)
+		}
 	}
 	return command
 }
@@ -855,19 +1762,31 @@ func arrayValue(root map[string]any, key string) []any {
 	return []any{}
 }
 
-// signingSeedFileArgPattern matches the optional --signing-seed-file segment
-// of an installed hook command, with its shell-quoted or bare argument. The
+// hookManagedFileArgPattern matches optional managed arguments of an installed
+// hook command, with their shell-quoted or bare arguments. The
 // argument alternation mirrors shellQuote output: a sequence of
 // single-quoted chunks, escaped quotes (the '\” idiom), and bare
 // non-space characters.
-var signingSeedFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
+var hookManagedFileArgPattern = regexp.MustCompile(` --(?:signing-seed-file|policy-profile|policy-profile-sha256) (?:'[^']*'|\\'|[^\s'])+`)
 
-// hookCommandKey reduces an installed hook command to its identity: the
-// signing-seed-file argument is a deployment detail, so `setup status` and
-// `setup remove` must match the hook whether or not (and with whichever path
-// form) the flag was passed on their own invocation.
+// hookSignerFileArgPattern omits only the signer source. A user may omit a
+// secret seed path when inspecting setup, but policy path and digest must stay
+// part of the status comparison so a stale custom policy is never reported as
+// active.
+var hookSignerFileArgPattern = regexp.MustCompile(` --signing-seed-file (?:'[^']*'|\\'|[^\s'])+`)
+
+// hookCommandKey reduces an installed hook command to its generic identity
+// for reinstall/remove. Managed arguments are deployment details, so `setup
+// remove` must match the hook whether or not (and with whichever path form)
+// they were passed on its own invocation.
 func hookCommandKey(command string) string {
-	return signingSeedFileArgPattern.ReplaceAllString(command, "")
+	return hookManagedFileArgPattern.ReplaceAllString(command, "")
+}
+
+// hookCommandConfigKey preserves the approved policy path and digest for
+// status checks while allowing the signer source to remain private.
+func hookCommandConfigKey(command string) string {
+	return hookSignerFileArgPattern.ReplaceAllString(command, "")
 }
 
 func hookCommandPresent(pre []any, command string) bool {
@@ -883,6 +1802,26 @@ func hookCommandPresent(pre []any, command string) bool {
 		}
 		for _, h := range hooks {
 			if hookCommandKey(hookCommandFromAny(h)) == key {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hookCommandConfigPresent(pre []any, command string) bool {
+	key := hookCommandConfigKey(command)
+	for _, item := range pre {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		hooks, ok := obj["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, h := range hooks {
+			if hookCommandConfigKey(hookCommandFromAny(h)) == key {
 				return true
 			}
 		}
@@ -1401,6 +2340,13 @@ func defaultSetupDataDir() string {
 		return ""
 	}
 	return filepath.Join(home, ".helm-ai-kernel")
+}
+
+func defaultQuickstartDataDir() string {
+	if dataDir := defaultSetupDataDir(); dataDir != "" {
+		return filepath.Join(dataDir, "quickstart")
+	}
+	return ""
 }
 
 func homeDirOrEmpty() string {

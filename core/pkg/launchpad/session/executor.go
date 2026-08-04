@@ -81,19 +81,24 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run := newLaunchRun(compiled, opts.Reason)
 	artifacts := map[string][]byte{}
 
-	kernelReceipt := receipts.NewReceipt("launchpad.kernel_verdict", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+	// One causal chain per launch. Every receipt used to be emitted with a
+	// hardcoded genesis clock and no predecessor, so a pack carried several
+	// receipts that each claimed to be first and none of which linked (F-21).
+	chain := receipts.NewChain(compiled.LaunchID)
+
+	kernelReceipt := chain.Next("launchpad.kernel_verdict", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
 		"app_id":       compiled.AppID,
 		"substrate_id": compiled.SubstrateID,
 		"plan_hash":    compiled.PlanHash,
 		"reason_code":  compiled.ReasonCode,
 	})
-	launchReceipt := receipts.NewReceipt("launchpad.launch", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+	launchReceipt := chain.Next("launchpad.launch", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
 		"app_id":       compiled.AppID,
 		"substrate_id": compiled.SubstrateID,
 		"plan_hash":    compiled.PlanHash,
 		"state":        run.State,
 	})
-	sandboxReceipt := receipts.NewReceipt("launchpad.sandbox_preflight", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+	sandboxReceipt := chain.Next("launchpad.sandbox_preflight", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
 		"sandbox_profile_hash":       compiled.SandboxProfileHash,
 		"network_default":            "deny",
 		"filesystem_default":         "deny",
@@ -102,22 +107,26 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		"payload_inspection":         "opaque_connect",
 		"network_proof":              "destination_allowlist_only",
 	})
-	mcpReceipt := receipts.NewReceipt("launchpad.mcp_quarantine", compiled.LaunchID, "ALLOW", map[string]any{
+	mcpReceipt := chain.Next("launchpad.mcp_quarantine", compiled.LaunchID, "ALLOW", map[string]any{
 		"unknown_server_policy": compiled.MCPPolicy.UnknownServerPolicy,
 		"unknown_tool_policy":   compiled.MCPPolicy.UnknownToolPolicy,
 		"require_schema_pin":    compiled.MCPPolicy.RequireSchemaPin,
 		"effect":                "unknown MCP servers and tools remain quarantined until approval receipt exists",
 	})
-	modelGatewayReceipt := receipts.NewReceipt("launchpad.model_gateway_grant", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
-		"provider":                   compiled.ModelGatewayProvider,
-		"mode":                       compiled.ModelGatewayMode,
-		"required_secret_refs":       compiled.RequiredSecretRefs,
-		"runtime_env_names":          compiled.ModelGatewayEnv,
-		"raw_provider_key_projected": compiled.RawProviderKeyProjected,
-		"network_allowlist":          compiled.NetworkAllowlist,
-		"budget_ceiling":             compiled.Budgets,
-	})
-	contractReceipt := receipts.NewReceipt("launchpad.f2_contract_preflight", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+	hasModelGateway := compiled.ModelGatewayMode != "" || len(compiled.ModelGatewayEnv) > 0
+	var modelGatewayReceipt receipts.Receipt
+	if hasModelGateway {
+		modelGatewayReceipt = chain.Next("launchpad.model_gateway_grant", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+			"provider":                   compiled.ModelGatewayProvider,
+			"mode":                       compiled.ModelGatewayMode,
+			"required_secret_refs":       compiled.RequiredSecretRefs,
+			"runtime_env_names":          compiled.ModelGatewayEnv,
+			"raw_provider_key_projected": compiled.RawProviderKeyProjected,
+			"network_allowlist":          compiled.NetworkAllowlist,
+			"budget_ceiling":             compiled.Budgets,
+		})
+	}
+	contractReceipt := chain.Next("launchpad.f2_contract_preflight", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
 		"stage":         "f2_contract_preflight",
 		"support_level": compiled.SupportLevel,
 		"result_class":  compiled.ResultClass,
@@ -132,7 +141,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	}
 	run.SandboxGrantRefs = append(run.SandboxGrantRefs, sandboxReceipt.ReceiptID)
 	run.MCPRefs = append(run.MCPRefs, mcpReceipt.ReceiptID)
-	if compiled.ModelGatewayMode != "" || len(compiled.ModelGatewayEnv) > 0 {
+	if hasModelGateway {
 		run.ModelGatewayGrantRefs = append(run.ModelGatewayGrantRefs, modelGatewayReceipt.ReceiptID)
 	}
 	run.LaunchReceiptRefs = append(run.LaunchReceiptRefs, launchReceipt.ReceiptID)
@@ -156,11 +165,11 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	addJSON(artifacts, "receipts/launchpad-mcp-quarantine.json", mcpReceipt)
 
 	if compiled.KernelVerdict != "ALLOW" {
-		escalationReceipt := receipts.NewReceipt("launchpad.escalation", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+		escalationReceipt := chain.Next("launchpad.escalation", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
 			"status":      run.State,
 			"reason_code": compiled.ReasonCode,
 		})
-		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ESCALATE", map[string]any{
+		healthReceipt := chain.Next("launchpad.healthcheck", compiled.LaunchID, "ESCALATE", map[string]any{
 			"status": "not-run",
 			"reason": "healthcheck blocked before ALLOW",
 		})
@@ -176,7 +185,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		return LaunchRun{}, err
 	}
 	if len(compiled.RequiredSecretRefs) > 0 || len(compiled.ModelGatewayEnv) > 0 {
-		secretReceipt := receipts.NewReceipt("launchpad.secret_grants", compiled.LaunchID, "ALLOW", map[string]any{
+		secretReceipt := chain.Next("launchpad.secret_grants", compiled.LaunchID, "ALLOW", map[string]any{
 			"required_secret_refs": compiled.RequiredSecretRefs,
 			"runtime_env_names":    compiled.ModelGatewayEnv,
 			"redacted":             true,
@@ -186,7 +195,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		addJSON(artifacts, "receipts/launchpad-secret-grants.json", secretReceipt)
 	}
 	run.State = StateInstalling
-	installReceipt := receipts.NewReceipt("launchpad.install", compiled.LaunchID, "ALLOW", map[string]any{
+	installReceipt := chain.Next("launchpad.install", compiled.LaunchID, "ALLOW", map[string]any{
 		"install_strategy": "artifact-first",
 		"layout":           "immutable-release",
 	})
@@ -208,7 +217,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 			"error":  err.Error(),
 		}
 		addRuntimeStartEvidence(failureSubject, runtimeResult)
-		failureReceipt := receipts.NewReceipt("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", failureSubject)
+		failureReceipt := chain.Next("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", failureSubject)
 		run.State = StateRepairRequired
 		run.ResultClass = plan.ResultClassRuntimeRepairRequired
 		run.RepairClass = plan.RepairClassRuntimeRepairRequired
@@ -222,7 +231,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		return e.persist(run, artifacts)
 	}
 	if runtimeResult.ContainerID == "" || runtimeResult.SandboxGrantRef == "" {
-		failureReceipt := receipts.NewReceipt("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", map[string]any{
+		failureReceipt := chain.Next("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", map[string]any{
 			"status": "repair_required",
 			"error":  "runtime did not return container id and sandbox grant ref",
 		})
@@ -237,7 +246,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		return e.persist(run, artifacts)
 	}
 	if len(compiled.NetworkAllowlist) > 0 && runtimeResult.EgressReceiptRef == "" {
-		failureReceipt := receipts.NewReceipt("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", map[string]any{
+		failureReceipt := chain.Next("launchpad.runtime_failure", compiled.LaunchID, "ALLOW", map[string]any{
 			"status": "repair_required",
 			"error":  "runtime did not return launch-scoped egress receipt ref",
 		})
@@ -259,7 +268,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	run.SandboxGrantRefs = appendUnique(run.SandboxGrantRefs, runtimeResult.SandboxGrantRef)
 	run.EgressReceiptRefs = appendUnique(run.EgressReceiptRefs, runtimeResult.EgressReceiptRef)
 	addEgressProxyReceipt(artifacts, runtimeResult)
-	startReceipt := receipts.NewReceipt("launchpad.start", compiled.LaunchID, "ALLOW", map[string]any{
+	startReceipt := chain.Next("launchpad.start", compiled.LaunchID, "ALLOW", map[string]any{
 		"runtime":                      runtimeResult.Runtime,
 		"container_id":                 runtimeResult.ContainerID,
 		"network":                      "deny",
@@ -294,7 +303,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		// second container sharing the launch-scoped egress network and
 		// collide on it ("network already exists"). Record the readiness
 		// the detached probe established and move on.
-		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
+		healthReceipt := chain.Next("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
 			"status": "ready",
 			"type":   "detached_readiness_probe",
 		})
@@ -310,7 +319,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 		}
 		healthResult, err := healthRunner.Run(compiled, runtimeResult, opts)
 		if err != nil {
-			failureReceipt := receipts.NewReceipt("launchpad.healthcheck_failure", compiled.LaunchID, "ALLOW", map[string]any{
+			failureReceipt := chain.Next("launchpad.healthcheck_failure", compiled.LaunchID, "ALLOW", map[string]any{
 				"status": "repair_required",
 				"error":  err.Error(),
 			})
@@ -324,7 +333,7 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 			addJSON(artifacts, "runtime_environment.json", runtimeEnvironment)
 			return e.persist(run, artifacts)
 		}
-		healthReceipt := receipts.NewReceipt("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
+		healthReceipt := chain.Next("launchpad.healthcheck", compiled.LaunchID, "ALLOW", map[string]any{
 			"status":   healthResult.Status,
 			"type":     healthResult.Type,
 			"metadata": healthResult.Metadata,
@@ -355,7 +364,12 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 		return LaunchRun{}, err
 	}
 	runtimeTeardown := teardownRuntimeHandles(run)
-	teardown := receipts.NewReceipt("launchpad.teardown", run.LaunchID, "ALLOW", map[string]any{
+	// Teardown is a separate operation from the launch, and LaunchRun does not
+	// persist the launch chain's head hash, so this receipt cannot link back to
+	// it. It is an explicit single-receipt genesis rather than a silent break in
+	// a chain that appears continuous. Linking teardown to its launch requires
+	// storing the head — the same missing-persistence shape as ADR 0002.
+	teardown := receipts.NewReceiptForSession("launchpad.teardown", run.LaunchID+":teardown", run.LaunchID, "ALLOW", map[string]any{
 		"cascade":        cascade,
 		"previous_state": previousState,
 		"reconciled":     true,

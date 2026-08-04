@@ -92,8 +92,11 @@ func TestControllerActivatesDegradedNarrowingWithCapsuleQuorumAndContinuity(t *t
 	if !result.DispatchAllowed || !result.NarrowedScope || result.ActivationReceipt == nil {
 		t.Fatalf("activation did not allow narrowed dispatch: %+v", result)
 	}
-	if intent.EmergencyActivationID == "" || intent.EmergencyDelegationSessionID != "session-1" {
-		t.Fatalf("intent did not receive emergency binding: %+v", intent)
+	if intent.EmergencyActivationID != "" || intent.EmergencyDelegationSessionID != "" || intent.EmergencyScopeHash != "" {
+		t.Fatalf("gate mutated the supplied intent: %+v", intent)
+	}
+	if result.EmergencyScopeHash != firstScopeHash(capsule.Delegation) {
+		t.Fatalf("activation result missing emergency scope evidence: %+v", result)
 	}
 	if _, err := controller.Gate(context.Background(), GateRequest{
 		Signal:     Signal{HazardCode: contracts.HazardCredentialExpired, ActiveClock: true},

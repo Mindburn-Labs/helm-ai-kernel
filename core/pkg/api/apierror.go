@@ -1,112 +1,79 @@
 // Package api — RFC 7807 Problem Detail error responses for the HELM API.
+//
+// The implementation moved to the stdlib-only leaf package pkg/httperr so that
+// libraries such as pkg/auth can write error responses without importing this
+// HTTP server package. Everything below forwards there; the names stay because
+// pkg/api is public OSS API and removing them would be a breaking change.
 package api
 
 import (
-	"encoding/json"
-	"fmt"
-	"log/slog"
 	"net/http"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 )
 
 // ProblemDetail implements RFC 7807 (Problem Details for HTTP APIs).
 // All API error responses must use this format.
-type ProblemDetail struct {
-	// Type is a URI reference that identifies the problem type.
-	Type string `json:"type"`
-	// Title is a short, human-readable summary of the problem type.
-	Title string `json:"title"`
-	// Status is the HTTP status code.
-	Status int `json:"status"`
-	// Detail is a human-readable explanation specific to this occurrence.
-	Detail string `json:"detail,omitempty"`
-	// Instance is a URI reference identifying the specific occurrence.
-	Instance string `json:"instance,omitempty"`
-	// TraceID links to the distributed trace for this request.
-	TraceID string `json:"trace_id,omitempty"`
-}
-
-// Error implements the error interface.
-func (p *ProblemDetail) Error() string {
-	return fmt.Sprintf("%s: %s", p.Title, p.Detail)
-}
+//
+// An alias, not a defined type: callers hand *ProblemDetail across the httperr
+// boundary (WriteInternal takes one as an error), and a distinct type would
+// silently break them.
+type ProblemDetail = httperr.ProblemDetail
 
 // WriteError writes an RFC 7807 Problem Detail JSON response.
 func WriteError(w http.ResponseWriter, status int, title, detail string) {
-	problem := &ProblemDetail{
-		Type:   fmt.Sprintf("https://helm.mindburn.run/errors/%d", status),
-		Title:  title,
-		Status: status,
-		Detail: detail,
-	}
-
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(problem)
+	httperr.WriteError(w, status, title, detail)
 }
 
 // WriteErrorR writes an RFC 7807 response enriched with request context
 // (trace_id from X-Request-ID, instance from request URI).
 func WriteErrorR(w http.ResponseWriter, r *http.Request, status int, title, detail string) {
-	problem := &ProblemDetail{
-		Type:     fmt.Sprintf("https://helm.mindburn.run/errors/%d", status),
-		Title:    title,
-		Status:   status,
-		Detail:   detail,
-		Instance: r.URL.Path,
-		TraceID:  w.Header().Get("X-Request-ID"),
-	}
-
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(problem)
+	httperr.WriteErrorR(w, r, status, title, detail)
 }
 
 // WriteBadRequest writes a 400 error response.
 func WriteBadRequest(w http.ResponseWriter, detail string) {
-	WriteError(w, http.StatusBadRequest, "Bad Request", detail)
+	httperr.WriteBadRequest(w, detail)
 }
 
 // WriteUnauthorized writes a 401 error response.
+//
+// Deprecated: use httperr.WriteUnauthorized. Authentication middleware is a
+// library concern and must not import this server package.
 func WriteUnauthorized(w http.ResponseWriter, detail string) {
-	if detail == "" {
-		detail = "Authentication required"
-	}
-	WriteError(w, http.StatusUnauthorized, "Unauthorized", detail)
+	httperr.WriteUnauthorized(w, detail)
 }
 
 // WriteForbidden writes a 403 error response.
 func WriteForbidden(w http.ResponseWriter, detail string) {
-	if detail == "" {
-		detail = "Insufficient permissions"
-	}
-	WriteError(w, http.StatusForbidden, "Forbidden", detail)
+	httperr.WriteForbidden(w, detail)
 }
 
 // WriteNotFound writes a 404 error response.
 func WriteNotFound(w http.ResponseWriter, detail string) {
-	WriteError(w, http.StatusNotFound, "Not Found", detail)
+	httperr.WriteNotFound(w, detail)
 }
 
 // WriteMethodNotAllowed writes a 405 error response.
 func WriteMethodNotAllowed(w http.ResponseWriter) {
-	WriteError(w, http.StatusMethodNotAllowed, "Method Not Allowed", "The HTTP method is not supported for this endpoint")
+	httperr.WriteMethodNotAllowed(w)
 }
 
 // WriteConflict writes a 409 error response (used for idempotency).
 func WriteConflict(w http.ResponseWriter, detail string) {
-	WriteError(w, http.StatusConflict, "Conflict", detail)
+	httperr.WriteConflict(w, detail)
 }
 
 // WriteTooManyRequests writes a 429 error response with Retry-After header.
+//
+// Deprecated: use httperr.WriteTooManyRequests. Rate-limit middleware is a
+// library concern and must not import this server package.
 func WriteTooManyRequests(w http.ResponseWriter, retryAfterSecs int) {
-	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfterSecs))
-	WriteError(w, http.StatusTooManyRequests, "Too Many Requests", "Rate limit exceeded. Retry after the specified interval.")
+	httperr.WriteTooManyRequests(w, retryAfterSecs)
 }
 
 // WriteInternal writes a 500 error response.
 // The err parameter is logged but NEVER exposed to the client.
 func WriteInternal(w http.ResponseWriter, err error) {
-	// Log internally but never expose to client
-	slog.Error("internal server error", "error", err)
-	WriteError(w, http.StatusInternalServerError, "Internal Server Error", "An unexpected error occurred. Please try again later.")
+	httperr.WriteInternal(w, err)
 }

@@ -98,6 +98,68 @@ func TestEffectDispositionRuntimeConfigRequiresDistinctScopeAndPinnedKeyrings(t 
 	}
 }
 
+func TestEffectReconciliationCandidatesRuntimeConfigIsDefaultOffAndRouteScoped(t *testing.T) {
+	approvalConsumptionTestEnv(t)
+	t.Setenv(effectReconciliationCandidatesEnabledEnv, "1")
+	if _, enabled, err := approvalConsumptionConfigFromEnv(); err == nil || !enabled {
+		t.Fatalf("standalone reconciliation enabled=%t err=%v", enabled, err)
+	}
+	approvalConsumptionTestEnv(t)
+	setCompleteApprovalConsumptionEnv(t)
+	config, enabled, err := approvalConsumptionConfigFromEnv()
+	if err != nil || !enabled || config.ReconciliationCandidatesEnabled {
+		t.Fatalf("default reconciliation config=%+v enabled=%t err=%v", config, enabled, err)
+	}
+
+	t.Setenv(effectReconciliationCandidatesEnabledEnv, "1")
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("reconciliation candidates accepted missing route resource and keyrings")
+	}
+	t.Setenv(effectReconciliationCandidatesResourceEnv, "https://kernel.example.test/internal/effect-dispositions/reconciliation-candidates")
+	now := time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC)
+	t.Setenv(effectDispositionCommandKeyringEnv, runtimeKeyringJSON(t, effectDispositionCommandKeyringV1, runtimeAuthorityKeyringKey{
+		AuthorityID: "spiffe://helm/control-plane", SigningKeyRef: "kms://helm/control-plane/disposition-a",
+		Audience: "helm-data-plane", PublicKey: hex.EncodeToString(make(ed25519.PublicKey, ed25519.PublicKeySize)),
+		Enabled: true, NotBefore: now, NotAfter: now.Add(24 * time.Hour),
+	}))
+	t.Setenv(connectorReleaseAuthorityKeyringEnv, runtimeKeyringJSON(t, connectorReleaseAuthorityKeyringV1, runtimeAuthorityKeyringKey{
+		AuthorityID: "connector-registry-a", SigningKeyRef: "kms://helm/connector-registry-a",
+		PublicKey: hex.EncodeToString(make(ed25519.PublicKey, ed25519.PublicKeySize)),
+		Enabled:   true, NotBefore: now, NotAfter: now.Add(24 * time.Hour),
+	}))
+	config, enabled, err = approvalConsumptionConfigFromEnv()
+	if err != nil || !enabled || !config.ReconciliationCandidatesEnabled ||
+		config.ReconciliationCandidatesScope != defaultEffectReconciliationCandidatesScope ||
+		config.ReconciliationCandidatesResource != "https://kernel.example.test/internal/effect-dispositions/reconciliation-candidates" {
+		t.Fatalf("reconciliation config=%+v enabled=%t err=%v", config, enabled, err)
+	}
+	t.Setenv(effectReconciliationCandidatesScopeEnv, "helm.effect.reconciliation.other")
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("reconciliation candidates accepted a noncanonical read scope")
+	}
+	t.Setenv(effectReconciliationCandidatesScopeEnv, defaultEffectDispositionScope)
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("reconciliation candidates accepted the write scope")
+	}
+	t.Setenv(effectReconciliationCandidatesScopeEnv, "")
+	t.Setenv(effectReconciliationCandidatesResourceEnv, "https://kernel.example.test/internal/v1/approval-grants")
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("reconciliation candidates accepted the approval-consumption resource")
+	}
+	for name, resource := range map[string]string{
+		"origin":  "https://kernel.example.test",
+		"sibling": "https://kernel.example.test/internal/effect-dispositions/reconciliation-candidates-next",
+		"query":   "https://kernel.example.test/internal/effect-dispositions/reconciliation-candidates?tenant_id=attacker",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(effectReconciliationCandidatesResourceEnv, resource)
+			if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+				t.Fatalf("reconciliation candidates accepted non-exact resource %q", resource)
+			}
+		})
+	}
+}
+
 func TestApprovalConsumptionRuntimeDisabledDoesNotRequireDatabase(t *testing.T) {
 	approvalConsumptionTestEnv(t)
 	runtime, err := newApprovalConsumptionRuntime(context.Background(), nil, "sqlite", nil, nil)
@@ -143,6 +205,7 @@ func approvalConsumptionTestEnv(t *testing.T) {
 		approvalDispatchScopeEnv, approvalDispatchAdmissionTTLEnv, approvalSigningKeyRefEnv,
 		approvalKernelTrustRootIDEnv, approvalConsumerMaxTokenTTLEnv,
 		effectDispositionEnabledEnv, effectDispositionScopeEnv, effectDispositionCommandKeyringEnv,
+		effectReconciliationCandidatesEnabledEnv, effectReconciliationCandidatesResourceEnv, effectReconciliationCandidatesScopeEnv,
 		connectorReleaseAuthorityKeyringEnv,
 	} {
 		t.Setenv(name, "")

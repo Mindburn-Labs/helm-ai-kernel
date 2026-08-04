@@ -139,7 +139,7 @@ func TestHybridSigner_SignDecision(t *testing.T) {
 		Timestamp:         time.Now(),
 	}
 
-	err = signer.SignDecision(d)
+	err = signer.SignDecision(testDecisionV4Authority(d))
 	require.NoError(t, err)
 
 	// Signature must be hybrid format
@@ -151,8 +151,9 @@ func TestHybridSigner_SignDecision(t *testing.T) {
 	assert.Equal(t, expectedSigType, d.SignatureType)
 
 	// Verify the composite signature
-	payload := CanonicalizeDecision(d.ID, d.Verdict, d.Reason, d.PhenotypeHash, d.PolicyContentHash, d.EffectDigest)
-	valid, err := signer.Verify([]byte(payload), d.Signature)
+	payload, err := DecisionVerifyPayload(d)
+	require.NoError(t, err)
+	valid, err := signer.Verify(payload, d.Signature)
 	require.NoError(t, err)
 	assert.True(t, valid, "hybrid decision signature should verify")
 }
@@ -227,15 +228,17 @@ func TestHybridSigner_SignReceiptRoundTrip(t *testing.T) {
 	assert.Equal(t, signer.MLDSASigner().PublicKey(), receipt.PublicKeySet[SigPrefixMLDSA65])
 
 	// Verify round-trip
-	payload := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)
-	valid, err := signer.Verify([]byte(payload), receipt.Signature)
+	payload, err := ReceiptVerifyPayload(receipt)
+	require.NoError(t, err)
+	valid, err := signer.Verify(payload, receipt.Signature)
 	require.NoError(t, err)
 	assert.True(t, valid, "receipt hybrid signature should verify")
 
 	// Tamper the status
 	receipt.Status = "FAILED"
-	payloadTampered := CanonicalizeReceipt(receipt.ReceiptID, receipt.DecisionID, receipt.EffectID, receipt.Status, receipt.OutputHash, receipt.PrevHash, receipt.LamportClock, receipt.ArgsHash)
-	valid, err = signer.Verify([]byte(payloadTampered), receipt.Signature)
+	payloadTampered, err := ReceiptVerifyPayload(receipt)
+	require.NoError(t, err)
+	valid, err = signer.Verify(payloadTampered, receipt.Signature)
 	require.NoError(t, err)
 	assert.False(t, valid, "should fail for tampered receipt")
 }

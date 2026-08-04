@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
@@ -135,6 +138,17 @@ func WithThreatScanner(ts *threatscan.Scanner) GuardianOption {
 	return func(g *Guardian) { g.threatScanner = ts }
 }
 
+// WithSemanticThreatEscalation configures the only verdict authority exposed
+// to semantic similarity: a deterministic ESCALATE threshold in basis points.
+// Invalid values leave semantic assessment advisory-only.
+func WithSemanticThreatEscalation(thresholdBP int) GuardianOption {
+	return func(g *Guardian) {
+		if thresholdBP >= 1 && thresholdBP <= 10000 {
+			g.semanticEscalationThresholdBP = thresholdBP
+		}
+	}
+}
+
 // WithDelegationStore injects the delegation session store.
 func WithDelegationStore(ds identity.DelegationStore) GuardianOption {
 	return func(g *Guardian) { g.delegationStore = ds }
@@ -175,37 +189,50 @@ func WithSafeDepController(controller *safedep.Controller) GuardianOption {
 	return func(g *Guardian) { g.safeDepController = controller }
 }
 
+// WithAssumptionObserver injects the re-reader for declared assumptions.
+// Without it the freshness gate still enforces each observation's validity
+// window; with it, that window becomes a ceiling on a check against live state.
+func WithAssumptionObserver(o AssumptionObserver) GuardianOption {
+	return func(g *Guardian) { g.assumptionObserver = o }
+}
+
 // Guardian enforces the Proof Requirement Graph (PRG)
 type Guardian struct {
-	signer            crypto.Signer
-	prg               *prg.Graph
-	pe                *prg.PolicyEngine
-	registry          *pkg_artifact.Registry
-	clock             Clock
-	tracker           BudgetGate
-	auditLog          *AuditLog
-	temporal          *TemporalGuardian
-	envFprint         string                  // Boot-sequence fingerprint for DecisionRecords
-	pdp               pdp.PolicyDecisionPoint // Optional pluggable policy backend
-	snapshotStore     policyreconcile.PolicySnapshotStore
-	snapshotScope     policyreconcile.PolicyScope
-	complianceChecker ComplianceChecker            // Optional compliance pre-check
-	freezeCtrl        *kernel.FreezeController     // Global kill-switch
-	scopedStopReader  kernel.ScopedStopReader      // Tenant/workspace dispatch fence
-	agentKillSwitch   *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
-	contextGuard      *kernel.ContextGuard         // Environment mismatch detection
-	isolationChecker  *identity.IsolationChecker   // Agent credential reuse detection
-	egressChecker     *firewall.EgressChecker      // Network egress enforcement
-	threatScanner     *threatscan.Scanner          // Canonical threat signal scanner
-	delegationStore   identity.DelegationStore     // Delegation session store (§Gate 5)
-	behavioralScorer  *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
-	privilegeResolver PrivilegeResolver            // Privilege tier resolver
-	sessionRiskMemory *SessionRiskMemory           // Deterministic trajectory authorization gate
-	otel              *OTelInstrumentation         // Optional OTel tracing & metrics
-	warmLeaseMgr      *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
-	zeroidInterceptor *ZeroIDInterceptor           // ZeroID identity validator
-	safeDepController *safedep.Controller          // Safe Deprecation emergency release plane
-	boundaryChain     []BoundaryInterceptor        // Cached request interceptors
+	signer                        crypto.Signer
+	prg                           *prg.Graph
+	pe                            *prg.PolicyEngine
+	registry                      *pkg_artifact.Registry
+	clock                         Clock
+	tracker                       BudgetGate
+	auditLog                      *AuditLog
+	temporal                      *TemporalGuardian
+	envFprint                     string                  // Boot-sequence fingerprint for DecisionRecords
+	gateRosterHash                string                  // Digest of the injected gate set; constant after construction
+	pdp                           pdp.PolicyDecisionPoint // Optional pluggable policy backend
+	snapshotStore                 policyreconcile.PolicySnapshotStore
+	snapshotScope                 policyreconcile.PolicyScope
+	complianceChecker             ComplianceChecker            // Optional compliance pre-check
+	capabilityRegistry            *capability.Registry         // Hash-pinned capability authority
+	capabilityVerifier            *capability.TokenVerifier    // Task-scoped capability token gate
+	rollbackPlans                 capability.RollbackPlanStore // Verified rollback-plan gate
+	freezeCtrl                    *kernel.FreezeController     // Global kill-switch
+	scopedStopReader              kernel.ScopedStopReader      // Tenant/workspace dispatch fence
+	agentKillSwitch               *kernel.AgentKillSwitch      // Per-agent kill switch (§Phase E)
+	contextGuard                  *kernel.ContextGuard         // Environment mismatch detection
+	isolationChecker              *identity.IsolationChecker   // Agent credential reuse detection
+	egressChecker                 *firewall.EgressChecker      // Network egress enforcement
+	threatScanner                 *threatscan.Scanner          // Canonical threat signal scanner
+	semanticEscalationThresholdBP int                          // Optional ESCALATE-only semantic policy
+	delegationStore               identity.DelegationStore     // Delegation session store (§Gate 5)
+	behavioralScorer              *trust.BehavioralTrustScorer // Dynamic behavioral trust scorer (MIN-82)
+	privilegeResolver             PrivilegeResolver            // Privilege tier resolver
+	sessionRiskMemory             *SessionRiskMemory           // Deterministic trajectory authorization gate
+	otel                          *OTelInstrumentation         // Optional OTel tracing & metrics
+	warmLeaseMgr                  *sandbox.WarmLeaseManager    // Warm lease manager for sandboxes
+	zeroidInterceptor             *ZeroIDInterceptor           // ZeroID identity validator
+	safeDepController             *safedep.Controller          // Safe Deprecation emergency release plane
+	assumptionObserver            AssumptionObserver           // Re-reads state a declared assumption depends on
+	boundaryChain                 []BoundaryInterceptor        // Cached request interceptors
 }
 
 // ZeroID returns the registered ZeroIDInterceptor.
@@ -240,8 +267,24 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		opt(g)
 	}
 
+	// The roster is fixed once every option has been applied, so digest it
+	// here rather than per decision. Reported at construction because a gate
+	// set is otherwise only discoverable by reading each call site.
+	roster := g.GateRoster()
+	if hash, err := roster.Hash(); err != nil {
+		slog.Warn("[guardian] gate roster hash failed; decisions will not state their gate set", "error", err)
+	} else {
+		g.gateRosterHash = hash
+	}
+	slog.Info("[guardian] gate roster",
+		"active", roster.Active,
+		"inactive", roster.Inactive,
+		"active_count", len(roster.Active),
+		"declared_count", len(AllGateIDs()),
+		"roster_hash", g.gateRosterHash)
+
 	if g.zeroidInterceptor == nil {
-		g.zeroidInterceptor = NewZeroIDInterceptor(g, nil)
+		g.zeroidInterceptor = NewZeroIDInterceptor(g)
 	}
 
 	if g.clock == nil {
@@ -252,12 +295,21 @@ func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.R
 		slog.Warn("[guardian] no authority clock injected; falling back to wall clock (KERNEL_TCB §3) — inject WithClock in production")
 		g.clock = wallClock{}
 	}
+
+	if !taintEgressEnforcementEnabled() {
+		// Logged once here rather than per-decision: the check sits on the hot
+		// path, but a disabled security boundary must never be silent. This
+		// state contradicts TaintSafeEgress in proofs/GuardianPipeline.tla.
+		slog.Warn("[guardian] tainted-egress enforcement DISABLED by HELM_TAINT_TRACKING; TAINTED_DATA_EGRESS_DENY will not fire (contradicts proofs/GuardianPipeline.tla TaintSafeEgress)")
+	}
+
 	g.boundaryChain = []BoundaryInterceptor{
 		g.zeroidInterceptor,
 		NewTemporalInterceptor(g),
 		NewFreezeInterceptor(g),
 		NewPDPInterceptor(g),
 		NewTaintEgressInterceptor(g),
+		NewAssumptionFreshnessInterceptor(g),
 		NewSandboxAllocationInterceptor(g),
 	}
 
@@ -377,6 +429,20 @@ func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.Decisio
 }
 
 func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, ruleGraph *prg.Graph) error {
+	if decision == nil {
+		return fmt.Errorf("decision is required")
+	}
+	// This public signing path has no DecisionRequest argument, so it can only
+	// accept an authority tuple the caller supplied explicitly. Reusing the
+	// request binder makes blank tuple fields fail closed consistently with the
+	// evaluated-request path below.
+	if err := bindDecisionRequest(decision, DecisionRequest{
+		Principal: decision.SubjectID,
+		Action:    decision.Action,
+		Resource:  decision.Resource,
+	}); err != nil {
+		return fmt.Errorf("bind decision authority: %w", err)
+	}
 	// Bind the canonical effect digest before any signing path: the decision
 	// signature covers EffectDigest (crypto.CanonicalizeDecision), and intent
 	// issuance / execution verify the binding fail-closed. Without this, a
@@ -387,6 +453,14 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 			return fmt.Errorf("canonicalize effect digest: %w", err)
 		}
 		decision.EffectDigest = digest
+	}
+
+	// Bind the gate roster before any signing path. Every exit below reaches
+	// SignDecision, and this is the only funnel all six DecisionRecord
+	// construction sites pass through, so binding here cannot be missed by a
+	// seventh.
+	if decision.GateRosterHash == "" {
+		decision.GateRosterHash = g.gateRosterHash
 	}
 
 	artifacts := make([]*pkg_artifact.ArtifactEnvelope, 0, len(evidenceHashes))
@@ -473,19 +547,24 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		"timestamp": g.clock.Now().Unix(),
 		"taint":     contracts.NormalizeTaintLabels(effect.Taint),
 	}
+	if decision.ThreatScan != nil {
+		// Expose only Guardian-owned typed evidence at the stable CEL path
+		// input.threat_scan; never project caller context into this field.
+		input[ContextThreatScan] = decision.ThreatScan.PolicyContext()
+	}
 
-	valid, err := g.pe.EvaluateRequirementSet(rule, input)
+	valid, failures, err := g.pe.EvaluateRequirementSetDetail(rule, input)
 	if err != nil {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonPRGEvalError)
-		decision.Reason = fmt.Sprintf("PRG Evaluation Error: %v", err)
+		decision.Reason = "PRG Evaluation Error: policy requirement evaluation failed"
 		return g.signer.SignDecision(decision)
 	}
 
 	if !valid {
 		decision.Verdict = string(contracts.VerdictDeny)
 		decision.ReasonCode = string(contracts.ReasonMissingRequirement)
-		decision.Reason = string(contracts.ReasonMissingRequirement)
+		decision.Reason = missingRequirementReason(failures, input)
 		g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
 		return g.signer.SignDecision(decision)
 	}
@@ -540,12 +619,26 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 	if valid, err := verifier.VerifyDecision(decision); err != nil || !valid {
 		return nil, fmt.Errorf("invalid decision signature: %w", err)
 	}
+	if err := contracts.ValidateDecisionAuthorityForUse(decision); err != nil {
+		return nil, fmt.Errorf("cannot issue execution intent: %w", err)
+	}
 
 	if g.snapshotStore != nil {
 		scope := g.policyScopeFromContext(decision.InputContext)
 		current, ok := g.snapshotStore.Get(scope)
 		if !ok || current == nil {
 			return nil, fmt.Errorf("%s: policy snapshot missing for %s", contracts.ReasonPolicyEpochChanged, scope.Key())
+		}
+		// A signed decision is only executable while its bound snapshot remains
+		// active. Invalidation intentionally preserves the hash and epoch for
+		// operator evidence, so comparing those fields alone would let a decision
+		// issued before invalidation cross the execution boundary.
+		if current.Validation.Status != policyreconcile.StatusActive {
+			return nil, fmt.Errorf("%s: policy snapshot for %s is %s",
+				contracts.ReasonPolicyEpochChanged,
+				scope.Key(),
+				current.Validation.Status,
+			)
 		}
 		decisionEpoch, err := strconv.ParseUint(decision.PolicyEpoch, 10, 64)
 		if err != nil || decision.PolicyContentHash == "" {
@@ -734,6 +827,26 @@ type DecisionRequest struct {
 	SessionHistory []SessionAction        `json:"session_history,omitempty"`
 }
 
+type trustedTaintedEgressOverrideContextKey struct{}
+
+// WithTrustedTaintedEgressOverride marks a request context after an in-process
+// transport or adapter has independently approved tainted egress. The marker is
+// deliberately outside DecisionRequest.Context so caller JSON cannot self-approve.
+func WithTrustedTaintedEgressOverride(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, trustedTaintedEgressOverrideContextKey{}, true)
+}
+
+func trustedTaintedEgressOverride(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	approved, _ := ctx.Value(trustedTaintedEgressOverrideContextKey{}).(bool)
+	return approved
+}
+
 // SessionAction represents a previous action in the current session.
 // Per arXiv 2603.16586, path-based policies evaluate the full execution
 // history, catching multi-step attack chains that stateless checks miss.
@@ -782,12 +895,12 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				InputContext:  req.Context,
 				PolicyVersion: "unavailable",
 			}
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := g.signDecisionForRequest(decision, req, nil, "unavailable"); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
 			return decision, nil
 		}
-		if snapshot.Validation.Status != "" && snapshot.Validation.Status != policyreconcile.StatusActive {
+		if snapshot.Validation.Status != policyreconcile.StatusActive {
 			decision := &contracts.DecisionRecord{
 				ID:            newDecisionID(),
 				Timestamp:     g.clock.Now(),
@@ -797,8 +910,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				InputContext:  req.Context,
 				PolicyVersion: snapshot.PolicyHash,
 			}
-			bindRuntimePolicyDecision(decision, snapshot, snapshot.PolicyHash)
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := g.signDecisionForRequest(decision, req, snapshot, snapshot.PolicyHash); signErr != nil {
 				return nil, fmt.Errorf("failed to sign policy-not-ready decision: %w", signErr)
 			}
 			return decision, nil
@@ -836,13 +948,18 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 					InputContext:  req.Context,
 					PolicyVersion: policyVersion,
 				}
-				bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := g.signDecisionForRequest(decision, req, activeSnapshot, policyVersion); signErr != nil {
 					return nil, fmt.Errorf("failed to sign safe-deprecation decision: %w", signErr)
 				}
 				return decision, nil
 			}
 		}
+	}
+
+	if decision, capErr := g.resolveCapabilityGate(span, &req, activeSnapshot, policyVersion); capErr != nil {
+		return nil, capErr
+	} else if decision != nil {
+		return decision, nil
 	}
 
 	// ── Session history enrichment (arXiv 2603.16586: path-aware policies) ──
@@ -888,8 +1005,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				SessionCentroidHash:    snapshot.SessionCentroidHash,
 				RiskAccumulationWindow: snapshot.RiskAccumulationWindow,
 			}
-			bindRuntimePolicyDecision(decision, activeSnapshot, policyVersion)
-			if signErr := g.signer.SignDecision(decision); signErr != nil {
+			if signErr := g.signDecisionForRequest(decision, req, activeSnapshot, policyVersion); signErr != nil {
 				return nil, fmt.Errorf("failed to sign session-risk decision: %w", signErr)
 			}
 			if g.auditLog != nil {
@@ -1001,6 +1117,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		decision := &contracts.DecisionRecord{
 			ID:             newDecisionID(),
 			Timestamp:      g.clock.Now(),
+			SubjectID:      req.Principal,
+			Action:         req.Action,
+			Resource:       req.Resource,
 			Verdict:        string(contracts.VerdictDeny), // Default deny
 			EffectDigest:   effectDigest,
 			InputContext:   req.Context,
@@ -1014,11 +1133,13 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			decision.RiskAccumulationWindow = eCtx.SessionRiskSnapshot.RiskAccumulationWindow
 		}
 
-		if eCtx.ThreatScanResult != nil && eCtx.ThreatScanResult.FindingCount > 0 {
+		if eCtx.ThreatScanResult != nil && (eCtx.ThreatScanResult.FindingCount > 0 || eCtx.ThreatScanResult.Semantic != nil) {
 			if decision.InputContext == nil {
 				decision.InputContext = make(map[string]any)
 			}
-			decision.InputContext["threat_scan"] = eCtx.ThreatScanResult.Ref()
+			ref := eCtx.ThreatScanResult.Ref()
+			decision.InputContext[ContextThreatScan] = ref.PolicyContext()
+			decision.ThreatScan = &ref
 		}
 
 		if eCtx.PDPBackend != "" {
@@ -1039,7 +1160,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				decision.Verdict = string(contracts.VerdictDeny)
 				decision.ReasonCode = "COMPLIANCE_ERROR"
 				decision.Reason = fmt.Sprintf("compliance check error: %v", compErr)
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
 					return nil, fmt.Errorf("failed to sign compliance-error decision: %w", signErr)
 				}
 				return decision, nil
@@ -1048,7 +1169,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				decision.Verdict = string(contracts.VerdictDeny)
 				decision.ReasonCode = "COMPLIANCE_VIOLATION"
 				decision.Reason = fmt.Sprintf("compliance violation: %s (obligations: %v)", compResult.Reason, compResult.ViolatedObligations)
-				if signErr := g.signer.SignDecision(decision); signErr != nil {
+				if signErr := g.signDecisionWithContext(decision, eCtx); signErr != nil {
 					return nil, fmt.Errorf("failed to sign compliance-deny decision: %w", signErr)
 				}
 				g.recordBehavioralEvent(req.Principal, trust.EventPolicyViolate, "compliance violation")
@@ -1056,6 +1177,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			}
 		}
 
+		if err := bindDecisionRequest(decision, req); err != nil {
+			return nil, fmt.Errorf("bind evaluated decision request: %w", err)
+		}
 		err = g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph)
 		if err != nil {
 			return nil, err
@@ -1143,23 +1267,34 @@ func stringContextValue(ctx map[string]any, keys ...string) (string, bool) {
 	return "", false
 }
 
-func taintTrackingEnabled() bool {
+// taintEgressEnforcementEnabled reports whether the built-in tainted-egress deny
+// is active. Taint *labelling* always runs; this gates only enforcement.
+//
+// Enforcement defaults to ON. proofs/GuardianPipeline.tla:52-53 states
+// TaintSafeEgress unconditionally, it is listed in Safety and enforced as an
+// INVARIANT in guardian.cfg, and it is model-checked on every PR. A default of
+// off left the implementation weaker than its own proof: with the variable
+// unset, the && at the call site short-circuited and TAINTED_DATA_EGRESS_DENY
+// never evaluated.
+//
+// Only an explicit "0" or "false" disables it — an unset or unparseable value
+// enforces, so a typo cannot silently open the boundary. Disabling is intended
+// for incident response and is logged once at construction.
+func taintEgressEnforcementEnabled() bool {
 	v := strings.TrimSpace(os.Getenv("HELM_TAINT_TRACKING"))
-	return v == "1" || strings.EqualFold(v, "true")
+	return !(v == "0" || strings.EqualFold(v, "false"))
 }
 
-func taintedEgressDenied(ctx map[string]interface{}, labels []string) bool {
-	if len(labels) == 0 || ctx == nil {
+func taintedEgressDenied(requestCtx context.Context, values map[string]interface{}, labels []string) bool {
+	if len(labels) == 0 || values == nil {
 		return false
 	}
-	// The egress override is a security decision: honor it only when the
-	// context was bound by a trusted transport/adapter boundary, never from
-	// caller-supplied arguments (otherwise any agent can self-approve
-	// PII/credential/secret egress).
-	if approved, ok := ctx["allow_tainted_egress"].(bool); ok && approved && trustedSecurityContext(ctx) {
+	// The egress override is a security decision. Context values are often
+	// caller-controlled, so only an in-process trusted marker may authorize it.
+	if approved, ok := values[ContextAllowTaintedEgress].(bool); ok && approved && trustedTaintedEgressOverride(requestCtx) {
 		return false
 	}
-	destination, _ := ctx["destination"].(string)
+	destination, _ := values[ContextDestination].(string)
 	if strings.TrimSpace(destination) == "" {
 		return false
 	}
@@ -1194,6 +1329,55 @@ func toMap(v any) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// missingRequirementReason builds the actionable deny reason for a PRG rule
+// that evaluated to false. It names each blocking requirement without exposing
+// policy source and lists the input.* fields the policy author can reference.
+func missingRequirementReason(failures []prg.RequirementFailure, input map[string]interface{}) string {
+	var b strings.Builder
+	b.WriteString(string(contracts.ReasonMissingRequirement))
+	b.WriteString(": policy requirement not met")
+	if len(failures) > 0 {
+		parts := make([]string, 0, len(failures))
+		for _, f := range failures {
+			parts = append(parts, f.ID)
+		}
+		b.WriteString("; blocking requirement(s): ")
+		b.WriteString(strings.Join(parts, ", "))
+	}
+	if len(input) > 0 {
+		fields := make([]string, 0, len(input))
+		for name, value := range input {
+			fields = append(fields, fmt.Sprintf("%s (%s)", name, inputFieldType(value)))
+		}
+		sort.Strings(fields)
+		b.WriteString("; available input.* fields: ")
+		b.WriteString(strings.Join(fields, ", "))
+	}
+	return b.String()
+}
+
+// inputFieldType names the JSON-level type of an input.* field value so a
+// policy author can see, for example, that input.effect is an object and not
+// a string.
+func inputFieldType(value any) string {
+	switch value.(type) {
+	case map[string]interface{}:
+		return "object"
+	case string:
+		return "string"
+	case bool:
+		return "boolean"
+	case nil:
+		return "null"
+	default:
+		rv := reflect.ValueOf(value)
+		if rv.IsValid() && (rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array) {
+			return "array"
+		}
+		return "number"
+	}
 }
 
 // OutputScanResult describes the outcome of post-execution output scanning.

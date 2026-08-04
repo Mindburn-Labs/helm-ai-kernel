@@ -13,6 +13,12 @@ import (
 )
 
 func TestWriteEvidencePackMaterializesRequiredDirectories(t *testing.T) {
+	// Packs here are sealed with a "file-dev" signer, so the seal carries its
+	// own verification key. Self-attestation is refused by default (F-02);
+	// this test covers pack materialisation, not provenance, so it opts in
+	// explicitly rather than relying on the old permissive default.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
+
 	packDir, err := WriteEvidencePack(t.TempDir(), "launch-test", map[string][]byte{
 		"receipts/kernel-verdict.json": []byte(`{"receipt_id":"r1","decision_id":"d1","decision_hash":"sha256:test","status":"ALLOW","verdict":"ALLOW","lamport_clock":1}`),
 	})
@@ -68,6 +74,12 @@ func TestWriteEvidencePackBuildsEvidenceGraph(t *testing.T) {
 }
 
 func TestWriteEvidencePackRewriteKeepsEvidenceGraphHashCurrent(t *testing.T) {
+	// Packs here are sealed with a "file-dev" signer, so the seal carries its
+	// own verification key. Self-attestation is refused by default (F-02);
+	// this test covers pack materialisation, not provenance, so it opts in
+	// explicitly rather than relying on the old permissive default.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
+
 	root := t.TempDir()
 	firstPackDir, err := WriteEvidencePack(root, "launch-rewrite", map[string][]byte{
 		"receipts/kernel-verdict.json": []byte(`{"receipt_id":"r1","type":"launchpad.kernel_verdict","decision_id":"d1","decision_hash":"sha256:test","status":"ALLOW","verdict":"ALLOW","lamport_clock":1}`),

@@ -1,8 +1,10 @@
+// quantum_posture: Guardian decision signatures use classical Ed25519 and do not provide post-quantum assurance.
 package governance
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -28,6 +30,18 @@ func NewGuardian(signer *crypto.Ed25519Signer, engine *PolicyEngine) *Guardian {
 
 // AuthorizeAgentSafety evaluates the agent-safety baseline and signs the result.
 func (g *Guardian) AuthorizeAgentSafety(ctx context.Context, input AgentSafetyContext) (*contracts.DecisionRecord, error) {
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"principal", input.PrincipalID},
+		{"action", input.Action},
+		{"resource", input.ResourceID},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return nil, fmt.Errorf("agent safety signing requires %s", field.name)
+		}
+	}
 	dec, err := g.engine.EvaluateAgentSafetyBaseline(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("agent safety policy evaluation failed: %w", err)
@@ -57,18 +71,22 @@ func (g *Guardian) Authorize(action string, riskScore int) (*contracts.DecisionR
 
 	verdict := "DENY"
 	reason := fmt.Sprintf("risk_score %d >= threshold 80 for action %q", riskScore, action)
+	reasonCode := string(contracts.ReasonPolicyViolation)
 	if allowed {
 		verdict = "ALLOW"
 		reason = fmt.Sprintf("risk_score %d < threshold 80 for action %q", riskScore, action)
+		reasonCode = ""
 	}
 
 	dec := &contracts.DecisionRecord{
-		ID:        fmt.Sprintf("gdec-%d", time.Now().UnixNano()),
-		SubjectID: "guardian",
-		Action:    action,
-		Verdict:   verdict,
-		Reason:    reason,
-		Timestamp: time.Now(),
+		ID:         fmt.Sprintf("gdec-%d", time.Now().UnixNano()),
+		SubjectID:  "guardian",
+		Action:     action,
+		Resource:   "governance:default-risk-policy",
+		Verdict:    verdict,
+		Reason:     reason,
+		ReasonCode: reasonCode,
+		Timestamp:  time.Now(),
 	}
 
 	// Sign the decision

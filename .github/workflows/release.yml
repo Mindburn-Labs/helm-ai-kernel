@@ -35,11 +35,47 @@ jobs:
       - name: Check tag and lockstep source versions
         run: python3 scripts/release/check_version_drift.py local --tag "${GITHUB_REF_NAME}"
 
-  validate:
+  release-preflight:
     runs-on: ubuntu-latest
     needs: version-contract
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - name: Require tagged commit to be current origin/main
+        run: |
+          set -euo pipefail
+          tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
+          main_commit="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 { print $1 }')"
+          if [ "$tag_commit" != "$main_commit" ]; then
+            echo "::error::Refusing to release ${GITHUB_REF_NAME}: tag commit ${tag_commit} is not current origin/main ${main_commit}."
+            exit 1
+          fi
+      - name: Require contracts catalog OpenAPI to already match
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::DOWNSTREAM_FANOUT_TOKEN with contents:read on Mindburn-Labs/contracts-catalog is required before release publication."
+            exit 1
+          fi
+          kernel_blob="$(git hash-object --no-filters api/openapi/helm.openapi.yaml)"
+          catalog_blob="$(gh api 'repos/Mindburn-Labs/contracts-catalog/contents/api/specs/helm.openapi.yaml?ref=main' --jq '.sha')"
+          if [ "$kernel_blob" != "$catalog_blob" ]; then
+            echo "::error::contracts-catalog main OpenAPI does not match this tag. Sync and merge the catalog before tagging ${GITHUB_REF_NAME}."
+            exit 1
+          fi
+
+  validate:
+    runs-on: ubuntu-latest
+    needs: release-preflight
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
       - name: Install presentation hygiene dependency
         run: |
           set -euo pipefail
@@ -68,18 +104,27 @@ jobs:
       - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
         with:
           github_token: ${{ github.token }}
-      - name: Fetch main ref for proto compatibility checks
+      - name: Install oasdiff (prior-release contract breaking-change gate)
         run: |
-          if [ "$(git symbolic-ref --short -q HEAD || true)" = "main" ]; then
-            echo "On main; local refs/heads/main is already HEAD — nothing to fetch."
-          else
-            git fetch origin main:refs/heads/main --force
-          fi
+          set -euo pipefail
+          ver=1.23.0
+          tmp="$(mktemp -d)"
+          archive="$tmp/oasdiff_${ver}_linux_amd64.tar.gz"
+          sha256='972b10535c3db4366b9dc3ebc11ca021279af3095267c3cffdca854a3a3c4f89'
+          curl -fsSL -o "$archive" "https://github.com/oasdiff/oasdiff/releases/download/v${ver}/oasdiff_${ver}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict -
+          tar -xzf "$archive" -C "$tmp"
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$tmp/oasdiff" "$HOME/.local/bin/oasdiff"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/oasdiff" --version
       - name: Install codegen tools
         run: |
           python -m pip install --require-hashes -r .github/codegen-requirements.txt
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
+      - name: Install json-schemas gate dependency (HELM-374)
+        run: "python -m pip install --only-binary=:all: --require-hashes -r .github/schema-requirements.txt"
       - name: Build and test retained surfaces
         run: make quality-release
 
@@ -125,9 +170,152 @@ jobs:
       - name: Reproducibility, SBOM, and VEX smoke
         run: make release-smoke
 
+  console-local-sidecar:
+    # The Console closure is built on its own native runners. This job accepts
+    # only its aggregate keyless manifest and an exact source pin committed in
+    # the Kernel release source; it never accepts a mutable Console main build.
+    runs-on: ubuntu-latest
+    needs: validate
+    outputs:
+      manifest_sha256: ${{ steps.console-verify.outputs.manifest_sha256 }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - id: console-pin
+        name: Resolve exact Console source pin
+        run: |
+          set -euo pipefail
+          python3 scripts/release/console_local_sidecar.py pin \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --github-output
+      - name: Require scoped Console artifact token
+        env:
+          CONSOLE_BUNDLE_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CONSOLE_BUNDLE_TOKEN}" ]; then
+            echo "::error::CONSOLE_BUNDLE_TOKEN is required to dispatch and retrieve the pinned Console local-sidecar artifact"
+            exit 1
+          fi
+      - id: console-run
+        name: Dispatch and await exact Console native closure build
+        env:
+          GH_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+          CONSOLE_REPOSITORY: ${{ steps.console-pin.outputs.repository }}
+          CONSOLE_SOURCE_SHA: ${{ steps.console-pin.outputs.source_sha }}
+          CONSOLE_WORKFLOW_REF: ${{ steps.console-pin.outputs.workflow_ref }}
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null
+          case "${CONSOLE_WORKFLOW_REF}" in
+            refs/tags/*) ;;
+            *)
+              echo "::error::Console workflow_ref must be an immutable refs/tags/... source pin."
+              exit 1
+              ;;
+          esac
+          workflow_tag="${CONSOLE_WORKFLOW_REF#refs/tags/}"
+          workflow_sha="$(gh api "repos/${CONSOLE_REPOSITORY}/commits/${workflow_tag}" --jq '.sha')"
+          if [ "${workflow_sha}" != "${CONSOLE_SOURCE_SHA}" ]; then
+            echo "::error::Console workflow_ref ${CONSOLE_WORKFLOW_REF} resolves to ${workflow_sha}, not pinned source ${CONSOLE_SOURCE_SHA}. Create a protected immutable tag at the pinned source before releasing."
+            exit 1
+          fi
+          prior_runs="${RUNNER_TEMP}/console-local-sidecar-prior-runs.txt"
+          gh run list \
+            --repo "${CONSOLE_REPOSITORY}" \
+            --workflow release-local-sidecar.yml \
+            --event workflow_dispatch \
+            --limit 100 \
+            --json databaseId \
+            --jq '.[].databaseId' | sort > "${prior_runs}"
+          gh workflow run release-local-sidecar.yml \
+            --repo "${CONSOLE_REPOSITORY}" \
+            --ref "${workflow_tag}" \
+            -f source_sha="${CONSOLE_SOURCE_SHA}" \
+            -f kernel_release_version="${GITHUB_REF_NAME}"
+
+          expected_title="local-sidecar ${GITHUB_REF_NAME} ${CONSOLE_SOURCE_SHA}"
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list \
+              --repo "${CONSOLE_REPOSITORY}" \
+              --workflow release-local-sidecar.yml \
+              --event workflow_dispatch \
+              --limit 100 \
+              --json databaseId,displayTitle \
+              | python3 -c 'import json, pathlib, sys; expected, prior_path = sys.argv[1:]; prior = set(pathlib.Path(prior_path).read_text(encoding="utf-8").splitlines()); matches = [str(run["databaseId"]) for run in json.load(sys.stdin) if run.get("displayTitle") == expected and str(run["databaseId"]) not in prior]; sys.exit("multiple newly-dispatched Console sidecar runs matched the exact title") if len(matches) > 1 else print(matches[0] if matches else "")' "${expected_title}" "${prior_runs}")"
+            if [ -n "${run_id}" ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ -z "${run_id}" ]; then
+            echo "::error::Console sidecar workflow did not expose one exact dispatched run"
+            exit 1
+          fi
+
+          for _ in $(seq 1 180); do
+            state="$(gh run view "${run_id}" --repo "${CONSOLE_REPOSITORY}" --json status,conclusion \
+              | python3 -c 'import json, sys; run = json.load(sys.stdin); print(run.get("status", ""), run.get("conclusion") or "")')"
+            status="${state%% *}"
+            conclusion="${state#* }"
+            if [ "${status}" = "completed" ]; then
+              if [ "${conclusion}" != "success" ]; then
+                echo "::error::Console sidecar workflow ${run_id} completed with ${conclusion}"
+                exit 1
+              fi
+              echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Console sidecar workflow ${run_id} did not complete"
+          exit 1
+      - name: Download exact Console aggregate and target artifacts
+        env:
+          GH_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+          CONSOLE_REPOSITORY: ${{ steps.console-pin.outputs.repository }}
+          CONSOLE_RUN_ID: ${{ steps.console-run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p console-local-sidecar
+          gh run download "${CONSOLE_RUN_ID}" --repo "${CONSOLE_REPOSITORY}" \
+            --name helm-console-local-sidecar-release-manifest --dir console-local-sidecar
+          for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+            gh run download "${CONSOLE_RUN_ID}" --repo "${CONSOLE_REPOSITORY}" \
+              --name "helm-console-local-sidecar-${target}" --dir console-local-sidecar
+          done
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - id: console-verify
+        name: Verify Console signature, source pin, and native closures
+        run: |
+          set -euo pipefail
+          python3 scripts/release/console_local_sidecar.py verify \
+            --input-dir console-local-sidecar \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --github-output
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: console-local-sidecar
+          path: console-local-sidecar/
+          if-no-files-found: error
+
   binaries:
     runs-on: ubuntu-latest
     needs: [validate, deployment-smoke, kind-smoke, release-smoke]
+    env:
+      HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE }}
+      HELM_RELEASE_EVIDENCE_ANCHOR_TYPE: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_TYPE }}
+      HELM_RELEASE_EVIDENCE_ANCHOR_URI: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_URI }}
+      HELM_RELEASE_EVIDENCE_STORAGE_URI: ${{ vars.HELM_RELEASE_EVIDENCE_STORAGE_URI }}
+      HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND: ${{ secrets.HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND }}
+      HELM_EVIDENCE_KMS_KEY_ID: ${{ secrets.HELM_EVIDENCE_KMS_KEY_ID }}
+      HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX: ${{ secrets.HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX }}
+      HELM_EVIDENCE_KMS_SIGN_COMMAND: ${{ secrets.HELM_EVIDENCE_KMS_SIGN_COMMAND }}
     permissions:
       actions: read
       attestations: write
@@ -142,6 +330,22 @@ jobs:
         with:
           go-version: "1.25.12"
           cache-dependency-path: "**/go.sum"
+      - name: Require explicit external release EvidencePack trust
+        run: |
+          for name in \
+            HELM_RELEASE_EVIDENCE_PROFILE \
+            HELM_RELEASE_EVIDENCE_ANCHOR_TYPE \
+            HELM_RELEASE_EVIDENCE_ANCHOR_URI \
+            HELM_RELEASE_EVIDENCE_STORAGE_URI \
+            HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND \
+            HELM_EVIDENCE_KMS_KEY_ID \
+            HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX \
+            HELM_EVIDENCE_KMS_SIGN_COMMAND; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name must be configured for release EvidencePack trust"
+              exit 1
+            fi
+          done
       - name: Build and stage release assets
         run: make release-assets
       - name: Attest release artifacts
@@ -184,16 +388,20 @@ jobs:
             case "$f" in
               *.cosign.bundle) continue ;;
             esac
+            bundle="${f}.cosign.bundle"
             echo "::group::Signing $f"
-            cosign sign-blob --yes --bundle "${f}.cosign.bundle" "$f"
+            cosign sign-blob --yes --bundle "${bundle}" "$f"
             echo "::endgroup::"
           done
       - name: Verify cosign bundles
-        run: bash scripts/release/verify_cosign.sh release-assets
+        run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh release-assets
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cosign-bundles
-          path: release-assets/*.cosign.bundle
+          path: |
+            release-assets/*.cosign.bundle
+            !release-assets/helm-console-local-sidecar-release-manifest.json.cosign.bundle
+            !release-assets/helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle
 
   reproducibility-check:
     runs-on: ubuntu-latest
@@ -483,82 +691,29 @@ jobs:
           gh pr merge "$pr" \
             --repo Mindburn-Labs/homebrew-tap \
             --squash \
-            --admin \
+            --auto \
             --delete-branch
-
-  downstream-fanout:
-    # After a tag release, open auto-PRs that pull the released kernel surface
-    # into downstream contract consumers that version-drift.yml only *detects*
-    # drift on. PRs are opened (never auto-merged) so a human reviews the
-    # contract bump before it lands.
-    runs-on: ubuntu-latest
-    needs: github-release
-    steps:
-      - name: Check out released kernel ref
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          ref: ${{ github.sha }}
-      - name: Require cross-repo fan-out token
-        env:
-          DOWNSTREAM_FANOUT_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-        run: |
-          if [ -z "$DOWNSTREAM_FANOUT_TOKEN" ]; then
-            echo "::error::DOWNSTREAM_FANOUT_TOKEN secret is not configured. The release fan-out opens pull requests against Mindburn-Labs/contracts-catalog, which is outside the scope of HOMEBREW_TAP_TOKEN (tap-only). Add a repo-scoped (or fine-grained) PAT named DOWNSTREAM_FANOUT_TOKEN with 'contents:write' and 'pull_requests:write' on the downstream repository, then re-run this job."
-            exit 1
-          fi
-      - name: Resolve release coordinates
-        id: rel
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          {
-            echo "version=${version}"
-            echo "commit=${GITHUB_SHA}"
-            echo "short=$(git rev-parse --short=12 "${GITHUB_SHA}")"
-            echo "branch=ci/helm-release-${GITHUB_REF_NAME}"
-          } >> "${GITHUB_OUTPUT}"
-      - name: Configure git identity
-        run: |
-          git config --global user.name "mindburn-release-bot"
-          git config --global user.email "release@mindburn.org"
-      - name: Open PR — contracts-catalog spec refresh
-        env:
-          GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-          DOWNSTREAM_FANOUT_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-          VERSION: ${{ steps.rel.outputs.version }}
-          COMMIT: ${{ steps.rel.outputs.commit }}
-          SHORT: ${{ steps.rel.outputs.short }}
-          BRANCH: ${{ steps.rel.outputs.branch }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          src="${GITHUB_WORKSPACE}/api/openapi/helm.openapi.yaml"
-          if [ ! -f "$src" ]; then
-            echo "::error::Released kernel spec not found at api/openapi/helm.openapi.yaml"
-            exit 1
-          fi
-          mkdir -p fanout-work
-          git clone "https://x-access-token:${DOWNSTREAM_FANOUT_TOKEN}@github.com/Mindburn-Labs/contracts-catalog.git" fanout-work/contracts-catalog
-          cd fanout-work/contracts-catalog
-          dest="api/specs/helm.openapi.yaml"
-          mkdir -p "$(dirname "$dest")"
-          cp "$src" "$dest"
-          if git diff --quiet -- "$dest"; then
-            echo "contracts-catalog spec already matches ${REF_NAME}; nothing to PR."
-            exit 0
-          fi
-          git checkout -b "$BRANCH"
-          git add "$dest"
-          git commit \
-            -m "chore: refresh helm OpenAPI spec to ${REF_NAME}" \
-            -m "Synced api/specs/helm.openapi.yaml from helm-ai-kernel api/openapi/helm.openapi.yaml at release ${REF_NAME} (${SHORT})." \
-            -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
-          git push --force-with-lease origin "$BRANCH"
-          gh pr create \
-            --repo Mindburn-Labs/contracts-catalog \
-            --base main \
-            --head "$BRANCH" \
-            --title "chore: refresh helm OpenAPI spec to ${REF_NAME}" \
-            --body "$(printf 'Automated release fan-out from helm-ai-kernel %s (%s).\n\nThis refreshes `api/specs/helm.openapi.yaml` from the released kernel `api/openapi/helm.openapi.yaml` so the catalog stays in lockstep with the published kernel contract. The openapi compat gate in this repo will validate backward compatibility.\n\nReview and merge to clear downstream contract drift.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)' "${REF_NAME}" "${SHORT}")"
+          for attempt in $(seq 1 120); do
+            state="$(gh pr view "$pr" \
+              --repo Mindburn-Labs/homebrew-tap \
+              --json state \
+              --jq '.state')"
+            case "$state" in
+              MERGED) exit 0 ;;
+              CLOSED)
+                echo "::error::Homebrew PR #${pr} closed without merging."
+                exit 1
+                ;;
+              OPEN) echo "Waiting for Homebrew PR #${pr} to reach MERGED (${attempt}/120)." ;;
+              *)
+                echo "::error::Homebrew PR #${pr} has unexpected state ${state}."
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "::error::Timed out waiting for Homebrew PR #${pr} to reach MERGED."
+          exit 1
 
   chart:
     runs-on: ubuntu-latest
@@ -1007,7 +1162,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke]
+    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets]
     permissions:
       actions: read
       contents: write
@@ -1028,6 +1183,10 @@ jobs:
         with:
           name: version-status
           path: version-status/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: console-release-assets
+          path: console-release-assets/
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
@@ -1037,6 +1196,156 @@ jobs:
             cosign/**/*.cosign.bundle
             benchmarks-release/*.json
             version-status/version-status.json
+            console-release-assets/helm-console-local-sidecar-*
+            console-release-assets/helm-ai-kernel-*-console.tar.gz
+            console-release-assets/helm-ai-kernel-*-console.tar.gz.cosign.bundle
+            console-release-assets/CONSOLE-SHA256SUMS.txt
+            console-release-assets/CONSOLE-SHA256SUMS.txt.cosign.bundle
+
+  console-release-assets:
+    # v0.8.0 includes the local Console. Build and verify every Console asset
+    # before the one public GitHub release step consumes this artifact.
+    runs-on: ubuntu-latest
+    needs: console-local-sidecar
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.12"
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: console-local-sidecar
+          path: console-local-sidecar/
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - name: Re-verify Console input before packaging
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          test -n "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          python3 scripts/release/console_local_sidecar.py verify \
+            --input-dir console-local-sidecar \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - name: Bind the verified Console manifest to this Kernel tag
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          manifest="console-local-sidecar/helm-console-local-sidecar-release-manifest.json"
+          kernel_bundle="${manifest}.kernel.cosign.bundle"
+          cosign sign-blob --yes \
+            --bundle "${kernel_bundle}" \
+            "${manifest}"
+          test -s "${kernel_bundle}"
+          KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" \
+            bash scripts/release/verify_cosign.sh console-local-sidecar
+      - name: Build manifest-bound Kernel binaries
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: make release-binaries-reproducible
+      - name: Stage Console assets and standalone layouts
+        env:
+          CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256: ${{ needs.console-local-sidecar.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          assets=console-release-assets
+          layout_input=console-layout-input
+          mkdir -p "${assets}" "${layout_input}"
+          python3 scripts/release/console_local_sidecar.py stage \
+            --input-dir console-local-sidecar \
+            --output-dir "${assets}" \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+          cp "${assets}"/* "${layout_input}/"
+          cp \
+            bin/helm-ai-kernel-linux-amd64 \
+            bin/helm-ai-kernel-linux-arm64 \
+            bin/helm-ai-kernel-darwin-amd64 \
+            bin/helm-ai-kernel-darwin-arm64 \
+            "${layout_input}/"
+          python3 scripts/release/console_local_sidecar.py layout \
+            --input-dir "${layout_input}" \
+            --output-dir "${assets}" \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --expected-manifest-sha256 "${CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256}"
+      - id: console-pin
+        name: Resolve exact Console browser source pin
+        run: |
+          set -euo pipefail
+          python3 scripts/release/console_local_sidecar.py pin \
+            --pins release/console-local-sidecar-pins.json \
+            --kernel-release "${GITHUB_REF_NAME}" \
+            --github-output
+      - name: Check out pinned Console browser tooling
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: ${{ steps.console-pin.outputs.repository }}
+          ref: ${{ steps.console-pin.outputs.source_sha }}
+          token: ${{ secrets.CONSOLE_BUNDLE_TOKEN }}
+          path: console-browser-tools
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console-browser-tools/package-lock.json
+      - name: Install pinned Console Playwright Chromium
+        run: |
+          set -euo pipefail
+          cd console-browser-tools
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Browser-smoke the archived Linux Console layout
+        run: |
+          set -euo pipefail
+          node scripts/release/console_layout_browser_smoke.mjs \
+            --layout console-release-assets/helm-ai-kernel-linux-amd64-console.tar.gz \
+            --console-checkout console-browser-tools
+      - name: Cosign keyless-sign standalone Console layouts
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          for layout in console-release-assets/helm-ai-kernel-*-console.tar.gz; do
+            test -f "${layout}"
+            cosign sign-blob --yes \
+              --bundle "${layout}.cosign.bundle" \
+              "${layout}"
+          done
+      - name: Create a signed Console checksum manifest
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          set -euo pipefail
+          cd console-release-assets
+          find . -maxdepth 1 -type f \
+            \( \
+              -name 'helm-console-local-sidecar-*' \
+              -o -name 'helm-ai-kernel-*-console.tar.gz' \
+              -o -name 'helm-ai-kernel-*-console.tar.gz.cosign.bundle' \
+            \) \
+            -print0 | sort -z | xargs -0 sha256sum > CONSOLE-SHA256SUMS.txt
+          test -s CONSOLE-SHA256SUMS.txt
+          cosign sign-blob --yes \
+            --bundle CONSOLE-SHA256SUMS.txt.cosign.bundle \
+            CONSOLE-SHA256SUMS.txt
+      - name: Verify staged Console assets before publication
+        run: KERNEL_RELEASE_TAG="${GITHUB_REF_NAME}" bash scripts/release/verify_cosign.sh console-release-assets
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: console-release-assets
+          path: console-release-assets/
+          if-no-files-found: error
 
   slsa-provenance:
     needs: [binaries, github-release]
@@ -1053,12 +1362,38 @@ jobs:
 
   post-release-version-drift:
     runs-on: ubuntu-latest
-    needs: [github-release, slsa-provenance, homebrew, downstream-fanout, go-sdk-tag]
+    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]
+    if: >-
+      always() &&
+      needs.github-release.result == 'success' &&
+      needs.slsa-provenance.result == 'success' &&
+      needs.homebrew.result == 'success' &&
+      needs.go-sdk-tag.result == 'success' &&
+      needs.console-release-assets.result == 'success'
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - name: Wait for published version convergence
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 40); do
+            if python3 scripts/release/check_version_drift.py \
+              --expected-version "$VERSION" \
+              --surface-timeout 10 \
+              published; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 40 ]; then
+              echo "Published version surfaces have not converged (${attempt}/40); retrying."
+              sleep 30
+            fi
+          done
+          echo "::error::Published version surfaces did not converge within the bounded retry budget."
+          exit 1
       - name: Check full published version status
+        if: always()
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           python3 scripts/release/check_version_drift.py \
@@ -1066,6 +1401,7 @@ jobs:
             --write-status version-status.json \
             published
       - name: Replace release version status with full post-release status
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${GITHUB_REF_NAME}" version-status.json --clobber

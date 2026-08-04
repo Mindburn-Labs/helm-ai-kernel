@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connector"
@@ -12,8 +15,11 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
 
-// Ensure Connector implements effects.Connector at compile time.
-var _ effects.Connector = (*Connector)(nil)
+// Compile-time contracts for the governed execution path.
+var (
+	_ effects.Connector           = (*Connector)(nil)
+	_ effects.PermitScopeProvider = (*Connector)(nil)
+)
 
 // Connector is the HELM connector for the Linear project management API.
 //
@@ -24,11 +30,37 @@ var _ effects.Connector = (*Connector)(nil)
 //
 // Every tool call produces an INTENT -> EFFECT chain in the ProofGraph.
 type Connector struct {
-	client      *Client
-	gate        *connector.ZeroTrustGate
-	graph       *proofgraph.Graph
-	connectorID string
-	seq         atomic.Uint64
+	client       *Client
+	gate         *connector.ZeroTrustGate
+	graph        *proofgraph.Graph
+	connectorID  string
+	nonceMu      sync.Mutex
+	permitNonces map[string]permitNonceState
+	now          func() time.Time
+	seq          atomic.Uint64
+}
+
+const linearPermitMaxTTL = time.Hour
+
+type permitNonceState struct {
+	expiresAt time.Time
+	reserved  bool
+}
+
+var toolEffectTypeMap = map[string]effects.EffectType{
+	"linear.create_issue": effects.EffectTypeWrite,
+	"linear.update_issue": effects.EffectTypeWrite,
+	"linear.get_issue":    effects.EffectTypeRead,
+	"linear.list_issues":  effects.EffectTypeRead,
+	"linear.add_comment":  effects.EffectTypeWrite,
+}
+
+var toolAllowedParamsMap = map[string][]string{
+	"linear.create_issue": {"team_id", "title", "description", "priority", "assignee_id", "label_ids"},
+	"linear.update_issue": {"issue_id", "title", "description", "state", "priority", "assignee_id"},
+	"linear.get_issue":    {"issue_id"},
+	"linear.list_issues":  {"team_id", "state"},
+	"linear.add_comment":  {"issue_id", "body"},
 }
 
 // Config configures a new Linear connector.
@@ -71,10 +103,12 @@ func NewConnector(cfg Config) *Connector {
 	}
 
 	return &Connector{
-		client:      client,
-		gate:        gate,
-		graph:       proofgraph.NewGraph(),
-		connectorID: cfg.ConnectorID,
+		client:       client,
+		gate:         gate,
+		graph:        proofgraph.NewGraph(),
+		connectorID:  cfg.ConnectorID,
+		permitNonces: make(map[string]permitNonceState),
+		now:          time.Now,
 	}
 }
 
@@ -83,33 +117,92 @@ func (c *Connector) ID() string {
 	return c.connectorID
 }
 
+// MaxPermitTTL declares the connector's maximum accepted permit lifetime.
+// GovernedBridge recognizes this optional connector contract and never mints a
+// longer-lived Linear permit.
+func (*Connector) MaxPermitTTL() time.Duration {
+	return linearPermitMaxTTL
+}
+
+// PermitScope declares the exact connector-owned permit contract for a call.
+// Every accepted parameter is bound by its type and JSON value, and every
+// Linear action is bound to its team or issue resource.
+func (c *Connector) PermitScope(toolName string, params map[string]any) (effects.EffectType, effects.EffectScope, string, error) {
+	effectType, ok := toolEffectTypeMap[toolName]
+	if !ok {
+		return "", effects.EffectScope{}, "", fmt.Errorf("linear: unknown tool %q", toolName)
+	}
+	if err := validateToolParams(toolName, params); err != nil {
+		return "", effects.EffectScope{}, "", err
+	}
+	allowedKeys := toolAllowedParamsMap[toolName]
+	allowedParams := make([]string, 0, len(params))
+	for _, key := range allowedKeys {
+		if value, present := params[key]; present {
+			encoded, err := scopeParamValue(value)
+			if err != nil {
+				return "", effects.EffectScope{}, "", fmt.Errorf("linear: encode permit param %q: %w", key, err)
+			}
+			allowedParams = append(allowedParams, key+"="+encoded)
+		}
+	}
+	resourceRef, err := linearResourceRef(toolName, params)
+	if err != nil {
+		return "", effects.EffectScope{}, "", err
+	}
+	return effectType, effects.EffectScope{AllowedAction: toolName, AllowedParams: allowedParams}, resourceRef, nil
+}
+
 // Execute dispatches a tool call through the zero-trust gate and records it in
 // the ProofGraph. Implements effects.Connector.
 func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, toolName string, params map[string]any) (any, error) {
-	// 1. Validate permit.ConnectorID matches
-	if permit.ConnectorID != c.connectorID {
-		return nil, fmt.Errorf("linear: permit connector_id %q does not match %q", permit.ConnectorID, c.connectorID)
+	if params == nil {
+		params = map[string]any{}
 	}
 
-	// 2. Resolve data class for this tool
+	// 1. Resolve governed classifications before any side effect.
 	dataClass, ok := toolDataClassMap[toolName]
 	if !ok {
 		return nil, fmt.Errorf("linear: unknown tool %q", toolName)
 	}
+	effectType, ok := toolEffectTypeMap[toolName]
+	if !ok {
+		return nil, fmt.Errorf("linear: missing effect classification for tool %q", toolName)
+	}
 
-	// 3. Gate check
+	// 2. Validate the EffectPermit scope. The connector is the last guard
+	// before Linear's GraphQL sinks, so it cannot rely on the bridge alone.
+	if err := c.validatePermit(permit, toolName, effectType, params); err != nil {
+		return nil, err
+	}
+
+	// 3. Reserve before the gate records a call. A replay cannot consume
+	// rate-limit capacity, while a gate denial releases a fresh permit.
+	if err := c.reservePermitNonce(permit.Nonce, permit.ExpiresAt); err != nil {
+		return nil, err
+	}
+
+	// 4. Gate check.
 	decision := c.gate.CheckCall(ctx, c.connectorID, dataClass)
 	if !decision.Allowed {
+		c.releasePermitNonce(permit.Nonce)
 		return nil, fmt.Errorf("linear: gate denied: %s (%s)", decision.Reason, decision.Violation)
 	}
 
-	// 4. Compute input hash via canonicalize.CanonicalHash
+	// 5. Compute input hash via canonicalize.CanonicalHash.
 	inputHash, err := canonicalize.CanonicalHash(params)
 	if err != nil {
+		c.releasePermitNonce(permit.Nonce)
 		return nil, fmt.Errorf("linear: canonical hash of params: %w", err)
 	}
 
-	// 5. Append INTENT node to ProofGraph
+	// 6. Consume the single-use permit only after all pre-execution validation
+	// and the gate succeed, but before any ProofGraph intent or Linear request.
+	if err := c.consumePermitNonce(permit.Nonce); err != nil {
+		return nil, err
+	}
+
+	// 7. Append INTENT node to ProofGraph.
 	intentPayload, err := json.Marshal(map[string]any{
 		"type":       "linear.intent",
 		"tool":       toolName,
@@ -124,10 +217,10 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, fmt.Errorf("linear: append intent: %w", err)
 	}
 
-	// 6. Dispatch to appropriate client method
+	// 8. Dispatch to the appropriate client method.
 	result, execErr := c.dispatch(ctx, toolName, params)
 
-	// 7. Append EFFECT node to ProofGraph
+	// 9. Append EFFECT node to ProofGraph.
 	effectEntry := map[string]any{
 		"type":       "linear.effect",
 		"tool":       toolName,
@@ -153,6 +246,272 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		return nil, execErr
 	}
 	return result, nil
+}
+
+func (c *Connector) validatePermit(permit *effects.EffectPermit, toolName string, effectType effects.EffectType, params map[string]any) error {
+	if permit == nil {
+		return fmt.Errorf("linear: missing effect permit")
+	}
+	if permit.ConnectorID != c.connectorID {
+		return fmt.Errorf("linear: permit connector_id %q does not match %q", permit.ConnectorID, c.connectorID)
+	}
+	if permit.Scope.AllowedAction == "" {
+		return fmt.Errorf("linear: permit missing allowed_action")
+	}
+	if permit.Scope.AllowedAction != toolName {
+		return fmt.Errorf("linear: permit action %q does not authorize %q", permit.Scope.AllowedAction, toolName)
+	}
+	if permit.EffectType != effectType {
+		return fmt.Errorf("linear: permit effect_type %q does not authorize %q", permit.EffectType, toolName)
+	}
+	now := c.now().UTC()
+	if permit.IssuedAt.IsZero() {
+		return fmt.Errorf("linear: permit missing issued_at")
+	}
+	if permit.ExpiresAt.IsZero() {
+		return fmt.Errorf("linear: permit missing expires_at")
+	}
+	if !permit.ExpiresAt.UTC().After(permit.IssuedAt.UTC()) {
+		return fmt.Errorf("linear: permit expires_at must be after issued_at")
+	}
+	if permit.IssuedAt.UTC().After(now.Add(time.Minute)) {
+		return fmt.Errorf("linear: permit issued_at is in the future")
+	}
+	if !now.Before(permit.ExpiresAt.UTC()) {
+		return fmt.Errorf("linear: permit expired at %s", permit.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+	if permit.ExpiresAt.UTC().Sub(permit.IssuedAt.UTC()) > linearPermitMaxTTL {
+		return fmt.Errorf("linear: permit ttl exceeds %s", linearPermitMaxTTL)
+	}
+	if !permit.SingleUse {
+		return fmt.Errorf("linear: permit must be single-use")
+	}
+	if strings.TrimSpace(permit.Nonce) == "" {
+		return fmt.Errorf("linear: permit missing nonce")
+	}
+	if err := validateToolParams(toolName, params); err != nil {
+		return err
+	}
+	if err := validateParamScope(permit, toolName, params); err != nil {
+		return err
+	}
+	return validateResourceScope(permit, toolName, params)
+}
+
+func validateToolParams(toolName string, params map[string]any) error {
+	allowed, ok := toolAllowedParamsMap[toolName]
+	if !ok {
+		return fmt.Errorf("linear: missing permit scope for tool %q", toolName)
+	}
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, key := range allowed {
+		allowedSet[key] = struct{}{}
+	}
+	for key, value := range params {
+		if _, ok := allowedSet[key]; !ok {
+			return fmt.Errorf("linear: param %q is not supported by %q", key, toolName)
+		}
+		if key == "label_ids" {
+			if !isStringSlice(value) {
+				return fmt.Errorf("linear: param %q for %q must be a string slice", key, toolName)
+			}
+			continue
+		}
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("linear: param %q for %q must be a string", key, toolName)
+		}
+	}
+
+	resourceKey, _ := linearResourceKey(toolName)
+	resourceID, ok := stringParamExact(params, resourceKey)
+	if !ok || strings.TrimSpace(resourceID) == "" {
+		return fmt.Errorf("linear: action %q requires %s", toolName, resourceKey)
+	}
+	if resourceID != strings.TrimSpace(resourceID) {
+		return fmt.Errorf("linear: %s must not contain surrounding whitespace", resourceKey)
+	}
+	switch toolName {
+	case "linear.create_issue":
+		if title, ok := stringParamExact(params, "title"); !ok || title == "" {
+			return fmt.Errorf("linear: create_issue: missing required param title")
+		}
+	case "linear.update_issue":
+		for _, key := range []string{"title", "description", "state", "priority", "assignee_id"} {
+			if _, present := params[key]; present {
+				return nil
+			}
+		}
+		return fmt.Errorf("linear: update_issue: no fields to update")
+	case "linear.add_comment":
+		if body, ok := stringParamExact(params, "body"); !ok || body == "" {
+			return fmt.Errorf("linear: add_comment: missing required param body")
+		}
+	}
+	return nil
+}
+
+func validateParamScope(permit *effects.EffectPermit, toolName string, params map[string]any) error {
+	exactValues := make(map[string]string, len(permit.Scope.AllowedParams))
+	for _, raw := range permit.Scope.AllowedParams {
+		if strings.TrimSpace(raw) == "" {
+			return fmt.Errorf("linear: permit contains blank allowed_param")
+		}
+		key, value, hasValue := strings.Cut(raw, "=")
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return fmt.Errorf("linear: permit contains blank allowed_param key")
+		}
+		if !hasValue {
+			return fmt.Errorf("linear: permit param %q must bind an exact value", key)
+		}
+		if _, known := params[key]; !known {
+			return fmt.Errorf("linear: permit scope requires param %q", key)
+		}
+		if _, duplicate := exactValues[key]; duplicate {
+			return fmt.Errorf("linear: permit repeats allowed_param %q", key)
+		}
+		if !validScopeParamValue(value) {
+			return fmt.Errorf("linear: permit param %q has invalid exact value", key)
+		}
+		exactValues[key] = value
+	}
+	if len(exactValues) != len(params) {
+		return fmt.Errorf("linear: permit scope does not bind every supplied param")
+	}
+	for key, actual := range params {
+		expected, ok := exactValues[key]
+		if !ok {
+			return fmt.Errorf("linear: param %q not authorized by permit scope", key)
+		}
+		got, err := scopeParamValue(actual)
+		if err != nil {
+			return fmt.Errorf("linear: encode param %q for permit validation: %w", key, err)
+		}
+		if got != expected {
+			return fmt.Errorf("linear: param %q does not match permit scope", key)
+		}
+	}
+	return nil
+}
+
+type scopedParamValue struct {
+	Type  string          `json:"type"`
+	Value json.RawMessage `json:"value"`
+}
+
+func scopeParamValue(value any) (string, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(scopedParamValue{Type: fmt.Sprintf("%T", value), Value: raw})
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func validScopeParamValue(value string) bool {
+	var decoded scopedParamValue
+	return json.Unmarshal([]byte(value), &decoded) == nil && decoded.Type != "" && json.Valid(decoded.Value)
+}
+
+func validateResourceScope(permit *effects.EffectPermit, toolName string, params map[string]any) error {
+	want, err := linearResourceRef(toolName, params)
+	if err != nil {
+		return err
+	}
+	if permit.ResourceRef != want {
+		return fmt.Errorf("linear: permit resource_ref %q does not authorize %q", permit.ResourceRef, want)
+	}
+	return nil
+}
+
+func linearResourceRef(toolName string, params map[string]any) (string, error) {
+	resourceKey, prefix := linearResourceKey(toolName)
+	resourceID, ok := stringParamExact(params, resourceKey)
+	if !ok || strings.TrimSpace(resourceID) == "" {
+		return "", fmt.Errorf("linear: action %q requires %s", toolName, resourceKey)
+	}
+	if resourceID != strings.TrimSpace(resourceID) {
+		return "", fmt.Errorf("linear: %s must not contain surrounding whitespace", resourceKey)
+	}
+	return prefix + resourceID, nil
+}
+
+func linearResourceKey(toolName string) (string, string) {
+	if toolName == "linear.create_issue" || toolName == "linear.list_issues" {
+		return "team_id", "team:"
+	}
+	return "issue_id", "issue:"
+}
+
+func stringParamExact(params map[string]any, key string) (string, bool) {
+	value, ok := params[key]
+	if !ok {
+		return "", false
+	}
+	stringValue, ok := value.(string)
+	return stringValue, ok
+}
+
+func isStringSlice(value any) bool {
+	switch typed := value.(type) {
+	case []string:
+		return true
+	case []any:
+		for _, item := range typed {
+			if _, ok := item.(string); !ok {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+// NOTE: This is an in-process replay tracker that retains nonces only until
+// each permit expires. Cross-replica deployments need a shared/durable store
+// or equivalent strategy.
+func (c *Connector) reservePermitNonce(nonce string, expiresAt time.Time) error {
+	c.nonceMu.Lock()
+	defer c.nonceMu.Unlock()
+	c.pruneExpiredPermitNoncesLocked(c.now().UTC())
+	if _, ok := c.permitNonces[nonce]; ok {
+		return fmt.Errorf("linear: permit nonce %q already used", nonce)
+	}
+	c.permitNonces[nonce] = permitNonceState{expiresAt: expiresAt.UTC(), reserved: true}
+	return nil
+}
+
+func (c *Connector) releasePermitNonce(nonce string) {
+	c.nonceMu.Lock()
+	defer c.nonceMu.Unlock()
+	if state, ok := c.permitNonces[nonce]; ok && state.reserved {
+		delete(c.permitNonces, nonce)
+	}
+}
+
+func (c *Connector) consumePermitNonce(nonce string) error {
+	c.nonceMu.Lock()
+	defer c.nonceMu.Unlock()
+	c.pruneExpiredPermitNoncesLocked(c.now().UTC())
+	state, ok := c.permitNonces[nonce]
+	if !ok || !state.reserved {
+		return fmt.Errorf("linear: permit nonce %q was not reserved", nonce)
+	}
+	state.reserved = false
+	c.permitNonces[nonce] = state
+	return nil
+}
+
+func (c *Connector) pruneExpiredPermitNoncesLocked(now time.Time) {
+	for nonce, state := range c.permitNonces {
+		if !now.Before(state.expiresAt) {
+			delete(c.permitNonces, nonce)
+		}
+	}
 }
 
 // dispatch routes to the appropriate client method based on toolName.

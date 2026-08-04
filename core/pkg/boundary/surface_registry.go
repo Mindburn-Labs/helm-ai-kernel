@@ -1,11 +1,15 @@
 package boundary
 
+// quantum_posture: classical Ed25519/SHA-256 only; no post-quantum assurance
+// is claimed or provided by this file.
+
 import (
 	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +54,11 @@ type SurfaceRegistry struct {
 	agents             map[string]contracts.AgentIdentityProfile
 	reports            map[string]map[string]any
 }
+
+// ErrApprovalTransitionConflict means the approval changed after a caller
+// reviewed its sealed ceremony hash. Callers must load the current ceremony
+// and require a new review before trying again.
+var ErrApprovalTransitionConflict = errors.New("approval ceremony changed")
 
 func NewSurfaceRegistry(now func() time.Time) *SurfaceRegistry {
 	r := newSurfaceRegistry(now)
@@ -461,12 +470,16 @@ func (r *SurfaceRegistry) ListCheckpoints() []contracts.BoundaryCheckpoint {
 }
 
 func (r *SurfaceRegistry) PutApproval(approval contracts.ApprovalCeremony) (contracts.ApprovalCeremony, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.putApprovalLocked(approval)
+}
+
+func (r *SurfaceRegistry) putApprovalLocked(approval contracts.ApprovalCeremony) (contracts.ApprovalCeremony, error) {
 	sealed, err := approval.Seal()
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.approvals[sealed.ApprovalID] = sealed
 	if err := r.appendEventLocked("approval", sealed.ApprovalID, sealed); err != nil {
 		return contracts.ApprovalCeremony{}, err
@@ -489,27 +502,76 @@ func (r *SurfaceRegistry) ListApprovals() []contracts.ApprovalCeremony {
 }
 
 func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.ApprovalCeremonyState, actor, receiptID, reason string) (contracts.ApprovalCeremony, error) {
-	r.mu.RLock()
+	return r.TransitionApprovalIfCurrent(id, state, actor, receiptID, reason, "")
+}
+
+// TransitionApprovalIfCurrent transitions an approval only if its current
+// sealed hash still matches the snapshot explicitly reviewed by the caller.
+// An empty expected hash retains the local direct-command boundary, where the
+// process owns the registry directly; HTTP callers must supply one.
+func (r *SurfaceRegistry) TransitionApprovalIfCurrent(id string, state contracts.ApprovalCeremonyState, actor, receiptID, reason, expectedCeremonyHash string) (contracts.ApprovalCeremony, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.transitionApprovalLocked(id, state, actor, receiptID, reason, expectedCeremonyHash)
+}
+
+func (r *SurfaceRegistry) transitionApprovalLocked(id string, state contracts.ApprovalCeremonyState, actor, receiptID, reason, expectedCeremonyHash string) (contracts.ApprovalCeremony, error) {
 	approval, ok := r.approvals[id]
-	r.mu.RUnlock()
 	if !ok {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q not found", id)
+	}
+	if expected := strings.TrimSpace(expectedCeremonyHash); expected != "" && expected != approval.CeremonyHash {
+		return contracts.ApprovalCeremony{}, fmt.Errorf("%w: approval %q has changed; refresh and review again", ErrApprovalTransitionConflict, id)
+	}
+	if approval.State != contracts.ApprovalCeremonyPending &&
+		!(approval.State == contracts.ApprovalCeremonyAllowed && state == contracts.ApprovalCeremonyRevoked) {
+		return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q cannot transition from %s to %s", id, approval.State, state)
 	}
 	now := r.now().UTC()
 	if !approval.ExpiresAt.IsZero() && now.After(approval.ExpiresAt) && state == contracts.ApprovalCeremonyAllowed {
 		approval.State = contracts.ApprovalCeremonyExpired
 		approval.UpdatedAt = now
 		approval.Reason = "approval expired before assertion"
-		return r.PutApproval(approval)
+		return r.putApprovalLocked(approval)
 	}
 	if state == contracts.ApprovalCeremonyAllowed && !approval.TimelockUntil.IsZero() && now.Before(approval.TimelockUntil) {
 		approval.UpdatedAt = now
 		approval.Reason = "approval timelock has not elapsed"
-		return r.PutApproval(approval)
+		return r.putApprovalLocked(approval)
 	}
 	if state == contracts.ApprovalCeremonyAllowed && approval.BreakGlass && (strings.TrimSpace(reason) == "" || strings.TrimSpace(receiptID) == "") {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("break-glass approval requires reason and receipt_id")
 	}
+	// An approver identity that is merely asserted by the caller cannot
+	// establish dual control. The actor arrives as a plain string — from a
+	// request body on the HTTP route, or a CLI flag — and the only credential
+	// behind it is the single shared admin key. One key holder could therefore
+	// satisfy a 2-of-2 quorum by approving twice under two different names,
+	// which is precisely the interlock that gates high-risk actions (F-08).
+	//
+	// There is no verified approver identity on this path: the WebAuthn variant
+	// checks only that an assertion string is non-empty and never verifies it
+	// against a credential. Until one exists, a multi-party quorum is refused
+	// rather than faked. The correct implementation is
+	// boundary/approvalverify.VerifyQuorum, which already enforces distinct
+	// principal / credential / device / key and a real ed25519.Verify against
+	// authority-registry-pinned keys.
+	if state == contracts.ApprovalCeremonyAllowed {
+		if actor != "" && actor == approval.RequestedBy {
+			return contracts.ApprovalCeremony{}, fmt.Errorf(
+				"approver %q is the requester of approval %q: dual control requires a distinct approver",
+				actor, id)
+		}
+		if quorumFor(approval) > 1 {
+			approval.UpdatedAt = now
+			approval.State = contracts.ApprovalCeremonyPending
+			approval.Reason = fmt.Sprintf(
+				"approval requires a %d-party quorum, which cannot be established from an asserted actor name; "+
+					"verified approver credentials are required", quorumFor(approval))
+			return r.putApprovalLocked(approval)
+		}
+	}
+
 	approval.State = state
 	approval.UpdatedAt = now
 	approval.Reason = reason
@@ -520,16 +582,21 @@ func (r *SurfaceRegistry) TransitionApproval(id string, state contracts.Approval
 		approval.ReceiptID = receiptID
 	}
 	if state == contracts.ApprovalCeremonyAllowed {
-		quorum := approval.Quorum
-		if quorum <= 0 {
-			quorum = 1
-		}
+		quorum := quorumFor(approval)
 		if len(approval.Approvers) < quorum {
 			approval.State = contracts.ApprovalCeremonyPending
 			approval.Reason = fmt.Sprintf("approval quorum pending: %d/%d", len(approval.Approvers), quorum)
 		}
 	}
-	return r.PutApproval(approval)
+	return r.putApprovalLocked(approval)
+}
+
+// quorumFor normalises an unset quorum to single-approver.
+func quorumFor(approval contracts.ApprovalCeremony) int {
+	if approval.Quorum <= 0 {
+		return 1
+	}
+	return approval.Quorum
 }
 
 func (r *SurfaceRegistry) CreateApprovalChallenge(approvalID, method string, ttl time.Duration) (contracts.ApprovalWebAuthnChallenge, error) {
@@ -580,15 +647,6 @@ func (r *SurfaceRegistry) AssertApprovalChallenge(assertion contracts.ApprovalWe
 	if strings.TrimSpace(assertion.ChallengeID) == "" || strings.TrimSpace(assertion.Actor) == "" || strings.TrimSpace(assertion.Assertion) == "" {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("challenge_id, actor, and assertion are required")
 	}
-	r.mu.RLock()
-	challenge, ok := r.challenges[assertion.ChallengeID]
-	r.mu.RUnlock()
-	if !ok {
-		return contracts.ApprovalCeremony{}, fmt.Errorf("approval challenge %q not found", assertion.ChallengeID)
-	}
-	if r.now().UTC().After(challenge.ExpiresAt) {
-		return contracts.ApprovalCeremony{}, fmt.Errorf("approval challenge expired")
-	}
 	assertionHash, err := canonicalize.CanonicalHash(map[string]string{
 		"challenge_id": assertion.ChallengeID,
 		"actor":        assertion.Actor,
@@ -597,7 +655,16 @@ func (r *SurfaceRegistry) AssertApprovalChallenge(assertion contracts.ApprovalWe
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
 	}
-	approval, err := r.TransitionApproval(challenge.ApprovalID, contracts.ApprovalCeremonyAllowed, assertion.Actor, assertion.ReceiptID, assertion.Reason)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	challenge, ok := r.challenges[assertion.ChallengeID]
+	if !ok {
+		return contracts.ApprovalCeremony{}, fmt.Errorf("approval challenge %q not found", assertion.ChallengeID)
+	}
+	if r.now().UTC().After(challenge.ExpiresAt) {
+		return contracts.ApprovalCeremony{}, fmt.Errorf("approval challenge expired")
+	}
+	approval, err := r.transitionApprovalLocked(challenge.ApprovalID, contracts.ApprovalCeremonyAllowed, assertion.Actor, assertion.ReceiptID, assertion.Reason, "")
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
 	}
@@ -605,16 +672,14 @@ func (r *SurfaceRegistry) AssertApprovalChallenge(assertion contracts.ApprovalWe
 	approval.ChallengeID = challenge.ChallengeID
 	approval.ChallengeHash = challenge.ChallengeHash
 	approval.AssertionHash = "sha256:" + assertionHash
-	sealed, err := r.PutApproval(approval)
+	sealed, err := r.putApprovalLocked(approval)
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
 	}
 	challenge.Verified = sealed.State == contracts.ApprovalCeremonyAllowed
 	challenge.AssertionHash = sealed.AssertionHash
-	r.mu.Lock()
 	r.challenges[challenge.ChallengeID] = challenge
 	err = r.persistLocked()
-	r.mu.Unlock()
 	if err != nil {
 		return contracts.ApprovalCeremony{}, err
 	}

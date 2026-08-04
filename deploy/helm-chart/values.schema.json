@@ -366,6 +366,15 @@
               "type": "string",
               "default": "HELM_EMERGENCY_STOP_COMMAND_PUBLIC_KEYS",
               "description": "Key inside existingSecret that contains the command verification keyring."
+            },
+            "commandReplayKeyring": {
+              "type": "string",
+              "description": "Optional strict JSON replay-authority keyring for FENCE commands signed before a key or audience rotation. Supply directly or from existingSecret via commandReplayKeyringSecretKey, never both."
+            },
+            "commandReplayKeyringSecretKey": {
+              "type": "string",
+              "default": "",
+              "description": "Optional key inside existingSecret that contains HELM_EMERGENCY_STOP_COMMAND_REPLAY_KEYRING. Requires existingSecret and conflicts with a direct commandReplayKeyring value."
             }
           }
         },
@@ -670,27 +679,16 @@
               "additionalProperties": false,
               "description": "Behavior when a snapshot is missing, stale, or invalid.",
               "properties": {
-                "requireInitialSnapshot": {
-                  "type": "boolean",
-                  "default": true,
-                  "description": "Refuse to serve traffic until the first valid policy snapshot is loaded."
-                },
-                "onMissingSnapshot": {
-                  "type": "string",
-                  "enum": ["deny", "allow", "keepLastKnownGood"],
-                  "default": "deny",
-                  "description": "Action when no snapshot is available. Keep on deny for production; allow is for emergency degraded-mode operation only."
-                },
                 "onInvalidUpdate": {
                   "type": "string",
-                  "enum": ["deny", "allow", "keepLastKnownGood"],
+                  "enum": ["deny", "keepLastKnownGood"],
                   "default": "keepLastKnownGood",
-                  "description": "Action when an updated bundle fails verification. keepLastKnownGood is the safe default; switch to deny for ultra-strict environments."
+                  "description": "Action when an updated bundle fails verification. keepLastKnownGood retains only a fresh verified snapshot; deny invalidates immediately."
                 },
                 "lastKnownGoodMaxAge": {
                   "type": "string",
                   "default": "10m",
-                  "description": "Maximum age of the last-known-good snapshot before the reconciler escalates to onMissingSnapshot behavior."
+                  "description": "Positive Go duration limiting last-known-good retention after a source fault."
                 }
               }
             },

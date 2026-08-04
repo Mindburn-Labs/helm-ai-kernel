@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskenvelope"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskscan"
 )
@@ -44,6 +45,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		upload       bool
 		uploadURL    string
 		yes          bool
+		noUserConfig bool
 		previews     scanPreviewFlags
 	)
 	cmd.StringVar(&rootPath, "path", ".", "Directory to scan")
@@ -54,6 +56,7 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&envelopePath, "risk-envelope", "", "Write anonymized RiskEnvelope JSON")
 	cmd.Var(&previews, "preview", "Write local preview (.md or .html); may be repeated")
 	cmd.StringVar(&evidencePack, "evidence-pack", "", "Write anonymized scan EvidencePack tar")
+	cmd.BoolVar(&noUserConfig, "no-user-config", false, "Do not inspect user-level Claude, Codex, or desktop MCP config")
 	cmd.BoolVar(&upload, "upload", false, "Upload anonymized RiskEnvelope JSON")
 	cmd.StringVar(&uploadURL, "upload-url", "", "Explicit upload endpoint for --upload")
 	cmd.BoolVar(&yes, "yes", false, "Confirm upload after local preview is printed")
@@ -61,26 +64,24 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if cmd.NArg() != 0 {
-		fmt.Fprintf(stderr, "Unexpected scan arguments: %s\n", strings.Join(cmd.Args(), " "))
-		return 2
+		return cliui.WriteError(stderr, cliui.UsageErrorf("scan", "unexpected arguments: %s", strings.Join(cmd.Args(), " ")))
 	}
 	if saltFile == "" {
 		var err error
 		saltFile, err = defaultScanSaltFile()
 		if err != nil {
-			fmt.Fprintf(stderr, "Error resolving default salt file: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "resolving default salt file"))
 		}
 	}
 	salt, err := riskenvelope.LoadOrCreateSaltFile(saltFile)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error loading scan salt: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "loading scan salt"))
 	}
 	opts := riskscan.BuildOptions{
-		Salt:   salt,
-		Cohort: riskenvelope.CohortBucket(cohort),
-		Now:    time.Now().UTC(),
+		Salt:              salt,
+		Cohort:            riskenvelope.CohortBucket(cohort),
+		Now:               time.Now().UTC(),
+		IncludeUserConfig: !noUserConfig,
 	}
 	var result riskscan.ScanResult
 	if strings.TrimSpace(receiptsPath) != "" {
@@ -90,22 +91,18 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if err != nil {
 		if errors.Is(err, riskscan.ErrScanCoverageIncomplete) {
-			fmt.Fprintln(stderr, "Error scanning declared input: coverage could not be completed; no artifacts were written")
-			return 2
+			return cliui.WriteError(stderr, cliui.UsageErrorf("scan", "scanning declared input: coverage could not be completed; no artifacts were written"))
 		}
-		fmt.Fprintf(stderr, "Error scanning declared input: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "scanning declared input"))
 	}
 	envelope := result.Envelope
 	body, err := riskscan.EnvelopeJSON(envelope)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error building risk envelope: %v\n", err)
-		return 2
+		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "building risk envelope"))
 	}
 	if envelopePath != "" {
 		if err := writeScanFile(envelopePath, body); err != nil {
-			fmt.Fprintf(stderr, "Error writing risk envelope: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "writing risk envelope"))
 		}
 	}
 
@@ -113,43 +110,38 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 	for _, previewPath := range previews {
 		payload, packName, err := renderPreview(previewPath, envelope)
 		if err != nil {
-			fmt.Fprintf(stderr, "Error rendering preview: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "rendering preview"))
 		}
 		if err := writeScanFile(previewPath, payload); err != nil {
-			fmt.Fprintf(stderr, "Error writing preview: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "writing preview"))
 		}
 		previewPayloads[packName] = payload
 	}
 	if evidencePack != "" {
 		if err := riskscan.WriteEvidencePack(evidencePack, result, previewPayloads, riskscan.EvidencePackOptions{DataDir: dataDir, Now: opts.Now}); err != nil {
-			fmt.Fprintf(stderr, "Error writing evidence pack: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "writing evidence pack"))
 		}
 	}
 
 	fmt.Fprintf(stdout, "RiskEnvelope: %s\n", envelope.EnvelopeID)
 	fmt.Fprintf(stdout, "Content hash: %s\n", envelope.EnvelopeContentHash)
 	fmt.Fprintf(stdout, "Findings: %d\n", len(envelope.Findings))
+	fmt.Fprintf(stdout, "MCP servers detected: %d\n", envelope.Posture.MCPServerCount)
 	fmt.Fprintf(stdout, "Static config files read: %d\n", envelope.Posture.StaticConfigFilesRead)
 
 	if upload {
 		if strings.TrimSpace(uploadURL) == "" {
-			fmt.Fprintln(stderr, "Error: --upload-url is required with --upload")
-			return 2
+			return cliui.WriteError(stderr, cliui.UsageErrorf("scan", "--upload-url is required with --upload"))
 		}
 		fmt.Fprintf(stdout, "Upload destination: %s\n", uploadURL)
 		fmt.Fprintf(stdout, "Upload body hash: %s\n", riskenvelope.SHA256Ref(body))
 		fmt.Fprintf(stdout, "Upload body bytes: %d\n", len(body))
 		fmt.Fprintln(stdout, "Upload privacy: raw_prompts=false source_code=false secret_values=false command_bodies=false")
 		if !yes {
-			fmt.Fprintln(stderr, "Upload not sent; rerun with --yes after reviewing the local preview.")
-			return 2
+			return cliui.WriteError(stderr, cliui.UsageErrorf("scan", "Upload not sent; rerun with --yes after reviewing the local preview."))
 		}
 		if err := riskscan.UploadEnvelope(context.Background(), uploadURL, body); err != nil {
-			fmt.Fprintf(stderr, "Error uploading risk envelope: %v\n", err)
-			return 2
+			return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "scan", "uploading risk envelope"))
 		}
 		fmt.Fprintln(stdout, "Upload sent.")
 	}

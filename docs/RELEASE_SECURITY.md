@@ -53,15 +53,34 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.7.5`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.7.5>. The
+Current source release target: `v0.8.0`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.0>. The
 release is complete only when GitHub shows Darwin/Linux/Windows binaries,
-`SHA256SUMS.txt`, `sbom.json`, `v0.7.5.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.8.0.openvex.json`,
 `release-attestation.json`, `evidence-pack.tar`, `release.high_risk.v3.toml`,
 `sample-policy-material.tar`, `helm-ai-kernel-launchpad-data.tar`,
-`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.7.5.json`,
+`helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `v0.8.0.json`,
 `version-status.json`, and matching `*.cosign.bundle` files for each primary
-asset. Browser UI bundles are not Kernel release assets.
+asset. Browser UI bundles are not Kernel release assets. Where a release
+declares the loopback Console local-sidecar, it is a verified standalone native
+closure—not a Homebrew resource or a hosted UI.
+
+For the v0.8.0 local Console closure, release assembly verifies the producer
+bundle and exact Console source pin, signs the aggregate manifest once for the
+exact Kernel tag, and compiles its SHA-256 into the Kernel binary. The Console
+source tuple is immutable, while the producer workflow identity is a declared
+protected-branch `main` trust assumption rather than an immutable workflow
+revision. The separate Kernel bundle is retained in the staged assets, checksum
+set, standalone layout, and GitHub release; public verification derives the
+exact tag from the Console manifest and does not accept a Kernel `main`
+identity. Each matching
+`helm-ai-kernel-<os>-<arch>-console.tar.gz` artifact contains the executable
+beside the raw Console material and the host closure it will execute. Runtime
+trusts that authenticated binary digest, then rechecks the installed manifest
+and its source, target, archive, checksum, inventory, and provenance relations
+before issuing a session or starting bundled Node. The separate producer and
+Kernel Cosign bundles are release evidence; runtime requires neither host Cosign
+nor network access.
 
 ## Public Release Material
 
@@ -81,7 +100,7 @@ asset. Browser UI bundles are not Kernel release assets.
 make release-binaries-reproducible
 make release-smoke
 make release-assets
-make verify-cosign
+make verify-cosign COSIGN_ARTIFACT_DIR=./downloaded-release
 make verify-fixtures
 make docs-coverage docs-truth
 ```

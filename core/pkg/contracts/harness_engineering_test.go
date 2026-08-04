@@ -84,3 +84,51 @@ func TestGUIActionReceiptRequiresPostconditionVerification(t *testing.T) {
 		t.Fatal("expected unverified postcondition to fail")
 	}
 }
+
+func TestExplicitReceiptRefsAreHashBound(t *testing.T) {
+	now := time.Date(2026, 5, 20, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		seal func([]string) (string, error)
+	}{
+		{
+			name: "verification scope",
+			seal: func(refs []string) (string, error) {
+				sealed, err := (VerificationScope{VerificationScopeID: "scope-refs", ReceiptRefs: refs, SubjectHash: "sha256:subject", ChecksPerformed: []string{"hash"}, VerifierHash: "sha256:verifier", PolicyHash: "sha256:policy", CreatedAt: now}).Seal()
+				return sealed.ScopeHash, err
+			},
+		},
+		{
+			name: "plan transaction",
+			seal: func(refs []string) (string, error) {
+				sealed, err := (PlanTransaction{PlanTransactionID: "tx-refs", ReceiptRefs: refs, PlanHash: "sha256:plan", ReadSet: []string{"artifact:read"}, WriteSet: []string{"artifact:write"}, AssumptionSet: []string{"assumption"}, VerificationObligations: []string{"verify"}, ConflictPolicy: "deny"}).Seal()
+				return sealed.TransactionHash, err
+			},
+		},
+		{
+			name: "grounded action",
+			seal: func(refs []string) (string, error) {
+				sealed, err := (GroundedActionRef{GroundedActionID: "action-refs", ReceiptRefs: refs, ScreenshotHash: "sha256:screenshot", DOMOrAXSnapshotHash: "sha256:dom", TargetRef: "button#save", BBoxOrElementID: "button#save", ActionType: "click", Precondition: "form dirty", Postcondition: "saved", PostconditionRef: "proof:save", ProofGraphNodeRef: "proofgraph:save", VerificationScopeRef: "scope-refs", PolicyHash: "sha256:policy", CreatedAt: now}).Seal()
+				return sealed.GroundingHash, err
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			first, err := tt.seal([]string{"rcpt-1"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := tt.seal([]string{"rcpt-2"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if first == second {
+				t.Fatalf("receipt refs did not change sealed hash: %q", first)
+			}
+			if _, err := tt.seal([]string{" "}); err == nil {
+				t.Fatal("blank receipt ref should be rejected")
+			}
+		})
+	}
+}

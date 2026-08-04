@@ -145,6 +145,13 @@ type VerifyEvidencePackSealOptions struct {
 	// file outside 00_INDEX.json only after the caller has verified it against
 	// an external trusted key. Library callers should leave this false.
 	AllowVerifiedConformanceSignature bool
+	// AllowSelfAttested permits a dev-local seal to be verified against the
+	// public key carried inside the seal itself. That proves only internal
+	// consistency, never provenance, so it is off by default and must be an
+	// explicit choice by whoever is interpreting the result (F-02). Callers
+	// verifying a pack they just produced locally may set it; a caller
+	// verifying a pack that arrived from elsewhere must not.
+	AllowSelfAttested bool
 }
 
 // EvidencePackSealVerification is the verifier-facing seal status.
@@ -425,7 +432,7 @@ func VerifyEvidencePackSeal(packDir string, opts VerifyEvidencePackSealOptions) 
 			result.Errors = append(result.Errors, fmt.Sprintf("entry_count mismatch: seal=%d current=%d", seal.EntryCount, roots.EntryCount))
 		}
 	}
-	publicKey, keyErr := trustedPublicKeyForSeal(seal, cfg, profile)
+	publicKey, keyErr := trustedPublicKeyForSeal(seal, cfg, profile, opts.AllowSelfAttested)
 	if keyErr != nil {
 		result.Errors = append(result.Errors, keyErr.Error())
 	}
@@ -485,8 +492,20 @@ func ComputeEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, erro
 	return inventory.Roots, err
 }
 
+// VerifyEvidencePackIndexRoots verifies every indexed file, rejects unindexed
+// files, and returns the roots of the verified inventory. Callers that use the
+// result as an authorization boundary must compare it with roots obtained from
+// a separately trusted seal or canonical verification result.
+func VerifyEvidencePackIndexRoots(packDir string) (EvidencePackIndexRoots, error) {
+	inventory, err := computeEvidencePackInventory(packDir, true)
+	return inventory.Roots, err
+}
+
 func computeEvidencePackInventory(packDir string, verifyFiles bool, allowVerifiedConformanceSignature ...bool) (evidencePackInventory, error) {
 	indexPath := filepath.Join(packDir, "00_INDEX.json")
+	if err := rejectEvidencePackSymlinks(packDir, "00_INDEX.json"); err != nil {
+		return evidencePackInventory{}, fmt.Errorf("read 00_INDEX.json: %w", err)
+	}
 	indexData, err := os.ReadFile(indexPath)
 	if err != nil {
 		return evidencePackInventory{}, fmt.Errorf("read 00_INDEX.json: %w", err)
@@ -606,6 +625,9 @@ func verifyEvidencePackIndexedFiles(packDir string, entries []indexRootEntry) er
 
 func verifyEvidencePackIndexedFile(packDir string, entry indexRootEntry) error {
 	clean := filepath.Clean(entry.Path)
+	if err := rejectEvidencePackSymlinks(packDir, clean); err != nil {
+		return fmt.Errorf("inspect indexed file %s: %w", entry.Path, err)
+	}
 	actual, err := HashFile(filepath.Join(packDir, clean))
 	if err != nil {
 		return fmt.Errorf("hash indexed file %s: %w", entry.Path, err)
@@ -613,6 +635,21 @@ func verifyEvidencePackIndexedFile(packDir string, entry indexRootEntry) error {
 	expected := strings.TrimPrefix(strings.TrimSpace(entry.SHA256), "sha256:")
 	if !strings.EqualFold(strings.TrimPrefix(actual, "sha256:"), expected) {
 		return fmt.Errorf("indexed file hash mismatch for %s: index=sha256:%s current=%s", entry.Path, expected, actual)
+	}
+	return nil
+}
+
+func rejectEvidencePackSymlinks(packDir, rel string) error {
+	path := packDir
+	for _, component := range strings.Split(filepath.Clean(rel), string(filepath.Separator)) {
+		path = filepath.Join(path, component)
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("evidence pack path is a symlink: %s", filepath.ToSlash(rel))
+		}
 	}
 	return nil
 }
@@ -1135,7 +1172,7 @@ func inferPackID(packDir, indexHash string) string {
 	return "ep_unknown"
 }
 
-func trustedPublicKeyForSeal(seal EvidencePackSeal, cfg *EvidencePackTrustConfig, profile EvidenceTrustProfile) (ed25519.PublicKey, error) {
+func trustedPublicKeyForSeal(seal EvidencePackSeal, cfg *EvidencePackTrustConfig, profile EvidenceTrustProfile, allowSelfAttested bool) (ed25519.PublicKey, error) {
 	trusted := ""
 	if cfg != nil {
 		if cfg.TrustedKeys != nil {
@@ -1155,9 +1192,41 @@ func trustedPublicKeyForSeal(seal EvidencePackSeal, cfg *EvidencePackTrustConfig
 		return decodeEd25519PublicKey(trusted)
 	}
 	if profile == EvidenceTrustProfileDevLocal && seal.Signer.Type == "file-dev" && seal.Signer.PublicKey != "" {
+		// Self-attestation: the verification key is being taken from inside the
+		// very document it is meant to authenticate. A signature checked this
+		// way proves the pack is internally consistent, not that it came from
+		// anyone in particular — anybody can generate a keypair, sign their own
+		// pack, and embed the matching public key.
+		//
+		// dev-local is the default profile for `helm-ai-kernel verify`, so this
+		// branch used to run silently on the common path and report PASS.
+		// It now requires explicit opt-in.
+		if !allowSelfAttested && !selfAttestedEvidenceAllowed() {
+			return nil, fmt.Errorf(
+				"seal for signer %s is self-attested: its verification key is carried inside the pack, "+
+					"so the signature proves internal consistency only, not provenance. "+
+					"Supply a trusted key via HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX or a trust config, "+
+					"select --profile team|customer|high-assurance, or set "+
+					"HELM_ALLOW_SELF_ATTESTED_EVIDENCE=1 to accept it explicitly as unverified",
+				seal.Signer.KeyID)
+		}
 		return decodeEd25519PublicKey(seal.Signer.PublicKey)
 	}
 	return nil, fmt.Errorf("no trusted public key configured for signer %s under profile %s", seal.Signer.KeyID, profile)
+}
+
+// selfAttestedEvidenceAllowed reports whether the operator has explicitly
+// accepted seals whose verification key comes from inside the pack.
+//
+// This is a development and demo convenience. It must never be set in any
+// context where an evidence pack's provenance matters.
+func selfAttestedEvidenceAllowed() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func decodeEd25519PublicKey(value string) (ed25519.PublicKey, error) {

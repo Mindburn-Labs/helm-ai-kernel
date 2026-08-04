@@ -229,7 +229,53 @@
         "action": { "type": "string" },
         "reason_code": { "type": "string", "minLength": 1 },
         "reason": { "type": "string" },
-        "occurred_at": { "type": "string", "format": "date-time" }
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "finality": {
+          "type": "string",
+          "description": "What kind of refusal this was, derived from the rule that fired. Absent unless the policy profile opts in.",
+          "enum": ["class_forbidden", "ungranted", "instance_parameter", "instance_context", "instance_membership"]
+        },
+        "counterfactual": {
+          "type": "object",
+          "description": "Nearest allowed envelope. Absent unless the profile opts in and the refusal's disclosure class permits one; refusals that turn on set membership never carry it.",
+          "$comment": "Scalar envelope invariant: requested > max. JSON Schema Draft 2020-12 cannot compare sibling instance values, so consumers must enforce this semantic invariant after structural validation.",
+          "additionalProperties": false,
+          "required": ["field"],
+          "oneOf": [
+            {
+              "required": ["requested", "max"],
+              "not": { "required": ["capability"] }
+            },
+            {
+              "required": ["capability"],
+              "not": {
+                "anyOf": [
+                  { "required": ["requested"] },
+                  { "required": ["max"] }
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "field": { "type": "string", "minLength": 1 },
+            "requested": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+            "max": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+            "capability": {
+              "type": "string",
+              "enum": [
+                "network.egress",
+                "file.write",
+                "mcp.mutate",
+                "memory.write",
+                "loop.register",
+                "shell.operate",
+                "deploy.publish",
+                "secret.read",
+                "payment.initiate"
+              ]
+            }
+          }
+        }
       }
     }
   }

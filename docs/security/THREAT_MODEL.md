@@ -1,9 +1,9 @@
 # HELM AI Kernel Threat Model
 
-Version: 2026-06-08-security-evidence-loop-v1
-Version Hash: sha256:77210a48f9f402bd0c28c1c93bc5d422a08f80003fa850e819cedff116697bc8
+Version: 2026-08-03-security-evidence-loop-v4
+Version Hash: no signed release artifact has been created for this source revision
 Owner: HELM Kernel Security
-Review Date: 2026-06-08
+Review Date: 2026-08-03
 
 ## Assets
 
@@ -39,6 +39,63 @@ Review Date: 2026-06-08
 
 - Signing keys, KMS references, local development signing keys, secret refs, sandbox mounts, environment variables, and external anchor credentials.
 - Credential material must never be stored in receipts, EvidencePacks, fixtures, transcripts, or test golden files.
+
+### Desktop local sidecar transport (`transport-v1`, source support)
+
+`transport-v1` defends the local Desktop composition against a distinct local
+process squatting a known port and receiving a credential-bearing Console
+request. A port, URL, readiness response, or bearer alone is not a
+process-identity boundary. It does not claim hostile same-UID or
+replaced-process protection.
+
+Status, read back from source on 2026-08-03:
+
+- **`helm-desktop` — implemented.** It sets `HELM_DESKTOP_TRANSPORT_V1` on the
+  child, reads a bounded handoff record off the direct child, binds it with an
+  HMAC over the per-launch nonce, origin, and challenge, and proves it at
+  `/api/v1/desktop/transport/proof` before starting Console. On a handoff
+  timeout it fails closed (`transport_timeout`); there is no fixed Kernel-port
+  fallback in that handoff path.
+- **`helm-ai-kernel` — source support.** An explicit
+  `server --desktop-transport-v1` requires the three transport environment
+  values, atomically binds `127.0.0.1:0`, writes one bounded authenticated
+  direct-child record, and exposes the no-bearer loopback proof route. Ordinary
+  fixed-port CLI behavior remains unchanged when the flag is absent.
+
+This source change is not package, native-runtime, release, or security-
+certification proof. Those remain separate evidence gates for the full Desktop
+composition.
+
+Before any Desktop use of this path can claim a governed local boundary,
+`transport-v1` must fail closed:
+
+- Kernel atomically binds `127.0.0.1:0`; there is no Desktop availability
+  preflight and no fixed-port fallback.
+- Kernel emits one bounded, HMAC-authenticated transport record on its direct
+  child stdout. The record binds the per-launch nonce to the dynamic loopback
+  origin and port.
+- Desktop validates the record's size, encoding, nonce, MAC, loopback origin,
+  and port, then verifies `/healthz` before starting Console with the attested
+  dynamic origin.
+- Console rejects malformed or non-loopback origins before it forwards a
+  bearer credential. It does not expose the origin or capability to browser
+  code.
+- Exit, restart, revocation, a bad transport record, or failed health check
+  invalidates the launch and blocks Console; relaunch requires a fresh record.
+- Tests cover a pre-bound fixed port, malformed or replayed records, nonce or
+  MAC mismatch, non-loopback origins, failed health checks, and absence of a
+  fixed-port fallback.
+
+Inherited listeners, Unix-domain sockets, mTLS, or socket activation are the
+stronger follow-on requirement for a hostile same-UID or replaced-process
+threat. `transport-v1` does not claim that stronger protection.
+
+For a complete transport-v1 design, `helm-desktop` owns the per-launch
+nonce/HMAC, direct-child record validation, health check, and sidecar
+lifecycle; `helm-ai-kernel` owns the atomic dynamic bind and bounded transport
+record; `app-helm-console` owns origin rejection before bearer forwarding and
+browser non-exposure. The Kernel proof route is internal and opt-in; it creates
+no public API, runtime, or release claim by itself.
 
 ## Effect Classes
 

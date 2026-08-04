@@ -2,6 +2,7 @@ package prg
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -345,6 +346,7 @@ func TestEvaluateRequirementSet_NOT_InvertsFalse(t *testing.T) {
 func TestEvaluateRequirementSet_NOT_AllTrue_ReturnsFalse(t *testing.T) {
 	pe, _ := NewPolicyEngine()
 	rs := RequirementSet{
+		ID:    "forbidden-combination",
 		Logic: NOT,
 		Requirements: []Requirement{
 			{ID: "r1", Expression: "true"},
@@ -357,6 +359,13 @@ func TestEvaluateRequirementSet_NOT_AllTrue_ReturnsFalse(t *testing.T) {
 	}
 	if result {
 		t.Fatal("NOT of all-true should be false")
+	}
+	valid, failures, err := pe.EvaluateRequirementSetDetail(rs, map[string]interface{}{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid || len(failures) != 1 || failures[0].ID != rs.ID {
+		t.Fatalf("NOT denial failures = %#v, want group id %q", failures, rs.ID)
 	}
 }
 
@@ -469,6 +478,32 @@ func TestEvaluateRequirementSet_CELWithInput(t *testing.T) {
 	}
 	if !result {
 		t.Fatal("expected true for level=5 > 3")
+	}
+}
+
+func TestEvaluateRequirementSetDetail_DoesNotExposePolicySource(t *testing.T) {
+	pe, _ := NewPolicyEngine()
+	const secret = "private-policy-literal"
+	rs := RequirementSet{
+		Requirements: []Requirement{{
+			ID:         "safe-requirement-id",
+			Expression: `input["tier"] == "` + secret + `"`,
+		}},
+	}
+
+	valid, failures, err := pe.EvaluateRequirementSetDetail(rs, map[string]interface{}{"tier": "public"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if valid || len(failures) != 1 || failures[0].ID != "safe-requirement-id" {
+		t.Fatalf("failures = %#v, want safe requirement id", failures)
+	}
+	serialized, err := json.Marshal(failures)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(serialized), secret) || strings.Contains(strings.ToLower(string(serialized)), "expression") {
+		t.Fatalf("requirement failure exposed policy source: %s", serialized)
 	}
 }
 
@@ -927,5 +962,108 @@ func TestCompiler_Compile_ContainsRule(t *testing.T) {
 	g, _ := c.Compile(RequirementSet{ID: "rs-1"})
 	if _, ok := g.Rules["rs-1"]; !ok {
 		t.Fatal("compiled graph should contain rule with ID as key")
+	}
+}
+
+// Graph.Validate evaluates artifact presence only. Before this guard, a
+// requirement carrying a CEL Expression but no ArtifactType was assumed
+// satisfied, so Validate could return true *plus a rule hash* for a policy
+// whose expression was never evaluated — a fail-open verdict carrying evidence
+// of an evaluation that did not happen.
+func TestGraph_Validate_RefusesCELExpressionRequirement(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-cel", RequirementSet{
+		ID:    "rs-cel",
+		Logic: AND,
+		Requirements: []Requirement{
+			{ID: "r1", Expression: "intent.risk < 3"},
+		},
+	})
+
+	ok, hash, err := g.Validate("act-cel", nil)
+	if err == nil {
+		t.Fatal("expected Validate to refuse a CEL expression requirement")
+	}
+	if ok {
+		t.Fatal("fail-open: reported satisfied without evaluating the expression")
+	}
+	if hash != "" {
+		t.Fatalf("must not emit a rule hash for an unevaluated rule, got %q", hash)
+	}
+	if !strings.Contains(err.Error(), "EvaluateRequirementSet") {
+		t.Fatalf("error should name the canonical evaluator, got %q", err)
+	}
+}
+
+// The guard must see expressions nested in child sets, not just top-level ones.
+func TestGraph_Validate_RefusesNestedCELExpressionRequirement(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-nested", RequirementSet{
+		ID:    "rs-root",
+		Logic: AND,
+		Requirements: []Requirement{
+			{ID: "r1", ArtifactType: "evidence/alert"},
+		},
+		Children: []RequirementSet{{
+			ID:           "rs-child",
+			Logic:        AND,
+			Requirements: []Requirement{{ID: "r2", Expression: "state.approved == true"}},
+		}},
+	})
+
+	arts := []*pkg_artifact.ArtifactEnvelope{{Type: "evidence/alert"}}
+	ok, _, err := g.Validate("act-nested", arts)
+	if err == nil || ok {
+		t.Fatal("expected a nested CEL expression requirement to be refused")
+	}
+}
+
+// A requirement with neither an ArtifactType nor an Expression is malformed.
+// It must fail closed rather than count as satisfied.
+func TestGraph_Validate_MalformedRequirementFailsClosed(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-malformed", RequirementSet{
+		ID:           "rs-malformed",
+		Logic:        AND,
+		Requirements: []Requirement{{ID: "r1", Description: "no artifact type, no expression"}},
+	})
+
+	ok, _, err := g.Validate("act-malformed", nil)
+	if ok {
+		t.Fatal("fail-open: malformed requirement counted as satisfied")
+	}
+	if err == nil {
+		t.Fatal("expected an error for an unsatisfiable rule")
+	}
+	if !strings.Contains(err.Error(), "action act-malformed has malformed requirement") {
+		t.Fatalf("expected actionable malformed-rule error, got %q", err)
+	}
+}
+
+// A malformed leaf must abort evaluation before a parent NOT can invert it.
+func TestGraph_Validate_MalformedRequirementNestedInNOTFailsClosed(t *testing.T) {
+	g := NewGraph()
+	_ = g.AddRule("act-malformed-not", RequirementSet{
+		ID:    "rs-root",
+		Logic: AND,
+		Children: []RequirementSet{{
+			ID:           "rs-not",
+			Logic:        NOT,
+			Requirements: []Requirement{{ID: "r-malformed"}},
+		}},
+	})
+
+	ok, hash, err := g.Validate("act-malformed-not", nil)
+	if ok {
+		t.Fatal("fail-open: malformed requirement was inverted by NOT")
+	}
+	if hash != "" {
+		t.Fatalf("must not emit a rule hash for a malformed rule, got %q", hash)
+	}
+	if err == nil {
+		t.Fatal("expected an error for a malformed requirement")
+	}
+	if !strings.Contains(err.Error(), "action act-malformed-not has malformed requirement") {
+		t.Fatalf("expected actionable malformed-rule error, got %q", err)
 	}
 }

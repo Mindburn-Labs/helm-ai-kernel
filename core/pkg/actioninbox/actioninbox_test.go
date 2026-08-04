@@ -13,10 +13,10 @@ import (
 func newTestItem(id, managerID string) *actioninbox.InboxItem {
 	return &actioninbox.InboxItem{
 		ItemID:     id,
-		ProposalID: "prop-" + id,
+		ProposalID: "prop-1",
 		EmployeeID: "emp-1",
 		ManagerID:  managerID,
-		Title:      "Test action " + id,
+		Title:      "Test action",
 		Summary:    "Needs approval",
 		RiskClass:  "R2",
 		Status:     actioninbox.StatusPending,

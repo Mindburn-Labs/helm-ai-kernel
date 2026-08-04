@@ -14,8 +14,8 @@ maintainer-addition or maintainer-removal rule documented there.
 
 Reviewers provide advisory review in their listed area. Neither reviewer
 identity, CODEOWNERS, labels, nor commit trailers authorize a code merge; that
-authority is limited to the source-owned deterministic gates and
-distinct-provider exact-head machine interlock in `GOVERNANCE.md`.
+authority is limited to the source-owned deterministic gates on the current
+pull-request merge commit and resolved review threads in `GOVERNANCE.md`.
 
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |

@@ -1,3 +1,5 @@
+// quantum_posture: test-only coverage of existing cryptographic code paths;
+// it makes no production deployment, hybrid, or post-quantum assurance claim.
 package crypto
 
 import (
@@ -223,7 +225,7 @@ func TestSoftHSM_UnsupportedAlgorithm(t *testing.T) {
 func TestEd25519_SignDecisionRoundTrip(t *testing.T) {
 	s, _ := NewEd25519Signer("k1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "ok"}
-	if err := s.SignDecision(d); err != nil {
+	if err := s.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatal(err)
 	}
 	ok, err := s.VerifyDecision(d)

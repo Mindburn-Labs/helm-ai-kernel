@@ -1,0 +1,1 @@
+{"algorithm":"ed25519","consumption_hash":"sha256:af3cca4c826f649db1a31ce9a821a79a75133e487de5b4799ef2c8ee5e120471","contract_version":"2026-07-22","domain":"HELM/GeneratedSpecApprovalConsumptionSignature/v1","kernel_trust_root_id":"kernel-root-a","signing_key_ref":"kms://helm/generated-spec-a"}

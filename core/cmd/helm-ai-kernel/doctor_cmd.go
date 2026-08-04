@@ -1,3 +1,6 @@
+// quantum_posture: doctor reports classical cryptographic setup and computes
+// diagnostic SHA-256 checksums; it does not implement hybrid or post-quantum
+// cryptographic controls.
 package main
 
 import (
@@ -12,6 +15,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 func init() {
@@ -41,6 +46,8 @@ type CheckResult struct {
 	Detail     string      `json:"detail,omitempty"`
 	Suggestion string      `json:"suggestion,omitempty"`
 }
+
+const doctorOnboardingSuggestion = "Run: helm-ai-kernel setup --quickstart --profile mcp --yes"
 
 // doctorSummary is the JSON-serializable summary.
 type doctorSummary struct {
@@ -148,31 +155,35 @@ func renderJSON(out io.Writer, results []CheckResult, summary doctorSummary, hea
 }
 
 func renderText(out io.Writer, results []CheckResult, summary doctorSummary, verbose bool) int {
-	_, _ = fmt.Fprintf(out, "\n%sHELM Doctor%s -- Diagnostic Report\n\n", ColorBold+ColorPurple, ColorReset)
+	return renderTextWithCaps(out, results, summary, verbose, doctorCapabilities(out))
+}
+
+func renderTextWithCaps(out io.Writer, results []CheckResult, summary doctorSummary, verbose bool, caps ui.Capabilities) int {
+	_, _ = fmt.Fprintf(out, "\n%s -- Diagnostic Report\n\n", doctorStyle(caps, "HELM Doctor", ColorBold+ColorPurple))
 
 	for _, r := range results {
 		icon := statusIcon(r.Status)
 		label := padRight(r.Name, 22)
 
-		_, _ = fmt.Fprintf(out, "  %s %s%s%s\n", icon, ColorBold, label, ColorReset)
+		_, _ = fmt.Fprintf(out, "  %s %s\n", icon, doctorStyle(caps, label, ColorBold))
 		_, _ = fmt.Fprintf(out, "     %s\n", r.Message)
 
 		if verbose && r.Detail != "" {
-			_, _ = fmt.Fprintf(out, "     %s%s%s\n", ColorGray, r.Detail, ColorReset)
+			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, r.Detail, ColorGray))
 		}
 		if r.Status == statusFail && r.Suggestion != "" {
-			_, _ = fmt.Fprintf(out, "     %sSuggestion: %s%s\n", ColorYellow, r.Suggestion, ColorReset)
+			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, "Suggestion: "+r.Suggestion, ColorYellow))
 		}
 		if r.Status == statusWarn && r.Suggestion != "" {
-			_, _ = fmt.Fprintf(out, "     %sSuggestion: %s%s\n", ColorYellow, r.Suggestion, ColorReset)
+			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, "Suggestion: "+r.Suggestion, ColorYellow))
 		}
 	}
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintf(out, "Summary: %s%d passed%s, %s%d warning%s, %s%d failed%s\n",
-		ColorGreen, summary.Pass, ColorReset,
-		warnColor(summary.Warn), summary.Warn, ColorReset,
-		failColor(summary.Fail), summary.Fail, ColorReset,
+		doctorANSI(caps, ColorGreen), summary.Pass, doctorReset(caps),
+		doctorANSI(caps, warnColor(summary.Warn)), summary.Warn, doctorReset(caps),
+		doctorANSI(caps, failColor(summary.Fail)), summary.Fail, doctorReset(caps),
 	)
 
 	if summary.Fail > 0 {
@@ -182,8 +193,37 @@ func renderText(out io.Writer, results []CheckResult, summary doctorSummary, ver
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(out, "\n%sAll checks passed. HELM is ready.%s\n", ColorGreen+ColorBold, ColorReset)
+	_, _ = fmt.Fprintf(out, "\n%sAll checks passed. HELM is ready.%s\n", doctorANSI(caps, ColorGreen+ColorBold), doctorReset(caps))
 	return 0
+}
+
+func doctorCapabilities(out io.Writer) ui.Capabilities {
+	file, ok := out.(*os.File)
+	if !ok {
+		return ui.Capabilities{Width: ui.DefaultTerminalWidth}
+	}
+	return ui.DetectCapabilities(os.Stdin, file, ui.TerminalOptions{
+		Format: ui.FormatText,
+		Color:  ui.ColorAuto,
+	})
+}
+
+func doctorStyle(caps ui.Capabilities, value, ansi string) string {
+	return doctorANSI(caps, ansi) + value + doctorReset(caps)
+}
+
+func doctorANSI(caps ui.Capabilities, ansi string) string {
+	if !caps.Color {
+		return ""
+	}
+	return ansi
+}
+
+func doctorReset(caps ui.Capabilities) string {
+	if !caps.Color {
+		return ""
+	}
+	return ColorReset
 }
 
 func statusIcon(s checkStatus) string {
@@ -226,9 +266,12 @@ func failColor(n int) string {
 // Individual checks
 // ---------------------------------------------------------------------------
 
-// resolveDataDir returns the data directory, honoring HELM_DATA_DIR.
+// resolveDataDir returns the Quickstart data directory, honoring HELM_DATA_DIR.
 func resolveDataDir() string {
 	if d := os.Getenv("HELM_DATA_DIR"); d != "" {
+		return d
+	}
+	if d := defaultQuickstartDataDir(); d != "" {
 		return d
 	}
 	return "data"
@@ -281,7 +324,7 @@ func checkCryptoKeys(verbose bool) CheckResult {
 
 	r.Status = statusFail
 	r.Message = "No keypair found"
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -308,7 +351,7 @@ func checkDataDirectory(verbose bool) CheckResult {
 		r.Status = statusFail
 		r.Message = "Data directory missing"
 		r.Detail = dataDir
-		r.Suggestion = "Run: helm-ai-kernel init"
+		r.Suggestion = doctorOnboardingSuggestion
 		return r
 	}
 	if !info.IsDir() {
@@ -352,7 +395,10 @@ func checkConfig(verbose bool) CheckResult {
 		return r
 	}
 
-	for _, candidate := range []string{"helm.yaml", "helm.yml", ".helm.yaml"} {
+	for _, candidate := range []string{
+		filepath.Join(resolveDataDir(), "quickstart", "oss_local_first_run.toml"),
+		"helm.yaml", "helm.yml", ".helm.yaml",
+	} {
 		if _, err := os.Stat(candidate); err == nil {
 			r.Status = statusPass
 			r.Message = fmt.Sprintf("Loaded from %s", candidate)
@@ -363,7 +409,7 @@ func checkConfig(verbose bool) CheckResult {
 
 	r.Status = statusWarn
 	r.Message = "No config file found, using defaults"
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -391,7 +437,7 @@ func checkDatabase(verbose bool) CheckResult {
 
 	r.Status = statusFail
 	r.Message = "Database not found"
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -400,6 +446,8 @@ func checkPolicyBundles(verbose bool) CheckResult {
 
 	policiesDirs := []string{
 		filepath.Join(resolveDataDir(), "policies"),
+		filepath.Join(resolveDataDir(), "quickstart"),
+		filepath.Join(resolveDataDir(), "quickstart", "reference_packs"),
 		"packs",
 		"policies",
 	}
@@ -418,6 +466,7 @@ func checkPolicyBundles(verbose bool) CheckResult {
 			name := entry.Name()
 			if strings.HasSuffix(name, ".yaml") ||
 				strings.HasSuffix(name, ".yml") ||
+				strings.HasSuffix(name, ".toml") ||
 				strings.HasSuffix(name, ".json") ||
 				strings.HasSuffix(name, ".wasm") ||
 				strings.HasSuffix(name, ".cel") ||
@@ -439,7 +488,7 @@ func checkPolicyBundles(verbose bool) CheckResult {
 
 	r.Status = statusWarn
 	r.Message = "No policy bundles found -- all actions will use default policy"
-	r.Suggestion = "Add policy files to data/policies/ or packs/"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 
@@ -465,7 +514,7 @@ func checkEvidenceStore(verbose bool) CheckResult {
 	r.Status = statusWarn
 	r.Message = "Evidence directory missing"
 	r.Detail = filepath.Join(dataDir, "evidence")
-	r.Suggestion = "Run: helm-ai-kernel init"
+	r.Suggestion = doctorOnboardingSuggestion
 	return r
 }
 

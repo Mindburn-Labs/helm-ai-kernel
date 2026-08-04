@@ -10,6 +10,7 @@ package helm.policy.v1;
 option go_package = "helm.mindburn.run/policy/v1;policyv1";
 
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 import "foundations.proto";
 
 // ── CPI Verdict ────────────────────────────────────────────────
@@ -62,6 +63,12 @@ message DenyPayload {
   repeated ReasonCodeRef reason_codes = 1;
   // Deterministic witness trace.
   string witness_id = 2;
+  // What kind of "no" this was. UNSPECIFIED when the policy profile has not
+  // opted in, or when no rule classified the denial.
+  DenialFinality finality = 3;
+  // Nearest allowed envelope. Absent unless the profile opts in AND the
+  // denial's disclosure class permits one — see DenialCounterfactual.
+  DenialCounterfactual counterfactual = 4;
 
   reserved 100 to 199;
 }
@@ -73,8 +80,132 @@ message RequireApprovalPayload {
   repeated SignerSpec required_signatures = 3;
   // Optional fact requests.
   repeated FactRequest fact_requests = 4;
+  // Escalations carry a finality too, and it is not always UNGRANTED: an
+  // escalation raised because the context was tainted is INSTANCE_CONTEXT.
+  // A consumer reads the verdict kind to know what to do, and the finality
+  // to know what to learn.
+  DenialFinality finality = 5;
 
   reserved 100 to 199;
+}
+
+// ── Denial Legibility ──────────────────────────────────────────
+
+// DenialFinality says what kind of refusal this was, so an agent can draw the
+// right lesson from it rather than retrying at random.
+//
+// It is derived from the rule that fired, never assigned by a caller. A
+// hand-set value drifts from the rule it claims to describe, and a denial that
+// teaches has to teach the same lesson every time it is replayed.
+enum DenialFinality {
+  // Not classified, or the policy profile has not opted in. A consumer must
+  // treat this as "no information" and change nothing it has learned.
+  DENIAL_FINALITY_UNSPECIFIED = 0;
+  // The action itself is forbidden. Erase any stored bounds for it and stop
+  // probing.
+  DENIAL_FINALITY_CLASS_FORBIDDEN = 1;
+  // Nothing granted this action. There is no bound to learn and nothing to
+  // retry; it needs an authority to say yes. Carried on REQUIRE_APPROVAL
+  // where a signer exists to address, and on DENY where none does.
+  DENIAL_FINALITY_UNGRANTED = 2;
+  // A bound was exceeded. Record the bound and retry within it.
+  DENIAL_FINALITY_INSTANCE_PARAMETER = 3;
+  // The surrounding context was refused — taint, for example. The refusal was
+  // not about the action, so a consumer should touch none of its stored
+  // bounds.
+  DENIAL_FINALITY_INSTANCE_CONTEXT = 4;
+  // A caller-chosen target was refused against a confidential set — an egress
+  // host outside the allowlist, a path outside the workspace roots. That
+  // target is closed; other targets may work. The set is never disclosed:
+  // there is no bound to record and nothing to erase, so a consumer stops
+  // retrying this target without unlearning anything else. Distinct from
+  // CLASS_FORBIDDEN, where the refused thing is a policy-named category of
+  // action from a fixed public vocabulary, not a probe against a private set.
+  DENIAL_FINALITY_INSTANCE_MEMBERSHIP = 5;
+}
+
+// DenialCounterfactual is the nearest allowed envelope for a refusal: enough
+// for an agent to retry correctly, and deliberately no more.
+//
+// Emitted for scalar bounds and required-capability names only. Refusals that
+// turn on set membership never carry one. An egress allowlist or a set of
+// workspace roots is a map of internal infrastructure, and answering "not that
+// one, try these" would turn every refusal into a free probe of the estate.
+//
+// The counterfactual is computed from the same policy snapshot that produced
+// the verdict — the bundle already committed in CpiVerdict.policy_bundle_hash.
+// A counterfactual derived from any other snapshot would describe a boundary
+// that never denied anything.
+//
+// Despite the shared word, this is not a counterfactual receipt. This message
+// rides a denial the boundary actually enforced; a counterfactual receipt
+// records the verdict a PDP would have issued under an observe grant, enforces
+// nothing, and must never be presentable as enforced.
+message DenialCounterfactual {
+  option (buf.validate.message).cel = {
+    id: "denial_counterfactual.envelope_required"
+    message: "exactly one denial counterfactual envelope is required"
+    expression: "has(this.scalar_bound) || has(this.required_capability)"
+  };
+
+  // Exactly one envelope is valid. Grouping the scalar fields keeps a
+  // field-only value from becoming a counterfactual, while the oneof prevents
+  // a producer from claiming both a scalar bound and a capability.
+  oneof envelope {
+    DenialScalarBound scalar_bound = 1;
+    DenialRequiredCapability required_capability = 2;
+  }
+
+  reserved 3 to 99;
+  reserved 100 to 199;
+}
+
+message DenialScalarBound {
+  option (buf.validate.message).cel = {
+    id: "denial_scalar_bound.complete"
+    message: "field is required and requested must exceed max"
+    expression: "this.field != '' && this.requested > this.max && this.max > 0"
+  };
+
+  // Policy field that bound the request, e.g. "ttl_days".
+  string field = 1;
+  // Scalar bound. Unsigned to match the public Go and JSON contracts.
+  uint32 requested = 2;
+  uint32 max = 3;
+
+  reserved 100 to 199;
+}
+
+message DenialRequiredCapability {
+  option (buf.validate.message).cel = {
+    id: "denial_required_capability.field_required"
+    message: "field is required"
+    expression: "this.field != ''"
+  };
+
+  // Policy field that named the missing capability.
+  string field = 1;
+  // Capability the action would have needed, from the fixed permission
+  // vocabulary. Never an instance identifier.
+  WorkstationPermission capability = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  reserved 100 to 199;
+}
+
+enum WorkstationPermission {
+  WORKSTATION_PERMISSION_UNSPECIFIED = 0;
+  WORKSTATION_PERMISSION_NETWORK_EGRESS = 1;
+  WORKSTATION_PERMISSION_MCP_MUTATE = 2;
+  WORKSTATION_PERMISSION_MEMORY_WRITE = 3;
+  WORKSTATION_PERMISSION_LOOP_REGISTER = 4;
+  WORKSTATION_PERMISSION_SHELL_OPERATE = 5;
+  WORKSTATION_PERMISSION_DEPLOY_PUBLISH = 6;
+  WORKSTATION_PERMISSION_SECRET_READ = 7;
+  WORKSTATION_PERMISSION_PAYMENT_INITIATE = 8;
+  WORKSTATION_PERMISSION_FILE_WRITE = 9;
 }
 
 // ── Supporting Types ───────────────────────────────────────────

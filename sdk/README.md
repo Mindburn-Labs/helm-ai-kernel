@@ -23,7 +23,7 @@ flowchart LR
 | Python | `sdk/python/helm_sdk/` | `helm-sdk` | First-class local example under `examples/python_sdk/` | `make test-sdk-py` |
 | TypeScript / JavaScript | `sdk/ts/src/` | `@mindburn/helm-ai-kernel` | First-class local example under `examples/ts_sdk/` | `make test-sdk-ts` |
 | Rust | `sdk/rust/src/` | `helm-sdk` | Source-backed SDK package | `make test-sdk-rust` |
-| Java | `sdk/java/src/main/java/` | `io.github.mindburnlabs:helm-sdk` | Published Maven Central package; source-backed SDK | `make test-sdk-java` |
+| Java | `sdk/java/src/main/java/` | `io.github.mindburnlabs:helm-sdk` | Source-backed SDK package | `make test-sdk-java` |
 
 ## What Is Covered
 
@@ -49,13 +49,17 @@ flowchart LR
 
 ## Regeneration
 
-OpenAPI type generation is owned by `scripts/sdk/gen.sh`. Protobuf generation
-is owned by the `make codegen-*` targets in the repository `Makefile`.
+OpenAPI type generation is owned by `scripts/sdk/gen.sh` (digest-pinned
+generator, deterministic output, patch-as-assertion post-processing). Each SDK
+package root carries a committed `generated.manifest.json` recording the
+generator image, spec hash, and generated-file hashes. Protobuf generation is
+owned by the `make codegen-*` targets in the repository `Makefile`.
 
 Run these gates before publishing SDK claims:
 
 ```bash
 make sdk-openapi-check
+make sdk-gen-check
 make test-sdk-go-standalone
 make test-sdk-py
 make test-sdk-ts

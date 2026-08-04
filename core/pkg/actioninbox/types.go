@@ -4,7 +4,10 @@
 // proceed.
 package actioninbox
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // InboxItemStatus represents the lifecycle state of an inbox item.
 type InboxItemStatus string
@@ -32,9 +35,66 @@ type InboxItem struct {
 	Status      InboxItemStatus   `json:"status"`
 	Route       ApprovalRoute     `json:"route"`
 	Escalation  *EscalationReason `json:"escalation,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	ExpiresAt   time.Time         `json:"expires_at"`
-	ContentHash string            `json:"content_hash"`
+	// Denial is the structured, model-actionable denial record, present
+	// once the item has been denied. Additive (omitempty): older items and
+	// non-denied items are unaffected.
+	Denial      *DenialRecord `json:"denial,omitempty"`
+	CreatedAt   time.Time     `json:"created_at"`
+	ExpiresAt   time.Time     `json:"expires_at"`
+	ContentHash string        `json:"content_hash"`
+}
+
+// SessionContextKey is the InboxItem.Context key carrying the agent session
+// identifier. Cascade-reject only propagates within one session.
+const SessionContextKey = "session_id"
+
+// SessionID returns the session identifier recorded on the item, or "".
+func (i *InboxItem) SessionID() string {
+	if i == nil || i.Context == nil {
+		return ""
+	}
+	if s, ok := i.Context[SessionContextKey].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// HasApprovalDomain reports whether the item carries the domain-defining
+// fields a cascade decision can compare: a requester (EmployeeID) and an
+// approval authority (ManagerID). Items lacking them are not comparable —
+// fail-closed callers must refuse to cascade to or from them.
+func (i *InboxItem) HasApprovalDomain() bool {
+	return i != nil && i.EmployeeID != "" && i.ManagerID != ""
+}
+
+// SameApprovalDomain reports whether two items belong to the same approval
+// domain: identical requester, identical approval authority, and identical
+// approval route (who must approve and how). A denial ceremony for one item
+// may only cascade within its own domain; denying across managers,
+// employees, or routes would let one principal settle asks they are not
+// authorized for.
+func (i *InboxItem) SameApprovalDomain(other *InboxItem) bool {
+	if !i.HasApprovalDomain() || !other.HasApprovalDomain() {
+		return false
+	}
+	if i.EmployeeID != other.EmployeeID || i.ManagerID != other.ManagerID {
+		return false
+	}
+	return i.Route.SameRoute(&other.Route)
+}
+
+// SameRoute reports whether two approval routes are identical in every
+// field that defines the approval authority and ceremony.
+func (r *ApprovalRoute) SameRoute(other *ApprovalRoute) bool {
+	if r == nil || other == nil {
+		return r == other
+	}
+	return r.RouteType == other.RouteType &&
+		slices.Equal(r.ApproverIDs, other.ApproverIDs) &&
+		slices.Equal(r.ApproverRoles, other.ApproverRoles) &&
+		r.Quorum == other.Quorum &&
+		r.TimeoutSecs == other.TimeoutSecs &&
+		r.OnTimeout == other.OnTimeout
 }
 
 // ApprovalRoute defines how an item must be approved.

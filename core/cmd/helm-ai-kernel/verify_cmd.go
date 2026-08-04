@@ -59,20 +59,21 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.SetOutput(stderr)
 
 	var (
-		bundle           string
-		jsonOutput       bool
-		jsonOutFile      string
-		online           bool
-		ledgerURL        string
-		profile          string
-		configPath       string
-		storageReceipt   string
-		externalHostKey  string
-		trustedPublicKey string
-		managedAgentKey  string
-		requireEIDAS     bool
-		eidasMaxAgeHours int
-		requireTEE       string
+		bundle            string
+		jsonOutput        bool
+		jsonOutFile       string
+		online            bool
+		ledgerURL         string
+		profile           string
+		allowSelfAttested bool
+		configPath        string
+		storageReceipt    string
+		externalHostKey   string
+		trustedPublicKey  string
+		managedAgentKey   string
+		requireEIDAS      bool
+		eidasMaxAgeHours  int
+		requireTEE        string
 	)
 
 	cmd.StringVar(&bundle, "bundle", "", "Path to EvidencePack directory or archive")
@@ -81,6 +82,9 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&online, "online", false, "Verify pack metadata against the public proof ledger after offline checks pass")
 	cmd.StringVar(&ledgerURL, "ledger-url", "", "Public proof verification URL")
 	cmd.StringVar(&profile, "profile", "", "Evidence trust profile: dev-local, team, customer, high-assurance (default: active config or dev-local)")
+	cmd.BoolVar(&allowSelfAttested, "allow-self-attested", false,
+		"Accept a dev-local seal whose verification key is carried inside the pack. "+
+			"Such a seal proves internal consistency only, never provenance — anyone can sign their own pack.")
 	cmd.StringVar(&configPath, "config", "", "Evidence trust config path (for example helm/helm.yaml)")
 	cmd.StringVar(&storageReceipt, "storage-receipt", "", "Path to S3 Object Lock storage receipt for customer/high-assurance verification")
 	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for external host evidence chains")
@@ -158,6 +162,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		ExternalHostKeyHex:                externalHostKey,
 		ManagedAgentReceiptPublicKeyHex:   managedAgentKey,
 		AllowVerifiedConformanceSignature: allowVerifiedConformanceSignature,
+		AllowSelfAttested:                 allowSelfAttested,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: verification failed: %v\n", err)

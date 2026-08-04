@@ -22,8 +22,10 @@ surface for the `helm-ai-kernel` project.
 - `make openapi-breaking` / `make proto-breaking` run the contract
   breaking-change gate (HELM-151 GATE 1) against the PR base branch —
   `oasdiff` for the OpenAPI surfaces, `buf breaking` for the policy-schema
-  protos. Both now run in the `pr` profile; a major-version bump or the
-  `contract:breaking-approved` PR label is the explicit override.
+  protos. The PR profile has no mutable label or environment override;
+  only a source-controlled major-version bump permits a break. The release
+  profile runs `make contract-breaking-release` against the commit resolved
+  from the immutable prior version tag, never current `origin/main`.
 
 ## Active Quality Workflows
 
@@ -45,7 +47,10 @@ surface for the `helm-ai-kernel` project.
   `CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON` and `HELM_SIGNING_KEY_HEX` secrets.
 - `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
   egress-proxy artifacts, then runs gated live local-container conformance when
-  manually dispatched with the scoped CI key.
+  manually dispatched with the scoped CI key. Main runs retain artifact evidence
+  only; an explicitly dispatched, live-conformance-backed run can attach a
+  review patch, but neither this workflow nor the catalog workflow creates a
+  branch or pull request.
 - `launchpad-clean-install.yml` validates the published Homebrew package on a
   macOS runner, launches OpenClaw and Hermes through `local-container`, verifies
   produced EvidencePacks, and uploads redacted GA evidence.
@@ -54,9 +59,9 @@ surface for the `helm-ai-kernel` project.
 - `release.yml` calls `make quality-release` before producing binaries,
   container images, SBOM, VEX, attestations, SDK packages, signatures, and
   `version-status.json`.
-- `scorecard.yml` uploads OpenSSF Scorecard SARIF for `main` and pull requests;
-  PR SARIF is normalized so GitHub code scanning sees the same branch-protection
-  category that exists on `main`.
+- `scorecard.yml` keeps pull-request analysis read-only and retains SARIF as
+  artifact evidence; only trusted `main` and scheduled runs publish Scorecard
+  SARIF through OIDC and code-scanning authority.
 - `slsa-provenance.yml` is a manual repair workflow that re-attests the
   checksum-covered assets already attached to a published release. Normal tag
   releases generate SLSA provenance from `release.yml`.
@@ -70,8 +75,13 @@ monorepo jobs do not look for a nonexistent root `go.sum`.
 
 Tag-triggered release jobs treat the repository `VERSION` file as release
 truth. The first release job fails when `GITHUB_REF_NAME` is not exactly
-`v$(cat VERSION)`, and release jobs must not patch chart or SDK package
-versions in CI.
+`v$(cat VERSION)`. Before any release publication, the preflight also requires
+the tag's peeled commit to equal current `origin/main` and the Kernel OpenAPI
+blob to exactly match `Mindburn-Labs/contracts-catalog` `main`. The workflow
+never creates a downstream catalog PR; sync and merge that catalog change
+before tagging. `DOWNSTREAM_FANOUT_TOKEN` is retained only as a
+`contents:read` token for that preflight. Release jobs must not patch chart or
+SDK package versions in CI.
 
 ## Documentation Contract
 

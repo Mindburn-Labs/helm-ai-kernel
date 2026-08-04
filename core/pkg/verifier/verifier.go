@@ -19,12 +19,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
@@ -98,12 +101,33 @@ type VerifyOptions struct {
 	// verified it against an external trusted key. Standalone library callers
 	// should leave this false so the seal verifier remains fail-closed.
 	AllowVerifiedConformanceSignature bool
+	// AllowSelfAttested accepts a dev-local seal whose verification key comes
+	// from inside the pack. Only set this when verifying a pack this process
+	// just produced; never when verifying one that arrived from elsewhere.
+	AllowSelfAttested bool
 }
 
 // VerifyBundle performs offline verification of an EvidencePack directory.
 // No network access. No server dependency. Pure filesystem + crypto.
+//
+// Provenance is NOT assumed: a dev-local seal that carries its own verification
+// key is rejected. Use VerifyLocallyProducedBundle when the caller created the
+// pack itself and only wants the structural and chain checks.
 func VerifyBundle(bundlePath string) (*VerifyReport, error) {
 	return VerifyBundleWithOptions(bundlePath, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileDevLocal})
+}
+
+// VerifyLocallyProducedBundle verifies a pack that this process just created.
+//
+// It accepts the self-attested dev-local seal, because the caller already knows
+// which key signed it — there is no provenance question to answer. Never use it
+// on a pack received from elsewhere: that is exactly the case where the seal's
+// embedded key proves nothing (F-02).
+func VerifyLocallyProducedBundle(bundlePath string) (*VerifyReport, error) {
+	return VerifyBundleWithOptions(bundlePath, VerifyOptions{
+		Profile:           evidencepkg.EvidenceTrustProfileDevLocal,
+		AllowSelfAttested: true,
+	})
 }
 
 // VerifyBundleWithOptions performs offline verification with an explicit trust profile.
@@ -204,6 +228,7 @@ func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyO
 		StorageObjectPath:                 opts.StorageObjectPath,
 		Now:                               opts.Now,
 		AllowVerifiedConformanceSignature: opts.AllowVerifiedConformanceSignature,
+		AllowSelfAttested:                 opts.AllowSelfAttested,
 	})
 	report.Seal = &seal
 	report.SealState = seal.State
@@ -497,9 +522,10 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 	if v := firstUint(document, "lamport_clock"); v != nil {
 		lamport = *v
 	}
-	// Mirrors crypto.CanonicalizeReceipt — receipt_id:decision_id:effect_id:
-	// status:output_hash:prev_hash:lamport_clock:args_hash.
-	payload := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
+	// Mirrors crypto.CanonicalizeReceipt for legacy V4. The active receipt.v5
+	// payload below is a narrow JCS envelope so its field boundaries cannot
+	// collide when a signed value contains a colon.
+	payload := []byte(fmt.Sprintf("%s:%s:%s:%s:%s:%s:%d:%s",
 		firstString(document, "receipt_id"),
 		firstString(document, "decision_id"),
 		firstString(document, "effect_id"),
@@ -508,8 +534,70 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 		firstString(document, "prev_hash"),
 		lamport,
 		firstString(document, "args_hash"),
-	)
-	return ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(payload), sigBytes)
+	))
+	switch sigVersion := firstString(document, "signature_version"); sigVersion {
+	case "":
+		// legacy V4 — payload as built
+	case "receipt.v5":
+		// V5 has a fixed signed schema. firstString deliberately treats a
+		// missing legacy alias and an explicit empty value alike, but doing so
+		// here would let an attacker remove an explicitly empty genesis
+		// prev_hash without changing the reconstructed payload.
+		for _, field := range []string{
+			"signature_version", "receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash",
+			"args_hash", "verdict", "reason_code", "policy_hash", "session_id",
+		} {
+			if _, ok := document[field].(string); !ok {
+				return false
+			}
+		}
+		lamportValue := firstUint(document, "lamport_clock")
+		if lamportValue == nil {
+			return false
+		}
+		var err error
+		payload, err = canonicalize.JCS(receiptV5DocumentEnvelope{
+			SignatureVersion: sigVersion,
+			ReceiptID:        firstString(document, "receipt_id"),
+			DecisionID:       firstString(document, "decision_id"),
+			EffectID:         firstString(document, "effect_id"),
+			Status:           firstString(document, "status"),
+			OutputHash:       firstString(document, "output_hash"),
+			PrevHash:         firstString(document, "prev_hash"),
+			LamportClock:     *lamportValue,
+			ArgsHash:         firstString(document, "args_hash"),
+			Verdict:          firstString(document, "verdict"),
+			ReasonCode:       firstString(document, "reason_code"),
+			PolicyHash:       firstString(document, "policy_hash"),
+			SessionID:        firstString(document, "session_id"),
+		})
+		if err != nil {
+			return false
+		}
+	default:
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(pubBytes), payload, sigBytes)
+}
+
+// receiptV5DocumentEnvelope must stay structurally identical to
+// crypto.receiptV5SigningEnvelope. The offline verifier intentionally does
+// not import the signer package, so it reconstructs the public signing
+// contract from the exported receipt document instead.
+type receiptV5DocumentEnvelope struct {
+	SignatureVersion string `json:"signature_version"`
+	ReceiptID        string `json:"receipt_id"`
+	DecisionID       string `json:"decision_id"`
+	EffectID         string `json:"effect_id"`
+	Status           string `json:"status"`
+	OutputHash       string `json:"output_hash"`
+	PrevHash         string `json:"prev_hash"`
+	LamportClock     uint64 `json:"lamport_clock"`
+	ArgsHash         string `json:"args_hash"`
+	Verdict          string `json:"verdict"`
+	ReasonCode       string `json:"reason_code"`
+	PolicyHash       string `json:"policy_hash"`
+	SessionID        string `json:"session_id"`
 }
 
 // verifyWitnessReceiptSignature verifies a witness attestation: an Ed25519
@@ -821,34 +909,385 @@ func checkChainIntegrity(bundlePath string) CheckResult {
 		if err := json.Unmarshal(data, &pg); err != nil {
 			return CheckResult{Name: "chain_integrity", Pass: false, Reason: fmt.Sprintf("invalid proofgraph JSON: %v", err)}
 		}
-		return CheckResult{Name: "chain_integrity", Pass: true, Detail: "proof graph valid JSON"}
 	}
 
-	return CheckResult{Name: "chain_integrity", Pass: true, Detail: "proof graph directory present"}
+	// The proof graph being present and parseable was, until now, the entire
+	// check — it never read prev_hash and never walked a parent, so a chain with
+	// its middle removed, its order changed, or a fork grafted on reported
+	// "chain integrity: PASS" (F-03). Actually link the receipts.
+	if !packClaimsAChain(receiptPath(bundlePath)) {
+		return unchainedPackResult("chain_integrity", receiptPath(bundlePath))
+	}
+	chains, res := loadReceiptChains(bundlePath, "chain_integrity")
+	if res != nil {
+		return *res
+	}
+
+	linked := 0
+	for _, chain := range chains {
+		// linkChain already proved each node's prev_hash resolves to the chain
+		// hash of its predecessor, that there is exactly one genesis, no forks,
+		// no cycles and no orphans. Re-assert the linkage explicitly so the
+		// invariant is stated where a reader looks for it.
+		for i := 1; i < len(chain.ordered); i++ {
+			prev := chain.ordered[i-1]
+			cur := chain.ordered[i]
+			if !prev.matches(cur.receipt.PrevHash) {
+				return CheckResult{
+					Name: "chain_integrity", Pass: false,
+					Reason: fmt.Sprintf("session %q: receipt %s prev_hash=%s does not match the chain hash of %s (%s)",
+						chain.sessionID, cur.receipt.ReceiptID, cur.receipt.PrevHash, prev.receipt.ReceiptID, prev.primary()),
+				}
+			}
+		}
+		linked += len(chain.ordered)
+	}
+
+	return CheckResult{
+		Name: "chain_integrity", Pass: true,
+		Detail: fmt.Sprintf("%d receipts across %d session chain(s) link genesis-to-head with no fork, gap, or cycle", linked, len(chains)),
+	}
 }
 
+// checkLamportMonotonicity verifies that each receipt chain carries strictly
+// increasing Lamport clocks, and that the genesis receipt starts at 1.
+//
+// This previously returned Pass with "%d receipt files present" straight from
+// os.ReadDir — no clock was ever parsed, so any ordering claim passed (F-03).
 func checkLamportMonotonicity(bundlePath string) CheckResult {
-	// Receipt files are required for Lamport monotonicity verification.
-	// An evidence pack without receipts cannot prove ordering.
-	receiptsDir := receiptPath(bundlePath)
-	if !dirExists(receiptsDir) {
-		return CheckResult{
-			Name:   "lamport_monotonicity",
-			Pass:   false,
-			Reason: "missing receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — Lamport ordering cannot be verified",
+	if !packClaimsAChain(receiptPath(bundlePath)) {
+		return unchainedPackResult("lamport_monotonicity", receiptPath(bundlePath))
+	}
+	chains, res := loadReceiptChains(bundlePath, "lamport_monotonicity")
+	if res != nil {
+		return *res
+	}
+
+	checked := 0
+	for _, chain := range chains {
+		for i, r := range chain.ordered {
+			if i == 0 {
+				if r.receipt.LamportClock != 1 {
+					return CheckResult{
+						Name: "lamport_monotonicity", Pass: false,
+						Reason: fmt.Sprintf("session %q genesis receipt %s has lamport_clock=%d, want 1 — the chain head is missing",
+							chain.sessionID, r.receipt.ReceiptID, r.receipt.LamportClock),
+					}
+				}
+				checked++
+				continue
+			}
+			prev := chain.ordered[i-1].receipt
+			if r.receipt.LamportClock != prev.LamportClock+1 {
+				return CheckResult{
+					Name: "lamport_monotonicity", Pass: false,
+					Reason: fmt.Sprintf("session %q: receipt %s has lamport_clock=%d after %d — chain is truncated, reordered, or has a gap",
+						chain.sessionID, r.receipt.ReceiptID, r.receipt.LamportClock, prev.LamportClock),
+				}
+			}
+			checked++
 		}
 	}
 
+	return CheckResult{
+		Name: "lamport_monotonicity", Pass: true,
+		Detail: fmt.Sprintf("%d receipts across %d session chain(s) are strictly monotonic from genesis", checked, len(chains)),
+	}
+}
+
+// receiptNode pairs a parsed receipt with the chain hash other receipts use to
+// reference it.
+type receiptNode struct {
+	receipt *contracts.Receipt
+	// hashes are the identities a successor's prev_hash may legitimately carry.
+	// EvidencePack producers do not agree on one derivation:
+	//   - store     chains on contracts.ReceiptChainHash (JCS over the receipt)
+	//   - mcp-proof chains on "sha256:"+sha256 of the receipt file as written
+	//   - demo      chains on a "hash" field the receipt declares about itself
+	// The first two are recomputed here, so tampering breaks linkage. The third
+	// has no specified preimage and cannot be recomputed — recorded in the
+	// security ledger as a schema gap.
+	hashes []string
+	file   string
+}
+
+// normalizeHash strips the optional "sha256:" prefix so identities produced by
+// different producers compare equal.
+func normalizeHash(h string) string {
+	return strings.TrimPrefix(strings.TrimSpace(h), "sha256:")
+}
+
+// matches reports whether prevHash refers to this node under any derivation.
+func (n receiptNode) matches(prevHash string) bool {
+	want := normalizeHash(prevHash)
+	if want == "" {
+		return false
+	}
+	for _, h := range n.hashes {
+		if normalizeHash(h) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// primary is the identity quoted in diagnostics.
+func (n receiptNode) primary() string {
+	if len(n.hashes) == 0 {
+		return ""
+	}
+	return normalizeHash(n.hashes[0])
+}
+
+// receiptChain is one session's receipts ordered from genesis to head.
+type receiptChain struct {
+	sessionID string
+	ordered   []receiptNode
+}
+
+// loadReceiptChains parses every receipt in the pack, groups them by session,
+// and links each group into a single chain by walking prev_hash from genesis.
+//
+// It returns a non-nil CheckResult when the receipts cannot be loaded or the
+// chain does not link, so callers surface the failure under their own name.
+func loadReceiptChains(bundlePath, checkName string) ([]receiptChain, *CheckResult) {
+	fail := func(format string, args ...any) (
+		[]receiptChain, *CheckResult) {
+		return nil, &CheckResult{Name: checkName, Pass: false, Reason: fmt.Sprintf(format, args...)}
+	}
+
+	receiptsDir := receiptPath(bundlePath)
+	if !dirExists(receiptsDir) {
+		return fail("missing receipts directory (checked receipts/ and 02_PROOFGRAPH/receipts/) — chain of custody cannot be verified")
+	}
 	entries, err := os.ReadDir(receiptsDir)
 	if err != nil {
-		return CheckResult{Name: "lamport_monotonicity", Pass: false, Reason: fmt.Sprintf("cannot read receipts: %v", err)}
+		return fail("cannot read receipts: %v", err)
 	}
 
-	if len(entries) == 0 {
-		return CheckResult{Name: "lamport_monotonicity", Pass: false, Reason: "receipts directory is empty — no Lamport claims to verify"}
+	bySession := map[string][]receiptNode{}
+	total := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		filePath := filepath.Join(receiptsDir, entry.Name())
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return fail("cannot read receipt %s: %v", entry.Name(), err)
+		}
+		var receipt contracts.Receipt
+		if err := json.Unmarshal(data, &receipt); err != nil {
+			return fail("receipt %s is not valid JSON: %v", entry.Name(), err)
+		}
+
+		// EvidencePacks carry more than one receipt schema, and they do not
+		// agree on how a node is identified:
+		//
+		//   - store.buildNextCausalReceipt chains contracts.Receipt on
+		//     contracts.ReceiptChainHash (JCS over the receipt minus its
+		//     transparency fields).
+		//   - demo/mcp-proof/financedemo receipts carry their own "hash" field
+		//     and chain children on that value directly.
+		//
+		// Use the declared hash when the producer supplies one, otherwise derive
+		// it. Either way the linkage below is real: truncation, reordering and
+		// forks are detected for both shapes.
+		//
+		// Caveat recorded in the security ledger: a self-declared "hash" cannot
+		// be recomputed by the verifier, because its preimage is not specified
+		// anywhere. For those receipts this proves the chain is well-formed, not
+		// that each node's contents are bound to its identity.
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return fail("receipt %s is not a JSON object: %v", entry.Name(), err)
+		}
+
+		var hashes []string
+		// Recomputed identities first, so diagnostics quote a verifiable value.
+		if h, hErr := contracts.ReceiptChainHash(&receipt); hErr == nil {
+			hashes = append(hashes, h)
+		}
+		hashes = append(hashes, "sha256:"+sha256Hex(data))
+		if declared, _ := raw["hash"].(string); strings.TrimSpace(declared) != "" {
+			hashes = append(hashes, declared)
+		}
+
+		// Lamport lives under different keys across the schemas.
+		if receipt.LamportClock == 0 {
+			// Reject a non-integral or negative clock rather than truncating it:
+			// uint64(1.9) is 1, which would let a tampered receipt slot into an
+			// ordering it does not actually occupy.
+			if v, ok := raw["lamport"].(float64); ok {
+				if v != math.Trunc(v) || v < 0 {
+					return fail("receipt %s has a non-integral lamport clock %v", entry.Name(), v)
+				}
+				receipt.LamportClock = uint64(v)
+			}
+		}
+		if receipt.ReceiptID == "" {
+			receipt.ReceiptID, _ = raw["receipt_id"].(string)
+		}
+
+		// Only receipt.v5 binds SessionID in its signing envelope. Legacy
+		// receipts retain their historical ExecutorID chain scope even when a
+		// later storage migration has populated session_id for lookup purposes.
+		session := receipt.ExecutorID
+		if receipt.SignatureVersion == contracts.ReceiptSignatureV5 {
+			session = receipt.SessionID
+		}
+		bySession[session] = append(bySession[session], receiptNode{
+			receipt: &receipt, hashes: hashes, file: entry.Name(),
+		})
+		total++
 	}
 
-	return CheckResult{Name: "lamport_monotonicity", Pass: true, Detail: fmt.Sprintf("%d receipt files present", len(entries))}
+	if total == 0 {
+		return fail("receipts directory contains no receipts — no chain of custody to verify")
+	}
+
+	chains := make([]receiptChain, 0, len(bySession))
+	for session, nodes := range bySession {
+		ordered, err := linkChain(nodes)
+		if err != nil {
+			return fail("session %q: %v", session, err)
+		}
+		chains = append(chains, receiptChain{sessionID: session, ordered: ordered})
+	}
+	sort.Slice(chains, func(i, j int) bool { return chains[i].sessionID < chains[j].sessionID })
+	return chains, nil
+}
+
+// linkChain orders one session's receipts by following prev_hash from the
+// genesis receipt, and rejects forks, cycles, orphans and truncation.
+func linkChain(nodes []receiptNode) ([]receiptNode, error) {
+	// Genesis is the receipt with an empty prev_hash. Exactly one is required:
+	// zero means the head of the chain was removed, more than one means the
+	// chain was forked at the root.
+	var roots []receiptNode
+	for _, n := range nodes {
+		if normalizeHash(n.receipt.PrevHash) == "" {
+			roots = append(roots, n)
+		}
+	}
+	switch {
+	case len(roots) == 0:
+		return nil, fmt.Errorf("no genesis receipt (none has an empty prev_hash) — the start of the chain is missing")
+	case len(roots) > 1:
+		return nil, fmt.Errorf("%d receipts claim to be genesis — the chain is forked at the root", len(roots))
+	}
+
+	ordered := make([]receiptNode, 0, len(nodes))
+	used := map[string]bool{}
+	current := roots[0]
+	for {
+		ordered = append(ordered, current)
+		used[current.file] = true
+
+		var children []receiptNode
+		for _, n := range nodes {
+			if used[n.file] {
+				continue
+			}
+			if current.matches(n.receipt.PrevHash) {
+				children = append(children, n)
+			}
+		}
+		if len(children) == 0 {
+			break
+		}
+		if len(children) > 1 {
+			return nil, fmt.Errorf("receipt %s has %d successors — the chain is forked",
+				current.receipt.ReceiptID, len(children))
+		}
+		current = children[0]
+		if len(ordered) > len(nodes) {
+			return nil, fmt.Errorf("receipt chain contains a cycle")
+		}
+	}
+
+	if len(ordered) != len(nodes) {
+		// Unreached receipts point at a predecessor that is not in the pack —
+		// exactly what deleting a middle receipt produces.
+		var orphans []string
+		for _, n := range nodes {
+			if !used[n.file] {
+				orphans = append(orphans, fmt.Sprintf("%s (prev_hash=%s)", n.receipt.ReceiptID, n.receipt.PrevHash))
+			}
+		}
+		sort.Strings(orphans)
+		return nil, fmt.Errorf("%d of %d receipts are unreachable from genesis — the chain is broken or truncated: %s",
+			len(orphans), len(nodes), strings.Join(orphans, ", "))
+	}
+
+	return ordered, nil
+}
+
+// packClaimsAChain reports whether the pack should be held to the full
+// genesis-to-head walk.
+//
+// That is true when any receipt carries a non-empty prev_hash, and also — fail
+// closed — when the receipts directory is missing or empty, or when any receipt
+// cannot be read or parsed. Only a directory of well-formed receipts that all
+// lack prev_hash counts as "no chain claimed".
+//
+// Several producers (launchpad, conform) emit receipts with lamport clocks that
+// imply an order but no prev_hash linking them — those packs assert no chain of
+// custody at all. Verifying such a pack must neither invent a chain nor claim to
+// have checked one. Packs that DO carry prev_hash values get the full
+// genesis-to-head walk.
+//
+// This cannot be abused to bypass the check: stripping every prev_hash changes
+// what the pack claims, and the report says so in plain text instead of
+// reporting a verified chain. A missing or empty receipts directory is not "no
+// chain claimed" — it is a pack with no evidence, so it falls through and fails.
+func packClaimsAChain(receiptsDir string) bool {
+	if !dirExists(receiptsDir) {
+		return true
+	}
+	entries, err := os.ReadDir(receiptsDir)
+	if err != nil {
+		return true
+	}
+	receipts := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		receipts++
+		data, err := os.ReadFile(filepath.Join(receiptsDir, entry.Name()))
+		if err != nil {
+			// An unreadable receipt must not be read as "no chain claimed" —
+			// that would let a corrupt or deliberately unreadable file skip the
+			// walk entirely. Claim a chain so the caller falls through to
+			// loadReceiptChains and fails there with the real reason.
+			return true
+		}
+		var raw map[string]any
+		if json.Unmarshal(data, &raw) != nil {
+			return true
+		}
+		if s, _ := raw["prev_hash"].(string); strings.TrimSpace(s) != "" {
+			return true
+		}
+	}
+	return receipts == 0
+}
+
+// unchainedPackResult describes a pack that makes no chaining claim.
+func unchainedPackResult(checkName, receiptsDir string) CheckResult {
+	entries, _ := os.ReadDir(receiptsDir)
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".json" {
+			n++
+		}
+	}
+	return CheckResult{
+		Name: checkName, Pass: true,
+		Detail: fmt.Sprintf("%d receipts carry no prev_hash — this pack asserts no chain of custody, "+
+			"so none was verified", n),
+	}
 }
 
 func checkPolicyDecisionHashes(bundlePath string) CheckResult {

@@ -100,6 +100,7 @@ const (
 	ReasonTaintedInvokeDeny          ReasonCode = "TAINTED_PRIVILEGED_INVOKE_DENY"
 	ReasonTaintedEgressDeny          ReasonCode = "TAINTED_DATA_EGRESS_DENY"
 	ReasonTaintedEscalate            ReasonCode = "TAINTED_HIGH_RISK_ESCALATE"
+	ReasonSemanticThreatEscalate     ReasonCode = "SEMANTIC_THREAT_REVIEW_REQUIRED"
 
 	// ── TON / Acton Connector Reasons (v1.3) ──────────────────
 	ReasonTONActonUnknownCommand             ReasonCode = "ERR_TON_ACTON_UNKNOWN_COMMAND"
@@ -160,6 +161,13 @@ const (
 	ReasonHardwareQuorumUnbound     ReasonCode = "ERR_HARDWARE_QUORUM_UNBOUND"
 	ReasonAttestationResultRequired ReasonCode = "ERR_ATTESTATION_RESULT_REQUIRED"
 	ReasonDevFallbackPresent        ReasonCode = "ERR_DEV_FALLBACK_PRESENT"
+
+	// ── Capability Registry Reasons (capability-manifest/v1) ──────────────
+	ReasonCapabilityUnknown             ReasonCode = "CAPABILITY_UNKNOWN"
+	ReasonCapabilityManifestDrift       ReasonCode = "CAPABILITY_MANIFEST_DRIFT"
+	ReasonCapabilityTokenInvalid        ReasonCode = "CAPABILITY_TOKEN_INVALID"
+	ReasonCapabilityRollbackPlanInvalid ReasonCode = "CAPABILITY_ROLLBACK_PLAN_INVALID"
+	ReasonCapabilityIrreversible        ReasonCode = "CAPABILITY_IRREVERSIBLE"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.
@@ -218,6 +226,7 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonTaintedInvokeDeny,
 		ReasonTaintedEgressDeny,
 		ReasonTaintedEscalate,
+		ReasonSemanticThreatEscalate,
 		ReasonTONActonUnknownCommand,
 		ReasonTONActonUnsupportedVersion,
 		ReasonTONTolkCompilerUnpinned,
@@ -270,6 +279,11 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonHardwareQuorumUnbound,
 		ReasonAttestationResultRequired,
 		ReasonDevFallbackPresent,
+		ReasonCapabilityUnknown,
+		ReasonCapabilityManifestDrift,
+		ReasonCapabilityTokenInvalid,
+		ReasonCapabilityRollbackPlanInvalid,
+		ReasonCapabilityIrreversible,
 	}
 }
 

@@ -1,3 +1,5 @@
+// quantum_posture: test-only coverage of existing cryptographic code paths;
+// it makes no production deployment, hybrid, or post-quantum assurance claim.
 package crypto
 
 import (
@@ -69,7 +71,7 @@ func TestDeepEd25519VerifyInvalidSig(t *testing.T) {
 func TestDeepEd25519SignDecision(t *testing.T) {
 	signer, _ := NewEd25519Signer("key-1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "test"}
-	if err := signer.SignDecision(d); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatal(err)
 	}
 	if d.Signature == "" || d.SignatureType == "" {
@@ -80,7 +82,7 @@ func TestDeepEd25519SignDecision(t *testing.T) {
 func TestDeepEd25519VerifyDecisionRoundTrip(t *testing.T) {
 	signer, _ := NewEd25519Signer("key-1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "DENY", Reason: "test"}
-	signer.SignDecision(d)
+	signer.SignDecision(testDecisionV4Authority(d))
 	valid, err := signer.VerifyDecision(d)
 	if err != nil || !valid {
 		t.Fatal("signed decision should verify")
@@ -143,7 +145,7 @@ func TestDeepMLDSASign100Messages(t *testing.T) {
 func TestDeepMLDSASignDecisionVerify(t *testing.T) {
 	signer, _ := NewMLDSASigner("pq-key-1")
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW", Reason: "test"}
-	signer.SignDecision(d)
+	signer.SignDecision(testDecisionV4Authority(d))
 	valid, err := signer.VerifyDecision(d)
 	if err != nil || !valid {
 		t.Fatal("ML-DSA signed decision should verify")
@@ -206,7 +208,7 @@ func TestDeepKeyRingVerifyDecisionAfterRotation(t *testing.T) {
 	s1, _ := NewEd25519Signer("key-v1")
 	kr.AddKey(s1)
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW"}
-	s1.SignDecision(d)
+	s1.SignDecision(testDecisionV4Authority(d))
 	// Add new key, keep old
 	s2, _ := NewEd25519Signer("key-v2")
 	kr.AddKey(s2)
@@ -219,7 +221,7 @@ func TestDeepKeyRingVerifyDecisionAfterRotation(t *testing.T) {
 func TestDeepKeyRingSignDecisionEmptyRing(t *testing.T) {
 	kr := NewKeyRing()
 	d := &contracts.DecisionRecord{ID: "d1"}
-	err := kr.SignDecision(d)
+	err := kr.SignDecision(testDecisionV4Authority(d))
 	if err == nil {
 		t.Fatal("sign with empty keyring should error")
 	}

@@ -21,7 +21,7 @@ func TestExt_FreezeGateDeniesWithReasonCode(t *testing.T) {
 	fc := kernel.NewFreezeController()
 	fc.Freeze("admin")
 	g := newMinimalGuardian(WithFreezeController(fc))
-	dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestExt_AgentKillSwitchDenies(t *testing.T) {
 	ks := kernel.NewAgentKillSwitch()
 	ks.Kill("bad-agent", "admin", "testing")
 	g := newMinimalGuardian(WithAgentKillSwitch(ks))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "bad-agent", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "bad-agent", Action: "x", Resource: "test-resource"})
 	if dec.Verdict != string(contracts.VerdictDeny) || dec.ReasonCode != string(contracts.ReasonAgentKilled) {
 		t.Fatalf("expected DENY/AGENT_KILLED, got %s/%s", dec.Verdict, dec.ReasonCode)
 	}
@@ -48,7 +48,7 @@ func TestExt_ContextMismatchDeniesWithCode(t *testing.T) {
 	cg := kernel.NewContextGuardWithFingerprint("boot-fp")
 	g := newMinimalGuardian(WithContextGuard(cg))
 	// ValidateCurrent will compute real fingerprint which won't match "boot-fp"
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if dec.ReasonCode != string(contracts.ReasonContextMismatch) {
 		t.Fatalf("expected CONTEXT_MISMATCH, got %s", dec.ReasonCode)
 	}
@@ -65,6 +65,7 @@ func TestExt_IdentityIsolationViolationDenies(t *testing.T) {
 	req := DecisionRequest{
 		Principal: "agent-2",
 		Action:    "x",
+		Resource:  "test-resource",
 		Context: map[string]interface{}{
 			ContextSecurityTrusted: true,
 			ContextCredentialHash:  "cred-hash-1",
@@ -85,6 +86,7 @@ func TestExt_EgressBlockedDenies(t *testing.T) {
 	req := DecisionRequest{
 		Principal: "a",
 		Action:    "x",
+		Resource:  "test-resource",
 		Context: map[string]interface{}{
 			ContextSecurityTrusted: true,
 			ContextDestination:     "https://evil.com",
@@ -144,7 +146,7 @@ func TestExt_ConcurrentEvaluateDecisionNoPanics(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+			g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 		}()
 	}
 	wg.Wait()
@@ -160,19 +162,18 @@ func TestExt_NilSignerReturnsError(t *testing.T) {
 	fc := kernel.NewFreezeController()
 	fc.Freeze("admin")
 	g := NewGuardian(signer, graph, reg, WithFreezeController(fc))
-	_, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	_, err := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if err == nil {
 		t.Fatal("expected error when signer fails")
 	}
 }
 
-// ─── 9: Empty request still produces a decision ───────────────
+// ─── 9: Empty request fails closed ─────────────────────────────
 
-func TestExt_EmptyRequestProducesDecision(t *testing.T) {
+func TestExt_EmptyRequestFailsClosed(t *testing.T) {
 	g := newMinimalGuardian()
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{})
-	if dec == nil {
-		t.Fatal("expected non-nil decision even for empty request")
+	if _, err := g.EvaluateDecision(context.Background(), DecisionRequest{}); err == nil {
+		t.Fatal("expected missing authority tuple to fail closed")
 	}
 }
 
@@ -182,7 +183,7 @@ func TestExt_FreezeVerdictIsDeny(t *testing.T) {
 	fc := kernel.NewFreezeController()
 	fc.Freeze("admin")
 	g := newMinimalGuardian(WithFreezeController(fc))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "p", Action: "a"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "p", Action: "a", Resource: "test-resource"})
 	if dec.Verdict != string(contracts.VerdictDeny) {
 		t.Fatalf("expected DENY, got %s", dec.Verdict)
 	}
@@ -194,7 +195,7 @@ func TestExt_BudgetExceededDenial(t *testing.T) {
 	bt := newMockBudgetTracker(0) // zero budget
 	g := newMinimalGuardian(WithBudgetTracker(bt))
 	effect := &contracts.Effect{EffectID: "e1", EffectType: "T", Params: map[string]any{"tool_name": "test_tool", "budget_id": "b1"}}
-	dec := &contracts.DecisionRecord{ID: "d1"}
+	dec := &contracts.DecisionRecord{ID: "d1", SubjectID: "agent-1", Action: "EXECUTE_TOOL", Resource: "test_tool"}
 	err := g.SignDecision(context.Background(), dec, effect, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -233,6 +234,7 @@ func TestExt_BehavioralScorerRecordsEgressBlock(t *testing.T) {
 	req := DecisionRequest{
 		Principal: "agent-1",
 		Action:    "x",
+		Resource:  "test-resource",
 		Context: map[string]interface{}{
 			ContextSecurityTrusted: true,
 			ContextDestination:     "https://evil.com",
@@ -249,7 +251,7 @@ func TestExt_BehavioralScorerRecordsEgressBlock(t *testing.T) {
 
 func TestExt_DecisionIDNonEmpty(t *testing.T) {
 	g := newMinimalGuardian()
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	if dec.ID == "" {
 		t.Fatal("decision ID must be non-empty")
 	}
@@ -320,7 +322,7 @@ func TestExt_UnfreezeAllowsDecisions(t *testing.T) {
 	fc.Freeze("admin")
 	fc.Unfreeze("admin")
 	g := newMinimalGuardian(WithFreezeController(fc))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "a", Action: "x", Resource: "test-resource"})
 	// Should NOT be SYSTEM_FROZEN after unfreeze
 	if dec.ReasonCode == string(contracts.ReasonSystemFrozen) {
 		t.Fatal("should not deny after unfreeze")
@@ -333,7 +335,7 @@ func TestExt_AgentNotKilledPasses(t *testing.T) {
 	ks := kernel.NewAgentKillSwitch()
 	ks.Kill("other-agent", "admin", "testing")
 	g := newMinimalGuardian(WithAgentKillSwitch(ks))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "good-agent", Action: "x"})
+	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "good-agent", Action: "x", Resource: "test-resource"})
 	if dec.ReasonCode == string(contracts.ReasonAgentKilled) {
 		t.Fatal("good-agent should not be killed")
 	}
@@ -373,7 +375,7 @@ func TestExt_IssueIntentPropagatesTaint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec := &contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: digest}
+	dec := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-taint", Verdict: string(contracts.VerdictAllow), Signature: "sig", EffectDigest: digest})
 	intent, err := g.IssueExecutionIntent(context.Background(), dec, effect)
 	if err != nil {
 		t.Fatalf("IssueExecutionIntent failed: %v", err)

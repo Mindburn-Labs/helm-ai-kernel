@@ -1,0 +1,2 @@
+ALTER TABLE receipts
+	ADD COLUMN IF NOT EXISTS chain_hash TEXT DEFAULT '';

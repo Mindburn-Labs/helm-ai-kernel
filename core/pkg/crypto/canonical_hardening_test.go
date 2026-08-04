@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -26,7 +27,7 @@ func TestCanonicalizeDecision_FullBinding(t *testing.T) {
 	}
 
 	// Sign it
-	if err := signer.SignDecision(d); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("sign failed: %v", err)
 	}
 	if d.Signature == "" {
@@ -46,7 +47,12 @@ func TestCanonicalizeDecision_FullBinding(t *testing.T) {
 	}{
 		{"ID", func(d *contracts.DecisionRecord) { d.ID = "dec-TAMPERED" }},
 		{"Verdict", func(d *contracts.DecisionRecord) { d.Verdict = "FAIL" }},
-		{"Reason", func(d *contracts.DecisionRecord) { d.Reason = "Tampered reason" }},
+		// HELM-303 preimage V2: the machine-readable ReasonCode is bound
+		// directly, free-text Reason as its digest — prose is prohibited from
+		// export and must not carry the signed claim itself. See
+		// TestCanonicalizeDecisionV2_ReasonBoundByDigest.
+		{"ReasonCode", func(d *contracts.DecisionRecord) { d.ReasonCode = "TAMPERED_CODE" }},
+		{"Reason", func(d *contracts.DecisionRecord) { d.Reason = "All checks TAMPERED" }},
 		{"PhenotypeHash", func(d *contracts.DecisionRecord) { d.PhenotypeHash = "sha256:deadbeef" }},
 		{"PolicyContentHash", func(d *contracts.DecisionRecord) { d.PolicyContentHash = "sha256:YYYY" }},
 		{"EffectDigest", func(d *contracts.DecisionRecord) { d.EffectDigest = "sha256:ZZZZ" }},
@@ -83,12 +89,118 @@ func TestCanonicalizeDecision_EmptyFields(t *testing.T) {
 		// All other fields empty
 	}
 
-	if err := signer.SignDecision(d); err != nil {
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
 		t.Fatalf("sign failed: %v", err)
 	}
 
 	ok, err := signer.VerifyDecision(d)
 	if err != nil || !ok {
 		t.Fatalf("signature should verify with empty optional fields: ok=%v err=%v", ok, err)
+	}
+}
+
+// TestCanonicalizeDecisionV4_ReasonBoundByDigest pins the HELM-303 semantics
+// retained by V4: ReasonCode is in the preimage and free-text Reason stays
+// attested as reason_hash.
+func TestCanonicalizeDecisionV4_ReasonBoundByDigest(t *testing.T) {
+	signer, err := NewEd25519Signer("drift7-v2-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &contracts.DecisionRecord{ID: "dec-v2", Verdict: "DENY", Reason: "human words", ReasonCode: "POLICY_DENY"}
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
+		t.Fatal(err)
+	}
+	if d.SignatureVersion != contracts.DecisionRecordSignatureV4 {
+		t.Fatalf("expected V4 signature version, got %q", d.SignatureVersion)
+	}
+	d.Reason = "different human words"
+	ok, err := signer.VerifyDecision(d)
+	if err != nil {
+		t.Fatalf("verify after Reason mutation: %v", err)
+	}
+	if ok {
+		t.Fatal("Reason mutation must invalidate a V4 signature: it is bound as reason_hash")
+	}
+
+	// The prose itself must not appear in the preimage — only its digest.
+	d.Reason = "human words"
+	payload, err := DecisionSigningPayload(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(payload, []byte("human words")) {
+		t.Fatalf("free-text Reason leaked into the signed preimage: %s", payload)
+	}
+}
+
+// An ALLOW decision carries no ReasonCode by contract — the registry in
+// contracts/verdict.go is defined for DENY/ESCALATE. Without reason_hash the V4
+// preimage would therefore authenticate nothing about why an action was
+// permitted, where the legacy preimage bound the reason. That is the regression
+// this test exists to catch.
+func TestCanonicalizeDecisionV4_AllowExplanationIsAttested(t *testing.T) {
+	signer, err := NewEd25519Signer("v2-allow-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &contracts.DecisionRecord{
+		ID:      "dec-allow",
+		Verdict: string(contracts.VerdictAllow),
+		Reason:  "risk_score 12 < threshold 80 for action \"deploy\"",
+	}
+	if err := signer.SignDecision(testDecisionV4Authority(d)); err != nil {
+		t.Fatal(err)
+	}
+	if d.ReasonCode != "" {
+		t.Fatalf("precondition: ALLOW must carry no reason code, got %q", d.ReasonCode)
+	}
+
+	d.Reason = "operator override, no policy consulted"
+	ok, err := signer.VerifyDecision(d)
+	if err != nil {
+		t.Fatalf("verify after Reason mutation: %v", err)
+	}
+	if ok {
+		t.Fatal("an ALLOW decision's explanation is unauthenticated — V4 attests nothing on the allow path")
+	}
+}
+
+func TestDecisionSemanticHashIgnoresUnsignedPolicyDecisionHash(t *testing.T) {
+	signer, err := NewEd25519Signer("decision-semantic-hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := &contracts.DecisionRecord{
+		ID:                 "dec-semantic",
+		Verdict:            string(contracts.VerdictAllow),
+		ReasonCode:         "POLICY_ALLOW",
+		PhenotypeHash:      "sha256:phenotype",
+		PolicyContentHash:  "sha256:policy",
+		EffectDigest:       "sha256:effect",
+		PolicyDecisionHash: "sha256:trusted-source",
+	}
+	if err := signer.SignDecision(testDecisionV4Authority(decision)); err != nil {
+		t.Fatal(err)
+	}
+	decision.PolicyDecisionHash = "sha256:attacker-chosen"
+	ok, err := signer.VerifyDecision(decision)
+	if err != nil || !ok {
+		t.Fatalf("policy_decision_hash is outside the current signed payload: ok=%v err=%v", ok, err)
+	}
+
+	got, err := DecisionSemanticHash(decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := DecisionContentHash(decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("semantic decision hash = %q, want signed payload hash %q", got, want)
+	}
+	if got == decision.PolicyDecisionHash {
+		t.Fatalf("semantic decision hash trusted unsigned policy_decision_hash %q", got)
 	}
 }

@@ -108,6 +108,12 @@ def result_status(actual: Any, expected: Any) -> str:
     return "pass" if actual == expected else "fail"
 
 
+def semver_parts(value: str, label: str) -> tuple[int, int, int]:
+    if not SEMVER_RE.fullmatch(value):
+        raise ValueError(f"{label} must be plain semver, got {value!r}")
+    return tuple(int(part) for part in value.split("."))  # type: ignore[return-value]
+
+
 def read_json_field(path: Path, field: str) -> Any:
     payload = json.loads(path.read_text(encoding="utf-8"))
     current: Any = payload
@@ -553,6 +559,29 @@ def check_published(contract: dict[str, Any], version: str, skip: set[str], only
                 )
             )
             continue
+        introduced_in = surface.get("introduced_in")
+        if introduced_in is not None:
+            if not isinstance(introduced_in, str):
+                results.append(SurfaceResult(surface["id"], "fail", version, introduced_in, detail="introduced_in must be a semver string"))
+                continue
+            try:
+                before_introduction = semver_parts(version, "expected version") < semver_parts(introduced_in, f"{surface['id']}.introduced_in")
+            except ValueError as exc:
+                results.append(SurfaceResult(surface["id"], "fail", version, introduced_in, detail=str(exc)))
+                continue
+            if before_introduction:
+                results.append(
+                    SurfaceResult(
+                        surface["id"],
+                        "skipped",
+                        version,
+                        None,
+                        url=fmt(surface.get("human_url") or surface.get("url", ""), version),
+                        detail=f"introduced in v{introduced_in}",
+                        blocking=False,
+                    )
+                )
+                continue
         if surface["id"] in skip:
             results.append(
                 SurfaceResult(
@@ -572,7 +601,7 @@ def check_published(contract: dict[str, Any], version: str, skip: set[str], only
             continue
         try:
             results.append(checker(surface, version))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, socket.timeout, KeyError, ET.ParseError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, socket.timeout, KeyError, ValueError, ET.ParseError, json.JSONDecodeError) as exc:
             results.append(published_error(surface, version, exc))
     return results
 

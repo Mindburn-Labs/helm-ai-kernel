@@ -23,6 +23,12 @@ func TestExecutionIntentV2BindsCompleteAuthority(t *testing.T) {
 		"effect_binding": func(intent *contracts.AuthorizedExecutionIntent) {
 			intent.EffectBinding.Params = map[string]any{"command": []string{"/bin/substituted"}}
 		},
+		"emergency_activation": func(intent *contracts.AuthorizedExecutionIntent) {
+			intent.EmergencyActivationID = "activation-substituted"
+		},
+		"emergency_delegation": func(intent *contracts.AuthorizedExecutionIntent) {
+			intent.EmergencyDelegationSessionID = "delegation-substituted"
+		},
 		"emergency_scope": func(intent *contracts.AuthorizedExecutionIntent) { intent.EmergencyScopeHash = "sha256:substituted" },
 	}
 

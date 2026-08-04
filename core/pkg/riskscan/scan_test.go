@@ -274,6 +274,12 @@ func TestScanFailsClosedOnInvalidRecognizedConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 		},
+		"mcp servers not object": func(t *testing.T, root string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{"mcpServers":[]}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
@@ -286,6 +292,231 @@ func TestScanFailsClosedOnInvalidRecognizedConfig(t *testing.T) {
 				t.Fatalf("Scan() leaked local path: %v", err)
 			}
 		})
+	}
+}
+
+func TestCollectConfigObservationProjectPermissionOverridesUser(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	userClaude := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(userClaude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userClaude, "settings.json"), []byte(`{"permissionMode":"bypassPermissions"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	projectClaude := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(projectClaude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectClaude, "settings.json"), []byte(`{"permissionMode":"plan"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := collectConfigObservation(root, true, true)
+	if err != nil {
+		t.Fatalf("collect config observation: %v", err)
+	}
+	if obs.PermissionMode != riskenvelope.PermissionModePlan {
+		t.Fatalf("permission mode = %s, want project plan", obs.PermissionMode)
+	}
+	if !obs.ManagedSettingsPresent {
+		t.Fatal("project settings should be marked as managed")
+	}
+	if obs.StaticConfigFilesRead != 2 {
+		t.Fatalf("config files read = %d, want 2", obs.StaticConfigFilesRead)
+	}
+}
+
+func TestCollectConfigObservationExplicitUnknownProjectModeOverridesUser(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	userClaude := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(userClaude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userClaude, "settings.json"), []byte(`{"permissionMode":"bypassPermissions"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	projectClaude := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(projectClaude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectClaude, "settings.json"), []byte(`{"permissionMode":"future-mode"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := collectConfigObservation(root, true, true)
+	if err != nil {
+		t.Fatalf("collect config observation: %v", err)
+	}
+	if obs.PermissionMode != riskenvelope.PermissionModeUnknown {
+		t.Fatalf("permission mode = %s, want explicit project unknown", obs.PermissionMode)
+	}
+}
+
+func TestCollectConfigObservationUserConfigsRequireOptIn(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"mcpServers":{"user":{"command":"example"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte("[mcp_servers.user]\ncommand = \"example\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	withoutUser, err := collectConfigObservation(root, true, false)
+	if err != nil {
+		t.Fatalf("collect without user config: %v", err)
+	}
+	if withoutUser.StaticConfigFilesRead != 0 || withoutUser.MCPServerCount != 0 {
+		t.Fatalf("without user config = %#v, want no observed config", withoutUser)
+	}
+
+	withUser, err := collectConfigObservation(root, true, true)
+	if err != nil {
+		t.Fatalf("collect with user config: %v", err)
+	}
+	if withUser.StaticConfigFilesRead != 2 || withUser.MCPServerCount != 2 {
+		t.Fatalf("with user config = %#v, want two config files and servers", withUser)
+	}
+}
+
+func TestCollectConfigObservationReadsNewestEnabledPluginConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	userClaude := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(userClaude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userClaude, "settings.json"), []byte(`{"enabledPlugins":{"scanner@market":false}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	projectClaude := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(projectClaude, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectClaude, "settings.json"), []byte(`{"enabledPlugins":{"scanner@market":true}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	older := filepath.Join(t.TempDir(), "older")
+	newer := filepath.Join(t.TempDir(), "newer")
+	writePluginMCPConfig(t, older, `{"old-one":{"command":"old"},"old-two":{"command":"old"}}`)
+	writePluginMCPConfig(t, newer, `{"latest":{"command":"latest"}}`)
+	registryDir := filepath.Join(home, ".claude", "plugins")
+	if err := os.MkdirAll(registryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := json.Marshal(map[string]any{
+		"plugins": map[string]any{
+			"scanner@market": []map[string]string{
+				{"installPath": older, "lastUpdated": "2026-01-01T00:00:00Z"},
+				{"installPath": newer, "lastUpdated": "2026-02-01T00:00:00Z"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(registryDir, "installed_plugins.json"), registry, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	obs, err := collectConfigObservation(root, true, true)
+	if err != nil {
+		t.Fatalf("collect config observation: %v", err)
+	}
+	if obs.MCPServerCount != 1 {
+		t.Fatalf("MCP server count = %d, want latest plugin only", obs.MCPServerCount)
+	}
+	if obs.StaticConfigFilesRead != 4 {
+		t.Fatalf("config files read = %d, want user/project settings, registry, and plugin config", obs.StaticConfigFilesRead)
+	}
+}
+
+func TestCollectConfigObservationFailsClosedOnMalformedEnabledPluginConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "settings.json"), []byte(`{"enabledPlugins":{"scanner@market":true}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	installPath := filepath.Join(t.TempDir(), "plugin")
+	writePluginMCPConfig(t, installPath, `{"mcpServers":[]}`)
+	registryDir := filepath.Join(claudeDir, "plugins")
+	if err := os.MkdirAll(registryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := json.Marshal(map[string]any{
+		"plugins": map[string]any{
+			"scanner@market": []map[string]string{{"installPath": installPath, "lastUpdated": "2026-02-01T00:00:00Z"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(registryDir, "installed_plugins.json"), registry, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = collectConfigObservation(t.TempDir(), true, true)
+	if !errors.Is(err, ErrScanCoverageIncomplete) {
+		t.Fatalf("malformed enabled plugin error = %v, want coverage error", err)
+	}
+}
+
+func TestScanFailsClosedOnInvalidUserConfigWhenIncluded(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte("{not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if _, err := Scan(root, BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()}); err != nil {
+		t.Fatalf("scan without user config: %v", err)
+	}
+	_, err := Scan(root, BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime(), IncludeUserConfig: true})
+	if !errors.Is(err, ErrScanCoverageIncomplete) {
+		t.Fatalf("scan with invalid user config = %v, want coverage error", err)
+	}
+	if strings.Contains(err.Error(), home) {
+		t.Fatalf("scan leaked home path: %v", err)
+	}
+}
+
+func writePluginMCPConfig(t *testing.T, installPath, body string) {
+	t.Helper()
+	metadataDir := filepath.Join(installPath, ".claude-plugin")
+	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(metadataDir, "plugin.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(installPath, ".mcp.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

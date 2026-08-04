@@ -1,0 +1,17 @@
+{
+  "schema_version": "capability-manifest/v1",
+  "capability_id": "helm.cap.net.fetch",
+  "name": "net-fetch",
+  "version": "1.0.0",
+  "description": "Fetch a URL over the network (irreversible-in-practice external fixture: no undo, external boundary).",
+  "protocol": "http-api",
+  "binding": { "kind": "http_endpoint", "ref": "https://{host}/{path}" },
+  "effect_class": "network_egress",
+  "reversibility": "none",
+  "data_boundary": "external",
+  "risk_score": 35,
+  "required_permit_level": "none",
+  "rollback": { "required": false },
+  "receipts": { "required": true },
+  "memory_access": { "user_domain": "none", "agent_domain": "write", "cross_domain_read": false }
+}

@@ -1,3 +1,7 @@
+// quantum_posture: these tests sign transparency-log heads with classical
+// Ed25519 using a deterministic zero seed. They exercise the log's existing
+// signing path and implement no cryptography of their own, so they make no
+// hybrid or post-quantum claim.
 package translog
 
 import (

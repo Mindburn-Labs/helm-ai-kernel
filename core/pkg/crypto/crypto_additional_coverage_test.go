@@ -1,3 +1,5 @@
+// quantum_posture: test-only coverage of existing cryptographic code paths;
+// it makes no production deployment, hybrid, or post-quantum assurance claim.
 package crypto
 
 import (
@@ -94,7 +96,7 @@ func TestExt_KeyRingVerifyDecisionRevokedKey(t *testing.T) {
 	ed, _ := NewEd25519Signer("k1")
 	kr.AddKey(ed)
 	d := &contracts.DecisionRecord{ID: "d1", Verdict: "ALLOW"}
-	kr.SignDecision(d)
+	kr.SignDecision(testDecisionV4Authority(d))
 	kr.RevokeKey("k1")
 	_, err := kr.VerifyDecision(d)
 	if err == nil {

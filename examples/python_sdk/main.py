@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any
 
-from helm_sdk import HelmApiError, HelmClient
+from helm_sdk import EvaluateRequest, HelmApiError, HelmClient
 
 
 CANONICAL_VERDICTS = {"ALLOW", "DENY", "ESCALATE"}
@@ -58,23 +58,24 @@ def main() -> None:
     helm_url = os.environ.get("HELM_URL", "http://127.0.0.1:7715")
     admin_key = os.environ.get("HELM_ADMIN_API_KEY")
     tenant_id = os.environ.get("HELM_TENANT_ID", "sdk-python-example")
-    with HelmClient(base_url=helm_url, api_key=admin_key, tenant_id=tenant_id) as helm:
-        allowed = helm.evaluate_decision(
-            {
-                "principal": "sdk-python-agent",
-                "action": "read-ticket",
-                "resource": "ticket:SDK-100",
-                "context": {"example": "python-sdk"},
-            }
-        )
-        denied = helm.evaluate_decision(
-            {
-                "principal": "sdk-python-agent",
-                "action": "dangerous-shell",
-                "resource": "system:shell",
-                "context": {"example": "python-sdk"},
-            }
-        )
+    principal_id = os.environ.get("HELM_PRINCIPAL_ID", "system-admin")
+    with HelmClient(base_url=helm_url, api_key=admin_key, tenant_id=tenant_id, principal_id=principal_id) as helm:
+        allowed = helm.evaluate_decision_v5(
+            EvaluateRequest(
+                tool="read-ticket",
+                effect_level="ticket:SDK-100",
+                session_id="python-sdk-example",
+                args={"example": "python-sdk"},
+            )
+        ).to_dict()
+        denied = helm.evaluate_decision_v5(
+            EvaluateRequest(
+                tool="dangerous-shell",
+                effect_level="system:shell",
+                session_id="python-sdk-example",
+                args={"example": "python-sdk"},
+            )
+        ).to_dict()
         require_verdict(allowed, "ALLOW", "allowed tool call")
         require_verdict(denied, "DENY", "denied dangerous action")
 
@@ -98,7 +99,7 @@ def main() -> None:
         )
         require_verdict(preflight, "ALLOW", "sandbox preflight")
 
-        evidence = helm.export_evidence("sdk-python-agent")
+        evidence = helm.export_evidence("python-sdk-example")
         evidence_result = helm.verify_evidence(evidence)
         if evidence_result.verdict != "PASS":
             raise AssertionError(f"evidence verification failed: {evidence_result.to_dict()}")

@@ -1,12 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/a2a"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
@@ -35,7 +42,7 @@ func TestLocalMCPRuntimeAuthorizesExecutionWithPolicyGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := executor(context.Background(), mcppkg.ToolExecutionRequest{
+	resp, err := executor.Execute(context.Background(), mcppkg.ToolExecutionRequest{
 		ToolName:  "file_read",
 		SessionID: "mcp-test",
 		Arguments: map[string]any{"path": target},
@@ -62,7 +69,7 @@ func TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := executor(context.Background(), mcppkg.ToolExecutionRequest{
+	resp, err := executor.Execute(context.Background(), mcppkg.ToolExecutionRequest{
 		ToolName:  "file_read",
 		SessionID: "mcp-test",
 		Arguments: map[string]any{"path": target},
@@ -76,4 +83,87 @@ func TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph(t *testing.T) {
 	if strings.Contains(resp.Content, "sensitive") {
 		t.Fatalf("blocked MCP response leaked file content: %q", resp.Content)
 	}
+}
+
+func TestLocalMCPRuntimeExecutesAdvertisedGovernanceTools(t *testing.T) {
+	evaluator := fixedMCPDecisionEvaluator{decision: &contracts.DecisionRecord{
+		ID:                 "decision-governance-tool",
+		Verdict:            string(contracts.VerdictAllow),
+		RequirementSetHash: "sha256:requirements",
+	}}
+	catalog, executor, err := newLocalMCPRuntimeWithEvaluator(evaluator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"helm.verify", "helm.evaluate"} {
+		if _, ok := catalog.Lookup(name); !ok {
+			t.Fatalf("implemented tool %q was not advertised", name)
+		}
+	}
+
+	gateway := mcppkg.NewGateway(catalog, mcppkg.GatewayConfig{}, mcppkg.WithGovernedExecutor(executor))
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	verify := callLocalMCPTool(t, mux, "helm.verify", map[string]any{
+		"action":    "file_read",
+		"principal": "agent-test",
+		"resource":  "allowed.txt",
+		"args_hash": "sha256:args",
+	})
+	if verify["verdict"] != string(contracts.VerdictAllow) || verify["receipt_id"] != "decision-governance-tool" {
+		t.Fatalf("helm.verify result = %#v", verify)
+	}
+
+	now := time.Now().UTC()
+	evaluate := callLocalMCPTool(t, mux, "helm.evaluate", map[string]any{
+		"envelope": map[string]any{
+			"envelope_id":       "envelope-test",
+			"schema_version":    a2a.CurrentVersion,
+			"origin_agent_id":   "agent-a",
+			"target_agent_id":   "agent-b",
+			"required_features": []string{string(a2a.FeatureEvidenceExport)},
+			"offered_features":  []string{string(a2a.FeatureEvidenceExport)},
+			"payload_hash":      "sha256:payload",
+			"created_at":        now,
+			"expires_at":        now.Add(time.Hour),
+		},
+		"local_features": []string{string(a2a.FeatureEvidenceExport)},
+	})
+	if evaluate["accepted"] != true || evaluate["receipt_id"] == "" {
+		t.Fatalf("helm.evaluate result = %#v", evaluate)
+	}
+}
+
+func callLocalMCPTool(t *testing.T, mux *http.ServeMux, name string, arguments map[string]any) map[string]any {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": name, "arguments": arguments},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
+	req.Header.Set("MCP-Protocol-Version", mcppkg.LatestProtocolVersion)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s status=%d body=%s", name, rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Result struct {
+			StructuredContent map[string]any `json:"structuredContent"`
+		} `json:"result"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Error != nil {
+		t.Fatalf("%s error=%v body=%s", name, response.Error, rec.Body.String())
+	}
+	return response.Result.StructuredContent
 }

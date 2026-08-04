@@ -40,6 +40,7 @@ enum ReasonCode {
   REASON_CODE_VERIFICATION_FAILURE = 15;
   REASON_CODE_TENANT_ISOLATION = 16;
   REASON_CODE_JURISDICTION_VIOLATION = 17;
+  REASON_CODE_SEMANTIC_THREAT_REVIEW_REQUIRED = 18;
 }
 
 // ── Core Types ─────────────────────────────────────────────────
@@ -49,6 +50,33 @@ message Effect {
   string effect_id = 2;
   bytes params = 3;   // JSON-encoded parameters
   string budget_id = 4;
+}
+
+// Deterministic advisory-classifier evidence. This is informational by
+// default; a Guardian policy may only escalate an explicitly configured score,
+// coverage, or availability condition.
+message SemanticThreatAssessment {
+  bool available = 1;
+  string model_version = 2;
+  string model_hash = 3;
+  string expected_model_hash = 4;
+  string failure_reason = 5;
+  uint32 threshold_bp = 6;
+  uint32 max_bp = 7;
+  string nearest_class = 8;
+  bool flagged = 9;
+  bool input_truncated = 10;
+}
+
+// Guardian-owned threat evidence bound by decision_record.v3 whenever it is
+// present. The input hash is a reference, never caller-controlled policy data.
+message ThreatScanReference {
+  string scan_id = 1;
+  string max_severity = 2;
+  uint32 finding_count = 3;
+  string trust_level = 4;
+  string input_hash = 5;
+  SemanticThreatAssessment semantic = 6;
 }
 
 message DecisionRecord {
@@ -68,6 +96,20 @@ message DecisionRecord {
   // for — the stable join key across lifecycle events, receipts, and
   // evidence. Optional; outside the decision signature until HELM-303.
   string correlation_id = 13;
+  // HELM-303 decision.v2 / decision.v3 signing envelope fields.
+  string signature_version = 14;
+  string phenotype_hash = 15;
+  string policy_content_hash = 16;
+  ThreatScanReference threat_scan = 17;
+  // decision_record.v4 authorization and signer bindings. These are appended
+  // so current V3 Guardian threat evidence keeps its established wire field.
+  string subject_id = 18;
+  string action = 19;
+  string resource = 20;
+  string signature_type = 21;
+  // The full open-string ReasonCode bound by the V2/V3/V4 preimages. The
+  // legacy reason_code field above remains a closed enum for compatibility.
+  string reason_code_text = 22;
 }
 
 message AuthorizedExecutionIntent {
@@ -101,6 +143,15 @@ message Receipt {
   // Product request identity (X-Helm-Correlation-ID) this receipt belongs
   // to. Optional; outside the receipt signature until HELM-303.
   string correlation_id = 17;
+  // HELM-303 receipt.v5 signing envelope fields. The existing verdict and
+  // reason_code fields are also signed by receipt.v5.
+  string signature_version = 18;
+  string status = 19;
+  string output_hash = 20;
+  string prev_hash = 21;
+  string args_hash = 22;
+  string policy_hash = 23;
+  string session_id = 24;
 }
 
 // ── PDP Service ────────────────────────────────────────────────

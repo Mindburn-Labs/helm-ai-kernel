@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 )
 
 type ReasonCode = string
@@ -14,7 +15,16 @@ type MappedNullable interface {
 }
 
 func IsNil(i interface{}) bool {
-	return i == nil
+	if i == nil {
+		return true
+	}
+	v := reflect.ValueOf(i)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 type NullableString struct {

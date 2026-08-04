@@ -17,6 +17,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
@@ -28,6 +29,7 @@ const (
 	approvalDispatchAdmissionRecoverPath = "/internal/v1/approval-grants/recover-dispatch-admission"
 	effectDispositionPath                = "/internal/v1/effect-dispositions"
 	effectDispositionRecoverPath         = "/internal/v1/effect-dispositions/recover"
+	effectReconciliationCandidatesPath   = "/internal/effect-dispositions/reconciliation-candidates"
 	approvalGrantConsumptionMaxBody      = 32 << 10
 	approvalConsumptionReasonHeader      = "X-Helm-Reason-Code"
 	approvalConsumptionFencedReason      = "EMERGENCY_STOP_FENCED"
@@ -51,20 +53,26 @@ type effectDispositionRecorder interface {
 	Recover(context.Context, string) (approvalceremony.EffectDispositionRecord, error)
 }
 
+type effectReconciliationCandidateProvider interface {
+	ListReconciliationCandidates(context.Context) (contracts.EffectReconciliationCandidates, error)
+}
+
 type approvalConsumerTokenValidator interface {
 	ValidateAuthorization(string) (*mcppkg.OAuthTokenClaims, error)
 }
 
 type approvalConsumptionRuntime struct {
-	consumer             approvalGrantConsumer
-	admitter             approvalDispatchAdmitter
-	validator            approvalConsumerTokenValidator
-	dispatchValidator    approvalConsumerTokenValidator
-	disposition          effectDispositionRecorder
-	dispositionValidator approvalConsumerTokenValidator
-	stops                kernel.ScopedStopReader
-	audience             string
-	maxTokenTTL          time.Duration
+	consumer                 approvalGrantConsumer
+	admitter                 approvalDispatchAdmitter
+	validator                approvalConsumerTokenValidator
+	dispatchValidator        approvalConsumerTokenValidator
+	disposition              effectDispositionRecorder
+	dispositionValidator     approvalConsumerTokenValidator
+	reconciliationCandidates effectReconciliationCandidateProvider
+	reconciliationValidator  approvalConsumerTokenValidator
+	stops                    kernel.ScopedStopReader
+	audience                 string
+	maxTokenTTL              time.Duration
 }
 
 type approvalGrantConsumptionRequest struct {
@@ -107,6 +115,9 @@ func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approva
 		mux.HandleFunc(effectDispositionPath, runtime.protectDisposition(runtime.handleEffectDispositionRecord))
 		mux.HandleFunc(effectDispositionRecoverPath, runtime.protectDisposition(runtime.handleEffectDispositionRecover))
 	}
+	if runtime.reconciliationCandidates != nil {
+		mux.HandleFunc(effectReconciliationCandidatesPath, runtime.protectReconciliationCandidates(runtime.handleEffectReconciliationCandidates))
+	}
 }
 
 func (runtime *approvalConsumptionRuntime) protect(next http.HandlerFunc) http.HandlerFunc {
@@ -127,6 +138,18 @@ func (runtime *approvalConsumptionRuntime) protectDisposition(next http.HandlerF
 	protected := runtime.protectWorkload(
 		runtime.dispositionValidator, runtime != nil && runtime.disposition != nil,
 		"helm-effect-disposition", "effect-disposition-recorder", "effect disposition", next,
+	)
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Helm-Contract-Status", "internal_non_production")
+		protected(w, r)
+	}
+}
+
+func (runtime *approvalConsumptionRuntime) protectReconciliationCandidates(next http.HandlerFunc) http.HandlerFunc {
+	protected := runtime.protectWorkload(
+		runtime.reconciliationValidator, runtime != nil && runtime.reconciliationCandidates != nil,
+		"helm-effect-reconciliation", "effect-reconciliation-reader", "effect reconciliation observation", next,
 	)
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -187,6 +210,30 @@ func (runtime *approvalConsumptionRuntime) handleEffectDispositionRecover(w http
 		return
 	}
 	writeEffectDispositionRecord(w, record)
+}
+
+func (runtime *approvalConsumptionRuntime) handleEffectReconciliationCandidates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		api.WriteMethodNotAllowed(w)
+		return
+	}
+	// The workload identity is the only scope input. Never let a caller select
+	// a FENCE, tenant, workspace, reservation, or connector tuple here.
+	if r.URL.RawQuery != "" || r.URL.ForceQuery {
+		api.WriteBadRequest(w, "Effect reconciliation candidates do not accept caller-selected scope")
+		return
+	}
+	projection, err := runtime.reconciliationCandidates.ListReconciliationCandidates(r.Context())
+	if err != nil {
+		writeEffectDispositionError(w, err)
+		return
+	}
+	if err := projection.Validate(); err != nil {
+		api.WriteError(w, http.StatusServiceUnavailable, "Effect reconciliation candidates unavailable", "Kernel projection is incomplete")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(projection)
 }
 
 func writeEffectDispositionRecord(w http.ResponseWriter, record approvalceremony.EffectDispositionRecord) {
@@ -440,7 +487,7 @@ func writeApprovalConsumerUnauthorized(w http.ResponseWriter, detail string) {
 
 func writeApprovalWorkloadUnauthorized(w http.ResponseWriter, realm, detail string) {
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="%s"`, realm))
-	api.WriteUnauthorized(w, detail)
+	httperr.WriteUnauthorized(w, detail)
 }
 
 func validSHA256Reference(value string) bool {

@@ -1,3 +1,5 @@
+// quantum_posture: the envelope and receipt fixtures use classical Ed25519
+// signatures only and make no hybrid or post-quantum protection claim.
 package contracts_test
 
 import (
@@ -360,6 +362,128 @@ func TestLaunchActivationAndCompensationRepresentStatefulResourcesWithoutDeploym
 	}
 }
 
+func TestLaunchEffectPreviewEnvelopeAndReceiptSchemas(t *testing.T) {
+	fixture := launchInputFixtures()[0]
+	key, err := contracts.DeriveLaunchEffectIdempotencyKey(fixture.effectID, fixture.input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := launchHash("e")
+	envelope := map[string]any{
+		"schema_version":               "launch_effect_envelope.v1",
+		"effect_id":                    fixture.effectID,
+		"tenant_id":                    "tenant-1",
+		"workspace_id":                 "workspace-1",
+		"mission_id":                   "mission-1",
+		"principal":                    "spiffe://helm/data-plane-1",
+		"audience":                     "launch.dispatch",
+		"kernel_trust_root_id":         "kernel-root-1",
+		"effect_ordinal":               1,
+		"input_schema_ref":             fixture.schema,
+		"input_schema_hash":            h,
+		"input":                        fixture.input,
+		"input_hash":                   key,
+		"idempotency_key":              key,
+		"plan_hash":                    launchHash("a"),
+		"approval_artifact_ref":        "approval-1",
+		"approval_artifact_hash":       launchHash("b"),
+		"approval_consumption_ref":     "approval-consumption-1",
+		"approval_consumption_hash":    launchHash("e"),
+		"dispatch_admission_ref":       "dispatch-admission-1",
+		"dispatch_admission_hash":      launchHash("1"),
+		"connector_authority_ref":      "connector-release-authority-1",
+		"connector_authority_hash":     launchHash("2"),
+		"dependency_set_ref":           "dependency-set-1",
+		"dependency_set_hash":          launchHash("f"),
+		"policy_epoch":                 "epoch-1",
+		"emergency_fence_epoch":        4,
+		"verdict":                      "ALLOW",
+		"kernel_verdict_ref":           "verdict-1",
+		"kernel_verdict_issued_at":     "2026-07-18T11:59:00Z",
+		"kernel_verdict_expiry":        "2026-07-18T12:06:00Z",
+		"kernel_verdict_signer_key_id": "kernel-key-1",
+		"kernel_verdict_hash":          launchHash("c"),
+		"kernel_verdict_signature":     "ed25519:" + strings.Repeat("a", 128),
+		"effect_permit_ref":            "permit-1",
+		"effect_permit_hash":           launchHash("0"),
+		"permit_nonce":                 "0123456789abcdefABCDEF",
+		"permit_issued_at":             "2026-07-18T12:00:00Z",
+		"permit_expiry":                "2026-07-18T12:05:00Z",
+		"proof_session_ref":            "proof-session-1",
+		"evidence_reservation_ref":     "evidence-reservation-1",
+		"connector_id":                 contracts.LaunchConnectorProviderRoute,
+		"connector_contract_hash":      launchHash("d"),
+		"action_urn":                   contracts.LaunchActionProviderProvision,
+		"request_body_hash":            key,
+		"args_c14n_hash":               key,
+		"dispatch_deadline":            "2026-07-18T12:04:00Z",
+		"replay_hint":                  "single_use_permit",
+	}
+	envelopeSchema := compileSchema(t, "effects/launch/launch_effect_envelope.v1.json")
+	if err := envelopeSchema.Validate(envelope); err != nil {
+		t.Fatalf("valid authorization envelope rejected: %v", err)
+	}
+	incompleteEnvelope := cloneLaunchInput(t, envelope)
+	incompleteInput := cloneLaunchInput(t, fixture.input)
+	delete(incompleteInput, "resource_graph_hash")
+	incompleteEnvelope["input"] = incompleteInput
+	if err := envelopeSchema.Validate(incompleteEnvelope); err == nil {
+		t.Fatal("authorization envelope schema accepted an input that violates its effect-specific schema")
+	}
+	wrongSchemaRef := cloneLaunchInput(t, envelope)
+	wrongSchemaRef["input_schema_ref"] = "effects/launch/provider_teardown.v1.json"
+	if err := envelopeSchema.Validate(wrongSchemaRef); err == nil {
+		t.Fatal("authorization envelope schema accepted a mismatched input schema reference")
+	}
+
+	signedReceipt, err := contracts.SignLaunchEffectReceipt(launchUnknownReceiptFixture(), launchFixturePrivateKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptSchema := compileSchema(t, "effects/launch/launch_effect_receipt.v1.json")
+	if err := validateAgainstSchema(t, receiptSchema, signedReceipt); err != nil {
+		t.Fatalf("valid UNKNOWN receipt rejected: %v", err)
+	}
+	receiptBytes, err := json.Marshal(signedReceipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt map[string]any
+	if err := json.Unmarshal(receiptBytes, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	receipt["evidence_pack_ref"] = "evidencepack:premature"
+	receipt["evidence_pack_hash"] = launchHash("2")
+	if err := receiptSchema.Validate(receipt); err == nil {
+		t.Fatal("UNKNOWN receipt claimed a finalized EvidencePack")
+	}
+	delete(receipt, "evidence_pack_ref")
+	delete(receipt, "evidence_pack_hash")
+	receipt["reconciliation_status"] = "PROVEN_APPLIED"
+	if err := receiptSchema.Validate(receipt); err == nil {
+		t.Fatal("UNKNOWN receipt escaped the mandatory PENDING reconciliation state")
+	}
+}
+
+func TestLaunchProviderV1InputsRemainDualReadCompatible(t *testing.T) {
+	for _, fixture := range launchInputFixtures() {
+		if !launchTestEffectRequiresProviderRoute(fixture.effectID) {
+			continue
+		}
+		t.Run(fixture.effectID, func(t *testing.T) {
+			legacy := cloneLaunchInput(t, fixture.input)
+			delete(legacy, "provider_offering_id")
+			delete(legacy, "provider_destination_hash")
+			if err := validateAgainstSchema(t, compileSchema(t, fixture.schema), legacy); err != nil {
+				t.Fatalf("legacy v1 input rejected by %s: %v", fixture.schema, err)
+			}
+			if err := contracts.ValidateLaunchEffectInputSemantics(fixture.effectID, legacy); err != nil {
+				t.Fatalf("legacy v1 input rejected by semantic validation: %v", err)
+			}
+		})
+	}
+}
+
 func TestLaunchEffectSchemasAdvertisePreviewOnly(t *testing.T) {
 	root := repoRoot(t)
 	for _, fixture := range launchInputFixtures() {
@@ -412,10 +536,11 @@ func providerActionLaunchInput(effectID string, ordinal int, actionURN string, f
 	input := providerLaunchInput(effectID, ordinal, map[string]any{
 		"workload_graph_ref": "workload-graph-1", "workload_graph_hash": launchHash("2"),
 		"route_binding_ref": "route-1", "route_binding_hash": launchHash("3"), "route_placement_id": "placement-1",
+		"provider_offering_id":            "app-platform",
 		"provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": launchHash("4"),
 		"provider_certification_ref": "do-certification-1", "provider_certification_hash": launchHash("5"),
 		"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": launchHash("5"),
-		"provider_action_urn": actionURN, "provider_payload_hash": launchHash("6"),
+		"provider_action_urn": actionURN, "provider_destination_hash": launchHash("d"), "provider_payload_hash": launchHash("6"),
 		"provision_receipt_ref": "provision-receipt-1", "provision_receipt_hash": launchHash("0"),
 		"resource_graph_ref": "resource-graph-1", "resource_graph_hash": launchHash("7"),
 	})
@@ -431,12 +556,12 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeProviderProvision,
 			schema:    "effects/launch/provider_provision.v1.json",
-			goldenKey: "sha256:f921f17d52f89b73f421fe1e0e916ac7f60ee9c658c5cca9c580f8643cbf6f9e",
+			goldenKey: "sha256:4d0f9f802ce906ec6cf444457b19aa2afcbb45ff028c3c4bd20930c266be6b2c",
 			input: providerLaunchInput(contracts.EffectTypeProviderProvision, 1, map[string]any{
 				"repository_analysis_ref": "analysis-1", "repository_analysis_hash": h("0"), "workload_graph_ref": "workload-graph-1", "workload_graph_hash": h("1"),
-				"route_binding_ref": "route-1", "route_binding_hash": h("2"), "route_placement_id": "placement-1", "provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("3"),
+				"route_binding_ref": "route-1", "route_binding_hash": h("2"), "route_placement_id": "placement-1", "provider_offering_id": "app-platform", "provider_capability_profile_ref": "do-profile-1", "provider_capability_profile_hash": h("3"),
 				"provider_certification_ref": "do-certification-1", "provider_certification_hash": h("4"),
-				"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": h("4"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanProvision, "provider_payload_hash": h("5"),
+				"provider_connector_id": contracts.LaunchConnectorDigitalOcean, "provider_connector_contract_hash": h("4"), "provider_action_urn": contracts.LaunchProviderActionDigitalOceanProvision, "provider_destination_hash": h("d"), "provider_payload_hash": h("5"),
 				"resource_graph_hash": h("6"),
 				"billing_cadence":     "MONTHLY", "commitment_term": "MONTH_TO_MONTH", "gross_cap_currency": "EUR", "gross_cap_minor": 1200, "gross_exposure_minor": 1200,
 				"generated_spec_hash": h("7"), "route_quote_ref": "route-quote-1", "route_quote_hash": h("8"), "constraint_set_hash": h("9"),
@@ -449,7 +574,7 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeDeployProductionActivate,
 			schema:    "effects/launch/deploy_production_activate.v1.json",
-			goldenKey: "sha256:ede0de2921f564f59eea19913fc8f1eb2dc9e2a199ccf0ed55067306e5c6715c",
+			goldenKey: "sha256:503807511de64e5e0584d5d42b534b1b540eb48033e1f9f56fb41ecd21b49a1d",
 			input: providerActionLaunchInput(contracts.EffectTypeDeployProductionActivate, 2, contracts.LaunchProviderActionDigitalOceanActivate, map[string]any{
 				"activation_class": contracts.LaunchTransitionReleaseCutover, "exposure_kind": "ENDPOINT",
 				"source_state_ref": "deployment-state-1", "source_state_hash": h("3"), "target_state_ref": "deployment-state-2", "target_state_hash": h("4"),
@@ -485,7 +610,7 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeProviderRollback,
 			schema:    "effects/launch/provider_rollback.v1.json",
-			goldenKey: "sha256:82defc4ae5cc59802de3bd2d5825fc23b5641196ea330ffae0c1bc03f7b5aa84",
+			goldenKey: "sha256:316a4cd6253bacbb3a61bb29dd8d283a0f743f9ecd10260e0e435db9b0036701",
 			input: providerActionLaunchInput(contracts.EffectTypeProviderRollback, 3, contracts.LaunchProviderActionDigitalOceanRollback, map[string]any{
 				"origin_activation_receipt_ref": "activation-receipt-1", "origin_activation_receipt_hash": h("f"), "resource_ownership_hash": h("2"),
 				"compensation_class": contracts.LaunchCompensationReleaseRollback, "source_state_ref": "deployment-state-2", "source_state_hash": h("4"), "target_state_ref": "deployment-state-1", "target_state_hash": h("6"),
@@ -498,7 +623,7 @@ func launchInputFixtures() []launchInputFixture {
 		{
 			effectID:  contracts.EffectTypeProviderTeardown,
 			schema:    "effects/launch/provider_teardown.v1.json",
-			goldenKey: "sha256:e69036f831cbb2cf2b5886a84001b1c743de1ea42a0b35b2d16b482d1f755040",
+			goldenKey: "sha256:262e39c8119b6930f4b5f68cab9c9fa06876367c0d577b5724434c375ebb8bcd",
 			input: providerActionLaunchInput(contracts.EffectTypeProviderTeardown, 4, contracts.LaunchProviderActionDigitalOceanTeardown, map[string]any{
 				"resource_ownership_hash": h("2"), "observed_state_hash": h("3"), "dependency_snapshot_hash": h("4"),
 				"resource_empty_evidence_hash": h("5"), "retention_clearance_hash": h("6"), "backup_clearance_hash": h("7"), "billing_exposure_snapshot_hash": h("8"),

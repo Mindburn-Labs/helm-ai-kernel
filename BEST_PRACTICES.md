@@ -1,5 +1,7 @@
 # OpenSSF Best Practices: Gold-Tier Mapping
 
+<!-- quantum_posture: this criteria map references classical Ed25519, ML-DSA-65, and hybrid signer code paths; it makes no claim that every repository surface, release, or connector has post-quantum protection. -->
+
 [![OpenSSF Best Practices](https://bestpractices.dev/projects/9876/badge)](https://bestpractices.dev/projects/9876)
 
 This document maps the OpenSSF Best Practices Badge gold-tier criteria
@@ -82,8 +84,8 @@ canonical bestpractices.dev project badge.
   the build twice on independent runners and diffs the SHA-256 set.
 - **Supply-chain hygiene** — pinned tool versions in `.github/workflows/`,
   per-release benchmark snapshots pinned by `scripts/release/pin_benchmarks.sh`,
-  Scorecard CI in `.github/workflows/scorecard.yml`, and pull-request
-  Scorecard SARIF category normalization in `scripts/ci/normalize_scorecard_sarif.py`.
+  and Scorecard CI in `.github/workflows/scorecard.yml`, where pull-request runs
+  stay read-only and retain SARIF as artifact evidence.
 
 ## Analysis (Gold-only Additions)
 

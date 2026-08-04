@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -49,7 +50,9 @@ func TestRun_Help(t *testing.T) {
 	exitCode := Run(args, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout.String(), "Protect an agent:")
+	assert.Contains(t, stdout.String(), "Your first governed-agent run")
+	assert.Contains(t, stdout.String(), "Launch local Kernel and browser Console")
+	assert.Contains(t, stdout.String(), "Review live decisions when they need you")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel help --all")
 }
 
@@ -58,8 +61,57 @@ func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
 	exitCode := Run([]string{"helm"}, &stdout, &stderr)
 
 	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout.String(), "helm-ai-kernel setup claude-code --yes")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel quickstart --console")
+	assert.Contains(t, stdout.String(), "requires a Console-including package")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel setup claude-code")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel setup codex")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel watch")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel help --json")
 	assert.Empty(t, stderr.String())
+}
+
+func TestRunQuickstartAndConsoleHelpPointToLocalConsole(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "quickstart",
+			args: []string{"quickstart", "--help"},
+			want: []string{
+				"Usage: helm-ai-kernel quickstart",
+				"helm-ai-kernel quickstart --console",
+				"loopback-only Kernel",
+				"Console-including packaged layout",
+				"helm-ai-kernel-<os>-<arch>-console.tar.gz",
+				"Homebrew and raw release binaries are headless",
+			},
+		},
+		{
+			name: "console topic",
+			args: []string{"help", "console"},
+			want: []string{
+				"The local browser Console is launched by Quickstart",
+				"helm-ai-kernel quickstart --console",
+				"loopback-only Kernel",
+				"Console-including packaged layout",
+				"helm-ai-kernel-<os>-<arch>-console.tar.gz",
+				"Homebrew and raw release binaries are headless",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := Run(append([]string{"helm"}, tc.args...), &stdout, &stderr); code != 0 {
+				t.Fatalf("exit code = %d, stderr = %s", code, stderr.String())
+			}
+			assert.Empty(t, stderr.String())
+			for _, want := range tc.want {
+				assert.Contains(t, stdout.String(), want)
+			}
+		})
+	}
 }
 
 func TestRunHelpAllPrintsFullCommandList(t *testing.T) {
@@ -121,6 +173,28 @@ func TestRunServerCommandReportsStartupFailure(t *testing.T) {
 
 	assert.Equal(t, 1, exitCode)
 	assert.Contains(t, stderr.String(), "bind failed")
+}
+
+func TestServerNarrationWriterSeparatesJSONAndText(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		json       bool
+		wantStdout string
+		wantStderr string
+	}{
+		{name: "json", json: true, wantStderr: "human startup narration"},
+		{name: "text", wantStdout: "human startup narration"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if _, err := fmt.Fprint(serverNarrationWriter(serverOptions{JSON: test.json, Stdout: &stdout, Stderr: &stderr}), "human startup narration"); err != nil {
+				t.Fatal(err)
+			}
+			if stdout.String() != test.wantStdout || stderr.String() != test.wantStderr {
+				t.Fatalf("narration routing stdout=%q stderr=%q", stdout.String(), stderr.String())
+			}
+		})
+	}
 }
 
 func TestRunLegacyServerFlagsReportStartupFailure(t *testing.T) {

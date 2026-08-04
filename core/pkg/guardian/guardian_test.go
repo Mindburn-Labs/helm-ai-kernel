@@ -63,6 +63,12 @@ func (m *MockSigner) SignDecision(d *contracts.DecisionRecord) error {
 	if m.FailSign {
 		return errors.New("signer broken")
 	}
+	if d.SignatureVersion == "" {
+		d.SignatureVersion = contracts.DecisionRecordSignatureV4
+	}
+	if d.SignatureType == "" {
+		d.SignatureType = "mock:signer"
+	}
 	d.Signature = "mock_decision_sig"
 	return nil
 }
@@ -177,7 +183,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 		}
 		evidence := []string{validHash}
 
-		err := subject.SignDecision(ctx, decision, effect, evidence, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, evidence, nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, "ALLOW", decision.Verdict)
@@ -195,7 +201,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 		}
 		evidence := []string{"missing_hash"}
 
-		err := subject.SignDecision(ctx, decision, effect, evidence, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, evidence, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to retrieve evidence")
 	})
@@ -209,7 +215,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 		}
 		evidence := []string{invalidHash}
 
-		err := subject.SignDecision(ctx, decision, effect, evidence, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, evidence, nil)
 		require.NoError(t, err) // Should NOT return error, but sign a FAIL verdict
 
 		assert.Equal(t, "DENY", decision.Verdict)
@@ -226,7 +232,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 		}
 		evidence := []string{validHash}
 
-		err := subject.SignDecision(ctx, decision, effect, evidence, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, evidence, nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, "DENY", decision.Verdict)
@@ -242,7 +248,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 			Requirements: []prg.Requirement{
 				{
 					ID:         "check-budget",
-					Expression: `input.effect.params.budget_id != ""`,
+					Expression: `input.effect.params.budget_id == "secret-policy-tier"`,
 				},
 			},
 		}
@@ -254,11 +260,11 @@ func TestGuardian_SignDecision(t *testing.T) {
 			EffectID:   "eff-cel-1",
 			Params: map[string]any{
 				"tool_name": "cel_tool",
-				"budget_id": "test-budget",
+				"budget_id": "secret-policy-tier",
 			},
 		}
 
-		err := subject.SignDecision(ctx, decision, effect, nil, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "ALLOW", decision.Verdict)
 	})
@@ -274,10 +280,18 @@ func TestGuardian_SignDecision(t *testing.T) {
 			},
 		}
 
-		err := subject.SignDecision(ctx, decision, effect, nil, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "DENY", decision.Verdict)
-		assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.Reason)
+		assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.ReasonCode)
+		// The deny reason names the blocking requirement and available input
+		// shape without exposing policy source.
+		assert.Contains(t, decision.Reason, string(contracts.ReasonMissingRequirement))
+		assert.Contains(t, decision.Reason, "check-budget")
+		assert.NotContains(t, decision.Reason, `input.effect.params.budget_id`)
+		assert.NotContains(t, decision.Reason, "secret-policy-tier")
+		assert.Contains(t, decision.Reason, "available input.* fields:")
+		assert.Contains(t, decision.Reason, "effect (object)")
 	})
 
 	t.Run("Fail: Signer Error", func(t *testing.T) {
@@ -292,7 +306,7 @@ func TestGuardian_SignDecision(t *testing.T) {
 		}
 		evidence := []string{validHash}
 
-		err := brokenSubject.SignDecision(ctx, decision, effect, evidence, nil)
+		err := brokenSubject.SignDecision(ctx, testDecisionAuthority(decision), effect, evidence, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "signer broken")
 	})
@@ -329,7 +343,7 @@ func TestGuardian_BudgetNotConsumedOnPolicyDeny(t *testing.T) {
 		EffectID:   "eff-deny",
 		Params:     map[string]any{"tool_name": "gated_tool", "budget_id": "b1"},
 	}
-	require.NoError(t, g.SignDecision(context.Background(), decision, effect, nil, nil))
+	require.NoError(t, g.SignDecision(context.Background(), testDecisionAuthority(decision), effect, nil, nil))
 	assert.Equal(t, string(contracts.VerdictDeny), decision.Verdict)
 	assert.Equal(t, string(contracts.ReasonMissingRequirement), decision.ReasonCode)
 
@@ -353,7 +367,7 @@ func TestGuardian_BudgetConsumeFailureFailsClosed(t *testing.T) {
 		EffectID:   "eff-consume-fail",
 		Params:     map[string]any{"tool_name": "safe_tool", "budget_id": "b1"},
 	}
-	require.NoError(t, g.SignDecision(context.Background(), decision, effect, nil, nil))
+	require.NoError(t, g.SignDecision(context.Background(), testDecisionAuthority(decision), effect, nil, nil))
 	assert.Equal(t, string(contracts.VerdictDeny), decision.Verdict,
 		"a failed budget consume must fail closed, not allow")
 	assert.Equal(t, string(contracts.ReasonBudgetError), decision.ReasonCode)
@@ -392,7 +406,7 @@ func TestGuardian_BudgetEnforcement(t *testing.T) {
 			},
 		}
 
-		err := subject.SignDecision(ctx, decision, effect, nil, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "ALLOW", decision.Verdict)
 	})
@@ -410,7 +424,7 @@ func TestGuardian_BudgetEnforcement(t *testing.T) {
 			},
 		}
 
-		err := subject.SignDecision(ctx, decision, effect, nil, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
 		// It might return error or sign fail depending on impl.
 		// My impl signs fail for "Budget Exceeded" but returns Signed decision (nil error).
 		require.NoError(t, err)
@@ -429,7 +443,7 @@ func TestGuardian_BudgetEnforcement(t *testing.T) {
 			},
 		}
 
-		err := subject.SignDecision(ctx, decision, effect, nil, nil)
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "ALLOW", decision.Verdict)
 	})

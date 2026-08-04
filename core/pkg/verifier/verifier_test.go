@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 )
 
@@ -108,6 +110,13 @@ func createValidCanonicalBundleFixture(t *testing.T) string {
 
 func sealVerifierFixture(t *testing.T, dir, packID string) {
 	t.Helper()
+	// These fixtures are sealed with a "file-dev" signer, so the seal carries
+	// its own verification key. That is self-attestation and is refused by
+	// default (F-02). These tests exercise the verifier's *other* checks —
+	// structure, index integrity, merkle roots, replay determinism — so they
+	// opt in explicitly rather than silently relying on the old default.
+	// TestVerifyBundle_RejectsSelfAttestedSealByDefault covers the refusal.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "1")
 	writeSealFixtureIndex(t, dir)
 	if _, err := evidencepkg.SealEvidencePack(context.Background(), dir, evidencepkg.SealEvidencePackOptions{
 		PackID:  packID,
@@ -183,6 +192,47 @@ func setBundleGates(t *testing.T, dir string, gates ...string) {
 	}
 	index["gates"] = gates
 	writeJSON(t, indexPath, index)
+}
+
+// TestVerifyBundle_RejectsSelfAttestedSealByDefault is the F-02 regression.
+//
+// dev-local is the default trust profile for `helm-ai-kernel verify`, and it
+// used to accept seal.signer.public_key — a key read out of the pack being
+// verified — as the trust root. Anyone could mint a keypair, sign their own
+// evidence pack, embed the matching public key, and get "PASS: n/n checks
+// passed". Accepting a self-attested seal must now be an explicit choice.
+func TestVerifyBundle_RejectsSelfAttestedSealByDefault(t *testing.T) {
+	dir := createValidBundleFixture(t)
+
+	// createValidBundleFixture opts in via sealVerifierFixture; withdraw that so
+	// this test observes the default posture an operator actually gets.
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
+
+	report, err := VerifyBundle(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if report.Verified {
+		t.Fatal("a self-attested evidence pack verified under the default profile: " +
+			"its signature proves internal consistency only, so reporting PASS overstates provenance")
+	}
+
+	var sealCheck *CheckResult
+	for i := range report.Checks {
+		if report.Checks[i].Name == "evidence_pack_seal" {
+			sealCheck = &report.Checks[i]
+			break
+		}
+	}
+	if sealCheck == nil {
+		t.Fatal("no evidence_pack_seal check present in report")
+	}
+	if sealCheck.Pass {
+		t.Fatal("evidence_pack_seal passed on a self-attested seal")
+	}
+	if !strings.Contains(sealCheck.Reason, "self-attested") {
+		t.Fatalf("seal failure should name self-attestation, got: %s", sealCheck.Reason)
+	}
 }
 
 func TestVerifyBundle_Valid(t *testing.T) {
@@ -416,6 +466,128 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+}
+
+func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := map[string]any{
+		"receipt_id":        "rcpt-001",
+		"decision_id":       "dec-001",
+		"effect_id":         "mcp.tools.call/proof.read",
+		"status":            "DENY",
+		"output_hash":       "sha256:out",
+		"prev_hash":         "",
+		"lamport_clock":     float64(1),
+		"args_hash":         "sha256:args",
+		"signature_version": "receipt.v5",
+		"verdict":           "DENY",
+		"reason_code":       "POLICY:VIOLATION",
+		"policy_hash":       "sha256:policy",
+		"session_id":        "session-1",
+	}
+	payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
+		SignatureVersion: "receipt.v5",
+		ReceiptID:        "rcpt-001",
+		DecisionID:       "dec-001",
+		EffectID:         "mcp.tools.call/proof.read",
+		Status:           "DENY",
+		OutputHash:       "sha256:out",
+		PrevHash:         "",
+		LamportClock:     1,
+		ArgsHash:         "sha256:args",
+		Verdict:          "DENY",
+		ReasonCode:       "POLICY:VIOLATION",
+		PolicyHash:       "sha256:policy",
+		SessionID:        "session-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	document["signature"] = hex.EncodeToString(ed25519.Sign(priv, payload))
+
+	if !verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
+		t.Fatal("structured V5 receipt must verify")
+	}
+	signedDocument, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal signed V5 receipt: %v", err)
+	}
+	for _, signedField := range []string{
+		"signature_version", "receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash",
+		"lamport_clock", "args_hash", "verdict", "reason_code", "policy_hash", "session_id",
+	} {
+		t.Run("missing_"+signedField, func(t *testing.T) {
+			var tampered map[string]any
+			if err := json.Unmarshal(signedDocument, &tampered); err != nil {
+				t.Fatalf("decode tampered V5 receipt: %v", err)
+			}
+			delete(tampered, signedField)
+			tamperedDocument, err := json.Marshal(tampered)
+			if err != nil {
+				t.Fatalf("marshal tampered V5 receipt: %v", err)
+			}
+			var decoded map[string]any
+			if err := json.Unmarshal(tamperedDocument, &decoded); err != nil {
+				t.Fatalf("decode tampered V5 JSON: %v", err)
+			}
+			if verifyEd25519CanonicalReceipt(decoded, decoded["signature"].(string), hex.EncodeToString(pub)) {
+				t.Fatalf("V5 receipt with omitted signed field %q verified", signedField)
+			}
+		})
+	}
+	document["policy_hash"] = "sha256:tampered"
+	if verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
+		t.Fatal("tampered V5 governance field must not verify")
+	}
+}
+
+func TestVerifyEd25519CanonicalReceiptV5AcceptsEmptySignedFieldsOnDisk(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt := contracts.Receipt{
+		ReceiptID:        "rcpt-empty-v5",
+		DecisionID:       "dec-empty-v5",
+		EffectID:         "effect-empty-v5",
+		Status:           "DENY",
+		PrevHash:         "",
+		LamportClock:     1,
+		SignatureVersion: contracts.ReceiptSignatureV5,
+	}
+	payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
+		SignatureVersion: receipt.SignatureVersion,
+		ReceiptID:        receipt.ReceiptID,
+		DecisionID:       receipt.DecisionID,
+		EffectID:         receipt.EffectID,
+		Status:           receipt.Status,
+		OutputHash:       receipt.OutputHash,
+		PrevHash:         receipt.PrevHash,
+		LamportClock:     receipt.LamportClock,
+		ArgsHash:         receipt.ArgsHash,
+		Verdict:          receipt.Verdict,
+		ReasonCode:       receipt.ReasonCode,
+		PolicyHash:       receipt.PolicyHash,
+		SessionID:        receipt.SessionID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt.Signature = hex.EncodeToString(ed25519.Sign(priv, payload))
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatalf("marshal V5 receipt: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode V5 receipt: %v", err)
+	}
+	if !verifyEd25519CanonicalReceipt(document, receipt.Signature, hex.EncodeToString(pub)) {
+		t.Fatalf("V5 receipt with structurally present empty signed fields did not verify: %s", data)
+	}
 }
 
 func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {

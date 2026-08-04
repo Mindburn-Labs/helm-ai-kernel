@@ -6,6 +6,8 @@
       "gates": [
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
+        "scorecard-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -15,11 +17,17 @@
         "verify-fixtures",
         "tcb-imports",
         "boundary-manifest",
+        "quality-self-test",
         "quantum-crypto-inventory",
+        "docker-smoke-hardening",
+        "helm-smoke-hardening",
+        "tla-tools-hardening",
         "python-sdk",
         "ts-sdk",
         "rust-sdk",
         "java-sdk",
+        "json-schemas",
+        "contract-breaking-self-test",
         "proto-breaking",
         "openapi-breaking"
       ]
@@ -27,8 +35,10 @@
     "merge": {
       "description": "Full merge gate for retained OSS surfaces.",
       "gates": [
+        "quality-self-test",
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -39,6 +49,9 @@
         "tcb-imports",
         "boundary-manifest",
         "quantum-crypto-inventory",
+        "docker-smoke-hardening",
+        "helm-smoke-hardening",
+        "tla-tools-hardening",
         "crucible",
         "go-race",
         "go-sdk",
@@ -50,6 +63,7 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
+        "contract-breaking-self-test",
         "proto-breaking",
         "deployment-smoke",
         "release-smoke"
@@ -61,6 +75,7 @@
         "quality-self-test",
         "docs-truth",
         "version-drift",
+        "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "go-lint",
@@ -71,6 +86,9 @@
         "tcb-imports",
         "boundary-manifest",
         "quantum-crypto-inventory",
+        "docker-smoke-hardening",
+        "helm-smoke-hardening",
+        "tla-tools-hardening",
         "crucible",
         "go-sdk",
         "python-sdk",
@@ -81,7 +99,8 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
-        "proto-breaking",
+        "contract-breaking-self-test",
+        "contract-breaking-release",
         "benchmark-report",
         "release-readiness",
         "reproducible-binaries",
@@ -211,6 +230,31 @@
       ]
     },
     {
+      "id": "release-workflow-contract",
+      "title": "Release workflow provenance contract",
+      "command": "python3 scripts/ci/release_workflow_contract_test.py",
+      "timeout_seconds": 60,
+      "paths": [
+        ".github/workflows/release.yml",
+        "scripts/ci/quality-gates.json",
+        "scripts/ci/release_workflow_contract_test.py"
+      ]
+    },
+    {
+      "id": "scorecard-workflow-contract",
+      "title": "Scorecard least-privilege contract",
+      "command": "python3 scripts/ci/scorecard_workflow_contract_test.py",
+      "timeout_seconds": 60,
+      "paths": [
+        ".github/workflows/scorecard.yml",
+        ".github/workflows/README.md",
+        ".bestpractices.json",
+        "BEST_PRACTICES.md",
+        "scripts/ci/quality-gates.json",
+        "scripts/ci/scorecard_workflow_contract_test.py"
+      ]
+    },
+    {
       "id": "presentation-hygiene",
       "title": "Presentation hygiene",
       "command": "make verify-presentation",
@@ -275,7 +319,7 @@
     {
       "id": "command-tests",
       "title": "CLI command tests",
-      "command": "go test ./core/cmd/helm-ai-kernel -count=1",
+      "command": "cd core && go test ./cmd/helm-ai-kernel -count=1",
       "timeout_seconds": 900,
       "paths": [
         "core/cmd/**",
@@ -417,15 +461,18 @@
     },
     {
       "id": "json-schemas",
-      "title": "JSON schema compilation",
-      "command": "python3 scripts/ci/check_json_schemas.py",
+      "title": "JSON schema compilation and registry conformance",
+      "command": "python3 scripts/ci/check_json_schemas_test.py && python3 scripts/ci/check_json_schemas.py && python3 scripts/ci/check_reason_codes.py",
       "timeout_seconds": 300,
       "paths": [
         "schemas/**",
         "protocols/json-schemas/**",
         "protocols/specs/**",
         "api/openapi/**",
-        "scripts/ci/check_json_schemas.py"
+        ".github/schema-requirements.txt",
+        "scripts/ci/check_json_schemas.py",
+        "scripts/ci/check_json_schemas_test.py",
+        "scripts/ci/check_reason_codes.py"
       ]
     },
     {
@@ -463,6 +510,38 @@
       "paths": [
         "protocols/policy-schema/**",
         "buf.yaml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "contract-breaking-self-test",
+      "title": "Contract-breaking gate regression test",
+      "description": "Proves unavailable bases and differ execution failures fail closed, while mutable label-style input cannot override a break.",
+      "command": "make test-contract-breaking",
+      "timeout_seconds": 120,
+      "paths": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        "scripts/ci/contract_breaking.sh",
+        "scripts/ci/test_contract_breaking.sh",
+        "scripts/ci/quality-gates.json",
+        "scripts/ci/quality.py",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "contract-breaking-release",
+      "title": "Prior-release contract-breaking check",
+      "description": "Diffs OpenAPI and policy-schema contracts against the commit resolved from the immutable prior release tag.",
+      "command": "make contract-breaking-release",
+      "timeout_seconds": 600,
+      "paths": [
+        ".github/workflows/release.yml",
+        "api/openapi/**",
+        "protocols/specs/effects/openapi.yaml",
+        "protocols/policy-schema/**",
+        "VERSION",
+        "scripts/ci/contract_breaking.sh",
         "Makefile"
       ]
     },

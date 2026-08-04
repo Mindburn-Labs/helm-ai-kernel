@@ -196,6 +196,33 @@ CREATE TABLE IF NOT EXISTS generated_spec_approval_ceremonies (
     )
 );
 
+-- Fail closed before enforcing one active binding for legacy rows.
+DO $$
+DECLARE
+    has_duplicate_active_binding BOOLEAN;
+BEGIN
+    BEGIN
+        PERFORM set_config('row_security', 'off', true);
+        SELECT EXISTS (
+            SELECT 1
+            FROM generated_spec_approval_ceremonies
+            WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED')
+            GROUP BY tenant_id, workspace_id, binding_ref
+            HAVING COUNT(*) > 1
+        ) INTO has_duplicate_active_binding;
+    EXCEPTION
+        WHEN insufficient_privilege THEN
+            RAISE EXCEPTION 'generated spec approval ceremony migration blocked: cannot inspect legacy active bindings with complete visibility'
+                USING ERRCODE = 'P0001';
+    END;
+
+    IF has_duplicate_active_binding THEN
+        RAISE EXCEPTION 'generated spec approval ceremony migration blocked: duplicate active bindings require operator reconciliation'
+            USING ERRCODE = 'P0001';
+    END IF;
+END
+$$;
+
 CREATE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_active_scope_idx
     ON generated_spec_approval_ceremonies (tenant_id, workspace_id, state, updated_at DESC)
     WHERE state IN ('HOLD_PENDING', 'CHALLENGE_ISSUED', 'QUORUM_VERIFIED', 'GRANT_ISSUED');

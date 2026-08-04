@@ -74,6 +74,106 @@ func TestPostgresSchemaKeepsOneActiveCeremonyPerBinding(t *testing.T) {
 	}
 }
 
+func TestPostgresSchemaPreflightsLegacyDuplicateActiveBindings(t *testing.T) {
+	const diagnostic = "generated spec approval ceremony migration blocked: duplicate active bindings require operator reconciliation"
+	preflight := strings.Index(generatedSpecApprovalPostgresSchema, diagnostic)
+	uniqueIndex := strings.Index(generatedSpecApprovalPostgresSchema, "CREATE UNIQUE INDEX IF NOT EXISTS generated_spec_approval_ceremonies_active_binding_ref_uq")
+	if preflight < 0 || uniqueIndex < 0 || preflight > uniqueIndex {
+		t.Fatalf("legacy duplicate preflight must precede active binding unique index")
+	}
+	if !strings.Contains(generatedSpecApprovalPostgresSchema, "PERFORM set_config('row_security', 'off', true)") {
+		t.Fatal("legacy duplicate preflight must require complete row visibility")
+	}
+}
+
+// TestPostgresStoreInitPreflightsLegacyActiveBindings exercises a schema that
+// predates the active-binding unique index. It never repairs or exposes the
+// duplicate scope; the migration must stop with its static operator diagnostic.
+func TestPostgresStoreInitPreflightsLegacyActiveBindings(t *testing.T) {
+	postgresURL := os.Getenv("HELM_TEST_POSTGRES_URL")
+	if postgresURL == "" {
+		t.Skip("set HELM_TEST_POSTGRES_URL to run generated spec approval PostgreSQL migration proof")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	for _, test := range []struct {
+		name       string
+		duplicates bool
+		wantErr    bool
+	}{
+		{name: "valid legacy data migrates"},
+		{name: "duplicate active bindings fail closed", duplicates: true, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			schema := fmt.Sprintf("helm_generated_spec_approval_migration_%d", time.Now().UnixNano())
+			db := openGeneratedSpecApprovalTestPostgres(t, postgresURL, schema, "", "")
+			defer func() { _ = db.Close() }()
+			if _, err := db.ExecContext(ctx, `CREATE SCHEMA `+pq.QuoteIdentifier(schema)); err != nil {
+				t.Fatalf("create generated spec approval migration schema: %v", err)
+			}
+			defer func() {
+				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cleanupCancel()
+				_, _ = db.ExecContext(cleanupCtx, `DROP SCHEMA IF EXISTS `+pq.QuoteIdentifier(schema)+` CASCADE`)
+			}()
+			if _, err := db.ExecContext(ctx, generatedSpecApprovalLegacyTableSchema(t)); err != nil {
+				t.Fatalf("create legacy generated spec approval table: %v", err)
+			}
+
+			fixture := newCeremonyFixture(t)
+			legacyStore := NewPostgresStore(db, fixture.verifier)
+			hold, err := fixture.service.BeginHold(ctx, fixture.binding.BindingRef)
+			if err != nil {
+				t.Fatalf("create legacy hold: %v", err)
+			}
+			if _, err := legacyStore.CreateHold(ctx, hold); err != nil {
+				t.Fatalf("persist legacy hold: %v", err)
+			}
+			if test.duplicates {
+				duplicate := hold
+				duplicate.ApprovalID = "approval-legacy-duplicate"
+				if _, err := legacyStore.CreateHold(ctx, duplicate); err != nil {
+					t.Fatalf("persist duplicate legacy hold: %v", err)
+				}
+			}
+
+			err = legacyStore.Init(ctx)
+			if test.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "generated spec approval ceremony migration blocked: duplicate active bindings require operator reconciliation") {
+					t.Fatalf("legacy duplicate migration error = %v", err)
+				}
+				for _, identifier := range []string{"tenant-a", "workspace-a", "binding-a", "approval-legacy-duplicate"} {
+					if strings.Contains(err.Error(), identifier) {
+						t.Fatalf("legacy duplicate migration diagnostic leaked %q: %v", identifier, err)
+					}
+				}
+				var index sql.NullString
+				if indexErr := db.QueryRowContext(ctx, `SELECT to_regclass('generated_spec_approval_ceremonies_active_binding_ref_uq')`).Scan(&index); indexErr != nil || index.Valid {
+					t.Fatalf("duplicate migration created active binding unique index = %q, error = %v", index.String, indexErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("migrate valid legacy data: %v", err)
+			}
+			var index sql.NullString
+			if err := db.QueryRowContext(ctx, `SELECT to_regclass('generated_spec_approval_ceremonies_active_binding_ref_uq')`).Scan(&index); err != nil || !index.Valid {
+				t.Fatalf("active binding unique index = %q, error = %v", index.String, err)
+			}
+		})
+	}
+}
+
+func generatedSpecApprovalLegacyTableSchema(t *testing.T) string {
+	t.Helper()
+	legacySchema, _, found := strings.Cut(generatedSpecApprovalPostgresSchema, "\n-- Fail closed before enforcing one active binding for legacy rows.")
+	if !found {
+		t.Fatal("generated spec approval migration missing legacy duplicate preflight")
+	}
+	return legacySchema
+}
+
 // TestPostgresLifecycleSingleIssueConsumeAndFence is a source-owned real-
 // Postgres proof. It intentionally skips until the caller supplies a database
 // URL; it never falls back to SQLite or a missing emergency-stop table.

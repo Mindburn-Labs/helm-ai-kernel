@@ -140,12 +140,14 @@ func TestScanCommandDoesNotExportOnIncompleteCoverage(t *testing.T) {
 	}
 	out := t.TempDir()
 	output := filepath.Join(out, "risk.json")
+	pack := filepath.Join(out, "risk.tar")
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"helm-ai-kernel", "scan",
 		"--path", root,
 		"--salt-file", filepath.Join(out, "salt.hex"),
 		"--risk-envelope", output,
+		"--evidence-pack", pack,
 	}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("scan code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
@@ -158,6 +160,9 @@ func TestScanCommandDoesNotExportOnIncompleteCoverage(t *testing.T) {
 	}
 	if _, err := os.Stat(output); !os.IsNotExist(err) {
 		t.Fatalf("risk envelope should not be written, stat error = %v", err)
+	}
+	if _, err := os.Stat(pack); !os.IsNotExist(err) {
+		t.Fatalf("evidence pack should not be written, stat error = %v", err)
 	}
 }
 

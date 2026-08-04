@@ -1,7 +1,6 @@
 package riskscan
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -47,23 +46,6 @@ const (
 	configScopeUser configScope = iota
 	configScopeProject
 )
-
-type SchemaValidation struct {
-	Schema              string `json:"schema"`
-	Valid               bool   `json:"valid"`
-	EnvelopeContentHash string `json:"envelope_content_hash"`
-	ValidatedAt         string `json:"validated_at"`
-}
-
-type PrivacyManifest struct {
-	RawPromptsCollected   bool   `json:"raw_prompts_collected"`
-	SourceCodeCollected   bool   `json:"source_code_collected"`
-	SecretValuesCollected bool   `json:"secret_values_collected"`
-	CommandBodiesExported bool   `json:"command_bodies_exported"`
-	SaltExported          bool   `json:"salt_exported"`
-	RawSourcePackBundled  bool   `json:"raw_source_pack_bundled"`
-	GeneratedBy           string `json:"generated_by"`
-}
 
 // ErrScanCoverageIncomplete means the CLI-only static scan could not inspect
 // its declared candidate/config scope. Callers must not export a partial
@@ -473,72 +455,6 @@ func RenderHTML(envelope riskenvelope.RiskEnvelope) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func WriteEvidencePack(path string, envelope riskenvelope.RiskEnvelope, previews map[string][]byte) (err error) {
-	if err := envelope.Validate(); err != nil {
-		return err
-	}
-	body, err := EnvelopeJSON(envelope)
-	if err != nil {
-		return err
-	}
-	files := map[string][]byte{
-		"risk-envelope.json":     body,
-		"schema-validation.json": mustJSON(schemaValidation(envelope)),
-		"privacy-manifest.json":  mustJSON(PrivacyManifest{GeneratedBy: "helm-ai-kernel scan"}),
-		"source-pack-hash.json":  mustJSON(map[string]string{"source_pack_hash": envelope.SourcePackHash}),
-	}
-	for name, data := range previews {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("preview name is required")
-		}
-		clean := filepath.ToSlash(filepath.Clean(name))
-		if strings.HasPrefix(clean, "../") || clean == ".." || filepath.IsAbs(clean) {
-			return fmt.Errorf("invalid preview path %q", name)
-		}
-		files[clean] = data
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := f.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-	tw := tar.NewWriter(f)
-	defer func() {
-		if closeErr := tw.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		data := files[name]
-		header := &tar.Header{
-			Name:    name,
-			Mode:    0o644,
-			Size:    int64(len(data)),
-			ModTime: time.Unix(0, 0).UTC(),
-		}
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-		if _, err := tw.Write(data); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func UploadEnvelope(ctx context.Context, url string, body []byte) error {
 	if strings.TrimSpace(url) == "" {
 		return fmt.Errorf("upload url is required")
@@ -559,15 +475,6 @@ func UploadEnvelope(ctx context.Context, url string, body []byte) error {
 		return fmt.Errorf("upload failed: %s %s", resp.Status, strings.TrimSpace(string(msg)))
 	}
 	return nil
-}
-
-func schemaValidation(envelope riskenvelope.RiskEnvelope) SchemaValidation {
-	return SchemaValidation{
-		Schema:              riskenvelope.SchemaVersion,
-		Valid:               true,
-		EnvelopeContentHash: envelope.EnvelopeContentHash,
-		ValidatedAt:         envelope.GeneratedAt.UTC().Format(time.RFC3339),
-	}
 }
 
 func projectFindings(findings []shadow.Finding, obs ConfigObservation, salt []byte) ([]riskenvelope.EnvelopeFinding, error) {
@@ -968,14 +875,6 @@ func sortedRows(counts map[string]int) []previewRow {
 		rows = append(rows, previewRow{Name: name, Count: counts[name]})
 	}
 	return rows
-}
-
-func mustJSON(v any) []byte {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	return append(data, '\n')
 }
 
 const htmlPreviewTemplate = `<!doctype html>

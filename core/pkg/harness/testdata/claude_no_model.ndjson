@@ -1,0 +1,3 @@
+{"type":"system","subtype":"init","session_id":"sess-claude-2","tools":["Read"]}
+{"type":"assistant","session_id":"sess-claude-2","message":{"id":"msg_1","content":[{"type":"text","text":"Working."}]}}
+{"type":"result","subtype":"success","is_error":false,"session_id":"sess-claude-2","result":"Done."}

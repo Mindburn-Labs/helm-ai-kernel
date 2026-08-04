@@ -1,0 +1,7 @@
+{"id":"0","msg":{"type":"session_configured","session_id":"sess-codex-1","model":"gpt-5-codex"}}
+{"id":"1","msg":{"type":"agent_message","message":"Inspecting the tree."}}
+{"id":"2","msg":{"type":"exec_command_begin","call_id":"call-1","command":["bash","-lc","go test ./..."]}}
+{"id":"3","msg":{"type":"exec_command_end","call_id":"call-1","exit_code":1}}
+{"id":"4","msg":{"type":"background_event","message":"unrecognised frame type"}}
+{"id":"5","msg":{"type":"token_count","input_tokens":880,"output_tokens":210}}
+{"id":"6","msg":{"type":"task_complete","last_agent_message":"Fixed the assertion."}}

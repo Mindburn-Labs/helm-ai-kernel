@@ -2,6 +2,8 @@ package harness
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -306,19 +308,25 @@ func TestArgsRejectUnknownAccessProfile(t *testing.T) {
 
 func TestValidateRunSpecRejectsMissingTreeAndPrompt(t *testing.T) {
 	caps := claudeCapabilities()
+	runtime := t.TempDir()
+	tree := filepath.Join(runtime, "tree")
+	home := filepath.Join(runtime, "home")
 	if err := validateRunSpec(RunSpec{Prompt: "hi", Access: AccessReadonly}, caps); !errors.Is(err, ErrTreeRequired) {
 		t.Errorf("err = %v, want ErrTreeRequired", err)
 	}
-	if err := validateRunSpec(RunSpec{Tree: "/t", HomeDir: "/home", Access: AccessReadonly}, caps); !errors.Is(err, ErrPromptRequired) {
+	if err := validateRunSpec(RunSpec{Tree: tree, HomeDir: home, Access: AccessReadonly}, caps); !errors.Is(err, ErrPromptRequired) {
 		t.Errorf("err = %v, want ErrPromptRequired", err)
 	}
-	if err := validateRunSpec(RunSpec{Tree: "/t", HomeDir: "/home", Prompt: "hi", Access: "nope"}, caps); !errors.Is(err, ErrAccessUnsupported) {
+	if err := validateRunSpec(RunSpec{Tree: tree, HomeDir: home, Prompt: "hi", Access: "nope"}, caps); !errors.Is(err, ErrAccessUnsupported) {
 		t.Errorf("err = %v, want ErrAccessUnsupported", err)
 	}
 }
 
 func TestValidateRunSpecRequiresScopedSiblingHome(t *testing.T) {
 	caps := claudeCapabilities()
+	runtime := filepath.Join(t.TempDir(), "not-created")
+	tree := filepath.Join(runtime, "tree")
+	home := filepath.Join(runtime, "home")
 	for _, tc := range []struct {
 		name string
 		spec RunSpec
@@ -326,22 +334,22 @@ func TestValidateRunSpecRequiresScopedSiblingHome(t *testing.T) {
 	}{
 		{
 			name: "missing home",
-			spec: RunSpec{Tree: "/runtime/tree", Prompt: "hi", Access: AccessReadonly},
+			spec: RunSpec{Tree: tree, Prompt: "hi", Access: AccessReadonly},
 			want: ErrHomeDirRequired,
 		},
 		{
 			name: "home inside tree",
-			spec: RunSpec{Tree: "/runtime/tree", HomeDir: "/runtime/tree/home", Prompt: "hi", Access: AccessReadonly},
+			spec: RunSpec{Tree: tree, HomeDir: filepath.Join(tree, "home"), Prompt: "hi", Access: AccessReadonly},
 			want: ErrHomeDirInsideTree,
 		},
 		{
 			name: "home outside sibling pair",
-			spec: RunSpec{Tree: "/runtime/tree", HomeDir: "/other/home", Prompt: "hi", Access: AccessReadonly},
+			spec: RunSpec{Tree: tree, HomeDir: filepath.Join(t.TempDir(), "home"), Prompt: "hi", Access: AccessReadonly},
 			want: ErrHomeDirNotSibling,
 		},
 		{
 			name: "sibling home",
-			spec: RunSpec{Tree: "/runtime/tree", HomeDir: "/runtime/home", Prompt: "hi", Access: AccessReadonly},
+			spec: RunSpec{Tree: tree, HomeDir: home, Prompt: "hi", Access: AccessReadonly},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -356,5 +364,44 @@ func TestValidateRunSpecRequiresScopedSiblingHome(t *testing.T) {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestValidateRunSpecAcceptsRealSiblingHome(t *testing.T) {
+	runtime := t.TempDir()
+	tree := filepath.Join(runtime, "tree")
+	home := filepath.Join(runtime, "home")
+	if err := os.MkdirAll(tree, 0o755); err != nil {
+		t.Fatalf("create tree: %v", err)
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("create scoped home: %v", err)
+	}
+
+	spec := RunSpec{Tree: tree, HomeDir: home, Prompt: "hi", Access: AccessReadonly}
+	if err := validateRunSpec(spec, claudeCapabilities()); err != nil {
+		t.Fatalf("validateRunSpec: %v", err)
+	}
+}
+
+// TestReviewSymlinkedSiblingHomePassesValidation reproduces the review finding:
+// a lexical sibling must still be rejected when its effective directory is
+// outside the worktree envelope.
+func TestReviewSymlinkedSiblingHomePassesValidation(t *testing.T) {
+	runtime := t.TempDir()
+	tree := filepath.Join(runtime, "tree")
+	if err := os.MkdirAll(tree, 0o755); err != nil {
+		t.Fatalf("create tree: %v", err)
+	}
+
+	externalHome := t.TempDir()
+	home := filepath.Join(runtime, "home")
+	if err := os.Symlink(externalHome, home); err != nil {
+		t.Fatalf("create external home symlink: %v", err)
+	}
+
+	spec := RunSpec{Tree: tree, HomeDir: home, Prompt: "hi", Access: AccessReadonly}
+	if err := validateRunSpec(spec, claudeCapabilities()); !errors.Is(err, ErrHomeDirNotSibling) {
+		t.Fatalf("validateRunSpec error = %v, want ErrHomeDirNotSibling", err)
 	}
 }

@@ -358,11 +358,11 @@ func validateRunSpec(spec RunSpec, caps CapabilityProfile) error {
 	if strings.TrimSpace(spec.HomeDir) == "" {
 		return ErrHomeDirRequired
 	}
-	treePath, err := filepath.Abs(spec.Tree)
+	treePath, err := resolveEffectivePath(spec.Tree)
 	if err != nil {
 		return fmt.Errorf("%w: resolve execution tree: %v", ErrTreeRequired, err)
 	}
-	homePath, err := filepath.Abs(spec.HomeDir)
+	homePath, err := resolveEffectivePath(spec.HomeDir)
 	if err != nil {
 		return fmt.Errorf("%w: resolve scoped home: %v", ErrHomeDirRequired, err)
 	}
@@ -387,6 +387,42 @@ func pathWithin(path, base string) bool {
 		return false
 	}
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// resolveEffectivePath returns an absolute path with every existing component
+// resolved. A run path may not exist until the adapter starts, so resolve its
+// nearest existing parent before reattaching the missing suffix. Comparing
+// filepath.Abs paths alone would accept a lexical sibling HOME whose symlink
+// target is outside the owned worktree envelope.
+func resolveEffectivePath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+
+	current := abs
+	var suffix []string
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
+			}
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return resolved, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("no existing parent for %q", abs)
+		}
+		suffix = append(suffix, filepath.Base(current))
+		current = parent
+	}
 }
 
 // composePrompt folds Instructions into the prompt.

@@ -81,18 +81,19 @@ type generatedSpecApprovalConsumeRequest struct {
 }
 
 type generatedSpecApprovalRecordResponse struct {
-	State         generatedspecapprovalceremony.State       `json:"state"`
-	ApprovalID    string                                    `json:"approval_id"`
-	TenantID      string                                    `json:"tenant_id"`
-	WorkspaceID   string                                    `json:"workspace_id"`
-	Challenge     *contracts.GeneratedSpecApprovalChallenge `json:"challenge,omitempty"`
-	Grant         *generatedspecapproval.SignedGrant        `json:"grant,omitempty"`
-	Consumption   *generatedspecapproval.SignedConsumption  `json:"consumption,omitempty"`
-	HoldStartedAt time.Time                                 `json:"hold_started_at"`
-	ExpiresAt     *time.Time                                `json:"expires_at,omitempty"`
-	ConsumedAt    *time.Time                                `json:"consumed_at,omitempty"`
-	ConsumedBy    string                                    `json:"consumed_by,omitempty"`
-	Version       int64                                     `json:"version"`
+	State           generatedspecapprovalceremony.State       `json:"state"`
+	ApprovalID      string                                    `json:"approval_id"`
+	TenantID        string                                    `json:"tenant_id"`
+	WorkspaceID     string                                    `json:"workspace_id"`
+	GeneratedSpecID string                                    `json:"generated_spec_id"`
+	Challenge       *contracts.GeneratedSpecApprovalChallenge `json:"challenge,omitempty"`
+	Grant           *generatedspecapproval.SignedGrant        `json:"grant,omitempty"`
+	Consumption     *generatedspecapproval.SignedConsumption  `json:"consumption,omitempty"`
+	HoldStartedAt   time.Time                                 `json:"hold_started_at"`
+	ExpiresAt       *time.Time                                `json:"expires_at,omitempty"`
+	ConsumedAt      *time.Time                                `json:"consumed_at,omitempty"`
+	ConsumedBy      string                                    `json:"consumed_by,omitempty"`
+	Version         int64                                     `json:"version"`
 }
 
 func registerGeneratedSpecApprovalRoutes(mux *http.ServeMux, runtime *generatedSpecApprovalRuntime) {
@@ -274,7 +275,8 @@ func writeGeneratedSpecApprovalResult(w http.ResponseWriter, record generatedspe
 	}
 	response := generatedSpecApprovalRecordResponse{
 		State: record.State, ApprovalID: record.ApprovalID, TenantID: record.TenantID, WorkspaceID: record.WorkspaceID,
-		Challenge: record.Challenge, Grant: record.SignedGrant, Consumption: record.SignedConsumption,
+		GeneratedSpecID: record.Binding.GeneratedSpecID,
+		Challenge:       record.Challenge, Grant: record.SignedGrant, Consumption: record.SignedConsumption,
 		HoldStartedAt: record.HoldStartedAt, ExpiresAt: record.ExpiresAt, ConsumedAt: record.ConsumedAt,
 		ConsumedBy: record.ConsumedBy, Version: record.Version,
 	}

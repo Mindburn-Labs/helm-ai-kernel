@@ -28,12 +28,19 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-const setupMCPServerName = "helm-ai-kernel-governance"
+const (
+	setupMCPServerName      = "helm-ai-kernel-governance"
+	setupRecoveryMarkerName = "setup-recovery.json"
+)
 
 var (
-	setupRunQuickstart = runQuickstartCmdWithReady
-	setupRunFirstRun   = runQuickstartCmd
-	setupExecCommand   = func(dir, name string, args ...string) error {
+	setupRunQuickstart      = runQuickstartCmdWithReady
+	setupRunFirstRun        = runQuickstartCmd
+	setupResolveSigningSeed = resolveWorkstationSigningSeed
+	setupRunAutoconfigure   = runSetupAutoconfigure
+	setupInstallMCP         = installSetupMCP
+	setupInstallHook        = installSetupHook
+	setupExecCommand        = func(dir, name string, args ...string) error {
 		cmd := exec.Command(name, args...)
 		if dir != "" {
 			cmd.Dir = dir
@@ -113,6 +120,16 @@ type setupSummary struct {
 	QuickstartStarted bool     `json:"quickstart_started"`
 	PlannedActions    []string `json:"planned_actions"`
 	RetainedData      bool     `json:"retained_data,omitempty"`
+	RecoveryRequired  bool     `json:"recovery_required,omitempty"`
+}
+
+type setupRecoveryMarker struct {
+	Version         int    `json:"version"`
+	Target          string `json:"target"`
+	Scope           string `json:"scope"`
+	Workspace       string `json:"workspace"`
+	SigningSeedFile string `json:"signing_seed_file,omitempty"`
+	PolicyProfile   string `json:"policy_profile,omitempty"`
 }
 
 func init() {
@@ -509,24 +526,21 @@ func runSetupInstallCmdWithInput(args []string, stdout, stderr io.Writer, input 
 		fmt.Fprintf(stderr, "setup: create data dir: %v\n", err)
 		return 1
 	}
-	if _, err := resolveWorkstationSigningSeed(opts.DataDir, "", opts.SigningSeedFile); err != nil {
-		fmt.Fprintf(stderr, "setup: provision local receipt signing key: %v\n", err)
+	if err := beginSetupRecovery(opts); err != nil {
+		fmt.Fprintf(stderr, "setup: recovery marker: %v\n", err)
 		return 1
 	}
-	grade, policyPath, err := runSetupAutoconfigure(opts.DataDir, opts.Workspace)
-	if err != nil {
-		fmt.Fprintf(stderr, "setup: autoconfigure: %v\n", err)
-		return 1
+	if err := provisionSetupLocalState(opts, &summary); err != nil {
+		return reportSetupRecovery(stderr, opts, err)
 	}
-	summary.ScanGrade = grade
-	summary.DraftPolicyPath = policyPath
-	if err := installSetupMCP(opts, summary.BinaryPath); err != nil {
-		fmt.Fprintf(stderr, "setup: install MCP server: %v\n", err)
-		return 1
+	if err := setupInstallMCP(opts, summary.BinaryPath); err != nil {
+		return reportSetupRecovery(stderr, opts, fmt.Errorf("install MCP server: %w", err))
 	}
-	if err := installSetupHook(opts, summary.BinaryPath); err != nil {
-		fmt.Fprintf(stderr, "setup: install pre-tool hook: %v\n", err)
-		return 1
+	if err := setupInstallHook(opts, summary.BinaryPath); err != nil {
+		return reportSetupRecovery(stderr, opts, fmt.Errorf("install pre-tool hook: %w", err))
+	}
+	if err := clearSetupRecovery(opts); err != nil {
+		return reportSetupRecovery(stderr, opts, fmt.Errorf("clear recovery marker: %w", err))
 	}
 	summary.MCPInstalled = true
 	summary.HookInstalled = true
@@ -582,6 +596,25 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "setup status: %v\n", err)
 		return 2
 	}
+	marker, recoveryPending, err := readSetupRecoveryMarker(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup status: recovery marker: %v\n", err)
+		return 2
+	}
+	if recoveryPending && marker.matches(opts) {
+		recoveryOpts := marker.options(opts)
+		if err := populateSetupPolicyProfileDigest(&recoveryOpts); err != nil {
+			fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
+			return 2
+		}
+		summary.RecoveryCommand = setupRecoveryCommand(recoveryOpts)
+		summary.RecoveryRequired = true
+		summary.MCPInstalled = setupMCPInstalled(recoveryOpts, summary.ClientConfigPath, summary.BinaryPath)
+		summary.HookInstalled = setupHookInstalled(recoveryOpts, summary.HookConfigPath, summary.BinaryPath)
+		summary.ClientState = "recovery_required"
+		printSetupSummary(stdout, summary, opts.JSON)
+		return 1
+	}
 	if !opts.PolicyProfileSet {
 		if err := discoverSetupStatusPolicyProfile(&opts, summary.HookConfigPath, summary.BinaryPath); err != nil {
 			fmt.Fprintf(stderr, "setup status: policy profile: %v\n", err)
@@ -625,6 +658,22 @@ func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "setup repair: pass --yes to repair HELM-owned config, or --dry-run to preview changes")
 		return 2
 	}
+	marker, recoveryPending, err := readSetupRecoveryMarker(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup repair: recovery marker: %v\n", err)
+		return 2
+	}
+	if recoveryPending {
+		if !marker.matches(opts) {
+			fmt.Fprintf(stderr, "setup repair: recovery marker belongs to a different setup; run `%s`\n", setupRecoveryCommand(marker.options(opts)))
+			return 2
+		}
+		opts, err = applySetupRecoveryMarker(opts, marker)
+		if err != nil {
+			fmt.Fprintf(stderr, "setup repair: recovery marker: %v\n", err)
+			return 2
+		}
+	}
 	summary, err := buildSetupSummary(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "setup repair: %v\n", err)
@@ -646,25 +695,43 @@ func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	summary.MCPInstalled = setupMCPInstalled(opts, summary.ClientConfigPath, summary.BinaryPath)
 	summary.HookInstalled = setupHookInstalled(opts, summary.HookConfigPath, summary.BinaryPath)
+	summary.RecoveryRequired = recoveryPending
 	summary.PlannedActions = setupRepairActions(summary)
 	if opts.DryRun {
 		printSetupSummary(stdout, summary, opts.JSON)
 		return 0
 	}
 	printSetupPlan(stderr, summary)
+	if recoveryPending {
+		if err := provisionSetupLocalState(opts, &summary); err != nil {
+			return reportSetupRecovery(stderr, opts, err)
+		}
+	}
 	if !summary.MCPInstalled {
-		if err := installSetupMCP(opts, summary.BinaryPath); err != nil {
+		if err := setupInstallMCP(opts, summary.BinaryPath); err != nil {
+			if recoveryPending {
+				return reportSetupRecovery(stderr, opts, fmt.Errorf("install MCP server: %w", err))
+			}
 			fmt.Fprintf(stderr, "setup repair: install MCP server: %v\n", err)
 			return 1
 		}
 		summary.MCPInstalled = true
 	}
 	if !summary.HookInstalled {
-		if err := installSetupHook(opts, summary.BinaryPath); err != nil {
+		if err := setupInstallHook(opts, summary.BinaryPath); err != nil {
+			if recoveryPending {
+				return reportSetupRecovery(stderr, opts, fmt.Errorf("install pre-tool hook: %w", err))
+			}
 			fmt.Fprintf(stderr, "setup repair: install pre-tool hook: %v\n", err)
 			return 1
 		}
 		summary.HookInstalled = true
+	}
+	if recoveryPending {
+		if err := clearSetupRecovery(opts); err != nil {
+			return reportSetupRecovery(stderr, opts, fmt.Errorf("clear recovery marker: %w", err))
+		}
+		summary.RecoveryRequired = false
 	}
 	observeSetupClientState(opts, &summary)
 	printSetupSummary(stdout, summary, opts.JSON)
@@ -1202,7 +1269,10 @@ func setupInstallActions(opts setupOptions) []string {
 }
 
 func setupRepairActions(summary setupSummary) []string {
-	actions := make([]string, 0, 2)
+	actions := make([]string, 0, 3)
+	if summary.RecoveryRequired {
+		actions = append(actions, "resume the incomplete HELM setup")
+	}
 	if !summary.MCPInstalled {
 		actions = append(actions, "configure the HELM MCP server in "+summary.ClientConfigPath)
 	}
@@ -1210,6 +1280,118 @@ func setupRepairActions(summary setupSummary) []string {
 		actions = append(actions, "configure the HELM PreToolUse hook in "+summary.HookConfigPath)
 	}
 	return actions
+}
+
+func setupRecoveryMarkerPath(opts setupOptions) string {
+	return filepath.Join(opts.DataDir, setupRecoveryMarkerName)
+}
+
+func (marker setupRecoveryMarker) matches(opts setupOptions) bool {
+	if marker.Target != opts.Target || marker.Scope != opts.Scope {
+		return false
+	}
+	return opts.Scope != "project" || marker.Workspace == opts.Workspace
+}
+
+func (marker setupRecoveryMarker) options(opts setupOptions) setupOptions {
+	opts.Target = marker.Target
+	opts.Scope = marker.Scope
+	opts.Workspace = marker.Workspace
+	opts.SigningSeedFile = marker.SigningSeedFile
+	opts.PolicyProfile = marker.PolicyProfile
+	// The marker is the source of truth for a resumed setup, including an
+	// intentionally empty policy profile. Do not inspect a half-written hook
+	// and accidentally replace the original choice while recovering.
+	opts.PolicyProfileSet = true
+	return opts
+}
+
+func applySetupRecoveryMarker(opts setupOptions, marker setupRecoveryMarker) (setupOptions, error) {
+	if !marker.matches(opts) {
+		return opts, errors.New("marker does not match this target, scope, and workspace")
+	}
+	if opts.SigningSeedFile != "" && opts.SigningSeedFile != marker.SigningSeedFile {
+		return opts, errors.New("--signing-seed-file differs from the interrupted setup")
+	}
+	if opts.PolicyProfile != "" && opts.PolicyProfile != marker.PolicyProfile {
+		return opts, errors.New("--policy-profile differs from the interrupted setup")
+	}
+	return marker.options(opts), nil
+}
+
+func readSetupRecoveryMarker(opts setupOptions) (setupRecoveryMarker, bool, error) {
+	path := setupRecoveryMarkerPath(opts)
+	raw, err := readRegularFile(path, "setup recovery marker")
+	if os.IsNotExist(err) {
+		return setupRecoveryMarker{}, false, nil
+	}
+	if err != nil {
+		return setupRecoveryMarker{}, false, err
+	}
+	var marker setupRecoveryMarker
+	if err := json.Unmarshal(raw, &marker); err != nil {
+		return setupRecoveryMarker{}, false, fmt.Errorf("parse %q: %w", path, err)
+	}
+	target, targetErr := normalizeSetupTarget(marker.Target)
+	if marker.Version != 1 || targetErr != nil || target != marker.Target || (marker.Scope != "user" && marker.Scope != "project") || !filepath.IsAbs(marker.Workspace) {
+		return setupRecoveryMarker{}, false, fmt.Errorf("invalid %q", path)
+	}
+	return marker, true, nil
+}
+
+func beginSetupRecovery(opts setupOptions) error {
+	marker, pending, err := readSetupRecoveryMarker(opts)
+	if err != nil {
+		return err
+	}
+	if pending {
+		return fmt.Errorf("an earlier setup still needs recovery; run `%s`", setupRecoveryCommand(marker.options(opts)))
+	}
+	data, err := json.Marshal(setupRecoveryMarker{
+		Version:         1,
+		Target:          opts.Target,
+		Scope:           opts.Scope,
+		Workspace:       opts.Workspace,
+		SigningSeedFile: opts.SigningSeedFile,
+		PolicyProfile:   opts.PolicyProfile,
+	})
+	if err != nil {
+		return err
+	}
+	return writePrivateFileAtomic(setupRecoveryMarkerPath(opts), append(data, '\n'), opts.DataDir)
+}
+
+func clearSetupRecovery(opts setupOptions) error {
+	path, err := privateFileWritePath(setupRecoveryMarkerPath(opts), opts.DataDir)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func provisionSetupLocalState(opts setupOptions, summary *setupSummary) error {
+	if err := os.MkdirAll(opts.DataDir, 0o750); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	if _, err := setupResolveSigningSeed(opts.DataDir, "", opts.SigningSeedFile); err != nil {
+		return fmt.Errorf("provision local receipt signing key: %w", err)
+	}
+	grade, policyPath, err := setupRunAutoconfigure(opts.DataDir, opts.Workspace)
+	if err != nil {
+		return fmt.Errorf("autoconfigure: %w", err)
+	}
+	summary.ScanGrade = grade
+	summary.DraftPolicyPath = policyPath
+	return nil
+}
+
+func reportSetupRecovery(stderr io.Writer, opts setupOptions, err error) int {
+	fmt.Fprintf(stderr, "setup: %v\n", err)
+	fmt.Fprintf(stderr, "setup: recovery required; run `%s`\n", setupRecoveryCommand(opts))
+	return 1
 }
 
 func setupRemoveActions(summary setupSummary) []string {
@@ -1469,7 +1651,9 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	if summary.CodexTrustPending {
 		fmt.Fprintf(stdout, "  Codex trust:   PENDING — Codex will ignore this project config until you trust the workspace (run `codex` in %s and approve it, or set trust_level=\"trusted\" in ~/.codex/config.toml). Governance is not active until then.\n", summary.Workspace)
 	}
-	if summary.MCPInstalled || summary.HookInstalled {
+	if summary.RecoveryRequired {
+		fmt.Fprintf(stdout, "  Next:          recovery required; run %s\n", summary.RecoveryCommand)
+	} else if summary.MCPInstalled || summary.HookInstalled {
 		fmt.Fprintf(stdout, "  Next:          restart %s, then run %s\n", summary.Target, summary.RecoveryCommand)
 	}
 	if summary.RetainedData {

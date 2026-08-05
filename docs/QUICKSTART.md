@@ -39,7 +39,7 @@ make build
 | Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
 | Skill Packs | `helm-ai-kernel skills search --json` |
 | Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
-| MCP approval loop | `mcp authorize-call`, `mcp approve`, `mcp revoke`, `mcp pending`, `mcp receipts` |
+| MCP quarantine and recovery | `mcp authorize-call`, `mcp quarantine`, `mcp pending`, `mcp receipts`, `mcp revoke`; `mcp approve` rejects opaque local approval metadata |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
 | Receipts | `helm-ai-kernel mcp receipts --json` and `helm-ai-kernel boundary records --json` |
 | Conformance | `helm-ai-kernel conform --level L1 --json` and `--level L2` |
@@ -86,89 +86,47 @@ helm-ai-kernel mcp authorize-call \
   --tool-name file_read
 ```
 
-Every verdict prints the same shape: verdict, decision id, reason, receipt
-path, and — where a remediation exists — the exact next-step command.
+Every verdict prints the same shape: verdict, decision id, reason, and receipt
+path. A local quarantine escalation intentionally does not print a command
+that could mint approval authority.
 
 ```text
 HELM ESCALATE
 decision: mcp-boundary-...
-reason: unknown MCP server requires approval
+reason: unknown MCP server remains quarantined; credential verification is unavailable
+approval: credential verification unavailable; the server remains quarantined
 receipt: data/receipts/mcp/...
-next:
-  helm-ai-kernel mcp approve --server-id helm-governance \
-    --tools "file_read" \
-    --ttl 15m \
-    --reason 'read-only repo inspection for local dev'
 ```
 
-Nothing runs on `ESCALATE`. The developer either approves the exact scope or
-does nothing.
+Nothing runs on `ESCALATE`. Local `helm-ai-kernel mcp approve` is retained only
+for compatibility and rejects opaque approver names, receipt ids, tool lists,
+and TTLs; it cannot create an MCP approval or side-effect grant.
 
-Approve a narrow read-only grant:
+To progress a bounded action, the governing approval integration must issue an
+exact, credential-verified durable dispatch admission. The local CLI
+deliberately has no command that can create that admission. A
+verifier-backed runtime re-evaluates the exact request, schema pin, policy,
+effect scope, expiry, and revocation before it dispatches.
+
+Inspect the local, no-dispatch state and its evidence:
 
 ```bash
-helm-ai-kernel mcp approve \
-  --server-id helm-governance \
-  --tools "file_read" \
-  --ttl 15m \
-  --reason "read-only repo inspection for local dev"
+helm-ai-kernel mcp quarantine --json
+helm-ai-kernel mcp pending --json
+helm-ai-kernel mcp receipts --json
 ```
 
-Then rerun the original action. The approval covers the server and tool, so
-the check advances to the next gate: the tool's schema must be pinned so a
-server-side schema change cannot silently rewrite what the tool does.
-
-```text
-HELM ESCALATE
-decision: mcp-boundary-...
-reason: MCP tool schema requires approval or pinning
-receipt: data/receipts/mcp/...
-next:
-  helm-ai-kernel mcp authorize-call --server-id helm-governance \
-    --tool-name file_read --pinned-schema-hash sha256:...
-```
-
-Pin the schema by rerunning with the printed hash:
-
-```bash
-helm-ai-kernel mcp authorize-call \
-  --server-id helm-governance \
-  --tool-name file_read \
-  --pinned-schema-hash sha256:...
-```
-
-```text
-HELM ALLOW
-decision: mcp-boundary-...
-reason: approved scope, schema pin, and policy checks passed
-receipt: data/receipts/mcp/...
-```
-
-A call outside the approved scope fails closed with the same shape — receipt
-path plus the approval command that would widen the scope:
-
-```text
-HELM DENY
-decision: mcp-boundary-...
-reason: tool is outside the approved scope for this MCP server
-receipt: data/receipts/mcp/...
-next:
-  helm-ai-kernel mcp approve --server-id helm-governance \
-    --tools "file_write" --ttl 15m --reason '...'
-```
-
-Approval does not silently resume the blocked action: HELM evaluates again
-against the approval, schema pin, policy, and effect scope on every call. See
-[Deny Reason Codes](guides/deny-reason-codes.md) for what each reason code
-means and the step that resolves it.
-
-Revoke the grant:
+If an existing registry record must be invalidated, revocation remains
+available; it never grants authority:
 
 ```bash
 helm-ai-kernel mcp revoke \
   --server-id helm-governance \
   --reason "inspection finished"
 ```
+
+See [Deny Reason Codes](guides/deny-reason-codes.md) for the evidence required
+to resolve each reason code.
 
 ## Connect A Local Agent
 

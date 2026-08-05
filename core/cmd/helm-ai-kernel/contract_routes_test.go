@@ -862,13 +862,11 @@ func TestBoundaryContractRoutesExposeNewControlSurfaces(t *testing.T) {
 	}
 }
 
-func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
+func TestMCPAuthorizeCallAPIFailsClosedWithUnverifiedPersistedApproval(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
-	// The caller-body HTTP approve path fails closed now, so approval
-	// authority reaches the API only as persisted state written by the
-	// governed receipt-backed path. Seed the approved record and let route
-	// registration hydrate the quarantine registry from it.
+	// Legacy persisted state is opaque local metadata, not approval authority.
+	// The registry must quarantine it before the route hydrates the firewall.
 	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
 	if _, err := surfaces.PutMCPServer(mcppkg.ServerQuarantineRecord{
 		ServerID:          "api-fixture",
@@ -883,6 +881,10 @@ func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 		Reason:            "reviewed",
 	}); err != nil {
 		t.Fatalf("seed approved mcp server: %v", err)
+	}
+	persisted, ok := surfaces.GetMCPServer("api-fixture")
+	if !ok || persisted.State != mcppkg.QuarantineQuarantined {
+		t.Fatalf("unverified approval persisted as executable state: found=%t record=%+v", ok, persisted)
 	}
 	svc.BoundarySurfaces = surfaces
 	mux := http.NewServeMux()
@@ -930,18 +932,21 @@ func TestMCPAuthorizeCallAPIFailClosedAndPinnedAllow(t *testing.T) {
 		t.Fatalf("missing pin verdict = %+v", missingPin)
 	}
 
-	allowed := postMCPAuthorizeForTest(t, mux, map[string]any{
+	unverified := postMCPAuthorizeForTest(t, mux, map[string]any{
 		"server_id":          "api-fixture",
 		"tool_name":          "local.echo",
 		"args_hash":          "sha256:pinned-allow",
 		"tool_schema":        schema,
 		"pinned_schema_hash": hash,
-	}, http.StatusOK)
-	if allowed["verdict"] != "ALLOW" {
-		t.Fatalf("allow verdict = %+v", allowed)
+	}, http.StatusForbidden)
+	if unverified["verdict"] == "ALLOW" {
+		t.Fatalf("unverified persisted approval authorized dispatch: %+v", unverified)
 	}
-	if allowed["record_hash"] == "" {
-		t.Fatal("allowed record_hash missing")
+	if unverified["reason_code"] != string(contracts.ReasonApprovalRequired) {
+		t.Fatalf("unverified approval reason = %+v", unverified)
+	}
+	if unverified["record_hash"] == "" {
+		t.Fatal("fail-closed record_hash missing")
 	}
 }
 

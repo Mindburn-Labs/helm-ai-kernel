@@ -25,15 +25,13 @@ func TestExecutionFirewallFiltersToolsByQuarantineAndScope(t *testing.T) {
 	if _, err := firewall.FilterVisibleTools(ctx, "srv-1", tools, []string{"tools.write"}); err == nil {
 		t.Fatal("quarantined server should fail list-time visibility")
 	}
-	if _, err := registry.Approve(ctx, ApprovalDecision{
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{
 		ServerID:          "srv-1",
 		ApproverID:        "user:alice",
 		ApprovalReceiptID: "approval-r1",
 		Reason:            "reviewed",
 		ToolNames:         []string{"read", "write"},
-	}); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
+	})
 	visible, err := firewall.FilterVisibleTools(ctx, "srv-1", tools, nil)
 	if err != nil {
 		t.Fatalf("filter tools: %v", err)
@@ -232,15 +230,13 @@ func approvedFirewall(t *testing.T) *ExecutionFirewall {
 	if _, err := registry.Discover(ctx, DiscoverServerRequest{ServerID: "srv-1"}); err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	if _, err := registry.Approve(ctx, ApprovalDecision{
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{
 		ServerID:          "srv-1",
 		ApproverID:        "user:alice",
 		ApprovalReceiptID: "approval-r1",
 		Reason:            "reviewed",
 		ToolNames:         []string{"read", "write", "local.echo", "missing"},
-	}); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
+	})
 	firewall := NewExecutionFirewall(NewToolCatalog(), registry, "epoch-42")
 	firewall.Clock = boundaryFixedClock()
 	return firewall

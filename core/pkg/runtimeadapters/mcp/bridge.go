@@ -141,9 +141,9 @@ type BridgeConfig struct {
 	// Approvals verifies approval evidence for escalated writes. Nil => writes
 	// requiring approval always escalate and can never proceed.
 	Approvals ApprovalStore
-	// EffectReservations enables the durable near-effect path for writes. When
-	// configured, a write without an exact signed dispatch admission or a
-	// lifecycle-aware connector fails closed.
+	// EffectReservations is required for writes and enables their durable
+	// near-effect path. Opaque approval evidence is rejected unless it carries
+	// an exact signed dispatch admission backed by this boundary.
 	EffectReservations EffectReservationBoundary
 	// IsWrite classifies bounded writes that require approval. Nil => default.
 	IsWrite WriteClassifier
@@ -312,6 +312,12 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 			base.Reason = "bounded write requires human approval before dispatch"
 			return base
 		}
+		if b.reservations == nil || approval.DispatchAdmission == nil {
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "APPROVAL_EVIDENCE_UNVERIFIABLE"
+			base.Reason = "bounded write requires a verified dispatch admission and durable reservation boundary"
+			return base
+		}
 		base.Approval = &approval
 	}
 	// ALLOW: writes get deterministic nonces so an identical approved effect is
@@ -325,7 +331,7 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	}
 
 	var lifecycle *bridgeExecutionLifecycle
-	if isWrite && b.reservations != nil {
+	if isWrite {
 		reservation, reservationErr := b.admitWriteReservation(ctx, req, inputHash, base.Approval)
 		if reservationErr != nil {
 			base.Verdict = contracts.VerdictDeny

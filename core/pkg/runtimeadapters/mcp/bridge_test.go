@@ -246,7 +246,7 @@ func TestGovernedBridgeWithoutSigningSeedFailsClosed(t *testing.T) {
 }
 
 // Smoke 3: a bounded write that policy allows is ESCALATED for approval, then
-// ALLOWED once approval evidence is bound to the request.
+// ALLOWED only when the approval carries an exact durable dispatch admission.
 func TestGovernedBridgeEscalatesThenAllowsWrite(t *testing.T) {
 	req := &runtimeadapters.AdaptedRequest{
 		RuntimeType: "mcp", ToolName: "linear.create_issue",
@@ -276,10 +276,19 @@ func TestGovernedBridgeEscalatesThenAllowsWrite(t *testing.T) {
 	}
 	assertNoDispatchProof(t, graph, resp, DispatchStateNotDispatched)
 
-	// Bind approval evidence to this exact request, then retry: ALLOW.
-	// This in-memory fixture proves conformance only; it is not a signed approval protocol.
-	approvals.Grant(inputHash, ApprovalEvidence{ApproverID: "ivan", ApprovalHash: "abc", GrantedScope: "linear.create_issue"})
-	adapter2, graph2 := newAdapter(t, BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()})
+	admission := approvalceremony.DispatchAdmissionRecord{Admission: contracts.ApprovalDispatchAdmission{
+		AdmissionID: "dispatch-admission-linear-smoke", AdmissionHash: "admission-hash-linear-smoke", EffectHash: inputHash,
+		ConnectorAuthority: contracts.ApprovalConnectorAuthority{ConnectorID: "linear", ConnectorAction: req.ToolName},
+	}}
+	approvals.Grant(inputHash, ApprovalEvidence{
+		ApproverID: "ivan", ApprovalHash: admission.Admission.AdmissionHash, GrantedScope: req.ToolName,
+		DispatchAdmission: &admission,
+	})
+	connector := &fakeLifecycleConnector{id: "linear"}
+	adapter2, _ := newAdapter(t, BridgeConfig{
+		Profile: operateProfile(), Approvals: approvals, Connector: connector,
+		EffectReservations: &fakeEffectReservationBoundary{}, Now: fixedClock(),
+	})
 	resp2, err := adapter2.Intercept(context.Background(), req)
 	if err != nil {
 		t.Fatalf("intercept after approval: %v", err)
@@ -287,12 +296,14 @@ func TestGovernedBridgeEscalatesThenAllowsWrite(t *testing.T) {
 	if !resp2.Allowed {
 		t.Fatalf("expected ALLOW after approval, got %+v", resp2.DenyReason)
 	}
-	assertNoDispatchProof(t, graph2, resp2, DispatchStateNoDispatch)
+	if connector.calls != 1 || resp2.Result == nil {
+		t.Fatalf("durably admitted write must dispatch once with a result: calls=%d response=%+v", connector.calls, resp2)
+	}
 }
 
-// Replay: an approved bounded WRITE is single-use. A second identical dispatch
-// (real or fixed clock — the nonce is clock-independent) is denied as a replay.
-func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
+// Replay: a durably admitted bounded WRITE is single-use. A second identical
+// dispatch is denied by the reservation before it can reach the connector.
+func TestGovernedBridgeDurableWriteIsSingleUse(t *testing.T) {
 	req := &runtimeadapters.AdaptedRequest{
 		RuntimeType: "mcp", ToolName: "linear.create_issue",
 		Arguments: map[string]any{"team_id": "T1", "title": "Ship it"}, PrincipalID: "ve-assistant",
@@ -301,9 +312,21 @@ func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hash: %v", err)
 	}
+	admission := approvalceremony.DispatchAdmissionRecord{Admission: contracts.ApprovalDispatchAdmission{
+		AdmissionID: "dispatch-admission-linear-replay", AdmissionHash: "admission-hash-linear-replay", EffectHash: inputHash,
+		ConnectorAuthority: contracts.ApprovalConnectorAuthority{ConnectorID: "linear", ConnectorAction: req.ToolName},
+	}}
 	approvals := NewMemoryApprovalStore()
-	approvals.Grant(inputHash, ApprovalEvidence{ApproverID: "ivan"})
-	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{Profile: operateProfile(), Approvals: approvals, Now: fixedClock()}))
+	approvals.Grant(inputHash, ApprovalEvidence{
+		ApproverID: "ivan", ApprovalHash: admission.Admission.AdmissionHash, GrantedScope: req.ToolName,
+		DispatchAdmission: &admission,
+	})
+	reservations := &fakeEffectReservationBoundary{}
+	connector := &fakeLifecycleConnector{id: "linear"}
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{
+		Profile: operateProfile(), Approvals: approvals, Connector: connector,
+		EffectReservations: reservations, Now: fixedClock(),
+	}))
 	graph := proofgraph.NewGraph()
 	adapter, err := NewMCPAdapter(Config{Graph: graph, Bridge: bridge})
 	if err != nil {
@@ -313,7 +336,6 @@ func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
 	if err != nil || !first.Allowed {
 		t.Fatalf("first approved write should ALLOW: %v %+v", err, first.DenyReason)
 	}
-	assertNoDispatchProof(t, graph, first, DispatchStateNoDispatch)
 	second, err := adapter.Intercept(context.Background(), req)
 	if err != nil {
 		t.Fatalf("second intercept: %v", err)
@@ -321,10 +343,12 @@ func TestGovernedBridgeWriteIsSingleUse(t *testing.T) {
 	if second.Allowed {
 		t.Fatal("expected a second identical write to be denied as single-use replay")
 	}
-	if second.DenyReason == nil || second.DenyReason.Code != string(contracts.ReasonPlanTransactionConflict) {
-		t.Fatalf("expected canonical replay reason, got %+v", second.DenyReason)
+	if second.DenyReason == nil || second.DenyReason.Code != "EFFECT_RESERVATION_NOT_DISPATCHABLE" {
+		t.Fatalf("expected durable replay denial, got %+v", second.DenyReason)
 	}
-	assertNoDispatchProof(t, graph, second, DispatchStateNotDispatched)
+	if connector.calls != 1 {
+		t.Fatalf("replayed write reached connector %d times, want 1", connector.calls)
+	}
 }
 
 // Reads are idempotent: the same read may be retried and is allowed each time
@@ -395,7 +419,7 @@ func TestGovernedBridgeUsesConnectorEffectClassInsteadOfVerbHeuristic(t *testing
 	}
 }
 
-func TestGovernedBridgeUsesConnectorEffectClassAtFirewall(t *testing.T) {
+func TestGovernedBridgeRejectsOpaqueFirewallApproval(t *testing.T) {
 	ctx := context.Background()
 	now := fixedClock()()
 	const serverID = "system-server"
@@ -428,17 +452,11 @@ func TestGovernedBridgeUsesConnectorEffectClassAtFirewall(t *testing.T) {
 		ServerID: serverID, ApproverID: "reviewer", ApprovalReceiptID: "receipt-read-only",
 		ApprovedAt: now, ExpiresAt: now.Add(time.Hour), Reason: "read-only approval",
 		ToolNames: []string{req.ToolName}, Effects: []string{"read"},
-	}); err != nil {
-		t.Fatal(err)
+	}); !errors.Is(err, mcpcore.ErrApprovalVerificationUnavailable) {
+		t.Fatalf("opaque firewall approval error = %v, want verification unavailable", err)
 	}
 	firewall := mcpcore.NewExecutionFirewall(catalog, quarantine, "epoch-test")
 	firewall.Clock = fixedClock()
-	readRecord, err := firewall.AuthorizeToolCall(ctx, mcpcore.ToolCallAuthorization{
-		ServerID: serverID, ToolName: req.ToolName, Effect: "read", ArgsHash: "read-control",
-	})
-	if err != nil || !mcpcore.ShouldDispatch(readRecord) {
-		t.Fatalf("read-only control must pass the configured firewall: record=%+v err=%v", readRecord, err)
-	}
 
 	connector := &fakeConnector{id: "system", effect: effects.EffectTypeWrite}
 	adapter, _ := newAdapter(t, BridgeConfig{
@@ -449,7 +467,7 @@ func TestGovernedBridgeUsesConnectorEffectClassAtFirewall(t *testing.T) {
 		t.Fatal(err)
 	}
 	if response.Allowed || response.DenyReason == nil || response.DenyReason.Code != string(contracts.ReasonApprovalRequired) {
-		t.Fatalf("connector-declared write used read-only firewall approval: %+v", response)
+		t.Fatalf("opaque firewall approval reached connector path: %+v", response)
 	}
 	if connector.calls != 0 {
 		t.Fatalf("connector calls = %d, want 0", connector.calls)

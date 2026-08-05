@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/readmodel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
@@ -79,115 +77,23 @@ func runMCPWrap(args []string, stdout, stderr io.Writer) int {
 func runMCPApprove(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("mcp approve", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-
-	var (
-		serverID   string
-		approver   string
-		receiptID  string
-		risk       string
-		tools      string
-		effects    string
-		ttl        string
-		reason     string
-		jsonOutput bool
-	)
-	cmd.StringVar(&serverID, "server-id", "", "MCP server id to approve (REQUIRED)")
-	cmd.StringVar(&approver, "approver", "local.operator", "Approver identity")
-	cmd.StringVar(&receiptID, "receipt-id", "", "Approval ceremony receipt id")
-	cmd.StringVar(&risk, "risk", "unknown", "Risk label: unknown, low, medium, high, critical")
-	cmd.StringVar(&tools, "tools", "", "Comma-separated tools approved by this scoped grant")
-	cmd.StringVar(&effects, "effects", "read", "Comma-separated effects approved by this scoped grant")
-	cmd.StringVar(&ttl, "ttl", "15m", "Approval TTL")
-	cmd.StringVar(&reason, "reason", "", "Human approval reason")
-	cmd.BoolVar(&jsonOutput, "json", false, "Output approval record as JSON")
+	// Keep the historical flags parseable so callers receive the real authority
+	// error rather than an accidental compatibility break. None of these opaque
+	// local values can authorize an MCP server.
+	cmd.String("server-id", "", "MCP server id (not an approval authority)")
+	cmd.String("approver", "local.operator", "Opaque approver metadata")
+	cmd.String("receipt-id", "", "Opaque receipt metadata")
+	cmd.String("risk", "unknown", "Risk label")
+	cmd.String("tools", "", "Requested tool scope")
+	cmd.String("effects", "read", "Requested effect scope")
+	cmd.String("ttl", "15m", "Requested approval TTL")
+	cmd.String("reason", "", "Requested approval reason")
+	cmd.Bool("json", false, "Output format (no approval record is emitted)")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
-	if serverID == "" && cmd.NArg() > 0 {
-		serverID = cmd.Arg(0)
-	}
-	toolNames := splitCSV(tools)
-	effectNames := splitCSV(effects)
-	duration, err := scopedApprovalTTL(ttl, effectNames)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
-	}
-	if receiptID == "" && serverID != "" {
-		receiptID = "rcp_mcp_approval_" + sanitizeReceiptPart(serverID+"_"+tools)
-	}
-	if serverID == "" || approver == "" || receiptID == "" {
-		fmt.Fprintln(stderr, "Error: server id is required")
-		return 2
-	}
-	if len(toolNames) == 0 || strings.TrimSpace(reason) == "" {
-		fmt.Fprintln(stderr, "Error: --tools and --reason are required for scoped MCP approval")
-		return 2
-	}
-
-	now := time.Now().UTC()
-	registry := mcppkg.NewQuarantineRegistry()
-	if _, err := registry.Discover(context.Background(), mcppkg.DiscoverServerRequest{
-		ServerID:  serverID,
-		ToolNames: toolNames,
-		Risk:      mcppkg.ServerRisk(risk),
-	}); err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
-	}
-	record, err := registry.Approve(context.Background(), mcppkg.ApprovalDecision{
-		ServerID:          serverID,
-		ApproverID:        approver,
-		ApprovalReceiptID: receiptID,
-		ApprovedAt:        now,
-		ExpiresAt:         now.Add(duration),
-		Reason:            strings.TrimSpace(reason),
-		ToolNames:         toolNames,
-		Effects:           effectNames,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
-	}
-	record.ApprovalReceiptPath = writeLocalMCPReceipt(record.ApprovalReceiptID, "approval", record)
-	if _, err := newLocalSurfaceRegistry().PutMCPServer(record); err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 1
-	}
-
-	if jsonOutput {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(record)
-		return 0
-	}
-	fmt.Fprintf(stdout, "Approved MCP server %s with receipt %s\n", record.ServerID, record.ApprovalReceiptID)
-	fmt.Fprintf(stdout, "Tools: %s\n", strings.Join(record.ApprovedToolNames, ","))
-	fmt.Fprintf(stdout, "Effects: %s\n", strings.Join(record.ApprovedEffects, ","))
-	fmt.Fprintf(stdout, "TTL: %s\n", ttl)
-	fmt.Fprintf(stdout, "Reason: %s\n", record.Reason)
-	return 0
-}
-
-func scopedApprovalTTL(value string, effects []string) (time.Duration, error) {
-	if strings.TrimSpace(value) == "" {
-		value = "15m"
-	}
-	duration, err := time.ParseDuration(value)
-	if err != nil || duration <= 0 {
-		return 0, fmt.Errorf("--ttl must be a positive Go duration such as 15m")
-	}
-	max := 24 * time.Hour
-	for _, effect := range effects {
-		switch strings.ToLower(strings.TrimSpace(effect)) {
-		case "write", "deploy", "network", "payment", "side_effect":
-			max = 15 * time.Minute
-		}
-	}
-	if duration > max {
-		return 0, fmt.Errorf("--ttl exceeds maximum %s for this approval scope", max)
-	}
-	return duration, nil
+	fmt.Fprintf(stderr, "Error: %v\n", mcppkg.ErrApprovalVerificationUnavailable)
+	return 2
 }
 
 func runMCPQuarantine(args []string, stdout, stderr io.Writer) int {

@@ -6,8 +6,8 @@ last_reviewed: 2026-07-15
 # MCP
 
 Use the current MCP surface to generate client configuration, inspect local
-quarantine state, evaluate a scoped call before dispatch, revoke approval, and
-produce receipt-backed no-dispatch evidence.
+quarantine state, evaluate a scoped call before dispatch, revoke local MCP
+records, and produce receipt-backed no-dispatch evidence.
 
 The public commands do **not** yet prove a general-purpose upstream MCP proxy.
 `mcp wrap` emits a wrapper profile; it does not launch the upstream command.
@@ -55,11 +55,10 @@ helm-ai-kernel mcp authorize-call \
 ```
 
 An unknown or unapproved server returns `ESCALATE`. The authorization check does
-not dispatch the tool call. Use the approval loop in
-[Quickstart](/quickstart#see-an-escalation), then rerun the original configured
-call path.
+not dispatch the tool call. Credential verification is not wired to this local
+CLI, so it cannot approve the server; it remains quarantined.
 
-## Scan Before Approval
+## Scan Before Credential-Verified Approval
 
 Use the local MCP risk scanner before granting a new server/tool bundle:
 
@@ -77,19 +76,11 @@ does not dispatch, approve, or resume a tool call.
 
 ## Effect Scope
 
-Approvals are local, receipt-backed, TTL-bound, and revocable. HELM rejects
-wildcard tool approvals and overlong side-effect approvals.
-
-For side-effect tools, approve the effect explicitly:
-
-```bash
-helm-ai-kernel mcp approve \
-  --server-id deploy-tools \
-  --tools deploy.preview \
-  --effects side_effect \
-  --ttl 15m \
-  --reason "preview deploy for local validation"
-```
+Raw local approver fields, receipt identifiers, tool lists, and TTLs are not
+executable authority. `helm-ai-kernel mcp approve` returns an approval
+verification-unavailable error until a credential verifier is wired to the
+governing approval authority. No local command can turn a receipt string into
+an allowed MCP server or side-effect grant.
 
 ## Revoke
 
@@ -99,7 +90,9 @@ helm-ai-kernel mcp revoke \
   --reason "inspection finished"
 ```
 
-Revoked and expired grants fail closed on the next configured evaluation.
+Revoked records fail closed on the next configured evaluation. Credential-
+verified grants and their expiry semantics require a verifier-backed runtime
+integration.
 
 ## Inspect And Prove
 
@@ -126,14 +119,16 @@ helm-ai-kernel verify \
 
 ## Current Boundary
 
-The source-owned proof covers configuration generation, quarantine, scoped
-authorization, expiry, revocation, no-dispatch behavior, receipts, and offline
-verification. Before a live client rollout, separately prove:
+The source-owned proof covers configuration generation, quarantine, no-dispatch
+behavior, receipts, and offline verification. It does not demonstrate a
+credential-verified MCP approval or allowed side-effect path. Before a live
+client rollout, separately prove:
 
 - the native client loaded the generated configuration;
 - the intended policy graph is wired into the selected MCP runtime;
+- credential verification binds approval to the exact server, tool, and effect;
 - the exact tool call reaches the configured boundary;
 - the allowed path has an explicit executor or upstream proxy;
 - denied and escalated calls do not dispatch;
-- schema drift, expired approval, and revocation fail closed; and
+- schema drift, verified-grant expiry, and revocation fail closed; and
 - the resulting receipt or EvidencePack verifies outside the client.

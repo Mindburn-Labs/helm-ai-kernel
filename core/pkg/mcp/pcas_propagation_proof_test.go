@@ -122,9 +122,7 @@ func TestPCASPropagatedScopeEnforcedAtDispatchWithEvidence(t *testing.T) {
 	if _, err := registry.Discover(ctx, DiscoverServerRequest{ServerID: "srv-pcas"}); err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	if _, err := registry.Approve(ctx, ApprovalDecision{ServerID: "srv-pcas", ApproverID: "user:root", ApprovalReceiptID: "approval-pcas", Reason: "pcas fixture", ToolNames: []string{"crm.read", "crm.export"}}); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{ServerID: "srv-pcas", ApproverID: "user:root", ApprovalReceiptID: "approval-pcas", Reason: "pcas fixture", ToolNames: []string{"crm.read", "crm.export"}})
 	for _, tool := range []ToolRef{
 		{Name: "crm.read", ServerID: "srv-pcas", RequiredScopes: []string{"crm.read"}, Schema: map[string]any{"type": "object"}},
 		{Name: "crm.export", ServerID: "srv-pcas", RequiredScopes: []string{"crm.export"}, Schema: map[string]any{"type": "object"}},
@@ -179,9 +177,7 @@ func TestPCASAggregationInferenceGapIsDocumentedBehavior(t *testing.T) {
 	if _, err := registry.Discover(ctx, DiscoverServerRequest{ServerID: "srv-pcas"}); err != nil {
 		t.Fatalf("discover: %v", err)
 	}
-	if _, err := registry.Approve(ctx, ApprovalDecision{ServerID: "srv-pcas", ApproverID: "user:root", ApprovalReceiptID: "approval-pcas", Reason: "pcas fixture", ToolNames: []string{"directory.lookup"}}); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
+	seedVerifiedApprovalFixture(t, registry, ApprovalDecision{ServerID: "srv-pcas", ApproverID: "user:root", ApprovalReceiptID: "approval-pcas", Reason: "pcas fixture", ToolNames: []string{"directory.lookup"}})
 	if err := catalog.Register(ctx, ToolRef{Name: "directory.lookup", ServerID: "srv-pcas", RequiredScopes: []string{"dir.read"}, Schema: map[string]any{"type": "object"}}); err != nil {
 		t.Fatalf("register: %v", err)
 	}

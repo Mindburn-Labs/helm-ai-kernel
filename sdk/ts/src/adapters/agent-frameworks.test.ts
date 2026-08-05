@@ -3,10 +3,13 @@ import {
   agentFrameworkAdapters,
   buildGovernedToolRequest,
   createAgentFrameworkAdapter,
+  fromClaudeToolCall,
+  fromCodexToolCall,
   fromAutoGenToolCall,
   fromCrewAITask,
   fromLangGraphToolCall,
   fromLangChainToolCall,
+  fromHermesToolCall,
   fromLlamaIndexToolCall,
   fromLiteLLMToolCall,
   fromN8NNodeExecution,
@@ -26,6 +29,9 @@ describe("agent framework adapters", () => {
       "langgraph",
       "autogen",
       "crewai",
+      "codex",
+      "claude-code",
+      "hermes",
       "openai-agents",
       "semantic-kernel",
       "pydantic-ai",
@@ -87,6 +93,55 @@ describe("agent framework adapters", () => {
       toolName: "file.write",
       toolCallId: "call-openai",
       arguments: { path: "/tmp/out.txt", content: "ok" },
+    });
+  });
+
+  it("normalizes Codex, Claude Code, and Hermes tool calls", () => {
+    expect(
+      fromCodexToolCall({
+        recipient_name: "functions.exec_command",
+        parameters: { cmd: "git status --short" },
+        session_id: "codex-session",
+        thread_id: "codex-thread",
+        worktree: "/tmp/worktree",
+      }),
+    ).toMatchObject({
+      framework: "codex",
+      toolName: "functions.exec_command",
+      arguments: { cmd: "git status --short" },
+      runId: "codex-thread",
+      metadata: { session_id: "codex-session", worktree: "/tmp/worktree" },
+    });
+
+    expect(
+      fromClaudeToolCall({
+        tool_name: "Bash",
+        tool_input: { command: "npm test" },
+        tool_use_id: "toolu_1",
+        session_id: "claude-session",
+      }),
+    ).toMatchObject({
+      framework: "claude-code",
+      toolName: "Bash",
+      toolCallId: "toolu_1",
+      arguments: { command: "npm test" },
+      runId: "claude-session",
+    });
+
+    expect(
+      fromHermesToolCall({
+        tool_name: "web.search",
+        arguments: { query: "governed agent frameworks" },
+        profile: "researcher",
+        task_id: "task-1",
+        run_id: "run-1",
+      }),
+    ).toMatchObject({
+      framework: "hermes",
+      toolName: "web.search",
+      agentId: "researcher",
+      taskId: "task-1",
+      runId: "run-1",
     });
   });
 

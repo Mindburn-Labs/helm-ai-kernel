@@ -9,6 +9,9 @@ export type AgentFramework =
   | "langgraph"
   | "autogen"
   | "crewai"
+  | "codex"
+  | "claude-code"
+  | "hermes"
   | "openai-agents"
   | "semantic-kernel"
   | "pydantic-ai"
@@ -47,6 +50,24 @@ export const agentFrameworkAdapters: AgentFrameworkAdapterMetadata[] = [
   {
     framework: "crewai",
     displayName: "CrewAI",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "codex",
+    displayName: "OpenAI Codex",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "claude-code",
+    displayName: "Claude Code",
+    status: "compatible",
+    source: "TypeScript SDK",
+  },
+  {
+    framework: "hermes",
+    displayName: "Hermes",
     status: "compatible",
     source: "TypeScript SDK",
   },
@@ -168,6 +189,46 @@ export interface OpenAIAgentsToolCall {
     name?: string;
     arguments?: unknown;
   };
+  metadata?: Record<string, unknown>;
+}
+
+export interface CodexToolCall {
+  id?: string;
+  tool_name?: string;
+  name?: string;
+  recipient_name?: string;
+  arguments?: unknown;
+  parameters?: unknown;
+  input?: unknown;
+  payload?: unknown;
+  session_id?: string;
+  thread_id?: string;
+  worktree?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ClaudeToolCall {
+  id?: string;
+  tool_use_id?: string;
+  tool_name?: string;
+  name?: string;
+  tool_input?: unknown;
+  input?: unknown;
+  arguments?: unknown;
+  session_id?: string;
+  transcript_path?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface HermesToolCall {
+  id?: string;
+  tool_name?: string;
+  name?: string;
+  arguments?: unknown;
+  args?: unknown;
+  profile?: string;
+  task_id?: string;
+  run_id?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -300,6 +361,54 @@ export function fromOpenAIAgentsToolCall(
     call.function?.arguments ?? call.arguments,
     {
       toolCallId: call.id,
+      metadata: call.metadata,
+    },
+  );
+}
+
+export function fromCodexToolCall(call: CodexToolCall): AgentFrameworkAction {
+  return frameworkAction(
+    "codex",
+    call.tool_name ?? call.name ?? call.recipient_name,
+    call.arguments ?? call.parameters ?? call.input ?? call.payload,
+    {
+      toolCallId: call.id,
+      runId: call.thread_id ?? call.session_id,
+      metadata: {
+        ...call.metadata,
+        session_id: call.session_id,
+        worktree: call.worktree,
+      },
+    },
+  );
+}
+
+export function fromClaudeToolCall(call: ClaudeToolCall): AgentFrameworkAction {
+  return frameworkAction(
+    "claude-code",
+    call.tool_name ?? call.name,
+    call.tool_input ?? call.input ?? call.arguments,
+    {
+      toolCallId: call.tool_use_id ?? call.id,
+      runId: call.session_id,
+      metadata: {
+        ...call.metadata,
+        transcript_path: call.transcript_path,
+      },
+    },
+  );
+}
+
+export function fromHermesToolCall(call: HermesToolCall): AgentFrameworkAction {
+  return frameworkAction(
+    "hermes",
+    call.tool_name ?? call.name,
+    call.arguments ?? call.args,
+    {
+      toolCallId: call.id,
+      agentId: call.profile,
+      taskId: call.task_id,
+      runId: call.run_id,
       metadata: call.metadata,
     },
   );

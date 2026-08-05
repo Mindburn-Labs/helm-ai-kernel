@@ -103,6 +103,9 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         ):
             self.assertIn(asset, github_release)
 
+    def test_release_workflow_never_exposes_raw_evidence_private_pem(self) -> None:
+        self.assertNotIn("HELM_EVIDENCE_KMS_PRIVATE_PEM", self.workflow)
+
     def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
         self.assertIn("needs: console-local-sidecar", console_assets)

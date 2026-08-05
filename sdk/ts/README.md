@@ -54,7 +54,14 @@ from `examples/ts_sdk/`.
 
 ## Agent Framework Adapters
 
-The TypeScript SDK includes lightweight adapter helpers for LangGraph, CrewAI, OpenAI Agents SDK, PydanticAI, and LlamaIndex tool-call events. These helpers normalize each framework event into a HELM governance request and submit it through `chatCompletionsWithReceipt`, preserving the kernel receipt returned in `X-Helm-*` headers.
+The TypeScript SDK includes lightweight adapter helpers for Codex, Claude Code,
+Hermes, LangChain/LangGraph, AutoGen, CrewAI, OpenAI Agents SDK, Semantic
+Kernel, PydanticAI, LlamaIndex, LiteLLM, n8n, Zapier-style webhooks, and raw MCP
+tool-call events. These helpers normalize each framework event into a HELM
+governance request and submit it through `chatCompletionsWithReceipt`,
+preserving the kernel receipt returned in `X-Helm-*` headers. Frameworks
+without a named adapter can use the raw MCP adapter; no model-specific policy
+path is required.
 
 ```ts
 import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm-ai-kernel";

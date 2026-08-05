@@ -1,6 +1,6 @@
 ---
 title: Framework Adapters
-last_reviewed: 2026-07-01
+last_reviewed: 2026-08-05
 ---
 
 # Framework Adapters
@@ -15,6 +15,9 @@ and you need to normalize that proposed action before HELM evaluates it.
 | LangGraph | `fromLangGraphToolCall` |
 | LangChain | `fromLangChainToolCall` |
 | CrewAI | `fromCrewAITask` |
+| OpenAI Codex | `fromCodexToolCall` |
+| Claude Code | `fromClaudeToolCall` |
+| Hermes | `fromHermesToolCall` |
 | OpenAI Agents SDK | `fromOpenAIAgentsToolCall` |
 | AutoGen / AG2 | `fromAutoGenToolCall` |
 | Semantic Kernel | `fromSemanticKernelFunctionCall` |
@@ -48,4 +51,11 @@ console.log(result.governance.receiptId);
 ```
 
 The adapter prepares the action for HELM. It does not execute the original
-tool.
+tool. Named helpers are conveniences, not separate policy lanes: every helper
+produces the same `AgentFrameworkAction` and uses the same receipt-bearing HELM
+client. Use `fromRawMCPToolCall` for another framework that exposes an MCP tool
+call instead of adding a provider-specific authority path.
+
+Source presence is not package-release proof. Before a production integration,
+verify the installed SDK version contains the helper, route one allow case and
+blocked deny/escalate cases, and verify the resulting receipt offline.

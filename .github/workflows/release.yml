@@ -316,9 +316,6 @@ jobs:
       HELM_EVIDENCE_KMS_KEY_ID: ${{ secrets.HELM_EVIDENCE_KMS_KEY_ID }}
       HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX: ${{ secrets.HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX }}
       HELM_EVIDENCE_KMS_SIGN_COMMAND: ${{ secrets.HELM_EVIDENCE_KMS_SIGN_COMMAND }}
-      # Interim soft-key posture (2026-08): the sign command reads this PEM.
-      # Replace with cloud-KMS material and drop the PEM once HELM-<kms> lands.
-      HELM_EVIDENCE_KMS_PRIVATE_PEM: ${{ secrets.HELM_EVIDENCE_KMS_PRIVATE_PEM }}
     permissions:
       actions: read
       attestations: write

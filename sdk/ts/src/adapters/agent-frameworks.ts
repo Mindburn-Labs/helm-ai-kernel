@@ -750,7 +750,7 @@ function requireCanonicalToolName(
   if (typeof value !== "string" || !value.trim()) {
     throw new TypeError(`${framework} adapter requires canonical ${field}`);
   }
-  return value;
+  return value.trim();
 }
 
 function rejectConflictingAliasToolName(
@@ -766,7 +766,7 @@ function rejectConflictingAliasToolName(
         `${framework} adapter rejects blank alias ${field}; use canonical ${canonicalField}`,
       );
     }
-    if (value.trim() !== canonicalValue.trim()) {
+    if (value.trim() !== canonicalValue) {
       throw new TypeError(
         `${framework} adapter rejects conflicting ${field}; use canonical ${canonicalField}`,
       );

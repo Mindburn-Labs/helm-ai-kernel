@@ -194,6 +194,20 @@ describe("agent framework adapters", () => {
     ).toThrow("hermes adapter rejects conflicting name");
   });
 
+  it("canonicalizes populated named helper identities before alias comparison", () => {
+    expect(
+      fromCodexToolCall({
+        recipient_name: "  functions.exec_command  ",
+        name: "functions.exec_command",
+        parameters: { cmd: "pwd" },
+      }),
+    ).toMatchObject({
+      framework: "codex",
+      toolName: "functions.exec_command",
+      arguments: { cmd: "pwd" },
+    });
+  });
+
   it("rejects alias-shaped or mismatched arguments for named helpers", () => {
     expect(() =>
       fromCodexToolCall({

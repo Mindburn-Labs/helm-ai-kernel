@@ -168,6 +168,9 @@ func (a *MCPAdapter) governed(ctx context.Context, req *runtimeadapters.AdaptedR
 }
 
 func actionableFor(outcome GovernedOutcome) string {
+	if outcome.ReasonCode == "APPROVAL_EVIDENCE_UNVERIFIABLE" {
+		return "contact_admin"
+	}
 	if outcome.Verdict == contracts.VerdictEscalate {
 		return "request_approval"
 	}

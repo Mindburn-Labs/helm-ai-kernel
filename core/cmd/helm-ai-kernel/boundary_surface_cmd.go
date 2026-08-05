@@ -996,7 +996,7 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	outputSchemaJSON := cmd.String("output-schema-json", "", "Output JSON Schema for a discovered server-local tool")
 	oauthResource := cmd.String("oauth-resource", "https://helm.local/mcp", "OAuth resource indicator")
 	effect := cmd.String("effect", "read", "Tool effect: read or side_effect")
-	approved := cmd.Bool("approved", false, "Seed an approved local server before authorization")
+	approved := cmd.Bool("approved", false, "Unavailable: opaque local approval cannot authorize dispatch")
 	receiptID := cmd.String("receipt-id", "", "Receipt id to bind")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
 	if err := cmd.Parse(args); err != nil {
@@ -1004,6 +1004,10 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	}
 	if *serverID == "" || *toolName == "" {
 		fmt.Fprintln(stderr, "Error: --server-id and --tool-name are required")
+		return 2
+	}
+	if *approved {
+		fmt.Fprintf(stderr, "Error: %v\n", mcppkg.ErrApprovalVerificationUnavailable)
 		return 2
 	}
 	catalog := mcppkg.NewToolCatalog()
@@ -1038,20 +1042,6 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	if _, ok := surfaces.GetMCPServer(*serverID); !ok {
 		_, _ = quarantine.Discover(context.Background(), mcppkg.DiscoverServerRequest{ServerID: *serverID, ToolNames: []string{*toolName}})
 	}
-	if *approved {
-		now := time.Now().UTC()
-		record, _ := quarantine.Approve(context.Background(), mcppkg.ApprovalDecision{
-			ServerID:          *serverID,
-			ApproverID:        "user:local-admin",
-			ApprovalReceiptID: "receipt-local-mcp-approval",
-			ApprovedAt:        now,
-			ExpiresAt:         now.Add(15 * time.Minute),
-			Reason:            "local authorize-call test approval",
-			ToolNames:         []string{*toolName},
-			Effects:           []string{*effect},
-		})
-		_, _ = surfaces.PutMCPServer(record)
-	}
 	firewall := mcppkg.NewExecutionFirewall(catalog, quarantine, "local-cli")
 	firewall.RequirePinnedSchema = true
 	authorization := mcppkg.ToolCallAuthorization{
@@ -1068,9 +1058,6 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
-	}
-	if record.ReasonCode == contracts.ReasonApprovalRequired || record.ReasonCode == contracts.ReasonApprovalTimeout {
-		record.ApprovalCommand = mcpApprovalCommand(*serverID, *toolName, *effect)
 	}
 	record.DecisionReceiptPath = localMCPReceiptPath(record.RecordID)
 	sealed, err := record.Seal()
@@ -1106,6 +1093,9 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "HELM %s\n", record.Verdict)
 	fmt.Fprintf(stdout, "decision: %s\n", record.RecordID)
 	fmt.Fprintf(stdout, "reason: %s\n", mcpVerdictReason(record))
+	if record.ReasonCode == contracts.ReasonApprovalRequired || record.ReasonCode == contracts.ReasonApprovalTimeout {
+		fmt.Fprintln(stdout, "approval: credential verification unavailable; the server remains quarantined")
+	}
 	fmt.Fprintf(stdout, "receipt: %s\n", record.DecisionReceiptPath)
 	if nextStep := mcpAuthorizeCallNextStep(record, catalog, authorization); nextStep != "" {
 		fmt.Fprintln(stdout, "next:")
@@ -1114,13 +1104,10 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	return exitCode
 }
 
-// mcpAuthorizeCallNextStep returns the exact command that moves the call
-// toward ALLOW, or "" when there is no single next step (ALLOW already
-// reached, or the fix is not a CLI command).
+// mcpAuthorizeCallNextStep returns a schema-remediation command only. It never
+// suggests a local approval command because this CLI has no credential verifier
+// and therefore cannot move a quarantined server toward ALLOW.
 func mcpAuthorizeCallNextStep(record contracts.ExecutionBoundaryRecord, catalog *mcppkg.ToolCatalog, authorization mcppkg.ToolCallAuthorization) string {
-	if record.ApprovalCommand != "" {
-		return record.ApprovalCommand
-	}
 	if record.ReasonCode != contracts.ReasonSchemaViolation {
 		return ""
 	}
@@ -1169,33 +1156,11 @@ func mcpAuthorizeCallNextStep(record contracts.ExecutionBoundaryRecord, catalog 
 	return strings.Join(next, " ")
 }
 
-func mcpApprovalCommand(serverID, toolName, effect string) string {
-	parts := []string{
-		"helm-ai-kernel mcp approve",
-		"--server-id " + shellToken(serverID),
-		"--tools " + shellDoubleQuote(toolName),
-		"--ttl 15m",
-		"--reason " + shellQuote("read-only repo inspection for local dev"),
-	}
-	if effect != "" && effect != "read" {
-		parts = append(parts[:3], append([]string{"--effects " + shellToken(effect)}, parts[3:]...)...)
-	}
-	return strings.Join(parts, " ")
-}
-
 func shellToken(value string) string {
 	if value == "" || strings.ContainsAny(value, " \t\n\r'\"`#~\\$&|;()<>*?[]{}!") {
 		return shellQuote(value)
 	}
 	return value
-}
-
-func shellDoubleQuote(value string) string {
-	escaped := strings.ReplaceAll(value, `\`, `\\`)
-	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
-	escaped = strings.ReplaceAll(escaped, `$`, `\$`)
-	escaped = strings.ReplaceAll(escaped, "`", "\\`")
-	return `"` + escaped + `"`
 }
 
 // mcpVerdictReason renders the human reason line for any authorize-call
@@ -1206,7 +1171,7 @@ func mcpVerdictReason(record contracts.ExecutionBoundaryRecord) string {
 		if record.Verdict == contracts.VerdictDeny {
 			return "tool is outside the approved scope for this MCP server"
 		}
-		return "unknown MCP server requires approval"
+		return "unknown MCP server remains quarantined; credential verification is unavailable"
 	case contracts.ReasonApprovalTimeout:
 		return "MCP server approval expired or was revoked"
 	case contracts.ReasonSchemaViolation:

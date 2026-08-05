@@ -29,9 +29,7 @@ func benchFirewall(b *testing.B) (*ExecutionFirewall, context.Context) {
 	if _, err := registry.Discover(ctx, DiscoverServerRequest{ServerID: "srv-bench"}); err != nil {
 		b.Fatalf("discover: %v", err)
 	}
-	if _, err := registry.Approve(ctx, ApprovalDecision{ServerID: "srv-bench", ApproverID: "user:bench", ApprovalReceiptID: "approval-bench", Reason: "benchmark fixture", ToolNames: []string{"crm.read"}}); err != nil {
-		b.Fatalf("approve: %v", err)
-	}
+	seedVerifiedApprovalFixture(b, registry, ApprovalDecision{ServerID: "srv-bench", ApproverID: "user:bench", ApprovalReceiptID: "approval-bench", Reason: "benchmark fixture", ToolNames: []string{"crm.read"}})
 	if err := catalog.Register(ctx, ToolRef{Name: "crm.read", ServerID: "srv-bench", RequiredScopes: []string{"crm.read"}, Schema: map[string]any{"type": "object"}}); err != nil {
 		b.Fatalf("register: %v", err)
 	}

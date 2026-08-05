@@ -851,8 +851,8 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		// MCP approval authority must come from a credential-verified approval
 		// ceremony, never from caller-supplied body fields. Do not parse the
 		// opaque metadata first: it must never influence an approval result or
-		// change the public 503 contract. Local operators keep the
-		// receipt-backed `helm-ai-kernel mcp approve` CLI path.
+		// change the public 503 contract. Local CLI metadata is likewise not an
+		// approval authority.
 		api.WriteError(w, http.StatusServiceUnavailable, "MCP approval verification unavailable", boundarypkg.ErrApprovalVerificationUnavailable.Error())
 	}))
 
@@ -1504,6 +1504,7 @@ func authorizeArtifactReceiptReferences(ctx context.Context, svc *Services, tena
 
 func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegistry, records []mcppkg.ServerQuarantineRecord) {
 	for _, record := range records {
+		record = mcppkg.FailClosedUnverifiedApproval(record)
 		_, _ = registry.Discover(ctx, mcppkg.DiscoverServerRequest{
 			ServerID:     record.ServerID,
 			Name:         record.Name,
@@ -1516,19 +1517,6 @@ func hydrateMCPQuarantine(ctx context.Context, registry *mcppkg.QuarantineRegist
 			Reason:       record.Reason,
 		})
 		switch record.State {
-		case mcppkg.QuarantineApproved:
-			if record.ApprovedBy != "" && record.ApprovalReceiptID != "" {
-				_, _ = registry.Approve(ctx, mcppkg.ApprovalDecision{
-					ServerID:          record.ServerID,
-					ApproverID:        record.ApprovedBy,
-					ApprovalReceiptID: record.ApprovalReceiptID,
-					ApprovedAt:        record.ApprovedAt,
-					ExpiresAt:         record.ExpiresAt,
-					Reason:            record.Reason,
-					ToolNames:         record.ApprovedToolNames,
-					Effects:           record.ApprovedEffects,
-				})
-			}
 		case mcppkg.QuarantineRevoked:
 			_, _ = registry.Revoke(ctx, record.ServerID, record.Reason, record.RevokedAt)
 		}

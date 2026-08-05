@@ -333,8 +333,28 @@ func TestMCPThreatReviews(t *testing.T) {
 	if reviews[1].State != "quarantined" || reviews[1].ProofStatus != "proven" || reviews[1].Publisher != "https://example.test/mcp" {
 		t.Fatalf("mcp review = %+v, want proven quarantined review with metadata", reviews[1])
 	}
-	if len(reviews[1].FixActions) != 1 || !strings.Contains(reviews[1].CLIEquivalent, "mcp-mcp") {
+	if len(reviews[1].FixActions) != 1 || reviews[1].CLIEquivalent != "helm-ai-kernel mcp quarantine" {
 		t.Fatalf("mcp review actions = %+v cli=%q", reviews[1].FixActions, reviews[1].CLIEquivalent)
+	}
+}
+
+func TestMCPThreatReviewsDoNotEmitLocalApprovalAuthority(t *testing.T) {
+	reviews := MCPThreatReviews(&registry.Catalog{Apps: []registry.AppSpec{testApp("mcp")}}, nil)
+	if len(reviews) != 1 {
+		t.Fatalf("reviews length = %d, want 1", len(reviews))
+	}
+	review := reviews[0]
+	instructions := []string{review.CLIEquivalent, review.Summary}
+	for _, action := range review.FixActions {
+		instructions = append(instructions, action.CLI, action.Description)
+	}
+	for _, instruction := range instructions {
+		if strings.Contains(instruction, "mcp approve") {
+			t.Fatalf("readmodel emitted local MCP approval authority: %q", instruction)
+		}
+	}
+	if !strings.Contains(review.Summary, "credential-verified durable dispatch admission") {
+		t.Fatalf("mcp review summary = %q, want credential-verified durable admission requirement", review.Summary)
 	}
 }
 

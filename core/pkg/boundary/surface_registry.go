@@ -764,6 +764,7 @@ func (r *SurfaceRegistry) PutMCPServer(record mcppkg.ServerQuarantineRecord) (mc
 	if strings.TrimSpace(record.ServerID) == "" {
 		return mcppkg.ServerQuarantineRecord{}, fmt.Errorf("mcp server id is required")
 	}
+	record = mcppkg.FailClosedUnverifiedApproval(record)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mcpServers[record.ServerID] = record
@@ -1303,6 +1304,9 @@ func (r *SurfaceRegistry) loadSnapshot(data []byte) error {
 	r.challenges = snap.Challenges
 	r.authProfiles = snap.AuthProfiles
 	r.mcpServers = snap.MCPServers
+	for id, record := range r.mcpServers {
+		r.mcpServers[id] = mcppkg.FailClosedUnverifiedApproval(record)
+	}
 	r.sandboxGrants = snap.SandboxGrants
 	r.authzSnapshots = snap.AuthzSnapshots
 	r.envelopes = snap.Envelopes

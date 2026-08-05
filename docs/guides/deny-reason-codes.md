@@ -37,9 +37,9 @@ same checks enforced at serve time).
 
 | Code | Verdict | Usual cause | Next step |
 | --- | --- | --- | --- |
-| `APPROVAL_REQUIRED` | ESCALATE | The MCP server is unknown (not yet approved). | Run the printed `helm-ai-kernel mcp approve ...` command, then rerun `mcp authorize-call`. |
-| `APPROVAL_REQUIRED` | DENY | The server is approved, but this tool (or effect) is outside the approved scope. | Approve the exact tool: `helm-ai-kernel mcp approve --server-id <id> --tools "<tool>" --ttl 15m --reason '...'`. |
-| `APPROVAL_TIMEOUT` | DENY | A previous approval expired or was revoked. | Re-approve with `mcp approve`. |
+| `APPROVAL_REQUIRED` | ESCALATE | The MCP server is unknown or remains quarantined because local credential verification is unavailable. | Inspect with `mcp quarantine` or `mcp pending`. Local `mcp approve` rejects opaque values; the governing approval integration must issue a credential-verified durable dispatch admission before re-evaluation. |
+| `APPROVAL_REQUIRED` | DENY | A verifier-backed server exists, but this tool or effect is outside the exact admitted scope. | Do not widen scope locally. The governing approval integration must issue a new credential-verified durable dispatch admission for the exact request. |
+| `APPROVAL_TIMEOUT` | DENY | A verifier-backed dispatch admission expired or was revoked. | Obtain a new credential-verified durable dispatch admission from the governing approval integration, then re-evaluate. |
 | `SCHEMA_VIOLATION` | ESCALATE | The tool schema is not pinned yet. | Rerun `mcp authorize-call` with `--pinned-schema-hash <hash>`; the CLI prints the exact command with the hash filled in. |
 | `SCHEMA_VIOLATION` | DENY | The pinned hash no longer matches the tool's current schema (schema drift). | Review the schema change, then pin the new hash printed in the receipt. |
 | `INSUFFICIENT_PRIVILEGE` | DENY | Granted OAuth scopes do not cover the tool's required scopes. | Re-authorize with the required scopes (`--scopes` on `mcp authorize-call`, or the OAuth flow for a live server). |

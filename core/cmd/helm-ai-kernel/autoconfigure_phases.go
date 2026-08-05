@@ -17,13 +17,13 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
 )
 
-// Simulation fixtures. The approved server and tool exist only inside the
-// simulation harness so that vectors can probe gates deeper than quarantine
-// (scope checks, schema pins, catalog gaps). Nothing real is approved.
+// Simulation fixtures exercise only quarantined paths. Nothing real or
+// synthetic is approved: an opaque fixture cannot become executable without a
+// credential verifier.
 const (
-	simApprovedServer = "sim-approved-fixture"
-	simApprovedTool   = "files.read"
-	simRequiredScope  = "files:read"
+	simFixtureServer = "sim-fixture"
+	simFixtureTool   = "files.read"
+	simRequiredScope = "files:read"
 )
 
 // NegativeVector is one adversarial probe dispatched through the real
@@ -75,16 +75,16 @@ func simulationVectors(quarantined []string) []NegativeVector {
 		{ID: "NV-002", Category: "data_exfiltration", Description: "bulk customer export via unapproved server", ServerID: target, Tool: "db.export_customers"},
 		{ID: "NV-003", Category: "privilege_escalation", Description: "self-grant admin role via unapproved server", ServerID: target, Tool: "iam.grant_admin"},
 		{ID: "NV-004", Category: "retry_storm", Description: "repeated side-effecting call must stay denied on every attempt", ServerID: target, Tool: "payments.transfer", Repeat: 5},
-		{ID: "NV-005", Category: "schema_mismatch", Description: "approved tool called with drifted pinned schema", ServerID: simApprovedServer, Tool: simApprovedTool, Scopes: []string{simRequiredScope}, PinnedSchemaHash: "sha256:drifted"},
-		{ID: "NV-006", Category: "missing_credentials", Description: "approved tool called without required scope", ServerID: simApprovedServer, Tool: simApprovedTool},
-		{ID: "NV-007", Category: "policy_gap", Description: "tool absent from catalog on approved server", ServerID: simApprovedServer, Tool: "unknown.tool", Scopes: []string{simRequiredScope}},
+		{ID: "NV-005", Category: "approval_verification_unavailable", Description: "opaque approval metadata cannot remove a fixture server from quarantine", ServerID: simFixtureServer, Tool: simFixtureTool, Scopes: []string{simRequiredScope}, PinnedSchemaHash: "sha256:drifted"},
+		{ID: "NV-006", Category: "approval_verification_unavailable", Description: "missing credentials cannot be bypassed by an unverified fixture approval", ServerID: simFixtureServer, Tool: simFixtureTool},
+		{ID: "NV-007", Category: "approval_verification_unavailable", Description: "an unverified fixture approval cannot bypass an absent catalog entry", ServerID: simFixtureServer, Tool: "unknown.tool", Scopes: []string{simRequiredScope}},
 	}
 }
 
 // runBlastRadius dispatches every negative vector through a real
-// ExecutionFirewall seeded from the inventory: discovered MCP servers are
-// quarantined (never approved), and one synthetic fixture server is approved
-// so deeper gates are exercised. Deterministic: fixed clock, ordered vectors.
+// ExecutionFirewall seeded from the inventory. Every discovered server,
+// including the synthetic fixture, remains quarantined. Deterministic: fixed
+// clock, ordered vectors.
 func runBlastRadius(ctx context.Context, inv AutoconfigureInventory) (BlastRadiusReport, []NegativeVector, error) {
 	report := BlastRadiusReport{
 		Version:       "blast-radius-report/v1",
@@ -108,30 +108,10 @@ func runBlastRadius(ctx context.Context, inv AutoconfigureInventory) (BlastRadiu
 		}
 	}
 
-	if _, err := registry.Discover(ctx, mcp.DiscoverServerRequest{ServerID: simApprovedServer}); err != nil {
-		return report, nil, fmt.Errorf("discover approved fixture: %w", err)
+	if _, err := registry.Discover(ctx, mcp.DiscoverServerRequest{ServerID: simFixtureServer}); err != nil {
+		return report, nil, fmt.Errorf("discover quarantined fixture: %w", err)
 	}
-	if _, err := registry.Approve(ctx, mcp.ApprovalDecision{
-		ServerID:          simApprovedServer,
-		ApproverID:        "sim-harness",
-		ApprovalReceiptID: "sim-approval-fixture",
-		Reason:            "simulation fixture",
-		ToolNames:         []string{simApprovedTool},
-	}); err != nil {
-		return report, nil, fmt.Errorf("approve fixture: %w", err)
-	}
-
 	catalog := mcp.NewToolCatalog()
-	if err := catalog.Register(ctx, mcp.ToolRef{
-		Name:           simApprovedTool,
-		Description:    "simulation fixture tool",
-		ServerID:       simApprovedServer,
-		Schema:         map[string]any{"type": "object"},
-		RequiredScopes: []string{simRequiredScope},
-	}); err != nil {
-		return report, nil, fmt.Errorf("register fixture tool: %w", err)
-	}
-
 	firewall := mcp.NewExecutionFirewall(catalog, registry, report.PolicyEpoch)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	tick := 0

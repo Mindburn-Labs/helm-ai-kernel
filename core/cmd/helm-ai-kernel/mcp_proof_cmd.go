@@ -227,7 +227,7 @@ func selectMCPProofScenarios(name string, at time.Time) ([]mcpProofScenario, err
 }
 
 func mcpProofScenarios(_ time.Time) []mcpProofScenario {
-	approved := launchpadmcp.ServerRecord{
+	opaqueApproval := launchpadmcp.ServerRecord{
 		ServerID:   "srv-approved",
 		LaunchID:   "launch-proof",
 		AppID:      "proof-app",
@@ -282,16 +282,16 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ID:          "prompt_injected_tool_output",
 			Name:        "Prompt-injected tool output cannot induce a side effect",
 			ThreatClass: "prompt_injected_tool_output",
-			Summary:     "A tainted tool-output instruction asks for a write, but no approval receipt is bound.",
-			Server:      approved,
+			Summary:     "Opaque approval metadata cannot turn a tainted tool-output instruction into a dispatch grant without credential verification.",
+			Server:      opaqueApproval,
 			Request:     req("proof.write", "sha256:write", launchpadmcp.EffectSideEffect),
 		},
 		{
 			ID:          "excessive_agency",
 			Name:        "Excessive agency request requires approval before dispatch",
 			ThreatClass: "excessive_agency",
-			Summary:     "A destructive autonomous action is blocked without an approval receipt.",
-			Server:      approved,
+			Summary:     "A destructive autonomous action remains blocked until credential-verified approval creates a dispatch grant.",
+			Server:      opaqueApproval,
 			Request:     req("proof.write", "sha256:write", launchpadmcp.EffectSideEffect),
 		},
 		{
@@ -299,7 +299,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			Name:        "Confused-deputy launch scope mismatch fails closed",
 			ThreatClass: "confused_deputy",
 			Summary:     "A request tries to reuse another launch scope.",
-			Server:      approved,
+			Server:      opaqueApproval,
 			Request: launchpadmcp.CallRequest{
 				ServerID:   "srv-approved",
 				LaunchID:   "launch-other",
@@ -315,16 +315,16 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			ID:          "missing_schema_pin",
 			Name:        "Missing schema pin quarantines an unknown tool",
 			ThreatClass: "missing_schema_pin",
-			Summary:     "Approved server status is insufficient without a pinned tool schema.",
-			Server:      approved,
+			Summary:     "Opaque approval state cannot bypass credential verification or a pinned tool schema.",
+			Server:      opaqueApproval,
 			Request:     req("proof.unpinned", "sha256:unknown", launchpadmcp.EffectRead),
 		},
 		{
 			ID:          "schema_drift",
 			Name:        "Schema drift denies before dispatch",
 			ThreatClass: "schema_drift",
-			Summary:     "The caller-supplied schema hash does not match the pinned schema.",
-			Server:      approved,
+			Summary:     "Opaque approval state cannot bypass credential verification or schema-pin enforcement.",
+			Server:      opaqueApproval,
 			Request:     req("proof.read", "sha256:drift", launchpadmcp.EffectRead),
 		},
 		{
@@ -332,7 +332,7 @@ func mcpProofScenarios(_ time.Time) []mcpProofScenario {
 			Name:        "Replay or reordering attempt is marked invalid",
 			ThreatClass: "replay_reordering",
 			Summary:     "A replay ledger attempts to present side effects out of causal order.",
-			Server:      approved,
+			Server:      opaqueApproval,
 			Request:     req("proof.write", "sha256:write", launchpadmcp.EffectSideEffect),
 			Decision:    &replayDecision,
 		},

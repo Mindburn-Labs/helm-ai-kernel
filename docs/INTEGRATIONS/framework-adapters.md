@@ -56,6 +56,15 @@ produces the same `AgentFrameworkAction` and uses the same receipt-bearing HELM
 client. Use `fromRawMCPToolCall` for another framework that exposes an MCP tool
 call instead of adding a provider-specific authority path.
 
+Named helpers expect the provider's canonical envelope:
+
+- `fromCodexToolCall`: `recipient_name` + `parameters`
+- `fromClaudeToolCall`: `tool_name` + `tool_input`
+- `fromHermesToolCall`: `tool_name` + `arguments`
+
+If those canonical fields are missing, or alias fields disagree with them, the
+helper throws `TypeError` before any HELM request is built.
+
 Source presence is not package-release proof. Before a production integration,
 verify the installed SDK version contains the helper, route one allow case and
 blocked deny/escalate cases, and verify the resulting receipt offline.

@@ -145,6 +145,116 @@ describe("agent framework adapters", () => {
     });
   });
 
+  it("rejects named helper payloads that omit canonical identity fields", () => {
+    expect(() =>
+      fromCodexToolCall({
+        name: "functions.exec_command",
+        parameters: { cmd: "pwd" },
+      }),
+    ).toThrow("codex adapter requires canonical recipient_name");
+
+    expect(() =>
+      fromClaudeToolCall({
+        name: "Bash",
+        tool_input: { command: "pwd" },
+      }),
+    ).toThrow("claude-code adapter requires canonical tool_name");
+
+    expect(() =>
+      fromHermesToolCall({
+        name: "web.search",
+        arguments: { query: "boundary" },
+      }),
+    ).toThrow("hermes adapter requires canonical tool_name");
+  });
+
+  it("rejects conflicting alias identities for named helpers", () => {
+    expect(() =>
+      fromCodexToolCall({
+        recipient_name: "functions.exec_command",
+        name: "functions.write_stdin",
+        parameters: { cmd: "pwd" },
+      }),
+    ).toThrow("codex adapter rejects conflicting name");
+
+    expect(() =>
+      fromClaudeToolCall({
+        tool_name: "Bash",
+        name: "Edit",
+        tool_input: { command: "pwd" },
+      }),
+    ).toThrow("claude-code adapter rejects conflicting name");
+
+    expect(() =>
+      fromHermesToolCall({
+        tool_name: "web.search",
+        name: "terminal",
+        arguments: { query: "boundary" },
+      }),
+    ).toThrow("hermes adapter rejects conflicting name");
+  });
+
+  it("canonicalizes populated named helper identities before alias comparison", () => {
+    expect(
+      fromCodexToolCall({
+        recipient_name: "  functions.exec_command  ",
+        name: "functions.exec_command",
+        parameters: { cmd: "pwd" },
+      }),
+    ).toMatchObject({
+      framework: "codex",
+      toolName: "functions.exec_command",
+      arguments: { cmd: "pwd" },
+    });
+  });
+
+  it("rejects alias-shaped or mismatched arguments for named helpers", () => {
+    expect(() =>
+      fromCodexToolCall({
+        recipient_name: "functions.exec_command",
+        arguments: { cmd: "pwd" },
+      }),
+    ).toThrow("codex adapter requires canonical parameters");
+
+    expect(() =>
+      fromClaudeToolCall({
+        tool_name: "Bash",
+        arguments: { command: "pwd" },
+      }),
+    ).toThrow("claude-code adapter requires canonical tool_input");
+
+    expect(() =>
+      fromHermesToolCall({
+        tool_name: "web.search",
+        args: { query: "boundary" },
+      }),
+    ).toThrow("hermes adapter requires canonical arguments");
+
+    expect(() =>
+      fromCodexToolCall({
+        recipient_name: "functions.exec_command",
+        parameters: { cmd: "pwd" },
+        input: { cmd: "git status" },
+      }),
+    ).toThrow("codex adapter rejects conflicting input");
+
+    expect(() =>
+      fromClaudeToolCall({
+        tool_name: "Bash",
+        tool_input: { command: "pwd" },
+        input: { command: "git status" },
+      }),
+    ).toThrow("claude-code adapter rejects conflicting input");
+
+    expect(() =>
+      fromHermesToolCall({
+        tool_name: "web.search",
+        arguments: { query: "boundary" },
+        args: { query: "other" },
+      }),
+    ).toThrow("hermes adapter rejects conflicting args");
+  });
+
   it("normalizes PydanticAI and LlamaIndex variants", () => {
     expect(
       fromPydanticAIToolCall({

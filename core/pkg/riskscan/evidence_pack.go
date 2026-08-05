@@ -221,6 +221,9 @@ func VerifyEvidencePack(packDir string) EvidencePackVerification {
 		return verificationError(result, fmt.Errorf("decode evidence pack: %w", err))
 	}
 	result.PackID = pack.PackID
+	if strings.TrimSpace(pack.Attestation.PackHash) == "" {
+		return verificationError(result, fmt.Errorf("evidence pack attestation.pack_hash is required"))
+	}
 	if issues := executor.ValidateEvidencePack(&pack); len(issues) > 0 {
 		return verificationError(result, fmt.Errorf("validate evidence pack: %s", strings.Join(issues, "; ")))
 	}

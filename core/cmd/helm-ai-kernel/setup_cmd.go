@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -54,6 +55,9 @@ var (
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
 		return cmd.Run()
+	}
+	setupTerminalSession = func(chrome io.Writer) (io.Reader, ui.Capabilities) {
+		return os.Stdin, setupConfirmationCapabilities(chrome)
 	}
 )
 
@@ -121,8 +125,12 @@ func init() {
 
 func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		printSetupUsage(stdout)
-		return 0
+		input, caps := setupTerminalSession(stderr)
+		if !caps.Interactive {
+			printSetupUsage(stdout)
+			return 0
+		}
+		return runSetupGuidedChooser(bufio.NewReader(input), stdout, stderr, caps)
 	}
 	if len(args) == 1 && isHelpRequest(args) {
 		printSetupUsage(stdout)
@@ -143,6 +151,35 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 		return 0
 	default:
 		return runSetupInstallCmd(args, stdout, stderr)
+	}
+}
+
+func runSetupGuidedChooser(input *bufio.Reader, stdout, stderr io.Writer, caps ui.Capabilities) int {
+	fmt.Fprintln(stderr, "HELM setup configures one client for this project (project scope is the default).")
+	fmt.Fprintln(stderr, "  1) Claude Code (recommended, default)")
+	fmt.Fprintln(stderr, "  2) Codex")
+	fmt.Fprintln(stderr, "  q) Quit without changes")
+	fmt.Fprint(stderr, "Choose [1]: ")
+
+	choice, err := input.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		fmt.Fprintf(stderr, "setup: read selection: %v\n", err)
+		fmt.Fprintln(stderr, "setup: no changes made; run `helm-ai-kernel setup claude-code --scope project --dry-run` when ready")
+		return 2
+	}
+
+	switch strings.ToLower(strings.TrimSpace(choice)) {
+	case "", "1", "claude", "claude-code":
+		return runSetupInstallCmdWithInput([]string{"claude-code", "--scope", "project"}, stdout, stderr, input, caps)
+	case "2", "codex":
+		return runSetupInstallCmdWithInput([]string{"codex", "--scope", "project"}, stdout, stderr, input, caps)
+	case "q", "quit", "cancel":
+		fmt.Fprintln(stderr, "setup: no changes made; run `helm-ai-kernel setup claude-code --scope project --dry-run` when ready")
+		return 0
+	default:
+		fmt.Fprintf(stderr, "setup: unknown choice %q; choose 1, 2, or q\n", strings.TrimSpace(choice))
+		fmt.Fprintln(stderr, "setup: no changes made; run `helm-ai-kernel setup claude-code --scope project --dry-run` when ready")
+		return 2
 	}
 }
 
@@ -407,6 +444,11 @@ func confirmSetupInstall(input io.Reader, chrome io.Writer, caps ui.Capabilities
 }
 
 func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
+	input, caps := setupTerminalSession(stderr)
+	return runSetupInstallCmdWithInput(args, stdout, stderr, bufio.NewReader(input), caps)
+}
+
+func runSetupInstallCmdWithInput(args []string, stdout, stderr io.Writer, input io.Reader, caps ui.Capabilities) int {
 	if isHelpRequest(args) {
 		printSetupInstallUsage(stdout)
 		return 0
@@ -424,7 +466,6 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	} else {
 		opts.Operation = "install"
 	}
-	caps := setupConfirmationCapabilities(stderr)
 	if !opts.Yes && !opts.DryRun && (!caps.Interactive || opts.JSON) {
 		fmt.Fprintln(stderr, "setup: pass --yes to install local config, or --dry-run to preview changes")
 		return 2
@@ -444,7 +485,7 @@ func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if !opts.Yes {
 		confirmed := false
-		if err := confirmSetupInstall(os.Stdin, stderr, caps, summary, setupInstallActions(opts), func() error {
+		if err := confirmSetupInstall(input, stderr, caps, summary, setupInstallActions(opts), func() error {
 			confirmed = true
 			return nil
 		}); err != nil {
@@ -702,7 +743,7 @@ func runSetupRemoveCmd(args []string, stdout, stderr io.Writer) int {
 }
 
 func printSetupUsage(w io.Writer) {
-	fmt.Fprintln(w, "Choose a local agent profile:")
+	fmt.Fprintln(w, "Choose a local agent profile (project scope is the default):")
 	fmt.Fprintln(w, "  helm-ai-kernel setup claude-code --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup --quickstart --profile mcp --yes")
@@ -747,7 +788,7 @@ func printSetupInstallUsage(w io.Writer) {
 	fmt.Fprintln(w, "Install a scoped HELM MCP server and PreToolUse hook for one local coding agent.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
-	fmt.Fprintln(w, "  --scope user|project                          Install scope (default user)")
+	fmt.Fprintln(w, "  --scope user|project                          Install scope (default project)")
 	fmt.Fprintln(w, "  --workspace DIR                               Project-scope workspace (defaults to the current directory)")
 	fmt.Fprintln(w, "  --data-dir DIR                                HELM local state directory")
 	fmt.Fprintln(w, "  --dry-run | --json | --yes                    Preview, automate output, or approve installation")
@@ -779,7 +820,7 @@ func printSetupInspectUsage(w io.Writer, operation string, includeYes bool) {
 }
 
 func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) {
-	opts := setupOptions{Scope: "user", NoQuickstart: true}
+	opts := setupOptions{Scope: "project", NoQuickstart: true}
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.StringVar(&opts.Scope, "scope", opts.Scope, "Install scope: user or project")

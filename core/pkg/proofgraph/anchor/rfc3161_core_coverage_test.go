@@ -48,8 +48,8 @@ func TestRFC3161BackendAnchorAndVerifyBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Anchor: %v", err)
 	}
-	if receipt.Backend != rfc3161BackendName || receipt.Signature == "" || len(receipt.RawResponse) == 0 {
-		t.Fatalf("receipt = %#v, want rfc3161 receipt with signature/raw response", receipt)
+	if receipt.Backend != rfc3161BackendName || receipt.Signature == "" || len(receipt.RawResponse) != 0 {
+		t.Fatalf("receipt = %#v, want rfc3161 receipt with base64 signature and no raw archival bytes", receipt)
 	}
 	if err := backend.Verify(context.Background(), receipt); err != nil {
 		t.Fatalf("Verify valid receipt: %v", err)

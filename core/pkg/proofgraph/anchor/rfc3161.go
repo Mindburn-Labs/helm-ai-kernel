@@ -130,8 +130,9 @@ func (r *RFC3161Backend) Anchor(ctx context.Context, req AnchorRequest) (*Anchor
 		LogID:          r.tsaURL,
 		LogIndex:       0, // RFC 3161 doesn't have log indices
 		IntegratedTime: time.Now().UTC(),
-		Signature:      base64.StdEncoding.EncodeToString(respBody),
-		RawResponse:    respBody,
+		// The DER token lives base64-encoded in Signature; raw DER must never
+		// enter RawResponse (json.RawMessage), or seal canonicalization fails.
+		Signature: base64.StdEncoding.EncodeToString(respBody),
 	}
 	receipt.ReceiptHash = receipt.ComputeReceiptHash()
 

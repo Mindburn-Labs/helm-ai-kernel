@@ -190,8 +190,9 @@ func (a *EIDASAnchor) Anchor(ctx context.Context, req AnchorRequest) (*AnchorRec
 		LogID:          a.qtspURL,
 		LogIndex:       0,
 		IntegratedTime: time.Now().UTC(),
-		Signature:      base64.StdEncoding.EncodeToString(respBody),
-		RawResponse:    respBody,
+		// The DER token lives base64-encoded in Signature; raw DER must never
+		// enter RawResponse (json.RawMessage), or seal canonicalization fails.
+		Signature: base64.StdEncoding.EncodeToString(respBody),
 	}
 	receipt.ReceiptHash = receipt.ComputeReceiptHash()
 	return receipt, nil

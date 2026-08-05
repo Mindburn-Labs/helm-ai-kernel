@@ -61,7 +61,10 @@ tool-call events. These helpers normalize each framework event into a HELM
 governance request and submit it through `chatCompletionsWithReceipt`,
 preserving the kernel receipt returned in `X-Helm-*` headers. Frameworks
 without a named adapter can use the raw MCP adapter; no model-specific policy
-path is required.
+path is required. The named Codex, Claude Code, and Hermes helpers expect their
+canonical provider fields (`recipient_name` + `parameters`, `tool_name` +
+`tool_input`, `tool_name` + `arguments`) and throw before dispatch if alias
+fields conflict with that envelope.
 
 ```ts
 import { HelmClient, createAgentFrameworkAdapter, fromOpenAIAgentsToolCall } from "@mindburn/helm-ai-kernel";

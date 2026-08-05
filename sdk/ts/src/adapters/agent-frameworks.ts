@@ -367,10 +367,24 @@ export function fromOpenAIAgentsToolCall(
 }
 
 export function fromCodexToolCall(call: CodexToolCall): AgentFrameworkAction {
+  const toolName = requireCanonicalToolName(
+    "codex",
+    "recipient_name",
+    call.recipient_name,
+  );
+  rejectConflictingAliasToolName("codex", "recipient_name", toolName, {
+    tool_name: call.tool_name,
+    name: call.name,
+  });
+  const args = requireCanonicalArguments("codex", "parameters", call.parameters, {
+    arguments: call.arguments,
+    input: call.input,
+    payload: call.payload,
+  });
   return frameworkAction(
     "codex",
-    call.tool_name ?? call.name ?? call.recipient_name,
-    call.arguments ?? call.parameters ?? call.input ?? call.payload,
+    toolName,
+    args,
     {
       toolCallId: call.id,
       runId: call.thread_id ?? call.session_id,
@@ -384,10 +398,27 @@ export function fromCodexToolCall(call: CodexToolCall): AgentFrameworkAction {
 }
 
 export function fromClaudeToolCall(call: ClaudeToolCall): AgentFrameworkAction {
+  const toolName = requireCanonicalToolName(
+    "claude-code",
+    "tool_name",
+    call.tool_name,
+  );
+  rejectConflictingAliasToolName("claude-code", "tool_name", toolName, {
+    name: call.name,
+  });
+  const args = requireCanonicalArguments(
+    "claude-code",
+    "tool_input",
+    call.tool_input,
+    {
+      input: call.input,
+      arguments: call.arguments,
+    },
+  );
   return frameworkAction(
     "claude-code",
-    call.tool_name ?? call.name,
-    call.tool_input ?? call.input ?? call.arguments,
+    toolName,
+    args,
     {
       toolCallId: call.tool_use_id ?? call.id,
       runId: call.session_id,
@@ -400,10 +431,26 @@ export function fromClaudeToolCall(call: ClaudeToolCall): AgentFrameworkAction {
 }
 
 export function fromHermesToolCall(call: HermesToolCall): AgentFrameworkAction {
+  const toolName = requireCanonicalToolName(
+    "hermes",
+    "tool_name",
+    call.tool_name,
+  );
+  rejectConflictingAliasToolName("hermes", "tool_name", toolName, {
+    name: call.name,
+  });
+  const args = requireCanonicalArguments(
+    "hermes",
+    "arguments",
+    call.arguments,
+    {
+      args: call.args,
+    },
+  );
   return frameworkAction(
     "hermes",
-    call.tool_name ?? call.name,
-    call.arguments ?? call.args,
+    toolName,
+    args,
     {
       toolCallId: call.id,
       agentId: call.profile,
@@ -693,4 +740,74 @@ function displayName(framework: AgentFramework): string {
     agentFrameworkAdapters.find((adapter) => adapter.framework === framework)
       ?.displayName ?? framework
   );
+}
+
+function requireCanonicalToolName(
+  framework: "codex" | "claude-code" | "hermes",
+  field: string,
+  value: unknown,
+): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new TypeError(`${framework} adapter requires canonical ${field}`);
+  }
+  return value;
+}
+
+function rejectConflictingAliasToolName(
+  framework: "codex" | "claude-code" | "hermes",
+  canonicalField: string,
+  canonicalValue: string,
+  aliases: Record<string, unknown>,
+): void {
+  for (const [field, value] of Object.entries(aliases)) {
+    if (value == null) continue;
+    if (typeof value !== "string" || !value.trim()) {
+      throw new TypeError(
+        `${framework} adapter rejects blank alias ${field}; use canonical ${canonicalField}`,
+      );
+    }
+    if (value.trim() !== canonicalValue.trim()) {
+      throw new TypeError(
+        `${framework} adapter rejects conflicting ${field}; use canonical ${canonicalField}`,
+      );
+    }
+  }
+}
+
+function requireCanonicalArguments(
+  framework: "codex" | "claude-code" | "hermes",
+  canonicalField: string,
+  canonicalValue: unknown,
+  aliases: Record<string, unknown>,
+): unknown {
+  if (canonicalValue === undefined) {
+    throw new TypeError(`${framework} adapter requires canonical ${canonicalField}`);
+  }
+  for (const [field, value] of Object.entries(aliases)) {
+    if (value === undefined) continue;
+    if (!sameNormalizedArguments(canonicalValue, value)) {
+      throw new TypeError(
+        `${framework} adapter rejects conflicting ${field}; use canonical ${canonicalField}`,
+      );
+    }
+  }
+  return canonicalValue;
+}
+
+function sameNormalizedArguments(left: unknown, right: unknown): boolean {
+  return stableSerialize(normalizeArguments(left)) === stableSerialize(normalizeArguments(right));
+}
+
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerialize(item)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableSerialize(object[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }

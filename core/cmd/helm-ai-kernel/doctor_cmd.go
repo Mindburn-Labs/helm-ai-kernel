@@ -159,31 +159,26 @@ func renderText(out io.Writer, results []CheckResult, summary doctorSummary, ver
 }
 
 func renderTextWithCaps(out io.Writer, results []CheckResult, summary doctorSummary, verbose bool, caps ui.Capabilities) int {
-	_, _ = fmt.Fprintf(out, "\n%s -- Diagnostic Report\n\n", doctorStyle(caps, "HELM Doctor", ColorBold+ColorPurple))
+	renderer := ui.NewRenderer(out, caps)
+	_, _ = fmt.Fprint(out, "\nHELM Doctor -- Diagnostic Report\n\n")
 
 	for _, r := range results {
-		icon := statusIcon(r.Status)
-		label := padRight(r.Name, 22)
-
-		_, _ = fmt.Fprintf(out, "  %s %s\n", icon, doctorStyle(caps, label, ColorBold))
+		_, _ = fmt.Fprintf(out, "  %s %s\n", doctorStatusMarker(renderer, r.Status), r.Name)
 		_, _ = fmt.Fprintf(out, "     %s\n", r.Message)
 
 		if verbose && r.Detail != "" {
-			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, r.Detail, ColorGray))
+			_, _ = fmt.Fprintf(out, "     Detail: %s\n", r.Detail)
 		}
-		if r.Status == statusFail && r.Suggestion != "" {
-			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, "Suggestion: "+r.Suggestion, ColorYellow))
-		}
-		if r.Status == statusWarn && r.Suggestion != "" {
-			_, _ = fmt.Fprintf(out, "     %s\n", doctorStyle(caps, "Suggestion: "+r.Suggestion, ColorYellow))
+		if (r.Status == statusFail || r.Status == statusWarn) && r.Suggestion != "" {
+			_, _ = fmt.Fprintf(out, "     Next action: %s\n", r.Suggestion)
 		}
 	}
 
 	_, _ = fmt.Fprintln(out)
-	_, _ = fmt.Fprintf(out, "Summary: %s%d passed%s, %s%d warning%s, %s%d failed%s\n",
-		doctorANSI(caps, ColorGreen), summary.Pass, doctorReset(caps),
-		doctorANSI(caps, warnColor(summary.Warn)), summary.Warn, doctorReset(caps),
-		doctorANSI(caps, failColor(summary.Fail)), summary.Fail, doctorReset(caps),
+	_, _ = fmt.Fprintf(out, "Summary: %s %d, %s %d, %s %d\n",
+		renderer.Status(ui.StatusPass), summary.Pass,
+		renderer.Status(ui.StatusWarn), summary.Warn,
+		renderer.Status(ui.StatusFail), summary.Fail,
 	)
 
 	if summary.Fail > 0 {
@@ -193,7 +188,7 @@ func renderTextWithCaps(out io.Writer, results []CheckResult, summary doctorSumm
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(out, "\n%sAll checks passed. HELM is ready.%s\n", doctorANSI(caps, ColorGreen+ColorBold), doctorReset(caps))
+	_, _ = fmt.Fprintf(out, "\n%s All checks passed. HELM is ready.\n", renderer.Status(ui.StatusPass))
 	return 0
 }
 
@@ -208,58 +203,21 @@ func doctorCapabilities(out io.Writer) ui.Capabilities {
 	})
 }
 
-func doctorStyle(caps ui.Capabilities, value, ansi string) string {
-	return doctorANSI(caps, ansi) + value + doctorReset(caps)
-}
-
-func doctorANSI(caps ui.Capabilities, ansi string) string {
-	if !caps.Color {
-		return ""
-	}
-	return ansi
-}
-
-func doctorReset(caps ui.Capabilities) string {
-	if !caps.Color {
-		return ""
-	}
-	return ColorReset
-}
-
-func statusIcon(s checkStatus) string {
-	switch s {
+func doctorStatusMarker(renderer ui.Renderer, status checkStatus) string {
+	switch status {
 	case statusPass:
-		return "\u2705" // check mark
+		return renderer.Status(ui.StatusPass)
 	case statusWarn:
-		return "\u26a0\ufe0f " // warning
+		return renderer.Status(ui.StatusWarn)
 	case statusFail:
-		return "\u274c" // cross
+		return renderer.Status(ui.StatusFail)
 	case statusInfo:
-		return "\u2139\ufe0f " // info
+		// Info is a value report, not a check outcome. The shared renderer has
+		// no info state, so keep it visible without reintroducing styling.
+		return "[INFO]"
 	default:
-		return "  "
+		return renderer.Status(ui.StatusWarn)
 	}
-}
-
-func padRight(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
-}
-
-func warnColor(n int) string {
-	if n > 0 {
-		return ColorYellow
-	}
-	return ColorGreen
-}
-
-func failColor(n int) string {
-	if n > 0 {
-		return ColorRed
-	}
-	return ColorGreen
 }
 
 // ---------------------------------------------------------------------------

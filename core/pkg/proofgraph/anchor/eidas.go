@@ -1,3 +1,7 @@
+// quantum_posture: eIDAS anchoring consumes QTSP-issued classical
+// timestamp tokens (X.509 chains, SHA-256 imprints); this file adds no
+// cryptographic control of its own, and the receipt-encoding change keeps
+// the DER token base64-encoded in Signature without altering any primitive.
 package anchor
 
 import (

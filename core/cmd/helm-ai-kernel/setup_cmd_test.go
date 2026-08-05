@@ -19,7 +19,19 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
 )
 
+type setupPanicReader struct{}
+
+func (setupPanicReader) Read([]byte) (int, error) {
+	panic("noninteractive setup must not read input")
+}
+
 func TestSetupNoArgsPrintsChooser(t *testing.T) {
+	oldSession := setupTerminalSession
+	setupTerminalSession = func(io.Writer) (io.Reader, ui.Capabilities) {
+		return setupPanicReader{}, ui.Capabilities{Width: ui.DefaultTerminalWidth}
+	}
+	t.Cleanup(func() { setupTerminalSession = oldSession })
+
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup"}, &stdout, &stderr)
 	if code != 0 {
@@ -31,11 +43,123 @@ func TestSetupNoArgsPrintsChooser(t *testing.T) {
 		"helm-ai-kernel setup codex --yes",
 		"helm-ai-kernel setup --quickstart --profile mcp --yes",
 		"helm-ai-kernel setup --client cursor --print-config",
+		"project scope is the default",
 		"Interactive terminals show the scoped preview",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("setup chooser missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestSetupInteractiveChooserDelegatesProjectInstall(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(home, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Chdir(workspace)
+	state := stubSetupSideEffects(t)
+
+	oldSession := setupTerminalSession
+	sessions := 0
+	setupTerminalSession = func(io.Writer) (io.Reader, ui.Capabilities) {
+		sessions++
+		if sessions == 1 {
+			return strings.NewReader("1\nAPPROVE\n"), ui.Capabilities{Interactive: true, Width: 80}
+		}
+		return strings.NewReader(""), ui.Capabilities{Interactive: true, Width: 80}
+	}
+	t.Cleanup(func() { setupTerminalSession = oldSession })
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"helm-ai-kernel", "setup"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("interactive setup exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if sessions != 1 {
+		t.Fatalf("terminal sessions = %d, want one shared chooser/confirmation session", sessions)
+	}
+	if len(state.execCalls) != 1 || !strings.Contains(strings.Join(state.execCalls[0], " "), "claude mcp add --transport stdio --scope project") {
+		t.Fatalf("chooser did not delegate project-scoped Claude install: %#v", state.execCalls)
+	}
+	if len(state.quickstartArgs) != 0 {
+		t.Fatalf("chooser unexpectedly started Quickstart: %#v", state.quickstartArgs)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, ".claude", "settings.json")); err != nil {
+		t.Fatalf("project-scoped hook config was not installed: %v", err)
+	}
+	for _, want := range []string{"Claude Code (recommended, default)", "project scope is the default", "Type APPROVE"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("interactive setup missing %q:\n%s", want, stderr.String())
+		}
+	}
+}
+
+func TestSetupInteractiveChooserCancelOrInvalidDoesNotInstall(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		input    string
+		wantCode int
+	}{
+		{name: "cancel", input: "q\n", wantCode: 0},
+		{name: "invalid", input: "nope\n", wantCode: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			workspace := filepath.Join(tmp, "workspace")
+			if err := os.MkdirAll(workspace, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			t.Chdir(workspace)
+			state := stubSetupSideEffects(t)
+			oldSession := setupTerminalSession
+			setupTerminalSession = func(io.Writer) (io.Reader, ui.Capabilities) {
+				return strings.NewReader(test.input), ui.Capabilities{Interactive: true, Width: 80}
+			}
+			t.Cleanup(func() { setupTerminalSession = oldSession })
+
+			var stdout, stderr bytes.Buffer
+			if code := Run([]string{"helm-ai-kernel", "setup"}, &stdout, &stderr); code != test.wantCode {
+				t.Fatalf("chooser exit=%d, want %d stdout=%s stderr=%s", code, test.wantCode, stdout.String(), stderr.String())
+			}
+			if len(state.execCalls) != 0 || len(state.quickstartArgs) != 0 || state.probeCalls != 0 {
+				t.Fatalf("chooser %s had install side effects: %#v", test.name, state)
+			}
+			for _, want := range []string{"no changes made", "helm-ai-kernel setup claude-code --scope project --dry-run"} {
+				if !strings.Contains(stderr.String(), want) {
+					t.Fatalf("chooser %s missing %q:\n%s", test.name, want, stderr.String())
+				}
+			}
+		})
+	}
+}
+
+func TestParseSetupInstallArgsDefaultsToProjectAndAcceptsUserScope(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "default", args: []string{"codex", "--data-dir", filepath.Join(tmp, "default")}, want: "project"},
+		{name: "explicit_user", args: []string{"codex", "--scope", "user", "--data-dir", filepath.Join(tmp, "user")}, want: "user"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			opts, code := parseSetupInstallArgs(test.args, io.Discard)
+			if code != 0 {
+				t.Fatalf("parse code=%d", code)
+			}
+			if opts.Scope != test.want {
+				t.Fatalf("scope=%q, want %q", opts.Scope, test.want)
+			}
+		})
 	}
 }
 
@@ -579,6 +703,11 @@ func TestPublicExamplesAvoidStaleCLIStrings(t *testing.T) {
 func TestSetupDryRunJSONSummary(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", filepath.Join(tmp, "home"))
+	workspace := filepath.Join(tmp, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(workspace)
 	stubSetupSideEffects(t)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup", "claude-code", "--dry-run", "--json", "--data-dir", filepath.Join(tmp, "helm")}, &stdout, &stderr)
@@ -591,6 +720,13 @@ func TestSetupDryRunJSONSummary(t *testing.T) {
 	}
 	if summary.Target != "claude-code" {
 		t.Fatalf("target = %q, want claude-code", summary.Target)
+	}
+	canonicalWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Scope != "project" || summary.Workspace != canonicalWorkspace {
+		t.Fatalf("default setup scope/workspace = %q/%q, want project/%q", summary.Scope, summary.Workspace, canonicalWorkspace)
 	}
 	if summary.DataDir != filepath.Join(tmp, "helm") {
 		t.Fatalf("data dir = %q", summary.DataDir)
@@ -1100,7 +1236,7 @@ func TestSetupRequiresExplicitDataDirWithoutHome(t *testing.T) {
 
 func TestSetupUserScopeRequiresAbsoluteHomeEvenWithDataDir(t *testing.T) {
 	commands := [][]string{
-		{"helm-ai-kernel", "setup", "codex", "--yes"},
+		{"helm-ai-kernel", "setup", "codex", "--scope", "user", "--yes"},
 		{"helm-ai-kernel", "setup", "status", "codex"},
 		{"helm-ai-kernel", "setup", "remove", "codex", "--yes"},
 	}
@@ -1138,7 +1274,7 @@ func TestSetupInstallClaudeWritesHookAndRunsExplicitQuickstart(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	dataDir := filepath.Join(tmp, "helm")
-	code := Run([]string{"helm-ai-kernel", "setup", "claude-code", "--yes", "--quickstart", "--data-dir", dataDir}, &stdout, &stderr)
+	code := Run([]string{"helm-ai-kernel", "setup", "claude-code", "--scope", "user", "--yes", "--quickstart", "--data-dir", dataDir}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("setup exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}

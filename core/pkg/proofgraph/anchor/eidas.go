@@ -1,3 +1,7 @@
+// quantum_posture: eIDAS anchoring consumes QTSP-issued classical
+// timestamp tokens (X.509 chains, SHA-256 imprints); this file adds no
+// cryptographic control of its own, and the receipt-encoding change keeps
+// the DER token base64-encoded in Signature without altering any primitive.
 package anchor
 
 import (
@@ -190,8 +194,9 @@ func (a *EIDASAnchor) Anchor(ctx context.Context, req AnchorRequest) (*AnchorRec
 		LogID:          a.qtspURL,
 		LogIndex:       0,
 		IntegratedTime: time.Now().UTC(),
-		Signature:      base64.StdEncoding.EncodeToString(respBody),
-		RawResponse:    respBody,
+		// The DER token lives base64-encoded in Signature; raw DER must never
+		// enter RawResponse (json.RawMessage), or seal canonicalization fails.
+		Signature: base64.StdEncoding.EncodeToString(respBody),
 	}
 	receipt.ReceiptHash = receipt.ComputeReceiptHash()
 	return receipt, nil

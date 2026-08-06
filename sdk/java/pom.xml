@@ -6,7 +6,7 @@
 
     <groupId>io.github.mindburnlabs</groupId>
     <artifactId>helm-sdk</artifactId>
-    <version>0.8.0</version>
+    <version>0.8.1</version>
     <packaging>jar</packaging>
 
     <name>HELM SDK</name>

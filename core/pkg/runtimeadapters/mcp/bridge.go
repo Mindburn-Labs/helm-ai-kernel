@@ -1,11 +1,13 @@
 // quantum_posture: SHA-256 for JCS content hashing and deterministic permit
-// nonce derivation only; no signatures here (receipt signing is Ed25519 in the
-// workstation engine). Classical hash, PQ posture inherited from the signer.
+// nonce derivation; EffectPermits are signed here with classical Ed25519 derived
+// from the same seed the workstation engine uses for receipts. Classical hash,
+// PQ posture inherited from the signer.
 
 package mcp
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -18,6 +20,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcpcore "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
@@ -104,6 +107,7 @@ type GovernedBridge struct {
 	scopes       []string
 	profile      contracts.WorkstationPolicyProfile
 	signingSeed  []byte
+	permitSigner *helmcrypto.Ed25519Signer // nil => permits are minted unsigned
 	nonces       effects.NonceStore
 	connector    effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
 	approvals    ApprovalStore     // optional: nil => escalations cannot be satisfied
@@ -186,12 +190,25 @@ func NewGovernedBridge(cfg BridgeConfig) *GovernedBridge {
 	if now == nil {
 		now = time.Now
 	}
+	// The permit signer reuses the receipt signing seed: a permit and the
+	// decision receipt that authorized it must trace to the same key, and a
+	// second key would be a second thing to distribute. A seed of the wrong
+	// length yields no signer and permits are minted unsigned, exactly as
+	// before this field existed — connectors that require signatures still
+	// refuse them, so the failure surfaces at the boundary rather than here.
+	var permitSigner *helmcrypto.Ed25519Signer
+	if len(cfg.SigningSeed) == ed25519.SeedSize {
+		if s, err := helmcrypto.NewEd25519SignerFromSeed(cfg.SigningSeed, issuer); err == nil {
+			permitSigner = s
+		}
+	}
 	return &GovernedBridge{
 		firewall:     cfg.Firewall,
 		serverID:     cfg.ServerID,
 		scopes:       cfg.GrantedScopes,
 		profile:      profile,
 		signingSeed:  cfg.SigningSeed,
+		permitSigner: permitSigner,
 		nonces:       nonces,
 		connector:    cfg.Connector,
 		approvals:    cfg.Approvals,
@@ -771,7 +788,26 @@ func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHa
 	if receipt.DecisionID != "" {
 		permit.EvidenceBindings = map[string]string{"decision_id": receipt.DecisionID}
 	}
+	// Signing is last: every covered field, EvidenceBindings included, must
+	// already be final. A configured signer that fails is a denial, not an
+	// unsigned permit.
+	if b.permitSigner != nil {
+		if err := helmcrypto.SignPermit(b.permitSigner, permit); err != nil {
+			return nil, fmt.Errorf("mcp bridge: sign permit: %w", err)
+		}
+	}
 	return permit, nil
+}
+
+// PermitSigningPublicKey returns the hex Ed25519 public key that permits from
+// this bridge are signed under, or "" when no signer is configured. It is the
+// value a verifying connector must be given; there is no other way to learn it,
+// because the seed itself must not leave the bridge.
+func (b *GovernedBridge) PermitSigningPublicKey() string {
+	if b.permitSigner == nil {
+		return ""
+	}
+	return b.permitSigner.PublicKey()
 }
 
 func connectorIDFor(c effects.Connector) string {

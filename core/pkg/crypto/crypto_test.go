@@ -1,10 +1,13 @@
 package crypto
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 )
 
 func TestCanonicalHasher_Hash(t *testing.T) {
@@ -105,5 +108,197 @@ func TestAuditLog_Append(t *testing.T) {
 	}
 	if entries[0].Hash == "" {
 		t.Error("Expected hash to be populated")
+	}
+}
+
+// --- EffectPermit signing (effect_permit.v1) ------------------------------
+
+func testEffectPermit() *effects.EffectPermit {
+	issued := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	return &effects.EffectPermit{
+		PermitID:    "permit-abc",
+		IntentHash:  "sha256:intent",
+		VerdictHash: "sha256:verdict",
+		PlanHash:    "sha256:plan",
+		PolicyHash:  "sha256:policy",
+		EffectType:  effects.EffectTypeWrite,
+		ConnectorID: "linear",
+		Scope: effects.EffectScope{
+			AllowedAction: "linear.create_issue",
+			AllowedParams: []string{"team_id=s:team-1", "title=s:Bug"},
+			DenyPatterns:  []string{"^secret"},
+		},
+		ResourceRef:      "linear:team:team-1",
+		ExpiresAt:        issued.Add(5 * time.Minute),
+		SingleUse:        true,
+		Nonce:            "nonce-1",
+		IssuedAt:         issued,
+		IssuerID:         "mcp-governed-bridge-v1",
+		EvidenceBindings: map[string]string{"decision_id": "dec-1"},
+	}
+}
+
+func TestSignPermit_RoundTrip(t *testing.T) {
+	signer, err := NewEd25519Signer("permit-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	permit := testEffectPermit()
+	if permit.Signature != "" {
+		t.Fatal("fixture must start unsigned")
+	}
+	if err := SignPermit(signer, permit); err != nil {
+		t.Fatalf("SignPermit: %v", err)
+	}
+	if permit.Signature == "" {
+		t.Fatal("SignPermit did not populate Signature")
+	}
+	ok, err := VerifyPermit(signer.PublicKey(), permit)
+	if err != nil || !ok {
+		t.Fatalf("freshly signed permit must verify: ok=%v err=%v", ok, err)
+	}
+}
+
+// permitTampers mutates exactly one covered field each. The keys are the
+// effects.EffectPermit field names (dotted for Scope members) so
+// TestVerifyPermit_CoversEveryFieldButSignature can prove the set is complete.
+var permitTampers = map[string]func(p *effects.EffectPermit){
+	"PermitID":            func(p *effects.EffectPermit) { p.PermitID = "permit-evil" },
+	"IntentHash":          func(p *effects.EffectPermit) { p.IntentHash = "sha256:evil" },
+	"VerdictHash":         func(p *effects.EffectPermit) { p.VerdictHash = "sha256:evil" },
+	"PlanHash":            func(p *effects.EffectPermit) { p.PlanHash = "sha256:evil" },
+	"PolicyHash":          func(p *effects.EffectPermit) { p.PolicyHash = "sha256:evil" },
+	"EffectType":          func(p *effects.EffectPermit) { p.EffectType = effects.EffectTypeDelete },
+	"ConnectorID":         func(p *effects.EffectPermit) { p.ConnectorID = "github" },
+	"Scope.AllowedAction": func(p *effects.EffectPermit) { p.Scope.AllowedAction = "linear.delete_issue" },
+	"Scope.AllowedParams": func(p *effects.EffectPermit) { p.Scope.AllowedParams = []string{"team_id=s:team-evil"} },
+	"Scope.DenyPatterns":  func(p *effects.EffectPermit) { p.Scope.DenyPatterns = nil },
+	"ResourceRef":         func(p *effects.EffectPermit) { p.ResourceRef = "linear:team:team-evil" },
+	"ExpiresAt":           func(p *effects.EffectPermit) { p.ExpiresAt = p.ExpiresAt.Add(time.Hour) },
+	"SingleUse":           func(p *effects.EffectPermit) { p.SingleUse = false },
+	"Nonce":               func(p *effects.EffectPermit) { p.Nonce = "nonce-evil" },
+	"IssuedAt":            func(p *effects.EffectPermit) { p.IssuedAt = p.IssuedAt.Add(-time.Hour) },
+	"IssuerID":            func(p *effects.EffectPermit) { p.IssuerID = "issuer-evil" },
+	"EvidenceBindings":    func(p *effects.EffectPermit) { p.EvidenceBindings = map[string]string{"decision_id": "dec-evil"} },
+}
+
+func TestVerifyPermit_TamperedFieldFailsVerification(t *testing.T) {
+	signer, err := NewEd25519Signer("permit-tamper-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tamper := range permitTampers {
+		t.Run(name, func(t *testing.T) {
+			permit := testEffectPermit()
+			if err := SignPermit(signer, permit); err != nil {
+				t.Fatal(err)
+			}
+			tamper(permit)
+			ok, err := VerifyPermit(signer.PublicKey(), permit)
+			if err != nil {
+				t.Fatalf("tampered permit must fail verification, not error: %v", err)
+			}
+			if ok {
+				t.Fatalf("tampered %s verified — the field is not covered by the signature", name)
+			}
+		})
+	}
+}
+
+// TestVerifyPermit_CoversEveryFieldButSignature is the guard that keeps the
+// documented covered-field list honest: a field added to EffectPermit without a
+// matching tamper vector fails here rather than silently riding unsigned.
+func TestVerifyPermit_CoversEveryFieldButSignature(t *testing.T) {
+	covered := make(map[string]struct{}, len(permitTampers))
+	for name := range permitTampers {
+		root, _, _ := strings.Cut(name, ".")
+		covered[root] = struct{}{}
+	}
+	typ := reflect.TypeOf(effects.EffectPermit{})
+	for i := range typ.NumField() {
+		field := typ.Field(i).Name
+		if field == "Signature" {
+			if _, present := covered[field]; present {
+				t.Fatal("Signature must not be an input to the signature that authenticates it")
+			}
+			continue
+		}
+		if _, present := covered[field]; !present {
+			t.Fatalf("EffectPermit.%s has no tamper vector: either it is uncovered by "+
+				"effect_permit.v1 or the vector set is stale", field)
+		}
+	}
+}
+
+func TestVerifyPermit_UnsignedIsRefused(t *testing.T) {
+	signer, err := NewEd25519Signer("permit-unsigned-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, err := VerifyPermit(signer.PublicKey(), testEffectPermit())
+	if ok {
+		t.Fatal("an unsigned permit must never verify")
+	}
+	if err == nil {
+		t.Fatal("an unsigned permit must be distinguishable from a forged one")
+	}
+}
+
+func TestVerifyPermit_ForeignSignerRejected(t *testing.T) {
+	issuer, err := NewEd25519Signer("permit-issuer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	impostor, err := NewEd25519Signer("permit-impostor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	permit := testEffectPermit()
+	if err := SignPermit(impostor, permit); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := VerifyPermit(issuer.PublicKey(), permit)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatal("a permit signed by an untrusted key must not verify")
+	}
+}
+
+// The preimage normalizes timestamps to UTC, so a permit that crossed a
+// transport carrying a numeric zone offset still verifies against the instant
+// it was signed over.
+func TestVerifyPermit_TimestampZoneIsNormalized(t *testing.T) {
+	signer, err := NewEd25519Signer("permit-zone-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	permit := testEffectPermit()
+	if err := SignPermit(signer, permit); err != nil {
+		t.Fatal(err)
+	}
+	permit.IssuedAt = permit.IssuedAt.In(time.FixedZone("UTC+3", 3*60*60))
+	permit.ExpiresAt = permit.ExpiresAt.In(time.FixedZone("UTC-7", -7*60*60))
+
+	ok, err := VerifyPermit(signer.PublicKey(), permit)
+	if err != nil || !ok {
+		t.Fatalf("same instant in another zone must verify: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestSignPermit_NilArgumentsAreErrors(t *testing.T) {
+	signer, err := NewEd25519Signer("permit-nil-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SignPermit(nil, testEffectPermit()); err == nil {
+		t.Fatal("nil signer must error")
+	}
+	if err := SignPermit(signer, nil); err == nil {
+		t.Fatal("nil permit must error")
+	}
+	if _, err := VerifyPermit(signer.PublicKey(), nil); err == nil {
+		t.Fatal("nil permit must error")
 	}
 }

@@ -45,6 +45,7 @@ def _enum_values() -> dict[str, dict[str, str]]:
 
 CLASSES = _model_classes()
 ENUMS = _enum_values()
+UNION_ORIGINS = (typing.Union, getattr(py_types, "UnionType", object()))
 
 
 def _unwrap(annotation: Any) -> Any:
@@ -59,7 +60,7 @@ def _is_optional(annotation: Any) -> bool:
         kind, _name = _parse_forward(annotation.__forward_arg__)
         return kind == "optional"
     origin = get_origin(annotation)
-    return origin in (typing.Union, py_types.UnionType) and type(None) in get_args(annotation)
+    return origin in UNION_ORIGINS and type(None) in get_args(annotation)
 
 
 def _parse_forward(value: str) -> tuple[str, str]:
@@ -99,7 +100,7 @@ def _value_for(annotation: Any, class_name: str, field_name: str, stack: tuple[s
         return [_value_for(args[0] if args else Any, class_name, field_name, stack, required_only)]
     if origin in (dict, typing.Dict):
         return {"key": _value_for(args[1] if len(args) > 1 else Any, class_name, field_name, stack, required_only)}
-    if origin in (typing.Union, py_types.UnionType):
+    if origin in UNION_ORIGINS:
         for arg in args:
             if arg is not type(None):
                 return _value_for(arg, class_name, field_name, stack, required_only)

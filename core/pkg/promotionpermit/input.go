@@ -3,14 +3,17 @@
 package promotionpermit
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"unicode"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -104,24 +107,81 @@ func (input Input) VerifyArtifactBytes(releaseManifest, platformOverlay, appsOve
 	if err := input.Validate(); err != nil {
 		return err
 	}
-	for field, expected := range map[string]string{
-		"release manifest": input.ReleaseManifestHash,
-		"platform overlay": input.PlatformOverlayHash,
-		"apps overlay":     input.AppsOverlayHash,
+	for _, artifact := range []struct {
+		name     string
+		expected string
+		content  []byte
+	}{
+		{name: "release manifest", expected: input.ReleaseManifestHash, content: releaseManifest},
+		{name: "platform overlay", expected: input.PlatformOverlayHash, content: platformOverlay},
+		{name: "apps overlay", expected: input.AppsOverlayHash, content: appsOverlay},
 	} {
-		var content []byte
-		switch field {
-		case "release manifest":
-			content = releaseManifest
-		case "platform overlay":
-			content = platformOverlay
-		default:
-			content = appsOverlay
+		actual := canonicalize.ComputeArtifactHash(artifact.content)
+		if subtle.ConstantTimeCompare([]byte(actual), []byte(artifact.expected)) != 1 {
+			return fmt.Errorf("promotion input %s bytes do not match the approved hash", artifact.name)
 		}
-		actual := canonicalize.ComputeArtifactHash(content)
-		if subtle.ConstantTimeCompare([]byte(actual), []byte(expected)) != 1 {
-			return fmt.Errorf("promotion input %s bytes do not match the approved hash", field)
+	}
+	var manifest struct {
+		Metadata struct {
+			Generation int64 `yaml:"generation"`
+		} `yaml:"metadata"`
+		Spec struct {
+			Status    string `yaml:"status"`
+			Promotion struct {
+				TargetEnvironment string `yaml:"target_environment"`
+			} `yaml:"promotion"`
+		} `yaml:"spec"`
+	}
+	if err := decodeOneYAML(releaseManifest, &manifest); err != nil {
+		return fmt.Errorf("decode release manifest: %w", err)
+	}
+	if manifest.Metadata.Generation != input.ReleaseManifestGeneration || manifest.Spec.Status != input.ReleaseManifestStatus || manifest.Spec.Promotion.TargetEnvironment != input.TargetEnvironment {
+		return errors.New("release manifest generation, status, or target environment does not match promotion input")
+	}
+	type overlayPromotion struct {
+		ReleaseManifestGeneration int64  `yaml:"release_manifest_generation"`
+		ProtectedEnvironment      string `yaml:"protected_environment"`
+	}
+	var platform struct {
+		Spec struct {
+			Promotion overlayPromotion `yaml:"production_promotion"`
+		} `yaml:"spec"`
+	}
+	if err := decodeOneYAML(platformOverlay, &platform); err != nil {
+		return fmt.Errorf("decode platform overlay: %w", err)
+	}
+	if platform.Spec.Promotion.ReleaseManifestGeneration != input.ReleaseManifestGeneration || platform.Spec.Promotion.ProtectedEnvironment != input.ProtectedEnvironment {
+		return errors.New("platform overlay generation or protected environment does not match promotion input")
+	}
+	var apps struct {
+		Spec struct {
+			Promotion    overlayPromotion `yaml:"production_promotion"`
+			Applications *[]any           `yaml:"applications"`
+		} `yaml:"spec"`
+	}
+	if err := decodeOneYAML(appsOverlay, &apps); err != nil {
+		return fmt.Errorf("decode apps overlay: %w", err)
+	}
+	if apps.Spec.Promotion.ReleaseManifestGeneration != input.ReleaseManifestGeneration || apps.Spec.Promotion.ProtectedEnvironment != input.ProtectedEnvironment {
+		return errors.New("apps overlay generation or protected environment does not match promotion input")
+	}
+	if apps.Spec.Applications == nil || (len(*apps.Spec.Applications) == 0) != input.AppsEmptyIntent {
+		return errors.New("apps overlay does not match explicit apps_empty_intent")
+	}
+	return nil
+}
+
+func decodeOneYAML(content []byte, destination any) error {
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("input contains more than one YAML document")
 		}
+		return err
 	}
 	return nil
 }

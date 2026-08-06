@@ -52,9 +52,9 @@ func TestInputRejectsInvalidPromotionClaims(t *testing.T) {
 }
 
 func TestInputVerifiesExactArtifactBytes(t *testing.T) {
-	release := []byte("release manifest\n")
-	platform := []byte("platform overlay\n")
-	apps := []byte("apps overlay\n")
+	release := []byte("metadata:\n  generation: 23\nspec:\n  status: production_candidate\n  promotion:\n    target_environment: production\n")
+	platform := []byte("spec:\n  production_promotion:\n    release_manifest_generation: 23\n    protected_environment: production\n")
+	apps := []byte("spec:\n  production_promotion:\n    release_manifest_generation: 23\n    protected_environment: production\n  applications:\n    - name: control-plane\n")
 	input := validInput()
 	input.ReleaseManifestHash = canonicalize.ComputeArtifactHash(release)
 	input.PlatformOverlayHash = canonicalize.ComputeArtifactHash(platform)
@@ -64,6 +64,23 @@ func TestInputVerifiesExactArtifactBytes(t *testing.T) {
 	}
 	if err := input.VerifyArtifactBytes(release, platform, append(apps, '!')); err == nil || !strings.Contains(err.Error(), "apps overlay") {
 		t.Fatalf("VerifyArtifactBytes() error = %v, want apps overlay mismatch", err)
+	}
+}
+
+func TestInputRequiresExplicitAppsEmptyIntent(t *testing.T) {
+	release := []byte("metadata:\n  generation: 23\nspec:\n  status: production_candidate\n  promotion:\n    target_environment: production\n")
+	platform := []byte("spec:\n  production_promotion:\n    release_manifest_generation: 23\n    protected_environment: production\n")
+	apps := []byte("spec:\n  production_promotion:\n    release_manifest_generation: 23\n    protected_environment: production\n  applications: []\n")
+	input := validInput()
+	input.ReleaseManifestHash = canonicalize.ComputeArtifactHash(release)
+	input.PlatformOverlayHash = canonicalize.ComputeArtifactHash(platform)
+	input.AppsOverlayHash = canonicalize.ComputeArtifactHash(apps)
+	if err := input.VerifyArtifactBytes(release, platform, apps); err == nil || !strings.Contains(err.Error(), "apps_empty_intent") {
+		t.Fatalf("VerifyArtifactBytes() error = %v, want explicit intent mismatch", err)
+	}
+	input.AppsEmptyIntent = true
+	if err := input.VerifyArtifactBytes(release, platform, apps); err != nil {
+		t.Fatalf("VerifyArtifactBytes() with explicit empty intent error = %v", err)
 	}
 }
 

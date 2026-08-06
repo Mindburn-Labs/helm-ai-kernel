@@ -39,7 +39,14 @@ class EffectScope(_message.Message):
     def __init__(self, allowed_action: _Optional[str] = ..., allowed_params: _Optional[_Iterable[str]] = ..., deny_patterns: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class EffectPermit(_message.Message):
-    __slots__ = ("permit_id", "intent_hash", "verdict_hash", "plan_hash", "policy_hash", "effect_type", "connector_id", "scope", "resource_ref", "expires_at", "single_use", "nonce", "issued_at", "issuer_id", "signature")
+    __slots__ = ("permit_id", "intent_hash", "verdict_hash", "plan_hash", "policy_hash", "effect_type", "connector_id", "scope", "resource_ref", "expires_at", "single_use", "nonce", "issued_at", "issuer_id", "signature", "evidence_bindings")
+    class EvidenceBindingsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     PERMIT_ID_FIELD_NUMBER: _ClassVar[int]
     INTENT_HASH_FIELD_NUMBER: _ClassVar[int]
     VERDICT_HASH_FIELD_NUMBER: _ClassVar[int]
@@ -55,6 +62,7 @@ class EffectPermit(_message.Message):
     ISSUED_AT_FIELD_NUMBER: _ClassVar[int]
     ISSUER_ID_FIELD_NUMBER: _ClassVar[int]
     SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    EVIDENCE_BINDINGS_FIELD_NUMBER: _ClassVar[int]
     permit_id: str
     intent_hash: str
     verdict_hash: str
@@ -70,7 +78,8 @@ class EffectPermit(_message.Message):
     issued_at: _timestamp_pb2.Timestamp
     issuer_id: str
     signature: str
-    def __init__(self, permit_id: _Optional[str] = ..., intent_hash: _Optional[str] = ..., verdict_hash: _Optional[str] = ..., plan_hash: _Optional[str] = ..., policy_hash: _Optional[str] = ..., effect_type: _Optional[_Union[EffectType, str]] = ..., connector_id: _Optional[str] = ..., scope: _Optional[_Union[EffectScope, _Mapping]] = ..., resource_ref: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., single_use: bool = ..., nonce: _Optional[str] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., issuer_id: _Optional[str] = ..., signature: _Optional[str] = ...) -> None: ...
+    evidence_bindings: _containers.ScalarMap[str, str]
+    def __init__(self, permit_id: _Optional[str] = ..., intent_hash: _Optional[str] = ..., verdict_hash: _Optional[str] = ..., plan_hash: _Optional[str] = ..., policy_hash: _Optional[str] = ..., effect_type: _Optional[_Union[EffectType, str]] = ..., connector_id: _Optional[str] = ..., scope: _Optional[_Union[EffectScope, _Mapping]] = ..., resource_ref: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., single_use: bool = ..., nonce: _Optional[str] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., issuer_id: _Optional[str] = ..., signature: _Optional[str] = ..., evidence_bindings: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class GatewayEffectRequest(_message.Message):
     __slots__ = ("request_id", "effect_type", "connector_id", "tool_name", "params", "resource_ref", "plan_hash", "policy_hash", "verdict_hash", "requested_at")

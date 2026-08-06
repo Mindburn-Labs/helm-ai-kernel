@@ -37,6 +37,7 @@ func TestInputRejectsInvalidPromotionClaims(t *testing.T) {
 		{name: "zero generation", mutate: func(input *Input) { input.ReleaseManifestGeneration = 0 }, want: "generation"},
 		{name: "unsafe generation", mutate: func(input *Input) { input.ReleaseManifestGeneration = maxJCSSafeInteger + 1 }, want: "JCS-safe"},
 		{name: "unknown status", mutate: func(input *Input) { input.ReleaseManifestStatus = "readiness_freeze" }, want: "status"},
+		{name: "noncanonical released status", mutate: func(input *Input) { input.ReleaseManifestStatus = "released" }, want: "status"},
 		{name: "uppercase hash", mutate: func(input *Input) { input.AppsOverlayHash = "sha256:" + strings.Repeat("A", 64) }, want: "apps_overlay_hash"},
 		{name: "noncanonical protected environment", mutate: func(input *Input) { input.ProtectedEnvironment = "Production Env" }, want: "protected_environment"},
 	}
@@ -48,6 +49,14 @@ func TestInputRejectsInvalidPromotionClaims(t *testing.T) {
 				t.Fatalf("Validate() error = %v, want substring %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestInputAcceptsCanonicalProductionReleasedStatus(t *testing.T) {
+	input := validInput()
+	input.ReleaseManifestStatus = ReleaseManifestStatusProductionReleased
+	if err := input.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
 	}
 }
 

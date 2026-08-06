@@ -20,7 +20,7 @@ const (
 	InputSchemaV1 = "helm.production-promotion-input/v1"
 
 	ReleaseManifestStatusProductionCandidate = "production_candidate"
-	ReleaseManifestStatusReleased            = "released"
+	ReleaseManifestStatusProductionReleased  = "production_released"
 )
 
 const maxJCSSafeInteger = int64(1<<53 - 1)
@@ -58,9 +58,9 @@ func (input Input) Validate() error {
 		return errors.New("promotion input release_manifest_generation must be a positive JCS-safe integer")
 	}
 	switch input.ReleaseManifestStatus {
-	case ReleaseManifestStatusProductionCandidate, ReleaseManifestStatusReleased:
+	case ReleaseManifestStatusProductionCandidate, ReleaseManifestStatusProductionReleased:
 	default:
-		return errors.New("promotion input release_manifest_status must be production_candidate or released")
+		return errors.New("promotion input release_manifest_status must be production_candidate or production_released")
 	}
 	for field, value := range map[string]string{
 		"release_manifest_ref": input.ReleaseManifestRef,

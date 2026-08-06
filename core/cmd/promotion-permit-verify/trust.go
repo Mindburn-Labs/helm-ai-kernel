@@ -19,11 +19,14 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-const trustedInputsSchemaV1 = "helm.production-promotion-trusted-inputs/v1"
+const verificationContextSchemaV1 = "helm.production-promotion-verification-context/v1"
 
 var trustedSHA256Pattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
-type trustedInputs struct {
+// verificationContextInput is not self-authenticating. The integration that
+// invokes this CLI must load it from a base-owned trust source; the CLI only
+// applies that supplied context to the candidate artifacts.
+type verificationContextInput struct {
 	Schema                  string                                      `json:"schema"`
 	ObservedAt              time.Time                                   `json:"observed_at"`
 	MaximumPermitTTL        string                                      `json:"maximum_permit_ttl"`
@@ -136,27 +139,27 @@ type staticRouteResolver struct {
 	certificationKeys map[string]ed25519.PublicKey
 }
 
-func (inputs trustedInputs) launchContext(envelope contracts.LaunchEffectAuthorizationEnvelope, schemaBytes []byte) (contracts.LaunchEffectEnvelopeVerificationContext, error) {
-	if inputs.Schema != trustedInputsSchemaV1 {
-		return contracts.LaunchEffectEnvelopeVerificationContext{}, fmt.Errorf("trusted inputs schema must equal %q", trustedInputsSchemaV1)
+func (inputs verificationContextInput) launchContext(envelope contracts.LaunchEffectAuthorizationEnvelope, schemaBytes []byte) (contracts.LaunchEffectEnvelopeVerificationContext, error) {
+	if inputs.Schema != verificationContextSchemaV1 {
+		return contracts.LaunchEffectEnvelopeVerificationContext{}, fmt.Errorf("verification context schema must equal %q", verificationContextSchemaV1)
 	}
 	if inputs.ObservedAt.IsZero() || inputs.ObservedAt.Location() != time.UTC {
-		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("trusted inputs observed_at must be UTC")
+		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("verification context observed_at must be UTC")
 	}
 	maximumTTL, err := time.ParseDuration(inputs.MaximumPermitTTL)
 	if err != nil || maximumTTL <= 0 {
-		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("trusted inputs maximum_permit_ttl must be positive")
+		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("verification context maximum_permit_ttl must be positive")
 	}
 	if !boundedToken(inputs.ExpectedPolicyEpoch) || !boundedToken(inputs.ApprovalConsumptionRef) {
-		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("trusted inputs policy epoch or approval consumption ref is invalid")
+		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("verification context policy epoch or approval consumption ref is invalid")
 	}
 	verdictKey, err := parsePublicKey(inputs.VerdictTrust.PublicKey)
 	if err != nil {
-		return contracts.LaunchEffectEnvelopeVerificationContext{}, fmt.Errorf("trusted verdict key: %w", err)
+		return contracts.LaunchEffectEnvelopeVerificationContext{}, fmt.Errorf("verification context verdict key: %w", err)
 	}
 	approvalKey, err := parsePublicKey(inputs.ApprovalTrust.PublicKey)
 	if err != nil {
-		return contracts.LaunchEffectEnvelopeVerificationContext{}, fmt.Errorf("trusted approval key: %w", err)
+		return contracts.LaunchEffectEnvelopeVerificationContext{}, fmt.Errorf("verification context approval key: %w", err)
 	}
 	approvalVerifier, err := approvalceremony.NewEd25519GrantSignatureVerifier(approvalKey, inputs.ApprovalTrust.SigningKeyRef, inputs.ApprovalTrust.KernelTrustRootID)
 	if err != nil {
@@ -178,7 +181,7 @@ func (inputs trustedInputs) launchContext(envelope contracts.LaunchEffectAuthori
 		return contracts.LaunchEffectEnvelopeVerificationContext{}, err
 	}
 	if !boundedToken(inputs.Dependency.Ref) || !trustedSHA256Pattern.MatchString(inputs.Dependency.Hash) {
-		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("trusted dependency binding is invalid")
+		return contracts.LaunchEffectEnvelopeVerificationContext{}, errors.New("verification context dependency binding is invalid")
 	}
 
 	compiler := jsonschema.NewCompiler()
@@ -201,19 +204,19 @@ func (inputs trustedInputs) launchContext(envelope contracts.LaunchEffectAuthori
 		Now: inputs.ObservedAt,
 		ResolveInputSchema: func(ref string) ([]byte, error) {
 			if ref != envelope.InputSchemaRef {
-				return nil, errors.New("input schema ref is not trusted")
+				return nil, errors.New("input schema ref does not match verification context")
 			}
 			return append([]byte(nil), schemaBytes...), nil
 		},
 		ValidateInput: func(ref, hash string, candidate map[string]any) error {
 			if ref != envelope.InputSchemaRef || hash != envelope.InputSchemaHash {
-				return errors.New("input schema identity is not trusted")
+				return errors.New("input schema identity does not match verification context")
 			}
 			return compiledSchema.Validate(candidate)
 		},
 		ResolveRouteBinding: func(ref string) (contracts.LaunchRouteBinding, error) {
 			if ref != route.RouteID {
-				return contracts.LaunchRouteBinding{}, errors.New("route binding is not trusted")
+				return contracts.LaunchRouteBinding{}, errors.New("route binding does not match verification context")
 			}
 			return route, nil
 		},
@@ -221,7 +224,7 @@ func (inputs trustedInputs) launchContext(envelope contracts.LaunchEffectAuthori
 		ResolveApprovalAuthority: func(grantRef, grantHash, consumptionRef, consumptionHash string) (contracts.LaunchEffectApprovalAuthority, error) {
 			if grantRef != approval.Grant.GrantID || grantHash != approval.Grant.GrantHash ||
 				consumptionRef != inputs.ApprovalConsumptionRef || consumptionHash != approval.Consumption.ConsumptionHash {
-				return contracts.LaunchEffectApprovalAuthority{}, errors.New("approval authority is not trusted")
+				return contracts.LaunchEffectApprovalAuthority{}, errors.New("approval authority does not match verification context")
 			}
 			return approval, nil
 		},
@@ -236,7 +239,7 @@ func (inputs trustedInputs) launchContext(envelope contracts.LaunchEffectAuthori
 		},
 		VerifyDependencyState: func(ref, hash string) error {
 			if ref != inputs.Dependency.Ref || subtle.ConstantTimeCompare([]byte(hash), []byte(inputs.Dependency.Hash)) != 1 {
-				return errors.New("dependency state is not trusted")
+				return errors.New("dependency state does not match verification context")
 			}
 			return nil
 		},
@@ -246,19 +249,19 @@ func (inputs trustedInputs) launchContext(envelope contracts.LaunchEffectAuthori
 		MaximumPermitTTL:        maximumTTL,
 		ResolveVerdictKeyForTrustRoot: func(rootID, keyRef string) (ed25519.PublicKey, error) {
 			if rootID != inputs.VerdictTrust.KernelTrustRootID || keyRef != inputs.VerdictTrust.SigningKeyRef {
-				return nil, errors.New("verdict signer is not trusted")
+				return nil, errors.New("verdict signer does not match verification context")
 			}
 			return append(ed25519.PublicKey(nil), verdictKey...), nil
 		},
 		ResolveEmergencyFence: func(tenantID, workspaceID string) (contracts.LaunchEmergencyFenceSnapshot, error) {
 			if tenantID != fence.TenantID || workspaceID != fence.WorkspaceID {
-				return contracts.LaunchEmergencyFenceSnapshot{}, errors.New("emergency fence scope is not trusted")
+				return contracts.LaunchEmergencyFenceSnapshot{}, errors.New("emergency fence scope does not match verification context")
 			}
 			return contracts.LaunchEmergencyFenceSnapshot{TenantID: fence.TenantID, WorkspaceID: fence.WorkspaceID, EffectiveEpoch: fence.EffectiveEpoch, Active: fence.Active}, nil
 		},
 		ResolveCurrentConnectorRelease: func(candidate contracts.ApprovalConnectorAuthority) (contracts.ConnectorReleaseAuthorityEnvelope, error) {
 			if candidate.AuthorityHash != approval.Grant.ConnectorAuthority.AuthorityHash {
-				return contracts.ConnectorReleaseAuthorityEnvelope{}, errors.New("connector release lookup is not trusted")
+				return contracts.ConnectorReleaseAuthorityEnvelope{}, errors.New("connector release lookup does not match verification context")
 			}
 			return currentRelease, nil
 		},
@@ -270,11 +273,11 @@ func (inputs trustedInputs) launchContext(envelope contracts.LaunchEffectAuthori
 func (trust connectorReleaseTrust) key() (connectorregistry.TrustedReleaseAuthorityKey, error) {
 	publicKey, err := parsePublicKey(trust.PublicKey)
 	if err != nil {
-		return connectorregistry.TrustedReleaseAuthorityKey{}, fmt.Errorf("trusted connector release key: %w", err)
+		return connectorregistry.TrustedReleaseAuthorityKey{}, fmt.Errorf("verification context connector release key: %w", err)
 	}
 	if !boundedToken(trust.AuthorityID) || !boundedToken(trust.SigningKeyRef) || !trust.Enabled ||
 		trust.NotBefore.IsZero() || trust.NotAfter.IsZero() || trust.NotBefore.Location() != time.UTC || trust.NotAfter.Location() != time.UTC || !trust.NotAfter.After(trust.NotBefore) {
-		return connectorregistry.TrustedReleaseAuthorityKey{}, errors.New("trusted connector release key metadata is invalid")
+		return connectorregistry.TrustedReleaseAuthorityKey{}, errors.New("verification context connector release key metadata is invalid")
 	}
 	return connectorregistry.TrustedReleaseAuthorityKey{
 		AuthorityID: trust.AuthorityID, SigningKeyRef: trust.SigningKeyRef, PublicKey: publicKey,
@@ -284,11 +287,11 @@ func (trust connectorReleaseTrust) key() (connectorregistry.TrustedReleaseAuthor
 
 func (binding permitBinding) validate() error {
 	if !binding.SingleUse || binding.EffectID != contracts.EffectTypeDeployProductionActivate || binding.EffectOrdinal < 0 || binding.EmergencyFenceEpoch < 0 {
-		return errors.New("trusted permit must be single-use DEPLOY_PRODUCTION_ACTIVATE")
+		return errors.New("verification context permit must be single-use DEPLOY_PRODUCTION_ACTIVATE")
 	}
 	for _, observed := range []time.Time{binding.PermitIssuedAt, binding.PermitExpiry, binding.KernelVerdictIssuedAt, binding.KernelVerdictExpiry, binding.DispatchDeadline} {
 		if observed.IsZero() || observed.Location() != time.UTC {
-			return errors.New("trusted permit times must be UTC")
+			return errors.New("verification context permit times must be UTC")
 		}
 	}
 	return nil
@@ -322,16 +325,16 @@ func newStaticRouteResolver(artifacts routeArtifacts) (*staticRouteResolver, err
 		artifacts.CommercialEvidence == nil || artifacts.FXSnapshots == nil || artifacts.TaxSnapshots == nil ||
 		artifacts.OfferSnapshots == nil || artifacts.ResourceGraphs == nil || artifacts.ProviderPayloadSets == nil ||
 		artifacts.GeneratedSpecHashes == nil || artifacts.CertificationKeys == nil || artifacts.CurrentCertifications == nil {
-		return nil, errors.New("trusted route artifact maps must be explicit")
+		return nil, errors.New("verification context route artifact maps must be explicit")
 	}
 	keys := make(map[string]ed25519.PublicKey, len(artifacts.CertificationKeys))
 	for keyID, encoded := range artifacts.CertificationKeys {
 		if !boundedToken(keyID) {
-			return nil, errors.New("trusted route certification key ID is invalid")
+			return nil, errors.New("verification context route certification key ID is invalid")
 		}
 		key, err := parsePublicKey(encoded)
 		if err != nil {
-			return nil, fmt.Errorf("trusted route certification key %q: %w", keyID, err)
+			return nil, fmt.Errorf("verification context route certification key %q: %w", keyID, err)
 		}
 		keys[keyID] = key
 	}
@@ -464,5 +467,5 @@ func boundedToken(value string) bool {
 }
 
 func missingRouteArtifact(kind, ref string) error {
-	return fmt.Errorf("trusted %s %q not found", kind, ref)
+	return fmt.Errorf("verification context %s %q not found", kind, ref)
 }

@@ -53,7 +53,7 @@ func TestRunRejectsDuplicateEnvelopeBeforeTrustResolution(t *testing.T) {
 	err := run([]string{
 		"--envelope", path, "--promotion-input", path, "--promotion-input-ref", "promotion:1",
 		"--release-manifest", path, "--platform-overlay", path, "--apps-overlay", path,
-		"--input-schema", path, "--trusted-inputs", path,
+		"--input-schema", path, "--verification-context", path,
 	}, &strings.Builder{})
 	if err == nil || !strings.Contains(err.Error(), `duplicate JSON key "effect_id"`) {
 		t.Fatalf("run() error = %v, want duplicate envelope rejection", err)
@@ -71,15 +71,15 @@ func TestReadRegularFileRejectsSymlink(t *testing.T) {
 	}
 }
 
-func TestTrustedInputsRejectSelfAssertedVerdictKey(t *testing.T) {
-	inputs := trustedInputs{
-		Schema: trustedInputsSchemaV1, ObservedAt: time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC),
+func TestVerificationContextRejectsMalformedVerdictKey(t *testing.T) {
+	inputs := verificationContextInput{
+		Schema: verificationContextSchemaV1, ObservedAt: time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC),
 		MaximumPermitTTL: "1m", ExpectedPolicyEpoch: "epoch-1", ApprovalConsumptionRef: "consumption:1",
 		VerdictTrust: trustKey{PublicKey: "ed25519:" + strings.Repeat("0", 62) + "zz"},
 	}
 	_, err := inputs.launchContext(contracts.LaunchEffectAuthorizationEnvelope{}, []byte(`{"type":"object"}`))
-	if err == nil || !strings.Contains(err.Error(), "trusted verdict key") {
-		t.Fatalf("launchContext() error = %v, want untrusted verdict key rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "verification context verdict key") {
+		t.Fatalf("launchContext() error = %v, want malformed verdict key rejection", err)
 	}
 }
 

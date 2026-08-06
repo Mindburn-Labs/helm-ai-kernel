@@ -22,7 +22,7 @@ var promotionInputKeys = []string{
 	"apps_overlay_ref", "apps_overlay_hash", "protected_environment", "apps_empty_intent",
 }
 
-var trustedInputKeys = []string{
+var verificationContextKeys = []string{
 	"schema", "observed_at", "maximum_permit_ttl", "expected_policy_epoch", "emergency_fence",
 	"verdict_trust", "approval_trust", "approval_consumption_ref", "approval_authority",
 	"connector_release_trust", "current_connector_release", "permit", "dependency", "route_binding", "route_artifacts",
@@ -39,15 +39,15 @@ func run(args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("promotion-permit-verify", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	var envelopePath, promotionInputPath, promotionInputRef, releaseManifestPath string
-	var platformOverlayPath, appsOverlayPath, inputSchemaPath, trustPath string
+	var platformOverlayPath, appsOverlayPath, inputSchemaPath, verificationContextPath string
 	flags.StringVar(&envelopePath, "envelope", "", "immutable LaunchEffectAuthorizationEnvelope JSON")
 	flags.StringVar(&promotionInputPath, "promotion-input", "", "production promotion input JSON")
 	flags.StringVar(&promotionInputRef, "promotion-input-ref", "", "source-owned ref bound as promotion_permit_ref")
-	flags.StringVar(&releaseManifestPath, "release-manifest", "", "trusted release manifest bytes")
-	flags.StringVar(&platformOverlayPath, "platform-overlay", "", "trusted production platform overlay bytes")
-	flags.StringVar(&appsOverlayPath, "apps-overlay", "", "trusted production apps overlay bytes")
-	flags.StringVar(&inputSchemaPath, "input-schema", "", "source-owned DEPLOY_PRODUCTION_ACTIVATE JSON schema")
-	flags.StringVar(&trustPath, "trusted-inputs", "", "source-owned approval, verdict, connector, policy, fence, permit, and route inputs")
+	flags.StringVar(&releaseManifestPath, "release-manifest", "", "release manifest bytes bound by the promotion input")
+	flags.StringVar(&platformOverlayPath, "platform-overlay", "", "production platform overlay bytes bound by the promotion input")
+	flags.StringVar(&appsOverlayPath, "apps-overlay", "", "production apps overlay bytes bound by the promotion input")
+	flags.StringVar(&inputSchemaPath, "input-schema", "", "base-owned DEPLOY_PRODUCTION_ACTIVATE JSON schema; caller establishes provenance")
+	flags.StringVar(&verificationContextPath, "verification-context", "", "operator-supplied verification context; base-owned provenance must be established outside this CLI")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func run(args []string, output io.Writer) error {
 		"--envelope": envelopePath, "--promotion-input": promotionInputPath,
 		"--promotion-input-ref": promotionInputRef, "--release-manifest": releaseManifestPath,
 		"--platform-overlay": platformOverlayPath, "--apps-overlay": appsOverlayPath,
-		"--input-schema": inputSchemaPath, "--trusted-inputs": trustPath,
+		"--input-schema": inputSchemaPath, "--verification-context": verificationContextPath,
 	} {
 		if value == "" {
 			return fmt.Errorf("%s is required", name)
@@ -73,9 +73,9 @@ func run(args []string, output io.Writer) error {
 	if _, err := decodeStrictFile(promotionInputPath, &input, promotionInputKeys); err != nil {
 		return fmt.Errorf("read promotion input: %w", err)
 	}
-	var trust trustedInputs
-	if _, err := decodeStrictFile(trustPath, &trust, trustedInputKeys); err != nil {
-		return fmt.Errorf("read trusted inputs: %w", err)
+	var verificationContext verificationContextInput
+	if _, err := decodeStrictFile(verificationContextPath, &verificationContext, verificationContextKeys); err != nil {
+		return fmt.Errorf("read verification context: %w", err)
 	}
 	releaseManifest, err := readRegularFile(releaseManifestPath)
 	if err != nil {
@@ -93,9 +93,9 @@ func run(args []string, output io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("read input schema: %w", err)
 	}
-	launchContext, err := trust.launchContext(envelope, inputSchema)
+	launchContext, err := verificationContext.launchContext(envelope, inputSchema)
 	if err != nil {
-		return fmt.Errorf("build source-owned verification context: %w", err)
+		return fmt.Errorf("build verification context: %w", err)
 	}
 	if err := promotionpermit.Verify(envelope, promotionpermit.VerificationContext{
 		PromotionInputRef: promotionInputRef,
@@ -111,7 +111,7 @@ func run(args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(output, "production promotion preflight verified: %s\n", digest)
+	_, err = fmt.Fprintf(output, "production promotion preflight verified against supplied context: %s\n", digest)
 	return err
 }
 

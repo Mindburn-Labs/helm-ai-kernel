@@ -1,3 +1,6 @@
+// quantum_posture: permit verification here is classical Ed25519, inherited
+// from crypto.VerifyPermit; this connector neither chooses nor upgrades the
+// signing profile of the permits it is handed.
 package linear
 
 import (

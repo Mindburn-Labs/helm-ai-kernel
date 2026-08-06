@@ -42,6 +42,13 @@ message EffectPermit {
   google.protobuf.Timestamp issued_at = 13;
   string issuer_id = 14;
   string signature = 15;
+  // evidence_bindings is covered by the effect_permit.v1 signature, so a
+  // transport that drops it produces a permit that cannot verify on the far
+  // side. It was missing here while the Go type carried it, which made v1
+  // signatures in-process only. Field 16 is a backward-compatible add: older
+  // readers ignore it, and newer readers can now reconstruct the exact signed
+  // preimage after a proto hop.
+  map<string, string> evidence_bindings = 16;
 }
 
 message GatewayEffectRequest {

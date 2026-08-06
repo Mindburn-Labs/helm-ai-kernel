@@ -229,7 +229,7 @@ specification and are held to the same vectors:
 | Implementation | Path |
 |---|---|
 | Rust SDK | `sdk/rust/src/canonical.rs` |
-| Reference-pack verifier (shared by 12 packs) | `reference_packs/approval/verify_approval_vectors.py` |
+| Reference-pack verifier (its own pack, plus imported by 9 others) | `reference_packs/approval/verify_approval_vectors.py` |
 | Reference-pack verifier (extauthz) | `reference_packs/extauthz/verify_extauthz_vectors.py` |
 | Specification reference implementation | `reference_packs/canonical-json-v1/verify_vectors.py` |
 

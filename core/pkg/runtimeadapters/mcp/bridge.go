@@ -431,6 +431,29 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 		base.DispatchState = DispatchStateNoDispatch
 		return base
 	}
+	// Connector-side signature verification is the contract, but it is only as
+	// live as its configuration: linear.Config.PermitPublicKey is a no-op when
+	// unset and nothing in this repository sets it, and the independent review
+	// of #798 found linear.NewConnector itself has zero non-test callers. So on
+	// every path that ships today the permit is signed and nothing checks the
+	// signature. This gate closes that at the last point the kernel controls. It
+	// needs no key distribution — the bridge already holds the signing key — and
+	// it covers every connector rather than one. Connector-side verification
+	// remains as defence in depth wherever a key is configured.
+	if err := b.verifyPermitBeforeDispatch(permit); err != nil {
+		resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "PERMIT_UNVERIFIED")
+		applyEffectReservation(&base, resolved)
+		base.Verdict = contracts.VerdictDeny
+		base.ReasonCode = "PERMIT_UNVERIFIED"
+		base.Reason = err.Error()
+		if resolutionErr != nil {
+			base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+			base.Reason = resolutionErr.Error()
+		}
+		base.DispatchState = DispatchStateNoDispatch
+		return base
+	}
+
 	var output any
 	var execErr error
 	if lifecycle != nil {
@@ -823,6 +846,39 @@ func (b *GovernedBridge) PermitSigningPublicKey() string {
 		return ""
 	}
 	return b.permitSigner.PublicKey()
+}
+
+// verifyPermitBeforeDispatch refuses to hand a connector a permit that does not
+// verify under the bridge's own signing key.
+//
+// It is the enforcement half of permit signing. Without it, signing is an
+// unobserved side effect: the only connector that can check a signature does so
+// exclusively when an operator supplies a public key by hand, and no code path
+// in this repository supplies one.
+func (b *GovernedBridge) verifyPermitBeforeDispatch(permit *effects.EffectPermit) error {
+	if permit == nil {
+		return fmt.Errorf("permit is nil")
+	}
+	if b.permitSignerErr != nil {
+		return b.permitSignerErr
+	}
+	if b.permitSigner == nil {
+		// No signing configured: permits are minted unsigned by design in that
+		// mode, so there is nothing to verify here. The unsigned-permit risk is
+		// owned by the mint path, not silently re-litigated at dispatch.
+		return nil
+	}
+	if permit.Signature == "" {
+		return fmt.Errorf("permit carries no signature though this bridge signs permits")
+	}
+	ok, err := helmcrypto.VerifyPermit(b.permitSigner.PublicKey(), permit)
+	if err != nil {
+		return fmt.Errorf("permit signature verification failed: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("permit signature does not verify under the issuing key")
+	}
+	return nil
 }
 
 func connectorIDFor(c effects.Connector) string {

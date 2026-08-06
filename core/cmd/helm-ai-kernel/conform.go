@@ -1,3 +1,8 @@
+// quantum_posture: the conform command signs its report artifacts and the
+// external-failure HCV validation manifest with classical Ed25519 from
+// HELM_SIGNING_KEY_HEX, falling back to an explicitly labelled digest-only
+// artifact when no key is set. It offers no hybrid or post-quantum profile,
+// and canonicalJSON only fixes the bytes those signatures cover.
 package main
 
 import (

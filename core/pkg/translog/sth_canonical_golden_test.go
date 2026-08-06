@@ -1,3 +1,7 @@
+// quantum_posture: these goldens pin canonical signed-tree-head bytes and a
+// classical Ed25519 signature over them from a fixed seed. They assert byte
+// stability of the preimage only and claim no hybrid or post-quantum
+// assurance for the transparency log.
 package translog
 
 import (

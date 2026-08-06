@@ -95,14 +95,16 @@ func TestEnforcementDate_GPAITransparency(t *testing.T) {
 }
 
 func TestEnforcementDate_HighRiskObligations(t *testing.T) {
-	expected := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	// Deferred from 2026-08-02 by Regulation (EU) 2026/1744.
+	expected := time.Date(2027, 12, 2, 0, 0, 0, 0, time.UTC)
 	if !DateHighRiskObligations.Equal(expected) {
 		t.Fatalf("expected %v, got %v", expected, DateHighRiskObligations)
 	}
 }
 
 func TestEnforcementDate_AnnexI(t *testing.T) {
-	expected := time.Date(2027, 8, 2, 0, 0, 0, 0, time.UTC)
+	// Deferred from 2027-08-02 by Regulation (EU) 2026/1744.
+	expected := time.Date(2028, 8, 2, 0, 0, 0, 0, time.UTC)
 	if !DateAnnexIHighRisk.Equal(expected) {
 		t.Fatalf("expected %v, got %v", expected, DateAnnexIHighRisk)
 	}

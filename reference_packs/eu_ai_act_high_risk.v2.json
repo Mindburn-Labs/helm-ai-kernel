@@ -1,12 +1,9 @@
 {
-  "pack_id": "eu-ai-act-high-risk-v1",
+  "pack_id": "eu-ai-act-high-risk-v2",
   "label": "EU AI Act High-Risk System Compliance",
-  "description": "Governs AI agent operations classified as high-risk under the EU AI Act (Regulation 2024/1689). Enforces risk management, data governance, transparency, human oversight, and technical documentation requirements per Articles 6-15 and Annex III.",
-  "version": 1,
-  "status": "superseded",
-  "superseded_by": "eu-ai-act-high-risk-v2",
-  "superseded_on": "2026-08-06",
-  "superseded_reason": "The enforcement_dates in this pack were correct under Regulation (EU) 2024/1689 as originally adopted, but Regulation (EU) 2026/1744 (Digital Omnibus on AI, in force 2026-07-27) deferred the Annex III high-risk date from 2026-08-02 to 2027-12-02 and the Annex I date from 2027-08-02 to 2028-08-02. Do not key compliance timelines off this pack. Use eu_ai_act_high_risk.v2.json.",
+  "description": "Governs AI agent operations classified as high-risk under the EU AI Act (Regulation 2024/1689, as amended by Regulation (EU) 2026/1744). Enforces risk management, data governance, transparency, human oversight, and technical documentation requirements per Articles 6-15 and Annex III.",
+  "version": 2,
+  "supersedes": "eu-ai-act-high-risk-v1",
   "compliance_framework": "EU_AI_ACT",
   "risk_classification": "HIGH",
   "annex_iii_areas": [
@@ -67,13 +64,25 @@
     }
   ],
   "enforcement_dates": {
-    "_superseded": true,
-    "_corrected_in": "eu_ai_act_high_risk.v2.json",
-    "_note": "Values below are retained as originally shipped, for audit. They no longer state current law: high_risk_full moved to 2027-12-02 and high_risk_annex_i to 2028-08-02 per Regulation (EU) 2026/1744.",
     "prohibited_practices": "2025-02-02",
     "gpai_obligations": "2025-08-02",
-    "high_risk_full": "2026-08-02",
-    "high_risk_annex_i": "2027-08-02"
+    "transparency_art_50": "2026-08-02",
+    "high_risk_annex_iii": "2027-12-02",
+    "high_risk_annex_i": "2028-08-02"
+  },
+  "enforcement_dates_provenance": {
+    "verified_on": "2026-08-06",
+    "legal_basis": [
+      "Regulation (EU) 2024/1689 (Artificial Intelligence Act)",
+      "Regulation (EU) 2026/1744 (Digital Omnibus on AI), adopted 2026-07-08, in force 2026-07-27"
+    ],
+    "sources": [
+      "http://data.europa.eu/eli/reg/2024/1689/oj",
+      "http://data.europa.eu/eli/reg/2026/1744/oj"
+    ],
+    "change_note": "Regulation (EU) 2026/1744 deferred application of Chapter III Sections 1-3 for Annex III high-risk systems from 2026-08-02 to 2027-12-02, and for Annex I high-risk systems from 2027-08-02 to 2028-08-02. Article 50 transparency obligations were NOT deferred and apply from 2026-08-02. The v1 key `high_risk_full` is replaced by `high_risk_annex_iii` because there are two distinct high-risk dates.",
+    "review_owner": "compliance",
+    "next_review": "2027-06-01"
   },
   "budget_constraints": {
     "daily_limit_cents": 200000,

@@ -89,6 +89,30 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
+### Changed — EU AI Act enforcement dates corrected
+
+Regulation (EU) 2026/1744 (Digital Omnibus on AI), in force 2026-07-27,
+deferred the application of Chapter III, Sections 1-3 of Regulation (EU)
+2024/1689. The Annex III high-risk date moved from 2026-08-02 to 2027-12-02 and
+the Annex I high-risk date moved from 2027-08-02 to 2028-08-02. Article 50
+transparency obligations were not deferred.
+
+- `reference_packs/eu_ai_act_high_risk.v2.json` is added and is now the pack
+  referenced by `release.high_risk.v3.toml` and staged into release assets. It
+  carries the corrected dates plus an `enforcement_dates_provenance` block with
+  the legal basis, source URLs, verification date, and review owner. The v1 key
+  `high_risk_full` is replaced by `high_risk_annex_iii`.
+- `reference_packs/eu_ai_act_high_risk.v1.json` is retained and marked
+  `"status": "superseded"` with `superseded_by`, `superseded_on`, and a reason.
+  Its original date values are preserved so previously shipped evidence stays
+  auditable. **Anyone who keyed a compliance timeline off v1 must re-read it.**
+- `core/pkg/compliance/euaiact` exported dates `DateHighRiskObligations` and
+  `DateAnnexIHighRisk` now return the amended dates. These are behavioural
+  values, not documentation: any caller comparing against them changes result.
+
+Verified against EUR-Lex on 2026-08-06: CELEX 32026R1744,
+`http://data.europa.eu/eli/reg/2026/1744/oj`.
+
 ## [0.8.1] - pending tag
 
 Corrective release target for the completed v0.8 feature train. The v0.8.0

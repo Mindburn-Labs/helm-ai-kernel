@@ -28,7 +28,7 @@ func TestLoadServePolicyTOML(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 name = "release.high_risk.v3"
 profile = "high_risk"
-reference_pack = "./reference_packs/eu_ai_act_high_risk.v1.json"
+reference_pack = "./reference_packs/eu_ai_act_high_risk.v2.json"
 
 [server]
 bind = "127.0.0.1"

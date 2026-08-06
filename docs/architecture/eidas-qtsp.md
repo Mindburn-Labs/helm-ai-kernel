@@ -65,7 +65,7 @@ Each receipt-anchoring decision composes optional layers:
 4. **eIDAS qualified timestamp** — restricted variant of (3), validated
    against the EU LOTL in `core/pkg/proofgraph/anchor/eidas.go`. Optional
    but **required** when `qtsp_required: true` in the loaded reference
-   pack (see `reference_packs/eu_ai_act_high_risk.v1.json`).
+   pack (see `reference_packs/eu_ai_act_high_risk.v2.json`).
 
 The verifier accepts any subset; the strictest verifier (`helm-ai-kernel verify
 --require-eidas`) demands the eIDAS layer.
@@ -179,7 +179,7 @@ the EU LOTL and therefore fails `--require-eidas`.
 
 When a loaded reference pack carries
 `evidence_requirements.qtsp_required: true` (e.g.
-`reference_packs/eu_ai_act_high_risk.v1.json`), the kernel:
+`reference_packs/eu_ai_act_high_risk.v2.json`), the kernel:
 
 - Refuses to mint receipts at runtime if no QTSP endpoint is configured.
 - Refuses to verify packs missing eIDAS anchors at the boundary.

@@ -1,6 +1,6 @@
 ---
 title: EU AI Act High-Risk Pack
-last_reviewed: 2026-05-05
+last_reviewed: 2026-08-06
 ---
 
 # EU AI Act High-Risk Pack
@@ -56,16 +56,26 @@ flowchart TD
 ```
 
 
-The HELM AI Kernel EU AI Act reference pack is `reference_packs/eu_ai_act_high_risk.v1.json`.
+The HELM AI Kernel EU AI Act reference pack is `reference_packs/eu_ai_act_high_risk.v2.json`.
 
 ## Source Status
 
-Primary source verified on April 30, 2026: the European Commission AI Act Service Desk timeline says the majority of AI Act rules start applying on August 2, 2026, including Annex III high-risk AI system rules, Article 50 transparency rules, innovation-support measures, and national/EU-level enforcement.
+Primary source verified on August 6, 2026 against EUR-Lex. Regulation (EU) 2026/1744 (Digital Omnibus on AI), adopted July 8, 2026 and in force July 27, 2026, amends Regulation (EU) 2024/1689 and defers the application of Chapter III, Sections 1-3:
 
-The same source notes that high-risk AI embedded in regulated products applies on August 2, 2027. The reference pack therefore distinguishes:
+- Annex III high-risk systems: from August 2, 2026 to **December 2, 2027**
+- Annex I high-risk systems, embedded in regulated products: from August 2, 2027 to **August 2, 2028**
 
-- `high_risk_full`: `2026-08-02`
-- `high_risk_annex_i`: `2027-08-02`
+Article 50 transparency obligations were not deferred and apply from August 2, 2026.
+
+The reference pack therefore records:
+
+- `transparency_art_50`: `2026-08-02`
+- `high_risk_annex_iii`: `2027-12-02` — replaces the v1 key `high_risk_full`, which was ambiguous once the two high-risk dates diverged
+- `high_risk_annex_i`: `2028-08-02`
+
+Sources: EUR-Lex CELEX 32024R1689 and CELEX 32026R1744 (`http://data.europa.eu/eli/reg/2026/1744/oj`).
+
+An earlier version of this page cited the European Commission AI Act Service Desk timeline, verified April 30, 2026, for an August 2, 2026 high-risk date. That statement was accurate when written and was superseded by the amending Regulation on July 27, 2026. `reference_packs/eu_ai_act_high_risk.v1.json` stays in the repository marked `superseded` so previously shipped evidence remains auditable.
 
 ## Pack Coverage
 

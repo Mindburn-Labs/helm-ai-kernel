@@ -9,20 +9,28 @@
 // - Serious Incident Reporting within 72h (Art.62)
 // - CE Marking and EU Database Registration (Art.49)
 //
-// Key enforcement dates:
+// Key enforcement dates, as amended by Regulation (EU) 2026/1744 (Digital
+// Omnibus on AI), in force 2026-07-27. Verified against EUR-Lex 2026-08-06.
 //
 //	2025-02-02: Prohibited practices (Title II) + AI literacy (Art.4)
 //	2025-08-02: GPAI transparency (Chapter V) + penalties
-//	2026-08-02: High-risk obligations (Title III) + CE marking + EU DB
-//	2027-08-02: High-risk per Annex I (existing product safety)
+//	2026-08-02: Transparency obligations (Art.50) — NOT deferred
+//	2027-12-02: High-risk per Annex III (Chapter III, Sections 1-3),
+//	            CE marking, and EU database registration
+//	2028-08-02: High-risk per Annex I (existing product safety legislation)
+//
+// The 2027-12-02 and 2028-08-02 dates replace 2026-08-02 and 2027-08-02
+// respectively. Article 50 transparency was not deferred and still applies
+// from 2026-08-02.
 //
 // HELM relevance: Guardian pipeline decisions may constitute "high-risk AI"
 // under Annex III when used in critical infrastructure, safety components,
 // or financial services.
 //
 // References:
-// - Regulation (EU) 2024/1689
-// - EUR-Lex CELEX: 32024R1689
+// - Regulation (EU) 2024/1689 — EUR-Lex CELEX: 32024R1689
+// - Regulation (EU) 2026/1744 — EUR-Lex CELEX: 32026R1744
+//   http://data.europa.eu/eli/reg/2026/1744/oj
 package euaiact
 
 import (
@@ -93,13 +101,16 @@ var (
 	// (Chapter V) and associated penalties apply.
 	DateGPAITransparency = time.Date(2025, 8, 2, 0, 0, 0, 0, time.UTC)
 
-	// DateHighRiskObligations is when high-risk AI system obligations
-	// (Title III, Chapters 2-5), CE marking, and EU DB registration apply.
-	DateHighRiskObligations = time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	// DateHighRiskObligations is when high-risk AI system obligations for
+	// Annex III systems (Chapter III, Sections 1-3), CE marking, and EU DB
+	// registration apply. Deferred from 2026-08-02 by Regulation (EU)
+	// 2026/1744, which amends Regulation (EU) 2024/1689.
+	DateHighRiskObligations = time.Date(2027, 12, 2, 0, 0, 0, 0, time.UTC)
 
 	// DateAnnexIHighRisk is when high-risk obligations for Annex I systems
-	// (existing product safety legislation) apply.
-	DateAnnexIHighRisk = time.Date(2027, 8, 2, 0, 0, 0, 0, time.UTC)
+	// (existing product safety legislation) apply. Deferred from 2027-08-02
+	// by Regulation (EU) 2026/1744.
+	DateAnnexIHighRisk = time.Date(2028, 8, 2, 0, 0, 0, 0, time.UTC)
 )
 
 // -----------------------------------------------------------------------

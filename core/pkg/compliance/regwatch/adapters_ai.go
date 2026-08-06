@@ -51,8 +51,12 @@ func (n *NISTAIRMFAdapter) SetHealthy(healthy bool) {
 //
 //	2025-02-02: Prohibited practices (Title II) + AI literacy (Art 4)
 //	2025-08-02: GPAI transparency (Chapter V) + penalties
-//	2026-08-02: High-risk obligations (Title III, Chapter 2-5) + CE marking + EU DB registration
-//	2027-08-02: High-risk per Annex I (existing product safety)
+//	2026-08-02: Transparency obligations (Art 50) — NOT deferred
+//	2027-12-02: High-risk per Annex III (Chapter III, Sections 1-3) + CE marking + EU DB registration
+//	2028-08-02: High-risk per Annex I (existing product safety)
+//
+// Dates amended by Regulation (EU) 2026/1744 (in force 2026-07-27); verified
+// against EUR-Lex 2026-08-06.
 //
 // HELM relevance: Guardian pipeline decisions may constitute "high-risk AI" under Annex III
 // when used in critical infrastructure, safety components, or financial services.

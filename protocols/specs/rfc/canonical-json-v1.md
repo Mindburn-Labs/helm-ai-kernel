@@ -199,7 +199,7 @@ Verified against `core/pkg/canonicalize/jcs.go:206-296` and
 
 ## 6. One canonicalizer per artifact (normative)
 
-There is exactly one canonical JSON encoder in the kernel:
+There is exactly one canonical JSON encoder in the kernel Go tree:
 `core/pkg/canonicalize`. `crypto.CanonicalMarshal` is retained as a thin alias
 for `canonicalize.JCS` and MUST NOT be reimplemented.
 
@@ -232,6 +232,30 @@ specification and are held to the same vectors:
 | Reference-pack verifier (its own pack, plus imported by 9 others) | `reference_packs/approval/verify_approval_vectors.py` |
 | Reference-pack verifier (extauthz) | `reference_packs/extauthz/verify_extauthz_vectors.py` |
 | Specification reference implementation | `reference_packs/canonical-json-v1/verify_vectors.py` |
+
+### 6.1 The one permitted specialization
+
+`crypto.CanonicalizeDecisionV4` (`core/pkg/crypto/canonical.go:398-460`)
+appends the decision.v4 envelope's twelve keys in a hardcoded order with a
+hand-written string escaper (`appendJCSQuotedString`, `:461`), to keep the
+authorization hot path allocation-free. It is byte-for-byte equivalent to
+`canonicalize.JCS` over the same envelope, and that equivalence is asserted
+against the real encoder — not against a literal — by
+`TestCanonicalizeDecisionV4MatchesJCS`
+(`core/pkg/crypto/decision_signature_v4_test.go:149`). All twelve keys are
+ASCII, so Section 3 ordering is neutral for it.
+
+A specialization of this kind is permitted only with such an equivalence test.
+Without one it is a second definition of a signed preimage.
+
+### 6.2 Outside this specification's scope
+
+`protocols/policy-schema/v1/canonicalization.md` is a **separate** normative
+canonicalization, for the `*_canonical` protobuf fields of policy artifacts
+across the native-Rust and WASM policy runtimes. It does not claim RFC 8785
+and it orders keys by Unicode code point (its Section 2.1). It is not governed
+by this document, and this document's Section 3 does not apply to it. The two
+schemes must not be conflated when a digest disagrees.
 
 New code MUST NOT construct a canonical encoder from `encoding/json`,
 `json.dumps`, `serde_json::to_string` or any other library encoder without

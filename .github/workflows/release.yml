@@ -364,7 +364,9 @@ jobs:
 
   cosign-binaries:
     runs-on: ubuntu-latest
-    needs: binaries
+    # Keyless signatures are externally visible release evidence. Do not create
+    # them until both release authorities have closed successfully.
+    needs: [binaries, console-local-sidecar]
     permissions:
       actions: read
       contents: read
@@ -431,7 +433,9 @@ jobs:
 
   container:
     runs-on: ubuntu-latest
-    needs: validate
+    # Public registry publication starts only after the EvidencePack-backed
+    # release assets and the exact Console source closure both succeed.
+    needs: [binaries, console-local-sidecar]
     permissions:
       contents: read
       id-token: write
@@ -796,7 +800,7 @@ jobs:
 
   go-sdk-tag:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [binaries, console-local-sidecar]
     permissions:
       contents: write
     steps:
@@ -812,10 +816,11 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           tag="sdk/go/v${version}"
-          target="$(git rev-parse HEAD^{commit})"
+          commit_suffix='^{commit}'
+          target="$(git rev-parse "HEAD${commit_suffix}")"
           git fetch origin "refs/tags/${tag}:refs/tags/${tag}" || true
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            existing="$(git rev-parse "${tag}^{commit}")"
+            existing="$(git rev-parse "${tag}${commit_suffix}")"
             if [ "$existing" != "$target" ]; then
               echo "::error::Go SDK tag ${tag} points at ${existing}, expected ${target}; refusing to move an existing release tag."
               exit 1
@@ -832,17 +837,17 @@ jobs:
           set -euo pipefail
           module="github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v${GITHUB_REF_NAME#v}"
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            if GONOSUMDB=github.com/Mindburn-Labs/* go list -m "$module"; then
+            if GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"; then
               exit 0
             fi
             echo "Go proxy has not indexed ${module} yet; retry ${attempt}/12."
             sleep 10
           done
-          GONOSUMDB=github.com/Mindburn-Labs/* go list -m "$module"
+          GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"
 
   npm-sdk:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [binaries, console-local-sidecar]
     environment: npm-production
     permissions:
       contents: read
@@ -892,7 +897,7 @@ jobs:
 
   python-sdk:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [binaries, console-local-sidecar]
     environment: pypi-production
     permissions:
       contents: read
@@ -965,7 +970,7 @@ jobs:
 
   crates-sdk:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [binaries, console-local-sidecar]
     environment: crates-production
     permissions:
       contents: read
@@ -1030,7 +1035,7 @@ jobs:
 
   maven-sdk:
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [binaries, console-local-sidecar]
     environment: maven-central
     permissions:
       contents: read
@@ -1206,7 +1211,7 @@ jobs:
     # v0.8.0 includes the local Console. Build and verify every Console asset
     # before the one public GitHub release step consumes this artifact.
     runs-on: ubuntu-latest
-    needs: console-local-sidecar
+    needs: [binaries, console-local-sidecar]
     permissions:
       actions: read
       contents: read

@@ -33,7 +33,7 @@ RELEASE_SOURCE_PIN = {
     "version": "0.2.1",
     "package_lock_sha256": "5a548841282cac8e37a7380088cbfdf9aec08dba4ed33200a483644a362860c9",
 }
-RELEASE_WORKFLOW_REF = "refs/tags/helm-console-sidecar-v0.8.0"
+RELEASE_WORKFLOW_REF = "refs/tags/helm-console-sidecar-v0.8.1"
 TEST_WORKFLOW_REF = "refs/tags/test-console-source"
 
 
@@ -563,10 +563,10 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "ordered exactly"):
                 sidecar.verify_release(root, pins, "v0.8.0", require_cosign=False)
 
-    def test_v080_source_pin_matches_the_exact_console_release_contract(self) -> None:
+    def test_v081_source_pin_matches_the_exact_console_release_contract(self) -> None:
         pin = sidecar.resolve_pin(
             REPOSITORY_ROOT / "release/console-local-sidecar-pins.json",
-            "v0.8.0",
+            "v0.8.1",
         )
         self.assertEqual(pin["source_repository"], sidecar.CONSOLE_REPOSITORY)
         self.assertEqual(pin["source"], RELEASE_SOURCE_PIN)
@@ -594,7 +594,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             artifacts = Path(directory) / "artifacts"
             artifacts.mkdir()
             manifest = artifacts / sidecar.MANIFEST_NAME
-            manifest.write_text(json.dumps({"kernel_release_version": "v0.8.0"}), encoding="utf-8")
+            manifest.write_text(json.dumps({"kernel_release_version": "v0.8.1"}), encoding="utf-8")
             (artifacts / sidecar.MANIFEST_BUNDLE_NAME).write_text("producer", encoding="utf-8")
             (artifacts / f"{sidecar.MANIFEST_NAME}.kernel.cosign.bundle").write_text("kernel", encoding="utf-8")
             (artifacts / "ordinary-release-asset").write_text("asset", encoding="utf-8")
@@ -605,8 +605,8 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             fake_cosign.write_text(
                 "#!/usr/bin/env bash\n"
                 "case \" $* \" in\n"
-                "  *\" --certificate-identity https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v0.8.0 \"*) exit 0 ;;\n"
-                "  *\" --certificate-identity https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/tags/helm-console-sidecar-v0.8.0 \"*) exit 0 ;;\n"
+                "  *\" --certificate-identity https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v0.8.1 \"*) exit 0 ;;\n"
+                "  *\" --certificate-identity https://github.com/Mindburn-Labs/app-helm-console/.github/workflows/release-local-sidecar.yml@refs/tags/helm-console-sidecar-v0.8.1 \"*) exit 0 ;;\n"
                 "  *) exit 23 ;;\n"
                 "esac\n",
                 encoding="utf-8",
@@ -657,7 +657,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             artifacts = Path(directory) / "artifacts"
             artifacts.mkdir()
-            (artifacts / sidecar.MANIFEST_NAME).write_text(json.dumps({"kernel_release_version": "v0.8.0"}), encoding="utf-8")
+            (artifacts / sidecar.MANIFEST_NAME).write_text(json.dumps({"kernel_release_version": "v0.8.1"}), encoding="utf-8")
             (artifacts / f"{sidecar.MANIFEST_NAME}.kernel.cosign.bundle").write_text("kernel", encoding="utf-8")
             fake_bin = Path(directory) / "bin"
             fake_bin.mkdir()

@@ -89,10 +89,23 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.8.0] - pending tag
+## [0.8.1] - pending tag
 
-Release preparation only: the immutable `v0.8.0` tag and its source-owned
-artifacts are not published yet.
+Corrective release target for the completed v0.8 feature train. The v0.8.0
+aggregate publication was incomplete: it has no GitHub Release or complete
+source-owned asset set, so it must not be described as a completed release.
+
+### Changed
+
+- Retargeted the lockstep CLI, chart, SDK, OpenAPI, and release documentation
+  surfaces to v0.8.1 without rewriting any previously published version.
+- Bound the local Console closure to a distinct v0.8.1 Console workflow tag
+  while retaining its exact reviewed source pin.
+
+## [0.8.0] - incomplete publication
+
+Release preparation record only. The `v0.8.0` aggregate release did not finish
+its required asset and provenance gates, and is not a completed public release.
 
 <!-- quantum_posture: v0.8.0 continues classical Ed25519 (and optional ML-DSA-65 hybrid) signatures and SHA-256 content hashes; no new post-quantum cryptographic control is added. -->
 

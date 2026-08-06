@@ -4,13 +4,13 @@ Typed Go client for the HELM kernel HTTP API.
 
 ## Install
 
-After the `sdk/go/v0.8.0` subdirectory tag is published and verified:
+After the `sdk/go/v0.8.1` subdirectory tag is published and verified:
 
 ```bash
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.0
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.1
 ```
 
-Version truth is the repository `VERSION` file (`0.8.0` for this source target).
+Version truth is the repository `VERSION` file (`0.8.1` for this source target).
 Tagged Go module releases use the subdirectory tag form shown above; this
 source target does not claim that the tag already exists.
 

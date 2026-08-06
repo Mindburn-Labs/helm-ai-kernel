@@ -58,7 +58,7 @@ The Console producer bundle remains alongside the separate Kernel bundle, so
 public verification derives the exact tag from the signed Console manifest and
 cannot fall back to a Kernel `main` workflow identity.
 
-Before building any v0.8.0 release binary, the workflow re-verifies the signed
+Before building any Console-enabled release binary, the workflow re-verifies the signed
 Console input and passes the aggregate manifest SHA-256 through
 `CONSOLE_LOCAL_SIDECAR_MANIFEST_SHA256` to both normal and reproducible linker
 flags as `main.consoleLocalSidecarManifestSHA256`. The local launcher uses that

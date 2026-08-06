@@ -14,7 +14,7 @@ func TestCFTCEngine_AssessMarket_EventContract(t *testing.T) {
 	ctx := context.Background()
 
 	err := engine.AssessMarket(ctx, &PredictionMarketAssessment{
-		MarketID:        "event-mkt-001",
+		MarketID:        "polymarket-001",
 		MarketName:      "US Election 2028",
 		Classification:  ClassEventContract,
 		IsDCMRegistered: true,
@@ -22,7 +22,7 @@ func TestCFTCEngine_AssessMarket_EventContract(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assessment, err := engine.GetMarketAssessment(ctx, "event-mkt-001")
+	assessment, err := engine.GetMarketAssessment(ctx, "polymarket-001")
 	require.NoError(t, err)
 	assert.Equal(t, ClassEventContract, assessment.Classification)
 	assert.Contains(t, assessment.HELMRequirements, "guardian_policy_enforcement")

@@ -17,8 +17,8 @@ import (
 //   - Digital asset classification: commodity vs security distinction
 //   - DCM/SEF/DCO registration: derivatives market infrastructure
 //
-// The CFTC has primary jurisdiction over prediction markets when event
-// contracts are classified as swaps or commodity options under the CEA.
+// The CFTC has primary jurisdiction over prediction markets (e.g., Polymarket)
+// when event contracts are classified as swaps or commodity options under the CEA.
 type CFTCAdapter struct {
 	BaseAdapter
 	trackingAreas []string // e.g., ["prediction_markets", "ai_agents", "digital_assets"]

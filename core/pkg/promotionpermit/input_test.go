@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func TestInputCanonicalHashBindsEveryPromotionField(t *testing.T) {
@@ -63,6 +64,30 @@ func TestInputVerifiesExactArtifactBytes(t *testing.T) {
 	}
 	if err := input.VerifyArtifactBytes(release, platform, append(apps, '!')); err == nil || !strings.Contains(err.Error(), "apps overlay") {
 		t.Fatalf("VerifyArtifactBytes() error = %v, want apps overlay mismatch", err)
+	}
+}
+
+func TestInputBindsExistingLaunchPromotionFields(t *testing.T) {
+	input := validInput()
+	hash, err := input.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope := contracts.LaunchEffectAuthorizationEnvelope{
+		EffectID: contracts.EffectTypeDeployProductionActivate,
+		Input: map[string]any{
+			"promotion_permit_ref":  "promotion-input:23",
+			"promotion_permit_hash": hash,
+			"release_manifest_ref":  input.ReleaseManifestRef,
+			"release_manifest_hash": input.ReleaseManifestHash,
+		},
+	}
+	if err := input.VerifyEnvelopeBinding(envelope, "promotion-input:23"); err != nil {
+		t.Fatalf("VerifyEnvelopeBinding() error = %v", err)
+	}
+	envelope.Input["promotion_permit_hash"] = "sha256:" + strings.Repeat("f", 64)
+	if err := input.VerifyEnvelopeBinding(envelope, "promotion-input:23"); err == nil || !strings.Contains(err.Error(), "promotion_permit_hash") {
+		t.Fatalf("VerifyEnvelopeBinding() error = %v, want promotion hash mismatch", err)
 	}
 }
 

@@ -262,7 +262,7 @@ func TestCheckInteroperableNumbers(t *testing.T) {
 	t.Run("accepts safe integers everywhere", func(t *testing.T) {
 		v := map[string]interface{}{
 			"a": 0,
-			"b": []interface{}{1, -1, MaxSafeInteger, -MaxSafeInteger},
+			"b": []interface{}{1, -1, int64(MaxSafeInteger), int64(-MaxSafeInteger)},
 			"c": map[string]interface{}{"d": 42},
 			"e": "1e2 in a string is fine",
 			"f": nil,

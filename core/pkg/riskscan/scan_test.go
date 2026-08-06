@@ -17,6 +17,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskenvelope"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
 )
 
 var testSalt = bytes.Repeat([]byte{0x08}, riskenvelope.SaltBytes)
@@ -81,6 +82,181 @@ func TestScanProjectionPreviewsAndPackOmitRawInputs(t *testing.T) {
 				t.Fatalf("%s leaked raw input %q", name, raw)
 			}
 		}
+	}
+}
+
+func TestScanCarriesBoundaryGradeIntoEnvelopeAndPreviews(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		root       func(t *testing.T) string
+		wantLetter riskenvelope.BoundaryGradeLetter
+		wantReason string
+	}{
+		{
+			name:       "agent surface with high exposure and no boundary",
+			root:       fixtureRoot,
+			wantLetter: riskenvelope.BoundaryGradeF,
+		},
+		{
+			name:       "no agent surface",
+			root:       func(t *testing.T) string { return t.TempDir() },
+			wantLetter: riskenvelope.BoundaryGradeA,
+			wantReason: "no agent execution surface detected",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			envelope, err := Scan(tc.root(t), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+			if err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			if envelope.BoundaryGrade == nil {
+				t.Fatal("envelope is missing the boundary grade")
+			}
+			if envelope.BoundaryGrade.Letter != tc.wantLetter {
+				t.Fatalf("letter = %q, want %q (reason: %s)", envelope.BoundaryGrade.Letter, tc.wantLetter, envelope.BoundaryGrade.Reason)
+			}
+			reason := string(envelope.BoundaryGrade.Reason)
+			if tc.wantReason != "" && reason != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", reason, tc.wantReason)
+			}
+			if reason == "" {
+				t.Fatal("reason must not be empty")
+			}
+
+			body, err := EnvelopeJSON(envelope)
+			if err != nil {
+				t.Fatalf("envelope json: %v", err)
+			}
+			if !bytes.Contains(body, []byte(`"boundary_grade"`)) {
+				t.Fatalf("envelope json omits boundary_grade: %s", body)
+			}
+			md, err := RenderMarkdown(envelope)
+			if err != nil {
+				t.Fatalf("markdown: %v", err)
+			}
+			html, err := RenderHTML(envelope)
+			if err != nil {
+				t.Fatalf("html: %v", err)
+			}
+			headline := "Boundary grade: " + string(tc.wantLetter)
+			for name, payload := range map[string][]byte{"markdown": md, "html": html} {
+				if !bytes.Contains(payload, []byte(headline)) {
+					t.Fatalf("%s is missing %q: %s", name, headline, payload)
+				}
+				if !bytes.Contains(payload, []byte(reason)) {
+					t.Fatalf("%s is missing the grade reason: %s", name, payload)
+				}
+			}
+		})
+	}
+}
+
+// Receipt projections observe traffic rather than a static tree, so they carry
+// no grade. The field must stay absent instead of reporting a default letter.
+func TestScanReceiptsOmitsBoundaryGrade(t *testing.T) {
+	envelope, err := ScanReceipts(receiptFixtureRoot(t), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+	if err != nil {
+		t.Fatalf("scan receipts: %v", err)
+	}
+	if envelope.BoundaryGrade != nil {
+		t.Fatalf("receipt projection carried a boundary grade: %+v", envelope.BoundaryGrade)
+	}
+	body, err := EnvelopeJSON(envelope)
+	if err != nil {
+		t.Fatalf("envelope json: %v", err)
+	}
+	if bytes.Contains(body, []byte("boundary_grade")) {
+		t.Fatalf("receipt envelope emitted boundary_grade: %s", body)
+	}
+	md, err := RenderMarkdown(envelope)
+	if err != nil {
+		t.Fatalf("markdown: %v", err)
+	}
+	if bytes.Contains(md, []byte("Boundary grade")) {
+		t.Fatalf("receipt preview rendered a grade headline: %s", md)
+	}
+}
+
+// The envelope validates the grade reason against a closed set of grader
+// sentences, so that a scanned path or secret cannot reach an upload through a
+// free-text field. Rewording shadow.ComputeGrade without updating
+// riskenvelope must fail here rather than in a user's scan.
+func TestBuildEnvelopeAcceptsEveryGraderSentence(t *testing.T) {
+	for name, tc := range map[string]struct {
+		report     shadow.Report
+		wantLetter riskenvelope.BoundaryGradeLetter
+	}{
+		"boundary present and clean": {
+			report:     shadow.Report{HelmCoverage: shadow.HelmCoverage{Present: true}},
+			wantLetter: riskenvelope.BoundaryGradeA,
+		},
+		"boundary present with medium signals": {
+			report: shadow.Report{
+				HelmCoverage: shadow.HelmCoverage{Present: true},
+				Findings:     []shadow.Finding{{Kind: "sdk_import", Vendor: "openai", Severity: "MEDIUM"}},
+			},
+			wantLetter: riskenvelope.BoundaryGradeB,
+		},
+		"boundary present with high exposure": {
+			report: shadow.Report{
+				HelmCoverage: shadow.HelmCoverage{Present: true},
+				Findings:     []shadow.Finding{{Kind: "api_key", Vendor: "openai", Severity: "HIGH"}},
+			},
+			wantLetter: riskenvelope.BoundaryGradeC,
+		},
+		"no agent surface": {
+			report:     shadow.Report{},
+			wantLetter: riskenvelope.BoundaryGradeA,
+		},
+		"agent surface without boundary": {
+			report: shadow.Report{
+				Findings: []shadow.Finding{{Kind: "sdk_import", Vendor: "anthropic", Severity: "MEDIUM"}},
+			},
+			wantLetter: riskenvelope.BoundaryGradeD,
+		},
+		"agent surface without boundary and high exposure": {
+			report: shadow.Report{
+				Findings: []shadow.Finding{
+					{Kind: "sdk_import", Vendor: "openai", Severity: "MEDIUM"},
+					{Kind: "api_key", Vendor: "openai", Severity: "HIGH"},
+				},
+			},
+			wantLetter: riskenvelope.BoundaryGradeF,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			report := tc.report
+			report.Grade = shadow.ComputeGrade(&report)
+			obs := ConfigObservation{
+				AgentSurface:   riskenvelope.AgentSurfaceUnknown,
+				PermissionMode: riskenvelope.PermissionModeUnknown,
+			}
+			envelope, err := BuildEnvelope(&report, obs, BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+			if err != nil {
+				t.Fatalf("build envelope for %q: %v", report.Grade.Reason, err)
+			}
+			if envelope.BoundaryGrade.Letter != tc.wantLetter {
+				t.Fatalf("letter = %q, want %q", envelope.BoundaryGrade.Letter, tc.wantLetter)
+			}
+		})
+	}
+}
+
+func TestEnvelopeRejectsFreeTextBoundaryGradeReason(t *testing.T) {
+	envelope, err := Scan(fixtureRoot(t), BuildOptions{Salt: testSalt, Cohort: riskenvelope.CohortUnknown, Now: fixedTime()})
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	envelope.BoundaryGrade = &riskenvelope.BoundaryGrade{
+		Letter: riskenvelope.BoundaryGradeF,
+		Reason: "no boundary at /Users/customer/private-game (sk-12345678901234567890123456789012)",
+	}
+	resealed, err := riskenvelope.Seal(envelope)
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	if err := resealed.Validate(); err == nil {
+		t.Fatal("free-text grade reason should be rejected")
 	}
 }
 

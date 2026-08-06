@@ -89,7 +89,31 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.8.1] - pending tag
+## [0.8.2] - pending tag
+
+Completing release target for the v0.8 train. v0.8.0 and v0.8.1 both stopped
+before their GitHub Release and full asset set; neither is a completed public
+release and neither may be described as one. Their partial registry
+publications are permanent and are the reason this train advances the version
+rather than reissuing one.
+
+### Added
+
+- `EffectPermit` is signed on issuance under the `effect_permit.v1` preimage
+  and verified fail-closed before any connector executes: an unsigned permit,
+  a permit whose scope or expiry was rewritten after signing, an expired or
+  replayed permit, and a permit bound to another connector are all denied.
+- `evidence_bindings` has a wire representation in the effects proto, so a
+  signed permit keeps verifying after crossing a process boundary. Every
+  language binding carries the field.
+
+### Fixed
+
+- The release preflight requires the tagged commit to be reachable from
+  `main` rather than identical to it. Requiring identity made a tagged release
+  uncompletable as soon as anything merged, which is how v0.8.1 was stranded.
+
+## [0.8.1] - stranded, superseded by 0.8.2
 
 Corrective release target for the completed v0.8 feature train. The v0.8.0
 aggregate publication was incomplete: it has no GitHub Release or complete

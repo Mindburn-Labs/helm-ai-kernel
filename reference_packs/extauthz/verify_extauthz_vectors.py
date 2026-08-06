@@ -9,7 +9,23 @@ VALID_VERDICT_SIGNATURE = "0" * 128
 
 
 def canonical_json(value):
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    # RFC 8785 Section 3.2.3 orders property names by UTF-16 code unit;
+    # json.dumps(sort_keys=True) orders by code point, which differs for
+    # supplementary-plane keys. See protocols/specs/rfc/canonical-json-v1.md.
+    return json.dumps(
+        _utf16_ordered(value), ensure_ascii=False, sort_keys=False, separators=(",", ":")
+    )
+
+
+def _utf16_ordered(value):
+    if isinstance(value, dict):
+        return {
+            key: _utf16_ordered(value[key])
+            for key in sorted(value, key=lambda k: k.encode("utf-16-be"))
+        }
+    if isinstance(value, list):
+        return [_utf16_ordered(item) for item in value]
+    return value
 
 
 def load_json(path):

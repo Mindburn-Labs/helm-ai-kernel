@@ -85,6 +85,30 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("console-local-sidecar", binaries)
         self.assertNotIn("HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR", binaries)
 
+        # The two authority-producing jobs remain parallel, but no public
+        # publication may begin before both have succeeded.
+        for publisher in (
+            "cosign-binaries",
+            "container",
+            "go-sdk-tag",
+            "npm-sdk",
+            "python-sdk",
+            "crates-sdk",
+            "maven-sdk",
+            "console-release-assets",
+        ):
+            self.assertIn(
+                "needs: [binaries, console-local-sidecar]",
+                self.job(publisher),
+                publisher,
+            )
+
+        self.assertIn("needs: container", self.job("cosign-container"))
+        self.assertIn("container", self.job("chart"))
+        self.assertIn("cosign-container", self.job("chart"))
+        self.assertIn("needs: chart", self.job("artifacthub-repo"))
+        self.assertIn("needs: github-release", self.job("homebrew"))
+
         reproducibility = self.job("reproducibility-check")
         self.assertIn("needs: validate", reproducibility)
         self.assertNotIn("console-local-sidecar", reproducibility)
@@ -108,7 +132,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
-        self.assertIn("needs: console-local-sidecar", console_assets)
+        self.assertIn("needs: [binaries, console-local-sidecar]", console_assets)
         self.assertNotIn("github-release", console_assets)
         self.assertNotIn("always()", console_assets)
         self.assertIn("make release-binaries-reproducible", console_assets)

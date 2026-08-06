@@ -108,15 +108,18 @@ type GovernedBridge struct {
 	profile      contracts.WorkstationPolicyProfile
 	signingSeed  []byte
 	permitSigner *helmcrypto.Ed25519Signer // nil => permits are minted unsigned
-	nonces       effects.NonceStore
-	connector    effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
-	approvals    ApprovalStore     // optional: nil => escalations cannot be satisfied
-	reservations EffectReservationBoundary
-	isWrite      WriteClassifier
-	permitTTL    time.Duration
-	issuerID     string
-	now          func() time.Time
-	permitSeq    atomic.Uint64
+	// permitSignerErr records a signer that was configured but could not be
+	// built. It denies at mint time rather than degrading to unsigned permits.
+	permitSignerErr error
+	nonces          effects.NonceStore
+	connector       effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
+	approvals       ApprovalStore     // optional: nil => escalations cannot be satisfied
+	reservations    EffectReservationBoundary
+	isWrite         WriteClassifier
+	permitTTL       time.Duration
+	issuerID        string
+	now             func() time.Time
+	permitSeq       atomic.Uint64
 }
 
 // BridgeConfig configures a GovernedBridge.
@@ -196,27 +199,36 @@ func NewGovernedBridge(cfg BridgeConfig) *GovernedBridge {
 	// length yields no signer and permits are minted unsigned, exactly as
 	// before this field existed — connectors that require signatures still
 	// refuse them, so the failure surfaces at the boundary rather than here.
+	// A seed of the wrong length means "no signing configured" and is the only
+	// silent branch. A correctly sized seed that still fails to build a signer is
+	// a misconfiguration, not an opt-out — recording the error lets it surface at
+	// the boundary (see permit minting) rather than silently minting unsigned
+	// permits that a verifying connector refuses for reasons nobody can see.
 	var permitSigner *helmcrypto.Ed25519Signer
+	var permitSignerErr error
 	if len(cfg.SigningSeed) == ed25519.SeedSize {
-		if s, err := helmcrypto.NewEd25519SignerFromSeed(cfg.SigningSeed, issuer); err == nil {
-			permitSigner = s
+		s, err := helmcrypto.NewEd25519SignerFromSeed(cfg.SigningSeed, issuer)
+		if err != nil {
+			permitSignerErr = fmt.Errorf("permit signer unavailable: %w", err)
 		}
+		permitSigner = s
 	}
 	return &GovernedBridge{
-		firewall:     cfg.Firewall,
-		serverID:     cfg.ServerID,
-		scopes:       cfg.GrantedScopes,
-		profile:      profile,
-		signingSeed:  cfg.SigningSeed,
-		permitSigner: permitSigner,
-		nonces:       nonces,
-		connector:    cfg.Connector,
-		approvals:    cfg.Approvals,
-		reservations: cfg.EffectReservations,
-		isWrite:      isWrite,
-		permitTTL:    ttl,
-		issuerID:     issuer,
-		now:          now,
+		firewall:        cfg.Firewall,
+		serverID:        cfg.ServerID,
+		scopes:          cfg.GrantedScopes,
+		profile:         profile,
+		signingSeed:     cfg.SigningSeed,
+		permitSigner:    permitSigner,
+		permitSignerErr: permitSignerErr,
+		nonces:          nonces,
+		connector:       cfg.Connector,
+		approvals:       cfg.Approvals,
+		reservations:    cfg.EffectReservations,
+		isWrite:         isWrite,
+		permitTTL:       ttl,
+		issuerID:        issuer,
+		now:             now,
 	}
 }
 
@@ -791,6 +803,9 @@ func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHa
 	// Signing is last: every covered field, EvidenceBindings included, must
 	// already be final. A configured signer that fails is a denial, not an
 	// unsigned permit.
+	if b.permitSignerErr != nil {
+		return nil, fmt.Errorf("mcp bridge: %w", b.permitSignerErr)
+	}
 	if b.permitSigner != nil {
 		if err := helmcrypto.SignPermit(b.permitSigner, permit); err != nil {
 			return nil, fmt.Errorf("mcp bridge: sign permit: %w", err)

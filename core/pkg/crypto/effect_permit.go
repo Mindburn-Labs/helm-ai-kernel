@@ -34,6 +34,16 @@ const EffectPermitSignatureV1 = "effect_permit.v1"
 //
 // No field uses omitempty. An explicitly empty plan_hash is part of the signed
 // schema and must not be confusable with a field a transport dropped.
+//
+// TRANSPORT SCOPE — v1 signatures are in-process only. evidence_bindings is a
+// covered field of the Go type but has no counterpart in
+// protocols/proto/helm/effects/v1/effects.proto, so any proto or
+// schema-validated JSON hop drops it and verification fails on the far side.
+// Before a permit is signed on one process and verified on another, either add
+// evidence_bindings to the wire contract (a backward-compatible field add) or
+// cut a v2 preimage that excludes it. There is no Go↔proto permit conversion in
+// the kernel today, so nothing is broken by this — it is a precondition, not a
+// defect.
 type effectPermitV1SigningEnvelope struct {
 	SignatureVersion string              `json:"signature_version"`
 	PermitID         string              `json:"permit_id"`

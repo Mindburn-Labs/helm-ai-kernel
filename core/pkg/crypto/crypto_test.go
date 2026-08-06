@@ -228,6 +228,25 @@ func TestVerifyPermit_CoversEveryFieldButSignature(t *testing.T) {
 				"effect_permit.v1 or the vector set is stale", field)
 		}
 	}
+
+	// Scope is a nested struct. A root-level "Scope" vector proves the field is
+	// reachable, not that every member of EffectScope is signed — so walk it too
+	// and require a per-member vector keyed "Scope.<Field>".
+	scopeCovered := make(map[string]struct{}, len(permitTampers))
+	for name := range permitTampers {
+		root, rest, found := strings.Cut(name, ".")
+		if found && root == "Scope" {
+			scopeCovered[rest] = struct{}{}
+		}
+	}
+	scopeTyp := reflect.TypeOf(effects.EffectScope{})
+	for i := range scopeTyp.NumField() {
+		field := scopeTyp.Field(i).Name
+		if _, present := scopeCovered[field]; !present {
+			t.Fatalf("EffectScope.%s has no tamper vector: a field added to the scope "+
+				"rides unsigned unless a Scope.%s vector proves otherwise", field, field)
+		}
+	}
 }
 
 func TestVerifyPermit_UnsignedIsRefused(t *testing.T) {

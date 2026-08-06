@@ -18,6 +18,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcpcore "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
@@ -770,6 +771,21 @@ func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHa
 	}
 	if receipt.DecisionID != "" {
 		permit.EvidenceBindings = map[string]string{"decision_id": receipt.DecisionID}
+	}
+	// A permit is the pre-action authorization artifact: its scope and expiry
+	// must not be rewritable by the party it authorizes. Issuance therefore
+	// fails closed when the bridge holds no signing key — an unsigned permit
+	// would authorize nothing that a verifier could trust, so it is better to
+	// refuse the effect than to hand out an unattested one.
+	if len(b.signingSeed) == 0 {
+		return nil, fmt.Errorf("mcp bridge: refusing to issue an unsigned permit: no signing seed configured")
+	}
+	signer, err := helmcrypto.NewEd25519SignerFromSeed(b.signingSeed, b.issuerID)
+	if err != nil {
+		return nil, fmt.Errorf("mcp bridge: permit signer: %w", err)
+	}
+	if err := helmcrypto.SignPermit(signer, permit); err != nil {
+		return nil, fmt.Errorf("mcp bridge: sign permit: %w", err)
 	}
 	return permit, nil
 }

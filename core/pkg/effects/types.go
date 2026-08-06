@@ -83,7 +83,12 @@ type EffectPermit struct {
 	// EvidenceBindings binds verifier-approved evidence hashes required by
 	// connector policy, such as sandbox_grant_hash for governed sandboxes.
 	EvidenceBindings map[string]string `json:"evidence_bindings,omitempty"`
-	Signature        string            `json:"signature,omitempty"`
+	// SignatureVersion names the signing-preimage revision the Signature was
+	// produced over. Empty means the permit carries no attested authority:
+	// permits were issued unsigned before permit.v1, so verifiers must reject
+	// an unversioned permit rather than assume a preimage for it.
+	SignatureVersion string `json:"signature_version,omitempty"`
+	Signature        string `json:"signature,omitempty"`
 }
 
 // EffectScope defines the boundaries of what a permit allows.

@@ -1,3 +1,6 @@
+// quantum_posture: permit verification here is classical Ed25519, inherited
+// from crypto.VerifyPermit; this connector neither chooses nor upgrades the
+// signing profile of the permits it is handed.
 package linear
 
 import (
@@ -11,6 +14,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connector"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 )
@@ -34,6 +38,7 @@ type Connector struct {
 	gate         *connector.ZeroTrustGate
 	graph        *proofgraph.Graph
 	connectorID  string
+	permitPubKey string
 	nonceMu      sync.Mutex
 	permitNonces map[string]permitNonceState
 	now          func() time.Time
@@ -73,6 +78,16 @@ type Config struct {
 	BaseURL     string
 	ConnectorID string
 	Token       string
+	// PermitPublicKey is the hex Ed25519 public key that EffectPermits for this
+	// connector must be signed under — GovernedBridge.PermitSigningPublicKey().
+	//
+	// It is opt-in, and that is a deliberate transitional state, not a design:
+	// leaving it empty preserves today's behaviour, where the permit carries no
+	// cryptographic binding at all and the connector trusts whoever handed it
+	// the struct. Setting it makes this connector fail closed on an unsigned,
+	// tampered, or foreign-signed permit. Every deployment that wants the
+	// permit to mean anything must set it.
+	PermitPublicKey string
 }
 
 // NewConnector creates a new Linear connector.
@@ -107,6 +122,7 @@ func NewConnector(cfg Config) *Connector {
 		gate:         gate,
 		graph:        proofgraph.NewGraph(),
 		connectorID:  cfg.ConnectorID,
+		permitPubKey: strings.TrimSpace(cfg.PermitPublicKey),
 		permitNonces: make(map[string]permitNonceState),
 		now:          time.Now,
 	}
@@ -252,6 +268,13 @@ func (c *Connector) validatePermit(permit *effects.EffectPermit, toolName string
 	if permit == nil {
 		return fmt.Errorf("linear: missing effect permit")
 	}
+	// The signature is checked before any other permit field, and validatePermit
+	// itself runs before the nonce reservation, the gate, the ProofGraph intent
+	// and the GraphQL client. A permit that does not verify never reaches any of
+	// them, so a refusal here means no effect was attempted.
+	if err := c.verifyPermitSignature(permit); err != nil {
+		return err
+	}
 	if permit.ConnectorID != c.connectorID {
 		return fmt.Errorf("linear: permit connector_id %q does not match %q", permit.ConnectorID, c.connectorID)
 	}
@@ -296,6 +319,28 @@ func (c *Connector) validatePermit(permit *effects.EffectPermit, toolName string
 		return err
 	}
 	return validateResourceScope(permit, toolName, params)
+}
+
+// verifyPermitSignature enforces the permit's cryptographic binding when this
+// connector was configured with a verification key. Without a key it is a
+// no-op, which is what keeps every existing caller and test working.
+//
+// With a key it is fail-closed in all three directions: an unsigned permit, a
+// permit whose covered fields were edited after signing, and a permit signed by
+// a key this connector does not trust are all refused with an error. There is
+// no path that downgrades to "accept unverified".
+func (c *Connector) verifyPermitSignature(permit *effects.EffectPermit) error {
+	if c.permitPubKey == "" {
+		return nil
+	}
+	ok, err := crypto.VerifyPermit(c.permitPubKey, permit)
+	if err != nil {
+		return fmt.Errorf("linear: permit signature verification failed: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("linear: permit signature does not verify under the configured key")
+	}
+	return nil
 }
 
 func validateToolParams(toolName string, params map[string]any) error {

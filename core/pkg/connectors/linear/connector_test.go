@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connector"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 )
 
@@ -446,5 +447,171 @@ func TestExecuteGateDenialReleasesFreshPermit(t *testing.T) {
 	})
 	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", params); err == nil || strings.Contains(err.Error(), "already used") {
 		t.Fatalf("gate denial consumed permit: %v", err)
+	}
+}
+
+// --- permit signature verification (opt-in, fail-closed) -------------------
+
+// countingLinearServer answers list_issues and counts how many requests ever
+// reached it. Zero is the assertion that matters for a refusal: an error return
+// alone would not prove the connector stopped before Linear's GraphQL sink.
+func countingLinearServer(t *testing.T, requests *int) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		*requests++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"issues":{"nodes":[]}}}`))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// verifyingConnector wires a connector that requires signer-issued permits and
+// pins its clock so permit windows are deterministic.
+func verifyingConnector(t *testing.T, baseURL, pubKey string, now time.Time) *Connector {
+	t.Helper()
+	c := NewConnector(Config{BaseURL: baseURL, Token: "lin_api_test", PermitPublicKey: pubKey})
+	c.now = func() time.Time { return now }
+	c.gate = connector.NewZeroTrustGate().WithClock(func() time.Time { return now })
+	c.gate.SetPolicy(&connector.TrustPolicy{
+		ConnectorID:        ConnectorID,
+		TrustLevel:         connector.TrustLevelVerified,
+		MaxTTLSeconds:      3600,
+		AllowedDataClasses: AllowedDataClasses(),
+		RateLimitPerMinute: 60,
+	})
+	return c
+}
+
+func signedListPermit(t *testing.T, signer *crypto.Ed25519Signer, nonce string, now time.Time, params map[string]any) *effects.EffectPermit {
+	t.Helper()
+	permit := permitFor(t, "linear.list_issues", nonce, params)
+	permit.IssuedAt = now.Add(-time.Second)
+	permit.ExpiresAt = now.Add(time.Minute)
+	if err := crypto.SignPermit(signer, permit); err != nil {
+		t.Fatalf("sign permit: %v", err)
+	}
+	return permit
+}
+
+func TestExecuteAcceptsSignedPermitWhenVerificationEnabled(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("linear-permit-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	server := countingLinearServer(t, &requests)
+	now := time.Now().UTC()
+	c := verifyingConnector(t, server.URL, signer.PublicKey(), now)
+	c.client.httpClient = server.Client()
+
+	params := map[string]any{"team_id": "team-1"}
+	permit := signedListPermit(t, signer, "nonce-signed-ok", now, params)
+
+	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", params); err != nil {
+		t.Fatalf("a correctly signed permit must execute: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("expected exactly one dispatched request, got %d", requests)
+	}
+}
+
+func TestExecuteRefusesTamperedPermitWithoutAttemptingEffect(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("linear-permit-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+
+	// Each vector rewrites a field the signature covers. The first two would
+	// still pass every non-cryptographic permit check, which is the point: only
+	// the signature catches them.
+	tampers := map[string]func(p *effects.EffectPermit){
+		"widened expiry":   func(p *effects.EffectPermit) { p.ExpiresAt = now.Add(30 * time.Minute) },
+		"reused nonce":     func(p *effects.EffectPermit) { p.Nonce = "nonce-swapped" },
+		"swapped resource": func(p *effects.EffectPermit) { p.ResourceRef = "team:other-team" },
+		"forged signature": func(p *effects.EffectPermit) { p.Signature = strings.Repeat("00", 64) },
+		"escalated effect": func(p *effects.EffectPermit) { p.EffectType = effects.EffectTypeDelete },
+		"rebound decision": func(p *effects.EffectPermit) { p.EvidenceBindings = map[string]string{"decision_id": "dec-evil"} },
+	}
+	for name, tamper := range tampers {
+		t.Run(name, func(t *testing.T) {
+			requests := 0
+			server := countingLinearServer(t, &requests)
+			c := verifyingConnector(t, server.URL, signer.PublicKey(), now)
+			c.client.httpClient = server.Client()
+
+			params := map[string]any{"team_id": "team-1"}
+			permit := signedListPermit(t, signer, "nonce-tampered", now, params)
+			tamper(permit)
+
+			_, err := c.Execute(context.Background(), permit, "linear.list_issues", params)
+			if err == nil {
+				t.Fatal("a tampered permit must be refused")
+			}
+			if !strings.Contains(err.Error(), "permit signature") {
+				t.Fatalf("refusal must name the signature, got %v", err)
+			}
+			if requests != 0 {
+				t.Fatalf("no effect may be attempted, but %d request(s) reached Linear", requests)
+			}
+			if c.Graph().Len() != 0 {
+				t.Fatalf("no intent may be recorded, got %d ProofGraph nodes", c.Graph().Len())
+			}
+		})
+	}
+}
+
+func TestExecuteRefusesUnsignedPermitWhenVerificationEnabled(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("linear-permit-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	server := countingLinearServer(t, &requests)
+	now := time.Now().UTC()
+	c := verifyingConnector(t, server.URL, signer.PublicKey(), now)
+	c.client.httpClient = server.Client()
+
+	params := map[string]any{"team_id": "team-1"}
+	permit := permitFor(t, "linear.list_issues", "nonce-unsigned", params)
+	permit.IssuedAt = now.Add(-time.Second)
+	permit.ExpiresAt = now.Add(time.Minute)
+
+	_, execErr := c.Execute(context.Background(), permit, "linear.list_issues", params)
+	if execErr == nil {
+		t.Fatal("an unsigned permit must be refused when a verification key is configured")
+	}
+	if !strings.Contains(execErr.Error(), "unsigned") {
+		t.Fatalf("refusal must name the missing signature, got %v", execErr)
+	}
+	if requests != 0 {
+		t.Fatalf("no effect may be attempted, but %d request(s) reached Linear", requests)
+	}
+	if c.Graph().Len() != 0 {
+		t.Fatalf("no intent may be recorded, got %d ProofGraph nodes", c.Graph().Len())
+	}
+}
+
+// Verification is opt-in per connector: without a configured key the connector
+// behaves exactly as it did before signatures existed. This is the compatibility
+// contract every other caller in the estate depends on.
+func TestExecuteAcceptsUnsignedPermitWhenVerificationDisabled(t *testing.T) {
+	requests := 0
+	server := countingLinearServer(t, &requests)
+	now := time.Now().UTC()
+	c := verifyingConnector(t, server.URL, "", now)
+	c.client.httpClient = server.Client()
+
+	params := map[string]any{"team_id": "team-1"}
+	permit := permitFor(t, "linear.list_issues", "nonce-unverified", params)
+	permit.IssuedAt = now.Add(-time.Second)
+	permit.ExpiresAt = now.Add(time.Minute)
+
+	if _, err := c.Execute(context.Background(), permit, "linear.list_issues", params); err != nil {
+		t.Fatalf("unsigned permits must still work without a verification key: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("expected exactly one dispatched request, got %d", requests)
 	}
 }

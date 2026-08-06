@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	githubconnector "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/github"
 	linearconnector "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/linear"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcpcore "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
@@ -963,5 +965,69 @@ func TestAdapterWithoutBridgeIsFailClosed(t *testing.T) {
 	}
 	if resp.Allowed || resp.DenyReason == nil || resp.DenyReason.Code != "BRIDGE_NOT_CONFIGURED" {
 		t.Fatalf("expected BRIDGE_NOT_CONFIGURED deny, got %+v", resp)
+	}
+}
+
+// The end-to-end binding: the bridge signs every permit it mints with the same
+// seed that signs decision receipts, and a connector whose only trust anchor is
+// that public key accepts the result. The dispatch failure asserted here is the
+// Linear client's "not connected" sentinel — reaching it proves the connector
+// validated the signature and moved on, rather than refusing at the boundary.
+func TestGovernedBridgeSignsPermitsForVerifyingConnector(t *testing.T) {
+	seedSigner, err := helmcrypto.NewEd25519SignerFromSeed(bridgeTestSigningSeed(), "bridge-permit-key")
+	if err != nil {
+		t.Fatalf("derive expected permit key: %v", err)
+	}
+	now := time.Now().UTC()
+	conn := linearconnector.NewConnector(linearconnector.Config{PermitPublicKey: seedSigner.PublicKey()})
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{
+		Profile:   operateProfile(),
+		Connector: conn,
+		Now:       func() time.Time { return now },
+	}))
+
+	if got := bridge.PermitSigningPublicKey(); got != seedSigner.PublicKey() {
+		t.Fatalf("PermitSigningPublicKey() = %q, want the seed-derived key %q", got, seedSigner.PublicKey())
+	}
+
+	req := &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "linear.get_issue",
+		Arguments: map[string]any{"issue_id": "ENG-1"}, PrincipalID: "ve-assistant",
+	}
+	inputHash, err := canonicalize.CanonicalHash(req.Arguments)
+	if err != nil {
+		t.Fatalf("input hash: %v", err)
+	}
+	outcome := bridge.Govern(context.Background(), req, inputHash)
+
+	if outcome.Permit == nil {
+		t.Fatalf("expected a minted permit, got outcome %+v", outcome)
+	}
+	if outcome.Permit.Signature == "" {
+		t.Fatal("bridge minted an unsigned permit")
+	}
+	ok, err := helmcrypto.VerifyPermit(bridge.PermitSigningPublicKey(), outcome.Permit)
+	if err != nil || !ok {
+		t.Fatalf("minted permit must verify under the bridge key: ok=%v err=%v", ok, err)
+	}
+	if strings.Contains(outcome.Reason, "permit signature") {
+		t.Fatalf("verifying connector refused a bridge-signed permit: %s", outcome.Reason)
+	}
+	if !strings.Contains(outcome.Reason, "not connected") {
+		t.Fatalf("expected the permit to reach the Linear client, got reason %q", outcome.Reason)
+	}
+}
+
+// Without a usable seed the bridge mints unsigned permits rather than failing:
+// callers that never configured signing keep working, and the refusal happens
+// at a connector that requires a signature, not here.
+func TestGovernedBridgeWithoutUsableSeedMintsUnsignedPermits(t *testing.T) {
+	bridge := NewGovernedBridge(BridgeConfig{
+		Profile:     operateProfile(),
+		SigningSeed: []byte("too-short"),
+		Now:         fixedClock(),
+	})
+	if got := bridge.PermitSigningPublicKey(); got != "" {
+		t.Fatalf("no signer expected, got public key %q", got)
 	}
 }

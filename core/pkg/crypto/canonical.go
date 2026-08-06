@@ -30,7 +30,8 @@ import (
 // (translog.SignedTreeHead.SigningBytes), reordering a Go struct field
 // silently changed signed bytes. The three in-repo call sites are
 // byte-for-byte unchanged by the switch; that is asserted by
-// TestCanonicalMarshalCallSitesAreByteStable in this package.
+// TestCanonicalMarshalCallSiteShapesAreByteStable in this package and by
+// TestSTHSigningBytesAreCanonicalGolden in core/pkg/translog.
 func CanonicalMarshal(v interface{}) ([]byte, error) {
 	b, err := canonicalize.JCS(v)
 	if err != nil {

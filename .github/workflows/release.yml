@@ -816,10 +816,11 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           tag="sdk/go/v${version}"
-          target="$(git rev-parse HEAD^{commit})"
+          commit_suffix='^{commit}'
+          target="$(git rev-parse "HEAD${commit_suffix}")"
           git fetch origin "refs/tags/${tag}:refs/tags/${tag}" || true
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            existing="$(git rev-parse "${tag}^{commit}")"
+            existing="$(git rev-parse "${tag}${commit_suffix}")"
             if [ "$existing" != "$target" ]; then
               echo "::error::Go SDK tag ${tag} points at ${existing}, expected ${target}; refusing to move an existing release tag."
               exit 1
@@ -836,13 +837,13 @@ jobs:
           set -euo pipefail
           module="github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v${GITHUB_REF_NAME#v}"
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            if GONOSUMDB=github.com/Mindburn-Labs/* go list -m "$module"; then
+            if GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"; then
               exit 0
             fi
             echo "Go proxy has not indexed ${module} yet; retry ${attempt}/12."
             sleep 10
           done
-          GONOSUMDB=github.com/Mindburn-Labs/* go list -m "$module"
+          GONOSUMDB='github.com/Mindburn-Labs/*' go list -m "$module"
 
   npm-sdk:
     runs-on: ubuntu-latest

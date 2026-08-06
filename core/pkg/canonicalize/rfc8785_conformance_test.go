@@ -335,6 +335,47 @@ func TestJCSIsLossyOnInvalidUTF8(t *testing.T) {
 	}
 }
 
+// TestDuplicateKeysResolveToTheLastOccurrence pins Section 2.3 of the
+// specification. RFC 7493 forbids duplicate member names and RFC 8785 does not
+// say what to do with them; we do not reject, we keep the last. A verifier
+// that parses wire bytes itself may reasonably refuse instead, so the
+// behaviour is stated rather than left to be discovered.
+func TestDuplicateKeysResolveToTheLastOccurrence(t *testing.T) {
+	var generic interface{}
+	decoder := json.NewDecoder(strings.NewReader(`{"a":1,"a":2}`))
+	decoder.UseNumber()
+	if err := decoder.Decode(&generic); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got, err := JCS(generic)
+	if err != nil {
+		t.Fatalf("JCS: %v", err)
+	}
+	if string(got) != `{"a":2}` {
+		t.Fatalf("got %s want {\"a\":2}", got)
+	}
+}
+
+// TestTopLevelValuesAreCanonicalized pins Section 2.4.
+func TestTopLevelValuesAreCanonicalized(t *testing.T) {
+	cases := map[string]interface{}{
+		`"x"`:     "x",
+		`true`:    true,
+		`null`:    nil,
+		`[1,2]`:   []int{1, 2},
+		`{"a":1}`: map[string]int{"a": 1},
+	}
+	for want, value := range cases {
+		got, err := JCS(value)
+		if err != nil {
+			t.Fatalf("JCS(%v): %v", value, err)
+		}
+		if string(got) != want {
+			t.Errorf("got %s want %s", got, want)
+		}
+	}
+}
+
 // TestASCIIKeysAreOrderingNeutral is the regression guard for the claim that
 // switching to UTF-16 ordering changed no published bytes: every canonical
 // artifact in this repository uses ASCII object keys, and for those the two

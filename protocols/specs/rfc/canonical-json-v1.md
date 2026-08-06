@@ -38,9 +38,15 @@ interpreted as described in RFC 2119.
 ### 1.2 Relationship to RFC 8785
 
 HELM canonical JSON is RFC 8785 (JSON Canonicalization Scheme) with **one
-deviation**, in Section 3.2.2.3 number serialization. Object property
-ordering (RFC 8785 Section 3.2.3), string escaping (Section 3.2.2.2),
-whitespace and literal handling are implemented as specified.
+deviation from its normative serialization rules**: Section 3.2.2.3 number
+serialization. Object property ordering (RFC 8785 Section 3.2.3), string
+escaping (Section 3.2.2.2), whitespace and literal handling are implemented as
+specified.
+
+Two behaviours concern input that RFC 8785 places outside its data model and
+therefore does not specify — ill-formed UTF-8 (Section 2.2 below) and duplicate
+object keys (Section 2.3). They are not deviations from the RFC, but they are
+observable, so they are stated rather than left to be discovered.
 
 Sections 2 and 3 of this document restate the conformant parts so the rule is
 readable without the RFC in hand. Sections 4 and 5 define the deviation and the
@@ -91,6 +97,20 @@ input carrying invalid UTF-8 therefore canonicalizes to a document containing
 U+FFFD rather than failing. Producers MUST NOT rely on this: a HELM artifact
 MUST contain only well-formed UTF-8, and a verifier MAY reject ill-formed input
 outright. Pinned by `TestJCSIsLossyOnInvalidUTF8`.
+
+### 2.3 Duplicate object keys (implementation note, not a rule)
+
+RFC 7493 (I-JSON), which RFC 8785 builds on, forbids duplicate object member
+names. `canonicalize.JCS` does not reject them: the `encoding/json` decode into
+a map keeps the **last** occurrence, so `{"a":1,"a":2}` canonicalizes to
+`{"a":2}`. A producer MUST NOT emit a document with duplicate keys, and a
+verifier that parses the wire bytes itself SHOULD reject one rather than
+silently agreeing with us.
+
+### 2.4 Top-level values
+
+A top-level value of any JSON type is canonicalized, not only an object.
+`JCS("x")` yields `"x"`.
 
 ## 3. Object property ordering (normative)
 

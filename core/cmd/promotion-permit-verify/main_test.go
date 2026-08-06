@@ -33,6 +33,7 @@ func TestDecodeStrictPromotionInputRejectsAmbiguousJSON(t *testing.T) {
 		{name: "duplicate", content: strings.Replace(valid, `"schema":`, `"schema":"forged","schema":`, 1), want: `duplicate JSON key "schema"`},
 		{name: "unknown", content: strings.TrimSuffix(valid, "}") + `,"unexpected":true}`, want: "input keys must be exactly"},
 		{name: "missing explicit bool", content: strings.Replace(valid, `,"apps_empty_intent":false`, "", 1), want: "input keys must be exactly"},
+		{name: "null explicit bool", content: strings.Replace(valid, `"apps_empty_intent":false`, `"apps_empty_intent":null`, 1), want: "JSON null values are not accepted"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

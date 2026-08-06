@@ -208,6 +208,9 @@ func scanJSONValue(decoder *json.Decoder) error {
 	if err != nil {
 		return err
 	}
+	if token == nil {
+		return errors.New("JSON null values are not accepted")
+	}
 	delimiter, ok := token.(json.Delim)
 	if !ok {
 		return nil

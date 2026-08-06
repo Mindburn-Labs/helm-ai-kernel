@@ -101,8 +101,8 @@ func (input Input) Hash() (string, error) {
 	return canonicalize.ComputeArtifactHash(canonical), nil
 }
 
-// VerifyArtifactBytes checks the exact bytes named by the promotion input.
-// Parsing their YAML/JSON would create a second source of release truth.
+// VerifyArtifactBytes checks both the exact bytes named by the promotion input
+// and the production fields those source-owned artifacts must carry.
 func (input Input) VerifyArtifactBytes(releaseManifest, platformOverlay, appsOverlay []byte) error {
 	if err := input.Validate(); err != nil {
 		return err

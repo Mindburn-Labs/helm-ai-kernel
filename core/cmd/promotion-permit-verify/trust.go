@@ -1,3 +1,5 @@
+// quantum_posture: this offline preflight verifies the existing classical
+// Ed25519 approval, verdict, and connector authorities; it adds no PQ claim.
 package main
 
 import (

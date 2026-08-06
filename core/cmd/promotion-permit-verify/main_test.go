@@ -1,3 +1,5 @@
+// quantum_posture: these verifier tests exercise existing classical Ed25519
+// trust inputs only; they add no post-quantum assurance claim.
 package main
 
 import (

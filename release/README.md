@@ -46,7 +46,7 @@ GitHub release before publication is claimed:
 - `multiple.intoto.jsonl`
 
 The sample policy material archive contains `release.high_risk.v3.toml` and
-`reference_packs/eu_ai_act_high_risk.v1.json`. The GitHub release workflow
+`reference_packs/eu_ai_act_high_risk.v2.json`. The GitHub release workflow
 attaches `*.cosign.bundle` files generated for each primary asset.
 
 Homebrew remains headless: it downloads only the Kernel binary and Launchpad

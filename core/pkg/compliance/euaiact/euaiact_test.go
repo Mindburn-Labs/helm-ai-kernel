@@ -250,7 +250,8 @@ func TestGetObligations_EffectiveDatesCorrect(t *testing.T) {
 	require.Equal(t, DateGPAITransparency, dateMap[ObligationTransparency],
 		"Transparency obligation effective date must be 2025-08-02")
 
-	// All other obligations use the high-risk deadline: 2026-08-02
+	// All other obligations use the Annex III high-risk deadline: 2027-12-02
+	// as deferred by Regulation (EU) 2026/1744.
 	require.Equal(t, DateHighRiskObligations, dateMap[ObligationHighRiskClassification])
 	require.Equal(t, DateHighRiskObligations, dateMap[ObligationRiskManagement])
 	require.Equal(t, DateHighRiskObligations, dateMap[ObligationHumanOversight])
@@ -291,10 +292,10 @@ func TestEnforcementDates(t *testing.T) {
 		"Prohibited practices date must be 2025-02-02")
 	require.Equal(t, time.Date(2025, 8, 2, 0, 0, 0, 0, time.UTC), DateGPAITransparency,
 		"GPAI transparency date must be 2025-08-02")
-	require.Equal(t, time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC), DateHighRiskObligations,
-		"High-risk obligations date must be 2026-08-02")
-	require.Equal(t, time.Date(2027, 8, 2, 0, 0, 0, 0, time.UTC), DateAnnexIHighRisk,
-		"Annex I high-risk date must be 2027-08-02")
+	require.Equal(t, time.Date(2027, 12, 2, 0, 0, 0, 0, time.UTC), DateHighRiskObligations,
+		"Annex III high-risk obligations date must be 2027-12-02 per Regulation (EU) 2026/1744")
+	require.Equal(t, time.Date(2028, 8, 2, 0, 0, 0, 0, time.UTC), DateAnnexIHighRisk,
+		"Annex I high-risk date must be 2028-08-02 per Regulation (EU) 2026/1744")
 }
 
 func TestEnforcementDatesChronologicalOrder(t *testing.T) {

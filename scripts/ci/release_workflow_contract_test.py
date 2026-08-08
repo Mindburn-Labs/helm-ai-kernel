@@ -35,7 +35,12 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         preflight = self.job("release-preflight")
         self.assertIn("needs: version-contract", preflight)
         self.assertIn('tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"', preflight)
-        self.assertIn("git ls-remote --exit-code origin refs/heads/main", preflight)
+        # Ancestry, not equality: the tagged commit must be reachable from
+        # main so nothing off-main ships, while a merge landing mid-release no
+        # longer strands the tag (v0.8.1 was stranded exactly that way).
+        self.assertIn("git merge-base --is-ancestor", preflight)
+        self.assertIn("origin/main", preflight)
+        self.assertNotIn('if [ "$tag_commit" != "$main_commit" ]', preflight)
         self.assertIn("kernel_blob=\"$(git hash-object --no-filters api/openapi/helm.openapi.yaml)\"", preflight)
         self.assertIn(
             "repos/Mindburn-Labs/contracts-catalog/contents/api/specs/helm.openapi.yaml?ref=main",

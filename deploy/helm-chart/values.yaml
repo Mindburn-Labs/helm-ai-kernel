@@ -281,6 +281,29 @@ helm:
     referencePackID: "helm-chart-reference-pack"
     referencePackLabel: "HELM chart default fail-closed reference pack"
 
+# Telemetry (HELM-453). Off by default and it must stay that way: the
+# Application Readiness Gate is closed, and a stand handed an endpoint starts
+# exporting the moment it boots. Enabled per stand, never in a chart default.
+telemetry:
+  enabled: false
+  # In-cluster gateway. Plaintext on purpose: TLS terminates at the central
+  # frontdoor, not inside the cluster. Example:
+  #   http://telemetry-gateway.telemetry-system.svc.cluster.local:4317
+  #
+  # Keep the http:// prefix. The kernel's otlpEndpointFromEnv strips the scheme
+  # before handing host:port to the otlptracegrpc exporter and treats its
+  # presence as the insecure-dial switch; without it the exporter negotiates
+  # TLS against a listener that does not terminate it.
+  #
+  # Only the endpoint belongs here — do not add OTEL_RESOURCE_ATTRIBUTES with a
+  # data class, environment, namespace, or cluster: the gateway's client lane
+  # deletes those keys before enrichment and re-derives them from namespace
+  # labels, so anything the chart declared about where it runs is dropped
+  # silently. service.name survives, but the kernel pins it to
+  # helm-sovereign-os in code and ignores OTEL_SERVICE_NAME (HELM-477), so
+  # overriding it from the chart has no effect either.
+  endpoint: ""
+
 # Persistent storage for HELM dataDir and SQLite state.
 persistence:
   enabled: true

@@ -25,8 +25,46 @@ class VectorError(Exception):
         self.code = code
 
 
+def _utf16_sort_key(key):
+    """RFC 8785 Section 3.2.3 ordering: UTF-16 code units as unsigned integers.
+
+    Python compares str by code point, which differs from UTF-16 code unit
+    order for exactly one input class: a supplementary-plane character
+    (U+10000 and above) encodes as a surrogate pair starting in
+    U+D800..U+DBFF, so it sorts BEFORE any character in U+E000..U+FFFF.
+    json.dumps(sort_keys=True) uses code point order and is therefore not
+    RFC 8785 conformant for such keys.
+    """
+    return key.encode("utf-16-be")
+
+
+def _utf16_ordered(value):
+    if isinstance(value, dict):
+        return {
+            key: _utf16_ordered(value[key])
+            for key in sorted(value, key=_utf16_sort_key)
+        }
+    if isinstance(value, list):
+        return [_utf16_ordered(item) for item in value]
+    return value
+
+
 def canonical_json(value):
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    """HELM canonical JSON.
+
+    RFC 8785 with one documented deviation, specified in
+    protocols/specs/rfc/canonical-json-v1.md: numbers are not re-rendered by
+    the ECMAScript Number-to-String algorithm. Every HELM signed artifact and
+    published vector is confined to the interoperable subset (integers within
+    +/-(2**53-1)), on which this function and a strict RFC 8785
+    implementation produce identical bytes.
+    """
+    return json.dumps(
+        _utf16_ordered(value),
+        ensure_ascii=False,
+        sort_keys=False,
+        separators=(",", ":"),
+    )
 
 
 def sha256_ref(raw):

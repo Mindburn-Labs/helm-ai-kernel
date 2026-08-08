@@ -120,6 +120,9 @@ func runScanCmd(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	if envelope.BoundaryGrade != nil {
+		fmt.Fprintf(stdout, "Boundary grade: %s — %s\n", envelope.BoundaryGrade.Letter, envelope.BoundaryGrade.Reason)
+	}
 	fmt.Fprintf(stdout, "RiskEnvelope: %s\n", envelope.EnvelopeID)
 	fmt.Fprintf(stdout, "Content hash: %s\n", envelope.EnvelopeContentHash)
 	fmt.Fprintf(stdout, "Findings: %d\n", len(envelope.Findings))

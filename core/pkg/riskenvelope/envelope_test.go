@@ -157,6 +157,7 @@ func TestRiskEnvelopeSchemaAlignment(t *testing.T) {
 
 func TestRiskEnvelopeSchemaEnumParity(t *testing.T) {
 	raw := loadRiskEnvelopeSchema(t)
+	assertSchemaEnum(t, raw, []string{"$defs", "boundary_grade", "properties", "letter", "enum"}, stringValues(BoundaryGradeA, BoundaryGradeB, BoundaryGradeC, BoundaryGradeD, BoundaryGradeF))
 	assertSchemaEnum(t, raw, []string{"$defs", "finding", "properties", "resource_type", "enum"}, stringValues(ResourceRepo, ResourceMCPServer, ResourceWorkflow, ResourceSecretClass, ResourcePermissionProfile, ResourceEnvironment, ResourceOAuthClient, ResourceIAMPrincipal))
 	assertSchemaEnum(t, raw, []string{"$defs", "finding", "properties", "risk_code", "enum"}, stringValues(RiskAgentWriteWithoutEnvApproval, RiskBroadShellAllow, RiskBypassPermissionsEnabled, RiskMCPWriteScopeWithoutApproval, RiskProdEnvWithoutReviewers, RiskSecretClassAgentReadable, RiskDirectDispatchSeen, RiskNoManagedSettings, RiskNoAuditExport, RiskNoBranchProtection, RiskSchemaPinMissing, RiskIAMAdminGrantVisible, RiskOAuthHighRiskScope, RiskCIWorkflowWriteToken))
 	assertSchemaEnum(t, raw, []string{"$defs", "finding", "properties", "severity", "enum"}, stringValues(SeverityInfo, SeverityLow, SeverityMedium, SeverityHigh, SeverityCritical))
@@ -165,6 +166,27 @@ func TestRiskEnvelopeSchemaEnumParity(t *testing.T) {
 	assertSchemaEnum(t, raw, []string{"$defs", "posture", "properties", "permission_mode", "enum"}, stringValues(PermissionModeUnknown, PermissionModePlan, PermissionModeAsk, PermissionModeAcceptEdits, PermissionModeBypassPermissions))
 	assertSchemaEnum(t, raw, []string{"$defs", "oauth_scope_bucket_count", "properties", "bucket", "enum"}, stringValues(OAuthScopeNone, OAuthScopeRead, OAuthScopeWrite, OAuthScopeAdmin, OAuthScopeRepo, OAuthScopeWorkflow, OAuthScopeCloud, OAuthScopeDB, OAuthScopeUnknown))
 	assertSchemaEnum(t, raw, []string{"$defs", "iam_grant_bucket_count", "properties", "bucket", "enum"}, stringValues(IAMGrantNone, IAMGrantRead, IAMGrantWrite, IAMGrantAdmin, IAMGrantCloud, IAMGrantDeploy, IAMGrantBilling, IAMGrantUnknown))
+}
+
+// The grade reason is the envelope's only sentence-shaped field, so the Go
+// validator and the published schema must constrain it identically.
+func TestRiskEnvelopeSchemaBoundaryGradeReasonParity(t *testing.T) {
+	raw := loadRiskEnvelopeSchema(t)
+	var node any = raw
+	for _, part := range []string{"$defs", "boundary_grade", "properties", "reason", "pattern"} {
+		obj, ok := node.(map[string]any)
+		if !ok {
+			t.Fatalf("schema path stops before %q", part)
+		}
+		node = obj[part]
+	}
+	pattern, ok := node.(string)
+	if !ok {
+		t.Fatalf("boundary_grade reason pattern is %T, want string", node)
+	}
+	if pattern != boundaryGradeReasonPattern.String() {
+		t.Fatalf("schema reason pattern mismatch\ngot:  %s\nwant: %s", pattern, boundaryGradeReasonPattern.String())
+	}
 }
 
 func TestRiskEnvelopeSchemaRejectsFreeTextProjectionFields(t *testing.T) {

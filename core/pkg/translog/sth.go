@@ -23,8 +23,10 @@ type SignedTreeHead struct {
 	Signature string `json:"signature,omitempty"`
 }
 
-// sthSigningPayload is the signed subset of the tree head. Field order
-// is irrelevant: JCS sorts keys lexicographically.
+// sthSigningPayload is the signed subset of the tree head. Go field order is
+// irrelevant to the signed bytes: the canonicalizer sorts object keys by
+// UTF-16 code unit per protocols/specs/rfc/canonical-json-v1.md Section 3.
+// The exact bytes are pinned by TestSTHSigningBytesAreCanonicalGolden.
 type sthSigningPayload struct {
 	LogID     string `json:"log_id"`
 	RootHash  string `json:"root_hash"`

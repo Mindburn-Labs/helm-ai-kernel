@@ -20,6 +20,7 @@ into the same risk vocabulary used by static scan.
 
 After running `scan`, you can show:
 
+- an A–F boundary grade for the scanned tree, with its reason;
 - which agent surface was detected;
 - which risk codes were emitted;
 - how many MCP servers and config files were observed;
@@ -41,6 +42,40 @@ After running `scan`, you can show:
 | Local salt | `--salt-file <path>` |
 | Exclude user config | `--no-user-config` |
 | Content hash | `envelope_content_hash` |
+| Boundary grade | `boundary_grade`, `Boundary grade:` on stdout and in both previews |
+
+## Boundary Grade
+
+A static scan reports one A–F grade for the scanned tree. The grade is
+deterministic — the same tree produces the same letter and the same reason —
+and it is computed from the shadow scanner findings plus whether HELM was
+detected in the tree:
+
+| Grade | Condition |
+| --- | --- |
+| A | boundary present with no ungoverned signals, or no agent surface at all |
+| B | boundary present; MEDIUM signals not yet routed through it |
+| C | boundary present; HIGH-severity exposures remain |
+| D | agent surface detected with no boundary, no HIGH findings |
+| F | agent surface with no boundary and HIGH-severity exposure |
+
+The grade appears on stdout, in `boundary_grade` inside the envelope, and as
+the headline of the Markdown and HTML previews:
+
+```
+Boundary grade: F — 3 agent signal(s) with no execution boundary and 1 HIGH-severity exposure(s)
+```
+
+`boundary_grade` is optional in the schema. Receipt projections observe traffic
+rather than a static tree, so they omit it rather than report a default letter.
+
+The reason is not a free-text field. The envelope and the schema both accept
+only the grader's own deterministic sentences, so no scanned path, repository
+name, or secret can reach an upload body through it.
+
+Scope, as with the rest of a static scan: the grade describes declared and
+locally discoverable configuration. It does not establish what an agent
+executed at runtime.
 
 ## Static Scan
 
@@ -153,6 +188,8 @@ is implied by this command; operators must provide the explicit upload URL.
 | --- | --- |
 | salt generation, `0600` persistence, and local-only salt behavior | `core/pkg/riskenvelope/envelope_test.go` |
 | Go enum to JSON Schema parity | `core/pkg/riskenvelope/envelope_test.go` |
+| grade reason is a closed sentence set in both Go and the schema | `core/pkg/riskenvelope/envelope_test.go`, `core/pkg/riskscan/scan_test.go` |
+| grade reaches the envelope, previews, and stdout | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
 | content hash changes when findings change | `core/pkg/riskenvelope/envelope_test.go` |
 | static projection omits raw paths, repo names, commands, and secrets | `core/pkg/riskscan/scan_test.go` |
 | Markdown, HTML, and evidence pack outputs omit raw inputs | `core/pkg/riskscan/scan_test.go` |

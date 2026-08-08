@@ -23,6 +23,7 @@
       "enum": ["unknown", "1-10repos", "11-50repos", "51-200repos", "201plusrepos"]
     },
     "source_pack_hash": { "$ref": "#/$defs/sha256_ref" },
+    "boundary_grade": { "$ref": "#/$defs/boundary_grade" },
     "findings": {
       "type": "array",
       "items": { "$ref": "#/$defs/finding" }
@@ -39,6 +40,20 @@
     "sha256_ref": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "boundary_grade": {
+      "description": "Optional A-F grade of the scanned agent execution surface. Grades declared and locally discoverable configuration only; it does not establish what an agent executed at runtime. Absent for receipt projections, which have no static tree to grade.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["letter", "reason"],
+      "properties": {
+        "letter": { "enum": ["A", "B", "C", "D", "F"] },
+        "reason": {
+          "description": "Closed set of grader sentences; not free text.",
+          "type": "string",
+          "pattern": "^(?:execution boundary present; no ungoverned agent signals|no agent execution surface detected|boundary present; \\d+ agent signal\\(s\\) not yet routed through it|boundary present but \\d+ HIGH-severity exposure\\(s\\) remain|\\d+ agent signal\\(s\\) with no execution boundary — nothing receipted, nothing replayable|\\d+ agent signal\\(s\\) with no execution boundary and \\d+ HIGH-severity exposure\\(s\\))$"
+        }
+      }
     },
     "finding": {
       "type": "object",

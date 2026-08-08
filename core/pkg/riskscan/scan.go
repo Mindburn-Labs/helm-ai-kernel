@@ -371,7 +371,11 @@ func BuildEnvelope(report *shadow.Report, obs ConfigObservation, opts BuildOptio
 		EnvelopeID:     envelopeID,
 		CohortBucket:   opts.Cohort,
 		SourcePackHash: sourceHash,
-		Findings:       findings,
+		BoundaryGrade: &riskenvelope.BoundaryGrade{
+			Letter: riskenvelope.BoundaryGradeLetter(report.Grade.Letter),
+			Reason: riskenvelope.BoundaryGradeReason(report.Grade.Reason),
+		},
+		Findings: findings,
 		Posture: riskenvelope.PostureProbe{
 			AgentSurface:           resolveAgentSurface(report, obs),
 			PermissionMode:         obs.PermissionMode,
@@ -415,6 +419,11 @@ func RenderMarkdown(envelope riskenvelope.RiskEnvelope) ([]byte, error) {
 	view := newPreviewView(envelope)
 	var b strings.Builder
 	fmt.Fprintf(&b, "# HELM AI Agent Risk Surface\n\n")
+	if view.BoundaryGrade != "" {
+		fmt.Fprintf(&b, "## Boundary grade: %s\n\n", view.BoundaryGrade)
+		fmt.Fprintf(&b, "%s\n\n", view.BoundaryGradeReason)
+		fmt.Fprintf(&b, "The grade covers declared and locally discoverable configuration. It does not establish what an agent executed at runtime.\n\n")
+	}
 	fmt.Fprintf(&b, "- Envelope: `%s`\n", view.EnvelopeID)
 	fmt.Fprintf(&b, "- Content hash: `%s`\n", view.ContentHash)
 	fmt.Fprintf(&b, "- Generated: `%s`\n", view.GeneratedAt)
@@ -835,6 +844,8 @@ type previewRow struct {
 type previewView struct {
 	EnvelopeID            string
 	ContentHash           string
+	BoundaryGrade         string
+	BoundaryGradeReason   string
 	GeneratedAt           string
 	AgentSurface          string
 	PermissionMode        string
@@ -851,9 +862,16 @@ func newPreviewView(envelope riskenvelope.RiskEnvelope) previewView {
 		severity[string(finding.Severity)]++
 		risk[string(finding.RiskCode)]++
 	}
+	grade, gradeReason := "", ""
+	if envelope.BoundaryGrade != nil {
+		grade = string(envelope.BoundaryGrade.Letter)
+		gradeReason = string(envelope.BoundaryGrade.Reason)
+	}
 	return previewView{
 		EnvelopeID:            envelope.EnvelopeID,
 		ContentHash:           envelope.EnvelopeContentHash,
+		BoundaryGrade:         grade,
+		BoundaryGradeReason:   gradeReason,
 		GeneratedAt:           envelope.GeneratedAt.UTC().Format(time.RFC3339),
 		AgentSurface:          string(envelope.Posture.AgentSurface),
 		PermissionMode:        string(envelope.Posture.PermissionMode),
@@ -889,11 +907,17 @@ const htmlPreviewTemplate = `<!doctype html>
     table { border-collapse: collapse; width: 100%; margin: 16px 0 28px; }
     th, td { border-bottom: 1px solid #d8dee8; padding: 8px 4px; text-align: left; }
     th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #52606d; }
+    .grade { font-size: 28px; font-weight: 600; margin: 0 0 4px; }
+    .grade-reason { margin: 0 0 4px; }
+    .grade-scope { color: #52606d; font-size: 13px; margin: 0 0 24px; }
   </style>
 </head>
 <body>
 <main>
   <h1>HELM AI Agent Risk Surface</h1>
+  {{if .BoundaryGrade}}<p class="grade">Boundary grade: {{.BoundaryGrade}}</p>
+  <p class="grade-reason">{{.BoundaryGradeReason}}</p>
+  <p class="grade-scope">The grade covers declared and locally discoverable configuration. It does not establish what an agent executed at runtime.</p>{{end}}
   <p>Envelope <code>{{.EnvelopeID}}</code></p>
   <p>Content hash <code>{{.ContentHash}}</code></p>
   <table>

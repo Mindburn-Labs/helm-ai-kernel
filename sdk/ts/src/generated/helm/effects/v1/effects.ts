@@ -115,6 +115,20 @@ export interface EffectPermit {
   issuedAt: Date | undefined;
   issuerId: string;
   signature: string;
+  /**
+   * evidence_bindings is covered by the effect_permit.v1 signature, so a
+   * transport that drops it produces a permit that cannot verify on the far
+   * side. It was missing here while the Go type carried it, which made v1
+   * signatures in-process only. Field 16 is a backward-compatible add: older
+   * readers ignore it, and newer readers can now reconstruct the exact signed
+   * preimage after a proto hop.
+   */
+  evidenceBindings: { [key: string]: string };
+}
+
+export interface EffectPermit_EvidenceBindingsEntry {
+  key: string;
+  value: string;
 }
 
 export interface GatewayEffectRequest {
@@ -263,6 +277,7 @@ function createBaseEffectPermit(): EffectPermit {
     issuedAt: undefined,
     issuerId: "",
     signature: "",
+    evidenceBindings: {},
   };
 }
 
@@ -313,6 +328,9 @@ export const EffectPermit: MessageFns<EffectPermit> = {
     if (message.signature !== "") {
       writer.uint32(122).string(message.signature);
     }
+    globalThis.Object.entries(message.evidenceBindings).forEach(([key, value]: [string, string]) => {
+      EffectPermit_EvidenceBindingsEntry.encode({ key: key as any, value }, writer.uint32(130).fork()).join();
+    });
     return writer;
   },
 
@@ -443,6 +461,17 @@ export const EffectPermit: MessageFns<EffectPermit> = {
           message.signature = reader.string();
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          const entry16 = EffectPermit_EvidenceBindingsEntry.decode(reader, reader.uint32());
+          if (entry16.value !== undefined) {
+            message.evidenceBindings[entry16.key] = entry16.value;
+          }
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -517,6 +546,23 @@ export const EffectPermit: MessageFns<EffectPermit> = {
         ? globalThis.String(object.issuer_id)
         : "",
       signature: isSet(object.signature) ? globalThis.String(object.signature) : "",
+      evidenceBindings: isObject(object.evidenceBindings)
+        ? (globalThis.Object.entries(object.evidenceBindings) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.String(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.evidence_bindings)
+        ? (globalThis.Object.entries(object.evidence_bindings) as [string, any][]).reduce(
+          (acc: { [key: string]: string }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.String(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
     };
   },
 
@@ -567,6 +613,15 @@ export const EffectPermit: MessageFns<EffectPermit> = {
     if (message.signature !== "") {
       obj.signature = message.signature;
     }
+    if (message.evidenceBindings) {
+      const entries = globalThis.Object.entries(message.evidenceBindings) as [string, string][];
+      if (entries.length > 0) {
+        obj.evidenceBindings = {};
+        entries.forEach(([k, v]) => {
+          obj.evidenceBindings[k] = v;
+        });
+      }
+    }
     return obj;
   },
 
@@ -592,6 +647,95 @@ export const EffectPermit: MessageFns<EffectPermit> = {
     message.issuedAt = object.issuedAt ?? undefined;
     message.issuerId = object.issuerId ?? "";
     message.signature = object.signature ?? "";
+    message.evidenceBindings = (globalThis.Object.entries(object.evidenceBindings ?? {}) as [string, string][]).reduce(
+      (acc: { [key: string]: string }, [key, value]: [string, string]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.String(value);
+        }
+        return acc;
+      },
+      {},
+    );
+    return message;
+  },
+};
+
+function createBaseEffectPermit_EvidenceBindingsEntry(): EffectPermit_EvidenceBindingsEntry {
+  return { key: "", value: "" };
+}
+
+export const EffectPermit_EvidenceBindingsEntry: MessageFns<EffectPermit_EvidenceBindingsEntry> = {
+  encode(message: EffectPermit_EvidenceBindingsEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== "") {
+      writer.uint32(18).string(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EffectPermit_EvidenceBindingsEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEffectPermit_EvidenceBindingsEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.value = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EffectPermit_EvidenceBindingsEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.String(object.value) : "",
+    };
+  },
+
+  toJSON(message: EffectPermit_EvidenceBindingsEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== "") {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EffectPermit_EvidenceBindingsEntry>, I>>(
+    base?: I,
+  ): EffectPermit_EvidenceBindingsEntry {
+    return EffectPermit_EvidenceBindingsEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EffectPermit_EvidenceBindingsEntry>, I>>(
+    object: I,
+  ): EffectPermit_EvidenceBindingsEntry {
+    const message = createBaseEffectPermit_EvidenceBindingsEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? "";
     return message;
   },
 };
@@ -1148,6 +1292,10 @@ function fromJsonTimestamp(o: any): Date {
   } else {
     return fromTimestamp(Timestamp.fromJSON(o));
   }
+}
+
+function isObject(value: any): boolean {
+  return typeof value === "object" && value !== null;
 }
 
 function isSet(value: any): boolean {

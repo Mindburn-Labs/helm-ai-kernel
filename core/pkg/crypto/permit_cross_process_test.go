@@ -66,11 +66,19 @@ func loadPermitWireContract(t *testing.T) permitWireContract {
 	}
 	c := permitWireContract{num: map[string]protowire.Number{}}
 	for _, m := range regexp.MustCompile(`(?m)^\s*(?:map<[^>]+>|[\w.]+)\s+(\w+)\s*=\s*(\d+);`).FindAllSubmatch(block[1], -1) {
-		n, err := strconv.Atoi(string(m[2]))
+		// Parse at the wire's own width and range-check before narrowing. A
+		// protobuf field number is an int32 limited to [1, 2^29-1], so a value
+		// outside that must fail loudly rather than wrap into a plausible tag
+		// and silently encode the permit against the wrong field.
+		n, err := strconv.ParseInt(string(m[2]), 10, 32)
 		if err != nil {
-			t.Fatalf("field %q has an unparseable number %q", m[1], m[2])
+			t.Fatalf("field %q has an unparseable number %q: %v", m[1], m[2], err)
 		}
-		c.num[string(m[1])] = protowire.Number(n)
+		num := protowire.Number(n)
+		if num < protowire.MinValidNumber || num > protowire.MaxValidNumber {
+			t.Fatalf("field %q has out-of-range wire number %d", m[1], n)
+		}
+		c.num[string(m[1])] = num
 	}
 	if len(c.num) == 0 {
 		t.Fatal("parsed no fields from message EffectPermit")

@@ -191,7 +191,7 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		}
 		receiptRef, err := persistOnboardingReceipt(r, svc, step)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		writeOnboardingState(w, r, svc, opts, map[string]string{step.ID: receiptRef})
@@ -203,7 +203,7 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 		}
 		export, err := exportOnboardingEvidence(r, svc, opts)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

@@ -39,14 +39,14 @@ func RegisterPrincipalBindingRoutes(mux *http.ServeMux, svc *Services, opts serv
 			return
 		}
 		if svc == nil || svc.PrincipalBindings == nil {
-			api.WriteInternal(w, errPrincipalBindingsUnavailable)
+			api.WriteInternalR(w, r, errPrincipalBindingsUnavailable)
 			return
 		}
 		if err := svc.PrincipalBindings.Upsert(r.Context(), store.PrincipalBinding{
 			TenantID:    tenantID,
 			PrincipalID: principalID,
 		}); err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

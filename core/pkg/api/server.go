@@ -192,6 +192,13 @@ type ServerConfig struct {
 }
 
 // NewServer creates a new HELM API server.
+//
+// NOTE: this is NOT the helm-ai-kernel daemon's server. The daemon
+// (core/cmd/helm-ai-kernel) registers its own ~111 routes on its own mux and
+// builds its handler chain in buildAPIHandler; this constructor serves the six
+// routes in registerRoutes below and is used by embedders and tests. Wiring a
+// behavior here does not put it on the daemon's request path — HELM-495 was
+// exactly that mistake, with tracing wired here and nowhere else.
 func NewServer(cfg ServerConfig) *Server {
 	receiptSigner := cfg.ReceiptSigner
 	if receiptSigner == nil {
@@ -214,8 +221,9 @@ func NewServer(cfg ServerConfig) *Server {
 	s.registerRoutes()
 	// The edge participates in W3C trace context (HELM-333): every request
 	// runs inside a server span, continuing an inbound traceparent when
-	// present. Configure OTel (otel.SetTracerProvider) before building the
-	// server — the tracer is resolved at construction time.
+	// present. The tracer is resolved per request from the global
+	// TracerProvider, so OTel may be configured after this constructor runs —
+	// only after traffic starts is it too late (see tracing.WrapEdgeHandler).
 	s.edge = tracing.WrapEdgeHandler(http.HandlerFunc(s.serveEdge), "helm.api")
 	return s
 }

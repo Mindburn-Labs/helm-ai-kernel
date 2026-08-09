@@ -58,7 +58,7 @@ func registerExtAuthzRoutes(mux *http.ServeMux, svc *Services) {
 		ctx := kernelotel.ExtractTraceparent(r.Context(), r.Header)
 		resp, err := authorizeExtAuthzRequest(ctx, svc, req, time.Now().UTC())
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

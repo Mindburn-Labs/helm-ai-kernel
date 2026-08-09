@@ -123,7 +123,7 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 
 		guard, err := demoGuardian(svc, action)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		context := demoDecisionContext(action, req.Args)
@@ -134,7 +134,7 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 			Context:   context,
 		})
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		bodyBytes, _ := json.Marshal(map[string]any{"action_id": action.ID, "policy_id": req.PolicyID, "args": req.Args})
@@ -148,7 +148,7 @@ func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
 			"truth_label":            "OSS-BACKED SANDBOX SAMPLE POLICY",
 		})
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		receiptHash, _ := contracts.ReceiptChainHash(receipt)

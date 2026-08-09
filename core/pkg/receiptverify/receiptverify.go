@@ -148,9 +148,10 @@ func (b Bundle) embeddedKeys() map[string]string {
 // also wrote the key beside it. AllowSelfAttested exists so that property can
 // be demonstrated rather than argued about, and it is never the default.
 type TrustRoot struct {
-	// Keys maps key id to a hex-encoded Ed25519 public key. A receipt is
-	// verified against the key named by its key_id, or against every key when
-	// it declares none.
+	// Keys maps key id to a hex-encoded Ed25519 public key. Every key in the
+	// map is trusted. A receipt's declared key_id selects which key to try
+	// first; it never excludes the others, because key_id is data the receipt's
+	// producer wrote and a trust decision cannot hang on it.
 	Keys map[string]string
 	// AllowSelfAttested permits falling back to the receipt's own embedded
 	// PublicKeySet. This makes the receipt self-referential and is only useful
@@ -252,19 +253,25 @@ func verifyEd25519(pubKeyHex, sigHex string, data []byte) (bool, error) {
 	return ed25519.Verify(ed25519.PublicKey(pubKey), data, sig), nil
 }
 
-// candidateKeys returns the keys to try for a receipt, in trust order.
-// embedded is bundle-level self-declared key material, reachable only under
-// AllowSelfAttested and only after the receipt's own PublicKeySet.
+// candidateKeys returns the keys to try for a receipt.
+//
+// The receipt's declared key_id is a routing hint — the matching trusted key
+// is tried first — and never a filter: every caller-supplied key is trusted,
+// and a producer-written field must not be able to veto one. embedded is
+// bundle-level self-declared key material, reachable only under
+// AllowSelfAttested and only when no caller-supplied key exists.
 func candidateKeys(r *contracts.Receipt, trust TrustRoot, embedded map[string]string) ([]string, error) {
 	var keys []string
 	if r.KeyID != "" {
 		if k, ok := trust.Keys[r.KeyID]; ok {
 			keys = append(keys, k)
 		}
-	} else {
-		for _, k := range trust.Keys {
-			keys = append(keys, k)
+	}
+	for id, k := range trust.Keys {
+		if r.KeyID != "" && id == r.KeyID {
+			continue // already first
 		}
+		keys = append(keys, k)
 	}
 	if len(keys) > 0 {
 		return keys, nil

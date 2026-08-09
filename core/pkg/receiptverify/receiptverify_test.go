@@ -299,6 +299,20 @@ func TestSelfAttestedKeyIsRefusedByDefault(t *testing.T) {
 	}
 }
 
+// TestKeyIDIsAHintNotAFilter: key_id is data the receipt's producer wrote. It
+// may route which trusted key is tried first; it must never veto one. A
+// receipt declaring a wrong or hostile key_id still verifies when the caller
+// supplied the right key under any name.
+func TestKeyIDIsAHintNotAFilter(t *testing.T) {
+	fx := loadFrozen(t)
+	res := Verify(fx.Receipts, TrustRoot{Keys: map[string]string{
+		"a-name-the-receipt-never-declared": fx.PublicKeyHex,
+	}})
+	if !res.Valid {
+		t.Fatalf("a trusted key was vetoed by the receipt's self-declared key_id: %+v", res)
+	}
+}
+
 func TestWrongKeyIsRejected(t *testing.T) {
 	fx := loadFrozen(t)
 	_, other, err := ed25519.GenerateKey(nil)

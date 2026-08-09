@@ -64,22 +64,22 @@ type PermitScope struct {
 // the signed schema and must not be confusable with a field a transport
 // dropped.
 type permitV1SigningEnvelope struct {
-	SignatureVersion string                  `json:"signature_version"`
-	PermitID         string                  `json:"permit_id"`
-	IntentHash       string                  `json:"intent_hash"`
-	VerdictHash      string                  `json:"verdict_hash"`
-	PlanHash         string                  `json:"plan_hash"`
-	PolicyHash       string                  `json:"policy_hash"`
-	EffectType       string                  `json:"effect_type"`
-	ConnectorID      string                  `json:"connector_id"`
-	Scope            permitV1EnvelopeScope   `json:"scope"`
-	ResourceRef      string                  `json:"resource_ref"`
-	ExpiresAt        time.Time               `json:"expires_at"`
-	SingleUse        bool                    `json:"single_use"`
-	Nonce            string                  `json:"nonce"`
-	IssuedAt         time.Time               `json:"issued_at"`
-	IssuerID         string                  `json:"issuer_id"`
-	EvidenceBindings map[string]string       `json:"evidence_bindings"`
+	SignatureVersion string                `json:"signature_version"`
+	PermitID         string                `json:"permit_id"`
+	IntentHash       string                `json:"intent_hash"`
+	VerdictHash      string                `json:"verdict_hash"`
+	PlanHash         string                `json:"plan_hash"`
+	PolicyHash       string                `json:"policy_hash"`
+	EffectType       string                `json:"effect_type"`
+	ConnectorID      string                `json:"connector_id"`
+	Scope            permitV1EnvelopeScope `json:"scope"`
+	ResourceRef      string                `json:"resource_ref"`
+	ExpiresAt        time.Time             `json:"expires_at"`
+	SingleUse        bool                  `json:"single_use"`
+	Nonce            string                `json:"nonce"`
+	IssuedAt         time.Time             `json:"issued_at"`
+	IssuerID         string                `json:"issuer_id"`
+	EvidenceBindings map[string]string     `json:"evidence_bindings"`
 }
 
 type permitV1EnvelopeScope struct {

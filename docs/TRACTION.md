@@ -334,8 +334,8 @@ Run this checklist before publishing README edits, launch posts, diagrams, video
   Cloud as its paid hosted tier) and HELM AI OS. Kernel, Company Builder,
   Company OS, Console, and HELM Network are layers of HELM, not products.
 - Attaches a status label - Live, Preview, reviewed access, pilot, Building, or
-  coming soon - to every paid-surface capability, and does not state one in the
-  bare present tense before its release evidence exists.
+  roadmap - to every paid-surface capability, and does not state one in the bare
+  present tense before its release evidence exists.
 - Does not mention robot fleets, AGI OS, OrgDNA compiler, Titan, or physical-world control in OSS copy.
 
 ## Diagram Doctrine

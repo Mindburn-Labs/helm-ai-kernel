@@ -89,13 +89,20 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.8.2] - pending tag
+## [0.8.3] - pending tag
 
-Completing release target for the v0.8 train. v0.8.0 and v0.8.1 both stopped
-before their GitHub Release and full asset set; neither is a completed public
-release and neither may be described as one. Their partial registry
-publications are permanent and are the reason this train advances the version
-rather than reissuing one.
+Completing release target for the v0.8 train. v0.8.0, v0.8.1 and v0.8.2 all
+stopped before their GitHub Release and full asset set; none is a completed
+public release and none may be described as one. Their partial public records
+are permanent and are the reason this train advances the version rather than
+reissuing one.
+
+The local Console closure is bound to a distinct v0.8.3 Console workflow tag
+while retaining the exact reviewed source pin that built green for the v0.8.1
+train (`app-helm-console` commit `c0fd6b446`, sidecar `0.2.1`) — the same
+practice recorded for v0.8.1. Console `main` has moved since; folding those
+changes into a release whose scope is completing a stranded train would widen
+it through a packaging path never exercised on that tree.
 
 ### Added
 
@@ -106,12 +113,34 @@ rather than reissuing one.
 - `evidence_bindings` has a wire representation in the effects proto, so a
   signed permit keeps verifying after crossing a process boundary. Every
   language binding carries the field.
+- A pre-tag `console-sidecar-pin` quality gate requires a Console source pin
+  row for the checked-in `VERSION` in the pr, merge and release profiles. The
+  release job reads the pin file from the tag commit, so a row missing at tag
+  time strands the tag permanently; the gate catches it while it is still one
+  line in a pull request.
 
 ### Fixed
 
 - The release preflight requires the tagged commit to be reachable from
   `main` rather than identical to it. Requiring identity made a tagged release
   uncompletable as soon as anything merged, which is how v0.8.1 was stranded.
+- The CLI refuses to exercise authority it was not given: `approvals
+  approve`/`deny`/`assert` no longer default the actor, receipt or approval
+  id (a bare `approvals approve` used to approve the bootstrap ceremony and
+  attribute it to a principal that does not exist), an unrecognized flag no
+  longer starts the server or mints a trust root in the working directory,
+  and asking any boundary surface for `--help` no longer seeds or rewrites
+  authority state on disk.
+
+## [0.8.2] - stranded, superseded by 0.8.3
+
+Tagged at `7d63fb8c1` and permanently bound to that commit by the Go checksum
+transparency log and a Sigstore build-provenance attestation before the
+release run failed: the tagged tree carried no Console source pin row for
+v0.8.2, and the pin file is read from the tag commit. The tag cannot be moved
+without falsifying those records, and no GitHub Release or asset set exists.
+The permit-signing and wire-representation work first described under 0.8.2
+ships in 0.8.3.
 
 ## [0.8.1] - stranded, superseded by 0.8.2
 

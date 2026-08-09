@@ -67,12 +67,12 @@ or counterparty needs the signer's public key over an independent channel.
 Running with `--allow-self-attested` verifies against a key that travelled
 inside the pack; that shows internal consistency and nothing about origin.
 
-The byte-construction rule for the mainline receipt is **not yet published**, so
-a third party cannot currently write an independent verifier from a
-specification — they run this one. The mainline receipt is recorded as
-integrity-UNSPECIFIED in
-[ADR 0003 §D4](../adr/0003-normative-artifact-arbitration.md), and publishing
-the specification is tracked as remediation step P2-3. **Status: coming soon.**
+The byte-construction rule for the mainline receipt is not published, so a third
+party cannot currently write an independent verifier from a specification — they
+run this one. The mainline receipt is recorded as integrity-UNSPECIFIED in
+[ADR 0003 §D4](../adr/0003-normative-artifact-arbitration.md).
+**Status: unpublished**, tracked as remediation step P2-3. Treat a published
+receipt specification as absent until that step lands, not as pending.
 
 ## Audit Receipt Chain
 

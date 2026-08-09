@@ -250,12 +250,25 @@ Without one it is a second definition of a signed preimage.
 
 ### 6.2 Outside this specification's scope
 
-`protocols/policy-schema/v1/canonicalization.md` is a **separate** normative
-canonicalization, for the `*_canonical` protobuf fields of policy artifacts
-across the native-Rust and WASM policy runtimes. It does not claim RFC 8785
-and it orders keys by Unicode code point (its Section 2.1). It is not governed
-by this document, and this document's Section 3 does not apply to it. The two
-schemes must not be conflated when a digest disagrees.
+`protocols/policy-schema/v1/canonicalization.md` describes a **separate and
+unimplemented** canonicalization: the intended content of the `*_canonical`
+protobuf fields on the `helm.policy.v1` messages (`params_canonical`,
+`value_canonical`, `tooltip_model_canonical` and the rest). It is a design
+target, not a conformance target. It sits outside `protocols/specs/`, has no
+reference pack under `reference_packs/`, and no gate checks any rule in it, so
+under ADR 0003 §§D2–D3 it is UNSPECIFIED and MUST NOT be cited as a
+specification. `helm.policy.v1` generates no code — `sdk/go/gen/helm/` carries
+`{authority,effects,intervention,kernel,truth}/v1` only — so nothing in this
+repository populates those fields.
+
+The distinction from this document is one of subject, not of rule: this
+document specifies a JSON encoder and the exact bytes it emits, while that page
+sketches per-message canonical-bytes profiles for protobuf artifacts — which
+fields enter a preimage, and how repeated fields and maps are ordered before
+encoding. If those profiles are ever implemented they MUST take their JSON
+bytes from `canonicalize.JCS` rather than re-derive the rule; a profile that
+re-derives it is a second definition of a signed preimage, which Section 6.1
+admits only with an equivalence test.
 
 New code MUST NOT construct a canonical encoder from `encoding/json`,
 `json.dumps`, `serde_json::to_string` or any other library encoder without

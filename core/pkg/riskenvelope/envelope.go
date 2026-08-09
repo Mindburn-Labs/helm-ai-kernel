@@ -21,6 +21,21 @@ const SaltBytes = 32
 var (
 	hmacRefPattern   = regexp.MustCompile(`^hmac:[a-f0-9]{64}$`)
 	sha256RefPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
+	// boundaryGradeReasonPattern is the closed set of sentences the local
+	// grader emits. The reason is carried as a string, so it is the one place
+	// a scanned path, repository name, or secret could otherwise reach an
+	// upload body; pinning the exact shapes keeps that closed. Changing a
+	// grader sentence therefore requires changing this pattern too, and
+	// riskscan asserts the two stay in step.
+	boundaryGradeReasonPattern = regexp.MustCompile(`^(?:` + strings.Join([]string{
+		`execution boundary present; no ungoverned agent signals`,
+		`no agent execution surface detected`,
+		`boundary present; \d+ agent signal\(s\) not yet routed through it`,
+		`boundary present but \d+ HIGH-severity exposure\(s\) remain`,
+		`\d+ agent signal\(s\) with no execution boundary — nothing receipted, nothing replayable`,
+		`\d+ agent signal\(s\) with no execution boundary and \d+ HIGH-severity exposure\(s\)`,
+	}, "|") + `)$`)
 )
 
 type CohortBucket string
@@ -139,12 +154,36 @@ const (
 	IAMGrantUnknown IAMGrantBucket = "unknown"
 )
 
+type BoundaryGradeLetter string
+
+const (
+	BoundaryGradeA BoundaryGradeLetter = "A"
+	BoundaryGradeB BoundaryGradeLetter = "B"
+	BoundaryGradeC BoundaryGradeLetter = "C"
+	BoundaryGradeD BoundaryGradeLetter = "D"
+	BoundaryGradeF BoundaryGradeLetter = "F"
+)
+
+// BoundaryGrade is the A–F grade of the scanned agent execution surface. It
+// grades declared and locally discoverable configuration; it does not observe
+// what an agent executed at runtime. Optional: a receipt projection has no
+// static tree to grade and omits it.
+type BoundaryGrade struct {
+	Letter BoundaryGradeLetter `json:"letter"`
+	Reason BoundaryGradeReason `json:"reason"`
+}
+
+// BoundaryGradeReason is the one-line justification for a grade. It is not free
+// text: only the grader's own deterministic sentences validate.
+type BoundaryGradeReason string
+
 type RiskEnvelope struct {
 	SchemaVersion       string               `json:"schema_version"`
 	EnvelopeID          string               `json:"envelope_id"`
 	EnvelopeContentHash string               `json:"envelope_content_hash"`
 	CohortBucket        CohortBucket         `json:"cohort_bucket"`
 	SourcePackHash      string               `json:"source_pack_hash"`
+	BoundaryGrade       *BoundaryGrade       `json:"boundary_grade,omitempty"`
 	Findings            []EnvelopeFinding    `json:"findings"`
 	Posture             PostureProbe         `json:"posture"`
 	Privacy             PrivacyNonCollection `json:"privacy"`
@@ -331,6 +370,11 @@ func (e RiskEnvelope) Validate() error {
 	if err := e.Privacy.validate(); err != nil {
 		return fmt.Errorf("privacy: %w", err)
 	}
+	if e.BoundaryGrade != nil {
+		if err := e.BoundaryGrade.validate(); err != nil {
+			return fmt.Errorf("boundary_grade: %w", err)
+		}
+	}
 	for i, finding := range e.Findings {
 		if err := finding.validate(); err != nil {
 			return fmt.Errorf("findings[%d]: %w", i, err)
@@ -413,6 +457,16 @@ func (p PostureProbe) validate() error {
 	return nil
 }
 
+func (g BoundaryGrade) validate() error {
+	if !validBoundaryGradeLetter(g.Letter) {
+		return fmt.Errorf("invalid letter %q", g.Letter)
+	}
+	if !boundaryGradeReasonPattern.MatchString(string(g.Reason)) {
+		return fmt.Errorf("reason must be one of the grader's deterministic sentences")
+	}
+	return nil
+}
+
 func (p PrivacyNonCollection) validate() error {
 	if p.RawPromptsCollected || p.SourceCodeCollected || p.SecretValuesCollected || p.CommandBodiesExported {
 		return fmt.Errorf("risk envelope upload must not collect prompts, source code, secret values, or command bodies")
@@ -423,6 +477,15 @@ func (p PrivacyNonCollection) validate() error {
 func validCohortBucket(v CohortBucket) bool {
 	switch v {
 	case CohortUnknown, CohortRepos1To10, CohortRepos11To50, CohortRepos51To200, CohortRepos201Plus:
+		return true
+	default:
+		return false
+	}
+}
+
+func validBoundaryGradeLetter(v BoundaryGradeLetter) bool {
+	switch v {
+	case BoundaryGradeA, BoundaryGradeB, BoundaryGradeC, BoundaryGradeD, BoundaryGradeF:
 		return true
 	default:
 		return false

@@ -44,6 +44,34 @@ func TestScanCommandWritesLocalArtifacts(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Content hash: sha256:") {
 		t.Fatalf("stdout missing content hash: %s", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "Boundary grade: F — ") {
+		t.Fatalf("stdout missing boundary grade: %s", stdout.String())
+	}
+	riskMD, _ := os.ReadFile(filepath.Join(out, "risk.md"))
+	if !bytes.Contains(riskMD, []byte("Boundary grade: F")) {
+		t.Fatalf("markdown preview missing boundary grade: %s", riskMD)
+	}
+}
+
+func TestScanCommandPrintsCleanBoundaryGrade(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	out := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"helm-ai-kernel", "scan",
+		"--path", t.TempDir(),
+		"--salt-file", filepath.Join(out, "salt.hex"),
+		"--no-user-config",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("scan code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	want := "Boundary grade: A — no agent execution surface detected"
+	if !strings.Contains(stdout.String(), want) {
+		t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+	}
 }
 
 func TestScanCommandUploadRequiresURLAndConfirmation(t *testing.T) {

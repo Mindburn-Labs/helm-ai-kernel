@@ -40,6 +40,17 @@ pub struct EffectPermit {
     pub issuer_id: ::prost::alloc::string::String,
     #[prost(string, tag = "15")]
     pub signature: ::prost::alloc::string::String,
+    /// evidence_bindings is covered by the effect_permit.v1 signature, so a
+    /// transport that drops it produces a permit that cannot verify on the far
+    /// side. It was missing here while the Go type carried it, which made v1
+    /// signatures in-process only. Field 16 is a backward-compatible add: older
+    /// readers ignore it, and newer readers can now reconstruct the exact signed
+    /// preimage after a proto hop.
+    #[prost(map = "string, string", tag = "16")]
+    pub evidence_bindings: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GatewayEffectRequest {

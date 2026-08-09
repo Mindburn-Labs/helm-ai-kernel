@@ -49,6 +49,14 @@ test-effect-reservation-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle -count=10
 
+.PHONY: verify-canonical-json-vectors
+
+# The canonicalization contract every other vector pack is built on. Run this
+# first when a signing preimage disagrees across languages.
+verify-canonical-json-vectors:
+	cd core && go test ./pkg/canonicalize -run TestCanonicalJSONReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/canonical-json-v1/verify_vectors.py
+
 verify-approval-ceremony-vectors:
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
 	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalCeremonyGoldenVectors -count=1
@@ -125,6 +133,7 @@ verify-fixtures:
 	cd core && go test ./pkg/boundary/extauthz -run TestContract -count=1
 	cd core && go test ./pkg/canonicalize -run TestExtauthzGoldenVectorsAreCanonical -count=1
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
+	$(MAKE) verify-canonical-json-vectors
 	$(MAKE) verify-approval-ceremony-vectors
 	$(MAKE) verify-generated-spec-approval-ceremony-vectors
 	$(MAKE) verify-connector-release-authority-vectors

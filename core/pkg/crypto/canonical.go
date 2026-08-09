@@ -3,10 +3,8 @@
 package crypto
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -16,30 +14,30 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
-// CanonicalMarshal marshals v into canonical JSON format (RFC 8785).
-// Key features:
-// 1. Map keys sorted lexicographically (Go default)
-// 2. No HTML escaping (SetEscapeHTML(false))
-// 3. Compact representation (no whitespace)
-// 4. Trailing newline is NOT added
+// CanonicalMarshal marshals v into HELM canonical JSON.
+//
+// It is a thin alias for canonicalize.JCS and exists only so the callers that
+// predate the canonicalize package keep compiling. Do not add new callers;
+// call canonicalize.JCS (or canonicalize.InteroperableJCS for bytes that will
+// be published as a test vector) directly.
+//
+// Before 2026-08-06 this function was a second, independent encoder built on
+// encoding/json.Encoder. It disagreed with canonicalize.JCS on three inputs:
+// it emitted struct fields in Go declaration order instead of sorted order,
+// it escaped U+2028/U+2029 (which RFC 8785 Section 3.2.2.2 requires to be
+// emitted literally), and it escaped the U+FFFD substitutions produced from
+// ill-formed UTF-8. Because it signed transparency-log tree heads
+// (translog.SignedTreeHead.SigningBytes), reordering a Go struct field
+// silently changed signed bytes. The three in-repo call sites are
+// byte-for-byte unchanged by the switch; that is asserted by
+// TestCanonicalMarshalCallSiteShapesAreByteStable in this package and by
+// TestSTHSigningBytesAreCanonicalGolden in core/pkg/translog.
 func CanonicalMarshal(v interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "") // Compact
-
-	if err := enc.Encode(v); err != nil {
+	b, err := canonicalize.JCS(v)
+	if err != nil {
 		return nil, fmt.Errorf("canonical encoding failed: %w", err)
 	}
-
-	// json.Encoder.Encode adds a trailing newline, which we must remove for strict JCS compliance
-	// if we want pure content addressing of the value data.
-	ret := buf.Bytes()
-	if len(ret) > 0 && ret[len(ret)-1] == '\n' {
-		ret = ret[:len(ret)-1]
-	}
-
-	return ret, nil
+	return b, nil
 }
 
 // Signature components separators and prefixes

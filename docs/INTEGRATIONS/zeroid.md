@@ -1,31 +1,116 @@
-# Highflame ZeroID Interoperability Adapter
+# Highflame ZeroID — Not Integrated
 
-> Status: source-backed adapter candidate. This page documents the source-owned adapter path for Highflame ZeroID cryptographic credentials within the HELM AI Kernel Guardian policy engine; it is not release or runtime evidence.
+<!-- quantum_posture: this page describes the Guardian's classical Ed25519 decision signer as it exists; it implements no cryptographic control and makes no post-quantum claim. -->
 
-HELM integrates with Highflame ZeroID to enforce zero-trust identity authentication at the execution boundary. By validating ZeroID cryptographic tokens and SPIFFE URIs, HELM ensures that all dispatched tool calls and model requests originate from authenticated, policy-authorized principals.
+> [!IMPORTANT]
+> **ZeroID credential authentication is not implemented, and is not staged for
+> release.** No availability label applies to it: it is not Live, not Preview,
+> not reviewed access, and not a pilot. It is not on a roadmap either — there is
+> no dated ticket to build it. HELM does not verify Highflame ZeroID tokens,
+> does not derive a principal from them, and does not treat a SPIFFE URI
+> supplied by a caller as an identity.
+>
+> **What is Live** is a deny gate. `ZeroIDInterceptor` is the first interceptor
+> in every Guardian's default boundary chain, and it refuses any request that
+> presents a ZeroID envelope. Requests without one are untouched.
+>
+> Implementation of record: [`core/pkg/guardian/zeroid.go`](../../core/pkg/guardian/zeroid.go)
+> and its regression test [`core/pkg/guardian/zeroid_test.go`](../../core/pkg/guardian/zeroid_test.go).
+> Chain position: [`core/pkg/guardian/guardian.go`](../../core/pkg/guardian/guardian.go) (`boundaryChain`).
 
-## Architecture & Policy-Routing Logic
+## Retraction
 
-The ZeroID implementation is centered around the `ZeroIDInterceptor` under `core/pkg/guardian/zeroid.go`. It intercepts every inbound execution request to validate identity claims:
+An earlier revision of this page stated that HELM "ensures that all dispatched
+tool calls and model requests originate from authenticated, policy-authorized
+principals" by "validating ZeroID cryptographic tokens and SPIFFE URIs", that a
+validated SPIFFE URI is "bound to the `EvaluationContext.Request.Principal`",
+and that "the backend is pinned to `zeroid_verified`".
 
-1. **Continuous Access Evaluation (CAEP / SSF)**:
-   The interceptor maintains an in-memory revocation index. When a token revocation event is received via a CAEP (Continuous Access Evaluation Protocol) or SSF (Shared Signals and Events) stream, the token hash is dynamically marked as revoked. Subsequent requests using the revoked token are immediately blocked.
-   
-2. **SPIFFE URI Format Validation**:
-   Any SPIFFE identity provided in the request context (`spiffe_uri`) must conform to the standard format (prefixed with `spiffe://`). Malformed identities trigger an immediate deny decision.
+**None of that is true, and the behaviour it described was the security defect,
+not the defence.** It is recorded as finding **F-04 (severity T0)** in the
+[kernel security remediation ledger](../security/kernel-security-remediation-ledger.md):
+the interceptor overwrote the authenticated principal with a caller-supplied
+`spiffe_uri` after checking only that the string began with `spiffe://`, then
+labelled the result `zeroid_verified`. Because the interceptor runs first in
+every Guardian, that gave any caller who could reach the kernel a one-field
+cross-tenant impersonation primitive — the spoofed principal went on to drive
+privilege-tier resolution and behavioural trust scoring downstream. The proof of
+concept promoted a tenant-A low-privilege agent to
+`spiffe://tenant-b.example/admin` before the PDP ever ran.
 
-3. **Context Binding & Cedar Policy Down-Routing**:
-   Once validated, the SPIFFE URI is bound to the `EvaluationContext.Request.Principal` and the backend is pinned to `zeroid_verified`. This allows downstream Cedar policy evaluations to route decisions based on verified cryptographically bound identities rather than arbitrary names.
+F-04 is fixed. The fix was to stop binding the principal, not to start verifying
+the token. The string `zeroid_verified` no longer appears in any runtime path;
+the only occurrences left in the repository are the two comments and the one
+test assertion that forbid it.
+
+## What actually happens to a request
+
+The interceptor reads `zeroid_token` and `spiffe_uri` from
+`EvaluationContext.Request.Context` — the caller-supplied context map — and
+nothing else. It never writes to `Request.Principal`.
+
+| Request | Outcome | Reason code |
+|---|---|---|
+| Neither `zeroid_token` nor `spiffe_uri` present | Passes through to the rest of the chain, unmodified | — |
+| `zeroid_token` present and in the in-process revocation index | `DENY` | `TAINTED_CREDENTIAL_ACCESS_DENY` |
+| `spiffe_uri` present and not prefixed `spiffe://` | `DENY` | `IDENTITY_ISOLATION_VIOLATION` |
+| Any other envelope, including a well-formed `spiffe://` URI and a plausible token | `DENY` | `IDENTITY_ISOLATION_VIOLATION` |
+
+The last row is the one that matters: **a correctly formatted ZeroID envelope is
+denied.** There is no ZeroID token format, no issuer/audience/expiry model, and
+no trust-distribution mechanism for verification keys, so there is nothing the
+interceptor could check a token against. It refuses rather than guesses.
+
+The interceptor is retained rather than deleted so that a presented envelope
+meets an explicit signed `DENY` instead of being silently ignored by a later
+stage.
+
+### The revocation index does not gate anything
+
+`IngestCAEPRevocation(tokenHash string)` is an in-process Go method on the
+interceptor. **No CAEP or SSF stream receiver ships in this repository** — the
+method has no caller outside the test suite, and nothing subscribes to a
+Continuous Access Evaluation or Shared Signals feed. An embedder can call it
+directly, but doing so changes only which reason code a denied request carries.
+Revocation is checked first purely so that an explicitly revoked credential is
+distinguishable from one that merely cannot be verified. Every envelope is
+denied either way.
+
+## Decision records
+
+A deny is written as a `DecisionRecord` with verdict `DENY`, the reason code
+above, the Guardian's environment fingerprint, and the request context as
+`InputContext`. It is signed with the Guardian's configured signer; if signing
+fails the interceptor returns an error and no decision, so the request cannot
+proceed. When an audit log is configured, the record is also appended under the
+event type `ZEROID_DENY`.
+
+This page makes no claim about the completeness or offline verifiability of that
+signature. The signing preimage carries open findings of its own — see F-05 and
+F-06 in the [remediation ledger](../security/kernel-security-remediation-ledger.md).
 
 ## Verification
-
-To run the automated suite verifying continuous CAEP revocation and SPIFFE format validation:
 
 ```bash
 cd core
 go test ./pkg/guardian -run TestZeroIDContinuousEvaluation -v
 ```
 
-## Deny Reason Classification
+The suite asserts the behaviour documented above, including that an unverifiable
+envelope is denied, that it never reaches the rest of the chain, that the
+authenticated principal survives untouched, and that nothing is labelled
+`zeroid_verified`.
 
-If a credential is found to be revoked or dynamically tainted, the Guardian issues a signed decision record with `ReasonTaintedCredentialDeny`. If the SPIFFE identity contains format violations, `ReasonIdentityIsolationViolation` is returned instead. All decisions are sealed and signed with HELM's offline-verifiable keys.
+## What building a real ZeroID adapter would require
+
+Not a roadmap commitment — the preconditions, so that the gap is legible:
+
+1. A specified ZeroID token format.
+2. Signature verification against keys obtained from a trust root, not from the
+   request.
+3. Issuer, audience, and expiry checks.
+4. A real revocation source wired to the index — an actual CAEP/SSF subscriber.
+5. Principal binding only after all of the above.
+
+Until all five exist, binding an unverified principal is worse than refusing the
+request.

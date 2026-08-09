@@ -62,6 +62,9 @@ func Dispatch(name string, args []string, stdout, stderr io.Writer) (int, bool) 
 	if !ok {
 		return 0, false
 	}
+	// Only depth-1 help is answered here. Deeper help belongs to the leaf, which
+	// owns the flag set being described — see TestNestedHelpReachesLeafFlagSets.
+	// A leaf is responsible for answering it before it touches any state.
 	if len(args) == 1 && isHelpRequest(args) {
 		printSubcommandHelp(cmd, stdout)
 		return 0, true

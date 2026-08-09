@@ -21,6 +21,21 @@ import (
 	runtimesandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 )
 
+// answeredSurfaceHelp answers a help request for a boundary-surface router and
+// reports whether it did. Every one of these routers builds the file-backed
+// registry before it inspects its arguments, and on a fresh data directory that
+// seeds and writes authority state. Asking a governance command what it does
+// must not be the same as running it, so help is answered here, upstream of the
+// registry. Leaf-specific flag help is a separate improvement (plan 004); this
+// only guarantees the question is side-effect free.
+func answeredSurfaceHelp(usage string, args []string, stdout io.Writer) bool {
+	if len(args) == 0 || !isHelpRequest(args) {
+		return false
+	}
+	fmt.Fprintln(stdout, usage)
+	return true
+}
+
 func newLocalSurfaceRegistry() *boundarypkg.SurfaceRegistry {
 	registry, err := boundarypkg.NewFileBackedSurfaceRegistry(defaultBoundaryRegistryPath(), time.Now)
 	if err == nil {
@@ -74,6 +89,9 @@ func runBoundarySurfaceCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	if args[0] == "profile" {
 		return runBoundaryProfileCmd(args[1:], stdout, stderr)
+	}
+	if answeredSurfaceHelp("Usage: helm-ai-kernel boundary <status|capabilities|records|get|verify|checkpoint|profile> [flags]", args, stdout) {
+		return 0
 	}
 	registry := newLocalSurfaceRegistry()
 	switch args[0] {
@@ -263,6 +281,9 @@ func runAuthzSurfaceCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel authz <health|check|snapshots|get> [flags]")
 		return 2
 	}
+	if answeredSurfaceHelp("Usage: helm-ai-kernel authz <list|show|grant|revoke> [flags]", args, stdout) {
+		return 0
+	}
 	registry := newLocalSurfaceRegistry()
 	switch args[0] {
 	case "health":
@@ -391,6 +412,9 @@ func runApprovalsSurfaceCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel approvals <list|create|approve|deny|revoke|challenge|assert> [flags]")
 		return 2
 	}
+	if answeredSurfaceHelp("Usage: helm-ai-kernel approvals <list|show|approve|deny|challenge|assert> [flags]", args, stdout) {
+		return 0
+	}
 	registry := newLocalSurfaceRegistry()
 	switch args[0] {
 	case "list":
@@ -509,9 +533,9 @@ func runApprovalsAssert(args []string, registry *boundarypkg.SurfaceRegistry, st
 	cmd := flag.NewFlagSet("approvals assert", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 	challengeID := cmd.String("challenge-id", "", "Challenge id")
-	actor := cmd.String("actor", "user:local-admin", "Actor")
+	actor := cmd.String("actor", "", "Principal presenting the assertion (required)")
 	assertion := cmd.String("assertion", "", "Passkey/WebAuthn assertion or local signed assertion")
-	receiptID := cmd.String("receipt-id", "receipt-local-approval", "Receipt id")
+	receiptID := cmd.String("receipt-id", "", "Receipt this assertion is recorded against (required)")
 	reason := cmd.String("reason", "passkey assertion accepted", "Reason")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
 	if err := cmd.Parse(args); err != nil {
@@ -519,6 +543,13 @@ func runApprovalsAssert(args []string, registry *boundarypkg.SurfaceRegistry, st
 	}
 	if *challengeID == "" || *assertion == "" {
 		fmt.Fprintln(stderr, "Error: --challenge-id and --assertion are required")
+		return 2
+	}
+	// An assertion names the principal it authenticates. Defaulting the actor or
+	// the receipt would attribute a passkey ceremony to a principal who never
+	// presented one.
+	if missing := missingApprovalIdentity(*actor, *receiptID); len(missing) > 0 {
+		fmt.Fprintf(stderr, "Error: %s required; an assertion must name the principal and the receipt\n", strings.Join(missing, ", "))
 		return 2
 	}
 	approval, err := registry.AssertApprovalChallenge(contracts.ApprovalWebAuthnAssertion{
@@ -542,12 +573,31 @@ func runApprovalsAssert(args []string, registry *boundarypkg.SurfaceRegistry, st
 	return 0
 }
 
+// missingApprovalIdentity names the identity fields an approval command left
+// empty. It exists so the transition and assertion paths cannot drift: both
+// write a principal and a receipt into the permanent ceremony record, and
+// neither may invent one.
+func missingApprovalIdentity(actor, receiptID string) []string {
+	var missing []string
+	if strings.TrimSpace(actor) == "" {
+		missing = append(missing, "--actor")
+	}
+	if strings.TrimSpace(receiptID) == "" {
+		missing = append(missing, "--receipt-id")
+	}
+	return missing
+}
+
 func runApprovalsTransition(args []string, registry *boundarypkg.SurfaceRegistry, state contracts.ApprovalCeremonyState, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("approvals transition", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
-	approvalID := cmd.String("approval-id", "approval-bootstrap", "Approval id")
-	actor := cmd.String("actor", "user:local-admin", "Actor")
-	receiptID := cmd.String("receipt-id", "receipt-local-approval", "Receipt id")
+	// None of these carry a default. A transition records who exercised authority
+	// and against which receipt; a default would write an unattended command into
+	// the ceremony as though a named principal had reviewed it.
+	approvalID := cmd.String("approval-id", "", "Approval id (required; may also be given positionally)")
+	actor := cmd.String("actor", "", "Principal exercising the authority (required)")
+	receiptID := cmd.String("receipt-id", "", "Receipt this decision is recorded against (required)")
+	expectedCeremonyHash := cmd.String("expected-ceremony-hash", "", "Refuse the transition unless the approval still matches this reviewed hash")
 	reason := cmd.String("reason", string(state), "Reason")
 	jsonOutput := cmd.Bool("json", false, "Output as JSON")
 	if err := cmd.Parse(args); err != nil {
@@ -556,7 +606,15 @@ func runApprovalsTransition(args []string, registry *boundarypkg.SurfaceRegistry
 	if *approvalID == "" && cmd.NArg() > 0 {
 		*approvalID = cmd.Arg(0)
 	}
-	approval, err := registry.TransitionApproval(*approvalID, state, *actor, *receiptID, *reason)
+	missing := missingApprovalIdentity(*actor, *receiptID)
+	if strings.TrimSpace(*approvalID) == "" {
+		missing = append([]string{"--approval-id"}, missing...)
+	}
+	if len(missing) > 0 {
+		fmt.Fprintf(stderr, "Error: %s required; a transition must name the approval, the principal, and the receipt\n", strings.Join(missing, ", "))
+		return 2
+	}
+	approval, err := registry.TransitionApprovalIfCurrent(*approvalID, state, *actor, *receiptID, *reason, *expectedCeremonyHash)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 1
@@ -572,6 +630,9 @@ func runBudgetSurfaceCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel budget <list|set|verify> [flags]")
 		return 2
+	}
+	if answeredSurfaceHelp("Usage: helm-ai-kernel budget <list|set|verify> [flags]", args, stdout) {
+		return 0
 	}
 	registry := newLocalSurfaceRegistry()
 	switch args[0] {
@@ -895,6 +956,9 @@ func runMCPAuthProfile(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp auth-profile <list|put|verify> [flags]")
 		return 2
+	}
+	if answeredSurfaceHelp("Usage: helm-ai-kernel mcp auth-profile [flags]", args, stdout) {
+		return 0
 	}
 	registry := newLocalSurfaceRegistry()
 	switch args[0] {
@@ -1341,6 +1405,9 @@ func runEvidenceEnvelope(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel evidence envelope <list|create|get|verify> [flags]")
 		return 2
+	}
+	if answeredSurfaceHelp("Usage: helm-ai-kernel evidence envelope [flags]", args, stdout) {
+		return 0
 	}
 	registry := newLocalSurfaceRegistry()
 	switch args[0] {

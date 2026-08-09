@@ -6,6 +6,7 @@
       "gates": [
         "docs-truth",
         "version-drift",
+        "console-sidecar-pin",
         "release-workflow-contract",
         "scorecard-workflow-contract",
         "presentation-hygiene",
@@ -38,6 +39,7 @@
         "quality-self-test",
         "docs-truth",
         "version-drift",
+        "console-sidecar-pin",
         "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
@@ -75,6 +77,7 @@
         "quality-self-test",
         "docs-truth",
         "version-drift",
+        "console-sidecar-pin",
         "release-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
@@ -229,6 +232,18 @@
         "docs/VERIFICATION.md",
         "docs/RELEASE_SECURITY.md",
         "README.md"
+      ]
+    },
+    {
+      "id": "console-sidecar-pin",
+      "title": "Console sidecar source pin exists for the checked-in version",
+      "description": "Requires exactly one Console source pin row for the version in VERSION. The release job reads release/console-local-sidecar-pins.json from the tag commit, so a row missing at tag time strands the tag permanently; this catches it while it is still one line in a PR.",
+      "command": "python3 scripts/release/console_local_sidecar.py pin --pins release/console-local-sidecar-pins.json --kernel-release \"v$(cat VERSION)\"",
+      "timeout_seconds": 30,
+      "paths": [
+        "VERSION",
+        "release/console-local-sidecar-pins.json",
+        "scripts/release/console_local_sidecar.py"
       ]
     },
     {

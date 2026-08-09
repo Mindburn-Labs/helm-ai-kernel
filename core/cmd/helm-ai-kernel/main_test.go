@@ -197,16 +197,30 @@ func TestServerNarrationWriterSeparatesJSONAndText(t *testing.T) {
 	}
 }
 
-func TestRunLegacyServerFlagsReportStartupFailure(t *testing.T) {
+// TestRunUnknownFlagDoesNotStartTheServer replaces the former
+// TestRunLegacyServerFlagsReportStartupFailure, which pinned the opposite
+// behaviour: any unrecognized flag fell through to startServer as a
+// backward-compatible way to spell `serve`. The test's own fixture flag
+// (--legacy-server-flag) shows the breadth of it — every typo started a
+// listener and generated a persistent trust root in the working directory,
+// with the guardian roster empty. This is a deliberate breaking change; the
+// error names the flag and the explicit command that does start the server.
+func TestRunUnknownFlagDoesNotStartTheServer(t *testing.T) {
 	originalRunServer := startServer
 	defer func() { startServer = originalRunServer }()
-	startServer = func() error { return errors.New("legacy bind failed") }
+	started := false
+	startServer = func() error {
+		started = true
+		return nil
+	}
 
 	var stdout, stderr bytes.Buffer
 	exitCode := Run([]string{"helm", "--legacy-server-flag"}, &stdout, &stderr)
 
-	assert.Equal(t, 1, exitCode)
-	assert.Contains(t, stderr.String(), "legacy bind failed")
+	assert.Equal(t, 2, exitCode)
+	assert.False(t, started, "an unknown flag must not start the server")
+	assert.Contains(t, stderr.String(), "Unknown flag: --legacy-server-flag")
+	assert.Contains(t, stderr.String(), "helm-ai-kernel serve")
 }
 
 // TestRun_Health_Fail verifies availability of the health subcommand logic.

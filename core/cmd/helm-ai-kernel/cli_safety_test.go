@@ -45,6 +45,69 @@ func TestDispatchHelpSkipsHandler(t *testing.T) {
 	}
 }
 
+// TestNestedHelpWritesNoAuthorityState pins the property the depth-1 help test
+// cannot see. Nested help legitimately reaches the leaf (see
+// TestNestedHelpReachesLeafFlagSets), but the boundary-surface routers built
+// the file-backed registry before inspecting their arguments, so on a fresh
+// data directory `boundary status --help` seeded and wrote authority state
+// before printing anything. Asking a governance command what it does must never
+// be the same as running it.
+func TestNestedHelpWritesNoAuthorityState(t *testing.T) {
+	for _, args := range [][]string{
+		{"boundary", "status", "--help"},
+		{"boundary", "--help"},
+		{"approvals", "list", "--help"},
+		{"budget", "list", "--help"},
+		{"traces", "--help"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HELM_DATA_DIR", dir)
+
+			var stdout, stderr bytes.Buffer
+			if code := Run(append([]string{"helm-ai-kernel"}, args...), &stdout, &stderr); code != 0 {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+
+			var written []string
+			if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if !info.IsDir() {
+					written = append(written, path)
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if len(written) != 0 {
+				t.Fatalf("help wrote %v", written)
+			}
+		})
+	}
+}
+
+// TestUnknownFlagDoesNotStartTheServer pins the dispatcher's default branch. An
+// unrecognized flag used to fall through to startServer as a backward-compat
+// convenience, so a typo launched a listener and generated a persistent trust
+// root in the working directory.
+func TestUnknownFlagDoesNotStartTheServer(t *testing.T) {
+	for _, arg := range []string{"--frobnicate", "-x", "--port"} {
+		var stdout, stderr bytes.Buffer
+		code := Run([]string{"helm-ai-kernel", arg}, &stdout, &stderr)
+		if code != 2 {
+			t.Fatalf("arg=%s code=%d, want 2", arg, code)
+		}
+		if !strings.Contains(stderr.String(), "Unknown flag") {
+			t.Fatalf("arg=%s stderr does not name the unknown flag: %q", arg, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "serve") {
+			t.Fatalf("arg=%s stderr does not point at the explicit way to start the server: %q", arg, stderr.String())
+		}
+	}
+}
+
 func TestRegisterRejectsDuplicateNamesAndAliases(t *testing.T) {
 	original := subcommands
 	subcommands = make(map[string]Subcommand)

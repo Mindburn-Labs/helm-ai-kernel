@@ -1,3 +1,8 @@
+// quantum_posture: this package verifies classical Ed25519 signatures; it
+// provides and claims no hybrid or post-quantum protection. A receipt signed
+// under a post-quantum profile is not verifiable here, and the verdict text
+// never implies otherwise.
+//
 // Package receiptverify verifies HELM receipts with no service in the trust
 // path.
 //

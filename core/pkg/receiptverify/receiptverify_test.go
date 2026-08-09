@@ -1,3 +1,4 @@
+// quantum_posture: these tests exercise classical Ed25519 verification only.
 package receiptverify
 
 import (

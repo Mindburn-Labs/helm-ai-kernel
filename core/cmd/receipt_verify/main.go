@@ -1,3 +1,6 @@
+// quantum_posture: this command verifies classical Ed25519 signatures only; it
+// provides and claims no hybrid or post-quantum protection.
+//
 // Command receipt_verify verifies a HELM receipt chain with no HELM service in
 // the trust path.
 //

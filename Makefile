@@ -19,7 +19,7 @@ build:
 	cp bin/helm-ai-kernel bin/helm
 
 test:
-	cd core && go test ./pkg/... ./cmd/release-permit-verify/... -count=1
+	cd core && go test ./pkg/... ./cmd/release-permit-verify/... ./cmd/receipt_verify/... -count=1
 
 test-cli:
 	cd core && go test ./cmd/helm-ai-kernel ./cmd/release-permit-verify -count=1

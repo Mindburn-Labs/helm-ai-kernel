@@ -1,4 +1,9 @@
-# Workstation Adapter Feasibility Matrix
+# Workstation Adapter Feasibility Matrix (M0, historical)
+
+This is the M0 planning artifact that chose the first two workstation adapters.
+Its sequencing advice has been overtaken — see "Status of the M0 gate" at the
+bottom before treating anything here as guidance. The scoring table is kept as
+the record of what was known at M0.
 
 M0 scores what a manifest-first adapter can reliably observe today without private APIs. Scores are `0` unavailable, `1` partial/manual, `2` supported through stable local artifacts or documented exports.
 
@@ -19,3 +24,20 @@ M0 scores what a manifest-first adapter can reliably observe today without priva
 Codex is the first adapter because the local CLI/App Server direction and OTel event categories line up with a manifest-first receipt importer. Claude Code is second because hooks and local settings are strong, but parity depends on which local hook payloads are available in the customer environment.
 
 M0-M2 should ship as `observe-only`. M3 can be started only after the fixture set proves deterministic import for allowed observe, allowed draft, denied network, denied memory, recurring loop, and tainted-context cases.
+
+## Status of the M0 gate
+
+That gate is satisfied and M3 has shipped. Do not read the paragraph above as
+open sequencing work.
+
+- All six named fixture classes exist:
+  `fixtures/workstation/{allowed-observe,allowed-draft,denied-network,denied-memory,denied-recurring-loop,prompt-injection-tainted}`.
+- The workstation surface is no longer observe-only. `helm-ai-kernel
+  workstation` dispatches `decide` and `enforce`
+  (`core/cmd/helm-ai-kernel/workstation_cmd.go`), implemented in
+  `core/cmd/helm-ai-kernel/workstation_m3_cmd.go`. `workstation enforce` exits
+  `126` on a `DENY` verdict instead of running the wrapped command, so it acts
+  on the verdict rather than only recording it.
+
+The rest of this page is a historical scoring record. Current adapter behavior
+lives in `core/pkg/workstation/` and `core/cmd/helm-ai-kernel/workstation_*.go`.

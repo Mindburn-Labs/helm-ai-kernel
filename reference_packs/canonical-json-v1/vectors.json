@@ -1,0 +1,116 @@
+{
+  "schema_version": "helm.canonical-json/v1",
+  "spec": "protocols/specs/rfc/canonical-json-v1.md",
+  "vectors": [
+    {
+      "id": "rfc8785_section_3_2_3_sorting",
+      "description": "The object-property sorting sample published in RFC 8785 Section 3.2.3. The supplementary-plane key U+1F600 sorts before the BMP key U+FB33 because its UTF-16 surrogate pair begins at D83D. An implementation that sorts by code point or UTF-8 bytes fails this vector.",
+      "input": "{\"\\u20ac\":\"Euro Sign\",\"\\r\":\"Carriage Return\",\"\\ufb33\":\"Hebrew Letter Dalet With Dagesh\",\"1\":\"One\",\"\\ud83d\\ude00\":\"Emoji: Grinning Face\",\"\\u0080\":\"Control\",\"\\u00f6\":\"Latin Small Letter O With Diaeresis\"}",
+      "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+      "sha256": "5e321556d22018a9656991a9e94f77ec175fa193e52a2429d312f8419ec8b08c",
+      "interoperable": true
+    },
+    {
+      "id": "supplementary_plane_key_sorts_first",
+      "description": "The minimal divergence case. U+10000 (UTF-16 D800 DC00) sorts before U+FFFD (UTF-16 FFFD) under RFC 8785 Section 3.2.3, and after it under code point order.",
+      "input": "{\"\\ufffd\":1,\"\\ud800\\udc00\":2}",
+      "canonical": "{\"𐀀\":2,\"�\":1}",
+      "sha256": "2be8040fe3029f9de464f315235716337d3ef13fe83fe32a481281b77a32112c",
+      "interoperable": true
+    },
+    {
+      "id": "bmp_keys_order_identically",
+      "description": "Below U+E000 the UTF-16 and code point orderings agree, so every ASCII and common-BMP key set is unaffected by the ordering rule.",
+      "input": "{\"z\":1,\"a\":2,\"A\":3,\"0\":4,\"_\":5,\"~\":6,\"\\u00f6\":7,\"\\u20ac\":8}",
+      "canonical": "{\"0\":4,\"A\":3,\"_\":5,\"a\":2,\"z\":1,\"~\":6,\"ö\":7,\"€\":8}",
+      "sha256": "db75b81b33eede26b2d65692ad1fd7040db5be6762b918ede9b6aaabe061dc7c",
+      "interoperable": true
+    },
+    {
+      "id": "escape_set_rfc8785_section_3_2_2_2",
+      "description": "Only U+0000..U+001F, the quotation mark and the reverse solidus are escaped. U+007F, U+0080, U+2028, U+2029 and the HTML-significant ASCII characters are emitted as literal UTF-8.",
+      "input": "{\"controls\":\"\\u0000\\u0001\\u001f\\b\\f\\n\\r\\t\",\"quote\":\"\\\"\",\"backslash\":\"\\\\\",\"unescaped\":\"<a>&</a>\\u007f\\u0080\\u2028\\u2029\"}",
+      "canonical": "{\"backslash\":\"\\\\\",\"controls\":\"\\u0000\\u0001\\u001f\\b\\f\\n\\r\\t\",\"quote\":\"\\\"\",\"unescaped\":\"<a>&</a>\u2028\u2029\"}",
+      "sha256": "8b33e4b68798e58e3d551421f4969a1c88c2062c729d625af928def2441f664e",
+      "interoperable": true
+    },
+    {
+      "id": "array_order_is_preserved",
+      "description": "Array element order is data, not a key set: it is never reordered. Nested objects inside arrays are sorted individually.",
+      "input": "{\"list\":[3,1,2,{\"z\":1,\"a\":2},[\"c\",\"b\"]]}",
+      "canonical": "{\"list\":[3,1,2,{\"a\":2,\"z\":1},[\"c\",\"b\"]]}",
+      "sha256": "4070de82d79577c79a12b1826935f40f7246b587364a83a9b93ffe2b5ffbb2e4",
+      "interoperable": true
+    },
+    {
+      "id": "literal_types",
+      "description": "Literal null, true and false, and the empty object and array.",
+      "input": "{\"t\":true,\"f\":false,\"n\":null,\"o\":{},\"a\":[]}",
+      "canonical": "{\"a\":[],\"f\":false,\"n\":null,\"o\":{},\"t\":true}",
+      "sha256": "d54540f64e29451bbaaa55d8bc3247297964620eabc523c71e2c1cc504565e2f",
+      "interoperable": true
+    },
+    {
+      "id": "safe_integer_bounds",
+      "description": "The interoperable number subset: integers in [-(2^53-1), 2^53-1] with no sign on zero, no leading zeros, no fraction and no exponent. HELM canonical JSON and a strict RFC 8785 implementation produce identical bytes for these.",
+      "input": "{\"max\":9007199254740991,\"min\":-9007199254740991,\"zero\":0,\"one\":1,\"neg\":-1}",
+      "canonical": "{\"max\":9007199254740991,\"min\":-9007199254740991,\"neg\":-1,\"one\":1,\"zero\":0}",
+      "sha256": "c99a2fd8308c93e815daf2d8393b241a2fe90ca6516b223c2a1aa2ccbfd76a25",
+      "interoperable": true
+    },
+    {
+      "id": "deviation_exponent_literal",
+      "description": "DEVIATION. HELM preserves the source number literal; RFC 8785 Section 3.2.2.3 re-renders it with the ECMAScript Number-to-String algorithm. This vector MUST be rejected by the interoperable-subset check, and MUST NOT appear in any signed HELM artifact.",
+      "input": "{\"a\":1e2}",
+      "canonical": "{\"a\":1e2}",
+      "sha256": "43a058f361d595b0c583bc02ab61c16bb21e776ce5f188398d93bafc89015947",
+      "interoperable": false,
+      "rfc8785_canonical": "{\"a\":100}"
+    },
+    {
+      "id": "deviation_uppercase_exponent",
+      "description": "DEVIATION. As above with an uppercase exponent marker.",
+      "input": "{\"a\":1E2}",
+      "canonical": "{\"a\":1E2}",
+      "sha256": "b7626847d8445a20d39b2b272ce4d62a903e79b51dea2d00fa8c2f906c96aa3e",
+      "interoperable": false,
+      "rfc8785_canonical": "{\"a\":100}"
+    },
+    {
+      "id": "deviation_trailing_zero_fraction",
+      "description": "DEVIATION. RFC 8785 drops the redundant fraction; HELM keeps the literal.",
+      "input": "{\"a\":1.0,\"b\":1.50}",
+      "canonical": "{\"a\":1.0,\"b\":1.50}",
+      "sha256": "78603600ac411d3501743e0796c91d57cbea7ec4c285b7dc4d2cb40cd789b231",
+      "interoperable": false,
+      "rfc8785_canonical": "{\"a\":1,\"b\":1.5}"
+    },
+    {
+      "id": "deviation_negative_zero",
+      "description": "DEVIATION. ECMAScript Number-to-String renders negative zero as \"0\"; HELM keeps \"-0\".",
+      "input": "{\"a\":-0}",
+      "canonical": "{\"a\":-0}",
+      "sha256": "dbd681e539ad171ed90bfe0b80b788200b28a669b886b868605c53fb1ee9a962",
+      "interoperable": false,
+      "rfc8785_canonical": "{\"a\":0}"
+    },
+    {
+      "id": "deviation_beyond_safe_integer",
+      "description": "DEVIATION. 2^53+1 is not exactly representable as an IEEE 754 double, so RFC 8785 renders the rounded value while HELM preserves the exact literal. This is why the interoperable subset stops at 2^53-1.",
+      "input": "{\"a\":9007199254740993}",
+      "canonical": "{\"a\":9007199254740993}",
+      "sha256": "d509df67f639ccc7538a0e52d149de6b89e9a93e16d350095bb4478957f410ca",
+      "interoperable": false,
+      "rfc8785_canonical": "{\"a\":9007199254740992}"
+    },
+    {
+      "id": "deviation_non_integer",
+      "description": "DEVIATION CLASS. A fraction that happens to render identically today is still outside the subset: HELM's agreement with RFC 8785 on it is a property of the Go runtime, not of the specification.",
+      "input": "{\"a\":0.1}",
+      "canonical": "{\"a\":0.1}",
+      "sha256": "9e3d5635fc1c09ff15c19f1089a0bfe03fbd8329cca722f9a2227060ac77dcaa",
+      "interoperable": false,
+      "rfc8785_canonical": "{\"a\":0.1}"
+    }
+  ]
+}

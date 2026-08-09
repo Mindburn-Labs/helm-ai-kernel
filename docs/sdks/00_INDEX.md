@@ -23,27 +23,27 @@ This guide publishes no hosted HELM API base URL.
 Pin the mode and base URL together. Do not move an example between ports without
 starting the corresponding runtime.
 
-## Source-target v0.8.1 Coordinates
+## Source-target v0.8.2 Coordinates
 
 Run a clean registry check before copying these into a managed client estate.
-The following four coordinates target source version `0.8.1`; registry availability is not claimed.
+The following four coordinates target source version `0.8.2`; registry availability is not claimed.
 
-Source version claims are tied to the repository `VERSION` (`0.8.1` for this release).
-The matching Go subdirectory tag is `sdk/go/v0.8.1`.
+Source version claims are tied to the repository `VERSION` (`0.8.2` for this release).
+The matching Go subdirectory tag is `sdk/go/v0.8.2`.
 
 ```bash
-npm install @mindburn/helm-ai-kernel@0.8.1
-python -m pip install helm-sdk==0.8.1
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.1
+npm install @mindburn/helm-ai-kernel@0.8.2
+python -m pip install helm-sdk==0.8.2
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.2
 ```
 
-The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.8.1`:
+The matching Java coordinate is `io.github.mindburnlabs:helm-sdk:0.8.2`:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.8.1</version>
+  <version>0.8.2</version>
 </dependency>
 ```
 

@@ -1,0 +1,37 @@
+{
+  "comment": "Frozen 2026-08-09. The signing key was discarded after this file was written; nothing regenerates it. See TestFrozenPermitStillVerifies.",
+  "key_id": "frozen-permit-key-1",
+  "permits": [
+    {
+      "permit_id": "permit-frozen-001",
+      "intent_hash": "sha256:intent-frozen-001",
+      "verdict_hash": "sha256:verdict-frozen-001",
+      "plan_hash": "sha256:plan-frozen-001",
+      "policy_hash": "sha256:policy-frozen-v1",
+      "effect_type": "WRITE",
+      "connector_id": "connector.fs.workspace",
+      "scope": {
+        "allowed_action": "fs.write",
+        "allowed_params": [
+          "path",
+          "content"
+        ],
+        "deny_patterns": [
+          "/etc/*"
+        ]
+      },
+      "resource_ref": "helm://workspace/out/report.md",
+      "expires_at": "2026-08-09T13:00:00Z",
+      "single_use": true,
+      "nonce": "nonce-frozen-001",
+      "issued_at": "2026-08-09T12:00:00Z",
+      "issuer_id": "helm-kernel-frozen-2026",
+      "evidence_bindings": {
+        "reviewed_spec_hash": "sha256:spec-frozen-001",
+        "sandbox_grant_hash": "sha256:grant-frozen-001"
+      },
+      "signature": "57f9c9c2dd7e4d22423d3114525c701a8b59a238627d2a44e74cead7e5654ce46185324f464b1673db1fd593ca0813897052f0c9b2fd544a81c61ff24de09304"
+    }
+  ],
+  "public_key_hex": "523bbff6d29e8e098abb10e8201502bda69b751c6aaa93b200fed7664137ec7a"
+}

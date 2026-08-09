@@ -818,6 +818,22 @@
         }
       }
     },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Opt-in OTLP trace export to a central telemetry gateway. Off by default; enabled per stand, never in a chart default. Renders exactly one variable, OTEL_EXPORTER_OTLP_ENDPOINT, into the kernel container.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Export traces to telemetry.endpoint. A stand handed an endpoint starts exporting the moment it boots, so keep this false until the stand is meant to report."
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "OTLP gRPC target of the in-cluster gateway, e.g. http://telemetry-gateway.telemetry-system.svc.cluster.local:4317. Required when enabled is true. Keep the http:// prefix: the kernel strips the scheme before dialing and uses its presence to select an insecure connection, and the gateway does not terminate TLS in-cluster."
+        }
+      }
+    },
     "persistence": {
       "type": "object",
       "additionalProperties": false,

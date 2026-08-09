@@ -49,6 +49,14 @@ test-effect-reservation-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle -count=10
 
+.PHONY: verify-canonical-json-vectors
+
+# The canonicalization contract every other vector pack is built on. Run this
+# first when a signing preimage disagrees across languages.
+verify-canonical-json-vectors:
+	cd core && go test ./pkg/canonicalize -run TestCanonicalJSONReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/canonical-json-v1/verify_vectors.py
+
 verify-approval-ceremony-vectors:
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
 	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalCeremonyGoldenVectors -count=1
@@ -125,6 +133,7 @@ verify-fixtures:
 	cd core && go test ./pkg/boundary/extauthz -run TestContract -count=1
 	cd core && go test ./pkg/canonicalize -run TestExtauthzGoldenVectorsAreCanonical -count=1
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
+	$(MAKE) verify-canonical-json-vectors
 	$(MAKE) verify-approval-ceremony-vectors
 	$(MAKE) verify-generated-spec-approval-ceremony-vectors
 	$(MAKE) verify-connector-release-authority-vectors
@@ -371,6 +380,26 @@ release-binaries:
 	cp bin/helm-ai-kernel-darwin-arm64 bin/helm-darwin-arm64
 	cp bin/helm-ai-kernel-windows-amd64.exe bin/helm-windows-amd64.exe
 	cd bin && shasum -a 256 helm-ai-kernel-* helm-linux-* helm-darwin-* helm-windows-* > SHA256SUMS.txt
+
+# receipt_verify ships separately from the kernel on purpose. A counterparty
+# checking a receipt should not have to download the thing that issued it, and
+# a verifier bundled with the kernel invites exactly the question the tool
+# exists to answer. It is statically linked and has no runtime configuration:
+# the only inputs are the receipt file and the key you pass it.
+receipt-verify-binaries:
+	@mkdir -p bin
+	cd core && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/receipt_verify-linux-amd64 ./cmd/receipt_verify/
+	cd core && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/receipt_verify-linux-arm64 ./cmd/receipt_verify/
+	cd core && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/receipt_verify-darwin-amd64 ./cmd/receipt_verify/
+	cd core && GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/receipt_verify-darwin-arm64 ./cmd/receipt_verify/
+	cd core && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="$(RELEASE_LDFLAGS)" -o ../bin/receipt_verify-windows-amd64.exe ./cmd/receipt_verify/
+	cd bin && shasum -a 256 receipt_verify-* > SHA256SUMS-receipt_verify.txt
+
+# The offline property is the product. This target fails if a transport package
+# becomes reachable from the verifier, so the claim on the download page cannot
+# outlive the code that justified it.
+verify-receipt-verify-offline:
+	cd core && GOWORK=off go test ./pkg/receiptverify/ -run 'TestNoTransportPackageIsReachable|TestVerificationReadsNoClock|TestFrozenReceiptStillVerifies' -v
 
 release-assets: release-binaries-reproducible mcp-pack sbom vex
 	bash scripts/release/stage_release_assets.sh

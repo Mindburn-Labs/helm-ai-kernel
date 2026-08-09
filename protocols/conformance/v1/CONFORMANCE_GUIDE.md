@@ -4,6 +4,10 @@
 
 ## 1. Conformance Levels
 
+These are the **spec levels** an implementation claims. They are the values
+recorded as `conformance_level` in `compatibility-registry.json` and referenced
+by the compatibility tiers in §8.
+
 | Level                   | Requirement                                      |
 | ----------------------- | ------------------------------------------------ |
 | **Level 1: Core**       | Pass all ALLOW/DENY/ESCALATE verdict vectors     |
@@ -11,49 +15,149 @@
 | **Level 3: ProofGraph** | Maintain hash chain with monotonic Lamport clock |
 | **Level 4: Full**       | All above + fail-closed behavior + reason codes  |
 
+> **Do not confuse these with the CLI's `--level` flag.** `helm-ai-kernel
+> conform --level` is a gate-set shortcut over the Go reference's own
+> conformance gates and accepts only `L1` and `L2` — see §3.1. `--level 4`
+> exits 2 with `unknown level "4" (valid: L1, L2)`. The two numbering schemes
+> are unrelated, and no CLI flag asserts a spec level from the table above.
+
 ## 2. Test Vector Structure
 
-Test vectors are in `protocols/conformance/v1/test-vectors.json`.
+Test vectors are in `protocols/conformance/v1/test-vectors.json`
+(`test_suite: helm-conformance-v1`, `version: 1.1.0`, 61 vectors).
 
-Each vector specifies:
+No code in this repository reads this file — there is no loader, and no build
+or test gate consumes it. It is a data-only fixture published for implementers,
+and its schema is defined by the JSON itself rather than by a Go struct.
 
+Every vector carries:
+
+- `id`: Stable vector identifier (e.g. `ALLOW-001`)
+- `description`: Human-readable statement of what the vector proves
 - `input`: Effect, principal, and context to submit
-- `expected`: Verdict, reason code, receipt presence, intent presence
-- `pdp_behavior` (optional): How the PDP should respond for this test
+- `expected`: Assertions on the result — most commonly `verdict`,
+  `reason_code`, `receipt_present`, `intent_present`, and `active_packs`.
+  Multi-effect vectors instead use plural forms (`verdicts`, `receipts_present`,
+  `reason_codes`) plus chain assertions such as
+  `lamport_strictly_increasing`, `proofgraph_hash_matches`, and `replay_fails`.
+
+Some vectors add an optional driver key:
+
+- `pdp_behavior` (3 vectors): How the PDP should respond for this test
+- `budget_behavior` (1 vector): Budget state the harness must establish
+- `output_override` (1 vector): Output the harness must substitute
+
+Beyond `vectors`, the file carries the fixture sets required by §8.1:
+`receipt_invariants`, `hash_chain_vectors`, `golden_receipts`,
+`lifecycle_fixtures`, `jurisdiction_fixtures`, and `evidence_bundle_fixture`.
 
 ## 3. Running Conformance Tests
 
-### Against the Go Reference
+### 3.1 Against the Go Reference
+
+Unit-level gate tests:
 
 ```bash
 cd core && go test ./pkg/conform/... -tags conformance
 ```
 
-### Against an External Implementation
-
-1. Start your PDP/EffectBoundary server
-2. Run the conformance runner:
+The gate runner is the `conform` subcommand of the kernel binary. Build it
+first — a `helm-ai-kernel` already on `PATH` may be an older release, and its
+flags will not match this guide:
 
 ```bash
-helm-ai-kernel conform run \
-  --vectors protocols/conformance/v1/test-vectors.json \
-  --endpoint http://your-server:4001 \
-  --level 4
+make build   # writes ./bin/helm-ai-kernel
 ```
 
-### Against a Language SDK
+`conform` dispatches on three positional subcommands; with none of them, it
+runs the gate engine over the current working tree.
 
-Each SDK ships with a conformance test harness:
+| Invocation                    | Behaviour                                                            |
+| ----------------------------- | -------------------------------------------------------------------- |
+| `conform [flags]`             | Runs the conformance gate engine over the current working tree       |
+| `conform vectors [--json]`    | Prints the built-in negative execution-boundary vectors              |
+| `conform negative [--json]`   | The same vectors, with receipt and dispatch expectations             |
+| `conform managed-agents …`    | Managed-agent live evidence packs                                    |
+
+There is **no `conform run` subcommand**. Because Go's flag package stops at
+the first non-flag argument, `run` is taken as a positional, every flag after
+it is ignored, and the command exits 2 with
+`Error: --profile or --level is required`.
+
+Flags accepted by `conform` (source: `core/cmd/helm-ai-kernel/conform.go`):
+
+| Flag                    | Meaning                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| `--profile`             | `SMB`, `CORE`, `ENTERPRISE`, `REGULATED_FINANCE`, `REGULATED_HEALTH`, `AGENTIC_WEB_ROUTER` |
+| `--level`               | Gate-set shortcut, `L1` or `L2` only — **not** the §1 spec levels                          |
+| `--gate`                | Run only the named gate(s); repeatable                                                     |
+| `--jurisdiction`        | Jurisdiction code (e.g. `US`, `EU`, `APAC`)                                                |
+| `--output`              | EvidencePack output directory (default `artifacts/conformance`)                            |
+| `--json`                | Emit the report as JSON on stdout                                                          |
+| `--signed`              | Also write `conform_report.json` + `.sha256` + `.sig`                                      |
+| `--vector`              | Run one **external-failure** vector JSON (singular; see below)                              |
+| `--validation-manifest` | Write the signed external-failure HCV validation manifest                                  |
+| `--evidencepack`        | EvidencePack bound into that manifest (required with `--validation-manifest`)               |
+| `--kernel-commit`       | Kernel commit SHA recorded in that manifest                                                |
+
+Either `--profile` or `--level` is required. Exit codes: `0` all gates pass,
+`1` a gate failed, `2` runtime or usage error.
+
+The invocation the release gate itself uses (`make conformance-release-report`):
 
 ```bash
-# Python
-cd sdk/python && pytest tests/conformance/
+./bin/helm-ai-kernel conform \
+  --profile SMB \
+  --gate G0 \
+  --signed \
+  --output artifacts/conformance
+```
 
-# TypeScript
-cd sdk/ts && npm run test:conformance
+`--vector` is **not** a way to run `test-vectors.json`. It loads a single
+external-failure vector, which is a different schema: one object, not a suite,
+with the fields `id`, `vector_id`, `hpr_id`, `failure_mode`, `expected_verdict`,
+`expected_reason_code`, `must_emit_receipt`, `must_not_dispatch`,
+`must_bind_evidence`, `expected` (`verdict`, `reason_code`, `receipt_required`,
+`evidencepack_required`), and `negative_assertions`.
 
-# Java
-cd sdk/java && mvn test -Pconformance
+### 3.2 Against an External Implementation
+
+> **Status: not implemented — target.** No shipped command drives
+> `test-vectors.json` against a remote PDP/EffectBoundary. `conform` has no
+> `--vectors` and no `--endpoint` flag — both are rejected with
+> `flag provided but not defined` — and nothing in this repository reads
+> `test-vectors.json`. An endpoint-driven runner remains the intended design;
+> until it ships, the procedure below is the conformance path.
+
+External implementations self-certify: load `test-vectors.json` in your own
+harness, submit each vector's `input` to your PDP/EffectBoundary, and assert its
+`expected` block plus the invariants in §4–§6. Publish the result per §8.2.
+
+The reference behaviour your harness must reproduce for the fail-closed cases
+is printed by the kernel itself and needs no server:
+
+```bash
+./bin/helm-ai-kernel conform negative --json
+```
+
+### 3.3 Against a Language SDK
+
+The SDKs do not ship separate conformance suites. Their contract tests run
+through the root `Makefile`:
+
+```bash
+make test-sdk-py             # sdk/python — pytest
+make test-sdk-ts             # sdk/ts     — vitest + tsc build
+make test-sdk-java           # sdk/java   — mvn test
+make test-sdk-rust           # sdk/rust   — cargo test
+make test-sdk-go-standalone  # sdk/go     — go test ./... with GOWORK=off
+```
+
+Generated-code drift against `protocols/` is a separate gate:
+
+```bash
+make sdk-gen-check
+make sdk-manifest-verify
 ```
 
 ## 4. Receipt Invariants

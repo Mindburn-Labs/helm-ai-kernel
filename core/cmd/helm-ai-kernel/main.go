@@ -128,11 +128,17 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	default:
 		if args[1][0] == '-' {
-			if err := startServer(); err != nil { // Default backward compat behavior for flags passed without 'server'.
-				_, _ = fmt.Fprintf(stderr, "Error: start server: %v\n", err)
-				return 1
-			}
-			return 0
+			// An unrecognized flag used to start the server, as a convenience for
+			// `helm-ai-kernel --port …` without the subcommand. Nothing in the
+			// estate invokes it that way — every image, chart and unit names
+			// `serve`, `server` or a subcommand explicitly — and the convenience
+			// meant a mistyped flag silently launched a listener and minted a
+			// trust root in the working directory. A boundary that starts by
+			// accident is not a boundary.
+			_, _ = fmt.Fprintf(stderr, "Unknown flag: %s\n", args[1])
+			_, _ = fmt.Fprintf(stderr, "To start the server, name it: helm-ai-kernel serve %s\n", args[1])
+			printUsage(stderr)
+			return 2
 		}
 		_, _ = fmt.Fprintf(stderr, "Unknown command: %s\n", args[1])
 		printUsage(stderr)

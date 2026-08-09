@@ -35,15 +35,29 @@ const EffectPermitSignatureV1 = "effect_permit.v1"
 // No field uses omitempty. An explicitly empty plan_hash is part of the signed
 // schema and must not be confusable with a field a transport dropped.
 //
-// TRANSPORT SCOPE — v1 signatures are in-process only. evidence_bindings is a
-// covered field of the Go type but has no counterpart in
-// protocols/proto/helm/effects/v1/effects.proto, so any proto or
-// schema-validated JSON hop drops it and verification fails on the far side.
-// Before a permit is signed on one process and verified on another, either add
-// evidence_bindings to the wire contract (a backward-compatible field add) or
-// cut a v2 preimage that excludes it. There is no Go↔proto permit conversion in
-// the kernel today, so nothing is broken by this — it is a precondition, not a
-// defect.
+// TRANSPORT SCOPE — every field this envelope covers now has a home in
+// protocols/proto/helm/effects/v1/effects.proto, evidence_bindings included
+// (field 16). A permit signed in one process and encoded to that contract can be
+// verified in another: permit_cross_process_test.go encodes a signed permit to
+// protobuf wire bytes, rebuilds it from the bytes alone, and requires the
+// reconstructed preimage to match and the signature to verify. Dropping the
+// bindings in transit makes that verification fail, which is the property the
+// evidence obligation rests on.
+//
+// TWO CAVEATS a cross-process implementer must respect:
+//
+// Nothing in this repository converts effects.EffectPermit to the generated wire
+// type. core must not import sdk/go — that is the published client SDK, so the
+// dependency would run from the kernel to its own client — and sdk/go does not
+// import core. A production hop therefore needs a converter in a third package,
+// and until one exists the mapping in permit_cross_process_test.go is the only
+// executable statement of it.
+//
+// effect_type is the sharp edge in that mapping. This envelope signs the Go
+// string ("WRITE"); the wire carries an enum (EFFECT_TYPE_WRITE = 2). A far side
+// that renders the enum name instead of the bare string builds a different
+// preimage and rejects a valid permit. TestEffectTypeEnumMappingIsPinned pins
+// the rule; it is not yet published in a spec.
 type effectPermitV1SigningEnvelope struct {
 	SignatureVersion string              `json:"signature_version"`
 	PermitID         string              `json:"permit_id"`

@@ -93,23 +93,33 @@ func NewFileBackedSurfaceRegistry(path string, now func() time.Time) (*SurfaceRe
 		return NewSurfaceRegistry(now), nil
 	}
 	r := newSurfaceRegistry(now)
+	seeded := false
 	if data, err := os.ReadFile(path); err == nil {
 		if len(strings.TrimSpace(string(data))) == 0 {
 			r.seed()
+			seeded = true
 		} else if err := r.loadSnapshot(data); err != nil {
 			return nil, fmt.Errorf("load boundary registry %s: %w", path, err)
 		}
 	} else if os.IsNotExist(err) {
 		r.seed()
+		seeded = true
 	} else {
 		return nil, fmt.Errorf("read boundary registry %s: %w", path, err)
 	}
 	r.path = path
-	r.mu.Lock()
-	err := r.persistLocked()
-	r.mu.Unlock()
-	if err != nil {
-		return nil, err
+	// Only a fresh seed is written back. Persisting an unchanged snapshot meant
+	// that merely opening the registry — which every read-only surface command
+	// does, including help paths — rewrote authority state on disk. The seed
+	// still persists on first use, so its generated ids stay stable across
+	// invocations; that stability was the reason for the unconditional write.
+	if seeded {
+		r.mu.Lock()
+		err := r.persistLocked()
+		r.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return r, nil
 }

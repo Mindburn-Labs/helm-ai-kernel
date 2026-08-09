@@ -135,11 +135,23 @@ spec:
               fi
 
               if [ -f "$root_key" ]; then
-                chmod 0600 "$root_key"
+                if [ ! -r "$root_key" ]; then
+                  echo "durable authority root key exists but is not readable by the runtime identity" >&2
+                  exit 1
+                fi
                 if ! cmp -s "$source_key" "$root_key"; then
                   echo "durable authority root key differs from signing Secret; refusing silent rotation" >&2
                   exit 1
                 fi
+                # The invariant is content identity with the Secret, verified
+                # above. A matching key written by an earlier release can be
+                # owned by a different uid (the pre-init kernel wrote it as the
+                # image user), and chmod by a non-owner is EPERM even when the
+                # file is readable — that stranded every upgrade from such a
+                # volume while a fresh install passed. Tighten the mode when we
+                # own the file; never fail an unchanged, verified key over
+                # ownership history.
+                chmod 0600 "$root_key" 2>/dev/null || true
               else
                 tmp_key="$data_dir/.root.key.init.$$"
                 rm -f "$tmp_key"
@@ -147,7 +159,6 @@ spec:
                 chmod 0600 "$tmp_key"
                 mv -f "$tmp_key" "$root_key"
               fi
-              chmod 0600 "$root_key"
           env:
             - name: HELM_AUTHORITY_DATA_DIR
               value: {{ .Values.helm.dataDir | quote }}

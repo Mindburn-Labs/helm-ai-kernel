@@ -9,7 +9,7 @@ cd sdk/python
 python -m pip install .
 ```
 
-Package metadata identifies source target `0.8.2`; this README does not claim
+Package metadata identifies source target `0.8.3`; this README does not claim
 that a registry package has been published.
 
 ## Local Development

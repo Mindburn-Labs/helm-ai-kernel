@@ -1,5 +1,3 @@
-//go:build !cpi_native
-
 // Package cpi provides the Canonical Policy Index — a deterministic policy
 // stack validator for the HELM kernel. The CPI validates that composed policy
 // layers (P0 ceilings → P1 bundles → P2 overlays) are internally consistent,

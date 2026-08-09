@@ -69,6 +69,15 @@ const (
 	// prev_hash links resolve to the recomputed hash of the predecessor and the
 	// Lamport clock advances monotonically.
 	CheckClosure CheckName = "closure"
+	// CheckPermit verifies the Ed25519 signature of any EffectPermit the bundle
+	// carries, over the effect_permit.v1 envelope — which since kernel #798
+	// includes the permit's evidence obligations (evidence_bindings), and since
+	// #803 those survive a wire hop. It proves the permit's terms, scope and
+	// evidence obligations are the ones the issuer signed. It does not evaluate
+	// expiry (a dispatch-time property; a permit that expired in 2026 must
+	// still verify in 2036) and does not link permits to receipts, because the
+	// receipt does not carry a permit_id to link on.
+	CheckPermit CheckName = "permit"
 )
 
 // Status is the outcome of a single check.
@@ -105,7 +114,31 @@ type Result struct {
 	// which key the receipt *claims*. It is never used to select a key.
 	KeyID    string   `json:"key_id,omitempty"`
 	Receipts int      `json:"receipts"`
+	Permits  int      `json:"permits,omitempty"`
 	Errors   []string `json:"errors,omitempty"`
+}
+
+// Bundle is the shape a receipt reaches a counterparty in: one or more
+// receipts in causal order, optionally the permits that authorized them, and
+// optionally key material the producer wrote about itself.
+//
+// PublicKeyHex and KeyID are what the bundle *claims* its verification key is.
+// They are used only under TrustRoot.AllowSelfAttested, because a key that
+// travels with the thing it verifies is not a trust root.
+type Bundle struct {
+	Receipts     []*contracts.Receipt `json:"receipts"`
+	Permits      []*PermitRecord      `json:"permits,omitempty"`
+	PublicKeyHex string               `json:"public_key_hex,omitempty"`
+	KeyID        string               `json:"key_id,omitempty"`
+}
+
+// embeddedKeys returns the bundle-level self-declared key material, keyed by
+// the bundle's declared key id (possibly empty).
+func (b Bundle) embeddedKeys() map[string]string {
+	if b.PublicKeyHex == "" {
+		return nil
+	}
+	return map[string]string{b.KeyID: b.PublicKeyHex}
 }
 
 // TrustRoot supplies the public keys a caller is willing to trust.
@@ -220,7 +253,9 @@ func verifyEd25519(pubKeyHex, sigHex string, data []byte) (bool, error) {
 }
 
 // candidateKeys returns the keys to try for a receipt, in trust order.
-func candidateKeys(r *contracts.Receipt, trust TrustRoot) ([]string, error) {
+// embedded is bundle-level self-declared key material, reachable only under
+// AllowSelfAttested and only after the receipt's own PublicKeySet.
+func candidateKeys(r *contracts.Receipt, trust TrustRoot, embedded map[string]string) ([]string, error) {
 	var keys []string
 	if r.KeyID != "" {
 		if k, ok := trust.Keys[r.KeyID]; ok {
@@ -238,6 +273,9 @@ func candidateKeys(r *contracts.Receipt, trust TrustRoot) ([]string, error) {
 		for _, k := range r.PublicKeySet {
 			keys = append(keys, k)
 		}
+		for _, k := range embedded {
+			keys = append(keys, k)
+		}
 		if len(keys) > 0 {
 			return keys, nil
 		}
@@ -249,10 +287,20 @@ func candidateKeys(r *contracts.Receipt, trust TrustRoot) ([]string, error) {
 //
 // receipts must be in causal order. Verification is pure: it reads no clock, no
 // environment and no file, so the same inputs give the same verdict on any
-// machine at any time. That property is what TestVerdictIsStableInTheFarFuture
+// machine at any time. That property is what TestFrozenReceiptStillVerifies
 // pins down.
 func Verify(receipts []*contracts.Receipt, trust TrustRoot) Result {
-	res := Result{Receipts: len(receipts)}
+	return VerifyBundle(Bundle{Receipts: receipts}, trust)
+}
+
+// VerifyBundle checks a receipts-plus-permits bundle against a trust root.
+//
+// Receipts are required: a bundle with no receipts attests to nothing and is
+// an error, not a lesser success. Permits are verified when present, in
+// addition to — never instead of — the receipt chain.
+func VerifyBundle(b Bundle, trust TrustRoot) Result {
+	receipts := b.Receipts
+	res := Result{Receipts: len(receipts), Permits: len(b.Permits)}
 
 	if len(receipts) == 0 {
 		res.Errors = append(res.Errors, "no receipts supplied")
@@ -264,19 +312,27 @@ func Verify(receipts []*contracts.Receipt, trust TrustRoot) Result {
 			return res
 		}
 	}
+	for i, p := range b.Permits {
+		if p == nil {
+			res.Errors = append(res.Errors, fmt.Sprintf("permit[%d] is nil", i))
+			return res
+		}
+	}
 	if len(trust.Keys) == 0 && !trust.AllowSelfAttested {
 		res.Errors = append(res.Errors, ErrNoTrustedKey.Error())
 		return res
 	}
 
 	res.KeyID = receipts[0].KeyID
+	embedded := b.embeddedKeys()
 
-	identity := checkIdentity(receipts, trust, &res)
+	identity := checkIdentity(receipts, trust, embedded, &res)
 	res.Checks = append(res.Checks, identity)
 	res.Checks = append(res.Checks, checkIntegrity(receipts))
 	res.Checks = append(res.Checks, checkPolicy(receipts))
 	res.Checks = append(res.Checks, checkExecution(receipts))
 	res.Checks = append(res.Checks, checkClosure(receipts))
+	res.Checks = append(res.Checks, checkPermits(b.Permits, trust, embedded))
 
 	res.Valid = len(res.Errors) == 0
 	for _, c := range res.Checks {
@@ -287,7 +343,7 @@ func Verify(receipts []*contracts.Receipt, trust TrustRoot) Result {
 	return res
 }
 
-func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, res *Result) Check {
+func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, embedded map[string]string, res *Result) Check {
 	verified := 0
 	for i, r := range receipts {
 		if r.Signature == "" {
@@ -301,7 +357,7 @@ func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, res *Result) 
 		if res.PreimageVersion == "" {
 			res.PreimageVersion = version
 		}
-		keys, err := candidateKeys(r, trust)
+		keys, err := candidateKeys(r, trust, embedded)
 		if err != nil {
 			return Check{CheckIdentity, StatusFail, fmt.Sprintf(
 				"receipt[%d] %q: %v", i, r.ReceiptID, err)}
@@ -406,4 +462,72 @@ func checkClosure(receipts []*contracts.Receipt) Check {
 	}
 	return Check{CheckClosure, StatusPass, fmt.Sprintf(
 		"%d receipts form an unbroken chain: every prev_hash matches its recomputed predecessor and the Lamport clock advances", len(receipts))}
+}
+
+// checkPermits verifies each permit's signature over the effect_permit.v1
+// envelope. Deliberately absent: expiry evaluation (verification must be a
+// pure function of its inputs — a permit that expired in 2026 still has to
+// verify in 2036, because "was this authorization genuine" does not stop
+// being answerable when the authorization stops being usable) and
+// permit-to-receipt linkage (the receipt does not carry a permit_id, so any
+// claimed linkage would be invented here rather than verified).
+func checkPermits(permits []*PermitRecord, trust TrustRoot, embedded map[string]string) Check {
+	if len(permits) == 0 {
+		return Check{CheckPermit, StatusNotApplicable, "the bundle carries no permits; permit authenticity was not evaluated"}
+	}
+
+	var keys []string
+	for _, k := range trust.Keys {
+		keys = append(keys, k)
+	}
+	selfAttested := false
+	if len(keys) == 0 && trust.AllowSelfAttested {
+		for _, k := range embedded {
+			keys = append(keys, k)
+		}
+		selfAttested = len(keys) > 0
+	}
+	if len(keys) == 0 {
+		return Check{CheckPermit, StatusFail, ErrNoTrustedKey.Error()}
+	}
+
+	bound := 0
+	for i, p := range permits {
+		if p.Signature == "" {
+			return Check{CheckPermit, StatusFail, fmt.Sprintf(
+				"permit[%d] %q is unsigned; an unsigned permit authorizes nothing", i, p.PermitID)}
+		}
+		payload, err := canonicalizePermitV1(p)
+		if err != nil {
+			return Check{CheckPermit, StatusFail, fmt.Sprintf("permit[%d] %q: %v", i, p.PermitID, err)}
+		}
+		ok := false
+		for _, k := range keys {
+			good, verr := verifyEd25519(k, p.Signature, payload)
+			if verr != nil {
+				continue
+			}
+			if good {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return Check{CheckPermit, StatusFail, fmt.Sprintf(
+				"permit[%d] %q: signature does not verify under any supplied key; its terms, scope or evidence obligations are not the ones the issuer signed", i, p.PermitID)}
+		}
+		if len(p.EvidenceBindings) > 0 {
+			bound++
+		}
+	}
+
+	src := "the caller-supplied trust root"
+	if selfAttested {
+		src = "the bundle's OWN embedded key — self-attestation, proving internal consistency only"
+	}
+	return Check{CheckPermit, StatusPass, fmt.Sprintf(
+		"%d/%d permit signature(s) verify over the effect_permit.v1 envelope against %s; %d bind evidence obligations "+
+			"(evidence_bindings) inside the signature, so an obligation cannot be rewritten without breaking the permit. "+
+			"Expiry is a dispatch-time property and is deliberately not evaluated here",
+		len(permits), len(permits), src, bound)}
 }

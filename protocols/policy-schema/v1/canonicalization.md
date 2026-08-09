@@ -35,7 +35,7 @@ after it is a target.
 | Canonical JSON bytes | `canonicalize.JCS` / `JCSString` / `CanonicalHash` — `core/pkg/canonicalize/jcs.go:47,84,69` | `make verify-canonical-json-vectors` (`Makefile:56`), reached from `make verify-fixtures` (`Makefile:136`), run in CI at `.github/workflows/ci.yml:167` |
 | The rule those bytes follow | [`protocols/specs/rfc/canonical-json-v1.md`](../../specs/rfc/canonical-json-v1.md) — RFC 8785 with one stated number-serialization deviation | same target; vectors in [`reference_packs/canonical-json-v1/vectors.json`](../../../reference_packs/canonical-json-v1/vectors.json), independently verified by `verify_vectors.py` |
 | Signing preimages | `core/pkg/crypto/canonical.go`, `core/pkg/crypto/canonical_v5.go` | per-family reference packs; see ADR 0003 §D4 for which families are SPECIFIED |
-| Policy-stack validation ("CPI") | `core/pkg/kernel/cpi/cpi.go` — pure Go, selected by `//go:build !cpi_native`, i.e. the build that ships | `core/pkg/kernel/cpi/cpi_test.go` |
+| Policy-stack validation ("CPI") | `core/pkg/kernel/cpi/cpi.go` — pure Go, unconditionally compiled, and the only CPI implementation | `core/pkg/kernel/cpi/cpi_test.go` |
 | WASM policy execution | `core/pkg/policy/wasm/` — Go + wazero, modules content-addressed by SHA-256 of the binary | `core/pkg/policy/wasm/executor_test.go` |
 
 Two divergences an integrator must not miss:
@@ -153,12 +153,17 @@ For `ApplyWitnessPatchDelta` verification:
 
 **Not implemented. There is no `helm-policy-vm` crate and no golden corpus at
 `helm-policy-vm/tests/golden/`.** `crates/` has never existed in this
-repository — `git log --all -- crates` returns nothing. The one reference to the
-crate that remains is `core/pkg/kernel/cpi/cgo_bridge.go:6-7`, which links
-`-lhelm_policy_vm` and includes `crates/helm-policy-vm/include/helm_cpi.h`; that
-file is gated behind `//go:build cpi_native` (`cgo_bridge.go:1`), a tag no
-Makefile target and no CI workflow sets, so it is never compiled. The build that
-ships is the `!cpi_native` pure-Go `cpi.go`.
+repository — `git log --all -- crates` returns nothing across the full history
+of a non-shallow clone.
+
+The last reference to that crate anywhere in the tree was
+`core/pkg/kernel/cpi/cgo_bridge.go`, which linked `-lhelm_policy_vm` and
+included `crates/helm-policy-vm/include/helm_cpi.h` behind a
+`//go:build cpi_native` tag that no Makefile target, workflow or script ever
+set. It was deleted in #821, together with the complementary
+`//go:build !cpi_native` constraint on `cpi.go`. `core/pkg/kernel/cpi/cpi.go` is
+now the only CPI implementation, compiled unconditionally. After this page is
+corrected, no reference to `helm-policy-vm` remains in the repository.
 
 There is likewise no WASM leg to compare against: the only WASM in the policy
 path is the Go/wazero host in `core/pkg/policy/wasm`, which executes modules

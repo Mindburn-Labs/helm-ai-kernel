@@ -1,14 +1,23 @@
 ---
 title: Launchpad Conformance
-last_reviewed: 2026-05-20
+last_reviewed: 2026-08-09
 ---
 
 # Launchpad Conformance
 
-Status: OpenClaw, Hermes, OpenCode, and Kilo Code passed the v1.0 signed
-artifact, live local-container, teardown, receipt, and offline EvidencePack
-bar in workflow `26198407296`. DigitalOcean opt-in beta passed for all four
-apps; Hetzner remains fail-closed until a scoped provider token is available.
+Status: OpenClaw and Hermes are `oss_supported` / `agent_live`. They passed the
+v1.0 signed artifact, live local-container, teardown, receipt, and offline
+EvidencePack bar in workflow `26198407296`. OpenCode and Kilo Code are
+`oss_candidate` / `verify_only` from the same workflow — signed artifact plus a
+`--version` smoke only, which is not live-agent F2 coverage. DigitalOcean
+opt-in beta passed for OpenClaw and Hermes only; verify-only apps are not
+eligible for it, and Hetzner remains fail-closed until a scoped provider token
+is available.
+
+This header is derived from `docs/launchpad/v1_report.json`
+(`status`, `apps.*.availability`, `apps.*.support_level`,
+`substrates.digitalocean.controlled_live_apps`) and from
+`registry/launchpad/apps/*.yaml`. If it ever disagrees with them, they win.
 
 ## Audience
 
@@ -60,14 +69,15 @@ Implemented checks currently prove:
   EvidencePack verification, not from assertion.
 - OpenCode and Kilo Code are `verify_only`; `--version` smoke checks do not
   count as live-agent F2 coverage.
-- OpenClaw image:
-  `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995`.
-- Hermes image:
-  `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652`.
-- OpenCode image (`verify_only`):
-  `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`.
-- Kilo Code image (`verify_only`):
-  `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`.
+- The image pin that a launch actually resolves lives in
+  `registry/launchpad/apps/<app>.yaml` under `install.image` / `install.digest`.
+  The `ci(launchpad): promote signed launchpad image refs` automation re-pins
+  those files, so this page names the file rather than restating a digest that
+  goes stale on the next promotion.
+- `docs/launchpad/v1_report.json` (`apps.*.ghcr_digest`) records the digests
+  that evidence run `26198407296` exercised. Those are the digests the v1.0
+  claims above are about; they are older than the current registry pins for
+  OpenClaw and Hermes, which have been re-promoted since.
 - F2 reports are blocked unless they attach contract preflight JSON, launch
   plan, kernel verdict, sandbox grant, egress receipt, MCP quarantine receipt,
   healthcheck receipt, runtime environment, EvidencePack, offline verify output,

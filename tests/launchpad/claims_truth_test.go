@@ -222,8 +222,12 @@ func TestHistoricalLaunchpadReportsDeclareSupersededTruth(t *testing.T) {
 	requireContains(t, report, "historical `v0.5.4` production report")
 	requireContains(t, report, "This file is not the current Launchpad GA support truth")
 	requireContains(t, report, "docs/launchpad/v1_report.json")
-	requireContains(t, report, "OpenClaw, Hermes,")
-	requireContains(t, report, "OpenCode, and Kilo Code are `oss_supported`")
+	// The forward pointer must restate the contract-first v1 support levels, not
+	// the retracted "all four are oss_supported" line. registry/launchpad/apps/
+	// {opencode,kilocode}.yaml and v1_report.json both say oss_candidate/verify_only.
+	requireContains(t, report, "OpenClaw and Hermes are `oss_supported`")
+	requireContains(t, report, "OpenCode and Kilo Code are `oss_candidate`")
+	requireNotContains(t, report, "OpenCode, and Kilo Code are `oss_supported`", "docs/launchpad/FINAL_IMPLEMENTATION_REPORT.md")
 
 	jsonReport := readDoc(t, root, "docs/launchpad/final_report.json")
 	requireContains(t, jsonReport, `"historical_report": true`)

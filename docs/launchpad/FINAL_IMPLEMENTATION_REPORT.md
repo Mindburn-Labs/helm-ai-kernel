@@ -5,10 +5,16 @@ HELM Launchpad OpenClaw/Hermes local-container support, and HELM AI Enterprise
 Launchpad/Skills governance surfaces.
 
 This file is not the current Launchpad GA support truth. Current Launchpad v1
-truth is recorded in `docs/launchpad/v1_report.json`: OpenClaw, Hermes,
-OpenCode, and Kilo Code are `oss_supported` after workflow `26186959337`
-passed signed artifact build, SBOM, vulnerability scan, live OpenRouter
-launch, teardown, and offline EvidencePack verification for all four.
+truth is recorded in `docs/launchpad/v1_report.json`, from artifact workflow
+`26198407296`: OpenClaw and Hermes are `oss_supported` / `agent_live` after
+signed artifact build, SBOM, vulnerability scan, live launch, teardown, and
+offline EvidencePack verification; OpenCode and Kilo Code are `oss_candidate` /
+`verify_only`, proven by signed artifact plus a `--version` smoke, which is not
+live-agent F2 coverage. Workflow `26186959337` is this historical report's own
+`artifact_workflow_run_id` in `docs/launchpad/final_report.json` — it is not a
+v1 promotion run, and no run has promoted all four apps to `oss_supported`.
+`registry/launchpad/apps/{opencode,kilocode}.yaml` still carry
+`availability: oss_candidate` and `support_level: verify_only`.
 
 `mission_100_percent_complete` is true for this production deployment milestone. Kernel PR #161 and Enterprise PR #30 are merged. Kernel release `v0.5.4` is published from `main`, release workflow `26131090671` passed, and the release EvidencePack verifies offline. Homebrew PR https://github.com/mindburnlabs/homebrew-tap/pull/2 merged the public tap update to v0.5.4. Public website claims remain blocked until docs-truth and owner review approve a public claims update.
 

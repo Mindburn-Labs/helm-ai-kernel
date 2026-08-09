@@ -1,16 +1,17 @@
 ---
 title: Launchpad Clean Install GA
-last_reviewed: 2026-05-20
+last_reviewed: 2026-08-09
 ---
 
 # Launchpad Clean Install GA
 
-Status: v0.5.9 gate implemented; v1 promotes OpenClaw, Hermes, OpenCode, and
-Kilo Code into the supported-app clean-install set after workflow
-`26198407296` passed signed artifact, live conformance, teardown, receipts, and
-offline EvidencePack verification.
+Status: the gate is implemented and its release target tracks the current
+release tag, `v0.8.3`. The supported-app clean-install set is OpenClaw and
+Hermes, which passed signed artifact, live conformance, teardown, receipts, and
+offline EvidencePack verification in workflow `26198407296`. OpenCode and Kilo
+Code are in the verify-only set, not the supported set.
 
-Launchpad GA is a product-adoption gate for the `v0.5.9` release. It proves the
+Launchpad GA is a product-adoption gate for the current release. It proves the
 Homebrew package, signed Launchpad artifacts, local-container app launcher,
 MCP interceptor posture, signed receipts, teardown, and offline EvidencePack
 verification survive a machine that did not build the release.
@@ -29,9 +30,16 @@ offline verification.
 
 ## Source Truth
 
-- Release target: `v0.5.9`
-- Current four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26198407296>
-- Current macOS Homebrew clean-install workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26199878246>
+- Release target: `v0.8.3`. Do not hand-edit that number here. It is the
+  `RELEASE_TAG` default in `scripts/launch/clean_install_gate.sh` and the
+  `release_tag` input default in `.github/workflows/launchpad-clean-install.yml`,
+  and `tests/launchpad/claims_truth_test.go` fails the build unless both equal
+  `v` + the `version:` field of `deploy/helm-chart/Chart.yaml`.
+- Four-app Launchpad artifact workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26198407296>
+- Last executed macOS Homebrew clean-install workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26199878246>.
+  That run was against release tag `v0.5.5`, not against the current target;
+  `docs/launchpad/clean_install_report.json` is its recorded output. No
+  clean-install run has been executed against `v0.8.3`.
 - Current Launchpad v1 report: `docs/launchpad/v1_report.json`
 - Historical `v0.5.4` release report: `docs/launchpad/final_report.json`
 - Clean-install report: `docs/launchpad/clean_install_report.json`
@@ -102,7 +110,7 @@ Use the repo-native gate to collect redacted evidence:
 ```bash
 export OPENAI_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
-  --release-tag v0.5.9 \
+  --release-tag v0.8.3 \
   --artifact-run-id 26198407296 \
   --host-kind developer_macos \
   --output docs/launchpad/clean_install_report.json
@@ -118,14 +126,21 @@ OpenClaw and Hermes. OpenCode and Kilo Code are `verify_only`; `--version`
 smoke checks do not count as live-agent F2 coverage. `--include-candidates`
 remains accepted for backward compatibility but does not launch verify-only apps.
 
-## Supported App Digests
+## App Digests
 
-| App | Support level | Image |
+| App | Support level | Pinned digest |
 | --- | --- | --- |
-| OpenClaw | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/openclaw@sha256:4da80a1e48b5603fd203b7d2b98539a01f796142b0ed9315e5ed86b25bf5d995` |
-| Hermes | `agent_live` | `ghcr.io/mindburn-labs/helm-launchpad/hermes@sha256:4ec024dd8d0191fc887f04dc92c959fc865808d1526f782b5093f395fdd41652` |
-| OpenCode | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/opencode@sha256:cdbeb88cfbd698809e673339d525083cdf1cdb3e91529e01c6834cd90b778550`; `--version` smoke checks do not count as live-agent F2 coverage |
-| Kilo Code | `verify_only` | `ghcr.io/mindburn-labs/helm-launchpad/kilocode@sha256:7b03834725235714ea8e698d38d89ce9b8bd81230b7e784016cb20a2c3c93ca6`; `--version` smoke checks do not count as live-agent F2 coverage |
+| OpenClaw | `agent_live` | `registry/launchpad/apps/openclaw.yaml` → `install.digest` |
+| Hermes | `agent_live` | `registry/launchpad/apps/hermes.yaml` → `install.digest` |
+| OpenCode | `verify_only` | `registry/launchpad/apps/opencode.yaml` → `install.digest`; `--version` smoke checks do not count as live-agent F2 coverage |
+| Kilo Code | `verify_only` | `registry/launchpad/apps/kilocode.yaml` → `install.digest`; `--version` smoke checks do not count as live-agent F2 coverage |
+
+The registry files are the pin a launch actually resolves, and the
+`ci(launchpad): promote signed launchpad image refs` automation rewrites them,
+so this page names the file instead of restating a digest that goes stale on
+the next promotion. `docs/launchpad/v1_report.json` (`apps.*.ghcr_digest`)
+records the digests that evidence run `26198407296` exercised; for OpenClaw and
+Hermes those are older than the current registry pins.
 
 Codex, Claude Code, Cursor, and Junie remain external/BYO adapters.
 
@@ -136,9 +151,12 @@ Manual CI entrypoint:
 ```bash
 gh workflow run launchpad-clean-install.yml \
   --repo Mindburn-Labs/helm-ai-kernel \
-  -f release_tag=v0.5.9 \
+  -f release_tag=v0.8.3 \
   -f artifact_run_id=26198407296
 ```
+
+Both inputs already default to these values in the workflow, so a plain
+`gh workflow run launchpad-clean-install.yml` dispatches the same run.
 
 The CI report is the current repeatable macOS Homebrew gate. A separately
 operated clean Mac transcript can be attached as an additional adoption artifact

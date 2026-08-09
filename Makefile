@@ -244,6 +244,8 @@ release-smoke:
 	bash scripts/ci/release_smoke.sh
 
 version-drift:
+	python3 scripts/release/check_version_drift_test.py
+	python3 scripts/release/prepare_version_test.py
 	python3 scripts/release/check_version_drift.py local
 
 version-drift-report:

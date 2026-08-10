@@ -408,6 +408,43 @@ func TestPostgresReceiptAppendCausalScopedReloadsDurablePredecessorAcrossStoreIn
 	}
 }
 
+func TestPostgresListLatestByTenantUsesLatestFirstOrder(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	receiptStore := NewPostgresReceiptStore(db)
+	const tenantID = "tenant-a"
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	receipt := storeCoverageReceipt("receipt-latest", "decision-latest", "session-latest", 1, time.Date(2026, 5, 5, 0, 0, 2, 0, time.UTC))
+
+	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*ORDER BY timestamp DESC, append_sequence DESC LIMIT \$3`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix, 2).
+		WillReturnRows(storePostgresReceiptRows(receipt, nil))
+	got, err := receiptStore.ListLatestByTenant(ctx, tenantID, 2)
+	if err != nil || len(got) != 1 || got[0].ReceiptID != receipt.ReceiptID {
+		t.Fatalf("Postgres latest tenant receipts = %+v err=%v", got, err)
+	}
+}
+
+func TestPostgresListLatestOnboardingByTenantUsesLatestPerStepWithoutGlobalLimit(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	receiptStore := NewPostgresReceiptStore(db)
+	const tenantID = "tenant-a"
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	receipt := storeCoverageReceipt("receipt-onboarding", "decision-onboarding", "session-onboarding", 1, time.Date(2026, 5, 5, 0, 0, 2, 0, time.UTC))
+	receipt.Metadata = map[string]any{"onboarding_step": "deny"}
+
+	mock.ExpectQuery(`PARTITION BY metadata->>'onboarding_step'[\s\S]*ORDER BY timestamp DESC, append_sequence DESC[\s\S]*left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*onboarding_rank = 1`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix).
+		WillReturnRows(storePostgresReceiptRows(receipt, nil))
+	got, err := receiptStore.ListLatestOnboardingByTenant(ctx, tenantID)
+	if err != nil || len(got) != 1 || got[0].ReceiptID != receipt.ReceiptID {
+		t.Fatalf("Postgres latest onboarding receipts = %+v err=%v", got, err)
+	}
+}
+
 func TestPostgresListByTenantCursorUsesAppendSequence(t *testing.T) {
 	ctx := context.Background()
 	db, mock, cleanup := newStoreCoverageSQLMock(t)

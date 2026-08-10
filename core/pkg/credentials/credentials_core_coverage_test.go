@@ -126,7 +126,7 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 		body   string
 		call   func(*GoogleOAuth) error
 	}{
-		"exchange status": {http.StatusBadRequest, `bad exchange`, func(g *GoogleOAuth) error {
+		"exchange status": {http.StatusBadRequest, `{"access_token":"SECRET-CANARY"}`, func(g *GoogleOAuth) error {
 			_, err := g.ExchangeCode(ctx, "code", "verifier", "redirect")
 			return err
 		}},
@@ -134,7 +134,7 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 			_, err := g.ExchangeCode(ctx, "code", "verifier", "redirect")
 			return err
 		}},
-		"refresh status": {http.StatusUnauthorized, `bad refresh`, func(g *GoogleOAuth) error {
+		"refresh status": {http.StatusUnauthorized, `{"refresh_token":"SECRET-CANARY"}`, func(g *GoogleOAuth) error {
 			_, err := g.RefreshToken(ctx, "refresh")
 			return err
 		}},
@@ -159,8 +159,13 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			g := NewGoogleOAuth("client", "secret")
+			bodyReader := strings.NewReader(tc.body)
 			g.httpClient = &http.Client{Transport: credentialsRoundTripFunc(func(*http.Request) (*http.Response, error) {
-				return credentialsHTTPResponse(tc.status, tc.body), nil
+				return &http.Response{
+					StatusCode: tc.status,
+					Body:       io.NopCloser(bodyReader),
+					Header:     make(http.Header),
+				}, nil
 			})}
 			err := tc.call(g)
 			if name == "revoke already revoked" {
@@ -171,6 +176,12 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 			}
 			if err == nil {
 				t.Fatal("expected oauth error")
+			}
+			if strings.Contains(err.Error(), "SECRET-CANARY") {
+				t.Fatalf("oauth error leaked provider response body: %v", err)
+			}
+			if (strings.Contains(name, " status") || name == "revoke already revoked") && bodyReader.Len() != 0 {
+				t.Fatalf("oauth error response body was not drained: %d bytes remain", bodyReader.Len())
 			}
 		})
 	}

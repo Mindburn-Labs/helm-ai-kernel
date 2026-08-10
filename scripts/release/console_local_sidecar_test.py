@@ -28,10 +28,10 @@ SOURCE = {
 }
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_SOURCE_PIN = {
-    "commit": "c0fd6b4467bed8f03fdbcbca16544ea440cbb34d",
-    "tree": "c4175cccfaf1a3317f845c423e3a6e9d5a9b354a",
+    "commit": "38ab285d38fa3382a9e4c5180bb05659deaf61d5",
+    "tree": "1832cbd65ddeebb22f66e3d14da8ee998249029b",
     "version": "0.2.1",
-    "package_lock_sha256": "5a548841282cac8e37a7380088cbfdf9aec08dba4ed33200a483644a362860c9",
+    "package_lock_sha256": "0e0d41a1b3f04b088e4930b6d534ef9cf2e1d0fdd664f767da30f9fe762566e1",
 }
 RELEASE_WORKFLOW_REF = "refs/tags/helm-console-sidecar-v0.8.1"
 TEST_WORKFLOW_REF = "refs/tags/test-console-source"

@@ -168,19 +168,19 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				// synthetic "system" tenant.
 				counter, ok := svc.ReceiptStore.(store.ReceiptCounter)
 				if !ok {
-					api.WriteInternal(w, fmt.Errorf("receipt store does not support durable receipt counting"))
+					api.WriteInternalR(w, r, fmt.Errorf("receipt store does not support durable receipt counting"))
 					return
 				}
 				var err error
 				receiptCount, err = counter.CountReceipts(r.Context())
 				if err != nil {
-					api.WriteInternal(w, err)
+					api.WriteInternalR(w, r, err)
 					return
 				}
 			}
 			checkpoint, err := surfaces.CreateCheckpoint(receiptCount)
 			if err != nil {
-				api.WriteInternal(w, err)
+				api.WriteInternalR(w, r, err)
 				return
 			}
 			writeContractJSON(w, http.StatusCreated, checkpoint)
@@ -215,7 +215,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		receipts, err := canonicalContractReceipts(r.Context(), svc, tenantID, "", parseLimit(r.URL.Query().Get("limit"), 50, 1000))
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		sessions := proofgraphSessions(receipts)
@@ -250,7 +250,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		receipts, err := canonicalContractReceipts(r.Context(), svc, tenantID, sessionID, parseLimit(r.URL.Query().Get("limit"), 100, 1000))
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		if len(receipts) == 0 {
@@ -310,7 +310,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				api.WriteError(w, http.StatusRequestEntityTooLarge, "Evidence export too large", fmt.Sprintf("Evidence export is limited to %d receipts; export a narrower session or retention window", maxEvidenceExportReceipts))
 				return
 			}
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		if len(receipts) == 0 {
@@ -319,7 +319,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		bundle, err := buildTrustedEvidenceBundleWithSurfaceArtifacts(req.SessionID, receipts, surfaces, svc)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		sum := sha256.Sum256(bundle)
@@ -834,7 +834,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 			if _, err := surfaces.PutMCPServer(record); err != nil {
-				api.WriteInternal(w, err)
+				api.WriteInternalR(w, r, err)
 				return
 			}
 			writeContractJSON(w, http.StatusAccepted, record)
@@ -892,7 +892,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 			if _, err := surfaces.PutMCPServer(record); err != nil {
-				api.WriteInternal(w, err)
+				api.WriteInternalR(w, r, err)
 				return
 			}
 			writeContractJSON(w, http.StatusOK, record)
@@ -925,7 +925,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		if _, err := surfaces.PutMCPServer(record); err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		writeContractJSON(w, http.StatusAccepted, contracts.MCPScanResult{
@@ -1011,11 +1011,11 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			ReceiptID:        req.ReceiptID,
 		})
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		if _, putErr := surfaces.PutRecord(record); putErr != nil {
-			api.WriteInternal(w, putErr)
+			api.WriteInternalR(w, r, putErr)
 			return
 		}
 		status := http.StatusOK

@@ -115,8 +115,26 @@ func WriteTooManyRequests(w http.ResponseWriter, retryAfterSecs int) {
 
 // WriteInternal writes a 500 error response.
 // The err parameter is logged but NEVER exposed to the client.
+//
+// On a request path prefer WriteInternalR: this variant has no context, so the
+// record it emits carries no trace_id and cannot be joined to the span that
+// produced it.
 func WriteInternal(w http.ResponseWriter, err error) {
 	// Log internally but never expose to client
 	slog.Error("internal server error", "error", err)
+	WriteError(w, http.StatusInternalServerError, "Internal Server Error", "An unexpected error occurred. Please try again later.")
+}
+
+// WriteInternalR is WriteInternal for handlers that hold the request: the log
+// record is emitted with r.Context(), so the root slog handler
+// (tracing.NewSlogHandler) stamps it with trace_id/span_id/correlation_id and
+// the 500 can be joined to its server span. The err parameter is logged but
+// NEVER exposed to the client.
+//
+// The response is byte-identical to WriteInternal's — only the log record
+// changes — so swapping a call site cannot alter an API contract.
+func WriteInternalR(w http.ResponseWriter, r *http.Request, err error) {
+	// Log internally but never expose to client
+	slog.ErrorContext(r.Context(), "internal server error", "error", err)
 	WriteError(w, http.StatusInternalServerError, "Internal Server Error", "An unexpected error occurred. Please try again later.")
 }

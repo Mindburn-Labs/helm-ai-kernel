@@ -93,9 +93,34 @@ type cliVersionInfo struct {
 	BuildTime string `json:"build_time"`
 }
 
-func runVersionCommand(args []string, stdout, _ io.Writer) int {
-	if len(args) == 1 && args[0] == "--json" {
+// runVersionFlag serves the `--version`/`-v` flag: a single scriptable line
+// (or a JSON object with --json), so `helm-ai-kernel --version` can be read by
+// a script or pasted into a bug report and matched against a release. The rich
+// multi-line block stays behind the `version` subcommand.
+func runVersionFlag(args []string, stdout, stderr io.Writer) int {
+	switch {
+	case len(args) == 0:
+		fmt.Fprintln(stdout, displayVersion())
+		return 0
+	case len(args) == 1 && args[0] == "--json":
 		return writeVersionJSON(stdout)
+	default:
+		fmt.Fprintf(stderr, "Usage: helm-ai-kernel --version [--json]\n")
+		return 2
+	}
+}
+
+func runVersionCommand(args []string, stdout, stderr io.Writer) int {
+	switch {
+	case len(args) == 0:
+		// full block below
+	case len(args) == 1 && args[0] == "--json":
+		return writeVersionJSON(stdout)
+	default:
+		// An unknown arg used to be ignored and still exit 0, so `version
+		// --bogus` looked like it succeeded. Reject it.
+		fmt.Fprintf(stderr, "Usage: helm-ai-kernel version [--json]\n")
+		return 2
 	}
 	fmt.Fprintf(stdout, "%s %s (%s)\n", terminalTitle(stdout, "HELM AI Kernel"), displayVersion(), displayCommit())
 	fmt.Fprintf(stdout, "  Report Schema:          %s\n", reportSchemaVersion)

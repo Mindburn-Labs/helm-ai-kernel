@@ -1,3 +1,5 @@
+// quantum_posture: these handlers manage classical Ed25519 trust keys; they
+// provide no post-quantum or hybrid protection.
 package api
 
 import (
@@ -59,7 +61,7 @@ func (h *TrustKeyHandler) HandleAddKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Registry.Apply(event); err != nil {
-		WriteInternal(w, err)
+		WriteInternalR(w, r, err)
 		return
 	}
 
@@ -96,7 +98,7 @@ func (h *TrustKeyHandler) HandleRevokeKey(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.Registry.Apply(event); err != nil {
-		WriteInternal(w, err)
+		WriteInternalR(w, r, err)
 		return
 	}
 

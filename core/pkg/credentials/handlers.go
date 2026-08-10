@@ -1,4 +1,6 @@
 // Package credentials - HTTP handlers for credential management API
+// quantum_posture: these handlers store classical OAuth tokens and API keys;
+// they provide no post-quantum or hybrid protection.
 package credentials
 
 import (
@@ -64,7 +66,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	statuses, err := h.store.GetStatus(r.Context(), operatorID)
 	if err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 
@@ -100,7 +102,7 @@ func (h *Handler) handleGoogleToken(w http.ResponseWriter, r *http.Request) {
 	// Exchange code for tokens
 	tokenResp, err := h.googleOAuth.ExchangeCode(r.Context(), req.Code, req.CodeVerifier, req.RedirectURI)
 	if err != nil {
-		slog.Warn("credentials: google token exchange failed", "error", err)
+		slog.WarnContext(r.Context(), "credentials: google token exchange failed", "error", err)
 		api.WriteBadRequest(w, "Token exchange failed")
 		return
 	}
@@ -108,7 +110,7 @@ func (h *Handler) handleGoogleToken(w http.ResponseWriter, r *http.Request) {
 	// Get user info
 	userInfo, err := h.googleOAuth.GetUserInfo(r.Context(), tokenResp.AccessToken)
 	if err != nil {
-		slog.Warn("credentials: failed to get user info", "error", err)
+		slog.WarnContext(r.Context(), "credentials: failed to get user info", "error", err)
 		// Continue without email
 	}
 
@@ -131,8 +133,8 @@ func (h *Handler) handleGoogleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.SaveCredential(r.Context(), cred); err != nil {
-		slog.Error("credentials: failed to save credential", "error", err)
-		api.WriteInternal(w, err)
+		slog.ErrorContext(r.Context(), "credentials: failed to save credential", "error", err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 
@@ -164,7 +166,7 @@ func (h *Handler) handleGoogleRefresh(w http.ResponseWriter, r *http.Request) {
 	// Refresh token
 	tokenResp, err := h.googleOAuth.RefreshToken(r.Context(), cred.RefreshToken)
 	if err != nil {
-		slog.Warn("credentials: token refresh failed", "error", err)
+		slog.WarnContext(r.Context(), "credentials: token refresh failed", "error", err)
 		api.WriteBadRequest(w, "Token refresh failed")
 		return
 	}
@@ -178,7 +180,7 @@ func (h *Handler) handleGoogleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.SaveCredential(r.Context(), cred); err != nil {
-		slog.Error("credentials: failed to update credential", "error", err)
+		slog.ErrorContext(r.Context(), "credentials: failed to update credential", "error", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -199,7 +201,7 @@ func (h *Handler) handleDeleteGoogle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.DeleteCredential(r.Context(), operatorID, ProviderGoogle); err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 
@@ -229,7 +231,7 @@ func (h *Handler) handleStoreOpenAI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.SaveCredential(r.Context(), cred); err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 
@@ -241,7 +243,7 @@ func (h *Handler) handleDeleteOpenAI(w http.ResponseWriter, r *http.Request) {
 	operatorID := getOperatorID(r)
 
 	if err := h.store.DeleteCredential(r.Context(), operatorID, ProviderOpenAI); err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 
@@ -266,7 +268,7 @@ func (h *Handler) handleStoreAnthropic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.SaveCredential(r.Context(), cred); err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 
@@ -278,7 +280,7 @@ func (h *Handler) handleDeleteAnthropic(w http.ResponseWriter, r *http.Request) 
 	operatorID := getOperatorID(r)
 
 	if err := h.store.DeleteCredential(r.Context(), operatorID, ProviderAnthropic); err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 

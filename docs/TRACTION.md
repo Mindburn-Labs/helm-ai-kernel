@@ -329,13 +329,15 @@ Run this checklist before publishing README edits, launch posts, diagrams, video
 - Does not claim certification unless certification exists.
 - Does not describe Enterprise features as Kernel features.
 - Does not imply HELM Cloud or HELM AI OS weakens or forks Kernel semantics.
-- Names HELM as one product on two commercial surfaces, and names no third
-  product. The surfaces are the Kernel surface (free and open source, with HELM
-  Cloud as its paid hosted tier) and HELM AI OS. Kernel, Company Builder,
-  Company OS, Console, and HELM Network are layers of HELM, not products.
-- Attaches a status label - Live, Preview, reviewed access, pilot, Building, or
-  roadmap - to every paid-surface capability, and does not state one in the bare
-  present tense before its release evidence exists.
+- When paid surfaces are named, names HELM as one product on two commercial
+  surfaces and names no third product. The surfaces are the Kernel surface (free
+  and open source, with HELM Cloud as its paid hosted tier) and HELM AI OS.
+  Kernel, Company Builder, Company OS, Console, and HELM Network are layers of
+  HELM, not products.
+- Attaches an evidence-appropriate status label or gate date - Preview, reviewed
+  access, pilot, Building, roadmap, or a dated gate - to every paid-surface
+  capability. Uses Live or bare present-tense availability only when release
+  evidence exists.
 - Does not mention robot fleets, AGI OS, OrgDNA compiler, Titan, or physical-world control in OSS copy.
 
 ## Diagram Doctrine
@@ -371,9 +373,10 @@ Submit listings after the proof exists.
 
 HELM is one product on two commercial surfaces. The Kernel surface is free and
 open source, with **HELM Cloud** as its paid hosted tier; **HELM AI OS** is one
-modular product whose inclusions are enabled per customer. Kernel, Company
-Builder, Company OS, Console, and HELM Network are layers of HELM, not separate
-products. OSS copy must not invent a third product name for the paid surface.
+modular product in **Preview**, with reviewed access and inclusions enabled per
+customer. Kernel, Company Builder, Company OS, Console, and HELM Network are
+layers of HELM, not separate products. OSS copy must not invent a third product
+name for the paid surface.
 
 Use this bridge after local Kernel proof:
 

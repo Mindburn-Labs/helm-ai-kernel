@@ -43,6 +43,23 @@ const backfillSQLiteReceiptAppendSequenceSQL = `
 	WHERE COALESCE(append_sequence, 0) = 0;
 `
 
+// SQLite stores receipt timestamps as RFC3339Nano text, whose fractional width
+// varies. Build a fixed-width UTC key at query time so comparisons preserve
+// nanoseconds without rewriting existing rows or changing their representation.
+const sqliteReceiptTimestampSortLayout = "2006-01-02T15:04:05.000000000Z"
+
+const sqliteReceiptTimestampSortKeySQL = `CASE
+	WHEN substr(timestamp, 20, 1) = '.'
+		AND substr(timestamp, -1, 1) = 'Z'
+		AND length(timestamp) BETWEEN 22 AND 30
+	THEN substr(timestamp, 1, 20)
+		|| substr(substr(timestamp, 21, length(timestamp) - 21) || '000000000', 1, 9)
+		|| 'Z'
+	WHEN substr(timestamp, 20, 1) = 'Z'
+	THEN substr(timestamp, 1, 19) || '.000000000Z'
+	ELSE timestamp
+END`
+
 func NewSQLiteReceiptStore(db *sql.DB) (*SQLiteReceiptStore, error) {
 	s := &SQLiteReceiptStore{db: db}
 
@@ -591,12 +608,12 @@ func appendReceiptFilterPredicatesSQLite(query string, args []any, filter Receip
 		args = append(args, v)
 	}
 	if !filter.From.IsZero() {
-		query += "\n\t\t  AND julianday(timestamp) >= julianday(?)"
-		args = append(args, filter.From.UTC().Format(time.RFC3339Nano))
+		query += "\n\t\t  AND " + sqliteReceiptTimestampSortKeySQL + " >= ?"
+		args = append(args, filter.From.UTC().Format(sqliteReceiptTimestampSortLayout))
 	}
 	if !filter.To.IsZero() {
-		query += "\n\t\t  AND julianday(timestamp) < julianday(?)"
-		args = append(args, filter.To.UTC().Format(time.RFC3339Nano))
+		query += "\n\t\t  AND " + sqliteReceiptTimestampSortKeySQL + " < ?"
+		args = append(args, filter.To.UTC().Format(sqliteReceiptTimestampSortLayout))
 	}
 	return query, args
 }

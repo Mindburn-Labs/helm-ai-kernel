@@ -153,24 +153,55 @@ func TestSQLiteListByTenantSessionFilteredByVerdict(t *testing.T) {
 	}
 }
 
-func TestSQLiteReceiptTimeFilterOrdersFractionalRFC3339Chronologically(t *testing.T) {
+func TestSQLiteReceiptTimeFilterPreservesNanosecondHalfOpenBounds(t *testing.T) {
 	receiptStore, cleanup := newTestSQLiteStore(t)
 	defer cleanup()
 	ctx := context.Background()
 
 	const tenantID = "tenant-fractional-time"
-	base := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	at := time.Date(2026, 8, 2, 12, 0, 0, 123000000, time.UTC)
+	next := at.Add(time.Nanosecond)
 	seedTenantFilterReceipts(t, receiptStore, tenantID, []receiptFilterFixture{
-		{"at-second", "session-second", string(contracts.VerdictAllow), "ok", "agent", "read", base},
-		{"after-second", "session-fractional", string(contracts.VerdictAllow), "ok", "agent", "read", base.Add(500 * time.Millisecond)},
+		{"at-bound", "session-at", string(contracts.VerdictAllow), "ok", "agent", "read", at},
+		{"next-nanosecond", "session-next", string(contracts.VerdictAllow), "ok", "agent", "read", next},
+	})
+	seedTenantFilterReceipts(t, receiptStore, "tenant-foreign", []receiptFilterFixture{
+		{"foreign-at-bound", "session-foreign", string(contracts.VerdictAllow), "ok", "agent", "read", at},
 	})
 
-	got, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{}, ReceiptQueryFilter{From: base}, 10)
-	if err != nil {
-		t.Fatalf("filter from whole second: %v", err)
+	var stored string
+	if err := receiptStore.db.QueryRowContext(ctx, `SELECT CAST(timestamp AS TEXT) FROM receipts WHERE receipt_id = ?`, "at-bound").Scan(&stored); err != nil {
+		t.Fatalf("read stored timestamp: %v", err)
 	}
-	if ids := receiptIDsOf(got); !reflect.DeepEqual(ids, []string{"at-second", "after-second"}) {
-		t.Fatalf("fractional timestamp ordering returned %v", ids)
+	if stored != "2026-08-02T12:00:00.123Z" {
+		t.Fatalf("stored timestamp = %q, want RFC3339Nano without trailing fractional zeros", stored)
+	}
+
+	got, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{}, ReceiptQueryFilter{To: next}, 1)
+	if err != nil {
+		t.Fatalf("filter before adjacent nanosecond: %v", err)
+	}
+	if ids := receiptIDsOf(got); !reflect.DeepEqual(ids, []string{"at-bound"}) {
+		t.Fatalf("exclusive adjacent-nanosecond bound returned %v, want [at-bound]", ids)
+	}
+
+	continued, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{
+		ReceiptID: "at-bound",
+		Timestamp: at,
+	}, ReceiptQueryFilter{To: next}, 1)
+	if err != nil {
+		t.Fatalf("continue filtered page: %v", err)
+	}
+	if len(continued) != 0 {
+		t.Fatalf("continued filtered page returned %v, want no receipts", receiptIDsOf(continued))
+	}
+
+	got, err = receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{}, ReceiptQueryFilter{From: next}, 1)
+	if err != nil {
+		t.Fatalf("filter from adjacent nanosecond: %v", err)
+	}
+	if ids := receiptIDsOf(got); !reflect.DeepEqual(ids, []string{"next-nanosecond"}) {
+		t.Fatalf("inclusive adjacent-nanosecond bound returned %v, want [next-nanosecond]", ids)
 	}
 }
 

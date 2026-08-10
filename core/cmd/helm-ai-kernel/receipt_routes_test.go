@@ -676,6 +676,29 @@ func TestReceiptListQueryFilters(t *testing.T) {
 		DecisionHash: "sha256:boundary-decision",
 		ArgsHash:     "args-boundary",
 	})
+	nanosecondBound := time.Date(2026, 5, 9, 0, 0, 0, 123456789, time.UTC)
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-nano-at", &contracts.Receipt{
+		ReceiptID:    "rcpt-nano-at",
+		DecisionID:   "dec-nano-at",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictEscalate),
+		Verdict:      string(contracts.VerdictEscalate),
+		Timestamp:    nanosecondBound,
+		ExecutorID:   "agent.nanosecond",
+		DecisionHash: "sha256:nano-at-decision",
+		ArgsHash:     "args-nano-at",
+	})
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-nano-next", &contracts.Receipt{
+		ReceiptID:    "rcpt-nano-next",
+		DecisionID:   "dec-nano-next",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictEscalate),
+		Verdict:      string(contracts.VerdictEscalate),
+		Timestamp:    nanosecondBound.Add(time.Nanosecond),
+		ExecutorID:   "agent.nanosecond",
+		DecisionHash: "sha256:nano-next-decision",
+		ArgsHash:     "args-nano-next",
+	})
 	appendTenantScopedReceipt(t, receiptStore, "tenant-foreign", "session-deny", &contracts.Receipt{
 		ReceiptID:    "rcpt-foreign",
 		DecisionID:   "dec-foreign",
@@ -715,6 +738,7 @@ func TestReceiptListQueryFilters(t *testing.T) {
 		{"effect overrides resource alias", "principal=agent.filtered&effect=READ_FILE&resource=EXECUTE_TOOL", []string{"rcpt-allow", "rcpt-to-boundary"}},
 		{"resource alias", "principal=agent.filtered&resource=READ_FILE", []string{"rcpt-allow", "rcpt-to-boundary"}},
 		{"half-open time bounds", "principal=agent.filtered&from=2026-05-06T00:00:00Z&to=2026-05-08T00:00:00Z", []string{"rcpt-allow", "rcpt-deny"}},
+		{"nanosecond half-open time bounds", "principal=agent.nanosecond&from=2026-05-09T00:00:00.123456789Z&to=2026-05-09T00:00:00.123456790Z", []string{"rcpt-nano-at"}},
 		{"session filter remains tenant scoped", "session_id=session-deny&executor=agent.filtered&resource=EXECUTE_TOOL", []string{"rcpt-deny"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

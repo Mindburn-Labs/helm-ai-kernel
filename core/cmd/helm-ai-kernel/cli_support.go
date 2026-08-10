@@ -181,67 +181,218 @@ func printCompletionUsage(out io.Writer) {
 }
 
 func completionScript(shell string) (string, bool) {
-	words := completionWords()
+	rootWords := completionWords()
+	contexts := completionContexts()
 	switch shell {
 	case "bash":
-		return bashCompletionScript(strings.Join(words, " ")), true
+		return bashCompletionScript(rootWords, contexts), true
 	case "zsh":
-		return zshCompletionScript(words), true
+		return zshCompletionScript(rootWords, contexts), true
 	case "fish":
-		return fishCompletionScript(words), true
+		return fishCompletionScript(rootWords, contexts), true
 	case "powershell":
-		return powerShellCompletionScript(words), true
+		return powerShellCompletionScript(rootWords, contexts), true
 	default:
 		return "", false
 	}
 }
 
-func bashCompletionScript(words string) string {
-	return fmt.Sprintf(`# bash completion for helm-ai-kernel
-_helm_ai_kernel_completion() {
-  local cur
-  cur="${COMP_WORDS[COMP_CWORD]}"
-  COMPREPLY=( $(compgen -W %q -- "$cur") )
-}
-complete -F _helm_ai_kernel_completion helm-ai-kernel
-`, words)
+func bashCompletionScript(rootWords []string, contexts []completionContext) string {
+	var script strings.Builder
+	fmt.Fprintf(&script, "# bash completion for helm-ai-kernel\n")
+	script.WriteString("_helm_ai_kernel_completion() {\n")
+	script.WriteString("  local cur context words\n")
+	script.WriteString("  cur=\"${COMP_WORDS[COMP_CWORD]}\"\n")
+	fmt.Fprintf(&script, "  words=%q\n", strings.Join(rootWords, " "))
+	script.WriteString("  if (( COMP_CWORD > 1 )); then\n")
+	script.WriteString("    context=\"${COMP_WORDS[1]}\"\n")
+	script.WriteString("    if (( COMP_CWORD >= 3 )) && [[ -n \"${COMP_WORDS[2]}\" ]]; then\n")
+	script.WriteString("      context=\"$context ${COMP_WORDS[2]}\"\n")
+	script.WriteString("    fi\n")
+	script.WriteString("    case \"$context\" in\n")
+	for _, context := range contexts {
+		if len(context.Path) < 2 {
+			continue
+		}
+		fmt.Fprintf(&script, "      %q) words=%q ;;\n", strings.Join(context.Path, " "), strings.Join(uniqueStrings(context.Candidates), " "))
+	}
+	script.WriteString("    esac\n")
+	script.WriteString("    if [[ \"$words\" == ")
+	fmt.Fprintf(&script, "%q", strings.Join(rootWords, " "))
+	script.WriteString(" ]]; then\n")
+	script.WriteString("      context=\"${COMP_WORDS[1]}\"\n")
+	script.WriteString("      case \"$context\" in\n")
+	for _, context := range contexts {
+		if len(context.Path) != 1 {
+			continue
+		}
+		fmt.Fprintf(&script, "        %q) words=%q ;;\n", strings.Join(context.Path, " "), strings.Join(uniqueStrings(context.Candidates), " "))
+	}
+	script.WriteString("      esac\n")
+	script.WriteString("    fi\n")
+	script.WriteString("  fi\n")
+	script.WriteString("  COMPREPLY=( $(compgen -W \"$words\" -- \"$cur\") )\n")
+	script.WriteString("}\n")
+	script.WriteString("complete -F _helm_ai_kernel_completion helm-ai-kernel\n")
+	return script.String()
 }
 
-func zshCompletionScript(words []string) string {
+func zshCompletionScript(rootWords []string, contexts []completionContext) string {
 	var script strings.Builder
 	script.WriteString("#compdef helm-ai-kernel\n\n")
 	script.WriteString("_helm_ai_kernel_completion() {\n")
-	script.WriteString("  local -a commands\n")
-	script.WriteString("  commands=(\n")
-	for _, word := range words {
-		fmt.Fprintf(&script, "    %q\n", word)
+	script.WriteString("  local -a choices\n")
+	script.WriteString("  local context\n")
+	script.WriteString("  if (( CURRENT > 2 )); then\n")
+	script.WriteString("    context=\"$words[2]\"\n")
+	script.WriteString("    if (( CURRENT > 3 )) && [[ -n \"$words[3]\" ]]; then\n")
+	script.WriteString("      context=\"$context $words[3]\"\n")
+	script.WriteString("    fi\n")
+	script.WriteString("    case \"$context\" in\n")
+	for _, context := range contexts {
+		if len(context.Path) < 2 {
+			continue
+		}
+		fmt.Fprintf(&script, "      %q)\n", strings.Join(context.Path, " "))
+		script.WriteString("        choices=(\n")
+		for _, word := range uniqueStrings(context.Candidates) {
+			fmt.Fprintf(&script, "          %q\n", word)
+		}
+		script.WriteString("        ) ;;\n")
 	}
-	script.WriteString("  )\n")
-	script.WriteString("  _describe -t commands 'helm-ai-kernel command' commands\n")
+	script.WriteString("    esac\n")
+	script.WriteString("    if (( $#choices == 0 )); then\n")
+	script.WriteString("      context=\"$words[2]\"\n")
+	script.WriteString("      case \"$context\" in\n")
+	for _, context := range contexts {
+		if len(context.Path) != 1 {
+			continue
+		}
+		fmt.Fprintf(&script, "        %q)\n", strings.Join(context.Path, " "))
+		script.WriteString("          choices=(\n")
+		for _, word := range uniqueStrings(context.Candidates) {
+			fmt.Fprintf(&script, "            %q\n", word)
+		}
+		script.WriteString("          ) ;;\n")
+	}
+	script.WriteString("      esac\n")
+	script.WriteString("    fi\n")
+	script.WriteString("  fi\n")
+	script.WriteString("  if (( $#choices == 0 )); then\n")
+	script.WriteString("    choices=(\n")
+	for _, word := range rootWords {
+		fmt.Fprintf(&script, "      %q\n", word)
+	}
+	script.WriteString("    )\n")
+	script.WriteString("  fi\n")
+	script.WriteString("  _describe -t commands 'helm-ai-kernel command' choices\n")
 	script.WriteString("}\n\n")
 	script.WriteString("compdef _helm_ai_kernel_completion helm-ai-kernel\n")
 	return script.String()
 }
 
-func fishCompletionScript(words []string) string {
+func fishCompletionScript(rootWords []string, contexts []completionContext) string {
 	var script strings.Builder
 	script.WriteString("# fish completion for helm-ai-kernel\n")
-	script.WriteString("complete -c helm-ai-kernel -f\n")
-	for _, word := range words {
-		fmt.Fprintf(&script, "complete -c helm-ai-kernel -n '__fish_use_subcommand' -a %q\n", word)
+	script.WriteString("function __fish_helm_ai_kernel_completion\n")
+	script.WriteString("  set -l tokens (commandline -opc)\n")
+	script.WriteString("  set -e tokens[1]\n")
+	script.WriteString("  set -l choices")
+	script.WriteByte('\n')
+	script.WriteString("  set -l context\n")
+	script.WriteString("  if test (count $tokens) -ge 1\n")
+	script.WriteString("    set context $tokens[1]\n")
+	script.WriteString("  end\n")
+	script.WriteString("  if test (count $tokens) -ge 2\n")
+	script.WriteString("    set context \"$tokens[1] $tokens[2]\"\n")
+	script.WriteString("  end\n")
+	script.WriteString("  switch $context\n")
+	for _, context := range contexts {
+		if len(context.Path) < 2 {
+			continue
+		}
+		fmt.Fprintf(&script, "    case %q\n", strings.Join(context.Path, " "))
+		for _, word := range uniqueStrings(context.Candidates) {
+			fmt.Fprintf(&script, "      set -a choices %q\n", word)
+		}
 	}
+	script.WriteString("  end\n")
+	script.WriteString("  if test (count $choices) -eq 0 -a (count $tokens) -ge 1\n")
+	script.WriteString("    switch $tokens[1]\n")
+	for _, context := range contexts {
+		if len(context.Path) != 1 {
+			continue
+		}
+		fmt.Fprintf(&script, "      case %q\n", strings.Join(context.Path, " "))
+		for _, word := range uniqueStrings(context.Candidates) {
+			fmt.Fprintf(&script, "        set -a choices %q\n", word)
+		}
+	}
+	script.WriteString("    end\n")
+	script.WriteString("  end\n")
+	script.WriteString("  if test (count $choices) -eq 0\n")
+	for _, word := range rootWords {
+		fmt.Fprintf(&script, "    set -a choices %q\n", word)
+	}
+	script.WriteString("  end\n")
+	script.WriteString("  for word in $choices\n")
+	script.WriteString("    echo $word\n")
+	script.WriteString("  end\n")
+	script.WriteString("end\n")
+	script.WriteString("complete -c helm-ai-kernel -f -a '(__fish_helm_ai_kernel_completion)'\n")
 	return script.String()
 }
 
-func powerShellCompletionScript(words []string) string {
+func powerShellCompletionScript(rootWords []string, contexts []completionContext) string {
 	var script strings.Builder
 	script.WriteString("Register-ArgumentCompleter -Native -CommandName helm-ai-kernel -ScriptBlock {\n")
 	script.WriteString("  param($wordToComplete, $commandAst, $cursorPosition)\n")
-	script.WriteString("  @(\n")
-	for _, word := range words {
-		fmt.Fprintf(&script, "    %s\n", powerShellQuote(word))
+	script.WriteString("  $elements = @($commandAst.CommandElements | ForEach-Object { $_.Extent.Text })\n")
+	script.WriteString("  if ($elements.Length -gt 0) { $elements = $elements[1..($elements.Length - 1)] }\n")
+	script.WriteString("  $choices = @()\n")
+	script.WriteString("  $context = ''\n")
+	script.WriteString("  if ($elements.Length -ge 2) { $context = \"$($elements[0]) $($elements[1])\" }\n")
+	script.WriteString("  switch ($context) {\n")
+	for _, context := range contexts {
+		if len(context.Path) < 2 {
+			continue
+		}
+		fmt.Fprintf(&script, "    %s { $choices = @(", powerShellQuote(strings.Join(context.Path, " ")))
+		for index, word := range uniqueStrings(context.Candidates) {
+			if index > 0 {
+				script.WriteString(", ")
+			}
+			script.WriteString(powerShellQuote(word))
+		}
+		script.WriteString(") }\n")
 	}
-	script.WriteString("  ) | Where-Object { $_ -like \"$wordToComplete*\" } | ForEach-Object {\n")
+	script.WriteString("  }\n")
+	script.WriteString("  if ($choices.Length -eq 0 -and $elements.Length -ge 1) {\n")
+	script.WriteString("    switch ($elements[0]) {\n")
+	for _, context := range contexts {
+		if len(context.Path) != 1 {
+			continue
+		}
+		fmt.Fprintf(&script, "      %s { $choices = @(", powerShellQuote(strings.Join(context.Path, " ")))
+		for index, word := range uniqueStrings(context.Candidates) {
+			if index > 0 {
+				script.WriteString(", ")
+			}
+			script.WriteString(powerShellQuote(word))
+		}
+		script.WriteString(") }\n")
+	}
+	script.WriteString("    }\n")
+	script.WriteString("  }\n")
+	script.WriteString("  if ($choices.Length -eq 0) { $choices = @(")
+	for index, word := range rootWords {
+		if index > 0 {
+			script.WriteString(", ")
+		}
+		script.WriteString(powerShellQuote(word))
+	}
+	script.WriteString(") }\n")
+	script.WriteString("  $choices | Where-Object { $_ -like \"$wordToComplete*\" } | ForEach-Object {\n")
 	script.WriteString("    [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)\n")
 	script.WriteString("  }\n")
 	script.WriteString("}\n")

@@ -619,6 +619,85 @@ func TestReceiptRoutesRejectInvalidSessionQuery(t *testing.T) {
 	}
 }
 
+func receiptListIDs(t *testing.T, result map[string]any) []string {
+	t.Helper()
+	raw, ok := result["receipts"].([]any)
+	if !ok {
+		return nil
+	}
+	ids := make([]string, 0, len(raw))
+	for _, item := range raw {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("receipt entry is not an object: %T", item)
+		}
+		if id, ok := obj["receipt_id"].(string); ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func TestReceiptListFiltersByVerdictQueryParam(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	receiptStore := svc.ReceiptStore.(*store.SQLiteReceiptStore)
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-allow", &contracts.Receipt{
+		ReceiptID:    "rcpt-allow",
+		DecisionID:   "dec-allow",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictAllow),
+		Verdict:      string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 6, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		DecisionHash: "sha256:allow-decision",
+		ArgsHash:     "args-allow",
+	})
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-deny", &contracts.Receipt{
+		ReceiptID:    "rcpt-deny",
+		DecisionID:   "dec-deny",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictDeny),
+		Verdict:      string(contracts.VerdictDeny),
+		ReasonCode:   "policy.blocked",
+		Timestamp:    time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.test",
+		DecisionHash: "sha256:deny-decision",
+		ArgsHash:     "args-deny",
+	})
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	deny := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?verdict=DENY"))
+	if len(deny) != 1 || deny[0] != "rcpt-deny" {
+		t.Fatalf("verdict=DENY returned %v, want [rcpt-deny]", deny)
+	}
+	allow := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?verdict=ALLOW&reason_code="))
+	if len(allow) != 1 || allow[0] != "rcpt-allow" {
+		t.Fatalf("verdict=ALLOW returned %v, want [rcpt-allow]", allow)
+	}
+	denyReason := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?verdict=DENY&reason_code=policy.blocked"))
+	if len(denyReason) != 1 || denyReason[0] != "rcpt-deny" {
+		t.Fatalf("verdict=DENY&reason_code=policy.blocked returned %v, want [rcpt-deny]", denyReason)
+	}
+}
+
+func TestReceiptListRejectsInvalidTimeFilter(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?from=not-a-timestamp", nil)
+	authorizeTestRequest(req)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid from filter status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTenantReceiptTailUsesOpaqueKeysetCursorAcrossSessions(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()

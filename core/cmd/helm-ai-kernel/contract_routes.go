@@ -1437,7 +1437,7 @@ func contractReceipts(ctx context.Context, svc *Services, tenantID, sessionID st
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
-	return listReceiptsForCursor(ctx, svc, tenantID, sessionID, store.TenantReceiptCursor{}, limit)
+	return listReceiptsForCursor(ctx, svc, tenantID, sessionID, store.TenantReceiptCursor{}, store.ReceiptQueryFilter{}, limit)
 }
 
 func canonicalContractReceipts(ctx context.Context, svc *Services, tenantID, sessionID string, limit int) ([]*contracts.Receipt, error) {
@@ -1588,7 +1588,7 @@ func contractReceiptsForExportWithPageSize(ctx context.Context, svc *Services, t
 		}
 		var page []*contracts.Receipt
 		var err error
-		page, err = listReceiptsForCursor(ctx, svc, tenantID, sessionID, cursor, limit)
+		page, err = listReceiptsForCursor(ctx, svc, tenantID, sessionID, cursor, store.ReceiptQueryFilter{}, limit)
 		if err != nil {
 			return nil, err
 		}

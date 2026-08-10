@@ -63,9 +63,16 @@ func (r Renderer) ConfirmDecision(input io.Reader, decision DecisionContext, app
 	if err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
-	if !strings.EqualFold(strings.TrimSpace(line), string(decision.Action)) {
+	// Echo the resolved answer on its own line. Without it, the prompt and the
+	// caller's next output collided on a single line (a piped session showed
+	// "…to confirm: setup: no changes made"), and the transcript was not a
+	// record of what was decided.
+	answer := strings.TrimSpace(line)
+	if !strings.EqualFold(answer, string(decision.Action)) {
+		_, _ = fmt.Fprintf(r.chrome, "→ cancelled\n")
 		return ErrConfirmationRequired
 	}
+	_, _ = fmt.Fprintf(r.chrome, "→ %s\n", decision.Action)
 	if apply == nil {
 		return nil
 	}

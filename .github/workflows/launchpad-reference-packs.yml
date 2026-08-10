@@ -1,6 +1,12 @@
 name: Launchpad Reference Packs Verification
 
 on:
+  # Weekly as well as on-path: this gate last ran 2026-07-06 and passed, then sat idle while
+  # the kernel tightened its evidence policy. A path-filtered gate that never fires reports
+  # green without checking anything. The schedule is what makes it a gate.
+  schedule:
+    - cron: '43 5 * * 1'
+  workflow_dispatch:
   push:
     branches: [ main ]
     paths:
@@ -29,19 +35,43 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version: '1.22'
+          go-version: "1.25.12"
 
       - name: Build helm-ai-kernel CLI
         run: make build
 
       - name: Verify OpenClaw Reference Bundle
+        # These fixtures carry a self-attested dev-local seal, which the kernel refuses by
+        # default — correctly, since such a seal proves internal consistency, not provenance.
+        # Accepting it explicitly keeps the gate meaningful (it still catches tampering) while
+        # being honest about what it proves. Do NOT copy this flag to a real EvidencePack.
+        env:
+          HELM_ALLOW_SELF_ATTESTED_EVIDENCE: '1'
         run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/openclaw/evidence-pack.tar
 
       - name: Verify Hermes Reference Bundle
+        # These fixtures carry a self-attested dev-local seal, which the kernel refuses by
+        # default — correctly, since such a seal proves internal consistency, not provenance.
+        # Accepting it explicitly keeps the gate meaningful (it still catches tampering) while
+        # being honest about what it proves. Do NOT copy this flag to a real EvidencePack.
+        env:
+          HELM_ALLOW_SELF_ATTESTED_EVIDENCE: '1'
         run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/hermes/evidence-pack.tar
 
       - name: Verify OpenCode Reference Bundle
+        # These fixtures carry a self-attested dev-local seal, which the kernel refuses by
+        # default — correctly, since such a seal proves internal consistency, not provenance.
+        # Accepting it explicitly keeps the gate meaningful (it still catches tampering) while
+        # being honest about what it proves. Do NOT copy this flag to a real EvidencePack.
+        env:
+          HELM_ALLOW_SELF_ATTESTED_EVIDENCE: '1'
         run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/opencode/evidence-pack.tar
 
       - name: Verify Kilo Code Reference Bundle
+        # These fixtures carry a self-attested dev-local seal, which the kernel refuses by
+        # default — correctly, since such a seal proves internal consistency, not provenance.
+        # Accepting it explicitly keeps the gate meaningful (it still catches tampering) while
+        # being honest about what it proves. Do NOT copy this flag to a real EvidencePack.
+        env:
+          HELM_ALLOW_SELF_ATTESTED_EVIDENCE: '1'
         run: ./bin/helm-ai-kernel verify --bundle reference_packs/launchpad/kilocode/evidence-pack.tar

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -119,9 +120,7 @@ func loadOrGenerateEd25519Root(dataDir string) (*crypto.Ed25519Signer, error) {
 	}
 
 	log.Printf("[helm] trust: generating new persistent root key at %s", keyPath)
-	fmt.Fprintf(os.Stderr, "\n%s⚠️  SECURITY WARNING: Using auto-generated root key.%s\n", ColorBold+ColorYellow, ColorReset)
-	fmt.Fprintf(os.Stderr, "   Key saved to: %s\n", keyPath)
-	fmt.Fprintf(os.Stderr, "   In production, use a hardware security module (HSM) or cloud KMS.\n\n")
+	slog.Warn("using auto-generated root key", "path", keyPath, "production_guidance", "use an HSM or cloud KMS")
 
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

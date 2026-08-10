@@ -269,8 +269,12 @@ func TestQuickstartJSONStdoutIsSingleReadyDocument(t *testing.T) {
 		}
 		// Exercise the same production output boundary that runtime startup uses:
 		// human narration must be redirected while the ready callback owns stdout.
-		_, _ = fmt.Fprintf(serverNarrationWriter(opts), "%sstartup narration%s\n", ColorBold, ColorReset)
-		writeServerReady(opts, opts.BindAddr, opts.Port)
+		_, _ = fmt.Fprintf(opts.Stderr, "%sstartup narration%s\n", ColorBold, ColorReset)
+		logger, format, err := configureServerLogger(opts.Stderr, opts.Mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeServerReady(opts, logger, format, opts.BindAddr, opts.Port)
 		return nil
 	}
 

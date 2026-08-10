@@ -210,10 +210,24 @@ func runServer() error {
 	return runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr})
 }
 
-func newServerLogHandler(w io.Writer) (slog.Handler, error) {
+func resolveServerLogFormat(mode string) (string, error) {
+	format := strings.ToLower(strings.TrimSpace(os.Getenv("HELM_LOG_FORMAT")))
+	if format == "" {
+		if mode == "quickstart" {
+			return "text", nil
+		}
+		return "json", nil
+	}
+	if format != "json" && format != "text" {
+		return "", fmt.Errorf("invalid HELM_LOG_FORMAT %q: expected json or text", format)
+	}
+	return format, nil
+}
+
+func newServerLogHandler(w io.Writer, format string) slog.Handler {
 	var handler slog.Handler
-	switch format := strings.ToLower(strings.TrimSpace(os.Getenv("HELM_LOG_FORMAT"))); format {
-	case "", "json":
+	switch format {
+	case "json":
 		handler = slog.NewJSONHandler(w, &slog.HandlerOptions{ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
 			if len(groups) == 0 && attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
 				return slog.String("timestamp", attr.Value.Time().UTC().Format("2006-01-02T15:04:05.000Z07:00"))
@@ -222,10 +236,26 @@ func newServerLogHandler(w io.Writer) (slog.Handler, error) {
 		}})
 	case "text":
 		handler = slog.NewTextHandler(w, nil)
-	default:
-		return nil, fmt.Errorf("invalid HELM_LOG_FORMAT %q: expected json or text", format)
 	}
-	return tracing.NewSlogHandler(handler), nil
+	return tracing.NewSlogHandler(handler)
+}
+
+func configureServerLogger(w io.Writer, mode string) (*slog.Logger, string, error) {
+	format, err := resolveServerLogFormat(mode)
+	if err != nil {
+		return nil, "", err
+	}
+	logger := slog.New(newServerLogHandler(w, format))
+	slog.SetDefault(logger)
+	return logger, format, nil
+}
+
+func writeServerNarration(logger *slog.Logger, format string, human io.Writer, humanText, message string, attrs ...any) {
+	if format == "json" {
+		logger.Info(message, attrs...)
+		return
+	}
+	_, _ = fmt.Fprintln(human, humanText)
 }
 
 //nolint:gocognit,gocyclo
@@ -236,7 +266,7 @@ func runServerWithOptions(opts serverOptions) error {
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
-	logHandler, logConfigErr := newServerLogHandler(opts.Stderr)
+	logger, logFormat, logConfigErr := configureServerLogger(opts.Stderr, opts.Mode)
 	if logConfigErr != nil {
 		return logConfigErr
 	}
@@ -247,7 +277,10 @@ func runServerWithOptions(opts serverOptions) error {
 	if transportErr != nil {
 		return fmt.Errorf("desktop transport v1 configuration: %w", transportErr)
 	}
-	narration := serverNarrationWriter(opts)
+	narration := opts.Stdout
+	if opts.JSON {
+		narration = opts.Stderr
+	}
 	// SEC: Default to localhost to prevent accidental network exposure.
 	// HELM_BIND_ADDR=0.0.0.0 remains an explicit opt-in for server mode.
 	bindAddr := opts.BindAddr
@@ -300,16 +333,11 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	defer func() { _ = apiListener.Close() }()
 
-	fmt.Fprintf(narration, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
+	writeServerNarration(logger, logFormat, narration,
+		ColorBold+ColorBlue+"HELM AI Kernel starting..."+ColorReset,
+		"HELM AI Kernel starting")
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
-	// Stamp trace_id/span_id/correlation_id from ctx onto every record
-	// (HELM-333); requires *Context slog variants at call sites. The wrapped
-	// handler must be an explicit sink handler: wrapping the stdlib bridge
-	// (slog.Default().Handler()) and re-SetDefault-ing creates a log→slog→log
-	// cycle that deadlocks the first log.Printf at boot.
-	logger := slog.New(logHandler)
-	slog.SetDefault(logger)
 	dataDir := opts.DataDir
 	if dataDir == "" {
 		dataDir = "data"
@@ -326,7 +354,9 @@ func runServerWithOptions(opts serverOptions) error {
 	// 0.2 Connect to Database (Infrastructure)
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		fmt.Fprintf(narration, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
+		writeServerNarration(logger, logFormat, narration,
+			"ℹ️  DATABASE_URL not set. Falling back to "+ColorBold+ColorCyan+"Lite Mode"+ColorReset+" (SQLite).",
+			"DATABASE_URL not set; using Lite Mode", "database", "sqlite")
 		if opts.SQLitePath != "" {
 			db, _, receiptStore, err = setupLiteModeWithDBPath(ctx, opts.SQLitePath)
 			dataDir = filepath.Dir(opts.SQLitePath)
@@ -383,7 +413,9 @@ func runServerWithOptions(opts serverOptions) error {
 		log.Fatalf("Failed to init signer: %v", err)
 	}
 	verifier, _ := crypto.NewEd25519Verifier(signer.PublicKeyBytes())
-	fmt.Fprintf(narration, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
+	writeServerNarration(logger, logFormat, narration,
+		"🔑 Trust Root: "+ColorBold+ColorGreen+signer.PublicKey()+ColorReset,
+		"trust root ready", "public_key", signer.PublicKey())
 
 	// 2. Registry
 	reg := registry.NewPostgresRegistry(db)
@@ -683,7 +715,7 @@ func runServerWithOptions(opts serverOptions) error {
 			}
 		}
 	}
-	if err := writeServerReady(opts, bindAddr, port); err != nil {
+	if err := writeServerReady(opts, logger, logFormat, bindAddr, port); err != nil {
 		shutdown()
 		return err
 	}
@@ -706,17 +738,7 @@ func runServerWithOptions(opts serverOptions) error {
 	return runtimeErr
 }
 
-// serverNarrationWriter keeps human-only startup prose out of a command's JSON
-// data stream. JSON callers retain stdout for machine data and receive
-// diagnostics and narration on stderr.
-func serverNarrationWriter(opts serverOptions) io.Writer {
-	if opts.JSON {
-		return opts.Stderr
-	}
-	return opts.Stdout
-}
-
-func writeServerReady(opts serverOptions, bindAddr string, port int) error {
+func writeServerReady(opts serverOptions, logger *slog.Logger, logFormat, bindAddr string, port int) error {
 	if opts.OnReady != nil {
 		if err := opts.OnReady(bindAddr, port); err != nil {
 			return err
@@ -730,6 +752,8 @@ func writeServerReady(opts serverOptions, bindAddr string, port int) error {
 			"ready":  true,
 			"policy": opts.PolicyPath,
 		})
+	} else if logFormat == "json" {
+		logger.Info("server ready", "name", "helm-edge-local", "addr", bindAddr, "port", port, "policy", opts.PolicyPath)
 	} else if opts.Mode == "serve" {
 		fmt.Fprintf(opts.Stdout, "helm-edge-local · listening :%d · ready\n", port)
 	} else {

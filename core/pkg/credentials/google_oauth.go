@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -85,8 +84,7 @@ func (g *GoogleOAuth) ExchangeCode(ctx context.Context, code, codeVerifier, redi
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("token exchange failed: %s", string(body))
+		return nil, fmt.Errorf("token exchange failed with status: %d", resp.StatusCode)
 	}
 
 	var tokenResp TokenResponse
@@ -119,8 +117,7 @@ func (g *GoogleOAuth) RefreshToken(ctx context.Context, refreshToken string) (*T
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("token refresh failed: %s", string(body))
+		return nil, fmt.Errorf("token refresh failed with status: %d", resp.StatusCode)
 	}
 
 	var tokenResp TokenResponse

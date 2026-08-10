@@ -64,6 +64,10 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		fmt.Fprintf(stderr, "quickstart: %v\n", err)
 		return 2
 	}
+	if _, _, err := configureServerLogger(stderr, "quickstart"); err != nil {
+		fmt.Fprintf(stderr, "quickstart: %v\n", err)
+		return 2
+	}
 	planned, err := planQuickstart(opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "quickstart: %v\n", err)
@@ -409,6 +413,7 @@ func printQuickstartUsage(stdout io.Writer) {
 	fmt.Fprintln(stdout)
 	printLocalConsoleJourney(stdout)
 	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Quickstart logs default to text; set HELM_LOG_FORMAT=json for structured logs.")
 	fmt.Fprintln(stdout, "Pass --reset --yes only to replace HELM-owned quickstart state.")
 }
 

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -180,25 +179,49 @@ func TestRunServerCommandReportsStartupFailure(t *testing.T) {
 	assert.Contains(t, stderr.String(), "bind failed")
 }
 
-func TestServerNarrationWriterSeparatesJSONAndText(t *testing.T) {
+func TestServerLogFormatDefaultsAndOverrides(t *testing.T) {
 	for _, test := range []struct {
-		name       string
-		json       bool
-		wantStdout string
-		wantStderr string
+		name, mode, env, want string
 	}{
-		{name: "json", json: true, wantStderr: "human startup narration"},
-		{name: "text", wantStdout: "human startup narration"},
+		{name: "daemon defaults to json", mode: "serve", want: "json"},
+		{name: "server defaults to json", mode: "server", want: "json"},
+		{name: "quickstart defaults to text", mode: "quickstart", want: "text"},
+		{name: "quickstart json override", mode: "quickstart", env: "json", want: "json"},
+		{name: "daemon text override", mode: "serve", env: "text", want: "text"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			var stdout, stderr bytes.Buffer
-			if _, err := fmt.Fprint(serverNarrationWriter(serverOptions{JSON: test.json, Stdout: &stdout, Stderr: &stderr}), "human startup narration"); err != nil {
-				t.Fatal(err)
-			}
-			if stdout.String() != test.wantStdout || stderr.String() != test.wantStderr {
-				t.Fatalf("narration routing stdout=%q stderr=%q", stdout.String(), stderr.String())
+			t.Setenv("HELM_LOG_FORMAT", test.env)
+			got, err := resolveServerLogFormat(test.mode)
+			if err != nil || got != test.want {
+				t.Fatalf("resolveServerLogFormat(%q) = %q, %v; want %q", test.mode, got, err, test.want)
 			}
 		})
+	}
+}
+
+func TestDaemonNarrationAndReadinessAreStructured(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	logger := slog.New(newServerLogHandler(&stderr, "json"))
+	writeServerNarration(logger, "json", &stdout, "human startup narration", "kernel starting")
+	if err := writeServerReady(serverOptions{Mode: "serve", Stdout: &stdout}, logger, "json", "127.0.0.1", 7714); err != nil {
+		t.Fatal(err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("structured daemon wrote plain stdout: %q", stdout.String())
+	}
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("daemon emitted non-JSON line %q: %v", line, err)
+		}
+		for _, key := range []string{"timestamp", "level", "msg"} {
+			if record[key] == nil {
+				t.Fatalf("daemon record lacks %s: %v", key, record)
+			}
+		}
+		if strings.Contains(line, "\x1b") {
+			t.Fatalf("daemon record contains ANSI: %q", line)
+		}
 	}
 }
 
@@ -213,10 +236,11 @@ func TestServerLogHandler(t *testing.T) {
 	t.Run("json by default", func(t *testing.T) {
 		t.Setenv("HELM_LOG_FORMAT", "")
 		var output bytes.Buffer
-		handler, err := newServerLogHandler(&output)
+		format, err := resolveServerLogFormat("serve")
 		if err != nil {
 			t.Fatal(err)
 		}
+		handler := newServerLogHandler(&output, format)
 		slog.New(handler).InfoContext(ctx, "request served", "status", http.StatusOK)
 
 		var record map[string]any
@@ -241,10 +265,11 @@ func TestServerLogHandler(t *testing.T) {
 	t.Run("text is an explicit local opt-in", func(t *testing.T) {
 		t.Setenv("HELM_LOG_FORMAT", "text")
 		var output bytes.Buffer
-		handler, err := newServerLogHandler(&output)
+		format, err := resolveServerLogFormat("serve")
 		if err != nil {
 			t.Fatal(err)
 		}
+		handler := newServerLogHandler(&output, format)
 		slog.New(handler).InfoContext(ctx, "request served")
 		assert.Contains(t, output.String(), "level=INFO")
 		assert.Contains(t, output.String(), "trace_id="+traceID.String())
@@ -252,7 +277,7 @@ func TestServerLogHandler(t *testing.T) {
 
 	t.Run("unknown format fails closed", func(t *testing.T) {
 		t.Setenv("HELM_LOG_FORMAT", "yaml")
-		_, err := newServerLogHandler(&bytes.Buffer{})
+		_, err := resolveServerLogFormat("serve")
 		assert.EqualError(t, err, `invalid HELM_LOG_FORMAT "yaml": expected json or text`)
 	})
 }

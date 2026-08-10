@@ -34,11 +34,19 @@ const (
 	ExitOK      = 0
 	ExitFailure = 1
 	ExitUsage   = 2
+	// ExitDenied is the fail-closed denial code. It reuses the shell's
+	// "command found but not executable" status (126) deliberately: a policy
+	// that refuses an effect is exactly that. Surfaces that deny through a
+	// CliError must be able to carry it — see maxExitCode.
+	ExitDenied = 126
 )
 
-// maxExitCode bounds codes accepted from a CliError. Anything outside
-// 1..maxExitCode fails closed to ExitFailure so a programming mistake can
-// never masquerade as success or as a shell-reserved status.
+// maxExitCode bounds codes accepted from a CliError. Anything outside the
+// admitted set fails closed to ExitFailure so a programming mistake can never
+// masquerade as success. The band is 1..125 for operational failures plus the
+// intentional ExitDenied; without admitting ExitDenied a fail-closed denial
+// routed through a CliError was silently downgraded to a generic failure 1,
+// erasing the one distinction a CI script most needs to see.
 const maxExitCode = 125
 
 // Streams pairs the two output channels of a command.
@@ -200,7 +208,7 @@ func ExitCode(err error) int {
 	}
 	var ce *CliError
 	if errors.As(err, &ce) {
-		if ce.Code >= ExitFailure && ce.Code <= maxExitCode {
+		if (ce.Code >= ExitFailure && ce.Code <= maxExitCode) || ce.Code == ExitDenied {
 			return ce.Code
 		}
 		return ExitFailure

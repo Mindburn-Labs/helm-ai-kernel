@@ -131,15 +131,21 @@ func runTrustEUListStatus(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "  scheme operator:      %s\n", fallbackString(st.SchemeOperator, "(unknown)"))
 	fmt.Fprintf(stdout, "  qualified TSA count:  %d\n", st.QualifiedTSACount)
 	fmt.Fprintf(stdout, "  member state count:   %d\n", st.MemberStateCount)
+	// Recency and usability are two different facts. "FRESH" means the cache was
+	// refreshed recently; it says nothing about whether the list can actually
+	// anchor a timestamp. A freshly fetched list with zero qualified TSAs is
+	// fresh and unusable at once — printing FRESH and then exiting 1 with no
+	// reason was the screen contradicting its own exit code. Report both lines.
 	if st.Stale {
-		fmt.Fprintf(stdout, "  status:               %sSTALE%s\n", ColorRed, ColorReset)
+		fmt.Fprintf(stdout, "  refresh:              %sSTALE%s\n", ColorRed, ColorReset)
 	} else {
-		fmt.Fprintf(stdout, "  status:               %sFRESH%s\n", ColorGreen, ColorReset)
+		fmt.Fprintf(stdout, "  refresh:              %sFRESH%s\n", ColorGreen, ColorReset)
 	}
-
 	if st.QualifiedTSACount == 0 {
+		fmt.Fprintf(stdout, "  usable:               %sNO%s — no qualified TSAs; this list cannot anchor a timestamp\n", ColorRed, ColorReset)
 		return 1
 	}
+	fmt.Fprintf(stdout, "  usable:               %sYES%s\n", ColorGreen, ColorReset)
 	return 0
 }
 

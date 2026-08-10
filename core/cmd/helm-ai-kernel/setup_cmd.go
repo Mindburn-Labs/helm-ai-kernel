@@ -45,7 +45,12 @@ var (
 		if dir != "" {
 			cmd.Dir = dir
 		}
-		cmd.Stdout = os.Stdout
+		// The wrapped client's stdout (e.g. `claude mcp add` printing "Added
+		// stdio MCP server …") is its confirmation prose, not our machine
+		// document. Sending it to our stdout put unparseable text ahead of the
+		// JSON object under --json; it belongs with the rest of our human
+		// scaffolding on stderr, where it still shows in human mode.
+		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}
@@ -440,6 +445,11 @@ func setupConfirmationCapabilities(chrome io.Writer) ui.Capabilities {
 
 func confirmSetupInstall(input io.Reader, chrome io.Writer, caps ui.Capabilities, summary setupSummary, actions []string, apply func() error) error {
 	renderer := ui.NewRenderer(chrome, caps)
+	// State intent before asking for anything. The old preface named only the
+	// scope; a user was asked to approve an install without being told what it
+	// would do. Enumerate the actions first, the way a person would want them
+	// explained before consenting.
+	fmt.Fprintf(chrome, "HELM setup will configure %s at %s scope for %s. It will:\n", summary.Target, summary.Scope, summary.Workspace)
 	steps := make([]ui.Step, 0, len(actions))
 	for _, action := range actions {
 		steps = append(steps, ui.Step{Status: ui.StatusWait, Title: action})
@@ -458,6 +468,121 @@ func confirmSetupInstall(input io.Reader, chrome io.Writer, caps ui.Capabilities
 			{Key: "Recovery", Value: summary.RecoveryCommand},
 		},
 	}, apply)
+}
+
+// applySetupSteps runs the install operations in order and records the state of
+// each as a timeline step. It stops at the first failure and marks the
+// remaining steps as not attempted — a fail-closed governance install must not
+// keep going after a prerequisite fails (a hook installed on top of a failed
+// key provision would be worse than a clean abort), but the user is still shown
+// which steps ran, which failed, and which were skipped. The returned error is
+// nil only when every step passed.
+func applySetupSteps(opts setupOptions, summary *setupSummary) ([]ui.Step, error) {
+	type setupStep struct {
+		title string
+		run   func() error
+	}
+	plan := []setupStep{
+		{"provision the local signing key and draft policy artifacts", func() error { return provisionSetupLocalState(opts, summary) }},
+		{"configure the HELM MCP server in " + summary.ClientConfigPath, func() error { return setupInstallMCP(opts, summary.BinaryPath) }},
+		{"configure the HELM PreToolUse hook in " + summary.HookConfigPath, func() error { return setupInstallHook(opts, summary.BinaryPath) }},
+		{"clear the recovery marker", func() error { return clearSetupRecovery(opts) }},
+	}
+	steps := make([]ui.Step, len(plan))
+	var applyErr error
+	failed := -1
+	for i, s := range plan {
+		if failed >= 0 {
+			steps[i] = ui.Step{Status: ui.StatusWait, Title: s.title, Detail: "not attempted"}
+			continue
+		}
+		if err := s.run(); err != nil {
+			steps[i] = ui.Step{Status: ui.StatusFail, Title: s.title, Detail: err.Error()}
+			failed = i
+			// Wrap with the same context the previous per-call errors carried,
+			// so recovery reporting reads identically to before this refactor.
+			switch i {
+			case 1:
+				applyErr = fmt.Errorf("install MCP server: %w", err)
+			case 2:
+				applyErr = fmt.Errorf("install pre-tool hook: %w", err)
+			case 3:
+				applyErr = fmt.Errorf("clear recovery marker: %w", err)
+			default:
+				applyErr = err
+			}
+			continue
+		}
+		steps[i] = ui.Step{Status: ui.StatusPass, Title: s.title}
+	}
+	return steps, applyErr
+}
+
+// renderSetupOutcome writes the resolved timeline and a completion card to the
+// chrome stream. It replaces the old `mcp=true hook=true` line with a step
+// transcript that shows the resolved state of every action — the property the
+// setup path borrowed the vocabulary of (a [WAIT] preview) without ever
+// delivering.
+func renderSetupOutcome(chrome io.Writer, caps ui.Capabilities, summary setupSummary, steps []ui.Step, applyErr error) {
+	r := ui.NewRenderer(chrome, caps)
+	r.WriteTimeline("HELM setup", steps)
+	if applyErr != nil {
+		r.WriteCompletion(ui.CompletionCard{
+			Title:      "Setup did not complete",
+			Fields:     []ui.KeyValue{{Key: "Failed at", Value: firstFailedStepTitle(steps)}, {Key: "Left in place", Value: describeSetupResidue(steps)}},
+			NextAction: summary.RecoveryCommand,
+		})
+		return
+	}
+	next := "restart " + summary.Target + " to activate governance"
+	if summary.CodexTrustPending {
+		next = "trust this workspace in Codex, then restart it — governance is not active until then"
+	}
+	r.WriteCompletion(ui.CompletionCard{
+		Title: "Setup complete",
+		Fields: []ui.KeyValue{
+			{Key: "Client", Value: summary.Target},
+			{Key: "Scope", Value: summary.Scope},
+			{Key: "MCP server", Value: summary.ClientConfigPath},
+			{Key: "PreToolUse hook", Value: summary.HookConfigPath},
+			{Key: "Data dir", Value: summary.DataDir},
+		},
+		NextAction: next,
+	})
+}
+
+func firstFailedStepTitle(steps []ui.Step) string {
+	for _, s := range steps {
+		if s.Status == ui.StatusFail {
+			return s.Title
+		}
+	}
+	return "unknown"
+}
+
+// describeSetupResidue names which surfaces were written before the failure, so
+// the user is never left guessing what half-configured state remains — the
+// exact gap the audit flagged (an MCP boundary present with the hook absent is
+// the dangerous half of a fail-closed firewall).
+func describeSetupResidue(steps []ui.Step) string {
+	var written []string
+	for _, s := range steps {
+		if s.Status != ui.StatusPass {
+			continue
+		}
+		switch {
+		case strings.Contains(s.Title, "MCP server"):
+			written = append(written, "MCP server config")
+		case strings.Contains(s.Title, "PreToolUse hook"):
+			written = append(written, "PreToolUse hook")
+		case strings.Contains(s.Title, "signing key"):
+			written = append(written, "local signing key and draft artifacts")
+		}
+	}
+	if len(written) == 0 {
+		return "nothing written"
+	}
+	return strings.Join(written, ", ") + " (governance is NOT fully active until repair completes)"
 }
 
 func runSetupInstallCmd(args []string, stdout, stderr io.Writer) int {
@@ -530,17 +655,12 @@ func runSetupInstallCmdWithInput(args []string, stdout, stderr io.Writer, input 
 		fmt.Fprintf(stderr, "setup: recovery marker: %v\n", err)
 		return 1
 	}
-	if err := provisionSetupLocalState(opts, &summary); err != nil {
-		return reportSetupRecovery(stderr, opts, err)
+	steps, applyErr := applySetupSteps(opts, &summary)
+	if !opts.JSON {
+		renderSetupOutcome(stderr, caps, summary, steps, applyErr)
 	}
-	if err := setupInstallMCP(opts, summary.BinaryPath); err != nil {
-		return reportSetupRecovery(stderr, opts, fmt.Errorf("install MCP server: %w", err))
-	}
-	if err := setupInstallHook(opts, summary.BinaryPath); err != nil {
-		return reportSetupRecovery(stderr, opts, fmt.Errorf("install pre-tool hook: %w", err))
-	}
-	if err := clearSetupRecovery(opts); err != nil {
-		return reportSetupRecovery(stderr, opts, fmt.Errorf("clear recovery marker: %w", err))
+	if applyErr != nil {
+		return reportSetupRecovery(stderr, opts, applyErr)
 	}
 	summary.MCPInstalled = true
 	summary.HookInstalled = true
@@ -1654,7 +1774,11 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	if summary.RecoveryRequired {
 		fmt.Fprintf(stdout, "  Next:          recovery required; run %s\n", summary.RecoveryCommand)
 	} else if summary.MCPInstalled || summary.HookInstalled {
-		fmt.Fprintf(stdout, "  Next:          restart %s, then run %s\n", summary.Target, summary.RecoveryCommand)
+		// A healthy install's next step is to restart the client, not to run
+		// repair. Printing the repair command after every success — including a
+		// clean install and a removal preview — trained users to treat repair
+		// as routine and gave the lifecycle no terminal "you're done" state.
+		fmt.Fprintf(stdout, "  Next:          restart %s to activate governance\n", summary.Target)
 	}
 	if summary.RetainedData {
 		fmt.Fprintln(stdout, "  Local state:   retained (keys, evidence, and receipts were not removed)")

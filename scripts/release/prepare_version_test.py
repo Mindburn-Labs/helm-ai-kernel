@@ -7,7 +7,6 @@ import io
 import json
 import subprocess
 import unittest
-from pathlib import Path
 
 import prepare_version
 

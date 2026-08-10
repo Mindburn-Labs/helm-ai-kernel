@@ -408,6 +408,24 @@ func TestPostgresReceiptAppendCausalScopedReloadsDurablePredecessorAcrossStoreIn
 	}
 }
 
+func TestPostgresListLatestByTenantUsesLatestFirstOrder(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	receiptStore := NewPostgresReceiptStore(db)
+	const tenantID = "tenant-a"
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	receipt := storeCoverageReceipt("receipt-latest", "decision-latest", "session-latest", 1, time.Date(2026, 5, 5, 0, 0, 2, 0, time.UTC))
+
+	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*ORDER BY timestamp DESC, append_sequence DESC LIMIT \$3`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix, 2).
+		WillReturnRows(storePostgresReceiptRows(receipt, nil))
+	got, err := receiptStore.ListLatestByTenant(ctx, tenantID, 2)
+	if err != nil || len(got) != 1 || got[0].ReceiptID != receipt.ReceiptID {
+		t.Fatalf("Postgres latest tenant receipts = %+v err=%v", got, err)
+	}
+}
+
 func TestPostgresListByTenantCursorUsesAppendSequence(t *testing.T) {
 	ctx := context.Background()
 	db, mock, cleanup := newStoreCoverageSQLMock(t)

@@ -40,7 +40,7 @@ func TestConsoleBootstrapAllowsAdminCredentials(t *testing.T) {
 	}
 }
 
-func TestConsoleBootstrapScopesReceiptsToAuthenticatedTenant(t *testing.T) {
+func TestConsoleBootstrapReturnsLatestAuthenticatedTenantReceipts(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	signer, err := helmcrypto.NewEd25519Signer("console-tenant-scope-test")
@@ -49,7 +49,7 @@ func TestConsoleBootstrapScopesReceiptsToAuthenticatedTenant(t *testing.T) {
 	}
 	svc.ReceiptSigner = signer
 
-	decision := func(id, sessionID string) *contracts.DecisionRecord {
+	decision := func(id, sessionID string, timestamp time.Time) *contracts.DecisionRecord {
 		return &contracts.DecisionRecord{
 			ID:                 id,
 			Action:             "file_read",
@@ -57,13 +57,20 @@ func TestConsoleBootstrapScopesReceiptsToAuthenticatedTenant(t *testing.T) {
 			PolicyContentHash:  "sha256:policy-content",
 			PolicyDecisionHash: "sha256:pdp",
 			InputContext:       map[string]any{"session_id": sessionID},
-			Timestamp:          time.Unix(1700000000, 0).UTC(),
+			Timestamp:          timestamp,
 		}
 	}
-	if err := persistDecisionReceipt(context.Background(), svc, decision("mcp-unscoped", "mcp-http-jsonrpc"), "mcp-http-jsonrpc", []byte("file_read"), map[string]any{"source": "mcp.gateway"}); err != nil {
+	base := time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC)
+	if err := persistDecisionReceiptForTenant(context.Background(), svc, decision("tenant-middle", "tenant-middle-session", base.Add(time.Second)), "tenant-agent", defaultRuntimeTenantID, []byte("file_read"), map[string]any{"source": "api.evaluate"}); err != nil {
+		t.Fatalf("persist middle tenant receipt: %v", err)
+	}
+	if err := persistDecisionReceiptForTenant(context.Background(), svc, decision("tenant-latest", "tenant-latest-session", base.Add(2*time.Second)), "tenant-agent", defaultRuntimeTenantID, []byte("file_read"), map[string]any{"source": "api.evaluate"}); err != nil {
+		t.Fatalf("persist latest tenant receipt: %v", err)
+	}
+	if err := persistDecisionReceipt(context.Background(), svc, decision("mcp-unscoped", "mcp-http-jsonrpc", base.Add(4*time.Second)), "mcp-http-jsonrpc", []byte("file_read"), map[string]any{"source": "mcp.gateway"}); err != nil {
 		t.Fatalf("persist unscoped MCP receipt: %v", err)
 	}
-	if err := persistDecisionReceiptForTenant(context.Background(), svc, decision("foreign-tenant", "foreign-session"), "foreign-agent", "foreign-tenant", []byte("file_read"), map[string]any{"source": "api.evaluate"}); err != nil {
+	if err := persistDecisionReceiptForTenant(context.Background(), svc, decision("foreign-tenant", "foreign-session", base.Add(3*time.Second)), "foreign-agent", "foreign-tenant", []byte("file_read"), map[string]any{"source": "api.evaluate"}); err != nil {
 		t.Fatalf("persist foreign-tenant receipt: %v", err)
 	}
 
@@ -80,7 +87,7 @@ func TestConsoleBootstrapScopesReceiptsToAuthenticatedTenant(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode console bootstrap: %v", err)
 	}
-	if len(response.Receipts) != 1 || response.Receipts[0].ReceiptID != "rcpt-test" {
+	if len(response.Receipts) != 3 || response.Receipts[0].DecisionID != "tenant-latest" || response.Receipts[1].DecisionID != "tenant-middle" || response.Receipts[2].DecisionID != "dec-test" {
 		t.Fatalf("console bootstrap receipts escaped authenticated tenant scope: %+v", response.Receipts)
 	}
 }

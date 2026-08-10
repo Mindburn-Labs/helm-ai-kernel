@@ -434,6 +434,24 @@ func (s *SQLiteReceiptStore) ListByTenant(ctx context.Context, tenantID string, 
 	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, prefix, since, limit)
 }
 
+func (s *SQLiteReceiptStore) ListLatestByTenant(ctx context.Context, tenantID string, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `
+		SELECT ` + sqliteReceiptColumns + `
+		FROM receipts
+		WHERE signature_version = ?
+		  AND COALESCE(session_id, '') <> ''
+		  AND substr(causal_session_id, 1, length(?)) = ?
+		ORDER BY timestamp DESC, append_sequence DESC
+		LIMIT ?
+	`
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, prefix, limit)
+}
+
 // ListByTenantCursor returns V5 receipts in durable append order. The opaque
 // cursor's receipt ID is resolved inside the authenticated tenant scope, so
 // later session genesis receipts are never compared to another session's

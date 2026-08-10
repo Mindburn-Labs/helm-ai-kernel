@@ -801,7 +801,14 @@ func listConsoleReceipts(ctx context.Context, svc *Services, limit int) []*contr
 	if err != nil {
 		return nil
 	}
-	receipts, err := listReceiptsForCursor(ctx, svc, tenantID, "", store.TenantReceiptCursor{}, limit)
+	if svc == nil || svc.ReceiptStore == nil {
+		return nil
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader)
+	if !ok {
+		return nil
+	}
+	receipts, err := reader.ListLatestByTenant(ctx, tenantID, limit)
 	if err != nil {
 		return nil
 	}

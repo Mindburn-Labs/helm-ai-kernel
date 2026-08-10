@@ -224,7 +224,7 @@ its required asset and provenance gates, and is not a completed public release.
   admin authentication, which establishes no tenant binding, while that route
   reads only tenant-scoped rows. No shipped CLI or HTTP API exposes these
   unscoped rows; only the store's internal sequence-ordered `ListSince` API can
-  read them. Console receipt views now use the same tenant-scoped cursor and
+  read them. Console receipt views use a tenant-scoped latest-first reader and
   exclude unscoped or foreign-tenant rows. Tenant retrievability would require
   moving the gateway to tenant-scoped auth, a breaking change for MCP clients,
   still open on HELM-363.

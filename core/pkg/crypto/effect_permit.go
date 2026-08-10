@@ -104,7 +104,7 @@ func EffectPermitSigningPayload(p *effects.EffectPermit) ([]byte, error) {
 	if p == nil {
 		return nil, fmt.Errorf("effect permit is nil")
 	}
-	return canonicalize.JCS(effectPermitV1SigningEnvelope{
+	return canonicalize.InteroperableJCS(effectPermitV1SigningEnvelope{
 		SignatureVersion: EffectPermitSignatureV1,
 		PermitID:         p.PermitID,
 		IntentHash:       p.IntentHash,

@@ -183,7 +183,7 @@ the EvidencePack schema, until P2-7 corrects them.
 
 #### The families that already work — the model to copy
 
-Eleven reference packs are integrity-SPECIFIED and CI-bound, each with a Go
+The reference packs below are integrity-SPECIFIED and CI-bound, each with a Go
 parity test and an independent stdlib-Python verifier reached from
 `make verify-fixtures` (`Makefile:123-138`, CI `.github/workflows/ci.yml:167`):
 
@@ -197,6 +197,7 @@ parity test and an independent stdlib-Python verifier reached from
 | `reference_packs/connector-release-authority-v1/` | `Makefile:65-67` |
 | `reference_packs/effect-close-v1/` | `Makefile:69-71` |
 | `reference_packs/effect-disposition-v1/` | `Makefile:73-76` |
+| `reference_packs/effect-permit-v1/` | `make verify-effect-permit-vectors`, included by `make verify-fixtures` |
 | `reference_packs/boundary-profile-v1/` | `Makefile:78-80` |
 | `reference_packs/update-bundle-v1/` | `Makefile:82-85` |
 | `reference_packs/launch-mission-v1/` | `Makefile:89-91` |

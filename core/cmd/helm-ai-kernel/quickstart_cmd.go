@@ -131,9 +131,28 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		Stderr: stderr,
 	}); err != nil {
 		fmt.Fprintf(stderr, "quickstart: start Kernel: %v\n", err)
+		if route := quickstartErrorRoute(err, opts); route != "" {
+			fmt.Fprintf(stderr, "  %s\n", route)
+		}
 		return 1
 	}
 	return 0
+}
+
+// quickstartErrorRoute turns the most common start failures into a concrete
+// next command instead of a bare Go error the user has to interpret. An error
+// that says what is wrong but not what to do is a dead end.
+func quickstartErrorRoute(err error, opts quickstartOptions) string {
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "address already in use"), strings.Contains(msg, "eaddrinuse"):
+		return fmt.Sprintf("That port is already in use. Choose another: helm-ai-kernel quickstart --port <n> (current: %d).", opts.Port)
+	case strings.Contains(msg, "permission denied"):
+		return "The data or bind path is not writable by this user. Point --data-dir at a directory you own, or fix its permissions."
+	case strings.Contains(msg, "bind"), strings.Contains(msg, "listen"):
+		return "The Kernel could not bind its loopback address. Pass --addr 127.0.0.1 --port <n> to choose an open one."
+	}
+	return ""
 }
 
 func installQuickstartRuntimeEnv(runtime *quickstartRuntime) {

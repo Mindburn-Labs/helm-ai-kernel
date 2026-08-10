@@ -20,6 +20,7 @@ require (
 	github.com/google/cel-go v0.29.0
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.12.3
+	github.com/mattn/go-isatty v0.0.20
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/open-policy-agent/opa v1.15.2
 	github.com/prometheus/client_golang v1.23.2
@@ -105,7 +106,6 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.2 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.0.13 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

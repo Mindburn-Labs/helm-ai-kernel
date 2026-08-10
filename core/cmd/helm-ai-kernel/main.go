@@ -121,8 +121,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel run maintenance [--once|--schedule]")
 		return 2
-	case "version", "--version", "-v":
+	case "version":
 		return runVersionCommand(args[2:], stdout, stderr)
+	case "--version", "-v":
+		return runVersionFlag(args[2:], stdout, stderr)
 	case "--help", "-h":
 		printFrontDoor(stdout)
 		return 0
@@ -140,8 +142,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			printUsage(stderr)
 			return 2
 		}
-		_, _ = fmt.Fprintf(stderr, "Unknown command: %s\n", args[1])
-		printUsage(stderr)
+		printUnknownCommand(stderr, args[1])
 		return 2
 	}
 }

@@ -182,6 +182,19 @@ func renderApprovalSnapshot(w io.Writer, items []contracts.ApprovalCeremony, _ .
 	}
 }
 
+// watchReviewCard renders the full ceremony context for reading BEFORE the
+// reviewer is asked which way to decide. The prompt used to ask APPROVE or DENY
+// first and only render the 22-field card at the type-to-confirm step, so the
+// reviewer picked a side before seeing the requester, reason, quorum and
+// expiry. Same fields as watchDecisionContext, minus the chosen action.
+func watchReviewCard(item contracts.ApprovalCeremony) ui.CompletionCard {
+	ctx := watchDecisionContext(item, "")
+	return ui.CompletionCard{
+		Title:  "Approval ceremony " + terminalSafe(item.ApprovalID) + " — review, then decide",
+		Fields: ctx.Details,
+	}
+}
+
 // watchDecisionContext includes every approval-ceremony field before a human
 // can transition it. Keep these ordered rather than using a map: review order
 // is part of the accessible terminal contract.

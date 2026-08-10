@@ -638,7 +638,7 @@ func receiptListIDs(t *testing.T, result map[string]any) []string {
 	return ids
 }
 
-func TestReceiptListFiltersByVerdictQueryParam(t *testing.T) {
+func TestReceiptListQueryFilters(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	receiptStore := svc.ReceiptStore.(*store.SQLiteReceiptStore)
@@ -649,7 +649,7 @@ func TestReceiptListFiltersByVerdictQueryParam(t *testing.T) {
 		Status:       string(contracts.VerdictAllow),
 		Verdict:      string(contracts.VerdictAllow),
 		Timestamp:    time.Date(2026, 5, 6, 0, 0, 0, 0, time.UTC),
-		ExecutorID:   "agent.test",
+		ExecutorID:   "agent.filtered",
 		DecisionHash: "sha256:allow-decision",
 		ArgsHash:     "args-allow",
 	})
@@ -661,9 +661,32 @@ func TestReceiptListFiltersByVerdictQueryParam(t *testing.T) {
 		Verdict:      string(contracts.VerdictDeny),
 		ReasonCode:   "policy.blocked",
 		Timestamp:    time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
-		ExecutorID:   "agent.test",
+		ExecutorID:   "agent.filtered",
 		DecisionHash: "sha256:deny-decision",
 		ArgsHash:     "args-deny",
+	})
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-boundary", &contracts.Receipt{
+		ReceiptID:    "rcpt-to-boundary",
+		DecisionID:   "dec-to-boundary",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictEscalate),
+		Verdict:      string(contracts.VerdictEscalate),
+		Timestamp:    time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.filtered",
+		DecisionHash: "sha256:boundary-decision",
+		ArgsHash:     "args-boundary",
+	})
+	appendTenantScopedReceipt(t, receiptStore, "tenant-foreign", "session-deny", &contracts.Receipt{
+		ReceiptID:    "rcpt-foreign",
+		DecisionID:   "dec-foreign",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictDeny),
+		Verdict:      string(contracts.VerdictDeny),
+		ReasonCode:   "policy.blocked",
+		Timestamp:    time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.filtered",
+		DecisionHash: "sha256:foreign-decision",
+		ArgsHash:     "args-foreign",
 	})
 
 	mux := http.NewServeMux()
@@ -680,6 +703,26 @@ func TestReceiptListFiltersByVerdictQueryParam(t *testing.T) {
 	denyReason := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?verdict=DENY&reason_code=policy.blocked"))
 	if len(denyReason) != 1 || denyReason[0] != "rcpt-deny" {
 		t.Fatalf("verdict=DENY&reason_code=policy.blocked returned %v, want [rcpt-deny]", denyReason)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{"principal overrides executor alias", "principal=agent.filtered&executor=other", []string{"rcpt-allow", "rcpt-deny", "rcpt-to-boundary"}},
+		{"executor alias", "executor=agent.filtered", []string{"rcpt-allow", "rcpt-deny", "rcpt-to-boundary"}},
+		{"effect overrides resource alias", "principal=agent.filtered&effect=READ_FILE&resource=EXECUTE_TOOL", []string{"rcpt-allow", "rcpt-to-boundary"}},
+		{"resource alias", "principal=agent.filtered&resource=READ_FILE", []string{"rcpt-allow", "rcpt-to-boundary"}},
+		{"half-open time bounds", "principal=agent.filtered&from=2026-05-06T00:00:00Z&to=2026-05-08T00:00:00Z", []string{"rcpt-allow", "rcpt-deny"}},
+		{"session filter remains tenant scoped", "session_id=session-deny&executor=agent.filtered&resource=EXECUTE_TOOL", []string{"rcpt-deny"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?"+tc.query))
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("query %q returned %v, want %v", tc.query, got, tc.want)
+			}
+		})
 	}
 }
 

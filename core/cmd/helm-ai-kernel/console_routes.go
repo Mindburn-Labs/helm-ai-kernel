@@ -15,6 +15,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 type consoleBootstrapResponse struct {
@@ -796,10 +797,18 @@ func parseTime(value string) time.Time {
 }
 
 func listConsoleReceipts(ctx context.Context, svc *Services, limit int) []*contracts.Receipt {
+	tenantID, err := authenticatedReceiptTenantID(ctx)
+	if err != nil {
+		return nil
+	}
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil
 	}
-	receipts, err := svc.ReceiptStore.List(ctx, limit)
+	reader, ok := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader)
+	if !ok {
+		return nil
+	}
+	receipts, err := reader.ListLatestByTenant(ctx, tenantID, limit)
 	if err != nil {
 		return nil
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,7 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 func TestQuickstartDryRunJSONIsPurePreview(t *testing.T) {
@@ -805,7 +808,8 @@ func TestQuickstartOnboardingRunStepSignsReceiptAndExportsEvidence(t *testing.T)
 		t.Fatalf("state mode = %+v", state)
 	}
 
-	receipts, err := svc.ReceiptStore.List(req.Context(), 50)
+	reader := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader)
+	receipts, err := reader.ListLatestByTenant(req.Context(), runtime.TenantID, 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -849,6 +853,291 @@ func TestQuickstartOnboardingRunStepSignsReceiptAndExportsEvidence(t *testing.T)
 	if _, err := os.Stat(filepath.Join(dataDir, "evidence", "onboarding-evidence.json")); err != nil {
 		t.Fatalf("evidencepack file not written: %v", err)
 	}
+}
+
+func TestQuickstartOnboardingExcludesForeignTenantStateAndExport(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	signer, err := helmcrypto.NewEd25519Signer("quickstart-onboarding-tenant-isolation-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.ReceiptSigner = signer
+
+	foreignRuntime := quickstartRouteRuntime()
+	foreignRuntime.SessionToken = "foreign-session-token"
+	foreignRuntime.TenantID = "tenant-foreign"
+	foreignRuntime.PrincipalID = "principal-foreign"
+	t.Setenv("HELM_ADMIN_API_KEY", foreignRuntime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, foreignRuntime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, foreignRuntime.PrincipalID)
+	foreignMux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(foreignMux, svc, serverOptions{Quickstart: foreignRuntime})
+
+	foreignReq := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/run-step", strings.NewReader(`{"step_id":"deny"}`))
+	authorizeQuickstartRequest(foreignReq, foreignRuntime)
+	foreignRec := httptest.NewRecorder()
+	foreignMux.ServeHTTP(foreignRec, foreignReq)
+	if foreignRec.Code != http.StatusOK {
+		t.Fatalf("foreign run-step status=%d body=%s", foreignRec.Code, foreignRec.Body.String())
+	}
+	foreignState := decodeOnboardingPayload(t, foreignRec)
+	foreignDeny := onboardingStepPayload(t, foreignState, "deny")
+	foreignReceiptID, _ := foreignDeny["receipt_ref"].(string)
+	if foreignReceiptID == "" || foreignDeny["status"] != "pass" {
+		t.Fatalf("foreign deny step = %+v", foreignDeny)
+	}
+
+	localRuntime := quickstartRouteRuntime()
+	t.Setenv("HELM_ADMIN_API_KEY", localRuntime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, localRuntime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, localRuntime.PrincipalID)
+	localMux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(localMux, svc, serverOptions{Quickstart: localRuntime})
+
+	stateReq := httptest.NewRequest(http.MethodGet, "/api/v1/onboarding/state", nil)
+	authorizeQuickstartRequest(stateReq, localRuntime)
+	stateRec := httptest.NewRecorder()
+	localMux.ServeHTTP(stateRec, stateReq)
+	if stateRec.Code != http.StatusOK {
+		t.Fatalf("local state status=%d body=%s", stateRec.Code, stateRec.Body.String())
+	}
+	localState := decodeOnboardingPayload(t, stateRec)
+	localDenyBefore := onboardingStepPayload(t, localState, "deny")
+	if localDenyBefore["status"] != "pending" || localDenyBefore["receipt_ref"] != "" {
+		t.Fatalf("foreign receipt changed local onboarding status: %+v", localDenyBefore)
+	}
+	if strings.Contains(stateRec.Body.String(), foreignReceiptID) {
+		t.Fatalf("local state leaked foreign receipt %q: %s", foreignReceiptID, stateRec.Body.String())
+	}
+
+	exportReq := httptest.NewRequest(http.MethodGet, "/api/v1/onboarding/export", nil)
+	authorizeQuickstartRequest(exportReq, localRuntime)
+	exportRec := httptest.NewRecorder()
+	localMux.ServeHTTP(exportRec, exportReq)
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("local export status=%d body=%s", exportRec.Code, exportRec.Body.String())
+	}
+	localExportBefore := decodeOnboardingPayload(t, exportRec)
+	localExportDenyBefore := onboardingStepPayload(t, localExportBefore, "deny")
+	if localExportDenyBefore["status"] != "pending" || localExportDenyBefore["receipt_ref"] != "" {
+		t.Fatalf("foreign receipt changed local export status: %+v", localExportDenyBefore)
+	}
+	if strings.Contains(exportRec.Body.String(), foreignReceiptID) {
+		t.Fatalf("local export leaked foreign receipt %q: %s", foreignReceiptID, exportRec.Body.String())
+	}
+
+	localRunReq := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/run-step", strings.NewReader(`{"step_id":"deny"}`))
+	authorizeQuickstartRequest(localRunReq, localRuntime)
+	localRunRec := httptest.NewRecorder()
+	localMux.ServeHTTP(localRunRec, localRunReq)
+	if localRunRec.Code != http.StatusOK {
+		t.Fatalf("local run-step status=%d body=%s", localRunRec.Code, localRunRec.Body.String())
+	}
+	localDenyAfter := onboardingStepPayload(t, decodeOnboardingPayload(t, localRunRec), "deny")
+	localReceiptID, _ := localDenyAfter["receipt_ref"].(string)
+	if localReceiptID == "" || localReceiptID == foreignReceiptID || localDenyAfter["status"] != "pass" {
+		t.Fatalf("local deny step = %+v, foreign receipt=%q", localDenyAfter, foreignReceiptID)
+	}
+
+	localExportReq := httptest.NewRequest(http.MethodGet, "/api/v1/onboarding/export", nil)
+	authorizeQuickstartRequest(localExportReq, localRuntime)
+	localExportRec := httptest.NewRecorder()
+	localMux.ServeHTTP(localExportRec, localExportReq)
+	if localExportRec.Code != http.StatusOK {
+		t.Fatalf("local export after run status=%d body=%s", localExportRec.Code, localExportRec.Body.String())
+	}
+	localExportAfter := decodeOnboardingPayload(t, localExportRec)
+	localExportDenyAfter := onboardingStepPayload(t, localExportAfter, "deny")
+	if localExportDenyAfter["status"] != "pass" || localExportDenyAfter["receipt_ref"] != localReceiptID {
+		t.Fatalf("local export deny step = %+v, want receipt=%q", localExportDenyAfter, localReceiptID)
+	}
+	if strings.Contains(localExportRec.Body.String(), foreignReceiptID) {
+		t.Fatalf("local export after run leaked foreign receipt %q: %s", foreignReceiptID, localExportRec.Body.String())
+	}
+
+	reader := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader)
+	foreignReceipts, err := reader.ListLatestByTenant(context.Background(), foreignRuntime.TenantID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localReceipts, err := reader.ListLatestByTenant(context.Background(), localRuntime.TenantID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(foreignReceipts) != 1 || foreignReceipts[0].ReceiptID != foreignReceiptID {
+		t.Fatalf("foreign tenant receipts = %+v", foreignReceipts)
+	}
+	if len(localReceipts) != 1 || localReceipts[0].ReceiptID != localReceiptID {
+		t.Fatalf("local tenant receipts = %+v", localReceipts)
+	}
+}
+
+func TestQuickstartOnboardingProofSurvivesMoreThanFiveHundredNewerTenantReceipts(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	signer, err := helmcrypto.NewEd25519Signer("quickstart-onboarding-proof-retention-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.ReceiptSigner = signer
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+
+	mux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(mux, svc, serverOptions{Quickstart: runtime})
+	runReq := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/run-step", strings.NewReader(`{"step_id":"deny"}`))
+	authorizeQuickstartRequest(runReq, runtime)
+	runRec := httptest.NewRecorder()
+	mux.ServeHTTP(runRec, runReq)
+	if runRec.Code != http.StatusOK {
+		t.Fatalf("run-step status=%d body=%s", runRec.Code, runRec.Body.String())
+	}
+	deniedStep := onboardingStepPayload(t, decodeOnboardingPayload(t, runRec), "deny")
+	onboardingReceiptID, _ := deniedStep["receipt_ref"].(string)
+	if onboardingReceiptID == "" {
+		t.Fatalf("deny step has no receipt: %+v", deniedStep)
+	}
+
+	base := time.Now().UTC().Add(time.Second)
+	for i := 0; i < 501; i++ {
+		decision := &contracts.DecisionRecord{
+			ID:                 fmt.Sprintf("post-onboarding-%03d", i),
+			SubjectID:          runtime.PrincipalID,
+			Action:             "FILE_READ",
+			Resource:           fmt.Sprintf("local.file.%03d", i),
+			Verdict:            string(contracts.VerdictAllow),
+			Reason:             "proof retention regression",
+			ReasonCode:         "SAFE_REQUEST_ALLOWED",
+			PolicyBackend:      "test",
+			PolicyContentHash:  "sha256:policy-content",
+			PolicyDecisionHash: "sha256:policy-decision",
+			Timestamp:          base.Add(time.Duration(i) * time.Millisecond),
+		}
+		if err := persistDecisionReceiptForTenant(context.Background(), svc, decision, runtime.PrincipalID, runtime.TenantID, []byte(decision.Resource), map[string]any{"source": "test.bulk"}); err != nil {
+			t.Fatalf("persist newer receipt %d: %v", i, err)
+		}
+	}
+	recent, err := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader).ListLatestByTenant(context.Background(), runtime.TenantID, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, receipt := range recent {
+		if receipt.ReceiptID == onboardingReceiptID {
+			t.Fatalf("test setup did not age onboarding receipt %q beyond latest-500 window", onboardingReceiptID)
+		}
+	}
+
+	for _, endpoint := range []string{"/api/v1/onboarding/state", "/api/v1/onboarding/export"} {
+		req := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		authorizeQuickstartRequest(req, runtime)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", endpoint, rec.Code, rec.Body.String())
+		}
+		step := onboardingStepPayload(t, decodeOnboardingPayload(t, rec), "deny")
+		if step["status"] != "pass" || step["receipt_ref"] != onboardingReceiptID {
+			t.Fatalf("%s lost aged onboarding proof: step=%+v want receipt=%q", endpoint, step, onboardingReceiptID)
+		}
+	}
+}
+
+type receiptStoreWithoutOnboardingCapabilities struct {
+	store.ReceiptStore
+}
+
+type onboardingReceiptReaderStub struct {
+	store.ReceiptStore
+	err error
+}
+
+func (s *onboardingReceiptReaderStub) ListLatestOnboardingByTenant(context.Context, string) ([]*contracts.Receipt, error) {
+	return nil, s.err
+}
+
+func TestQuickstartOnboardingStateAndExportFailClosedOnProofReadFailure(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+
+	stores := []struct {
+		name         string
+		receiptStore store.ReceiptStore
+	}{
+		{name: "missing tenant proof reader", receiptStore: &receiptStoreWithoutOnboardingCapabilities{}},
+		{name: "tenant proof read error", receiptStore: &onboardingReceiptReaderStub{err: errors.New("receipt database unavailable")}},
+	}
+	for _, storeCase := range stores {
+		for _, endpoint := range []string{"/api/v1/onboarding/state", "/api/v1/onboarding/export"} {
+			t.Run(storeCase.name+" "+endpoint, func(t *testing.T) {
+				mux := http.NewServeMux()
+				RegisterLocalFirstRunRoutes(mux, &Services{ReceiptStore: storeCase.receiptStore}, serverOptions{Quickstart: runtime})
+				req := httptest.NewRequest(http.MethodGet, endpoint, nil)
+				authorizeQuickstartRequest(req, runtime)
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+				if rec.Code != http.StatusInternalServerError {
+					t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+				}
+				if strings.Contains(rec.Body.String(), `"status":"pending"`) || strings.Contains(rec.Body.String(), `"receipt_refs":{}`) {
+					t.Fatalf("proof read failure produced successful-looking empty state: %s", rec.Body.String())
+				}
+			})
+		}
+	}
+}
+
+func TestQuickstartOnboardingRunStepFailsClosedWithoutScopedAppender(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	signer, err := helmcrypto.NewEd25519Signer("quickstart-onboarding-scoped-appender-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+
+	mux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(mux, &Services{
+		ReceiptStore:  &onboardingReceiptReaderStub{},
+		ReceiptSigner: signer,
+	}, serverOptions{Quickstart: runtime})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/run-step", strings.NewReader(`{"step_id":"deny"}`))
+	authorizeQuickstartRequest(req, runtime)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func decodeOnboardingPayload(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func onboardingStepPayload(t *testing.T, payload map[string]any, stepID string) map[string]any {
+	t.Helper()
+	steps, ok := payload["steps"].([]any)
+	if !ok {
+		t.Fatalf("onboarding payload has no steps: %+v", payload)
+	}
+	for _, item := range steps {
+		step, ok := item.(map[string]any)
+		if ok && step["id"] == stepID {
+			return step
+		}
+	}
+	t.Fatalf("onboarding step %q not found: %+v", stepID, payload)
+	return nil
 }
 
 func postLocalExchange(t *testing.T, mux *http.ServeMux, token string, remoteAddr string) *httptest.ResponseRecorder {

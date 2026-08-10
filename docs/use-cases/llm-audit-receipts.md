@@ -52,8 +52,9 @@ Two limits apply today:
   successor-chain coverage.
 - **Unversioned receipts have two compatibility paths.** The standalone
   `receipt_verify` path treats a receipt with no `signature_version` as legacy
-  V4: eight fields joined with `:` (`core/pkg/crypto/canonical.go:232-233`). The
-  separate `crypto.VerifyReceiptSignature` compatibility helper first tries the
+  V4: eight fields joined with `:`
+  (`core/pkg/receiptverify/receiptverify.go:225-229`). The separate
+  `crypto.VerifyReceiptSignature` compatibility helper first tries the
   historical whole-receipt JCS candidate and then V4
   (`core/pkg/crypto/canonical_v5.go:115-135`). The 13-key envelope applies only
   to receipts that declare `receipt.v5`.
@@ -65,7 +66,7 @@ Ed25519 only. Hybrid and post-quantum receipt profiles are unsupported. It uses
 no HELM service in the trust path and opens no sockets by construction rather
 than by policy: the binary's transitive import graph contains no transport
 package, and a test fails the build if one appears
-(`core/cmd/receipt_verify/main.go:1-32`). **Status: Live in tagged source.** The
+(`core/pkg/receiptverify/receiptverify_test.go:40-78`). **Status: Live in tagged source.** The
 `v0.8.3` tag contains the command and its dedicated build target, but the
 `v0.8.3` GitHub Release does not publish standalone `receipt_verify-*` assets.
 

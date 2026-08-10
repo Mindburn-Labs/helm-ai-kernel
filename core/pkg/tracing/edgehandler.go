@@ -12,10 +12,11 @@ import (
 )
 
 // WrapEdgeHandler wraps an external HTTP edge in an otelhttp server-span
-// handler (HELM-333). An inbound W3C traceparent is continued into the server
-// span; the propagator is explicit so the edge behaves the same whether or
-// not a global propagator was configured, and matches the repo's composite
-// (TraceContext + Baggage, see observability.Setup).
+// handler (HELM-333). The daemon's shared listener is a public trust boundary:
+// an inbound W3C traceparent is linked to a new kernel trace, never adopted as
+// its parent. That keeps a caller from choosing the kernel trace ID or clearing
+// the sampled flag to suppress the server span. The explicit TraceContext-only
+// propagator also prevents untrusted baggage from entering request context.
 //
 // The tracer is resolved PER REQUEST, not at wrap time: no WithTracerProvider
 // option is passed, so otelhttp reads otel.GetTracerProvider() inside
@@ -88,9 +89,8 @@ import (
 // wrapper BELOW RequestIDMiddleware, which copies the request the same way.
 func WrapEdgeHandler(h http.Handler, operation string) http.Handler {
 	return otelhttp.NewHandler(withRouteAttribute(h), operation,
-		otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(
-			propagation.TraceContext{}, propagation.Baggage{},
-		)),
+		otelhttp.WithPropagators(propagation.TraceContext{}),
+		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
 		otelhttp.WithSpanNameFormatter(edgeSpanName),
 		otelhttp.WithMetricAttributesFn(edgeMetricAttributes),
 	)

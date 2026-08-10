@@ -160,9 +160,9 @@ func TestBuildAPIHandlerStartsServerSpan(t *testing.T) {
 	}
 }
 
-// TestBuildAPIHandlerContinuesInboundTraceparent proves the daemon joins an
-// existing distributed trace rather than rooting its own.
-func TestBuildAPIHandlerContinuesInboundTraceparent(t *testing.T) {
+// TestBuildAPIHandlerRootsInboundTraceparent proves an external caller cannot
+// choose the daemon's trace ID or suppress its server span via remote sampling.
+func TestBuildAPIHandlerRootsInboundTraceparent(t *testing.T) {
 	sr := recordSpans(t)
 
 	mux := http.NewServeMux()
@@ -173,15 +173,19 @@ func TestBuildAPIHandlerContinuesInboundTraceparent(t *testing.T) {
 
 	const inboundTraceID = "4bf92f3577b34da6a3ce929d0e0e4736"
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/probe", nil)
-	req.Header.Set("traceparent", "00-"+inboundTraceID+"-00f067aa0ba902b7-01")
+	req.Header.Set("traceparent", "00-"+inboundTraceID+"-00f067aa0ba902b7-00")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
 	ended := sr.Ended()
 	if len(ended) == 0 {
 		t.Fatal("no span recorded for a served request")
 	}
-	if got := ended[0].SpanContext().TraceID().String(); got != inboundTraceID {
-		t.Errorf("server span trace_id = %s, want continuation of %s", got, inboundTraceID)
+	if got := ended[0].SpanContext().TraceID().String(); got == inboundTraceID {
+		t.Errorf("server span adopted untrusted trace_id %s", got)
+	}
+	links := ended[0].Links()
+	if len(links) != 1 || links[0].SpanContext.TraceID().String() != inboundTraceID {
+		t.Errorf("server span links = %+v, want one link to inbound trace %s", links, inboundTraceID)
 	}
 }
 
@@ -237,8 +241,11 @@ func TestServedPathLogRecordCarriesTraceID(t *testing.T) {
 	})
 	h := buildAPIHandler(mux, helmapi.NewGlobalRateLimiter(100, 100))
 
+	const inboundTraceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/probe", nil)
+	req.Header.Set("traceparent", "00-"+inboundTraceID+"-00f067aa0ba902b7-01")
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/probe", nil))
+	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
@@ -253,6 +260,9 @@ func TestServedPathLogRecordCarriesTraceID(t *testing.T) {
 	if !strings.Contains(logged, "trace_id="+wantTraceID) {
 		t.Errorf("served-path log record does not carry the span's trace_id.\nwant trace_id=%s\ngot: %s",
 			wantTraceID, logged)
+	}
+	if strings.Contains(logged, "trace_id="+inboundTraceID) {
+		t.Errorf("served-path log record adopted the untrusted trace_id %s: %s", inboundTraceID, logged)
 	}
 }
 

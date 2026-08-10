@@ -16,7 +16,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/extauthz"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
-	kernelotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
 )
 
 const extauthzAuthorizePath = "/api/v1/extauthz/authorize"
@@ -55,8 +54,10 @@ func registerExtAuthzRoutes(mux *http.ServeMux, svc *Services) {
 			}
 		}
 
-		ctx := kernelotel.ExtractTraceparent(r.Context(), r.Header)
-		resp, err := authorizeExtAuthzRequest(ctx, svc, req, time.Now().UTC())
+		// The ext-authz route shares the public daemon listener. Re-extracting
+		// traceparent here would bypass the edge's root-and-link trust policy;
+		// Guardian must remain a child of the kernel server span.
+		resp, err := authorizeExtAuthzRequest(r.Context(), svc, req, time.Now().UTC())
 		if err != nil {
 			api.WriteInternalR(w, r, err)
 			return

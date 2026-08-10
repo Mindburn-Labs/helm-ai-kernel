@@ -184,6 +184,21 @@ func TestRunServerCommandReportsStartupFailure(t *testing.T) {
 	assert.Contains(t, record["error"], "bind failed")
 }
 
+func TestRunServerCommandInvalidLogFormatIsStructured(t *testing.T) {
+	t.Setenv("HELM_LOG_FORMAT", "yaml")
+	var stdout, stderr bytes.Buffer
+
+	exitCode := runServerCommand("serve", nil, &stdout, &stderr)
+
+	assert.Equal(t, 2, exitCode)
+	assert.Empty(t, stdout.String())
+	var record map[string]any
+	assert.NoError(t, json.Unmarshal(stderr.Bytes(), &record))
+	assert.Equal(t, "ERROR", record["level"])
+	assert.Equal(t, "server command failed", record["msg"])
+	assert.Contains(t, record["error"], `invalid HELM_LOG_FORMAT "yaml"`)
+}
+
 func TestServerLogFormatDefaultsAndOverrides(t *testing.T) {
 	for _, test := range []struct {
 		name, mode, env, want string

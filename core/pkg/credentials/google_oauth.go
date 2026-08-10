@@ -150,6 +150,7 @@ func (g *GoogleOAuth) GetUserInfo(ctx context.Context, accessToken string) (*Use
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
+		drainOAuthErrorBody(resp.Body)
 		return nil, fmt.Errorf("user info request failed: %d", resp.StatusCode)
 	}
 
@@ -176,6 +177,7 @@ func (g *GoogleOAuth) RevokeToken(ctx context.Context, token string) error {
 		return fmt.Errorf("revoke failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	drainOAuthErrorBody(resp.Body)
 
 	// 200 = success, 400 = already revoked (both are okay)
 	if resp.StatusCode != 200 && resp.StatusCode != 400 {

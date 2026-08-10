@@ -10,9 +10,14 @@ import (
 )
 
 func runServerCommand(name string, args []string, stdout, stderr io.Writer) int {
+	if isHelpRequest(args) {
+		printGlobalCommandHelp(name, stdout)
+		return 0
+	}
 	logger, logFormat, logConfigErr := configureServerLogger(stderr, name)
 	if logConfigErr != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: %v\n", logConfigErr)
+		logger = slog.New(newServerLogHandler(stderr, "json"))
+		writeServerCommandError(logger, "json", stderr, logConfigErr)
 		return 2
 	}
 	if name == "server" && len(args) == 0 {

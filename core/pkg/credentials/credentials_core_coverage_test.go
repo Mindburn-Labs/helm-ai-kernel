@@ -180,7 +180,7 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 			if strings.Contains(err.Error(), "SECRET-CANARY") {
 				t.Fatalf("oauth error leaked provider response body: %v", err)
 			}
-			if (name == "exchange status" || name == "refresh status") && bodyReader.Len() != 0 {
+			if (strings.Contains(name, " status") || name == "revoke already revoked") && bodyReader.Len() != 0 {
 				t.Fatalf("oauth error response body was not drained: %d bytes remain", bodyReader.Len())
 			}
 		})

@@ -26,7 +26,7 @@ func TestHelpJSONCatalogIsStableAndSideEffectFree(t *testing.T) {
 	if err := json.Unmarshal([]byte(first), &raw); err != nil {
 		t.Fatalf("help --json is not valid JSON: %v\n%s", err, first)
 	}
-	if len(raw) != 2 || raw["schema_version"] == nil || raw["commands"] == nil {
+	if raw["schema_version"] == nil || raw["commands"] == nil {
 		t.Fatalf("unexpected catalog schema: %s", first)
 	}
 
@@ -75,6 +75,51 @@ func TestHelpJSONCatalogIsStableAndSideEffectFree(t *testing.T) {
 	if !catalogContainsName(catalog, "watch") {
 		t.Fatal("catalog omitted the integrated watch command")
 	}
+
+	wantSections := []struct {
+		id    string
+		title string
+	}{
+		{id: "get-started", title: "Get started"},
+		{id: "use-helm", title: "Use HELM"},
+		{id: "evidence", title: "Evidence"},
+		{id: "operate", title: "Operate"},
+	}
+	if len(catalog.Sections) != len(wantSections) {
+		t.Fatalf("catalog section count=%d, want %d", len(catalog.Sections), len(wantSections))
+	}
+	seenSections := make(map[string]struct{}, len(catalog.Sections))
+	for index, section := range catalog.Sections {
+		if section.ID != wantSections[index].id || section.Title != wantSections[index].title {
+			t.Fatalf("catalog section[%d]=%+v, want id=%q title=%q", index, section, wantSections[index].id, wantSections[index].title)
+		}
+		if len(section.Commands) == 0 {
+			t.Fatalf("catalog section %q is empty", section.ID)
+		}
+		seenSections[section.Title] = struct{}{}
+		for _, command := range section.Commands {
+			if command.Group != section.Title {
+				t.Fatalf("command %q group=%q, want %q", command.Name, command.Group, section.Title)
+			}
+		}
+	}
+	if !sectionContainsCommand(catalog, "get-started", "quickstart") {
+		t.Fatal("get-started section omitted quickstart")
+	}
+	if !sectionContainsCommand(catalog, "use-helm", "watch") {
+		t.Fatal("use-helm section omitted watch")
+	}
+	if !sectionContainsCommand(catalog, "evidence", "verify") {
+		t.Fatal("evidence section omitted verify")
+	}
+	if !sectionContainsCommand(catalog, "operate", "workstation") {
+		t.Fatal("operate section omitted workstation")
+	}
+	for _, title := range []string{"Get started", "Use HELM", "Evidence", "Operate"} {
+		if _, ok := seenSections[title]; !ok {
+			t.Fatalf("missing catalog section %q", title)
+		}
+	}
 }
 
 func TestCompletionScriptsAreDeterministicAndSideEffectFree(t *testing.T) {
@@ -99,6 +144,27 @@ func TestCompletionScriptsAreDeterministicAndSideEffectFree(t *testing.T) {
 			for _, command := range commandCatalog().Commands {
 				if !strings.Contains(first, command.Name) {
 					t.Fatalf("%s completion omitted %q", shell, command.Name)
+				}
+			}
+			for _, token := range []string{
+				"launch",
+				"delete",
+				"evidence",
+				"setup",
+				"codex",
+				"status",
+				"quickstart",
+				"--console",
+				"receipts",
+				"tail",
+				"--agent",
+				"scan",
+				"--risk-envelope",
+				"watch",
+				"--api-key-file",
+			} {
+				if !strings.Contains(first, token) {
+					t.Fatalf("%s completion omitted nested token %q", shell, token)
 				}
 			}
 		})
@@ -223,6 +289,55 @@ func TestNestedHelpReachesLeafFlagSets(t *testing.T) {
 	}
 }
 
+func TestFrontDoorCommandsExposeSpecificHelp(t *testing.T) {
+	isolateDiscoverabilityTest(t)
+
+	for _, tc := range []struct {
+		name   string
+		args   []string
+		want   string
+		unwant string
+	}{
+		{"scan", []string{"scan", "--help"}, "--risk-envelope FILE", "Run `helm-ai-kernel help --all` to list commands."},
+		{"receipts", []string{"receipts", "--help"}, "--agent <id>", "Run `helm-ai-kernel help --all` to list commands."},
+		{"watch", []string{"watch", "--help"}, "--api-key-file FILE", "Run `helm-ai-kernel help --all` to list commands."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := Run(append([]string{"helm-ai-kernel"}, tc.args...), &stdout, &stderr)
+			if code != 0 || stderr.Len() != 0 {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stdout.String(), tc.want) || strings.Contains(stdout.String(), tc.unwant) {
+				t.Fatalf("help output = %q", stdout.String())
+			}
+		})
+	}
+}
+
+func TestHelpAllGroupsCommandsByUserJourney(t *testing.T) {
+	isolateDiscoverabilityTest(t)
+
+	output := runDiscoverabilityCommand(t, "help", "--all")
+	sections := []string{"Get started:", "Use HELM:", "Evidence:", "Operate:"}
+	last := -1
+	for _, section := range sections {
+		index := strings.Index(output, section)
+		if index < 0 {
+			t.Fatalf("help --all omitted section %q\n%s", section, output)
+		}
+		if index <= last {
+			t.Fatalf("help --all section order is unstable\n%s", output)
+		}
+		last = index
+	}
+	for _, expected := range []string{"quickstart", "watch", "verify", "workstation"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("help --all omitted %q\n%s", expected, output)
+		}
+	}
+}
+
 func isolateDiscoverabilityTest(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
@@ -285,6 +400,20 @@ func catalogContainsName(catalog commandCatalogDocument, name string) bool {
 	for _, command := range catalog.Commands {
 		if command.Name == name {
 			return true
+		}
+	}
+	return false
+}
+
+func sectionContainsCommand(catalog commandCatalogDocument, sectionID, commandName string) bool {
+	for _, section := range catalog.Sections {
+		if section.ID != sectionID {
+			continue
+		}
+		for _, command := range section.Commands {
+			if command.Name == commandName {
+				return true
+			}
 		}
 	}
 	return false

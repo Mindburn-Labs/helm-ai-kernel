@@ -567,14 +567,17 @@ func TestQuickstartConsoleFailsBeforeMutationForExternalOverrideOrMissingBundle(
 	t.Cleanup(func() { localConsoleExecutable = original })
 	dataDir := filepath.Join(dir, "quickstart-data")
 	var stdout, stderr bytes.Buffer
-	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 1 {
-		t.Fatalf("dry-run exit code = %d, stderr = %s", code, stderr.String())
+	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 0 {
+		t.Fatalf("dry-run exit code = %d, stdout = %s stderr = %s", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "valid compiled release manifest digest") {
-		t.Fatalf("missing compiled digest error = %s", stderr.String())
+	if stderr.Len() != 0 {
+		t.Fatalf("dry-run wrote stderr = %s", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "Console-including packaged layout") {
-		t.Fatalf("missing Console layout guidance = %s", stderr.String())
+	if !strings.Contains(stdout.String(), "\"operation\":\"preview\"") {
+		t.Fatalf("missing preview summary = %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Console-including packaged layout") {
+		t.Fatalf("missing Console layout warning = %s", stdout.String())
 	}
 	if _, statErr := os.Stat(dataDir); !os.IsNotExist(statErr) {
 		t.Fatalf("missing bundle dry-run mutated %q: %v", dataDir, statErr)

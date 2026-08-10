@@ -23,14 +23,33 @@ const commandCatalogSchemaVersion = "helm-ai-kernel.command-catalog.v1"
 
 // commandCatalogDocument is the stable, side-effect-free command discovery contract.
 type commandCatalogDocument struct {
-	SchemaVersion string                `json:"schema_version"`
-	Commands      []commandCatalogEntry `json:"commands"`
+	SchemaVersion string                  `json:"schema_version"`
+	Commands      []commandCatalogEntry   `json:"commands"`
+	Sections      []commandCatalogSection `json:"sections,omitempty"`
 }
 
 type commandCatalogEntry struct {
 	Name    string   `json:"name"`
 	Aliases []string `json:"aliases"`
 	Usage   string   `json:"usage"`
+	Group   string   `json:"group,omitempty"`
+}
+
+type commandCatalogSection struct {
+	ID       string                `json:"id"`
+	Title    string                `json:"title"`
+	Commands []commandCatalogEntry `json:"commands"`
+}
+
+type commandSectionSpec struct {
+	ID       string
+	Title    string
+	Commands []string
+}
+
+type completionContext struct {
+	Path       []string
+	Candidates []string
 }
 
 // Register adds a subcommand to the CLI registry.
@@ -196,25 +215,20 @@ func printUnknownCommand(out io.Writer, typed string) {
 }
 
 func printUsageAll(out io.Writer) {
+	catalog := commandCatalog()
 	fmt.Fprintf(out, "%s: Canonical Execution Verifier (Version %s, Commit %s)\n\n", terminalTitle(out, "HELM AI Kernel"), displayVersion(), displayCommit())
 	fmt.Fprintln(out, "Usage: helm-ai-kernel <command> [options]")
 	fmt.Fprintln(out, "\nCommands:")
-
-	for _, cmd := range canonicalRegisteredCommands() {
-		aliasStr := ""
-		if len(cmd.Aliases) > 0 {
-			aliasStr = fmt.Sprintf(" (aliases: %s)", strings.Join(cmd.Aliases, ", "))
+	fmt.Fprintln(out, "Common outcomes first; `help --json` keeps the stable machine catalog.")
+	for _, section := range catalog.Sections {
+		fmt.Fprintf(out, "\n%s:\n", section.Title)
+		for _, cmd := range section.Commands {
+			aliasStr := ""
+			if len(cmd.Aliases) > 0 {
+				aliasStr = fmt.Sprintf(" (aliases: %s)", strings.Join(cmd.Aliases, ", "))
+			}
+			fmt.Fprintf(out, "  %-20s %s%s\n", cmd.Name, cmd.Usage, aliasStr)
 		}
-		fmt.Fprintf(out, "  %-20s %s%s\n", cmd.Name, cmd.Usage, aliasStr)
-	}
-
-	fmt.Fprintln(out, "\nGlobal Commands:")
-	for _, cmd := range explicitGlobalCommands() {
-		aliasStr := ""
-		if len(cmd.Aliases) > 0 {
-			aliasStr = fmt.Sprintf(" (aliases: %s)", strings.Join(cmd.Aliases, ", "))
-		}
-		fmt.Fprintf(out, "  %-20s %s%s\n", cmd.Name, cmd.Usage, aliasStr)
 	}
 }
 
@@ -224,6 +238,7 @@ func commandCatalog() commandCatalogDocument {
 	return commandCatalogDocument{
 		SchemaVersion: commandCatalogSchemaVersion,
 		Commands:      commands,
+		Sections:      groupedCommandCatalogSections(commands),
 	}
 }
 
@@ -239,6 +254,7 @@ func canonicalRegisteredCommands() []commandCatalogEntry {
 			Name:    cmd.Name,
 			Aliases: aliases,
 			Usage:   cmd.Usage,
+			Group:   commandGroupTitle(cmd.Name),
 		})
 	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Name < commands[j].Name })
@@ -247,12 +263,12 @@ func canonicalRegisteredCommands() []commandCatalogEntry {
 
 func explicitGlobalCommands() []commandCatalogEntry {
 	return []commandCatalogEntry{
-		{Name: "completion", Aliases: []string{}, Usage: "Generate static shell completion"},
-		{Name: "help", Aliases: []string{"--help", "-h"}, Usage: "Show command help"},
-		{Name: "server", Aliases: []string{}, Usage: "Start the HELM Guardian API and proxy services"},
-		{Name: "serve", Aliases: []string{}, Usage: "Start a local HELM boundary from --policy"},
-		{Name: "threat", Aliases: []string{}, Usage: "Run a threat scan or test"},
-		{Name: "version", Aliases: []string{"--version", "-v"}, Usage: "Print version and schema information"},
+		{Name: "completion", Aliases: []string{}, Usage: "Generate static shell completion", Group: commandGroupTitle("completion")},
+		{Name: "help", Aliases: []string{"--help", "-h"}, Usage: "Show command help", Group: commandGroupTitle("help")},
+		{Name: "server", Aliases: []string{}, Usage: "Start the HELM Guardian API and proxy services", Group: commandGroupTitle("server")},
+		{Name: "serve", Aliases: []string{}, Usage: "Start a local HELM boundary from --policy", Group: commandGroupTitle("serve")},
+		{Name: "threat", Aliases: []string{}, Usage: "Run a threat scan or test", Group: commandGroupTitle("threat")},
+		{Name: "version", Aliases: []string{"--version", "-v"}, Usage: "Print version and schema information", Group: commandGroupTitle("version")},
 	}
 }
 
@@ -270,6 +286,147 @@ func completionWords() []string {
 	}
 	sort.Strings(words)
 	return words
+}
+
+func groupedCommandCatalogSections(commands []commandCatalogEntry) []commandCatalogSection {
+	index := make(map[string]commandCatalogEntry, len(commands))
+	for _, command := range commands {
+		index[command.Name] = command
+	}
+	seen := make(map[string]struct{}, len(commands))
+	sections := make([]commandCatalogSection, 0, len(commandSectionSpecs()))
+	for _, spec := range commandSectionSpecs() {
+		grouped := make([]commandCatalogEntry, 0, len(spec.Commands))
+		for _, name := range spec.Commands {
+			command, ok := index[name]
+			if !ok {
+				continue
+			}
+			grouped = append(grouped, command)
+			seen[name] = struct{}{}
+		}
+		if spec.ID == "operate" {
+			var leftovers []commandCatalogEntry
+			for _, command := range commands {
+				if _, ok := seen[command.Name]; ok {
+					continue
+				}
+				leftovers = append(leftovers, command)
+			}
+			sort.Slice(leftovers, func(i, j int) bool { return leftovers[i].Name < leftovers[j].Name })
+			grouped = append(grouped, leftovers...)
+		}
+		sections = append(sections, commandCatalogSection{
+			ID:       spec.ID,
+			Title:    spec.Title,
+			Commands: grouped,
+		})
+	}
+	return sections
+}
+
+func commandGroupTitle(name string) string {
+	for _, spec := range commandSectionSpecs() {
+		for _, command := range spec.Commands {
+			if command == name {
+				return spec.Title
+			}
+		}
+	}
+	return "Operate"
+}
+
+func commandSectionSpecs() []commandSectionSpec {
+	return []commandSectionSpec{
+		{
+			ID:    "get-started",
+			Title: "Get started",
+			Commands: []string{
+				"setup", "quickstart", "scan", "doctor", "help", "completion", "version", "onboard", "init", "connect", "login",
+			},
+		},
+		{
+			ID:    "use-helm",
+			Title: "Use HELM",
+			Commands: []string{
+				"watch", "receipts", "mcp", "launch", "app", "up", "run", "proxy", "local", "sandbox", "hook", "serve", "server", "dev", "scaffold", "shadow", "skills", "control-plane", "integrate", "health", "threat",
+			},
+		},
+		{
+			ID:    "evidence",
+			Title: "Evidence",
+			Commands: []string{
+				"verify", "verify-scan", "evidence", "export", "audit", "report", "replay", "rollup", "log", "traces", "gui", "plan", "risk-summary", "conform", "certify", "coverage", "brief",
+			},
+		},
+		{
+			ID:    "operate",
+			Title: "Operate",
+			Commands: []string{
+				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "did", "freeze", "identity", "import", "incident", "policy", "secret", "tee", "telemetry", "trust", "unfreeze", "workstation",
+			},
+		},
+	}
+}
+
+func completionContexts() []completionContext {
+	return []completionContext{
+		{Path: []string{"completion"}, Candidates: []string{"bash", "zsh", "fish", "powershell"}},
+		{Path: []string{"help"}, Candidates: append([]string{"--all", "--json"}, completionWords()...)},
+		{Path: []string{"launch"}, Candidates: []string{"matrix", "apps", "substrates", "plan", "status", "logs", "repair", "delete", "evidence", "promote", "secrets", "imports"}},
+		{Path: []string{"launch", "delete"}, Candidates: []string{"--cascade"}},
+		{Path: []string{"launch", "evidence"}, Candidates: []string{"--export", "--json", "--output"}},
+		{Path: []string{"launch", "plan"}, Candidates: []string{"--json"}},
+		{Path: []string{"quickstart"}, Candidates: []string{"--addr", "--port", "--data-dir", "--reset", "--offline", "--profile", "claude", "codex", "mcp", "openai-compatible", "--json", "--dry-run", "--yes", "--console", "--console-port", "--no-open"}},
+		{Path: []string{"receipts"}, Candidates: []string{"tail"}},
+		{Path: []string{"receipts", "tail"}, Candidates: []string{"--agent", "--server", "--since", "--json", "--format", "text", "json", "--limit"}},
+		{Path: []string{"scan"}, Candidates: []string{"--path", "--from-receipts", "--cohort", "unknown", "1-10repos", "11-50repos", "51-200repos", "201plusrepos", "--salt-file", "--risk-envelope", "--preview", "--evidence-pack", "--no-user-config", "--upload", "--upload-url", "--yes"}},
+		{Path: []string{"setup"}, Candidates: []string{"claude-code", "codex", "status", "repair", "remove", "--client", "--print-config", "--json", "--quickstart", "--profile", "claude", "codex", "mcp", "openai-compatible", "--yes", "--dry-run", "--data-dir", "--console", "--console-port", "--no-open", "--offline", "--reset"}},
+		{Path: []string{"setup", "claude-code"}, Candidates: []string{"--scope", "user", "project", "--workspace", "--data-dir", "--dry-run", "--json", "--yes", "--no-quickstart", "--quickstart", "--console", "--console-port", "--no-open", "--signing-seed-file", "--policy-profile", "--policy-profile-sha256"}},
+		{Path: []string{"setup", "codex"}, Candidates: []string{"--scope", "user", "project", "--workspace", "--data-dir", "--dry-run", "--json", "--yes", "--no-quickstart", "--quickstart", "--console", "--console-port", "--no-open", "--signing-seed-file", "--policy-profile", "--policy-profile-sha256"}},
+		{Path: []string{"setup", "remove"}, Candidates: []string{"claude-code", "codex", "--scope", "user", "project", "--workspace", "--yes", "--dry-run", "--json", "--data-dir"}},
+		{Path: []string{"setup", "repair"}, Candidates: []string{"claude-code", "codex", "--scope", "user", "project", "--workspace", "--yes", "--dry-run", "--json", "--data-dir"}},
+		{Path: []string{"setup", "status"}, Candidates: []string{"claude-code", "codex", "--scope", "user", "project", "--workspace", "--json", "--data-dir"}},
+		{Path: []string{"version"}, Candidates: []string{"--json"}},
+		{Path: []string{"watch"}, Candidates: []string{"--url", "--api-key-file", "--once", "--json"}},
+	}
+}
+
+func completionCandidates(path []string) []string {
+	root := completionWords()
+	if len(path) == 0 {
+		return root
+	}
+	key := strings.Join(path, " ")
+	byKey := make(map[string][]string, len(completionContexts()))
+	for _, context := range completionContexts() {
+		byKey[strings.Join(context.Path, " ")] = uniqueStrings(context.Candidates)
+	}
+	if candidates, ok := byKey[key]; ok {
+		return candidates
+	}
+	if len(path) > 1 {
+		if candidates, ok := byKey[path[0]]; ok {
+			return candidates
+		}
+	}
+	return root
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func writeCommandCatalogJSON(out io.Writer) int {

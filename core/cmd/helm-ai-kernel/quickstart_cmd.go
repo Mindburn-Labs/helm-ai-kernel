@@ -318,12 +318,7 @@ func planQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 		Console:        opts.Console,
 	}
 	if opts.Console {
-		bundle, err := discoverLocalConsoleBundle()
-		if err != nil {
-			return quickstartPrepared{}, err
-		}
-		prepared.ConsoleBundle = bundle
-		prepared.PlannedActions = append(prepared.PlannedActions, "start the packaged local Console sidecar")
+		prepared.PlannedActions = append(prepared.PlannedActions, "start the packaged local Console sidecar (requires a Console-including packaged layout)")
 	}
 	return prepared, nil
 }
@@ -341,6 +336,13 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 		if err := os.RemoveAll(opts.DataDir); err != nil {
 			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", opts.DataDir, err)
 		}
+	}
+	if opts.Console {
+		bundle, err := discoverLocalConsoleBundle()
+		if err != nil {
+			return quickstartPrepared{}, err
+		}
+		prepared.ConsoleBundle = bundle
 	}
 	if err := ensureQuickstartDataDirOwnership(opts.DataDir); err != nil {
 		return quickstartPrepared{}, err

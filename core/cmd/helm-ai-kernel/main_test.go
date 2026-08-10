@@ -2,8 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -11,6 +14,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 func chdirTempDir(t *testing.T) string {
@@ -195,6 +199,53 @@ func TestServerNarrationWriterSeparatesJSONAndText(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServerLogHandler(t *testing.T) {
+	traceID := oteltrace.TraceID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	spanID := oteltrace.SpanID{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18}
+	ctx := oteltrace.ContextWithSpanContext(context.Background(), oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  spanID,
+	}))
+
+	t.Run("json by default", func(t *testing.T) {
+		t.Setenv("HELM_LOG_FORMAT", "")
+		var output bytes.Buffer
+		handler, err := newServerLogHandler(&output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		slog.New(handler).InfoContext(ctx, "request served", "status", http.StatusOK)
+
+		var record map[string]any
+		if err := json.Unmarshal(output.Bytes(), &record); err != nil {
+			t.Fatalf("decode JSON log %q: %v", output.String(), err)
+		}
+		assert.Equal(t, "INFO", record["level"])
+		assert.Equal(t, "request served", record["msg"])
+		assert.Equal(t, float64(http.StatusOK), record["status"])
+		assert.Equal(t, traceID.String(), record["trace_id"])
+		assert.Equal(t, spanID.String(), record["span_id"])
+	})
+
+	t.Run("text is an explicit local opt-in", func(t *testing.T) {
+		t.Setenv("HELM_LOG_FORMAT", "text")
+		var output bytes.Buffer
+		handler, err := newServerLogHandler(&output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		slog.New(handler).InfoContext(ctx, "request served")
+		assert.Contains(t, output.String(), "level=INFO")
+		assert.Contains(t, output.String(), "trace_id="+traceID.String())
+	})
+
+	t.Run("unknown format fails closed", func(t *testing.T) {
+		t.Setenv("HELM_LOG_FORMAT", "yaml")
+		_, err := newServerLogHandler(&bytes.Buffer{})
+		assert.EqualError(t, err, `invalid HELM_LOG_FORMAT "yaml": expected json or text`)
+	})
 }
 
 // TestRunUnknownFlagDoesNotStartTheServer replaces the former

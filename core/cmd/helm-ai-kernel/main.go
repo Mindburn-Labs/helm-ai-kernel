@@ -178,8 +178,10 @@ func printGlobalCommandHelp(name string, stdout io.Writer) {
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel help [--all|--json|<command>]")
 	case "server":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel server [--policy PATH] [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+		fmt.Fprintln(stdout, "Logs default to JSON; set HELM_LOG_FORMAT=text for local human-readable output.")
 	case "serve":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel serve --policy PATH [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+		fmt.Fprintln(stdout, "Logs default to JSON; set HELM_LOG_FORMAT=text for local human-readable output.")
 	case "threat":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel threat <scan|test> [flags]")
 	case "version":
@@ -208,20 +210,37 @@ func runServer() error {
 	return runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr})
 }
 
+func newServerLogHandler(w io.Writer) (slog.Handler, error) {
+	var handler slog.Handler
+	switch format := strings.ToLower(strings.TrimSpace(os.Getenv("HELM_LOG_FORMAT"))); format {
+	case "", "json":
+		handler = slog.NewJSONHandler(w, nil)
+	case "text":
+		handler = slog.NewTextHandler(w, nil)
+	default:
+		return nil, fmt.Errorf("invalid HELM_LOG_FORMAT %q: expected json or text", format)
+	}
+	return tracing.NewSlogHandler(handler), nil
+}
+
 //nolint:gocognit,gocyclo
 func runServerWithOptions(opts serverOptions) error {
+	if opts.Stdout == nil {
+		opts.Stdout = os.Stdout
+	}
+	if opts.Stderr == nil {
+		opts.Stderr = os.Stderr
+	}
+	logHandler, logConfigErr := newServerLogHandler(opts.Stderr)
+	if logConfigErr != nil {
+		return logConfigErr
+	}
 	// Consume the Desktop launch secret before any optional runtime setup can
 	// spawn a subprocess. The route retains only the in-memory copy below.
 	desktopReadyToken := takeDesktopReadyToken()
 	desktopTransport, transportErr := desktopTransportV1ForOptions(opts)
 	if transportErr != nil {
 		return fmt.Errorf("desktop transport v1 configuration: %w", transportErr)
-	}
-	if opts.Stdout == nil {
-		opts.Stdout = os.Stdout
-	}
-	if opts.Stderr == nil {
-		opts.Stderr = os.Stderr
 	}
 	narration := serverNarrationWriter(opts)
 	// SEC: Default to localhost to prevent accidental network exposure.
@@ -284,7 +303,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// handler must be an explicit sink handler: wrapping the stdlib bridge
 	// (slog.Default().Handler()) and re-SetDefault-ing creates a log→slog→log
 	// cycle that deadlocks the first log.Printf at boot.
-	logger := slog.New(tracing.NewSlogHandler(slog.NewTextHandler(opts.Stderr, nil)))
+	logger := slog.New(logHandler)
 	slog.SetDefault(logger)
 	dataDir := opts.DataDir
 	if dataDir == "" {

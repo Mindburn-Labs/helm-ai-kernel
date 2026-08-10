@@ -1,3 +1,5 @@
+// quantum_posture: structured logging changes only signer lifecycle warnings;
+// existing classical Ed25519 and optional ML-DSA-65 profile behavior is unchanged.
 package main
 
 import (

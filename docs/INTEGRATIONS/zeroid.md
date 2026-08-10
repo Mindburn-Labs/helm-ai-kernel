@@ -90,9 +90,16 @@ the record under the event type `ZEROID_DENY`. The append is best-effort:
 failures are not propagated and do not change the signed `DENY` returned to the
 caller.
 
-This page makes no claim about the completeness or offline verifiability of that
-signature. The signing preimage carries open findings of its own — see F-05 and
-F-06 in the [remediation ledger](../security/kernel-security-remediation-ledger.md).
+The denial path calls the Guardian's configured `SignDecision`. The shipped
+kernel signers stamp `DecisionRecordSignatureV4`, whose preimage is
+JCS-canonical JSON; the legacy colon-joined preimage described by F-06 in the
+[remediation ledger](../security/kernel-security-remediation-ledger.md) therefore
+does not describe newly issued ZeroID decisions.
+
+V4 is not a whole-record signature. Fields outside its envelope — including
+`Timestamp`, `EnvFingerprint`, `InputContext`, and `GateRosterHash` — remain
+unsigned. This page makes no claim that the signature covers the whole record
+or is independently offline-verifiable.
 
 ## Verification
 

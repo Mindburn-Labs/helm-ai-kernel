@@ -386,7 +386,9 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		resp.Content = execResp.ContentItems
 		resp.StructuredContent = execResp.StructuredContent
 	} else if g.bridge != nil {
-		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, argsHash)
+		// No per-call cost signal is available at MCP method dispatch; the
+		// bridge floors a nil breakdown to the nominal unit.
+		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, argsHash, nil)
 		if govErr != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)

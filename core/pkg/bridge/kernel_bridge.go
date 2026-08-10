@@ -10,6 +10,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
@@ -52,12 +53,17 @@ func NewKernelBridge(g *guardian.Guardian, prgGraph *prg.Graph, pg *proofgraph.G
 //  3. ProofGraph INTENT node (always)
 //  4. ProofGraph ATTESTATION node with verdict
 //
+// The cost argument carries the effect's measured cost so budget consumption
+// tracks real spend: an expensive model call consumes proportionally more than
+// a cheap one. It may be nil when the caller has no cost signal, in which case
+// the effect consumes the minimum floor of one unit (see budgetCents).
+//
 // Returns a GovernResult with the decision, reason code, and ProofGraph node ID.
 // This is fail-closed: any error results in denial.
-func (kb *KernelBridge) Govern(ctx context.Context, toolName string, argsHash string) (*GovernResult, error) {
+func (kb *KernelBridge) Govern(ctx context.Context, toolName string, argsHash string, cost *effects.CostBreakdown) (*GovernResult, error) {
 	// 1. Budget check (fail-closed)
 	if kb.budget != nil {
-		cost := budget.Cost{Amount: 1, Currency: "USD", Reason: "tool_call:" + toolName}
+		cost := budget.Cost{Amount: budgetCents(cost), Currency: "USD", Reason: "tool_call:" + toolName}
 		decision, err := kb.budget.Check(ctx, kb.tenantID, cost)
 		if err != nil || !decision.Allowed {
 			reason := string(contracts.ReasonBudgetExceeded)
@@ -141,6 +147,36 @@ func (kb *KernelBridge) Govern(ctx context.Context, toolName string, argsHash st
 // Graph returns the underlying ProofGraph for serialization/export.
 func (kb *KernelBridge) Graph() *proofgraph.Graph {
 	return kb.graph
+}
+
+// budgetCents resolves the amount to charge the budget for one governed effect,
+// in the enforcer's cents unit. It uses the richest cost signal the effect
+// carries, in precedence order, and never invents a price of its own — pricing
+// beyond these already-measured fields is out of scope for the bridge:
+//
+//  1. TotalCents — the settled/estimated total when the effect priced itself.
+//  2. ModelCostCents + ToolCostCents — the priced components, when no total.
+//  3. InputTokens + OutputTokens — the raw usage as a proportional proxy when
+//     no priced signal exists yet (e.g. the proxy path, which observes token
+//     usage but not a per-model price).
+//
+// A nil breakdown, or one with no cost signal at all, floors to 1 so every
+// governed effect still consumes a nominal unit — matching the pre-metering
+// baseline and keeping the budget fail-closed rather than free.
+func budgetCents(cost *effects.CostBreakdown) int64 {
+	if cost == nil {
+		return 1
+	}
+	if cost.TotalCents > 0 {
+		return cost.TotalCents
+	}
+	if priced := cost.ModelCostCents + cost.ToolCostCents; priced > 0 {
+		return priced
+	}
+	if tokens := cost.InputTokens + cost.OutputTokens; tokens > 0 {
+		return tokens
+	}
+	return 1
 }
 
 // appendNode is a helper that marshals the payload and appends to the ProofGraph.

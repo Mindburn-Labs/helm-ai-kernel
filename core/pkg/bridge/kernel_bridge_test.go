@@ -9,6 +9,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
@@ -53,7 +54,7 @@ func TestGovern_AllowedToolCall(t *testing.T) {
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-test")
 
-	result, err := kb.Govern(context.Background(), "get_weather", "sha256:abc123")
+	result, err := kb.Govern(context.Background(), "get_weather", "sha256:abc123", nil)
 	require.NoError(t, err)
 
 	assert.True(t, result.Allowed, "expected tool call to be allowed")
@@ -72,7 +73,7 @@ func TestGovern_UnknownToolFailsClosedWithoutMutatingPolicy(t *testing.T) {
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-test")
 
-	result, err := kb.Govern(context.Background(), "credential_export", "sha256:bad")
+	result, err := kb.Govern(context.Background(), "credential_export", "sha256:bad", nil)
 	require.NoError(t, err)
 
 	assert.False(t, result.Allowed, "unknown tools must not be allowed")
@@ -102,19 +103,84 @@ func TestGovern_BudgetExhausted(t *testing.T) {
 	kb := NewKernelBridge(g, prgG, pg, enforcer, "tenant-budget")
 
 	// First two calls should pass (budget = 2 cents daily, 1 cent per call)
-	r1, err := kb.Govern(ctx, "tool_a", "sha256:1")
+	r1, err := kb.Govern(ctx, "tool_a", "sha256:1", nil)
 	require.NoError(t, err)
 	assert.True(t, r1.Allowed, "first call should succeed")
 
-	r2, err := kb.Govern(ctx, "tool_b", "sha256:2")
+	r2, err := kb.Govern(ctx, "tool_b", "sha256:2", nil)
 	require.NoError(t, err)
 	assert.True(t, r2.Allowed, "second call should succeed")
 
 	// Third call should be budget-blocked
-	r3, err := kb.Govern(ctx, "tool_c", "sha256:3")
+	r3, err := kb.Govern(ctx, "tool_c", "sha256:3", nil)
 	require.NoError(t, err)
 	assert.False(t, r3.Allowed, "third call should be denied (budget exhausted)")
 	assert.Equal(t, string(contracts.ReasonBudgetExceeded), r3.ReasonCode)
+}
+
+// dailyUsedCents reads a tenant's consumed daily budget, treating an
+// un-provisioned tenant (nil budget) as zero used.
+func dailyUsedCents(b *budget.Budget) int64 {
+	if b == nil {
+		return 0
+	}
+	return b.DailyUsed
+}
+
+// TestGovern_BudgetMeteredByEffectCost is the money-metering gate: an effect's
+// real cost — not a constant — must drive budget consumption, so an expensive
+// model call consumes proportionally more than a cheap one, and a cost that
+// exceeds the limit is denied.
+//
+// MUTATION CHECK: revert kernel_bridge.go's budget amount to a constant
+// (`Amount: 1`) and this test fails at the proportional-delta assertions,
+// proving the test actually pins metering to cost rather than call count.
+func TestGovern_BudgetMeteredByEffectCost(t *testing.T) {
+	g, prgG := newTestGuardian(t)
+	addAllowedToolRule(t, prgG, "cheap_tool")
+	addAllowedToolRule(t, prgG, "expensive_tool")
+	pg := proofgraph.NewGraph()
+
+	memStore := budget.NewMemoryStorage()
+	enforcer := budget.NewSimpleEnforcer(memStore)
+	ctx := context.Background()
+
+	const tenant = "tenant-metered"
+	// Generous limits so both priced calls are admitted; the final huge call
+	// is what must trip the limit.
+	require.NoError(t, enforcer.SetLimits(ctx, tenant, 10_000, 100_000))
+
+	kb := NewKernelBridge(g, prgG, pg, enforcer, tenant)
+
+	cheap := &effects.CostBreakdown{ModelCostCents: 5, TotalCents: 5}
+	expensive := &effects.CostBreakdown{ModelCostCents: 500, TotalCents: 500}
+
+	rCheap, err := kb.Govern(ctx, "cheap_tool", "sha256:cheap", cheap)
+	require.NoError(t, err)
+	require.True(t, rCheap.Allowed, "cheap call within budget must be allowed")
+	afterCheap, err := enforcer.GetBudget(ctx, tenant)
+	require.NoError(t, err)
+	cheapDelta := dailyUsedCents(afterCheap) // from zero
+
+	rExp, err := kb.Govern(ctx, "expensive_tool", "sha256:exp", expensive)
+	require.NoError(t, err)
+	require.True(t, rExp.Allowed, "expensive call within budget must be allowed")
+	afterExp, err := enforcer.GetBudget(ctx, tenant)
+	require.NoError(t, err)
+	expDelta := dailyUsedCents(afterExp) - dailyUsedCents(afterCheap)
+
+	// Proportional: each effect consumes exactly its own cost, and the
+	// expensive call consumes 100x the cheap one.
+	assert.Equal(t, int64(5), cheapDelta, "cheap effect must consume its 5-cent cost")
+	assert.Equal(t, int64(500), expDelta, "expensive effect must consume its 500-cent cost")
+	assert.Equal(t, cheapDelta*100, expDelta, "budget consumption must scale with effect cost")
+
+	// Denial: a cost exceeding the remaining daily budget is blocked, fail-closed.
+	huge := &effects.CostBreakdown{TotalCents: 1_000_000}
+	rDenied, err := kb.Govern(ctx, "expensive_tool", "sha256:huge", huge)
+	require.NoError(t, err)
+	assert.False(t, rDenied.Allowed, "a cost exceeding the limit must be denied")
+	assert.Equal(t, string(contracts.ReasonBudgetExceeded), rDenied.ReasonCode)
 }
 
 func TestGovern_ProofGraphChainIntegrity(t *testing.T) {
@@ -127,7 +193,7 @@ func TestGovern_ProofGraphChainIntegrity(t *testing.T) {
 
 	// Make 5 governed calls
 	for i := 0; i < 5; i++ {
-		r, err := kb.Govern(ctx, "tool_iterate", "sha256:iter")
+		r, err := kb.Govern(ctx, "tool_iterate", "sha256:iter", nil)
 		require.NoError(t, err)
 		assert.True(t, r.Allowed)
 	}
@@ -150,7 +216,7 @@ func TestGovern_NilBudgetSkipsBudgetOnly(t *testing.T) {
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-nobud")
 
-	result, err := kb.Govern(context.Background(), "any_tool", "sha256:any")
+	result, err := kb.Govern(context.Background(), "any_tool", "sha256:any", nil)
 	require.NoError(t, err)
 	assert.True(t, result.Allowed, "nil budget should skip only budget checks")
 }
@@ -162,7 +228,7 @@ func TestGovern_DecisionHasToolName(t *testing.T) {
 
 	kb := NewKernelBridge(g, prgG, pg, nil, "tenant-tool")
 
-	result, err := kb.Govern(context.Background(), "execute_code", "sha256:code")
+	result, err := kb.Govern(context.Background(), "execute_code", "sha256:code", nil)
 	require.NoError(t, err)
 	require.NotNil(t, result.Decision)
 	// Verify that the decision was made against the explicit tool policy.

@@ -30,6 +30,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
@@ -704,7 +705,16 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 											reasonCode = "PROXY_WALLCLOCK_LIMIT"
 											log.Printf("[DENY] wallclock limit exceeded (%v > %v)", time.Since(sessionStart), maxWallclock)
 										} else {
-											govResult, govErr := kb.Govern(context.Background(), toolName, hash)
+											// Meter budget by the model call's measured token
+											// usage so an expensive call consumes proportionally
+											// more than a cheap one. The proxy observes usage,
+											// not a per-model price, so tokens are the proxy
+											// signal the bridge charges against.
+											effectCost := &effects.CostBreakdown{
+												InputTokens:  inputTokens,
+												OutputTokens: outputTokens,
+											}
+											govResult, govErr := kb.Govern(context.Background(), toolName, hash, effectCost)
 											if govErr != nil {
 												status = "GOVERNANCE_ERROR"
 												reasonCode = "PDP_ERROR"

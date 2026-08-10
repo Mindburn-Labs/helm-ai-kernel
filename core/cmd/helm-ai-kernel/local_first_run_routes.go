@@ -20,6 +20,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 const (
@@ -170,7 +172,9 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		writeOnboardingState(w, r, svc, opts, nil)
+		if err := writeOnboardingState(w, r, svc, opts, nil); err != nil {
+			api.WriteInternalR(w, r, err)
+		}
 	}))
 	mux.HandleFunc("/api/v1/onboarding/run-step", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -194,7 +198,9 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 			api.WriteInternalR(w, r, err)
 			return
 		}
-		writeOnboardingState(w, r, svc, opts, map[string]string{step.ID: receiptRef})
+		if err := writeOnboardingState(w, r, svc, opts, map[string]string{step.ID: receiptRef}); err != nil {
+			api.WriteInternalR(w, r, err)
+		}
 	}))
 	mux.HandleFunc("/api/v1/onboarding/export", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -273,8 +279,11 @@ func onboardingStepByID(id string) (onboardingStep, bool) {
 	return onboardingStep{}, false
 }
 
-func writeOnboardingState(w http.ResponseWriter, r *http.Request, svc *Services, opts serverOptions, fresh map[string]string) {
-	receiptRefs := onboardingReceiptRefs(r.Context(), svc)
+func writeOnboardingState(w http.ResponseWriter, r *http.Request, svc *Services, opts serverOptions, fresh map[string]string) error {
+	receiptRefs, err := onboardingReceiptRefs(r.Context(), svc)
+	if err != nil {
+		return err
+	}
 	for k, v := range fresh {
 		receiptRefs[k] = v
 	}
@@ -304,16 +313,25 @@ func writeOnboardingState(w http.ResponseWriter, r *http.Request, svc *Services,
 		"evidence_pack_ref": onboardingEvidenceRef(receiptRefs),
 		"steps":             steps,
 	})
+	return nil
 }
 
-func onboardingReceiptRefs(ctx context.Context, svc *Services) map[string]string {
+func onboardingReceiptRefs(ctx context.Context, svc *Services) (map[string]string, error) {
 	refs := make(map[string]string)
 	if svc == nil || svc.ReceiptStore == nil {
-		return refs
+		return nil, fmt.Errorf("onboarding receipt store unavailable")
 	}
-	receipts, err := svc.ReceiptStore.List(ctx, 500)
+	tenantID, err := authenticatedReceiptTenantID(ctx)
 	if err != nil {
-		return refs
+		return nil, err
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedOnboardingReceiptReader)
+	if !ok {
+		return nil, fmt.Errorf("onboarding receipt store lacks tenant-scoped proof read capability")
+	}
+	receipts, err := reader.ListLatestOnboardingByTenant(ctx, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("list tenant onboarding receipts: %w", err)
 	}
 	for _, receipt := range receipts {
 		if receipt == nil || receipt.Metadata == nil {
@@ -324,7 +342,7 @@ func onboardingReceiptRefs(ctx context.Context, svc *Services) map[string]string
 			refs[stepID] = receipt.ReceiptID
 		}
 	}
-	return refs
+	return refs, nil
 }
 
 func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingStep) (string, error) {
@@ -334,6 +352,13 @@ func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingSte
 	principal, err := helmauth.GetPrincipal(r.Context())
 	if err != nil || principal == nil {
 		return "", fmt.Errorf("onboarding route requires authenticated principal")
+	}
+	tenantID := strings.TrimSpace(principal.GetTenantID())
+	if tenantID == "" {
+		return "", fmt.Errorf("onboarding route requires authenticated tenant")
+	}
+	if _, ok := svc.ReceiptStore.(store.TenantScopedCausalReceiptAppender); !ok {
+		return "", fmt.Errorf("onboarding receipt store lacks tenant-scoped causal append capability")
 	}
 	now := time.Now().UTC()
 	decision := &contracts.DecisionRecord{
@@ -349,7 +374,7 @@ func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingSte
 		PolicyDecisionHash: sha256HexBytes([]byte(step.ID + ":" + step.Verdict)),
 		Timestamp:          now,
 	}
-	err = persistDecisionReceipt(r.Context(), svc, decision, principal.GetID(), []byte(step.Action+":"+step.Resource), map[string]any{
+	err = persistDecisionReceiptForTenant(r.Context(), svc, decision, principal.GetID(), tenantID, []byte(step.Action+":"+step.Resource), map[string]any{
 		"source":          "onboarding",
 		"onboarding_step": step.ID,
 		"action":          step.Action,
@@ -359,11 +384,14 @@ func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingSte
 	if err != nil {
 		return "", err
 	}
-	return "rcpt_" + decision.ID, nil
+	return executor.ReceiptIDForDecision(tenantID, decision.ID), nil
 }
 
 func exportOnboardingEvidence(r *http.Request, svc *Services, opts serverOptions) (map[string]any, error) {
-	refs := onboardingReceiptRefs(r.Context(), svc)
+	refs, err := onboardingReceiptRefs(r.Context(), svc)
+	if err != nil {
+		return nil, err
+	}
 	payload := map[string]any{
 		"schema_version": "helm.onboarding.evidencepack.v1",
 		"created_at":     time.Now().UTC().Format(time.RFC3339),

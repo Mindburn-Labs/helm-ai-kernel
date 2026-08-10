@@ -1,3 +1,5 @@
+// quantum_posture: structured logging changes only signer lifecycle warnings;
+// existing classical Ed25519 and optional ML-DSA-65 profile behavior is unchanged.
 package main
 
 import (
@@ -8,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -119,9 +122,7 @@ func loadOrGenerateEd25519Root(dataDir string) (*crypto.Ed25519Signer, error) {
 	}
 
 	log.Printf("[helm] trust: generating new persistent root key at %s", keyPath)
-	fmt.Fprintf(os.Stderr, "\n%s⚠️  SECURITY WARNING: Using auto-generated root key.%s\n", ColorBold+ColorYellow, ColorReset)
-	fmt.Fprintf(os.Stderr, "   Key saved to: %s\n", keyPath)
-	fmt.Fprintf(os.Stderr, "   In production, use a hardware security module (HSM) or cloud KMS.\n\n")
+	slog.Warn("using auto-generated root key", "path", keyPath, "production_guidance", "use an HSM or cloud KMS")
 
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -135,7 +136,7 @@ func loadOrGenerateEd25519Root(dataDir string) (*crypto.Ed25519Signer, error) {
 
 	pubPath := filepath.Join(dataDir, "root.pub")
 	if err := os.WriteFile(pubPath, []byte(hex.EncodeToString(pub)), 0644); err != nil {
-		log.Printf("⚠️  failed to save root.pub: %v", err)
+		slog.Error("failed to save root public key", "error", err)
 	}
 
 	return crypto.NewEd25519SignerFromKey(priv, "root"), nil

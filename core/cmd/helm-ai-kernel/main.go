@@ -178,8 +178,10 @@ func printGlobalCommandHelp(name string, stdout io.Writer) {
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel help [--all|--json|<command>]")
 	case "server":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel server [--policy PATH] [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+		fmt.Fprintln(stdout, "Logs default to JSON; set HELM_LOG_FORMAT=text for local human-readable output.")
 	case "serve":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel serve --policy PATH [--addr ADDR] [--port PORT] [--data-dir DIR] [--json]")
+		fmt.Fprintln(stdout, "Logs default to JSON; set HELM_LOG_FORMAT=text for local human-readable output.")
 	case "threat":
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel threat <scan|test> [flags]")
 	case "version":
@@ -208,8 +210,66 @@ func runServer() error {
 	return runServerWithOptions(serverOptions{Mode: "server", Stdout: os.Stdout, Stderr: os.Stderr})
 }
 
+func resolveServerLogFormat(mode string) (string, error) {
+	format := strings.ToLower(strings.TrimSpace(os.Getenv("HELM_LOG_FORMAT")))
+	if format == "" {
+		if mode == "quickstart" {
+			return "text", nil
+		}
+		return "json", nil
+	}
+	if format != "json" && format != "text" {
+		return "", fmt.Errorf("invalid HELM_LOG_FORMAT %q: expected json or text", format)
+	}
+	return format, nil
+}
+
+func newServerLogHandler(w io.Writer, format string) slog.Handler {
+	var handler slog.Handler
+	switch format {
+	case "json":
+		handler = slog.NewJSONHandler(w, &slog.HandlerOptions{ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+			if len(groups) == 0 && attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
+				return slog.String("timestamp", attr.Value.Time().UTC().Format("2006-01-02T15:04:05.000Z07:00"))
+			}
+			return attr
+		}})
+	case "text":
+		handler = slog.NewTextHandler(w, nil)
+	}
+	return tracing.NewSlogHandler(handler)
+}
+
+func configureServerLogger(w io.Writer, mode string) (*slog.Logger, string, error) {
+	format, err := resolveServerLogFormat(mode)
+	if err != nil {
+		return nil, "", err
+	}
+	logger := slog.New(newServerLogHandler(w, format))
+	slog.SetDefault(logger)
+	return logger, format, nil
+}
+
+func writeServerNarration(logger *slog.Logger, format string, human io.Writer, humanText, message string, attrs ...any) {
+	if format == "json" {
+		logger.Info(message, attrs...)
+		return
+	}
+	_, _ = fmt.Fprintln(human, humanText)
+}
+
 //nolint:gocognit,gocyclo
 func runServerWithOptions(opts serverOptions) error {
+	if opts.Stdout == nil {
+		opts.Stdout = os.Stdout
+	}
+	if opts.Stderr == nil {
+		opts.Stderr = os.Stderr
+	}
+	logger, logFormat, logConfigErr := configureServerLogger(opts.Stderr, opts.Mode)
+	if logConfigErr != nil {
+		return logConfigErr
+	}
 	// Consume the Desktop launch secret before any optional runtime setup can
 	// spawn a subprocess. The route retains only the in-memory copy below.
 	desktopReadyToken := takeDesktopReadyToken()
@@ -217,13 +277,10 @@ func runServerWithOptions(opts serverOptions) error {
 	if transportErr != nil {
 		return fmt.Errorf("desktop transport v1 configuration: %w", transportErr)
 	}
-	if opts.Stdout == nil {
-		opts.Stdout = os.Stdout
+	narration := opts.Stdout
+	if opts.JSON {
+		narration = opts.Stderr
 	}
-	if opts.Stderr == nil {
-		opts.Stderr = os.Stderr
-	}
-	narration := serverNarrationWriter(opts)
 	// SEC: Default to localhost to prevent accidental network exposure.
 	// HELM_BIND_ADDR=0.0.0.0 remains an explicit opt-in for server mode.
 	bindAddr := opts.BindAddr
@@ -276,16 +333,11 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	defer func() { _ = apiListener.Close() }()
 
-	fmt.Fprintf(narration, "%sHELM AI Kernel starting...%s\n", ColorBold+ColorBlue, ColorReset)
+	writeServerNarration(logger, logFormat, narration,
+		ColorBold+ColorBlue+"HELM AI Kernel starting..."+ColorReset,
+		"HELM AI Kernel starting")
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
-	// Stamp trace_id/span_id/correlation_id from ctx onto every record
-	// (HELM-333); requires *Context slog variants at call sites. The wrapped
-	// handler must be an explicit sink handler: wrapping the stdlib bridge
-	// (slog.Default().Handler()) and re-SetDefault-ing creates a log→slog→log
-	// cycle that deadlocks the first log.Printf at boot.
-	logger := slog.New(tracing.NewSlogHandler(slog.NewTextHandler(opts.Stderr, nil)))
-	slog.SetDefault(logger)
 	dataDir := opts.DataDir
 	if dataDir == "" {
 		dataDir = "data"
@@ -302,7 +354,9 @@ func runServerWithOptions(opts serverOptions) error {
 	// 0.2 Connect to Database (Infrastructure)
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		fmt.Fprintf(narration, "ℹ️  DATABASE_URL not set. Falling back to %sLite Mode%s (SQLite).\n", ColorBold+ColorCyan, ColorReset)
+		writeServerNarration(logger, logFormat, narration,
+			"ℹ️  DATABASE_URL not set. Falling back to "+ColorBold+ColorCyan+"Lite Mode"+ColorReset+" (SQLite).",
+			"DATABASE_URL not set; using Lite Mode", "database", "sqlite")
 		if opts.SQLitePath != "" {
 			db, _, receiptStore, err = setupLiteModeWithDBPath(ctx, opts.SQLitePath)
 			dataDir = filepath.Dir(opts.SQLitePath)
@@ -310,43 +364,43 @@ func runServerWithOptions(opts serverOptions) error {
 			db, _, receiptStore, err = setupLiteModeWithDataDir(ctx, dataDir)
 		}
 		if err != nil {
-			log.Fatalf("Failed to setup Lite Mode: %v", err)
+			return fmt.Errorf("setup Lite Mode: %w", err)
 		}
 		principalBindingStore, err = store.NewSQLitePrincipalBindingStore(db)
 		if err != nil {
-			log.Fatalf("Failed to init sqlite principal binding store: %v", err)
+			return fmt.Errorf("init sqlite principal binding store: %w", err)
 		}
 	} else {
 		databaseMode = "postgres"
 		if envBool("HELM_PRODUCTION") {
 			if err := validateProductionDatabaseURL(dbURL); err != nil {
-				log.Fatalf("Invalid production DATABASE_URL: %v", err)
+				return fmt.Errorf("invalid production DATABASE_URL: %w", err)
 			}
 		}
 		db, err = sql.Open("postgres", dbURL)
 		if err != nil {
-			log.Fatalf("Failed to connect to DB: %v", err)
+			return fmt.Errorf("connect to DB: %w", err)
 		}
 		configurePostgresPool(db)
 		if err := db.PingContext(ctx); err != nil {
-			log.Fatalf("DB Ping failed: %v", err)
+			return fmt.Errorf("ping DB: %w", err)
 		}
 		log.Println("[helm] postgres: connected")
 
 		// Initialize Postgres stores (used by Services layer)
 		pl := ledger.NewPostgresLedger(db)
 		if err := pl.Init(ctx); err != nil {
-			log.Fatalf("Failed to init ledger: %v", err)
+			return fmt.Errorf("init ledger: %w", err)
 		}
 		_ = pl // Ledger is managed via Services layer
 		ps := store.NewPostgresReceiptStore(db)
 		if err := ps.Init(ctx); err != nil {
-			log.Fatalf("Failed to init receipt store: %v", err)
+			return fmt.Errorf("init receipt store: %w", err)
 		}
 		receiptStore = ps
 		pbs, pbErr := store.NewPostgresPrincipalBindingStore(db)
 		if pbErr != nil {
-			log.Fatalf("Failed to init postgres principal binding store: %v", pbErr)
+			return fmt.Errorf("init postgres principal binding store: %w", pbErr)
 		}
 		principalBindingStore = pbs
 	}
@@ -356,15 +410,17 @@ func runServerWithOptions(opts serverOptions) error {
 	// Signing Authority
 	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
-		log.Fatalf("Failed to init signer: %v", err)
+		return fmt.Errorf("init signer: %w", err)
 	}
 	verifier, _ := crypto.NewEd25519Verifier(signer.PublicKeyBytes())
-	fmt.Fprintf(narration, "🔑 Trust Root: %s%s%s\n", ColorBold+ColorGreen, signer.PublicKey(), ColorReset)
+	writeServerNarration(logger, logFormat, narration,
+		"🔑 Trust Root: "+ColorBold+ColorGreen+signer.PublicKey()+ColorReset,
+		"trust root ready", "public_key", signer.PublicKey())
 
 	// 2. Registry
 	reg := registry.NewPostgresRegistry(db)
 	if err := reg.Init(ctx); err != nil {
-		log.Fatalf("Failed to init registry: %v", err)
+		return fmt.Errorf("init registry: %w", err)
 	}
 	log.Println("[helm] registry: ready")
 
@@ -385,9 +441,9 @@ func runServerWithOptions(opts serverOptions) error {
 		// service graph would make readiness ambiguous and hide a bad authority
 		// or durable-store configuration.
 		if servicesInitFailureIsFatal() {
-			log.Fatalf("Services init failed while a fail-closed runtime boundary is enabled: %v", svcErr)
+			return fmt.Errorf("services init failed while a fail-closed runtime boundary is enabled: %w", svcErr)
 		}
-		log.Printf("Services init (non-fatal, degraded mode): %v", svcErr)
+		logger.Warn("services init failed; continuing in degraded mode", "error", svcErr)
 	}
 	if services != nil {
 		services.DatabaseMode = databaseMode
@@ -412,15 +468,15 @@ func runServerWithOptions(opts serverOptions) error {
 	if opts.PolicyPath != "" {
 		policySource, policySourceKind, sourceErr := policySourceFromEnv(opts.PolicyPath, policyScope)
 		if sourceErr != nil {
-			log.Fatalf("Failed to configure policy source: %v", sourceErr)
+			return fmt.Errorf("configure policy source: %w", sourceErr)
 		}
 		policyVerifier, requirePolicySignature, verifierErr := policySignatureVerifierFromEnv(policySourceKind)
 		if verifierErr != nil {
-			log.Fatalf("Failed to configure policy signature verifier: %v", verifierErr)
+			return fmt.Errorf("configure policy signature verifier: %w", verifierErr)
 		}
 		keepLastKnownGood, lkgMaxAge, lkgConfigErr := policyLastKnownGoodConfigFromEnv()
 		if lkgConfigErr != nil {
-			log.Fatalf("Failed to configure last-known-good policy retention: %v", lkgConfigErr)
+			return fmt.Errorf("configure last-known-good policy retention: %w", lkgConfigErr)
 		}
 		policyStore = policyreconcile.NewAtomicSnapshotStore()
 		policyReconciler, err = policyreconcile.NewReconciler(policyreconcile.ReconcilerConfig{
@@ -434,7 +490,7 @@ func runServerWithOptions(opts serverOptions) error {
 			Clock:               runtimeClock.Now,
 		})
 		if err != nil {
-			log.Fatalf("Failed to initialize policy reconciler: %v", err)
+			return fmt.Errorf("initialize policy reconciler: %w", err)
 		}
 		reconcileCtx := ctx
 		if timeout := policyInitialReconcileTimeoutFromEnv(); timeout > 0 {
@@ -444,11 +500,11 @@ func runServerWithOptions(opts serverOptions) error {
 		}
 		status, recErr := policyReconciler.Reconcile(reconcileCtx, policyScope)
 		if recErr != nil {
-			log.Fatalf("Failed to reconcile initial policy snapshot: %v", recErr)
+			return fmt.Errorf("reconcile initial policy snapshot: %w", recErr)
 		}
 		snapshot, ok := policyStore.Get(policyScope)
 		if !ok || snapshot == nil {
-			log.Fatalf("Failed to install initial policy snapshot: %s", status.ReconcileStatus)
+			return fmt.Errorf("install initial policy snapshot: %s", status.ReconcileStatus)
 		}
 		if snapshot.Graph != nil {
 			ruleGraph = snapshot.Graph
@@ -483,7 +539,7 @@ func runServerWithOptions(opts serverOptions) error {
 		if !fallbackMock {
 			cmd := exec.Command("docker", "info")
 			if err := cmd.Run(); err != nil {
-				log.Println("[helm] Docker daemon not reachable, falling back to mock warm sandboxes")
+				logger.Warn("Docker daemon not reachable; falling back to mock warm sandboxes")
 				fallbackMock = true
 			}
 		}
@@ -513,11 +569,11 @@ func runServerWithOptions(opts serverOptions) error {
 		services.PolicyScope = policyScope
 		services.ApprovalConsumption, err = newApprovalConsumptionRuntime(ctx, db, databaseMode, signer, services.EmergencyStops)
 		if err != nil {
-			log.Fatalf("Failed to initialize approval grant consumption runtime: %v", err)
+			return fmt.Errorf("initialize approval grant consumption runtime: %w", err)
 		}
 		services.GeneratedSpecApproval, err = newGeneratedSpecApprovalRuntime(ctx, db, databaseMode, signer, services.EmergencyStops)
 		if err != nil {
-			log.Fatalf("Failed to initialize GeneratedSpec approval runtime: %v", err)
+			return fmt.Errorf("initialize GeneratedSpec approval runtime: %w", err)
 		}
 
 		// Receipt transparency log: anchor decision-record receipt hashes at
@@ -529,9 +585,9 @@ func runServerWithOptions(opts serverOptions) error {
 		transpLog, transpErr := translog.Open(filepath.Join(dataDir, "translog"))
 		if transpErr != nil {
 			if envBool("HELM_PRODUCTION") {
-				log.Fatalf("Failed to open receipt transparency log: %v", transpErr)
+				return fmt.Errorf("open receipt transparency log: %w", transpErr)
 			}
-			log.Printf("[helm] receipt transparency log disabled (dev): %v", transpErr)
+			logger.Warn("receipt transparency log disabled in development", "error", transpErr)
 		} else {
 			services.TranspLog = transpLog
 			services.TranspLogID = translog.LogIDFromPublicKey(signer.PublicKeyBytes())
@@ -563,7 +619,7 @@ func runServerWithOptions(opts serverOptions) error {
 		IdleTimeout:       120 * time.Second,
 	}
 	if bindAddr == "0.0.0.0" {
-		log.Printf("[helm] WARNING: API server binding to all interfaces (0.0.0.0:%d) — ensure firewall rules are in place", port)
+		logger.Warn("API server binding to all interfaces; ensure firewall rules are in place", "port", port)
 	}
 	go func() {
 		log.Printf("[helm] API server: %s:%d", bindAddr, port)
@@ -600,7 +656,7 @@ func runServerWithOptions(opts serverOptions) error {
 		go func() {
 			log.Printf("[helm] health server: %s:%d", bindAddr, healthPort)
 			if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Printf("[helm] health server error: %v", err)
+				logger.Error("health server failed", "error", err)
 			}
 		}()
 	}
@@ -619,7 +675,7 @@ func runServerWithOptions(opts serverOptions) error {
 		go func() {
 			log.Printf("[helm] metrics server: %s:%d", bindAddr, metricsPort)
 			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Printf("[helm] metrics server error: %v", err)
+				logger.Error("metrics server failed", "error", err)
 			}
 		}()
 	}
@@ -633,16 +689,16 @@ func runServerWithOptions(opts serverOptions) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("[helm] API server shutdown error: %v", err)
+			logger.Error("API server shutdown failed", "error", err)
 		}
 		if healthServer != nil {
 			if err := healthServer.Shutdown(shutdownCtx); err != nil {
-				log.Printf("[helm] health server shutdown error: %v", err)
+				logger.Error("health server shutdown failed", "error", err)
 			}
 		}
 		if metricsServer != nil {
 			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-				log.Printf("[helm] metrics server shutdown error: %v", err)
+				logger.Error("metrics server shutdown failed", "error", err)
 			}
 		}
 		// Flush the OTLP batchers last, after the servers stopped accepting.
@@ -655,11 +711,11 @@ func runServerWithOptions(opts serverOptions) error {
 		// the case it exists for.
 		if services != nil && services.Observability != nil {
 			if err := flushObservability(services.Observability); err != nil {
-				log.Printf("[helm] observability shutdown error: %v", err)
+				logger.Error("observability shutdown failed", "error", err)
 			}
 		}
 	}
-	if err := writeServerReady(opts, bindAddr, port); err != nil {
+	if err := writeServerReady(opts, logger, logFormat, bindAddr, port); err != nil {
 		shutdown()
 		return err
 	}
@@ -682,17 +738,7 @@ func runServerWithOptions(opts serverOptions) error {
 	return runtimeErr
 }
 
-// serverNarrationWriter keeps human-only startup prose out of a command's JSON
-// data stream. JSON callers retain stdout for machine data and receive
-// diagnostics and narration on stderr.
-func serverNarrationWriter(opts serverOptions) io.Writer {
-	if opts.JSON {
-		return opts.Stderr
-	}
-	return opts.Stdout
-}
-
-func writeServerReady(opts serverOptions, bindAddr string, port int) error {
+func writeServerReady(opts serverOptions, logger *slog.Logger, logFormat, bindAddr string, port int) error {
 	if opts.OnReady != nil {
 		if err := opts.OnReady(bindAddr, port); err != nil {
 			return err
@@ -706,6 +752,8 @@ func writeServerReady(opts serverOptions, bindAddr string, port int) error {
 			"ready":  true,
 			"policy": opts.PolicyPath,
 		})
+	} else if logFormat == "json" {
+		logger.Info("server ready", "name", "helm-edge-local", "addr", bindAddr, "port", port, "policy", opts.PolicyPath)
 	} else if opts.Mode == "serve" {
 		fmt.Fprintf(opts.Stdout, "helm-edge-local · listening :%d · ready\n", port)
 	} else {

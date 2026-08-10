@@ -205,9 +205,9 @@ and copy-paste quickstart commands. Tag commercial signals when users ask for
 shared policy repositories, retention/search, SIEM or observability
 integrations, SSO, role-based approvals, or hosted evidence workflows.
 
-Do not implement Basic or Enterprise layers in the OSS kernel. Record product
-requirements separately and keep the kernel boundary, receipt, and verifier
-contracts stable.
+Do not implement paid HELM Cloud or HELM AI OS layers in the OSS kernel. Record
+product requirements separately and keep the kernel boundary, receipt, and
+verifier contracts stable.
 
 ### Phase 5: Feedback Capture
 
@@ -310,8 +310,8 @@ Engagement:
 
 Commercial bridge:
 
-- HELM AI Enterprise Individual interest CTA clicks
-- docs path from Kernel to Individual
+- HELM Cloud interest CTA clicks
+- docs path from Kernel to HELM Cloud
 - inbound team-use requests
 
 GitHub traffic windows are short, so export private analytics daily, publish a weekly channel cohort report, keep a launch-post UTM map, and log README hook changes.
@@ -328,7 +328,16 @@ Run this checklist before publishing README edits, launch posts, diagrams, video
 - Does not claim a hosted control plane for OSS Kernel.
 - Does not claim certification unless certification exists.
 - Does not describe Enterprise features as Kernel features.
-- Does not imply Individual or Enterprise weakens or forks Kernel semantics.
+- Does not imply HELM Cloud or HELM AI OS weakens or forks Kernel semantics.
+- When paid surfaces are named, names HELM as one product on two commercial
+  surfaces and names no third product. The surfaces are the Kernel surface (free
+  and open source, with HELM Cloud as its paid hosted tier) and HELM AI OS.
+  Kernel, Company Builder, Company OS, Console, and HELM Network are layers of
+  HELM, not products.
+- Attaches an evidence-appropriate status label or gate date - Preview, reviewed
+  access, pilot, Building, roadmap, or a dated gate - to every paid-surface
+  capability. Uses Live or bare present-tense availability only when release
+  evidence exists.
 - Does not mention robot fleets, AGI OS, OrgDNA compiler, Titan, or physical-world control in OSS copy.
 
 ## Diagram Doctrine
@@ -362,15 +371,30 @@ Submit listings after the proof exists.
 
 ## Commercial Bridge
 
+HELM is one product on two commercial surfaces. The Kernel surface is free and
+open source, with **HELM Cloud** as its paid hosted tier; **HELM AI OS** is one
+modular product in **Preview**, with reviewed access and inclusions enabled per
+customer. Kernel, Company Builder, Company OS, Console, and HELM Network are
+layers of HELM, not separate products. OSS copy must not invent a third product
+name for the paid surface.
+
 Use this bridge after local Kernel proof:
 
 ```text
-Try HELM AI Kernel locally.
-Use HELM AI Enterprise Individual for shared approvals, receipts, policies, and short-retention evidence.
+Try HELM AI Kernel locally: free, open source, and offline-verifiable.
+HELM Cloud is the paid hosted tier for shared approvals, receipts, policies,
+and retained evidence. Status: Building - access is by request.
 Talk to Mindburn Labs about production execution authority.
 ```
 
-HELM AI Enterprise Individual gives operators a shared control plane for governed AI actions: workspaces, approvals, receipts, API access, custom policies, and short-retention evidence, all built on HELM AI Kernel.
+HELM Cloud is the headless hosted control plane **specified** for governed AI
+actions - workspaces, API keys, approvals, budgets, plans, incidents, receipts,
+evidence, retention, and runtime bridges - built on HELM AI Kernel. Its status
+is **Building**, not general availability: the local Kernel path is what an OSS
+visitor can run today, and paid access is by request rather than self-serve
+checkout. Do not write present-tense availability, customer, deployment, or
+adoption claims for HELM Cloud in OSS copy. Route interest to a request-access
+CTA, and let the Kernel proof path carry the demonstration.
 
 ## Source Truth
 

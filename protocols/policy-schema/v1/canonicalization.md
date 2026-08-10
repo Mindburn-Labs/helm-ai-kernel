@@ -4,9 +4,9 @@
 > **Status: DESIGN TARGET — UNSPECIFIED, not implemented.**
 > Sections 2–7 describe the intended canonicalization for the `helm.policy.v1`
 > schema. **None of it is implemented in this repository.** The `helm.policy.v1`
-> messages generate no code (`sdk/go/gen/` carries `helm/{authority,effects,
-> intervention,kernel,truth}/v1` only), there is no policy VM, and no gate
-> checks any rule below.
+> messages generate no code — `sdk/go/gen/helm/` carries `authority`, `effects`,
+> `intervention`, `kernel` and `truth`, and no `policy`. There is no policy VM,
+> and no gate checks any rule below.
 >
 > Per [ADR 0003 §D2](../../../docs/adr/0003-normative-artifact-arbitration.md),
 > an integrity contract is normative only when a specification under

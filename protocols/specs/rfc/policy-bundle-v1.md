@@ -158,7 +158,7 @@ Two consequences matter for integrators:
 Verification compares a recomputed hash against an expected one:
 
 ```bash
-helm-ai-kernel bundle verify --file ./corporate-baseline.yaml --hash 76d068297e3b…
+helm-ai-kernel bundle verify --file ./corporate-baseline.yaml --hash 4ca9fb0250d6603ef7e51771b19801d7152691c3335de11ebdcef582b2100475
 ```
 
 A mismatch returns `ErrBundleHashMismatch` and exit code 1.

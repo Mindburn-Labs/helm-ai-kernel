@@ -255,8 +255,9 @@ by every conforming implementation. The same bound applies to `effect_ordinal`,
 A CounterfactualReceipt MUST carry `enforcement = counterfactual`; the field MUST
 NOT be omitted, and `enforced` is forbidden for this receipt family.
 `counterfactual` means the verdict is the one the PDP **would** have issued under
-an explicit, time-boxed observe grant, computed without any enforcement or side
-effect.
+an explicit, time-boxed observe grant. The recorded verdict is not enforced,
+but the separate grant may still let shadow mode dispatch the evaluated action
+and produce real effects; this receipt does not authorize that dispatch.
 
 A counterfactual receipt is signed, content-addressed, and verifiable exactly
 like any other receipt, but it confers **no execution authority**. It MUST be
@@ -336,9 +337,13 @@ A conforming verifier of this profile MUST additionally:
 
 Signer keys MAY rotate between revisions, so cryptographic verification of each
 predecessor is mandatory at verification time and cannot be inherited from the
-head. The normative sequence is implemented by `VerifyLaunchEffectReceipt` in
-`core/pkg/contracts/launch_effect_receipt.go` and independently by
-`reference_packs/launch-mission-v1/verify_vectors.py`.
+head. The full sequence is implemented by `VerifyLaunchEffectReceipt` in
+`core/pkg/contracts/launch_effect_receipt.go`. The independent Python verifier
+at `reference_packs/launch-mission-v1/verify_vectors.py` checks steps 1–9 for the
+reference pack's single receipt, pack-supplied authority binding, and evidence
+DAG. It does not resolve predecessor receipts or verify EvidencePack closure.
+Step 10, including cryptographic verification of every predecessor and
+signer-key rotation across revisions, remains Kernel-only.
 
 ## 6. Security Considerations
 

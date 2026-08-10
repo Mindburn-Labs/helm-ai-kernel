@@ -151,12 +151,24 @@ func newLocalMCPGatewayWithEvaluator(cfg mcppkg.GatewayConfig, evaluator mcppkg.
 	return mcppkg.NewGateway(catalog, cfg, mcppkg.WithGovernedExecutor(executor)), nil
 }
 
-// receiptPersistingEvaluator persists a signed, queryable receipt for every
-// governed MCP gateway decision — ALLOW and DENY — into the kernel receipt
-// store that /api/v1/receipts reads. Persistence is fail-closed: a decision
-// that cannot be receipted surfaces as a governance error and blocks the
-// call, matching the /api/v1/evaluate route and the transparency-anchor
-// posture.
+// receiptPersistingEvaluator persists a signed receipt for every governed MCP
+// gateway decision — ALLOW and DENY. Persistence is fail-closed: a decision
+// that cannot be receipted surfaces as a governance error and blocks the call,
+// matching the /api/v1/evaluate route and the transparency-anchor posture.
+//
+// These receipts are durable and signed but NOT retrievable through
+// /api/v1/receipts. The gateway routes are mounted under RouteAuthAdmin
+// (see registerDeployedMCPRoutes), which authenticates a principal and never
+// establishes a tenant binding, so there is no independently authenticated
+// tenant to scope by. persistDecisionReceipt therefore writes an unscoped
+// causal row on purpose rather than deriving a durable namespace from
+// caller-controlled decision context, while every /api/v1/receipts read
+// filters on the tenant-qualified scope prefix. Reach these receipts through
+// the store's sequence-ordered reads (ListSince) or the CLI.
+//
+// Making them tenant-retrievable requires moving the gateway routes to
+// RouteAuthTenant, which is a breaking change for MCP clients; that is tracked
+// on HELM-363 and deliberately not done here.
 type receiptPersistingEvaluator struct {
 	svc   *Services
 	inner mcppkg.PolicyEvaluator

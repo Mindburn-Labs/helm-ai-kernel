@@ -111,6 +111,21 @@ type TenantScopedReceiptCursorReader interface {
 	ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error)
 }
 
+// TenantScopedLatestReceiptReader returns the latest V5 receipts constrained
+// to an authenticated tenant. Snapshot surfaces use this instead of cursor
+// readers, whose oldest-first ordering serves pagination and tailing.
+type TenantScopedLatestReceiptReader interface {
+	ListLatestByTenant(ctx context.Context, tenantID string, limit int) ([]*contracts.Receipt, error)
+}
+
+// TenantScopedOnboardingReceiptReader returns the latest V5 receipt for each
+// onboarding step inside an authenticated tenant scope. It queries onboarding
+// metadata directly so proof state does not disappear behind an unrelated
+// total-receipt window.
+type TenantScopedOnboardingReceiptReader interface {
+	ListLatestOnboardingByTenant(ctx context.Context, tenantID string) ([]*contracts.Receipt, error)
+}
+
 // ReceiptTimestampNormalizer exposes a store's durable timestamp precision to
 // producers. A producer must normalize before it signs or anchors a receipt
 // whose chain hash will later be reloaded from that store.
@@ -502,6 +517,44 @@ func (s *PostgresReceiptStore) ListByTenant(ctx context.Context, tenantID string
 		  AND lamport_clock > $3
 		ORDER BY lamport_clock ASC, timestamp ASC LIMIT $4`
 	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, since, limit)
+}
+
+func (s *PostgresReceiptStore) ListLatestByTenant(ctx context.Context, tenantID string, limit int) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `SELECT ` + receiptColumns + ` FROM receipts
+		WHERE signature_version = $1
+		  AND COALESCE(session_id, '') <> ''
+		  AND left(causal_session_id, char_length($2)) = $2
+		ORDER BY timestamp DESC, append_sequence DESC LIMIT $3`
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, limit)
+}
+
+func (s *PostgresReceiptStore) ListLatestOnboardingByTenant(ctx context.Context, tenantID string) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `WITH ranked AS (
+		SELECT receipts.*,
+			ROW_NUMBER() OVER (
+				PARTITION BY metadata->>'onboarding_step'
+				ORDER BY timestamp DESC, append_sequence DESC
+			) AS onboarding_rank
+		FROM receipts
+		WHERE signature_version = $1
+		  AND COALESCE(session_id, '') <> ''
+		  AND left(causal_session_id, char_length($2)) = $2
+		  AND NULLIF(metadata->>'onboarding_step', '') IS NOT NULL
+	)
+	SELECT ` + receiptColumns + ` FROM ranked
+	WHERE onboarding_rank = 1
+	ORDER BY timestamp DESC, append_sequence DESC`
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix)
 }
 
 // ListByTenantCursor returns V5 receipts in durable append order. The opaque

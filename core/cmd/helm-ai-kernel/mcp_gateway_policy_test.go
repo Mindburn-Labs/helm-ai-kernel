@@ -204,10 +204,16 @@ func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 	}
 }
 
-// TestMCPGatewayDecisionsPersistQueryableReceipts covers HELM-363: every
-// governed decision through the MCP gateway — ALLOW and DENY — must persist a
-// signed receipt into the same store /api/v1/receipts reads.
-func TestMCPGatewayDecisionsPersistQueryableReceipts(t *testing.T) {
+// TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope covers the
+// part of HELM-363 that is actually true: every governed decision through the
+// MCP gateway — ALLOW and DENY — persists a signed, durable receipt.
+//
+// It deliberately does NOT claim those receipts are readable through
+// /api/v1/receipts. They are written unscoped, because the gateway routes run
+// under RouteAuthAdmin and so carry no authenticated tenant to scope by, while
+// that route reads through ListByTenantCursor. The final assertion pins that
+// boundary so the gap cannot silently reappear as a green test.
+func TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope(t *testing.T) {
 	dir := t.TempDir()
 	policyPath, _ := writeMountedServePolicyFixture(t, dir, `{
   "pack_id": "runtime-pack",
@@ -277,7 +283,10 @@ func TestMCPGatewayDecisionsPersistQueryableReceipts(t *testing.T) {
 		t.Fatalf("expected DENY for file_write: %s", body)
 	}
 
-	// The same read path /api/v1/receipts uses.
+	// Sequence-ordered read. This is NOT the read path /api/v1/receipts uses —
+	// that route goes through listReceiptsForCursor -> ListByTenantCursor, which
+	// filters on the tenant-qualified scope prefix. See the scope assertion at
+	// the end of this test.
 	receipts, err := receiptStore.ListSince(context.Background(), 0, 10)
 	if err != nil {
 		t.Fatalf("list receipts: %v", err)
@@ -295,6 +304,39 @@ func TestMCPGatewayDecisionsPersistQueryableReceipts(t *testing.T) {
 	}
 	if verdicts["file_write"] != string(contracts.VerdictDeny) {
 		t.Fatalf("missing DENY receipt for file_write: %+v", verdicts)
+	}
+
+	// Pin the scope boundary this test used to misdescribe (HELM-363). The
+	// gateway runs under RouteAuthAdmin, which establishes no tenant binding, so
+	// persistDecisionReceipt writes these rows unscoped by design, and every
+	// /api/v1/receipts read filters on the "tenant:" scope prefix — which is why
+	// these receipts cannot be reached there.
+	//
+	// This asserts on the durable scope actually stored rather than on a guessed
+	// tenant id, so it fails for any tenant if a future change starts scoping
+	// these rows. When that happens, rewrite it; do not delete it to make a
+	// build green.
+	scopeRows, err := db.QueryContext(context.Background(), `SELECT COALESCE(causal_session_id, '') FROM receipts`)
+	if err != nil {
+		t.Fatalf("read durable receipt scopes: %v", err)
+	}
+	defer scopeRows.Close()
+	scopes := 0
+	for scopeRows.Next() {
+		var scope string
+		if err := scopeRows.Scan(&scope); err != nil {
+			t.Fatalf("scan receipt scope: %v", err)
+		}
+		scopes++
+		if strings.HasPrefix(scope, "tenant:") {
+			t.Fatalf("gateway receipt is tenant-scoped (%q); the route has no authenticated tenant to derive that from, and this test's claim about /api/v1/receipts needs revisiting (HELM-363)", scope)
+		}
+	}
+	if err := scopeRows.Err(); err != nil {
+		t.Fatalf("iterate receipt scopes: %v", err)
+	}
+	if scopes == 0 {
+		t.Fatal("expected the gateway to have persisted receipts")
 	}
 }
 

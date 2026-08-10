@@ -90,6 +90,11 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 			writeQuickstartError(logger, logFormat, stderr, err, "")
 			return 1
 		}
+		planned, err = preflightQuickstartConsole(opts, planned)
+		if err != nil {
+			writeQuickstartError(logger, logFormat, stderr, err, "")
+			return 1
+		}
 		_ = json.NewEncoder(stdout).Encode(planned.summary("preview"))
 		return 0
 	}
@@ -332,12 +337,9 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, err
 	}
-	if opts.Console {
-		bundle, err := discoverLocalConsoleBundle()
-		if err != nil {
-			return quickstartPrepared{}, err
-		}
-		prepared.ConsoleBundle = bundle
+	prepared, err = preflightQuickstartConsole(opts, prepared)
+	if err != nil {
+		return quickstartPrepared{}, err
 	}
 	if opts.Reset {
 		if err := os.RemoveAll(opts.DataDir); err != nil {
@@ -381,6 +383,18 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	prepared.PolicyPath = policyPath
 	prepared.Runtime = runtime
 	prepared.LocalSessionCredentialPath = credentialPath
+	return prepared, nil
+}
+
+func preflightQuickstartConsole(opts quickstartOptions, prepared quickstartPrepared) (quickstartPrepared, error) {
+	if !opts.Console {
+		return prepared, nil
+	}
+	bundle, err := discoverLocalConsoleBundle()
+	if err != nil {
+		return quickstartPrepared{}, err
+	}
+	prepared.ConsoleBundle = bundle
 	return prepared, nil
 }
 

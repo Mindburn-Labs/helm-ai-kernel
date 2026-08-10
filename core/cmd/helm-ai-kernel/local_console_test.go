@@ -567,20 +567,56 @@ func TestQuickstartConsoleFailsBeforeMutationForExternalOverrideOrMissingBundle(
 	t.Cleanup(func() { localConsoleExecutable = original })
 	dataDir := filepath.Join(dir, "quickstart-data")
 	var stdout, stderr bytes.Buffer
+	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 1 {
+		t.Fatalf("dry-run exit code = %d, stdout = %s stderr = %s", code, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("dry-run wrote stdout = %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Console-including packaged layout") {
+		t.Fatalf("missing bundle error = %s", stderr.String())
+	}
+	if _, statErr := os.Stat(dataDir); !os.IsNotExist(statErr) {
+		t.Fatalf("missing bundle dry-run mutated %q: %v", dataDir, statErr)
+	}
+}
+
+func TestQuickstartConsoleDryRunSucceedsWithTrustedBundleWithoutMutation(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	_, manifestDigest := writeTrustedLocalConsoleRelease(t, executable, target)
+	consoleLocalSidecarManifestSHA256 = manifestDigest
+	originalExecutable := localConsoleExecutable
+	localConsoleExecutable = func() (string, error) { return executable, nil }
+	t.Cleanup(func() { localConsoleExecutable = originalExecutable })
+
+	dataDir := filepath.Join(dir, "quickstart-data")
+	var stdout, stderr bytes.Buffer
 	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 0 {
 		t.Fatalf("dry-run exit code = %d, stdout = %s stderr = %s", code, stdout.String(), stderr.String())
 	}
 	if stderr.Len() != 0 {
-		t.Fatalf("dry-run wrote stderr = %s", stderr.String())
+		t.Fatalf("unexpected dry-run stderr = %s", stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "\"operation\":\"preview\"") {
 		t.Fatalf("missing preview summary = %s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Console-including packaged layout") {
-		t.Fatalf("missing Console layout warning = %s", stdout.String())
+	if !strings.Contains(stdout.String(), "\"console\":true") {
+		t.Fatalf("missing console preview flag = %s", stdout.String())
 	}
 	if _, statErr := os.Stat(dataDir); !os.IsNotExist(statErr) {
-		t.Fatalf("missing bundle dry-run mutated %q: %v", dataDir, statErr)
+		t.Fatalf("trusted bundle dry-run mutated %q: %v", dataDir, statErr)
 	}
 }
 

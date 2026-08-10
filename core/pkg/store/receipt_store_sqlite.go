@@ -591,11 +591,11 @@ func appendReceiptFilterPredicatesSQLite(query string, args []any, filter Receip
 		args = append(args, v)
 	}
 	if !filter.From.IsZero() {
-		query += "\n\t\t  AND timestamp >= ?"
+		query += "\n\t\t  AND julianday(timestamp) >= julianday(?)"
 		args = append(args, filter.From.UTC().Format(time.RFC3339Nano))
 	}
 	if !filter.To.IsZero() {
-		query += "\n\t\t  AND timestamp < ?"
+		query += "\n\t\t  AND julianday(timestamp) < julianday(?)"
 		args = append(args, filter.To.UTC().Format(time.RFC3339Nano))
 	}
 	return query, args

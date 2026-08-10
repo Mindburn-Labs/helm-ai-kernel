@@ -152,3 +152,57 @@ func TestSQLiteListByTenantSessionFilteredByVerdict(t *testing.T) {
 		t.Fatalf("unfiltered session list = %d receipts err=%v, want 3", len(all), err)
 	}
 }
+
+func TestSQLiteReceiptTimeFilterOrdersFractionalRFC3339Chronologically(t *testing.T) {
+	receiptStore, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const tenantID = "tenant-fractional-time"
+	base := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	seedTenantFilterReceipts(t, receiptStore, tenantID, []receiptFilterFixture{
+		{"at-second", "session-second", string(contracts.VerdictAllow), "ok", "agent", "read", base},
+		{"after-second", "session-fractional", string(contracts.VerdictAllow), "ok", "agent", "read", base.Add(500 * time.Millisecond)},
+	})
+
+	got, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{}, ReceiptQueryFilter{From: base}, 10)
+	if err != nil {
+		t.Fatalf("filter from whole second: %v", err)
+	}
+	if ids := receiptIDsOf(got); !reflect.DeepEqual(ids, []string{"at-second", "after-second"}) {
+		t.Fatalf("fractional timestamp ordering returned %v", ids)
+	}
+}
+
+func TestPostgresListByTenantCursorFilteredBuildsScopedPredicates(t *testing.T) {
+	ctx := context.Background()
+	db, mock, cleanup := newStoreCoverageSQLMock(t)
+	defer cleanup()
+	receiptStore := NewPostgresReceiptStore(db)
+
+	const tenantID = "tenant-filtered"
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	from := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	to := from.Add(time.Hour)
+	receipt := storeCoverageReceipt("receipt-filtered", "decision-filtered", "session-filtered", 1, from)
+
+	mock.ExpectQuery(`left\(causal_session_id, char_length\(\$2\)\) = \$2[\s\S]*verdict = \$3[\s\S]*reason_code = \$4[\s\S]*executor_id = \$5[\s\S]*effect_id = \$6[\s\S]*timestamp >= \$7[\s\S]*timestamp < \$8[\s\S]*ORDER BY append_sequence ASC LIMIT \$9`).
+		WithArgs(contracts.ReceiptSignatureV5, prefix, "DENY", "policy.blocked", "agent-1", "fs.write", from, to, 10).
+		WillReturnRows(storePostgresReceiptRows(receipt, nil))
+
+	got, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{}, ReceiptQueryFilter{
+		Verdict:    "DENY",
+		ReasonCode: "policy.blocked",
+		Executor:   "agent-1",
+		Effect:     "fs.write",
+		From:       from,
+		To:         to,
+	}, 10)
+	if err != nil || len(got) != 1 || got[0].ReceiptID != receipt.ReceiptID {
+		t.Fatalf("Postgres filtered tenant receipts = %+v err=%v", got, err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("Postgres filtered query contract: %v", err)
+	}
+}

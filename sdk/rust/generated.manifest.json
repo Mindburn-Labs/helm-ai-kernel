@@ -8,7 +8,7 @@
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",
   "sdk": "rust",
   "source": {
-    "sha256": "fa2863e113035a09341425508c705e4ae73c245df2f58e61ea60e039f51404e7",
+    "sha256": "22148a12440fa574042871152f758e76f2d49ffcf12b15fe40f4252eee39bba5",
     "spec": "api/openapi/helm.openapi.yaml"
   }
 }

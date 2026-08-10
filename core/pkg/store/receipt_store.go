@@ -1,3 +1,6 @@
+// quantum_posture: receipt persistence and query paths carry configured
+// signature metadata and SHA-256 causal hashes; filtering adds no signature
+// verification or post-quantum assurance.
 package store
 
 import (
@@ -136,9 +139,9 @@ type TenantScopedOnboardingReceiptReader interface {
 // compatibility copy written beside the receipt, NOT the signed envelope. What
 // authenticates each returned row differs by dimension and is documented where
 // the filter is applied (see the /api/v1/receipts handler): Verdict, ReasonCode
-// and Effect are bound by the receipt.v5 Ed25519 signature; Executor and the
-// timestamp bounds are covered only by the causal chain hash, never by the
-// signature. Filtering also does not authenticate completeness: a caller can
+// and Effect are bound by the receipt.v5 signing envelope; Executor and the
+// timestamp bounds are covered only by the causal chain hash, never by that
+// envelope. Filtering also does not authenticate completeness: a caller can
 // re-verify each returned receipt, but the response itself carries no proof
 // that no matching receipt was omitted.
 type ReceiptQueryFilter struct {

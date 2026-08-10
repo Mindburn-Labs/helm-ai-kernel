@@ -332,17 +332,17 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, err
 	}
-	if opts.Reset {
-		if err := os.RemoveAll(opts.DataDir); err != nil {
-			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", opts.DataDir, err)
-		}
-	}
 	if opts.Console {
 		bundle, err := discoverLocalConsoleBundle()
 		if err != nil {
 			return quickstartPrepared{}, err
 		}
 		prepared.ConsoleBundle = bundle
+	}
+	if opts.Reset {
+		if err := os.RemoveAll(opts.DataDir); err != nil {
+			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", opts.DataDir, err)
+		}
 	}
 	if err := ensureQuickstartDataDirOwnership(opts.DataDir); err != nil {
 		return quickstartPrepared{}, err

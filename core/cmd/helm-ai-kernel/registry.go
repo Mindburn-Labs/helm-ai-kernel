@@ -272,6 +272,72 @@ func explicitGlobalCommands() []commandCatalogEntry {
 	}
 }
 
+func completionCommandNames(name string) []string {
+	canonical := name
+	for _, command := range commandCatalog().Commands {
+		if command.Name == name {
+			return append([]string{command.Name}, command.Aliases...)
+		}
+		for _, alias := range command.Aliases {
+			if alias != name {
+				continue
+			}
+			return append([]string{command.Name}, command.Aliases...)
+		}
+	}
+	return []string{canonical}
+}
+
+func completionCanonicalPath(path []string) []string {
+	if len(path) == 0 {
+		return nil
+	}
+	normalized := append([]string(nil), path...)
+	normalized[0] = completionCommandNames(normalized[0])[0]
+	if len(normalized) > 1 && normalized[0] == "help" {
+		normalized[1] = completionCommandNames(normalized[1])[0]
+	}
+	return normalized
+}
+
+func expandCompletionContexts(contexts []completionContext) []completionContext {
+	expanded := make([]completionContext, 0, len(contexts))
+	seen := make(map[string]struct{}, len(contexts))
+	for _, context := range contexts {
+		var paths [][]string
+		paths = append(paths, []string{})
+		for index, segment := range context.Path {
+			names := []string{segment}
+			if index == 0 {
+				names = completionCommandNames(segment)
+			}
+			if index == 1 && len(context.Path) > 1 && completionCanonicalPath(context.Path)[0] == "help" {
+				names = completionCommandNames(segment)
+			}
+			next := make([][]string, 0, len(paths)*len(names))
+			for _, path := range paths {
+				for _, name := range names {
+					candidate := append(append([]string(nil), path...), name)
+					next = append(next, candidate)
+				}
+			}
+			paths = next
+		}
+		for _, path := range paths {
+			key := strings.Join(path, "\x00")
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			expanded = append(expanded, completionContext{
+				Path:       path,
+				Candidates: uniqueStrings(context.Candidates),
+			})
+		}
+	}
+	return expanded
+}
+
 func completionWords() []string {
 	seen := make(map[string]struct{})
 	for _, cmd := range commandCatalog().Commands {
@@ -370,7 +436,7 @@ func commandSectionSpecs() []commandSectionSpec {
 }
 
 func completionContexts() []completionContext {
-	return []completionContext{
+	return expandCompletionContexts([]completionContext{
 		{Path: []string{"completion"}, Candidates: []string{"bash", "zsh", "fish", "powershell"}},
 		{Path: []string{"help"}, Candidates: append([]string{"--all", "--json"}, completionWords()...)},
 		{Path: []string{"launch"}, Candidates: []string{"matrix", "apps", "substrates", "plan", "status", "logs", "repair", "delete", "evidence", "promote", "secrets", "imports"}},
@@ -389,7 +455,7 @@ func completionContexts() []completionContext {
 		{Path: []string{"setup", "status"}, Candidates: []string{"claude-code", "codex", "--scope", "user", "project", "--workspace", "--json", "--data-dir"}},
 		{Path: []string{"version"}, Candidates: []string{"--json"}},
 		{Path: []string{"watch"}, Candidates: []string{"--url", "--api-key-file", "--once", "--json"}},
-	}
+	})
 }
 
 func completionCandidates(path []string) []string {
@@ -397,6 +463,7 @@ func completionCandidates(path []string) []string {
 	if len(path) == 0 {
 		return root
 	}
+	path = completionCanonicalPath(path)
 	key := strings.Join(path, " ")
 	byKey := make(map[string][]string, len(completionContexts()))
 	for _, context := range completionContexts() {

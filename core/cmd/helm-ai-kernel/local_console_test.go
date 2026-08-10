@@ -584,6 +584,47 @@ func TestQuickstartConsoleFailsBeforeMutationForExternalOverrideOrMissingBundle(
 	}
 }
 
+func TestQuickstartConsoleResetRejectsMissingBundleBeforeMutation(t *testing.T) {
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	original := localConsoleExecutable
+	localConsoleExecutable = func() (string, error) { return executable, nil }
+	t.Cleanup(func() { localConsoleExecutable = original })
+
+	dataDir := filepath.Join(dir, "quickstart-data")
+	if err := os.MkdirAll(filepath.Join(dataDir, "quickstart"), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dataDir, quickstartOwnershipMarker), []byte(quickstartOwnershipMarkerContents), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sentinelPath := filepath.Join(dataDir, "quickstart", "sentinel.txt")
+	if err := os.WriteFile(sentinelPath, []byte("preserve"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runQuickstartCmdWithReady([]string{"--console", "--reset", "--yes", "--data-dir", dataDir}, &stdout, &stderr, nil)
+	if code != 1 {
+		t.Fatalf("reset exit code = %d, stdout = %s stderr = %s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Console-including packaged layout") {
+		t.Fatalf("missing bundle error = %s", stderr.String())
+	}
+	if got, err := os.ReadFile(sentinelPath); err != nil || string(got) != "preserve" {
+		t.Fatalf("reset mutated sentinel = %q, err=%v", got, err)
+	}
+	if marker, err := os.ReadFile(filepath.Join(dataDir, quickstartOwnershipMarker)); err != nil || string(marker) != quickstartOwnershipMarkerContents {
+		t.Fatalf("reset mutated ownership marker = %q, err=%v", marker, err)
+	}
+}
+
 func TestTrustedLocalConsoleReleaseRejectsMissingDigestAndTampering(t *testing.T) {
 	target, err := localConsoleTarget()
 	if err != nil {

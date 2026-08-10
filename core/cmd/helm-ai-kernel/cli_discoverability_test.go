@@ -171,6 +171,38 @@ func TestCompletionScriptsAreDeterministicAndSideEffectFree(t *testing.T) {
 	}
 }
 
+func TestCompletionAliasesReuseCanonicalContexts(t *testing.T) {
+	isolateDiscoverabilityTest(t)
+
+	for _, tc := range []struct {
+		path []string
+		want []string
+	}{
+		{path: []string{"launchpad"}, want: completionCandidates([]string{"launch"})},
+		{path: []string{"--help"}, want: completionCandidates([]string{"help"})},
+		{path: []string{"-h"}, want: completionCandidates([]string{"help"})},
+		{path: []string{"help", "launchpad"}, want: completionCandidates([]string{"help", "launch"})},
+	} {
+		if got := completionCandidates(tc.path); !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("completionCandidates(%v) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+
+	bash := runDiscoverabilityCommand(t, "completion", "bash")
+	for _, token := range []string{`"launchpad") words="matrix apps substrates plan status logs repair delete evidence promote secrets imports"`, `"--help") words=`, `"-h") words=`} {
+		if !strings.Contains(bash, token) {
+			t.Fatalf("bash completion omitted alias context %q", token)
+		}
+	}
+
+	zsh := runDiscoverabilityCommand(t, "completion", "zsh")
+	for _, token := range []string{`"launchpad")`, `"--help")`, `"-h")`} {
+		if !strings.Contains(zsh, token) {
+			t.Fatalf("zsh completion omitted alias context %q", token)
+		}
+	}
+}
+
 func TestCompletionRejectsMissingInvalidAndExtraArguments(t *testing.T) {
 	isolateDiscoverabilityTest(t)
 

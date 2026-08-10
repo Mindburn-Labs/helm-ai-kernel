@@ -126,6 +126,51 @@ type TenantScopedOnboardingReceiptReader interface {
 	ListLatestOnboardingByTenant(ctx context.Context, tenantID string) ([]*contracts.Receipt, error)
 }
 
+// ReceiptQueryFilter narrows a tenant-scoped receipt listing to a slice of the
+// decision ledger — e.g. "everything denied for reason X between two times" —
+// so a caller answers such a question in one query instead of paging the whole
+// tenant history client-side. A zero-value field imposes no constraint on that
+// dimension; IsZero reports whether the whole filter is empty.
+//
+// Every predicate matches the store's indexed projection column, which is a
+// compatibility copy written beside the receipt, NOT the signed envelope. What
+// authenticates each returned row differs by dimension and is documented where
+// the filter is applied (see the /api/v1/receipts handler): Verdict, ReasonCode
+// and Effect are bound by the receipt.v5 Ed25519 signature; Executor and the
+// timestamp bounds are covered only by the causal chain hash, never by the
+// signature. Filtering also does not authenticate completeness: a caller can
+// re-verify each returned receipt, but the response itself carries no proof
+// that no matching receipt was omitted.
+type ReceiptQueryFilter struct {
+	Verdict    string    // matches receipts.verdict (signed under receipt.v5)
+	ReasonCode string    // matches receipts.reason_code (signed under receipt.v5)
+	Executor   string    // matches receipts.executor_id (principal/executor; NOT signature-bound)
+	Effect     string    // matches receipts.effect_id (resource/effect; signed under receipt.v5)
+	From       time.Time // inclusive lower bound on receipts.timestamp (NOT signature-bound)
+	To         time.Time // exclusive upper bound on receipts.timestamp (NOT signature-bound)
+}
+
+// IsZero reports whether the filter constrains no dimension, in which case the
+// filtered readers return exactly what their unfiltered counterparts would.
+func (f ReceiptQueryFilter) IsZero() bool {
+	return strings.TrimSpace(f.Verdict) == "" &&
+		strings.TrimSpace(f.ReasonCode) == "" &&
+		strings.TrimSpace(f.Executor) == "" &&
+		strings.TrimSpace(f.Effect) == "" &&
+		f.From.IsZero() &&
+		f.To.IsZero()
+}
+
+// TenantScopedReceiptFilterReader is the additive predicate-query capability
+// for the tenant-scoped reader. It reuses the same authenticated tenant scope
+// and keyset/Lamport pagination as the unfiltered readers, adding only the
+// ReceiptQueryFilter dimensions. It is a separate interface so the existing
+// cursor and session readers, and their consumers, stay unchanged.
+type TenantScopedReceiptFilterReader interface {
+	ListByTenantCursorFiltered(ctx context.Context, tenantID string, cursor TenantReceiptCursor, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error)
+	ListByTenantSessionFiltered(ctx context.Context, tenantID, sessionID string, since uint64, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error)
+}
+
 // ReceiptTimestampNormalizer exposes a store's durable timestamp precision to
 // producers. A producer must normalize before it signs or anchors a receipt
 // whose chain hash will later be reloaded from that store.
@@ -362,6 +407,11 @@ func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 		CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_append_sequence_unique ON receipts(append_sequence);
+		-- Predicate-query support (ReceiptQueryFilter). executor_id and timestamp
+		-- are already indexed above; these cover the verdict/reason_code and
+		-- effect_id filter dimensions added for the /api/v1/receipts predicates.
+		CREATE INDEX IF NOT EXISTS idx_receipts_verdict_reason ON receipts(verdict, reason_code);
+		CREATE INDEX IF NOT EXISTS idx_receipts_effect_id ON receipts(effect_id);
 	`
 	if _, err := tx.ExecContext(ctx, indexQuery); err != nil {
 		return err
@@ -562,47 +612,118 @@ func (s *PostgresReceiptStore) ListLatestOnboardingByTenant(ctx context.Context,
 // later session genesis receipts are never compared to another session's
 // Lamport clock.
 func (s *PostgresReceiptStore) ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantCursor(ctx, tenantID, cursor, ReceiptQueryFilter{}, limit)
+}
+
+// ListByTenantCursorFiltered is ListByTenantCursor narrowed by an optional
+// ReceiptQueryFilter. It keeps the identical authenticated tenant scope and
+// durable append-order keyset pagination; the filter only removes rows, so a
+// zero-value filter is byte-for-byte equivalent to ListByTenantCursor.
+func (s *PostgresReceiptStore) ListByTenantCursorFiltered(ctx context.Context, tenantID string, cursor TenantReceiptCursor, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantCursor(ctx, tenantID, cursor, filter, limit)
+}
+
+func (s *PostgresReceiptStore) listByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	if tenantID == "" {
 		return nil, fmt.Errorf("tenant id is required")
 	}
-	cursor.ReceiptID = strings.TrimSpace(cursor.ReceiptID)
-	if cursor.ReceiptID != "" && cursor.Timestamp.IsZero() {
-		return nil, fmt.Errorf("tenant receipt cursor timestamp is required")
+	appendSequence, hasCursor, err := s.resolveTenantCursorAppendSequence(ctx, tenantID, cursor)
+	if err != nil {
+		return nil, err
 	}
 	prefix := causalReceiptTenantScopePrefix(tenantID)
-	var appendSequence int64
-	if cursor.ReceiptID != "" {
-		cursorQuery := `SELECT append_sequence FROM receipts
-			WHERE receipt_id = $1
-			  AND signature_version = $2
-			  AND COALESCE(session_id, '') <> ''
-			  AND left(causal_session_id, char_length($3)) = $3`
-		if err := s.db.QueryRowContext(ctx, cursorQuery, cursor.ReceiptID, contracts.ReceiptSignatureV5, prefix).Scan(&appendSequence); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, fmt.Errorf("tenant receipt cursor %q is invalid for authenticated tenant", cursor.ReceiptID)
-			}
-			return nil, fmt.Errorf("resolve tenant receipt cursor: %w", err)
-		}
-	}
 	query := `SELECT ` + receiptColumns + ` FROM receipts
 		WHERE signature_version = $1
 		  AND COALESCE(session_id, '') <> ''
 		  AND left(causal_session_id, char_length($2)) = $2`
 	args := []any{contracts.ReceiptSignatureV5, prefix}
-	if cursor.ReceiptID != "" {
-		query += `
-		  AND append_sequence > $3`
+	if hasCursor {
 		args = append(args, appendSequence)
+		query += fmt.Sprintf("\n\t\t  AND append_sequence > $%d", len(args))
 	}
-	query += fmt.Sprintf("\n\t\tORDER BY append_sequence ASC LIMIT $%d", len(args)+1)
+	query, args = appendReceiptFilterPredicatesPostgres(query, args, filter)
 	args = append(args, limit)
+	query += fmt.Sprintf("\n\t\tORDER BY append_sequence ASC LIMIT $%d", len(args))
 	return s.queryReceipts(ctx, query, args...)
+}
+
+// resolveTenantCursorAppendSequence maps an opaque tenant cursor to its durable
+// append position inside the authenticated tenant scope. An empty cursor
+// returns hasCursor=false; a cursor that does not resolve within the tenant is
+// rejected rather than silently treated as the start of the listing.
+func (s *PostgresReceiptStore) resolveTenantCursorAppendSequence(ctx context.Context, tenantID string, cursor TenantReceiptCursor) (int64, bool, error) {
+	cursor.ReceiptID = strings.TrimSpace(cursor.ReceiptID)
+	if cursor.ReceiptID == "" {
+		return 0, false, nil
+	}
+	if cursor.Timestamp.IsZero() {
+		return 0, false, fmt.Errorf("tenant receipt cursor timestamp is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	cursorQuery := `SELECT append_sequence FROM receipts
+			WHERE receipt_id = $1
+			  AND signature_version = $2
+			  AND COALESCE(session_id, '') <> ''
+			  AND left(causal_session_id, char_length($3)) = $3`
+	var appendSequence int64
+	if err := s.db.QueryRowContext(ctx, cursorQuery, cursor.ReceiptID, contracts.ReceiptSignatureV5, prefix).Scan(&appendSequence); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false, fmt.Errorf("tenant receipt cursor %q is invalid for authenticated tenant", cursor.ReceiptID)
+		}
+		return 0, false, fmt.Errorf("resolve tenant receipt cursor: %w", err)
+	}
+	return appendSequence, true, nil
+}
+
+// appendReceiptFilterPredicatesPostgres weaves the optional ReceiptQueryFilter
+// dimensions into a tenant-scoped query as additional AND predicates, using
+// $-placeholders that continue from the caller's current argument list. Each
+// predicate matches an indexed projection column; the returned envelope is the
+// hash-verified receipt, but the projection column the predicate tests is not
+// itself re-verified against the signature at filter time.
+func appendReceiptFilterPredicatesPostgres(query string, args []any, filter ReceiptQueryFilter) (string, []any) {
+	addEq := func(column, value string) {
+		args = append(args, value)
+		query += fmt.Sprintf("\n\t\t  AND %s = $%d", column, len(args))
+	}
+	if v := strings.TrimSpace(filter.Verdict); v != "" {
+		addEq("verdict", v)
+	}
+	if v := strings.TrimSpace(filter.ReasonCode); v != "" {
+		addEq("reason_code", v)
+	}
+	if v := strings.TrimSpace(filter.Executor); v != "" {
+		addEq("executor_id", v)
+	}
+	if v := strings.TrimSpace(filter.Effect); v != "" {
+		addEq("effect_id", v)
+	}
+	if !filter.From.IsZero() {
+		args = append(args, filter.From.UTC())
+		query += fmt.Sprintf("\n\t\t  AND timestamp >= $%d", len(args))
+	}
+	if !filter.To.IsZero() {
+		args = append(args, filter.To.UTC())
+		query += fmt.Sprintf("\n\t\t  AND timestamp < $%d", len(args))
+	}
+	return query, args
 }
 
 // ListByTenantSession returns the receipt chain keyed by the signed
 // Receipt.SessionID inside an authenticated tenant scope.
 func (s *PostgresReceiptStore) ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantSession(ctx, tenantID, sessionID, since, ReceiptQueryFilter{}, limit)
+}
+
+// ListByTenantSessionFiltered is ListByTenantSession narrowed by an optional
+// ReceiptQueryFilter over the same signed session chain. A zero-value filter is
+// equivalent to ListByTenantSession.
+func (s *PostgresReceiptStore) ListByTenantSessionFiltered(ctx context.Context, tenantID, sessionID string, since uint64, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantSession(ctx, tenantID, sessionID, since, filter, limit)
+}
+
+func (s *PostgresReceiptStore) listByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	sessionID = strings.TrimSpace(sessionID)
 	if tenantID == "" {
@@ -615,9 +736,12 @@ func (s *PostgresReceiptStore) ListByTenantSession(ctx context.Context, tenantID
 		WHERE causal_session_id = $1
 		  AND session_id = $2
 		  AND signature_version = $3
-		  AND lamport_clock > $4
-		ORDER BY lamport_clock ASC, timestamp ASC LIMIT $5`
-	return s.queryReceipts(ctx, query, causalReceiptScopeKey(tenantID, sessionID), sessionID, contracts.ReceiptSignatureV5, since, limit)
+		  AND lamport_clock > $4`
+	args := []any{causalReceiptScopeKey(tenantID, sessionID), sessionID, contracts.ReceiptSignatureV5, since}
+	query, args = appendReceiptFilterPredicatesPostgres(query, args, filter)
+	args = append(args, limit)
+	query += fmt.Sprintf("\n\t\tORDER BY lamport_clock ASC, timestamp ASC LIMIT $%d", len(args))
+	return s.queryReceipts(ctx, query, args...)
 }
 
 func (s *PostgresReceiptStore) ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {

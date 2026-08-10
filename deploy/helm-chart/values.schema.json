@@ -821,7 +821,7 @@
     "telemetry": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Opt-in OTLP trace export to a central telemetry gateway. Off by default; enabled per stand, never in a chart default. Renders exactly one variable, OTEL_EXPORTER_OTLP_ENDPOINT, into the kernel container.",
+      "description": "Opt-in OTLP trace export to a central telemetry gateway. Off by default; enabled per stand, never in a chart default. Renders OTEL_EXPORTER_OTLP_ENDPOINT into the kernel container, plus OTEL_SERVICE_NAME when serviceName is set.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -831,6 +831,12 @@
         "endpoint": {
           "type": "string",
           "description": "OTLP gRPC target of the in-cluster gateway, e.g. http://telemetry-gateway.telemetry-system.svc.cluster.local:4317. Required when enabled is true. Keep the http:// prefix: the kernel strips the scheme before dialing and uses its presence to select an insecure connection, and the gateway does not terminate TLS in-cluster."
+        },
+        "serviceName": {
+          "type": "string",
+          "default": "",
+          "pattern": "^(\\S|\\S.*\\S)?$",
+          "description": "service.name reported for every exported span, rendered as OTEL_SERVICE_NAME and applied only when enabled is true. Empty renders no variable and the kernel falls back to helm-sovereign-os. Set it to the name you query the tracing backend by, e.g. helm-ai-kernel: service.name is the one resource key the gateway does not re-derive from namespace labels. The pattern forbids leading, trailing, and whitespace-only values because the kernel trims this variable and treats a blank one as unset, so an untrimmed value would make the rendered manifest disagree with the reported service.name."
         }
       }
     },

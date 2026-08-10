@@ -86,6 +86,55 @@ def run(command: list[str]) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
+def rewrite_sdk_manifests() -> list[str]:
+    """Repin every SDK generated-file manifest against the bumped sources.
+
+    The version surfaces rewrite the version literal inside generated files
+    (types_gen.*), which changes their hashes; the manifests that pin those
+    hashes are not version surfaces, so without this step every release bump
+    leaves them stale and the regenerate-and-diff gate fails on content that
+    is otherwise byte-identical. Each manifest is rewritten with its own
+    recorded generator image and spec, so the pins stay exactly as reviewed.
+    """
+    rewritten: list[str] = []
+    for manifest_path in sorted(ROOT.glob("sdk/*/generated.manifest.json")):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        sdk_dir = manifest_path.parent
+        run(
+            [
+                "python3",
+                "scripts/sdk/manifest.py",
+                "write",
+                str(sdk_dir.relative_to(ROOT)),
+                manifest["generator"],
+                manifest["source"]["spec"],
+                *[entry["path"] for entry in manifest["files"]],
+            ]
+        )
+        rewritten.append(str(manifest_path.relative_to(ROOT)))
+    return rewritten
+
+
+def warn_missing_console_pin(version: str) -> None:
+    """Point at the one per-release declaration this script cannot write.
+
+    The Console source pin names a reviewed Console commit and a provenance
+    tag — a decision, not a derivation — so it cannot be generated here. The
+    release job reads the pin file from the tag commit, which is why a
+    missing row strands the tag; the console-sidecar-pin quality gate fails
+    until the row exists, and this warning says so at the moment the version
+    moves rather than at the first gate run.
+    """
+    pins_path = ROOT / "release" / "console-local-sidecar-pins.json"
+    payload = json.loads(pins_path.read_text(encoding="utf-8"))
+    wanted = f"v{version}"
+    if not any(pin.get("kernel_release_version") == wanted for pin in payload.get("pins", [])):
+        print(
+            f"NOTE: {drift.rel(pins_path)} has no row for {wanted}; add one before tagging —"
+            " the console-sidecar-pin gate fails until it exists, and a tag without it is stranded."
+        )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("version", help="semver release version, for example 1.2.3")
@@ -130,6 +179,12 @@ def main() -> int:
             print(f"- {surface_id}")
     else:
         print("all prepared version surfaces were already current")
+    rewritten = rewrite_sdk_manifests()
+    if rewritten:
+        print("repinned generated-file manifests:")
+        for manifest_id in rewritten:
+            print(f"- {manifest_id}")
+    warn_missing_console_pin(version)
     run(["python3", "scripts/release/check_version_drift.py", "--expected-version", version, "local"])
     return 0
 

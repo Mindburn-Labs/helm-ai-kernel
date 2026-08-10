@@ -165,6 +165,7 @@ bench-report:
 lint: docs-coverage docs-truth
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
+	bash scripts/ci/go_mod_tidy_check.sh
 
 # lint-security runs golangci-lint with gosec over the trusted computing base.
 #
@@ -244,6 +245,8 @@ release-smoke:
 	bash scripts/ci/release_smoke.sh
 
 version-drift:
+	python3 scripts/release/check_version_drift_test.py
+	python3 scripts/release/prepare_version_test.py
 	python3 scripts/release/check_version_drift.py local
 
 version-drift-report:

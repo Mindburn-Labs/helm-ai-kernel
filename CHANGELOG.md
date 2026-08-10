@@ -89,7 +89,69 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.8.3] - pending tag
+## [0.8.4] - pending tag
+
+Release target for the receipt tenant-isolation fix and a sweep of public claim
+corrections. v0.8.3 completed its publication, so this is an ordinary successor
+rather than another attempt at a stranded train.
+
+Note for anyone reading the published v0.8.3 notes: its changelog states that
+deployed MCP gateway receipts land "into the same store `GET /api/v1/receipts`
+reads". That was not true when it shipped and is corrected below. The v0.8.3
+artifacts are in immutable registries and cannot be reissued, so the correction
+lands here rather than being rewritten there.
+
+### Added
+
+- The GitHub connector executes through the governed MCP bridge on a shipped
+  path, so a connector dispatch is subject to the same permit and receipt
+  contract as any other governed effect.
+- The daemon serve path is traced: a span for the request, the matched route,
+  and a flush on shutdown, so a deployed kernel's request path is observable
+  without attaching a debugger.
+
+### Fixed
+
+- **Receipt reads are tenant-isolated (HELM-363).** Tenant-authenticated receipt
+  HTTP APIs, Console receipt views, and onboarding state and export now exclude
+  unscoped and foreign-tenant rows. Onboarding receipts are written into the
+  authenticated tenant's scope rather than left unscoped.
+- **Corrected claim, same issue:** receipts persisted by the deployed MCP
+  gateway are durable and signed but are **not** retrievable through
+  `GET /api/v1/receipts`. The gateway routes run under admin authentication,
+  which establishes no tenant binding, so those rows are written unscoped by
+  design while that route reads only tenant-scoped rows. Local operators with
+  direct store access can still include them in offline report and rollup
+  workflows. Making them tenant-retrievable requires moving the gateway to
+  tenant-scoped auth, a breaking change for MCP clients, still open on HELM-363.
+- Daemon output stays structured by default instead of degrading to
+  unstructured lines, so log collection does not depend on a flag.
+- The CLI no longer overstates what it can do: corrected contract and setup
+  narrative, and discovery paths that no longer write state as a side effect.
+- The Helm chart's authority initialization accepts a verified pre-existing root
+  key instead of failing, so re-running an install against provisioned authority
+  no longer requires deleting it first.
+- `receipt_verify` CLI contract tests run in the default test gate rather than
+  only in a profile nobody invokes locally.
+
+### Changed — public documentation corrected against its own evidence
+
+This release removes several documented capabilities that did not exist. Each was
+found by checking a page against the code or evidence file it cited, and the
+correction is a removal or a restatement, not a new claim:
+
+- Reference-pack documentation described fixtures as runs, and its documented
+  verify command did not work.
+- `canonicalization.md` documented a Rust crate that has never existed; the cgo
+  bridge to that crate is deleted.
+- The conformance guide described an external-implementation runner that does not
+  exist.
+- `canonical-json-v1` §6.2 cited an unimplemented page as normative.
+- `policy-bundle-v1` documented a bundle layout and CLI that do not exist.
+- Six stale status claims elsewhere disagreed with the evidence files they
+  pointed at.
+
+## [0.8.3] - 2026-08-09
 
 Completing release target for the v0.8 train. v0.8.0, v0.8.1 and v0.8.2 all
 stopped before their GitHub Release and full asset set; none is a completed

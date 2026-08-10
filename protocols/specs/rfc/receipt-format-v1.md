@@ -10,6 +10,10 @@ authors:
   - HELM Core Team
 ---
 
+<!-- quantum_posture: this v1 profile uses classical Ed25519 signatures and
+makes no post-quantum claim; receipt-pq-hybrid-profile-v1.md defines the
+separate draft Ed25519 + ML-DSA-65 profile. -->
+
 # RFC: HELM Receipt Format v1.0 — Launch Effect Receipt Profile
 
 ## Abstract
@@ -243,18 +247,16 @@ by every conforming implementation. The same bound applies to `effect_ordinal`,
 > `CounterfactualReceipt` family (`core/pkg/contracts/counterfactual_receipt.go`),
 > not the launch effect receipt of §2.1–§2.5. A counterfactual receipt's **wire
 > shape is unspecified** — it has no JSON Schema, no protobuf message and no
-> OpenAPI component — so the preimage rule below and the vector at
-> `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` are the only
+> OpenAPI component — so the preimage rule below, the invariants below, and the
+> vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` are the
 > normative statements this document makes about it. `launch_effect_receipt.v1`
 > defines no `enforcement` property and cannot carry one.
 
-A receipt MAY carry an `enforcement` field with exactly one of two values:
-
-- `enforced` — the verdict was actually enforced at the boundary. This is the
-  default; a receipt with no `enforcement` field is treated as `enforced`.
-- `counterfactual` — the verdict is the one the PDP **would** have issued under
-  an explicit, time-boxed observe grant, computed without any enforcement or
-  side effect.
+A CounterfactualReceipt MUST carry `enforcement = counterfactual`; the field MUST
+NOT be omitted, and `enforced` is forbidden for this receipt family.
+`counterfactual` means the verdict is the one the PDP **would** have issued under
+an explicit, time-boxed observe grant, computed without any enforcement or side
+effect.
 
 A counterfactual receipt is signed, content-addressed, and verifiable exactly
 like any other receipt, but it confers **no execution authority**. It MUST be

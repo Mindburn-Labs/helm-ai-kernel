@@ -1,0 +1,34 @@
+{
+  "source_repository": "Mindburn-Labs/helm-ai-kernel",
+  "source_path": "reference_packs/receipt-v5",
+  "pinning_authority": "reference_packs/receipt-v5/vectors.json",
+  "verifier": "reference_packs/receipt-v5/verify_vectors.py",
+  "immutable_payloads": [
+    {
+      "file": "decision_deny_genesis.receipt.c14n.json",
+      "sha256": "475bb75fc275a4be335f4c7b8000555fa7e534aa7a5ed256bc9bee4bb0cd2c73"
+    },
+    {
+      "file": "decision_deny_genesis.signing_payload.c14n.json",
+      "sha256": "35764780cd3c256d7bdf96af225656c93a1499617d8360997c73f532b35c54be"
+    },
+    {
+      "file": "executor_success_empty_governance.receipt.c14n.json",
+      "sha256": "c548f3479cd04bd77ee81a2dedcbd3f653aaaa74fa45b57ce5a896a25f3fca28"
+    },
+    {
+      "file": "executor_success_empty_governance.signing_payload.c14n.json",
+      "sha256": "4cba4275fbe651a281199461daa8d9567672ccf06331e95beb8dbf6cd9d757b3"
+    },
+    {
+      "file": "escaped_string_members.receipt.c14n.json",
+      "sha256": "1526efb3e5ab82062280d4c45a8ac01cebb81e5aaa01ebcbb5409d916a6b7aca"
+    },
+    {
+      "file": "escaped_string_members.signing_payload.c14n.json",
+      "sha256": "3d071b98ff23222864c09c9bb63227a31044207f6bdb68748da8927b3ec17f34"
+    }
+  ],
+  "$comment": "quantum_posture: classical_ed25519_only. The canonical JSON files are byte-exact signed fixtures; this manifest carries their posture note without changing signed bytes.",
+  "purpose": "Immutable receipt.v5 payload inventory; vectors.json remains the hash-pinning authority."
+}

@@ -11,10 +11,11 @@ Amended: 2026-08-06
 > **This ADR is not a specification.** Per
 > [ADR 0003 §D8](0003-normative-artifact-arbitration.md), no ADR is a normative
 > source for artifact bytes. In particular **this file does not define the
-> `receipt.v5` signing preimage.** No published artifact does; the mainline
-> receipt's integrity contract is UNSPECIFIED in ADR 0003 §D4, and publishing it
-> is remediation step P2-3. Anyone who arrived here looking for the bytes a HELM
-> receipt is signed over should stop reading and file that gap.
+> `receipt.v5` signing preimage.** The normative source is now
+> `protocols/specs/receipts/receipt-v5.md` together with
+> `reference_packs/receipt-v5/`, as registered by ADR 0003 §D4. Anyone who
+> arrived here looking for the bytes a HELM receipt is signed over should use
+> those artifacts, not this historical decision record.
 >
 > The Decision below was written on 2026-07-26 and **neither half shipped as
 > written**. Both halves are recorded, with what actually landed, in
@@ -200,12 +201,10 @@ Added by the amendment:
   what was chain-hashed. A verifier reconstructing a signature from
   `receipt_envelope` must first project it onto the thirteen-key envelope; the
   stored bytes are neither the preimage nor a canonicalization of it.
-- **Nothing in this file may be quoted as the receipt.v5 wire rule.** Under ADR
-  0003 §D2 the mainline receipt's integrity contract is UNSPECIFIED: the only
-  definition of the bytes is Go source, which ADR 0003 §D6 rule 7 forbids as a
-  conformance source. P2-3 publishes the specification and
-  `reference_packs/receipt-v5/`; until then no third-party verifiability claim
-  may be made for `contracts.Receipt`.
+- **Nothing in this file may be quoted as the receipt.v5 wire rule.** ADR 0003
+  §D2 makes `protocols/specs/receipts/receipt-v5.md` and
+  `reference_packs/receipt-v5/` the integrity source. The HTTP and gRPC wire
+  contracts remain separately owned by OpenAPI and protobuf.
 
 ## Open question for the product owner
 
@@ -227,3 +226,4 @@ is the system of record has not been decided.
   §D2 (normative source per contract), §D4 (per-family register), §D5 (field
   addition and version constants), §D8 (ADRs are not specifications).
 - `docs/security/kernel-security-remediation-ledger.md` — the F-05/F-06 ledger.
+- `protocols/specs/receipts/receipt-v5.md` — normative receipt.v5 preimage.

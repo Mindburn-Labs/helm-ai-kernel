@@ -25,6 +25,17 @@ Active surface for the `helm-ai-kernel` project.
   and Kernel close receipt in Go and independent Python.
 - `make verify-effect-disposition-vectors` verifies the Control Plane
   disposition command and Kernel receipt in Go and independent Python.
+- `make verify-receipt-v5-vectors` verifies the mainline Kernel receipt.v5
+  signing preimage in source-owned Go and independent stdlib Python.
+
+## Receipt v5 pack
+
+`receipt-v5/` pins the exact 13-member signing object, canonical payload,
+classical Ed25519 test signature, safe-integer boundary, empty signed members,
+and escaping cases defined by
+`protocols/specs/receipts/receipt-v5.md`. It proves portable integrity-contract
+verification only; unsigned receipt fields and a self-declared public key remain
+untrusted.
 
 ## Approval ceremony packs
 

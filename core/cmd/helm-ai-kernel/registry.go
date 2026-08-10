@@ -100,6 +100,101 @@ func printUsage(out io.Writer) {
 	printFrontDoor(out)
 }
 
+// suggestCommands returns registered command names within edit distance 2 of
+// the typed token, nearest first. A typo used to print the whole front-door
+// banner and no route; the nearest real command is what the user actually
+// needs.
+func suggestCommands(typed string) []string {
+	typed = strings.ToLower(strings.TrimSpace(typed))
+	if typed == "" {
+		return nil
+	}
+	type scored struct {
+		name string
+		dist int
+	}
+	var out []scored
+	seen := map[string]struct{}{}
+	consider := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		d := levenshtein(typed, strings.ToLower(name))
+		// Allow a slightly looser bound for longer words, capped at 2.
+		bound := 2
+		if len(typed) <= 3 {
+			bound = 1
+		}
+		if d <= bound {
+			out = append(out, scored{name, d})
+		}
+	}
+	for _, c := range canonicalRegisteredCommands() {
+		consider(c.Name)
+		for _, a := range c.Aliases {
+			consider(a)
+		}
+	}
+	// The top-level verbs handled directly by the dispatcher, not the registry.
+	for _, n := range []string{"server", "serve", "trust", "threat", "run", "version", "completion", "help"} {
+		consider(n)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].dist != out[j].dist {
+			return out[i].dist < out[j].dist
+		}
+		return out[i].name < out[j].name
+	})
+	names := make([]string, 0, len(out))
+	for _, s := range out {
+		names = append(names, s.name)
+		if len(names) == 3 {
+			break
+		}
+	}
+	return names
+}
+
+// levenshtein is the standard edit distance, ASCII-folded by the caller.
+func levenshtein(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	prev := make([]int, len(rb)+1)
+	curr := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		curr[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			curr[j] = min3(prev[j]+1, curr[j-1]+1, prev[j-1]+cost)
+		}
+		prev, curr = curr, prev
+	}
+	return prev[len(rb)]
+}
+
+// printUnknownCommand reports an unrecognized command with the nearest real
+// commands, not the full front-door banner.
+func printUnknownCommand(out io.Writer, typed string) {
+	fmt.Fprintf(out, "Unknown command: %s\n", typed)
+	if suggestions := suggestCommands(typed); len(suggestions) > 0 {
+		if len(suggestions) == 1 {
+			fmt.Fprintf(out, "Did you mean: %s?\n", suggestions[0])
+		} else {
+			fmt.Fprintf(out, "Did you mean one of: %s?\n", strings.Join(suggestions, ", "))
+		}
+	}
+	fmt.Fprintln(out, "Run `helm-ai-kernel help --all` to list commands.")
+}
+
 func printUsageAll(out io.Writer) {
 	fmt.Fprintf(out, "%s: Canonical Execution Verifier (Version %s, Commit %s)\n\n", terminalTitle(out, "HELM AI Kernel"), displayVersion(), displayCommit())
 	fmt.Fprintln(out, "Usage: helm-ai-kernel <command> [options]")

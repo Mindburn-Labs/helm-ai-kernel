@@ -142,8 +142,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			printUsage(stderr)
 			return 2
 		}
-		_, _ = fmt.Fprintf(stderr, "Unknown command: %s\n", args[1])
-		printUsage(stderr)
+		printUnknownCommand(stderr, args[1])
 		return 2
 	}
 }

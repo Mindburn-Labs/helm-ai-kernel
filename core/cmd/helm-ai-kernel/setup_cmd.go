@@ -45,7 +45,12 @@ var (
 		if dir != "" {
 			cmd.Dir = dir
 		}
-		cmd.Stdout = os.Stdout
+		// The wrapped client's stdout (e.g. `claude mcp add` printing "Added
+		// stdio MCP server …") is its confirmation prose, not our machine
+		// document. Sending it to our stdout put unparseable text ahead of the
+		// JSON object under --json; it belongs with the rest of our human
+		// scaffolding on stderr, where it still shows in human mode.
+		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}
@@ -1654,7 +1659,11 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	if summary.RecoveryRequired {
 		fmt.Fprintf(stdout, "  Next:          recovery required; run %s\n", summary.RecoveryCommand)
 	} else if summary.MCPInstalled || summary.HookInstalled {
-		fmt.Fprintf(stdout, "  Next:          restart %s, then run %s\n", summary.Target, summary.RecoveryCommand)
+		// A healthy install's next step is to restart the client, not to run
+		// repair. Printing the repair command after every success — including a
+		// clean install and a removal preview — trained users to treat repair
+		// as routine and gave the lifecycle no terminal "you're done" state.
+		fmt.Fprintf(stdout, "  Next:          restart %s to activate governance\n", summary.Target)
 	}
 	if summary.RetainedData {
 		fmt.Fprintln(stdout, "  Local state:   retained (keys, evidence, and receipts were not removed)")

@@ -133,7 +133,7 @@ func TestRecordRiskManagement(t *testing.T) {
 }
 
 // -----------------------------------------------------------------------
-// Incident Reporting (Art.62)
+// Incident Reporting (Art.73)
 // -----------------------------------------------------------------------
 
 func TestReportIncident(t *testing.T) {
@@ -150,11 +150,33 @@ func TestReportIncident(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, incident.ID)
 	require.False(t, incident.DetectedAt.IsZero())
+	require.Equal(t, IncidentReportingTierGeneral, incident.ReportingTier)
 }
 
-func TestIncidentReportingDeadlineIs72Hours(t *testing.T) {
-	require.Equal(t, 72*time.Hour, IncidentReportingDeadline,
-		"Art.62 mandates 72-hour reporting deadline")
+func TestReportIncidentRejectsUnknownTier(t *testing.T) {
+	engine := NewEUAIActComplianceEngine()
+	incident := &SeriousIncident{ReportingTier: "UNKNOWN"}
+
+	err := engine.ReportIncident(context.Background(), incident)
+	require.ErrorContains(t, err, "unsupported incident reporting tier")
+}
+
+func TestIncidentReportingDeadlines(t *testing.T) {
+	tests := []struct {
+		tier IncidentReportingTier
+		want time.Duration
+	}{
+		{IncidentReportingTierGeneral, 15 * 24 * time.Hour},
+		{IncidentReportingTierWidespreadOrCritical, 2 * 24 * time.Hour},
+		{IncidentReportingTierDeath, 10 * 24 * time.Hour},
+	}
+	for _, tt := range tests {
+		got, err := IncidentReportingDeadlineFor(tt.tier)
+		require.NoError(t, err)
+		require.Equal(t, tt.want, got)
+	}
+	require.Equal(t, IncidentReportingGeneralDeadline, IncidentReportingDeadline,
+		"compatibility alias must retain the Article 73 general deadline")
 }
 
 func TestIsIncidentReportOverdue_WithinDeadline(t *testing.T) {
@@ -166,19 +188,35 @@ func TestIsIncidentReportOverdue_WithinDeadline(t *testing.T) {
 	}
 
 	require.False(t, engine.IsIncidentReportOverdue(incident),
-		"incident detected 1h ago should not be overdue (72h deadline)")
+		"general-tier incident detected 1h ago should not be overdue")
 }
 
 func TestIsIncidentReportOverdue_PastDeadline(t *testing.T) {
 	engine := NewEUAIActComplianceEngine()
 
 	incident := &SeriousIncident{
-		DetectedAt:          time.Now().Add(-73 * time.Hour), // 73 hours ago
+		DetectedAt:          time.Now().Add(-16 * 24 * time.Hour),
 		ReportedToAuthority: false,
 	}
 
 	require.True(t, engine.IsIncidentReportOverdue(incident),
-		"incident detected 73h ago should be overdue (72h deadline)")
+		"general-tier incident detected more than 15 days ago should be overdue")
+}
+
+func TestIsIncidentReportOverdue_TieredDeadlines(t *testing.T) {
+	engine := NewEUAIActComplianceEngine()
+	require.True(t, engine.IsIncidentReportOverdue(&SeriousIncident{
+		ReportingTier: IncidentReportingTierWidespreadOrCritical,
+		DetectedAt:    time.Now().Add(-49 * time.Hour),
+	}))
+	require.False(t, engine.IsIncidentReportOverdue(&SeriousIncident{
+		ReportingTier: IncidentReportingTierDeath,
+		DetectedAt:    time.Now().Add(-9 * 24 * time.Hour),
+	}))
+	require.True(t, engine.IsIncidentReportOverdue(&SeriousIncident{
+		ReportingTier: "UNKNOWN",
+		DetectedAt:    time.Now(),
+	}), "unknown tier must fail closed")
 }
 
 func TestIsIncidentReportOverdue_AlreadyReported(t *testing.T) {
@@ -246,17 +284,25 @@ func TestGetObligations_EffectiveDatesCorrect(t *testing.T) {
 		dateMap[o.Category] = o.EffectiveFrom
 	}
 
-	// Art.50 (Transparency) has the earliest date: 2025-08-02
-	require.Equal(t, DateGPAITransparency, dateMap[ObligationTransparency],
-		"Transparency obligation effective date must be 2025-08-02")
-
-	// All other obligations use the Annex III high-risk deadline: 2027-12-02
-	// as deferred by Regulation (EU) 2026/1744.
+	// The amended high-risk date applies only to Chapter III, Sections 1-3.
 	require.Equal(t, DateHighRiskObligations, dateMap[ObligationHighRiskClassification])
 	require.Equal(t, DateHighRiskObligations, dateMap[ObligationRiskManagement])
 	require.Equal(t, DateHighRiskObligations, dateMap[ObligationHumanOversight])
-	require.Equal(t, DateHighRiskObligations, dateMap[ObligationIncidentReporting])
-	require.Equal(t, DateHighRiskObligations, dateMap[ObligationConformityAssessment])
+
+	// Article 50 and obligations outside Sections 1-3 remain separate.
+	require.Equal(t, DateArticle50Transparency, dateMap[ObligationTransparency])
+	require.Equal(t, DateGeneralApplication, dateMap[ObligationIncidentReporting])
+	require.Equal(t, DateGeneralApplication, dateMap[ObligationConformityAssessment])
+}
+
+func TestGetObligations_LegalReferences(t *testing.T) {
+	engine := NewEUAIActComplianceEngine()
+	refs := make(map[ObligationCategory]string)
+	for _, obligation := range engine.GetObligations() {
+		refs[obligation.Category] = obligation.ArticleRef
+	}
+	require.Equal(t, "Art.73", refs[ObligationIncidentReporting])
+	require.Equal(t, "Arts.48,49,71", refs[ObligationConformityAssessment])
 }
 
 func TestGetObligations_AllHaveEvidenceReqs(t *testing.T) {
@@ -291,7 +337,10 @@ func TestEnforcementDates(t *testing.T) {
 	require.Equal(t, time.Date(2025, 2, 2, 0, 0, 0, 0, time.UTC), DateProhibitedPractices,
 		"Prohibited practices date must be 2025-02-02")
 	require.Equal(t, time.Date(2025, 8, 2, 0, 0, 0, 0, time.UTC), DateGPAITransparency,
-		"GPAI transparency date must be 2025-08-02")
+		"GPAI Chapter V date must be 2025-08-02")
+	require.Equal(t, time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC), DateGeneralApplication)
+	require.Equal(t, DateGeneralApplication, DateArticle50Transparency)
+	require.Equal(t, time.Date(2026, 12, 2, 0, 0, 0, 0, time.UTC), DateArticle50PreexistingSystemTransition)
 	require.Equal(t, time.Date(2027, 12, 2, 0, 0, 0, 0, time.UTC), DateHighRiskObligations,
 		"Annex III high-risk obligations date must be 2027-12-02 per Regulation (EU) 2026/1744")
 	require.Equal(t, time.Date(2028, 8, 2, 0, 0, 0, 0, time.UTC), DateAnnexIHighRisk,
@@ -300,7 +349,9 @@ func TestEnforcementDates(t *testing.T) {
 
 func TestEnforcementDatesChronologicalOrder(t *testing.T) {
 	require.True(t, DateProhibitedPractices.Before(DateGPAITransparency))
-	require.True(t, DateGPAITransparency.Before(DateHighRiskObligations))
+	require.True(t, DateGPAITransparency.Before(DateGeneralApplication))
+	require.True(t, DateGeneralApplication.Before(DateArticle50PreexistingSystemTransition))
+	require.True(t, DateArticle50PreexistingSystemTransition.Before(DateHighRiskObligations))
 	require.True(t, DateHighRiskObligations.Before(DateAnnexIHighRisk))
 }
 
@@ -492,7 +543,7 @@ func TestGetComplianceStatus_UnreportedIncident(t *testing.T) {
 
 	status := engine.GetComplianceStatus(ctx)
 	require.Equal(t, 1, status.UnreportedIncidents)
-	require.Equal(t, 0, status.OverdueIncidentReports, "within 72h so not overdue")
+	require.Equal(t, 0, status.OverdueIncidentReports, "within the general 15-day deadline")
 }
 
 func TestGetComplianceStatus_OverdueIncidentReport(t *testing.T) {
@@ -502,7 +553,7 @@ func TestGetComplianceStatus_OverdueIncidentReport(t *testing.T) {
 	_ = engine.ReportIncident(ctx, &SeriousIncident{
 		AISystemID:          "sys-001",
 		Description:         "Serious malfunction",
-		DetectedAt:          time.Now().Add(-100 * time.Hour), // way past 72h
+		DetectedAt:          time.Now().Add(-16 * 24 * time.Hour),
 		ReportedToAuthority: false,
 	})
 

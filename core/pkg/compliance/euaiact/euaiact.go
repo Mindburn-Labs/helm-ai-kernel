@@ -5,32 +5,33 @@
 // - High-Risk AI System Classification (Art.6 + Annex III)
 // - Risk Management System (Art.9)
 // - Human Oversight mapped to Guardian pipeline (Art.14)
-// - Transparency Obligations for GPAI (Art.50)
-// - Serious Incident Reporting within 72h (Art.62)
-// - CE Marking and EU Database Registration (Art.49)
+// - Transparency Obligations for Certain AI Systems (Art.50)
+// - Serious Incident Reporting (Art.73)
+// - CE Marking and EU Database Registration (Arts.48, 49, 71)
 //
 // Key enforcement dates, as amended by Regulation (EU) 2026/1744 (Digital
 // Omnibus on AI), in force 2026-07-27. Verified against EUR-Lex 2026-08-06.
 //
 //	2025-02-02: Prohibited practices (Title II) + AI literacy (Art.4)
-//	2025-08-02: GPAI transparency (Chapter V) + penalties
-//	2026-08-02: Transparency obligations (Art.50) — NOT deferred
-//	2027-12-02: High-risk per Annex III (Chapter III, Sections 1-3),
-//	            CE marking, and EU database registration
-//	2028-08-02: High-risk per Annex I (existing product safety legislation)
+//	2025-08-02: GPAI obligations (Chapter V) + penalties
+//	2026-08-02: General application, including Arts.48, 49, 50, 71 and 73
+//	2026-12-02: Art.50(2) transition for specified pre-existing systems
+//	2027-12-02: Chapter III, Sections 1-3 for Annex III systems
+//	2028-08-02: Chapter III, Sections 1-3 for Annex I systems
 //
-// The 2027-12-02 and 2028-08-02 dates replace 2026-08-02 and 2027-08-02
-// respectively. Article 50 transparency was not deferred and still applies
-// from 2026-08-02.
+// The amended 2027-12-02 and 2028-08-02 dates are limited to Chapter III,
+// Sections 1-3 and expressly exclude Article 6(5). They do not silently move
+// duties in other sections or chapters, including Articles 48, 49, 50, 71 and
+// 73. Applicability to a particular system still requires legal assessment.
 //
 // HELM relevance: Guardian pipeline decisions may constitute "high-risk AI"
 // under Annex III when used in critical infrastructure, safety components,
 // or financial services.
 //
 // References:
-// - Regulation (EU) 2024/1689 — EUR-Lex CELEX: 32024R1689
-// - Regulation (EU) 2026/1744 — EUR-Lex CELEX: 32026R1744
-//   http://data.europa.eu/eli/reg/2026/1744/oj
+//   - Regulation (EU) 2024/1689 — EUR-Lex CELEX: 32024R1689
+//   - Regulation (EU) 2026/1744 — EUR-Lex CELEX: 32026R1744
+//     http://data.europa.eu/eli/reg/2026/1744/oj
 package euaiact
 
 import (
@@ -80,13 +81,29 @@ const (
 	ObligationRiskManagement         ObligationCategory = "RISK_MANAGEMENT"          // Art.9
 	ObligationHumanOversight         ObligationCategory = "HUMAN_OVERSIGHT"          // Art.14
 	ObligationTransparency           ObligationCategory = "TRANSPARENCY"             // Art.50
-	ObligationIncidentReporting      ObligationCategory = "INCIDENT_REPORTING"       // Art.62
-	ObligationConformityAssessment   ObligationCategory = "CONFORMITY_ASSESSMENT"    // Art.49
+	ObligationIncidentReporting      ObligationCategory = "INCIDENT_REPORTING"       // Art.73
+	ObligationConformityAssessment   ObligationCategory = "CONFORMITY_ASSESSMENT"    // Arts.48,49,71
 )
 
-// IncidentReportingDeadline is the maximum time allowed to report a serious
-// incident to market surveillance authorities per Article 62.
-const IncidentReportingDeadline = 72 * time.Hour
+// IncidentReportingTier selects the outer reporting deadline in Article 73.
+// Reporting must still happen immediately once the applicable causal-link
+// condition in Article 73 is established; these values are maximum periods.
+type IncidentReportingTier string
+
+const (
+	IncidentReportingTierGeneral              IncidentReportingTier = "GENERAL"
+	IncidentReportingTierWidespreadOrCritical IncidentReportingTier = "WIDESPREAD_OR_CRITICAL"
+	IncidentReportingTierDeath                IncidentReportingTier = "DEATH"
+
+	IncidentReportingGeneralDeadline              = 15 * 24 * time.Hour
+	IncidentReportingWidespreadOrCriticalDeadline = 2 * 24 * time.Hour
+	IncidentReportingDeathDeadline                = 10 * 24 * time.Hour
+
+	// IncidentReportingDeadline is retained for source compatibility and now
+	// denotes Article 73's general maximum period. New code should call
+	// IncidentReportingDeadlineFor with the incident's tier.
+	IncidentReportingDeadline = IncidentReportingGeneralDeadline
+)
 
 // -----------------------------------------------------------------------
 // Enforcement Dates
@@ -101,15 +118,27 @@ var (
 	// (Chapter V) and associated penalties apply.
 	DateGPAITransparency = time.Date(2025, 8, 2, 0, 0, 0, 0, time.UTC)
 
+	// DateGeneralApplication is the Regulation's general application date.
+	// Duties outside amended Chapter III, Sections 1-3 retain their own scope
+	// and transition rules instead of inheriting DateHighRiskObligations.
+	DateGeneralApplication = time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+
+	// DateArticle50Transparency is the general application date for Article 50.
+	DateArticle50Transparency = DateGeneralApplication
+
+	// DateArticle50PreexistingSystemTransition is the Article 111(4)
+	// transition for providers of systems described by Article 50(2) that were
+	// placed on the market before 2026-08-02.
+	DateArticle50PreexistingSystemTransition = time.Date(2026, 12, 2, 0, 0, 0, 0, time.UTC)
+
 	// DateHighRiskObligations is when high-risk AI system obligations for
-	// Annex III systems (Chapter III, Sections 1-3), CE marking, and EU DB
-	// registration apply. Deferred from 2026-08-02 by Regulation (EU)
-	// 2026/1744, which amends Regulation (EU) 2024/1689.
+	// Annex III systems in Chapter III, Sections 1-3 apply. Article 6(5) is
+	// expressly excluded from this deferral. Regulation (EU) 2026/1744 does
+	// not move duties outside those sections to this date.
 	DateHighRiskObligations = time.Date(2027, 12, 2, 0, 0, 0, 0, time.UTC)
 
 	// DateAnnexIHighRisk is when high-risk obligations for Annex I systems
-	// (existing product safety legislation) apply. Deferred from 2027-08-02
-	// by Regulation (EU) 2026/1744.
+	// in Chapter III, Sections 1-3 apply, again excluding Article 6(5).
 	DateAnnexIHighRisk = time.Date(2028, 8, 2, 0, 0, 0, 0, time.UTC)
 )
 
@@ -210,24 +239,27 @@ type IdentifiedRisk struct {
 	Mitigated   bool   `json:"mitigated"`
 }
 
-// SeriousIncident represents a reportable serious incident per Art.62.
+// SeriousIncident represents a reportable serious incident per Article 73.
 type SeriousIncident struct {
-	ID                  string            `json:"id"`
-	AISystemID          string            `json:"ai_system_id"`
-	Description         string            `json:"description"`
-	DetectedAt          time.Time         `json:"detected_at"`
-	ReportedAt          *time.Time        `json:"reported_at,omitempty"`
-	AffectedPersons     int               `json:"affected_persons"`
-	Severity            string            `json:"severity"`
-	RootCause           string            `json:"root_cause,omitempty"`
-	CorrectiveActions   []string          `json:"corrective_actions"`
-	ReportedToAuthority bool              `json:"reported_to_authority"`
-	AuthorityID         string            `json:"authority_id,omitempty"`
-	EvidencePackHash    string            `json:"evidence_pack_hash,omitempty"`
-	Metadata            map[string]string `json:"metadata"`
+	ID                  string                `json:"id"`
+	AISystemID          string                `json:"ai_system_id"`
+	Description         string                `json:"description"`
+	DetectedAt          time.Time             `json:"detected_at"`
+	ReportingTier       IncidentReportingTier `json:"reporting_tier,omitempty"`
+	ReportedAt          *time.Time            `json:"reported_at,omitempty"`
+	AffectedPersons     int                   `json:"affected_persons"`
+	Severity            string                `json:"severity"`
+	RootCause           string                `json:"root_cause,omitempty"`
+	CorrectiveActions   []string              `json:"corrective_actions"`
+	ReportedToAuthority bool                  `json:"reported_to_authority"`
+	AuthorityID         string                `json:"authority_id,omitempty"`
+	EvidencePackHash    string                `json:"evidence_pack_hash,omitempty"`
+	Metadata            map[string]string     `json:"metadata"`
 }
 
-// TransparencyRecord tracks GPAI transparency obligations per Art.50.
+// TransparencyRecord tracks selected evidence that may be relevant to
+// Article 50 and Chapter V transparency duties. It is not a legal
+// applicability determination.
 type TransparencyRecord struct {
 	ID                    string            `json:"id"`
 	AISystemID            string            `json:"ai_system_id"`
@@ -343,11 +375,19 @@ func (e *EUAIActComplianceEngine) RecordRiskManagement(ctx context.Context, reco
 	return nil
 }
 
-// ReportIncident reports a serious incident per Art.62.
+// ReportIncident records a serious incident under Article 73. An omitted tier
+// defaults to the general 15-day maximum; callers must select a shorter tier
+// when Article 73(2) or 73(3) applies.
 func (e *EUAIActComplianceEngine) ReportIncident(ctx context.Context, incident *SeriousIncident) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	if incident.ReportingTier == "" {
+		incident.ReportingTier = IncidentReportingTierGeneral
+	}
+	if _, err := IncidentReportingDeadlineFor(incident.ReportingTier); err != nil {
+		return err
+	}
 	if incident.ID == "" {
 		incident.ID = generateID("incident")
 	}
@@ -359,15 +399,35 @@ func (e *EUAIActComplianceEngine) ReportIncident(ctx context.Context, incident *
 	return nil
 }
 
-// IsIncidentReportOverdue checks whether the 72h reporting deadline has passed.
+// IncidentReportingDeadlineFor returns the outer Article 73 deadline for the
+// selected incident tier. The obligation to report immediately still applies.
+func IncidentReportingDeadlineFor(tier IncidentReportingTier) (time.Duration, error) {
+	switch tier {
+	case "", IncidentReportingTierGeneral:
+		return IncidentReportingGeneralDeadline, nil
+	case IncidentReportingTierWidespreadOrCritical:
+		return IncidentReportingWidespreadOrCriticalDeadline, nil
+	case IncidentReportingTierDeath:
+		return IncidentReportingDeathDeadline, nil
+	default:
+		return 0, fmt.Errorf("unsupported incident reporting tier %q", tier)
+	}
+}
+
+// IsIncidentReportOverdue checks whether the Article 73 outer deadline has
+// passed. Invalid tiers fail closed and are treated as overdue.
 func (e *EUAIActComplianceEngine) IsIncidentReportOverdue(incident *SeriousIncident) bool {
 	if incident.ReportedToAuthority {
 		return false
 	}
-	return time.Since(incident.DetectedAt) > IncidentReportingDeadline
+	deadline, err := IncidentReportingDeadlineFor(incident.ReportingTier)
+	if err != nil {
+		return true
+	}
+	return time.Since(incident.DetectedAt) > deadline
 }
 
-// RecordTransparency records GPAI transparency compliance per Art.50.
+// RecordTransparency records selected transparency evidence.
 func (e *EUAIActComplianceEngine) RecordTransparency(ctx context.Context, record *TransparencyRecord) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -388,7 +448,7 @@ func (e *EUAIActComplianceEngine) GetObligations() []Obligation {
 			Category:      ObligationHighRiskClassification,
 			ArticleRef:    "Art.6+AnnexIII",
 			Title:         "High-Risk AI System Classification",
-			Description:   "AI systems in Annex III areas (critical infrastructure, safety components, financial services) must comply with Chapter 2 requirements: risk management, data governance, technical docs, record-keeping, transparency, human oversight, accuracy/robustness/cybersecurity.",
+			Description:   "AI systems in Annex III areas may be high-risk under Article 6. The amended date applies only to Chapter III, Sections 1-3 for Annex III systems and expressly excludes Article 6(5).",
 			EffectiveFrom: DateHighRiskObligations,
 			PenaltyMax:    "EUR 15M or 3% global annual turnover",
 			EvidenceReqs:  []string{"ai_inventory", "risk_assessment", "technical_documentation"},
@@ -417,29 +477,29 @@ func (e *EUAIActComplianceEngine) GetObligations() []Obligation {
 		{
 			Category:      ObligationTransparency,
 			ArticleRef:    "Art.50",
-			Title:         "Transparency for GPAI Providers",
-			Description:   "General-purpose AI providers must: disclose AI-generated content, publish training data summaries, comply with copyright, publish model capabilities and limitations.",
-			EffectiveFrom: DateGPAITransparency,
+			Title:         "Transparency Duties for Certain AI Systems",
+			Description:   "Article 50 covers disclosure and machine-readable marking duties for specified AI systems and deployers. It generally applies from 2026-08-02; Article 111(4) gives providers of specified pre-existing Article 50(2) systems until 2026-12-02.",
+			EffectiveFrom: DateArticle50Transparency,
 			PenaltyMax:    "EUR 15M or 3% global annual turnover",
-			EvidenceReqs:  []string{"model_card", "training_data_summary", "capability_assessment", "copyright_policy"},
+			EvidenceReqs:  []string{"ai_interaction_notice", "synthetic_content_marking", "deepfake_disclosure", "public_interest_text_disclosure"},
 			HELMImpact:    "transparency_notice",
 		},
 		{
 			Category:      ObligationIncidentReporting,
-			ArticleRef:    "Art.62",
-			Title:         "Serious Incident Reporting (72h)",
-			Description:   "Providers/deployers of high-risk AI must report serious incidents to market surveillance authorities within 72 hours of becoming aware. HELM evidence packs provide audit trail.",
-			EffectiveFrom: DateHighRiskObligations,
+			ArticleRef:    "Art.73",
+			Title:         "Serious Incident Reporting",
+			Description:   "Providers of high-risk AI systems must report immediately and no later than the applicable outer deadline: 15 days generally, 2 days for widespread-infringement or Article 3(49)(b) incidents, and 10 days where a person dies.",
+			EffectiveFrom: DateGeneralApplication,
 			PenaltyMax:    "EUR 15M or 3% global annual turnover",
 			EvidenceReqs:  []string{"incident_report", "evidence_pack", "notification_receipt"},
 			HELMImpact:    "evidence_pack_reporting",
 		},
 		{
 			Category:      ObligationConformityAssessment,
-			ArticleRef:    "Art.49",
+			ArticleRef:    "Arts.48,49,71",
 			Title:         "CE Marking and EU Database Registration",
-			Description:   "High-risk AI systems require CE marking and registration in EU database before placing on market or putting into service.",
-			EffectiveFrom: DateHighRiskObligations,
+			Description:   "Articles 48, 49 and 71 govern CE marking and EU database registration. These provisions sit outside the amended Chapter III, Sections 1-3 deferral; applicability still depends on the system and its transition rules.",
+			EffectiveFrom: DateGeneralApplication,
 			PenaltyMax:    "EUR 15M or 3% global annual turnover",
 			EvidenceReqs:  []string{"conformity_declaration", "ce_certificate", "eu_db_registration"},
 			HELMImpact:    "conformity_assessment",

@@ -94,6 +94,17 @@ func TestEnforcementDate_GPAITransparency(t *testing.T) {
 	}
 }
 
+func TestEnforcementDate_GeneralAndArticle50Transition(t *testing.T) {
+	general := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	transition := time.Date(2026, 12, 2, 0, 0, 0, 0, time.UTC)
+	if !DateGeneralApplication.Equal(general) || !DateArticle50Transparency.Equal(general) {
+		t.Fatalf("general and Article 50 dates must be %v", general)
+	}
+	if !DateArticle50PreexistingSystemTransition.Equal(transition) {
+		t.Fatalf("Article 50(2) transition = %v, want %v", DateArticle50PreexistingSystemTransition, transition)
+	}
+}
+
 func TestEnforcementDate_HighRiskObligations(t *testing.T) {
 	// Deferred from 2026-08-02 by Regulation (EU) 2026/1744.
 	expected := time.Date(2027, 12, 2, 0, 0, 0, 0, time.UTC)
@@ -112,11 +123,11 @@ func TestEnforcementDate_AnnexI(t *testing.T) {
 
 // ── Incident Reporting ──
 
-func TestIncidentReportOverdue_72h(t *testing.T) {
+func TestIncidentReportOverdue_GeneralTier(t *testing.T) {
 	e := NewEUAIActComplianceEngine()
-	inc := &SeriousIncident{ID: "i1", DetectedAt: time.Now().Add(-73 * time.Hour)}
+	inc := &SeriousIncident{ID: "i1", DetectedAt: time.Now().Add(-16 * 24 * time.Hour)}
 	if !e.IsIncidentReportOverdue(inc) {
-		t.Fatal("incident detected >72h ago should be overdue")
+		t.Fatal("general incident detected >15 days ago should be overdue")
 	}
 }
 
@@ -147,8 +158,14 @@ func TestGetObligations_Count(t *testing.T) {
 }
 
 func TestGetObligations_IncidentReportingDeadline(t *testing.T) {
-	if IncidentReportingDeadline != 72*time.Hour {
-		t.Fatalf("expected 72h, got %v", IncidentReportingDeadline)
+	if IncidentReportingDeadline != 15*24*time.Hour {
+		t.Fatalf("expected 15 days, got %v", IncidentReportingDeadline)
+	}
+	if IncidentReportingWidespreadOrCriticalDeadline != 2*24*time.Hour {
+		t.Fatalf("expected 2 days, got %v", IncidentReportingWidespreadOrCriticalDeadline)
+	}
+	if IncidentReportingDeathDeadline != 10*24*time.Hour {
+		t.Fatalf("expected 10 days, got %v", IncidentReportingDeathDeadline)
 	}
 }
 

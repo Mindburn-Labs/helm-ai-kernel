@@ -11,8 +11,10 @@
 > supplied by a caller as an identity.
 >
 > **What is Live** is a deny gate. `ZeroIDInterceptor` is the first interceptor
-> in every Guardian's default boundary chain, and it refuses any request that
-> presents a ZeroID envelope. Requests without one are untouched.
+> in every Guardian's default boundary chain, and it refuses any request whose
+> caller-supplied context contains a non-empty string `zeroid_token` or
+> `spiffe_uri`. Requests where both values are absent, empty, or non-string are
+> untouched by this interceptor.
 >
 > Implementation of record: [`core/pkg/guardian/zeroid.go`](../../core/pkg/guardian/zeroid.go)
 > and its regression test [`core/pkg/guardian/zeroid_test.go`](../../core/pkg/guardian/zeroid_test.go).
@@ -40,30 +42,31 @@ concept promoted a tenant-A low-privilege agent to
 
 F-04 is fixed. The fix was to stop binding the principal, not to start verifying
 the token. The string `zeroid_verified` no longer appears in any runtime path;
-the only occurrences left in the repository are the two comments and the one
-test assertion that forbid it.
+its remaining occurrences explain the removed behaviour or assert negatively
+that the runtime does not select that backend.
 
 ## What actually happens to a request
 
-The interceptor reads `zeroid_token` and `spiffe_uri` from
-`EvaluationContext.Request.Context` — the caller-supplied context map — and
-nothing else. It never writes to `Request.Principal`.
+The interceptor reads non-empty string values for `zeroid_token` and
+`spiffe_uri` from `EvaluationContext.Request.Context` — the caller-supplied
+context map — and nothing else. Missing, empty, and non-string values are
+treated as no envelope. It never writes to `Request.Principal`.
 
 | Request | Outcome | Reason code |
 |---|---|---|
-| Neither `zeroid_token` nor `spiffe_uri` present | Passes through to the rest of the chain, unmodified | — |
-| `zeroid_token` present and in the in-process revocation index | `DENY` | `TAINTED_CREDENTIAL_ACCESS_DENY` |
-| `spiffe_uri` present and not prefixed `spiffe://` | `DENY` | `IDENTITY_ISOLATION_VIOLATION` |
-| Any other envelope, including a well-formed `spiffe://` URI and a plausible token | `DENY` | `IDENTITY_ISOLATION_VIOLATION` |
+| Neither key contains a non-empty string | Passes through to the rest of the chain, unmodified | — |
+| `zeroid_token` is a non-empty string present in the in-process revocation index | `DENY` | `TAINTED_CREDENTIAL_ACCESS_DENY` |
+| `spiffe_uri` is a non-empty string not prefixed `spiffe://` | `DENY` | `IDENTITY_ISOLATION_VIOLATION` |
+| Any other non-empty string envelope, including a well-formed `spiffe://` URI or a plausible token | `DENY` | `IDENTITY_ISOLATION_VIOLATION` |
 
 The last row is the one that matters: **a correctly formatted ZeroID envelope is
 denied.** There is no ZeroID token format, no issuer/audience/expiry model, and
 no trust-distribution mechanism for verification keys, so there is nothing the
 interceptor could check a token against. It refuses rather than guesses.
 
-The interceptor is retained rather than deleted so that a presented envelope
-meets an explicit signed `DENY` instead of being silently ignored by a later
-stage.
+The interceptor is retained rather than deleted so that a recognized non-empty
+string envelope meets an explicit signed `DENY` instead of being silently
+ignored by a later stage.
 
 ### The revocation index does not gate anything
 
@@ -82,8 +85,10 @@ A deny is written as a `DecisionRecord` with verdict `DENY`, the reason code
 above, the Guardian's environment fingerprint, and the request context as
 `InputContext`. It is signed with the Guardian's configured signer; if signing
 fails the interceptor returns an error and no decision, so the request cannot
-proceed. When an audit log is configured, the record is also appended under the
-event type `ZEROID_DENY`.
+proceed. When an audit log is configured, the interceptor attempts to append
+the record under the event type `ZEROID_DENY`. The append is best-effort:
+failures are not propagated and do not change the signed `DENY` returned to the
+caller.
 
 This page makes no claim about the completeness or offline verifiability of that
 signature. The signing preimage carries open findings of its own — see F-05 and

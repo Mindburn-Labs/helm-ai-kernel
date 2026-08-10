@@ -164,7 +164,8 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 // sealed boundary record produced under an active observe grant. It is the
 // observe-mode bridge: every action evaluated in shadow mode yields a
 // counterfactual receipt carrying the verdict the PDP WOULD have issued and its
-// reason code, with no enforcement and no side effect.
+// reason code. The receipt grants no execution authority; the active observe
+// grant separately permits shadow dispatch, which can produce real effects.
 //
 // It fails closed: a record that is not labeled shadow (or carries no grant id,
 // or is unsealed) has no counterfactual standing and is rejected — there is no

@@ -338,12 +338,17 @@ A conforming verifier of this profile MUST additionally:
 Signer keys MAY rotate between revisions, so cryptographic verification of each
 predecessor is mandatory at verification time and cannot be inherited from the
 head. The full sequence is implemented by `VerifyLaunchEffectReceipt` in
-`core/pkg/contracts/launch_effect_receipt.go`. The independent Python verifier
-at `reference_packs/launch-mission-v1/verify_vectors.py` checks steps 1–9 for the
-reference pack's single receipt, pack-supplied authority binding, and evidence
-DAG. It does not resolve predecessor receipts or verify EvidencePack closure.
-Step 10, including cryptographic verification of every predecessor and
-signer-key rotation across revisions, remains Kernel-only.
+`core/pkg/contracts/launch_effect_receipt.go`. For the reference pack's single
+receipt, the independent Python verifier at
+`reference_packs/launch-mission-v1/verify_vectors.py` recomputes `receipt_id`
+and `receipt_chain_id`, verifies the Ed25519 signature with the pack-supplied
+public key, checks the payload/request and decision/verdict bindings, compares
+the receipt with the pack-supplied authority binding, and validates the bound
+evidence DAG's hashes, reservation bindings, ordering, acyclicity, and
+non-circular artifact references. It does not resolve the signer key or durable
+reservation from external sources, walk predecessor receipts, or verify
+EvidencePack closure; those obligations are handled by
+`VerifyLaunchEffectReceipt`, not by the Python reference-pack verifier.
 
 ## 6. Security Considerations
 

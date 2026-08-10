@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
@@ -964,6 +966,148 @@ func TestQuickstartOnboardingExcludesForeignTenantStateAndExport(t *testing.T) {
 	}
 	if len(localReceipts) != 1 || localReceipts[0].ReceiptID != localReceiptID {
 		t.Fatalf("local tenant receipts = %+v", localReceipts)
+	}
+}
+
+func TestQuickstartOnboardingProofSurvivesMoreThanFiveHundredNewerTenantReceipts(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	signer, err := helmcrypto.NewEd25519Signer("quickstart-onboarding-proof-retention-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.ReceiptSigner = signer
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+
+	mux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(mux, svc, serverOptions{Quickstart: runtime})
+	runReq := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/run-step", strings.NewReader(`{"step_id":"deny"}`))
+	authorizeQuickstartRequest(runReq, runtime)
+	runRec := httptest.NewRecorder()
+	mux.ServeHTTP(runRec, runReq)
+	if runRec.Code != http.StatusOK {
+		t.Fatalf("run-step status=%d body=%s", runRec.Code, runRec.Body.String())
+	}
+	deniedStep := onboardingStepPayload(t, decodeOnboardingPayload(t, runRec), "deny")
+	onboardingReceiptID, _ := deniedStep["receipt_ref"].(string)
+	if onboardingReceiptID == "" {
+		t.Fatalf("deny step has no receipt: %+v", deniedStep)
+	}
+
+	base := time.Now().UTC().Add(time.Second)
+	for i := 0; i < 501; i++ {
+		decision := &contracts.DecisionRecord{
+			ID:                 fmt.Sprintf("post-onboarding-%03d", i),
+			SubjectID:          runtime.PrincipalID,
+			Action:             "FILE_READ",
+			Resource:           fmt.Sprintf("local.file.%03d", i),
+			Verdict:            string(contracts.VerdictAllow),
+			Reason:             "proof retention regression",
+			ReasonCode:         "SAFE_REQUEST_ALLOWED",
+			PolicyBackend:      "test",
+			PolicyContentHash:  "sha256:policy-content",
+			PolicyDecisionHash: "sha256:policy-decision",
+			Timestamp:          base.Add(time.Duration(i) * time.Millisecond),
+		}
+		if err := persistDecisionReceiptForTenant(context.Background(), svc, decision, runtime.PrincipalID, runtime.TenantID, []byte(decision.Resource), map[string]any{"source": "test.bulk"}); err != nil {
+			t.Fatalf("persist newer receipt %d: %v", i, err)
+		}
+	}
+	recent, err := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader).ListLatestByTenant(context.Background(), runtime.TenantID, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, receipt := range recent {
+		if receipt.ReceiptID == onboardingReceiptID {
+			t.Fatalf("test setup did not age onboarding receipt %q beyond latest-500 window", onboardingReceiptID)
+		}
+	}
+
+	for _, endpoint := range []string{"/api/v1/onboarding/state", "/api/v1/onboarding/export"} {
+		req := httptest.NewRequest(http.MethodGet, endpoint, nil)
+		authorizeQuickstartRequest(req, runtime)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", endpoint, rec.Code, rec.Body.String())
+		}
+		step := onboardingStepPayload(t, decodeOnboardingPayload(t, rec), "deny")
+		if step["status"] != "pass" || step["receipt_ref"] != onboardingReceiptID {
+			t.Fatalf("%s lost aged onboarding proof: step=%+v want receipt=%q", endpoint, step, onboardingReceiptID)
+		}
+	}
+}
+
+type receiptStoreWithoutOnboardingCapabilities struct {
+	store.ReceiptStore
+}
+
+type onboardingReceiptReaderStub struct {
+	store.ReceiptStore
+	err error
+}
+
+func (s *onboardingReceiptReaderStub) ListLatestOnboardingByTenant(context.Context, string) ([]*contracts.Receipt, error) {
+	return nil, s.err
+}
+
+func TestQuickstartOnboardingStateAndExportFailClosedOnProofReadFailure(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+
+	stores := []struct {
+		name         string
+		receiptStore store.ReceiptStore
+	}{
+		{name: "missing tenant proof reader", receiptStore: &receiptStoreWithoutOnboardingCapabilities{}},
+		{name: "tenant proof read error", receiptStore: &onboardingReceiptReaderStub{err: errors.New("receipt database unavailable")}},
+	}
+	for _, storeCase := range stores {
+		for _, endpoint := range []string{"/api/v1/onboarding/state", "/api/v1/onboarding/export"} {
+			t.Run(storeCase.name+" "+endpoint, func(t *testing.T) {
+				mux := http.NewServeMux()
+				RegisterLocalFirstRunRoutes(mux, &Services{ReceiptStore: storeCase.receiptStore}, serverOptions{Quickstart: runtime})
+				req := httptest.NewRequest(http.MethodGet, endpoint, nil)
+				authorizeQuickstartRequest(req, runtime)
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+				if rec.Code != http.StatusInternalServerError {
+					t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+				}
+				if strings.Contains(rec.Body.String(), `"status":"pending"`) || strings.Contains(rec.Body.String(), `"receipt_refs":{}`) {
+					t.Fatalf("proof read failure produced successful-looking empty state: %s", rec.Body.String())
+				}
+			})
+		}
+	}
+}
+
+func TestQuickstartOnboardingRunStepFailsClosedWithoutScopedAppender(t *testing.T) {
+	runtime := quickstartRouteRuntime()
+	signer, err := helmcrypto.NewEd25519Signer("quickstart-onboarding-scoped-appender-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HELM_ADMIN_API_KEY", runtime.SessionToken)
+	t.Setenv(runtimeTenantIDEnv, runtime.TenantID)
+	t.Setenv(runtimePrincipalIDEnv, runtime.PrincipalID)
+
+	mux := http.NewServeMux()
+	RegisterLocalFirstRunRoutes(mux, &Services{
+		ReceiptStore:  &onboardingReceiptReaderStub{},
+		ReceiptSigner: signer,
+	}, serverOptions{Quickstart: runtime})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/run-step", strings.NewReader(`{"step_id":"deny"}`))
+	authorizeQuickstartRequest(req, runtime)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

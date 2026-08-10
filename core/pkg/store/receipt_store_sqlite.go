@@ -452,6 +452,37 @@ func (s *SQLiteReceiptStore) ListLatestByTenant(ctx context.Context, tenantID st
 	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, prefix, limit)
 }
 
+func (s *SQLiteReceiptStore) ListLatestOnboardingByTenant(ctx context.Context, tenantID string) ([]*contracts.Receipt, error) {
+	tenantID = strings.TrimSpace(tenantID)
+	if tenantID == "" {
+		return nil, fmt.Errorf("tenant id is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	query := `WITH scoped AS (
+		SELECT receipts.*,
+			CASE
+				WHEN json_valid(metadata) THEN NULLIF(json_extract(metadata, '$.onboarding_step'), '')
+				ELSE NULL
+			END AS onboarding_step
+		FROM receipts
+		WHERE signature_version = ?
+		  AND COALESCE(session_id, '') <> ''
+		  AND substr(causal_session_id, 1, length(?)) = ?
+	), ranked AS (
+		SELECT scoped.*,
+			ROW_NUMBER() OVER (
+				PARTITION BY onboarding_step
+				ORDER BY timestamp DESC, append_sequence DESC
+			) AS onboarding_rank
+		FROM scoped
+		WHERE onboarding_step IS NOT NULL
+	)
+	SELECT ` + sqliteReceiptColumns + ` FROM ranked
+	WHERE onboarding_rank = 1
+	ORDER BY timestamp DESC, append_sequence DESC`
+	return s.queryReceipts(ctx, query, contracts.ReceiptSignatureV5, prefix, prefix)
+}
+
 // ListByTenantCursor returns V5 receipts in durable append order. The opaque
 // cursor's receipt ID is resolved inside the authenticated tenant scope, so
 // later session genesis receipts are never compared to another session's

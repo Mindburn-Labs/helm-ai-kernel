@@ -225,12 +225,15 @@ its required asset and provenance gates, and is not a completed public release.
   reads only tenant-scoped rows. Tenant-authenticated receipt HTTP APIs,
   Console receipt views, and onboarding state/export exclude unscoped and
   foreign-tenant rows; onboarding receipts are written into the authenticated
-  tenant scope. Local operators with direct access to the Kernel SQLite
-  database can still include unscoped rows through the offline `report` and
-  `rollup` commands, which intentionally operate on the local store rather
-  than an HTTP tenant principal. Tenant retrievability for MCP gateway clients
-  would require moving the gateway to tenant-scoped auth, a breaking change
-  still open on HELM-363.
+  tenant scope, and state/export query the latest proof for each onboarding
+  step without a fixed total-receipt window. Missing tenant-scoped store
+  capabilities and proof-read failures fail closed instead of rendering
+  successful-looking empty state. Local operators with direct access to the
+  Kernel SQLite database can still include unscoped rows through the offline
+  `report` and `rollup` commands, which intentionally operate on the local
+  store rather than an HTTP tenant principal. Tenant retrievability for MCP
+  gateway clients would require moving the gateway to tenant-scoped auth, a
+  breaking change still open on HELM-363.
 - MCP OAuth scope enforcement applies only when the gateway runs an OAuth
   channel; with `auth_mode: none` the scoped governance tools (`helm.verify`,
   `helm.evaluate`) are reachable and policy remains the fail-closed enforcement

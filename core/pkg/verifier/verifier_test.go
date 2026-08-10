@@ -829,7 +829,7 @@ func TestVerifyBundleReceiptV5RejectsAmbiguousRawJSON(t *testing.T) {
 		}
 		return []byte(updated)
 	}
-	verifyRaw := func(t *testing.T, raw []byte) *VerifyReport {
+	verifyRaw := func(t *testing.T, raw []byte) (*VerifyReport, int, int) {
 		t.Helper()
 		dir := createValidBundleFixture(t)
 		if err := os.WriteFile(filepath.Join(dir, "receipts", "receipt-001.json"), raw, 0o644); err != nil {
@@ -840,12 +840,18 @@ func TestVerifyBundleReceiptV5RejectsAmbiguousRawJSON(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return report
+		valid, total := countEmbeddedSignatures(dir, VerifyOptions{})
+		return report, valid, total
 	}
 
-	baseline := encode(signV5(1))
-	baselineReport := verifyRaw(t, baseline)
+	baselineSignature := signV5(1)
+	baseline := encode(baselineSignature)
+	baselineReport, baselineValid, baselineTotal := verifyRaw(t, baseline)
+	if baselineValid != 1 || baselineTotal != 1 {
+		t.Fatalf("baseline embedded signature count = %d/%d, want 1/1", baselineValid, baselineTotal)
+	}
 	assertCheck(t, baselineReport, "embedded_signature_trust", true)
+	signatureMember := `"signature":"` + baselineSignature + `"`
 
 	for _, tc := range []struct {
 		name string
@@ -855,9 +861,16 @@ func TestVerifyBundleReceiptV5RejectsAmbiguousRawJSON(t *testing.T) {
 		{name: "duplicate_signed_member", raw: replace(baseline, `"policy_hash":"sha256:policy"`, `"policy_hash":"sha256:policy","policy_hash":"sha256:policy"`)},
 		{name: "null_lamport_signed_zero", raw: replace(encode(signV5(0)), `"lamport_clock":1`, `"lamport_clock":null`)},
 		{name: "present_null_signature_version", raw: replace(encode(signLegacy()), `"signature_version":"receipt.v5"`, `"signature_version":null`)},
+		{name: "null_signature", raw: replace(baseline, signatureMember, `"signature":null`)},
+		{name: "duplicate_signature_last_null", raw: replace(baseline, signatureMember, signatureMember+`,"signature":null`)},
+		{name: "receipt_v5_missing_signature", raw: replace(baseline, signatureMember+`,`, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assertEmbeddedSignatureTrustFails(t, verifyRaw(t, tc.raw))
+			report, valid, total := verifyRaw(t, tc.raw)
+			if valid != 0 || total != 1 {
+				t.Fatalf("malformed embedded signature count = %d/%d, want 0/1", valid, total)
+			}
+			assertEmbeddedSignatureTrustFails(t, report)
 		})
 	}
 }

@@ -376,9 +376,12 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 			if document == nil {
 				return nil
 			}
-			if sig, ok := document["signature"].(string); ok && sig != "" {
+			signatureValue, signatureDeclared := document["signature"]
+			_, signatureVersionDeclared := document["signature_version"]
+			if signatureDeclared || signatureVersionDeclared {
 				total++
-				if parseErr == nil && verifyEmbeddedDocumentSignature(document, sig, opts) {
+				sig, sigOK := signatureValue.(string)
+				if parseErr == nil && sigOK && sig != "" && verifyEmbeddedDocumentSignature(document, sig, opts) {
 					valid++
 				}
 			}

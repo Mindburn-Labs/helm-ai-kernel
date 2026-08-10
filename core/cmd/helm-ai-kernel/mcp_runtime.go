@@ -163,8 +163,11 @@ func newLocalMCPGatewayWithEvaluator(cfg mcppkg.GatewayConfig, evaluator mcppkg.
 // tenant to scope by. persistDecisionReceipt therefore writes an unscoped
 // causal row on purpose rather than deriving a durable namespace from
 // caller-controlled decision context, while every /api/v1/receipts read
-// filters on the tenant-qualified scope prefix. No shipped CLI or HTTP API
-// exposes these unscoped rows; ListSince is an internal store API.
+// filters on the tenant-qualified scope prefix. Tenant-authenticated receipt
+// HTTP APIs, Console views, and onboarding state/export exclude these unscoped
+// rows. Local operators with direct SQLite access can still include them in
+// offline report and rollup workflows, which intentionally read the local
+// store without an HTTP tenant principal.
 //
 // Making them tenant-retrievable requires moving the gateway routes to
 // RouteAuthTenant, which is a breaking change for MCP clients; that is tracked

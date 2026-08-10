@@ -222,11 +222,14 @@ its required asset and provenance gates, and is not a completed public release.
   decision (ALLOW and DENY). These receipts are written unscoped and are **not**
   retrievable through `GET /api/v1/receipts`: the gateway routes run under
   admin authentication, which establishes no tenant binding, while that route
-  reads only tenant-scoped rows. No shipped CLI or HTTP API exposes these
-  unscoped rows; only the store's internal sequence-ordered `ListSince` API can
-  read them. Console receipt views use a tenant-scoped latest-first reader and
-  exclude unscoped or foreign-tenant rows. Tenant retrievability would require
-  moving the gateway to tenant-scoped auth, a breaking change for MCP clients,
+  reads only tenant-scoped rows. Tenant-authenticated receipt HTTP APIs,
+  Console receipt views, and onboarding state/export exclude unscoped and
+  foreign-tenant rows; onboarding receipts are written into the authenticated
+  tenant scope. Local operators with direct access to the Kernel SQLite
+  database can still include unscoped rows through the offline `report` and
+  `rollup` commands, which intentionally operate on the local store rather
+  than an HTTP tenant principal. Tenant retrievability for MCP gateway clients
+  would require moving the gateway to tenant-scoped auth, a breaking change
   still open on HELM-363.
 - MCP OAuth scope enforcement applies only when the gateway runs an OAuth
   channel; with `auth_mode: none` the scoped governance tools (`helm.verify`,

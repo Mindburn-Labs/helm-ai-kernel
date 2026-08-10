@@ -20,6 +20,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 const (
@@ -311,7 +313,15 @@ func onboardingReceiptRefs(ctx context.Context, svc *Services) map[string]string
 	if svc == nil || svc.ReceiptStore == nil {
 		return refs
 	}
-	receipts, err := svc.ReceiptStore.List(ctx, 500)
+	tenantID, err := authenticatedReceiptTenantID(ctx)
+	if err != nil {
+		return refs
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedLatestReceiptReader)
+	if !ok {
+		return refs
+	}
+	receipts, err := reader.ListLatestByTenant(ctx, tenantID, 500)
 	if err != nil {
 		return refs
 	}
@@ -335,6 +345,10 @@ func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingSte
 	if err != nil || principal == nil {
 		return "", fmt.Errorf("onboarding route requires authenticated principal")
 	}
+	tenantID := strings.TrimSpace(principal.GetTenantID())
+	if tenantID == "" {
+		return "", fmt.Errorf("onboarding route requires authenticated tenant")
+	}
 	now := time.Now().UTC()
 	decision := &contracts.DecisionRecord{
 		ID:                 fmt.Sprintf("onboarding_%s_%d", step.ID, now.UnixNano()),
@@ -349,7 +363,7 @@ func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingSte
 		PolicyDecisionHash: sha256HexBytes([]byte(step.ID + ":" + step.Verdict)),
 		Timestamp:          now,
 	}
-	err = persistDecisionReceipt(r.Context(), svc, decision, principal.GetID(), []byte(step.Action+":"+step.Resource), map[string]any{
+	err = persistDecisionReceiptForTenant(r.Context(), svc, decision, principal.GetID(), tenantID, []byte(step.Action+":"+step.Resource), map[string]any{
 		"source":          "onboarding",
 		"onboarding_step": step.ID,
 		"action":          step.Action,
@@ -359,7 +373,7 @@ func persistOnboardingReceipt(r *http.Request, svc *Services, step onboardingSte
 	if err != nil {
 		return "", err
 	}
-	return "rcpt_" + decision.ID, nil
+	return executor.ReceiptIDForDecision(tenantID, decision.ID), nil
 }
 
 func exportOnboardingEvidence(r *http.Request, svc *Services, opts serverOptions) (map[string]any, error) {

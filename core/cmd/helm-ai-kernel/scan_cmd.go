@@ -178,8 +178,21 @@ func defaultScanSaltFile() (string, error) {
 
 func init() {
 	Register(Subcommand{
-		Name:  "scan",
-		Usage: "Local anonymized AI agent risk scan",
-		RunFn: runScanCmd,
+		Name:   "scan",
+		Usage:  "Local anonymized AI agent risk scan",
+		RunFn:  runScanCmd,
+		HelpFn: printScanUsage,
 	})
+}
+
+func printScanUsage(stdout io.Writer) {
+	fmt.Fprintln(stdout, "Usage: helm-ai-kernel scan [--path DIR | --from-receipts DIR] [options]")
+	fmt.Fprintln(stdout, "Build an anonymized local risk envelope for a repo or a receipts directory.")
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Common options:")
+	fmt.Fprintln(stdout, "  --risk-envelope FILE          Write anonymized RiskEnvelope JSON")
+	fmt.Fprintln(stdout, "  --preview FILE                Write a local .md or .html preview (repeatable)")
+	fmt.Fprintln(stdout, "  --evidence-pack FILE          Write an anonymized scan EvidencePack tar")
+	fmt.Fprintln(stdout, "  --no-user-config              Skip user-level Claude/Codex/Desktop MCP config")
+	fmt.Fprintln(stdout, "  --upload --upload-url URL     Upload only after local review; requires --yes")
 }

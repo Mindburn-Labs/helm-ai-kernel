@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 func TestConsoleBootstrapRequiresCredentials(t *testing.T) {
@@ -32,6 +37,51 @@ func TestConsoleBootstrapAllowsAdminCredentials(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("console bootstrap with credentials status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestConsoleBootstrapScopesReceiptsToAuthenticatedTenant(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	signer, err := helmcrypto.NewEd25519Signer("console-tenant-scope-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.ReceiptSigner = signer
+
+	decision := func(id, sessionID string) *contracts.DecisionRecord {
+		return &contracts.DecisionRecord{
+			ID:                 id,
+			Action:             "file_read",
+			Verdict:            string(contracts.VerdictAllow),
+			PolicyContentHash:  "sha256:policy-content",
+			PolicyDecisionHash: "sha256:pdp",
+			InputContext:       map[string]any{"session_id": sessionID},
+			Timestamp:          time.Unix(1700000000, 0).UTC(),
+		}
+	}
+	if err := persistDecisionReceipt(context.Background(), svc, decision("mcp-unscoped", "mcp-http-jsonrpc"), "mcp-http-jsonrpc", []byte("file_read"), map[string]any{"source": "mcp.gateway"}); err != nil {
+		t.Fatalf("persist unscoped MCP receipt: %v", err)
+	}
+	if err := persistDecisionReceiptForTenant(context.Background(), svc, decision("foreign-tenant", "foreign-session"), "foreign-agent", "foreign-tenant", []byte("file_read"), map[string]any{"source": "api.evaluate"}); err != nil {
+		t.Fatalf("persist foreign-tenant receipt: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	RegisterConsoleRoutes(mux, svc, serverOptions{Mode: "serve"})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/console/bootstrap", nil)
+	authorizeTestRequest(req)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("console bootstrap status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response consoleBootstrapResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode console bootstrap: %v", err)
+	}
+	if len(response.Receipts) != 1 || response.Receipts[0].ReceiptID != "rcpt-test" {
+		t.Fatalf("console bootstrap receipts escaped authenticated tenant scope: %+v", response.Receipts)
 	}
 }
 

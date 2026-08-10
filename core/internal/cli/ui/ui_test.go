@@ -119,8 +119,10 @@ func TestExitCodeGolden(t *testing.T) {
 		{Failf("x", "boom"), ExitFailure},
 		{errors.New("boom"), ExitFailure},
 		{fmt.Errorf("wrap: %w", UsageErrorf("x", "bad")), ExitUsage},
-		{&CliError{Code: 0, Msg: "forged zero"}, ExitFailure},    // fail closed
-		{&CliError{Code: 255, Msg: "out of range"}, ExitFailure}, // fail closed
+		{&CliError{Code: 0, Msg: "forged zero"}, ExitFailure},           // fail closed
+		{&CliError{Code: 255, Msg: "out of range"}, ExitFailure},        // fail closed
+		{&CliError{Code: ExitDenied, Msg: "policy denied"}, ExitDenied}, // fail-closed denial survives
+		{&CliError{Code: 127, Msg: "shell-reserved"}, ExitFailure},      // still fails closed above ExitDenied
 	}
 	for i, tc := range cases {
 		if got := ExitCode(tc.err); got != tc.want {

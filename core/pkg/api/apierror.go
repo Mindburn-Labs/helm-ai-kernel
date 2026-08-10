@@ -74,6 +74,15 @@ func WriteTooManyRequests(w http.ResponseWriter, retryAfterSecs int) {
 
 // WriteInternal writes a 500 error response.
 // The err parameter is logged but NEVER exposed to the client.
+//
+// On a request path prefer WriteInternalR — see httperr.WriteInternalR.
 func WriteInternal(w http.ResponseWriter, err error) {
 	httperr.WriteInternal(w, err)
+}
+
+// WriteInternalR writes a 500 error response and logs the cause with the
+// request context attached, so the record carries trace_id/span_id. The
+// response is identical to WriteInternal's.
+func WriteInternalR(w http.ResponseWriter, r *http.Request, err error) {
+	httperr.WriteInternalR(w, r, err)
 }

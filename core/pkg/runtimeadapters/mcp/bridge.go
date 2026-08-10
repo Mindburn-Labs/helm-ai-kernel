@@ -1,11 +1,13 @@
 // quantum_posture: SHA-256 for JCS content hashing and deterministic permit
-// nonce derivation only; no signatures here (receipt signing is Ed25519 in the
-// workstation engine). Classical hash, PQ posture inherited from the signer.
+// nonce derivation; EffectPermits are signed here with classical Ed25519 derived
+// from the same seed the workstation engine uses for receipts. Classical hash,
+// PQ posture inherited from the signer.
 
 package mcp
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -18,6 +20,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcpcore "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
@@ -104,15 +107,19 @@ type GovernedBridge struct {
 	scopes       []string
 	profile      contracts.WorkstationPolicyProfile
 	signingSeed  []byte
-	nonces       effects.NonceStore
-	connector    effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
-	approvals    ApprovalStore     // optional: nil => escalations cannot be satisfied
-	reservations EffectReservationBoundary
-	isWrite      WriteClassifier
-	permitTTL    time.Duration
-	issuerID     string
-	now          func() time.Time
-	permitSeq    atomic.Uint64
+	permitSigner *helmcrypto.Ed25519Signer // nil => permits are minted unsigned
+	// permitSignerErr records a signer that was configured but could not be
+	// built. It denies at mint time rather than degrading to unsigned permits.
+	permitSignerErr error
+	nonces          effects.NonceStore
+	connector       effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
+	approvals       ApprovalStore     // optional: nil => escalations cannot be satisfied
+	reservations    EffectReservationBoundary
+	isWrite         WriteClassifier
+	permitTTL       time.Duration
+	issuerID        string
+	now             func() time.Time
+	permitSeq       atomic.Uint64
 }
 
 // BridgeConfig configures a GovernedBridge.
@@ -186,20 +193,42 @@ func NewGovernedBridge(cfg BridgeConfig) *GovernedBridge {
 	if now == nil {
 		now = time.Now
 	}
+	// The permit signer reuses the receipt signing seed: a permit and the
+	// decision receipt that authorized it must trace to the same key, and a
+	// second key would be a second thing to distribute. A seed of the wrong
+	// length yields no signer and permits are minted unsigned, exactly as
+	// before this field existed — connectors that require signatures still
+	// refuse them, so the failure surfaces at the boundary rather than here.
+	// A seed of the wrong length means "no signing configured" and is the only
+	// silent branch. A correctly sized seed that still fails to build a signer is
+	// a misconfiguration, not an opt-out — recording the error lets it surface at
+	// the boundary (see permit minting) rather than silently minting unsigned
+	// permits that a verifying connector refuses for reasons nobody can see.
+	var permitSigner *helmcrypto.Ed25519Signer
+	var permitSignerErr error
+	if len(cfg.SigningSeed) == ed25519.SeedSize {
+		s, err := helmcrypto.NewEd25519SignerFromSeed(cfg.SigningSeed, issuer)
+		if err != nil {
+			permitSignerErr = fmt.Errorf("permit signer unavailable: %w", err)
+		}
+		permitSigner = s
+	}
 	return &GovernedBridge{
-		firewall:     cfg.Firewall,
-		serverID:     cfg.ServerID,
-		scopes:       cfg.GrantedScopes,
-		profile:      profile,
-		signingSeed:  cfg.SigningSeed,
-		nonces:       nonces,
-		connector:    cfg.Connector,
-		approvals:    cfg.Approvals,
-		reservations: cfg.EffectReservations,
-		isWrite:      isWrite,
-		permitTTL:    ttl,
-		issuerID:     issuer,
-		now:          now,
+		firewall:        cfg.Firewall,
+		serverID:        cfg.ServerID,
+		scopes:          cfg.GrantedScopes,
+		profile:         profile,
+		signingSeed:     cfg.SigningSeed,
+		permitSigner:    permitSigner,
+		permitSignerErr: permitSignerErr,
+		nonces:          nonces,
+		connector:       cfg.Connector,
+		approvals:       cfg.Approvals,
+		reservations:    cfg.EffectReservations,
+		isWrite:         isWrite,
+		permitTTL:       ttl,
+		issuerID:        issuer,
+		now:             now,
 	}
 }
 
@@ -402,6 +431,29 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 		base.DispatchState = DispatchStateNoDispatch
 		return base
 	}
+	// Connector-side signature verification is the contract, but it is only as
+	// live as its configuration: linear.Config.PermitPublicKey is a no-op when
+	// unset and nothing in this repository sets it, and the independent review
+	// of #798 found linear.NewConnector itself has zero non-test callers. So on
+	// every path that ships today the permit is signed and nothing checks the
+	// signature. This gate closes that at the last point the kernel controls. It
+	// needs no key distribution — the bridge already holds the signing key — and
+	// it covers every connector rather than one. Connector-side verification
+	// remains as defence in depth wherever a key is configured.
+	if err := b.verifyPermitBeforeDispatch(permit); err != nil {
+		resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "PERMIT_UNVERIFIED")
+		applyEffectReservation(&base, resolved)
+		base.Verdict = contracts.VerdictDeny
+		base.ReasonCode = "PERMIT_UNVERIFIED"
+		base.Reason = err.Error()
+		if resolutionErr != nil {
+			base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+			base.Reason = resolutionErr.Error()
+		}
+		base.DispatchState = DispatchStateNoDispatch
+		return base
+	}
+
 	var output any
 	var execErr error
 	if lifecycle != nil {
@@ -771,7 +823,62 @@ func (b *GovernedBridge) mintPermit(req *runtimeadapters.AdaptedRequest, inputHa
 	if receipt.DecisionID != "" {
 		permit.EvidenceBindings = map[string]string{"decision_id": receipt.DecisionID}
 	}
+	// Signing is last: every covered field, EvidenceBindings included, must
+	// already be final. A configured signer that fails is a denial, not an
+	// unsigned permit.
+	if b.permitSignerErr != nil {
+		return nil, fmt.Errorf("mcp bridge: %w", b.permitSignerErr)
+	}
+	if b.permitSigner != nil {
+		if err := helmcrypto.SignPermit(b.permitSigner, permit); err != nil {
+			return nil, fmt.Errorf("mcp bridge: sign permit: %w", err)
+		}
+	}
 	return permit, nil
+}
+
+// PermitSigningPublicKey returns the hex Ed25519 public key that permits from
+// this bridge are signed under, or "" when no signer is configured. It is the
+// value a verifying connector must be given; there is no other way to learn it,
+// because the seed itself must not leave the bridge.
+func (b *GovernedBridge) PermitSigningPublicKey() string {
+	if b.permitSigner == nil {
+		return ""
+	}
+	return b.permitSigner.PublicKey()
+}
+
+// verifyPermitBeforeDispatch refuses to hand a connector a permit that does not
+// verify under the bridge's own signing key.
+//
+// It is the enforcement half of permit signing. Without it, signing is an
+// unobserved side effect: the only connector that can check a signature does so
+// exclusively when an operator supplies a public key by hand, and no code path
+// in this repository supplies one.
+func (b *GovernedBridge) verifyPermitBeforeDispatch(permit *effects.EffectPermit) error {
+	if permit == nil {
+		return fmt.Errorf("permit is nil")
+	}
+	if b.permitSignerErr != nil {
+		return b.permitSignerErr
+	}
+	if b.permitSigner == nil {
+		// No signing configured: permits are minted unsigned by design in that
+		// mode, so there is nothing to verify here. The unsigned-permit risk is
+		// owned by the mint path, not silently re-litigated at dispatch.
+		return nil
+	}
+	if permit.Signature == "" {
+		return fmt.Errorf("permit carries no signature though this bridge signs permits")
+	}
+	ok, err := helmcrypto.VerifyPermit(b.permitSigner.PublicKey(), permit)
+	if err != nil {
+		return fmt.Errorf("permit signature verification failed: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("permit signature does not verify under the issuing key")
+	}
+	return nil
 }
 
 func connectorIDFor(c effects.Connector) string {

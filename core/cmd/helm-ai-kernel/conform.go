@@ -1,7 +1,11 @@
+// quantum_posture: the conform command signs its report artifacts and the
+// external-failure HCV validation manifest with classical Ed25519 from
+// HELM_SIGNING_KEY_HEX, falling back to an explicitly labelled digest-only
+// artifact when no key is set. It offers no hybrid or post-quantum profile,
+// and canonicalJSON only fixes the bytes those signatures cover.
 package main
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,10 +15,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform/gates"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conformance"
@@ -414,84 +418,18 @@ func externalFailureSigningKey() (ed25519.PrivateKey, string, error) {
 	return privateKey, hex.EncodeToString(publicKey), nil
 }
 
+// canonicalJSON returns the HELM canonical JSON bytes of v, as specified by
+// protocols/specs/rfc/canonical-json-v1.md.
+//
+// It delegates to the kernel's single canonical encoder. Until 2026-08-06 this
+// function carried a private copy of the algorithm that had drifted from it in
+// two ways: it sorted object keys by code point instead of by UTF-16 code unit
+// (RFC 8785 Section 3.2.3), and it escaped U+2028/U+2029, which RFC 8785
+// Section 3.2.2.2 requires to be emitted literally. Those bytes are signed
+// (see writeExternalFailureValidationManifest), so the copy was a silent
+// second definition of a signed preimage.
 func canonicalJSON(v any) ([]byte, error) {
-	intermediate, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var generic any
-	decoder := json.NewDecoder(bytes.NewReader(intermediate))
-	decoder.UseNumber()
-	if err := decoder.Decode(&generic); err != nil {
-		return nil, err
-	}
-	return marshalCanonical(generic)
-}
-
-func marshalCanonical(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	switch value := v.(type) {
-	case nil:
-		return []byte("null"), nil
-	case bool:
-		if value {
-			return []byte("true"), nil
-		}
-		return []byte("false"), nil
-	case json.Number:
-		return []byte(value.String()), nil
-	case string:
-		if err := enc.Encode(value); err != nil {
-			return nil, err
-		}
-		return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
-	case []any:
-		buf.WriteByte('[')
-		for i, item := range value {
-			if i > 0 {
-				buf.WriteByte(',')
-			}
-			data, err := marshalCanonical(item)
-			if err != nil {
-				return nil, err
-			}
-			buf.Write(data)
-		}
-		buf.WriteByte(']')
-		return buf.Bytes(), nil
-	case map[string]any:
-		keys := make([]string, 0, len(value))
-		for key := range value {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		buf.WriteByte('{')
-		for i, key := range keys {
-			if i > 0 {
-				buf.WriteByte(',')
-			}
-			keyBytes, err := marshalCanonical(key)
-			if err != nil {
-				return nil, err
-			}
-			valueBytes, err := marshalCanonical(value[key])
-			if err != nil {
-				return nil, err
-			}
-			buf.Write(keyBytes)
-			buf.WriteByte(':')
-			buf.Write(valueBytes)
-		}
-		buf.WriteByte('}')
-		return buf.Bytes(), nil
-	default:
-		if err := enc.Encode(value); err != nil {
-			return nil, err
-		}
-		return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
-	}
+	return canonicalize.JCS(v)
 }
 
 func validateExternalFailureVector(vector externalFailureVector) []string {

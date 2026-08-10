@@ -1,7 +1,10 @@
 // HELM Policy Schema — CPI Verdict
 //
-// Returned by helm-policy-vm for every PlanIRDelta evaluation.
 // Contains structured payloads for ALLOW, DENY, and REQUIRE_APPROVAL.
+//
+// Schema only: nothing in this repository produces or consumes CpiVerdict.
+// The shipped policy validator (core/pkg/kernel/cpi) returns JSON, not this
+// message.
 //
 // Stability: v1 additive-only.
 syntax = "proto3";

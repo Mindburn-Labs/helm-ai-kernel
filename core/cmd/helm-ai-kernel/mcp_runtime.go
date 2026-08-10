@@ -56,7 +56,14 @@ func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Gra
 	if err != nil {
 		return nil, mcppkg.GovernedExecutor{}, err
 	}
-	return newLocalMCPRuntimeWithSignerAndPolicy(signer, policyGraph)
+	// Governed GitHub dispatch arms only from the environment (see
+	// mcp_effects.go); a misconfigured signer seed fails loudly here instead of
+	// degrading to unsigned permits.
+	githubEffects, err := newGitHubEffectsRuntimeFromEnv(dataDir)
+	if err != nil {
+		return nil, mcppkg.GovernedExecutor{}, err
+	}
+	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, githubEffects)
 }
 
 func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
@@ -69,13 +76,17 @@ func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog
 // denied, because an empty graph carries no allow rule. Pass a compiled graph
 // (see `mcp serve --policy`) to authorize the actions it declares.
 func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
+	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, nil)
+}
+
+func newLocalMCPRuntimeWithSignerPolicyAndEffects(signer helmcrypto.Signer, policyGraph *prg.Graph, githubEffects *githubEffectsRuntime) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if signer == nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp signer is required")
 	}
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
 	}
-	return newLocalMCPRuntimeWithEvaluator(guardian.NewGuardian(signer, policyGraph, nil))
+	return newLocalMCPRuntimeWithEvaluatorAndEffects(guardian.NewGuardian(signer, policyGraph, nil), githubEffects)
 }
 
 // newLocalMCPRuntimeWithEvaluator builds the local MCP runtime whose governance
@@ -84,15 +95,26 @@ func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph
 // (including reference-pack runtime_actions) instead of a static boot-time
 // graph that never sees reconciler updates.
 func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
+	return newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator, nil)
+}
+
+func newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator mcppkg.PolicyEvaluator, githubEffects *githubEffectsRuntime) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if evaluator == nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp policy evaluator is required")
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
 	catalog.RegisterGovernanceTools()
+	if githubEffects != nil {
+		for _, ref := range githubEffects.toolRefs() {
+			if err := catalog.Register(context.Background(), ref); err != nil {
+				return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("register github effect tool %s: %w", ref.Name, err)
+			}
+		}
+	}
 	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog)
 
-	return catalog, firewall.GovernedExecutor(localMCPToolHandler(evaluator)), nil
+	return catalog, firewall.GovernedExecutor(localMCPToolHandler(evaluator, githubEffects)), nil
 }
 
 func newLocalMCPGateway() (*mcppkg.Gateway, error) {
@@ -160,8 +182,23 @@ func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req g
 	return decision, nil
 }
 
-func localMCPToolHandler(evaluator mcppkg.PolicyEvaluator) mcppkg.ToolHandler {
+func localMCPToolHandler(evaluator mcppkg.PolicyEvaluator, githubEffects *githubEffectsRuntime) mcppkg.ToolHandler {
 	return func(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		if strings.HasPrefix(req.ToolName, "github.") {
+			if githubEffects == nil {
+				resp, err := structuredLocalMCPResponse(map[string]any{
+					"error":      "github effects dispatch is not configured",
+					"denied_by":  "local-mcp-runtime",
+					"next_steps": []string{"set " + githubEffectsTokenEnv + " and restart 'mcp serve'"},
+				})
+				if err != nil {
+					return resp, err
+				}
+				resp.IsError = true
+				return resp, nil
+			}
+			return githubEffects.execute(ctx, req)
+		}
 		return runLocalMCPTool(ctx, evaluator, req)
 	}
 }

@@ -103,6 +103,9 @@ flowchart TD
 | `ingress.enabled` | `false` | Enables Kubernetes ingress. |
 | `helm.metrics.enabled` | `false` | Enables `/metrics` on `service.metricsPort`. |
 | `helm.metrics.serviceMonitor.enabled` | `false` | Emits a Prometheus Operator `ServiceMonitor`. |
+| `telemetry.enabled` | `false` | Renders the OTLP variables into the kernel container. Enable per stand, never in a chart default. |
+| `telemetry.endpoint` | empty | OTLP gRPC target, e.g. `http://telemetry-gateway.telemetry-system.svc.cluster.local:4317`. Required when `telemetry.enabled=true`; keep the `http://` prefix. |
+| `telemetry.serviceName` | empty | `service.name` on exported spans, rendered as `OTEL_SERVICE_NAME` when `telemetry.enabled=true`. Empty renders nothing and the kernel reports `helm-sovereign-os`. No leading or trailing whitespace. |
 
 ## Production Notes
 
@@ -138,6 +141,15 @@ flowchart TD
   evidence.
 - Keep `serviceAccount.automountServiceAccountToken=false` unless CRD mode is
   enabled or another integration explicitly requires Kubernetes API access.
+- Leave `telemetry.enabled=false` in every values file and turn it on per
+  stand. The endpoint and `service.name` are the only things the application
+  declares: the gateway strips the data-class, environment, cluster, and
+  namespace resource keys from whatever a client sends and re-derives them from
+  namespace labels, so attributes set here would be dropped without a trace.
+  `service.name` is not re-derived, so set `telemetry.serviceName` to the name
+  you query the backend by; left empty the stand reports `helm-sovereign-os`
+  and a query for anything else returns empty, which is indistinguishable from
+  no spans arriving.
 - Use `make kind-smoke` to prove install, health, receipt persistence,
   evidence export, replay verification, and signing-key stability across pod
   restart.

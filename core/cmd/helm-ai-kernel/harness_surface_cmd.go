@@ -11,6 +11,9 @@ import (
 )
 
 func runEvidenceScopes(args []string, stdout, stderr io.Writer) int {
+	if answeredSurfaceHelp("Usage: helm-ai-kernel evidence scopes [flags]", args, stdout) {
+		return 0
+	}
 	registry := newLocalSurfaceRegistry()
 	return runHarnessObjectCommand(args, stdout, stderr, "evidence scopes", func(action string, id string, input string) (any, int, error) {
 		switch action {
@@ -38,6 +41,9 @@ func runEvidenceScopes(args []string, stdout, stderr io.Writer) int {
 }
 
 func runPlanTransactions(args []string, stdout, stderr io.Writer) int {
+	if answeredSurfaceHelp("Usage: helm-ai-kernel plan transactions [flags]", args, stdout) {
+		return 0
+	}
 	registry := newLocalSurfaceRegistry()
 	return runHarnessObjectCommand(args, stdout, stderr, "plan transactions", func(action string, id string, input string) (any, int, error) {
 		switch action {
@@ -65,6 +71,9 @@ func runPlanTransactions(args []string, stdout, stderr io.Writer) int {
 }
 
 func runTracesCmd(args []string, stdout, stderr io.Writer) int {
+	if answeredSurfaceHelp("Usage: helm-ai-kernel traces [flags]", args, stdout) {
+		return 0
+	}
 	registry := newLocalSurfaceRegistry()
 	return runHarnessObjectCommand(args, stdout, stderr, "traces", func(action string, id string, input string) (any, int, error) {
 		switch action {
@@ -95,6 +104,9 @@ func runHarnessCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || args[0] != "changes" {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel harness changes <list|get|put|verify|approve> [flags]")
 		return 2
+	}
+	if answeredSurfaceHelp("Usage: helm-ai-kernel harness [flags]", args, stdout) {
+		return 0
 	}
 	registry := newLocalSurfaceRegistry()
 	return runHarnessObjectCommand(args[1:], stdout, stderr, "harness changes", func(action string, id string, input string) (any, int, error) {

@@ -1314,6 +1314,85 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
      */
     com.google.protobuf.ByteString
         getSignatureBytes();
+
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    int getEvidenceBindingsCount();
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    boolean containsEvidenceBindings(
+        java.lang.String key);
+    /**
+     * Use {@link #getEvidenceBindingsMap()} instead.
+     */
+    @java.lang.Deprecated
+    java.util.Map<java.lang.String, java.lang.String>
+    getEvidenceBindings();
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    java.util.Map<java.lang.String, java.lang.String>
+    getEvidenceBindingsMap();
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    /* nullable */
+java.lang.String getEvidenceBindingsOrDefault(
+        java.lang.String key,
+        /* nullable */
+java.lang.String defaultValue);
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    java.lang.String getEvidenceBindingsOrThrow(
+        java.lang.String key);
   }
   /**
    * Protobuf type {@code helm.effects.v1.EffectPermit}
@@ -1360,6 +1439,18 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
       return helm.effects.v1.Effects.internal_static_helm_effects_v1_EffectPermit_descriptor;
     }
 
+    @SuppressWarnings({"rawtypes"})
+    @java.lang.Override
+    protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
+        int number) {
+      switch (number) {
+        case 16:
+          return internalGetEvidenceBindings();
+        default:
+          throw new RuntimeException(
+              "Invalid map field number: " + number);
+      }
+    }
     @java.lang.Override
     protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
@@ -1866,6 +1957,121 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
       }
     }
 
+    public static final int EVIDENCE_BINDINGS_FIELD_NUMBER = 16;
+    private static final class EvidenceBindingsDefaultEntryHolder {
+      static final com.google.protobuf.MapEntry<
+          java.lang.String, java.lang.String> defaultEntry =
+              com.google.protobuf.MapEntry
+              .<java.lang.String, java.lang.String>newDefaultInstance(
+                  helm.effects.v1.Effects.internal_static_helm_effects_v1_EffectPermit_EvidenceBindingsEntry_descriptor,
+                  com.google.protobuf.WireFormat.FieldType.STRING,
+                  "",
+                  com.google.protobuf.WireFormat.FieldType.STRING,
+                  "");
+    }
+    @SuppressWarnings("serial")
+    private com.google.protobuf.MapField<
+        java.lang.String, java.lang.String> evidenceBindings_;
+    private com.google.protobuf.MapField<java.lang.String, java.lang.String>
+    internalGetEvidenceBindings() {
+      if (evidenceBindings_ == null) {
+        return com.google.protobuf.MapField.emptyMapField(
+            EvidenceBindingsDefaultEntryHolder.defaultEntry);
+      }
+      return evidenceBindings_;
+    }
+    public int getEvidenceBindingsCount() {
+      return internalGetEvidenceBindings().getMap().size();
+    }
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    @java.lang.Override
+    public boolean containsEvidenceBindings(
+        java.lang.String key) {
+      if (key == null) { throw new NullPointerException("map key"); }
+      return internalGetEvidenceBindings().getMap().containsKey(key);
+    }
+    /**
+     * Use {@link #getEvidenceBindingsMap()} instead.
+     */
+    @java.lang.Override
+    @java.lang.Deprecated
+    public java.util.Map<java.lang.String, java.lang.String> getEvidenceBindings() {
+      return getEvidenceBindingsMap();
+    }
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    @java.lang.Override
+    public java.util.Map<java.lang.String, java.lang.String> getEvidenceBindingsMap() {
+      return internalGetEvidenceBindings().getMap();
+    }
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    @java.lang.Override
+    public /* nullable */
+java.lang.String getEvidenceBindingsOrDefault(
+        java.lang.String key,
+        /* nullable */
+java.lang.String defaultValue) {
+      if (key == null) { throw new NullPointerException("map key"); }
+      java.util.Map<java.lang.String, java.lang.String> map =
+          internalGetEvidenceBindings().getMap();
+      return map.containsKey(key) ? map.get(key) : defaultValue;
+    }
+    /**
+     * <pre>
+     * evidence_bindings is covered by the effect_permit.v1 signature, so a
+     * transport that drops it produces a permit that cannot verify on the far
+     * side. It was missing here while the Go type carried it, which made v1
+     * signatures in-process only. Field 16 is a backward-compatible add: older
+     * readers ignore it, and newer readers can now reconstruct the exact signed
+     * preimage after a proto hop.
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+     */
+    @java.lang.Override
+    public java.lang.String getEvidenceBindingsOrThrow(
+        java.lang.String key) {
+      if (key == null) { throw new NullPointerException("map key"); }
+      java.util.Map<java.lang.String, java.lang.String> map =
+          internalGetEvidenceBindings().getMap();
+      if (!map.containsKey(key)) {
+        throw new java.lang.IllegalArgumentException();
+      }
+      return map.get(key);
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -1925,6 +2131,12 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signature_)) {
         com.google.protobuf.GeneratedMessage.writeString(output, 15, signature_);
       }
+      com.google.protobuf.GeneratedMessage
+        .serializeStringMapTo(
+          output,
+          internalGetEvidenceBindings(),
+          EvidenceBindingsDefaultEntryHolder.defaultEntry,
+          16);
       getUnknownFields().writeTo(output);
     }
 
@@ -1984,6 +2196,16 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(signature_)) {
         size += com.google.protobuf.GeneratedMessage.computeStringSize(15, signature_);
       }
+      for (java.util.Map.Entry<java.lang.String, java.lang.String> entry
+           : internalGetEvidenceBindings().getMap().entrySet()) {
+        com.google.protobuf.MapEntry<java.lang.String, java.lang.String>
+        evidenceBindings__ = EvidenceBindingsDefaultEntryHolder.defaultEntry.newBuilderForType()
+            .setKey(entry.getKey())
+            .setValue(entry.getValue())
+            .buildPartial();
+        size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(16, evidenceBindings__);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -2037,6 +2259,8 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
           .equals(other.getIssuerId())) return false;
       if (!getSignature()
           .equals(other.getSignature())) return false;
+      if (!internalGetEvidenceBindings().equals(
+          other.internalGetEvidenceBindings())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -2085,6 +2309,10 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
       hash = (53 * hash) + getIssuerId().hashCode();
       hash = (37 * hash) + SIGNATURE_FIELD_NUMBER;
       hash = (53 * hash) + getSignature().hashCode();
+      if (!internalGetEvidenceBindings().getMap().isEmpty()) {
+        hash = (37 * hash) + EVIDENCE_BINDINGS_FIELD_NUMBER;
+        hash = (53 * hash) + internalGetEvidenceBindings().hashCode();
+      }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -2194,6 +2422,28 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
         return helm.effects.v1.Effects.internal_static_helm_effects_v1_EffectPermit_descriptor;
       }
 
+      @SuppressWarnings({"rawtypes"})
+      protected com.google.protobuf.MapFieldReflectionAccessor internalGetMapFieldReflection(
+          int number) {
+        switch (number) {
+          case 16:
+            return internalGetEvidenceBindings();
+          default:
+            throw new RuntimeException(
+                "Invalid map field number: " + number);
+        }
+      }
+      @SuppressWarnings({"rawtypes"})
+      protected com.google.protobuf.MapFieldReflectionAccessor internalGetMutableMapFieldReflection(
+          int number) {
+        switch (number) {
+          case 16:
+            return internalGetMutableEvidenceBindings();
+          default:
+            throw new RuntimeException(
+                "Invalid map field number: " + number);
+        }
+      }
       @java.lang.Override
       protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
@@ -2251,6 +2501,7 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
         }
         issuerId_ = "";
         signature_ = "";
+        internalGetMutableEvidenceBindings().clear();
         return this;
       }
 
@@ -2339,6 +2590,10 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
         if (((from_bitField0_ & 0x00004000) != 0)) {
           result.signature_ = signature_;
         }
+        if (((from_bitField0_ & 0x00008000) != 0)) {
+          result.evidenceBindings_ = internalGetEvidenceBindings();
+          result.evidenceBindings_.makeImmutable();
+        }
         result.bitField0_ |= to_bitField0_;
       }
 
@@ -2419,6 +2674,9 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
           bitField0_ |= 0x00004000;
           onChanged();
         }
+        internalGetMutableEvidenceBindings().mergeFrom(
+            other.internalGetEvidenceBindings());
+        bitField0_ |= 0x00008000;
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
         return this;
@@ -2526,6 +2784,15 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
                 bitField0_ |= 0x00004000;
                 break;
               } // case 122
+              case 130: {
+                com.google.protobuf.MapEntry<java.lang.String, java.lang.String>
+                evidenceBindings__ = input.readMessage(
+                    EvidenceBindingsDefaultEntryHolder.defaultEntry.getParserForType(), extensionRegistry);
+                internalGetMutableEvidenceBindings().getMutableMap().put(
+                    evidenceBindings__.getKey(), evidenceBindings__.getValue());
+                bitField0_ |= 0x00008000;
+                break;
+              } // case 130
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -3707,6 +3974,196 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
         signature_ = value;
         bitField0_ |= 0x00004000;
         onChanged();
+        return this;
+      }
+
+      private com.google.protobuf.MapField<
+          java.lang.String, java.lang.String> evidenceBindings_;
+      private com.google.protobuf.MapField<java.lang.String, java.lang.String>
+          internalGetEvidenceBindings() {
+        if (evidenceBindings_ == null) {
+          return com.google.protobuf.MapField.emptyMapField(
+              EvidenceBindingsDefaultEntryHolder.defaultEntry);
+        }
+        return evidenceBindings_;
+      }
+      private com.google.protobuf.MapField<java.lang.String, java.lang.String>
+          internalGetMutableEvidenceBindings() {
+        if (evidenceBindings_ == null) {
+          evidenceBindings_ = com.google.protobuf.MapField.newMapField(
+              EvidenceBindingsDefaultEntryHolder.defaultEntry);
+        }
+        if (!evidenceBindings_.isMutable()) {
+          evidenceBindings_ = evidenceBindings_.copy();
+        }
+        bitField0_ |= 0x00008000;
+        onChanged();
+        return evidenceBindings_;
+      }
+      public int getEvidenceBindingsCount() {
+        return internalGetEvidenceBindings().getMap().size();
+      }
+      /**
+       * <pre>
+       * evidence_bindings is covered by the effect_permit.v1 signature, so a
+       * transport that drops it produces a permit that cannot verify on the far
+       * side. It was missing here while the Go type carried it, which made v1
+       * signatures in-process only. Field 16 is a backward-compatible add: older
+       * readers ignore it, and newer readers can now reconstruct the exact signed
+       * preimage after a proto hop.
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+       */
+      @java.lang.Override
+      public boolean containsEvidenceBindings(
+          java.lang.String key) {
+        if (key == null) { throw new NullPointerException("map key"); }
+        return internalGetEvidenceBindings().getMap().containsKey(key);
+      }
+      /**
+       * Use {@link #getEvidenceBindingsMap()} instead.
+       */
+      @java.lang.Override
+      @java.lang.Deprecated
+      public java.util.Map<java.lang.String, java.lang.String> getEvidenceBindings() {
+        return getEvidenceBindingsMap();
+      }
+      /**
+       * <pre>
+       * evidence_bindings is covered by the effect_permit.v1 signature, so a
+       * transport that drops it produces a permit that cannot verify on the far
+       * side. It was missing here while the Go type carried it, which made v1
+       * signatures in-process only. Field 16 is a backward-compatible add: older
+       * readers ignore it, and newer readers can now reconstruct the exact signed
+       * preimage after a proto hop.
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+       */
+      @java.lang.Override
+      public java.util.Map<java.lang.String, java.lang.String> getEvidenceBindingsMap() {
+        return internalGetEvidenceBindings().getMap();
+      }
+      /**
+       * <pre>
+       * evidence_bindings is covered by the effect_permit.v1 signature, so a
+       * transport that drops it produces a permit that cannot verify on the far
+       * side. It was missing here while the Go type carried it, which made v1
+       * signatures in-process only. Field 16 is a backward-compatible add: older
+       * readers ignore it, and newer readers can now reconstruct the exact signed
+       * preimage after a proto hop.
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+       */
+      @java.lang.Override
+      public /* nullable */
+java.lang.String getEvidenceBindingsOrDefault(
+          java.lang.String key,
+          /* nullable */
+java.lang.String defaultValue) {
+        if (key == null) { throw new NullPointerException("map key"); }
+        java.util.Map<java.lang.String, java.lang.String> map =
+            internalGetEvidenceBindings().getMap();
+        return map.containsKey(key) ? map.get(key) : defaultValue;
+      }
+      /**
+       * <pre>
+       * evidence_bindings is covered by the effect_permit.v1 signature, so a
+       * transport that drops it produces a permit that cannot verify on the far
+       * side. It was missing here while the Go type carried it, which made v1
+       * signatures in-process only. Field 16 is a backward-compatible add: older
+       * readers ignore it, and newer readers can now reconstruct the exact signed
+       * preimage after a proto hop.
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+       */
+      @java.lang.Override
+      public java.lang.String getEvidenceBindingsOrThrow(
+          java.lang.String key) {
+        if (key == null) { throw new NullPointerException("map key"); }
+        java.util.Map<java.lang.String, java.lang.String> map =
+            internalGetEvidenceBindings().getMap();
+        if (!map.containsKey(key)) {
+          throw new java.lang.IllegalArgumentException();
+        }
+        return map.get(key);
+      }
+      public Builder clearEvidenceBindings() {
+        bitField0_ = (bitField0_ & ~0x00008000);
+        internalGetMutableEvidenceBindings().getMutableMap()
+            .clear();
+        return this;
+      }
+      /**
+       * <pre>
+       * evidence_bindings is covered by the effect_permit.v1 signature, so a
+       * transport that drops it produces a permit that cannot verify on the far
+       * side. It was missing here while the Go type carried it, which made v1
+       * signatures in-process only. Field 16 is a backward-compatible add: older
+       * readers ignore it, and newer readers can now reconstruct the exact signed
+       * preimage after a proto hop.
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+       */
+      public Builder removeEvidenceBindings(
+          java.lang.String key) {
+        if (key == null) { throw new NullPointerException("map key"); }
+        internalGetMutableEvidenceBindings().getMutableMap()
+            .remove(key);
+        return this;
+      }
+      /**
+       * Use alternate mutation accessors instead.
+       */
+      @java.lang.Deprecated
+      public java.util.Map<java.lang.String, java.lang.String>
+          getMutableEvidenceBindings() {
+        bitField0_ |= 0x00008000;
+        return internalGetMutableEvidenceBindings().getMutableMap();
+      }
+      /**
+       * <pre>
+       * evidence_bindings is covered by the effect_permit.v1 signature, so a
+       * transport that drops it produces a permit that cannot verify on the far
+       * side. It was missing here while the Go type carried it, which made v1
+       * signatures in-process only. Field 16 is a backward-compatible add: older
+       * readers ignore it, and newer readers can now reconstruct the exact signed
+       * preimage after a proto hop.
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+       */
+      public Builder putEvidenceBindings(
+          java.lang.String key,
+          java.lang.String value) {
+        if (key == null) { throw new NullPointerException("map key"); }
+        if (value == null) { throw new NullPointerException("map value"); }
+        internalGetMutableEvidenceBindings().getMutableMap()
+            .put(key, value);
+        bitField0_ |= 0x00008000;
+        return this;
+      }
+      /**
+       * <pre>
+       * evidence_bindings is covered by the effect_permit.v1 signature, so a
+       * transport that drops it produces a permit that cannot verify on the far
+       * side. It was missing here while the Go type carried it, which made v1
+       * signatures in-process only. Field 16 is a backward-compatible add: older
+       * readers ignore it, and newer readers can now reconstruct the exact signed
+       * preimage after a proto hop.
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; evidence_bindings = 16;</code>
+       */
+      public Builder putAllEvidenceBindings(
+          java.util.Map<java.lang.String, java.lang.String> values) {
+        internalGetMutableEvidenceBindings().getMutableMap()
+            .putAll(values);
+        bitField0_ |= 0x00008000;
         return this;
       }
 
@@ -7093,6 +7550,11 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_helm_effects_v1_EffectPermit_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_helm_effects_v1_EffectPermit_EvidenceBindingsEntry_descriptor;
+  private static final
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_helm_effects_v1_EffectPermit_EvidenceBindingsEntry_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_helm_effects_v1_GatewayEffectRequest_descriptor;
   private static final
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -7116,7 +7578,7 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
       "o\032\036google/protobuf/duration.proto\"T\n\013Eff" +
       "ectScope\022\026\n\016allowed_action\030\001 \001(\t\022\026\n\016allo" +
       "wed_params\030\002 \003(\t\022\025\n\rdeny_patterns\030\003 \003(\t\"" +
-      "\247\003\n\014EffectPermit\022\021\n\tpermit_id\030\001 \001(\t\022\023\n\013i" +
+      "\260\004\n\014EffectPermit\022\021\n\tpermit_id\030\001 \001(\t\022\023\n\013i" +
       "ntent_hash\030\002 \001(\t\022\024\n\014verdict_hash\030\003 \001(\t\022\021" +
       "\n\tplan_hash\030\004 \001(\t\022\023\n\013policy_hash\030\005 \001(\t\0220" +
       "\n\013effect_type\030\006 \001(\0162\033.helm.effects.v1.Ef" +
@@ -7126,29 +7588,32 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
       "google.protobuf.Timestamp\022\022\n\nsingle_use\030" +
       "\013 \001(\010\022\r\n\005nonce\030\014 \001(\t\022-\n\tissued_at\030\r \001(\0132" +
       "\032.google.protobuf.Timestamp\022\021\n\tissuer_id" +
-      "\030\016 \001(\t\022\021\n\tsignature\030\017 \001(\t\"\233\002\n\024GatewayEff" +
-      "ectRequest\022\022\n\nrequest_id\030\001 \001(\t\0220\n\013effect" +
-      "_type\030\002 \001(\0162\033.helm.effects.v1.EffectType" +
-      "\022\024\n\014connector_id\030\003 \001(\t\022\021\n\ttool_name\030\004 \001(" +
-      "\t\022\016\n\006params\030\005 \001(\014\022\024\n\014resource_ref\030\006 \001(\t\022" +
-      "\021\n\tplan_hash\030\007 \001(\t\022\023\n\013policy_hash\030\010 \001(\t\022" +
-      "\024\n\014verdict_hash\030\t \001(\t\0220\n\014requested_at\030\n " +
-      "\001(\0132\032.google.protobuf.Timestamp\"\341\001\n\024Gate" +
-      "wayEffectOutcome\022\022\n\nrequest_id\030\001 \001(\t\022\021\n\t" +
-      "permit_id\030\002 \001(\t\022\017\n\007success\030\003 \001(\010\022\016\n\006outp" +
-      "ut\030\004 \001(\014\022\r\n\005error\030\005 \001(\t\022\023\n\013output_hash\030\006" +
-      " \001(\t\022+\n\010duration\030\007 \001(\0132\031.google.protobuf" +
-      ".Duration\0220\n\014completed_at\030\010 \001(\0132\032.google" +
-      ".protobuf.Timestamp*\271\001\n\nEffectType\022\033\n\027EF" +
-      "FECT_TYPE_UNSPECIFIED\020\000\022\024\n\020EFFECT_TYPE_R" +
-      "EAD\020\001\022\025\n\021EFFECT_TYPE_WRITE\020\002\022\026\n\022EFFECT_T" +
-      "YPE_DELETE\020\003\022\027\n\023EFFECT_TYPE_EXECUTE\020\004\022\027\n" +
-      "\023EFFECT_TYPE_NETWORK\020\005\022\027\n\023EFFECT_TYPE_FI" +
-      "NANCE\020\0062p\n\025EffectsGatewayService\022W\n\007Exec" +
-      "ute\022%.helm.effects.v1.GatewayEffectReque" +
-      "st\032%.helm.effects.v1.GatewayEffectOutcom" +
-      "eB(Z&helm.mindburn.run/effects/v1;effect" +
-      "sv1b\006proto3"
+      "\030\016 \001(\t\022\021\n\tsignature\030\017 \001(\t\022N\n\021evidence_bi" +
+      "ndings\030\020 \003(\01323.helm.effects.v1.EffectPer" +
+      "mit.EvidenceBindingsEntry\0327\n\025EvidenceBin" +
+      "dingsEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\002" +
+      "8\001\"\233\002\n\024GatewayEffectRequest\022\022\n\nrequest_i" +
+      "d\030\001 \001(\t\0220\n\013effect_type\030\002 \001(\0162\033.helm.effe" +
+      "cts.v1.EffectType\022\024\n\014connector_id\030\003 \001(\t\022" +
+      "\021\n\ttool_name\030\004 \001(\t\022\016\n\006params\030\005 \001(\014\022\024\n\014re" +
+      "source_ref\030\006 \001(\t\022\021\n\tplan_hash\030\007 \001(\t\022\023\n\013p" +
+      "olicy_hash\030\010 \001(\t\022\024\n\014verdict_hash\030\t \001(\t\0220" +
+      "\n\014requested_at\030\n \001(\0132\032.google.protobuf.T" +
+      "imestamp\"\341\001\n\024GatewayEffectOutcome\022\022\n\nreq" +
+      "uest_id\030\001 \001(\t\022\021\n\tpermit_id\030\002 \001(\t\022\017\n\007succ" +
+      "ess\030\003 \001(\010\022\016\n\006output\030\004 \001(\014\022\r\n\005error\030\005 \001(\t" +
+      "\022\023\n\013output_hash\030\006 \001(\t\022+\n\010duration\030\007 \001(\0132" +
+      "\031.google.protobuf.Duration\0220\n\014completed_" +
+      "at\030\010 \001(\0132\032.google.protobuf.Timestamp*\271\001\n" +
+      "\nEffectType\022\033\n\027EFFECT_TYPE_UNSPECIFIED\020\000" +
+      "\022\024\n\020EFFECT_TYPE_READ\020\001\022\025\n\021EFFECT_TYPE_WR" +
+      "ITE\020\002\022\026\n\022EFFECT_TYPE_DELETE\020\003\022\027\n\023EFFECT_" +
+      "TYPE_EXECUTE\020\004\022\027\n\023EFFECT_TYPE_NETWORK\020\005\022" +
+      "\027\n\023EFFECT_TYPE_FINANCE\020\0062p\n\025EffectsGatew" +
+      "ayService\022W\n\007Execute\022%.helm.effects.v1.G" +
+      "atewayEffectRequest\032%.helm.effects.v1.Ga" +
+      "tewayEffectOutcomeB(Z&helm.mindburn.run/" +
+      "effects/v1;effectsv1b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -7167,7 +7632,13 @@ public final class Effects extends com.google.protobuf.GeneratedFile {
     internal_static_helm_effects_v1_EffectPermit_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_effects_v1_EffectPermit_descriptor,
-        new java.lang.String[] { "PermitId", "IntentHash", "VerdictHash", "PlanHash", "PolicyHash", "EffectType", "ConnectorId", "Scope", "ResourceRef", "ExpiresAt", "SingleUse", "Nonce", "IssuedAt", "IssuerId", "Signature", });
+        new java.lang.String[] { "PermitId", "IntentHash", "VerdictHash", "PlanHash", "PolicyHash", "EffectType", "ConnectorId", "Scope", "ResourceRef", "ExpiresAt", "SingleUse", "Nonce", "IssuedAt", "IssuerId", "Signature", "EvidenceBindings", });
+    internal_static_helm_effects_v1_EffectPermit_EvidenceBindingsEntry_descriptor =
+      internal_static_helm_effects_v1_EffectPermit_descriptor.getNestedType(0);
+    internal_static_helm_effects_v1_EffectPermit_EvidenceBindingsEntry_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+        internal_static_helm_effects_v1_EffectPermit_EvidenceBindingsEntry_descriptor,
+        new java.lang.String[] { "Key", "Value", });
     internal_static_helm_effects_v1_GatewayEffectRequest_descriptor =
       getDescriptor().getMessageType(2);
     internal_static_helm_effects_v1_GatewayEffectRequest_fieldAccessorTable = new

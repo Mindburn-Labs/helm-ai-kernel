@@ -150,24 +150,31 @@ func (x *EffectScope) GetDenyPatterns() []string {
 }
 
 type EffectPermit struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PermitId      string                 `protobuf:"bytes,1,opt,name=permit_id,json=permitId,proto3" json:"permit_id,omitempty"`
-	IntentHash    string                 `protobuf:"bytes,2,opt,name=intent_hash,json=intentHash,proto3" json:"intent_hash,omitempty"`
-	VerdictHash   string                 `protobuf:"bytes,3,opt,name=verdict_hash,json=verdictHash,proto3" json:"verdict_hash,omitempty"`
-	PlanHash      string                 `protobuf:"bytes,4,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`
-	PolicyHash    string                 `protobuf:"bytes,5,opt,name=policy_hash,json=policyHash,proto3" json:"policy_hash,omitempty"`
-	EffectType    EffectType             `protobuf:"varint,6,opt,name=effect_type,json=effectType,proto3,enum=helm.effects.v1.EffectType" json:"effect_type,omitempty"`
-	ConnectorId   string                 `protobuf:"bytes,7,opt,name=connector_id,json=connectorId,proto3" json:"connector_id,omitempty"`
-	Scope         *EffectScope           `protobuf:"bytes,8,opt,name=scope,proto3" json:"scope,omitempty"`
-	ResourceRef   string                 `protobuf:"bytes,9,opt,name=resource_ref,json=resourceRef,proto3" json:"resource_ref,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	SingleUse     bool                   `protobuf:"varint,11,opt,name=single_use,json=singleUse,proto3" json:"single_use,omitempty"`
-	Nonce         string                 `protobuf:"bytes,12,opt,name=nonce,proto3" json:"nonce,omitempty"`
-	IssuedAt      *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
-	IssuerId      string                 `protobuf:"bytes,14,opt,name=issuer_id,json=issuerId,proto3" json:"issuer_id,omitempty"`
-	Signature     string                 `protobuf:"bytes,15,opt,name=signature,proto3" json:"signature,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	PermitId    string                 `protobuf:"bytes,1,opt,name=permit_id,json=permitId,proto3" json:"permit_id,omitempty"`
+	IntentHash  string                 `protobuf:"bytes,2,opt,name=intent_hash,json=intentHash,proto3" json:"intent_hash,omitempty"`
+	VerdictHash string                 `protobuf:"bytes,3,opt,name=verdict_hash,json=verdictHash,proto3" json:"verdict_hash,omitempty"`
+	PlanHash    string                 `protobuf:"bytes,4,opt,name=plan_hash,json=planHash,proto3" json:"plan_hash,omitempty"`
+	PolicyHash  string                 `protobuf:"bytes,5,opt,name=policy_hash,json=policyHash,proto3" json:"policy_hash,omitempty"`
+	EffectType  EffectType             `protobuf:"varint,6,opt,name=effect_type,json=effectType,proto3,enum=helm.effects.v1.EffectType" json:"effect_type,omitempty"`
+	ConnectorId string                 `protobuf:"bytes,7,opt,name=connector_id,json=connectorId,proto3" json:"connector_id,omitempty"`
+	Scope       *EffectScope           `protobuf:"bytes,8,opt,name=scope,proto3" json:"scope,omitempty"`
+	ResourceRef string                 `protobuf:"bytes,9,opt,name=resource_ref,json=resourceRef,proto3" json:"resource_ref,omitempty"`
+	ExpiresAt   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	SingleUse   bool                   `protobuf:"varint,11,opt,name=single_use,json=singleUse,proto3" json:"single_use,omitempty"`
+	Nonce       string                 `protobuf:"bytes,12,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	IssuedAt    *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	IssuerId    string                 `protobuf:"bytes,14,opt,name=issuer_id,json=issuerId,proto3" json:"issuer_id,omitempty"`
+	Signature   string                 `protobuf:"bytes,15,opt,name=signature,proto3" json:"signature,omitempty"`
+	// evidence_bindings is covered by the effect_permit.v1 signature, so a
+	// transport that drops it produces a permit that cannot verify on the far
+	// side. It was missing here while the Go type carried it, which made v1
+	// signatures in-process only. Field 16 is a backward-compatible add: older
+	// readers ignore it, and newer readers can now reconstruct the exact signed
+	// preimage after a proto hop.
+	EvidenceBindings map[string]string `protobuf:"bytes,16,rep,name=evidence_bindings,json=evidenceBindings,proto3" json:"evidence_bindings,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *EffectPermit) Reset() {
@@ -303,6 +310,13 @@ func (x *EffectPermit) GetSignature() string {
 		return x.Signature
 	}
 	return ""
+}
+
+func (x *EffectPermit) GetEvidenceBindings() map[string]string {
+	if x != nil {
+		return x.EvidenceBindings
+	}
+	return nil
 }
 
 type GatewayEffectRequest struct {
@@ -529,7 +543,7 @@ const file_helm_effects_v1_effects_proto_rawDesc = "" +
 	"\vEffectScope\x12%\n" +
 	"\x0eallowed_action\x18\x01 \x01(\tR\rallowedAction\x12%\n" +
 	"\x0eallowed_params\x18\x02 \x03(\tR\rallowedParams\x12#\n" +
-	"\rdeny_patterns\x18\x03 \x03(\tR\fdenyPatterns\"\xc9\x04\n" +
+	"\rdeny_patterns\x18\x03 \x03(\tR\fdenyPatterns\"\xf0\x05\n" +
 	"\fEffectPermit\x12\x1b\n" +
 	"\tpermit_id\x18\x01 \x01(\tR\bpermitId\x12\x1f\n" +
 	"\vintent_hash\x18\x02 \x01(\tR\n" +
@@ -551,7 +565,11 @@ const file_helm_effects_v1_effects_proto_rawDesc = "" +
 	"\x05nonce\x18\f \x01(\tR\x05nonce\x127\n" +
 	"\tissued_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\bissuedAt\x12\x1b\n" +
 	"\tissuer_id\x18\x0e \x01(\tR\bissuerId\x12\x1c\n" +
-	"\tsignature\x18\x0f \x01(\tR\tsignature\"\x8e\x03\n" +
+	"\tsignature\x18\x0f \x01(\tR\tsignature\x12`\n" +
+	"\x11evidence_bindings\x18\x10 \x03(\v23.helm.effects.v1.EffectPermit.EvidenceBindingsEntryR\x10evidenceBindings\x1aC\n" +
+	"\x15EvidenceBindingsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x03\n" +
 	"\x14GatewayEffectRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12<\n" +
@@ -603,32 +621,34 @@ func file_helm_effects_v1_effects_proto_rawDescGZIP() []byte {
 }
 
 var file_helm_effects_v1_effects_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_helm_effects_v1_effects_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_helm_effects_v1_effects_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_helm_effects_v1_effects_proto_goTypes = []any{
 	(EffectType)(0),               // 0: helm.effects.v1.EffectType
 	(*EffectScope)(nil),           // 1: helm.effects.v1.EffectScope
 	(*EffectPermit)(nil),          // 2: helm.effects.v1.EffectPermit
 	(*GatewayEffectRequest)(nil),  // 3: helm.effects.v1.GatewayEffectRequest
 	(*GatewayEffectOutcome)(nil),  // 4: helm.effects.v1.GatewayEffectOutcome
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 6: google.protobuf.Duration
+	nil,                           // 5: helm.effects.v1.EffectPermit.EvidenceBindingsEntry
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 7: google.protobuf.Duration
 }
 var file_helm_effects_v1_effects_proto_depIdxs = []int32{
-	0, // 0: helm.effects.v1.EffectPermit.effect_type:type_name -> helm.effects.v1.EffectType
-	1, // 1: helm.effects.v1.EffectPermit.scope:type_name -> helm.effects.v1.EffectScope
-	5, // 2: helm.effects.v1.EffectPermit.expires_at:type_name -> google.protobuf.Timestamp
-	5, // 3: helm.effects.v1.EffectPermit.issued_at:type_name -> google.protobuf.Timestamp
-	0, // 4: helm.effects.v1.GatewayEffectRequest.effect_type:type_name -> helm.effects.v1.EffectType
-	5, // 5: helm.effects.v1.GatewayEffectRequest.requested_at:type_name -> google.protobuf.Timestamp
-	6, // 6: helm.effects.v1.GatewayEffectOutcome.duration:type_name -> google.protobuf.Duration
-	5, // 7: helm.effects.v1.GatewayEffectOutcome.completed_at:type_name -> google.protobuf.Timestamp
-	3, // 8: helm.effects.v1.EffectsGatewayService.Execute:input_type -> helm.effects.v1.GatewayEffectRequest
-	4, // 9: helm.effects.v1.EffectsGatewayService.Execute:output_type -> helm.effects.v1.GatewayEffectOutcome
-	9, // [9:10] is the sub-list for method output_type
-	8, // [8:9] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	0,  // 0: helm.effects.v1.EffectPermit.effect_type:type_name -> helm.effects.v1.EffectType
+	1,  // 1: helm.effects.v1.EffectPermit.scope:type_name -> helm.effects.v1.EffectScope
+	6,  // 2: helm.effects.v1.EffectPermit.expires_at:type_name -> google.protobuf.Timestamp
+	6,  // 3: helm.effects.v1.EffectPermit.issued_at:type_name -> google.protobuf.Timestamp
+	5,  // 4: helm.effects.v1.EffectPermit.evidence_bindings:type_name -> helm.effects.v1.EffectPermit.EvidenceBindingsEntry
+	0,  // 5: helm.effects.v1.GatewayEffectRequest.effect_type:type_name -> helm.effects.v1.EffectType
+	6,  // 6: helm.effects.v1.GatewayEffectRequest.requested_at:type_name -> google.protobuf.Timestamp
+	7,  // 7: helm.effects.v1.GatewayEffectOutcome.duration:type_name -> google.protobuf.Duration
+	6,  // 8: helm.effects.v1.GatewayEffectOutcome.completed_at:type_name -> google.protobuf.Timestamp
+	3,  // 9: helm.effects.v1.EffectsGatewayService.Execute:input_type -> helm.effects.v1.GatewayEffectRequest
+	4,  // 10: helm.effects.v1.EffectsGatewayService.Execute:output_type -> helm.effects.v1.GatewayEffectOutcome
+	10, // [10:11] is the sub-list for method output_type
+	9,  // [9:10] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_helm_effects_v1_effects_proto_init() }
@@ -642,7 +662,7 @@ func file_helm_effects_v1_effects_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helm_effects_v1_effects_proto_rawDesc), len(file_helm_effects_v1_effects_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

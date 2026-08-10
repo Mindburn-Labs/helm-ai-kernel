@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	helmapi "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/extauthz"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -279,7 +280,7 @@ func TestExtAuthzAuthorizeRouteBindsScopeAndEnforcesFence(t *testing.T) {
 	})
 }
 
-func TestExtAuthzAuthorizeRouteExtractsTraceparent(t *testing.T) {
+func TestExtAuthzAuthorizeRouteKeepsGuardianUnderServerSpan(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	previous := otelapi.GetTracerProvider()
@@ -299,13 +300,14 @@ func TestExtAuthzAuthorizeRouteExtractsTraceparent(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	registerExtAuthzRoutes(mux, svc)
+	h := buildAPIHandler(mux, helmapi.NewGlobalRateLimiter(100, 100))
 
 	body := mustJSONExtAuthzRoute(t, extAuthzRouteFixture("req-trace", "tenant-a", "epoch-1"))
 	req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer route-secret")
 	req.Header.Set("traceparent", "00-0102030405060708090a0b0c0d0e0f10-0000000000000001-01")
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -314,12 +316,32 @@ func TestExtAuthzAuthorizeRouteExtractsTraceparent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, span := range exporter.GetSpans() {
-		if span.SpanContext.TraceID() == wantTraceID {
-			return
+	var server, guardianSpan *tracetest.SpanStub
+	spans := exporter.GetSpans()
+	for i := range spans {
+		span := &spans[i]
+		switch span.Name {
+		case "POST " + extauthzAuthorizePath:
+			server = span
+		case "Guardian.EvaluateDecision":
+			guardianSpan = span
 		}
 	}
-	t.Fatalf("no Kernel span carried incoming trace id; spans=%+v", exporter.GetSpans())
+	if server == nil || guardianSpan == nil {
+		t.Fatalf("missing server or Guardian span; spans=%+v", spans)
+	}
+	if server.SpanContext.TraceID() == wantTraceID {
+		t.Fatalf("ext-authz server span adopted untrusted trace_id %s", wantTraceID)
+	}
+	if len(server.Links) != 1 || server.Links[0].SpanContext.TraceID() != wantTraceID {
+		t.Errorf("server span links = %+v, want one link to inbound trace %s", server.Links, wantTraceID)
+	}
+	if guardianSpan.SpanContext.TraceID() != server.SpanContext.TraceID() ||
+		guardianSpan.Parent.SpanID() != server.SpanContext.SpanID() {
+		t.Errorf("Guardian span parent = %s/%s, want server span %s/%s",
+			guardianSpan.Parent.TraceID(), guardianSpan.Parent.SpanID(),
+			server.SpanContext.TraceID(), server.SpanContext.SpanID())
+	}
 }
 
 func extAuthzSnapshotService(t *testing.T, signer *helmcrypto.Ed25519Signer, policyHash string, policyEpoch uint64) *Services {

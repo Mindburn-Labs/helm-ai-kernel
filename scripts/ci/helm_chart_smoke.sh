@@ -129,6 +129,25 @@ assert_contains "$default_rendered" "authority data volume is not writable by th
 assert_not_contains "$default_rendered" "subPath: root.key"
 assert_not_contains "$default_rendered" "mountPath: /data/root.key"
 
+# Upgrade-with-existing-data contract: a durable key written by an earlier
+# release can be owned by a different uid, and chmod by a non-owner is EPERM
+# even when the file is readable. The init must verify content identity with
+# the Secret and treat mode-tightening on a pre-existing key as best-effort —
+# an unconditional chmod stranded every QA upgrade to chart 0.8.3 while fresh
+# installs (CI) passed. An unreadable existing key must still fail closed.
+assert_contains "$default_rendered" 'chmod 0600 "$root_key" 2>/dev/null || true'
+assert_contains "$default_rendered" "durable authority root key exists but is not readable"
+authority_init_script="$RENDER_DIR/rendered-authority-init-script.txt"
+awk '/prepare-authority-state/{capture=1} capture{print} capture && /volumeMounts:/{exit}' "$default_rendered" >"$authority_init_script"
+if [ "$(/usr/bin/grep -c 'chmod 0600 "$root_key"' "$authority_init_script" 2>/dev/null || grep -c 'chmod 0600 "$root_key"' "$authority_init_script")" != "1" ]; then
+    echo "::error::expected exactly one existing-key chmod in the authority init, and it must be best-effort"
+    exit 1
+fi
+if ! awk '/cmp -s "\$source_key" "\$root_key"/{seen_cmp=1} /chmod 0600 "\$root_key" 2>\/dev\/null/{if (!seen_cmp) exit 1}' "$authority_init_script"; then
+    echo "::error::the existing-key chmod must come after content verification against the Secret"
+    exit 1
+fi
+
 runtime_init_fail_log="$RENDER_DIR/runtime-init-unpinned-image.log"
 if helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \

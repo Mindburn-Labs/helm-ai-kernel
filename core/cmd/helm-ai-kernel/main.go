@@ -121,8 +121,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel run maintenance [--once|--schedule]")
 		return 2
-	case "version", "--version", "-v":
+	case "version":
 		return runVersionCommand(args[2:], stdout, stderr)
+	case "--version", "-v":
+		return runVersionFlag(args[2:], stdout, stderr)
 	case "--help", "-h":
 		printFrontDoor(stdout)
 		return 0
@@ -140,8 +142,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			printUsage(stderr)
 			return 2
 		}
-		_, _ = fmt.Fprintf(stderr, "Unknown command: %s\n", args[1])
-		printUsage(stderr)
+		printUnknownCommand(stderr, args[1])
 		return 2
 	}
 }
@@ -554,14 +555,8 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	rateLimiter := buildRuntimeRateLimiter()
 	server := &http.Server{
-		Addr: apiAddr,
-		Handler: helmauth.SecurityHeaders(
-			helmauth.CORSMiddleware(nil)(
-				helmauth.RequestIDMiddleware(
-					rateLimiter.Middleware(mux),
-				),
-			),
-		),
+		Addr:              apiAddr,
+		Handler:           buildAPIHandler(mux, rateLimiter),
 		ReadHeaderTimeout: 15 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -650,6 +645,19 @@ func runServerWithOptions(opts serverOptions) error {
 				log.Printf("[helm] metrics server shutdown error: %v", err)
 			}
 		}
+		// Flush the OTLP batchers last, after the servers stopped accepting.
+		// The span processor batches on a 5s timer (observability.DefaultConfig
+		// BatchTimeout), so without this the final batch dies with the process —
+		// and in a short-lived pod that batch is most of the trace.
+		//
+		// flushObservability deliberately does NOT take shutdownCtx: see its doc
+		// comment. Reusing the drain's budget makes the flush a no-op in exactly
+		// the case it exists for.
+		if services != nil && services.Observability != nil {
+			if err := flushObservability(services.Observability); err != nil {
+				log.Printf("[helm] observability shutdown error: %v", err)
+			}
+		}
 	}
 	if err := writeServerReady(opts, bindAddr, port); err != nil {
 		shutdown()
@@ -725,6 +733,105 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+// buildAPIHandler assembles the daemon's request pipeline.
+//
+// Layer order is load-bearing and pinned by api_handler_chain_test.go:
+//
+//	SecurityHeaders -> CORS -> RequestID -> tracing -> rateLimiter -> mux
+//
+// The tracing wrapper (HELM-333/HELM-495) sits INSIDE RequestIDMiddleware and
+// OUTSIDE the rate limiter. Both halves matter:
+//
+//   - Inside RequestID because that middleware calls next.ServeHTTP with
+//     r.WithContext(ctx). http.ServeMux stamps the matched pattern onto the
+//     *http.Request it is handed, in place — so whichever request object
+//     otelhttp passes downstream is the one that comes back carrying Pattern.
+//     From outside RequestID, otelhttp holds the pre-clone request and never
+//     sees the pattern, which makes per-route naming structurally impossible.
+//   - Outside the rate limiter so a rejected request is still a span: a 429 is
+//     exactly the case worth seeing in a trace.
+//
+// The accepted cost of moving in is the CORS preflight, which CORSMiddleware
+// answers before the span starts and which therefore is no longer traced.
+//
+// Nothing here stamps http.route, and nothing here could. All three
+// route-bearing surfaces are supplied inside tracing.WrapEdgeHandler, but NOT
+// all three by the same mechanism — the split is what pins them to that
+// function rather than to this chain:
+//
+//   - The span NAME needs an otelhttp OPTION (WithSpanNameFormatter). otelhttp
+//     re-runs its formatter after the inner handler returns (handler.go:180-181)
+//     and overwrites whatever SetName a middleware performed, so no middleware,
+//     here or anywhere, can win that race.
+//   - The span ATTRIBUTE needs a MIDDLEWARE (tracing's own withRouteAttribute).
+//     There is no option for it: otelhttp freezes the request attributes at span
+//     start, before routing, and never revisits them. The middleware has to sit
+//     INSIDE otelhttp.NewHandler, because from outside the span has already
+//     ended and the write is dropped — which is precisely why it lives in the
+//     wrapper and cannot be a layer of this chain.
+//   - The metric ATTRIBUTE has TWO post-routing hooks — otelhttp.Labeler and
+//     WithMetricAttributesFn — and the wrapper uses the option, because it
+//     belongs to the wrapper rather than to any handler and so covers edges we
+//     do not own. See tracing.WrapEdgeHandler for why, and use the Labeler for
+//     an attribute only one handler knows.
+//
+// The one requirement this chain owes that machinery is that every layer below
+// the wrapper pass the request through unchanged; the rate limiter does.
+//
+// Everything downstream runs with a span in r.Context(), which is what lets
+// *Context slog call sites stamp trace_id/span_id (see tracing.NewSlogHandler).
+//
+// This is the daemon's only traced entry point: api.NewServer wraps its own
+// edge, but the daemon does not use that constructor (it registers its routes
+// on its own mux). The tracer is resolved per request from the global
+// TracerProvider, so wrapping before observability.New has configured OTel is
+// harmless as long as configuration lands before traffic does.
+//
+// The health (:HELM_HEALTH_PORT) and metrics (:HELM_METRICS_PORT) servers are
+// deliberately NOT wrapped: they serve liveness probes and Prometheus scrapes
+// on separate ports at a fixed cadence (~1200 probes per idle hour), which
+// would bury real request traces in root spans that carry no inbound
+// traceparent and no governance decision.
+func buildAPIHandler(mux http.Handler, rateLimiter *helmapi.GlobalRateLimiter) http.Handler {
+	return helmauth.SecurityHeaders(
+		helmauth.CORSMiddleware(nil)(
+			helmauth.RequestIDMiddleware(
+				tracing.WrapEdgeHandler(
+					rateLimiter.Middleware(mux),
+					"helm.api",
+				),
+			),
+		),
+	)
+}
+
+// observabilityFlushTimeout is the budget the OTLP flush gets to itself. It is
+// spent only after the HTTP servers have drained, so the pod's
+// terminationGracePeriodSeconds must cover the drain budget plus this.
+const observabilityFlushTimeout = 5 * time.Second
+
+// observabilityFlusher is the flush seam, narrow enough to fake in a test.
+type observabilityFlusher interface {
+	Shutdown(context.Context) error
+}
+
+// flushObservability drains the OTLP batchers on a budget created here, not on
+// the one the server drain was given.
+//
+// The drain and the flush cannot share a deadline. /api/v1/receipts/tail
+// (registered in receipt_routes.go) is an unbounded SSE loop whose only exit is
+// <-r.Context().Done(), and http.Server.Shutdown does not cancel in-flight
+// request contexts — it waits. One Console tailing receipts therefore burns the
+// whole drain budget, and sdktrace.TracerProvider.Shutdown then returns
+// ctx.Err() BEFORE it stops the span processor (otel/sdk trace/provider.go), so
+// nothing is exported: zero spans in precisely the shutdown the hook was added
+// to capture.
+func flushObservability(flusher observabilityFlusher) error {
+	flushCtx, cancel := context.WithTimeout(context.Background(), observabilityFlushTimeout)
+	defer cancel()
+	return flusher.Shutdown(flushCtx)
 }
 
 func buildRuntimeRateLimiter() *helmapi.GlobalRateLimiter {

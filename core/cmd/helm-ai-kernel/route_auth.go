@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -108,7 +108,9 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 			ok, err := principalBindingStore.Exists(r.Context(), requestedTenantID, requestedPrincipalID)
 			if err != nil {
 				// Fail closed: a store error must not be treated as a match.
-				log.Printf("[helm] principal binding lookup failed, denying tenant-scoped request: %v", err)
+				// Logged with the request context so the denial carries
+				// trace_id/span_id and can be joined to its server span.
+				slog.ErrorContext(r.Context(), "principal binding lookup failed, denying tenant-scoped request", "error", err)
 			} else {
 				registered = ok
 			}

@@ -133,19 +133,34 @@ def refresh_public_docs_api_contract() -> bool:
     two diverge would surface there rather than pass silently.
     """
     manifest_path = ROOT / "docs" / "public-docs.manifest.json"
-    if not manifest_path.exists():
-        return False
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not manifest_path.is_file():
+        raise SystemExit(f"required public docs manifest is missing or not a file: {drift.rel(manifest_path)}")
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            f"required public docs manifest is unreadable or invalid: {drift.rel(manifest_path)}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"required public docs manifest must contain a JSON object: {drift.rel(manifest_path)}")
     contract = payload.get("api_contract")
-    if not isinstance(contract, dict) or not contract.get("source_path"):
-        return False
-    source_path = ROOT / contract["source_path"]
-    if not source_path.exists():
-        return False
+    if not isinstance(contract, dict):
+        raise SystemExit(
+            f"required public docs manifest api_contract must be a JSON object: {drift.rel(manifest_path)}"
+        )
+    expected_source = "api/openapi/helm.openapi.yaml"
+    if contract.get("source_path") != expected_source:
+        raise SystemExit(
+            f"required public docs manifest api_contract.source_path must be {expected_source!r}: "
+            f"{drift.rel(manifest_path)}"
+        )
+    source_path = ROOT / expected_source
+    if not source_path.is_file():
+        raise SystemExit(f"required public docs API contract is missing or not a file: {drift.rel(source_path)}")
 
     digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
     blob = subprocess.run(
-        ["git", "hash-object", contract["source_path"]],
+        ["git", "hash-object", expected_source],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -172,10 +187,14 @@ def refresh_boundary_manifest() -> bool:
     """
     generator = ROOT / "tools" / "boundary" / "generate-manifest.sh"
     manifest = ROOT / "tools" / "boundary" / "protected.manifest"
-    if not generator.exists() or not manifest.exists():
-        return False
+    if not generator.is_file():
+        raise SystemExit(f"required boundary manifest generator is missing or not a file: {drift.rel(generator)}")
+    if not manifest.is_file():
+        raise SystemExit(f"required boundary manifest is missing or not a file: {drift.rel(manifest)}")
     before = manifest.read_bytes()
     run([str(generator)])
+    if not manifest.is_file():
+        raise SystemExit(f"boundary manifest generator did not produce a file: {drift.rel(manifest)}")
     return manifest.read_bytes() != before
 
 

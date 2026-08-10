@@ -214,7 +214,12 @@ func newServerLogHandler(w io.Writer) (slog.Handler, error) {
 	var handler slog.Handler
 	switch format := strings.ToLower(strings.TrimSpace(os.Getenv("HELM_LOG_FORMAT"))); format {
 	case "", "json":
-		handler = slog.NewJSONHandler(w, nil)
+		handler = slog.NewJSONHandler(w, &slog.HandlerOptions{ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+			if len(groups) == 0 && attr.Key == slog.TimeKey && attr.Value.Kind() == slog.KindTime {
+				return slog.String("timestamp", attr.Value.Time().UTC().Format("2006-01-02T15:04:05.000Z07:00"))
+			}
+			return attr
+		}})
 	case "text":
 		handler = slog.NewTextHandler(w, nil)
 	default:

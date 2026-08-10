@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
@@ -222,6 +223,14 @@ func TestServerLogHandler(t *testing.T) {
 		if err := json.Unmarshal(output.Bytes(), &record); err != nil {
 			t.Fatalf("decode JSON log %q: %v", output.String(), err)
 		}
+		timestamp, ok := record["timestamp"].(string)
+		if !ok {
+			t.Fatalf("JSON log has no string timestamp: %v", record)
+		}
+		if _, err := time.Parse("2006-01-02T15:04:05.999Z07:00", timestamp); err != nil {
+			t.Fatalf("timestamp %q does not match the collector contract: %v", timestamp, err)
+		}
+		assert.NotContains(t, record, "time")
 		assert.Equal(t, "INFO", record["level"])
 		assert.Equal(t, "request served", record["msg"])
 		assert.Equal(t, float64(http.StatusOK), record["status"])

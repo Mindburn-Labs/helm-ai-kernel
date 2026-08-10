@@ -29,10 +29,14 @@
 package receiptverify
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"strconv"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -167,8 +171,172 @@ var ErrNoTrustedKey = errors.New("no trusted key for receipt; supply one with a 
 // values retain receipts issued before these routing fields were populated;
 // once declared, each value must name the profile this verifier actually uses.
 func ClassicalEd25519MetadataCompatible(profile, algorithm string) bool {
-	return (profile == "" || profile == "classical") &&
-		(algorithm == "" || algorithm == "ed25519")
+	return (profile == "" && algorithm == "") ||
+		(profile == "classical" && algorithm == "ed25519")
+}
+
+// ParseReceiptDocument parses one raw receipt object without erasing wire
+// distinctions that affect signature verification. In particular, it rejects
+// duplicate object members, trailing JSON values, non-integer number spellings,
+// and null values that encoding/json would otherwise coerce to Go zero values.
+//
+// A missing signature_version is the only route to the retained legacy
+// preimage. Once present, it must be the non-empty string "receipt.v5", whose
+// 13 signed members must all be present with their exact wire types.
+//
+// The decoded document is returned with semantic errors when possible so an
+// EvidencePack inventory can count a signed-but-invalid receipt as invalid
+// instead of silently dropping it.
+func ParseReceiptDocument(raw []byte) (map[string]any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var document map[string]any
+	if err := decoder.Decode(&document); err != nil {
+		return nil, fmt.Errorf("receipt must be a JSON object: %w", err)
+	}
+	if document == nil {
+		return nil, errors.New("receipt must be a JSON object")
+	}
+	if err := rejectDuplicateOrTrailingJSON(raw); err != nil {
+		return document, err
+	}
+
+	versionValue, versionPresent := document["signature_version"]
+	if versionPresent {
+		version, ok := versionValue.(string)
+		if !ok {
+			return document, fmt.Errorf("signed member %q must be a string", "signature_version")
+		}
+		if version == "" {
+			return document, errors.New("signed member \"signature_version\" must not be empty")
+		}
+		if version != contracts.ReceiptSignatureV5 {
+			return document, fmt.Errorf("unsupported receipt signature version %q", version)
+		}
+		for _, field := range []string{
+			"signature_version", "receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash",
+			"args_hash", "verdict", "reason_code", "policy_hash", "session_id",
+		} {
+			value, exists := document[field]
+			if !exists {
+				return document, fmt.Errorf("receipt.v5 missing signed member %q", field)
+			}
+			if _, ok := value.(string); !ok {
+				return document, fmt.Errorf("receipt.v5 signed member %q must be a string", field)
+			}
+		}
+		lamport, exists := document["lamport_clock"]
+		if !exists {
+			return document, fmt.Errorf("receipt.v5 missing signed member %q", "lamport_clock")
+		}
+		number, ok := lamport.(json.Number)
+		if !ok {
+			return document, fmt.Errorf("receipt.v5 signed member %q must be an unsigned integer", "lamport_clock")
+		}
+		if _, err := strconv.ParseUint(number.String(), 10, 64); err != nil || canonicalize.CheckInteroperableNumbers(number) != nil {
+			return document, fmt.Errorf("receipt.v5 signed member %q must be an interoperable unsigned integer", "lamport_clock")
+		}
+	}
+
+	// Managed-agent receipt_version contracts have their own signature metadata
+	// schemas. The pair below governs canonical HELM receipts only.
+	if !isManagedAgentReceipt(document) {
+		profile, err := optionalStringMember(document, "signature_profile")
+		if err != nil {
+			return document, err
+		}
+		algorithm, err := optionalStringMember(document, "signature_algorithm")
+		if err != nil {
+			return document, err
+		}
+		if !ClassicalEd25519MetadataCompatible(profile, algorithm) {
+			return document, fmt.Errorf(
+				"signature metadata must be either both blank or exactly signature_profile %q with signature_algorithm %q",
+				"classical", "ed25519")
+		}
+	}
+	return document, nil
+}
+
+func optionalStringMember(document map[string]any, field string) (string, error) {
+	value, exists := document[field]
+	if !exists {
+		return "", nil
+	}
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("member %q must be a string when present", field)
+	}
+	return text, nil
+}
+
+func isManagedAgentReceipt(document map[string]any) bool {
+	version, _ := document["receipt_version"].(string)
+	return version == "managed_agent_live_scenario_receipt.v1" ||
+		version == "managed_agent_execution_receipt.v1"
+}
+
+func rejectDuplicateOrTrailingJSON(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := scanJSONValue(decoder, "$"); err != nil {
+		return err
+	}
+	if token, err := decoder.Token(); err == nil {
+		return fmt.Errorf("receipt has a trailing JSON value beginning with %v", token)
+	} else if !errors.Is(err, io.EOF) {
+		return fmt.Errorf("receipt has invalid trailing JSON: %w", err)
+	}
+	return nil
+}
+
+func scanJSONValue(decoder *json.Decoder, path string) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return fmt.Errorf("invalid receipt JSON at %s: %w", path, err)
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		seen := map[string]struct{}{}
+		for decoder.More() {
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return fmt.Errorf("invalid receipt object at %s: %w", path, err)
+			}
+			key, ok := keyToken.(string)
+			if !ok {
+				return fmt.Errorf("invalid receipt object member at %s", path)
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return fmt.Errorf("duplicate object member %q at %s", key, path)
+			}
+			seen[key] = struct{}{}
+			if err := scanJSONValue(decoder, path+"."+key); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil || end != json.Delim('}') {
+			return fmt.Errorf("invalid receipt object at %s", path)
+		}
+	case '[':
+		for index := 0; decoder.More(); index++ {
+			if err := scanJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index)); err != nil {
+				return err
+			}
+		}
+		end, err := decoder.Token()
+		if err != nil || end != json.Delim(']') {
+			return fmt.Errorf("invalid receipt array at %s", path)
+		}
+	default:
+		return fmt.Errorf("unexpected closing delimiter %q at %s", delim, path)
+	}
+	return nil
 }
 
 // receiptV5SigningEnvelope mirrors crypto.receiptV5SigningEnvelope field for

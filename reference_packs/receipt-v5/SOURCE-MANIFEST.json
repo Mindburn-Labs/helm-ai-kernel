@@ -29,6 +29,6 @@
       "sha256": "3d071b98ff23222864c09c9bb63227a31044207f6bdb68748da8927b3ec17f34"
     }
   ],
-  "$comment": "quantum_posture: classical_ed25519_only. The canonical JSON files are byte-exact signed fixtures; this manifest carries their posture note without changing signed bytes.",
-  "purpose": "Immutable receipt.v5 payload inventory; vectors.json remains the hash-pinning authority."
+  "$comment": "quantum_posture: classical_ed25519_only. Listed hashes cover canonical JSON text after removing the repository file's single trailing LF; Ed25519 covers each derived 13-member signing payload, not every receipt-file byte.",
+  "purpose": "Receipt.v5 canonical-text inventory; vectors.json remains the hash-pinning authority."
 }

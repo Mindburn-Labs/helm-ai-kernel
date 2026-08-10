@@ -3,6 +3,8 @@ title: Signed Receipts for AI Agent Actions
 last_reviewed: 2026-08-10
 ---
 
+<!-- quantum_posture: classical_ed25519_only; this guide claims no hybrid or post-quantum protection. -->
+
 # Signed Receipts for AI Agent Actions
 
 Logs answer "what did we write down"; receipts answer "what actually happened,

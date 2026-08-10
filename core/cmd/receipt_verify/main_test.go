@@ -59,6 +59,15 @@ func wrapReceiptShapes(t *testing.T, receipt json.RawMessage) []rawReceiptShape 
 	}
 }
 
+func replaceReceiptJSON(t *testing.T, raw []byte, old, replacement string) []byte {
+	t.Helper()
+	updated := strings.Replace(string(raw), old, replacement, 1)
+	if updated == string(raw) {
+		t.Fatalf("receipt fixture does not contain %q", old)
+	}
+	return []byte(updated)
+}
+
 func TestParseReceiptsNormalizesAllRawShapes(t *testing.T) {
 	receipt, err := os.ReadFile(emptyGovernanceFixture)
 	if err != nil {
@@ -131,6 +140,38 @@ func TestParseReceiptsRejectsWrongSignedMemberTypes(t *testing.T) {
 			_, err = parseReceipts(tampered)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("wrong %s type error = %v, want %q", tc.field, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseReceiptsRejectsAmbiguousV5WireFormsInAllRawShapes(t *testing.T) {
+	raw, err := os.ReadFile(emptyGovernanceFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name        string
+		old         string
+		replacement string
+		want        string
+	}{
+		{name: "null_string", old: `"policy_hash":""`, replacement: `"policy_hash":null`, want: "policy_hash"},
+		{name: "null_lamport_signed_zero", old: `"lamport_clock":9007199254740991`, replacement: `"lamport_clock":null`, want: "lamport_clock"},
+		{name: "duplicate_signed_member", old: `"policy_hash":""`, replacement: `"policy_hash":"","policy_hash":""`, want: "duplicate object member"},
+		{name: "present_null_signature_version", old: `"signature_version":"receipt.v5"`, replacement: `"signature_version":null`, want: "signature_version"},
+		{name: "present_empty_signature_version", old: `"signature_version":"receipt.v5"`, replacement: `"signature_version":""`, want: "must not be empty"},
+		{name: "unknown_signature_version", old: `"signature_version":"receipt.v5"`, replacement: `"signature_version":"receipt.v9"`, want: "unsupported receipt signature version"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tampered := replaceReceiptJSON(t, raw, tc.old, tc.replacement)
+			for _, shape := range wrapReceiptShapes(t, tampered) {
+				t.Run(shape.name, func(t *testing.T) {
+					_, err := parseReceipts(shape.raw)
+					if err == nil || !strings.Contains(err.Error(), tc.want) {
+						t.Fatalf("parse error = %v, want %q", err, tc.want)
+					}
+				})
 			}
 		})
 	}

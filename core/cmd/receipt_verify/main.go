@@ -202,7 +202,7 @@ func parseReceipts(raw []byte) (receiptverify.Bundle, error) {
 		KeyID:        input.keyID,
 	}
 	for i, rawReceipt := range input.receipts {
-		if err := validateRawReceiptV5(rawReceipt); err != nil {
+		if _, err := receiptverify.ParseReceiptDocument(rawReceipt); err != nil {
 			return receiptverify.Bundle{}, fmt.Errorf("receipt[%d]: %w", i, err)
 		}
 		var receipt *contracts.Receipt
@@ -259,46 +259,6 @@ func normalizeReceiptInput(raw []byte) (rawReceiptInput, error) {
 		return rawReceiptInput{}, fmt.Errorf("input must be a receipt object, an array of receipts, or an object with a \"receipts\" array")
 	}
 	return input, nil
-}
-
-func validateRawReceiptV5(raw json.RawMessage) error {
-	var document map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return fmt.Errorf("receipt must be a JSON object: %w", err)
-	}
-	versionValue, ok := document["signature_version"]
-	if !ok {
-		return nil // retained unversioned receipt compatibility
-	}
-	var version string
-	if err := json.Unmarshal(versionValue, &version); err != nil {
-		return fmt.Errorf("signed member %q must be a string", "signature_version")
-	}
-	if version != contracts.ReceiptSignatureV5 {
-		return nil
-	}
-	for _, field := range []string{
-		"signature_version", "receipt_id", "decision_id", "effect_id", "status", "output_hash", "prev_hash",
-		"args_hash", "verdict", "reason_code", "policy_hash", "session_id",
-	} {
-		value, exists := document[field]
-		if !exists {
-			return fmt.Errorf("receipt.v5 missing signed member %q", field)
-		}
-		var text string
-		if err := json.Unmarshal(value, &text); err != nil {
-			return fmt.Errorf("receipt.v5 signed member %q must be a string", field)
-		}
-	}
-	lamport, exists := document["lamport_clock"]
-	if !exists {
-		return fmt.Errorf("receipt.v5 missing signed member %q", "lamport_clock")
-	}
-	var clock uint64
-	if err := json.Unmarshal(lamport, &clock); err != nil {
-		return fmt.Errorf("receipt.v5 signed member %q must be an unsigned integer", "lamport_clock")
-	}
-	return nil
 }
 
 func writeHuman(w *os.File, res receiptverify.Result) {

@@ -372,19 +372,13 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 			if readErr != nil {
 				return nil
 			}
-			var document map[string]any
-			if !json.Valid(data) {
-				return nil
-			}
-			decoder := json.NewDecoder(strings.NewReader(string(data)))
-			// Preserve the literal so receipt.v5 can reject 1.0 and 1e0 before coercion.
-			decoder.UseNumber()
-			if decoder.Decode(&document) != nil {
+			document, parseErr := receiptverify.ParseReceiptDocument(data)
+			if document == nil {
 				return nil
 			}
 			if sig, ok := document["signature"].(string); ok && sig != "" {
 				total++
-				if verifyEmbeddedDocumentSignature(document, sig, opts) {
+				if parseErr == nil && verifyEmbeddedDocumentSignature(document, sig, opts) {
 					valid++
 				}
 			}
@@ -406,7 +400,7 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 						continue
 					}
 					total++
-					if verifyWitnessReceiptSignature(document, sig, keyHex) {
+					if parseErr == nil && verifyWitnessReceiptSignature(document, sig, keyHex) {
 						valid++
 					}
 				}

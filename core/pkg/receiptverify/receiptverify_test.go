@@ -202,8 +202,8 @@ func TestClassicalEd25519MetadataCompatibility(t *testing.T) {
 		wantValid bool
 	}{
 		{name: "legacy_blank", wantValid: true},
-		{name: "profile_only", profile: "classical", wantValid: true},
-		{name: "algorithm_only", algorithm: "ed25519", wantValid: true},
+		{name: "profile_only_is_partial", profile: "classical"},
+		{name: "algorithm_only_is_partial", algorithm: "ed25519"},
 		{name: "both", profile: "classical", algorithm: "ed25519", wantValid: true},
 		{name: "profile_only_contradiction", profile: "hybrid"},
 		{name: "algorithm_only_contradiction", algorithm: "ml-dsa-65"},

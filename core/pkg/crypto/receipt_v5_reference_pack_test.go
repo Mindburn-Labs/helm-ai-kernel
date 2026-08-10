@@ -189,8 +189,8 @@ func buildReceiptV5ReferencePack(t *testing.T) map[string][]byte {
 		PinningAuthority:  "reference_packs/receipt-v5/vectors.json",
 		Verifier:          "reference_packs/receipt-v5/verify_vectors.py",
 		ImmutablePayloads: manifestFiles,
-		Comment:           "quantum_posture: classical_ed25519_only. The canonical JSON files are byte-exact signed fixtures; this manifest carries their posture note without changing signed bytes.",
-		Purpose:           "Immutable receipt.v5 payload inventory; vectors.json remains the hash-pinning authority.",
+		Comment:           "quantum_posture: classical_ed25519_only. Listed hashes cover canonical JSON text after removing the repository file's single trailing LF; Ed25519 covers each derived 13-member signing payload, not every receipt-file byte.",
+		Purpose:           "Receipt.v5 canonical-text inventory; vectors.json remains the hash-pinning authority.",
 	}
 	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {

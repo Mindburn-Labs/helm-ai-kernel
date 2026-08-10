@@ -136,7 +136,7 @@ func loadOrGenerateEd25519Root(dataDir string) (*crypto.Ed25519Signer, error) {
 
 	pubPath := filepath.Join(dataDir, "root.pub")
 	if err := os.WriteFile(pubPath, []byte(hex.EncodeToString(pub)), 0644); err != nil {
-		log.Printf("⚠️  failed to save root.pub: %v", err)
+		slog.Error("failed to save root public key", "error", err)
 	}
 
 	return crypto.NewEd25519SignerFromKey(priv, "root"), nil

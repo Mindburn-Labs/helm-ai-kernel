@@ -364,43 +364,43 @@ func runServerWithOptions(opts serverOptions) error {
 			db, _, receiptStore, err = setupLiteModeWithDataDir(ctx, dataDir)
 		}
 		if err != nil {
-			log.Fatalf("Failed to setup Lite Mode: %v", err)
+			return fmt.Errorf("setup Lite Mode: %w", err)
 		}
 		principalBindingStore, err = store.NewSQLitePrincipalBindingStore(db)
 		if err != nil {
-			log.Fatalf("Failed to init sqlite principal binding store: %v", err)
+			return fmt.Errorf("init sqlite principal binding store: %w", err)
 		}
 	} else {
 		databaseMode = "postgres"
 		if envBool("HELM_PRODUCTION") {
 			if err := validateProductionDatabaseURL(dbURL); err != nil {
-				log.Fatalf("Invalid production DATABASE_URL: %v", err)
+				return fmt.Errorf("invalid production DATABASE_URL: %w", err)
 			}
 		}
 		db, err = sql.Open("postgres", dbURL)
 		if err != nil {
-			log.Fatalf("Failed to connect to DB: %v", err)
+			return fmt.Errorf("connect to DB: %w", err)
 		}
 		configurePostgresPool(db)
 		if err := db.PingContext(ctx); err != nil {
-			log.Fatalf("DB Ping failed: %v", err)
+			return fmt.Errorf("ping DB: %w", err)
 		}
 		log.Println("[helm] postgres: connected")
 
 		// Initialize Postgres stores (used by Services layer)
 		pl := ledger.NewPostgresLedger(db)
 		if err := pl.Init(ctx); err != nil {
-			log.Fatalf("Failed to init ledger: %v", err)
+			return fmt.Errorf("init ledger: %w", err)
 		}
 		_ = pl // Ledger is managed via Services layer
 		ps := store.NewPostgresReceiptStore(db)
 		if err := ps.Init(ctx); err != nil {
-			log.Fatalf("Failed to init receipt store: %v", err)
+			return fmt.Errorf("init receipt store: %w", err)
 		}
 		receiptStore = ps
 		pbs, pbErr := store.NewPostgresPrincipalBindingStore(db)
 		if pbErr != nil {
-			log.Fatalf("Failed to init postgres principal binding store: %v", pbErr)
+			return fmt.Errorf("init postgres principal binding store: %w", pbErr)
 		}
 		principalBindingStore = pbs
 	}
@@ -410,7 +410,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// Signing Authority
 	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
-		log.Fatalf("Failed to init signer: %v", err)
+		return fmt.Errorf("init signer: %w", err)
 	}
 	verifier, _ := crypto.NewEd25519Verifier(signer.PublicKeyBytes())
 	writeServerNarration(logger, logFormat, narration,
@@ -420,7 +420,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// 2. Registry
 	reg := registry.NewPostgresRegistry(db)
 	if err := reg.Init(ctx); err != nil {
-		log.Fatalf("Failed to init registry: %v", err)
+		return fmt.Errorf("init registry: %w", err)
 	}
 	log.Println("[helm] registry: ready")
 
@@ -441,9 +441,9 @@ func runServerWithOptions(opts serverOptions) error {
 		// service graph would make readiness ambiguous and hide a bad authority
 		// or durable-store configuration.
 		if servicesInitFailureIsFatal() {
-			log.Fatalf("Services init failed while a fail-closed runtime boundary is enabled: %v", svcErr)
+			return fmt.Errorf("services init failed while a fail-closed runtime boundary is enabled: %w", svcErr)
 		}
-		log.Printf("Services init (non-fatal, degraded mode): %v", svcErr)
+		logger.Warn("services init failed; continuing in degraded mode", "error", svcErr)
 	}
 	if services != nil {
 		services.DatabaseMode = databaseMode
@@ -468,15 +468,15 @@ func runServerWithOptions(opts serverOptions) error {
 	if opts.PolicyPath != "" {
 		policySource, policySourceKind, sourceErr := policySourceFromEnv(opts.PolicyPath, policyScope)
 		if sourceErr != nil {
-			log.Fatalf("Failed to configure policy source: %v", sourceErr)
+			return fmt.Errorf("configure policy source: %w", sourceErr)
 		}
 		policyVerifier, requirePolicySignature, verifierErr := policySignatureVerifierFromEnv(policySourceKind)
 		if verifierErr != nil {
-			log.Fatalf("Failed to configure policy signature verifier: %v", verifierErr)
+			return fmt.Errorf("configure policy signature verifier: %w", verifierErr)
 		}
 		keepLastKnownGood, lkgMaxAge, lkgConfigErr := policyLastKnownGoodConfigFromEnv()
 		if lkgConfigErr != nil {
-			log.Fatalf("Failed to configure last-known-good policy retention: %v", lkgConfigErr)
+			return fmt.Errorf("configure last-known-good policy retention: %w", lkgConfigErr)
 		}
 		policyStore = policyreconcile.NewAtomicSnapshotStore()
 		policyReconciler, err = policyreconcile.NewReconciler(policyreconcile.ReconcilerConfig{
@@ -490,7 +490,7 @@ func runServerWithOptions(opts serverOptions) error {
 			Clock:               runtimeClock.Now,
 		})
 		if err != nil {
-			log.Fatalf("Failed to initialize policy reconciler: %v", err)
+			return fmt.Errorf("initialize policy reconciler: %w", err)
 		}
 		reconcileCtx := ctx
 		if timeout := policyInitialReconcileTimeoutFromEnv(); timeout > 0 {
@@ -500,11 +500,11 @@ func runServerWithOptions(opts serverOptions) error {
 		}
 		status, recErr := policyReconciler.Reconcile(reconcileCtx, policyScope)
 		if recErr != nil {
-			log.Fatalf("Failed to reconcile initial policy snapshot: %v", recErr)
+			return fmt.Errorf("reconcile initial policy snapshot: %w", recErr)
 		}
 		snapshot, ok := policyStore.Get(policyScope)
 		if !ok || snapshot == nil {
-			log.Fatalf("Failed to install initial policy snapshot: %s", status.ReconcileStatus)
+			return fmt.Errorf("install initial policy snapshot: %s", status.ReconcileStatus)
 		}
 		if snapshot.Graph != nil {
 			ruleGraph = snapshot.Graph
@@ -539,7 +539,7 @@ func runServerWithOptions(opts serverOptions) error {
 		if !fallbackMock {
 			cmd := exec.Command("docker", "info")
 			if err := cmd.Run(); err != nil {
-				log.Println("[helm] Docker daemon not reachable, falling back to mock warm sandboxes")
+				logger.Warn("Docker daemon not reachable; falling back to mock warm sandboxes")
 				fallbackMock = true
 			}
 		}
@@ -569,11 +569,11 @@ func runServerWithOptions(opts serverOptions) error {
 		services.PolicyScope = policyScope
 		services.ApprovalConsumption, err = newApprovalConsumptionRuntime(ctx, db, databaseMode, signer, services.EmergencyStops)
 		if err != nil {
-			log.Fatalf("Failed to initialize approval grant consumption runtime: %v", err)
+			return fmt.Errorf("initialize approval grant consumption runtime: %w", err)
 		}
 		services.GeneratedSpecApproval, err = newGeneratedSpecApprovalRuntime(ctx, db, databaseMode, signer, services.EmergencyStops)
 		if err != nil {
-			log.Fatalf("Failed to initialize GeneratedSpec approval runtime: %v", err)
+			return fmt.Errorf("initialize GeneratedSpec approval runtime: %w", err)
 		}
 
 		// Receipt transparency log: anchor decision-record receipt hashes at
@@ -585,9 +585,9 @@ func runServerWithOptions(opts serverOptions) error {
 		transpLog, transpErr := translog.Open(filepath.Join(dataDir, "translog"))
 		if transpErr != nil {
 			if envBool("HELM_PRODUCTION") {
-				log.Fatalf("Failed to open receipt transparency log: %v", transpErr)
+				return fmt.Errorf("open receipt transparency log: %w", transpErr)
 			}
-			log.Printf("[helm] receipt transparency log disabled (dev): %v", transpErr)
+			logger.Warn("receipt transparency log disabled in development", "error", transpErr)
 		} else {
 			services.TranspLog = transpLog
 			services.TranspLogID = translog.LogIDFromPublicKey(signer.PublicKeyBytes())
@@ -619,7 +619,7 @@ func runServerWithOptions(opts serverOptions) error {
 		IdleTimeout:       120 * time.Second,
 	}
 	if bindAddr == "0.0.0.0" {
-		log.Printf("[helm] WARNING: API server binding to all interfaces (0.0.0.0:%d) — ensure firewall rules are in place", port)
+		logger.Warn("API server binding to all interfaces; ensure firewall rules are in place", "port", port)
 	}
 	go func() {
 		log.Printf("[helm] API server: %s:%d", bindAddr, port)
@@ -656,7 +656,7 @@ func runServerWithOptions(opts serverOptions) error {
 		go func() {
 			log.Printf("[helm] health server: %s:%d", bindAddr, healthPort)
 			if err := healthServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Printf("[helm] health server error: %v", err)
+				logger.Error("health server failed", "error", err)
 			}
 		}()
 	}
@@ -675,7 +675,7 @@ func runServerWithOptions(opts serverOptions) error {
 		go func() {
 			log.Printf("[helm] metrics server: %s:%d", bindAddr, metricsPort)
 			if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Printf("[helm] metrics server error: %v", err)
+				logger.Error("metrics server failed", "error", err)
 			}
 		}()
 	}
@@ -689,16 +689,16 @@ func runServerWithOptions(opts serverOptions) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("[helm] API server shutdown error: %v", err)
+			logger.Error("API server shutdown failed", "error", err)
 		}
 		if healthServer != nil {
 			if err := healthServer.Shutdown(shutdownCtx); err != nil {
-				log.Printf("[helm] health server shutdown error: %v", err)
+				logger.Error("health server shutdown failed", "error", err)
 			}
 		}
 		if metricsServer != nil {
 			if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-				log.Printf("[helm] metrics server shutdown error: %v", err)
+				logger.Error("metrics server shutdown failed", "error", err)
 			}
 		}
 		// Flush the OTLP batchers last, after the servers stopped accepting.
@@ -711,7 +711,7 @@ func runServerWithOptions(opts serverOptions) error {
 		// the case it exists for.
 		if services != nil && services.Observability != nil {
 			if err := flushObservability(services.Observability); err != nil {
-				log.Printf("[helm] observability shutdown error: %v", err)
+				logger.Error("observability shutdown failed", "error", err)
 			}
 		}
 	}

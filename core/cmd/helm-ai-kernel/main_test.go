@@ -168,6 +168,7 @@ func TestRun_Unknown(t *testing.T) {
 }
 
 func TestRunServerCommandReportsStartupFailure(t *testing.T) {
+	t.Setenv("HELM_LOG_FORMAT", "")
 	originalRunServer := startServer
 	defer func() { startServer = originalRunServer }()
 	startServer = func() error { return errors.New("bind failed") }
@@ -176,7 +177,11 @@ func TestRunServerCommandReportsStartupFailure(t *testing.T) {
 	exitCode := runServerCommand("server", nil, &stdout, &stderr)
 
 	assert.Equal(t, 1, exitCode)
-	assert.Contains(t, stderr.String(), "bind failed")
+	var record map[string]any
+	assert.NoError(t, json.Unmarshal(stderr.Bytes(), &record))
+	assert.Equal(t, "ERROR", record["level"])
+	assert.Equal(t, "server command failed", record["msg"])
+	assert.Contains(t, record["error"], "bind failed")
 }
 
 func TestServerLogFormatDefaultsAndOverrides(t *testing.T) {

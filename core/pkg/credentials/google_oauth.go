@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -84,6 +85,7 @@ func (g *GoogleOAuth) ExchangeCode(ctx context.Context, code, codeVerifier, redi
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
+		drainOAuthErrorBody(resp.Body)
 		return nil, fmt.Errorf("token exchange failed with status: %d", resp.StatusCode)
 	}
 
@@ -117,6 +119,7 @@ func (g *GoogleOAuth) RefreshToken(ctx context.Context, refreshToken string) (*T
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
+		drainOAuthErrorBody(resp.Body)
 		return nil, fmt.Errorf("token refresh failed with status: %d", resp.StatusCode)
 	}
 
@@ -126,6 +129,10 @@ func (g *GoogleOAuth) RefreshToken(ctx context.Context, refreshToken string) (*T
 	}
 
 	return &tokenResp, nil
+}
+
+func drainOAuthErrorBody(body io.Reader) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, 1<<20))
 }
 
 // GetUserInfo fetches user info using an access token.

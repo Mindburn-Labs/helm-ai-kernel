@@ -159,8 +159,13 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			g := NewGoogleOAuth("client", "secret")
+			bodyReader := strings.NewReader(tc.body)
 			g.httpClient = &http.Client{Transport: credentialsRoundTripFunc(func(*http.Request) (*http.Response, error) {
-				return credentialsHTTPResponse(tc.status, tc.body), nil
+				return &http.Response{
+					StatusCode: tc.status,
+					Body:       io.NopCloser(bodyReader),
+					Header:     make(http.Header),
+				}, nil
 			})}
 			err := tc.call(g)
 			if name == "revoke already revoked" {
@@ -174,6 +179,9 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 			}
 			if strings.Contains(err.Error(), "SECRET-CANARY") {
 				t.Fatalf("oauth error leaked provider response body: %v", err)
+			}
+			if (name == "exchange status" || name == "refresh status") && bodyReader.Len() != 0 {
+				t.Fatalf("oauth error response body was not drained: %d bytes remain", bodyReader.Len())
 			}
 		})
 	}

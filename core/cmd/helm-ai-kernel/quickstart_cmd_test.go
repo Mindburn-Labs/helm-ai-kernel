@@ -180,13 +180,18 @@ path = "./data/receipts.db"
 }
 
 func TestRunServerCommandServeRequiresPolicy(t *testing.T) {
+	t.Setenv("HELM_LOG_FORMAT", "")
 	var stdout, stderr bytes.Buffer
 	code := runServerCommand("serve", nil, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("exit code = %d, want 2", code)
 	}
-	if !strings.Contains(stderr.String(), "requires --policy") {
-		t.Fatalf("stderr missing policy error: %s", stderr.String())
+	var record map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &record); err != nil {
+		t.Fatalf("stderr is not JSON: %v\n%s", err, stderr.String())
+	}
+	if record["level"] != "ERROR" || record["msg"] != "server command failed" || !strings.Contains(record["error"].(string), "requires --policy") {
+		t.Fatalf("unexpected policy error record: %#v", record)
 	}
 }
 

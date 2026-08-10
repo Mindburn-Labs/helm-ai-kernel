@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
@@ -55,14 +56,14 @@ func runWorkstationEnforceCmd(args []string, stdout, stderr io.Writer) int {
 		printDecisionSummary(stdout, receipt)
 	}
 	if receipt.Verdict == contracts.WorkstationVerdictDeny {
-		return 126
+		return cliui.ExitDenied
 	}
 	if len(remaining) == 0 {
 		return 0
 	}
 	if receipt.Verdict != contracts.WorkstationVerdictAllow || receipt.Request.EffectMode != contracts.WorkstationEffectModeOperate {
 		_, _ = fmt.Fprintf(stderr, "Error: refusing to execute command without operate-mode ALLOW receipt (verdict=%s mode=%s)\n", receipt.Verdict, receipt.Request.EffectMode)
-		return 126
+		return cliui.ExitDenied
 	}
 	cmd := exec.CommandContext(context.Background(), remaining[0], remaining[1:]...)
 	cmd.Stdout = stdout
@@ -136,10 +137,38 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 		data, _ := json.MarshalIndent(result, "", "  ")
 		_, _ = fmt.Fprintln(stdout, string(data))
 	} else {
+		// Lead with the admissibility verdict, not the receipt's own claim. A
+		// tampered receipt still carries a verdict field, and printing it at the
+		// same weight as everything else made the forgery the loudest thing on
+		// screen while the one line that mattered — integrity:false — sat two
+		// rows below in plain text. The receipt's verdict is only meaningful
+		// once the receipt verifies against a trusted signer; until then it is
+		// an unverified claim and is labelled as one.
+		admissible := integrityValid && signerTrusted
+		switch {
+		case !integrityValid:
+			_, _ = fmt.Fprintf(stdout, "%s✗ TAMPERED — this receipt does not match its own signature%s\n", ColorRed, ColorReset)
+			_, _ = fmt.Fprintf(stdout, "  Its contents were altered after signing. Do not act on anything below.\n")
+		case !signerTrusted:
+			_, _ = fmt.Fprintf(stdout, "%s✗ UNVERIFIED — signature is intact but the signer is not a trusted anchor%s\n", ColorRed, ColorReset)
+			if !trustAnchorAvailable {
+				_, _ = fmt.Fprintf(stdout, "  No trust anchor was available. Pass --trusted-public-key-file to name the key you trust.\n")
+			} else {
+				_, _ = fmt.Fprintf(stdout, "  The receipt was signed by a key you have not anchored. A key that arrives with the receipt is not a trust root.\n")
+			}
+		default:
+			_, _ = fmt.Fprintf(stdout, "%s✓ ADMISSIBLE — signature verifies under a trusted anchor%s\n", ColorGreen, ColorReset)
+		}
 		_, _ = fmt.Fprintf(stdout, "%sWorkstation Policy Decision Verification%s\n", ColorBold, ColorReset)
 		_, _ = fmt.Fprintf(stdout, "  receipt:   %s\n", receiptPath)
 		_, _ = fmt.Fprintf(stdout, "  decision:  %s\n", receipt.DecisionID)
-		_, _ = fmt.Fprintf(stdout, "  verdict:   %s\n", receipt.Verdict)
+		if admissible {
+			_, _ = fmt.Fprintf(stdout, "  verdict:   %s\n", receipt.Verdict)
+		} else {
+			// Never present the verdict of an inadmissible receipt as a bare
+			// fact; the reader must not be able to quote it as the finding.
+			_, _ = fmt.Fprintf(stdout, "  verdict:   %s (unverified — claimed by the receipt, not established)\n", receipt.Verdict)
+		}
 		_, _ = fmt.Fprintf(stdout, "  reason:    %s\n", receipt.ReasonCode)
 		_, _ = fmt.Fprintf(stdout, "  effect:    %s\n", receipt.Request.EffectType)
 		_, _ = fmt.Fprintf(stdout, "  target:    %s\n", receipt.Request.Target)

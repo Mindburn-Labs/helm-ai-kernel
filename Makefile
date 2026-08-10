@@ -162,17 +162,10 @@ bench:
 bench-report:
 	cd core && go test -v -run TestOverheadReport -count=1 ./benchmarks/
 
-# The go.mod tidiness check is core-only on purpose. core/go.mod is where the
-# drift actually reached contributors: go-isatty sat in the indirect block while
-# core/internal/cli/ui/terminal.go imported it directly, so anyone who ran
-# `go mod tidy` picked up an unrelated diff (#813). Widening this to every module
-# needs a cleanup pass first — tests/conformance, tests/launchpad and
-# tests/skills are not tidy as of 2026-08-09. scripts/ci/go_module_tests.sh has
-# the enumeration pattern to reuse when that cleanup lands.
 lint: docs-coverage docs-truth
 	cd core && go vet ./...
 	cd core && test -z "$$(gofmt -l .)" || (echo "Run gofmt -w ." && exit 1)
-	cd core && GOWORK=off go mod tidy -diff || (echo "Run cd core && GOWORK=off go mod tidy" && exit 1)
+	bash scripts/ci/go_mod_tidy_check.sh
 
 # lint-security runs golangci-lint with gosec over the trusted computing base.
 #
@@ -252,6 +245,8 @@ release-smoke:
 	bash scripts/ci/release_smoke.sh
 
 version-drift:
+	python3 scripts/release/check_version_drift_test.py
+	python3 scripts/release/prepare_version_test.py
 	python3 scripts/release/check_version_drift.py local
 
 version-drift-report:

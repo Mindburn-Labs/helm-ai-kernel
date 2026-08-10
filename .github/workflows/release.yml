@@ -1396,8 +1396,8 @@ jobs:
           for attempt in $(seq 1 40); do
             if python3 scripts/release/check_version_drift.py \
               --expected-version "$VERSION" \
-              --surface-timeout 10 \
-              published; then
+              published \
+              --surface-timeout 10; then
               exit 0
             fi
             if [ "$attempt" -lt 40 ]; then

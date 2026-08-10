@@ -58,6 +58,15 @@ interoperable subset. The result is the signing payload exactly as emitted:
 UTF-8, no whitespace between tokens, no byte-order mark, and no trailing
 newline.
 
+The input to canonicalization is a decoded JSON data-model value, not an
+arbitrary byte string. Its strings are Unicode values. The reference-pack
+files are valid UTF-8 JSON, and the source-owned parity test rejects a fixture
+that is not. Handling a malformed byte stream before it becomes a JSON value
+belongs to the containing wire or transport contract, which this preimage
+profile does not define. In particular, this profile does not claim that a
+verifier receiving only an already-decoded object can recover and reject an
+earlier malformed encoding.
+
 `lamport_clock` is the only numeric member. Its value MUST be no greater than
 9007199254740991 (2^53−1). Producers MUST refuse a larger value rather than
 publishing bytes that a strict RFC 8785 implementation cannot reproduce.
@@ -85,7 +94,7 @@ A conforming verifier MUST:
 1. require `signature_version` to equal `receipt.v5` and refuse a missing or
    unknown version for this profile;
 2. require all 13 signing members, including empty-valued members;
-3. reject ill-formed UTF-8 and any number outside the interoperable subset;
+3. reject any number outside the interoperable subset;
 4. construct only the signing object above and canonicalize it byte-for-byte;
 5. verify the signature with an independently trusted key and the declared
    algorithm profile; and

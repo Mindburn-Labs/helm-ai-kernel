@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
@@ -256,6 +258,13 @@ func TestCanonicalizationAgreesWithCrypto(t *testing.T) {
 		if string(legacy) != string(theirsV4) {
 			t.Fatalf("receipt[%d] v4 preimage drifted:\n mine:   %s\n theirs: %s", i, legacy, theirsV4)
 		}
+	}
+}
+
+func TestCanonicalizeV5RejectsUnsafeLamportClock(t *testing.T) {
+	_, err := canonicalizeV5(&contracts.Receipt{LamportClock: canonicalize.MaxSafeInteger + 1})
+	if !errors.Is(err, canonicalize.ErrNonInteroperableNumber) {
+		t.Fatalf("canonicalizeV5 unsafe lamport_clock error = %v, want ErrNonInteroperableNumber", err)
 	}
 }
 

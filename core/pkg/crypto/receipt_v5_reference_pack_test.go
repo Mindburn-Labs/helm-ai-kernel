@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -89,6 +90,9 @@ func TestReceiptV5ReferencePackMatchesGoImplementation(t *testing.T) {
 		got, err := os.ReadFile(filepath.Join(root, name))
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
+		}
+		if !utf8.Valid(got) || !json.Valid(got) {
+			t.Fatalf("%s is not valid UTF-8 JSON", name)
 		}
 		if !bytes.Equal(got, want) {
 			t.Fatalf("%s differs from source-owned Go fixture; run UPDATE_RECEIPT_V5_VECTORS=1 go test ./pkg/crypto -run TestReceiptV5ReferencePackMatchesGoImplementation", name)

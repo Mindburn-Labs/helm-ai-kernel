@@ -480,7 +480,7 @@ func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
 		"status":            "DENY",
 		"output_hash":       "sha256:out",
 		"prev_hash":         "",
-		"lamport_clock":     float64(1),
+		"lamport_clock":     json.Number("1"),
 		"args_hash":         "sha256:args",
 		"signature_version": "receipt.v5",
 		"verdict":           "DENY",
@@ -488,29 +488,40 @@ func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
 		"policy_hash":       "sha256:policy",
 		"session_id":        "session-1",
 	}
-	payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
-		SignatureVersion: "receipt.v5",
-		ReceiptID:        "rcpt-001",
-		DecisionID:       "dec-001",
-		EffectID:         "mcp.tools.call/proof.read",
-		Status:           "DENY",
-		OutputHash:       "sha256:out",
-		PrevHash:         "",
-		LamportClock:     1,
-		ArgsHash:         "sha256:args",
-		Verdict:          "DENY",
-		ReasonCode:       "POLICY:VIOLATION",
-		PolicyHash:       "sha256:policy",
-		SessionID:        "session-1",
-	})
-	if err != nil {
-		t.Fatal(err)
+	sign := func(lamport uint64) string {
+		payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
+			SignatureVersion: "receipt.v5", ReceiptID: "rcpt-001", DecisionID: "dec-001",
+			EffectID: "mcp.tools.call/proof.read", Status: "DENY", OutputHash: "sha256:out", PrevHash: "",
+			LamportClock: lamport, ArgsHash: "sha256:args", Verdict: "DENY", ReasonCode: "POLICY:VIOLATION",
+			PolicyHash: "sha256:policy", SessionID: "session-1",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return hex.EncodeToString(ed25519.Sign(priv, payload))
 	}
-	document["signature"] = hex.EncodeToString(ed25519.Sign(priv, payload))
+	document["signature"] = sign(1)
 
 	if !verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
 		t.Fatal("structured V5 receipt must verify")
 	}
+	for _, tc := range []struct {
+		name          string
+		wireValue     json.Number
+		signedLamport uint64
+	}{
+		{name: "fractional", wireValue: json.Number("1.5"), signedLamport: 1},
+		{name: "fractional_literal", wireValue: json.Number("1.0"), signedLamport: 1},
+		{name: "above_max_safe_integer", wireValue: json.Number("9007199254740992"), signedLamport: canonicalize.MaxSafeInteger + 1},
+	} {
+		t.Run(tc.name+"_lamport_clock", func(t *testing.T) {
+			document["lamport_clock"] = tc.wireValue
+			if verifyEd25519CanonicalReceipt(document, sign(tc.signedLamport), hex.EncodeToString(pub)) {
+				t.Fatalf("receipt.v5 verifier accepted lamport_clock %v", tc.wireValue)
+			}
+		})
+	}
+	document["lamport_clock"] = json.Number("1")
 	signedDocument, err := json.Marshal(document)
 	if err != nil {
 		t.Fatalf("marshal signed V5 receipt: %v", err)
@@ -582,7 +593,9 @@ func TestVerifyEd25519CanonicalReceiptV5AcceptsEmptySignedFieldsOnDisk(t *testin
 		t.Fatalf("marshal V5 receipt: %v", err)
 	}
 	var document map[string]any
-	if err := json.Unmarshal(data, &document); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
 		t.Fatalf("decode V5 receipt: %v", err)
 	}
 	if !verifyEd25519CanonicalReceipt(document, receipt.Signature, hex.EncodeToString(pub)) {

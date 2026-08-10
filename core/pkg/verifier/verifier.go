@@ -322,6 +322,11 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 				v := uint64(value)
 				return &v
 			}
+		case json.Number:
+			if parsed, err := value.Int64(); err == nil && parsed >= 0 {
+				v := uint64(parsed)
+				return &v
+			}
 		case string:
 			var parsed uint64
 			if _, err := fmt.Sscanf(value, "%d", &parsed); err == nil {
@@ -367,7 +372,13 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 				return nil
 			}
 			var document map[string]any
-			if json.Unmarshal(data, &document) != nil {
+			if !json.Valid(data) {
+				return nil
+			}
+			decoder := json.NewDecoder(strings.NewReader(string(data)))
+			// Preserve the literal so receipt.v5 can reject 1.0 and 1e0 before coercion.
+			decoder.UseNumber()
+			if decoder.Decode(&document) != nil {
 				return nil
 			}
 			if sig, ok := document["signature"].(string); ok && sig != "" {
@@ -551,12 +562,16 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 				return false
 			}
 		}
+		rawLamport, ok := document["lamport_clock"].(json.Number)
+		if !ok || canonicalize.CheckInteroperableNumbers(rawLamport) != nil {
+			return false
+		}
 		lamportValue := firstUint(document, "lamport_clock")
 		if lamportValue == nil {
 			return false
 		}
 		var err error
-		payload, err = canonicalize.JCS(receiptV5DocumentEnvelope{
+		payload, err = canonicalize.InteroperableJCS(receiptV5DocumentEnvelope{
 			SignatureVersion: sigVersion,
 			ReceiptID:        firstString(document, "receipt_id"),
 			DecisionID:       firstString(document, "decision_id"),

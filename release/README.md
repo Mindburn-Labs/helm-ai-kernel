@@ -47,7 +47,10 @@ GitHub release before publication is claimed:
 
 The sample policy material archive contains `release.high_risk.v3.toml` and
 `reference_packs/eu_ai_act_high_risk.v2.json`. The GitHub release workflow
-attaches `*.cosign.bundle` files generated for each primary asset.
+attaches `*.cosign.bundle` files generated for each primary asset. The v2 JSON
+is a compliance mapping, not executable policy: it contains no supported
+top-level runtime actions, so the sample TOML compiles with zero allow-rules
+and remains fail-closed until an explicit supported runtime policy is supplied.
 
 Homebrew remains headless: it downloads only the Kernel binary and Launchpad
 data. Browser UI assets are not Kernel release assets. Where a release

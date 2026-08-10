@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-07-20
+last_reviewed: 2026-08-10
 ---
 
 # Changelog
@@ -89,29 +89,33 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-### Changed — EU AI Act enforcement dates corrected
+### Changed — EU AI Act mapping and applicability dates corrected
 
-Regulation (EU) 2026/1744 (Digital Omnibus on AI), in force 2026-07-27,
-deferred the application of Chapter III, Sections 1-3 of Regulation (EU)
-2024/1689. The Annex III high-risk date moved from 2026-08-02 to 2027-12-02 and
-the Annex I high-risk date moved from 2027-08-02 to 2028-08-02. Article 50
-transparency obligations were not deferred.
+Regulation (EU) 2026/1744 deferred Chapter III, Sections 1-3 of Regulation
+(EU) 2024/1689 to 2027-12-02 for Annex III systems and 2028-08-02 for Annex I
+systems, expressly excluding Article 6(5). This narrow amendment does not move
+Article 50, Article 73 incident reporting, or CE-marking/registration provisions
+outside Sections 1-3 to the same dates.
 
-- `reference_packs/eu_ai_act_high_risk.v2.json` is added and is now the pack
-  referenced by `release.high_risk.v3.toml` and staged into release assets. It
-  carries the corrected dates plus an `enforcement_dates_provenance` block with
-  the legal basis, source URLs, verification date, and review owner. The v1 key
-  `high_risk_full` is replaced by `high_risk_annex_iii`.
-- `reference_packs/eu_ai_act_high_risk.v1.json` is retained and marked
-  `"status": "superseded"` with `superseded_by`, `superseded_on`, and a reason.
-  Its original date values are preserved so previously shipped evidence stays
-  auditable. **Anyone who keyed a compliance timeline off v1 must re-read it.**
-- `core/pkg/compliance/euaiact` exported dates `DateHighRiskObligations` and
-  `DateAnnexIHighRisk` now return the amended dates. These are behavioural
-  values, not documentation: any caller comparing against them changes result.
+- Added `reference_packs/eu_ai_act_high_risk.v2.json` as an explicit
+  `COMPLIANCE_MAPPING`. It contains candidate mappings and evidence names but no
+  supported `runtime_actions` or `actions`; the sample policy therefore remains
+  fail-closed with zero runtime rules.
+- Preserved the previously released
+  `reference_packs/eu_ai_act_high_risk.v1.json` byte-for-byte at SHA-256
+  `8a33ad51441d6d939d74da2be388c1d11c12da1e055f1aeca72ca2763ebc05c4`.
+  Supersession metadata lives in v2 and documentation, not a rewritten v1.
+- Split general, Article 50, Annex III and Annex I applicability dates. The v2
+  mapping records the Article 50(2) transition for specified pre-existing
+  systems and the Article 6(5) exception.
+- Corrected serious-incident reporting from Article 62/72 hours to Article 73:
+  15 days generally, two days for the specified accelerated tier, and 10 days
+  where a person dies. The compliance API now records the incident tier.
+- Removed unsupported pack-driven QTSP, LOTL freshness and budget enforcement
+  claims. QTSP is an optional evidence mapping; operator/library verification
+  remains a separate explicitly configured path.
 
-Verified against EUR-Lex on 2026-08-06: CELEX 32026R1744,
-`http://data.europa.eu/eli/reg/2026/1744/oj`.
+Primary sources: CELEX 32024R1689 and CELEX 32026R1744 on EUR-Lex.
 
 ## [0.8.3] - pending tag
 

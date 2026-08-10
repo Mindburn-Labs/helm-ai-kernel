@@ -105,17 +105,17 @@ helm-ai-kernel verify --require-eidas --eidas-max-age-hours 24 eu-evidence-pack.
 
 Current limitation: this CLI gate inventories anchor JSON, rejects entries
 whose `backend` is not `eidas-qtsp`, requires at least one eIDAS-labelled item,
-and compares a successfully parsed non-zero `integrated_time` with the
-requested age. It does **not** call `EIDASAnchor.Verify`, parse the RFC 3161
-token, validate its message imprint or signature, consult an EU trusted list,
-or reject a missing/unparseable timestamp through that age comparison.
-Therefore a passing CLI result is only a metadata check, not cryptographic or
-legal qualification proof.
+requires a parseable non-zero `integrated_time`, and compares that declared
+time with the requested age. It does **not** call `EIDASAnchor.Verify`, parse
+the RFC 3161 token, validate its message imprint or signature, or consult an EU
+trusted list. Therefore a passing CLI result is only a metadata-shape and
+declared-time check, not cryptographic or legal qualification proof.
 
 Current CLI failure modes include:
 
 - no anchor metadata found;
 - no `backend=eidas-qtsp` anchor; or
+- missing/unparseable `integrated_time`; or
 - an anchor `integrated_time` older than `--eidas-max-age-hours`.
 
 Provider selection is outside this repository. Check the

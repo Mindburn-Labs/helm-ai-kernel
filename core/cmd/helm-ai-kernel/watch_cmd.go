@@ -219,6 +219,10 @@ func runWatchInteractive(client approvalClient, input io.Reader, chrome io.Write
 			continue
 		}
 
+		// Show the full ceremony context before asking which way to decide, so
+		// the reviewer reads the requester, reason, quorum and expiry before
+		// picking a side — not after.
+		renderer.WriteCompletion(watchReviewCard(item))
 		_, _ = fmt.Fprintf(chrome, "Decision for %s (APPROVE or DENY; blank cancels): ", terminalSafe(item.ApprovalID))
 		choice, ok, err := readWatchLine(reader)
 		if err != nil {

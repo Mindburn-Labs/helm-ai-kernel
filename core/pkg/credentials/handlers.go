@@ -1,4 +1,6 @@
 // Package credentials - HTTP handlers for credential management API
+// quantum_posture: these handlers store classical OAuth tokens and API keys;
+// they provide no post-quantum or hybrid protection.
 package credentials
 
 import (

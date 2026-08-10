@@ -1,3 +1,5 @@
+// quantum_posture: these handlers manage classical Ed25519 trust keys; they
+// provide no post-quantum or hybrid protection.
 package api
 
 import (

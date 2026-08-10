@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -46,6 +47,7 @@ func installKernelMeterProvider(t *testing.T) *sdkmetric.ManualReader {
 type serverMetric struct {
 	name       string
 	dataPoints []attribute.Set
+	bounds     []float64
 }
 
 // collectServerMetrics returns every http.server.* instrument the reader holds.
@@ -72,6 +74,9 @@ func collectServerMetrics(t *testing.T, reader *sdkmetric.ManualReader) []server
 			found := serverMetric{name: m.Name}
 			switch data := m.Data.(type) {
 			case metricdata.Histogram[float64]:
+				if len(data.DataPoints) > 0 {
+					found.bounds = append([]float64(nil), data.DataPoints[0].Bounds...)
+				}
 				for _, dp := range data.DataPoints {
 					found.dataPoints = append(found.dataPoints, dp.Attributes)
 				}
@@ -91,6 +96,23 @@ func collectServerMetrics(t *testing.T, reader *sdkmetric.ManualReader) []server
 		}
 	}
 	return out
+}
+
+func TestHTTPServerDurationKeepsRecommendedBuckets(t *testing.T) {
+	reader := installKernelMeterProvider(t)
+	probeHandler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/v1/probe/abc123", nil))
+
+	want := []float64{0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}
+	for _, metric := range collectServerMetrics(t, reader) {
+		if metric.name != "http.server.request.duration" {
+			continue
+		}
+		if !slices.Equal(metric.bounds, want) {
+			t.Errorf("duration histogram bounds = %v, want OTel HTTP bounds %v", metric.bounds, want)
+		}
+		return
+	}
+	t.Fatal("http.server.request.duration was not recorded")
 }
 
 func attributeKeys(set attribute.Set) []string {

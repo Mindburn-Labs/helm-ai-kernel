@@ -85,7 +85,7 @@ const (
 
 var ctxlogRemedy = map[string]string{
 	ctxlogClassContextFree:    "use the context-carrying variant (api.WriteInternalR / slog.*Context) with this handler's own *http.Request",
-	ctxlogClassDeadContext:    "pass r.Context(); context.Background/TODO carries no span, so the record gets no trace_id",
+	ctxlogClassDeadContext:    "pass r.Context(); context.Background carries no span, so the record gets no trace_id",
 	ctxlogClassAsyncContext:   "the request context may already be cancelled here — capture what you need before the go/defer, or use the context-free variant deliberately",
 	ctxlogClassForeignRequest: "pass this function's own *http.Request parameter; another request's context joins the record to the wrong span",
 }
@@ -133,7 +133,7 @@ type ctxlogFrame struct {
 	// requests are the *http.Request identifiers bound in this frame — its
 	// own parameters plus locals derived from a request.
 	requests map[string]bool
-	// deadContexts are locals bound to context.Background()/context.TODO().
+	// deadContexts are locals bound to context.Background().
 	deadContexts map[string]bool
 	// async is true when this frame is reached through a `go`/`defer`
 	// closure without crossing a fresh request boundary.
@@ -224,7 +224,7 @@ func ctxlogIsDeadContextCall(e ast.Expr) bool {
 		return false
 	}
 	name := ctxlogCalleeName(call.Fun)
-	return name == "context.Background" || name == "context.TODO"
+	return name == "context.Background"
 }
 
 // ctxlogClassifyContextArg reads what sits in a context parameter slot.
@@ -433,11 +433,11 @@ func (s *ctxlogScanner) checkCall(call *ast.CallExpr, stack []ctxlogFrame) {
 		}
 	}
 
-	// Class 2. context.Background()/TODO() on a request path: the call looks
+	// Class 2. context.Background() on a request path: the call looks
 	// converted, but the context it carries never held a span.
 	if kind == "dead" && onRequestPath {
 		s.report(call.Pos(), ctxlogClassDeadContext, name,
-			"context.Background/TODO in the context slot")
+			"context.Background in the context slot")
 		return
 	}
 
@@ -1219,16 +1219,6 @@ func TestContextLoggingContractCatchesEachFailureClass(t *testing.T) {
 			body: `func register(mux *http.ServeMux) {
 	mux.HandleFunc("/b", func(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(context.Background(), "internal", "error", errBoom)
-	})
-}`,
-		},
-		{
-			name:  "class2_todo_context_through_a_local",
-			class: ctxlogClassDeadContext,
-			body: `func register(mux *http.ServeMux) {
-	mux.HandleFunc("/b", func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.TODO()
-		slog.ErrorContext(ctx, "internal", "error", errBoom)
 	})
 }`,
 		},

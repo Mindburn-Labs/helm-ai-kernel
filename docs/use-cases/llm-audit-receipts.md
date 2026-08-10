@@ -80,13 +80,20 @@ public key over an independent channel. Running with `--allow-self-attested`
 uses key material carried with the input; that shows internal consistency and
 nothing about origin.
 
-The `receipt.v5` byte-construction rule is not defined by a published normative
-specification. This verifier reconstructs the current implementation's preimage;
-its pass shows agreement with that implementation, not conformance to a public
-receipt wire specification. The mainline receipt is recorded as
-integrity-UNSPECIFIED in
-[ADR 0003 §D4](../adr/0003-normative-artifact-arbitration.md).
-**Status: unpublished.**
+The [`receipt.v5` specification](../../protocols/specs/receipts/receipt-v5.md)
+together with the
+[`receipt.v5` reference pack](../../reference_packs/receipt-v5/) is the final
+normative integrity contract for this 13-member signing preimage. ADR 0003 §D4
+registers the mainline receipt as **SPECIFIED** and pins both the source-owned
+Go parity test and the independent stdlib-Python verifier. This contract is
+deliberately narrower than an HTTP or gRPC wire format, a receipt chain hash,
+or a legacy unversioned preimage.
+
+The reference pack demonstrates the classical Ed25519 profile only. Its
+self-declared key material is not an authority binding: a counterparty still
+needs independently trusted key material. Normative source status also does
+not, by itself, prove that a particular release tag or binary has been
+published or deployed. **Status: Final normative standard in source.**
 
 ## Source Truth
 
@@ -96,3 +103,5 @@ integrity-UNSPECIFIED in
 - [Verification](../VERIFICATION.md)
 - [ADR 0002 — canonical receipt bytes](../adr/0002-canonical-receipt-bytes.md)
 - [ADR 0003 — normative artifact arbitration](../adr/0003-normative-artifact-arbitration.md)
+- [`receipt.v5` normative signing-preimage specification](../../protocols/specs/receipts/receipt-v5.md)
+- [`receipt.v5` conformance reference pack](../../reference_packs/receipt-v5/)

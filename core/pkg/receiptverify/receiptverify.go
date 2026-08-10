@@ -162,6 +162,15 @@ type TrustRoot struct {
 // ErrNoTrustedKey is returned when no caller-supplied key covers a receipt.
 var ErrNoTrustedKey = errors.New("no trusted key for receipt; supply one with a trust root, or opt in to the receipt's embedded key")
 
+// ClassicalEd25519MetadataCompatible reports whether optional receipt
+// signature metadata is compatible with this classical-only verifier. Empty
+// values retain receipts issued before these routing fields were populated;
+// once declared, each value must name the profile this verifier actually uses.
+func ClassicalEd25519MetadataCompatible(profile, algorithm string) bool {
+	return (profile == "" || profile == "classical") &&
+		(algorithm == "" || algorithm == "ed25519")
+}
+
 // receiptV5SigningEnvelope mirrors crypto.receiptV5SigningEnvelope field for
 // field, including json tags and order. It is the active receipt.v5 payload:
 // the durable causal fields plus the four governance-meaning fields.
@@ -353,6 +362,11 @@ func VerifyBundle(b Bundle, trust TrustRoot) Result {
 func checkIdentity(receipts []*contracts.Receipt, trust TrustRoot, embedded map[string]string, res *Result) Check {
 	verified := 0
 	for i, r := range receipts {
+		if !ClassicalEd25519MetadataCompatible(r.SignatureProfile, r.SignatureAlgorithm) {
+			return Check{CheckIdentity, StatusFail, fmt.Sprintf(
+				"receipt[%d] %q declares signature_profile %q and signature_algorithm %q; this verifier accepts only classical/ed25519 declarations (blank metadata is retained for legacy receipts)",
+				i, r.ReceiptID, r.SignatureProfile, r.SignatureAlgorithm)}
+		}
 		if r.Signature == "" {
 			return Check{CheckIdentity, StatusFail, fmt.Sprintf(
 				"receipt[%d] %q carries no signature; an unsigned receipt attests to nothing", i, r.ReceiptID)}

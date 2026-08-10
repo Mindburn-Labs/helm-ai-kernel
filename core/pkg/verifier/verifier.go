@@ -29,6 +29,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
 
@@ -521,6 +522,12 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 }
 
 func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) bool {
+	if !receiptverify.ClassicalEd25519MetadataCompatible(
+		firstString(document, "signature_profile"),
+		firstString(document, "signature_algorithm"),
+	) {
+		return false
+	}
 	pubBytes, err := hex.DecodeString(strings.TrimSpace(keyHex))
 	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
 		return false

@@ -466,6 +466,32 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+
+	t.Run("declared nonclassical profile refuses legacy key fallback", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		doc := receipt(signature, keyHex)
+		doc["signature_profile"] = "hybrid"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("declared non-ed25519 algorithm refuses legacy key fallback", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		doc := receipt(signature, keyHex)
+		doc["signature_algorithm"] = "ml-dsa-65"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
 }
 
 func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
@@ -505,6 +531,37 @@ func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
 	if !verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
 		t.Fatal("structured V5 receipt must verify")
 	}
+	for _, tc := range []struct {
+		name      string
+		profile   string
+		algorithm string
+		wantValid bool
+	}{
+		{name: "legacy_blank", wantValid: true},
+		{name: "profile_only", profile: "classical", wantValid: true},
+		{name: "algorithm_only", algorithm: "ed25519", wantValid: true},
+		{name: "both", profile: "classical", algorithm: "ed25519", wantValid: true},
+		{name: "profile_only_contradiction", profile: "hybrid"},
+		{name: "algorithm_only_contradiction", algorithm: "ml-dsa-65"},
+		{name: "both_contradict", profile: "hybrid", algorithm: "ml-dsa-65"},
+	} {
+		t.Run("signature_metadata_"+tc.name, func(t *testing.T) {
+			delete(document, "signature_profile")
+			delete(document, "signature_algorithm")
+			if tc.profile != "" {
+				document["signature_profile"] = tc.profile
+			}
+			if tc.algorithm != "" {
+				document["signature_algorithm"] = tc.algorithm
+			}
+			got := verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub))
+			if got != tc.wantValid {
+				t.Fatalf("verification = %v, want %v", got, tc.wantValid)
+			}
+		})
+	}
+	delete(document, "signature_profile")
+	delete(document, "signature_algorithm")
 	for _, tc := range []struct {
 		name          string
 		wireValue     json.Number
@@ -696,6 +753,19 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), receipt(signedEffectID, sign(signedEffectID), keyHex))
 		sealVerifierFixture(t, dir, "test-session-001")
 		report, err := VerifyBundleWithOptions(dir, VerifyOptions{Profile: evidencepkg.EvidenceTrustProfileTeam})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("declared nonclassical profile fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		doc := receipt(signedEffectID, sign(signedEffectID), keyHex)
+		doc["signature_profile"] = "hybrid"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
 		if err != nil {
 			t.Fatal(err)
 		}

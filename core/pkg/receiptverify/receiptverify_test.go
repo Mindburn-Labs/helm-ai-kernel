@@ -193,6 +193,34 @@ func TestFrozenReceiptStillVerifies(t *testing.T) {
 	}
 }
 
+func TestClassicalEd25519MetadataCompatibility(t *testing.T) {
+	fx := loadFrozen(t)
+	for _, tc := range []struct {
+		name      string
+		profile   string
+		algorithm string
+		wantValid bool
+	}{
+		{name: "legacy_blank", wantValid: true},
+		{name: "profile_only", profile: "classical", wantValid: true},
+		{name: "algorithm_only", algorithm: "ed25519", wantValid: true},
+		{name: "both", profile: "classical", algorithm: "ed25519", wantValid: true},
+		{name: "profile_only_contradiction", profile: "hybrid"},
+		{name: "algorithm_only_contradiction", algorithm: "ml-dsa-65"},
+		{name: "both_contradict", profile: "hybrid", algorithm: "ml-dsa-65"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			receipt := *fx.Receipts[0]
+			receipt.SignatureProfile = tc.profile
+			receipt.SignatureAlgorithm = tc.algorithm
+			result := Verify([]*contracts.Receipt{&receipt}, fx.trust())
+			if result.Valid != tc.wantValid {
+				t.Fatalf("Verify() valid = %v, want %v; checks=%+v errors=%v", result.Valid, tc.wantValid, result.Checks, result.Errors)
+			}
+		})
+	}
+}
+
 // TestFrozenFixtureFailsWhenCanonicalizationDrifts proves the previous test can
 // actually fail. A test that only ever passes is decoration.
 //

@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	chainFixture  = "../../pkg/receiptverify/testdata/frozen-chain-2026.json"
-	permitFixture = "../../pkg/receiptverify/testdata/frozen-permit-2026.json"
+	chainFixture           = "../../pkg/receiptverify/testdata/frozen-chain-2026.json"
+	permitFixture          = "../../pkg/receiptverify/testdata/frozen-permit-2026.json"
+	emptyGovernanceFixture = "../../../reference_packs/receipt-v5/executor_success_empty_governance.receipt.c14n.json"
 )
 
 type fixtureFile struct {
@@ -34,6 +35,105 @@ func loadFixture(t *testing.T, path string) fixtureFile {
 		t.Fatal(err)
 	}
 	return f
+}
+
+type rawReceiptShape struct {
+	name string
+	raw  []byte
+}
+
+func wrapReceiptShapes(t *testing.T, receipt json.RawMessage) []rawReceiptShape {
+	t.Helper()
+	array, err := json.Marshal([]json.RawMessage{receipt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := json.Marshal(map[string]any{"receipts": []json.RawMessage{receipt}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []rawReceiptShape{
+		{name: "single", raw: receipt},
+		{name: "array", raw: array},
+		{name: "bundle", raw: bundle},
+	}
+}
+
+func TestParseReceiptsNormalizesAllRawShapes(t *testing.T) {
+	receipt, err := os.ReadFile(emptyGovernanceFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, shape := range wrapReceiptShapes(t, receipt) {
+		t.Run(shape.name, func(t *testing.T) {
+			bundle, err := parseReceipts(shape.raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(bundle.Receipts) != 1 || bundle.Receipts[0] == nil {
+				t.Fatalf("parsed receipts = %#v, want one receipt", bundle.Receipts)
+			}
+			if got := bundle.Receipts[0].SignatureVersion; got != "receipt.v5" {
+				t.Fatalf("signature_version = %q, want receipt.v5", got)
+			}
+		})
+	}
+}
+
+func TestParseReceiptsRejectsMissingEmptySignedMemberInAllRawShapes(t *testing.T) {
+	raw, err := os.ReadFile(emptyGovernanceFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	delete(receipt, "policy_hash")
+	tampered, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, shape := range wrapReceiptShapes(t, tampered) {
+		t.Run(shape.name, func(t *testing.T) {
+			_, err := parseReceipts(shape.raw)
+			if err == nil || !strings.Contains(err.Error(), "policy_hash") {
+				t.Fatalf("missing empty policy_hash error = %v", err)
+			}
+		})
+	}
+}
+
+func TestParseReceiptsRejectsWrongSignedMemberTypes(t *testing.T) {
+	raw, err := os.ReadFile(emptyGovernanceFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name  string
+		field string
+		value json.RawMessage
+		want  string
+	}{
+		{name: "string_member", field: "policy_hash", value: json.RawMessage(`0`), want: "must be a string"},
+		{name: "lamport_clock", field: "lamport_clock", value: json.RawMessage(`"1"`), want: "must be an unsigned integer"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var receipt map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &receipt); err != nil {
+				t.Fatal(err)
+			}
+			receipt[tc.field] = tc.value
+			tampered, err := json.Marshal(receipt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = parseReceipts(tampered)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("wrong %s type error = %v, want %q", tc.field, err, tc.want)
+			}
+		})
+	}
 }
 
 // execute runs the CLI entrypoint with captured stdout/stderr.

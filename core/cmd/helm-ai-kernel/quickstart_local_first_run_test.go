@@ -272,8 +272,12 @@ func TestQuickstartJSONStdoutIsSingleReadyDocument(t *testing.T) {
 		}
 		// Exercise the same production output boundary that runtime startup uses:
 		// human narration must be redirected while the ready callback owns stdout.
-		_, _ = fmt.Fprintf(serverNarrationWriter(opts), "%sstartup narration%s\n", ColorBold, ColorReset)
-		writeServerReady(opts, opts.BindAddr, opts.Port)
+		_, _ = fmt.Fprintf(opts.Stderr, "%sstartup narration%s\n", ColorBold, ColorReset)
+		logger, format, err := configureServerLogger(opts.Stderr, opts.Mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeServerReady(opts, logger, format, opts.BindAddr, opts.Port)
 		return nil
 	}
 
@@ -301,6 +305,78 @@ func TestQuickstartJSONStdoutIsSingleReadyDocument(t *testing.T) {
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		t.Fatalf("quickstart JSON stdout contains more than one document: extra=%+v err=%v", extra, err)
+	}
+}
+
+func TestQuickstartJSONLogFailuresAreStructured(t *testing.T) {
+	t.Setenv("HELM_LOG_FORMAT", "json")
+	t.Setenv("HELM_ADMIN_API_KEY", "")
+	t.Setenv(runtimeTenantIDEnv, "")
+	t.Setenv(runtimePrincipalIDEnv, "")
+	t.Setenv(quickstartExpiresAtEnv, "")
+	originalRunQuickstartServer := runQuickstartServer
+	t.Cleanup(func() { runQuickstartServer = originalRunQuickstartServer })
+	runQuickstartServer = func(serverOptions) error {
+		return errors.New("listen tcp: bind: address already in use")
+	}
+
+	unmarkedDir := filepath.Join(t.TempDir(), "unmarked")
+	if err := os.MkdirAll(unmarkedDir, 0750); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(unmarkedDir, "keep")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name string
+		args []string
+		code int
+		want string
+	}{
+		{name: "parse", args: []string{"--unknown"}, code: 2, want: "flag provided but not defined"},
+		{name: "validation", args: []string{"--data-dir", ""}, code: 2, want: "--data-dir must not be empty"},
+		{name: "preparation", args: []string{"--reset", "--yes", "--data-dir", unmarkedDir}, code: 1, want: "unmarked target"},
+		{name: "start", args: []string{"--data-dir", filepath.Join(t.TempDir(), "start")}, code: 1, want: "address already in use"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			if code := runQuickstartCmd(test.args, &stdout, &stderr); code != test.code {
+				t.Fatalf("exit code = %d, want %d; stdout=%s stderr=%s", code, test.code, stdout.String(), stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("failure wrote stdout: %q", stdout.String())
+			}
+
+			decoder := json.NewDecoder(strings.NewReader(stderr.String()))
+			errorRecords := 0
+			foundError := false
+			for {
+				var record map[string]any
+				if err := decoder.Decode(&record); err == io.EOF {
+					break
+				} else if err != nil {
+					t.Fatalf("stderr contains non-JSON output: %v\n%s", err, stderr.String())
+				}
+				if record["level"] == "ERROR" {
+					errorRecords++
+					if record["msg"] == "quickstart failed" && strings.Contains(fmt.Sprint(record["error"]), test.want) {
+						foundError = true
+					}
+				}
+			}
+			if errorRecords != 1 || !foundError {
+				t.Fatalf("structured failure mismatch: errors=%d want=%q stderr=%s", errorRecords, test.want, stderr.String())
+			}
+			if test.name == "start" && !strings.Contains(stderr.String(), `"next_step"`) {
+				t.Fatalf("start failure omitted recovery route: %s", stderr.String())
+			}
+		})
+	}
+
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatalf("preparation failure touched sentinel: %v", err)
 	}
 }
 

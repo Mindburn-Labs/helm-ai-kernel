@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -463,4 +464,27 @@ func TestGovernedDeployedMCPGatewayRequiresReceiptComponents(t *testing.T) {
 	if err != nil || gateway == nil {
 		t.Fatalf("fully receipted governed gateway unavailable: gateway=%v err=%v", gateway, err)
 	}
+}
+
+func TestUnavailableMCPGatewayLogsWarning(t *testing.T) {
+	previousLogger := slog.Default()
+	var output bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	svc.Guardian = &guardian.Guardian{}
+	RegisterSubsystemRoutes(http.NewServeMux(), svc)
+
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var record map[string]any
+		if json.Unmarshal([]byte(line), &record) == nil && record["msg"] == "MCP gateway unavailable" {
+			if record["level"] != "WARN" {
+				t.Fatalf("MCP gateway log level = %v, want WARN", record["level"])
+			}
+			return
+		}
+	}
+	t.Fatalf("MCP gateway warning missing from logs: %s", output.String())
 }

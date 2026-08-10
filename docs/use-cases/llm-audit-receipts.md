@@ -10,9 +10,6 @@ and can someone else check?" HELM AI Kernel signs every boundary decision with
 Ed25519 over a JCS (RFC 8785) canonical form. **Status: Live** in HELM AI
 Kernel.
 
-Receipts roll up into EvidencePacks: content-addressed, SHA-256-hashed archives
-that bundle the decision chain for a run.
-
 The norm this enables is simple: no receipt, no production. An agent action that
 cannot be replayed and verified did not happen as far as your audit trail is
 concerned.
@@ -27,12 +24,15 @@ The `receipt.v5` signing envelope is a fixed 13-key JCS object
 
 `contracts.Receipt` carries 76 JSON fields
 (`core/pkg/contracts/receipt.go:9-116`). Twelve receipt fields plus the version
-tag are inside the signature. The rest are not, and editing one of them does not
-invalidate the signature. `timestamp`, `executor_id`, `correlation_id`,
-`metadata`, `key_id`, `public_key_set`, `merkle_root`, `witness_signatures`,
-`model_hash`, `tool_name` and `risk_tier` are all carried unsigned —
-`correlation_id` says so in its own struct comment: treat it as *a recorded
-claim, not signed evidence* (`core/pkg/contracts/receipt.go:15-16`).
+tag form the signing preimage. The remaining fields are outside that preimage,
+so the receipt signature alone does not authenticate them. `timestamp`,
+`executor_id`, `correlation_id`, `metadata`, `key_id`, `public_key_set`,
+`merkle_root`, `witness_signatures`, `model_hash`, `tool_name` and `risk_tier`
+are examples; `correlation_id` says so in its own struct comment: treat it as
+*a recorded claim, not signed evidence*
+(`core/pkg/contracts/receipt.go:15-16`). A following receipt may detect changes
+to fields included in its predecessor chain hash, subject to the exclusions
+below.
 
 So state the guarantee precisely, because the precise version is the one worth
 having: **the governance meaning of a receipt — its verdict, reason code, policy
@@ -45,52 +45,42 @@ call a HELM receipt tamper-evident without naming the fields it covers.
 Two limits apply today:
 
 - **Chaining covers backwards, not forwards.** `prev_hash` is signed and is a
-  hash of the whole preceding receipt, so altering any field of a receipt that
-  has a successor breaks the successor's chain check. The last receipt in a
-  chain has no successor and gets no such cover.
+  hash of the preceding receipt after `Transparency`, `LogID`, and `LeafIndex`
+  are excluded. Altering another hashed field of a receipt that has a successor
+  breaks the successor's chain check. Those three anchoring fields are not
+  covered by the causal hash, and the final receipt has no successor to provide
+  successor-chain coverage.
 - **Unversioned receipts verify under a narrower rule.** A receipt with no
   `signature_version` falls back to the legacy V4 preimage: eight fields joined
   with `:` (`core/pkg/crypto/canonical.go:232-233`). The 13-key envelope applies
   only to receipts that declare `receipt.v5`.
 
-## Verifying a pack
+## Verifying a receipt chain
 
-`receipt_verify` checks a receipt chain with no HELM service in the trust path.
-It opens no sockets by construction rather than by policy: the binary's
-transitive import graph contains no transport package, and a test fails the
-build if one appears (`core/cmd/receipt_verify/main.go:1-32`).
-**Status: Live.**
+`receipt_verify` checks receipt chains and optional EffectPermits with classical
+Ed25519 only. Hybrid and post-quantum receipt profiles are unsupported. It uses
+no HELM service in the trust path and opens no sockets by construction rather
+than by policy: the binary's transitive import graph contains no transport
+package, and a test fails the build if one appears
+(`core/cmd/receipt_verify/main.go:1-32`). **Status: Live.**
 
-Verification answers one question — were these bytes signed by the key you
-supplied. It does not bind that key to an organization, so an auditor, insurer,
-or counterparty needs the signer's public key over an independent channel.
-Running with `--allow-self-attested` verifies against a key that travelled
-inside the pack; that shows internal consistency and nothing about origin.
+For each receipt, the verifier reconstructs the preimage declared by
+`signature_version` (legacy V4 when absent, `receipt.v5` when declared) and
+accepts the signature if it verifies under any caller-supplied Ed25519 key. An
+unknown preimage version is rejected. The receipt's `key_id` is only a key-order
+hint; every supplied key is trusted, and the verifier does not bind any key to
+an organization. An auditor, insurer, or counterparty must obtain the signer's
+public key over an independent channel. Running with `--allow-self-attested`
+uses key material carried with the input; that shows internal consistency and
+nothing about origin.
 
-The byte-construction rule for the mainline receipt is not published, so a third
-party cannot currently write an independent verifier from a specification — they
-run this one. The mainline receipt is recorded as integrity-UNSPECIFIED in
+The `receipt.v5` byte-construction rule is not defined by a published normative
+specification. This verifier reconstructs the current implementation's preimage;
+its pass shows agreement with that implementation, not conformance to a public
+receipt wire specification. The mainline receipt is recorded as
+integrity-UNSPECIFIED in
 [ADR 0003 §D4](../adr/0003-normative-artifact-arbitration.md).
-**Status: unpublished**, tracked as remediation step P2-3. Treat a published
-receipt specification as absent until that step lands, not as pending.
-
-## Audit Receipt Chain
-
-```mermaid
-flowchart LR
-    Request["LLM action request"] --> Verdict["Boundary verdict"]
-    Verdict --> Receipt["Signed receipt"]
-    Receipt --> Hash["Receipt hash"]
-    Hash --> EvidencePack["EvidencePack"]
-    EvidencePack --> Auditor["Auditor verification"]
-```
-
-```bash
-git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
-cd helm-ai-kernel
-make build
-bash scripts/launch/demo-proof.sh
-```
+**Status: unpublished.**
 
 ## Source Truth
 

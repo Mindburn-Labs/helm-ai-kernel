@@ -132,7 +132,8 @@ three states:
 
 ### D4 — The per-family register
 
-This is the arbitration answer. Every row was read at `origin/main` e24e90d70.
+This is the arbitration answer. Every row was originally audited at
+`origin/main` e24e90d70 and is updated when its normative source and gates land.
 
 #### Receipts
 
@@ -151,11 +152,13 @@ is P2-7. Until it says so, no surface may cite it as "the HELM receipt standard"
 
 | Family | Integrity state | Integrity source (or implementation of record) | Wire source | Derived |
 | --- | --- | --- | --- | --- |
-| `effects.EffectPermit` / `effect_permit.v1` | **UNSPECIFIED** | Implementation of record: `core/pkg/crypto/effect_permit.go:47-63` (17-key JCS envelope, UTC-normalized timestamps, nil→empty slices, order-significant lists). Nothing published, in this repository or in `app-helm-docs`. | `protocols/proto/helm/effects/v1/effects.proto:29-45` — **structurally incomplete**: the signed field `evidence_bindings` (`effect_permit.go:63`) has no proto field, so a permit that crosses a proto hop cannot be verified on the far side. The type's own comment states this at `effect_permit.go:37-46`. | the five SDK bindings |
+| `effects.EffectPermit` / `effect_permit.v1` | **SPECIFIED** | `protocols/specs/effects/effect-permit-v1.md` + `reference_packs/effect-permit-v1/`, with Go parity and an independent Python verifier bound into `make verify-fixtures` | `protocols/proto/helm/effects/v1/effects.proto:29-50`, including the signed `evidence_bindings` at field 16; `core/pkg/crypto/permit_cross_process_test.go` proves a field-complete wire round trip | the five SDK bindings |
 
-Until the wire contract carries every signed field, `effect_permit.v1` is an
-**in-process** contract. It has no cross-process wire contract to arbitrate, and
-none may be implied.
+The integrity contract and wire field set are specified and sufficient to
+reconstruct the signed preimage across a protobuf hop. This does not claim a
+shipping cross-process dispatch: production still has no
+`effects.EffectPermit`-to-generated-protobuf converter or Go-to-proto permit
+hop. Per D7, runtime deployment remains separate from contract status.
 
 #### Decisions
 
@@ -322,9 +325,10 @@ description of enforcement.
 
 Read together: **every enforced derivation runs downward from OpenAPI or proto
 into generated code. Not one gate runs upward from a specification into the
-signing implementation, except for the eleven reference packs.** That asymmetry
-is the whole reason `receipt.v5` and `effect_permit.v1` are UNSPECIFIED, and it
-is why P2-3 and P2-6 are pack-shaped rather than schema-shaped.
+signing implementation, except for the reference packs.** That asymmetry is why
+`receipt.v5` remains UNSPECIFIED and why P2-3 and P2-6 are pack-shaped rather
+than schema-shaped; this EffectPermit pack moves `effect_permit.v1` to
+SPECIFIED.
 
 ## Consequences
 
@@ -333,10 +337,9 @@ is why P2-3 and P2-6 are pack-shaped rather than schema-shaped.
   are not a fix for an unpublished preimage; `receipt-format-v1.md` is the launch
   profile's integrity source, so rewriting it to match the mainline receipt is a
   category error.
-- Three families are named UNSPECIFIED in a committed document
-  (`receipt.v5`, `effect_permit.v1`, `decision_record.v4`). This is intentional
-  and is the honest state; it is also the precondition for P2-3 and P2-6 to have
-  a defined target rather than a competing one.
+- Two families remain UNSPECIFIED (`receipt.v5`, `decision_record.v4`). This is
+  intentional and is the honest state; `effect_permit.v1` is now SPECIFIED by
+  its normative document and CI-bound reference pack.
 - EvidencePack is named CONTRADICTED, which blocks citing
   `evidence-pack-v1.md` on any surface until P2-7 corrects it.
 - The field-addition rule applies from today, including to changes that predate

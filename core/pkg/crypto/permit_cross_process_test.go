@@ -43,9 +43,9 @@ import (
 //
 // WHAT THIS IS NOT: production has no Go-to-proto permit hop yet, so this is the
 // contract a cross-process dispatch must use, proven sufficient in advance — not
-// a mirror of a shipping code path. The mapping helpers below are consequently
-// the only executable statement of that contract in the repo; see
-// TestEffectTypeEnumMappingIsPinned for the part of it that is still unpublished.
+// a mirror of a shipping code path. The mapping helpers below are the executable
+// parity fixture for the published contract; TestEffectTypeEnumMappingIsPinned
+// guards its enum-to-bare-value rule.
 
 // permitWireContract is the EffectPermit field numbering, read from the .proto
 // rather than copied, so the test fails when the contract and the signed

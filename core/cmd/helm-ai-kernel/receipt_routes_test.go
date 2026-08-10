@@ -739,6 +739,7 @@ func TestReceiptListQueryFilters(t *testing.T) {
 		{"resource alias", "principal=agent.filtered&resource=READ_FILE", []string{"rcpt-allow", "rcpt-to-boundary"}},
 		{"half-open time bounds", "principal=agent.filtered&from=2026-05-06T00:00:00Z&to=2026-05-08T00:00:00Z", []string{"rcpt-allow", "rcpt-deny"}},
 		{"nanosecond half-open time bounds", "principal=agent.nanosecond&from=2026-05-09T00:00:00.123456789Z&to=2026-05-09T00:00:00.123456790Z", []string{"rcpt-nano-at"}},
+		{"timezone offset represents the same nanosecond bounds", "principal=agent.nanosecond&from=2026-05-09T02:00:00.123456789%2B02:00&to=2026-05-09T02:00:00.123456790%2B02:00", []string{"rcpt-nano-at"}},
 		{"session filter remains tenant scoped", "session_id=session-deny&executor=agent.filtered&resource=EXECUTE_TOOL", []string{"rcpt-deny"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -756,12 +757,26 @@ func TestReceiptListRejectsInvalidTimeFilter(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?from=not-a-timestamp", nil)
-	authorizeTestRequest(req)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("invalid from filter status = %d body=%s", rec.Code, rec.Body.String())
+	for _, tc := range []struct {
+		name string
+		from string
+	}{
+		{"malformed", "not-a-timestamp"},
+		{"comma fractional separator", "2026-05-09T00:00:00,1Z"},
+		{"more than nine fractional digits", "2026-05-09T00:00:00.1234567890Z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?from="+tc.from, nil)
+			authorizeTestRequest(req)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("invalid from filter status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "RFC3339Nano with at most 9 fractional digits") {
+				t.Fatalf("invalid from filter body = %s", rec.Body.String())
+			}
+		})
 	}
 }
 

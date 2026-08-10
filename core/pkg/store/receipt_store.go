@@ -136,7 +136,9 @@ type TenantScopedOnboardingReceiptReader interface {
 // dimension; IsZero reports whether the whole filter is empty.
 //
 // Every predicate matches the store's indexed projection column, which is a
-// compatibility copy written beside the receipt, NOT the signed envelope. What
+// compatibility copy written beside the receipt, NOT the signed envelope. For
+// rows with a canonical envelope, the five filter projections are required to
+// match that hash-verified envelope before the row is returned. What
 // authenticates each returned row differs by dimension and is documented where
 // the filter is applied (see the /api/v1/receipts handler): Verdict, ReasonCode
 // and Effect are bound by the receipt.v5 signing envelope; Executor and the
@@ -682,9 +684,8 @@ func (s *PostgresReceiptStore) resolveTenantCursorAppendSequence(ctx context.Con
 // appendReceiptFilterPredicatesPostgres weaves the optional ReceiptQueryFilter
 // dimensions into a tenant-scoped query as additional AND predicates, using
 // $-placeholders that continue from the caller's current argument list. Each
-// predicate matches an indexed projection column; the returned envelope is the
-// hash-verified receipt, but the projection column the predicate tests is not
-// itself re-verified against the signature at filter time.
+// predicate matches an indexed projection column. A returned canonical envelope
+// must match all five filter projections at the shared restore boundary.
 func appendReceiptFilterPredicatesPostgres(query string, args []any, filter ReceiptQueryFilter) (string, []any) {
 	addEq := func(column, value string) {
 		args = append(args, value)
@@ -918,6 +919,18 @@ func restoreReceiptEnvelopeWithIntegrity(projected *contracts.Receipt, raw []byt
 		}
 		if hash != storedChainHash {
 			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q canonical envelope hash %q does not match stored chain hash %q", receipt.ReceiptID, hash, storedChainHash)
+		}
+		switch {
+		case receipt.Verdict != projected.Verdict:
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q canonical envelope verdict does not match indexed projection", receipt.ReceiptID)
+		case receipt.ReasonCode != projected.ReasonCode:
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q canonical envelope reason_code does not match indexed projection", receipt.ReceiptID)
+		case receipt.ExecutorID != projected.ExecutorID:
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q canonical envelope executor_id does not match indexed projection", receipt.ReceiptID)
+		case receipt.EffectID != projected.EffectID:
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q canonical envelope effect_id does not match indexed projection", receipt.ReceiptID)
+		case !receipt.Timestamp.Equal(projected.Timestamp):
+			return nil, receiptEnvelopeProjectionOnly, fmt.Errorf("receipt %q canonical envelope timestamp does not match indexed projection", receipt.ReceiptID)
 		}
 		return &receipt, receiptEnvelopeHashVerified, nil
 	}

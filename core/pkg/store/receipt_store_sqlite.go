@@ -588,8 +588,9 @@ func (s *SQLiteReceiptStore) resolveTenantCursorAppendSequence(ctx context.Conte
 // dimensions into a tenant-scoped query as positional predicates. Timestamp
 // bounds are compared against the RFC3339Nano UTC text the store persists (see
 // insertSQLiteReceiptWithCausalSession); the production Postgres store compares
-// native TIMESTAMPTZ. Each predicate matches an indexed projection column, not
-// the signed envelope.
+// native TIMESTAMPTZ. Each predicate matches an indexed projection column. A
+// returned canonical envelope must match all five filter projections at the
+// shared restore boundary.
 func appendReceiptFilterPredicatesSQLite(query string, args []any, filter ReceiptQueryFilter) (string, []any) {
 	if v := strings.TrimSpace(filter.Verdict); v != "" {
 		query += "\n\t\t  AND verdict = ?"

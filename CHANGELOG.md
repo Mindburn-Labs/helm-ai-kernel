@@ -92,10 +92,12 @@ evidence, and release artifacts for that exact capability.
 ### Added — tenant-scoped receipt query predicates
 
 `GET /api/v1/receipts` can filter the authenticated tenant's V5 receipts by
-verdict, reason code, principal/executor, effect/resource, and an RFC3339
-half-open time window. Verdict, reason code, and effect are receipt-signature
-fields; principal and timestamp are causal-chain-bound projections, and the
-listing does not prove completeness.
+verdict, reason code, principal/executor, effect/resource, and an RFC3339Nano
+half-open time window with at most nine fractional-second digits. Verdict,
+reason code, and effect are receipt-signature fields; principal and timestamp
+are causal-chain-bound projections, and the listing does not prove
+completeness. Canonical rows fail closed if any filter projection differs from
+the hash-verified receipt envelope.
 
 ## [0.8.4] - pending tag
 

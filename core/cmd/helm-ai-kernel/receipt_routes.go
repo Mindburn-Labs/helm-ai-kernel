@@ -418,9 +418,10 @@ func listReceiptsForCursor(ctx context.Context, svc *Services, tenantID, session
 
 // parseReceiptQueryFilter reads the optional predicate dimensions from the
 // query string so a caller can answer "everything denied for reason X in
-// period Y" in one request. Time bounds are RFC3339 (from inclusive, to
-// exclusive). principal/executor and effect/resource are accepted as synonyms.
-// Absent params impose no constraint on that dimension.
+// period Y" in one request. Time bounds are RFC3339Nano with at most nine
+// fractional-second digits (from inclusive, to exclusive). principal/executor
+// and effect/resource are accepted as synonyms. Absent params impose no
+// constraint on that dimension.
 func parseReceiptQueryFilter(r *http.Request) (store.ReceiptQueryFilter, error) {
 	q := r.URL.Query()
 	executor := strings.TrimSpace(q.Get("principal"))
@@ -458,9 +459,22 @@ func parseReceiptFilterTime(raw string) (time.Time, error) {
 	if raw == "" {
 		return time.Time{}, nil
 	}
-	parsed, err := time.Parse(time.RFC3339, raw)
+	const formatError = "must be RFC3339Nano with at most 9 fractional digits"
+	if strings.ContainsRune(raw, ',') {
+		return time.Time{}, fmt.Errorf(formatError)
+	}
+	if dot := strings.IndexByte(raw, '.'); dot >= 0 {
+		fractionalDigits := 0
+		for i := dot + 1; i < len(raw) && raw[i] >= '0' && raw[i] <= '9'; i++ {
+			fractionalDigits++
+		}
+		if fractionalDigits > 9 {
+			return time.Time{}, fmt.Errorf(formatError)
+		}
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("must be RFC3339")
+		return time.Time{}, fmt.Errorf(formatError)
 	}
 	return parsed.UTC(), nil
 }

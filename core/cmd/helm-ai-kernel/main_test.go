@@ -2,15 +2,19 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 func chdirTempDir(t *testing.T) string {
@@ -164,6 +168,7 @@ func TestRun_Unknown(t *testing.T) {
 }
 
 func TestRunServerCommandReportsStartupFailure(t *testing.T) {
+	t.Setenv("HELM_LOG_FORMAT", "")
 	originalRunServer := startServer
 	defer func() { startServer = originalRunServer }()
 	startServer = func() error { return errors.New("bind failed") }
@@ -172,29 +177,129 @@ func TestRunServerCommandReportsStartupFailure(t *testing.T) {
 	exitCode := runServerCommand("server", nil, &stdout, &stderr)
 
 	assert.Equal(t, 1, exitCode)
-	assert.Contains(t, stderr.String(), "bind failed")
+	var record map[string]any
+	assert.NoError(t, json.Unmarshal(stderr.Bytes(), &record))
+	assert.Equal(t, "ERROR", record["level"])
+	assert.Equal(t, "server command failed", record["msg"])
+	assert.Contains(t, record["error"], "bind failed")
 }
 
-func TestServerNarrationWriterSeparatesJSONAndText(t *testing.T) {
+func TestRunServerCommandInvalidLogFormatIsStructured(t *testing.T) {
+	t.Setenv("HELM_LOG_FORMAT", "yaml")
+	var stdout, stderr bytes.Buffer
+
+	exitCode := runServerCommand("serve", nil, &stdout, &stderr)
+
+	assert.Equal(t, 2, exitCode)
+	assert.Empty(t, stdout.String())
+	var record map[string]any
+	assert.NoError(t, json.Unmarshal(stderr.Bytes(), &record))
+	assert.Equal(t, "ERROR", record["level"])
+	assert.Equal(t, "server command failed", record["msg"])
+	assert.Contains(t, record["error"], `invalid HELM_LOG_FORMAT "yaml"`)
+}
+
+func TestServerLogFormatDefaultsAndOverrides(t *testing.T) {
 	for _, test := range []struct {
-		name       string
-		json       bool
-		wantStdout string
-		wantStderr string
+		name, mode, env, want string
 	}{
-		{name: "json", json: true, wantStderr: "human startup narration"},
-		{name: "text", wantStdout: "human startup narration"},
+		{name: "daemon defaults to json", mode: "serve", want: "json"},
+		{name: "server defaults to json", mode: "server", want: "json"},
+		{name: "quickstart defaults to text", mode: "quickstart", want: "text"},
+		{name: "quickstart json override", mode: "quickstart", env: "json", want: "json"},
+		{name: "daemon text override", mode: "serve", env: "text", want: "text"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			var stdout, stderr bytes.Buffer
-			if _, err := fmt.Fprint(serverNarrationWriter(serverOptions{JSON: test.json, Stdout: &stdout, Stderr: &stderr}), "human startup narration"); err != nil {
-				t.Fatal(err)
-			}
-			if stdout.String() != test.wantStdout || stderr.String() != test.wantStderr {
-				t.Fatalf("narration routing stdout=%q stderr=%q", stdout.String(), stderr.String())
+			t.Setenv("HELM_LOG_FORMAT", test.env)
+			got, err := resolveServerLogFormat(test.mode)
+			if err != nil || got != test.want {
+				t.Fatalf("resolveServerLogFormat(%q) = %q, %v; want %q", test.mode, got, err, test.want)
 			}
 		})
 	}
+}
+
+func TestDaemonNarrationAndReadinessAreStructured(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	logger := slog.New(newServerLogHandler(&stderr, "json"))
+	writeServerNarration(logger, "json", &stdout, "human startup narration", "kernel starting")
+	if err := writeServerReady(serverOptions{Mode: "serve", Stdout: &stdout}, logger, "json", "127.0.0.1", 7714); err != nil {
+		t.Fatal(err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("structured daemon wrote plain stdout: %q", stdout.String())
+	}
+	for _, line := range strings.Split(strings.TrimSpace(stderr.String()), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("daemon emitted non-JSON line %q: %v", line, err)
+		}
+		for _, key := range []string{"timestamp", "level", "msg"} {
+			if record[key] == nil {
+				t.Fatalf("daemon record lacks %s: %v", key, record)
+			}
+		}
+		if strings.Contains(line, "\x1b") {
+			t.Fatalf("daemon record contains ANSI: %q", line)
+		}
+	}
+}
+
+func TestServerLogHandler(t *testing.T) {
+	traceID := oteltrace.TraceID{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}
+	spanID := oteltrace.SpanID{0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18}
+	ctx := oteltrace.ContextWithSpanContext(context.Background(), oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  spanID,
+	}))
+
+	t.Run("json by default", func(t *testing.T) {
+		t.Setenv("HELM_LOG_FORMAT", "")
+		var output bytes.Buffer
+		format, err := resolveServerLogFormat("serve")
+		if err != nil {
+			t.Fatal(err)
+		}
+		handler := newServerLogHandler(&output, format)
+		slog.New(handler).InfoContext(ctx, "request served", "status", http.StatusOK)
+
+		var record map[string]any
+		if err := json.Unmarshal(output.Bytes(), &record); err != nil {
+			t.Fatalf("decode JSON log %q: %v", output.String(), err)
+		}
+		timestamp, ok := record["timestamp"].(string)
+		if !ok {
+			t.Fatalf("JSON log has no string timestamp: %v", record)
+		}
+		if _, err := time.Parse("2006-01-02T15:04:05.999Z07:00", timestamp); err != nil {
+			t.Fatalf("timestamp %q does not match the collector contract: %v", timestamp, err)
+		}
+		assert.NotContains(t, record, "time")
+		assert.Equal(t, "INFO", record["level"])
+		assert.Equal(t, "request served", record["msg"])
+		assert.Equal(t, float64(http.StatusOK), record["status"])
+		assert.Equal(t, traceID.String(), record["trace_id"])
+		assert.Equal(t, spanID.String(), record["span_id"])
+	})
+
+	t.Run("text is an explicit local opt-in", func(t *testing.T) {
+		t.Setenv("HELM_LOG_FORMAT", "text")
+		var output bytes.Buffer
+		format, err := resolveServerLogFormat("serve")
+		if err != nil {
+			t.Fatal(err)
+		}
+		handler := newServerLogHandler(&output, format)
+		slog.New(handler).InfoContext(ctx, "request served")
+		assert.Contains(t, output.String(), "level=INFO")
+		assert.Contains(t, output.String(), "trace_id="+traceID.String())
+	})
+
+	t.Run("unknown format fails closed", func(t *testing.T) {
+		t.Setenv("HELM_LOG_FORMAT", "yaml")
+		_, err := resolveServerLogFormat("serve")
+		assert.EqualError(t, err, `invalid HELM_LOG_FORMAT "yaml": expected json or text`)
+	})
 }
 
 // TestRunUnknownFlagDoesNotStartTheServer replaces the former

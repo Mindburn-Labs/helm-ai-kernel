@@ -156,7 +156,7 @@ for artifact in \
     dist/helm-ai-kernel.mcpb \
     sbom.json \
     release.high_risk.v3.toml \
-    reference_packs/eu_ai_act_high_risk.v1.json; do
+    reference_packs/eu_ai_act_high_risk.v2.json; do
     require_file "$SNAPSHOT_ROOT/$artifact"
 done
 
@@ -215,7 +215,7 @@ root = pathlib.Path(sys.argv[1])
 out = pathlib.Path(sys.argv[2])
 members = [
     pathlib.Path("release.high_risk.v3.toml"),
-    pathlib.Path("reference_packs/eu_ai_act_high_risk.v1.json"),
+    pathlib.Path("reference_packs/eu_ai_act_high_risk.v2.json"),
 ]
 with tarfile.open(out, "w") as tar:
     for rel in members:

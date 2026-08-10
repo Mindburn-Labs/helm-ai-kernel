@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"runtime"
@@ -238,7 +239,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// --- MCP Gateway ---
 	mcpGateway, err := newDeployedMCPGateway(svc)
 	if err != nil {
-		log.Printf("[helm] routes: MCP gateway unavailable: %v", err)
+		slog.Warn("MCP gateway unavailable", "error", err)
 	} else {
 		registerDeployedMCPRoutes(mux, mcpGateway)
 		log.Println("[helm] routes: MCP gateway routes registered")

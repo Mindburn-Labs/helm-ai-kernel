@@ -188,6 +188,8 @@ func TestHelpMatrix(t *testing.T) {
 	assertSafeHelp(t, []string{"help", "--all"})
 	assertSafeHelp(t, []string{"--help"})
 	assertSafeHelp(t, []string{"-h"})
+	assertSafeHelp(t, []string{"serve", "--policy", "unused.toml", "--help"})
+	assertSafeHelp(t, []string{"server", "--port", "8080", "-h"})
 
 	if startCalls != 0 {
 		t.Fatalf("help started the server %d times", startCalls)

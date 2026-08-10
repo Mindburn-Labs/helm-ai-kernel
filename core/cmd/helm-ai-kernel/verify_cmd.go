@@ -86,8 +86,8 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for external host evidence chains")
 	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for conformance report signatures")
 	cmd.StringVar(&managedAgentKey, "managed-agent-receipt-public-key", strings.TrimSpace(os.Getenv("HELM_MANAGED_AGENT_RECEIPT_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for embedded managed-agent receipt signatures")
-	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require every receipt to carry an eIDAS-qualified RFC 3161 anchor")
-	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of an anchor's integrated_time before --require-eidas treats it as stale")
+	cmd.BoolVar(&requireEIDAS, "require-eidas", false, "Require eIDAS-labelled anchor metadata (backend=eidas-qtsp with a parseable integrated_time); metadata-only, not RFC 3161 or EU Trusted List cryptographic verification")
+	cmd.IntVar(&eidasMaxAgeHours, "eidas-max-age-hours", 24, "Maximum age in hours of the declared integrated_time checked by --require-eidas; this does not verify the timestamp token")
 	cmd.StringVar(&requireTEE, "require-tee", "", "Require every receipt to carry a TEE attestation; one of sevsnp|tdx|nitro|any (empty = no requirement)")
 
 	normalizedArgs, normalizeErr := normalizeVerifyArgs(args)
@@ -189,7 +189,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if requireEIDAS {
-		eidasResults := checkEIDASAnchors(verifyTarget, time.Duration(eidasMaxAgeHours)*time.Hour)
+		eidasResults := checkEIDASAnchorMetadata(verifyTarget, time.Duration(eidasMaxAgeHours)*time.Hour)
 		report.Checks = append(report.Checks, eidasResults...)
 		for _, r := range eidasResults {
 			if !r.Pass {
@@ -566,15 +566,17 @@ func finalizeVerifyReport(report *verifier.VerifyReport) {
 	report.Summary = fmt.Sprintf("PASS: %d/%d checks passed", len(report.Checks), len(report.Checks))
 }
 
-// checkEIDASAnchors verifies that every receipt in the bundle carries an
-// eIDAS-qualified RFC 3161 anchor (backend == "eidas-qtsp") and that the
-// integrated_time of each anchor is fresher than maxAge.
+// checkEIDASAnchorMetadata inventories anchor records whose metadata declares
+// backend == "eidas-qtsp" and checks that integrated_time is parseable and no
+// older than maxAge. It does not parse or verify an RFC 3161 token, validate a
+// message imprint or signature, consult an EU Trusted List, establish receipt
+// coverage, or prove eIDAS/QTSP qualification.
 //
 // Anchor receipts are looked up under <bundle>/02_PROOFGRAPH/anchors/*.json
 // and as embedded shapes inside <bundle>/00_INDEX.json (key "anchor"). The
 // receipt JSON shape mirrors anchor.AnchorReceipt: {backend, log_id,
 // log_index, integrated_time, signature, request:{...}}.
-func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.CheckResult {
+func checkEIDASAnchorMetadata(bundleRoot string, maxAge time.Duration) []verifier.CheckResult {
 	const eidasBackend = "eidas-qtsp"
 
 	results := make([]verifier.CheckResult, 0, 4)
@@ -586,6 +588,7 @@ func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.Check
 	type anchorMeta struct {
 		Path           string
 		Backend        string
+		IntegratedRaw  string
 		IntegratedTime time.Time
 	}
 	var anchors []anchorMeta
@@ -616,7 +619,7 @@ func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.Check
 		backend, _ := doc["backend"].(string)
 		ts, _ := doc["integrated_time"].(string)
 		parsed, _ := time.Parse(time.RFC3339, ts)
-		anchors = append(anchors, anchorMeta{Path: path, Backend: backend, IntegratedTime: parsed})
+		anchors = append(anchors, anchorMeta{Path: path, Backend: backend, IntegratedRaw: ts, IntegratedTime: parsed})
 	}
 
 	// Also check 00_INDEX.json's embedded anchor field, when present.
@@ -627,7 +630,7 @@ func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.Check
 				backend, _ := a["backend"].(string)
 				ts, _ := a["integrated_time"].(string)
 				parsed, _ := time.Parse(time.RFC3339, ts)
-				anchors = append(anchors, anchorMeta{Path: "00_INDEX.json#anchor", Backend: backend, IntegratedTime: parsed})
+				anchors = append(anchors, anchorMeta{Path: "00_INDEX.json#anchor", Backend: backend, IntegratedRaw: ts, IntegratedTime: parsed})
 			}
 		}
 	}
@@ -636,7 +639,7 @@ func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.Check
 		results = append(results, verifier.CheckResult{
 			Name:   "eidas:require",
 			Pass:   false,
-			Reason: "no anchor receipts found under 02_PROOFGRAPH/anchors/ or 00_INDEX.json#anchor; --require-eidas needs at least one eIDAS-qualified anchor",
+			Reason: "no anchor metadata found under 02_PROOFGRAPH/anchors/ or 00_INDEX.json#anchor; --require-eidas needs at least one record declaring backend=eidas-qtsp and does not establish eIDAS qualification",
 		})
 		return results
 	}
@@ -653,7 +656,15 @@ func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.Check
 			continue
 		}
 		hasEIDAS = true
-		if maxAge > 0 && !a.IntegratedTime.IsZero() && now.Sub(a.IntegratedTime) > maxAge {
+		if strings.TrimSpace(a.IntegratedRaw) == "" || a.IntegratedTime.IsZero() {
+			results = append(results, verifier.CheckResult{
+				Name:   "eidas:anchor_metadata",
+				Pass:   false,
+				Reason: fmt.Sprintf("anchor %s must declare integrated_time as RFC3339 metadata; no timestamp token or EU Trusted List verification was performed", a.Path),
+			})
+			continue
+		}
+		if maxAge > 0 && now.Sub(a.IntegratedTime) > maxAge {
 			results = append(results, verifier.CheckResult{
 				Name: "eidas:anchor_freshness",
 				Pass: false,
@@ -663,9 +674,9 @@ func checkEIDASAnchors(bundleRoot string, maxAge time.Duration) []verifier.Check
 			continue
 		}
 		results = append(results, verifier.CheckResult{
-			Name:   "eidas:anchor_qualified",
+			Name:   "eidas:anchor_metadata",
 			Pass:   true,
-			Detail: fmt.Sprintf("%s carries eIDAS-qualified anchor at %s", a.Path, a.IntegratedTime.Format(time.RFC3339)),
+			Detail: fmt.Sprintf("%s declares backend=%s and integrated_time=%s; metadata only, RFC 3161 token and EU Trusted List were not verified", a.Path, eidasBackend, a.IntegratedTime.Format(time.RFC3339)),
 		})
 	}
 

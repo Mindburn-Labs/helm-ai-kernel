@@ -40,7 +40,7 @@ This tree is the canonical public documentation source for HELM AI Kernel. Publi
 
 - [OpenAI-compatible proxy](INTEGRATIONS/openai_baseurl.md)
 - [MCP integration](INTEGRATIONS/mcp.md)
-- [Highflame ZeroID Integration](INTEGRATIONS/zeroid.md)
+- [Highflame ZeroID — not integrated (envelope deny gate)](INTEGRATIONS/zeroid.md)
 - [Vaultak State Transaction Bridge](INTEGRATIONS/vaultak.md)
 - [BGT Labs Sentinel Authorization Gateway](INTEGRATIONS/sentinel.md)
 

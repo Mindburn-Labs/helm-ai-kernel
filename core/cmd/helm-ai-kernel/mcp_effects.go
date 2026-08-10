@@ -1,3 +1,8 @@
+// quantum_posture: this wiring consumes a classical Ed25519 seed only to key
+// the bridge's permit signer; it implements no cryptography itself and claims
+// no hybrid or post-quantum protection. Signing and verification are delegated
+// to the bridge and core/pkg/crypto, whose posture governs.
+
 package main
 
 import (

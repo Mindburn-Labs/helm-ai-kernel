@@ -1,3 +1,6 @@
+// quantum_posture: this test verifies classical Ed25519 permit signatures via
+// core/pkg/crypto; it exercises no post-quantum or hybrid path and asserts none.
+
 package main
 
 import (

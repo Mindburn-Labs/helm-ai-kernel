@@ -1,8 +1,10 @@
 {
   "pack_id": "eu-ai-act-high-risk-v2",
-  "label": "EU AI Act High-Risk System Compliance",
-  "description": "Governs AI agent operations classified as high-risk under the EU AI Act (Regulation 2024/1689, as amended by Regulation (EU) 2026/1744). Enforces risk management, data governance, transparency, human oversight, and technical documentation requirements per Articles 6-15 and Annex III.",
+  "label": "EU AI Act High-Risk System Compliance Mapping",
+  "description": "Maps selected EU AI Act high-risk obligations to HELM controls and candidate policy outcomes. This artifact does not configure runtime policy, enforce legal duties, determine applicability, or prove compliance.",
   "version": 2,
+  "artifact_kind": "COMPLIANCE_MAPPING",
+  "runtime_enforcement": false,
   "supersedes": "eu-ai-act-high-risk-v1",
   "compliance_framework": "EU_AI_ACT",
   "risk_classification": "HIGH",
@@ -16,14 +18,14 @@
       "label": "Risk Management System (Art. 9)",
       "status": "active",
       "controls": [
-        { "control_id": "Art.9(2)(a)", "description": "Identify and analyze known/foreseeable risks", "enforcement": "MANDATORY" },
-        { "control_id": "Art.9(2)(b)", "description": "Estimate and evaluate risks from intended use and foreseeable misuse", "enforcement": "MANDATORY" },
-        { "control_id": "Art.9(4)", "description": "Implement risk mitigation measures", "enforcement": "MANDATORY" },
-        { "control_id": "Art.9(5)", "description": "Test for risk management effectiveness", "enforcement": "MANDATORY" }
+        { "control_id": "Art.9(2)(a)", "description": "Identify and analyze known/foreseeable risks", "mapping_status": "MAPPED" },
+        { "control_id": "Art.9(2)(b)", "description": "Estimate and evaluate risks from intended use and foreseeable misuse", "mapping_status": "MAPPED" },
+        { "control_id": "Art.9(4)", "description": "Implement risk mitigation measures", "mapping_status": "MAPPED" },
+        { "control_id": "Art.9(5)", "description": "Test for risk management effectiveness", "mapping_status": "MAPPED" }
       ],
-      "policy_rules": [
-        { "action": "deny", "condition": "risk_level == CRITICAL AND autonomy_level > 0", "reason": "Art.9: critical-risk actions require human approval" },
-        { "action": "require_approval", "condition": "risk_level == HIGH", "reason": "Art.9: high-risk actions require oversight" }
+      "candidate_policy_mappings": [
+        { "candidate_outcome": "DENY", "candidate_condition": "risk_level == CRITICAL AND autonomy_level > 0", "rationale": "Possible control mapping for critical-risk actions; not compiled or enforced by this pack." },
+        { "candidate_outcome": "REQUIRE_APPROVAL", "candidate_condition": "risk_level == HIGH", "rationale": "Possible oversight mapping for high-risk actions; not compiled or enforced by this pack." }
       ]
     },
     {
@@ -31,11 +33,11 @@
       "label": "Transparency & Information (Art. 13)",
       "status": "active",
       "controls": [
-        { "control_id": "Art.13(1)", "description": "Design for sufficient transparency for deployers", "enforcement": "MANDATORY" },
-        { "control_id": "Art.13(3)(b)(ii)", "description": "Describe input data specifications", "enforcement": "MANDATORY" }
+        { "control_id": "Art.13(1)", "description": "Design for sufficient transparency for deployers", "mapping_status": "MAPPED" },
+        { "control_id": "Art.13(3)(b)(ii)", "description": "Describe input data specifications", "mapping_status": "MAPPED" }
       ],
-      "policy_rules": [
-        { "action": "audit", "condition": "true", "reason": "Art.13: all decisions must be explainable and logged" }
+      "candidate_policy_mappings": [
+        { "candidate_outcome": "AUDIT", "candidate_condition": "true", "rationale": "Possible audit mapping for Article 13 evidence; not compiled or enforced by this pack." }
       ]
     },
     {
@@ -43,12 +45,12 @@
       "label": "Human Oversight (Art. 14)",
       "status": "active",
       "controls": [
-        { "control_id": "Art.14(1)", "description": "Human oversight measures built in or identified", "enforcement": "MANDATORY" },
-        { "control_id": "Art.14(4)(a)", "description": "Humans can understand capabilities and limitations", "enforcement": "MANDATORY" },
-        { "control_id": "Art.14(4)(e)", "description": "Humans can decide not to use or override", "enforcement": "MANDATORY" }
+        { "control_id": "Art.14(1)", "description": "Human oversight measures built in or identified", "mapping_status": "MAPPED" },
+        { "control_id": "Art.14(4)(a)", "description": "Humans can understand capabilities and limitations", "mapping_status": "MAPPED" },
+        { "control_id": "Art.14(4)(e)", "description": "Humans can decide not to use or override", "mapping_status": "MAPPED" }
       ],
-      "policy_rules": [
-        { "action": "escalate", "condition": "effect_type IN [EXECUTE_PAYMENT, INFRA_DESTROY, SOFTWARE_PUBLISH]", "reason": "Art.14: high-impact actions require human oversight" }
+      "candidate_policy_mappings": [
+        { "candidate_outcome": "ESCALATE", "candidate_condition": "effect_type IN [EXECUTE_PAYMENT, INFRA_DESTROY, SOFTWARE_PUBLISH]", "rationale": "Possible human-oversight mapping for high-impact actions; not compiled or enforced by this pack." }
       ]
     },
     {
@@ -56,22 +58,25 @@
       "label": "Technical Documentation (Art. 11)",
       "status": "active",
       "controls": [
-        { "control_id": "Art.11(1)", "description": "Technical documentation drawn up before market placement", "enforcement": "MANDATORY" }
+        { "control_id": "Art.11(1)", "description": "Technical documentation drawn up before market placement", "mapping_status": "MAPPED" }
       ],
-      "policy_rules": [
-        { "action": "deny", "condition": "aibom_missing == true", "reason": "Art.11: AI system must have technical documentation (AI-BOM)" }
+      "candidate_policy_mappings": [
+        { "candidate_outcome": "DENY", "candidate_condition": "aibom_missing == true", "rationale": "Possible technical-documentation mapping; not compiled or enforced by this pack." }
       ]
     }
   ],
-  "enforcement_dates": {
+  "applicability_dates": {
     "prohibited_practices": "2025-02-02",
     "gpai_obligations": "2025-08-02",
-    "transparency_art_50": "2026-08-02",
-    "high_risk_annex_iii": "2027-12-02",
-    "high_risk_annex_i": "2028-08-02"
+    "general_application": "2026-08-02",
+    "article_50_general_application": "2026-08-02",
+    "article_50_2_preexisting_system_transition": "2026-12-02",
+    "chapter_iii_sections_1_3_annex_iii": "2027-12-02",
+    "chapter_iii_sections_1_3_annex_i": "2028-08-02",
+    "article_6_5_deferred": false
   },
-  "enforcement_dates_provenance": {
-    "verified_on": "2026-08-06",
+  "applicability_dates_provenance": {
+    "verified_on": "2026-08-10",
     "legal_basis": [
       "Regulation (EU) 2024/1689 (Artificial Intelligence Act)",
       "Regulation (EU) 2026/1744 (Digital Omnibus on AI), adopted 2026-07-08, in force 2026-07-27"
@@ -80,25 +85,19 @@
       "http://data.europa.eu/eli/reg/2024/1689/oj",
       "http://data.europa.eu/eli/reg/2026/1744/oj"
     ],
-    "change_note": "Regulation (EU) 2026/1744 deferred application of Chapter III Sections 1-3 for Annex III high-risk systems from 2026-08-02 to 2027-12-02, and for Annex I high-risk systems from 2027-08-02 to 2028-08-02. Article 50 transparency obligations were NOT deferred and apply from 2026-08-02. The v1 key `high_risk_full` is replaced by `high_risk_annex_iii` because there are two distinct high-risk dates.",
+    "change_note": "Regulation (EU) 2026/1744 deferred only Chapter III Sections 1-3: to 2027-12-02 for Annex III systems and 2028-08-02 for Annex I systems. Article 6(5) is expressly excluded. Article 50 generally applies from 2026-08-02, while Article 111(4) gives providers of specified systems placed on the market before that date until 2026-12-02 to comply with Article 50(2). Incident reporting under Article 73 and CE marking/registration provisions outside Sections 1-3 are not assigned the deferred dates by this mapping.",
     "review_owner": "compliance",
     "next_review": "2027-06-01"
   },
-  "budget_constraints": {
-    "daily_limit_cents": 200000,
-    "risk_score_cap": 400
-  },
-  "evidence_requirements": {
-    "receipt_signing": "MANDATORY",
-    "proofgraph_enabled": true,
-    "evidence_pack_retention_days": 3650,
-    "audit_chain_verification": true,
-    "aibom_required": true,
-    "oauth_resource_binding": true,
-    "tool_scope_enforcement": true,
-    "conformity_assessment": true,
-    "qtsp_required": true,
-    "qtsp_anchor_type": "RFC3161_EIDAS",
-    "qtsp_lotl_freshness_hours": 24
+  "evidence_mappings": {
+    "signed_receipt": "MAPPED",
+    "proofgraph_reference": "MAPPED",
+    "evidence_pack": "MAPPED",
+    "audit_chain": "MAPPED",
+    "ai_bom": "MAPPED",
+    "oauth_resource_binding": "MAPPED",
+    "tool_scope_record": "MAPPED",
+    "conformity_record": "MAPPED",
+    "qtsp_timestamp_anchor": "OPTIONAL_MAPPING_ONLY"
   }
 }

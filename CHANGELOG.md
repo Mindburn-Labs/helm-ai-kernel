@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-07-20
+last_reviewed: 2026-08-10
 ---
 
 # Changelog
@@ -91,9 +91,10 @@ that exact capability.
 
 ## [0.8.4] - pending tag
 
-Release target for the receipt tenant-isolation fix and a sweep of public claim
-corrections. v0.8.3 completed its publication, so this is an ordinary successor
-rather than another attempt at a stranded train.
+Release target for the receipt tenant-isolation fix, the corrected EU AI Act
+applicability mapping, and a sweep of public claim corrections. v0.8.3 completed
+its publication, so this is an ordinary successor rather than another attempt at
+a stranded train.
 
 Note for anyone reading the published v0.8.3 notes: its changelog states that
 deployed MCP gateway receipts land "into the same store `GET /api/v1/receipts`
@@ -150,6 +151,34 @@ correction is a removal or a restatement, not a new claim:
 - `policy-bundle-v1` documented a bundle layout and CLI that do not exist.
 - Six stale status claims elsewhere disagreed with the evidence files they
   pointed at.
+
+### Changed — EU AI Act mapping and applicability dates corrected
+
+Regulation (EU) 2026/1744 deferred Chapter III, Sections 1-3 of Regulation
+(EU) 2024/1689 to 2027-12-02 for Annex III systems and 2028-08-02 for Annex I
+systems, expressly excluding Article 6(5). This narrow amendment does not move
+Article 50, Article 73 incident reporting, or CE-marking/registration provisions
+outside Sections 1-3 to the same dates.
+
+- Added `reference_packs/eu_ai_act_high_risk.v2.json` as an explicit
+  `COMPLIANCE_MAPPING`. It contains candidate mappings and evidence names but no
+  supported `runtime_actions` or `actions`; the sample policy therefore remains
+  fail-closed with zero runtime rules.
+- Preserved the previously released
+  `reference_packs/eu_ai_act_high_risk.v1.json` byte-for-byte at SHA-256
+  `8a33ad51441d6d939d74da2be388c1d11c12da1e055f1aeca72ca2763ebc05c4`.
+  Supersession metadata lives in v2 and documentation, not a rewritten v1.
+- Split general, Article 50, Annex III and Annex I applicability dates. The v2
+  mapping records the Article 50(2) transition for specified pre-existing
+  systems and the Article 6(5) exception.
+- Corrected serious-incident reporting from Article 62/72 hours to Article 73:
+  15 days generally, two days for the specified accelerated tier, and 10 days
+  where a person dies. The compliance API now records the incident tier.
+- Removed unsupported pack-driven QTSP, LOTL freshness and budget enforcement
+  claims. QTSP is an optional evidence mapping; operator/library verification
+  remains a separate explicitly configured path.
+
+Primary sources: CELEX 32024R1689 and CELEX 32026R1744 on EUR-Lex.
 
 ## [0.8.3] - 2026-08-09
 

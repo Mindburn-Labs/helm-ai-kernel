@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	// EIDASBackendName identifies eIDAS-qualified anchors in the proof graph.
+	// EIDASBackendName identifies the eIDAS/QTSP-labelled anchor backend. The
+	// identifier alone is not proof of cryptographic or legal qualification.
 	EIDASBackendName = "eidas-qtsp"
 
 	// eidasMinTokenSize is a sanity bound: a real RFC 3161 ContentInfo with a
@@ -32,22 +33,27 @@ const (
 	eidasMinTokenSize = 64
 )
 
-// EIDASAnchor anchors ProofGraph Merkle roots via an EU-qualified RFC 3161
-// timestamping authority and validates that the response chain terminates at
-// a Member-State-supervised root listed on the EU Trusted List.
+// EIDASAnchor submits ProofGraph Merkle-root imprints to a configured RFC 3161
+// endpoint and performs a limited token-certificate inventory check against a
+// caller-supplied EUTrustedList.
 //
 // EIDASAnchor implements the same AnchorBackend interface as RFC3161Backend,
 // adding two stages on top:
 //
-//  1. Submit/parse the RFC 3161 TimeStampResp normally.
-//  2. Walk the certificate chain inside the SignedData and confirm that at
-//     least one certificate's SHA-256 thumbprint is trusted by the supplied
-//     EUTrustedList — i.e., the QTSP is a State-supervised QTSA.
+//  1. Submit an RFC 3161 TimeStampReq and preserve the returned token.
+//  2. Extract certificates from the token and confirm that at least one
+//     certificate's SHA-256 thumbprint is present in the supplied EUTrustedList.
+//
+// Verify does not validate the CMS signature, bind the token's message imprint
+// to the receipt, build an X.509 certification path, or verify the LOTL XML
+// signature. Those missing checks mean this type does not by itself establish
+// cryptographic or legal eIDAS qualification.
 //
 // If the LOTL cache is empty (never refreshed) or stale beyond the
 // configured threshold, anchoring still succeeds (we have a token) but
-// verification fails with ErrEIDASLOTLStale so callers using `--require-eidas`
-// can refuse to trust the anchor.
+// verification fails with ErrEIDASLOTLStale so callers that invoke Verify can
+// refuse to trust the anchor. The CLI `verify --require-eidas` does not invoke
+// this method; it performs a separate metadata-only check.
 type EIDASAnchor struct {
 	qtspURL         string
 	lotl            *trust.EUTrustedList
@@ -89,11 +95,10 @@ func WithEIDASAllowEmptyChain(allow bool) EIDASOption {
 	}
 }
 
-// NewEIDASAnchor creates a new eIDAS-qualified anchor backend.
+// NewEIDASAnchor creates a new eIDAS/QTSP-labelled RFC 3161 anchor backend.
 //
-// qtspURL must point to an RFC 3161 endpoint operated by an EU-qualified
-// trust service provider (see docs/architecture/eidas-qtsp.md for a list of
-// recognized QTSPs).
+// qtspURL must point to an RFC 3161 endpoint. Callers are responsible for
+// selecting and independently validating the provider and its legal status.
 //
 // lotl is the EU Trusted List validator used to gate verification; it must
 // not be nil. Callers are responsible for invoking lotl.Refresh on a
@@ -202,12 +207,14 @@ func (a *EIDASAnchor) Anchor(ctx context.Context, req AnchorRequest) (*AnchorRec
 	return receipt, nil
 }
 
-// Verify validates that the receipt is structurally a well-formed RFC 3161
-// token and that at least one certificate inside the embedded SignedData
-// chain is a Qualified TSA listed on the EU Trusted List.
+// Verify performs a limited RFC 3161 certificate-inventory check and requires
+// at least one embedded certificate thumbprint to be present in the supplied
+// EUTrustedList. It does not validate the token signature, message imprint,
+// certificate path, LOTL signature, or legal qualification.
 //
 // Returns ErrEIDASLOTLStale if the LOTL cache is older than maxLOTLAge.
-// Returns ErrEIDASChainNotTrusted if no chain certificate is qualified.
+// Returns ErrEIDASChainNotTrusted if no embedded certificate thumbprint is
+// present in the supplied EUTrustedList.
 func (a *EIDASAnchor) Verify(_ context.Context, receipt *AnchorReceipt) error {
 	if receipt.Backend != EIDASBackendName {
 		return fmt.Errorf("eidas: receipt backend mismatch: got %s", receipt.Backend)

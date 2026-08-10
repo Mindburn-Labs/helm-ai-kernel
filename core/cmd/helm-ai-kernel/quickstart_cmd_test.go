@@ -28,7 +28,7 @@ func TestLoadServePolicyTOML(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 name = "release.high_risk.v3"
 profile = "high_risk"
-reference_pack = "./reference_packs/eu_ai_act_high_risk.v1.json"
+reference_pack = "./reference_packs/eu_ai_act_high_risk.v2.json"
 
 [server]
 bind = "127.0.0.1"
@@ -95,6 +95,126 @@ path = "./data/receipts.db"
 	}
 	if len(rule.Requirements) != 1 || rule.Requirements[0].Expression != "true" {
 		t.Fatalf("unexpected rule: %+v", rule)
+	}
+}
+
+func TestCanonicalEUAIActMappingPackContract(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", "..", ".."))
+
+	v1, err := os.ReadFile(filepath.Join(repoRoot, "reference_packs", "eu_ai_act_high_risk.v1.json"))
+	if err != nil {
+		t.Fatalf("read immutable v1 pack: %v", err)
+	}
+	v1Digest := sha256.Sum256(v1)
+	if got, want := hex.EncodeToString(v1Digest[:]), "8a33ad51441d6d939d74da2be388c1d11c12da1e055f1aeca72ca2763ebc05c4"; got != want {
+		t.Fatalf("published v1 bytes changed: sha256=%s, want %s", got, want)
+	}
+
+	type mappingControl struct {
+		ControlID     string          `json:"control_id"`
+		MappingStatus string          `json:"mapping_status"`
+		Enforcement   json.RawMessage `json:"enforcement"`
+	}
+	type candidateMapping struct {
+		CandidateOutcome   string `json:"candidate_outcome"`
+		CandidateCondition string `json:"candidate_condition"`
+		Rationale          string `json:"rationale"`
+	}
+	type mappingProgram struct {
+		ProgramID               string             `json:"program_id"`
+		Controls                []mappingControl   `json:"controls"`
+		CandidatePolicyMappings []candidateMapping `json:"candidate_policy_mappings"`
+		PolicyRules             json.RawMessage    `json:"policy_rules"`
+	}
+	type mappingPack struct {
+		PackID             string           `json:"pack_id"`
+		Version            int              `json:"version"`
+		ArtifactKind       string           `json:"artifact_kind"`
+		RuntimeEnforcement *bool            `json:"runtime_enforcement"`
+		Description        string           `json:"description"`
+		Programs           []mappingProgram `json:"programs"`
+		ApplicabilityDates struct {
+			GeneralApplication                   string `json:"general_application"`
+			Article50GeneralApplication          string `json:"article_50_general_application"`
+			Article50PreexistingSystemTransition string `json:"article_50_2_preexisting_system_transition"`
+			AnnexIIISectionsOneToThree           string `json:"chapter_iii_sections_1_3_annex_iii"`
+			AnnexISectionsOneToThree             string `json:"chapter_iii_sections_1_3_annex_i"`
+			Article6Paragraph5Deferred           *bool  `json:"article_6_5_deferred"`
+		} `json:"applicability_dates"`
+		ApplicabilityDatesProvenance struct {
+			Sources []string `json:"sources"`
+		} `json:"applicability_dates_provenance"`
+		EvidenceMappings     map[string]string `json:"evidence_mappings"`
+		RuntimeActions       json.RawMessage   `json:"runtime_actions"`
+		Actions              json.RawMessage   `json:"actions"`
+		BudgetConstraints    json.RawMessage   `json:"budget_constraints"`
+		EvidenceRequirements json.RawMessage   `json:"evidence_requirements"`
+	}
+
+	v2, err := os.ReadFile(filepath.Join(repoRoot, "reference_packs", "eu_ai_act_high_risk.v2.json"))
+	if err != nil {
+		t.Fatalf("read v2 mapping pack: %v", err)
+	}
+	var pack mappingPack
+	if err := json.Unmarshal(v2, &pack); err != nil {
+		t.Fatalf("decode v2 mapping pack: %v", err)
+	}
+	if pack.PackID != "eu-ai-act-high-risk-v2" || pack.Version != 2 {
+		t.Fatalf("unexpected v2 identity: %q version %d", pack.PackID, pack.Version)
+	}
+	if pack.ArtifactKind != "COMPLIANCE_MAPPING" || pack.RuntimeEnforcement == nil || *pack.RuntimeEnforcement {
+		t.Fatalf("v2 must explicitly be mapping-only: kind=%q runtime_enforcement=%v", pack.ArtifactKind, pack.RuntimeEnforcement)
+	}
+	if !strings.Contains(strings.ToLower(pack.Description), "does not configure runtime policy") {
+		t.Fatalf("v2 description must disclose mapping-only semantics: %q", pack.Description)
+	}
+	if len(pack.RuntimeActions) != 0 || len(pack.Actions) != 0 || len(pack.BudgetConstraints) != 0 || len(pack.EvidenceRequirements) != 0 {
+		t.Fatal("mapping-only v2 must not contain runtime actions, budgets, or enforcement-shaped evidence requirements")
+	}
+	if len(pack.Programs) == 0 {
+		t.Fatal("v2 mapping must contain at least one program")
+	}
+	for _, program := range pack.Programs {
+		if strings.TrimSpace(program.ProgramID) == "" || len(program.Controls) == 0 || len(program.CandidatePolicyMappings) == 0 {
+			t.Fatalf("program must contain identity, controls, and candidate mappings: %+v", program)
+		}
+		if len(program.PolicyRules) != 0 {
+			t.Fatalf("program %q must not misrepresent candidate mappings as policy_rules", program.ProgramID)
+		}
+		for _, control := range program.Controls {
+			if strings.TrimSpace(control.ControlID) == "" || control.MappingStatus != "MAPPED" || len(control.Enforcement) != 0 {
+				t.Fatalf("program %q has a misrepresented control: %+v", program.ProgramID, control)
+			}
+		}
+		for _, mapping := range program.CandidatePolicyMappings {
+			if mapping.CandidateOutcome == "" || mapping.CandidateCondition == "" || mapping.Rationale == "" {
+				t.Fatalf("program %q has an empty candidate mapping: %+v", program.ProgramID, mapping)
+			}
+		}
+	}
+
+	dates := pack.ApplicabilityDates
+	if dates.GeneralApplication != "2026-08-02" || dates.Article50GeneralApplication != "2026-08-02" ||
+		dates.Article50PreexistingSystemTransition != "2026-12-02" ||
+		dates.AnnexIIISectionsOneToThree != "2027-12-02" || dates.AnnexISectionsOneToThree != "2028-08-02" ||
+		dates.Article6Paragraph5Deferred == nil || *dates.Article6Paragraph5Deferred {
+		t.Fatalf("unexpected v2 applicability dates or Article 6(5) carve-out: %+v", dates)
+	}
+	if len(pack.ApplicabilityDatesProvenance.Sources) != 2 ||
+		!strings.Contains(pack.ApplicabilityDatesProvenance.Sources[0], "data.europa.eu/eli/reg/2024/1689") ||
+		!strings.Contains(pack.ApplicabilityDatesProvenance.Sources[1], "data.europa.eu/eli/reg/2026/1744") {
+		t.Fatalf("v2 must retain both official ELI sources: %v", pack.ApplicabilityDatesProvenance.Sources)
+	}
+	if pack.EvidenceMappings["qtsp_timestamp_anchor"] != "OPTIONAL_MAPPING_ONLY" {
+		t.Fatalf("QTSP must remain an optional evidence mapping, got %q", pack.EvidenceMappings["qtsp_timestamp_anchor"])
+	}
+
+	runtime, err := loadServePolicyRuntime(filepath.Join(repoRoot, "release.high_risk.v3.toml"))
+	if err != nil {
+		t.Fatalf("load canonical mapping-only policy: %v", err)
+	}
+	if runtime.ReferencePack.PackID != pack.PackID || len(runtime.Graph.Rules) != 0 || len(runtime.AllowMap()) != 0 {
+		t.Fatalf("mapping-only pack must compile fail-closed with zero runtime rules: pack=%q rules=%d allow=%v", runtime.ReferencePack.PackID, len(runtime.Graph.Rules), runtime.AllowMap())
 	}
 }
 

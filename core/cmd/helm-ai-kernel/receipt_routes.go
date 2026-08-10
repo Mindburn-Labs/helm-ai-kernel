@@ -128,7 +128,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			Context:   req.Context,
 		})
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		if err := persistDecisionReceiptForTenant(r.Context(), svc, decision, principalID, tenantID, args, map[string]any{
@@ -138,17 +138,17 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			"reason":    decision.Reason,
 			"args_hash": argsHash,
 		}); err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		receiptID := executor.ReceiptIDForDecision(tenantID, decision.ID)
 		receipt, err := receiptForTenant(r.Context(), svc, tenantID, receiptID)
 		if err != nil {
-			api.WriteInternal(w, fmt.Errorf("load persisted receipt %s: %w", receiptID, err))
+			api.WriteInternalR(w, r, fmt.Errorf("load persisted receipt %s: %w", receiptID, err))
 			return
 		}
 		if receipt == nil {
-			api.WriteInternal(w, fmt.Errorf("persisted receipt %s is unavailable", receiptID))
+			api.WriteInternalR(w, r, fmt.Errorf("persisted receipt %s is unavailable", receiptID))
 			return
 		}
 		policyRef := decision.PolicyVersion
@@ -277,7 +277,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, limit+1)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		hasMore := len(receipts) > limit
@@ -286,7 +286,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		nextCursor, err := nextReceiptCursor(sessionID, receipts)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

@@ -295,14 +295,31 @@ telemetry:
   # presence as the insecure-dial switch; without it the exporter negotiates
   # TLS against a listener that does not terminate it.
   #
-  # Only the endpoint belongs here — do not add OTEL_RESOURCE_ATTRIBUTES with a
-  # data class, environment, namespace, or cluster: the gateway's client lane
-  # deletes those keys before enrichment and re-derives them from namespace
-  # labels, so anything the chart declared about where it runs is dropped
-  # silently. service.name survives, but the kernel pins it to
-  # helm-sovereign-os in code and ignores OTEL_SERVICE_NAME (HELM-477), so
-  # overriding it from the chart has no effect either.
+  # Do not add OTEL_RESOURCE_ATTRIBUTES with a data class, environment,
+  # namespace, or cluster: the gateway's client lane deletes those keys before
+  # enrichment and re-derives them from namespace labels, so anything the chart
+  # declared about where it runs is dropped silently.
   endpoint: ""
+
+  # service.name for every span this kernel exports. Empty renders no
+  # OTEL_SERVICE_NAME at all and the kernel falls back to its built-in
+  # helm-sovereign-os, which is what a stand reports unless you set this.
+  #
+  # service.name is the one resource key the gateway does NOT re-derive, so it
+  # is the only identity the chart can still choose. Set it to the name you
+  # actually query the tracing backend by — e.g. helm-ai-kernel — because a
+  # backend query for a name nothing emits returns empty and looks exactly like
+  # "no spans are arriving at all".
+  #
+  # Rendered only when enabled is true: the kernel reads OTEL_SERVICE_NAME
+  # while building its exporter config, and it never builds one without an
+  # endpoint, so a name set on a stand with telemetry off reaches nothing.
+  #
+  # No leading or trailing whitespace (the schema rejects it) — the kernel
+  # trims the value, so an untrimmed one would make the rendered manifest
+  # disagree with the service.name actually reported, and a whitespace-only
+  # value would silently fall back to helm-sovereign-os.
+  serviceName: ""
 
 # Persistent storage for HELM dataDir and SQLite state.
 persistence:

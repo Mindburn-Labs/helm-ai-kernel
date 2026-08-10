@@ -50,9 +50,15 @@ func (n *NISTAIRMFAdapter) SetHealthy(healthy bool) {
 // Key enforcement dates:
 //
 //	2025-02-02: Prohibited practices (Title II) + AI literacy (Art 4)
-//	2025-08-02: GPAI transparency (Chapter V) + penalties
-//	2026-08-02: High-risk obligations (Title III, Chapter 2-5) + CE marking + EU DB registration
-//	2027-08-02: High-risk per Annex I (existing product safety)
+//	2025-08-02: GPAI obligations (Chapter V) + penalties
+//	2026-08-02: General application, including Arts.48, 49, 50, 71 and 73
+//	2026-12-02: Art.50(2) transition for specified pre-existing systems
+//	2027-12-02: Chapter III, Sections 1-3 for Annex III systems
+//	2028-08-02: Chapter III, Sections 1-3 for Annex I systems
+//
+// Dates amended by Regulation (EU) 2026/1744 (in force 2026-07-27); verified
+// against EUR-Lex. The amended Chapter III dates expressly exclude Article
+// 6(5) and do not move obligations outside Sections 1-3.
 //
 // HELM relevance: Guardian pipeline decisions may constitute "high-risk AI" under Annex III
 // when used in critical infrastructure, safety components, or financial services.
@@ -77,7 +83,9 @@ func NewEUAIActAdapter() *EUAIActAdapter {
 // Seed data covers the key obligation categories that HELM deployments must address.
 // Production path: EUR-Lex CELLAR SPARQL for amendments to CELEX:32024R1689.
 func (e *EUAIActAdapter) FetchChanges(ctx context.Context, since time.Time) ([]*RegChange, error) {
-	highRiskDeadline := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	generalApplication := time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC)
+	article50PreexistingTransition := time.Date(2026, 12, 2, 0, 0, 0, 0, time.UTC)
+	highRiskDeadline := time.Date(2027, 12, 2, 0, 0, 0, 0, time.UTC)
 
 	obligations := []struct {
 		article   string
@@ -90,10 +98,10 @@ func (e *EUAIActAdapter) FetchChanges(ctx context.Context, since time.Time) ([]*
 		{
 			article:   "Art.6+AnnexIII",
 			title:     "High-Risk AI System Classification",
-			summary:   "AI systems in Annex III areas (critical infrastructure, safety components, financial services) must comply with Chapter 2 requirements: risk management, data governance, technical docs, record-keeping, transparency, human oversight, accuracy/robustness/cybersecurity.",
+			summary:   "AI systems in Annex III areas may be high-risk under Article 6. The amended deadline applies only to Chapter III, Sections 1-3 for Annex III systems and expressly excludes Article 6(5).",
 			chgType:   ChangeNew,
 			effective: highRiskDeadline,
-			meta:      map[string]interface{}{"articles": "6,9-15", "annex": "III", "helm_impact": "guardian_pipeline"},
+			meta:      map[string]interface{}{"articles": "6,9-15", "annex": "III", "scope": "chapter_iii_sections_1_3", "article_6_5_deferred": false, "helm_impact": "guardian_pipeline"},
 		},
 		{
 			article:   "Art.9",
@@ -113,27 +121,27 @@ func (e *EUAIActAdapter) FetchChanges(ctx context.Context, since time.Time) ([]*
 		},
 		{
 			article:   "Art.50",
-			title:     "Transparency for GPAI Providers",
-			summary:   "General-purpose AI providers must: disclose AI-generated content, publish training data summaries, comply with copyright, publish model capabilities and limitations.",
+			title:     "Transparency Duties for Certain AI Systems",
+			summary:   "Article 50 covers disclosure and machine-readable marking duties for specified AI systems and deployers. Article 111(4) provides a transition for specified pre-existing Article 50(2) systems.",
 			chgType:   ChangeNew,
-			effective: time.Date(2025, 8, 2, 0, 0, 0, 0, time.UTC),
-			meta:      map[string]interface{}{"articles": "50,52,53", "category": "transparency"},
+			effective: generalApplication,
+			meta:      map[string]interface{}{"articles": "50", "category": "transparency", "article_50_2_preexisting_transition": article50PreexistingTransition.Format("2006-01-02")},
 		},
 		{
-			article:   "Art.62",
-			title:     "Serious Incident Reporting (72h)",
-			summary:   "Providers/deployers of high-risk AI must report serious incidents to market surveillance authorities within 72 hours of becoming aware. HELM evidence packs provide audit trail.",
+			article:   "Art.73",
+			title:     "Serious Incident Reporting",
+			summary:   "Providers of high-risk AI systems must report immediately and no later than the applicable outer deadline: 15 days generally, 2 days for widespread-infringement or Article 3(49)(b) incidents, and 10 days where a person dies.",
 			chgType:   ChangeNew,
-			effective: highRiskDeadline,
-			meta:      map[string]interface{}{"articles": "62", "deadline_hours": 72, "helm_impact": "evidence_pack_reporting"},
+			effective: generalApplication,
+			meta:      map[string]interface{}{"articles": "73", "deadline_days_general": 15, "deadline_days_widespread_or_critical": 2, "deadline_days_death": 10, "helm_impact": "evidence_pack_reporting"},
 		},
 		{
-			article:   "Art.49",
+			article:   "Arts.48,49,71",
 			title:     "CE Marking and EU Database Registration",
-			summary:   "High-risk AI systems require CE marking and registration in EU database before placing on market or putting into service.",
+			summary:   "Articles 48, 49 and 71 govern CE marking and EU database registration outside the amended Chapter III, Sections 1-3 deferral; applicability depends on the system and its transition rules.",
 			chgType:   ChangeDeadline,
-			effective: highRiskDeadline,
-			meta:      map[string]interface{}{"articles": "49,71", "category": "conformity_assessment"},
+			effective: generalApplication,
+			meta:      map[string]interface{}{"articles": "48,49,71", "category": "conformity_assessment"},
 		},
 	}
 

@@ -262,7 +262,7 @@ with tarfile.open(assets / "sample-policy-material.tar", "r") as tar:
     members = set(tar.getnames())
 expected_members = {
     "release.high_risk.v3.toml",
-    "reference_packs/eu_ai_act_high_risk.v1.json",
+    "reference_packs/eu_ai_act_high_risk.v2.json",
 }
 if not expected_members.issubset(members):
     raise SystemExit(f"sample policy material missing {sorted(expected_members - members)}")

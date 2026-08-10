@@ -19,6 +19,14 @@ This document and `reference_packs/effect-permit-v1/` define the byte-exact
 `protocols/proto/helm/effects/v1/effects.proto` separately owns the wire
 contract. No JSON Schema is an authority for either contract.
 
+The final status applies to this named canonical integrity profile, not to every
+producer or verifier that uses the shared `EffectPermit` wire type. An existing
+unversioned or differently constructed signing preimage is outside
+`effect_permit.v1`. End-to-end G1 adoption requires coordinated Control Plane
+producer adoption plus Data Plane and Sandbox verification against this
+profile; publishing the contract alone does not prove those migrations are
+integrated or deployed.
+
 This specification does not define effect admission, connector-specific scope
 evaluation, expiry policy, replay storage, or nonce consumption. Those checks
 remain in the governed execution path that consumes a verified permit.

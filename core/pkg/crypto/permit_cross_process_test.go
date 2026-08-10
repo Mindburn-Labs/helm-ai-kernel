@@ -2,8 +2,10 @@
 // for the round trip. These tests assert that the protobuf wire form of an
 // EffectPermit is sufficient to reconstruct the exact signed preimage; they add
 // no production cryptographic control and no post-quantum assurance. The permit
-// preimage itself stays algorithm-neutral (see effect_permit.go), so a future
-// ML-DSA signer satisfies these tests unchanged.
+// canonical preimage and wire mapping stay algorithm-neutral (see
+// effect_permit.go) and can be reused by another signature profile. These tests
+// instantiate Ed25519 and exercise Ed25519 verification, so an ML-DSA or hybrid
+// profile requires its own profile-specific signing and verification tests.
 package crypto
 
 import (

@@ -152,13 +152,26 @@ is P2-7. Until it says so, no surface may cite it as "the HELM receipt standard"
 
 | Family | Integrity state | Integrity source (or implementation of record) | Wire source | Derived |
 | --- | --- | --- | --- | --- |
-| `effects.EffectPermit` / `effect_permit.v1` | **SPECIFIED** | `protocols/specs/effects/effect-permit-v1.md` + `reference_packs/effect-permit-v1/`, with Go parity and an independent Python verifier bound into `make verify-fixtures` | `protocols/proto/helm/effects/v1/effects.proto:29-50`, including the signed `evidence_bindings` at field 16; `core/pkg/crypto/permit_cross_process_test.go` proves a field-complete wire round trip | the five SDK bindings |
+| `effect_permit.v1` canonical integrity profile over `effects.EffectPermit` | **SPECIFIED** | `protocols/specs/effects/effect-permit-v1.md` + `reference_packs/effect-permit-v1/`, with Go parity and an independent Python verifier bound into `make verify-fixtures` | `protocols/proto/helm/effects/v1/effects.proto:29-50`, including the signed `evidence_bindings` at field 16; `core/pkg/crypto/permit_cross_process_test.go` proves a field-complete wire round trip | the five SDK bindings |
 
-The integrity contract and wire field set are specified and sufficient to
-reconstruct the signed preimage across a protobuf hop. This does not claim a
-shipping cross-process dispatch: production still has no
-`effects.EffectPermit`-to-generated-protobuf converter or Go-to-proto permit
-hop. Per D7, runtime deployment remains separate from contract status.
+This row classifies only the named v1 profile. It does not declare every signing
+behaviour over the shared `effects.EffectPermit` type specified or conformant.
+The integrity contract and wire field set are sufficient to reconstruct the v1
+preimage across a protobuf hop, but end-to-end G1 adoption still requires the
+Control Plane producer, Data Plane verifier/admission path, and Sandbox verifier
+to migrate together. Until that coordinated path is integrated, deployed, and
+verified, neither a shipping cross-process dispatch nor global completion of the
+EffectPermit family may be claimed. Per D7, runtime deployment remains separate
+from contract status.
+
+> **Non-normative integration note.** At this checkpoint, Control Plane
+> migration is draft
+> [#291](https://github.com/Mindburn-Labs/svc-helm-control-plane/pull/291),
+> Data Plane migration is pending without a pull request, and Sandbox migration
+> is draft
+> [#19](https://github.com/Mindburn-Labs/svc-agent-sandbox-runner/pull/19).
+> These delivery links are not part of the protocol and must be refreshed before
+> making an integration or deployment claim.
 
 #### Decisions
 
@@ -312,12 +325,12 @@ description of enforcement.
 | `api/openapi/helm.openapi.yaml` → the five SDK `types_gen` files | `make sdk-openapi-check` (`Makefile:108-109` → `scripts/sdk/openapi_check.sh`), CI `ci.yml:294` | **Yes** |
 | `api/openapi/**` backward compatibility | `make openapi-breaking` → `oasdiff --fail-on ERR` (`Makefile:183`, `scripts/ci/contract_breaking.sh:151`), gate `openapi-breaking` in the `pr` profile (`scripts/ci/quality-gates.json:563-573`) run by `make quality-pr` (`ci.yml:75`) | **Yes**, path-scoped to `api/openapi/**` |
 | OpenAPI operation set ↔ served public routes | `make docs-openapi-parity` → `TestPublicDocsOpenAPIContract` (`core/cmd/helm-ai-kernel/openapi_runtime_routes_test.go:77`) | **Yes**, for routes and operationIds — **not** for schema fields |
-| Reference pack ↔ Go implementation, for the eleven packs in D4 | `make verify-fixtures` (`Makefile:123-138`), CI `ci.yml:167` — Go parity test **and** independent Python verifier per pack | **Yes** |
+| Reference pack ↔ Go implementation, for the packs listed in D4 | `make verify-fixtures` (`Makefile:123-138`), CI `ci.yml:167` — Go parity test **and** independent Python verifier per pack | **Yes** |
 | `protocols/proto/**` lint and backward compatibility | **Unenforced.** `make proto-lint` runs `buf lint protocols/policy-schema` (`Makefile:177-178`) and `make proto-breaking` diffs `protocols/policy-schema` only (`scripts/ci/contract_breaking.sh:184-186`). No buf module is rooted at `protocols/proto/` (`find . -name 'buf.yaml'` returns only `protocols/policy-schema/buf.yaml`). The file holding the receipt and permit wire contracts has never been lint- or breaking-checked. | **No** |
 | `go-apidiff` on `protocols/` | **Does not exist.** Repository-wide `git grep apidiff` returns nothing. `CLAUDE.md` in the workspace root asserts this gate; the assertion is false and is on P2-9's list. | **No** |
 | Go struct ↔ JSON Schema | `core/pkg/contracts/schema_validation_test.go:106-129` builds a Go literal and validates it against the schema. With no `additionalProperties:false` anywhere in `receipt/v2.json`, a Go field the schema lacks passes, and a schema property no Go field produces is never exercised. The gate is green while the two disagree. | **No, structurally** |
 | Signed preimage field set ↔ published schema | No gate exists. | **No** |
-| Go signing envelope ↔ proto field set | No gate exists. For `effect_permit.v1` a parity test is written but unmerged (kernel PR #803). | **No** |
+| Go signing envelope ↔ proto field set | `core/pkg/crypto/permit_wire_parity_test.go` and `permit_cross_process_test.go` enforce the `effect_permit.v1` field inventory and wire mapping; no general cross-family gate exists. | **EffectPermit v1 only** |
 | JSON Schema backward compatibility | No gate exists. `make quality-pr`'s `json-schemas` gate (`scripts/ci/quality-gates.json:465-479`) runs `scripts/ci/check_json_schemas.py`, which parses each file, compiles it as a JSON Schema, and rejects duplicate `$id` — nothing about fields, Go, proto, OpenAPI or `SCHEMA_INDEX.md`. | **No** |
 | `SCHEMA_INDEX.md` ↔ the filesystem | No gate exists. | **No** |
 | Schema and spec file *content* pinning | `make verify-boundary` (`Makefile:465-466`, CI `ci.yml:173`) pins digests including `protocols/json-schemas/receipt/v2.json` (`tools/boundary/protected.manifest:899`), `protocols/proto/helm/kernel/v1/helm.proto` (:1011) and `protocols/specs/rfc/receipt-format-v1.md` (:1033). This detects an **unreviewed change**; it does not check that the file is derived from anything. Do not read a green `verify-boundary` as contract correctness. | **Change-detection only** |
@@ -327,8 +340,8 @@ Read together: **every enforced derivation runs downward from OpenAPI or proto
 into generated code. Not one gate runs upward from a specification into the
 signing implementation, except for the reference packs.** That asymmetry is why
 `receipt.v5` remains UNSPECIFIED and why P2-3 and P2-6 are pack-shaped rather
-than schema-shaped; this EffectPermit pack moves `effect_permit.v1` to
-SPECIFIED.
+than schema-shaped; this EffectPermit pack moves the named
+`effect_permit.v1` canonical profile to SPECIFIED.
 
 ## Consequences
 
@@ -338,8 +351,10 @@ SPECIFIED.
   profile's integrity source, so rewriting it to match the mainline receipt is a
   category error.
 - Two families remain UNSPECIFIED (`receipt.v5`, `decision_record.v4`). This is
-  intentional and is the honest state; `effect_permit.v1` is now SPECIFIED by
-  its normative document and CI-bound reference pack.
+  intentional and is the honest state; the named `effect_permit.v1` canonical
+  profile is now SPECIFIED by its normative document and CI-bound reference
+  pack, without implying that every EffectPermit producer or verifier has
+  adopted or deployed it.
 - EvidencePack is named CONTRADICTED, which blocks citing
   `evidence-pack-v1.md` on any surface until P2-7 corrects it.
 - The field-addition rule applies from today, including to changes that predate

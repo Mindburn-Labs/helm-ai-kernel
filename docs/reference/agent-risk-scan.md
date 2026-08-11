@@ -1,6 +1,6 @@
 ---
 title: Agent Risk Scan
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-11
 ---
 
 # Agent Risk Scan
@@ -37,6 +37,7 @@ After running `scan`, you can show:
 | Markdown preview | `--preview out.md` |
 | HTML preview | `--preview out.html` |
 | Evidence pack tar | `--evidence-pack pack.tar` |
+| Offline evidence-pack verification | `helm-ai-kernel verify-scan --bundle pack.tar` |
 | Explicit upload | `--upload --upload-url <url> --yes` |
 | Receipt projection | `--from-receipts <dir>` |
 | Local salt | `--salt-file <path>` |
@@ -163,15 +164,51 @@ These values are not exported:
 - secret values;
 - local salts.
 
-The evidence pack contains only:
+The evidence-pack tar contains exactly:
 
+- `evidence-pack.json`, using the generic `contracts.EvidencePack` contract;
 - `risk-envelope.json`;
-- `schema-validation.json`;
-- `privacy-manifest.json`;
-- `source-pack-hash.json`;
-- requested previews.
+- zero or more requested `.md` or `.html` previews under `previews/`.
 
-The raw source pack, raw config files, and raw receipts stay local.
+It adds no independent archive index, seal, signature, or trust format. The raw
+source pack, raw config files, and raw receipts stay local.
+
+## Offline Verification
+
+Verify an archive without uploading it:
+
+```bash
+helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar
+helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar --json
+```
+
+The verifier checks:
+
+- the generic EvidencePack validator's required identifiers and status fields
+  and required `attestation.pack_hash`, comparing that stored hash with a
+  legacy JCS projection; the projection excludes the entire `attestation`
+  object, including `attestation.kernel_version`, and also omits
+  `correlation_id`, `threat_scan`, `security_findings`, `network_logs`,
+  `secret_events`, `port_exposures`, `git_diffs`, and `replay_manifest`;
+  `verify-scan` separately rejects `attestation.signature` and
+  `attestation.signer_id`, but this path does not independently apply the
+  complete EvidencePack JSON Schema or bind those omitted fields;
+- the canonical RiskEnvelope representation, content hash, schema, and privacy
+  non-collection fields;
+- the pack-to-envelope IDs and hashes, plus every declared artifact path and
+  SHA-256 hash;
+- the supported final extracted-file layout, rejecting missing, unexpected,
+  unsupported, or hash-mismatched files and unsafe archive paths, entry types,
+  and sizes; duplicate normalized archive member paths are not rejected, so
+  this check does not establish archive-entry uniqueness.
+
+A signature or signer in this local risk-scan pack is rejected as unsupported:
+the scan has no independently trusted signer. `VERIFIED` therefore means
+structural validation and internal hash consistency for the final extracted
+file set. Because the expected hashes are stored in the same unsigned archive,
+it does not establish artifact integrity against an actor who can rewrite that
+archive. It also does not prove that execution occurred or was governed or
+authorized, nor does it establish runtime provenance or live posture.
 
 ## Upload Contract
 

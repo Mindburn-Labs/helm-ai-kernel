@@ -656,6 +656,9 @@ func TestGateway_RESTExecuteBridgeGovernanceBranches(t *testing.T) {
 	denyGateway.handleExecute(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
 	require.Equal(t, http.StatusForbidden, rec.Code)
 	assert.Contains(t, rec.Body.String(), "denied by governance")
+	var denied MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &denied))
+	assert.Equal(t, string(contracts.ReasonBudgetError), denied.ReasonCode)
 }
 
 func newGatewayTestBridge(t *testing.T, tenantID string, enforcer budget.Enforcer, allowedTools ...string) *bridge.KernelBridge {

@@ -2,6 +2,7 @@ package escalation
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -220,5 +221,52 @@ func TestApproveExpiredReturnsTimeout(t *testing.T) {
 	}
 	if receipt.Outcome != contracts.EscalationStatusTimedOut {
 		t.Fatalf("expected TIMED_OUT for expired approval, got %s", receipt.Outcome)
+	}
+}
+
+// TestApproveQuorumRejectsAssertedIdentities is the separation-of-duties gate:
+// caller-supplied labels can NEVER establish a verified multi-party quorum.
+//
+// MUTATION CHECK: remove the `quorum > 1` refusal in Approve and this test fails
+// because one asserted name either approves immediately or two names controlled
+// by one credential manufacture a false quorum.
+func TestApproveQuorumRejectsAssertedIdentities(t *testing.T) {
+	mgr := NewManager()
+
+	dec := testDecision()
+	dec.EscalationTemplate.Quorum = 2
+
+	intent, err := mgr.CreateIntent(
+		context.Background(),
+		dec,
+		testHeldEffect(),
+		testEscalationContext(),
+		"run-001", "env-001",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	receipt, err := mgr.Approve(context.Background(), intent.IntentID, "approver-1")
+	if err == nil || !strings.Contains(err.Error(), "verified approver credentials") {
+		t.Fatalf("first asserted identity = (%+v, %v), want verified-credential refusal", receipt, err)
+	}
+	if receipt != nil {
+		t.Fatalf("unverified approval returned a receipt: %+v", receipt)
+	}
+
+	receipt, err = mgr.Approve(context.Background(), intent.IntentID, "approver-2")
+	if err == nil || !strings.Contains(err.Error(), "verified approver credentials") {
+		t.Fatalf("second asserted identity = (%+v, %v), want verified-credential refusal", receipt, err)
+	}
+	if receipt != nil {
+		t.Fatalf("two unverified labels returned a receipt: %+v", receipt)
+	}
+	got, getErr := mgr.GetIntent(intent.IntentID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if got.Status != contracts.EscalationStatusPending || mgr.PendingCount() != 1 {
+		t.Fatalf("unverified labels mutated intent status: status=%s pending=%d", got.Status, mgr.PendingCount())
 	}
 }

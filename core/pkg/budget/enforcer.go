@@ -102,8 +102,24 @@ func (e *SimpleEnforcer) Check(ctx context.Context, tenantID string, cost Cost) 
 
 	// 3. Check Limits
 	// NOTE: Currency conversion is out of scope for v0.1. All amounts are assumed to be in the same base unit (cents/USD).
-	newDaily := b.DailyUsed + cost.Amount
-	newMonthly := b.MonthlyUsed + cost.Amount
+	newDaily, err := checkedUsageAdd(b.DailyUsed, cost.Amount)
+	if err != nil {
+		return &Decision{
+			Allowed:   false,
+			Reason:    fmt.Sprintf("invalid daily budget usage: %v", err),
+			Remaining: b,
+			Receipt:   e.createReceipt(tenantID, "denied", cost.Amount, "usage_overflow"),
+		}, err
+	}
+	newMonthly, err := checkedUsageAdd(b.MonthlyUsed, cost.Amount)
+	if err != nil {
+		return &Decision{
+			Allowed:   false,
+			Reason:    fmt.Sprintf("invalid monthly budget usage: %v", err),
+			Remaining: b,
+			Receipt:   e.createReceipt(tenantID, "denied", cost.Amount, "usage_overflow"),
+		}, err
+	}
 
 	if newDaily > b.DailyLimit {
 		slog.Warn("budget daily limit exceeded", "tenant_id", tenantID, "new_daily", newDaily, "daily_limit", b.DailyLimit)
@@ -146,6 +162,20 @@ func (e *SimpleEnforcer) Check(ctx context.Context, tenantID string, cost Cost) 
 		Remaining: b,
 		Receipt:   e.createReceipt(tenantID, "allowed", cost.Amount, "ok"),
 	}, nil
+}
+
+func checkedUsageAdd(used, amount int64) (int64, error) {
+	if used < 0 {
+		return 0, fmt.Errorf("stored usage must not be negative")
+	}
+	if amount < 0 {
+		return 0, fmt.Errorf("cost amount must not be negative")
+	}
+	const maxInt64 = int64(^uint64(0) >> 1)
+	if amount > maxInt64-used {
+		return 0, fmt.Errorf("cost addition overflows int64 cents")
+	}
+	return used + amount, nil
 }
 
 func (e *SimpleEnforcer) createReceipt(tenantID, action string, cost int64, reason string) *EnforcementReceipt {

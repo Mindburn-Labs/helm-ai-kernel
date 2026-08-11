@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: reports describe existing classical Ed25519 receipt
+// verification; this command adds no cryptographic control and makes no
+// post-quantum assurance claim.
+
 import (
 	"context"
 	"database/sql"

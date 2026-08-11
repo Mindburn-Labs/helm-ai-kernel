@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -737,6 +739,7 @@ func TestReceiptListQueryFilters(t *testing.T) {
 		{"executor alias", "executor=agent.filtered", []string{"rcpt-allow", "rcpt-deny", "rcpt-to-boundary"}},
 		{"effect overrides resource alias", "principal=agent.filtered&effect=READ_FILE&resource=EXECUTE_TOOL", []string{"rcpt-allow", "rcpt-to-boundary"}},
 		{"resource alias", "principal=agent.filtered&resource=READ_FILE", []string{"rcpt-allow", "rcpt-to-boundary"}},
+		{"all dimensions compose in one request", "verdict=DENY&reason_code=policy.blocked&principal=agent.filtered&resource=EXECUTE_TOOL&from=2026-05-07T00:00:00Z&to=2026-05-08T00:00:00Z", []string{"rcpt-deny"}},
 		{"half-open time bounds", "principal=agent.filtered&from=2026-05-06T00:00:00Z&to=2026-05-08T00:00:00Z", []string{"rcpt-allow", "rcpt-deny"}},
 		{"nanosecond half-open time bounds", "principal=agent.nanosecond&from=2026-05-09T00:00:00.123456789Z&to=2026-05-09T00:00:00.123456790Z", []string{"rcpt-nano-at"}},
 		{"timezone offset represents the same nanosecond bounds", "principal=agent.nanosecond&from=2026-05-09T02:00:00.123456789%2B02:00&to=2026-05-09T02:00:00.123456790%2B02:00", []string{"rcpt-nano-at"}},
@@ -748,6 +751,65 @@ func TestReceiptListQueryFilters(t *testing.T) {
 				t.Fatalf("query %q returned %v, want %v", tc.query, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestReceiptListQueryFiltersPreserveOpaquePagination(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	receiptStore := svc.ReceiptStore.(*store.SQLiteReceiptStore)
+	base := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
+	for _, receipt := range []*contracts.Receipt{
+		{
+			ReceiptID:    "rcpt-filter-page-1",
+			DecisionID:   "dec-filter-page-1",
+			EffectID:     "EXECUTE_TOOL",
+			Status:       string(contracts.VerdictDeny),
+			Verdict:      string(contracts.VerdictDeny),
+			ReasonCode:   "policy.blocked",
+			Timestamp:    base,
+			ExecutorID:   "agent.pagination",
+			DecisionHash: "sha256:filter-page-1",
+			ArgsHash:     "args-filter-page-1",
+		},
+		{
+			ReceiptID:    "rcpt-filter-page-decoy",
+			DecisionID:   "dec-filter-page-decoy",
+			EffectID:     "EXECUTE_TOOL",
+			Status:       string(contracts.VerdictAllow),
+			Verdict:      string(contracts.VerdictAllow),
+			Timestamp:    base.Add(time.Second),
+			ExecutorID:   "agent.pagination",
+			DecisionHash: "sha256:filter-page-decoy",
+			ArgsHash:     "args-filter-page-decoy",
+		},
+		{
+			ReceiptID:    "rcpt-filter-page-2",
+			DecisionID:   "dec-filter-page-2",
+			EffectID:     "EXECUTE_TOOL",
+			Status:       string(contracts.VerdictDeny),
+			Verdict:      string(contracts.VerdictDeny),
+			ReasonCode:   "policy.blocked",
+			Timestamp:    base.Add(2 * time.Second),
+			ExecutorID:   "agent.pagination",
+			DecisionHash: "sha256:filter-page-2",
+			ArgsHash:     "args-filter-page-2",
+		},
+	} {
+		appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-"+receipt.ReceiptID, receipt)
+	}
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+	filter := "verdict=DENY&reason_code=policy.blocked&principal=agent.pagination&effect=EXECUTE_TOOL"
+	firstPage := requestReceiptList(t, mux, "/api/v1/receipts?"+filter+"&limit=1")
+	firstCursor, _ := firstPage["next_cursor"].(string)
+	if ids := receiptListIDs(t, firstPage); !reflect.DeepEqual(ids, []string{"rcpt-filter-page-1"}) || firstPage["has_more"] != true || !strings.HasPrefix(firstCursor, tenantReceiptCursorVersionPrefix) {
+		t.Fatalf("first filtered page = ids %v cursor %q has_more %v", ids, firstCursor, firstPage["has_more"])
+	}
+	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?"+filter+"&since="+url.QueryEscape(firstCursor)+"&limit=1")
+	if ids := receiptListIDs(t, secondPage); !reflect.DeepEqual(ids, []string{"rcpt-filter-page-2"}) || secondPage["has_more"] != false {
+		t.Fatalf("second filtered page = ids %v has_more %v", ids, secondPage["has_more"])
 	}
 }
 

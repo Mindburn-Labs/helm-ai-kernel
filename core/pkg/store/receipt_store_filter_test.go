@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
 // receiptFilterFixture seeds one tenant with receipts that vary across every
@@ -115,6 +116,136 @@ func TestSQLiteListByTenantCursorFilteredByDimensions(t *testing.T) {
 			}
 			if ids := receiptIDsOf(got); !reflect.DeepEqual(ids, tc.want) {
 				t.Fatalf("filter %+v returned %v, want %v", tc.filter, ids, tc.want)
+			}
+		})
+	}
+}
+
+// TestSQLiteListByTenantCursorFilteredComposesAllDimensions is the narrowing
+// mutation proof for the complete predicate set. Each decoy differs from the
+// target in exactly one dimension; removing any one predicate admits that
+// decoy, while the full one-call filter returns only the target.
+func TestSQLiteListByTenantCursorFilteredComposesAllDimensions(t *testing.T) {
+	receiptStore, cleanup := newTestSQLiteStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const tenantID = "tenant-composed-filter"
+	deny := string(contracts.VerdictDeny)
+	allow := string(contracts.VerdictAllow)
+	targetTime := time.Date(2026, 8, 3, 12, 0, 0, 500, time.UTC)
+	from := targetTime.Add(-time.Nanosecond)
+	to := targetTime.Add(time.Nanosecond)
+	seedTenantFilterReceipts(t, receiptStore, tenantID, []receiptFilterFixture{
+		{"target", "session-target", deny, "policy.blocked", "agent-target", "fs.write", targetTime},
+		{"wrong-verdict", "session-wrong-verdict", allow, "policy.blocked", "agent-target", "fs.write", targetTime},
+		{"wrong-reason", "session-wrong-reason", deny, "rate.limit", "agent-target", "fs.write", targetTime},
+		{"wrong-executor", "session-wrong-executor", deny, "policy.blocked", "agent-other", "fs.write", targetTime},
+		{"wrong-effect", "session-wrong-effect", deny, "policy.blocked", "agent-target", "net.egress", targetTime},
+		{"before-from", "session-before-from", deny, "policy.blocked", "agent-target", "fs.write", from.Add(-time.Nanosecond)},
+		{"at-exclusive-to", "session-at-exclusive-to", deny, "policy.blocked", "agent-target", "fs.write", to},
+	})
+	seedTenantFilterReceipts(t, receiptStore, "tenant-foreign", []receiptFilterFixture{
+		{"foreign-exact-match", "session-foreign", deny, "policy.blocked", "agent-target", "fs.write", targetTime},
+	})
+
+	full := ReceiptQueryFilter{
+		Verdict:    deny,
+		ReasonCode: "policy.blocked",
+		Executor:   "agent-target",
+		Effect:     "fs.write",
+		From:       from,
+		To:         to,
+	}
+	cases := []struct {
+		name   string
+		mutate func(*ReceiptQueryFilter)
+		want   []string
+	}{
+		{"full filter", func(*ReceiptQueryFilter) {}, []string{"target"}},
+		{"without verdict", func(f *ReceiptQueryFilter) { f.Verdict = "" }, []string{"target", "wrong-verdict"}},
+		{"without reason", func(f *ReceiptQueryFilter) { f.ReasonCode = "" }, []string{"target", "wrong-reason"}},
+		{"without executor", func(f *ReceiptQueryFilter) { f.Executor = "" }, []string{"target", "wrong-executor"}},
+		{"without effect", func(f *ReceiptQueryFilter) { f.Effect = "" }, []string{"target", "wrong-effect"}},
+		{"without from", func(f *ReceiptQueryFilter) { f.From = time.Time{} }, []string{"target", "before-from"}},
+		{"without to", func(f *ReceiptQueryFilter) { f.To = time.Time{} }, []string{"target", "at-exclusive-to"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := full
+			tc.mutate(&filter)
+			got, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{}, filter, 100)
+			if err != nil {
+				t.Fatalf("filtered list: %v", err)
+			}
+			if ids := receiptIDsOf(got); !reflect.DeepEqual(ids, tc.want) {
+				t.Fatalf("filter %+v returned %v, want %v", filter, ids, tc.want)
+			}
+		})
+	}
+}
+
+// TestReceiptQueryFilterSignatureAndChainCoverage pins the trust distinction
+// exposed by the query contract: verdict, reason, and effect are in the V5
+// signature preimage; executor and timestamp are not, but all five change the
+// whole-receipt hash used by the causal chain.
+func TestReceiptQueryFilterSignatureAndChainCoverage(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("receipt-query-filter-coverage")
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	receipt := &contracts.Receipt{
+		ReceiptID:    "receipt-filter-coverage",
+		DecisionID:   "decision-filter-coverage",
+		EffectID:     "fs.write",
+		Status:       string(contracts.VerdictDeny),
+		OutputHash:   "output-filter-coverage",
+		Timestamp:    time.Date(2026, 8, 3, 13, 0, 0, 123456789, time.UTC),
+		ExecutorID:   "agent-filter-coverage",
+		PrevHash:     "previous-filter-coverage",
+		LamportClock: 7,
+		ArgsHash:     "args-filter-coverage",
+		Verdict:      string(contracts.VerdictDeny),
+		ReasonCode:   "policy.blocked",
+		PolicyHash:   "policy-filter-coverage",
+		SessionID:    "session-filter-coverage",
+	}
+	if err := signer.SignReceipt(receipt); err != nil {
+		t.Fatalf("sign receipt: %v", err)
+	}
+	baselineHash, err := contracts.ReceiptChainHash(receipt)
+	if err != nil {
+		t.Fatalf("hash signed receipt: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name           string
+		signatureBound bool
+		mutate         func(*contracts.Receipt)
+	}{
+		{"verdict", true, func(r *contracts.Receipt) { r.Verdict = string(contracts.VerdictAllow) }},
+		{"reason_code", true, func(r *contracts.Receipt) { r.ReasonCode = "rate.limit" }},
+		{"effect_id", true, func(r *contracts.Receipt) { r.EffectID = "net.egress" }},
+		{"executor_id", false, func(r *contracts.Receipt) { r.ExecutorID = "agent-other" }},
+		{"timestamp", false, func(r *contracts.Receipt) { r.Timestamp = r.Timestamp.Add(time.Nanosecond) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mutated := *receipt
+			tc.mutate(&mutated)
+			valid, err := signer.VerifyReceipt(&mutated)
+			if err != nil {
+				t.Fatalf("verify mutated receipt: %v", err)
+			}
+			wantSignatureValid := !tc.signatureBound
+			if valid != wantSignatureValid {
+				t.Fatalf("signature validity after mutating %s = %v, want %v", tc.name, valid, wantSignatureValid)
+			}
+			mutatedHash, err := contracts.ReceiptChainHash(&mutated)
+			if err != nil {
+				t.Fatalf("hash mutated receipt: %v", err)
+			}
+			if mutatedHash == baselineHash {
+				t.Fatalf("mutating %s did not change the causal chain hash", tc.name)
 			}
 		})
 	}

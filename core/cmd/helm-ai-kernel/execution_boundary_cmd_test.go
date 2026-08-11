@@ -351,6 +351,84 @@ func TestRunSandboxPreflightJSON(t *testing.T) {
 	}
 }
 
+func TestRunSandboxExecRefusesWithoutPolicyEvaluator(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{name: "json", args: []string{"exec", "--provider", "mock", "--json", "--", "echo", "hi"}},
+		{name: "text", args: []string{"exec", "--provider", "mock", "--", "echo", "hi"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := runSandboxCmd(tt.args, &stdout, &stderr)
+			if code != 1 {
+				t.Fatalf("exit code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+			combined := stdout.String() + stderr.String()
+			for _, forbidden := range []string{"ALLOW", "receipt_id", "preflight_hash", "image_digest", "sha256:"} {
+				if strings.Contains(combined, forbidden) {
+					t.Fatalf("sandbox exec emitted forbidden synthetic authority %q: stdout=%s stderr=%s", forbidden, stdout.String(), stderr.String())
+				}
+			}
+			if !strings.Contains(combined, sandboxPreflightReasonUnavailable) {
+				t.Fatalf("sandbox exec did not report unavailable evaluator: stdout=%s stderr=%s", stdout.String(), stderr.String())
+			}
+			if tt.name != "json" {
+				return
+			}
+			var result map[string]any
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatalf("parse json: %v\n%s", err, stdout.String())
+			}
+			if result["verdict"] != "DENY" || result["status"] != sandboxPreflightStatusUnavailable {
+				t.Fatalf("unexpected refusal envelope: %#v", result)
+			}
+			preflight, ok := result["preflight"].(map[string]any)
+			if !ok {
+				t.Fatalf("preflight missing from refusal envelope: %#v", result)
+			}
+			if preflight["pass"] != false || preflight["status"] != sandboxPreflightStatusUnavailable {
+				t.Fatalf("preflight = %#v, want failed unavailable", preflight)
+			}
+		})
+	}
+}
+
+func TestRunSandboxConformRefusesWithoutPolicyEvaluator(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runSandboxCmd([]string{"conform", "--provider", "mock", "--tier", "verified", "--json"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String() + stderr.String()
+	for _, forbidden := range []string{`"pass": true`, "ALLOW", "receipt_id", "preflight_hash", "sha256:"} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("sandbox conform emitted forbidden synthetic authority %q: stdout=%s stderr=%s", forbidden, stdout.String(), stderr.String())
+		}
+	}
+	var result map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("parse json: %v\n%s", err, stdout.String())
+	}
+	if result["pass"] != false || result["status"] != sandboxPreflightStatusUnavailable {
+		t.Fatalf("unexpected conformance result: %#v", result)
+	}
+	checks, ok := result["checks"].([]any)
+	if !ok || len(checks) == 0 {
+		t.Fatalf("checks missing: %#v", result)
+	}
+	for _, raw := range checks {
+		check, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected check payload: %#v", raw)
+		}
+		if check["pass"] != false || check["status"] != sandboxPreflightStatusUnavailable {
+			t.Fatalf("check = %#v, want failed unavailable", check)
+		}
+	}
+}
+
 func TestRunAuthzCheckJSON(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runAuthzSurfaceCmd([]string{"check", "--subject", "agent:a", "--object", "tool:b", "--relation", "can_call", "--json"}, &stdout, &stderr)

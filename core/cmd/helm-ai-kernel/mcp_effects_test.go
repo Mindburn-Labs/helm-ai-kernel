@@ -11,9 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	rtmcp "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters/mcp"
 )
 
@@ -107,6 +109,41 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 	tampered.Scope.AllowedAction = "github.create_issue"
 	if ok, _ := helmcrypto.VerifyPermit(pubKey, &tampered); ok {
 		t.Fatal("a permit whose scope was changed after signing still verified; the signature does not cover scope")
+	}
+
+	// The shipped response is already a receipt_verify bundle. Round-trip its
+	// exact JSON wire shape and verify it using the same offline library as the
+	// binary, with the signing key supplied as an explicit trust root.
+	bundleRaw, err := json.Marshal(doc["receipt_bundle"])
+	if err != nil {
+		t.Fatalf("marshal receipt bundle: %v", err)
+	}
+	var bundle receiptverify.Bundle
+	if err := json.Unmarshal(bundleRaw, &bundle); err != nil {
+		t.Fatalf("decode receipt_verify bundle: %v", err)
+	}
+	if len(bundle.Receipts) != 1 || len(bundle.Permits) != 1 {
+		t.Fatalf("bundle counts = receipts:%d permits:%d, want 1/1", len(bundle.Receipts), len(bundle.Permits))
+	}
+	receipt := bundle.Receipts[0]
+	if receipt.DecisionID != doc["decision_id"] {
+		t.Fatalf("receipt decision = %q, response decision = %v", receipt.DecisionID, doc["decision_id"])
+	}
+	if receipt.OutputHash != doc["output_hash"] {
+		t.Fatalf("receipt output hash = %q, response output hash = %v", receipt.OutputHash, doc["output_hash"])
+	}
+	receiptHash, err := contracts.ReceiptChainHash(receipt)
+	if err != nil {
+		t.Fatalf("hash execution receipt: %v", err)
+	}
+	if receiptHash != doc["execution_receipt_hash"] {
+		t.Fatalf("execution receipt hash = %q, response = %v", receiptHash, doc["execution_receipt_hash"])
+	}
+	verification := receiptverify.VerifyBundle(bundle, receiptverify.TrustRoot{
+		Keys: map[string]string{receipt.KeyID: pubKey},
+	})
+	if !verification.Valid || verification.Receipts != 1 || verification.Permits != 1 {
+		t.Fatalf("offline bundle verification failed: %+v", verification)
 	}
 }
 

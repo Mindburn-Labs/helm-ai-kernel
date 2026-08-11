@@ -197,8 +197,7 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 
 // execute routes a github.* tool call through the governed bridge and returns
 // the outcome as a machine document: verdict, dispatch state, the signed
-// permit itself, and the key that verifies it offline
-// (receipt_verify --key <permit_public_key>).
+// permit, and a canonical receipt bundle for offline receipt_verify use.
 func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
 	adapted := &runtimeadapters.AdaptedRequest{
 		RuntimeType:         "mcp",
@@ -224,10 +223,18 @@ func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecu
 		"permit_public_key": r.bridge.PermitSigningPublicKey(),
 	}
 	if outcome.Verdict == contracts.VerdictAllow {
+		if outcome.ExecutionReceipt == nil || outcome.ExecutionReceiptHash == "" {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("github effects: dispatched call produced no canonical execution receipt")
+		}
 		doc["result"] = outcome.Output
 		doc["output_hash"] = outcome.OutputHash
+		doc["execution_receipt_hash"] = outcome.ExecutionReceiptHash
+		doc["receipt_bundle"] = map[string]any{
+			"receipts": []any{outcome.ExecutionReceipt},
+			"permits":  []any{outcome.Permit},
+		}
 		doc["next_steps"] = []string{
-			"verify the permit offline: wrap it as {\"receipts\":[],\"permits\":[<permit>]} and run receipt_verify --receipt bundle.json --key " + r.bridge.PermitSigningPublicKey(),
+			"save receipt_bundle as bundle.json and run receipt_verify --receipt bundle.json --key-file <caller-trusted-root-key-file>",
 		}
 		return structuredLocalMCPResponse(doc)
 	}

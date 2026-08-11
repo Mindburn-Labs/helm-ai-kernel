@@ -103,16 +103,17 @@ func TestGovern_BudgetExhausted(t *testing.T) {
 	kb := NewKernelBridge(g, prgG, pg, enforcer, "tenant-budget")
 
 	// First two calls should pass (budget = 2 cents daily, 1 cent per call)
-	r1, err := kb.Govern(ctx, "tool_a", "sha256:1", nil)
+	oneCent := &effects.CostBreakdown{TotalCents: 1}
+	r1, err := kb.Govern(ctx, "tool_a", "sha256:1", oneCent)
 	require.NoError(t, err)
 	assert.True(t, r1.Allowed, "first call should succeed")
 
-	r2, err := kb.Govern(ctx, "tool_b", "sha256:2", nil)
+	r2, err := kb.Govern(ctx, "tool_b", "sha256:2", oneCent)
 	require.NoError(t, err)
 	assert.True(t, r2.Allowed, "second call should succeed")
 
 	// Third call should be budget-blocked
-	r3, err := kb.Govern(ctx, "tool_c", "sha256:3", nil)
+	r3, err := kb.Govern(ctx, "tool_c", "sha256:3", oneCent)
 	require.NoError(t, err)
 	assert.False(t, r3.Allowed, "third call should be denied (budget exhausted)")
 	assert.Equal(t, string(contracts.ReasonBudgetExceeded), r3.ReasonCode)
@@ -181,6 +182,38 @@ func TestGovern_BudgetMeteredByEffectCost(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, rDenied.Allowed, "a cost exceeding the limit must be denied")
 	assert.Equal(t, string(contracts.ReasonBudgetExceeded), rDenied.ReasonCode)
+}
+
+func TestGovern_BudgetRejectsTokenCountsAsMoney(t *testing.T) {
+	g, prgG := newTestGuardian(t)
+	addAllowedToolRule(t, prgG, "priced_tool")
+
+	memStore := budget.NewMemoryStorage()
+	enforcer := budget.NewSimpleEnforcer(memStore)
+	ctx := context.Background()
+	const tenant = "tenant-unpriced"
+	require.NoError(t, enforcer.SetLimits(ctx, tenant, 10_000, 100_000))
+
+	kb := NewKernelBridge(g, prgG, proofgraph.NewGraph(), enforcer, tenant)
+	usageOnly := &effects.CostBreakdown{InputTokens: 2_000, OutputTokens: 500}
+
+	result, err := kb.Govern(ctx, "priced_tool", "sha256:usage-only", usageOnly)
+	require.NoError(t, err)
+	require.False(t, result.Allowed, "unpriced token usage must fail closed")
+	assert.Equal(t, string(contracts.ReasonBudgetError), result.ReasonCode)
+
+	got, err := enforcer.GetBudget(ctx, tenant)
+	require.NoError(t, err)
+	assert.Zero(t, dailyUsedCents(got), "token counts must never be persisted as cents")
+}
+
+func TestBudgetCentsRejectsInconsistentMonetaryBreakdown(t *testing.T) {
+	_, err := budgetCents(&effects.CostBreakdown{
+		ModelCostCents: 5,
+		ToolCostCents:  2,
+		TotalCents:     1,
+	})
+	require.Error(t, err)
 }
 
 func TestGovern_ProofGraphChainIntegrity(t *testing.T) {

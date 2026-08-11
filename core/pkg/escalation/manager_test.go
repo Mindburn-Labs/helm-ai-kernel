@@ -286,3 +286,62 @@ func TestApproveQuorumRequiresDistinctApprovers(t *testing.T) {
 		t.Fatalf("expected 0 pending after quorum met, got %d", mgr.PendingCount())
 	}
 }
+
+func TestPartialQuorumStateClearedOnDeny(t *testing.T) {
+	mgr := NewManager()
+	dec := testDecision()
+	dec.EscalationTemplate.Quorum = 2
+	intent, err := mgr.CreateIntent(
+		context.Background(), dec, testHeldEffect(), testEscalationContext(),
+		"run-001", "env-001",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	receipt, err := mgr.Approve(context.Background(), intent.IntentID, "approver-1")
+	if err != nil || receipt != nil {
+		t.Fatalf("first approval = (%+v, %v), want (nil, nil)", receipt, err)
+	}
+	if len(mgr.approvers[intent.IntentID]) != 1 {
+		t.Fatalf("partial approval not recorded: %+v", mgr.approvers[intent.IntentID])
+	}
+
+	if _, err := mgr.Deny(context.Background(), intent.IntentID, "denier-1", "risk rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := mgr.approvers[intent.IntentID]; ok {
+		t.Fatal("terminal denial retained stale partial approvals")
+	}
+}
+
+func TestPartialQuorumStateClearedOnTimeout(t *testing.T) {
+	now := time.Now()
+	elapsed := time.Duration(0)
+	mgr := NewManager().WithClock(func() time.Time { return now.Add(elapsed) })
+	dec := testDecision()
+	dec.EscalationTemplate.Quorum = 2
+	dec.EscalationTemplate.TimeoutSeconds = 5
+	intent, err := mgr.CreateIntent(
+		context.Background(), dec, testHeldEffect(), testEscalationContext(),
+		"run-001", "env-001",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if receipt, err := mgr.Approve(context.Background(), intent.IntentID, "approver-1"); err != nil || receipt != nil {
+		t.Fatalf("first approval = (%+v, %v), want (nil, nil)", receipt, err)
+	}
+	elapsed = 6 * time.Second
+	receipts, err := mgr.CheckTimeouts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(receipts) != 1 || receipts[0].Outcome != contracts.EscalationStatusTimedOut {
+		t.Fatalf("timeout receipts = %+v, want one TIMED_OUT receipt", receipts)
+	}
+	if _, ok := mgr.approvers[intent.IntentID]; ok {
+		t.Fatal("terminal timeout retained stale partial approvals")
+	}
+}

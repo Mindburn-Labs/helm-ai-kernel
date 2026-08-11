@@ -705,11 +705,10 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 											reasonCode = "PROXY_WALLCLOCK_LIMIT"
 											log.Printf("[DENY] wallclock limit exceeded (%v > %v)", time.Since(sessionStart), maxWallclock)
 										} else {
-											// Meter budget by the model call's measured token
-											// usage so an expensive call consumes proportionally
-											// more than a cheap one. The proxy observes usage,
-											// not a per-model price, so tokens are the proxy
-											// signal the bridge charges against.
+											// Preserve token usage as usage evidence, but do not
+											// reinterpret it as cents. With budgeting enabled,
+											// the bridge fails closed until the caller supplies a
+											// trusted monetary price in this breakdown.
 											effectCost := &effects.CostBreakdown{
 												InputTokens:  inputTokens,
 												OutputTokens: outputTokens,

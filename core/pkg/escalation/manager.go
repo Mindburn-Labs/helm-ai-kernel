@@ -129,6 +129,7 @@ func (m *Manager) Approve(ctx context.Context, intentID string, approverID strin
 	now := m.clock()
 	if now.After(intent.ExpiresAt) {
 		intent.Status = contracts.EscalationStatusTimedOut
+		delete(m.approvers, intentID)
 		return m.createReceipt(intent, now), nil
 	}
 
@@ -197,6 +198,7 @@ func (m *Manager) Deny(ctx context.Context, intentID, denierID, reason string) (
 	}
 
 	intent.Status = contracts.EscalationStatusDenied
+	delete(m.approvers, intentID)
 	receipt := m.createReceipt(intent, m.clock())
 	receipt.DeniedBy = denierID
 	receipt.DenyReason = reason
@@ -220,6 +222,7 @@ func (m *Manager) CheckTimeouts(ctx context.Context) ([]*contracts.EscalationRec
 		}
 		if now.After(intent.ExpiresAt) {
 			intent.Status = contracts.EscalationStatusTimedOut
+			delete(m.approvers, intent.IntentID)
 			receipts = append(receipts, m.createReceipt(intent, now))
 		}
 	}

@@ -95,7 +95,11 @@ func (m *Manager) CreateIntent(
 	return intent, nil
 }
 
-// Approve approves an escalation intent.
+// Approve records a single-party approval. approverID is caller-asserted and
+// therefore cannot establish that two labels represent two independent people,
+// credentials, devices, or keys. Multi-party quorum is refused on this legacy
+// path; callers must use boundary/approvalverify.VerifyQuorum and a durable
+// approval ceremony backed by authority-registry-pinned credentials.
 func (m *Manager) Approve(ctx context.Context, intentID string, approverID string) (*contracts.EscalationReceipt, error) {
 	_ = ctx
 	m.mu.Lock()
@@ -115,6 +119,21 @@ func (m *Manager) Approve(ctx context.Context, intentID string, approverID strin
 	if now.After(intent.ExpiresAt) {
 		intent.Status = contracts.EscalationStatusTimedOut
 		return m.createReceipt(intent, now), nil
+	}
+
+	// An unnamed principal cannot count toward a quorum.
+	if approverID == "" {
+		return nil, fmt.Errorf("escalation intent %q: approver ID must not be empty", intentID)
+	}
+
+	quorum := intent.Approval.Quorum
+	if quorum < 1 {
+		quorum = 1
+	}
+	if quorum > 1 {
+		return nil, fmt.Errorf(
+			"escalation intent %q requires a %d-party quorum; verified approver credentials are required",
+			intentID, quorum)
 	}
 
 	intent.Status = contracts.EscalationStatusApproved

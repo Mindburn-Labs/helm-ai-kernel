@@ -51,6 +51,14 @@ func writeSurfaceJSON(w io.Writer, value any) int {
 	return 0
 }
 
+func writeSurfaceJSONResult(w io.Writer, value any, successful bool) int {
+	_ = writeSurfaceJSON(w, value)
+	if !successful {
+		return 1
+	}
+	return 0
+}
+
 func writeLocalMCPReceipt(id, kind string, value any) string {
 	path := localMCPReceiptPath(id)
 	dir := filepath.Dir(path)
@@ -215,7 +223,7 @@ func runBoundaryVerify(args []string, registry *boundarypkg.SurfaceRegistry, std
 	}
 	result := registry.VerifyRecord(*recordID)
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, result)
+		return writeSurfaceJSONResult(stdout, result, result.Verified)
 	}
 	fmt.Fprintf(stdout, "Boundary verification %s: %s\n", result.RecordID, result.Verdict)
 	if !result.Verified {
@@ -354,7 +362,7 @@ func runAuthzCheck(args []string, registry *boundarypkg.SurfaceRegistry, stdout,
 		return 2
 	}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, sealed)
+		return writeSurfaceJSONResult(stdout, sealed, sealed.Decision)
 	}
 	fmt.Fprintf(stdout, "Authz decision=%t snapshot=%s hash=%s\n", sealed.Decision, sealed.SnapshotID, sealed.SnapshotHash)
 	if !sealed.Decision {
@@ -564,7 +572,7 @@ func runApprovalsAssert(args []string, registry *boundarypkg.SurfaceRegistry, st
 		return 1
 	}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, approval)
+		return writeSurfaceJSONResult(stdout, approval, approval.State == contracts.ApprovalCeremonyAllowed)
 	}
 	fmt.Fprintf(stdout, "Approval %s state=%s method=%s\n", approval.ApprovalID, approval.State, approval.AuthMethod)
 	if approval.State != contracts.ApprovalCeremonyAllowed {
@@ -860,7 +868,7 @@ func runMCPGet(args []string, stdout, stderr io.Writer) int {
 	}
 	record := map[string]any{"server_id": *serverID, "state": "not_found", "dispatch_ready": false}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, record)
+		return writeSurfaceJSONResult(stdout, record, false)
 	}
 	fmt.Fprintf(stdout, "MCP server %s is not registered in this local CLI registry\n", *serverID)
 	return 1
@@ -1039,7 +1047,7 @@ func runMCPAuthProfileVerify(args []string, registry *boundarypkg.SurfaceRegistr
 		}
 	}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, result)
+		return writeSurfaceJSONResult(stdout, result, result["verified"] == true)
 	}
 	fmt.Fprintf(stdout, "MCP auth profile %s verified=%t\n", *profileID, result["verified"])
 	if result["verified"] != true {
@@ -1326,7 +1334,7 @@ func runSandboxGet(args []string, stdout, stderr io.Writer) int {
 	}
 	result := map[string]any{"grant_id": *grantID, "state": "not_found", "verified": false}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, result)
+		return writeSurfaceJSONResult(stdout, result, false)
 	}
 	fmt.Fprintf(stdout, "Sandbox grant %s is not recorded in this local CLI registry\n", *grantID)
 	return 1
@@ -1354,7 +1362,7 @@ func runSandboxVerify(args []string, stdout, stderr io.Writer) int {
 		result.Findings = []string{"grant hash is required for offline verification"}
 	}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, result)
+		return writeSurfaceJSONResult(stdout, result, result.Verdict == contracts.VerdictAllow)
 	}
 	fmt.Fprintf(stdout, "Sandbox verify verdict=%s grant=%s\n", result.Verdict, result.GrantID)
 	if result.Verdict != contracts.VerdictAllow {
@@ -1498,7 +1506,7 @@ func runEvidenceEnvelopeGet(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, result)
+		return writeSurfaceJSONResult(stdout, result, false)
 	}
 	fmt.Fprintf(stdout, "Envelope manifest %s is not recorded in this local CLI registry\n", *manifestID)
 	return 1
@@ -1576,7 +1584,7 @@ func runEvidenceEnvelopeVerify(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if *jsonOutput {
-		return writeSurfaceJSON(stdout, result)
+		return writeSurfaceJSONResult(stdout, result, result.Verified)
 	}
 	fmt.Fprintf(stdout, "Evidence envelope verify manifest=%s verified=%t\n", result.ManifestID, result.Verified)
 	if !result.Verified {

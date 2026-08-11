@@ -102,6 +102,11 @@ are both present, `tool`/`action`, `effect_level`/`resource`, and top-level
 `session_id`/`context.session_id` must match after trimming. The runtime rejects
 conflicts before policy evaluation or receipt issuance.
 
+Request `context` is not an identity or scope authority. The daemon removes
+caller-supplied principal, tenant, and workspace authority spellings before
+Guardian evaluation, then adds only the canonical values bound by the
+authenticated request. Other context fields are preserved.
+
 Receipt reads are tenant-scoped. Prefer `session_id`; legacy `agent` is an
 alias for that signed session ID and is never an executor filter. A session
 listing accepts `since=lamport:<n>`. A tenant-wide listing must continue with

@@ -2884,7 +2884,7 @@ pub struct EvaluateRequest {
     /// Non-whitespace signed causal session identifier.
     #[serde(rename = "session_id", skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
-    /// Optional input context; authenticated principal and tenant fields are added by the server.
+    /// Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.
     #[serde(rename = "context", skip_serializing_if = "Option::is_none")]
     pub context: Option<std::collections::HashMap<String, serde_json::Value>>,
 }

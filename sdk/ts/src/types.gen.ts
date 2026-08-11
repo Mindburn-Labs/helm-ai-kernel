@@ -6701,7 +6701,7 @@ export interface EvaluateRequest {
      */
     session_id?: string;
     /**
-     * Optional input context; authenticated principal and tenant fields are added by the server.
+     * Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.
      * @type {{ [key: string]: any; }}
      * @memberof EvaluateRequest
      */

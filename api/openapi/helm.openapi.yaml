@@ -4621,7 +4621,7 @@ components:
         context:
           type: object
           additionalProperties: true
-          description: Optional input context; authenticated principal and tenant fields are added by the server.
+          description: Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.
 
     NonBlankSessionID:
       type: string

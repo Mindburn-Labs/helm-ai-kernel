@@ -75,6 +75,16 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
+		// Authentication is the only authority for identity and scope. Remove
+		// every authority-bearing spelling recognized by this boundary or
+		// Guardian before publishing canonical authenticated values to policy.
+		for _, key := range []string{
+			"principal", "principal_id", "agent_id",
+			"tenant", "tenantId", "tenant_id",
+			"workspace", "workspaceId", "workspace_id",
+		} {
+			delete(req.Context, key)
+		}
 		req.AgentID = principalID
 		req.Context["principal_id"] = principalID
 		req.Context["tenant_id"] = tenantID

@@ -6161,7 +6161,7 @@ class EvaluateRequest(BaseModel):
     agent_id: Optional[StrictStr] = Field(default=None, description="Ignored; the authenticated principal is recorded as the receipt executor.")
     effect_level: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Policy resource used to evaluate the governed tool call.")
     session_id: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Non-whitespace signed causal session identifier.")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="Optional input context; authenticated principal and tenant fields are added by the server.")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.")
     __properties: ClassVar[List[str]] = ["principal", "action", "resource", "tool", "args", "agent_id", "effect_level", "session_id", "context"]
 
     @field_validator('session_id')

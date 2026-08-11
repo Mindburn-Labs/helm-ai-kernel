@@ -350,6 +350,43 @@ func TestSQLiteReceiptEnvelopeCompatibilityBackfillAndProofBoundary(t *testing.T
 	}
 }
 
+func TestSQLiteReceiptCanonicalEnvelopeRejectsTamperedFilterProjection(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		field     string
+		updateSQL string
+		value     any
+	}{
+		{"verdict", "verdict", `UPDATE receipts SET verdict = ? WHERE receipt_id = ?`, "DENY"},
+		{"reason code", "reason_code", `UPDATE receipts SET reason_code = ? WHERE receipt_id = ?`, "tampered.reason"},
+		{"executor", "executor_id", `UPDATE receipts SET executor_id = ? WHERE receipt_id = ?`, "tampered-executor"},
+		{"effect", "effect_id", `UPDATE receipts SET effect_id = ? WHERE receipt_id = ?`, "tampered-effect"},
+		{"timestamp", "timestamp", `UPDATE receipts SET timestamp = ? WHERE receipt_id = ?`, "2026-08-02T12:00:00.123456790Z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, cleanup := newTestSQLiteStore(t)
+			defer cleanup()
+			ctx := context.Background()
+			receipt := storeCoverageReceipt(
+				"receipt-projection-tamper",
+				"decision-projection-tamper",
+				"projection-session",
+				1,
+				time.Date(2026, 8, 2, 12, 0, 0, 123456789, time.UTC),
+			)
+			if err := store.Store(ctx, receipt); err != nil {
+				t.Fatalf("store canonical receipt: %v", err)
+			}
+			if _, err := store.db.ExecContext(ctx, tc.updateSQL, tc.value, receipt.ReceiptID); err != nil {
+				t.Fatalf("tamper %s projection: %v", tc.field, err)
+			}
+			if _, err := store.GetByReceiptID(ctx, receipt.ReceiptID); err == nil || !strings.Contains(err.Error(), tc.field) {
+				t.Fatalf("tampered %s projection did not fail closed: %v", tc.field, err)
+			}
+		})
+	}
+}
+
 func insertLegacySQLiteReceiptProjection(t *testing.T, store *SQLiteReceiptStore, receipt *contracts.Receipt, causalSessionID, chainHash string) {
 	t.Helper()
 	_, err := store.db.ExecContext(context.Background(), `INSERT INTO receipts (

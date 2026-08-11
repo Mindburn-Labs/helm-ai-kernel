@@ -36,7 +36,7 @@ test-approval-ceremony-postgres:
 
 test-receipt-store-postgres-migration:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
-	cd core && go test -race ./pkg/store -run '^TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash$$' -count=1
+	cd core && go test -race ./pkg/store -run '^(TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash|TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor)$$' -count=1
 test-generated-spec-approval-ceremony-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/generatedspecapprovalceremony -run TestPostgresLifecycleSingleIssueConsumeAndFence -count=10

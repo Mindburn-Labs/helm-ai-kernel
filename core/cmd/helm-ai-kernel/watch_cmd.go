@@ -31,10 +31,20 @@ const (
 
 func init() {
 	Register(Subcommand{
-		Name:  "watch",
-		Usage: "Review live approval state with typed APPROVE/DENY confirmation",
-		RunFn: runWatchCmd,
+		Name:   "watch",
+		Usage:  "Review live approval state with typed APPROVE/DENY confirmation",
+		RunFn:  runWatchCmd,
+		HelpFn: printWatchUsage,
 	})
+}
+
+func printWatchUsage(stdout io.Writer) {
+	fmt.Fprintln(stdout, "Usage: helm-ai-kernel watch [--url URL] [--api-key-file FILE] [--once|--json]")
+	fmt.Fprintln(stdout, "Review live approval state from the Kernel and confirm APPROVE or DENY with a second exact word.")
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Notes:")
+	fmt.Fprintln(stdout, "  --once and --json are snapshot-only and never prompt or change state.")
+	fmt.Fprintln(stdout, "  Set HELM_ADMIN_API_KEY or use --api-key-file; there is deliberately no --api-key flag.")
 }
 
 type watchClientFactory func(rawURL, apiKey string) (approvalClient, error)

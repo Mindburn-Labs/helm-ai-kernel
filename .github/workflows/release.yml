@@ -108,12 +108,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Bind this run to the live immutable annotated tag
+      - name: Bind this run to the live annotated tag and pushed commit
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
-          EXPECTED_TAG_OBJECT: ${{ github.event.after }}
-          EXPECTED_COMMIT: ${{ github.sha }}
+          PUSH_COMMIT: ${{ github.event.after }}
+          WORKFLOW_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
 
@@ -121,12 +121,16 @@ jobs:
             echo "::error::release-production environment is not armed. Set environment-scoped HELM_RELEASE_AUTHORITY_ARMED=release-production and keep required reviewers plus administrator-bypass disabled before enabling Release."
             exit 1
           fi
-          if ! [[ "${EXPECTED_TAG_OBJECT}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Push event after value is not a full Git object SHA: ${EXPECTED_TAG_OBJECT}"
+          if ! [[ "${PUSH_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Push event after value is not a full commit SHA: ${PUSH_COMMIT}"
             exit 1
           fi
-          if ! [[ "${EXPECTED_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Workflow commit is not a full Git commit SHA: ${EXPECTED_COMMIT}"
+          if ! [[ "${WORKFLOW_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Workflow commit is not a full commit SHA: ${WORKFLOW_COMMIT}"
+            exit 1
+          fi
+          if [ "${PUSH_COMMIT}" != "${WORKFLOW_COMMIT}" ]; then
+            echo "::error::Push commit ${PUSH_COMMIT} does not match workflow commit ${WORKFLOW_COMMIT}."
             exit 1
           fi
 
@@ -137,10 +141,6 @@ jobs:
             echo "::error::Release ref ${GITHUB_REF_NAME} is ${ref_type}, not an annotated tag object."
             exit 1
           fi
-          if [ "${live_tag_object}" != "${EXPECTED_TAG_OBJECT}" ]; then
-            echo "::error::Release tag object moved: event=${EXPECTED_TAG_OBJECT}, live=${live_tag_object}."
-            exit 1
-          fi
           tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${live_tag_object}")"
           target_type="$(jq -er '.object.type' <<<"${tag_json}")"
           target_commit="$(jq -er '.object.sha' <<<"${tag_json}")"
@@ -148,8 +148,8 @@ jobs:
             echo "::error::Annotated release tag points to ${target_type}, not a commit."
             exit 1
           fi
-          if [ "${target_commit}" != "${EXPECTED_COMMIT}" ]; then
-            echo "::error::Annotated release tag resolves to ${target_commit}, not workflow commit ${EXPECTED_COMMIT}."
+          if [ "${target_commit}" != "${PUSH_COMMIT}" ]; then
+            echo "::error::Annotated release tag resolves to ${target_commit}, not pushed commit ${PUSH_COMMIT}."
             exit 1
           fi
 
@@ -260,6 +260,7 @@ jobs:
     # the Kernel release source; it never accepts a mutable Console main build.
     runs-on: ubuntu-latest
     needs: [validate, release-authority]
+    if: github.run_attempt == 1
     outputs:
       manifest_sha256: ${{ steps.console-verify.outputs.manifest_sha256 }}
     permissions:
@@ -391,6 +392,7 @@ jobs:
   binaries:
     runs-on: ubuntu-latest
     needs: [validate, deployment-smoke, kind-smoke, release-smoke, release-authority]
+    if: github.run_attempt == 1
     env:
       HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE }}
       HELM_RELEASE_EVIDENCE_ANCHOR_TYPE: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_TYPE }}
@@ -451,6 +453,7 @@ jobs:
     # Keyless signatures are externally visible release evidence. Do not create
     # them until both release authorities have closed successfully.
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     permissions:
       actions: read
       contents: read
@@ -520,6 +523,7 @@ jobs:
     # Public registry publication starts only after the EvidencePack-backed
     # release assets and the exact Console source closure both succeed.
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     permissions:
       contents: read
       id-token: write
@@ -583,6 +587,7 @@ jobs:
   cosign-container:
     runs-on: ubuntu-latest
     needs: [container, release-authority]
+    if: github.run_attempt == 1
     permissions:
       contents: read
       id-token: write
@@ -727,6 +732,7 @@ jobs:
   homebrew:
     runs-on: ubuntu-latest
     needs: [github-release, release-authority]
+    if: github.run_attempt == 1
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -808,6 +814,7 @@ jobs:
   chart:
     runs-on: ubuntu-latest
     needs: [validate, deployment-smoke, kind-smoke, container, cosign-container, release-authority]
+    if: github.run_attempt == 1
     permissions:
       contents: read
       id-token: write
@@ -861,6 +868,7 @@ jobs:
   artifacthub-repo:
     runs-on: ubuntu-latest
     needs: [chart, release-authority]
+    if: github.run_attempt == 1
     permissions:
       contents: read
       packages: write
@@ -887,6 +895,7 @@ jobs:
   go-sdk-tag:
     runs-on: ubuntu-latest
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     permissions:
       contents: write
     steps:
@@ -934,6 +943,7 @@ jobs:
   npm-sdk:
     runs-on: ubuntu-latest
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     environment: npm-production
     permissions:
       contents: read
@@ -984,6 +994,7 @@ jobs:
   python-sdk:
     runs-on: ubuntu-latest
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     environment: pypi-production
     permissions:
       contents: read
@@ -1057,6 +1068,7 @@ jobs:
   crates-sdk:
     runs-on: ubuntu-latest
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     environment: crates-production
     permissions:
       contents: read
@@ -1122,6 +1134,7 @@ jobs:
   maven-sdk:
     runs-on: ubuntu-latest
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     environment: maven-central
     permissions:
       contents: read
@@ -1254,6 +1267,7 @@ jobs:
   github-release:
     runs-on: ubuntu-latest
     needs: [release-preflight, release-authority, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets]
+    if: github.run_attempt == 1
     permissions:
       actions: read
       contents: write
@@ -1298,6 +1312,7 @@ jobs:
     # before the one public GitHub release step consumes this artifact.
     runs-on: ubuntu-latest
     needs: [binaries, console-local-sidecar, release-authority]
+    if: github.run_attempt == 1
     permissions:
       actions: read
       contents: read
@@ -1440,6 +1455,7 @@ jobs:
 
   slsa-provenance:
     needs: [binaries, github-release, release-authority]
+    if: github.run_attempt == 1
     permissions:
       actions: read
       contents: write
@@ -1455,6 +1471,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets, release-authority]
     if: >-
+      github.run_attempt == 1 &&
       always() &&
       needs.github-release.result == 'success' &&
       needs.slsa-provenance.result == 'success' &&

@@ -226,6 +226,83 @@ func TestPostgresTenantCursorContinuesWithLateSignedSessionGenesisAfterAppendSeq
 	}
 }
 
+func TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor(t *testing.T) {
+	postgresURL := os.Getenv("HELM_TEST_POSTGRES_URL")
+	if postgresURL == "" {
+		t.Skip("set HELM_TEST_POSTGRES_URL to run the Postgres receipt filter proof")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	schema := fmt.Sprintf("helm_receipt_filter_query_%d", time.Now().UnixNano())
+	db, err := sql.Open("postgres", postgresURLWithSearchPath(t, postgresURL, schema))
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS `+schema); err != nil {
+		t.Fatalf("create test schema: %v", err)
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = db.ExecContext(cleanupCtx, `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+	}()
+
+	receiptStore := NewPostgresReceiptStore(db)
+	if err := receiptStore.Init(ctx); err != nil {
+		t.Fatalf("initialize receipt store: %v", err)
+	}
+
+	const sessionID = "session-filter-query"
+	appendReceipt := func(tenantID, receiptID string, timestamp time.Time) *contracts.Receipt {
+		t.Helper()
+		var issued *contracts.Receipt
+		if err := receiptStore.AppendCausalScoped(ctx, tenantID, sessionID, func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
+			issued = storeCoverageReceipt(receiptID, "decision-"+receiptID, sessionID, lamport, timestamp)
+			issued.PrevHash = prevHash
+			return issued, nil
+		}); err != nil {
+			t.Fatalf("append %s for %s: %v", receiptID, tenantID, err)
+		}
+		return issued
+	}
+
+	const tenantID = "tenant-filter-query"
+	const foreignTenantID = "tenant-filter-query-foreign"
+	from := time.Date(2026, 8, 2, 12, 0, 0, 123456000, time.UTC)
+	to := from.Add(2 * time.Microsecond)
+	appendReceipt(tenantID, "receipt-before-from", from.Add(-time.Microsecond))
+	atFrom := appendReceipt(tenantID, "receipt-at-from", from)
+	foreign := appendReceipt(foreignTenantID, "receipt-foreign", from)
+	inside := appendReceipt(tenantID, "receipt-inside", from.Add(time.Microsecond))
+	appendReceipt(tenantID, "receipt-at-to", to)
+
+	filter := ReceiptQueryFilter{From: from, To: to}
+	firstPage, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{}, filter, 1)
+	if err != nil || len(firstPage) != 1 || firstPage[0].ReceiptID != atFrom.ReceiptID || !firstPage[0].Timestamp.Equal(from) {
+		t.Fatalf("first filtered page = %+v err=%v, want receipt at inclusive microsecond bound", firstPage, err)
+	}
+	secondPage, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{
+		ReceiptID: firstPage[0].ReceiptID,
+		Timestamp: firstPage[0].Timestamp,
+	}, filter, 1)
+	if err != nil || len(secondPage) != 1 || secondPage[0].ReceiptID != inside.ReceiptID {
+		t.Fatalf("continued filtered page = %+v err=%v, want inside receipt", secondPage, err)
+	}
+	afterSecondPage, err := receiptStore.ListByTenantCursorFiltered(ctx, tenantID, TenantReceiptCursor{
+		ReceiptID: secondPage[0].ReceiptID,
+		Timestamp: secondPage[0].Timestamp,
+	}, filter, 1)
+	if err != nil || len(afterSecondPage) != 0 {
+		t.Fatalf("filtered continuation past exclusive bound = %+v err=%v, want empty page", afterSecondPage, err)
+	}
+	foreignPage, err := receiptStore.ListByTenantCursorFiltered(ctx, foreignTenantID, TenantReceiptCursor{}, filter, 1)
+	if err != nil || len(foreignPage) != 1 || foreignPage[0].ReceiptID != foreign.ReceiptID {
+		t.Fatalf("foreign tenant control page = %+v err=%v, want isolated foreign receipt", foreignPage, err)
+	}
+}
+
 func TestPostgresReceiptChainHashMigrationPreservesIssuedPredecessorAcrossReload(t *testing.T) {
 	postgresURL := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if postgresURL == "" {

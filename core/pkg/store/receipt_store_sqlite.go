@@ -43,6 +43,23 @@ const backfillSQLiteReceiptAppendSequenceSQL = `
 	WHERE COALESCE(append_sequence, 0) = 0;
 `
 
+// SQLite stores receipt timestamps as RFC3339Nano text, whose fractional width
+// varies. Build a fixed-width UTC key at query time so comparisons preserve
+// nanoseconds without rewriting existing rows or changing their representation.
+const sqliteReceiptTimestampSortLayout = "2006-01-02T15:04:05.000000000Z"
+
+const sqliteReceiptTimestampSortKeySQL = `CASE
+	WHEN substr(timestamp, 20, 1) = '.'
+		AND substr(timestamp, -1, 1) = 'Z'
+		AND length(timestamp) BETWEEN 22 AND 30
+	THEN substr(timestamp, 1, 20)
+		|| substr(substr(timestamp, 21, length(timestamp) - 21) || '000000000', 1, 9)
+		|| 'Z'
+	WHEN substr(timestamp, 20, 1) = 'Z'
+	THEN substr(timestamp, 1, 19) || '.000000000Z'
+	ELSE timestamp
+END`
+
 func NewSQLiteReceiptStore(db *sql.DB) (*SQLiteReceiptStore, error) {
 	s := &SQLiteReceiptStore{db: db}
 
@@ -173,6 +190,11 @@ func (s *SQLiteReceiptStore) migrate() error {
 	if err := s.ensureColumn("transparency", "TEXT"); err != nil {
 		return err
 	}
+	// effect_id is part of the base schema and the projection read; ensure it on
+	// legacy tables too so the effect_id predicate index below can be created.
+	if err := s.ensureColumn("effect_id", "TEXT"); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(context.Background(), backfillSQLiteReceiptDecisionHashSQL); err != nil {
 		return err
 	}
@@ -197,6 +219,11 @@ func (s *SQLiteReceiptStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_receipts_lamport_timestamp ON receipts(lamport_clock, timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_receipts_append_sequence_unique ON receipts(append_sequence) WHERE append_sequence > 0`,
+		// Predicate-query support (ReceiptQueryFilter): verdict/reason_code and
+		// effect_id filter dimensions. executor_id and timestamp are already
+		// indexed above.
+		`CREATE INDEX IF NOT EXISTS idx_receipts_verdict_reason ON receipts(verdict, reason_code)`,
+		`CREATE INDEX IF NOT EXISTS idx_receipts_effect_id ON receipts(effect_id)`,
 		`CREATE TRIGGER IF NOT EXISTS receipts_append_sequence_after_insert
 		AFTER INSERT ON receipts
 		FOR EACH ROW WHEN COALESCE(NEW.append_sequence, 0) = 0
@@ -488,29 +515,26 @@ func (s *SQLiteReceiptStore) ListLatestOnboardingByTenant(ctx context.Context, t
 // later session genesis receipts are never compared to another session's
 // Lamport clock.
 func (s *SQLiteReceiptStore) ListByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantCursor(ctx, tenantID, cursor, ReceiptQueryFilter{}, limit)
+}
+
+// ListByTenantCursorFiltered is ListByTenantCursor narrowed by an optional
+// ReceiptQueryFilter over the same authenticated tenant keyset page. A
+// zero-value filter is equivalent to ListByTenantCursor.
+func (s *SQLiteReceiptStore) ListByTenantCursorFiltered(ctx context.Context, tenantID string, cursor TenantReceiptCursor, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantCursor(ctx, tenantID, cursor, filter, limit)
+}
+
+func (s *SQLiteReceiptStore) listByTenantCursor(ctx context.Context, tenantID string, cursor TenantReceiptCursor, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	if tenantID == "" {
 		return nil, fmt.Errorf("tenant id is required")
 	}
-	cursor.ReceiptID = strings.TrimSpace(cursor.ReceiptID)
-	if cursor.ReceiptID != "" && cursor.Timestamp.IsZero() {
-		return nil, fmt.Errorf("tenant receipt cursor timestamp is required")
+	appendSequence, hasCursor, err := s.resolveTenantCursorAppendSequence(ctx, tenantID, cursor)
+	if err != nil {
+		return nil, err
 	}
 	prefix := causalReceiptTenantScopePrefix(tenantID)
-	var appendSequence int64
-	if cursor.ReceiptID != "" {
-		cursorQuery := `SELECT append_sequence FROM receipts
-			WHERE receipt_id = ?
-			  AND signature_version = ?
-			  AND COALESCE(session_id, '') <> ''
-			  AND substr(causal_session_id, 1, length(?)) = ?`
-		if err := s.db.QueryRowContext(ctx, cursorQuery, cursor.ReceiptID, contracts.ReceiptSignatureV5, prefix, prefix).Scan(&appendSequence); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil, fmt.Errorf("tenant receipt cursor %q is invalid for authenticated tenant", cursor.ReceiptID)
-			}
-			return nil, fmt.Errorf("resolve tenant receipt cursor: %w", err)
-		}
-	}
 	query := `
 		SELECT ` + sqliteReceiptColumns + `
 		FROM receipts
@@ -518,11 +542,12 @@ func (s *SQLiteReceiptStore) ListByTenantCursor(ctx context.Context, tenantID st
 		  AND COALESCE(session_id, '') <> ''
 		  AND substr(causal_session_id, 1, length(?)) = ?`
 	args := []any{contracts.ReceiptSignatureV5, prefix, prefix}
-	if cursor.ReceiptID != "" {
+	if hasCursor {
 		query += `
 		  AND append_sequence > ?`
 		args = append(args, appendSequence)
 	}
+	query, args = appendReceiptFilterPredicatesSQLite(query, args, filter)
 	query += `
 		ORDER BY append_sequence ASC
 		LIMIT ?
@@ -531,9 +556,83 @@ func (s *SQLiteReceiptStore) ListByTenantCursor(ctx context.Context, tenantID st
 	return s.queryReceipts(ctx, query, args...)
 }
 
+// resolveTenantCursorAppendSequence maps an opaque tenant cursor to its durable
+// append position inside the authenticated tenant scope. An empty cursor
+// returns hasCursor=false; a cursor that does not resolve within the tenant is
+// rejected rather than silently treated as the start of the listing.
+func (s *SQLiteReceiptStore) resolveTenantCursorAppendSequence(ctx context.Context, tenantID string, cursor TenantReceiptCursor) (int64, bool, error) {
+	cursor.ReceiptID = strings.TrimSpace(cursor.ReceiptID)
+	if cursor.ReceiptID == "" {
+		return 0, false, nil
+	}
+	if cursor.Timestamp.IsZero() {
+		return 0, false, fmt.Errorf("tenant receipt cursor timestamp is required")
+	}
+	prefix := causalReceiptTenantScopePrefix(tenantID)
+	cursorQuery := `SELECT append_sequence FROM receipts
+			WHERE receipt_id = ?
+			  AND signature_version = ?
+			  AND COALESCE(session_id, '') <> ''
+			  AND substr(causal_session_id, 1, length(?)) = ?`
+	var appendSequence int64
+	if err := s.db.QueryRowContext(ctx, cursorQuery, cursor.ReceiptID, contracts.ReceiptSignatureV5, prefix, prefix).Scan(&appendSequence); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false, fmt.Errorf("tenant receipt cursor %q is invalid for authenticated tenant", cursor.ReceiptID)
+		}
+		return 0, false, fmt.Errorf("resolve tenant receipt cursor: %w", err)
+	}
+	return appendSequence, true, nil
+}
+
+// appendReceiptFilterPredicatesSQLite weaves the optional ReceiptQueryFilter
+// dimensions into a tenant-scoped query as positional predicates. Timestamp
+// bounds are compared against the RFC3339Nano UTC text the store persists (see
+// insertSQLiteReceiptWithCausalSession); the production Postgres store compares
+// native TIMESTAMPTZ. Each predicate matches an indexed projection column. A
+// returned canonical envelope must match all five filter projections at the
+// shared restore boundary.
+func appendReceiptFilterPredicatesSQLite(query string, args []any, filter ReceiptQueryFilter) (string, []any) {
+	if v := strings.TrimSpace(filter.Verdict); v != "" {
+		query += "\n\t\t  AND verdict = ?"
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(filter.ReasonCode); v != "" {
+		query += "\n\t\t  AND reason_code = ?"
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(filter.Executor); v != "" {
+		query += "\n\t\t  AND executor_id = ?"
+		args = append(args, v)
+	}
+	if v := strings.TrimSpace(filter.Effect); v != "" {
+		query += "\n\t\t  AND effect_id = ?"
+		args = append(args, v)
+	}
+	if !filter.From.IsZero() {
+		query += "\n\t\t  AND " + sqliteReceiptTimestampSortKeySQL + " >= ?"
+		args = append(args, filter.From.UTC().Format(sqliteReceiptTimestampSortLayout))
+	}
+	if !filter.To.IsZero() {
+		query += "\n\t\t  AND " + sqliteReceiptTimestampSortKeySQL + " < ?"
+		args = append(args, filter.To.UTC().Format(sqliteReceiptTimestampSortLayout))
+	}
+	return query, args
+}
+
 // ListByTenantSession returns the receipt chain keyed by the signed
 // Receipt.SessionID inside an authenticated tenant scope.
 func (s *SQLiteReceiptStore) ListByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantSession(ctx, tenantID, sessionID, since, ReceiptQueryFilter{}, limit)
+}
+
+// ListByTenantSessionFiltered is ListByTenantSession narrowed by an optional
+// ReceiptQueryFilter over the same signed session chain. A zero-value filter is
+// equivalent to ListByTenantSession.
+func (s *SQLiteReceiptStore) ListByTenantSessionFiltered(ctx context.Context, tenantID, sessionID string, since uint64, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
+	return s.listByTenantSession(ctx, tenantID, sessionID, since, filter, limit)
+}
+
+func (s *SQLiteReceiptStore) listByTenantSession(ctx context.Context, tenantID, sessionID string, since uint64, filter ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
 	tenantID = strings.TrimSpace(tenantID)
 	sessionID = strings.TrimSpace(sessionID)
 	if tenantID == "" {
@@ -548,11 +647,15 @@ func (s *SQLiteReceiptStore) ListByTenantSession(ctx context.Context, tenantID, 
 		WHERE causal_session_id = ?
 		  AND session_id = ?
 		  AND signature_version = ?
-		  AND lamport_clock > ?
+		  AND lamport_clock > ?`
+	args := []any{causalReceiptScopeKey(tenantID, sessionID), sessionID, contracts.ReceiptSignatureV5, since}
+	query, args = appendReceiptFilterPredicatesSQLite(query, args, filter)
+	query += `
 		ORDER BY lamport_clock ASC, timestamp ASC
 		LIMIT ?
 	`
-	return s.queryReceipts(ctx, query, causalReceiptScopeKey(tenantID, sessionID), sessionID, contracts.ReceiptSignatureV5, since, limit)
+	args = append(args, limit)
+	return s.queryReceipts(ctx, query, args...)
 }
 
 func (s *SQLiteReceiptStore) ListSince(ctx context.Context, since uint64, limit int) ([]*contracts.Receipt, error) {

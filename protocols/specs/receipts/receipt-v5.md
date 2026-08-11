@@ -87,6 +87,13 @@ not enter the preimage. They are routing metadata, not trust roots. A verifier
 MUST use independently trusted key material; a receipt's self-declared public
 key is insufficient by itself.
 
+For historical `receipt.v5` values issued before signature routing metadata
+was populated, a classical-only verifier MAY accept `signature_profile` and
+`signature_algorithm` only when both are absent or empty together; it MUST
+then verify with Ed25519. Partial, contradictory, or other non-empty values
+MUST be rejected. This compatibility exception does not alter the signing
+preimage or permit a legacy-preimage fallback.
+
 ## Verification
 
 A conforming verifier MUST:

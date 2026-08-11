@@ -378,21 +378,28 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 			}
 			signatureValue, signatureDeclared := document["signature"]
 			_, signatureVersionDeclared := document["signature_version"]
+			witnessValue, witnessDeclared := document["witness_signatures"]
+			if parseErr != nil {
+				if signatureDeclared || signatureVersionDeclared || witnessDeclared {
+					total++
+				}
+				return nil
+			}
 			if signatureDeclared || signatureVersionDeclared {
 				total++
 				sig, sigOK := signatureValue.(string)
-				if parseErr == nil && sigOK && sig != "" && verifyEmbeddedDocumentSignature(document, sig, opts) {
+				if sigOK && sig != "" && verifyEmbeddedDocumentSignature(document, sig, opts) {
 					valid++
 				}
 			}
-			if witnesses, ok := document["witness_signatures"].([]any); ok {
+			if witnesses, ok := witnessValue.([]any); ok {
 				for _, witness := range witnesses {
 					item, ok := witness.(map[string]any)
 					if !ok {
 						continue
 					}
-					sig, ok := item["signature"].(string)
-					if !ok || sig == "" {
+					signatureValue, signatureDeclared := item["signature"]
+					if !signatureDeclared {
 						continue
 					}
 					keyHex := strings.TrimSpace(opts.WitnessPublicKeysHex[firstString(item, "witness_id")])
@@ -403,7 +410,8 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 						continue
 					}
 					total++
-					if parseErr == nil && verifyWitnessReceiptSignature(document, sig, keyHex) {
+					sig, ok := signatureValue.(string)
+					if ok && sig != "" && verifyWitnessReceiptSignature(document, sig, keyHex) {
 						valid++
 					}
 				}

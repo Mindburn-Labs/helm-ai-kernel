@@ -1053,6 +1053,48 @@ func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+
+	baseline, err := json.Marshal(receipt(witnessSig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	witnesses, err := json.Marshal(receipt(witnessSig)["witness_signatures"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	signatureMember := `"signature":"` + witnessSig + `"`
+	witnessesMember := `"witness_signatures":` + string(witnesses)
+	for _, tc := range []struct {
+		name string
+		from string
+		to   string
+	}{
+		{name: "configured null witness signature fails closed", from: signatureMember, to: `"signature":null`},
+		{name: "configured duplicate witness signature fails closed", from: signatureMember, to: signatureMember + `,"signature":null`},
+		{name: "duplicate witness collection fails closed", from: witnessesMember, to: witnessesMember + `,"witness_signatures":null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := strings.Replace(string(baseline), tc.from, tc.to, 1)
+			if raw == string(baseline) {
+				t.Fatalf("baseline receipt does not contain %q", tc.from)
+			}
+			dir := createValidBundleFixture(t)
+			if err := os.WriteFile(filepath.Join(dir, "receipts", "receipt-001.json"), []byte(raw), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			sealVerifierFixture(t, dir, "test-session-001")
+			opts := VerifyOptions{WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)}}
+			report, err := VerifyBundleWithOptions(dir, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			valid, total := countEmbeddedSignatures(dir, opts)
+			if valid != 0 || total != 1 {
+				t.Fatalf("malformed witness signature count = %d/%d, want 0/1", valid, total)
+			}
+			assertEmbeddedSignatureTrustFails(t, report)
+		})
+	}
 }
 
 func assertEmbeddedSignatureTrustFails(t *testing.T, report *VerifyReport) {

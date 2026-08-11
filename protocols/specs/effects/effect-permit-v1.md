@@ -8,6 +8,9 @@ authors:
   - HELM Core Team
 ---
 
+<!-- quantum_posture: this profile specifies classical Ed25519 signing and
+makes no hybrid or post-quantum cryptographic claim. -->
+
 # Effect Permit Signing v1
 
 ## Status and scope

@@ -386,8 +386,9 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		resp.Content = execResp.ContentItems
 		resp.StructuredContent = execResp.StructuredContent
 	} else if g.bridge != nil {
-		// No per-call cost signal is available at MCP method dispatch; the
-		// bridge floors a nil breakdown to the nominal unit.
+		// No per-call monetary cost signal is available at MCP method dispatch.
+		// When a budget enforcer is configured, the bridge therefore fails closed
+		// with BUDGET_ERROR rather than inventing cents from a nil breakdown.
 		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, argsHash, nil)
 		if govErr != nil {
 			w.Header().Set("Content-Type", "application/json")

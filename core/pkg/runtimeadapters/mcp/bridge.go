@@ -251,6 +251,18 @@ type GovernedOutcome struct {
 // connector is configured) dispatches the effect. inputHash is the canonical
 // hash of the request, already computed by the adapter.
 func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash string) GovernedOutcome {
+	return b.govern(ctx, req, inputHash, nil)
+}
+
+// govern keeps the production path and its mutation proof on the same code
+// path. Production always passes nil; package tests can alter the minted permit
+// at the exact pre-dispatch seam before the mandatory signature gate.
+func (b *GovernedBridge) govern(
+	ctx context.Context,
+	req *runtimeadapters.AdaptedRequest,
+	inputHash string,
+	beforeDispatch func(*effects.EffectPermit),
+) GovernedOutcome {
 	now := b.now().UTC()
 	permitScope, err := b.resolvePermitScope(req)
 	if err != nil {
@@ -440,6 +452,9 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	// needs no key distribution — the bridge already holds the signing key — and
 	// it covers every connector rather than one. Connector-side verification
 	// remains as defence in depth wherever a key is configured.
+	if beforeDispatch != nil {
+		beforeDispatch(permit)
+	}
 	if err := b.verifyPermitBeforeDispatch(permit); err != nil {
 		resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "PERMIT_UNVERIFIED")
 		applyEffectReservation(&base, resolved)

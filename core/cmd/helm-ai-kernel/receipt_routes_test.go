@@ -478,7 +478,7 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","args":{"message":"hello"},"agent_id":"attacker","session_id":" canonical-session ","context":{"session_id":"legacy-session","tenant_id":"tenant-attacker"}}`)
+	body := []byte(`{"tool":" EXECUTE_TOOL ","action":"EXECUTE_TOOL","effect_level":" local.echo ","resource":"local.echo","args":{"message":"hello"},"agent_id":"attacker","session_id":" canonical-session ","context":{"session_id":"canonical-session","tenant_id":"tenant-attacker"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -493,7 +493,7 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 		t.Fatal("canonical evaluate did not persist a receipt")
 	}
 	if receipts.stored.SessionID != "canonical-session" {
-		t.Fatalf("top-level session must be trimmed and take precedence: receipt=%q", receipts.stored.SessionID)
+		t.Fatalf("matching session aliases must be trimmed: receipt=%q", receipts.stored.SessionID)
 	}
 	if receipts.stored.ExecutorID != "principal-trusted" || receipts.stored.EffectID != "EXECUTE_TOOL" {
 		t.Fatalf("canonical evaluate did not bind authenticated executor/action: %+v", receipts.stored)
@@ -513,6 +513,35 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 	}
 	if response.ReceiptID != receipts.stored.ReceiptID || response.DecisionID != receipts.stored.DecisionID || response.DecisionHash != receipts.stored.DecisionHash || response.LamportClock != receipts.stored.LamportClock {
 		t.Fatalf("canonical response does not match persisted V5 receipt: response=%+v receipt=%+v", response, receipts.stored)
+	}
+}
+
+func TestEvaluateRouteRejectsConflictingAliasesBeforeReceiptIssuance(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	for name, body := range map[string]string{
+		"tool and action":             `{"tool":"EXECUTE_TOOL","action":"READ_FILE","effect_level":"local.echo","session_id":"session-tool"}`,
+		"effect level and resource":   `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","resource":"remote.http","session_id":"session-effect"}`,
+		"session and context session": `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"session-current","context":{"session_id":"session-legacy"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t)
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("conflicting aliases status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored != nil {
+				t.Fatalf("conflicting aliases persisted receipt: %+v", receipts.stored)
+			}
+		})
 	}
 }
 

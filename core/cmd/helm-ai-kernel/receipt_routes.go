@@ -68,31 +68,8 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 		}
-		req.Tool = strings.TrimSpace(req.Tool)
-		if req.Tool == "" {
-			req.Tool = strings.TrimSpace(req.Action)
-		}
-		req.EffectLevel = strings.TrimSpace(req.EffectLevel)
-		if req.EffectLevel == "" {
-			req.EffectLevel = strings.TrimSpace(req.Resource)
-		}
-		if req.Tool == "" || req.EffectLevel == "" {
-			api.WriteBadRequest(w, "Evaluate route requires tool and effect_level")
-			return
-		}
-		req.SessionID = strings.TrimSpace(req.SessionID)
-		if req.SessionID == "" && req.Context != nil {
-			if legacySessionID, ok := req.Context["session_id"].(string); ok {
-				req.SessionID = strings.TrimSpace(legacySessionID)
-			}
-		}
-		if req.SessionID == "" {
-			api.WriteBadRequest(w, "Evaluate route requires a non-blank session_id")
-			return
-		}
-		req.SessionID, err = api.NormalizePublicSessionID(req.SessionID)
-		if err != nil {
-			api.WriteBadRequest(w, "Evaluate route session_id may not contain path separators")
+		if err := api.NormalizeEvaluateRequest(&req); err != nil {
+			api.WriteBadRequest(w, "Evaluate route "+err.Error())
 			return
 		}
 		if req.Context == nil {

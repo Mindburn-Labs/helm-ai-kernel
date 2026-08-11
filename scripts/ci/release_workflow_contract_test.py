@@ -151,12 +151,12 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             'if [ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]; then',
             authority,
         )
-        # The guard binds the event-carried SHA to the live annotated tag
-        # object, then separately verifies the peeled commit.
-        self.assertIn("EXPECTED_TAG_OBJECT: ${{ github.event.after }}", authority)
-        self.assertIn("EXPECTED_COMMIT: ${{ github.sha }}", authority)
+        # A push payload's `after` value is the commit at the tag ref, not the
+        # annotated tag object's SHA. The live tag object comes from the API.
+        self.assertIn("PUSH_COMMIT: ${{ github.event.after }}", authority)
+        self.assertIn("WORKFLOW_COMMIT: ${{ github.sha }}", authority)
         self.assertIn(
-            'if [ "${live_tag_object}" != "${EXPECTED_TAG_OBJECT}" ]; then',
+            'if [ "${PUSH_COMMIT}" != "${WORKFLOW_COMMIT}" ]; then',
             authority,
         )
         self.assertIn(
@@ -170,7 +170,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         )
         self.assertIn('if [ "${target_type}" != "commit" ]; then', authority)
         self.assertIn(
-            'if [ "${target_commit}" != "${EXPECTED_COMMIT}" ]; then',
+            'if [ "${target_commit}" != "${PUSH_COMMIT}" ]; then',
             authority,
         )
 
@@ -185,6 +185,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         for job_name in sorted(TAG_RELEASE_MUTATION_JOBS):
             with self.subTest(job=job_name):
                 self.assertIn("release-authority", self.job_needs(job_name))
+                self.assertIn("github.run_attempt == 1", self.job_if(job_name))
 
     def test_container_sha_remains_the_separate_exact_sha_qa_lane(self) -> None:
         container_sha = self.job("container-sha")

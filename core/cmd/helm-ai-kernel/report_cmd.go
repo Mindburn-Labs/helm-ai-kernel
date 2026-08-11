@@ -133,6 +133,9 @@ func runReportCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s✅ Report generated%s → %s\n", ColorBold+ColorGreen, ColorReset, outputPath)
 	}
 
+	if !report.ChainIntegrity.Verified {
+		return 1
+	}
 	return 0
 }
 

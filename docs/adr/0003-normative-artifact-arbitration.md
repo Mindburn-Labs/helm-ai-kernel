@@ -141,8 +141,8 @@ This is the arbitration answer. Every row was originally audited at
 | Family | Integrity state | Integrity source (or implementation of record) | Wire source | Derived |
 | --- | --- | --- | --- | --- |
 | `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **SPECIFIED** | `protocols/specs/receipts/receipt-v5.md` + `reference_packs/receipt-v5/`; source-owned Go parity and independent stdlib-Python verification run from `make verify-fixtures` | `api/openapi/helm.openapi.yaml:4178-4224` (HTTP); `protocols/proto/helm/kernel/v1/helm.proto:126-155` (gRPC) | `protocols/json-schemas/receipt/v2.json`; the five SDK bindings; `core/pkg/contracts/receipt.go` |
-| `LaunchEffectReceipt` — the Receipt Format v1 launch profile | **SPECIFIED** | `protocols/specs/rfc/receipt-format-v1.md` §2 + `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json:304-313` + `reference_packs/launch-mission-v1/` | same schema | `core/pkg/contracts/launch_effect_receipt.go` |
-| `CounterfactualReceipt` | **SPECIFIED for the preimage; UNSPECIFIED for the wire shape** | `protocols/specs/rfc/receipt-format-v1.md:148-150` states the preimage `"counterfactual:" + receipt_hash`; `core/pkg/contracts/counterfactual_receipt.go:146-148` matches it exactly; vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` | none — no schema, no proto, no OpenAPI component | — |
+| `LaunchEffectReceipt` — the Receipt Format v1 launch profile | **SPECIFIED** | `protocols/specs/rfc/receipt-format-v1.md` §2 excluding §2.6, plus §§3–5; `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json:304-313`; `reference_packs/launch-mission-v1/` | same schema | `core/pkg/contracts/launch_effect_receipt.go` |
+| `CounterfactualReceipt` | **SPECIFIED for the preimage; UNSPECIFIED for the wire shape** | `protocols/specs/rfc/receipt-format-v1.md` §2.6 states the preimage `"counterfactual:" + receipt_hash`; `core/pkg/contracts/counterfactual_receipt.go:146-148` matches it exactly; vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` | none — no schema, no proto, no OpenAPI component | — |
 | External decision receipt (`helm_external.v1`) | **SPECIFIED** | `protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md` §3, matching `core/pkg/verifier/decisionreceipt/helm_external.go:74-85` field-for-field | same | — |
 
 `receipt-format-v1.md` is normative **for the launch profile only**. Its header
@@ -165,15 +165,18 @@ verified, neither a shipping cross-process dispatch nor global completion of the
 EffectPermit family may be claimed. Per D7, runtime deployment remains separate
 from contract status.
 
-> **Non-normative integration note.** At this checkpoint, Control Plane
-> migration is draft
-> [#291](https://github.com/Mindburn-Labs/svc-helm-control-plane/pull/291),
-> Data Plane migration is draft
-> [#37](https://github.com/Mindburn-Labs/svc-helm-data-plane/pull/37), and Sandbox
-> migration is draft
-> [#19](https://github.com/Mindburn-Labs/svc-agent-sandbox-runner/pull/19).
-> These delivery links are not part of the protocol and must be refreshed before
-> making an integration or deployment claim.
+> **Non-normative integration note.** The source migrations are merged: Control
+> Plane [#291](https://github.com/Mindburn-Labs/svc-helm-control-plane/pull/291)
+> from reviewed head `65d5e3e2e4d67d604cccf631d760211e94b14b70` as merge
+> `4fb9fa7667d501aa3902b11a885b56d383890414`, Data Plane
+> [#37](https://github.com/Mindburn-Labs/svc-helm-data-plane/pull/37) from reviewed
+> head `8617e0a9ac2f188eb828a3a68ee5301c8ebaa9b8` as merge
+> `47d077be052ab5f9e3aee322bd8a2df1d7012556`, and Sandbox
+> [#19](https://github.com/Mindburn-Labs/svc-agent-sandbox-runner/pull/19) from
+> reviewed head `6774814784eae4f1607382d50db46061f1d5f9a3` as merge
+> `c8622fcf2ce9b02067004bb1f2867638c5d9870c`. This proves source adoption only;
+> coordinated version pinning, deployment, activation, and end-to-end runtime
+> verification remain separate gates.
 
 #### Decisions
 
@@ -201,12 +204,13 @@ the EvidencePack schema, until P2-7 corrects them.
 
 #### The families that already work — the model to copy
 
-Thirteen reference packs are integrity-SPECIFIED and CI-bound, each with a Go
-parity test and an independent stdlib-Python verifier reached from
-`make verify-fixtures` (CI `.github/workflows/ci.yml:167`):
+`make verify-fixtures` reaches fourteen Go/Python conformance packs: thirteen
+signed-artifact integrity packs plus `canonical-json-v1`, their shared
+canonicalization substrate. The target is run by `.github/workflows/ci.yml`.
 
 | Pack | Gate |
 | --- | --- |
+| `reference_packs/canonical-json-v1/` | `make verify-canonical-json-vectors` |
 | `reference_packs/receipt-v5/` | `make verify-receipt-v5-vectors`, reached from `make verify-fixtures` |
 | `reference_packs/extauthz/` | `make verify-fixtures` |
 | `reference_packs/approval/` | `make verify-approval-ceremony-vectors` |

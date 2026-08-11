@@ -8,9 +8,10 @@ last_reviewed: 2026-08-10
 # Signed Receipts for AI Agent Actions
 
 Logs answer "what did we write down"; receipts answer "what actually happened,
-and can someone else check?" HELM AI Kernel signs every boundary decision with
-Ed25519 over a JCS (RFC 8785) canonical form. **Status: Live** in HELM AI
-Kernel.
+and can someone else check?" The classical `contracts.Receipt / receipt.v5`
+profile signs its fixed envelope with Ed25519 over a JCS (RFC 8785) canonical
+form. **Status: Live** in HELM AI Kernel source. Other receipt families and
+hybrid or post-quantum signatures are separate profiles.
 
 The norm this enables is simple: no receipt, no production. An agent action that
 cannot be replayed and verified did not happen as far as your audit trail is

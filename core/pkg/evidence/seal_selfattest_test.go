@@ -31,6 +31,12 @@ func TestTrustedPublicKeyForSeal_RejectsSelfAttestedByDefault(t *testing.T) {
 	if !strings.Contains(err.Error(), "self-attested") {
 		t.Fatalf("error should name self-attestation, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "--allow-self-attested") {
+		t.Fatalf("error should name the explicit CLI opt-in, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "--profile team|customer|high-assurance") {
+		t.Fatalf("error should not recommend stricter profiles without a trust root, got: %v", err)
+	}
 }
 
 // The escape hatch must still work, so the dev loop has a documented path.

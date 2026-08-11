@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-24
+last_reviewed: 2026-08-12
 ---
 
 # Quickstart
@@ -67,8 +67,11 @@ Expected shape:
 Verify the generated EvidencePack offline:
 
 ```bash
-helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --json
+helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --allow-self-attested --json
 ```
+
+The explicit opt-in is required because this local proof creates its own
+signing key. It proves internal consistency, not provenance.
 
 When the `v0.8.4` GitHub Release publishes an `evidence-pack.tar`, use that
 release asset for release verification instead of a local proof bundle. Until

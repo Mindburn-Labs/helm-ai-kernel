@@ -1,6 +1,6 @@
 ---
 title: HELM Proof Loop
-last_reviewed: 2026-07-02
+last_reviewed: 2026-08-12
 ---
 
 # HELM Proof Loop
@@ -27,8 +27,11 @@ Install the kernel, run the local proof, then verify the bundle:
 brew tap mindburn-labs/tap
 brew install helm-ai-kernel
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
-helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --json
+helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --allow-self-attested --json
 ```
+
+`--allow-self-attested` is explicit because this local proof creates its own
+signing key. It proves internal consistency, not provenance.
 
 For one workstation receipt:
 

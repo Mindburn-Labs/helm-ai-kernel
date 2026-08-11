@@ -10,7 +10,7 @@ npm ci
 npm run build
 ```
 
-Package metadata identifies source target `0.8.3`; this README does not claim
+Package metadata identifies source target `0.8.4`; this README does not claim
 that a registry package has been published.
 
 ## Local Development

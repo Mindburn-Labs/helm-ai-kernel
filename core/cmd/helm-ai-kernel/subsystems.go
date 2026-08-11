@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"runtime"
@@ -58,7 +59,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	mux.HandleFunc("/api/v1/evidence/soc2", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		bundle, err := svc.Evidence.ExportSOC2(r.Context(), "trace-"+time.Now().Format("20060102"), nil)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -180,7 +181,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		}
 		obl, err := svc.Obligation.CreateObligation(req.GoalSpec)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -238,7 +239,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	// --- MCP Gateway ---
 	mcpGateway, err := newDeployedMCPGateway(svc)
 	if err != nil {
-		log.Printf("[helm] routes: MCP gateway unavailable: %v", err)
+		slog.Warn("MCP gateway unavailable", "error", err)
 	} else {
 		registerDeployedMCPRoutes(mux, mcpGateway)
 		log.Println("[helm] routes: MCP gateway routes registered")
@@ -257,7 +258,7 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 		ns := r.URL.Query().Get("namespace")
 		entries, err := svc.GovMemory.List(tier, ns)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -395,7 +396,7 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 
 		decision, err := svc.Guardian.EvaluateDecision(r.Context(), req)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 

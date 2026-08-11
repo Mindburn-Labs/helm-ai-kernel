@@ -161,5 +161,16 @@ func printReceiptEvent(stdout io.Writer, raw string, jsonOut bool) {
 }
 
 func init() {
-	Register(Subcommand{Name: "receipts", Aliases: []string{}, Usage: "Tail durable receipts (tail --agent)", RunFn: runReceiptsCmd})
+	Register(Subcommand{
+		Name:    "receipts",
+		Aliases: []string{},
+		Usage:   "Tail durable receipts (tail --agent)",
+		RunFn:   runReceiptsCmd,
+		HelpFn:  printReceiptsUsage,
+	})
+}
+
+func printReceiptsUsage(stdout io.Writer) {
+	fmt.Fprintln(stdout, "Usage: helm-ai-kernel receipts tail --agent <id> [--server URL] [--since CURSOR] [--limit N] [--json|--format text|json]")
+	fmt.Fprintln(stdout, "Tail the durable receipt stream for one agent from a HELM server.")
 }

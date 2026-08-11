@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-07-20
+last_reviewed: 2026-08-10
 ---
 
 # Changelog
@@ -89,7 +89,98 @@ hardware-backed enforcement language out of the public changelog until a tagged
 release ships source-owned tests, verifier evidence, and release artifacts for
 that exact capability.
 
-## [0.8.3] - pending tag
+## [0.8.4] - pending tag
+
+Release target for the receipt tenant-isolation fix, the corrected EU AI Act
+applicability mapping, and a sweep of public claim corrections. v0.8.3 completed
+its publication, so this is an ordinary successor rather than another attempt at
+a stranded train.
+
+Note for anyone reading the published v0.8.3 notes: its changelog states that
+deployed MCP gateway receipts land "into the same store `GET /api/v1/receipts`
+reads". That was not true when it shipped and is corrected below. The v0.8.3
+artifacts are in immutable registries and cannot be reissued, so the correction
+lands here rather than being rewritten there.
+
+### Added
+
+- The GitHub connector executes through the governed MCP bridge on a shipped
+  path, so a connector dispatch is subject to the same permit and receipt
+  contract as any other governed effect.
+- The daemon serve path is traced: a span for the request, the matched route,
+  and a flush on shutdown, so a deployed kernel's request path is observable
+  without attaching a debugger.
+
+### Fixed
+
+- **Receipt reads are tenant-isolated (HELM-363).** Tenant-authenticated receipt
+  HTTP APIs, Console receipt views, and onboarding state and export now exclude
+  unscoped and foreign-tenant rows. Onboarding receipts are written into the
+  authenticated tenant's scope rather than left unscoped.
+- **Corrected claim, same issue:** receipts persisted by the deployed MCP
+  gateway are durable and signed but are **not** retrievable through
+  `GET /api/v1/receipts`. The gateway routes run under admin authentication,
+  which establishes no tenant binding, so those rows are written unscoped by
+  design while that route reads only tenant-scoped rows. Local operators with
+  direct store access can still include them in offline report and rollup
+  workflows. Making them tenant-retrievable requires moving the gateway to
+  tenant-scoped auth, a breaking change for MCP clients, still open on HELM-363.
+- Daemon output stays structured by default instead of degrading to
+  unstructured lines, so log collection does not depend on a flag.
+- The CLI no longer overstates what it can do: corrected contract and setup
+  narrative, and discovery paths that no longer write state as a side effect.
+- The Helm chart's authority initialization accepts a verified pre-existing root
+  key instead of failing, so re-running an install against provisioned authority
+  no longer requires deleting it first.
+- `receipt_verify` CLI contract tests run in the default test gate rather than
+  only in a profile nobody invokes locally.
+
+### Changed — public documentation corrected against its own evidence
+
+This release removes several documented capabilities that did not exist. Each was
+found by checking a page against the code or evidence file it cited, and the
+correction is a removal or a restatement, not a new claim:
+
+- Reference-pack documentation described fixtures as runs, and its documented
+  verify command did not work.
+- `canonicalization.md` documented a Rust crate that has never existed; the cgo
+  bridge to that crate is deleted.
+- The conformance guide described an external-implementation runner that does not
+  exist.
+- `canonical-json-v1` §6.2 cited an unimplemented page as normative.
+- `policy-bundle-v1` documented a bundle layout and CLI that do not exist.
+- Six stale status claims elsewhere disagreed with the evidence files they
+  pointed at.
+
+### Changed — EU AI Act mapping and applicability dates corrected
+
+Regulation (EU) 2026/1744 deferred Chapter III, Sections 1-3 of Regulation
+(EU) 2024/1689 to 2027-12-02 for Annex III systems and 2028-08-02 for Annex I
+systems, expressly excluding Article 6(5). This narrow amendment does not move
+Article 50, Article 73 incident reporting, or CE-marking/registration provisions
+outside Sections 1-3 to the same dates.
+
+- Added `reference_packs/eu_ai_act_high_risk.v2.json` as an explicit
+  `COMPLIANCE_MAPPING`. It contains candidate mappings and evidence names but no
+  supported `runtime_actions` or `actions`; the sample policy therefore remains
+  fail-closed with zero runtime rules.
+- Preserved the previously released
+  `reference_packs/eu_ai_act_high_risk.v1.json` byte-for-byte at SHA-256
+  `8a33ad51441d6d939d74da2be388c1d11c12da1e055f1aeca72ca2763ebc05c4`.
+  Supersession metadata lives in v2 and documentation, not a rewritten v1.
+- Split general, Article 50, Annex III and Annex I applicability dates. The v2
+  mapping records the Article 50(2) transition for specified pre-existing
+  systems and the Article 6(5) exception.
+- Corrected serious-incident reporting from Article 62/72 hours to Article 73:
+  15 days generally, two days for the specified accelerated tier, and 10 days
+  where a person dies. The compliance API now records the incident tier.
+- Removed unsupported pack-driven QTSP, LOTL freshness and budget enforcement
+  claims. QTSP is an optional evidence mapping; operator/library verification
+  remains a separate explicitly configured path.
+
+Primary sources: CELEX 32024R1689 and CELEX 32026R1744 on EUR-Lex.
+
+## [0.8.3] - 2026-08-09
 
 Completing release target for the v0.8 train. v0.8.0, v0.8.1 and v0.8.2 all
 stopped before their GitHub Release and full asset set; none is a completed
@@ -218,9 +309,22 @@ its required asset and provenance gates, and is not a completed public release.
   reference-pack `runtime_actions` compile into ALLOW rules on the served
   enforcement path instead of staying fail-closed `NO_POLICY_DEFINED`
   (HELM-362).
-- Deployed MCP gateway persists a signed receipt for every governed decision
-  (ALLOW and DENY) into the same store `GET /api/v1/receipts` reads
-  (HELM-363).
+- Deployed MCP gateway persists a signed, durable receipt for every governed
+  decision (ALLOW and DENY). These receipts are written unscoped and are **not**
+  retrievable through `GET /api/v1/receipts`: the gateway routes run under
+  admin authentication, which establishes no tenant binding, while that route
+  reads only tenant-scoped rows. Tenant-authenticated receipt HTTP APIs,
+  Console receipt views, and onboarding state/export exclude unscoped and
+  foreign-tenant rows; onboarding receipts are written into the authenticated
+  tenant scope, and state/export query the latest proof for each onboarding
+  step without a fixed total-receipt window. Missing tenant-scoped store
+  capabilities and proof-read failures fail closed instead of rendering
+  successful-looking empty state. Local operators with direct access to the
+  Kernel SQLite database can still include unscoped rows through the offline
+  `report` and `rollup` commands, which intentionally operate on the local
+  store rather than an HTTP tenant principal. Tenant retrievability for MCP
+  gateway clients would require moving the gateway to tenant-scoped auth, a
+  breaking change still open on HELM-363.
 - MCP OAuth scope enforcement applies only when the gateway runs an OAuth
   channel; with `auth_mode: none` the scoped governance tools (`helm.verify`,
   `helm.evaluate`) are reachable and policy remains the fail-closed enforcement

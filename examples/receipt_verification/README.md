@@ -41,7 +41,8 @@ bundle:
 | `--managed-agent-receipt-public-key` | embedded managed-agent receipts |
 | `--external-host-public-key` | external host evidence chains |
 | `--profile` | `dev-local`, `team`, `customer`, `high-assurance` |
-| `--require-eidas`, `--require-tee` | stronger anchors; absent anchors fail |
+| `--require-eidas` | requires eIDAS-labelled anchor metadata and declared-time freshness; it does not cryptographically verify RFC 3161 or EU Trusted List qualification |
+| `--require-tee` | requires declared TEE attestation metadata for the selected platform |
 
 `--entry <path> --proof <file>` verifies a single redacted entry, so a
 counterparty can check one claim without receiving the organization's private

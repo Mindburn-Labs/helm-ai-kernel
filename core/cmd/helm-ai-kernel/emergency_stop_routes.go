@@ -135,19 +135,19 @@ func registerEmergencyStopFenceRoutes(mux *http.ServeMux, svc *Services) {
 			case errors.Is(err, kernel.ErrScopedStopStaleEpoch), errors.Is(err, kernel.ErrScopedStopConflict):
 				api.WriteConflict(w, "Emergency-stop command conflicts with the active fence")
 			default:
-				api.WriteInternal(w, err)
+				api.WriteInternalR(w, r, err)
 			}
 			return
 		}
 
 		acknowledgementPayload, err := state.AcknowledgementPayload()
 		if err != nil {
-			api.WriteInternal(w, fmt.Errorf("canonicalize emergency-stop acknowledgement: %w", err))
+			api.WriteInternalR(w, r, fmt.Errorf("canonicalize emergency-stop acknowledgement: %w", err))
 			return
 		}
 		kernelSignature, err := svc.ReceiptSigner.Sign(acknowledgementPayload)
 		if err != nil {
-			api.WriteInternal(w, fmt.Errorf("sign emergency-stop acknowledgement: %w", err))
+			api.WriteInternalR(w, r, fmt.Errorf("sign emergency-stop acknowledgement: %w", err))
 			return
 		}
 

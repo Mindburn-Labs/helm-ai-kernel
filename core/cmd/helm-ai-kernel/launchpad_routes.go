@@ -31,11 +31,11 @@ func RegisterLaunchpadRoutes(mux *http.ServeMux, svc *Services) {
 		path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/launchpad/"), "/")
 		catalog, err := registry.LoadCatalog("")
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		if err := catalog.Validate(); err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 
@@ -62,13 +62,13 @@ func RegisterLaunchpadRoutes(mux *http.ServeMux, svc *Services) {
 		case path == "launch" && r.Method == http.MethodPost:
 			handleLaunchpadLaunch(w, r, catalog, store)
 		case path == "imports" && r.Method == http.MethodGet:
-			handleLaunchpadImportsList(w, store)
+			handleLaunchpadImportsList(w, r, store)
 		case path == "imports" && r.Method == http.MethodPost:
 			handleLaunchpadImportCreate(w, r, catalog, store)
 		case strings.HasPrefix(path, "imports/"):
 			handleLaunchpadImportPath(w, r, strings.TrimPrefix(path, "imports/"), store)
 		case path == "runs" && r.Method == http.MethodGet:
-			handleLaunchpadRunsList(w, store)
+			handleLaunchpadRunsList(w, r, store)
 		case path == "runs" && r.Method == http.MethodPost:
 			handleLaunchpadRunCreate(w, r, catalog, store)
 		case path == "policy/simulate" && r.Method == http.MethodPost:
@@ -135,16 +135,16 @@ func handleLaunchpadLaunch(w http.ResponseWriter, r *http.Request, catalog *regi
 	}
 	run, saveErr := launchsession.NewExecutor(store).ExecuteLaunch(compiled, launchsession.ExecuteOptions{Reason: "launch requested through OSS Console API"})
 	if saveErr != nil {
-		api.WriteInternal(w, saveErr)
+		api.WriteInternalR(w, r, saveErr)
 		return
 	}
 	writeLaunchpadJSON(w, http.StatusAccepted, run)
 }
 
-func handleLaunchpadImportsList(w http.ResponseWriter, store *launchsession.Store) {
+func handleLaunchpadImportsList(w http.ResponseWriter, r *http.Request, store *launchsession.Store) {
 	records, err := lpimporter.NewStore(store.Root()).List()
 	if err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 	writeLaunchpadJSON(w, http.StatusOK, map[string]any{
@@ -161,7 +161,7 @@ func handleLaunchpadImportCreate(w http.ResponseWriter, r *http.Request, catalog
 	}
 	adapters, err := lpimporter.LoadAdapters(catalog.Root)
 	if err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 	record, err := lpimporter.NewAnalyzer(adapters, nil).Import(r.Context(), req, time.Now().UTC())
@@ -170,7 +170,7 @@ func handleLaunchpadImportCreate(w http.ResponseWriter, r *http.Request, catalog
 		return
 	}
 	if err := lpimporter.NewStore(store.Root()).Save(record); err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 	writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
@@ -203,7 +203,7 @@ func handleLaunchpadImportPath(w http.ResponseWriter, r *http.Request, rest stri
 	case "preflight":
 		record = lpimporter.Preflight(record, time.Now().UTC())
 		if err := importStore.Save(record); err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
@@ -219,7 +219,7 @@ func handleLaunchpadImportPath(w http.ResponseWriter, r *http.Request, rest stri
 		record.State = lpimporter.StateTornDown
 		record.EvidenceLedger.Status = "teardown_recorded"
 		if err := importStore.Save(record); err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		writeLaunchpadJSON(w, http.StatusAccepted, map[string]any{
@@ -253,10 +253,10 @@ func handleLaunchpadImportLaunch(w http.ResponseWriter, record lpimporter.Import
 	api.WriteError(w, http.StatusConflict, "Imported app is not launchable yet", "generated imports must be promoted to the registry with preflight evidence before LaunchKit execution")
 }
 
-func handleLaunchpadRunsList(w http.ResponseWriter, store *launchsession.Store) {
+func handleLaunchpadRunsList(w http.ResponseWriter, r *http.Request, store *launchsession.Store) {
 	runs, err := store.List()
 	if err != nil {
-		api.WriteInternal(w, err)
+		api.WriteInternalR(w, r, err)
 		return
 	}
 	instances := make([]readmodel.RuntimeInstance, 0, len(runs))
@@ -282,7 +282,7 @@ func handleLaunchpadRunCreate(w http.ResponseWriter, r *http.Request, catalog *r
 	}
 	run, saveErr := launchsession.NewExecutor(store).ExecuteLaunch(compiled, launchsession.ExecuteOptions{Reason: "run requested through OSS Console API"})
 	if saveErr != nil {
-		api.WriteInternal(w, saveErr)
+		api.WriteInternalR(w, r, saveErr)
 		return
 	}
 	if !appOK || !substrateOK {
@@ -383,7 +383,7 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 		}
 		deleted, err := launchsession.NewExecutor(store).DeleteLaunch(runID, true)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		writeLaunchpadJSON(w, http.StatusAccepted, detailForStoredRun(catalog, deleted))
@@ -448,7 +448,7 @@ func handleLaunchpadSecrets(w http.ResponseWriter, r *http.Request, store *launc
 	if r.Method == http.MethodGet {
 		statuses, err := secretStore.Statuses()
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		writeLaunchpadJSON(w, http.StatusOK, map[string]any{"secrets": readmodel.SecretGrantStatuses(statuses)})
@@ -520,7 +520,7 @@ func handleLaunchpadRunPath(w http.ResponseWriter, r *http.Request, rest string,
 		}
 		deleted, err := launchsession.NewExecutor(store).DeleteLaunch(launchID, true)
 		if err != nil {
-			api.WriteInternal(w, err)
+			api.WriteInternalR(w, r, err)
 			return
 		}
 		writeLaunchpadJSON(w, http.StatusAccepted, deleted)

@@ -15,10 +15,10 @@ files. It is not a complete copy of any GitHub release.
 
 ## Current Release Target
 
-The current source release target is `v0.8.3`. Its expected visible release
+The current source release target is `v0.8.4`. Its expected visible release
 assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`v0.8.3.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.8.4.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `multiple.intoto.jsonl`, and matching
 `*.cosign.bundle` files for every primary asset.
@@ -26,16 +26,16 @@ assets are platform binaries for Darwin, Linux, and Windows,
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 
-## v0.8.3 Asset Contract
+## v0.8.4 Asset Contract
 
-`make release-assets` stages the `v0.8.3` asset set under
+`make release-assets` stages the `v0.8.4` asset set under
 `dist/release-assets/`, and the release workflow must attach that set to the
 GitHub release before publication is claimed:
 
 - five CLI binaries
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.8.3.openvex.json`
+- `v0.8.4.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -46,8 +46,11 @@ GitHub release before publication is claimed:
 - `multiple.intoto.jsonl`
 
 The sample policy material archive contains `release.high_risk.v3.toml` and
-`reference_packs/eu_ai_act_high_risk.v1.json`. The GitHub release workflow
-attaches `*.cosign.bundle` files generated for each primary asset.
+`reference_packs/eu_ai_act_high_risk.v2.json`. The GitHub release workflow
+attaches `*.cosign.bundle` files generated for each primary asset. The v2 JSON
+is a compliance mapping, not executable policy: it contains no supported
+top-level runtime actions, so the sample TOML compiles with zero allow-rules
+and remains fail-closed until an explicit supported runtime policy is supplied.
 
 Homebrew remains headless: it downloads only the Kernel binary and Launchpad
 data. Browser UI assets are not Kernel release assets. Where a release

@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -56,17 +57,28 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		printQuickstartUsage(stdout)
 		return 0
 	}
-	opts, code := parseQuickstartArgs(args, stderr)
-	if code != 0 {
-		return code
+	logger, logFormat, err := configureServerLogger(stderr, "quickstart")
+	if err != nil {
+		fmt.Fprintf(stderr, "quickstart: %v\n", err)
+		return 2
+	}
+	var parseOutput strings.Builder
+	opts, err := parseQuickstartArgs(args, &parseOutput)
+	if err != nil {
+		if logFormat == "json" || parseOutput.Len() == 0 {
+			writeQuickstartError(logger, logFormat, stderr, err, "")
+		} else {
+			_, _ = io.WriteString(stderr, parseOutput.String())
+		}
+		return 2
 	}
 	if err := validateQuickstartOptions(opts); err != nil {
-		fmt.Fprintf(stderr, "quickstart: %v\n", err)
+		writeQuickstartError(logger, logFormat, stderr, err, "")
 		return 2
 	}
 	planned, err := planQuickstart(opts)
 	if err != nil {
-		fmt.Fprintf(stderr, "quickstart: %v\n", err)
+		writeQuickstartError(logger, logFormat, stderr, err, "")
 		return 1
 	}
 	if opts.DryRun {
@@ -75,7 +87,7 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		// it passes would falsely imply that deletion is authorized.
 		_, planned, err = preflightQuickstartReset(opts, planned)
 		if err != nil {
-			fmt.Fprintf(stderr, "quickstart: %v\n", err)
+			writeQuickstartError(logger, logFormat, stderr, err, "")
 			return 1
 		}
 		_ = json.NewEncoder(stdout).Encode(planned.summary("preview"))
@@ -83,14 +95,14 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 	}
 	prepared, err := prepareQuickstart(opts)
 	if err != nil {
-		fmt.Fprintf(stderr, "quickstart: %v\n", err)
+		writeQuickstartError(logger, logFormat, stderr, err, "")
 		return 1
 	}
 	var console *localConsoleSupervisor
 	if opts.Console {
 		console, err = newLocalConsoleSupervisor(prepared.ConsoleBundle, opts.ConsolePort, prepared.Runtime)
 		if err != nil {
-			fmt.Fprintf(stderr, "quickstart: %v\n", err)
+			writeQuickstartError(logger, logFormat, stderr, err, "")
 			return 1
 		}
 	}
@@ -130,13 +142,25 @@ func runQuickstartCmdWithReady(args []string, stdout, stderr io.Writer, onReady 
 		Stdout: stdout,
 		Stderr: stderr,
 	}); err != nil {
-		fmt.Fprintf(stderr, "quickstart: start Kernel: %v\n", err)
-		if route := quickstartErrorRoute(err, opts); route != "" {
-			fmt.Fprintf(stderr, "  %s\n", route)
-		}
+		writeQuickstartError(logger, logFormat, stderr, fmt.Errorf("start Kernel: %w", err), quickstartErrorRoute(err, opts))
 		return 1
 	}
 	return 0
+}
+
+func writeQuickstartError(logger *slog.Logger, logFormat string, stderr io.Writer, err error, route string) {
+	if logFormat == "json" {
+		attrs := []any{"error", err}
+		if route != "" {
+			attrs = append(attrs, "next_step", route)
+		}
+		logger.Error("quickstart failed", attrs...)
+		return
+	}
+	_, _ = fmt.Fprintf(stderr, "quickstart: %v\n", err)
+	if route != "" {
+		_, _ = fmt.Fprintf(stderr, "  %s\n", route)
+	}
 }
 
 // quickstartErrorRoute turns the most common start failures into a concrete
@@ -165,7 +189,7 @@ func installQuickstartRuntimeEnv(runtime *quickstartRuntime) {
 	_ = os.Setenv(quickstartExpiresAtEnv, runtime.ExpiresAt.Format(time.RFC3339Nano))
 }
 
-func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, int) {
+func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, error) {
 	opts := quickstartOptions{
 		Addr:    "127.0.0.1",
 		Port:    7714,
@@ -187,13 +211,12 @@ func parseQuickstartArgs(args []string, stderr io.Writer) (quickstartOptions, in
 	fs.IntVar(&opts.ConsolePort, "console-port", 3400, "Local Console port (0 chooses a loopback ephemeral port)")
 	fs.BoolVar(&opts.NoOpen, "no-open", false, "Do not open the local Console in a browser")
 	if err := fs.Parse(args); err != nil {
-		return opts, 2
+		return opts, err
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(stderr, "quickstart: unexpected argument %q\n", fs.Arg(0))
-		return opts, 2
+		return opts, fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
-	return opts, 0
+	return opts, nil
 }
 
 func validateQuickstartOptions(opts quickstartOptions) error {
@@ -295,12 +318,7 @@ func planQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 		Console:        opts.Console,
 	}
 	if opts.Console {
-		bundle, err := discoverLocalConsoleBundle()
-		if err != nil {
-			return quickstartPrepared{}, err
-		}
-		prepared.ConsoleBundle = bundle
-		prepared.PlannedActions = append(prepared.PlannedActions, "start the packaged local Console sidecar")
+		prepared.PlannedActions = append(prepared.PlannedActions, "start the packaged local Console sidecar (requires a Console-including packaged layout)")
 	}
 	return prepared, nil
 }
@@ -313,6 +331,13 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	opts, prepared, err = preflightQuickstartReset(opts, prepared)
 	if err != nil {
 		return quickstartPrepared{}, err
+	}
+	if opts.Console {
+		bundle, err := discoverLocalConsoleBundle()
+		if err != nil {
+			return quickstartPrepared{}, err
+		}
+		prepared.ConsoleBundle = bundle
 	}
 	if opts.Reset {
 		if err := os.RemoveAll(opts.DataDir); err != nil {
@@ -409,6 +434,7 @@ func printQuickstartUsage(stdout io.Writer) {
 	fmt.Fprintln(stdout)
 	printLocalConsoleJourney(stdout)
 	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "Quickstart logs default to text; set HELM_LOG_FORMAT=json for structured logs.")
 	fmt.Fprintln(stdout, "Pass --reset --yes only to replace HELM-owned quickstart state.")
 }
 

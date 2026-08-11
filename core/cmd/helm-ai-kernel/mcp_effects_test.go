@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
@@ -31,6 +32,19 @@ func decodeEffectsDoc(t *testing.T, resp mcppkg.ToolExecutionResponse) map[strin
 		t.Fatalf("decode effects doc: %v (content=%q)", err, resp.Content)
 	}
 	return doc
+}
+
+func decodeReceiptBundle(t *testing.T, v any) receiptverify.Bundle {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal receipt bundle: %v", err)
+	}
+	var bundle receiptverify.Bundle
+	if err := json.Unmarshal(raw, &bundle); err != nil {
+		t.Fatalf("decode receipt_verify bundle: %v", err)
+	}
+	return bundle
 }
 
 // TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit is the W1 keystone
@@ -54,11 +68,13 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 		t.Fatalf("construct runtime: %v", err)
 	}
 
-	resp, err := rt.execute(context.Background(), mcppkg.ToolExecutionRequest{
+	args := map[string]any{"repo": "owner/repo", "state": "open"}
+	request := mcppkg.ToolExecutionRequest{
 		ToolName:  "github.list_prs",
-		Arguments: map[string]any{"repo": "owner/repo", "state": "open"},
+		Arguments: args,
 		SessionID: "sess-read",
-	})
+	}
+	resp, err := rt.execute(context.Background(), request)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -114,14 +130,7 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 	// The shipped response is already a receipt_verify bundle. Round-trip its
 	// exact JSON wire shape and verify it using the same offline library as the
 	// binary, with the signing key supplied as an explicit trust root.
-	bundleRaw, err := json.Marshal(doc["receipt_bundle"])
-	if err != nil {
-		t.Fatalf("marshal receipt bundle: %v", err)
-	}
-	var bundle receiptverify.Bundle
-	if err := json.Unmarshal(bundleRaw, &bundle); err != nil {
-		t.Fatalf("decode receipt_verify bundle: %v", err)
-	}
+	bundle := decodeReceiptBundle(t, doc["receipt_bundle"])
 	if len(bundle.Receipts) != 1 || len(bundle.Permits) != 1 {
 		t.Fatalf("bundle counts = receipts:%d permits:%d, want 1/1", len(bundle.Receipts), len(bundle.Permits))
 	}
@@ -131,6 +140,26 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 	}
 	if receipt.OutputHash != doc["output_hash"] {
 		t.Fatalf("receipt output hash = %q, response output hash = %v", receipt.OutputHash, doc["output_hash"])
+	}
+	wantOutputHash, err := canonicalize.CanonicalHash(doc["result"])
+	if err != nil {
+		t.Fatalf("independently hash returned result: %v", err)
+	}
+	if receipt.OutputHash != wantOutputHash {
+		t.Fatalf("receipt output hash = %q, independently computed = %q", receipt.OutputHash, wantOutputHash)
+	}
+	wantArgsHash, err := canonicalize.CanonicalHash(args)
+	if err != nil {
+		t.Fatalf("independently hash request arguments: %v", err)
+	}
+	if receipt.ArgsHash != wantArgsHash {
+		t.Fatalf("receipt args hash = %q, independently computed = %q", receipt.ArgsHash, wantArgsHash)
+	}
+	if receipt.EffectID != permit.PermitID {
+		t.Fatalf("receipt effect = %q, permit id = %q", receipt.EffectID, permit.PermitID)
+	}
+	if receipt.ReceiptID != "rcpt-"+permit.PermitID {
+		t.Fatalf("receipt id = %q, want permit-bound identity", receipt.ReceiptID)
 	}
 	receiptHash, err := contracts.ReceiptChainHash(receipt)
 	if err != nil {
@@ -144,6 +173,24 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 	})
 	if !verification.Valid || verification.Receipts != 1 || verification.Permits != 1 {
 		t.Fatalf("offline bundle verification failed: %+v", verification)
+	}
+
+	secondResp, err := rt.execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("repeat execute: %v", err)
+	}
+	if secondResp.IsError {
+		t.Fatalf("repeat read call reported error: %s", secondResp.Content)
+	}
+	secondBundle := decodeReceiptBundle(t, decodeEffectsDoc(t, secondResp)["receipt_bundle"])
+	if len(secondBundle.Receipts) != 1 || len(secondBundle.Permits) != 1 {
+		t.Fatalf("repeat bundle counts = receipts:%d permits:%d, want 1/1", len(secondBundle.Receipts), len(secondBundle.Permits))
+	}
+	if secondBundle.Receipts[0].ReceiptID == receipt.ReceiptID {
+		t.Fatalf("repeated read reused receipt id %q", receipt.ReceiptID)
+	}
+	if secondBundle.Receipts[0].EffectID != secondBundle.Permits[0].PermitID {
+		t.Fatalf("repeat receipt effect = %q, permit id = %q", secondBundle.Receipts[0].EffectID, secondBundle.Permits[0].PermitID)
 	}
 }
 

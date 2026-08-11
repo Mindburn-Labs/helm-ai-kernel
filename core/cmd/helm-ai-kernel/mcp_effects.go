@@ -223,8 +223,11 @@ func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecu
 		"permit_public_key": r.bridge.PermitSigningPublicKey(),
 	}
 	if outcome.Verdict == contracts.VerdictAllow {
-		if outcome.ExecutionReceipt == nil || outcome.ExecutionReceiptHash == "" {
+		if outcome.Permit == nil || outcome.ExecutionReceipt == nil || outcome.ExecutionReceiptHash == "" {
 			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("github effects: dispatched call produced no canonical execution receipt")
+		}
+		if outcome.ExecutionReceipt.EffectID != outcome.Permit.PermitID {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("github effects: execution receipt does not bind the dispatched permit")
 		}
 		doc["result"] = outcome.Output
 		doc["output_hash"] = outcome.OutputHash
@@ -235,6 +238,7 @@ func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecu
 		}
 		doc["next_steps"] = []string{
 			"save receipt_bundle as bundle.json and run receipt_verify --receipt bundle.json --key-file <caller-trusted-root-key-file>",
+			"after verification, require receipts[0].effect_id to equal permits[0].permit_id",
 		}
 		return structuredLocalMCPResponse(doc)
 	}

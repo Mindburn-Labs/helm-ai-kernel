@@ -623,7 +623,7 @@ func (b *GovernedBridge) newExecutionReceipt(
 		return nil, fmt.Errorf("canonicalize receipt policy: %w", err)
 	}
 	return &contracts.Receipt{
-		ReceiptID:        "rcpt-" + decision.DecisionID,
+		ReceiptID:        "rcpt-" + permit.PermitID,
 		DecisionID:       decision.DecisionID,
 		EffectID:         permit.PermitID,
 		Status:           "SUCCESS",

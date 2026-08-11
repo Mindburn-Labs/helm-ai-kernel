@@ -185,11 +185,14 @@ helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar --json
 The verifier checks:
 
 - the generic EvidencePack validator's required identifiers and status fields
-  and required `attestation.pack_hash`; it recomputes that hash over a legacy
-  JCS projection that omits `correlation_id`, `threat_scan`,
-  `security_findings`, `network_logs`, `secret_events`, `port_exposures`,
-  `git_diffs`, and `replay_manifest`; this path does not independently apply
-  the complete EvidencePack JSON Schema or bind those omitted fields;
+  and required `attestation.pack_hash`, comparing that stored hash with a
+  legacy JCS projection; the projection excludes the entire `attestation`
+  object, including `attestation.kernel_version`, and also omits
+  `correlation_id`, `threat_scan`, `security_findings`, `network_logs`,
+  `secret_events`, `port_exposures`, `git_diffs`, and `replay_manifest`;
+  `verify-scan` separately rejects `attestation.signature` and
+  `attestation.signer_id`, but this path does not independently apply the
+  complete EvidencePack JSON Schema or bind those omitted fields;
 - the canonical RiskEnvelope representation, content hash, schema, and privacy
   non-collection fields;
 - the pack-to-envelope IDs and hashes, plus every declared artifact path and

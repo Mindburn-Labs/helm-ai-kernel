@@ -184,8 +184,9 @@ helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar --json
 
 The verifier checks:
 
-- the generic EvidencePack required fields and required
-  `attestation.pack_hash`, including its JCS-computed contract hash;
+- the generic EvidencePack validator's required identifiers and status fields,
+  required `attestation.pack_hash`, and its JCS-computed contract hash; this
+  path does not independently apply the complete EvidencePack JSON Schema;
 - the canonical RiskEnvelope representation, content hash, schema, and privacy
   non-collection fields;
 - the pack-to-envelope IDs and hashes, plus every declared artifact path and

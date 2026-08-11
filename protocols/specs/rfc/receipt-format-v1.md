@@ -233,9 +233,10 @@ Where a receipt family admits a `reason_code` and its `verdict` is `DENY` or
 
 The `lamport` field MUST be an unsigned integer. An emitter conforming to this
 profile MUST assign a value strictly greater than every receipt it previously
-issued from the same HELM kernel instance. A standalone receipt cannot prove
-that instance-wide history; verification can enforce only the source-owned
-minimum and the predecessor/revision ordering supplied with the receipt.
+issued from the same HELM kernel instance. The Kernel verifier enforces a
+source-owned minimum and strictly increasing values across source-resolved
+revisions; instance-wide monotonicity remains an emitter or stateful-verifier
+obligation.
 
 `lamport` MUST be at least 1 and MUST NOT exceed 9007199254740991 (2^53 − 1).
 The upper bound is normative, not advisory: JCS serializes numbers through the
@@ -361,11 +362,13 @@ EvidencePack closure; those obligations are handled by
 - **Attributable Integrity**: Receipts are signed and content-addressed; origin
   attribution depends on source-owned trust-root and authority resolution.
 - **Tamper Evidence**: Verification recomputes the receipt ID, Ed25519
-  signature, evidence-DAG hashes and ordering, and predecessor/EvidencePack
-  closure for the material those checks bind.
-- **Secret Minimization**: Receipts exclude raw provider transcripts, session
-  keys, private ephemeral material, and arbitrary metadata. This profile makes
-  no forward-secrecy claim.
+  signature, evidence-DAG hashes and ordering, and predecessor chain. For a
+  terminal receipt it also requires the source-owned verifier to accept
+  EvidencePack closure.
+- **Secret Minimization**: The schema defines no dedicated fields for raw
+  provider transcripts, session keys, private ephemeral material, or arbitrary
+  metadata. Producers MUST NOT place secrets in permitted string or reference
+  fields. This profile makes no forward-secrecy claim.
 
 ## 7. IANA Considerations
 

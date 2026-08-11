@@ -6647,7 +6647,7 @@ export function EnvExposurePolicyToJSON(value?: EnvExposurePolicy | null): any {
  */
 
 /**
- * Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+ * Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id. When both forms are present, tool/action, effect_level/resource, and session_id/context.session_id must match after trimming; conflicting aliases fail before receipt issuance.
  * @export
  * @interface EvaluateRequest
  */
@@ -6701,7 +6701,7 @@ export interface EvaluateRequest {
      */
     session_id?: string;
     /**
-     * Optional input context; authenticated principal and tenant fields are added by the server.
+     * Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.
      * @type {{ [key: string]: any; }}
      * @memberof EvaluateRequest
      */

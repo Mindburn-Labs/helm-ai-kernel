@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
@@ -57,6 +60,18 @@ type recordingScopedStopReader struct {
 	fenced bool
 	err    error
 }
+
+type evaluateRouteCapturingPDP struct {
+	request *pdp.DecisionRequest
+}
+
+func (p *evaluateRouteCapturingPDP) Evaluate(_ context.Context, req *pdp.DecisionRequest) (*pdp.DecisionResponse, error) {
+	p.request = req
+	return &pdp.DecisionResponse{Allow: true, PolicyRef: "evaluate-route-test", DecisionHash: "sha256:decision"}, nil
+}
+
+func (*evaluateRouteCapturingPDP) Backend() pdp.Backend { return pdp.BackendHELM }
+func (*evaluateRouteCapturingPDP) PolicyHash() string   { return "sha256:policy" }
 
 func (r *recordingScopedStopReader) IsFenced(ctx context.Context, scope kernel.StopScope) (kernel.FenceState, bool, error) {
 	r.calls++
@@ -476,7 +491,7 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","args":{"message":"hello"},"agent_id":"attacker","session_id":" canonical-session ","context":{"session_id":"legacy-session","tenant_id":"tenant-attacker"}}`)
+	body := []byte(`{"tool":" EXECUTE_TOOL ","action":"EXECUTE_TOOL","effect_level":" local.echo ","resource":"local.echo","args":{"message":"hello"},"agent_id":"attacker","session_id":" canonical-session ","context":{"session_id":"canonical-session","tenant_id":"tenant-attacker"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -491,7 +506,7 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 		t.Fatal("canonical evaluate did not persist a receipt")
 	}
 	if receipts.stored.SessionID != "canonical-session" {
-		t.Fatalf("top-level session must be trimmed and take precedence: receipt=%q", receipts.stored.SessionID)
+		t.Fatalf("matching session aliases must be trimmed: receipt=%q", receipts.stored.SessionID)
 	}
 	if receipts.stored.ExecutorID != "principal-trusted" || receipts.stored.EffectID != "EXECUTE_TOOL" {
 		t.Fatalf("canonical evaluate did not bind authenticated executor/action: %+v", receipts.stored)
@@ -511,6 +526,103 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 	}
 	if response.ReceiptID != receipts.stored.ReceiptID || response.DecisionID != receipts.stored.DecisionID || response.DecisionHash != receipts.stored.DecisionHash || response.LamportClock != receipts.stored.LamportClock {
 		t.Fatalf("canonical response does not match persisted V5 receipt: response=%+v receipt=%+v", response, receipts.stored)
+	}
+}
+
+func TestEvaluateRouteRejectsConflictingAliasesBeforeReceiptIssuance(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	for name, body := range map[string]string{
+		"tool and action":             `{"tool":"EXECUTE_TOOL","action":"READ_FILE","effect_level":"local.echo","session_id":"session-tool"}`,
+		"effect level and resource":   `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","resource":"remote.http","session_id":"session-effect"}`,
+		"session and context session": `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"session-current","context":{"session_id":"session-legacy"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t)
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("conflicting aliases status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored != nil {
+				t.Fatalf("conflicting aliases persisted receipt: %+v", receipts.stored)
+			}
+		})
+	}
+}
+
+func TestEvaluateRouteRebindsAuthorityContextBeforeGuardian(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+
+	for _, tc := range []struct {
+		name          string
+		workspace     string
+		wantWorkspace bool
+	}{
+		{name: "without authenticated workspace"},
+		{name: "with authenticated workspace", workspace: "workspace-trusted", wantWorkspace: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capturing := &evaluateRouteCapturingPDP{}
+			svc, receipts := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+
+			body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"authority-session","context":{"principal":"principal-attacker","principal_id":"principal-attacker","agent_id":"principal-attacker","tenant":"tenant-attacker","tenantId":"tenant-attacker","tenant_id":"tenant-attacker","workspace":"workspace-attacker","workspaceId":"workspace-attacker","workspace_id":"workspace-attacker","custom":"preserved"}}`)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			if tc.workspace != "" {
+				req.Header.Set(workspaceHeader, tc.workspace)
+			}
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("evaluate status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored == nil {
+				t.Fatal("evaluate did not persist a receipt")
+			}
+			if capturing.request == nil {
+				t.Fatal("Guardian PDP did not receive the evaluate request")
+			}
+			if capturing.request.Principal != "principal-trusted" {
+				t.Fatalf("Guardian principal = %q", capturing.request.Principal)
+			}
+			if got := capturing.request.Context["principal_id"]; got != "principal-trusted" {
+				t.Fatalf("Guardian principal_id = %#v", got)
+			}
+			if got := capturing.request.Context["tenant_id"]; got != "tenant-trusted" {
+				t.Fatalf("Guardian tenant_id = %#v", got)
+			}
+			if got := capturing.request.Context["custom"]; got != "preserved" {
+				t.Fatalf("non-authority context changed: %#v", got)
+			}
+			for _, key := range []string{"principal", "agent_id", "tenant", "tenantId", "workspace", "workspaceId"} {
+				if value, exists := capturing.request.Context[key]; exists {
+					t.Fatalf("caller authority alias %q reached Guardian: %#v", key, value)
+				}
+			}
+			workspace, exists := capturing.request.Context["workspace_id"]
+			if tc.wantWorkspace {
+				if !exists || workspace != tc.workspace {
+					t.Fatalf("Guardian workspace_id = %#v, exists=%t", workspace, exists)
+				}
+			} else if exists {
+				t.Fatalf("caller workspace_id reached Guardian without an authenticated header: %#v", workspace)
+			}
+		})
 	}
 }
 
@@ -616,6 +728,227 @@ func TestReceiptRoutesRejectInvalidSessionQuery(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid session query status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func receiptListIDs(t *testing.T, result map[string]any) []string {
+	t.Helper()
+	raw, ok := result["receipts"].([]any)
+	if !ok {
+		return nil
+	}
+	ids := make([]string, 0, len(raw))
+	for _, item := range raw {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("receipt entry is not an object: %T", item)
+		}
+		if id, ok := obj["receipt_id"].(string); ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func TestReceiptListQueryFilters(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	receiptStore := svc.ReceiptStore.(*store.SQLiteReceiptStore)
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-allow", &contracts.Receipt{
+		ReceiptID:    "rcpt-allow",
+		DecisionID:   "dec-allow",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictAllow),
+		Verdict:      string(contracts.VerdictAllow),
+		Timestamp:    time.Date(2026, 5, 6, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.filtered",
+		DecisionHash: "sha256:allow-decision",
+		ArgsHash:     "args-allow",
+	})
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-deny", &contracts.Receipt{
+		ReceiptID:    "rcpt-deny",
+		DecisionID:   "dec-deny",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictDeny),
+		Verdict:      string(contracts.VerdictDeny),
+		ReasonCode:   "policy.blocked",
+		Timestamp:    time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.filtered",
+		DecisionHash: "sha256:deny-decision",
+		ArgsHash:     "args-deny",
+	})
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-boundary", &contracts.Receipt{
+		ReceiptID:    "rcpt-to-boundary",
+		DecisionID:   "dec-to-boundary",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictEscalate),
+		Verdict:      string(contracts.VerdictEscalate),
+		Timestamp:    time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.filtered",
+		DecisionHash: "sha256:boundary-decision",
+		ArgsHash:     "args-boundary",
+	})
+	nanosecondBound := time.Date(2026, 5, 9, 0, 0, 0, 123456789, time.UTC)
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-nano-at", &contracts.Receipt{
+		ReceiptID:    "rcpt-nano-at",
+		DecisionID:   "dec-nano-at",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictEscalate),
+		Verdict:      string(contracts.VerdictEscalate),
+		Timestamp:    nanosecondBound,
+		ExecutorID:   "agent.nanosecond",
+		DecisionHash: "sha256:nano-at-decision",
+		ArgsHash:     "args-nano-at",
+	})
+	appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-nano-next", &contracts.Receipt{
+		ReceiptID:    "rcpt-nano-next",
+		DecisionID:   "dec-nano-next",
+		EffectID:     "READ_FILE",
+		Status:       string(contracts.VerdictEscalate),
+		Verdict:      string(contracts.VerdictEscalate),
+		Timestamp:    nanosecondBound.Add(time.Nanosecond),
+		ExecutorID:   "agent.nanosecond",
+		DecisionHash: "sha256:nano-next-decision",
+		ArgsHash:     "args-nano-next",
+	})
+	appendTenantScopedReceipt(t, receiptStore, "tenant-foreign", "session-deny", &contracts.Receipt{
+		ReceiptID:    "rcpt-foreign",
+		DecisionID:   "dec-foreign",
+		EffectID:     "EXECUTE_TOOL",
+		Status:       string(contracts.VerdictDeny),
+		Verdict:      string(contracts.VerdictDeny),
+		ReasonCode:   "policy.blocked",
+		Timestamp:    time.Date(2026, 5, 7, 0, 0, 0, 0, time.UTC),
+		ExecutorID:   "agent.filtered",
+		DecisionHash: "sha256:foreign-decision",
+		ArgsHash:     "args-foreign",
+	})
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	deny := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?verdict=DENY"))
+	if len(deny) != 1 || deny[0] != "rcpt-deny" {
+		t.Fatalf("verdict=DENY returned %v, want [rcpt-deny]", deny)
+	}
+	allow := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?verdict=ALLOW&reason_code="))
+	if len(allow) != 1 || allow[0] != "rcpt-allow" {
+		t.Fatalf("verdict=ALLOW returned %v, want [rcpt-allow]", allow)
+	}
+	denyReason := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?verdict=DENY&reason_code=policy.blocked"))
+	if len(denyReason) != 1 || denyReason[0] != "rcpt-deny" {
+		t.Fatalf("verdict=DENY&reason_code=policy.blocked returned %v, want [rcpt-deny]", denyReason)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{"principal overrides executor alias", "principal=agent.filtered&executor=other", []string{"rcpt-allow", "rcpt-deny", "rcpt-to-boundary"}},
+		{"executor alias", "executor=agent.filtered", []string{"rcpt-allow", "rcpt-deny", "rcpt-to-boundary"}},
+		{"effect overrides resource alias", "principal=agent.filtered&effect=READ_FILE&resource=EXECUTE_TOOL", []string{"rcpt-allow", "rcpt-to-boundary"}},
+		{"resource alias", "principal=agent.filtered&resource=READ_FILE", []string{"rcpt-allow", "rcpt-to-boundary"}},
+		{"all dimensions compose in one request", "verdict=DENY&reason_code=policy.blocked&principal=agent.filtered&resource=EXECUTE_TOOL&from=2026-05-07T00:00:00Z&to=2026-05-08T00:00:00Z", []string{"rcpt-deny"}},
+		{"half-open time bounds", "principal=agent.filtered&from=2026-05-06T00:00:00Z&to=2026-05-08T00:00:00Z", []string{"rcpt-allow", "rcpt-deny"}},
+		{"nanosecond half-open time bounds", "principal=agent.nanosecond&from=2026-05-09T00:00:00.123456789Z&to=2026-05-09T00:00:00.123456790Z", []string{"rcpt-nano-at"}},
+		{"timezone offset represents the same nanosecond bounds", "principal=agent.nanosecond&from=2026-05-09T02:00:00.123456789%2B02:00&to=2026-05-09T02:00:00.123456790%2B02:00", []string{"rcpt-nano-at"}},
+		{"session filter remains tenant scoped", "session_id=session-deny&executor=agent.filtered&resource=EXECUTE_TOOL", []string{"rcpt-deny"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := receiptListIDs(t, requestReceiptList(t, mux, "/api/v1/receipts?"+tc.query))
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("query %q returned %v, want %v", tc.query, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReceiptListQueryFiltersPreserveOpaquePagination(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	receiptStore := svc.ReceiptStore.(*store.SQLiteReceiptStore)
+	base := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
+	for _, receipt := range []*contracts.Receipt{
+		{
+			ReceiptID:    "rcpt-filter-page-1",
+			DecisionID:   "dec-filter-page-1",
+			EffectID:     "EXECUTE_TOOL",
+			Status:       string(contracts.VerdictDeny),
+			Verdict:      string(contracts.VerdictDeny),
+			ReasonCode:   "policy.blocked",
+			Timestamp:    base,
+			ExecutorID:   "agent.pagination",
+			DecisionHash: "sha256:filter-page-1",
+			ArgsHash:     "args-filter-page-1",
+		},
+		{
+			ReceiptID:    "rcpt-filter-page-decoy",
+			DecisionID:   "dec-filter-page-decoy",
+			EffectID:     "EXECUTE_TOOL",
+			Status:       string(contracts.VerdictAllow),
+			Verdict:      string(contracts.VerdictAllow),
+			Timestamp:    base.Add(time.Second),
+			ExecutorID:   "agent.pagination",
+			DecisionHash: "sha256:filter-page-decoy",
+			ArgsHash:     "args-filter-page-decoy",
+		},
+		{
+			ReceiptID:    "rcpt-filter-page-2",
+			DecisionID:   "dec-filter-page-2",
+			EffectID:     "EXECUTE_TOOL",
+			Status:       string(contracts.VerdictDeny),
+			Verdict:      string(contracts.VerdictDeny),
+			ReasonCode:   "policy.blocked",
+			Timestamp:    base.Add(2 * time.Second),
+			ExecutorID:   "agent.pagination",
+			DecisionHash: "sha256:filter-page-2",
+			ArgsHash:     "args-filter-page-2",
+		},
+	} {
+		appendTenantScopedReceipt(t, receiptStore, defaultRuntimeTenantID, "session-"+receipt.ReceiptID, receipt)
+	}
+
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+	filter := "verdict=DENY&reason_code=policy.blocked&principal=agent.pagination&effect=EXECUTE_TOOL"
+	firstPage := requestReceiptList(t, mux, "/api/v1/receipts?"+filter+"&limit=1")
+	firstCursor, _ := firstPage["next_cursor"].(string)
+	if ids := receiptListIDs(t, firstPage); !reflect.DeepEqual(ids, []string{"rcpt-filter-page-1"}) || firstPage["has_more"] != true || !strings.HasPrefix(firstCursor, tenantReceiptCursorVersionPrefix) {
+		t.Fatalf("first filtered page = ids %v cursor %q has_more %v", ids, firstCursor, firstPage["has_more"])
+	}
+	secondPage := requestReceiptList(t, mux, "/api/v1/receipts?"+filter+"&since="+url.QueryEscape(firstCursor)+"&limit=1")
+	if ids := receiptListIDs(t, secondPage); !reflect.DeepEqual(ids, []string{"rcpt-filter-page-2"}) || secondPage["has_more"] != false {
+		t.Fatalf("second filtered page = ids %v has_more %v", ids, secondPage["has_more"])
+	}
+}
+
+func TestReceiptListRejectsInvalidTimeFilter(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	for _, tc := range []struct {
+		name string
+		from string
+	}{
+		{"malformed", "not-a-timestamp"},
+		{"comma fractional separator", "2026-05-09T00:00:00,1Z"},
+		{"more than nine fractional digits", "2026-05-09T00:00:00.1234567890Z"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?from="+tc.from, nil)
+			authorizeTestRequest(req)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("invalid from filter status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "RFC3339Nano with at most 9 fractional digits") {
+				t.Fatalf("invalid from filter body = %s", rec.Body.String())
+			}
+		})
 	}
 }
 

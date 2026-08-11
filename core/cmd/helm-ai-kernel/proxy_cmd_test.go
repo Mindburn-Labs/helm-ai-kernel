@@ -11,6 +11,18 @@ import (
 	"testing"
 )
 
+func TestExtractGenAIUsagePreservesUsagePresence(t *testing.T) {
+	input, output, present, finish := extractGenAIUsage([]byte(`{"choices":[{"finish_reason":"tool_calls"}]}`))
+	if present || input != 0 || output != 0 || finish != "tool_calls" {
+		t.Fatalf("absent usage parsed as (%d, %d, %t, %q)", input, output, present, finish)
+	}
+
+	input, output, present, finish = extractGenAIUsage([]byte(`{"usage":{"prompt_tokens":0,"completion_tokens":0}}`))
+	if !present || input != 0 || output != 0 || finish != "" {
+		t.Fatalf("explicit zero usage parsed as (%d, %d, %t, %q)", input, output, present, finish)
+	}
+}
+
 func TestProxyStatusBlocksBody(t *testing.T) {
 	for _, status := range []string{"DENIED", "PEP_VALIDATION_FAILED", "GOVERNANCE_ERROR", "PROXY_ITERATION_LIMIT", "PROXY_WALLCLOCK_LIMIT"} {
 		if !proxyStatusBlocksBody(status) {

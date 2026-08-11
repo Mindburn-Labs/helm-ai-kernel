@@ -36,7 +36,7 @@ test-approval-ceremony-postgres:
 
 test-receipt-store-postgres-migration:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
-	cd core && go test -race ./pkg/store -run '^TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash$$' -count=1
+	cd core && go test -race ./pkg/store -run '^(TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash|TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor)$$' -count=1
 test-generated-spec-approval-ceremony-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/generatedspecapprovalceremony -run TestPostgresLifecycleSingleIssueConsumeAndFence -count=10
@@ -57,9 +57,15 @@ verify-canonical-json-vectors:
 	cd core && go test ./pkg/canonicalize -run TestCanonicalJSONReferencePackMatchesGoImplementation -count=1
 	python3 reference_packs/canonical-json-v1/verify_vectors.py
 
+.PHONY: verify-receipt-v5-vectors verify-effect-permit-vectors
+
 verify-receipt-v5-vectors:
 	cd core && go test ./pkg/crypto -run TestReceiptV5ReferencePackMatchesGoImplementation -count=1
 	python3 reference_packs/receipt-v5/verify_vectors.py
+
+verify-effect-permit-vectors:
+	cd core && go test ./pkg/crypto -run TestEffectPermitReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/effect-permit-v1/verify_vectors.py
 
 verify-approval-ceremony-vectors:
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
@@ -139,6 +145,7 @@ verify-fixtures:
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
 	$(MAKE) verify-canonical-json-vectors
 	$(MAKE) verify-receipt-v5-vectors
+	$(MAKE) verify-effect-permit-vectors
 	$(MAKE) verify-approval-ceremony-vectors
 	$(MAKE) verify-generated-spec-approval-ceremony-vectors
 	$(MAKE) verify-connector-release-authority-vectors

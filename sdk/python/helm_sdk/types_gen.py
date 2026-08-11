@@ -6151,7 +6151,7 @@ class EnvExposurePolicy(BaseModel):
 
 class EvaluateRequest(BaseModel):
     """
-    Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+    Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id. When both forms are present, tool/action, effect_level/resource, and session_id/context.session_id must match after trimming; conflicting aliases fail before receipt issuance.
     """ # noqa: E501
     principal: Optional[StrictStr] = Field(default=None, description="Ignored; the authenticated principal is recorded as the receipt executor.")
     action: Optional[StrictStr] = Field(default=None, description="Legacy direct-daemon alias for tool.")
@@ -6161,7 +6161,7 @@ class EvaluateRequest(BaseModel):
     agent_id: Optional[StrictStr] = Field(default=None, description="Ignored; the authenticated principal is recorded as the receipt executor.")
     effect_level: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Policy resource used to evaluate the governed tool call.")
     session_id: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Non-whitespace signed causal session identifier.")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="Optional input context; authenticated principal and tenant fields are added by the server.")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.")
     __properties: ClassVar[List[str]] = ["principal", "action", "resource", "tool", "args", "agent_id", "effect_level", "session_id", "context"]
 
     @field_validator('session_id')

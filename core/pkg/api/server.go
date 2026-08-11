@@ -159,6 +159,54 @@ type EvaluateRequest struct {
 	Context     map[string]any `json:"context"`
 }
 
+// NormalizeEvaluateRequest resolves the public V5 and direct-daemon aliases
+// into one unambiguous request before any decision or receipt is produced.
+func NormalizeEvaluateRequest(req *EvaluateRequest) error {
+	req.Tool = strings.TrimSpace(req.Tool)
+	legacyTool := strings.TrimSpace(req.Action)
+	if req.Tool != "" && legacyTool != "" && req.Tool != legacyTool {
+		return fmt.Errorf("tool and action must match when both are provided")
+	}
+	if req.Tool == "" {
+		req.Tool = legacyTool
+	}
+
+	req.EffectLevel = strings.TrimSpace(req.EffectLevel)
+	legacyEffectLevel := strings.TrimSpace(req.Resource)
+	if req.EffectLevel != "" && legacyEffectLevel != "" && req.EffectLevel != legacyEffectLevel {
+		return fmt.Errorf("effect_level and resource must match when both are provided")
+	}
+	if req.EffectLevel == "" {
+		req.EffectLevel = legacyEffectLevel
+	}
+	if req.Tool == "" || req.EffectLevel == "" {
+		return fmt.Errorf("tool and effect_level are required")
+	}
+
+	req.SessionID = strings.TrimSpace(req.SessionID)
+	contextSessionID := ""
+	if req.Context != nil {
+		contextSessionID, _ = req.Context["session_id"].(string)
+		contextSessionID = strings.TrimSpace(contextSessionID)
+	}
+	if req.SessionID != "" && contextSessionID != "" && req.SessionID != contextSessionID {
+		return fmt.Errorf("session_id must match context.session_id when both are provided")
+	}
+	if req.SessionID == "" {
+		req.SessionID = contextSessionID
+	}
+	if req.SessionID == "" {
+		return fmt.Errorf("session_id is required")
+	}
+
+	normalizedSessionID, err := NormalizePublicSessionID(req.SessionID)
+	if err != nil {
+		return fmt.Errorf("session_id may not contain path separators")
+	}
+	req.SessionID = normalizedSessionID
+	return nil
+}
+
 // EvaluateResponse is the JSON response sent back to SDKs.
 type EvaluateResponse struct {
 	Allow        bool   `json:"allow"`
@@ -317,36 +365,10 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	// Preserve DecisionRequest callers while the V5 shape uses tool/effect_level.
-	// The public OpenAPI envelope keeps both shapes optional for compatibility;
-	// the daemon still requires one complete, non-blank effective intent.
-	req.Tool = strings.TrimSpace(req.Tool)
-	if req.Tool == "" {
-		req.Tool = strings.TrimSpace(req.Action)
-	}
-	req.EffectLevel = strings.TrimSpace(req.EffectLevel)
-	if req.EffectLevel == "" {
-		req.EffectLevel = strings.TrimSpace(req.Resource)
-	}
-	if req.Tool == "" || req.EffectLevel == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tool and effect_level are required"})
+	if err := NormalizeEvaluateRequest(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	req.SessionID = strings.TrimSpace(req.SessionID)
-	if req.SessionID == "" && req.Context != nil {
-		req.SessionID, _ = req.Context["session_id"].(string)
-		req.SessionID = strings.TrimSpace(req.SessionID)
-	}
-	if req.SessionID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id is required"})
-		return
-	}
-	normalizedSessionID, err := NormalizePublicSessionID(req.SessionID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id may not contain path separators"})
-		return
-	}
-	req.SessionID = normalizedSessionID
 	if s.receiptSigner == nil {
 		http.Error(w, "receipt signer unavailable", http.StatusServiceUnavailable)
 		return

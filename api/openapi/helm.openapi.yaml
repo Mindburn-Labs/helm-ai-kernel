@@ -425,6 +425,46 @@ paths:
           in: query
           description: Filter by the signed Receipt.SessionID within the authenticated tenant.
           schema: { type: string }
+        - name: verdict
+          in: query
+          description: Exact Receipt.Verdict match. The value is bound by a receipt.v5 signature.
+          schema: { type: string }
+        - name: reason_code
+          in: query
+          description: Exact Receipt.ReasonCode match. The value is bound by a receipt.v5 signature.
+          schema: { type: string }
+        - name: principal
+          in: query
+          description: Exact Receipt.ExecutorID match. This projection is causal-chain-bound but not receipt-signature-bound.
+          schema: { type: string }
+        - name: executor
+          in: query
+          deprecated: true
+          description: Deprecated alias for principal; ignored when principal is present.
+          schema: { type: string }
+        - name: effect
+          in: query
+          description: Exact Receipt.EffectID match. The value is bound by a receipt.v5 signature.
+          schema: { type: string }
+        - name: resource
+          in: query
+          deprecated: true
+          description: Deprecated alias for effect; ignored when effect is present.
+          schema: { type: string }
+        - name: from
+          in: query
+          description: Inclusive RFC3339Nano receipt timestamp lower bound with at most nine fractional-second digits; comma fractional separators are rejected. Timestamps are causal-chain-bound but not receipt-signature-bound.
+          schema:
+            type: string
+            format: date-time
+            pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$'
+        - name: to
+          in: query
+          description: Exclusive RFC3339Nano receipt timestamp upper bound with at most nine fractional-second digits; comma fractional separators are rejected. Timestamps are causal-chain-bound but not receipt-signature-bound.
+          schema:
+            type: string
+            format: date-time
+            pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$'
       responses:
         '200':
           description: Receipt list
@@ -4549,7 +4589,7 @@ components:
           additionalProperties: true
 
     EvaluateRequest:
-      description: Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+      description: Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id. When both forms are present, tool/action, effect_level/resource, and session_id/context.session_id must match after trimming; conflicting aliases fail before receipt issuance.
       type: object
       properties:
         principal:
@@ -4581,7 +4621,7 @@ components:
         context:
           type: object
           additionalProperties: true
-          description: Optional input context; authenticated principal and tenant fields are added by the server.
+          description: Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.
 
     NonBlankSessionID:
       type: string

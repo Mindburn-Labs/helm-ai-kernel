@@ -231,9 +231,11 @@ Where a receipt family admits a `reason_code` and its `verdict` is `DENY` or
 
 ### 2.4 Lamport Clock
 
-The `lamport` field MUST be a monotonically increasing unsigned integer.
-Each receipt MUST have a `lamport` value strictly greater than all
-previously issued receipts from the same HELM kernel instance.
+The `lamport` field MUST be an unsigned integer. An emitter conforming to this
+profile MUST assign a value strictly greater than every receipt it previously
+issued from the same HELM kernel instance. A standalone receipt cannot prove
+that instance-wide history; verification can enforce only the source-owned
+minimum and the predecessor/revision ordering supplied with the receipt.
 
 `lamport` MUST be at least 1 and MUST NOT exceed 9007199254740991 (2^53 − 1).
 The upper bound is normative, not advisory: JCS serializes numbers through the
@@ -352,10 +354,18 @@ EvidencePack closure; those obligations are handled by
 
 ## 6. Security Considerations
 
-- **Fail-Closed**: Without a valid receipt, the system MUST NOT permit effect execution.
-- **Non-Repudiation**: Receipts are cryptographically signed and content-addressed.
-- **Tamper Evidence**: ProofGraph hash chains detect any modification.
-- **Forward Secrecy**: Receipts do not contain session keys or ephemeral material.
+- **Fail-Closed Verification**: A conforming verifier rejects a receipt that
+  fails content-address, trust-root, authority, evidence-DAG,
+  predecessor-chain, or EvidencePack checks. This preview profile is not a live
+  execution gate, and a receipt does not authorize dispatch.
+- **Attributable Integrity**: Receipts are signed and content-addressed; origin
+  attribution depends on source-owned trust-root and authority resolution.
+- **Tamper Evidence**: Verification recomputes the receipt ID, Ed25519
+  signature, evidence-DAG hashes and ordering, and predecessor/EvidencePack
+  closure for the material those checks bind.
+- **Secret Minimization**: Receipts exclude raw provider transcripts, session
+  keys, private ephemeral material, and arbitrary metadata. This profile makes
+  no forward-secrecy claim.
 
 ## 7. IANA Considerations
 
@@ -367,7 +377,7 @@ This document has no IANA actions.
 - RFC 3339 — Date and Time on the Internet
 - RFC 8785 — JSON Canonicalization Scheme
 - AIGP Four Tests Standard (4TS) v1.0
-- HELM Unified Canonical Standard (UCS) v1.2
+- HELM Unified Canonical Standard (UCS) v1.3
 
 ### 8.1 Normative companions for this profile
 

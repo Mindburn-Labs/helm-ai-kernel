@@ -1205,9 +1205,9 @@ func trustedPublicKeyForSeal(seal EvidencePackSeal, cfg *EvidencePackTrustConfig
 			return nil, fmt.Errorf(
 				"seal for signer %s is self-attested: its verification key is carried inside the pack, "+
 					"so the signature proves internal consistency only, not provenance. "+
-					"Supply a trusted key via HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX or a trust config, "+
-					"select --profile team|customer|high-assurance, or set "+
-					"HELM_ALLOW_SELF_ATTESTED_EVIDENCE=1 to accept it explicitly as unverified",
+					"Supply a trusted key via HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX or a trust config for provenance, "+
+					"or pass --allow-self-attested (or set HELM_ALLOW_SELF_ATTESTED_EVIDENCE=1) for local/demo "+
+					"verification that accepts internal consistency without provenance",
 				seal.Signer.KeyID)
 		}
 		return decodeEd25519PublicKey(seal.Signer.PublicKey)

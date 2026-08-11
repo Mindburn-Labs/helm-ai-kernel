@@ -31,8 +31,8 @@ func TestDemoTerminalSummaryCard(t *testing.T) {
 	if strings.Contains(output, "run-report."+"html") {
 		t.Error("summary card should not reference HTML reports")
 	}
-	if !strings.Contains(output, "helm-ai-kernel verify") {
-		t.Error("missing verify command in summary card")
+	if !strings.Contains(output, "helm-ai-kernel verify --allow-self-attested") {
+		t.Error("missing self-attested local verify command in summary card")
 	}
 	if !strings.Contains(output, "opensandbox") {
 		t.Error("missing provider switch hint in summary card")

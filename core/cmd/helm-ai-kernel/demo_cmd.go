@@ -457,7 +457,7 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "%s╠════════════════════════════════════════════════════════════╣%s\n", ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  📊 Report:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, reportPath, ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  📦 Evidence: %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, outDir+"/", ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel verify --allow-self-attested "+outDir, ColorReset, ColorCyan, ColorReset)
+	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel verify --profile dev-local --allow-self-attested "+outDir, ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  🔄 Switch:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel demo organization --provider opensandbox", ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", ColorCyan, ColorReset)
 
@@ -474,7 +474,8 @@ func runDemoCompany(args []string, stdout, stderr io.Writer) int {
 }
 
 // writeVerifiableEvidencePack emits a canonical, dev-local-sealed EvidencePack
-// under outDir so that `helm-ai-kernel verify --allow-self-attested <outDir>`
+// under outDir so that
+// `helm-ai-kernel verify --profile dev-local --allow-self-attested <outDir>`
 // verifies its local seal (MIN-738). The pack follows the §3.1 directory layout,
 // carries receipts under 02_PROOFGRAPH/receipts/, derives a canonical manifest
 // via the evidence pack Builder, and is sealed in place under the dev-local

@@ -32,7 +32,7 @@ plans that would have edited the wrong artifact:
 
 - One planned to add the missing signed fields to
   `protocols/json-schemas/receipt/v2.json`. Those fields are already published —
-  `api/openapi/helm.openapi.yaml:4178-4224` carries all twelve plus
+  `api/openapi/helm.openapi.yaml:4218-4267` carries all twelve plus
   `signature_version` and `signature`, and
   `protocols/proto/helm/kernel/v1/helm.proto:126-155` carries twelve of them.
   At the time of this decision the *construction rule* was unpublished; P2-3
@@ -96,9 +96,9 @@ bindings, the JSON Schemas, and the Go structs.
 
 OpenAPI outranks the JSON Schemas here on evidence, not convention: for the
 mainline receipt it is the only representation that is field-complete for the
-signed set (`api/openapi/helm.openapi.yaml:4178-4224`, whose own comment at
-:4187 states the purpose — "so a verifier can reconstruct the signed governance
-view"), and it is the only one behind a backward-compatibility gate
+signed set (`api/openapi/helm.openapi.yaml:4218-4267`, whose own comment at
+`:4227-4228` states the purpose — "so a verifier can reconstruct the signed
+governance view"), and it is the only one behind a backward-compatibility gate
 (`make openapi-breaking` → `oasdiff`, `Makefile:183`,
 `scripts/ci/quality-gates.json:563-573`, run by `make quality-pr` at
 `.github/workflows/ci.yml:75`).
@@ -140,7 +140,7 @@ This is the arbitration answer. Every row was originally audited at
 
 | Family | Integrity state | Integrity source (or implementation of record) | Wire source | Derived |
 | --- | --- | --- | --- | --- |
-| `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **SPECIFIED** | `protocols/specs/receipts/receipt-v5.md` + `reference_packs/receipt-v5/`; source-owned Go parity and independent stdlib-Python verification run from `make verify-fixtures` | `api/openapi/helm.openapi.yaml:4178-4224` (HTTP); `protocols/proto/helm/kernel/v1/helm.proto:126-155` (gRPC) | `protocols/json-schemas/receipt/v2.json`; the five SDK bindings; `core/pkg/contracts/receipt.go` |
+| `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **SPECIFIED** | `protocols/specs/receipts/receipt-v5.md` + `reference_packs/receipt-v5/`; source-owned Go parity and independent stdlib-Python verification run from `make verify-fixtures` | `api/openapi/helm.openapi.yaml:4218-4267` (HTTP); `protocols/proto/helm/kernel/v1/helm.proto:126-155` (gRPC) | `protocols/json-schemas/receipt/v2.json`; the five SDK bindings; `core/pkg/contracts/receipt.go` |
 | `LaunchEffectReceipt` — the Receipt Format v1 launch profile | **SPECIFIED** | `protocols/specs/rfc/receipt-format-v1.md` §2 excluding §2.6, plus §§3–5; `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json:304-313`; `reference_packs/launch-mission-v1/` | same schema | `core/pkg/contracts/launch_effect_receipt.go` |
 | `CounterfactualReceipt` | **SPECIFIED for the preimage; UNSPECIFIED for the wire shape** | `protocols/specs/rfc/receipt-format-v1.md` §2.6 states the preimage `"counterfactual:" + receipt_hash`; `core/pkg/contracts/counterfactual_receipt.go:146-148` matches it exactly; vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` | none — no schema, no proto, no OpenAPI component | — |
 | External decision receipt (`helm_external.v1`) | **SPECIFIED** | `protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md` §3, matching `core/pkg/verifier/decisionreceipt/helm_external.go:74-85` field-for-field | same | — |

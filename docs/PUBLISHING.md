@@ -136,13 +136,17 @@ The release workflow attaches these assets:
 - `sample-policy-material.tar`
 - `helm-ai-kernel-launchpad-data.tar`
 - `helm-ai-kernel.mcpb`
+- `helm-console-local-sidecar-*`
+- `helm-ai-kernel-*-console.tar.gz`
+- `CONSOLE-SHA256SUMS.txt`
 - `helm-ai-kernel.rb`
 - `v0.8.4.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
-AI Act high-risk reference pack. Browser UI bundles are not Kernel release
-assets and are not installed by the Homebrew formula.
+AI Act high-risk reference pack. The local Console sidecars and standalone
+browser UI layouts are Kernel release assets; the Homebrew formula does not
+install them.
 The retained release workflow attaches a `helm-ai-kernel.rb` formula asset for version `0.8.4`
 and publishes the same version to `mindburnlabs/homebrew-tap`;
 `version-status.json` must include a passing `homebrew-tap` surface before

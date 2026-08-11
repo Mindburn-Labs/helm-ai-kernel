@@ -361,10 +361,10 @@ EvidencePack closure; those obligations are handled by
   execution gate, and a receipt does not authorize dispatch.
 - **Attributable Integrity**: Receipts are signed and content-addressed; origin
   attribution depends on source-owned trust-root and authority resolution.
-- **Tamper Evidence**: Verification recomputes the receipt ID, Ed25519
-  signature, evidence-DAG hashes and ordering, and predecessor chain. For a
-  terminal receipt it also requires the source-owned verifier to accept
-  EvidencePack closure.
+- **Tamper Evidence**: Verification recomputes the receipt ID and evidence-DAG
+  hashes and ordering, verifies the Ed25519 signature, and walks the
+  source-resolved predecessor chain. For a terminal receipt it also requires
+  the source-owned verifier to accept EvidencePack closure.
 - **Secret Minimization**: The schema defines no dedicated fields for raw
   provider transcripts, session keys, private ephemeral material, or arbitrary
   metadata. Producers MUST NOT place secrets in permitted string or reference

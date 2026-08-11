@@ -75,7 +75,7 @@ artifact without naming which of the two contracts it means.
 (`*.c14n.json`), the signing payload, the public key, the signature, and named
 negative mutations with expected errors, and where both a Go test of the form
 `Test<X>ReferencePackMatchesGoImplementation` and an independent Python verifier
-run from `make verify-fixtures` (`Makefile:123`, CI `.github/workflows/ci.yml:167`).
+run from `make verify-fixtures` (`Makefile:137-154`, CI `.github/workflows/ci.yml:167`).
 
 On conflict, **the specification and its pack win; the Go implementation is the
 bug.** This is not a stylistic preference. If Go won, an independent
@@ -152,7 +152,7 @@ is P2-7. Until it says so, no surface may cite it as "the HELM receipt standard"
 
 | Family | Integrity state | Integrity source (or implementation of record) | Wire source | Derived |
 | --- | --- | --- | --- | --- |
-| `effect_permit.v1` canonical integrity profile over `effects.EffectPermit` | **SPECIFIED** | `protocols/specs/effects/effect-permit-v1.md` + `reference_packs/effect-permit-v1/`, with Go parity and an independent Python verifier bound into `make verify-fixtures` | `protocols/proto/helm/effects/v1/effects.proto:29-50`, including the signed `evidence_bindings` at field 16; `core/pkg/crypto/permit_cross_process_test.go` proves a field-complete wire round trip | the five SDK bindings |
+| `effect_permit.v1` canonical integrity profile over `effects.EffectPermit` | **SPECIFIED** | `protocols/specs/effects/effect-permit-v1.md` + `reference_packs/effect-permit-v1/`, with Go parity and an independent Python verifier bound into `make verify-fixtures` | `protocols/proto/helm/effects/v1/effects.proto:29-51`, including the signed `evidence_bindings` at field 16; `core/pkg/crypto/permit_cross_process_test.go` proves a field-complete wire round trip | the five SDK bindings |
 
 This row classifies only the named v1 profile. It does not declare every signing
 behaviour over the shared `effects.EffectPermit` type specified or conformant.
@@ -167,8 +167,9 @@ from contract status.
 > **Non-normative integration note.** At this checkpoint, Control Plane
 > migration is draft
 > [#291](https://github.com/Mindburn-Labs/svc-helm-control-plane/pull/291),
-> Data Plane migration is pending without a pull request, and Sandbox migration
-> is draft
+> Data Plane migration is draft
+> [#37](https://github.com/Mindburn-Labs/svc-helm-data-plane/pull/37), and Sandbox
+> migration is draft
 > [#19](https://github.com/Mindburn-Labs/svc-agent-sandbox-runner/pull/19).
 > These delivery links are not part of the protocol and must be refreshed before
 > making an integration or deployment claim.
@@ -201,7 +202,7 @@ the EvidencePack schema, until P2-7 corrects them.
 
 The reference packs below are integrity-SPECIFIED and CI-bound, each with a Go
 parity test and an independent stdlib-Python verifier reached from
-`make verify-fixtures` (`Makefile:123-138`, CI `.github/workflows/ci.yml:167`):
+`make verify-fixtures` (`Makefile:137-154`, CI `.github/workflows/ci.yml:167`):
 
 | Pack | Gate |
 | --- | --- |
@@ -325,7 +326,7 @@ description of enforcement.
 | `api/openapi/helm.openapi.yaml` → the five SDK `types_gen` files | `make sdk-openapi-check` (`Makefile:108-109` → `scripts/sdk/openapi_check.sh`), CI `ci.yml:294` | **Yes** |
 | `api/openapi/**` backward compatibility | `make openapi-breaking` → `oasdiff --fail-on ERR` (`Makefile:183`, `scripts/ci/contract_breaking.sh:151`), gate `openapi-breaking` in the `pr` profile (`scripts/ci/quality-gates.json:563-573`) run by `make quality-pr` (`ci.yml:75`) | **Yes**, path-scoped to `api/openapi/**` |
 | OpenAPI operation set ↔ served public routes | `make docs-openapi-parity` → `TestPublicDocsOpenAPIContract` (`core/cmd/helm-ai-kernel/openapi_runtime_routes_test.go:77`) | **Yes**, for routes and operationIds — **not** for schema fields |
-| Reference pack ↔ Go implementation, for the packs listed in D4 | `make verify-fixtures` (`Makefile:123-138`), CI `ci.yml:167` — Go parity test **and** independent Python verifier per pack | **Yes** |
+| Reference pack ↔ Go implementation, for the packs listed in D4 | `make verify-fixtures` (`Makefile:137-154`), CI `ci.yml:167` — Go parity test **and** independent Python verifier per pack | **Yes** |
 | `protocols/proto/**` lint and backward compatibility | **Unenforced.** `make proto-lint` runs `buf lint protocols/policy-schema` (`Makefile:177-178`) and `make proto-breaking` diffs `protocols/policy-schema` only (`scripts/ci/contract_breaking.sh:184-186`). No buf module is rooted at `protocols/proto/` (`find . -name 'buf.yaml'` returns only `protocols/policy-schema/buf.yaml`). The file holding the receipt and permit wire contracts has never been lint- or breaking-checked. | **No** |
 | `go-apidiff` on `protocols/` | **Does not exist.** Repository-wide `git grep apidiff` returns nothing. `CLAUDE.md` in the workspace root asserts this gate; the assertion is false and is on P2-9's list. | **No** |
 | Go struct ↔ JSON Schema | `core/pkg/contracts/schema_validation_test.go:106-129` builds a Go literal and validates it against the schema. With no `additionalProperties:false` anywhere in `receipt/v2.json`, a Go field the schema lacks passes, and a schema property no Go field produces is never exercised. The gate is green while the two disagree. | **No, structurally** |

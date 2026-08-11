@@ -104,7 +104,8 @@ accepted by a deployed connector.
   a numeric UTC offset, and fractional seconds;
 - canonical permit and signing-payload bytes with SHA-256 indices;
 - fixed Ed25519 public-key and signature material; and
-- executed negative mutations for unsigned input, signature corruption,
+- executed negative mutations for unsigned input, non-canonical signature
+  casing, signature corruption,
   covered-field and list-order tampering, missing domain separation, null
   collections, and omitted UTC normalization.
 

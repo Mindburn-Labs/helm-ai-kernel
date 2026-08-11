@@ -43,6 +43,12 @@
       "expected_error": "permit_unsigned"
     },
     {
+      "id": "uppercase_signature_hex",
+      "vector": "bridge_write_permit",
+      "mutation": "uppercase_signature_hex",
+      "expected_error": "invalid_encoding"
+    },
+    {
       "id": "signature_bit_flip",
       "vector": "bridge_write_permit",
       "mutation": "flip_signature_last_bit",

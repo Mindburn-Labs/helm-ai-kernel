@@ -90,6 +90,18 @@ def verify_vector(index, vector, mutation=None):
 
     if mutation == "remove_signature":
         permit.pop("signature", None)
+    elif mutation == "uppercase_signature_hex":
+        for offset, char in enumerate(permit["signature"]):
+            if char in "abcdef":
+                permit["signature"] = (
+                    permit["signature"][:offset]
+                    + char.upper()
+                    + permit["signature"][offset + 1 :]
+                )
+                break
+        else:
+            raise VectorError("invalid_fixture", "signature contains no hex letter")
+        signature_value = "ed25519:" + permit["signature"]
     elif mutation == "flip_signature_last_bit":
         signature = bytearray(prefixed_bytes("ed25519:" + permit["signature"], "ed25519:", 64))
         signature[-1] ^= 1

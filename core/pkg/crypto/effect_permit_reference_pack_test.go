@@ -188,6 +188,7 @@ func buildEffectPermitReferencePack(t *testing.T) map[string][]byte {
 		},
 		NegativeVectors: []effectPermitNegativeVector{
 			{ID: "unsigned_permit", Vector: "bridge_write_permit", Mutation: "remove_signature", ExpectedError: "permit_unsigned"},
+			{ID: "uppercase_signature_hex", Vector: "bridge_write_permit", Mutation: "uppercase_signature_hex", ExpectedError: "invalid_encoding"},
 			{ID: "signature_bit_flip", Vector: "bridge_write_permit", Mutation: "flip_signature_last_bit", ExpectedError: "permit_signature_rejected"},
 			{ID: "tamper_permit_id", Vector: "bridge_write_permit", Mutation: "set_permit_id", ExpectedError: "permit_signature_rejected"},
 			{ID: "tamper_scope_order", Vector: "bridge_write_permit", Mutation: "reverse_scope_allowed_params", ExpectedError: "permit_signature_rejected"},

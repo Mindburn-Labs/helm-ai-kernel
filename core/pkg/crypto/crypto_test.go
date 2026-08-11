@@ -263,6 +263,27 @@ func TestVerifyPermit_UnsignedIsRefused(t *testing.T) {
 	}
 }
 
+func TestVerifyPermit_UppercaseSignatureIsRefused(t *testing.T) {
+	signer, err := NewEd25519Signer("permit-uppercase-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	permit := testEffectPermit()
+	if err := SignPermit(signer, permit); err != nil {
+		t.Fatal(err)
+	}
+	index := strings.IndexAny(permit.Signature, "abcdef")
+	if index < 0 {
+		t.Fatal("test signature unexpectedly contains no hexadecimal letter")
+	}
+	permit.Signature = permit.Signature[:index] + strings.ToUpper(permit.Signature[index:index+1]) + permit.Signature[index+1:]
+
+	ok, err := VerifyPermit(signer.PublicKey(), permit)
+	if ok || err == nil || !strings.Contains(err.Error(), "lowercase hex") {
+		t.Fatalf("non-canonical signature casing must be refused: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestVerifyPermit_ForeignSignerRejected(t *testing.T) {
 	issuer, err := NewEd25519Signer("permit-issuer")
 	if err != nil {

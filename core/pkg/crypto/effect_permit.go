@@ -4,6 +4,7 @@ package crypto
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -159,6 +160,9 @@ func VerifyPermit(pubKeyHex string, p *effects.EffectPermit) (bool, error) {
 	}
 	if p.Signature == "" {
 		return false, fmt.Errorf("effect permit is unsigned")
+	}
+	if p.Signature != strings.ToLower(p.Signature) {
+		return false, fmt.Errorf("effect permit signature must be lowercase hex")
 	}
 	payload, err := EffectPermitSigningPayload(p)
 	if err != nil {

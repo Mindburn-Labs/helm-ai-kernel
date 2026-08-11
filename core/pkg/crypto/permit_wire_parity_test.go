@@ -1,8 +1,11 @@
 // quantum_posture: test-only. Ed25519 appears here solely to obtain a signer
 // for the round trip; the tests assert wire/preimage parity, not cryptographic
 // strength, and add no production cryptographic control or post-quantum
-// assurance. The permit preimage itself stays algorithm-neutral (see
-// effect_permit.go), so a future ML-DSA signer satisfies these tests unchanged.
+// assurance. The canonical preimage and wire mapping stay algorithm-neutral
+// (see effect_permit.go) and can be reused by another signature profile. These
+// tests instantiate Ed25519 and exercise Ed25519 verification, so an ML-DSA or
+// hybrid profile requires its own profile-specific signing and verification
+// tests.
 package crypto
 
 import (

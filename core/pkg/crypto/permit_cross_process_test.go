@@ -2,8 +2,10 @@
 // for the round trip. These tests assert that the protobuf wire form of an
 // EffectPermit is sufficient to reconstruct the exact signed preimage; they add
 // no production cryptographic control and no post-quantum assurance. The permit
-// preimage itself stays algorithm-neutral (see effect_permit.go), so a future
-// ML-DSA signer satisfies these tests unchanged.
+// canonical preimage and wire mapping stay algorithm-neutral (see
+// effect_permit.go) and can be reused by another signature profile. These tests
+// instantiate Ed25519 and exercise Ed25519 verification, so an ML-DSA or hybrid
+// profile requires its own profile-specific signing and verification tests.
 package crypto
 
 import (
@@ -43,9 +45,9 @@ import (
 //
 // WHAT THIS IS NOT: production has no Go-to-proto permit hop yet, so this is the
 // contract a cross-process dispatch must use, proven sufficient in advance — not
-// a mirror of a shipping code path. The mapping helpers below are consequently
-// the only executable statement of that contract in the repo; see
-// TestEffectTypeEnumMappingIsPinned for the part of it that is still unpublished.
+// a mirror of a shipping code path. The mapping helpers below are the executable
+// parity fixture for the published contract; TestEffectTypeEnumMappingIsPinned
+// guards its enum-to-bare-value rule.
 
 // permitWireContract is the EffectPermit field numbering, read from the .proto
 // rather than copied, so the test fails when the contract and the signed

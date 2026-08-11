@@ -21,6 +21,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
@@ -59,6 +60,18 @@ type recordingScopedStopReader struct {
 	fenced bool
 	err    error
 }
+
+type evaluateRouteCapturingPDP struct {
+	request *pdp.DecisionRequest
+}
+
+func (p *evaluateRouteCapturingPDP) Evaluate(_ context.Context, req *pdp.DecisionRequest) (*pdp.DecisionResponse, error) {
+	p.request = req
+	return &pdp.DecisionResponse{Allow: true, PolicyRef: "evaluate-route-test", DecisionHash: "sha256:decision"}, nil
+}
+
+func (*evaluateRouteCapturingPDP) Backend() pdp.Backend { return pdp.BackendHELM }
+func (*evaluateRouteCapturingPDP) PolicyHash() string   { return "sha256:policy" }
 
 func (r *recordingScopedStopReader) IsFenced(ctx context.Context, scope kernel.StopScope) (kernel.FenceState, bool, error) {
 	r.calls++
@@ -478,7 +491,7 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","args":{"message":"hello"},"agent_id":"attacker","session_id":" canonical-session ","context":{"session_id":"legacy-session","tenant_id":"tenant-attacker"}}`)
+	body := []byte(`{"tool":" EXECUTE_TOOL ","action":"EXECUTE_TOOL","effect_level":" local.echo ","resource":"local.echo","args":{"message":"hello"},"agent_id":"attacker","session_id":" canonical-session ","context":{"session_id":"canonical-session","tenant_id":"tenant-attacker"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, "tenant-trusted")
@@ -493,7 +506,7 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 		t.Fatal("canonical evaluate did not persist a receipt")
 	}
 	if receipts.stored.SessionID != "canonical-session" {
-		t.Fatalf("top-level session must be trimmed and take precedence: receipt=%q", receipts.stored.SessionID)
+		t.Fatalf("matching session aliases must be trimmed: receipt=%q", receipts.stored.SessionID)
 	}
 	if receipts.stored.ExecutorID != "principal-trusted" || receipts.stored.EffectID != "EXECUTE_TOOL" {
 		t.Fatalf("canonical evaluate did not bind authenticated executor/action: %+v", receipts.stored)
@@ -513,6 +526,103 @@ func TestEvaluateRouteAcceptsCanonicalSDKContract(t *testing.T) {
 	}
 	if response.ReceiptID != receipts.stored.ReceiptID || response.DecisionID != receipts.stored.DecisionID || response.DecisionHash != receipts.stored.DecisionHash || response.LamportClock != receipts.stored.LamportClock {
 		t.Fatalf("canonical response does not match persisted V5 receipt: response=%+v receipt=%+v", response, receipts.stored)
+	}
+}
+
+func TestEvaluateRouteRejectsConflictingAliasesBeforeReceiptIssuance(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	for name, body := range map[string]string{
+		"tool and action":             `{"tool":"EXECUTE_TOOL","action":"READ_FILE","effect_level":"local.echo","session_id":"session-tool"}`,
+		"effect level and resource":   `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","resource":"remote.http","session_id":"session-effect"}`,
+		"session and context session": `{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"session-current","context":{"session_id":"session-legacy"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, receipts := newEvaluateRouteTestServices(t)
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("conflicting aliases status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored != nil {
+				t.Fatalf("conflicting aliases persisted receipt: %+v", receipts.stored)
+			}
+		})
+	}
+}
+
+func TestEvaluateRouteRebindsAuthorityContextBeforeGuardian(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+
+	for _, tc := range []struct {
+		name          string
+		workspace     string
+		wantWorkspace bool
+	}{
+		{name: "without authenticated workspace"},
+		{name: "with authenticated workspace", workspace: "workspace-trusted", wantWorkspace: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capturing := &evaluateRouteCapturingPDP{}
+			svc, receipts := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+
+			body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"authority-session","context":{"principal":"principal-attacker","principal_id":"principal-attacker","agent_id":"principal-attacker","tenant":"tenant-attacker","tenantId":"tenant-attacker","tenant_id":"tenant-attacker","workspace":"workspace-attacker","workspaceId":"workspace-attacker","workspace_id":"workspace-attacker","custom":"preserved"}}`)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			if tc.workspace != "" {
+				req.Header.Set(workspaceHeader, tc.workspace)
+			}
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("evaluate status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			if receipts.stored == nil {
+				t.Fatal("evaluate did not persist a receipt")
+			}
+			if capturing.request == nil {
+				t.Fatal("Guardian PDP did not receive the evaluate request")
+			}
+			if capturing.request.Principal != "principal-trusted" {
+				t.Fatalf("Guardian principal = %q", capturing.request.Principal)
+			}
+			if got := capturing.request.Context["principal_id"]; got != "principal-trusted" {
+				t.Fatalf("Guardian principal_id = %#v", got)
+			}
+			if got := capturing.request.Context["tenant_id"]; got != "tenant-trusted" {
+				t.Fatalf("Guardian tenant_id = %#v", got)
+			}
+			if got := capturing.request.Context["custom"]; got != "preserved" {
+				t.Fatalf("non-authority context changed: %#v", got)
+			}
+			for _, key := range []string{"principal", "agent_id", "tenant", "tenantId", "workspace", "workspaceId"} {
+				if value, exists := capturing.request.Context[key]; exists {
+					t.Fatalf("caller authority alias %q reached Guardian: %#v", key, value)
+				}
+			}
+			workspace, exists := capturing.request.Context["workspace_id"]
+			if tc.wantWorkspace {
+				if !exists || workspace != tc.workspace {
+					t.Fatalf("Guardian workspace_id = %#v, exists=%t", workspace, exists)
+				}
+			} else if exists {
+				t.Fatalf("caller workspace_id reached Guardian without an authenticated header: %#v", workspace)
+			}
+		})
 	}
 }
 

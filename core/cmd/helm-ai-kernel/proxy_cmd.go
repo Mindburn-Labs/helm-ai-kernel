@@ -254,15 +254,16 @@ func extractRequestModel(body []byte) string {
 // response. OpenAI: usage.prompt_tokens / usage.completion_tokens / choices[0].finish_reason.
 // Anthropic: usage.input_tokens / usage.output_tokens / stop_reason.
 // Bedrock: model-dependent — handled best-effort via the OpenAI/Anthropic shapes.
-func extractGenAIUsage(body []byte) (inputTokens, outputTokens int64, finishReason string) {
+func extractGenAIUsage(body []byte) (inputTokens, outputTokens int64, usagePresent bool, finishReason string) {
 	if len(body) == 0 {
-		return 0, 0, ""
+		return 0, 0, false, ""
 	}
 	var top map[string]any
 	if err := json.Unmarshal(body, &top); err != nil {
-		return 0, 0, ""
+		return 0, 0, false, ""
 	}
 	if usage, ok := top["usage"].(map[string]any); ok {
+		usagePresent = true
 		inputTokens = pickInt64(usage, "prompt_tokens", "input_tokens")
 		outputTokens = pickInt64(usage, "completion_tokens", "output_tokens")
 	}
@@ -280,7 +281,7 @@ func extractGenAIUsage(body []byte) (inputTokens, outputTokens int64, finishReas
 			finishReason = sr
 		}
 	}
-	return inputTokens, outputTokens, finishReason
+	return inputTokens, outputTokens, usagePresent, finishReason
 }
 
 func pickInt64(m map[string]any, keys ...string) int64 {
@@ -634,7 +635,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			traceparent, _ := reqCtx.Value(ctxKeyTraceparent).(string)
 
 			// Extract OTel GenAI usage from response body.
-			inputTokens, outputTokens, finishReason := extractGenAIUsage(body)
+			inputTokens, outputTokens, usagePresent, finishReason := extractGenAIUsage(body)
 
 			// Parse for tool_calls + PEP validation
 			var chatResp map[string]any
@@ -705,13 +706,17 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 											reasonCode = "PROXY_WALLCLOCK_LIMIT"
 											log.Printf("[DENY] wallclock limit exceeded (%v > %v)", time.Since(sessionStart), maxWallclock)
 										} else {
-											// Preserve token usage as usage evidence, but do not
-											// reinterpret it as cents. With budgeting enabled,
-											// the bridge fails closed until the caller supplies a
-											// trusted monetary price in this breakdown.
-											effectCost := &effects.CostBreakdown{
-												InputTokens:  inputTokens,
-												OutputTokens: outputTokens,
+											// Preserve recognized token usage as evidence, but do
+											// not manufacture a zero-cost breakdown when usage is
+											// absent. Token usage remains unpriced, so a configured
+											// budget fails closed in either case until a trusted
+											// monetary price is supplied.
+											var effectCost *effects.CostBreakdown
+											if usagePresent {
+												effectCost = &effects.CostBreakdown{
+													InputTokens:  inputTokens,
+													OutputTokens: outputTokens,
+												}
 											}
 											govResult, govErr := kb.Govern(context.Background(), toolName, hash, effectCost)
 											if govErr != nil {

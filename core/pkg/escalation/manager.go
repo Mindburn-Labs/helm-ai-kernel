@@ -11,7 +11,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -23,20 +22,14 @@ import (
 type Manager struct {
 	mu      sync.Mutex
 	intents map[string]*contracts.EscalationIntent
-	// approvers accumulates the DISTINCT approver identities recorded against
-	// each pending intent (intentID -> set of approverID). A quorum is only
-	// satisfied once this set reaches the intent's parsed Quorum, so a single
-	// approver can never satisfy a multi-party quorum by acting alone.
-	approvers map[string]map[string]struct{}
-	clock     func() time.Time
+	clock   func() time.Time
 }
 
 // NewManager creates a new escalation manager.
 func NewManager() *Manager {
 	return &Manager{
-		intents:   make(map[string]*contracts.EscalationIntent),
-		approvers: make(map[string]map[string]struct{}),
-		clock:     time.Now,
+		intents: make(map[string]*contracts.EscalationIntent),
+		clock:   time.Now,
 	}
 }
 
@@ -102,15 +95,11 @@ func (m *Manager) CreateIntent(
 	return intent, nil
 }
 
-// Approve records one approver's approval of an escalation intent and enforces
-// separation of duties: the intent only transitions to APPROVED once the number
-// of DISTINCT approvers reaches the intent's parsed Quorum.
-//
-// A single approver can therefore never satisfy a quorum greater than one — the
-// same principal approving twice is rejected, and each distinct approver counts
-// at most once. When the approval is recorded but the quorum is not yet
-// satisfied, the intent stays PENDING and a nil receipt (nil error) is returned;
-// the resolution receipt is only issued on the approval that meets quorum.
+// Approve records a single-party approval. approverID is caller-asserted and
+// therefore cannot establish that two labels represent two independent people,
+// credentials, devices, or keys. Multi-party quorum is refused on this legacy
+// path; callers must use boundary/approvalverify.VerifyQuorum and a durable
+// approval ceremony backed by authority-registry-pinned credentials.
 func (m *Manager) Approve(ctx context.Context, intentID string, approverID string) (*contracts.EscalationReceipt, error) {
 	_ = ctx
 	m.mu.Lock()
@@ -129,7 +118,6 @@ func (m *Manager) Approve(ctx context.Context, intentID string, approverID strin
 	now := m.clock()
 	if now.After(intent.ExpiresAt) {
 		intent.Status = contracts.EscalationStatusTimedOut
-		delete(m.approvers, intentID)
 		return m.createReceipt(intent, now), nil
 	}
 
@@ -138,48 +126,21 @@ func (m *Manager) Approve(ctx context.Context, intentID string, approverID strin
 		return nil, fmt.Errorf("escalation intent %q: approver ID must not be empty", intentID)
 	}
 
-	// Accumulate DISTINCT approvers. The same principal must never advance the
-	// quorum twice, or a single approver could satisfy any quorum by repeating.
-	set := m.approvers[intentID]
-	if set == nil {
-		set = make(map[string]struct{})
-		m.approvers[intentID] = set
-	}
-	if _, seen := set[approverID]; seen {
-		return nil, fmt.Errorf("escalation intent %q already has an approval from %q", intentID, approverID)
-	}
-	set[approverID] = struct{}{}
-
-	// Required distinct approvers, from the parsed approval spec (default 1).
 	quorum := intent.Approval.Quorum
 	if quorum < 1 {
 		quorum = 1
 	}
-
-	// Quorum not yet met: keep the intent PENDING and issue no resolution
-	// receipt. Separation of duties requires more distinct approvers first.
-	if len(set) < quorum {
-		return nil, nil
+	if quorum > 1 {
+		return nil, fmt.Errorf(
+			"escalation intent %q requires a %d-party quorum; verified approver credentials are required",
+			intentID, quorum)
 	}
 
-	// Quorum satisfied by distinct approvers.
 	intent.Status = contracts.EscalationStatusApproved
 	receipt := m.createReceipt(intent, now)
-	receipt.ApprovedBy = sortedApprovers(set)
-	delete(m.approvers, intentID)
+	receipt.ApprovedBy = []string{approverID}
 
 	return receipt, nil
-}
-
-// sortedApprovers returns the approver identities in deterministic order so the
-// receipt's ApprovedBy list is stable across runs.
-func sortedApprovers(set map[string]struct{}) []string {
-	out := make([]string, 0, len(set))
-	for id := range set {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // Deny denies an escalation intent.
@@ -198,7 +159,6 @@ func (m *Manager) Deny(ctx context.Context, intentID, denierID, reason string) (
 	}
 
 	intent.Status = contracts.EscalationStatusDenied
-	delete(m.approvers, intentID)
 	receipt := m.createReceipt(intent, m.clock())
 	receipt.DeniedBy = denierID
 	receipt.DenyReason = reason
@@ -222,7 +182,6 @@ func (m *Manager) CheckTimeouts(ctx context.Context) ([]*contracts.EscalationRec
 		}
 		if now.After(intent.ExpiresAt) {
 			intent.Status = contracts.EscalationStatusTimedOut
-			delete(m.approvers, intent.IntentID)
 			receipts = append(receipts, m.createReceipt(intent, now))
 		}
 	}

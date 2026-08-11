@@ -2,6 +2,7 @@ package escalation
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -223,17 +224,17 @@ func TestApproveExpiredReturnsTimeout(t *testing.T) {
 	}
 }
 
-// TestApproveQuorumRequiresDistinctApprovers is the separation-of-duties gate:
-// a satisfied quorum can NEVER be recorded from a single approver.
+// TestApproveQuorumRejectsAssertedIdentities is the separation-of-duties gate:
+// caller-supplied labels can NEVER establish a verified multi-party quorum.
 //
-// MUTATION CHECK: remove the `if len(set) < quorum { return nil, nil }` guard in
-// Approve (so any single approver falls through to APPROVED) and this test fails
-// at the first assertion, proving it pins the distinct-approver requirement.
-func TestApproveQuorumRequiresDistinctApprovers(t *testing.T) {
+// MUTATION CHECK: remove the `quorum > 1` refusal in Approve and this test fails
+// because one asserted name either approves immediately or two names controlled
+// by one credential manufacture a false quorum.
+func TestApproveQuorumRejectsAssertedIdentities(t *testing.T) {
 	mgr := NewManager()
 
 	dec := testDecision()
-	dec.EscalationTemplate.Quorum = 2 // require two DISTINCT approvers
+	dec.EscalationTemplate.Quorum = 2
 
 	intent, err := mgr.CreateIntent(
 		context.Background(),
@@ -246,102 +247,26 @@ func TestApproveQuorumRequiresDistinctApprovers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// One approver must NOT satisfy a 2-party quorum.
 	receipt, err := mgr.Approve(context.Background(), intent.IntentID, "approver-1")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "verified approver credentials") {
+		t.Fatalf("first asserted identity = (%+v, %v), want verified-credential refusal", receipt, err)
 	}
 	if receipt != nil {
-		t.Fatalf("a single approver must not resolve a quorum-2 intent, got receipt %+v", receipt)
-	}
-	got, _ := mgr.GetIntent(intent.IntentID)
-	if got.Status != contracts.EscalationStatusPending {
-		t.Fatalf("intent must remain PENDING after one of two approvers, got %s", got.Status)
+		t.Fatalf("unverified approval returned a receipt: %+v", receipt)
 	}
 
-	// The same approver repeating must be rejected — it cannot self-satisfy quorum.
-	if _, err := mgr.Approve(context.Background(), intent.IntentID, "approver-1"); err == nil {
-		t.Fatal("expected error when the same approver approves twice")
-	}
-	got, _ = mgr.GetIntent(intent.IntentID)
-	if got.Status != contracts.EscalationStatusPending {
-		t.Fatalf("intent must still be PENDING after a duplicate approval, got %s", got.Status)
-	}
-
-	// A second DISTINCT approver satisfies the quorum.
 	receipt, err = mgr.Approve(context.Background(), intent.IntentID, "approver-2")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "verified approver credentials") {
+		t.Fatalf("second asserted identity = (%+v, %v), want verified-credential refusal", receipt, err)
 	}
-	if receipt == nil || receipt.Outcome != contracts.EscalationStatusApproved {
-		t.Fatalf("two distinct approvers must satisfy quorum-2, got %+v", receipt)
+	if receipt != nil {
+		t.Fatalf("two unverified labels returned a receipt: %+v", receipt)
 	}
-	if len(receipt.ApprovedBy) != 2 {
-		t.Fatalf("expected 2 distinct approvers recorded, got %v", receipt.ApprovedBy)
+	got, getErr := mgr.GetIntent(intent.IntentID)
+	if getErr != nil {
+		t.Fatal(getErr)
 	}
-	if receipt.ApprovedBy[0] != "approver-1" || receipt.ApprovedBy[1] != "approver-2" {
-		t.Fatalf("expected [approver-1 approver-2], got %v", receipt.ApprovedBy)
-	}
-	if mgr.PendingCount() != 0 {
-		t.Fatalf("expected 0 pending after quorum met, got %d", mgr.PendingCount())
-	}
-}
-
-func TestPartialQuorumStateClearedOnDeny(t *testing.T) {
-	mgr := NewManager()
-	dec := testDecision()
-	dec.EscalationTemplate.Quorum = 2
-	intent, err := mgr.CreateIntent(
-		context.Background(), dec, testHeldEffect(), testEscalationContext(),
-		"run-001", "env-001",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	receipt, err := mgr.Approve(context.Background(), intent.IntentID, "approver-1")
-	if err != nil || receipt != nil {
-		t.Fatalf("first approval = (%+v, %v), want (nil, nil)", receipt, err)
-	}
-	if len(mgr.approvers[intent.IntentID]) != 1 {
-		t.Fatalf("partial approval not recorded: %+v", mgr.approvers[intent.IntentID])
-	}
-
-	if _, err := mgr.Deny(context.Background(), intent.IntentID, "denier-1", "risk rejected"); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := mgr.approvers[intent.IntentID]; ok {
-		t.Fatal("terminal denial retained stale partial approvals")
-	}
-}
-
-func TestPartialQuorumStateClearedOnTimeout(t *testing.T) {
-	now := time.Now()
-	elapsed := time.Duration(0)
-	mgr := NewManager().WithClock(func() time.Time { return now.Add(elapsed) })
-	dec := testDecision()
-	dec.EscalationTemplate.Quorum = 2
-	dec.EscalationTemplate.TimeoutSeconds = 5
-	intent, err := mgr.CreateIntent(
-		context.Background(), dec, testHeldEffect(), testEscalationContext(),
-		"run-001", "env-001",
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if receipt, err := mgr.Approve(context.Background(), intent.IntentID, "approver-1"); err != nil || receipt != nil {
-		t.Fatalf("first approval = (%+v, %v), want (nil, nil)", receipt, err)
-	}
-	elapsed = 6 * time.Second
-	receipts, err := mgr.CheckTimeouts(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(receipts) != 1 || receipts[0].Outcome != contracts.EscalationStatusTimedOut {
-		t.Fatalf("timeout receipts = %+v, want one TIMED_OUT receipt", receipts)
-	}
-	if _, ok := mgr.approvers[intent.IntentID]; ok {
-		t.Fatal("terminal timeout retained stale partial approvals")
+	if got.Status != contracts.EscalationStatusPending || mgr.PendingCount() != 1 {
+		t.Fatalf("unverified labels mutated intent status: status=%s pending=%d", got.Status, mgr.PendingCount())
 	}
 }

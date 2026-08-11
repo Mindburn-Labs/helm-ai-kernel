@@ -179,8 +179,9 @@ func (kb *KernelBridge) Graph() *proofgraph.Graph {
 //
 // Token counts remain useful usage evidence, but they are not cents. Missing,
 // negative, overflowing, or internally inconsistent monetary data fails closed.
-// A non-nil all-zero breakdown is an explicit zero-cost effect (for example, a
-// local model) and is therefore distinct from a missing price.
+// An all-zero monetary breakdown is only an explicit zero-cost effect when
+// PriceKnown is true. This prevents an absent provider usage/pricing object
+// from being manufactured into a free effect.
 func budgetCents(cost *effects.CostBreakdown) (int64, error) {
 	if cost == nil {
 		return 0, fmt.Errorf("priced cost breakdown is required")
@@ -204,6 +205,9 @@ func budgetCents(cost *effects.CostBreakdown) (int64, error) {
 	}
 	if cost.InputTokens > 0 || cost.OutputTokens > 0 {
 		return 0, fmt.Errorf("token usage is not a monetary cost")
+	}
+	if !cost.PriceKnown {
+		return 0, fmt.Errorf("monetary price is missing")
 	}
 	return 0, nil
 }

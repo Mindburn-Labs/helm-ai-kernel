@@ -207,6 +207,15 @@ func TestGovern_BudgetRejectsTokenCountsAsMoney(t *testing.T) {
 	assert.Zero(t, dailyUsedCents(got), "token counts must never be persisted as cents")
 }
 
+func TestBudgetCentsRequiresExplicitZeroPrice(t *testing.T) {
+	_, err := budgetCents(&effects.CostBreakdown{})
+	require.ErrorContains(t, err, "monetary price is missing")
+
+	amount, err := budgetCents(&effects.CostBreakdown{PriceKnown: true})
+	require.NoError(t, err)
+	assert.Zero(t, amount, "an explicitly priced free effect must remain representable")
+}
+
 func TestBudgetCentsRejectsInconsistentMonetaryBreakdown(t *testing.T) {
 	_, err := budgetCents(&effects.CostBreakdown{
 		ModelCostCents: 5,

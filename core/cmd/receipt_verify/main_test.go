@@ -177,6 +177,18 @@ func TestParseReceiptsRejectsAmbiguousV5WireFormsInAllRawShapes(t *testing.T) {
 	}
 }
 
+func TestParseReceiptsRejectsDuplicateBundleReceiptsMember(t *testing.T) {
+	receipt, err := os.ReadFile(emptyGovernanceFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := []byte(`{"receipts":[{}],"receipts":[` + string(receipt) + `]}`)
+	_, err = parseReceipts(bundle)
+	if err == nil || !strings.Contains(err.Error(), `duplicate object member "receipts"`) {
+		t.Fatalf("parse error = %v, want duplicate receipts member", err)
+	}
+}
+
 // execute runs the CLI entrypoint with captured stdout/stderr.
 func execute(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()

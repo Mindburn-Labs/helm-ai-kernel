@@ -197,7 +197,7 @@ func ParseReceiptDocument(raw []byte) (map[string]any, error) {
 	if document == nil {
 		return nil, errors.New("receipt must be a JSON object")
 	}
-	if err := rejectDuplicateOrTrailingJSON(raw); err != nil {
+	if err := ValidateJSONStructure(raw); err != nil {
 		return document, err
 	}
 
@@ -276,7 +276,9 @@ func isManagedAgentReceipt(document map[string]any) bool {
 		version == "managed_agent_execution_receipt.v1"
 }
 
-func rejectDuplicateOrTrailingJSON(raw []byte) error {
+// ValidateJSONStructure rejects duplicate object members and trailing JSON
+// values before encoding/json can collapse them during typed decoding.
+func ValidateJSONStructure(raw []byte) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	if err := scanJSONValue(decoder, "$"); err != nil {

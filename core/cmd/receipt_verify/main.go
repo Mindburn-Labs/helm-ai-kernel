@@ -223,6 +223,9 @@ func normalizeReceiptInput(raw []byte) (rawReceiptInput, error) {
 	if len(trimmed) == 0 {
 		return rawReceiptInput{}, fmt.Errorf("input is empty")
 	}
+	if err := receiptverify.ValidateJSONStructure(trimmed); err != nil {
+		return rawReceiptInput{}, err
+	}
 	var input rawReceiptInput
 	switch trimmed[0] {
 	case '[':

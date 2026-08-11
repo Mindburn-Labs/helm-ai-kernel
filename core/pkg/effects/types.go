@@ -61,6 +61,11 @@ type CostBreakdown struct {
 	ModelCostCents int64 `json:"model_cost_cents,omitempty"`
 	ToolCostCents  int64 `json:"tool_cost_cents,omitempty"`
 	TotalCents     int64 `json:"total_cents"`
+	// PriceKnown distinguishes an explicitly priced zero-cost effect from a
+	// breakdown that only carries usage evidence. Non-zero monetary fields are
+	// inherently priced; callers need this flag only when the monetary cost is
+	// deliberately zero (for example, an on-device model).
+	PriceKnown bool `json:"price_known,omitempty"`
 }
 
 // EffectPermit is the canonical authorization token for a single effect execution.

@@ -1,6 +1,6 @@
 ---
 title: Publishing
-last_reviewed: 2026-07-10
+last_reviewed: 2026-08-11
 ---
 
 # Publishing
@@ -93,8 +93,9 @@ Before tagging a release:
 9. after publication, run or confirm `make version-drift-published`
 
 Tag-triggered release workflows fail if the tag `v<version>` does not match
-the checked-in `VERSION` file, the tag's peeled commit is not current Kernel
-`main`, or the catalog OpenAPI differs from the tagged Kernel OpenAPI. The
+the checked-in `VERSION` file, the tag's peeled commit is not reachable from
+current `origin/main` (equal to it or one of its ancestors), or the catalog
+OpenAPI differs from the tagged Kernel OpenAPI. The
 preflight reads catalog `main` with `DOWNSTREAM_FANOUT_TOKEN`; it never opens
 or merges a downstream catalog PR. The chart and SDK package manifests are not
 patched in CI; source-controlled release metadata is the authority.
@@ -135,13 +136,17 @@ The release workflow attaches these assets:
 - `sample-policy-material.tar`
 - `helm-ai-kernel-launchpad-data.tar`
 - `helm-ai-kernel.mcpb`
+- `helm-console-local-sidecar-*`
+- `helm-ai-kernel-*-console.tar.gz`
+- `CONSOLE-SHA256SUMS.txt`
 - `helm-ai-kernel.rb`
 - `v0.8.4.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
-AI Act high-risk reference pack. Browser UI bundles are not Kernel release
-assets and are not installed by the Homebrew formula.
+AI Act high-risk reference pack. The local Console sidecars and standalone
+browser UI layouts are Kernel release assets; the Homebrew formula does not
+install them.
 The retained release workflow attaches a `helm-ai-kernel.rb` formula asset for version `0.8.4`
 and publishes the same version to `mindburnlabs/homebrew-tap`;
 `version-status.json` must include a passing `homebrew-tap` surface before

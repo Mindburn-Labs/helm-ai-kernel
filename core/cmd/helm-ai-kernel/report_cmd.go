@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: reports describe existing classical Ed25519 receipt
+// verification; this command adds no cryptographic control and makes no
+// post-quantum assurance claim.
+
 import (
 	"context"
 	"database/sql"
@@ -133,6 +137,9 @@ func runReportCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%s✅ Report generated%s → %s\n", ColorBold+ColorGreen, ColorReset, outputPath)
 	}
 
+	if !report.ChainIntegrity.Verified {
+		return 1
+	}
 	return 0
 }
 

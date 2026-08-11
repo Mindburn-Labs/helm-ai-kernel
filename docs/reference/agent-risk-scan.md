@@ -1,6 +1,6 @@
 ---
 title: Agent Risk Scan
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-11
 ---
 
 # Agent Risk Scan
@@ -37,6 +37,7 @@ After running `scan`, you can show:
 | Markdown preview | `--preview out.md` |
 | HTML preview | `--preview out.html` |
 | Evidence pack tar | `--evidence-pack pack.tar` |
+| Offline evidence-pack verification | `helm-ai-kernel verify-scan --bundle pack.tar` |
 | Explicit upload | `--upload --upload-url <url> --yes` |
 | Receipt projection | `--from-receipts <dir>` |
 | Local salt | `--salt-file <path>` |
@@ -163,15 +164,40 @@ These values are not exported:
 - secret values;
 - local salts.
 
-The evidence pack contains only:
+The evidence-pack tar contains exactly:
 
+- `evidence-pack.json`, using the generic `contracts.EvidencePack` contract;
 - `risk-envelope.json`;
-- `schema-validation.json`;
-- `privacy-manifest.json`;
-- `source-pack-hash.json`;
-- requested previews.
+- zero or more requested `.md` or `.html` previews under `previews/`.
 
-The raw source pack, raw config files, and raw receipts stay local.
+It adds no independent archive index, seal, signature, or trust format. The raw
+source pack, raw config files, and raw receipts stay local.
+
+## Offline Verification
+
+Verify an archive without uploading it:
+
+```bash
+helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar
+helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar --json
+```
+
+The verifier checks:
+
+- the generic EvidencePack required fields and required
+  `attestation.pack_hash`, including its JCS-computed contract hash;
+- the canonical RiskEnvelope representation, content hash, schema, and privacy
+  non-collection fields;
+- the pack-to-envelope IDs and hashes, plus every declared artifact path and
+  SHA-256 hash;
+- the exact supported layout, rejecting missing, unexpected, unsupported, or
+  hash-mismatched files and unsafe archive entries.
+
+A signature or signer in this local risk-scan pack is rejected as unsupported:
+the scan has no independently trusted signer. `VERIFIED` therefore means local
+artifact integrity only. It does not prove that execution occurred or was
+governed or authorized, nor does it establish runtime provenance or live
+posture.
 
 ## Upload Contract
 

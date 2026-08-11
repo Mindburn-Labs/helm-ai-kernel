@@ -217,7 +217,7 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for {
-			receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, limit)
+			receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, store.ReceiptQueryFilter{}, limit)
 			if err != nil {
 				fmt.Fprintf(w, "event: error\ndata: %q\n\n", err.Error())
 				flusher.Flush()
@@ -275,7 +275,12 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid since cursor")
 			return
 		}
-		receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, limit+1)
+		filter, err := parseReceiptQueryFilter(r)
+		if err != nil {
+			api.WriteBadRequest(w, err.Error())
+			return
+		}
+		receipts, err := listReceiptsForCursor(r.Context(), svc, tenantID, sessionID, cursor, filter, limit+1)
 		if err != nil {
 			api.WriteInternalR(w, r, err)
 			return
@@ -364,8 +369,30 @@ func tenantScopedReceiptReader(svc *Services) (store.TenantScopedReceiptReader, 
 	return reader, nil
 }
 
-func listReceiptsForCursor(ctx context.Context, svc *Services, tenantID, sessionID string, cursor store.TenantReceiptCursor, limit int) ([]*contracts.Receipt, error) {
+func tenantScopedReceiptFilterReader(svc *Services) (store.TenantScopedReceiptFilterReader, error) {
+	if svc == nil || svc.ReceiptStore == nil {
+		return nil, fmt.Errorf("receipt store unavailable")
+	}
+	reader, ok := svc.ReceiptStore.(store.TenantScopedReceiptFilterReader)
+	if !ok {
+		return nil, fmt.Errorf("receipt store lacks tenant-scoped predicate-query capability")
+	}
+	return reader, nil
+}
+
+// listReceiptsForCursor selects the tenant-scoped reader path. A non-empty
+// filter routes through the predicate-query capability; an empty filter keeps
+// the exact prior behaviour (and does not require the filter capability), so
+// the SSE tail loop is unaffected.
+func listReceiptsForCursor(ctx context.Context, svc *Services, tenantID, sessionID string, cursor store.TenantReceiptCursor, filter store.ReceiptQueryFilter, limit int) ([]*contracts.Receipt, error) {
 	if strings.TrimSpace(sessionID) != "" {
+		if !filter.IsZero() {
+			reader, err := tenantScopedReceiptFilterReader(svc)
+			if err != nil {
+				return nil, err
+			}
+			return reader.ListByTenantSessionFiltered(ctx, tenantID, sessionID, cursor.LamportClock, filter, limit)
+		}
 		reader, err := tenantScopedReceiptReader(svc)
 		if err != nil {
 			return nil, err
@@ -375,11 +402,81 @@ func listReceiptsForCursor(ctx context.Context, svc *Services, tenantID, session
 	if svc == nil || svc.ReceiptStore == nil {
 		return nil, fmt.Errorf("receipt store unavailable")
 	}
+	if !filter.IsZero() {
+		reader, ok := svc.ReceiptStore.(store.TenantScopedReceiptFilterReader)
+		if !ok {
+			return nil, fmt.Errorf("receipt store lacks tenant-wide predicate-query capability")
+		}
+		return reader.ListByTenantCursorFiltered(ctx, tenantID, cursor, filter, limit)
+	}
 	reader, ok := svc.ReceiptStore.(store.TenantScopedReceiptCursorReader)
 	if !ok {
 		return nil, fmt.Errorf("receipt store lacks tenant-wide keyset cursor capability")
 	}
 	return reader.ListByTenantCursor(ctx, tenantID, cursor, limit)
+}
+
+// parseReceiptQueryFilter reads the optional predicate dimensions from the
+// query string so a caller can answer "everything denied for reason X in
+// period Y" in one request. Time bounds are RFC3339Nano with at most nine
+// fractional-second digits (from inclusive, to exclusive). principal/executor
+// and effect/resource are accepted as synonyms. Absent params impose no
+// constraint on that dimension.
+func parseReceiptQueryFilter(r *http.Request) (store.ReceiptQueryFilter, error) {
+	q := r.URL.Query()
+	executor := strings.TrimSpace(q.Get("principal"))
+	if executor == "" {
+		executor = strings.TrimSpace(q.Get("executor"))
+	}
+	effect := strings.TrimSpace(q.Get("effect"))
+	if effect == "" {
+		effect = strings.TrimSpace(q.Get("resource"))
+	}
+	filter := store.ReceiptQueryFilter{
+		Verdict:    strings.TrimSpace(q.Get("verdict")),
+		ReasonCode: strings.TrimSpace(q.Get("reason_code")),
+		Executor:   executor,
+		Effect:     effect,
+	}
+	from, err := parseReceiptFilterTime(q.Get("from"))
+	if err != nil {
+		return store.ReceiptQueryFilter{}, fmt.Errorf("invalid from timestamp: %w", err)
+	}
+	to, err := parseReceiptFilterTime(q.Get("to"))
+	if err != nil {
+		return store.ReceiptQueryFilter{}, fmt.Errorf("invalid to timestamp: %w", err)
+	}
+	filter.From = from
+	filter.To = to
+	if !filter.From.IsZero() && !filter.To.IsZero() && !filter.To.After(filter.From) {
+		return store.ReceiptQueryFilter{}, fmt.Errorf("to must be after from")
+	}
+	return filter, nil
+}
+
+func parseReceiptFilterTime(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	const formatError = "must be RFC3339Nano with at most 9 fractional digits"
+	if strings.ContainsRune(raw, ',') {
+		return time.Time{}, fmt.Errorf(formatError)
+	}
+	if dot := strings.IndexByte(raw, '.'); dot >= 0 {
+		fractionalDigits := 0
+		for i := dot + 1; i < len(raw) && raw[i] >= '0' && raw[i] <= '9'; i++ {
+			fractionalDigits++
+		}
+		if fractionalDigits > 9 {
+			return time.Time{}, fmt.Errorf(formatError)
+		}
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf(formatError)
+	}
+	return parsed.UTC(), nil
 }
 
 func receiptForTenant(ctx context.Context, svc *Services, tenantID, receiptID string) (*contracts.Receipt, error) {

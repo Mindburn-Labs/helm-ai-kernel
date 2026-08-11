@@ -197,14 +197,18 @@ The verifier checks:
   non-collection fields;
 - the pack-to-envelope IDs and hashes, plus every declared artifact path and
   SHA-256 hash;
-- the exact supported layout, rejecting missing, unexpected, unsupported, or
-  hash-mismatched files and unsafe archive entries.
+- the supported final extracted-file layout, rejecting missing, unexpected,
+  unsupported, or hash-mismatched files and unsafe archive paths, entry types,
+  and sizes; duplicate normalized archive member paths are not rejected, so
+  this check does not establish archive-entry uniqueness.
 
 A signature or signer in this local risk-scan pack is rejected as unsupported:
-the scan has no independently trusted signer. `VERIFIED` therefore means local
-artifact integrity only. It does not prove that execution occurred or was
-governed or authorized, nor does it establish runtime provenance or live
-posture.
+the scan has no independently trusted signer. `VERIFIED` therefore means
+structural validation and internal hash consistency for the final extracted
+file set. Because the expected hashes are stored in the same unsigned archive,
+it does not establish artifact integrity against an actor who can rewrite that
+archive. It also does not prove that execution occurred or was governed or
+authorized, nor does it establish runtime provenance or live posture.
 
 ## Upload Contract
 

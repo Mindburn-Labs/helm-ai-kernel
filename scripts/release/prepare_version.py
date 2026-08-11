@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -115,6 +116,88 @@ def rewrite_sdk_manifests() -> list[str]:
     return rewritten
 
 
+def refresh_public_docs_api_contract() -> bool:
+    """Repin the public docs manifest against the OpenAPI file this script just bumped.
+
+    docs/public-docs.manifest.json records the api_contract hashes of
+    api/openapi/helm.openapi.yaml, and the version bump above rewrites that
+    file. Leaving the manifest stale fails docs-truth — a blocking gate — with a
+    hash mismatch that reads like an unrelated documentation defect rather than
+    the version bump that caused it.
+
+    git_blob_sha1 is what the committed blob will be: check_documentation_truth
+    resolves it with `git rev-parse HEAD:<path>`, so it is only correct once the
+    commit carrying the bump exists. `git hash-object` on the working tree is
+    that same value, which is why it can be written here. docs-truth still
+    verifies it against HEAD after the commit, so a content filter that made the
+    two diverge would surface there rather than pass silently.
+    """
+    manifest_path = ROOT / "docs" / "public-docs.manifest.json"
+    if not manifest_path.is_file():
+        raise SystemExit(f"required public docs manifest is missing or not a file: {drift.rel(manifest_path)}")
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            f"required public docs manifest is unreadable or invalid: {drift.rel(manifest_path)}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"required public docs manifest must contain a JSON object: {drift.rel(manifest_path)}")
+    contract = payload.get("api_contract")
+    if not isinstance(contract, dict):
+        raise SystemExit(
+            f"required public docs manifest api_contract must be a JSON object: {drift.rel(manifest_path)}"
+        )
+    expected_source = "api/openapi/helm.openapi.yaml"
+    if contract.get("source_path") != expected_source:
+        raise SystemExit(
+            f"required public docs manifest api_contract.source_path must be {expected_source!r}: "
+            f"{drift.rel(manifest_path)}"
+        )
+    source_path = ROOT / expected_source
+    if not source_path.is_file():
+        raise SystemExit(f"required public docs API contract is missing or not a file: {drift.rel(source_path)}")
+
+    digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    blob = subprocess.run(
+        ["git", "hash-object", expected_source],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    before = json.dumps(contract, sort_keys=True, ensure_ascii=False)
+    contract["content_sha256"] = f"sha256:{digest}"
+    contract["git_blob_sha1"] = blob
+    if json.dumps(contract, sort_keys=True, ensure_ascii=False) == before:
+        return False
+    manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return True
+
+
+def refresh_boundary_manifest() -> bool:
+    """Regenerate the protected-surface manifest after the version bump.
+
+    protocols/specs/effects/openapi.yaml carries a version string and is a
+    protected-surface file, so bumping it drifts tools/boundary/protected.manifest
+    and fails the blocking boundary-manifest gate. The generator is the only
+    sanctioned way to rewrite that manifest, so this shells out to it rather than
+    editing hashes in place.
+    """
+    generator = ROOT / "tools" / "boundary" / "generate-manifest.sh"
+    manifest = ROOT / "tools" / "boundary" / "protected.manifest"
+    if not generator.is_file():
+        raise SystemExit(f"required boundary manifest generator is missing or not a file: {drift.rel(generator)}")
+    if not manifest.is_file():
+        raise SystemExit(f"required boundary manifest is missing or not a file: {drift.rel(manifest)}")
+    before = manifest.read_bytes()
+    run([str(generator)])
+    if not manifest.is_file():
+        raise SystemExit(f"boundary manifest generator did not produce a file: {drift.rel(manifest)}")
+    return manifest.read_bytes() != before
+
+
 def warn_missing_console_pin(version: str) -> None:
     """Point at the one per-release declaration this script cannot write.
 
@@ -184,6 +267,13 @@ def main() -> int:
         print("repinned generated-file manifests:")
         for manifest_id in rewritten:
             print(f"- {manifest_id}")
+    # Both of these derive from files the bump above rewrote. Refreshing them
+    # here keeps a version bump from failing docs-truth and boundary-manifest,
+    # which is how v0.8.4 discovered each of them from a red gate.
+    if refresh_public_docs_api_contract():
+        print("repinned docs/public-docs.manifest.json api_contract hashes")
+    if refresh_boundary_manifest():
+        print("regenerated tools/boundary/protected.manifest")
     warn_missing_console_pin(version)
     run(["python3", "scripts/release/check_version_drift.py", "--expected-version", version, "local"])
     return 0

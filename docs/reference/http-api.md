@@ -97,6 +97,16 @@ shape only when `context.session_id` is non-blank. That compatibility path is
 not an SDK contract. Migrate SDK clients to the canonical request and typed
 `EvaluateResponse` before relying on the v0.8 release target.
 
+Do not mix the two forms with different values. If canonical and legacy aliases
+are both present, `tool`/`action`, `effect_level`/`resource`, and top-level
+`session_id`/`context.session_id` must match after trimming. The runtime rejects
+conflicts before policy evaluation or receipt issuance.
+
+Request `context` is not an identity or scope authority. The daemon removes
+caller-supplied principal, tenant, and workspace authority spellings before
+Guardian evaluation, then adds only the canonical values bound by the
+authenticated request. Other context fields are preserved.
+
 Receipt reads are tenant-scoped. Prefer `session_id`; legacy `agent` is an
 alias for that signed session ID and is never an executor filter. A session
 listing accepts `since=lamport:<n>`. A tenant-wide listing must continue with

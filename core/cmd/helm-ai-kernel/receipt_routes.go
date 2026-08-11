@@ -68,35 +68,22 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 		}
-		req.Tool = strings.TrimSpace(req.Tool)
-		if req.Tool == "" {
-			req.Tool = strings.TrimSpace(req.Action)
-		}
-		req.EffectLevel = strings.TrimSpace(req.EffectLevel)
-		if req.EffectLevel == "" {
-			req.EffectLevel = strings.TrimSpace(req.Resource)
-		}
-		if req.Tool == "" || req.EffectLevel == "" {
-			api.WriteBadRequest(w, "Evaluate route requires tool and effect_level")
-			return
-		}
-		req.SessionID = strings.TrimSpace(req.SessionID)
-		if req.SessionID == "" && req.Context != nil {
-			if legacySessionID, ok := req.Context["session_id"].(string); ok {
-				req.SessionID = strings.TrimSpace(legacySessionID)
-			}
-		}
-		if req.SessionID == "" {
-			api.WriteBadRequest(w, "Evaluate route requires a non-blank session_id")
-			return
-		}
-		req.SessionID, err = api.NormalizePublicSessionID(req.SessionID)
-		if err != nil {
-			api.WriteBadRequest(w, "Evaluate route session_id may not contain path separators")
+		if err := api.NormalizeEvaluateRequest(&req); err != nil {
+			api.WriteBadRequest(w, "Evaluate route "+err.Error())
 			return
 		}
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
+		}
+		// Authentication is the only authority for identity and scope. Remove
+		// every authority-bearing spelling recognized by this boundary or
+		// Guardian before publishing canonical authenticated values to policy.
+		for _, key := range []string{
+			"principal", "principal_id", "agent_id",
+			"tenant", "tenantId", "tenant_id",
+			"workspace", "workspaceId", "workspace_id",
+		} {
+			delete(req.Context, key)
 		}
 		req.AgentID = principalID
 		req.Context["principal_id"] = principalID

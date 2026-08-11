@@ -76,7 +76,7 @@ artifact without naming which of the two contracts it means.
 (`*.c14n.json`), the signing payload, the public key, the signature, and named
 negative mutations with expected errors, and where both a Go test of the form
 `Test<X>ReferencePackMatchesGoImplementation` and an independent Python verifier
-run from `make verify-fixtures` (`Makefile:137-154`, CI `.github/workflows/ci.yml:167`).
+run from `make verify-fixtures` (`Makefile:141-159`, CI `.github/workflows/ci.yml:167`).
 
 On conflict, **the specification and its pack win; the Go implementation is the
 bug.** This is not a stylistic preference. If Go won, an independent
@@ -99,8 +99,8 @@ mainline receipt it is the only representation that is field-complete for the
 signed set (`api/openapi/helm.openapi.yaml:4218-4267`, whose own comment at
 `:4227-4228` states the purpose — "so a verifier can reconstruct the signed
 governance view"), and it is the only one behind a backward-compatibility gate
-(`make openapi-breaking` → `oasdiff`, `Makefile:183`,
-`scripts/ci/quality-gates.json:563-573`, run by `make quality-pr` at
+(`make openapi-breaking` → `oasdiff`, `Makefile:205-206`,
+`scripts/ci/quality-gates.json:578-588`, run by `make quality-pr` at
 `.github/workflows/ci.yml:75`).
 
 **JSON Schemas under `protocols/json-schemas/` are derived validation views.**
@@ -331,7 +331,7 @@ description of enforcement.
 | --- | --- | --- |
 | `protocols/proto/**` → all five SDK bindings | `make codegen-check` (`Makefile:456-463`), CI `.github/workflows/ci.yml:292` | **Yes** |
 | `api/openapi/helm.openapi.yaml` → the five SDK `types_gen` files | `make sdk-openapi-check` (`Makefile:108-109` → `scripts/sdk/openapi_check.sh`), CI `ci.yml:294` | **Yes** |
-| `api/openapi/**` backward compatibility | `make openapi-breaking` → `oasdiff --fail-on ERR` (`Makefile:183`, `scripts/ci/contract_breaking.sh:151`), gate `openapi-breaking` in the `pr` profile (`scripts/ci/quality-gates.json:563-573`) run by `make quality-pr` (`ci.yml:75`) | **Yes**, path-scoped to `api/openapi/**` |
+| `api/openapi/**` backward compatibility | `make openapi-breaking` → `oasdiff --fail-on ERR` (`Makefile:205-206`, `scripts/ci/contract_breaking.sh:151`), gate `openapi-breaking` in the `pr` profile (`scripts/ci/quality-gates.json:578-588`) run by `make quality-pr` (`ci.yml:75`) | **Yes**, path-scoped to `api/openapi/**` |
 | OpenAPI operation set ↔ served public routes | `make docs-openapi-parity` → `TestPublicDocsOpenAPIContract` (`core/cmd/helm-ai-kernel/openapi_runtime_routes_test.go:77`) | **Yes**, for routes and operationIds — **not** for schema fields |
 | Reference pack ↔ Go implementation, for the packs listed in D4 | `make verify-fixtures`, run by `.github/workflows/ci.yml` — Go parity test **and** independent Python verifier per pack | **Yes** |
 | `protocols/proto/**` lint and backward compatibility | **Unenforced.** `make proto-lint` runs `buf lint protocols/policy-schema` (`Makefile:177-178`) and `make proto-breaking` diffs `protocols/policy-schema` only (`scripts/ci/contract_breaking.sh:184-186`). No buf module is rooted at `protocols/proto/` (`find . -name 'buf.yaml'` returns only `protocols/policy-schema/buf.yaml`). The file holding the receipt and permit wire contracts has never been lint- or breaking-checked. | **No** |

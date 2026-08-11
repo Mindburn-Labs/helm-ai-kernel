@@ -57,6 +57,12 @@ verify-canonical-json-vectors:
 	cd core && go test ./pkg/canonicalize -run TestCanonicalJSONReferencePackMatchesGoImplementation -count=1
 	python3 reference_packs/canonical-json-v1/verify_vectors.py
 
+.PHONY: verify-effect-permit-vectors
+
+verify-effect-permit-vectors:
+	cd core && go test ./pkg/crypto -run TestEffectPermitReferencePackMatchesGoImplementation -count=1
+	python3 reference_packs/effect-permit-v1/verify_vectors.py
+
 verify-approval-ceremony-vectors:
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
 	cd core && go test ./pkg/boundary/approvalceremony -run TestApprovalCeremonyGoldenVectors -count=1
@@ -134,6 +140,7 @@ verify-fixtures:
 	cd core && go test ./pkg/canonicalize -run TestExtauthzGoldenVectorsAreCanonical -count=1
 	cd core && go test ./pkg/boundary/approvalverify -run TestApprovalReferencePackMatchesGoImplementation -count=1
 	$(MAKE) verify-canonical-json-vectors
+	$(MAKE) verify-effect-permit-vectors
 	$(MAKE) verify-approval-ceremony-vectors
 	$(MAKE) verify-generated-spec-approval-ceremony-vectors
 	$(MAKE) verify-connector-release-authority-vectors

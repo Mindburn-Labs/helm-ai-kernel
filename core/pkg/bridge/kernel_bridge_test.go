@@ -214,6 +214,10 @@ func TestBudgetCentsRequiresExplicitZeroPrice(t *testing.T) {
 	amount, err := budgetCents(&effects.CostBreakdown{PriceKnown: true})
 	require.NoError(t, err)
 	assert.Zero(t, amount, "an explicitly priced free effect must remain representable")
+
+	amount, err = budgetCents(&effects.CostBreakdown{InputTokens: 100, OutputTokens: 25, PriceKnown: true})
+	require.NoError(t, err)
+	assert.Zero(t, amount, "usage evidence must not invalidate an explicitly priced free effect")
 }
 
 func TestBudgetCentsRejectsInconsistentMonetaryBreakdown(t *testing.T) {

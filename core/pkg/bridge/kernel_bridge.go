@@ -203,13 +203,13 @@ func budgetCents(cost *effects.CostBreakdown) (int64, error) {
 	if pricedComponents > 0 {
 		return pricedComponents, nil
 	}
+	if cost.PriceKnown {
+		return 0, nil
+	}
 	if cost.InputTokens > 0 || cost.OutputTokens > 0 {
 		return 0, fmt.Errorf("token usage is not a monetary cost")
 	}
-	if !cost.PriceKnown {
-		return 0, fmt.Errorf("monetary price is missing")
-	}
-	return 0, nil
+	return 0, fmt.Errorf("monetary price is missing")
 }
 
 // appendNode is a helper that marshals the payload and appends to the ProofGraph.

@@ -415,8 +415,8 @@ func TestEvaluateAcceptsCurrentAndLegacyRequestSessions(t *testing.T) {
 		wantTool      string
 	}{
 		{
-			name:          "current top-level session wins",
-			body:          `{"tool":"modern-tool","effect_level":"modern-resource","session_id":"  modern-session  ","context":{"session_id":"context-session"}}`,
+			name:          "matching current and context session",
+			body:          `{"tool":"modern-tool","effect_level":"modern-resource","session_id":"  modern-session  ","context":{"session_id":"modern-session"}}`,
 			wantSessionID: "modern-session",
 			wantTool:      "modern-tool",
 		},
@@ -456,6 +456,30 @@ func TestEvaluateAcceptsCurrentAndLegacyRequestSessions(t *testing.T) {
 			}
 			if receipt.SessionID != tc.wantSessionID || receipt.EffectID != tc.wantTool {
 				t.Fatalf("receipt = session %q, tool %q; want session %q, tool %q", receipt.SessionID, receipt.EffectID, tc.wantSessionID, tc.wantTool)
+			}
+		})
+	}
+}
+
+func TestEvaluateRejectsConflictingCompatibilityAliasesBeforeReceiptIssuance(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "tool and action", body: `{"tool":"modern-tool","action":"legacy-tool","effect_level":"read_file","session_id":"session-tool"}`},
+		{name: "effect level and resource", body: `{"tool":"read_file","effect_level":"modern-resource","resource":"legacy-resource","session_id":"session-effect"}`},
+		{name: "session locations", body: `{"tool":"read_file","effect_level":"read_file","session_id":"modern-session","context":{"session_id":"legacy-session"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newTestServer(t)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(tc.body)))
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("evaluate with conflicting aliases = %d, want 400: %s", w.Code, w.Body.String())
+			}
+			if len(srv.receipts) != 0 {
+				t.Fatalf("conflicting aliases issued receipts: %+v", srv.receipts)
 			}
 		})
 	}

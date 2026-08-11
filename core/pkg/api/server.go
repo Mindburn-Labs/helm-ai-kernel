@@ -321,21 +321,39 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	// The public OpenAPI envelope keeps both shapes optional for compatibility;
 	// the daemon still requires one complete, non-blank effective intent.
 	req.Tool = strings.TrimSpace(req.Tool)
+	legacyTool := strings.TrimSpace(req.Action)
+	if req.Tool != "" && legacyTool != "" && req.Tool != legacyTool {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tool and action must match when both are provided"})
+		return
+	}
 	if req.Tool == "" {
-		req.Tool = strings.TrimSpace(req.Action)
+		req.Tool = legacyTool
 	}
 	req.EffectLevel = strings.TrimSpace(req.EffectLevel)
+	legacyEffectLevel := strings.TrimSpace(req.Resource)
+	if req.EffectLevel != "" && legacyEffectLevel != "" && req.EffectLevel != legacyEffectLevel {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "effect_level and resource must match when both are provided"})
+		return
+	}
 	if req.EffectLevel == "" {
-		req.EffectLevel = strings.TrimSpace(req.Resource)
+		req.EffectLevel = legacyEffectLevel
 	}
 	if req.Tool == "" || req.EffectLevel == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tool and effect_level are required"})
 		return
 	}
 	req.SessionID = strings.TrimSpace(req.SessionID)
-	if req.SessionID == "" && req.Context != nil {
-		req.SessionID, _ = req.Context["session_id"].(string)
-		req.SessionID = strings.TrimSpace(req.SessionID)
+	contextSessionID := ""
+	if req.Context != nil {
+		contextSessionID, _ = req.Context["session_id"].(string)
+		contextSessionID = strings.TrimSpace(contextSessionID)
+	}
+	if req.SessionID != "" && contextSessionID != "" && req.SessionID != contextSessionID {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id must match context.session_id when both are provided"})
+		return
+	}
+	if req.SessionID == "" {
+		req.SessionID = contextSessionID
 	}
 	if req.SessionID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id is required"})

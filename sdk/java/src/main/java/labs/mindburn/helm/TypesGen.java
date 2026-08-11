@@ -21635,7 +21635,7 @@ public static class EnvExposurePolicy {
 
 
 /**
- * Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+ * Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id. When both forms are present, tool/action, effect_level/resource, and session_id/context.session_id must match after trimming; conflicting aliases fail before receipt issuance.
  */
 @JsonPropertyOrder({
   EvaluateRequest.JSON_PROPERTY_PRINCIPAL,

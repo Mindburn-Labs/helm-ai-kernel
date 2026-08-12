@@ -293,31 +293,55 @@ func TestNestedHelpReachesLeafFlagSets(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		args     []string
-		wantCode int
 		wantFlag string
 		parent   string
 	}{
-		{"receipts tail", []string{"receipts", "tail", "--help"}, 2, "-agent string", "Usage: helm-ai-kernel receipts [options]"},
-		{"mcp authorize-call", []string{"mcp", "authorize-call", "--help"}, 2, "-server-id string", "Usage: helm-ai-kernel mcp [options]"},
-		{"workstation verify-decision", []string{"workstation", "verify-decision", "--help"}, 0, "-receipt string", "Usage: helm-ai-kernel workstation [options]"},
-		{"setup install", []string{"setup", "codex", "--help"}, 0, "--scope user|project", "Choose a local agent profile"},
-		{"setup status", []string{"setup", "status", "codex", "--help"}, 0, "Usage: helm-ai-kernel setup status", "Choose a local agent profile"},
-		{"setup remove", []string{"setup", "remove", "codex", "--help"}, 0, "--yes", "Choose a local agent profile"},
-		{"setup quickstart", []string{"setup", "--quickstart", "--help"}, 0, "--console", "Choose a local agent profile"},
-		{"setup support matrix", []string{"setup", "--json", "--help"}, 0, "--json", "Choose a local agent profile"},
-		{"setup print config", []string{"setup", "--client", "cursor", "--print-config", "--help"}, 0, "--print-config", "Choose a local agent profile"},
+		{"receipts tail", []string{"receipts", "tail", "--help"}, "-agent string", "Usage: helm-ai-kernel receipts [options]"},
+		{"mcp authorize-call", []string{"mcp", "authorize-call", "--help"}, "-server-id string", "Usage: helm-ai-kernel mcp [options]"},
+		{"workstation verify-decision", []string{"workstation", "verify-decision", "--help"}, "-receipt string", "Usage: helm-ai-kernel workstation [options]"},
+		{"setup install", []string{"setup", "codex", "--help"}, "--scope user|project", "Choose a local agent profile"},
+		{"setup status", []string{"setup", "status", "codex", "--help"}, "Usage: helm-ai-kernel setup status", "Choose a local agent profile"},
+		{"setup remove", []string{"setup", "remove", "codex", "--help"}, "--yes", "Choose a local agent profile"},
+		{"setup quickstart", []string{"setup", "--quickstart", "--help"}, "--console", "Choose a local agent profile"},
+		{"setup support matrix", []string{"setup", "--json", "--help"}, "--json", "Choose a local agent profile"},
+		{"setup print config", []string{"setup", "--client", "cursor", "--print-config", "--help"}, "--print-config", "Choose a local agent profile"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := Run(append([]string{"helm-ai-kernel"}, tc.args...), &stdout, &stderr)
-			if code != tc.wantCode {
-				t.Fatalf("code=%d want %d stdout=%q stderr=%q", code, tc.wantCode, stdout.String(), stderr.String())
+			if code != 0 || stderr.Len() != 0 {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 			}
-			output := stdout.String() + stderr.String()
+			output := stdout.String()
 			if !strings.Contains(output, tc.wantFlag) || strings.Contains(output, tc.parent) {
 				t.Fatalf("leaf help not reached: %q", output)
 			}
 		})
+	}
+}
+
+func TestHelpPathForwardsCompletePath(t *testing.T) {
+	isolateDiscoverabilityTest(t)
+
+	for _, path := range [][]string{{"receipts", "tail"}, {"mcp", "authorize-call"}} {
+		forms := [][]string{
+			append([]string{"helm-ai-kernel", "help"}, path...),
+			append(append([]string{"helm-ai-kernel"}, path...), "--help"),
+			append(append([]string{"helm-ai-kernel"}, path...), "-h"),
+			append(append([]string{"helm-ai-kernel"}, path...), "help"),
+		}
+		var want string
+		for _, args := range forms {
+			var stdout, stderr bytes.Buffer
+			if code := Run(args, &stdout, &stderr); code != 0 || stderr.Len() != 0 {
+				t.Fatalf("args=%v code=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
+			}
+			if want == "" {
+				want = stdout.String()
+			} else if stdout.String() != want {
+				t.Fatalf("args=%v did not reach the same leaf\nwant=%q\ngot=%q", args, want, stdout.String())
+			}
+		}
 	}
 }
 

@@ -156,7 +156,11 @@ func runHelpCommand(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(args) > 0 {
-		if code, ok := Dispatch(args[0], []string{"--help"}, stdout, stderr); ok {
+		path := append([]string(nil), args[1:]...)
+		if !isHelpRequest(path) {
+			path = append(path, "--help")
+		}
+		if code, ok := Dispatch(args[0], path, stdout, stderr); ok {
 			return code
 		}
 		printGlobalCommandHelp(args[0], stdout)

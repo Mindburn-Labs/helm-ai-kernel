@@ -70,18 +70,20 @@ func TestWrapEdgeHandlerDropsInboundTraceWithoutSDK(t *testing.T) {
 	prev := otel.GetTracerProvider()
 	otel.SetTracerProvider(noop.NewTracerProvider())
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	reader := recordEdgeMetrics(t)
 
 	var logs bytes.Buffer
 	logger := slog.New(tracing.NewSlogHandler(slog.NewTextHandler(&logs, nil)))
 	var innerSpan oteltrace.SpanContext
-	inner := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /probe/{id}", func(_ http.ResponseWriter, r *http.Request) {
 		innerSpan = oteltrace.SpanContextFromContext(r.Context())
 		logger.ErrorContext(r.Context(), "probe")
 	})
-	h := tracing.WrapEdgeHandler(inner, "test.edge")
+	h := tracing.WrapEdgeHandler(mux, "test.edge")
 
 	const inboundTraceID = "4bf92f3577b34da6a3ce929d0e0e4736"
-	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req := httptest.NewRequest(http.MethodGet, "/probe/abc123", nil)
 	req.Header.Set("traceparent", "00-"+inboundTraceID+"-00f067aa0ba902b7-01")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -90,5 +92,8 @@ func TestWrapEdgeHandlerDropsInboundTraceWithoutSDK(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), inboundTraceID) {
 		t.Fatalf("log adopted untrusted trace_id without an SDK: %s", logs.String())
+	}
+	if got := durationRoutes(t, reader); !equalStrings(got, []string{"/probe/{id}"}) {
+		t.Fatalf("routed no-SDK request metric routes = %v, want [/probe/{id}]", got)
 	}
 }

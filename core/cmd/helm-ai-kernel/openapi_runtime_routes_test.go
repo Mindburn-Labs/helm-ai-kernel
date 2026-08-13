@@ -201,8 +201,8 @@ func TestBoundaryStatusOpenAPIMatchesRuntimeContract(t *testing.T) {
 			t.Errorf("BoundaryStatus.%s minimum=%v, want 0", name, minimum)
 		}
 	}
-	if additional := schema.Properties["components"].AdditionalProperties; additional == nil || additional.Type != "string" {
-		t.Errorf("BoundaryStatus.components additionalProperties=%+v, want string values", additional)
+	if got := openAPIAdditionalPropertiesType(t, schema.Properties["components"].AdditionalProperties); got != "string" {
+		t.Errorf("BoundaryStatus.components additionalProperties type=%q, want string values", got)
 	}
 
 	registry := boundarypkg.NewSurfaceRegistry(func() time.Time {
@@ -232,18 +232,99 @@ func TestBoundaryStatusOpenAPIMatchesRuntimeContract(t *testing.T) {
 	}
 }
 
+func TestRequestBodyContractMatchesRuntime(t *testing.T) {
+	schemas := readOpenAPIRequestBodySchemas(t)
+	contracts := requestBodyRuntimeContracts()
+	allowlisted := 0
+
+	for key, schema := range schemas {
+		contract, ok := contracts[key]
+		if !ok {
+			t.Errorf("OpenAPI requestBody %s is missing a runtime classification", key)
+			continue
+		}
+		if contract.Source == "" {
+			t.Errorf("requestBody classification %s is missing source ownership", key)
+			continue
+		}
+		if contract.Type == nil {
+			if strings.TrimSpace(contract.Reason) == "" {
+				t.Errorf("allowlisted requestBody %s (%s) is missing a concrete reason", key, contract.Source)
+			}
+			allowlisted++
+			continue
+		}
+
+		properties, required := jsonObjectContractFromType(t, contract.Type)
+		unexpectedProperties := make([]string, 0, len(schema.Properties))
+		for name := range schema.Properties {
+			if !containsString(properties, name) {
+				unexpectedProperties = append(unexpectedProperties, name)
+			}
+		}
+		sort.Strings(unexpectedProperties)
+		if len(unexpectedProperties) > 0 {
+			t.Errorf("%s OpenAPI requestBody exposes properties absent from runtime contract at %s: %v", key, contract.Source, unexpectedProperties)
+		}
+
+		missingRequired := make([]string, 0, len(schema.Required))
+		for _, name := range uniqueSorted(schema.Required) {
+			if !containsString(required, name) {
+				missingRequired = append(missingRequired, name)
+			}
+		}
+		if len(missingRequired) > 0 {
+			t.Errorf("%s OpenAPI requestBody marks fields required that runtime does not require at %s: %v", key, contract.Source, missingRequired)
+		}
+	}
+
+	for key, contract := range contracts {
+		if _, ok := schemas[key]; ok {
+			continue
+		}
+		t.Errorf("requestBody classification %s (%s) has no matching OpenAPI requestBody operation", key, contract.Source)
+	}
+
+	t.Logf("HELM-481 allowlisted requestBody operations pending follow-up: %d", allowlisted)
+}
+
 type openAPISchemaProperty struct {
-	Type                 string                 `yaml:"type"`
-	Format               string                 `yaml:"format"`
-	Enum                 []string               `yaml:"enum"`
-	Minimum              *int                   `yaml:"minimum"`
-	AdditionalProperties *openAPISchemaProperty `yaml:"additionalProperties"`
+	Type                 string    `yaml:"type"`
+	Format               string    `yaml:"format"`
+	Enum                 []string  `yaml:"enum"`
+	Minimum              *int      `yaml:"minimum"`
+	AdditionalProperties yaml.Node `yaml:"additionalProperties"`
 }
 
 type openAPIObjectSchema struct {
 	Type       string                           `yaml:"type"`
 	Required   []string                         `yaml:"required"`
 	Properties map[string]openAPISchemaProperty `yaml:"properties"`
+}
+
+type openAPISpec struct {
+	Paths      map[string]map[string]openAPIOperation `yaml:"paths"`
+	Components struct {
+		Schemas map[string]yaml.Node `yaml:"schemas"`
+	} `yaml:"components"`
+}
+
+type openAPIOperation struct {
+	RequestBody openAPIRequestBody `yaml:"requestBody"`
+}
+
+type openAPIRequestBody struct {
+	Content map[string]openAPIMediaType `yaml:"content"`
+}
+
+type openAPIMediaType struct {
+	Schema yaml.Node `yaml:"schema"`
+}
+
+type requestBodyRuntimeContract struct {
+	Type   reflect.Type
+	Source string
+	Reason string
 }
 
 func readOpenAPIBoundaryStatusSchema(t *testing.T) openAPIObjectSchema {
@@ -274,6 +355,64 @@ func readOpenAPIBoundaryStatusSchema(t *testing.T) openAPIObjectSchema {
 	return schema
 }
 
+func readOpenAPIRequestBodySchemas(t *testing.T) map[string]openAPIObjectSchema {
+	t.Helper()
+	data, err := readOpenAPIFromRepository()
+	if err != nil {
+		t.Fatalf("read OpenAPI: %v", err)
+	}
+	var spec openAPISpec
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		t.Fatalf("parse OpenAPI: %v", err)
+	}
+
+	schemas := map[string]openAPIObjectSchema{}
+	for path, operations := range spec.Paths {
+		for method, operation := range operations {
+			switch method {
+			case "delete", "patch", "post", "put":
+			default:
+				continue
+			}
+			mediaType, ok := operation.RequestBody.Content["application/json"]
+			if !ok {
+				mediaType, ok = operation.RequestBody.Content["multipart/form-data"]
+			}
+			if !ok || mediaType.Schema.Kind == 0 {
+				continue
+			}
+			schema := decodeOpenAPIObjectSchema(t, spec, mediaType.Schema)
+			key := strings.ToUpper(method) + " " + path
+			schemas[key] = schema
+		}
+	}
+	return schemas
+}
+
+func decodeOpenAPIObjectSchema(t *testing.T, spec openAPISpec, node yaml.Node) openAPIObjectSchema {
+	t.Helper()
+	var ref struct {
+		Ref string `yaml:"$ref"`
+	}
+	if err := node.Decode(&ref); err != nil {
+		t.Fatalf("decode OpenAPI schema ref: %v", err)
+	}
+	if ref.Ref != "" {
+		schemaName := strings.TrimPrefix(ref.Ref, "#/components/schemas/")
+		refNode, ok := spec.Components.Schemas[schemaName]
+		if !ok {
+			t.Fatalf("OpenAPI is missing components.schemas.%s", schemaName)
+		}
+		return decodeOpenAPIObjectSchema(t, spec, refNode)
+	}
+
+	var schema openAPIObjectSchema
+	if err := node.Decode(&schema); err != nil {
+		t.Fatalf("decode OpenAPI object schema: %v", err)
+	}
+	return schema
+}
+
 func boundaryStatusJSONContract(t *testing.T) ([]string, []string) {
 	t.Helper()
 	typeOfStatus := reflect.TypeOf(contracts.BoundaryStatus{})
@@ -284,6 +423,40 @@ func boundaryStatusJSONContract(t *testing.T) ([]string, []string) {
 		parts := strings.Split(field.Tag.Get("json"), ",")
 		if len(parts) == 0 || parts[0] == "" || parts[0] == "-" {
 			t.Fatalf("BoundaryStatus.%s has no public JSON property", field.Name)
+		}
+		properties = append(properties, parts[0])
+		optional := false
+		for _, option := range parts[1:] {
+			if option == "omitempty" {
+				optional = true
+				break
+			}
+		}
+		if !optional {
+			required = append(required, parts[0])
+		}
+	}
+	sort.Strings(properties)
+	sort.Strings(required)
+	return properties, required
+}
+
+func jsonObjectContractFromType(t *testing.T, typ reflect.Type) ([]string, []string) {
+	t.Helper()
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ.Kind() != reflect.Struct {
+		t.Fatalf("runtime request contract type %s is not a struct", typ)
+	}
+
+	properties := make([]string, 0, typ.NumField())
+	required := make([]string, 0, typ.NumField())
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		parts := strings.Split(field.Tag.Get("json"), ",")
+		if len(parts) == 0 || parts[0] == "" || parts[0] == "-" {
+			t.Fatalf("%s.%s has no public JSON property", typ.Name(), field.Name)
 		}
 		properties = append(properties, parts[0])
 		optional := false
@@ -328,6 +501,25 @@ func boundaryStatusOpenAPIType(t *testing.T, propertyName string) string {
 	return ""
 }
 
+func openAPIAdditionalPropertiesType(t *testing.T, node yaml.Node) string {
+	t.Helper()
+	if node.Kind == 0 {
+		return ""
+	}
+	var boolean bool
+	if err := node.Decode(&boolean); err == nil {
+		if boolean {
+			return "any"
+		}
+		return ""
+	}
+	var property openAPISchemaProperty
+	if err := node.Decode(&property); err != nil {
+		t.Fatalf("decode additionalProperties: %v", err)
+	}
+	return property.Type
+}
+
 func uniqueSorted(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	unique := make([]string, 0, len(values))
@@ -340,6 +532,233 @@ func uniqueSorted(values []string) []string {
 	}
 	sort.Strings(unique)
 	return unique
+}
+
+func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
+	return map[string]requestBodyRuntimeContract{
+		"POST /api/v1/kernel/approve": {
+			Type:   reflect.TypeOf(contracts.ApprovalReceipt{}),
+			Source: "core/pkg/api/approve_handler.go:83",
+		},
+		"POST /api/v1/approvals": {
+			Type: reflect.TypeOf(struct {
+				ApprovalID  string   `json:"approval_id"`
+				Subject     string   `json:"subject"`
+				Action      string   `json:"action"`
+				RequestedBy string   `json:"requested_by"`
+				Approvers   []string `json:"approvers"`
+				Quorum      int      `json:"quorum"`
+				TimelockMs  int64    `json:"timelock_ms"`
+				ExpiresInMs int64    `json:"expires_in_ms"`
+				Reason      string   `json:"reason"`
+				ReceiptID   string   `json:"receipt_id"`
+				BreakGlass  bool     `json:"break_glass"`
+			}{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1217",
+		},
+		"POST /api/v1/approvals/{approval_id}/webauthn/challenge": {
+			Type: reflect.TypeOf(struct {
+				Method string `json:"method"`
+				TTLMS  int64  `json:"ttl_ms"`
+			}{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1281",
+		},
+		"POST /api/v1/approvals/{approval_id}/webauthn/assert": {
+			Type:   reflect.TypeOf(contracts.ApprovalWebAuthnAssertion{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1295",
+		},
+		"POST /api/v1/approvals/{approval_id}/{action}": {
+			Type: reflect.TypeOf(struct {
+				ReceiptID            string `json:"receipt_id"`
+				Reason               string `json:"reason"`
+				ExpectedCeremonyHash string `json:"expected_ceremony_hash"`
+			}{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1312",
+		},
+		"POST /api/v1/harness/change-contracts/{change_id}/approve": {
+			Type: reflect.TypeOf(struct {
+				ReceiptRef string `json:"receipt_ref"`
+			}{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:555",
+		},
+		"PUT /api/v1/budgets/{budget_id}": {
+			Type:   reflect.TypeOf(contracts.BudgetCeiling{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1372",
+		},
+		"POST /api/v1/telemetry/export": {
+			Type:   reflect.TypeOf(contracts.TelemetryExportRequest{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1421",
+		},
+		"POST /api/v1/mcp/scan": {
+			Type:   reflect.TypeOf(contracts.MCPScanRequest{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:897",
+		},
+		"PUT /api/v1/mcp/auth-profiles/{profile_id}": {
+			Type:   reflect.TypeOf(contracts.MCPAuthorizationProfile{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:955",
+		},
+		"POST /api/v1/mcp/authorize-call": {
+			Type:   reflect.TypeOf(contracts.MCPAuthorizeCallRequest{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:971",
+		},
+		"POST /api/v1/sandbox/preflight": {
+			Type:   reflect.TypeOf(contracts.SandboxPreflightRequest{}),
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1108",
+		},
+
+		"POST /api/demo/run": {
+			Source: "core/cmd/helm-ai-kernel/demo_routes.go:103",
+			Reason: "inline runtime request shape not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/demo/verify": {
+			Source: "core/cmd/helm-ai-kernel/demo_routes.go:176",
+			Reason: "inline runtime request shape not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/demo/tamper": {
+			Source: "core/cmd/helm-ai-kernel/demo_routes.go:194",
+			Reason: "inline runtime request shape not yet classified in HELM-481 phase 1",
+		},
+		"POST /v1/chat/completions": {
+			Source: "core/pkg/api/openai_proxy.go:83",
+			Reason: "proxy request contract spans compatibility surface and is deferred to a follow-up slice",
+		},
+		"POST /api/v1/evaluate": {
+			Source: "core/cmd/helm-ai-kernel/receipt_routes.go:40",
+			Reason: "shared evaluation compatibility envelope is deferred to a follow-up slice",
+		},
+		"POST /api/v1/local-session/exchange": {
+			Source: "core/cmd/helm-ai-kernel/local_first_run_routes.go",
+			Reason: "local-first bootstrap request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/onboarding/run-step": {
+			Source: "core/cmd/helm-ai-kernel/local_first_run_routes.go",
+			Reason: "local-first onboarding request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/agent-ui/run": {
+			Source: "core/cmd/helm-ai-kernel/console_agui_routes.go:64",
+			Reason: "agent UI runtime request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/plan": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad planning request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/launch": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad launch request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/imports": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad import request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/runs": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad run creation request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/runs/{run_id}/teardown": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad teardown request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/policy/simulate": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad policy simulation request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/mcp/approvals": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad MCP approval request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/secrets": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad secret binding request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/launchpad/launches/{launch_id}/delete": {
+			Source: "core/cmd/helm-ai-kernel/launchpad_routes.go",
+			Reason: "launchpad delete request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/ag-ui/run": {
+			Source: "core/cmd/helm-ai-kernel/console_agui_routes.go:64",
+			Reason: "compat AGUI request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/trust/keys/add": {
+			Source: "core/pkg/api/trust_keys_handler.go:39",
+			Reason: "trust-key request package is deferred to a follow-up slice",
+		},
+		"POST /api/v1/trust/keys/revoke": {
+			Source: "core/pkg/api/trust_keys_handler.go:83",
+			Reason: "trust-key request package is deferred to a follow-up slice",
+		},
+		"POST /mcp": {
+			Source: "core/pkg/mcp/gateway.go:171",
+			Reason: "JSON-RPC request contract is deferred to a follow-up slice",
+		},
+		"POST /api/v1/evidence/export": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "evidence export request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/evidence/verify": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "evidence verify request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/evidence/verification-scopes": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "verification-scope request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/telemetry/harness-traces": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "harness trace request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/plans/transactions": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "plan-transaction request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/harness/change-contracts": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "harness contract creation request not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/gui/receipts/verify": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "GUI receipt verification request not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/evidence/envelopes": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "evidence envelope request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/replay/verify": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "replay verification request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/conformance/run": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "conformance run request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/mcp/registry": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:808",
+			Reason: "MCP registry discovery request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/mcp/registry/approve": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:847",
+			Reason: "approval-verification-unavailable endpoint intentionally ignores body fields and is deferred",
+		},
+		"POST /api/v1/mcp/registry/{server_id}/approve": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:873",
+			Reason: "approval-verification-unavailable endpoint intentionally ignores body fields and is deferred",
+		},
+		"POST /api/v1/mcp/registry/{server_id}/revoke": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go:878",
+			Reason: "MCP revoke request contract not yet classified in HELM-481 phase 1",
+		},
+		"POST /mcp/v1/execute": {
+			Source: "core/pkg/mcp/gateway.go:297",
+			Reason: "MCP execute request contract is deferred to a follow-up slice",
+		},
+		"POST /api/v1/sandbox/grants": {
+			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
+			Reason: "sandbox grant creation request not yet classified in HELM-481 phase 1",
+		},
+		"POST /api/v1/authz/check": {
+			Source: "core/cmd/helm-ai-kernel/subsystems.go:116",
+			Reason: "authz check request contract not yet classified in HELM-481 phase 1",
+		},
+	}
 }
 
 func TestRuntimeRouteRegistryHasExplicitSecurityMetadata(t *testing.T) {

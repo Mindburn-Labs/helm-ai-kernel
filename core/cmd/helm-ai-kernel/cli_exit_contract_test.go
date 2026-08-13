@@ -72,14 +72,16 @@ func TestApprovalsAssertKeepsJSONExitStatusWhileQuorumIsPending(t *testing.T) {
 		registry := boundarypkg.NewSurfaceRegistry(time.Now)
 		now := time.Now().UTC()
 		_, err := registry.PutApproval(contracts.ApprovalCeremony{
-			ApprovalID:  "approval-quorum",
-			Subject:     "deploy",
-			Action:      "approve",
-			State:       contracts.ApprovalCeremonyPending,
-			RequestedBy: "agent:requester",
-			Quorum:      2,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			ApprovalID:    "approval-quorum",
+			Subject:       "deploy",
+			Action:        "approve",
+			State:         contracts.ApprovalCeremonyPending,
+			RequestedBy:   "agent:requester",
+			Quorum:        2,
+			TimelockUntil: now.Add(-time.Minute),
+			ExpiresAt:     now.Add(time.Hour),
+			CreatedAt:     now,
+			UpdatedAt:     now,
 		})
 		if err != nil {
 			t.Fatal(err)

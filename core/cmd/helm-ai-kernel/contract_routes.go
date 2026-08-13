@@ -1212,17 +1212,17 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			writeContractJSON(w, http.StatusOK, surfaces.ListApprovals())
 		case http.MethodPost:
 			var req struct {
-				ApprovalID  string   `json:"approval_id"`
-				Subject     string   `json:"subject"`
-				Action      string   `json:"action"`
-				RequestedBy string   `json:"requested_by"`
-				Approvers   []string `json:"approvers"`
-				Quorum      int      `json:"quorum"`
-				TimelockMs  int64    `json:"timelock_ms"`
-				ExpiresInMs int64    `json:"expires_in_ms"`
-				Reason      string   `json:"reason"`
-				ReceiptID   string   `json:"receipt_id"`
-				BreakGlass  bool     `json:"break_glass"`
+				ApprovalID    string    `json:"approval_id"`
+				Subject       string    `json:"subject"`
+				Action        string    `json:"action"`
+				RequestedBy   string    `json:"requested_by"`
+				Approvers     []string  `json:"approvers"`
+				Quorum        int       `json:"quorum"`
+				TimelockUntil time.Time `json:"timelock_until"`
+				ExpiresAt     time.Time `json:"expires_at"`
+				Reason        string    `json:"reason"`
+				ReceiptID     string    `json:"receipt_id"`
+				BreakGlass    bool      `json:"break_glass"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				api.WriteBadRequest(w, "Invalid approval request")
@@ -1231,15 +1231,11 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			if req.ApprovalID == "" {
 				req.ApprovalID = contracts.SurfaceID("approval", req.Subject+"-"+req.Action)
 			}
+			if req.TimelockUntil.IsZero() || req.ExpiresAt.IsZero() {
+				api.WriteBadRequest(w, "timelock_until and expires_at are required")
+				return
+			}
 			now := time.Now().UTC()
-			var timelock time.Time
-			if req.TimelockMs > 0 {
-				timelock = now.Add(time.Duration(req.TimelockMs) * time.Millisecond)
-			}
-			var expires time.Time
-			if req.ExpiresInMs > 0 {
-				expires = now.Add(time.Duration(req.ExpiresInMs) * time.Millisecond)
-			}
 			approval, err := surfaces.PutApproval(contracts.ApprovalCeremony{
 				ApprovalID:    req.ApprovalID,
 				Subject:       req.Subject,
@@ -1248,8 +1244,8 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 				RequestedBy:   req.RequestedBy,
 				Approvers:     req.Approvers,
 				Quorum:        req.Quorum,
-				TimelockUntil: timelock,
-				ExpiresAt:     expires,
+				TimelockUntil: req.TimelockUntil,
+				ExpiresAt:     req.ExpiresAt,
 				BreakGlass:    req.BreakGlass,
 				Reason:        req.Reason,
 				ReceiptID:     req.ReceiptID,

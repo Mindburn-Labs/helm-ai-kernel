@@ -1486,13 +1486,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          set +e
           VERSION="${GITHUB_REF_NAME#v}"
+          status=0
           for attempt in $(seq 1 40); do
-            if python3 scripts/release/check_version_drift.py \
+            python3 scripts/release/check_version_drift.py \
               --expected-version "$VERSION" \
               published \
-              --surface-timeout 10; then
+              --surface-timeout 10 \
+              --rate-limit-retries 1
+            status=$?
+            if [ "$status" -eq 0 ]; then
               exit 0
             fi
             if [ "$attempt" -lt 40 ]; then
@@ -1500,6 +1505,10 @@ jobs:
               sleep 30
             fi
           done
+          if [ "$status" -eq 75 ]; then
+            echo "::warning::Published version surfaces stayed unreadable within the bounded retry budget (rate limited); reporting unknown rather than drift."
+            exit 0
+          fi
           echo "::error::Published version surfaces did not converge within the bounded retry budget."
           exit 1
       - name: Check full published version status
@@ -1507,11 +1516,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          set -uo pipefail
+          set +e
           VERSION="${GITHUB_REF_NAME#v}"
           python3 scripts/release/check_version_drift.py \
             --expected-version "$VERSION" \
             --write-status version-status.json \
             published
+          status=$?
+          if [ "$status" -eq 75 ]; then
+            echo "::warning::At least one published surface could not be read (rate limited); version-status.json records it as unknown, not drift."
+            exit 0
+          fi
+          exit "$status"
       - name: Replace release version status with full post-release status
         if: success()
         env:

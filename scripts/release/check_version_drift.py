@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Check release version drift across local source and published surfaces."""
+"""Check release version drift across local source and published surfaces.
+
+Exit codes: 0 when every checked surface matches, 1 when a blocking surface
+drifted, and 75 when nothing drifted but at least one surface stayed unreadable
+after the bounded rate-limit retry budget. An unreadable surface is reported as
+unknown so a throttled read never masquerades as a version mismatch.
+"""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +18,7 @@ import re
 import socket
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,6 +31,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONTRACT = ROOT / "release" / "version-surfaces.yaml"
 REQUEST_TIMEOUT_SECONDS = 30.0
+RATE_LIMIT_RETRY_ATTEMPTS = 3
+RATE_LIMIT_BACKOFF_SECONDS = 2.0
+RATE_LIMIT_MAX_BACKOFF_SECONDS = 30.0
+# A surface the checker could not read. It is not a drift verdict: the published
+# value is unknown, so it must never be reported as a version mismatch.
+STATUS_UNKNOWN = "unknown"
+# EX_TEMPFAIL. Nothing drifted, but at least one surface could not be read.
+EXIT_UNKNOWN = 75
 SEMVER_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 SEMVER_TAG_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
 REJECT_TOKEN_SUFFIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.+-"
@@ -35,6 +50,21 @@ GHCR_MANIFEST_ACCEPT = ", ".join(
         "application/vnd.docker.distribution.manifest.v2+json",
     ]
 )
+
+
+class SurfaceUnreadable(Exception):
+    """A surface stayed unreadable after the bounded rate-limit retry budget.
+
+    Raised only for transport-level refusals to serve the response (rate
+    limiting), never for a response that carried a version. Callers turn it into
+    an ``unknown`` surface result so a throttled read is never counted as drift.
+    """
+
+    def __init__(self, url: str, attempts: int, cause: Exception) -> None:
+        super().__init__(f"could not read {url} after {attempts} attempt(s): {type(cause).__name__}: {cause}")
+        self.url = url
+        self.attempts = attempts
+        self.cause = cause
 
 
 @dataclass
@@ -223,27 +253,109 @@ def http_request(
     return request
 
 
+def header_value(exc: urllib.error.HTTPError, name: str) -> str:
+    headers = getattr(exc, "headers", None) or {}
+    getter = getattr(headers, "get", None)
+    if getter is None:
+        return ""
+    value = getter(name)
+    if value is None and isinstance(headers, dict):
+        lowered = name.lower()
+        value = next((item for key, item in headers.items() if str(key).lower() == lowered), None)
+    return "" if value is None else str(value).strip()
+
+
+def is_rate_limited(exc: urllib.error.HTTPError) -> bool:
+    """Report whether a response is a refusal to serve rather than an answer.
+
+    GitHub answers an exhausted quota with 403 plus `x-ratelimit-remaining: 0`,
+    and a secondary limit with 403 plus `retry-after`; other hosts use 429. A
+    plain 403 stays a normal result, so surfaces that treat 403 as an expected
+    status keep their current behaviour and cost no retries.
+    """
+    if exc.code == 429:
+        return True
+    if exc.code != 403:
+        return False
+    if header_value(exc, "x-ratelimit-remaining") == "0":
+        return True
+    if header_value(exc, "retry-after"):
+        return True
+    reason = str(getattr(exc, "reason", "") or "").lower()
+    return "rate limit" in reason or "too many requests" in reason
+
+
+def rate_limit_backoff(exc: urllib.error.HTTPError, attempt: int) -> float:
+    retry_after = header_value(exc, "retry-after")
+    delay = RATE_LIMIT_BACKOFF_SECONDS * (2 ** (attempt - 1))
+    if retry_after:
+        try:
+            delay = float(retry_after)
+        except ValueError:
+            pass
+    return max(0.0, min(delay, RATE_LIMIT_MAX_BACKOFF_SECONDS))
+
+
+def urlopen_with_retry(request: urllib.request.Request) -> Any:
+    """Open a request, retrying rate-limit refusals with bounded backoff.
+
+    Raises SurfaceUnreadable when the host keeps refusing; every other error
+    propagates unchanged so real failures keep their existing handling.
+    """
+    attempts = max(1, RATE_LIMIT_RETRY_ATTEMPTS)
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS)
+        except urllib.error.HTTPError as exc:
+            if not is_rate_limited(exc):
+                raise
+            if attempt >= attempts:
+                raise SurfaceUnreadable(request.full_url, attempts, exc) from exc
+            delay = rate_limit_backoff(exc, attempt)
+            print(
+                f"rate limited by {urllib.parse.urlsplit(request.full_url).hostname} "
+                f"(HTTP {exc.code}); retrying in {delay:g}s ({attempt}/{attempts - 1})",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+
+
 def request_json(url: str) -> Any:
     req = http_request(url)
-    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+    with urlopen_with_retry(req) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def request_bytes(url: str) -> bytes:
     req = http_request(url, extra={"Accept": "application/octet-stream, */*"})
-    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+    with urlopen_with_retry(req) as response:
         return response.read()
 
 
 def request_text(url: str) -> str:
     req = http_request(url, extra={"Accept": "text/plain, text/html, application/xml, */*"})
-    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+    with urlopen_with_retry(req) as response:
         return response.read().decode("utf-8")
 
 
 def published_error(surface: dict[str, Any], version: str, exc: Exception) -> SurfaceResult:
     detail = f"{type(exc).__name__}: {exc}"
     return SurfaceResult(surface["id"], "fail", version, None, url=fmt(surface.get("human_url") or surface.get("url", ""), version), detail=detail, blocking=is_blocking(surface))
+
+
+def published_unknown(surface: dict[str, Any], version: str, exc: SurfaceUnreadable) -> SurfaceResult:
+    detail = f"surface unreadable, not drift: {exc}"
+    return SurfaceResult(
+        surface["id"],
+        STATUS_UNKNOWN,
+        version,
+        None,
+        url=fmt(surface.get("human_url") or surface.get("url", ""), version),
+        detail=detail,
+        blocking=is_blocking(surface),
+    )
 
 
 def check_github_release(surface: dict[str, Any], version: str) -> SurfaceResult:
@@ -430,7 +542,7 @@ def ghcr_tags(repository: str) -> list[str]:
     token = request_json(token_url)["token"]
     url = f"https://ghcr.io/v2/{repository}/tags/list"
     req = http_request(url, extra={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+    with urlopen_with_retry(req) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload.get("tags") or []
 
@@ -445,7 +557,7 @@ def ghcr_manifest_status(repository: str, tag: str) -> int:
         extra={"Authorization": f"Bearer {token}", "Accept": GHCR_MANIFEST_ACCEPT},
     )
     try:
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urlopen_with_retry(req) as response:
             return response.status
     except urllib.error.HTTPError as exc:
         return exc.code
@@ -466,7 +578,7 @@ def check_http_exists(surface: dict[str, Any], version: str) -> SurfaceResult:
     url = fmt(surface["url"], version)
     req = http_request(url, method="HEAD")
     try:
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        with urlopen_with_retry(req) as response:
             code = response.status
     except urllib.error.HTTPError as exc:
         code = exc.code
@@ -619,6 +731,8 @@ def check_published(contract: dict[str, Any], version: str, skip: set[str], only
             continue
         try:
             results.append(checker(surface, version))
+        except SurfaceUnreadable as exc:
+            results.append(published_unknown(surface, version, exc))
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, socket.timeout, KeyError, ValueError, ET.ParseError, json.JSONDecodeError) as exc:
             results.append(published_error(surface, version, exc))
     return results
@@ -631,12 +745,34 @@ def should_fail(results: list[SurfaceResult], mode: str) -> bool:
     return False
 
 
+def has_blocking_unknown(results: list[SurfaceResult]) -> bool:
+    return any(result.status == STATUS_UNKNOWN and result.blocking for result in results)
+
+
+def exit_code(status: str) -> int:
+    """Map an overall verdict to a process exit code.
+
+    Drift keeps exit 1. An unreadable surface gets its own code so callers can
+    tell "the release is wrong" from "we could not look".
+    """
+    if status == "fail":
+        return 1
+    if status == STATUS_UNKNOWN:
+        return EXIT_UNKNOWN
+    return 0
+
+
 def status_payload(mode: str, version: str, results: list[SurfaceResult], source_results: list[SurfaceResult], registry_results: list[SurfaceResult]) -> dict[str, Any]:
     try:
         commit = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         commit = "unknown"
-    overall = "fail" if should_fail(results, mode) else "pass"
+    if should_fail(results, mode):
+        overall = "fail"
+    elif has_blocking_unknown(results):
+        overall = STATUS_UNKNOWN
+    else:
+        overall = "pass"
     return {
         "schema_version": "mindburn.version_status.v1",
         "mode": mode,
@@ -651,9 +787,19 @@ def status_payload(mode: str, version: str, results: list[SurfaceResult], source
     }
 
 
+def result_marker(result: SurfaceResult) -> str:
+    if result.status == "pass":
+        return "OK"
+    if result.status == "skipped":
+        return "SKIP"
+    if result.status == STATUS_UNKNOWN:
+        return "UNKNOWN"
+    return "FAIL" if result.blocking else "WARN"
+
+
 def print_results(results: list[SurfaceResult]) -> None:
     for result in results:
-        marker = "OK" if result.status == "pass" else "SKIP" if result.status == "skipped" else "FAIL" if result.blocking else "WARN"
+        marker = result_marker(result)
         location = result.path or result.url or ""
         scope = "blocking" if result.blocking else "advisory"
         print(f"{marker} {result.id} [{scope}]: expected={result.expected!r} actual={result.actual!r} {location}")
@@ -679,17 +825,26 @@ def parse_args() -> argparse.Namespace:
     published.add_argument("--skip", action="append", default=[], help="published surface id to skip; can be passed more than once")
     published.add_argument("--only", action="append", default=[], help="published surface id to check; when passed, all other published surfaces are skipped")
     published.add_argument("--surface-timeout", type=float, default=REQUEST_TIMEOUT_SECONDS, help="timeout in seconds for each public surface request")
+    published.add_argument(
+        "--rate-limit-retries",
+        type=int,
+        default=RATE_LIMIT_RETRY_ATTEMPTS,
+        help="attempts per request when a host answers with a rate limit; a surface that stays unreadable is reported unknown, not drift",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
-    global REQUEST_TIMEOUT_SECONDS
+    global REQUEST_TIMEOUT_SECONDS, RATE_LIMIT_RETRY_ATTEMPTS
     args = parse_args()
     contract = load_contract(args.contract)
     version = expected_version(contract, args.expected_version)
     if getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS) <= 0:
         raise SystemExit("--surface-timeout must be greater than 0")
     REQUEST_TIMEOUT_SECONDS = float(getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS))
+    if getattr(args, "rate_limit_retries", RATE_LIMIT_RETRY_ATTEMPTS) < 1:
+        raise SystemExit("--rate-limit-retries must be at least 1")
+    RATE_LIMIT_RETRY_ATTEMPTS = int(getattr(args, "rate_limit_retries", RATE_LIMIT_RETRY_ATTEMPTS))
 
     if args.mode == "local":
         source_results = check_local(contract, version, args.tag)
@@ -708,7 +863,7 @@ def main() -> int:
     print_results(results)
     if args.report:
         return 0
-    return 1 if payload["status"] == "fail" else 0
+    return exit_code(payload["status"])
 
 
 if __name__ == "__main__":

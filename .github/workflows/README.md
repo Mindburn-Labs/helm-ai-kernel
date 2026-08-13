@@ -69,7 +69,9 @@ surface for the `helm-ai-kernel` project.
   checksum-covered assets already attached to a published release. Normal tag
   releases generate SLSA provenance from `release.yml`.
 - `version-drift.yml` runs the published registry drift check daily and opens or
-  updates one issue when any public channel falls behind `VERSION`.
+  updates one issue when any public channel falls behind `VERSION`. A channel
+  that could not be read after the bounded rate-limit retries is reported as
+  unknown: it does not open a drift issue and does not close an open one.
 
 Pinned first-party setup actions should stay on Node 24-capable majors
 (`checkout` v5, `setup-go` v6, `setup-python` v6, `setup-node` v6, and

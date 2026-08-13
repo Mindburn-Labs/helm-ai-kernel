@@ -234,23 +234,37 @@ func NewGovernedBridge(cfg BridgeConfig) *GovernedBridge {
 
 // GovernedOutcome is the result of governing one MCP tool call.
 type GovernedOutcome struct {
-	Verdict           contracts.Verdict
-	DecisionID        string
-	ReceiptHash       string
-	ReasonCode        string
-	Reason            string
-	Permit            *effects.EffectPermit
-	Output            any
-	OutputHash        string
-	DispatchState     string
-	Approval          *ApprovalEvidence
-	EffectReservation *approvalceremony.EffectReservationEvent
+	Verdict              contracts.Verdict
+	DecisionID           string
+	ReceiptHash          string
+	ExecutionReceipt     *contracts.Receipt
+	ExecutionReceiptHash string
+	ReasonCode           string
+	Reason               string
+	Permit               *effects.EffectPermit
+	Output               any
+	OutputHash           string
+	DispatchState        string
+	Approval             *ApprovalEvidence
+	EffectReservation    *approvalceremony.EffectReservationEvent
 }
 
 // Govern evaluates an MCP tool call and, on ALLOW, mints a permit and (if a
 // connector is configured) dispatches the effect. inputHash is the canonical
 // hash of the request, already computed by the adapter.
 func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash string) GovernedOutcome {
+	return b.govern(ctx, req, inputHash, nil)
+}
+
+// govern keeps the production path and its mutation proof on the same code
+// path. Production always passes nil; package tests can alter the minted permit
+// at the exact pre-dispatch seam before the mandatory signature gate.
+func (b *GovernedBridge) govern(
+	ctx context.Context,
+	req *runtimeadapters.AdaptedRequest,
+	inputHash string,
+	beforeDispatch func(*effects.EffectPermit),
+) GovernedOutcome {
 	now := b.now().UTC()
 	permitScope, err := b.resolvePermitScope(req)
 	if err != nil {
@@ -440,6 +454,9 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	// needs no key distribution — the bridge already holds the signing key — and
 	// it covers every connector rather than one. Connector-side verification
 	// remains as defence in depth wherever a key is configured.
+	if beforeDispatch != nil {
+		beforeDispatch(permit)
+	}
 	if err := b.verifyPermitBeforeDispatch(permit); err != nil {
 		resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "PERMIT_UNVERIFIED")
 		applyEffectReservation(&base, resolved)
@@ -452,6 +469,26 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 		}
 		base.DispatchState = DispatchStateNoDispatch
 		return base
+	}
+
+	var executionReceipt *contracts.Receipt
+	if b.permitSigner != nil {
+		executionReceipt, err = b.newExecutionReceipt(req, receipt, permit, now)
+		if err != nil {
+			resolved, resolutionErr := b.resolvePreDispatchFailure(ctx, lifecycle, "RECEIPT_EVIDENCE_INVALID")
+			applyEffectReservation(&base, resolved)
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "RECEIPT_EVIDENCE_INVALID"
+			base.Reason = err.Error()
+			if resolutionErr != nil {
+				base.ReasonCode = "EFFECT_LIFECYCLE_UNCERTAIN"
+				base.Reason = resolutionErr.Error()
+				base.DispatchState = DispatchStateUncertain
+				return base
+			}
+			base.DispatchState = DispatchStateNoDispatch
+			return base
+		}
 	}
 
 	var output any
@@ -547,8 +584,59 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	}
 	base.Output = output
 	base.OutputHash = outHash
+	if executionReceipt != nil {
+		executionReceipt.OutputHash = outHash
+		receiptErr := b.permitSigner.SignReceipt(executionReceipt)
+		if receiptErr == nil {
+			base.ExecutionReceiptHash, receiptErr = contracts.ReceiptChainHash(executionReceipt)
+		}
+		if receiptErr != nil {
+			if lifecycle != nil {
+				if uncertain, transitionErr := b.reservations.MarkUncertain(ctx, lifecycle.admissionID, approvalceremony.EffectTransitionMeta{ReasonCode: "RECEIPT_EVIDENCE_INVALID"}); transitionErr == nil {
+					base.EffectReservation = &uncertain
+				}
+			}
+			base.Verdict = contracts.VerdictDeny
+			base.ReasonCode = "RECEIPT_EVIDENCE_INVALID"
+			base.Reason = fmt.Sprintf("sign canonical execution receipt: %v", receiptErr)
+			base.DispatchState = DispatchStateUncertain
+			return base
+		}
+		base.ExecutionReceipt = executionReceipt
+	}
 	base.DispatchState = DispatchStateDispatched
 	return base
+}
+
+func (b *GovernedBridge) newExecutionReceipt(
+	req *runtimeadapters.AdaptedRequest,
+	decision *contracts.WorkstationPolicyDecisionReceipt,
+	permit *effects.EffectPermit,
+	now time.Time,
+) (*contracts.Receipt, error) {
+	argsHash, err := canonicalize.CanonicalHash(req.Arguments)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize receipt arguments: %w", err)
+	}
+	policyHash, err := canonicalize.CanonicalHash(b.profile)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize receipt policy: %w", err)
+	}
+	return &contracts.Receipt{
+		ReceiptID:        "rcpt-" + permit.PermitID,
+		DecisionID:       decision.DecisionID,
+		EffectID:         permit.PermitID,
+		Status:           "SUCCESS",
+		Timestamp:        now,
+		ExecutorID:       b.issuerID,
+		LamportClock:     1,
+		ArgsHash:         argsHash,
+		SignatureVersion: contracts.ReceiptSignatureV5,
+		Verdict:          decision.Verdict,
+		ReasonCode:       decision.ReasonCode,
+		PolicyHash:       policyHash,
+		SessionID:        firstNonEmpty(req.SessionID, decision.DecisionID),
+	}, nil
 }
 
 func (b *GovernedBridge) admitWriteReservation(

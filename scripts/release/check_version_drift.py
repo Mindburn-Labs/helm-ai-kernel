@@ -13,6 +13,7 @@ import socket
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -197,10 +198,11 @@ def check_local(contract: dict[str, Any], version: str, tag: str | None) -> list
     return results
 
 
-def http_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+def http_headers(url: str, extra: dict[str, str] | None = None) -> dict[str, str]:
     headers = {"Accept": "application/json", "User-Agent": "MindburnLabs-VersionDriftGuard/1.0"}
     token = os.environ.get("GITHUB_TOKEN")
-    if token:
+    parsed = urllib.parse.urlsplit(url)
+    if token and parsed.scheme == "https" and parsed.hostname == "api.github.com":
         headers["Authorization"] = f"Bearer {token}"
     if extra:
         headers.update(extra)
@@ -208,19 +210,19 @@ def http_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
 
 
 def request_json(url: str) -> Any:
-    req = urllib.request.Request(url, headers=http_headers())
+    req = urllib.request.Request(url, headers=http_headers(url))
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def request_bytes(url: str) -> bytes:
-    req = urllib.request.Request(url, headers=http_headers({"Accept": "application/octet-stream, */*"}))
+    req = urllib.request.Request(url, headers=http_headers(url, {"Accept": "application/octet-stream, */*"}))
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return response.read()
 
 
 def request_text(url: str) -> str:
-    req = urllib.request.Request(url, headers=http_headers({"Accept": "text/plain, text/html, application/xml, */*"}))
+    req = urllib.request.Request(url, headers=http_headers(url, {"Accept": "text/plain, text/html, application/xml, */*"}))
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return response.read().decode("utf-8")
 
@@ -412,7 +414,8 @@ def check_homebrew_formula(surface: dict[str, Any], version: str) -> SurfaceResu
 def ghcr_tags(repository: str) -> list[str]:
     token_url = f"https://ghcr.io/token?scope=repository:{repository}:pull&service=ghcr.io"
     token = request_json(token_url)["token"]
-    req = urllib.request.Request(f"https://ghcr.io/v2/{repository}/tags/list", headers=http_headers({"Authorization": f"Bearer {token}"}))
+    url = f"https://ghcr.io/v2/{repository}/tags/list"
+    req = urllib.request.Request(url, headers=http_headers(url, {"Authorization": f"Bearer {token}"}))
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload.get("tags") or []
@@ -421,10 +424,11 @@ def ghcr_tags(repository: str) -> list[str]:
 def ghcr_manifest_status(repository: str, tag: str) -> int:
     token_url = f"https://ghcr.io/token?scope=repository:{repository}:pull&service=ghcr.io"
     token = request_json(token_url)["token"]
+    url = f"https://ghcr.io/v2/{repository}/manifests/{tag}"
     req = urllib.request.Request(
-        f"https://ghcr.io/v2/{repository}/manifests/{tag}",
+        url,
         method="HEAD",
-        headers=http_headers({"Authorization": f"Bearer {token}", "Accept": GHCR_MANIFEST_ACCEPT}),
+        headers=http_headers(url, {"Authorization": f"Bearer {token}", "Accept": GHCR_MANIFEST_ACCEPT}),
     )
     try:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
@@ -446,7 +450,7 @@ def check_ghcr_tags(surface: dict[str, Any], version: str) -> SurfaceResult:
 
 def check_http_exists(surface: dict[str, Any], version: str) -> SurfaceResult:
     url = fmt(surface["url"], version)
-    req = urllib.request.Request(url, method="HEAD", headers=http_headers())
+    req = urllib.request.Request(url, method="HEAD", headers=http_headers(url))
     try:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             code = response.status

@@ -6,11 +6,37 @@ import base64
 import hashlib
 import json
 import unittest
+from unittest import mock
 
 import check_version_drift as drift
 
 
 class VersionDriftMonitorTests(unittest.TestCase):
+    def test_http_headers_scope_ambient_github_token_to_github_api(self) -> None:
+        with mock.patch.dict(drift.os.environ, {"GITHUB_TOKEN": "repo-token"}):
+            self.assertEqual(
+                drift.http_headers("https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel")["Authorization"],
+                "Bearer repo-token",
+            )
+
+            for url in (
+                "http://api.github.com/repos/Mindburn-Labs/helm-ai-kernel",
+                "https://api.github.com.evil.test/repos/Mindburn-Labs/helm-ai-kernel",
+                "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/download/v0.8.4/asset",
+                "https://registry.npmjs.org/@mindburn/helm-ai-kernel",
+                "https://helm.docs.mindburn.org/version.json",
+            ):
+                with self.subTest(url=url):
+                    self.assertNotIn("Authorization", drift.http_headers(url))
+
+            self.assertEqual(
+                drift.http_headers(
+                    "https://ghcr.io/v2/mindburn-labs/helm-ai-kernel/tags/list",
+                    {"Authorization": "Bearer ghcr-token"},
+                )["Authorization"],
+                "Bearer ghcr-token",
+            )
+
     def test_published_contract_covers_release_channels(self) -> None:
         contract = drift.load_contract(drift.DEFAULT_CONTRACT)
         ids = {surface["id"] for surface in contract["published_surfaces"]}

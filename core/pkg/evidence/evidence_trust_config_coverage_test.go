@@ -159,8 +159,8 @@ func TestEvidenceTrustConfigKMSAndHelperBranches(t *testing.T) {
 	if ProfileRequiresExternalTrust(EvidenceTrustProfileTeam) {
 		t.Fatal("team profile should not require external trust")
 	}
-	if got := BuildEvidencePackVerifyCommand("bundle.tar", EvidenceTrustProfileDevLocal, ""); strings.Contains(got, "--allow-self-attested") || strings.Contains(got, "--profile") {
-		t.Fatalf("dev-local verify command must require an explicit trust opt-in: %s", got)
+	if got := BuildEvidencePackVerifyCommand("bundle.tar", EvidenceTrustProfileDevLocal, ""); !strings.Contains(got, "--profile dev-local") || !strings.Contains(got, "--allow-self-attested") {
+		t.Fatalf("dev-local verify command must carry the explicit trust opt-in: %s", got)
 	}
 	if got := BuildEvidencePackVerifyCommand("bundle.tar", EvidenceTrustProfileCustomer, "storage.json"); !strings.Contains(got, "--profile customer") || !strings.Contains(got, "--storage-receipt storage.json") || strings.Contains(got, "--allow-self-attested") {
 		t.Fatalf("customer verify command missing flags: %s", got)

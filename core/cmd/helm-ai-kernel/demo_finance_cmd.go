@@ -78,7 +78,11 @@ func runDemoFinance(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "  📦 %d receipts → %s/\n", len(res.Receipts), outDir)
 	fmt.Fprintf(stdout, "  🔏 Sealed (dev-local) → %s/%s\n", outDir, evidencepkg.EvidencePackSealPath)
-	fmt.Fprintf(stdout, "  🔍 Verify: helm-ai-kernel verify %s\n", outDir)
+	if code := runVerifyCmd([]string{"--bundle", outDir, "--profile", "dev-local", "--allow-self-attested"}, stdout, stderr); code != 0 {
+		fmt.Fprintf(stderr, "Error verifying generated EvidencePack (exit %d)\n", code)
+		return 1
+	}
+	fmt.Fprintf(stdout, "  🔍 Verify: %s\n", evidencepkg.BuildEvidencePackVerifyCommand(outDir, evidencepkg.EvidenceTrustProfileDevLocal, ""))
 
 	fmt.Fprintf(stdout, "\n%s🎉 Finance demo complete.%s Payment above limit escalated, approved, then executed (simulated).\n", ColorBold+ColorGreen, ColorReset)
 	return 0
@@ -127,10 +131,12 @@ func dollars(cents int64) string {
 }
 
 // writeFinanceEvidencePack seals a canonical, dev-local EvidencePack under
-// outDir so that `helm-ai-kernel verify <outDir>` accepts it. It mirrors the
-// organization demo's §3.1 layout: receipts under 02_PROOFGRAPH/receipts/, a
-// canonical manifest, 01_SCORE.json, 00_INDEX.json, then an in-place dev-local
-// seal. All timestamps are the deterministic finance demo clock.
+// outDir so that
+// `helm-ai-kernel verify --profile dev-local --allow-self-attested <outDir>`
+// verifies its local seal. It mirrors the organization demo's §3.1 layout:
+// receipts under 02_PROOFGRAPH/receipts/, a canonical manifest, 01_SCORE.json,
+// 00_INDEX.json, then an in-place dev-local seal. All timestamps are the
+// deterministic finance demo clock.
 func writeFinanceEvidencePack(outDir string, res *financedemo.ScenarioResult) error {
 	if len(res.Receipts) == 0 {
 		return fmt.Errorf("no receipts to seal")

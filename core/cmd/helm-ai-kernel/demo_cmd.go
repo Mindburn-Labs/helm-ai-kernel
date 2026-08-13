@@ -428,24 +428,9 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "  📊 Run Report → %s/%s\n", outDir, demoRunReportRelPath)
 
 	fmt.Fprintf(stdout, "\n%sVerifying EvidencePack...%s\n", ColorBold, ColorReset)
-	verifyPrev := ""
-	allValid := true
-	for _, r := range receipts {
-		if r.PrevHash != verifyPrev {
-			fmt.Fprintf(stdout, "  ❌ Chain break at L=%d\n", r.Lamport)
-			allValid = false
-			break
-		}
-		verifyPrev = r.Hash
-	}
-
-	if allValid {
-		fmt.Fprintf(stdout, "  ✅ Causal chain:  %d receipts, no breaks\n", len(receipts))
-		fmt.Fprintf(stdout, "  ✅ Root hash:     %s...%s\n", prevHash[:16], prevHash[len(prevHash)-8:])
-		fmt.Fprintf(stdout, "  ✅ Lamport clock: %d\n", lamport)
-		fmt.Fprintf(stdout, "  ✅ Deny path:     fail-closed verified\n")
-		fmt.Fprintf(stdout, "  ✅ Scope binding: org=%s scope=%s\n", cfg.organizationID, cfg.scopeID)
-		fmt.Fprintf(stdout, "  ✅ Maintenance:   incident auto-resolved with conformance\n")
+	if code := runVerifyCmd([]string{"--bundle", outDir, "--profile", "dev-local", "--allow-self-attested"}, stdout, stderr); code != 0 {
+		fmt.Fprintf(stderr, "Error verifying generated EvidencePack (exit %d)\n", code)
+		return 1
 	}
 
 	fmt.Fprintf(stdout, "\n%s🎉 Demo complete.%s Evidence at %s/\n", ColorBold+ColorGreen, ColorReset, outDir)
@@ -457,13 +442,10 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "%s╠════════════════════════════════════════════════════════════╣%s\n", ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  📊 Report:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, reportPath, ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  📦 Evidence: %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, outDir+"/", ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel verify --profile dev-local --allow-self-attested "+outDir, ColorReset, ColorCyan, ColorReset)
+	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, evidencepkg.BuildEvidencePackVerifyCommand(outDir, evidencepkg.EvidenceTrustProfileDevLocal, ""), ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s║%s  🔄 Switch:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel demo organization --provider opensandbox", ColorReset, ColorCyan, ColorReset)
 	fmt.Fprintf(stdout, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", ColorCyan, ColorReset)
 
-	if !allValid {
-		return 1
-	}
 	return 0
 }
 

@@ -20,6 +20,12 @@ func TestDemoFinance_EscalatesAndSealsVerifiablePack(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("demo finance failed with code %d: stderr=%s", code, stderr.String())
 	}
+	if !bytes.Contains(stdout.Bytes(), []byte("VERIFIED")) {
+		t.Fatalf("demo finance did not run the offline CLI verifier: %s", stdout.String())
+	}
+	if !bytes.Contains(stdout.Bytes(), []byte("--profile dev-local --allow-self-attested")) {
+		t.Fatalf("demo finance omitted explicit self-attested verification opt-in: %s", stdout.String())
+	}
 
 	report, err := verifier.VerifyLocallyProducedBundle(out)
 	if err != nil {

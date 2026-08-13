@@ -39,6 +39,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	_ "github.com/lib/pq" // Postgres Driver
 )
 
@@ -647,7 +649,7 @@ func runServerWithOptions(opts serverOptions) error {
 		healthMux.HandleFunc("/health", healthHandler)
 		healthMux.HandleFunc("/healthz", healthHandler)
 		if metricsEnabled && metricsPort == healthPort {
-			healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+			healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandlerFor(metricsGatherers(services)...))
 		}
 		healthServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
@@ -667,7 +669,7 @@ func runServerWithOptions(opts serverOptions) error {
 	var metricsServer *http.Server
 	if metricsEnabled && metricsPort != healthPort {
 		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+		metricsMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandlerFor(metricsGatherers(services)...))
 		metricsServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
 			Handler:           metricsMux,
@@ -785,6 +787,29 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+// metricsGatherers is the set of Prometheus registries /metrics serves in
+// addition to the hand-written governance families (HELM-477).
+//
+//   - prometheus.DefaultGatherer carries the go_* and process_* runtime families
+//     — the kernel had none before, for the one component whose stability
+//     matters most — and helm_kernel_decisions_total, a promauto counter
+//     incremented on every PDP decision that nothing could read.
+//   - Services.OTelMetrics carries the OpenTelemetry instruments the
+//     MeterProvider's prometheus reader exports, which is where the RED signal
+//     lives: otelhttp's http.server.request.duration, broken down by the
+//     bounded http.route / http.request.method / http.response.status_code
+//     allowlist from observability.HTTPServerMetricViews.
+//
+// Services may be nil when the daemon failed to initialise them; the runtime
+// families still tell an operator the process is alive, so serve what exists.
+func metricsGatherers(services *Services) []prometheus.Gatherer {
+	gatherers := []prometheus.Gatherer{prometheus.DefaultGatherer}
+	if services != nil && services.OTelMetrics != nil {
+		gatherers = append(gatherers, services.OTelMetrics)
+	}
+	return gatherers
 }
 
 // buildAPIHandler assembles the daemon's request pipeline.

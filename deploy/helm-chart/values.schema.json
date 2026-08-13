@@ -837,6 +837,12 @@
           "default": "",
           "pattern": "^(\\S|\\S.*\\S)?$",
           "description": "service.name reported for every exported span, rendered as OTEL_SERVICE_NAME and applied only when enabled is true. Empty renders no variable and the kernel falls back to helm-sovereign-os. Set it to the name you query the tracing backend by, e.g. helm-ai-kernel: service.name is the one resource key the gateway does not re-derive from namespace labels. The pattern forbids leading, trailing, and whitespace-only values because the kernel trims this variable and treats a blank one as unset, so an untrimmed value would make the rendered manifest disagree with the reported service.name."
+        },
+        "metricsExporter": {
+          "type": "string",
+          "enum": ["none", "otlp"],
+          "default": "none",
+          "description": "OTLP metric push, rendered as OTEL_METRICS_EXPORTER and applied only when enabled is true. Independent of the trace endpoint since HELM-477: before that, an endpoint supplied for traces also started a metric push at a gateway with no metrics pipeline, which retried in a loop forever. Leave none unless a metrics pipeline exists on the other end; the kernel's metrics reach VictoriaMetrics by scrape of /metrics (helm.metrics.enabled), which this value does not affect."
         }
       }
     },

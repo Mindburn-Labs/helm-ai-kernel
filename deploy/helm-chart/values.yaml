@@ -321,6 +321,21 @@ telemetry:
   # value would silently fall back to helm-sovereign-os.
   serviceName: ""
 
+  # OTLP metric PUSH, rendered as OTEL_METRICS_EXPORTER and applied only when
+  # enabled is true. "none" (default) or "otlp".
+  #
+  # Metrics are NOT implied by the endpoint above (HELM-477). Before that they
+  # were: handing the kernel an endpoint so it could export traces also started
+  # pushing metrics at a gateway with no metrics pipeline, and the exporter then
+  # retried in a loop against a component with no owner for that signal. That
+  # coupling is what kept this whole telemetry block off for the kernel.
+  #
+  # Leave it "none" unless a metrics pipeline actually exists on the other end.
+  # The kernel's metrics reach VictoriaMetrics by SCRAPE of /metrics
+  # (helm.metrics.enabled + service.metricsPort), which is the transport
+  # HELM-469 settled on and is unaffected by this value.
+  metricsExporter: none
+
 # Persistent storage for HELM dataDir and SQLite state.
 persistence:
   enabled: true

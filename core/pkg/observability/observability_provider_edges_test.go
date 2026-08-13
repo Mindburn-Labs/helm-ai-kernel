@@ -123,16 +123,23 @@ func TestCoverageInitExportProviders(t *testing.T) {
 		_ = provider.tracerProvider.Shutdown(shutdownCtx)
 	})
 
+	// MetricsExporter is explicit because since HELM-477 an OTLPEndpoint alone
+	// no longer raises the metric pusher — that coupling is the defect, and
+	// TestOTLPEndpointAloneDoesNotPushMetrics guards the other side of it.
 	t.Run("metric provider", func(t *testing.T) {
 		provider := &Provider{
 			config: &Config{
-				OTLPEndpoint: "localhost:4317",
-				Insecure:     true,
+				OTLPEndpoint:    "localhost:4317",
+				Insecure:        true,
+				MetricsExporter: MetricsExporterOTLP,
 			},
 			logger: slog.Default(),
 		}
 		if err := provider.initMetricProvider(ctx, res); err != nil {
 			t.Fatalf("initMetricProvider() error = %v", err)
+		}
+		if provider.meterProvider == nil {
+			t.Fatal("initMetricProvider installed no provider with the otlp exporter selected")
 		}
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
 		defer shutdownCancel()

@@ -15,10 +15,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -41,6 +43,54 @@ type Config struct {
 	CertFile       string        // Path to client certificate
 	KeyFile        string        // Path to client key
 	CAFile         string        // Path to CA certificate
+
+	// TracesEnabled installs the OTLP span exporter and the global
+	// TracerProvider. It requires OTLPEndpoint: traces have no pull surface,
+	// so with no endpoint there is nowhere for a span to go.
+	TracesEnabled bool
+
+	// MetricsExporter selects the PUSH half of the metric pipeline:
+	// MetricsExporterOTLP or MetricsExporterNone (see MetricsExporterFromEnv).
+	//
+	// It is deliberately independent of TracesEnabled. Before HELM-477 a single
+	// OTLPEndpoint raised both providers, so handing the kernel an endpoint so
+	// it could export TRACES also started pushing METRICS at a collector with
+	// no metrics pipeline, which then retried in a loop forever.
+	MetricsExporter string
+
+	// PrometheusRegisterer receives the PULL half of the metric pipeline. When
+	// non-nil the MeterProvider gets a prometheus exporter reader, which is what
+	// makes the otelhttp http.server.* RED instruments readable from /metrics
+	// with no OTLP endpoint anywhere. Nil disables the pull surface.
+	PrometheusRegisterer prometheus.Registerer
+}
+
+// Metric exporter selectors for Config.MetricsExporter, named after the values
+// of the standard OTEL_METRICS_EXPORTER variable.
+const (
+	MetricsExporterNone = "none"
+	MetricsExporterOTLP = "otlp"
+)
+
+// MetricsExporterFromEnv resolves the OTLP metric-push selector from the
+// standard OTEL_METRICS_EXPORTER variable.
+//
+// The default is deliberately "none" rather than the OpenTelemetry spec's
+// "otlp". HELM-469 settled the kernel's metric transport as PULL-only into
+// VictoriaMetrics, so there is no collector on the other end of a metric push;
+// defaulting to otlp would restore exactly the failure HELM-477 records. "otlp"
+// remains available for anyone who stands that pipeline up, and the pull
+// surface is unconditional either way — "none" silences the push, not /metrics.
+func MetricsExporterFromEnv() string {
+	switch v := strings.ToLower(strings.TrimSpace(os.Getenv("OTEL_METRICS_EXPORTER"))); v {
+	case MetricsExporterOTLP:
+		return MetricsExporterOTLP
+	default:
+		// Includes "none", "prometheus" (the pull surface is always on, so the
+		// value is already satisfied) and any unrecognised value: fail closed to
+		// no push rather than guessing at a transport.
+		return MetricsExporterNone
+	}
 }
 
 // DefaultServiceName is the service.name every span carries unless
@@ -63,14 +113,16 @@ func ServiceNameFromEnv() string {
 // DefaultConfig returns production-ready defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		ServiceName:    ServiceNameFromEnv(),
-		ServiceVersion: "2.0.0",
-		Environment:    "development",
-		OTLPEndpoint:   "localhost:4317",
-		SampleRate:     1.0, // Sample everything in dev
-		BatchTimeout:   5 * time.Second,
-		Enabled:        true,
-		Insecure:       false, // Secure by default
+		ServiceName:     ServiceNameFromEnv(),
+		ServiceVersion:  "2.0.0",
+		Environment:     "development",
+		OTLPEndpoint:    "localhost:4317",
+		SampleRate:      1.0, // Sample everything in dev
+		BatchTimeout:    5 * time.Second,
+		Enabled:         true,
+		Insecure:        false, // Secure by default
+		TracesEnabled:   true,
+		MetricsExporter: MetricsExporterFromEnv(),
 	}
 }
 
@@ -121,9 +173,12 @@ func New(ctx context.Context, config *Config) (*Provider, error) {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Initialize trace provider
-	if err := p.initTraceProvider(ctx, res); err != nil {
-		return nil, fmt.Errorf("failed to init trace provider: %w", err)
+	// Initialize trace provider. Traces have no pull surface, so an endpoint is
+	// a hard prerequisite; metrics below are not gated on it.
+	if config.TracesEnabled && config.OTLPEndpoint != "" {
+		if err := p.initTraceProvider(ctx, res); err != nil {
+			return nil, fmt.Errorf("failed to init trace provider: %w", err)
+		}
 	}
 
 	// Initialize metric provider
@@ -144,12 +199,18 @@ func New(ctx context.Context, config *Config) (*Provider, error) {
 		return nil, fmt.Errorf("failed to init RED metrics: %w", err)
 	}
 
+	// Report the two halves separately. A single "initialized" line next to an
+	// endpoint is what made the HELM-477 metrics gap hard to see: it reads as
+	// "everything is exporting" whichever providers actually came up.
 	p.logger.InfoContext(ctx, "observability initialized",
 		"service", config.ServiceName,
 		"environment", config.Environment,
 		"endpoint", config.OTLPEndpoint,
 		"sample_rate", config.SampleRate,
 		"insecure", config.Insecure,
+		"traces", p.tracerProvider != nil,
+		"metrics_pull", config.PrometheusRegisterer != nil,
+		"metrics_push", config.MetricsExporter,
 	)
 
 	return p, nil
@@ -204,28 +265,70 @@ func (p *Provider) initTraceProvider(ctx context.Context, res *resource.Resource
 }
 
 // initMetricProvider initializes the OpenTelemetry metric provider.
+//
+// The provider is assembled from up to two readers, chosen independently:
+//
+//   - a prometheus exporter reader (PULL), whenever Config.PrometheusRegisterer
+//     is set. This is the reader that makes the metric pipeline reachable at
+//     all: without it the otelhttp http.server.* instruments are recorded into
+//     a provider nothing can read, which is the HELM-477 finding.
+//   - an OTLP PeriodicReader (PUSH), only when Config.MetricsExporter selects
+//     otlp — no longer implied by having an OTLPEndpoint for traces.
+//
+// With neither selected no provider is installed and the global MeterProvider
+// stays the no-op, exactly as before HELM-477.
 func (p *Provider) initMetricProvider(ctx context.Context, res *resource.Resource) error {
-	opts := []otlpmetricgrpc.Option{
-		otlpmetricgrpc.WithEndpoint(p.config.OTLPEndpoint),
+	var readers []sdkmetric.Reader
+
+	if p.config.PrometheusRegisterer != nil {
+		// WithoutScopeInfo/WithoutTargetInfo: the otel_scope_* and target_info
+		// series carry no dimension an operator queries here, and target_info in
+		// particular re-adds the resource attribute set to every scrape.
+		promExporter, err := otelprom.New(
+			otelprom.WithRegisterer(p.config.PrometheusRegisterer),
+			otelprom.WithoutScopeInfo(),
+			otelprom.WithoutTargetInfo(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create prometheus metric exporter: %w", err)
+		}
+		readers = append(readers, promExporter)
 	}
 
-	if p.config.Insecure {
-		opts = append(opts, otlpmetricgrpc.WithInsecure())
+	if p.config.MetricsExporter == MetricsExporterOTLP {
+		if p.config.OTLPEndpoint == "" {
+			return fmt.Errorf("metrics exporter %q selected without an OTLP endpoint", MetricsExporterOTLP)
+		}
+		opts := []otlpmetricgrpc.Option{
+			otlpmetricgrpc.WithEndpoint(p.config.OTLPEndpoint),
+		}
+		if p.config.Insecure {
+			opts = append(opts, otlpmetricgrpc.WithInsecure())
+		}
+		exporter, err := otlpmetricgrpc.New(ctx, opts...)
+		if err != nil {
+			return fmt.Errorf("failed to create metric exporter: %w", err)
+		}
+		readers = append(readers, sdkmetric.NewPeriodicReader(exporter,
+			sdkmetric.WithInterval(15*time.Second),
+		))
 	}
 
-	exporter, err := otlpmetricgrpc.New(ctx, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to create metric exporter: %w", err)
+	if len(readers) == 0 {
+		return nil
 	}
 
-	reader := sdkmetric.NewPeriodicReader(exporter,
-		sdkmetric.WithInterval(15*time.Second),
-	)
-	p.meterProvider = sdkmetric.NewMeterProvider(meterProviderOptions(res, reader)...)
+	p.meterProvider = sdkmetric.NewMeterProvider(meterProviderOptions(res, readers...)...)
 
 	// Set as global provider. otelhttp resolves its meter from the global
 	// provider (tracing.WrapEdgeHandler passes no WithMeterProvider), so this
 	// assignment is what puts the views below on the kernel's HTTP metrics.
+	//
+	// ORDERING IS LOAD-BEARING: unlike the tracer, which otelhttp resolves
+	// lazily per request, the meter is bound once inside otelhttp.NewHandler
+	// (config.go newConfig -> semconv.NewHTTPServer(c.Meter)). A handler
+	// constructed before this line keeps the no-op meter for the life of the
+	// process, and its http.server.* series never appear on /metrics.
 	otel.SetMeterProvider(p.meterProvider)
 
 	return nil
@@ -238,10 +341,12 @@ func (p *Provider) initMetricProvider(ctx context.Context, res *resource.Resourc
 // provider with a ManualReader in place of the OTLP PeriodicReader. A
 // cardinality view exercised only on a provider the test assembled itself would
 // prove nothing about the provider the daemon runs.
-func meterProviderOptions(res *resource.Resource, reader sdkmetric.Reader) []sdkmetric.Option {
+func meterProviderOptions(res *resource.Resource, readers ...sdkmetric.Reader) []sdkmetric.Option {
 	opts := []sdkmetric.Option{
 		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(reader),
+	}
+	for _, reader := range readers {
+		opts = append(opts, sdkmetric.WithReader(reader))
 	}
 	for _, view := range HTTPServerMetricViews() {
 		opts = append(opts, sdkmetric.WithView(view))

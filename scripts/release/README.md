@@ -22,6 +22,30 @@ specific GitHub release attached a matching asset.
 | `check_version_drift.py` | Checks local source versions and published release channels with bounded per-surface requests. | `make version-drift`, `make version-drift-published`, scheduled monitor. |
 | `check_version_drift_test.py` | Self-test for required published-channel coverage and drift-monitor error shaping. | Manual validation for release monitor edits. |
 
+## Drift, unknown, and exit codes
+
+`check_version_drift.py` separates "the published version is wrong" from "the
+published version could not be read". A host that answers with a rate limit
+(HTTP 429, or HTTP 403 carrying `x-ratelimit-remaining: 0`, `retry-after`, or a
+rate-limit reason) is retried with bounded backoff; `--rate-limit-retries`
+sets the attempts per request. A surface that stays unreadable is reported as
+`UNKNOWN` with an explicit unreadable detail, never as a version mismatch, and
+`version-status.json` records `"status": "unknown"` for it. An unreadable
+blocking surface also makes the run verdict `unknown`; an advisory one does not,
+exactly as advisory failures do not fail a run. A plain HTTP 403 is not a rate
+limit, is not retried, and keeps its existing failure or expected-status
+handling.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Every checked surface matched the expected version. |
+| `1` | A blocking surface drifted. Real drift still fails the caller. |
+| `75` | Nothing drifted, but at least one surface stayed unreadable. |
+
+Release and monitor callers treat `75` as a warning rather than drift, except
+the pre-release lockstep gate in `release.yml`, which still refuses to publish a
+GitHub Release on a verdict it could not verify.
+
 ## Validation
 
 ```bash

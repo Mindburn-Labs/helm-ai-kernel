@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
+import io
 import json
 import unittest
 from unittest import mock
@@ -424,6 +426,139 @@ class VersionDriftMonitorTests(unittest.TestCase):
         self.assertEqual(result.actual["missing"], ["io.github.mindburnlabs:helm-sdk:0.5.10"])
         self.assertEqual(result.actual["rejected_found"], ["io.github.mindburnlabs:helm-sdk:0.5.2"])
 
+    def test_rate_limited_read_retries_then_reports_unknown_instead_of_drift(self) -> None:
+        sleeps: list[float] = []
+        attempts: list[str] = []
+
+        def always_rate_limited(request, timeout=None):
+            attempts.append(request.full_url)
+            raise rate_limited_error(request.full_url)
+
+        with captured_stderr() as notices, mock.patch.object(
+            drift.urllib.request, "urlopen", always_rate_limited
+        ), mock.patch.object(drift.time, "sleep", sleeps.append):
+            results = drift.check_published(github_release_contract(), "0.8.4", set())
+
+        self.assertEqual(len(attempts), drift.RATE_LIMIT_RETRY_ATTEMPTS)
+        self.assertEqual(sleeps, [2.0, 4.0])
+        self.assertIn("rate limited by api.github.com (HTTP 403); retrying in 2s", notices.getvalue())
+
+        result = results[0]
+        self.assertEqual(result.status, drift.STATUS_UNKNOWN)
+        self.assertTrue(result.blocking)
+        self.assertIsNone(result.actual)
+        self.assertIn("could not read", result.detail or "")
+        self.assertIn("rate limit exceeded", result.detail or "")
+        self.assertEqual(drift.result_marker(result), "UNKNOWN")
+
+        payload = drift.status_payload("published", "0.8.4", results, [], results)
+        self.assertFalse(drift.should_fail(results, "published"))
+        self.assertEqual(payload["status"], drift.STATUS_UNKNOWN)
+        self.assertEqual(payload["registry_versions"][0]["status"], drift.STATUS_UNKNOWN)
+        self.assertEqual(drift.exit_code(payload["status"]), drift.EXIT_UNKNOWN)
+        self.assertNotEqual(drift.EXIT_UNKNOWN, 0)
+
+    def test_rate_limited_read_recovers_within_the_retry_budget(self) -> None:
+        sleeps: list[float] = []
+        responses = [rate_limited_error("https://api.github.com/releases/tags/v0.8.4")]
+
+        def flaky(request, timeout=None):
+            if responses:
+                raise responses.pop()
+            return fake_response(json.dumps({"tag_name": "v0.8.4"}).encode())
+
+        with captured_stderr(), mock.patch.object(drift.urllib.request, "urlopen", flaky), mock.patch.object(
+            drift.time, "sleep", sleeps.append
+        ):
+            results = drift.check_published(github_release_contract(), "0.8.4", set())
+
+        self.assertEqual(sleeps, [2.0])
+        self.assertEqual(results[0].status, "pass")
+        self.assertEqual(results[0].actual, "v0.8.4")
+        self.assertEqual(drift.exit_code(drift.status_payload("published", "0.8.4", results, [], results)["status"]), 0)
+
+    def test_rate_limit_backoff_honours_retry_after_within_the_cap(self) -> None:
+        secondary = rate_limited_error("https://api.github.com", code=403, headers={"Retry-After": "7"})
+        self.assertTrue(drift.is_rate_limited(secondary))
+        self.assertEqual(drift.rate_limit_backoff(secondary, 1), 7.0)
+
+        excessive = rate_limited_error("https://api.github.com", code=429, headers={"Retry-After": "3600"})
+        self.assertEqual(drift.rate_limit_backoff(excessive, 1), drift.RATE_LIMIT_MAX_BACKOFF_SECONDS)
+
+        exhausted = rate_limited_error("https://api.github.com", headers={"x-ratelimit-remaining": "0"}, reason="Forbidden")
+        self.assertTrue(drift.is_rate_limited(exhausted))
+        self.assertEqual(drift.rate_limit_backoff(exhausted, 3), 8.0)
+
+    def test_plain_forbidden_is_not_retried_and_still_reports_drift(self) -> None:
+        sleeps: list[float] = []
+        attempts: list[str] = []
+
+        def forbidden(request, timeout=None):
+            attempts.append(request.full_url)
+            raise drift.urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, None)
+
+        with mock.patch.object(drift.urllib.request, "urlopen", forbidden), mock.patch.object(
+            drift.time, "sleep", sleeps.append
+        ):
+            results = drift.check_published(github_release_contract(), "0.8.4", set())
+
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(sleeps, [])
+        self.assertEqual(results[0].status, "fail")
+        self.assertTrue(results[0].blocking)
+        self.assertIn("HTTPError", results[0].detail or "")
+
+    def test_version_mismatch_still_fails_when_another_surface_is_unknown(self) -> None:
+        mismatch = drift.SurfaceResult("npm-sdk", "fail", "0.8.4", "0.8.3", url="https://example.test/npm")
+        unreadable = drift.published_unknown(
+            {"id": "github-release", "url": "https://api.example.test/releases/tags/v0.8.4"},
+            "0.8.4",
+            drift.SurfaceUnreadable("https://api.example.test/releases/tags/v0.8.4", 3, TimeoutError("rate limit exceeded")),
+        )
+        results = [mismatch, unreadable]
+
+        payload = drift.status_payload("published", "0.8.4", results, [], results)
+        self.assertTrue(drift.should_fail(results, "published"))
+        self.assertEqual(payload["status"], "fail")
+        self.assertEqual(drift.exit_code(payload["status"]), 1)
+        self.assertEqual(drift.result_marker(mismatch), "FAIL")
+        self.assertEqual(drift.result_marker(unreadable), "UNKNOWN")
+
+    def test_advisory_unknown_does_not_move_the_overall_verdict(self) -> None:
+        advisory = drift.published_unknown(
+            {"id": "optional-docs-cache", "url": "https://example.test/cache", "blocking": False},
+            "0.8.4",
+            drift.SurfaceUnreadable("https://example.test/cache", 3, TimeoutError("rate limit exceeded")),
+        )
+        passing = drift.SurfaceResult("npm-sdk", "pass", "0.8.4", "0.8.4", url="https://example.test/npm")
+
+        payload = drift.status_payload("published", "0.8.4", [passing, advisory], [], [passing, advisory])
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["registry_versions"][1]["status"], drift.STATUS_UNKNOWN)
+        self.assertFalse(payload["registry_versions"][1]["blocking"])
+        self.assertEqual(drift.exit_code(payload["status"]), 0)
+
+    def test_successful_read_is_unchanged_by_the_retry_path(self) -> None:
+        sleeps: list[float] = []
+        calls: list[str] = []
+
+        def ok(request, timeout=None):
+            calls.append(request.full_url)
+            return fake_response(json.dumps({"tag_name": "v0.8.4"}).encode())
+
+        with mock.patch.object(drift.urllib.request, "urlopen", ok), mock.patch.object(
+            drift.time, "sleep", sleeps.append
+        ):
+            results = drift.check_published(github_release_contract(), "0.8.4", set())
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(sleeps, [])
+        self.assertEqual(results[0].status, "pass")
+        payload = drift.status_payload("published", "0.8.4", results, [], results)
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(drift.exit_code(payload["status"]), 0)
+        self.assertEqual(drift.result_marker(results[0]), "OK")
+
     def test_http_contains_does_not_reject_version_prefix_matches(self) -> None:
         original = drift.request_text
         drift.request_text = lambda _url: (
@@ -454,6 +589,54 @@ class VersionDriftMonitorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "pass")
         self.assertEqual(result.actual["rejected_found"], [])
+
+
+def github_release_contract() -> dict[str, list[dict[str, str]]]:
+    return {
+        "published_surfaces": [
+            {
+                "id": "github-release",
+                "kind": "github_release",
+                "url": "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel/releases/tags/v{version}",
+                "human_url": "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v{version}",
+            }
+        ]
+    }
+
+
+def rate_limited_error(
+    url: str,
+    code: int = 403,
+    headers: dict[str, str] | None = None,
+    reason: str = "rate limit exceeded",
+) -> drift.urllib.error.HTTPError:
+    return drift.urllib.error.HTTPError(url, code, reason, headers or {"x-ratelimit-remaining": "0"}, None)
+
+
+class FakeResponse:
+    def __init__(self, body: bytes, status: int = 200) -> None:
+        self._body = body
+        self.status = status
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> "FakeResponse":
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+
+def fake_response(body: bytes, status: int = 200) -> FakeResponse:
+    return FakeResponse(body, status)
+
+
+@contextlib.contextmanager
+def captured_stderr():
+    buffer = io.StringIO()
+    with contextlib.redirect_stderr(buffer):
+        yield buffer
 
 
 def release_surface() -> dict[str, str]:

@@ -466,6 +466,32 @@ func TestVerifyBundleMCPPolicyDecisionReceiptTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+
+	t.Run("declared nonclassical profile refuses legacy key fallback", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		doc := receipt(signature, keyHex)
+		doc["signature_profile"] = "hybrid"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+
+	t.Run("declared non-ed25519 algorithm refuses legacy key fallback", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		doc := receipt(signature, keyHex)
+		doc["signature_algorithm"] = "ml-dsa-65"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
 }
 
 func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
@@ -480,7 +506,7 @@ func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
 		"status":            "DENY",
 		"output_hash":       "sha256:out",
 		"prev_hash":         "",
-		"lamport_clock":     float64(1),
+		"lamport_clock":     json.Number("1"),
 		"args_hash":         "sha256:args",
 		"signature_version": "receipt.v5",
 		"verdict":           "DENY",
@@ -488,29 +514,71 @@ func TestVerifyEd25519CanonicalReceiptV5UsesStructuredPayload(t *testing.T) {
 		"policy_hash":       "sha256:policy",
 		"session_id":        "session-1",
 	}
-	payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
-		SignatureVersion: "receipt.v5",
-		ReceiptID:        "rcpt-001",
-		DecisionID:       "dec-001",
-		EffectID:         "mcp.tools.call/proof.read",
-		Status:           "DENY",
-		OutputHash:       "sha256:out",
-		PrevHash:         "",
-		LamportClock:     1,
-		ArgsHash:         "sha256:args",
-		Verdict:          "DENY",
-		ReasonCode:       "POLICY:VIOLATION",
-		PolicyHash:       "sha256:policy",
-		SessionID:        "session-1",
-	})
-	if err != nil {
-		t.Fatal(err)
+	sign := func(lamport uint64) string {
+		payload, err := canonicalize.JCS(receiptV5DocumentEnvelope{
+			SignatureVersion: "receipt.v5", ReceiptID: "rcpt-001", DecisionID: "dec-001",
+			EffectID: "mcp.tools.call/proof.read", Status: "DENY", OutputHash: "sha256:out", PrevHash: "",
+			LamportClock: lamport, ArgsHash: "sha256:args", Verdict: "DENY", ReasonCode: "POLICY:VIOLATION",
+			PolicyHash: "sha256:policy", SessionID: "session-1",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return hex.EncodeToString(ed25519.Sign(priv, payload))
 	}
-	document["signature"] = hex.EncodeToString(ed25519.Sign(priv, payload))
+	document["signature"] = sign(1)
 
 	if !verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub)) {
 		t.Fatal("structured V5 receipt must verify")
 	}
+	for _, tc := range []struct {
+		name      string
+		profile   string
+		algorithm string
+		wantValid bool
+	}{
+		{name: "legacy_blank", wantValid: true},
+		{name: "profile_only_is_partial", profile: "classical"},
+		{name: "algorithm_only_is_partial", algorithm: "ed25519"},
+		{name: "both", profile: "classical", algorithm: "ed25519", wantValid: true},
+		{name: "profile_only_contradiction", profile: "hybrid"},
+		{name: "algorithm_only_contradiction", algorithm: "ml-dsa-65"},
+		{name: "both_contradict", profile: "hybrid", algorithm: "ml-dsa-65"},
+	} {
+		t.Run("signature_metadata_"+tc.name, func(t *testing.T) {
+			delete(document, "signature_profile")
+			delete(document, "signature_algorithm")
+			if tc.profile != "" {
+				document["signature_profile"] = tc.profile
+			}
+			if tc.algorithm != "" {
+				document["signature_algorithm"] = tc.algorithm
+			}
+			got := verifyEd25519CanonicalReceipt(document, document["signature"].(string), hex.EncodeToString(pub))
+			if got != tc.wantValid {
+				t.Fatalf("verification = %v, want %v", got, tc.wantValid)
+			}
+		})
+	}
+	delete(document, "signature_profile")
+	delete(document, "signature_algorithm")
+	for _, tc := range []struct {
+		name          string
+		wireValue     json.Number
+		signedLamport uint64
+	}{
+		{name: "fractional", wireValue: json.Number("1.5"), signedLamport: 1},
+		{name: "fractional_literal", wireValue: json.Number("1.0"), signedLamport: 1},
+		{name: "above_max_safe_integer", wireValue: json.Number("9007199254740992"), signedLamport: canonicalize.MaxSafeInteger + 1},
+	} {
+		t.Run(tc.name+"_lamport_clock", func(t *testing.T) {
+			document["lamport_clock"] = tc.wireValue
+			if verifyEd25519CanonicalReceipt(document, sign(tc.signedLamport), hex.EncodeToString(pub)) {
+				t.Fatalf("receipt.v5 verifier accepted lamport_clock %v", tc.wireValue)
+			}
+		})
+	}
+	document["lamport_clock"] = json.Number("1")
 	signedDocument, err := json.Marshal(document)
 	if err != nil {
 		t.Fatalf("marshal signed V5 receipt: %v", err)
@@ -582,7 +650,9 @@ func TestVerifyEd25519CanonicalReceiptV5AcceptsEmptySignedFieldsOnDisk(t *testin
 		t.Fatalf("marshal V5 receipt: %v", err)
 	}
 	var document map[string]any
-	if err := json.Unmarshal(data, &document); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
 		t.Fatalf("decode V5 receipt: %v", err)
 	}
 	if !verifyEd25519CanonicalReceipt(document, receipt.Signature, hex.EncodeToString(pub)) {
@@ -616,6 +686,7 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 			"lamport_clock":       1,
 			"args_hash":           "sha256:args",
 			"signature":           sig,
+			"signature_profile":   "classical",
 			"signature_algorithm": "ed25519",
 			"public_key_set":      keySet,
 		}
@@ -688,6 +759,120 @@ func TestVerifyBundleMCPGovernedEffectReceiptTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+
+	t.Run("declared nonclassical profile fails closed", func(t *testing.T) {
+		dir := createValidBundleFixture(t)
+		doc := receipt(signedEffectID, sign(signedEffectID), keyHex)
+		doc["signature_profile"] = "hybrid"
+		writeJSON(t, filepath.Join(dir, "receipts", "receipt-001.json"), doc)
+		sealVerifierFixture(t, dir, "test-session-001")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEmbeddedSignatureTrustFails(t, report)
+	})
+}
+
+func TestVerifyBundleReceiptV5RejectsAmbiguousRawJSON(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const effectID = "mcp_policy_decision/proof.read"
+	document := map[string]any{
+		"signature_version":   "receipt.v5",
+		"receipt_id":          "rcpt-raw-v5",
+		"decision_id":         "dec-raw-v5",
+		"effect_id":           effectID,
+		"status":              "DENY",
+		"output_hash":         "sha256:out",
+		"prev_hash":           "",
+		"lamport_clock":       1,
+		"args_hash":           "sha256:args",
+		"verdict":             "DENY",
+		"reason_code":         "POLICY:VIOLATION",
+		"policy_hash":         "sha256:policy",
+		"session_id":          "session-raw-v5",
+		"signature_profile":   "classical",
+		"signature_algorithm": "ed25519",
+		"public_key_set":      map[string]any{"ed25519": hex.EncodeToString(pub)},
+	}
+	signV5 := func(lamport uint64) string {
+		payload, err := canonicalize.InteroperableJCS(receiptV5DocumentEnvelope{
+			SignatureVersion: "receipt.v5", ReceiptID: "rcpt-raw-v5", DecisionID: "dec-raw-v5",
+			EffectID: effectID, Status: "DENY", OutputHash: "sha256:out", PrevHash: "",
+			LamportClock: lamport, ArgsHash: "sha256:args", Verdict: "DENY", ReasonCode: "POLICY:VIOLATION",
+			PolicyHash: "sha256:policy", SessionID: "session-raw-v5",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return hex.EncodeToString(ed25519.Sign(priv, payload))
+	}
+	signLegacy := func() string {
+		payload := "rcpt-raw-v5:dec-raw-v5:" + effectID + ":DENY:sha256:out::1:sha256:args"
+		return hex.EncodeToString(ed25519.Sign(priv, []byte(payload)))
+	}
+	encode := func(signature string) []byte {
+		document["signature"] = signature
+		raw, err := json.Marshal(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	replace := func(raw []byte, old, replacement string) []byte {
+		updated := strings.Replace(string(raw), old, replacement, 1)
+		if updated == string(raw) {
+			t.Fatalf("encoded receipt does not contain %q", old)
+		}
+		return []byte(updated)
+	}
+	verifyRaw := func(t *testing.T, raw []byte) (*VerifyReport, int, int) {
+		t.Helper()
+		dir := createValidBundleFixture(t)
+		if err := os.WriteFile(filepath.Join(dir, "receipts", "receipt-001.json"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		sealVerifierFixture(t, dir, "raw-v5")
+		report, err := VerifyBundle(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		valid, total := countEmbeddedSignatures(dir, VerifyOptions{})
+		return report, valid, total
+	}
+
+	baselineSignature := signV5(1)
+	baseline := encode(baselineSignature)
+	baselineReport, baselineValid, baselineTotal := verifyRaw(t, baseline)
+	if baselineValid != 1 || baselineTotal != 1 {
+		t.Fatalf("baseline embedded signature count = %d/%d, want 1/1", baselineValid, baselineTotal)
+	}
+	assertCheck(t, baselineReport, "embedded_signature_trust", true)
+	signatureMember := `"signature":"` + baselineSignature + `"`
+
+	for _, tc := range []struct {
+		name string
+		raw  []byte
+	}{
+		{name: "null_string", raw: replace(baseline, `"policy_hash":"sha256:policy"`, `"policy_hash":null`)},
+		{name: "duplicate_signed_member", raw: replace(baseline, `"policy_hash":"sha256:policy"`, `"policy_hash":"sha256:policy","policy_hash":"sha256:policy"`)},
+		{name: "null_lamport_signed_zero", raw: replace(encode(signV5(0)), `"lamport_clock":1`, `"lamport_clock":null`)},
+		{name: "present_null_signature_version", raw: replace(encode(signLegacy()), `"signature_version":"receipt.v5"`, `"signature_version":null`)},
+		{name: "null_signature", raw: replace(baseline, signatureMember, `"signature":null`)},
+		{name: "duplicate_signature_last_null", raw: replace(baseline, signatureMember, signatureMember+`,"signature":null`)},
+		{name: "receipt_v5_missing_signature", raw: replace(baseline, signatureMember+`,`, "")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			report, valid, total := verifyRaw(t, tc.raw)
+			if valid != 0 || total != 1 {
+				t.Fatalf("malformed embedded signature count = %d/%d, want 0/1", valid, total)
+			}
+			assertEmbeddedSignatureTrustFails(t, report)
+		})
+	}
 }
 
 func TestVerifyBundleReceiptClassBindingMismatch(t *testing.T) {
@@ -711,6 +896,7 @@ func TestVerifyBundleReceiptClassBindingMismatch(t *testing.T) {
 			"lamport_clock":       1,
 			"args_hash":           "sha256:args",
 			"signature":           hex.EncodeToString(ed25519.Sign(priv, []byte(payload))),
+			"signature_profile":   "classical",
 			"signature_algorithm": "ed25519",
 			"public_key_set":      map[string]any{"ed25519": keyHex},
 		}
@@ -867,6 +1053,48 @@ func TestVerifyBundleWitnessSignatureTrust(t *testing.T) {
 		}
 		assertEmbeddedSignatureTrustFails(t, report)
 	})
+
+	baseline, err := json.Marshal(receipt(witnessSig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	witnesses, err := json.Marshal(receipt(witnessSig)["witness_signatures"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	signatureMember := `"signature":"` + witnessSig + `"`
+	witnessesMember := `"witness_signatures":` + string(witnesses)
+	for _, tc := range []struct {
+		name string
+		from string
+		to   string
+	}{
+		{name: "configured null witness signature fails closed", from: signatureMember, to: `"signature":null`},
+		{name: "configured duplicate witness signature fails closed", from: signatureMember, to: signatureMember + `,"signature":null`},
+		{name: "duplicate witness collection fails closed", from: witnessesMember, to: witnessesMember + `,"witness_signatures":null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := strings.Replace(string(baseline), tc.from, tc.to, 1)
+			if raw == string(baseline) {
+				t.Fatalf("baseline receipt does not contain %q", tc.from)
+			}
+			dir := createValidBundleFixture(t)
+			if err := os.WriteFile(filepath.Join(dir, "receipts", "receipt-001.json"), []byte(raw), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			sealVerifierFixture(t, dir, "test-session-001")
+			opts := VerifyOptions{WitnessPublicKeysHex: map[string]string{"w1": hex.EncodeToString(pub)}}
+			report, err := VerifyBundleWithOptions(dir, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			valid, total := countEmbeddedSignatures(dir, opts)
+			if valid != 0 || total != 1 {
+				t.Fatalf("malformed witness signature count = %d/%d, want 0/1", valid, total)
+			}
+			assertEmbeddedSignatureTrustFails(t, report)
+		})
+	}
 }
 
 func assertEmbeddedSignatureTrustFails(t *testing.T, report *VerifyReport) {

@@ -29,6 +29,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/verifier/externalreceipt"
 )
 
@@ -322,6 +323,11 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 				v := uint64(value)
 				return &v
 			}
+		case json.Number:
+			if parsed, err := value.Int64(); err == nil && parsed >= 0 {
+				v := uint64(parsed)
+				return &v
+			}
 		case string:
 			var parsed uint64
 			if _, err := fmt.Sscanf(value, "%d", &parsed); err == nil {
@@ -366,24 +372,34 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 			if readErr != nil {
 				return nil
 			}
-			var document map[string]any
-			if json.Unmarshal(data, &document) != nil {
+			document, parseErr := receiptverify.ParseReceiptDocument(data)
+			if document == nil {
 				return nil
 			}
-			if sig, ok := document["signature"].(string); ok && sig != "" {
+			signatureValue, signatureDeclared := document["signature"]
+			_, signatureVersionDeclared := document["signature_version"]
+			witnessValue, witnessDeclared := document["witness_signatures"]
+			if parseErr != nil {
+				if signatureDeclared || signatureVersionDeclared || witnessDeclared {
+					total++
+				}
+				return nil
+			}
+			if signatureDeclared || signatureVersionDeclared {
 				total++
-				if verifyEmbeddedDocumentSignature(document, sig, opts) {
+				sig, sigOK := signatureValue.(string)
+				if sigOK && sig != "" && verifyEmbeddedDocumentSignature(document, sig, opts) {
 					valid++
 				}
 			}
-			if witnesses, ok := document["witness_signatures"].([]any); ok {
+			if witnesses, ok := witnessValue.([]any); ok {
 				for _, witness := range witnesses {
 					item, ok := witness.(map[string]any)
 					if !ok {
 						continue
 					}
-					sig, ok := item["signature"].(string)
-					if !ok || sig == "" {
+					signatureValue, signatureDeclared := item["signature"]
+					if !signatureDeclared {
 						continue
 					}
 					keyHex := strings.TrimSpace(opts.WitnessPublicKeysHex[firstString(item, "witness_id")])
@@ -394,7 +410,8 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 						continue
 					}
 					total++
-					if verifyWitnessReceiptSignature(document, sig, keyHex) {
+					sig, ok := signatureValue.(string)
+					if ok && sig != "" && verifyWitnessReceiptSignature(document, sig, keyHex) {
 						valid++
 					}
 				}
@@ -510,6 +527,12 @@ func verifyMCPPolicyDecisionReceiptSignature(document map[string]any, sig string
 }
 
 func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) bool {
+	if !receiptverify.ClassicalEd25519MetadataCompatible(
+		firstString(document, "signature_profile"),
+		firstString(document, "signature_algorithm"),
+	) {
+		return false
+	}
 	pubBytes, err := hex.DecodeString(strings.TrimSpace(keyHex))
 	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
 		return false
@@ -551,12 +574,16 @@ func verifyEd25519CanonicalReceipt(document map[string]any, sig, keyHex string) 
 				return false
 			}
 		}
+		rawLamport, ok := document["lamport_clock"].(json.Number)
+		if !ok || canonicalize.CheckInteroperableNumbers(rawLamport) != nil {
+			return false
+		}
 		lamportValue := firstUint(document, "lamport_clock")
 		if lamportValue == nil {
 			return false
 		}
 		var err error
-		payload, err = canonicalize.JCS(receiptV5DocumentEnvelope{
+		payload, err = canonicalize.InteroperableJCS(receiptV5DocumentEnvelope{
 			SignatureVersion: sigVersion,
 			ReceiptID:        firstString(document, "receipt_id"),
 			DecisionID:       firstString(document, "decision_id"),

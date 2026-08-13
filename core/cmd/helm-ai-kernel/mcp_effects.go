@@ -24,12 +24,13 @@ import (
 
 // Environment contract for governed GitHub dispatch on the local MCP runtime.
 //
-// HELM_GITHUB_TOKEN arms the github.* tools: the runtime constructs the real
-// GitHub connector and hands it to a GovernedBridge whose permit signer is
-// keyed from the same root seed that signs receipts (data-dir root.key). Unset,
-// the tools are not registered and the handler refuses with a structured
-// reason — there is no mode where a github tool call is "allowed but not
-// dispatched" or dispatched under an unverifiable permit.
+// HELM_GITHUB_TOKEN arms the github.* connector wiring: the runtime constructs
+// the real GitHub connector and hands it to a GovernedBridge whose permit
+// signer is keyed from the same root seed that signs receipts (data-dir
+// root.key). The bridge also requires a shared full-gate Guardian; this local
+// caller does not yet inject that authority, so configured calls fail closed
+// with a structured no-dispatch reason until the wiring is completed. Unset,
+// the tools are not registered.
 const (
 	githubEffectsTokenEnv   = "HELM_GITHUB_TOKEN"
 	githubEffectsBaseURLEnv = "HELM_GITHUB_API_URL"
@@ -37,11 +38,10 @@ const (
 )
 
 // githubEffectsRuntime is the shipped wiring of the governed effects stack:
-// a real connector bound to a GovernedBridge that signs every minted
-// EffectPermit and verifies the signature at dispatch (PERMIT_UNVERIFIED
-// denial on failure). Reads dispatch under single-use permits; writes stay
-// fail-closed behind the approval ceremony (no ApprovalStore is configured
-// here, so bounded writes always escalate and never dispatch).
+// a real connector bound to a GovernedBridge that signs permits and verifies
+// them at dispatch. Dispatch is intentionally fail-closed here because this
+// caller has no shared Guardian with active threat, freeze, and delegation
+// gates; the bridge refuses before permit minting or connector execution.
 type githubEffectsRuntime struct {
 	bridge *rtmcp.GovernedBridge
 }
@@ -64,11 +64,10 @@ func newGitHubEffectsRuntimeFromEnv(dataDir string) (*githubEffectsRuntime, erro
 	return newGitHubEffectsRuntime(token, strings.TrimSpace(os.Getenv(githubEffectsBaseURLEnv)), seed)
 }
 
-// newGitHubEffectsRuntime constructs the governed dispatch runtime from
-// explicit inputs. It refuses a seed that yields no permit signer: the bridge's
-// dispatch gate is a no-op without a signer, so arming dispatch without one
-// would make the permit-tamper check pass vacuously — the one failure mode this
-// wiring exists to prevent.
+// newGitHubEffectsRuntime constructs the governed runtime from explicit inputs.
+// It refuses a seed that yields no permit signer. It deliberately does not
+// synthesize a Guardian: freeze/delegation authority must come from the shared
+// runtime owner, and the bridge fails closed until that authority is supplied.
 func newGitHubEffectsRuntime(token, baseURL string, seed []byte) (*githubEffectsRuntime, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, fmt.Errorf("github effects: token is required")
@@ -108,12 +107,9 @@ func localPermitSigningSeed(dataDir string) ([]byte, error) {
 	return seed, nil
 }
 
-// githubEffectsProfile authorizes operate-class MCP tool calls for this
-// bridge. Scope below this profile is enforced by the connector's declared
-// permit contract (exact tool, exact params) and the permit signature gate;
-// above it, the serve-policy Guardian gate stays deny-all unless --policy
-// explicitly allows each github tool. This profile never ships as a default
-// for anything else.
+// githubEffectsProfile authorizes operate-class MCP tool calls for this bridge
+// once the shared Guardian and connector permit contract are present. The
+// profile alone never authorizes a configured connector dispatch.
 func githubEffectsProfile() contracts.WorkstationPolicyProfile {
 	return contracts.WorkstationPolicyProfile{
 		ID:      "workstation.github.effects.v1",
@@ -131,7 +127,7 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 		{
 			Name:        "github.list_prs",
 			Title:       "List GitHub pull requests",
-			Description: "Lists pull requests in a repository. Dispatches under a signed EffectPermit verified at dispatch.",
+			Description: "Configured but unavailable until shared Guardian wiring exists; calls fail closed in the current runtime.",
 			ServerID:    githubEffectsServerID,
 			Schema: map[string]any{
 				"type": "object",
@@ -146,7 +142,7 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 		{
 			Name:        "github.read_pr",
 			Title:       "Read a GitHub pull request",
-			Description: "Reads one pull request. Dispatches under a signed EffectPermit verified at dispatch.",
+			Description: "Configured but unavailable until shared Guardian wiring exists; calls fail closed in the current runtime.",
 			ServerID:    githubEffectsServerID,
 			Schema: map[string]any{
 				"type": "object",
@@ -161,7 +157,7 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 		{
 			Name:        "github.create_issue",
 			Title:       "Create a GitHub issue",
-			Description: "Bounded write: requires human approval evidence before dispatch; without it the call escalates and nothing is sent.",
+			Description: "Configured but unavailable until shared Guardian wiring exists; calls fail closed in the current runtime.",
 			ServerID:    githubEffectsServerID,
 			Schema: map[string]any{
 				"type": "object",
@@ -179,7 +175,7 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 		{
 			Name:        "github.add_comment",
 			Title:       "Comment on a GitHub issue",
-			Description: "Bounded write: requires human approval evidence before dispatch; without it the call escalates and nothing is sent.",
+			Description: "Configured but unavailable until shared Guardian wiring exists; calls fail closed in the current runtime.",
 			ServerID:    githubEffectsServerID,
 			Schema: map[string]any{
 				"type": "object",
@@ -196,9 +192,9 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 }
 
 // execute routes a github.* tool call through the governed bridge and returns
-// the outcome as a machine document: verdict, dispatch state, the signed
-// permit itself, and the key that verifies it offline
-// (receipt_verify --key <permit_public_key>).
+// the outcome as a machine document. A denied call carries the gate or scope
+// reason and a not-dispatched state; an allowed call also carries the signed
+// permit and its offline verification key.
 func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
 	adapted := &runtimeadapters.AdaptedRequest{
 		RuntimeType:         "mcp",

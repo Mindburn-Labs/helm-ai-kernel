@@ -8,11 +8,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
-	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	rtmcp "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters/mcp"
 )
@@ -31,17 +28,40 @@ func decodeEffectsDoc(t *testing.T, resp mcppkg.ToolExecutionResponse) map[strin
 	return doc
 }
 
-// TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit is the W1 keystone
-// acceptance proof on the shipped path: a governed github.list_prs call
-// dispatches against a real HTTP endpoint under a permit the bridge signed and
-// verified, the receipt's output hash reflects the real response, and the
-// emitted permit verifies offline with the reported key. The mutation at the
-// end shows the signature actually covers the permit: flip one byte and offline
-// verification fails.
-func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
-	var gotPath string
+func TestGitHubEffectsToolRefsDiscloseUnavailableRuntime(t *testing.T) {
+	rt, err := newGitHubEffectsRuntime("ghp-test", "https://api.github.test", testSigningSeed())
+	if err != nil {
+		t.Fatalf("construct runtime: %v", err)
+	}
+	want := "Configured but unavailable until shared Guardian wiring exists; calls fail closed in the current runtime."
+	wantNames := map[string]bool{
+		"github.list_prs":     true,
+		"github.read_pr":      true,
+		"github.create_issue": true,
+		"github.add_comment":  true,
+	}
+	refs := rt.toolRefs()
+	if len(refs) != len(wantNames) {
+		t.Fatalf("registered GitHub tool count = %d, want %d", len(refs), len(wantNames))
+	}
+	for _, ref := range refs {
+		if !wantNames[ref.Name] {
+			t.Fatalf("unexpected GitHub tool %q", ref.Name)
+		}
+		if ref.Description != want {
+			t.Errorf("%s description = %q, want unavailable-state disclosure", ref.Name, ref.Description)
+		}
+	}
+}
+
+// TestGitHubEffectsRuntimeFailsClosedWithoutGuardianGates is the shipped-path
+// boundary proof: the real provider connector is configured, but this caller
+// does not inject a shared full-gate Guardian, so the bridge refuses before the
+// connector can reach an external HTTP endpoint.
+func TestGitHubEffectsRuntimeFailsClosedWithoutGuardianGates(t *testing.T) {
+	var requests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		requests++
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[{"number":7,"title":"Fix","body":"Body","state":"open","created_at":"2026-08-01T00:00:00Z","user":{"login":"ada"},"head":{"ref":"feature"},"base":{"ref":"main"}}]`))
 	}))
@@ -60,53 +80,21 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if resp.IsError {
-		t.Fatalf("read call reported error: %s", resp.Content)
+	if !resp.IsError {
+		t.Fatalf("configured connector call was not refused: %s", resp.Content)
 	}
 	doc := decodeEffectsDoc(t, resp)
-
-	// Acceptance 1 + 4: the call actually dispatched and the receipt binds the
-	// real response.
-	if doc["verdict"] != "ALLOW" {
-		t.Fatalf("verdict = %v, want ALLOW (reason=%v)", doc["verdict"], doc["reason"])
+	if doc["verdict"] != "DENY" {
+		t.Fatalf("verdict = %v, want DENY (reason=%v)", doc["verdict"], doc["reason"])
 	}
-	if doc["dispatch_state"] != rtmcp.DispatchStateDispatched {
-		t.Fatalf("dispatch_state = %v, want %q", doc["dispatch_state"], rtmcp.DispatchStateDispatched)
+	if doc["reason_code"] != "GUARDIAN_GATES_UNAVAILABLE" {
+		t.Fatalf("reason_code = %v, want GUARDIAN_GATES_UNAVAILABLE", doc["reason_code"])
 	}
-	if doc["dispatch_state"] == rtmcp.DispatchStateNoDispatch {
-		t.Fatal("shipped path emitted a no-dispatch proof; the connector was not wired")
+	if doc["dispatch_state"] != rtmcp.DispatchStateNotDispatched {
+		t.Fatalf("dispatch_state = %v, want %q", doc["dispatch_state"], rtmcp.DispatchStateNotDispatched)
 	}
-	if oh, _ := doc["output_hash"].(string); oh == "" {
-		t.Fatal("output_hash is empty; the receipt does not bind the real response")
-	}
-	if !strings.Contains(gotPath, "/repos/owner/repo/pulls") {
-		t.Fatalf("connector did not reach the GitHub pulls endpoint; hit %q", gotPath)
-	}
-	if doc["result"] == nil {
-		t.Fatal("no result returned from a dispatched read")
-	}
-
-	// Acceptance 2 + 5: the emitted permit is signed and verifies offline with
-	// the key the response reports — no HELM service in the trust path.
-	pubKey, _ := doc["permit_public_key"].(string)
-	if pubKey == "" {
-		t.Fatal("response did not report the permit public key")
-	}
-	permit := decodePermit(t, doc["permit"])
-	if permit.Signature == "" {
-		t.Fatal("dispatched permit is unsigned")
-	}
-	ok, err := helmcrypto.VerifyPermit(pubKey, permit)
-	if err != nil || !ok {
-		t.Fatalf("emitted permit failed offline verification: ok=%v err=%v", ok, err)
-	}
-
-	// Mutation: the signature must actually cover the permit. Widen the scope
-	// after issuance and offline verification must reject it.
-	tampered := *permit
-	tampered.Scope.AllowedAction = "github.create_issue"
-	if ok, _ := helmcrypto.VerifyPermit(pubKey, &tampered); ok {
-		t.Fatal("a permit whose scope was changed after signing still verified; the signature does not cover scope")
+	if requests != 0 {
+		t.Fatalf("Guardian gate refusal reached GitHub %d times", requests)
 	}
 }
 
@@ -153,10 +141,10 @@ func TestGitHubEffectsRuntimeRefusesWithoutSigningSeed(t *testing.T) {
 	}
 }
 
-// TestGitHubEffectsWriteEscalatesWithoutApproval proves bounded writes stay
-// fail-closed on this path: with no approval store configured, create_issue
-// escalates and never dispatches, so no external write can occur.
-func TestGitHubEffectsWriteEscalatesWithoutApproval(t *testing.T) {
+// TestGitHubEffectsWriteRequiresGuardianBeforeApproval proves the generic
+// bridge gate precedes approval handling: this caller lacks the shared Guardian
+// required for any configured connector, so no write reaches approval or HTTP.
+func TestGitHubEffectsWriteRequiresGuardianBeforeApproval(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Error("write reached GitHub without approval")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -179,25 +167,13 @@ func TestGitHubEffectsWriteEscalatesWithoutApproval(t *testing.T) {
 		t.Fatalf("bounded write was not refused: %s", resp.Content)
 	}
 	doc := decodeEffectsDoc(t, resp)
-	if doc["verdict"] != "ESCALATE" {
-		t.Fatalf("verdict = %v, want ESCALATE", doc["verdict"])
+	if doc["verdict"] != "DENY" {
+		t.Fatalf("verdict = %v, want DENY", doc["verdict"])
 	}
-	if doc["dispatch_state"] == rtmcp.DispatchStateDispatched {
-		t.Fatal("bounded write dispatched without approval")
+	if doc["reason_code"] != "GUARDIAN_GATES_UNAVAILABLE" {
+		t.Fatalf("reason_code = %v, want GUARDIAN_GATES_UNAVAILABLE", doc["reason_code"])
 	}
-}
-
-// decodePermit round-trips the response's permit field back into an
-// effects.EffectPermit for offline verification.
-func decodePermit(t *testing.T, v any) *effects.EffectPermit {
-	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal permit: %v", err)
+	if doc["dispatch_state"] != rtmcp.DispatchStateNotDispatched {
+		t.Fatalf("dispatch_state = %v, want %q", doc["dispatch_state"], rtmcp.DispatchStateNotDispatched)
 	}
-	var permit effects.EffectPermit
-	if err := json.Unmarshal(raw, &permit); err != nil {
-		t.Fatalf("unmarshal permit: %v", err)
-	}
-	return &permit
 }

@@ -17,6 +17,10 @@ type permitRecordingConnector struct {
 
 func (c *permitRecordingConnector) ID() string { return c.id }
 
+func (c *permitRecordingConnector) PermitScope(toolName string, _ map[string]any) (effects.EffectType, effects.EffectScope, string, error) {
+	return effects.EffectTypeRead, effects.EffectScope{AllowedAction: toolName}, toolName, nil
+}
+
 func (c *permitRecordingConnector) Execute(_ context.Context, permit *effects.EffectPermit, _ string, _ map[string]any) (any, error) {
 	c.calls++
 	c.permit = permit

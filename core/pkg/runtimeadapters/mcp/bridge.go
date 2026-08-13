@@ -22,6 +22,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcpcore "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/workstation"
@@ -71,8 +72,9 @@ type EffectReservationBoundary interface {
 // human approval before dispatch, even when policy would otherwise allow it.
 type WriteClassifier func(toolName string, args map[string]any) bool
 
-// DefaultWriteClassifier flags tool names with common mutating verbs. Deployments
-// should replace it with connector-declared effect classes.
+// DefaultWriteClassifier flags tool names with common mutating verbs. It is
+// retained only for connectorless no-dispatch fixtures; configured connectors
+// must declare their effect through effects.PermitScopeProvider.
 //
 // ponytail: verb heuristic; connector effect-class metadata should drive this in
 // production (see effects.EffectRequest.EffectType).
@@ -93,14 +95,12 @@ func DefaultWriteClassifier(toolName string, _ map[string]any) bool {
 //
 // It is fail-closed: any internal error yields a DENY outcome, never an ALLOW.
 //
-// Threat-model note: policy authority here is the workstation profile engine
-// (workstation.Decide), NOT the full 6-gate guardian PEP. It enforces
-// operate-permission and (via the boundary firewall) allowlist/identity/scope,
-// but it does not run the Threat/injection, Freeze, or full Delegation-scope
-// gates. MCP is a prime prompt-injection surface, so routing it through the
-// complete guardian pipeline is a tracked follow-up before this bridge is
-// enabled by default. DelegationSessionID is forwarded into the decision record
-// but not yet scope-enforced on this path.
+// Threat-model note: configured connector dispatch requires a full Guardian
+// with the Threat/injection, Freeze, and Delegation gates active. The Guardian
+// runs before workstation policy and connector dispatch; a missing Guardian or
+// required gate fails closed. Workstation policy remains the MCP-specific
+// operate-permission decision, and the boundary firewall remains an additional
+// allowlist/identity/scope gate.
 type GovernedBridge struct {
 	firewall     *mcpcore.ExecutionFirewall // optional boundary gate: allowlist/identity/scope/pinned-schema
 	serverID     string
@@ -113,7 +113,8 @@ type GovernedBridge struct {
 	permitSignerErr error
 	nonces          effects.NonceStore
 	connector       effects.Connector // optional: nil => allowed but not dispatched (no-dispatch proof)
-	approvals       ApprovalStore     // optional: nil => escalations cannot be satisfied
+	guardian        *guardian.Guardian
+	approvals       ApprovalStore // optional: nil => escalations cannot be satisfied
 	reservations    EffectReservationBoundary
 	isWrite         WriteClassifier
 	permitTTL       time.Duration
@@ -145,6 +146,11 @@ type BridgeConfig struct {
 	Nonces effects.NonceStore
 	// Connector dispatches ALLOW effects. Nil => allowed but not dispatched.
 	Connector effects.Connector
+	// Guardian is the full governance authority for configured connector
+	// dispatch. It must have threat, freeze, and delegation gates active; nil or
+	// incomplete rosters fail closed before policy, permit minting, or dispatch.
+	// Connectorless bridges remain available for no-dispatch proofs.
+	Guardian *guardian.Guardian
 	// Approvals verifies approval evidence for escalated writes. Nil => writes
 	// requiring approval always escalate and can never proceed.
 	Approvals ApprovalStore
@@ -223,6 +229,7 @@ func NewGovernedBridge(cfg BridgeConfig) *GovernedBridge {
 		permitSignerErr: permitSignerErr,
 		nonces:          nonces,
 		connector:       cfg.Connector,
+		guardian:        cfg.Guardian,
 		approvals:       cfg.Approvals,
 		reservations:    cfg.EffectReservations,
 		isWrite:         isWrite,
@@ -254,9 +261,13 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 	now := b.now().UTC()
 	permitScope, err := b.resolvePermitScope(req)
 	if err != nil {
+		reasonCode := "CONNECTOR_PERMIT_SCOPE_REJECTED"
+		if errors.Is(err, errConnectorPermitScopeUnsupported) {
+			reasonCode = "CONNECTOR_PERMIT_SCOPE_UNSUPPORTED"
+		}
 		return GovernedOutcome{
 			Verdict:       contracts.VerdictDeny,
-			ReasonCode:    "CONNECTOR_PERMIT_SCOPE_REJECTED",
+			ReasonCode:    reasonCode,
 			Reason:        err.Error(),
 			DispatchState: DispatchStateNotDispatched,
 		}
@@ -274,6 +285,11 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 		boundaryEffect = strings.ToLower(string(permitScope.effectType))
 	} else if b.isWrite(req.ToolName, req.Arguments) {
 		boundaryEffect = "write"
+	}
+	if b.connector != nil {
+		if outcome, ok := b.authorizeGuardian(ctx, req, inputHash); !ok {
+			return outcome
+		}
 	}
 
 	// Boundary gate (allowlist / server identity / scope / pinned schema) runs
@@ -327,11 +343,13 @@ func (b *GovernedBridge) Govern(ctx context.Context, req *runtimeadapters.Adapte
 
 	// Approval-gated ESCALATE tier: policy allows it, but a bounded write needs
 	// human approval evidence bound to this exact request. Connector-declared
-	// effect metadata is authoritative when present; the verb heuristic remains
-	// only for legacy connectors without a permit-scope contract.
-	isWrite := b.isWrite(req.ToolName, req.Arguments)
+	// effect metadata is authoritative for configured connectors. The verb
+	// heuristic remains only for connectorless no-dispatch fixtures.
+	isWrite := false
 	if permitScope.connectorDeclared {
 		isWrite = effectTypeRequiresApproval(permitScope.effectType)
+	} else if b.connector == nil {
+		isWrite = b.isWrite(req.ToolName, req.Arguments)
 	}
 	if isWrite {
 		approval, ok := b.checkApproval(inputHash)
@@ -752,15 +770,128 @@ type permitScopeResolution struct {
 	connectorDeclared bool
 }
 
+var errConnectorPermitScopeUnsupported = errors.New("configured dispatch connector must implement effects.PermitScopeProvider")
+
+func (b *GovernedBridge) authorizeGuardian(ctx context.Context, req *runtimeadapters.AdaptedRequest, inputHash string) (GovernedOutcome, bool) {
+	if b.guardian == nil {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    "GUARDIAN_GATES_UNAVAILABLE",
+			Reason:        "configured connector dispatch requires a Guardian with threat, freeze, and delegation gates",
+			DispatchState: DispatchStateNotDispatched,
+		}, false
+	}
+	roster := b.guardian.GateRoster()
+	missing := make([]string, 0, 3)
+	for _, gate := range []guardian.GateID{guardian.GateThreat, guardian.GateFreeze, guardian.GateDelegation} {
+		active := false
+		for _, candidate := range roster.Active {
+			if candidate == gate {
+				active = true
+				break
+			}
+		}
+		if !active {
+			missing = append(missing, string(gate))
+		}
+	}
+	if len(missing) > 0 {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    "GUARDIAN_GATES_UNAVAILABLE",
+			Reason:        fmt.Sprintf("configured connector dispatch is missing Guardian gates: %s", strings.Join(missing, ", ")),
+			DispatchState: DispatchStateNotDispatched,
+		}, false
+	}
+
+	args, err := canonicalize.JCS(req.Arguments)
+	if err != nil {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    string(contracts.ReasonPDPError),
+			Reason:        fmt.Sprintf("Guardian context canonicalization failed: %v", err),
+			DispatchState: DispatchStateNotDispatched,
+		}, false
+	}
+	decision, err := b.guardian.EvaluateDecision(ctx, guardian.DecisionRequest{
+		Principal: req.PrincipalID,
+		Action:    "EXECUTE_TOOL",
+		Resource:  req.ToolName,
+		Context:   guardianContext(req, inputHash, args),
+	})
+	if err != nil {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    string(contracts.ReasonPDPError),
+			Reason:        fmt.Sprintf("Guardian evaluation failed: %v", err),
+			DispatchState: DispatchStateNotDispatched,
+		}, false
+	}
+	if decision == nil {
+		return GovernedOutcome{
+			Verdict:       contracts.VerdictDeny,
+			ReasonCode:    string(contracts.ReasonPDPError),
+			Reason:        "Guardian returned no decision",
+			DispatchState: DispatchStateNotDispatched,
+		}, false
+	}
+	if decision.Verdict == string(contracts.VerdictAllow) {
+		return GovernedOutcome{}, true
+	}
+	verdict := contracts.VerdictDeny
+	if decision.Verdict == string(contracts.VerdictEscalate) {
+		verdict = contracts.VerdictEscalate
+	}
+	reasonCode := decision.ReasonCode
+	if reasonCode == "" {
+		reasonCode = "GUARDIAN_DECISION_REJECTED"
+	}
+	return GovernedOutcome{
+		Verdict:       verdict,
+		DecisionID:    decision.ID,
+		ReasonCode:    reasonCode,
+		Reason:        decision.Reason,
+		DispatchState: DispatchStateNotDispatched,
+	}, false
+}
+
+func guardianContext(req *runtimeadapters.AdaptedRequest, inputHash string, canonicalArgs []byte) map[string]interface{} {
+	ctx := make(map[string]interface{}, len(req.Metadata)+4)
+	for key, value := range req.Metadata {
+		switch key {
+		case "content", "delegation_session_id", "delegation_validated", "delegation_delegator", "delegation_delegate":
+			continue
+		}
+		if guardian.IsReservedSecurityContextKey(key) {
+			continue
+		}
+		ctx[key] = value
+	}
+	ctx["tool_name"] = req.ToolName
+	ctx["arguments"] = req.Arguments
+	ctx["content"] = string(canonicalArgs)
+	ctx["input_hash"] = inputHash
+	if strings.TrimSpace(req.DelegationSessionID) != "" {
+		ctx["delegation_session_id"] = req.DelegationSessionID
+	}
+	if verifier, ok := req.Metadata["delegation_verifier"]; ok {
+		ctx["delegation_verifier"] = verifier
+	}
+	return ctx
+}
+
 func (b *GovernedBridge) resolvePermitScope(req *runtimeadapters.AdaptedRequest) (permitScopeResolution, error) {
 	resolution := permitScopeResolution{
 		effectType:  effects.EffectTypeExecute,
 		scope:       effects.EffectScope{AllowedAction: req.ToolName},
 		resourceRef: req.ToolName,
 	}
+	if b.connector == nil {
+		return resolution, nil
+	}
 	provider, ok := b.connector.(effects.PermitScopeProvider)
 	if !ok {
-		return resolution, nil
+		return permitScopeResolution{}, fmt.Errorf("%w: %s", errConnectorPermitScopeUnsupported, b.connector.ID())
 	}
 	effectType, scope, resourceRef, err := provider.PermitScope(req.ToolName, req.Arguments)
 	if err != nil {
@@ -902,9 +1033,8 @@ func mergeMetadata(md map[string]string, inputHash, delegationSessionID string) 
 	for k, v := range md {
 		out[k] = v
 	}
-	// Forward the delegation session so the decision record carries it. Full
-	// delegation-scope enforcement on the MCP surface is a follow-up (see the
-	// GovernedBridge threat-model note) — this preserves the reference today.
+	// Forward the delegation session so the workstation decision record carries
+	// the same reference that the Guardian already scope-checks before policy.
 	if strings.TrimSpace(delegationSessionID) != "" {
 		out["delegation_session_id"] = delegationSessionID
 	}

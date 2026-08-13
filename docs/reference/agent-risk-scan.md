@@ -164,6 +164,17 @@ These values are not exported:
 - secret values;
 - local salts.
 
+`source_pack_hash` is not a hash of source files, config bytes, receipt files,
+or other raw scan input. It is `sha256:` plus the SHA-256 digest of the
+HELM canonical JSON form of an anonymized projection summary, as produced by
+`canonicalize.CanonicalHash`. Static scans hash `sourceSummary`:
+`files_scanned`, `files_skipped`, aggregate vendor and severity counts,
+`boundary_grade`, `helm_present`, `mcp_server_count`, and
+`static_config_files_read`. Receipt scans hash the corresponding anonymized
+`receiptSourceSummary`: receipt, action, denial, and observe counts plus
+effect-type, tool-class, and risk-code buckets. Raw file content and raw
+identifiers enter neither summary.
+
 The evidence-pack tar contains exactly:
 
 - `evidence-pack.json`, using the generic `contracts.EvidencePack` contract;
@@ -227,7 +238,7 @@ is implied by this command; operators must provide the explicit upload URL.
 | Go enum to JSON Schema parity | `core/pkg/riskenvelope/envelope_test.go` |
 | grade reason is a closed sentence set in both Go and the schema | `core/pkg/riskenvelope/envelope_test.go`, `core/pkg/riskscan/scan_test.go` |
 | grade reaches the envelope, previews, and stdout | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
-| content hash changes when findings change | `core/pkg/riskenvelope/envelope_test.go` |
+| content hash changes when findings or any posture field changes, and stale hashes fail validation | `core/pkg/riskenvelope/envelope_test.go` |
 | static projection omits raw paths, repo names, commands, and secrets | `core/pkg/riskscan/scan_test.go` |
 | Markdown, HTML, and evidence pack outputs omit raw inputs | `core/pkg/riskscan/scan_test.go` |
 | deterministic evidence pack tar contents | `core/pkg/riskscan/scan_test.go` |

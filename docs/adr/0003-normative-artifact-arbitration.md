@@ -32,10 +32,11 @@ plans that would have edited the wrong artifact:
 
 - One planned to add the missing signed fields to
   `protocols/json-schemas/receipt/v2.json`. Those fields are already published —
-  `api/openapi/helm.openapi.yaml:4178-4224` carries all twelve plus
+  `api/openapi/helm.openapi.yaml:4218-4267` carries all twelve plus
   `signature_version` and `signature`, and
   `protocols/proto/helm/kernel/v1/helm.proto:126-155` carries twelve of them.
-  What is unpublished is the *construction rule*, which no schema can express.
+  At the time of this decision the *construction rule* was unpublished; P2-3
+  later published it without changing the wire field inventory.
 - One planned to rewrite `protocols/specs/rfc/receipt-format-v1.md` §2.3 to match
   `core/pkg/crypto/canonical.go`. That RFC is correct — for
   `LaunchEffectReceipt` (`core/pkg/contracts/launch_effect_receipt.go:370-381`),
@@ -75,7 +76,7 @@ artifact without naming which of the two contracts it means.
 (`*.c14n.json`), the signing payload, the public key, the signature, and named
 negative mutations with expected errors, and where both a Go test of the form
 `Test<X>ReferencePackMatchesGoImplementation` and an independent Python verifier
-run from `make verify-fixtures` (`Makefile:137-154`, CI `.github/workflows/ci.yml:167`).
+run from `make verify-fixtures` (`Makefile:141-159`, CI `.github/workflows/ci.yml:167`).
 
 On conflict, **the specification and its pack win; the Go implementation is the
 bug.** This is not a stylistic preference. If Go won, an independent
@@ -95,11 +96,11 @@ bindings, the JSON Schemas, and the Go structs.
 
 OpenAPI outranks the JSON Schemas here on evidence, not convention: for the
 mainline receipt it is the only representation that is field-complete for the
-signed set (`api/openapi/helm.openapi.yaml:4178-4224`, whose own comment at
-:4187 states the purpose — "so a verifier can reconstruct the signed governance
-view"), and it is the only one behind a backward-compatibility gate
-(`make openapi-breaking` → `oasdiff`, `Makefile:183`,
-`scripts/ci/quality-gates.json:563-573`, run by `make quality-pr` at
+signed set (`api/openapi/helm.openapi.yaml:4218-4267`, whose own comment at
+`:4227-4228` states the purpose — "so a verifier can reconstruct the signed
+governance view"), and it is the only one behind a backward-compatibility gate
+(`make openapi-breaking` → `oasdiff`, `Makefile:205-206`,
+`scripts/ci/quality-gates.json:578-588`, run by `make quality-pr` at
 `.github/workflows/ci.yml:75`).
 
 **JSON Schemas under `protocols/json-schemas/` are derived validation views.**
@@ -139,14 +140,14 @@ This is the arbitration answer. Every row was originally audited at
 
 | Family | Integrity state | Integrity source (or implementation of record) | Wire source | Derived |
 | --- | --- | --- | --- | --- |
-| `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **UNSPECIFIED** | Implementation of record: `core/pkg/crypto/canonical.go:171-185` (13-key JCS envelope) reached through `ReceiptSigningPayload` (`canonical.go:217-223`); lowercase hex signature (`core/pkg/crypto/signer.go:145-148`). **No published artifact states the construction rule.** | `api/openapi/helm.openapi.yaml:4178-4224` (HTTP); `protocols/proto/helm/kernel/v1/helm.proto:126-155` (gRPC) | `protocols/json-schemas/receipt/v2.json`; the five SDK bindings; `core/pkg/contracts/receipt.go` |
-| `LaunchEffectReceipt` — the Receipt Format v1 launch profile | **SPECIFIED** | `protocols/specs/rfc/receipt-format-v1.md` §2 + `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json:304-313` + `reference_packs/launch-mission-v1/` | same schema | `core/pkg/contracts/launch_effect_receipt.go` |
-| `CounterfactualReceipt` | **SPECIFIED for the preimage; UNSPECIFIED for the wire shape** | `protocols/specs/rfc/receipt-format-v1.md:148-150` states the preimage `"counterfactual:" + receipt_hash`; `core/pkg/contracts/counterfactual_receipt.go:146-148` matches it exactly; vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` | none — no schema, no proto, no OpenAPI component | — |
+| `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **SPECIFIED** | `protocols/specs/receipts/receipt-v5.md` + `reference_packs/receipt-v5/`; source-owned Go parity and independent stdlib-Python verification run from `make verify-fixtures` | `api/openapi/helm.openapi.yaml:4218-4267` (HTTP); `protocols/proto/helm/kernel/v1/helm.proto:126-155` (gRPC) | `protocols/json-schemas/receipt/v2.json`; the five SDK bindings; `core/pkg/contracts/receipt.go` |
+| `LaunchEffectReceipt` — the Receipt Format v1 launch profile | **SPECIFIED** | `protocols/specs/rfc/receipt-format-v1.md` §2 excluding §2.6, plus §§3–5; `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json:304-313`; `reference_packs/launch-mission-v1/` | same schema | `core/pkg/contracts/launch_effect_receipt.go` |
+| `CounterfactualReceipt` | **SPECIFIED for the preimage; UNSPECIFIED for the wire shape** | `protocols/specs/rfc/receipt-format-v1.md` §2.6 states the preimage `"counterfactual:" + receipt_hash`; `core/pkg/contracts/counterfactual_receipt.go:146-148` matches it exactly; vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json` | none — no schema, no proto, no OpenAPI component | — |
 | External decision receipt (`helm_external.v1`) | **SPECIFIED** | `protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md` §3, matching `core/pkg/verifier/decisionreceipt/helm_external.go:74-85` field-for-field | same | — |
 
 `receipt-format-v1.md` is normative **for the launch profile only**. Its header
-does not say so, which is what produced the second wrong plan; fixing the header
-is P2-7. Until it says so, no surface may cite it as "the HELM receipt standard".
+and scope now name `launch_effect_receipt.v1`; no surface may cite it as a
+generic "HELM receipt standard".
 
 #### Permits
 
@@ -164,15 +165,18 @@ verified, neither a shipping cross-process dispatch nor global completion of the
 EffectPermit family may be claimed. Per D7, runtime deployment remains separate
 from contract status.
 
-> **Non-normative integration note.** At this checkpoint, Control Plane
-> migration is draft
-> [#291](https://github.com/Mindburn-Labs/svc-helm-control-plane/pull/291),
-> Data Plane migration is draft
-> [#37](https://github.com/Mindburn-Labs/svc-helm-data-plane/pull/37), and Sandbox
-> migration is draft
-> [#19](https://github.com/Mindburn-Labs/svc-agent-sandbox-runner/pull/19).
-> These delivery links are not part of the protocol and must be refreshed before
-> making an integration or deployment claim.
+> **Non-normative integration note.** The source migrations are merged: Control
+> Plane [#291](https://github.com/Mindburn-Labs/svc-helm-control-plane/pull/291)
+> from reviewed head `65d5e3e2e4d67d604cccf631d760211e94b14b70` as merge
+> `4fb9fa7667d501aa3902b11a885b56d383890414`, Data Plane
+> [#37](https://github.com/Mindburn-Labs/svc-helm-data-plane/pull/37) from reviewed
+> head `8617e0a9ac2f188eb828a3a68ee5301c8ebaa9b8` as merge
+> `47d077be052ab5f9e3aee322bd8a2df1d7012556`, and Sandbox
+> [#19](https://github.com/Mindburn-Labs/svc-agent-sandbox-runner/pull/19) from
+> reviewed head `6774814784eae4f1607382d50db46061f1d5f9a3` as merge
+> `c8622fcf2ce9b02067004bb1f2867638c5d9870c`. This proves source adoption only;
+> coordinated version pinning, deployment, activation, and end-to-end runtime
+> verification remain separate gates.
 
 #### Decisions
 
@@ -192,7 +196,7 @@ dispatch: `canonical.go:92-93` rejects an intent whose version is not exactly
 
 | Family | Integrity state | Detail |
 | --- | --- | --- |
-| EvidencePack | **CONTRADICTED** | `protocols/spec/evidence-pack-v1.md` is `status: draft` in its front matter (:3) and "Draft -- Normative Standard" in its body (:26). At :207 it requires each receipt entry's `signature` to be a base64 Ed25519 signature; the kernel emits lowercase hex (`core/pkg/crypto/signer.go:145-148`) and `crypto.Verify` hard-errors on anything that is not hex (`signer.go:167-175`). At :187 it defers the receipt signature to "the receipt signing payload", a term the document never defines and which — per the receipt row above — is unpublished. Separately, the L1-normative `protocols/json-schemas/core/evidence_pack.schema.json` (`SCHEMA_INDEX.md:28`) has exactly one non-documentation mention anywhere in the tree: a `// Schema:` comment attached to a *different* type, `sovereignty.DecisionRecord`, at `core/pkg/kernel/sovereignty/types.go:10` — and `git grep 'kernel/sovereignty' -- '*.go'`, excluding tests, returns nothing, so that package has no importer either. The shipped pack manifest is a different shape entirely: `core/pkg/evidencepack/manifest.go:23-38`. |
+| EvidencePack | **CONTRADICTED** | `protocols/spec/evidence-pack-v1.md` is `status: draft` in its front matter (:3) and "Draft -- Normative Standard" in its body (:26). At :207 it requires each receipt entry's `signature` to be a base64 Ed25519 signature; the kernel emits lowercase hex (`core/pkg/crypto/signer.go:145-148`) and `crypto.Verify` hard-errors on anything that is not hex (`signer.go:167-175`). At :187 it defers to "the receipt signing payload" without naming an artifact family or signature version; the later receipt.v5 specification does not retroactively bind that ambiguous evidence contract. Separately, the L1-normative `protocols/json-schemas/core/evidence_pack.schema.json` (`SCHEMA_INDEX.md:28`) has exactly one non-documentation mention anywhere in the tree: a `// Schema:` comment attached to a *different* type, `sovereignty.DecisionRecord`, at `core/pkg/kernel/sovereignty/types.go:10` — and `git grep 'kernel/sovereignty' -- '*.go'`, excluding tests, returns nothing, so that package has no importer either. The shipped pack manifest is a different shape entirely: `core/pkg/evidencepack/manifest.go:23-38`. |
 
 Consequence of CONTRADICTED: `evidence-pack-v1.md` may not be cited as the
 EvidencePack specification, and `evidence_pack.schema.json` may not be cited as
@@ -200,24 +204,26 @@ the EvidencePack schema, until P2-7 corrects them.
 
 #### The families that already work — the model to copy
 
-The reference packs below are integrity-SPECIFIED and CI-bound, each with a Go
-parity test and an independent stdlib-Python verifier reached from
-`make verify-fixtures` (`Makefile:137-154`, CI `.github/workflows/ci.yml:167`):
+`make verify-fixtures` reaches fourteen Go/Python conformance packs: thirteen
+signed-artifact integrity packs plus `canonical-json-v1`, their shared
+canonicalization substrate. The target is run by `.github/workflows/ci.yml`.
 
 | Pack | Gate |
 | --- | --- |
-| `reference_packs/extauthz/` | `Makefile:136`, plus `Makefile:125-126` |
-| `reference_packs/approval/` | `Makefile:127`, `Makefile:52-53`, `Makefile:137` |
-| `reference_packs/approval-consumption-v1/` | `Makefile:54`, `Makefile:57` |
-| `reference_packs/approval-dispatch-admission-v1/` | `Makefile:55`, `Makefile:58` |
-| `reference_packs/generated-spec-approval-ceremony-v1/` | `Makefile:61-63` |
-| `reference_packs/connector-release-authority-v1/` | `Makefile:65-67` |
-| `reference_packs/effect-close-v1/` | `Makefile:69-71` |
-| `reference_packs/effect-disposition-v1/` | `Makefile:73-76` |
+| `reference_packs/canonical-json-v1/` | `make verify-canonical-json-vectors` |
+| `reference_packs/receipt-v5/` | `make verify-receipt-v5-vectors`, reached from `make verify-fixtures` |
+| `reference_packs/extauthz/` | `make verify-fixtures` |
+| `reference_packs/approval/` | `make verify-approval-ceremony-vectors` |
+| `reference_packs/approval-consumption-v1/` | `make verify-approval-ceremony-vectors` |
+| `reference_packs/approval-dispatch-admission-v1/` | `make verify-approval-ceremony-vectors` |
+| `reference_packs/generated-spec-approval-ceremony-v1/` | `make verify-generated-spec-approval-ceremony-vectors` |
+| `reference_packs/connector-release-authority-v1/` | `make verify-connector-release-authority-vectors` |
+| `reference_packs/effect-close-v1/` | `make verify-effect-close-vectors` |
+| `reference_packs/effect-disposition-v1/` | `make verify-effect-disposition-vectors` |
 | `reference_packs/effect-permit-v1/` | `make verify-effect-permit-vectors`, included by `make verify-fixtures` |
-| `reference_packs/boundary-profile-v1/` | `Makefile:78-80` |
-| `reference_packs/update-bundle-v1/` | `Makefile:82-85` |
-| `reference_packs/launch-mission-v1/` | `Makefile:89-91` |
+| `reference_packs/boundary-profile-v1/` | `make verify-boundary-profile-vectors` |
+| `reference_packs/update-bundle-v1/` | `make verify-update-bundle-vectors` |
+| `reference_packs/launch-mission-v1/` | `make verify-launch-mission-vectors` |
 
 `reference_packs/adversarial-policy-v1/verify_vectors.py` exists but is invoked
 from no Makefile target and no workflow; its verification command lives only as
@@ -267,8 +273,9 @@ the verify dispatch treats an absent version as legacy v4
 a permissive fallback is an unversioned downgrade path: it lets an attacker
 choose the weaker preimage by deleting a field. New signed artifacts MUST NOT
 mark their version tag `omitempty`, and new dispatches MUST reject a missing
-version — as the intent path already does at `canonical.go:92-93`. Repairing the
-receipt path is P2-3's job, not this ADR's.
+version — as the intent path already does at `canonical.go:92-93`. Publishing
+the receipt.v5 preimage is P2-3's job. The legacy absent-version downgrade path
+remains HELM-303 work and is not closed by the v5 conformance target.
 
 ### D6 — What an implementer does on disagreement
 
@@ -324,9 +331,9 @@ description of enforcement.
 | --- | --- | --- |
 | `protocols/proto/**` → all five SDK bindings | `make codegen-check` (`Makefile:456-463`), CI `.github/workflows/ci.yml:292` | **Yes** |
 | `api/openapi/helm.openapi.yaml` → the five SDK `types_gen` files | `make sdk-openapi-check` (`Makefile:108-109` → `scripts/sdk/openapi_check.sh`), CI `ci.yml:294` | **Yes** |
-| `api/openapi/**` backward compatibility | `make openapi-breaking` → `oasdiff --fail-on ERR` (`Makefile:183`, `scripts/ci/contract_breaking.sh:151`), gate `openapi-breaking` in the `pr` profile (`scripts/ci/quality-gates.json:563-573`) run by `make quality-pr` (`ci.yml:75`) | **Yes**, path-scoped to `api/openapi/**` |
+| `api/openapi/**` backward compatibility | `make openapi-breaking` → `oasdiff --fail-on ERR` (`Makefile:205-206`, `scripts/ci/contract_breaking.sh:151`), gate `openapi-breaking` in the `pr` profile (`scripts/ci/quality-gates.json:578-588`) run by `make quality-pr` (`ci.yml:75`) | **Yes**, path-scoped to `api/openapi/**` |
 | OpenAPI operation set ↔ served public routes | `make docs-openapi-parity` → `TestPublicDocsOpenAPIContract` (`core/cmd/helm-ai-kernel/openapi_runtime_routes_test.go:77`) | **Yes**, for routes and operationIds — **not** for schema fields |
-| Reference pack ↔ Go implementation, for the packs listed in D4 | `make verify-fixtures` (`Makefile:137-154`), CI `ci.yml:167` — Go parity test **and** independent Python verifier per pack | **Yes** |
+| Reference pack ↔ Go implementation, for the packs listed in D4 | `make verify-fixtures`, run by `.github/workflows/ci.yml` — Go parity test **and** independent Python verifier per pack | **Yes** |
 | `protocols/proto/**` lint and backward compatibility | **Unenforced.** `make proto-lint` runs `buf lint protocols/policy-schema` (`Makefile:177-178`) and `make proto-breaking` diffs `protocols/policy-schema` only (`scripts/ci/contract_breaking.sh:184-186`). No buf module is rooted at `protocols/proto/` (`find . -name 'buf.yaml'` returns only `protocols/policy-schema/buf.yaml`). The file holding the receipt and permit wire contracts has never been lint- or breaking-checked. | **No** |
 | `go-apidiff` on `protocols/` | **Does not exist.** Repository-wide `git grep apidiff` returns nothing. `CLAUDE.md` in the workspace root asserts this gate; the assertion is false and is on P2-9's list. | **No** |
 | Go struct ↔ JSON Schema | `core/pkg/contracts/schema_validation_test.go:106-129` builds a Go literal and validates it against the schema. With no `additionalProperties:false` anywhere in `receipt/v2.json`, a Go field the schema lacks passes, and a schema property no Go field produces is never exercised. The gate is green while the two disagree. | **No, structurally** |
@@ -339,10 +346,10 @@ description of enforcement.
 
 Read together: **every enforced derivation runs downward from OpenAPI or proto
 into generated code. Not one gate runs upward from a specification into the
-signing implementation, except for the reference packs.** That asymmetry is why
-`receipt.v5` remains UNSPECIFIED and why P2-3 and P2-6 are pack-shaped rather
-than schema-shaped; this EffectPermit pack moves the named
-`effect_permit.v1` canonical profile to SPECIFIED.
+signing implementation, except for the reference packs.** P2-3 and P2-6 close
+that gap for `receipt.v5` and the named `effect_permit.v1` canonical profile;
+`decision_record.v4` remains UNSPECIFIED. These pack gates prove portable
+integrity only, not deployment or global adoption.
 
 ## Consequences
 
@@ -351,11 +358,10 @@ than schema-shaped; this EffectPermit pack moves the named
   are not a fix for an unpublished preimage; `receipt-format-v1.md` is the launch
   profile's integrity source, so rewriting it to match the mainline receipt is a
   category error.
-- Two families remain UNSPECIFIED (`receipt.v5`, `decision_record.v4`). This is
-  intentional and is the honest state; the named `effect_permit.v1` canonical
-  profile is now SPECIFIED by its normative document and CI-bound reference
-  pack, without implying that every EffectPermit producer or verifier has
-  adopted or deployed it.
+- Among the remediation families, only `decision_record.v4` remains
+  UNSPECIFIED. `receipt.v5` and the named `effect_permit.v1` canonical profile
+  are SPECIFIED by normative documents and CI-bound reference packs, without
+  implying deployment or global producer/verifier adoption.
 - EvidencePack is named CONTRADICTED, which blocks citing
   `evidence-pack-v1.md` on any surface until P2-7 corrects it.
 - The field-addition rule applies from today, including to changes that predate
@@ -417,7 +423,8 @@ amendment, landed in the same change as this ADR:
 - records that the rejected alternative was overruled, and the reason the code
   gives for overruling it;
 - states plainly that ADR 0002 is **not** the `receipt.v5` preimage
-  specification, that no such specification exists, and that P2-3 owns it;
+  specification; P2-3 subsequently published that specification and its
+  reference pack without making this ADR normative;
 - keeps the original Decision text visible as "what was decided", so the delta
   between decision and outcome is legible rather than erased.
 
@@ -429,3 +436,4 @@ amendment, landed in the same change as this ADR:
 - `protocols/json-schemas/SCHEMA_INDEX.md` — conformance levels; not an
   arbitration rule (see D2).
 - `reference_packs/README.md` — the pack pattern D2 makes normative.
+- `protocols/specs/receipts/receipt-v5.md` — the receipt.v5 integrity rule.

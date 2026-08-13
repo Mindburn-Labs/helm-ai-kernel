@@ -10,6 +10,7 @@ import (
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,18 @@ func (m *mockBudgetTracker) Consume(_ string, cost BudgetCost) error {
 
 type MockSigner struct {
 	FailSign bool
+}
+
+type marshalOnceValue struct {
+	calls int
+}
+
+func (v *marshalOnceValue) MarshalJSON() ([]byte, error) {
+	v.calls++
+	if v.calls > 1 {
+		return nil, errors.New("second serialization rejected")
+	}
+	return []byte(`"serializable-once"`), nil
 }
 
 func (m *MockSigner) Sign(data []byte) (string, error) {
@@ -292,6 +305,89 @@ func TestGuardian_SignDecision(t *testing.T) {
 		assert.NotContains(t, decision.Reason, "secret-policy-tier")
 		assert.Contains(t, decision.Reason, "available input.* fields:")
 		assert.Contains(t, decision.Reason, "effect (object)")
+	})
+
+	t.Run("Fail: Non-serializable Effect Never Reaches Policy", func(t *testing.T) {
+		require.NoError(t, ruleGraph.AddRule("serialization_tool", prg.RequirementSet{ID: "req-serialization", Logic: prg.AND}))
+
+		for _, suppliedDigest := range []string{"", "sha256:caller-supplied"} {
+			decision := &contracts.DecisionRecord{ID: "dec-serialization", EffectDigest: suppliedDigest}
+			effect := &contracts.Effect{
+				EffectType: "tool_call",
+				EffectID:   "eff-serialization",
+				Params: map[string]any{
+					"tool_name": "serialization_tool",
+					"invalid":   func() {},
+				},
+			}
+
+			err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
+			require.ErrorContains(t, err, "canonicalize effect digest")
+			assert.Empty(t, decision.Signature)
+			assert.NotEqual(t, string(contracts.VerdictAllow), decision.Verdict)
+		}
+	})
+
+	t.Run("Fail: Caller-supplied Effect Digest Must Match", func(t *testing.T) {
+		decision := &contracts.DecisionRecord{ID: "dec-digest-mismatch", EffectDigest: "sha256:caller-supplied"}
+		effect := &contracts.Effect{
+			EffectType: "tool_call",
+			EffectID:   "eff-digest-mismatch",
+			Params:     map[string]any{"tool_name": "serialization_tool"},
+		}
+
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
+		require.ErrorContains(t, err, "effect digest mismatch")
+		assert.Empty(t, decision.Signature)
+		assert.NotEqual(t, string(contracts.VerdictAllow), decision.Verdict)
+	})
+
+	t.Run("Fail: Policy Input Serialization Error Is Not Signed", func(t *testing.T) {
+		decision := &contracts.DecisionRecord{ID: "dec-policy-input"}
+		effect := &contracts.Effect{
+			EffectType: "tool_call",
+			EffectID:   "eff-policy-input",
+			Params: map[string]any{
+				"tool_name": "serialization_tool",
+				"flaky":     &marshalOnceValue{},
+			},
+		}
+
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
+		require.ErrorContains(t, err, "serialize effect policy input")
+		assert.Empty(t, decision.Signature)
+		assert.NotEqual(t, string(contracts.VerdictAllow), decision.Verdict)
+	})
+
+	t.Run("Fail: EvaluateDecision Rejects Non-serializable Context", func(t *testing.T) {
+		decision, err := subject.EvaluateDecision(ctx, DecisionRequest{
+			Principal: "agent",
+			Action:    "serialization_tool",
+			Resource:  "resource",
+			Context:   map[string]any{"invalid": func() {}},
+		})
+		require.ErrorContains(t, err, "canonicalize effect digest")
+		assert.Nil(t, decision)
+	})
+
+	t.Run("Success: Matching Digest Is Bound By Real Signature", func(t *testing.T) {
+		realSigner, err := helmcrypto.NewEd25519Signer("guardian-effect-binding")
+		require.NoError(t, err)
+		realGuardian := NewGuardian(realSigner, ruleGraph, registry)
+		effect := &contracts.Effect{
+			EffectType: "tool_call",
+			EffectID:   "eff-bound",
+			Params:     map[string]any{"tool_name": "serialization_tool"},
+		}
+		digest, err := canonicalEffectDigest(effect)
+		require.NoError(t, err)
+		decision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-bound", EffectDigest: digest})
+
+		require.NoError(t, realGuardian.SignDecision(ctx, decision, effect, nil, nil))
+		valid, err := realSigner.VerifyDecision(decision)
+		require.NoError(t, err)
+		assert.True(t, valid)
+		assert.Equal(t, digest, decision.EffectDigest)
 	})
 
 	t.Run("Fail: Signer Error", func(t *testing.T) {

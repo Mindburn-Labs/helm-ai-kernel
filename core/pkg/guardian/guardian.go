@@ -445,14 +445,10 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 	}
 	// Bind the canonical effect digest before any signing path: the decision
 	// signature covers EffectDigest (crypto.CanonicalizeDecision), and intent
-	// issuance / execution verify the binding fail-closed. Without this, a
-	// SignDecision caller signs an empty digest and can never issue intents.
-	if decision.EffectDigest == "" {
-		digest, err := canonicalEffectDigest(effect)
-		if err != nil {
-			return fmt.Errorf("canonicalize effect digest: %w", err)
-		}
-		decision.EffectDigest = digest
+	// issuance / execution verify the binding fail-closed. A caller-supplied
+	// digest is accepted only when it matches the effect being evaluated.
+	if err := bindCanonicalEffectDigest(decision, effect); err != nil {
+		return err
 	}
 
 	// Bind the gate roster before any signing path. Every exit below reaches
@@ -539,7 +535,10 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 	}
 
 	// Prepare CEL input
-	effectMap, _ := toMap(effect)
+	effectMap, err := toMap(effect)
+	if err != nil {
+		return fmt.Errorf("serialize effect policy input: %w", err)
+	}
 	input := map[string]interface{}{
 		"action":    actionID,
 		"effect":    effectMap,
@@ -713,6 +712,18 @@ func (g *Guardian) IssueExecutionIntent(ctx context.Context, decision *contracts
 
 func canonicalEffectDigest(effect *contracts.Effect) (string, error) {
 	return contracts.CanonicalEffectDigest(effect)
+}
+
+func bindCanonicalEffectDigest(decision *contracts.DecisionRecord, effect *contracts.Effect) error {
+	digest, err := canonicalEffectDigest(effect)
+	if err != nil {
+		return fmt.Errorf("canonicalize effect digest: %w", err)
+	}
+	if decision.EffectDigest != "" && decision.EffectDigest != digest {
+		return fmt.Errorf("effect digest mismatch: decision=%s canonical=%s", decision.EffectDigest, digest)
+	}
+	decision.EffectDigest = digest
+	return nil
 }
 
 const (
@@ -1104,11 +1115,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		}
 
 		// 2. Prepare Decision Record
-		effectDigest, err := canonicalEffectDigest(effect)
-		if err != nil {
-			return nil, fmt.Errorf("canonicalize effect digest: %w", err)
-		}
-
 		envFP := g.envFprint
 		if envFP == "" {
 			envFP = "sha256:unconfigured"
@@ -1121,7 +1127,6 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 			Action:         req.Action,
 			Resource:       req.Resource,
 			Verdict:        string(contracts.VerdictDeny), // Default deny
-			EffectDigest:   effectDigest,
 			InputContext:   req.Context,
 			EnvFingerprint: envFP,
 			PolicyVersion:  eCtx.PolicyVersion,
@@ -1157,6 +1162,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		if g.complianceChecker != nil {
 			compResult, compErr := g.complianceChecker.CheckCompliance(ctx, req.Principal, req.Action, req.Context)
 			if compErr != nil {
+				if bindErr := bindCanonicalEffectDigest(decision, effect); bindErr != nil {
+					return nil, bindErr
+				}
 				decision.Verdict = string(contracts.VerdictDeny)
 				decision.ReasonCode = "COMPLIANCE_ERROR"
 				decision.Reason = fmt.Sprintf("compliance check error: %v", compErr)
@@ -1166,6 +1174,9 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 				return decision, nil
 			}
 			if !compResult.Compliant {
+				if bindErr := bindCanonicalEffectDigest(decision, effect); bindErr != nil {
+					return nil, bindErr
+				}
 				decision.Verdict = string(contracts.VerdictDeny)
 				decision.ReasonCode = "COMPLIANCE_VIOLATION"
 				decision.Reason = fmt.Sprintf("compliance violation: %s (obligations: %v)", compResult.Reason, compResult.ViolatedObligations)
@@ -1180,8 +1191,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*
 		if err := bindDecisionRequest(decision, req); err != nil {
 			return nil, fmt.Errorf("bind evaluated decision request: %w", err)
 		}
-		err = g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph)
-		if err != nil {
+		if err := g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph); err != nil {
 			return nil, err
 		}
 

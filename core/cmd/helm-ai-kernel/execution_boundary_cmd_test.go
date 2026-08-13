@@ -356,7 +356,7 @@ func TestRunSandboxExecRefusesWithoutPolicyEvaluator(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "json", args: []string{"exec", "--provider", "mock", "--json", "--", "echo", "hi"}},
+		{name: "json", args: []string{"exec", "--provider", "mock", "--json", "--", "rm", "-rf", "/", "--no-preserve-root"}},
 		{name: "text", args: []string{"exec", "--provider", "mock", "--", "echo", "hi"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -396,36 +396,48 @@ func TestRunSandboxExecRefusesWithoutPolicyEvaluator(t *testing.T) {
 }
 
 func TestRunSandboxConformRefusesWithoutPolicyEvaluator(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	code := runSandboxCmd([]string{"conform", "--provider", "mock", "--tier", "verified", "--json"}, &stdout, &stderr)
-	if code != 1 {
-		t.Fatalf("exit code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
-	}
-	output := stdout.String() + stderr.String()
-	for _, forbidden := range []string{`"pass": true`, "ALLOW", "receipt_id", "preflight_hash", "sha256:"} {
-		if strings.Contains(output, forbidden) {
-			t.Fatalf("sandbox conform emitted forbidden synthetic authority %q: stdout=%s stderr=%s", forbidden, stdout.String(), stderr.String())
-		}
-	}
-	var result map[string]any
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("parse json: %v\n%s", err, stdout.String())
-	}
-	if result["pass"] != false || result["status"] != sandboxPreflightStatusUnavailable {
-		t.Fatalf("unexpected conformance result: %#v", result)
-	}
-	checks, ok := result["checks"].([]any)
-	if !ok || len(checks) == 0 {
-		t.Fatalf("checks missing: %#v", result)
-	}
-	for _, raw := range checks {
-		check, ok := raw.(map[string]any)
-		if !ok {
-			t.Fatalf("unexpected check payload: %#v", raw)
-		}
-		if check["pass"] != false || check["status"] != sandboxPreflightStatusUnavailable {
-			t.Fatalf("check = %#v, want failed unavailable", check)
-		}
+	for _, tt := range []struct {
+		name       string
+		provider   string
+		status     string
+		reasonCode string
+	}{
+		{name: "known provider without evaluator", provider: "mock", status: sandboxPreflightStatusUnavailable, reasonCode: "SANDBOX_POLICY_EVALUATION_UNAVAILABLE"},
+		{name: "unknown provider", provider: "totally-fake-provider", status: "invalid_provider", reasonCode: "INVALID_SANDBOX_PROVIDER"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := runSandboxCmd([]string{"conform", "--provider", tt.provider, "--tier", "verified", "--json"}, &stdout, &stderr)
+			if code != 1 {
+				t.Fatalf("exit code = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+			}
+			output := stdout.String() + stderr.String()
+			for _, forbidden := range []string{`"pass": true`, "ALLOW", "receipt_id", "preflight_hash", "sha256:"} {
+				if strings.Contains(output, forbidden) {
+					t.Fatalf("sandbox conform emitted forbidden synthetic authority %q: stdout=%s stderr=%s", forbidden, stdout.String(), stderr.String())
+				}
+			}
+			var result map[string]any
+			if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+				t.Fatalf("parse json: %v\n%s", err, stdout.String())
+			}
+			if result["pass"] != false || result["status"] != tt.status || result["reason_code"] != tt.reasonCode {
+				t.Fatalf("unexpected conformance result: %#v", result)
+			}
+			checks, ok := result["checks"].([]any)
+			if !ok || len(checks) == 0 {
+				t.Fatalf("checks missing: %#v", result)
+			}
+			for _, raw := range checks {
+				check, ok := raw.(map[string]any)
+				if !ok {
+					t.Fatalf("unexpected check payload: %#v", raw)
+				}
+				if check["pass"] != false || check["status"] != tt.status {
+					t.Fatalf("check = %#v, want failed status %q", check, tt.status)
+				}
+			}
+		})
 	}
 }
 

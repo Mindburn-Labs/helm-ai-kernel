@@ -1286,7 +1286,9 @@ func ProfileRequiresExternalTrust(profile EvidenceTrustProfile) bool {
 func BuildEvidencePackVerifyCommand(bundle string, profile EvidenceTrustProfile, storageReceiptPath string) string {
 	cmd := "helm-ai-kernel verify --bundle " + bundle
 	profile = NormalizeEvidenceTrustProfile(profile)
-	if profileRequiresExternalTrust(profile) {
+	if profile == EvidenceTrustProfileDevLocal {
+		cmd += " --profile dev-local --allow-self-attested"
+	} else if profileRequiresExternalTrust(profile) {
 		cmd += " --profile " + string(profile)
 		if strings.TrimSpace(storageReceiptPath) != "" {
 			cmd += " --storage-receipt " + strings.TrimSpace(storageReceiptPath)

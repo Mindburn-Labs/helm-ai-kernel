@@ -1,14 +1,11 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"strings"
-	"time"
 )
 
 // runSandboxCmd implements `helm-ai-kernel sandbox` — governed sandbox execution.
@@ -23,8 +20,8 @@ func runSandboxCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel sandbox <exec|conform|inspect|profiles|grant|list|get|verify|preflight> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
-		fmt.Fprintln(stderr, "  exec      Execute a command in a governed sandbox")
-		fmt.Fprintln(stderr, "  conform   Run sandbox conformance checks")
+		fmt.Fprintln(stderr, "  exec      Request sandbox execution through preflight guardrails")
+		fmt.Fprintln(stderr, "  conform   Report sandbox conformance status")
 		fmt.Fprintln(stderr, "  inspect   Inspect sandbox backend profiles or sealed grant posture")
 		fmt.Fprintln(stderr, "  profiles  List sandbox backend profiles")
 		fmt.Fprintln(stderr, "  grant     Create a sealed sandbox grant")
@@ -58,8 +55,8 @@ func runSandboxCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "Usage: helm-ai-kernel sandbox <exec|conform|inspect|profiles|grant|list|get|verify|preflight> [flags]")
 		fmt.Fprintln(stdout, "")
 		fmt.Fprintln(stdout, "Subcommands:")
-		fmt.Fprintln(stdout, "  exec      Execute a command in a governed sandbox")
-		fmt.Fprintln(stdout, "  conform   Run sandbox conformance checks")
+		fmt.Fprintln(stdout, "  exec      Request sandbox execution through preflight guardrails")
+		fmt.Fprintln(stdout, "  conform   Report sandbox conformance status")
 		fmt.Fprintln(stdout, "  inspect   Inspect sandbox backend profiles or sealed grant posture")
 		fmt.Fprintln(stdout, "  profiles  List sandbox backend profiles")
 		fmt.Fprintln(stdout, "  grant     Create a sealed sandbox grant")
@@ -74,16 +71,23 @@ func runSandboxCmd(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// sandboxPreflightResult captures the strict posture check
+const (
+	sandboxPreflightStatusUnavailable = "unavailable"
+	sandboxPreflightReasonUnavailable = "sandbox policy evaluation is unavailable; refusing to approve execution or issue a receipt"
+)
+
+// sandboxPreflightResult captures the strict posture check.
 type sandboxPreflightResult struct {
 	Provider     string `json:"provider"`
-	Version      string `json:"provider_version"`
-	ImageDigest  string `json:"image_digest"`
-	EgressPolicy string `json:"egress_policy_hash"`
-	Mounts       string `json:"mounts_hash"`
-	ResourceLim  string `json:"resource_limits_hash"`
-	SpecHash     string `json:"sandbox_spec_hash"`
+	Version      string `json:"provider_version,omitempty"`
+	ImageDigest  string `json:"image_digest,omitempty"`
+	EgressPolicy string `json:"egress_policy_hash,omitempty"`
+	Mounts       string `json:"mounts_hash,omitempty"`
+	ResourceLim  string `json:"resource_limits_hash,omitempty"`
+	SpecHash     string `json:"sandbox_spec_hash,omitempty"`
 	Pass         bool   `json:"pass"`
+	Status       string `json:"status,omitempty"`
+	ReasonCode   string `json:"reason_code,omitempty"`
 	Reason       string `json:"reason,omitempty"`
 }
 
@@ -120,111 +124,33 @@ func runSandboxExec(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	sandboxCmd := strings.Join(remaining, " ")
-
-	// Preflight check
 	preflight := runPreflight(provider, image)
-
-	if !preflight.Pass {
-		if jsonOutput {
-			data, _ := json.MarshalIndent(map[string]any{
-				"preflight": preflight,
-				"verdict":   "DENY",
-				"reason":    preflight.Reason,
-			}, "", "  ")
-			fmt.Fprintln(stdout, string(data))
-		} else {
-			fmt.Fprintf(stderr, "❌ Preflight DENIED: %s\n", preflight.Reason)
-			fmt.Fprintf(stderr, "   Provider: %s  Version: %s\n", preflight.Provider, preflight.Version)
-		}
-		return 1
-	}
-
-	// Build receipt preimage
-	preimage := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s",
-		preflight.Provider, preflight.Version, preflight.ImageDigest,
-		preflight.Mounts, preflight.EgressPolicy, preflight.ResourceLim,
-		preflight.SpecHash)
-	preimageHash := sha256.Sum256([]byte(preimage))
-	receiptHash := hex.EncodeToString(preimageHash[:])
-
-	if !jsonOutput {
-		fmt.Fprintf(stdout, "%sSandbox Execution%s\n", ColorBold+ColorBlue, ColorReset)
-		fmt.Fprintf(stdout, "  Provider:  %s\n", provider)
-		fmt.Fprintf(stdout, "  Command:   %s\n", sandboxCmd)
-		fmt.Fprintf(stdout, "  Preflight: %s✓ PASS%s\n\n", ColorGreen, ColorReset)
-	}
-
-	// Execute (mock or real)
-	var execOutput string
-	var execErr error
-
-	switch provider {
-	case "mock":
-		execOutput = fmt.Sprintf("[mock] Executed: %s\nOutput: (mock provider - deterministic output)", sandboxCmd)
-	case "opensandbox", "e2b", "daytona":
-		execOutput = fmt.Sprintf("[%s] Command queued: %s\n(Connect %s credentials to execute with the external provider)", provider, sandboxCmd, provider)
-	default:
-		fmt.Fprintf(stderr, "Error: unknown provider %q\n", provider)
-		return 2
-	}
-
-	_ = execErr
-
-	// Build receipt
-	receipt := map[string]any{
-		"receipt_id":         fmt.Sprintf("sbx-%s", receiptHash[:16]),
-		"timestamp":          time.Now().UTC().Format(time.RFC3339),
-		"provider":           provider,
-		"command":            sandboxCmd,
-		"verdict":            "ALLOW",
-		"preflight_hash":     receiptHash,
-		"provider_version":   preflight.Version,
-		"image_digest":       preflight.ImageDigest,
-		"egress_policy_hash": preflight.EgressPolicy,
-		"sandbox_spec_hash":  preflight.SpecHash,
-		"output":             execOutput,
-	}
-
 	if jsonOutput {
-		data, _ := json.MarshalIndent(receipt, "", "  ")
+		data, _ := json.MarshalIndent(map[string]any{
+			"preflight":   preflight,
+			"verdict":     "DENY",
+			"status":      preflight.Status,
+			"reason_code": preflight.ReasonCode,
+			"reason":      preflight.Reason,
+		}, "", "  ")
 		fmt.Fprintln(stdout, string(data))
 	} else {
-		fmt.Fprintf(stdout, "  %sOutput:%s\n    %s\n\n", ColorBold, ColorReset, execOutput)
-		fmt.Fprintf(stdout, "  %sReceipt:%s %s\n", ColorBold, ColorReset, receipt["receipt_id"])
-		fmt.Fprintf(stdout, "  %sPreflight Hash:%s %s...%s\n",
-			ColorBold, ColorReset, receiptHash[:16], receiptHash[len(receiptHash)-8:])
-		fmt.Fprintf(stdout, "  %sVerdict:%s %s✅ ALLOW%s\n\n", ColorBold, ColorReset, ColorGreen, ColorReset)
+		fmt.Fprintf(stderr, "❌ Preflight DENIED: %s\n", preflight.Reason)
+		fmt.Fprintf(stderr, "   Provider: %s  Version: %s\n", preflight.Provider, preflight.Version)
 	}
-
-	return 0
+	return 1
 }
 
 func runPreflight(provider, image string) sandboxPreflightResult {
-	// Compute deterministic hashes for the sandbox specification
-	specData := fmt.Sprintf("provider=%s,image=%s", provider, image)
-	specHash := sha256.Sum256([]byte(specData))
-
-	egressData := fmt.Sprintf("egress:default-deny:%s", provider)
-	egressHash := sha256.Sum256([]byte(egressData))
-
-	mountData := fmt.Sprintf("mounts:ro:/workspace:%s", provider)
-	mountHash := sha256.Sum256([]byte(mountData))
-
-	resData := fmt.Sprintf("limits:cpu=1,mem=512Mi,time=30s:%s", provider)
-	resHash := sha256.Sum256([]byte(resData))
-
 	result := sandboxPreflightResult{
-		Provider:     provider,
-		ImageDigest:  fmt.Sprintf("sha256:%s", hex.EncodeToString(specHash[:])[:24]),
-		EgressPolicy: hex.EncodeToString(egressHash[:])[:16],
-		Mounts:       hex.EncodeToString(mountHash[:])[:16],
-		ResourceLim:  hex.EncodeToString(resHash[:])[:16],
-		SpecHash:     hex.EncodeToString(specHash[:]),
-		Pass:         true,
+		Provider:   provider,
+		Pass:       false,
+		Status:     sandboxPreflightStatusUnavailable,
+		ReasonCode: "SANDBOX_POLICY_EVALUATION_UNAVAILABLE",
+		Reason:     sandboxPreflightReasonUnavailable,
 	}
+	_ = image
 
-	// Set provider-specific versions
 	switch provider {
 	case "mock":
 		result.Version = "mock-1.0.0"
@@ -235,7 +161,8 @@ func runPreflight(provider, image string) sandboxPreflightResult {
 	case "daytona":
 		result.Version = "daytona-latest"
 	default:
-		result.Pass = false
+		result.Status = "invalid_provider"
+		result.ReasonCode = "INVALID_SANDBOX_PROVIDER"
 		result.Reason = fmt.Sprintf("unknown provider: %s", provider)
 	}
 
@@ -266,20 +193,23 @@ func runSandboxConform(args []string, stdout, stderr io.Writer) int {
 	}
 
 	type conformCheck struct {
-		Name string `json:"name"`
-		Pass bool   `json:"pass"`
+		Name   string `json:"name"`
+		Pass   bool   `json:"pass"`
+		Status string `json:"status,omitempty"`
+		Reason string `json:"reason,omitempty"`
 	}
 
+	preflight := runPreflight(provider, "conformance")
 	checks := []conformCheck{
-		{Name: "preflight_posture", Pass: true},
-		{Name: "receipt_binding", Pass: true},
-		{Name: "deny_degraded", Pass: true},
+		{Name: "preflight_posture", Pass: preflight.Pass, Status: preflight.Status, Reason: preflight.Reason},
+		{Name: "receipt_binding", Pass: false, Status: preflight.Status, Reason: preflight.Reason},
+		{Name: "deny_degraded", Pass: false, Status: preflight.Status, Reason: preflight.Reason},
 	}
 
 	if tier == "verified" {
 		checks = append(checks,
-			conformCheck{Name: "strict_preflight", Pass: true},
-			conformCheck{Name: "receipt_preimage_binding", Pass: true},
+			conformCheck{Name: "strict_preflight", Pass: false, Status: preflight.Status, Reason: preflight.Reason},
+			conformCheck{Name: "receipt_preimage_binding", Pass: false, Status: preflight.Status, Reason: preflight.Reason},
 		)
 	}
 
@@ -291,10 +221,13 @@ func runSandboxConform(args []string, stdout, stderr io.Writer) int {
 	}
 
 	result := map[string]any{
-		"provider": provider,
-		"tier":     tier,
-		"checks":   checks,
-		"pass":     allPass,
+		"provider":    provider,
+		"tier":        tier,
+		"checks":      checks,
+		"pass":        allPass,
+		"status":      preflight.Status,
+		"reason_code": preflight.ReasonCode,
+		"reason":      preflight.Reason,
 	}
 
 	if jsonOutput {
@@ -323,5 +256,5 @@ func runSandboxConform(args []string, stdout, stderr io.Writer) int {
 }
 
 func init() {
-	Register(Subcommand{Name: "sandbox", Aliases: []string{}, Usage: "Governed sandbox execution (exec, conform)", RunFn: runSandboxCmd})
+	Register(Subcommand{Name: "sandbox", Aliases: []string{}, Usage: "Sandbox guardrails and conformance status", RunFn: runSandboxCmd})
 }

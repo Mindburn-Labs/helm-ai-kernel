@@ -72,11 +72,13 @@ func TestGitHubEffectsRuntimeFailsClosedWithoutGuardianGates(t *testing.T) {
 		t.Fatalf("construct runtime: %v", err)
 	}
 
-	resp, err := rt.execute(context.Background(), mcppkg.ToolExecutionRequest{
+	args := map[string]any{"repo": "owner/repo", "state": "open"}
+	request := mcppkg.ToolExecutionRequest{
 		ToolName:  "github.list_prs",
-		Arguments: map[string]any{"repo": "owner/repo", "state": "open"},
+		Arguments: args,
 		SessionID: "sess-read",
-	})
+	}
+	resp, err := rt.execute(context.Background(), request)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}

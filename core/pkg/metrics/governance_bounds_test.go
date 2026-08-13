@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -39,20 +40,32 @@ func TestToolLabelSanitized(t *testing.T) {
 // HELM-302: the active-agent map must not accumulate every id ever seen.
 func TestActiveAgentsEvicted(t *testing.T) {
 	m := NewGovernanceMetrics()
-	// Seed >1024 stale agents.
-	stale := time.Now().Add(-time.Hour)
-	m.mu.Lock()
-	for i := 0; i < 1500; i++ {
-		m.activeAgents["stale-"+strings.Repeat("a", i%5)+time.Duration(i).String()] = stale
-	}
-	m.mu.Unlock()
+	start := time.Date(2026, time.August, 13, 0, 0, 0, 0, time.UTC)
+	now := start
+	m.now = func() time.Time { return now }
 
-	m.RecordDecision(true, "tool", "", "fresh-agent", 10)
+	const (
+		agentCount = 100_000
+		step       = 100 * time.Millisecond
+	)
+	for i := 0; i < agentCount; i++ {
+		now = start.Add(time.Duration(i) * step)
+		m.RecordDecision(true, "tool", "", "agent-"+strconv.Itoa(i), 10)
+	}
 
 	m.mu.RLock()
-	n := len(m.activeAgents)
+	retained := len(m.activeAgents)
 	m.mu.RUnlock()
-	if n > 1100 {
-		t.Fatalf("stale agents not evicted: %d entries remain", n)
+	maxRetained := int((activeAgentRetention+activeAgentSweepInterval)/step) + 1
+	if retained > maxRetained {
+		t.Fatalf("agent map did not converge: retained %d of %d, want <= %d", retained, agentCount, maxRetained)
+	}
+
+	if got, want := m.Snapshot().ActiveAgents, int(activeAgentWindow/step); got != want {
+		t.Fatalf("active-agent window mismatch: got %d, want %d", got, want)
+	}
+	now = now.Add(activeAgentWindow + time.Nanosecond)
+	if got := m.Snapshot().ActiveAgents; got != 0 {
+		t.Fatalf("stale agents remained active after window: got %d, want 0", got)
 	}
 }

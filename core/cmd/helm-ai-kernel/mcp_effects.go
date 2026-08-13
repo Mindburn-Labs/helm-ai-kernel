@@ -192,9 +192,8 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 }
 
 // execute routes a github.* tool call through the governed bridge and returns
-// the outcome as a machine document. A denied call carries the gate or scope
-// reason and a not-dispatched state; an allowed call also carries the signed
-// permit and its offline verification key.
+// the outcome as a machine document. A denial carries the gate or scope reason;
+// an allowed call also carries its signed permit and canonical receipt bundle.
 func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
 	adapted := &runtimeadapters.AdaptedRequest{
 		RuntimeType:         "mcp",
@@ -220,10 +219,22 @@ func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecu
 		"permit_public_key": r.bridge.PermitSigningPublicKey(),
 	}
 	if outcome.Verdict == contracts.VerdictAllow {
+		if outcome.Permit == nil || outcome.ExecutionReceipt == nil || outcome.ExecutionReceiptHash == "" {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("github effects: dispatched call produced no canonical execution receipt")
+		}
+		if outcome.ExecutionReceipt.EffectID != outcome.Permit.PermitID {
+			return mcppkg.ToolExecutionResponse{}, fmt.Errorf("github effects: execution receipt does not bind the dispatched permit")
+		}
 		doc["result"] = outcome.Output
 		doc["output_hash"] = outcome.OutputHash
+		doc["execution_receipt_hash"] = outcome.ExecutionReceiptHash
+		doc["receipt_bundle"] = map[string]any{
+			"receipts": []any{outcome.ExecutionReceipt},
+			"permits":  []any{outcome.Permit},
+		}
 		doc["next_steps"] = []string{
-			"verify the permit offline: wrap it as {\"receipts\":[],\"permits\":[<permit>]} and run receipt_verify --receipt bundle.json --key " + r.bridge.PermitSigningPublicKey(),
+			"save receipt_bundle as bundle.json and run receipt_verify --receipt bundle.json --key-file <caller-trusted-root-key-file>",
+			"after verification, require receipts[0].effect_id to equal permits[0].permit_id",
 		}
 		return structuredLocalMCPResponse(doc)
 	}

@@ -209,20 +209,34 @@ def http_headers(url: str, extra: dict[str, str] | None = None) -> dict[str, str
     return headers
 
 
+def http_request(
+    url: str,
+    *,
+    method: str | None = None,
+    extra: dict[str, str] | None = None,
+) -> urllib.request.Request:
+    headers = http_headers(url, extra)
+    authorization = headers.pop("Authorization", None)
+    request = urllib.request.Request(url, method=method, headers=headers)
+    if authorization:
+        request.add_unredirected_header("Authorization", authorization)
+    return request
+
+
 def request_json(url: str) -> Any:
-    req = urllib.request.Request(url, headers=http_headers(url))
+    req = http_request(url)
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def request_bytes(url: str) -> bytes:
-    req = urllib.request.Request(url, headers=http_headers(url, {"Accept": "application/octet-stream, */*"}))
+    req = http_request(url, extra={"Accept": "application/octet-stream, */*"})
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return response.read()
 
 
 def request_text(url: str) -> str:
-    req = urllib.request.Request(url, headers=http_headers(url, {"Accept": "text/plain, text/html, application/xml, */*"}))
+    req = http_request(url, extra={"Accept": "text/plain, text/html, application/xml, */*"})
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return response.read().decode("utf-8")
 
@@ -415,7 +429,7 @@ def ghcr_tags(repository: str) -> list[str]:
     token_url = f"https://ghcr.io/token?scope=repository:{repository}:pull&service=ghcr.io"
     token = request_json(token_url)["token"]
     url = f"https://ghcr.io/v2/{repository}/tags/list"
-    req = urllib.request.Request(url, headers=http_headers(url, {"Authorization": f"Bearer {token}"}))
+    req = http_request(url, extra={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         payload = json.loads(response.read().decode("utf-8"))
     return payload.get("tags") or []
@@ -425,10 +439,10 @@ def ghcr_manifest_status(repository: str, tag: str) -> int:
     token_url = f"https://ghcr.io/token?scope=repository:{repository}:pull&service=ghcr.io"
     token = request_json(token_url)["token"]
     url = f"https://ghcr.io/v2/{repository}/manifests/{tag}"
-    req = urllib.request.Request(
+    req = http_request(
         url,
         method="HEAD",
-        headers=http_headers(url, {"Authorization": f"Bearer {token}", "Accept": GHCR_MANIFEST_ACCEPT}),
+        extra={"Authorization": f"Bearer {token}", "Accept": GHCR_MANIFEST_ACCEPT},
     )
     try:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
@@ -450,7 +464,7 @@ def check_ghcr_tags(surface: dict[str, Any], version: str) -> SurfaceResult:
 
 def check_http_exists(surface: dict[str, Any], version: str) -> SurfaceResult:
     url = fmt(surface["url"], version)
-    req = urllib.request.Request(url, method="HEAD", headers=http_headers(url))
+    req = http_request(url, method="HEAD")
     try:
         with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             code = response.status

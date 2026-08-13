@@ -18,6 +18,13 @@ class VersionDriftMonitorTests(unittest.TestCase):
                 drift.http_headers("https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel")["Authorization"],
                 "Bearer repo-token",
             )
+            self.assertEqual(
+                drift.http_headers(
+                    "https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel",
+                    {"Authorization": "Bearer explicit-token"},
+                )["Authorization"],
+                "Bearer explicit-token",
+            )
 
             for url in (
                 "http://api.github.com/repos/Mindburn-Labs/helm-ai-kernel",
@@ -36,6 +43,42 @@ class VersionDriftMonitorTests(unittest.TestCase):
                 )["Authorization"],
                 "Bearer ghcr-token",
             )
+
+    def test_http_request_does_not_forward_authorization_on_redirect(self) -> None:
+        with mock.patch.dict(drift.os.environ, {"GITHUB_TOKEN": "repo-token"}):
+            requests = (
+                (
+                    drift.http_request("https://api.github.com/repos/Mindburn-Labs/helm-ai-kernel"),
+                    "Bearer repo-token",
+                ),
+                (
+                    drift.http_request(
+                        "https://ghcr.io/v2/mindburn-labs/helm-ai-kernel/tags/list",
+                        extra={"Authorization": "Bearer ghcr-token"},
+                    ),
+                    "Bearer ghcr-token",
+                ),
+            )
+
+        handler = drift.urllib.request.HTTPRedirectHandler()
+        for initial, expected_authorization in requests:
+            with self.subTest(url=initial.full_url):
+                self.assertEqual(initial.get_header("Authorization"), expected_authorization)
+                self.assertNotIn("Authorization", initial.headers)
+
+                redirected = handler.redirect_request(
+                    initial,
+                    None,
+                    302,
+                    "Found",
+                    {},
+                    "https://third-party.example/redirected",
+                )
+                self.assertIsNotNone(redirected)
+                assert redirected is not None
+                self.assertIsNone(redirected.get_header("Authorization"))
+                self.assertEqual(redirected.get_header("Accept"), initial.get_header("Accept"))
+                self.assertEqual(redirected.get_header("User-Agent"), initial.get_header("User-Agent"))
 
     def test_published_contract_covers_release_channels(self) -> None:
         contract = drift.load_contract(drift.DEFAULT_CONTRACT)

@@ -539,7 +539,10 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 	}
 
 	// Prepare CEL input
-	effectMap, _ := toMap(effect)
+	effectMap, err := toMap(effect)
+	if err != nil {
+		return fmt.Errorf("serialize effect policy input: %w", err)
+	}
 	input := map[string]interface{}{
 		"action":    actionID,
 		"effect":    effectMap,

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -45,6 +46,38 @@ func TestDispatchHelpSkipsHandler(t *testing.T) {
 	}
 }
 
+func TestDispatchNestedHelpSkipsLeafWork(t *testing.T) {
+	original := subcommands
+	subcommands = make(map[string]Subcommand)
+	t.Cleanup(func() { subcommands = original })
+
+	calls := 0
+	Register(Subcommand{
+		Name: "nested-test-command",
+		RunFn: func(args []string, _, stderr io.Writer) int {
+			fs := flag.NewFlagSet("nested-test-command leaf", flag.ContinueOnError)
+			fs.SetOutput(stderr)
+			fs.Bool("leaf-flag", false, "leaf flag")
+			if err := fs.Parse(args[1:]); err != nil {
+				return 2
+			}
+			calls++
+			return 1
+		},
+	})
+
+	for _, args := range [][]string{{"leaf", "--help"}, {"leaf", "-h"}, {"leaf", "help"}} {
+		var stdout, stderr bytes.Buffer
+		code, ok := Dispatch("nested-test-command", args, &stdout, &stderr)
+		if !ok || code != 0 || calls != 0 {
+			t.Fatalf("args=%v code=%d handled=%t calls=%d", args, code, ok, calls)
+		}
+		if !strings.Contains(stdout.String(), "-leaf-flag") || stderr.Len() != 0 {
+			t.Fatalf("args=%v stdout=%q stderr=%q", args, stdout.String(), stderr.String())
+		}
+	}
+}
+
 // TestNestedHelpWritesNoAuthorityState pins the property the depth-1 help test
 // cannot see. Nested help legitimately reaches the leaf (see
 // TestNestedHelpReachesLeafFlagSets), but the boundary-surface routers built
@@ -53,38 +86,46 @@ func TestDispatchHelpSkipsHandler(t *testing.T) {
 // before printing anything. Asking a governance command what it does must never
 // be the same as running it.
 func TestNestedHelpWritesNoAuthorityState(t *testing.T) {
-	for _, args := range [][]string{
-		{"boundary", "status", "--help"},
-		{"boundary", "--help"},
-		{"approvals", "list", "--help"},
-		{"budget", "list", "--help"},
-		{"traces", "--help"},
+	for _, path := range [][]string{
+		{"boundary", "status"},
+		{"boundary"},
+		{"approvals", "list"},
+		{"budget", "list"},
+		{"traces"},
 	} {
-		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			dir := t.TempDir()
-			t.Setenv("HELM_DATA_DIR", dir)
+		forms := [][]string{
+			append(append([]string(nil), path...), "--help"),
+			append(append([]string(nil), path...), "-h"),
+			append(append([]string(nil), path...), "help"),
+			append([]string{"help"}, path...),
+		}
+		for _, args := range forms {
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				dir := t.TempDir()
+				t.Setenv("HELM_DATA_DIR", dir)
 
-			var stdout, stderr bytes.Buffer
-			if code := Run(append([]string{"helm-ai-kernel"}, args...), &stdout, &stderr); code != 0 {
-				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-			}
+				var stdout, stderr bytes.Buffer
+				if code := Run(append([]string{"helm-ai-kernel"}, args...), &stdout, &stderr); code != 0 || stdout.Len() == 0 || stderr.Len() != 0 {
+					t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+				}
 
-			var written []string
-			if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return err
+				var written []string
+				if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					if !info.IsDir() {
+						written = append(written, path)
+					}
+					return nil
+				}); err != nil {
+					t.Fatal(err)
 				}
-				if !info.IsDir() {
-					written = append(written, path)
+				if len(written) != 0 {
+					t.Fatalf("help wrote %v", written)
 				}
-				return nil
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if len(written) != 0 {
-				t.Fatalf("help wrote %v", written)
-			}
-		})
+			})
+		}
 	}
 }
 

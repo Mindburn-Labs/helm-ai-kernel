@@ -292,6 +292,7 @@ def rate_limit_backoff(exc: urllib.error.HTTPError, attempt: int) -> float:
         try:
             delay = float(retry_after)
         except ValueError:
+            # Invalid Retry-After value; keep the computed exponential backoff.
             pass
     return max(0.0, min(delay, RATE_LIMIT_MAX_BACKOFF_SECONDS))
 

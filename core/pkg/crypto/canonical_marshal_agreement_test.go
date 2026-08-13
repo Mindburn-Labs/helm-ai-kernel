@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // This file pins the resolution of the "two mutually incompatible canonical
@@ -162,5 +163,8 @@ func TestReceiptV5PreimageStaysInsideTheInteroperableSubset(t *testing.T) {
 	outOfRange := receiptV5SigningEnvelope{SignatureVersion: "receipt.v5", LamportClock: 9007199254740992}
 	if err := canonicalize.CheckInteroperableNumbers(outOfRange); err == nil {
 		t.Fatal("lamport_clock beyond 2^53-1 must be rejected: its canonical bytes are not RFC 8785 reproducible")
+	}
+	if _, err := CanonicalizeReceiptV5(&contracts.Receipt{LamportClock: 9007199254740992}); err == nil {
+		t.Fatal("receipt.v5 producer accepted a non-interoperable lamport_clock")
 	}
 }

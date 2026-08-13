@@ -191,7 +191,7 @@ func CanonicalizeReceiptV5(r *contracts.Receipt) ([]byte, error) {
 	if r == nil {
 		return nil, fmt.Errorf("receipt is nil")
 	}
-	return canonicalize.JCS(receiptV5SigningEnvelope{
+	return canonicalize.InteroperableJCS(receiptV5SigningEnvelope{
 		SignatureVersion: contracts.ReceiptSignatureV5,
 		ReceiptID:        r.ReceiptID,
 		DecisionID:       r.DecisionID,

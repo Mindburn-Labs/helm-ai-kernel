@@ -13,14 +13,16 @@ func TestLocalApprovalTransitionRetainsExplicitActor(t *testing.T) {
 	now := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
 	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return now })
 	approval, err := registry.PutApproval(contracts.ApprovalCeremony{
-		ApprovalID:  "approval-local-actor",
-		Subject:     "mcp:local",
-		Action:      "mcp.approve",
-		State:       contracts.ApprovalCeremonyPending,
-		RequestedBy: "agent:requester",
-		Quorum:      1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ApprovalID:    "approval-local-actor",
+		Subject:       "mcp:local",
+		Action:        "mcp.approve",
+		State:         contracts.ApprovalCeremonyPending,
+		RequestedBy:   "agent:requester",
+		Quorum:        1,
+		TimelockUntil: now.Add(-time.Minute),
+		ExpiresAt:     now.Add(time.Hour),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -64,14 +66,16 @@ func TestApprovalTransitionRefusesUnattributedAuthority(t *testing.T) {
 		now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
 		registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return now })
 		if _, err := registry.PutApproval(contracts.ApprovalCeremony{
-			ApprovalID:  "approval-bootstrap",
-			Subject:     "mcp:local",
-			Action:      "mcp.approve",
-			State:       contracts.ApprovalCeremonyPending,
-			RequestedBy: "agent:requester",
-			Quorum:      1,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			ApprovalID:    "approval-bootstrap",
+			Subject:       "mcp:local",
+			Action:        "mcp.approve",
+			State:         contracts.ApprovalCeremonyPending,
+			RequestedBy:   "agent:requester",
+			Quorum:        1,
+			TimelockUntil: now.Add(-time.Minute),
+			ExpiresAt:     now.Add(time.Hour),
+			CreatedAt:     now,
+			UpdatedAt:     now,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -107,14 +111,16 @@ func TestApprovalTransitionHonoursReviewedCeremonyHash(t *testing.T) {
 	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
 	registry := boundarypkg.NewSurfaceRegistry(func() time.Time { return now })
 	approval, err := registry.PutApproval(contracts.ApprovalCeremony{
-		ApprovalID:  "approval-hash",
-		Subject:     "mcp:local",
-		Action:      "mcp.approve",
-		State:       contracts.ApprovalCeremonyPending,
-		RequestedBy: "agent:requester",
-		Quorum:      1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ApprovalID:    "approval-hash",
+		Subject:       "mcp:local",
+		Action:        "mcp.approve",
+		State:         contracts.ApprovalCeremonyPending,
+		RequestedBy:   "agent:requester",
+		Quorum:        1,
+		TimelockUntil: now.Add(-time.Minute),
+		ExpiresAt:     now.Add(time.Hour),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	})
 	if err != nil {
 		t.Fatal(err)

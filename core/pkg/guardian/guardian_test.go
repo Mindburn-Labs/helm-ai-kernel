@@ -294,6 +294,31 @@ func TestGuardian_SignDecision(t *testing.T) {
 		assert.Contains(t, decision.Reason, "effect (object)")
 	})
 
+	t.Run("Fail: Policy Input Serialization Error Cannot Allow", func(t *testing.T) {
+		require.NoError(t, ruleGraph.AddRule("serialization_tool", prg.RequirementSet{
+			ID:    "req-serialization",
+			Logic: prg.AND,
+			Requirements: []prg.Requirement{
+				{ID: "would-allow", Expression: "true"},
+			},
+		}))
+
+		decision := &contracts.DecisionRecord{ID: "dec-policy-input", EffectDigest: "sha256:prebound"}
+		effect := &contracts.Effect{
+			EffectType: "tool_call",
+			EffectID:   "eff-policy-input",
+			Params: map[string]any{
+				"tool_name": "serialization_tool",
+				"invalid":   func() {},
+			},
+		}
+
+		err := subject.SignDecision(ctx, testDecisionAuthority(decision), effect, nil, nil)
+		require.ErrorContains(t, err, "serialize effect policy input")
+		assert.Empty(t, decision.Signature)
+		assert.NotEqual(t, string(contracts.VerdictAllow), decision.Verdict)
+	})
+
 	t.Run("Fail: Signer Error", func(t *testing.T) {
 		brokenSigner := &MockSigner{FailSign: true}
 		brokenSubject := NewGuardian(brokenSigner, ruleGraph, registry)

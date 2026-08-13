@@ -139,7 +139,7 @@ class TestApproveIntent:
         mock_client.post.return_value = mock_response(200, RECEIPT_DATA)
 
         client = HelmClient(base_url="http://h")
-        req = ApprovalRequest(intent_hash="abc", signature_b64="s", public_key_b64="pk")
+        req = ApprovalRequest(intent_hash="abc", signature="s", public_key="pk")
         result = client.approve_intent(req)
 
         mock_client.post.assert_called_once()

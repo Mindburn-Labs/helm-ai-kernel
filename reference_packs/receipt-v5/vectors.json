@@ -1,0 +1,77 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 receipt.v5 vectors only; no hybrid or post-quantum claim.",
+  "schema_version": "receipt-v5-vectors.v1",
+  "signature_version": "receipt.v5",
+  "quantum_posture": "classical_ed25519_only",
+  "canonicalization": {
+    "specification": "protocols/specs/rfc/canonical-json-v1.md",
+    "profile": "interoperable_subset",
+    "max_safe_integer": 9007199254740991
+  },
+  "key_id": "receipt-v5-reference-key-v1",
+  "public_key": "ed25519:197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61",
+  "vectors": [
+    {
+      "id": "decision_deny_genesis",
+      "receipt": {
+        "canonical": "decision_deny_genesis.receipt.c14n.json",
+        "sha256": "sha256:475bb75fc275a4be335f4c7b8000555fa7e534aa7a5ed256bc9bee4bb0cd2c73"
+      },
+      "signing_payload": {
+        "canonical": "decision_deny_genesis.signing_payload.c14n.json",
+        "sha256": "sha256:35764780cd3c256d7bdf96af225656c93a1499617d8360997c73f532b35c54be"
+      },
+      "signature": "ed25519:997493bfdd9db8c14f0acff911419c25e7e1e527155923bf8b52405dd825d0b292b89d9bda576dcedcb933e9b45187315c9645abd452c4280fa9f6c0ce586905"
+    },
+    {
+      "id": "executor_success_empty_governance",
+      "receipt": {
+        "canonical": "executor_success_empty_governance.receipt.c14n.json",
+        "sha256": "sha256:c548f3479cd04bd77ee81a2dedcbd3f653aaaa74fa45b57ce5a896a25f3fca28"
+      },
+      "signing_payload": {
+        "canonical": "executor_success_empty_governance.signing_payload.c14n.json",
+        "sha256": "sha256:4cba4275fbe651a281199461daa8d9567672ccf06331e95beb8dbf6cd9d757b3"
+      },
+      "signature": "ed25519:5f1210a65ba385cad9443156c1ab3161d5a40c209e2ddcdc09ef288bd3679b16aea23a94e77e8e31d274bc401073e4b824942b982712438447603d29a372a107"
+    },
+    {
+      "id": "escaped_string_members",
+      "receipt": {
+        "canonical": "escaped_string_members.receipt.c14n.json",
+        "sha256": "sha256:1526efb3e5ab82062280d4c45a8ac01cebb81e5aaa01ebcbb5409d916a6b7aca"
+      },
+      "signing_payload": {
+        "canonical": "escaped_string_members.signing_payload.c14n.json",
+        "sha256": "sha256:3d071b98ff23222864c09c9bb63227a31044207f6bdb68748da8927b3ec17f34"
+      },
+      "signature": "ed25519:b7e80b35657dc17ab5e4555bce416f16a40d381d4d7ba6dc52c9fe48d0f52512736c8e7ce0df43ddf3bd1af710e8e86ce3532cdc64f4040f495ad18bf37cfd0c"
+    }
+  ],
+  "negative_vectors": [
+    {
+      "id": "governance_substitution",
+      "vector_id": "decision_deny_genesis",
+      "mutation": "set_verdict_to_ALLOW",
+      "expected_error": "signature_rejected"
+    },
+    {
+      "id": "signature_tamper",
+      "vector_id": "escaped_string_members",
+      "mutation": "flip_signature_last_bit",
+      "expected_error": "signature_rejected"
+    },
+    {
+      "id": "unsafe_lamport_clock",
+      "vector_id": "executor_success_empty_governance",
+      "mutation": "set_lamport_clock_above_max_safe_integer",
+      "expected_error": "non_interoperable_number"
+    },
+    {
+      "id": "missing_signed_member",
+      "vector_id": "executor_success_empty_governance",
+      "mutation": "remove_empty_policy_hash",
+      "expected_error": "contract_mismatch"
+    }
+  ]
+}

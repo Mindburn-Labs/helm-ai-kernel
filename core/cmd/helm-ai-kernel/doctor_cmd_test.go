@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestDoctorDefaultsToQuickstartState(t *testing.T) {
+func TestDoctorDefaultsToSetupState(t *testing.T) {
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
 	if err := os.Mkdir(home, 0o750); err != nil {
@@ -25,7 +25,7 @@ func TestDoctorDefaultsToQuickstartState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wantDataDir := filepath.Join(home, ".helm-ai-kernel", "quickstart")
+	wantDataDir := filepath.Join(home, ".helm-ai-kernel")
 	if got := resolveDataDir(); got != wantDataDir {
 		t.Fatalf("resolveDataDir()=%q, want %q", got, wantDataDir)
 	}

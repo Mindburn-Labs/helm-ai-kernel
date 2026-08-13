@@ -22,14 +22,16 @@ func newApprovalForTest(t *testing.T, r *SurfaceRegistry, id string, quorum int,
 	t.Helper()
 	now := time.Unix(1700000000, 0).UTC()
 	if _, err := r.PutApproval(contracts.ApprovalCeremony{
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		ApprovalID:  id,
-		Subject:     "payments.transfer",
-		Action:      "EXECUTE",
-		State:       contracts.ApprovalCeremonyPending,
-		RequestedBy: requester,
-		Quorum:      quorum,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		ApprovalID:    id,
+		Subject:       "payments.transfer",
+		Action:        "EXECUTE",
+		State:         contracts.ApprovalCeremonyPending,
+		RequestedBy:   requester,
+		Quorum:        quorum,
+		TimelockUntil: now.Add(-time.Minute),
+		ExpiresAt:     now.Add(time.Hour),
 	}); err != nil {
 		t.Fatalf("PutApproval: %v", err)
 	}

@@ -1,6 +1,12 @@
 package contracts
 
-import "time"
+import (
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // quantum_posture: approval receipts expose explicit classical/hybrid signature
 // metadata; public_key is the registry-authoritative verification key envelope.
@@ -58,6 +64,56 @@ type ApprovalReceipt struct {
 
 	// SessionID links this approval to a specific operator session
 	SessionID string `json:"session_id,omitempty"`
+}
+
+// UnmarshalJSON preserves v0.8.4 request compatibility by accepting the
+// legacy *_b64 field names and canonicalizing them into the authoritative
+// public_key/signature fields.
+func (r *ApprovalReceipt) UnmarshalJSON(data []byte) error {
+	type rawApprovalReceipt ApprovalReceipt
+	type approvalReceiptCompat struct {
+		rawApprovalReceipt
+		LegacyPublicKeyB64 string `json:"public_key_b64"`
+		LegacySignatureB64 string `json:"signature_b64"`
+		ChallengeResponse  string `json:"challenge_response"`
+	}
+
+	var raw approvalReceiptCompat
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	normalized := ApprovalReceipt(raw.rawApprovalReceipt)
+
+	if raw.LegacyPublicKeyB64 != "" {
+		decoded, err := base64.StdEncoding.DecodeString(raw.LegacyPublicKeyB64)
+		if err != nil {
+			return fmt.Errorf("public_key_b64 must be canonical base64 Ed25519 bytes: %w", err)
+		}
+		legacyCanonical := hex.EncodeToString(decoded)
+		switch {
+		case normalized.PublicKey == "":
+			normalized.PublicKey = legacyCanonical
+		case normalized.PublicKey != legacyCanonical:
+			return fmt.Errorf("public_key and public_key_b64 disagree")
+		}
+	}
+
+	if raw.LegacySignatureB64 != "" {
+		decoded, err := base64.StdEncoding.DecodeString(raw.LegacySignatureB64)
+		if err != nil {
+			return fmt.Errorf("signature_b64 must be canonical base64 Ed25519 bytes: %w", err)
+		}
+		legacyCanonical := hex.EncodeToString(decoded)
+		switch {
+		case normalized.Signature == "":
+			normalized.Signature = legacyCanonical
+		case normalized.Signature != legacyCanonical:
+			return fmt.Errorf("signature and signature_b64 disagree")
+		}
+	}
+
+	*r = normalized
+	return nil
 }
 
 // ApprovalStatus represents the current state of an approval request.

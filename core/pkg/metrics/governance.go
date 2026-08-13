@@ -23,6 +23,8 @@ type GovernanceMetrics struct {
 	toolCounts     map[string]int64
 	reasonCounts   map[string]int64
 	activeAgents   map[string]time.Time
+	now            func() time.Time
+	nextAgentSweep time.Time
 	budgetUsed     int64
 	budgetCeiling  int64
 	chainLength    int64
@@ -41,6 +43,11 @@ const (
 	maxToolLabelValues = 64
 	maxToolLabelLen    = 64
 	toolLabelOverflow  = "_other"
+
+	activeAgentWindow         = 5 * time.Minute
+	activeAgentRetention      = 10 * time.Minute
+	activeAgentSweepInterval  = time.Minute
+	activeAgentSweepThreshold = 1024
 )
 
 // sanitizeToolLabel maps an arbitrary caller-supplied tool name onto the
@@ -68,6 +75,7 @@ func NewGovernanceMetrics() *GovernanceMetrics {
 		toolCounts:   make(map[string]int64),
 		reasonCounts: make(map[string]int64),
 		activeAgents: make(map[string]time.Time),
+		now:          time.Now,
 	}
 }
 
@@ -92,18 +100,20 @@ func (m *GovernanceMetrics) RecordDecision(allowed bool, tool, reasonCode, agent
 	if reasonCode != "" {
 		m.reasonCounts[reasonCode]++
 	}
-	now := time.Now()
+	now := m.now()
 	m.activeAgents[agentID] = now
 	// HELM-302: evict idle agents opportunistically so a long-lived kernel
 	// does not accumulate every agent id ever seen. The snapshot's activity
-	// window is 5 minutes; anything past 10 is dead weight.
-	if len(m.activeAgents) > 1024 {
-		cutoff := now.Add(-10 * time.Minute)
+	// window is 5 minutes; anything past 10 is dead weight. Throttling avoids
+	// scanning the map on every decision while it remains above the threshold.
+	if len(m.activeAgents) > activeAgentSweepThreshold && !now.Before(m.nextAgentSweep) {
+		cutoff := now.Add(-activeAgentRetention)
 		for id, seen := range m.activeAgents {
 			if seen.Before(cutoff) {
 				delete(m.activeAgents, id)
 			}
 		}
+		m.nextAgentSweep = now.Add(activeAgentSweepInterval)
 	}
 	if len(m.latencySamples) < 1024 {
 		m.latencySamples = append(m.latencySamples, latencyUs)
@@ -169,6 +179,7 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 		budgetPct = float64(budgetUsed) / float64(budgetCeiling) * 100.0
 	}
 
+	now := m.now()
 	m.mu.RLock()
 	tools := make(map[string]int64, len(m.toolCounts))
 	for k, v := range m.toolCounts {
@@ -179,8 +190,8 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 		reasons[k] = v
 	}
 	samples := append([]int64(nil), m.latencySamples...)
-	// Count active agents (seen in last 5 minutes).
-	cutoff := time.Now().Add(-5 * time.Minute)
+	// Count active agents seen within the source-owned activity window.
+	cutoff := now.Add(-activeAgentWindow)
 	active := 0
 	for _, t := range m.activeAgents {
 		if t.After(cutoff) {
@@ -203,7 +214,7 @@ func (m *GovernanceMetrics) Snapshot() MetricsSnapshot {
 		BudgetUsed:    budgetPct,
 		ToolCounts:    tools,
 		ReasonCounts:  reasons,
-		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		Timestamp:     now.UTC().Format(time.RFC3339),
 	}
 }
 
@@ -255,7 +266,7 @@ func (m *GovernanceMetrics) PrometheusHandler() http.HandlerFunc {
 		fmt.Fprintf(w, "# HELP helm_chain_length Current receipt chain length\n")
 		fmt.Fprintf(w, "# TYPE helm_chain_length gauge\n")
 		fmt.Fprintf(w, "helm_chain_length %d\n", snap.ChainLength)
-		fmt.Fprintf(w, "# HELP helm_active_agents Number of active agents\n")
+		fmt.Fprintf(w, "# HELP helm_active_agents Number of agents seen in the last 5 minutes\n")
 		fmt.Fprintf(w, "# TYPE helm_active_agents gauge\n")
 		fmt.Fprintf(w, "helm_active_agents %d\n", snap.ActiveAgents)
 		fmt.Fprintf(w, "# HELP helm_budget_used_pct Budget utilization percentage\n")

@@ -2,13 +2,13 @@
   "files": [
     {
       "path": "src/types_gen.rs",
-      "sha256": "f6bff79ace046fb3d60e6bc39d848137a22c1058fbc6e4e5cb6cf218907057c8"
+      "sha256": "c9e73d569d3beb719c04ec11fa4c53804a41e8f859bd095152e974ff2e5d0747"
     }
   ],
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",
   "sdk": "rust",
   "source": {
-    "sha256": "3548d4d8cd34efea36b994133399fdd889852f1743bf61bf83ec1a1ac4601bf9",
+    "sha256": "adbfa56e63522d4e37cc4b412ccae08a1fc5dce7001b70e4f55bc5764a8f6f31",
     "spec": "api/openapi/helm.openapi.yaml"
   }
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
@@ -21,6 +22,35 @@ func (c *permitRecordingConnector) Execute(_ context.Context, permit *effects.Ef
 	c.calls++
 	c.permit = permit
 	return map[string]any{"ok": true}, nil
+}
+
+func TestGovernRejectsPermitTamperedAfterMintBeforeConnectorCall(t *testing.T) {
+	connector := &permitRecordingConnector{id: "linear"}
+	bridge := NewGovernedBridge(withTestSigningSeed(BridgeConfig{
+		Profile: operateProfile(), Connector: connector, Now: fixedClock(),
+	}))
+	req := &runtimeadapters.AdaptedRequest{
+		RuntimeType: "mcp", ToolName: "linear.get_issue",
+		Arguments:   map[string]any{"issue_id": "ISS-1"},
+		PrincipalID: "ve-assistant",
+	}
+
+	outcome := bridge.govern(context.Background(), req, "input-hash", func(permit *effects.EffectPermit) {
+		permit.Scope.AllowedAction = "linear.create_issue"
+	})
+
+	if outcome.Verdict != contracts.VerdictDeny {
+		t.Fatalf("tampered permit verdict = %s, want DENY", outcome.Verdict)
+	}
+	if outcome.ReasonCode != "PERMIT_UNVERIFIED" {
+		t.Fatalf("tampered permit reason = %q, want PERMIT_UNVERIFIED", outcome.ReasonCode)
+	}
+	if outcome.DispatchState != DispatchStateNoDispatch {
+		t.Fatalf("tampered permit dispatch state = %q, want %q", outcome.DispatchState, DispatchStateNoDispatch)
+	}
+	if connector.calls != 0 {
+		t.Fatalf("connector calls = %d after tamper, want zero", connector.calls)
+	}
 }
 
 // Signing is only worth anything if something downstream requires it. This

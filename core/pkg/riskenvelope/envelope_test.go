@@ -147,6 +147,49 @@ func TestRiskEnvelopeContentHashBindsFindings(t *testing.T) {
 	}
 }
 
+func TestRiskEnvelopeContentHashBindsPosture(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*PostureProbe)
+	}{
+		{"agent surface", func(p *PostureProbe) { p.AgentSurface = AgentSurfaceCodex }},
+		{"permission mode", func(p *PostureProbe) { p.PermissionMode = PermissionModePlan }},
+		{"managed settings", func(p *PostureProbe) { p.ManagedSettingsPresent = true }},
+		{"MCP server count", func(p *PostureProbe) { p.MCPServerCount++ }},
+		{"OAuth scope buckets", func(p *PostureProbe) { p.OAuthScopeBuckets[0].Count++ }},
+		{"IAM grant buckets", func(p *PostureProbe) { p.IAMGrantBuckets[0].Count++ }},
+		{"static config files read", func(p *PostureProbe) { p.StaticConfigFilesRead++ }},
+		{"metadata API calls", func(p *PostureProbe) { p.MetadataAPICalls++ }},
+		{"suppressed finding count", func(p *PostureProbe) { p.SuppressedFindingCount++ }},
+		{"k-anonymity floor", func(p *PostureProbe) { p.KAnonymityFloor++ }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			modified := validEnvelope(t)
+			staleHash := modified.EnvelopeContentHash
+			test.mutate(&modified.Posture)
+
+			newHash, err := modified.ContentHash()
+			if err != nil {
+				t.Fatalf("content hash: %v", err)
+			}
+			if newHash == staleHash {
+				t.Fatal("content hash should change when posture changes")
+			}
+
+			modified.EnvelopeContentHash = newHash
+			if err := modified.Validate(); err != nil {
+				t.Fatalf("valid posture mutation rejected: %v", err)
+			}
+			modified.EnvelopeContentHash = staleHash
+			if err := modified.Validate(); err == nil {
+				t.Fatal("modified posture with old content hash should be rejected")
+			}
+		})
+	}
+}
+
 func TestRiskEnvelopeSchemaAlignment(t *testing.T) {
 	schema := compileRiskEnvelopeSchema(t)
 	raw := marshalEnvelopeForSchema(t, validEnvelope(t))

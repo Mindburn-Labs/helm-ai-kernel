@@ -137,7 +137,7 @@ describe('HelmClient', () => {
       const client = new HelmClient({ baseUrl: 'http://h' });
 
       const result = await client.approveIntent({
-        intent_hash: 'abc', signature_b64: 's', public_key_b64: 'pk',
+        intent_hash: 'abc', signature: 's', public_key: 'pk',
       });
 
       expect(fetchSpy).toHaveBeenCalledWith(

@@ -57,16 +57,15 @@ func TestSurfaceRegistryVerifyRecordDetectsTamper(t *testing.T) {
 	}
 }
 
-func TestApprovalTransitionSealsCeremony(t *testing.T) {
+func TestApprovalTransitionFailsClosedWithoutWindow(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })
 
-	approval, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed")
-	if err != nil {
-		t.Fatal(err)
+	if _, err := registry.TransitionApproval("approval-bootstrap", contracts.ApprovalCeremonyAllowed, "user:alice", "rcpt-1", "reviewed"); err == nil || !strings.Contains(err.Error(), "timelock_until and expires_at") {
+		t.Fatalf("zero-value approval transition error = %v", err)
 	}
-	if approval.State != contracts.ApprovalCeremonyAllowed || approval.CeremonyHash == "" {
-		t.Fatalf("unexpected approval: %+v", approval)
+	if approval := registry.approvals["approval-bootstrap"]; approval.State != contracts.ApprovalCeremonyPending {
+		t.Fatalf("zero-value approval became authoritative: %+v", approval)
 	}
 }
 
@@ -74,14 +73,16 @@ func TestApprovalTransitionIfCurrentRejectsStaleAndConcurrentSnapshots(t *testin
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })
 	approval, err := registry.PutApproval(contracts.ApprovalCeremony{
-		ApprovalID:  "approval-cas",
-		Subject:     "mcp:cas",
-		Action:      "mcp.approve",
-		State:       contracts.ApprovalCeremonyPending,
-		RequestedBy: "agent:test",
-		Quorum:      1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ApprovalID:    "approval-cas",
+		Subject:       "mcp:cas",
+		Action:        "mcp.approve",
+		State:         contracts.ApprovalCeremonyPending,
+		RequestedBy:   "agent:test",
+		Quorum:        1,
+		TimelockUntil: now.Add(-time.Minute),
+		ExpiresAt:     now.Add(time.Hour),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -146,6 +147,7 @@ func TestApprovalTransitionEnforcesQuorumAndTimelock(t *testing.T) {
 		RequestedBy:   "agent:test",
 		Quorum:        2,
 		TimelockUntil: now.Add(time.Minute),
+		ExpiresAt:     now.Add(10 * time.Minute),
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	})
@@ -279,15 +281,29 @@ func TestApprovalChallengeAssertionVerifierUnavailableForCredentialFailsClosed(t
 func TestApprovalChallengeAssertionBindsPasskeyEvidenceWithVerifier(t *testing.T) {
 	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	registry := NewSurfaceRegistry(func() time.Time { return now })
+	const approvalID = "approval-passkey"
+	if _, err := registry.PutApproval(contracts.ApprovalCeremony{
+		ApprovalID:    approvalID,
+		Subject:       "mcp:passkey",
+		Action:        "mcp.approve",
+		State:         contracts.ApprovalCeremonyPending,
+		RequestedBy:   "agent:test",
+		TimelockUntil: now.Add(-time.Minute),
+		ExpiresAt:     now.Add(time.Hour),
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	var verified int
 	registry.SetApprovalAssertionVerifier(approvalAssertionVerifierFunc(func(challenge contracts.ApprovalWebAuthnChallenge, assertion contracts.ApprovalWebAuthnAssertion) error {
 		verified++
-		if challenge.ApprovalID != "approval-bootstrap" || assertion.Assertion != "signed-client-data" {
+		if challenge.ApprovalID != approvalID || assertion.Assertion != "signed-client-data" {
 			return errors.New("unexpected verification input")
 		}
 		return nil
 	}))
-	challenge, err := registry.CreateApprovalChallenge("approval-bootstrap", "passkey", time.Minute)
+	challenge, err := registry.CreateApprovalChallenge(approvalID, "passkey", time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1172,7 +1172,8 @@ func (v *routeApprovalAssertionVerifier) VerifyApprovalAssertion(contracts.Appro
 
 func webAuthnRouteChallengeID(t *testing.T, mux *http.ServeMux, approvalID string) string {
 	t.Helper()
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(fmt.Sprintf(`{"approval_id":%q,"subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`, approvalID)))
+	now := time.Now().UTC()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(fmt.Sprintf(`{"approval_id":%q,"subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1,"timelock_until":%q,"expires_at":%q}`, approvalID, now.Add(-time.Minute).Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano))))
 	authorizeTestRequest(createReq)
 	createRec := httptest.NewRecorder()
 	mux.ServeHTTP(createRec, createReq)
@@ -1196,6 +1197,39 @@ func webAuthnRouteChallengeID(t *testing.T, mux *http.ServeMux, approvalID strin
 		t.Fatalf("challenge missing id: %+v", challenge)
 	}
 	return challengeID
+}
+
+func TestApprovalRouteRequiresAbsoluteWindow(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	mux := http.NewServeMux()
+	registerContractRoutes(mux, svc)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(`{"approval_id":"approval-relative","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","timelock_ms":60000,"expires_in_ms":3600000}`))
+	authorizeTestRequest(request)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "timelock_until and expires_at") {
+		t.Fatalf("relative approval window status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	now := time.Now().UTC()
+	timelockUntil := now.Add(-time.Minute)
+	expiresAt := now.Add(time.Hour)
+	request = httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(fmt.Sprintf(`{"approval_id":"approval-absolute","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","timelock_until":%q,"expires_at":%q}`, timelockUntil.Format(time.RFC3339Nano), expiresAt.Format(time.RFC3339Nano))))
+	authorizeTestRequest(request)
+	recorder = httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("absolute approval window status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var approval contracts.ApprovalCeremony
+	if err := json.Unmarshal(recorder.Body.Bytes(), &approval); err != nil {
+		t.Fatal(err)
+	}
+	if !approval.TimelockUntil.Equal(timelockUntil) || !approval.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("approval window = (%s,%s), want (%s,%s)", approval.TimelockUntil, approval.ExpiresAt, timelockUntil, expiresAt)
+	}
 }
 
 func TestApprovalWebAuthnAssertFailsClosedWithoutVerifier(t *testing.T) {
@@ -1291,7 +1325,8 @@ func TestApprovalRouteDerivesActorAndRejectsStaleCeremony(t *testing.T) {
 	mux := http.NewServeMux()
 	registerContractRoutes(mux, svc)
 
-	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(`{"approval_id":"approval-raw-admin","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1}`))
+	now := time.Now().UTC()
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/approvals", strings.NewReader(fmt.Sprintf(`{"approval_id":"approval-raw-admin","subject":"mcp:srv","action":"mcp.approve","requested_by":"agent:test","quorum":1,"timelock_until":%q,"expires_at":%q}`, now.Add(-time.Minute).Format(time.RFC3339Nano), now.Add(time.Hour).Format(time.RFC3339Nano))))
 	authorizeTestRequest(createReq)
 	createRec := httptest.NewRecorder()
 	mux.ServeHTTP(createRec, createReq)

@@ -105,6 +105,9 @@ func TestPrometheusHandler(t *testing.T) {
 	if !strings.Contains(body, `helm_denial_reasons{reason="DENY"}`) {
 		t.Error("expected reason counters")
 	}
+	if !strings.Contains(body, "# HELP helm_active_agents Number of agents seen in the last 5 minutes") {
+		t.Error("expected active-agent window in metric help")
+	}
 }
 
 func TestBudget(t *testing.T) {

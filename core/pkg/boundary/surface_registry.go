@@ -558,16 +558,21 @@ func (r *SurfaceRegistry) transitionApprovalLocked(id string, state contracts.Ap
 		return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q cannot transition from %s to %s", id, approval.State, state)
 	}
 	now := r.now().UTC()
-	if !approval.ExpiresAt.IsZero() && now.After(approval.ExpiresAt) && state == contracts.ApprovalCeremonyAllowed {
-		approval.State = contracts.ApprovalCeremonyExpired
-		approval.UpdatedAt = now
-		approval.Reason = "approval expired before assertion"
-		return r.putApprovalLocked(approval)
-	}
-	if state == contracts.ApprovalCeremonyAllowed && !approval.TimelockUntil.IsZero() && now.Before(approval.TimelockUntil) {
-		approval.UpdatedAt = now
-		approval.Reason = "approval timelock has not elapsed"
-		return r.putApprovalLocked(approval)
+	if state == contracts.ApprovalCeremonyAllowed {
+		if approval.TimelockUntil.IsZero() || approval.ExpiresAt.IsZero() {
+			return contracts.ApprovalCeremony{}, fmt.Errorf("approval %q requires timelock_until and expires_at", id)
+		}
+		if !now.Before(approval.ExpiresAt) {
+			approval.State = contracts.ApprovalCeremonyExpired
+			approval.UpdatedAt = now
+			approval.Reason = "approval expired before assertion"
+			return r.putApprovalLocked(approval)
+		}
+		if now.Before(approval.TimelockUntil) {
+			approval.UpdatedAt = now
+			approval.Reason = "approval timelock has not elapsed"
+			return r.putApprovalLocked(approval)
+		}
 	}
 	if state == contracts.ApprovalCeremonyAllowed && approval.BreakGlass && (strings.TrimSpace(reason) == "" || strings.TrimSpace(receiptID) == "") {
 		return contracts.ApprovalCeremony{}, fmt.Errorf("break-glass approval requires reason and receipt_id")

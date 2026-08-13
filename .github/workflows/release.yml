@@ -1483,6 +1483,8 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Wait for published version convergence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
@@ -1502,6 +1504,8 @@ jobs:
           exit 1
       - name: Check full published version status
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           python3 scripts/release/check_version_drift.py \
@@ -1509,7 +1513,7 @@ jobs:
             --write-status version-status.json \
             published
       - name: Replace release version status with full post-release status
-        if: always()
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${GITHUB_REF_NAME}" version-status.json --clobber

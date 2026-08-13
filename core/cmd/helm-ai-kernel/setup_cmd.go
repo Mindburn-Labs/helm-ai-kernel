@@ -752,9 +752,9 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		summary.ScanGrade = grade
 	}
 	printSetupSummary(stdout, summary, opts.JSON)
-	// A project-scoped Codex config that Codex will not load until the
-	// project is trusted is not an effective install; do not report success.
-	if summary.MCPInstalled && summary.HookInstalled && !summary.CodexTrustPending {
+	// On-disk config alone is not healthy: the client must be present and
+	// confirm that it loaded HELM, with no explicit trust step still pending.
+	if summary.MCPInstalled && summary.HookInstalled && summary.ClientDetected && summary.NativeLoaded && !summary.CodexTrustPending {
 		return 0
 	}
 	return 1

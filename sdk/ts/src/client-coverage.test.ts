@@ -48,7 +48,7 @@ describe("HelmClient coverage matrix", () => {
       ["evaluateDecisionV5", [{ tool: "read_file", effect_level: "read_file", session_id: "current-session" }]],
       ["runPublicDemo", ["read_ticket", { id: 1 }]],
       ["verifyPublicDemoReceipt", [{ receipt_id: "r1" }, "hash"]],
-      ["approveIntent", [{ intent_hash: "h", signature_b64: "sig", public_key_b64: "pk" }]],
+      ["approveIntent", [{ intent_hash: "h", signature: "sig", public_key: "pk" }]],
       ["listSessions", []],
       ["listSessions", [7, 3]],
       ["getReceipts", ["session/one"]],

@@ -950,7 +950,7 @@ func TestSetupStatusReportsConfiguredClientMissing(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--json", "--data-dir", dataDir}, &stdout, &stderr)
-	if code != 0 {
+	if code != 1 {
 		t.Fatalf("status exit=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 	got := decodeSingleSetupSummary(t, &stdout)
@@ -1615,14 +1615,14 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code = Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--no-quickstart", "--json", "--data-dir", dataDir}, &stdout, &stderr)
-	if code != 0 {
+	if code != 1 {
 		t.Fatalf("status exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
 	}
 	var status setupSummary
 	if err := json.Unmarshal(stdout.Bytes(), &status); err != nil {
 		t.Fatalf("decode status summary: %v\n%s", err, stdout.String())
 	}
-	if !status.MCPInstalled || !status.HookInstalled || status.KernelURL != "" {
+	if !status.MCPInstalled || !status.HookInstalled || status.ClientState != "configured_unverified" || status.KernelURL != "" {
 		t.Fatalf("unexpected setup status: %#v", status)
 	}
 
@@ -1825,8 +1825,12 @@ func TestSetupStatusRejectsStaleMCPDataDir(t *testing.T) {
 			stdout.Reset()
 			stderr.Reset()
 			code = Run(args, &stdout, &stderr)
-			if code != 0 {
-				t.Fatalf("exact status exit = %d, want 0; stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+			wantCode := 0
+			if test.target == "codex" && test.scope == "project" {
+				wantCode = 1 // Project-local Codex loading cannot yet be verified natively.
+			}
+			if code != wantCode {
+				t.Fatalf("exact status exit = %d, want %d; stderr=%s stdout=%s", code, wantCode, stderr.String(), stdout.String())
 			}
 			exact := decodeSingleSetupSummary(t, &stdout)
 			if !exact.MCPInstalled || !exact.HookInstalled {
@@ -2553,6 +2557,15 @@ func TestSetupCodexProjectTrustPending(t *testing.T) {
 	}
 	if !installed.CodexTrustPending {
 		t.Fatal("install summary should report CodexTrustPending=true for an untrusted project")
+	}
+	so.Reset()
+	se.Reset()
+	if code := Run([]string{"helm-ai-kernel", "setup", "status", "codex", "--scope", "project", "--workspace", workspace, "--json", "--data-dir", dataDir}, &so, &se); code != 1 {
+		t.Fatalf("pending status exit = %d, want 1; stderr=%s stdout=%s", code, se.String(), so.String())
+	}
+	pending := decodeSingleSetupSummary(t, &so)
+	if !pending.CodexTrustPending || pending.ClientState != "trust_pending" {
+		t.Fatalf("pending status lost explicit trust state: %#v", pending)
 	}
 }
 

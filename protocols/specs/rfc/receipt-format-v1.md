@@ -73,7 +73,7 @@ stated normatively here.
 | --- | --- | --- |
 | `launch_effect_receipt.v1` — `LaunchEffectReceipt` | **Yes** — §2 (excluding §2.6), §3, §4, §5 | this document + `protocols/json-schemas/effects/launch/launch_effect_receipt.v1.json` (which declares `x-helm.receipt_format: receipt-format-v1`) + `reference_packs/launch-mission-v1/` |
 | `CounterfactualReceipt` | **Partially** — §2.6 defines its signing preimage only | §2.6 + vector at `core/pkg/contracts/testdata/counterfactual_receipt_v1.json`. Its wire shape has no schema, no protobuf message and no OpenAPI component, and is therefore unspecified. |
-| `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **No** | **No published document defines its bytes.** Its field set is `core/pkg/contracts/receipt.go`; its wire contract is `api/openapi/helm.openapi.yaml` (HTTP) and `protocols/proto/helm/kernel/v1/helm.proto` (gRPC). Third-party verifiability MUST NOT be claimed for it. |
+| `contracts.Receipt` / `receipt.v5` — the mainline kernel receipt | **No** — this document does not specify it | `protocols/specs/receipts/receipt-v5.md` and `reference_packs/receipt-v5/` define and independently verify its 13-member signing preimage. Its field set is `core/pkg/contracts/receipt.go`; its wire contract is `api/openapi/helm.openapi.yaml` (HTTP) and `protocols/proto/helm/kernel/v1/helm.proto` (gRPC). |
 | External decision receipt (`helm_external.v1`) | **No** | `protocols/specs/receipts/HELM_RECEIPT_SPEC_v1.0.md` |
 
 The mainline receipt is the one an integrator is most likely to meet first, and

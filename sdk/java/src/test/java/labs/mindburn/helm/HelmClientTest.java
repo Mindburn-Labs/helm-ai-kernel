@@ -105,12 +105,12 @@ public class HelmClientTest {
     void testApprovalRequestRoundtrip() throws Exception {
         TypesGen.ApprovalRequest req = new TypesGen.ApprovalRequest();
         req.setIntentHash("intent-789");
-        req.setSignatureB64("sig-ed25519-abc");
+        req.setSignature("sig-ed25519-abc");
 
         String json = mapper.writeValueAsString(req);
         TypesGen.ApprovalRequest deserialized = mapper.readValue(json, TypesGen.ApprovalRequest.class);
         assertEquals("intent-789", deserialized.getIntentHash());
-        assertEquals("sig-ed25519-abc", deserialized.getSignatureB64());
+        assertEquals("sig-ed25519-abc", deserialized.getSignature());
     }
 
     @Test

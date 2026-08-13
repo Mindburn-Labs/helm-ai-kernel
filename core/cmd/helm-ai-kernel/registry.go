@@ -81,11 +81,14 @@ func Dispatch(name string, args []string, stdout, stderr io.Writer) (int, bool) 
 	if !ok {
 		return 0, false
 	}
-	// Only depth-1 help is answered here. Deeper help belongs to the leaf, which
-	// owns the flag set being described — see TestNestedHelpReachesLeafFlagSets.
-	// A leaf is responsible for answering it before it touches any state.
 	if len(args) == 1 && isHelpRequest(args) {
 		printSubcommandHelp(cmd, stdout)
+		return 0, true
+	}
+	// Deeper help belongs to the leaf flag set. Route its help chrome to stdout
+	// and normalize flag.ErrHelp-style exit codes; leaf parsers return before work.
+	if helpArgs, ok := normalizeHelpRequest(args); ok {
+		_ = cmd.RunFn(helpArgs, stdout, stdout)
 		return 0, true
 	}
 	return cmd.RunFn(args, stdout, stderr), true
@@ -100,7 +103,26 @@ func isHelpRequest(args []string) bool {
 			return true
 		}
 	}
+	if len(args) > 1 && args[len(args)-1] == "help" {
+		for _, arg := range args[:len(args)-1] {
+			if strings.HasPrefix(arg, "-") {
+				return false
+			}
+		}
+		return true
+	}
 	return false
+}
+
+func normalizeHelpRequest(args []string) ([]string, bool) {
+	if !isHelpRequest(args) {
+		return nil, false
+	}
+	normalized := append([]string(nil), args...)
+	if normalized[len(normalized)-1] == "help" {
+		normalized[len(normalized)-1] = "--help"
+	}
+	return normalized, true
 }
 
 func printSubcommandHelp(cmd Subcommand, stdout io.Writer) {

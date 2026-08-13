@@ -25,6 +25,10 @@ import (
 // before OTel is configured is therefore fine — only wrapping after traffic has
 // started would lose spans. An earlier comment here claimed construction-time
 // resolution and sent an investigation down the wrong path; do not restore it.
+// When no SDK provider is installed, however, OTel's noop tracer ignores
+// WithNewRoot and carries the extracted remote SpanContext forward unchanged.
+// dropRemoteSpanContext closes that provider-independent trust-boundary gap
+// before application handlers or context-aware logs can observe it.
 //
 // # Per-route identity (HELM-495)
 //
@@ -88,12 +92,29 @@ import (
 // The same mechanism is why the daemon's chain in cmd/helm-ai-kernel keeps this
 // wrapper BELOW RequestIDMiddleware, which copies the request the same way.
 func WrapEdgeHandler(h http.Handler, operation string) http.Handler {
-	return otelhttp.NewHandler(withRouteAttribute(h), operation,
+	return otelhttp.NewHandler(withRouteAttribute(dropRemoteSpanContext(h)), operation,
 		otelhttp.WithPropagators(propagation.TraceContext{}),
 		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
 		otelhttp.WithSpanNameFormatter(edgeSpanName),
 		otelhttp.WithMetricAttributesFn(edgeMetricAttributes),
 	)
+}
+
+// dropRemoteSpanContext removes the extracted caller context only when the
+// tracer failed to replace it with a local server span. That is the observable
+// noop-provider failure mode: a real SDK span is local and remains untouched,
+// preserving both recording and the link created by WithPublicEndpointFn.
+//
+// Update the request in place so the outer otelhttp wrapper still observes the
+// route pattern stamped by http.ServeMux after the handler returns.
+func dropRemoteSpanContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if oteltrace.SpanContextFromContext(r.Context()).IsRemote() {
+			ctx := oteltrace.ContextWithSpanContext(r.Context(), oteltrace.SpanContext{})
+			*r = *r.WithContext(ctx)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // edgeSpanName renders the server span name.

@@ -224,12 +224,12 @@ func doctorStatusMarker(renderer ui.Renderer, status checkStatus) string {
 // Individual checks
 // ---------------------------------------------------------------------------
 
-// resolveDataDir returns the Quickstart data directory, honoring HELM_DATA_DIR.
+// resolveDataDir returns the canonical setup data directory, honoring HELM_DATA_DIR.
 func resolveDataDir() string {
 	if d := os.Getenv("HELM_DATA_DIR"); d != "" {
 		return d
 	}
-	if d := defaultQuickstartDataDir(); d != "" {
+	if d := defaultSetupDataDir(); d != "" {
 		return d
 	}
 	return "data"

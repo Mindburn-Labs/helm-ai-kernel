@@ -106,14 +106,15 @@ func TestSurfaceRegistryApprovalEdges(t *testing.T) {
 	}
 
 	expiring, err := registry.PutApproval(contracts.ApprovalCeremony{
-		ApprovalID:  "approval-expiring",
-		Subject:     "mcp:expiring",
-		Action:      "mcp.approve",
-		State:       contracts.ApprovalCeremonyPending,
-		RequestedBy: "agent:test",
-		ExpiresAt:   now.Add(-time.Minute),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ApprovalID:    "approval-expiring",
+		Subject:       "mcp:expiring",
+		Action:        "mcp.approve",
+		State:         contracts.ApprovalCeremonyPending,
+		RequestedBy:   "agent:test",
+		TimelockUntil: now.Add(-2 * time.Minute),
+		ExpiresAt:     now.Add(-time.Minute),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -127,14 +128,16 @@ func TestSurfaceRegistryApprovalEdges(t *testing.T) {
 	}
 
 	breakGlass, err := registry.PutApproval(contracts.ApprovalCeremony{
-		ApprovalID:  "approval-break-glass",
-		Subject:     "mcp:break-glass",
-		Action:      "mcp.approve",
-		State:       contracts.ApprovalCeremonyPending,
-		RequestedBy: "agent:test",
-		BreakGlass:  true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ApprovalID:    "approval-break-glass",
+		Subject:       "mcp:break-glass",
+		Action:        "mcp.approve",
+		State:         contracts.ApprovalCeremonyPending,
+		RequestedBy:   "agent:test",
+		BreakGlass:    true,
+		TimelockUntil: now.Add(-time.Minute),
+		ExpiresAt:     now.Add(time.Hour),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	})
 	if err != nil {
 		t.Fatal(err)

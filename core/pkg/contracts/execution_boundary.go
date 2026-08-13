@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -82,6 +83,56 @@ type MCPAuthorizationProfile struct {
 	ProtocolVersions     []string `json:"protocol_versions,omitempty"`
 	ToolScopeHash        string   `json:"tool_scope_hash,omitempty"`
 	ProfileHash          string   `json:"profile_hash,omitempty"`
+}
+
+func (p *MCPAuthorizationProfile) UnmarshalJSON(data []byte) error {
+	type rawMCPAuthorizationProfile MCPAuthorizationProfile
+	type mcpAuthorizationProfileCompat struct {
+		rawMCPAuthorizationProfile
+		LegacyProtocolVersion  string              `json:"protocol_version"`
+		LegacyToolScopes       map[string][]string `json:"tool_scopes"`
+		LegacyRequiredAudience string              `json:"required_audience"`
+		LegacyStaleAfter       string              `json:"stale_after"`
+	}
+
+	var raw mcpAuthorizationProfileCompat
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	normalized := MCPAuthorizationProfile(raw.rawMCPAuthorizationProfile)
+
+	if raw.LegacyProtocolVersion != "" {
+		switch {
+		case len(normalized.ProtocolVersions) == 0:
+			normalized.ProtocolVersions = []string{raw.LegacyProtocolVersion}
+		case len(normalized.ProtocolVersions) != 1 || normalized.ProtocolVersions[0] != raw.LegacyProtocolVersion:
+			return fmt.Errorf("protocol_versions and protocol_version disagree")
+		}
+	}
+	if raw.LegacyRequiredAudience != "" {
+		switch {
+		case normalized.Resource == "":
+			normalized.Resource = raw.LegacyRequiredAudience
+		case normalized.Resource != raw.LegacyRequiredAudience:
+			return fmt.Errorf("resource and required_audience disagree")
+		}
+	}
+	if len(raw.LegacyToolScopes) > 0 {
+		legacyHash, err := hashJCS(raw.LegacyToolScopes)
+		if err != nil {
+			return fmt.Errorf("hash legacy tool_scopes: %w", err)
+		}
+		switch {
+		case normalized.ToolScopeHash == "":
+			normalized.ToolScopeHash = legacyHash
+		case normalized.ToolScopeHash != legacyHash:
+			return fmt.Errorf("tool_scope_hash and tool_scopes disagree")
+		}
+	}
+
+	_ = raw.LegacyStaleAfter
+	*p = normalized
+	return nil
 }
 
 // EnforcementModeShadow labels boundary records produced under an explicit,

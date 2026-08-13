@@ -128,6 +128,38 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             if any(marker in body for marker in EXTERNAL_MUTATION_MARKERS)
         }
 
+    def step(self, job: str, name: str) -> str:
+        match = re.search(
+            rf"^      - name: {re.escape(name)}\n"
+            r"(?P<body>.*?)(?=^      - (?:name:|uses:)|\Z)",
+            job,
+            re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(match, f"missing {name} step")
+        assert match is not None
+        return match.group("body")
+
+    def assert_post_release_status_safety(self, post_release: str) -> None:
+        for step_name in (
+            "Wait for published version convergence",
+            "Check full published version status",
+        ):
+            self.assertIn(
+                "GITHUB_TOKEN: ${{ github.token }}",
+                self.step(post_release, step_name),
+                f"{step_name} must use authenticated GitHub API requests",
+            )
+
+        upload = self.step(
+            post_release,
+            "Replace release version status with full post-release status",
+        )
+        self.assertRegex(
+            upload,
+            r"(?m)^        if: success\(\)$",
+            "failed convergence must not clobber the passing release receipt",
+        )
+
     def test_release_authority_is_human_gated_armed_and_binds_the_live_tag_object(self) -> None:
         authority = self.job("release-authority")
         self.assertEqual(
@@ -357,7 +389,34 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             post_release.index("- name: Check full published version status"),
         )
         self.assertRegex(post_release, r"- name: Check full published version status\n\s+if: always\(\)")
-        self.assertRegex(post_release, r"- name: Replace release version status with full post-release status\n\s+if: always\(\)")
+        self.assert_post_release_status_safety(post_release)
+
+    def test_post_release_status_safety_rejects_unsafe_mutations(self) -> None:
+        post_release = self.job("post-release-version-drift")
+        token = "GITHUB_TOKEN: ${{ github.token }}"
+        wait_step = self.step(post_release, "Wait for published version convergence")
+        status_step = self.step(post_release, "Check full published version status")
+
+        mutations = {
+            "unauthenticated convergence polling": post_release.replace(
+                wait_step,
+                wait_step.replace(token, "", 1),
+                1,
+            ),
+            "unauthenticated final status check": post_release.replace(
+                status_step,
+                status_step.replace(token, "", 1),
+                1,
+            ),
+            "failed status clobbers passing receipt": post_release.replace(
+                "- name: Replace release version status with full post-release status\n        if: success()",
+                "- name: Replace release version status with full post-release status\n        if: always()",
+                1,
+            ),
+        }
+        for mutation, workflow in mutations.items():
+            with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
+                self.assert_post_release_status_safety(workflow)
 
     def test_console_dispatch_uses_an_immutable_ref_bound_to_the_source_pin(self) -> None:
         console_sidecar = self.job("console-local-sidecar")

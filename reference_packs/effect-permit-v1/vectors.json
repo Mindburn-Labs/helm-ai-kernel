@@ -1,0 +1,88 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 test vectors only; the effect_permit.v1 preimage is algorithm-neutral.",
+  "schema_version": "effect-permit-vectors.v1",
+  "signature_version": "effect_permit.v1",
+  "contract_version": "2026-08-10",
+  "quantum_posture": "classical_ed25519_test_vectors",
+  "status": "final",
+  "specification": "protocols/specs/effects/effect-permit-v1.md",
+  "issuer_public_key": "ed25519:c050c5637a44fa8629fff3cccce2300cb362a63d99d95fc54145266f4332445a",
+  "vectors": [
+    {
+      "id": "bridge_write_permit",
+      "description": "Fully populated WRITE permit with ordered scope lists and two evidence bindings.",
+      "artifact": {
+        "canonical": "bridge_permit.c14n.json",
+        "sha256": "sha256:07f62cafc68e8b912665090d563b3b9f1504a291f9389dddcf180ca28200f91e"
+      },
+      "signing_payload": {
+        "canonical": "bridge_permit_signing_payload.c14n.json",
+        "sha256": "sha256:e3cfe02c9379cb2b3ed7f9e46b6af366a5c7c0e09c6677f67cb07dbd0eaaf719"
+      },
+      "signature": "ed25519:f74ff1ab85f66def6a59afaeedac6256dbc970714314fec431f3cced4b5c10ea7b7025262d96a6ba3a5960b41ee06f8348029329a4b736762af9743fc1e5f006"
+    },
+    {
+      "id": "minimal_read_permit",
+      "description": "Normalization vector for empty optional fields, nil collections, UTC conversion, and fractional seconds.",
+      "artifact": {
+        "canonical": "minimal_permit.c14n.json",
+        "sha256": "sha256:ade4d878325ff283c7d219b3783c857019f1fd344cd4eb2ccbbcfc6d5994b701"
+      },
+      "signing_payload": {
+        "canonical": "minimal_permit_signing_payload.c14n.json",
+        "sha256": "sha256:21440e6f89b3e45c8e2b1625d90f98c5b2267d5d70fb55140ac7f2da7a13b2d0"
+      },
+      "signature": "ed25519:35ac244e7cf14091339fc406fe89b12f5179668c7e583754682cdfb22cf16d29b82bb0702aa60b10bb48332ca4b2c7239fa0e80e0bb26be26892f06b5770f202"
+    }
+  ],
+  "negative_vectors": [
+    {
+      "id": "unsigned_permit",
+      "vector": "bridge_write_permit",
+      "mutation": "remove_signature",
+      "expected_error": "permit_unsigned"
+    },
+    {
+      "id": "uppercase_signature_hex",
+      "vector": "bridge_write_permit",
+      "mutation": "uppercase_signature_hex",
+      "expected_error": "invalid_encoding"
+    },
+    {
+      "id": "signature_bit_flip",
+      "vector": "bridge_write_permit",
+      "mutation": "flip_signature_last_bit",
+      "expected_error": "permit_signature_rejected"
+    },
+    {
+      "id": "tamper_permit_id",
+      "vector": "bridge_write_permit",
+      "mutation": "set_permit_id",
+      "expected_error": "permit_signature_rejected"
+    },
+    {
+      "id": "tamper_scope_order",
+      "vector": "bridge_write_permit",
+      "mutation": "reverse_scope_allowed_params",
+      "expected_error": "permit_signature_rejected"
+    },
+    {
+      "id": "omit_signature_version",
+      "vector": "bridge_write_permit",
+      "mutation": "build_payload_without_signature_version",
+      "expected_error": "permit_signature_rejected"
+    },
+    {
+      "id": "null_empty_scope_lists",
+      "vector": "minimal_read_permit",
+      "mutation": "build_payload_with_null_scope_lists",
+      "expected_error": "permit_signature_rejected"
+    },
+    {
+      "id": "retain_timestamp_offset",
+      "vector": "minimal_read_permit",
+      "mutation": "build_payload_without_utc_normalization",
+      "expected_error": "permit_signature_rejected"
+    }
+  ]
+}

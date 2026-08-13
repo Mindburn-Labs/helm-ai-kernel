@@ -334,8 +334,8 @@ paths:
               $ref: '#/components/schemas/ApprovalRequest'
             example:
               intent_hash: "sha256:abc123..."
-              signature_b64: "base64-encoded-ed25519-signature"
-              public_key_b64: "base64-encoded-public-key"
+              signature: "hex-encoded-ed25519-signature"
+              public_key: "hex-encoded-public-key"
       responses:
         '200':
           description: Approval receipt
@@ -2760,6 +2760,13 @@ paths:
           in: path
           required: true
           schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                receipt_ref: { type: string }
       responses:
         '200':
           description: Updated harness change contract
@@ -3721,7 +3728,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApprovalCeremony'
+              $ref: '#/components/schemas/ApprovalCeremonyCreateRequest'
       responses:
         '201':
           description: Approval ceremony
@@ -3826,7 +3833,9 @@ paths:
             schema:
               type: object
               properties:
-                actor: { type: string }
+                actor:
+                  type: string
+                  description: Deprecated compatibility field. Runtime ignores caller-supplied actor and uses the authenticated principal.
                 receipt_id: { type: string }
                 reason: { type: string }
                 expected_ceremony_hash:
@@ -4183,20 +4192,95 @@ components:
 
     ApprovalRequest:
       type: object
-      required: [intent_hash, signature_b64, public_key_b64]
+      required: [intent_hash]
       properties:
         intent_hash:
           type: string
           description: SHA-256 hash of the intent to approve
-        signature_b64:
+        plan_hash:
           type: string
-          description: Base64-encoded Ed25519 signature
+        policy_hash:
+          type: string
+        nonce:
+          type: string
+        approver_id:
+          type: string
+        public_key:
+          type: string
+          description: Hex-encoded Ed25519 public key or the hybrid key envelope.
         public_key_b64:
           type: string
-          description: Base64-encoded Ed25519 public key
+          description: Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into public_key.
+        signature:
+          type: string
+          description: Hex-encoded Ed25519 signature or the hybrid signature envelope.
+        signature_b64:
+          type: string
+          description: Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into signature.
         challenge_response:
           type: string
-          description: Optional challenge/response for ceremony
+          description: Deprecated ceremony compatibility field. Runtime ignores it.
+        signature_profile:
+          type: string
+        signature_algorithm:
+          type: string
+        key_id:
+          type: string
+        public_key_set:
+          type: object
+          additionalProperties: { type: string }
+        verification_policy:
+          type: string
+        downgrade_rejected:
+          type: boolean
+        accepted_algorithms:
+          type: array
+          items: { type: string }
+        timestamp:
+          type: string
+          format: date-time
+        biometric_tier:
+          type: string
+        session_id:
+          type: string
+
+    ApprovalCeremonyCreateRequest:
+      type: object
+      properties:
+        approval_id:
+          type: string
+          description: Optional stable identifier. Runtime derives one when omitted.
+        subject: { type: string }
+        action: { type: string }
+        state:
+          type: string
+          enum: [pending, approved, denied, revoked, expired]
+          description: Deprecated response-era field accepted for compatibility and ignored on create.
+        requested_by: { type: string }
+        approvers:
+          type: array
+          items: { type: string }
+        quorum: { type: integer }
+        timelock_until:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        reason: { type: string }
+        receipt_id: { type: string }
+        break_glass: { type: boolean }
+        created_at:
+          type: string
+          format: date-time
+          description: Deprecated response-era field accepted for compatibility and ignored on create.
+        updated_at:
+          type: string
+          format: date-time
+          description: Deprecated response-era field accepted for compatibility and ignored on create.
+        ceremony_hash:
+          type: string
+          description: Deprecated response-era field accepted for compatibility and ignored on create.
 
     AddTrustKeyRequest:
       type: object
@@ -4589,7 +4673,7 @@ components:
           additionalProperties: true
 
     EvaluateRequest:
-      description: Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id; the runtime requires one accepted intent shape and a non-blank effective session before issuing a receipt.
+      description: Public v0.8 compatibility envelope. V5 SDK clients send non-blank top-level tool, effect_level, and session_id. Existing direct-daemon callers may continue action/resource with context.session_id. When both forms are present, tool/action, effect_level/resource, and session_id/context.session_id must match after trimming; conflicting aliases fail before receipt issuance.
       type: object
       properties:
         principal:
@@ -4621,7 +4705,7 @@ components:
         context:
           type: object
           additionalProperties: true
-          description: Optional input context; authenticated principal and tenant fields are added by the server.
+          description: Optional input context. Caller-supplied principal, tenant, and workspace authority keys are removed; the server adds canonical values from authenticated scope.
 
     NonBlankSessionID:
       type: string
@@ -6209,6 +6293,7 @@ components:
         manifest:
           type: object
           additionalProperties: true
+          description: Deprecated compatibility field. Runtime ignores the caller-supplied manifest.
 
     MCPScanResult:
       type: object
@@ -6231,8 +6316,13 @@ components:
       type: object
       properties:
         profile_id: { type: string }
-        protocol_version: { type: string }
+        protocol_version:
+          type: string
+          description: Deprecated singular compatibility alias for protocol_versions.
         resource: { type: string }
+        required_audience:
+          type: string
+          description: Deprecated compatibility alias for resource.
         authorization_servers:
           type: array
           items: { type: string }
@@ -6244,8 +6334,18 @@ components:
           additionalProperties:
             type: array
             items: { type: string }
-        required_audience: { type: string }
-        stale_after: { type: string, format: date-time }
+          description: Deprecated compatibility field. Runtime hashes the legacy map into tool_scope_hash when supplied.
+        required_scopes:
+          type: array
+          items: { type: string }
+        protocol_versions:
+          type: array
+          items: { type: string }
+        stale_after:
+          type: string
+          format: date-time
+          description: Deprecated compatibility field retained for additive schema compatibility.
+        tool_scope_hash: { type: string }
         profile_hash: { type: string }
 
     MCPAuthorizeCallRequest:
@@ -6360,12 +6460,30 @@ components:
         budget_id: { type: string }
         subject: { type: string }
         window: { type: string }
-        max_tool_calls: { type: integer }
-        max_spend_minor: { type: integer, format: int64 }
-        max_egress_bytes: { type: integer, format: int64 }
-        max_write_ops: { type: integer }
-        approval_required_after: { type: integer }
+        max_tool_calls:
+          type: integer
+          description: Deprecated compatibility alias for tool_call_limit.
+        tool_call_limit: { type: integer }
+        max_spend_minor:
+          type: integer
+          format: int64
+          description: Deprecated compatibility alias for spend_limit_cents.
+        spend_limit_cents: { type: integer, format: int64 }
+        max_egress_bytes:
+          type: integer
+          format: int64
+          description: Deprecated compatibility alias for egress_limit_bytes.
+        egress_limit_bytes: { type: integer, format: int64 }
+        max_write_ops:
+          type: integer
+          description: Deprecated compatibility alias for write_operation_limit.
+        write_operation_limit: { type: integer }
+        approval_required_after:
+          type: integer
+          description: Deprecated compatibility alias for approval_required_above_cents.
+        approval_required_above_cents: { type: integer, format: int64 }
         policy_epoch: { type: string }
+        updated_at: { type: string, format: date-time }
 
     CoexistenceCapabilityManifest:
       type: object
@@ -6403,11 +6521,21 @@ components:
         format: { type: string }
         receipt_id: { type: string }
         record_hash: { type: string }
-        policy_epoch: { type: string }
-        verdict: { type: string }
-        reason_code: { type: string }
-        sandbox_grant_hash: { type: string }
-        authz_snapshot_hash: { type: string }
+        policy_epoch:
+          type: string
+          description: Deprecated compatibility field. Runtime ignores it on export requests.
+        verdict:
+          type: string
+          description: Deprecated compatibility field. Runtime ignores it on export requests.
+        reason_code:
+          type: string
+          description: Deprecated compatibility field. Runtime ignores it on export requests.
+        sandbox_grant_hash:
+          type: string
+          description: Deprecated compatibility field. Runtime ignores it on export requests.
+        authz_snapshot_hash:
+          type: string
+          description: Deprecated compatibility field. Runtime ignores it on export requests.
         attributes:
           type: object
           additionalProperties: { type: string }

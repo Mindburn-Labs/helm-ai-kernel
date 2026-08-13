@@ -4,6 +4,7 @@ package crypto
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -50,14 +51,14 @@ const EffectPermitSignatureV1 = "effect_permit.v1"
 // type. core must not import sdk/go — that is the published client SDK, so the
 // dependency would run from the kernel to its own client — and sdk/go does not
 // import core. A production hop therefore needs a converter in a third package,
-// and until one exists the mapping in permit_cross_process_test.go is the only
-// executable statement of it.
+// while permit_cross_process_test.go is the executable parity guard for the
+// mapping published in protocols/specs/effects/effect-permit-v1.md.
 //
 // effect_type is the sharp edge in that mapping. This envelope signs the Go
 // string ("WRITE"); the wire carries an enum (EFFECT_TYPE_WRITE = 2). A far side
 // that renders the enum name instead of the bare string builds a different
 // preimage and rejects a valid permit. TestEffectTypeEnumMappingIsPinned pins
-// the rule; it is not yet published in a spec.
+// the rule published in the effect-permit-v1 signing table.
 type effectPermitV1SigningEnvelope struct {
 	SignatureVersion string              `json:"signature_version"`
 	PermitID         string              `json:"permit_id"`
@@ -104,7 +105,7 @@ func EffectPermitSigningPayload(p *effects.EffectPermit) ([]byte, error) {
 	if p == nil {
 		return nil, fmt.Errorf("effect permit is nil")
 	}
-	return canonicalize.JCS(effectPermitV1SigningEnvelope{
+	return canonicalize.InteroperableJCS(effectPermitV1SigningEnvelope{
 		SignatureVersion: EffectPermitSignatureV1,
 		PermitID:         p.PermitID,
 		IntentHash:       p.IntentHash,
@@ -159,6 +160,9 @@ func VerifyPermit(pubKeyHex string, p *effects.EffectPermit) (bool, error) {
 	}
 	if p.Signature == "" {
 		return false, fmt.Errorf("effect permit is unsigned")
+	}
+	if p.Signature != strings.ToLower(p.Signature) {
+		return false, fmt.Errorf("effect permit signature must be lowercase hex")
 	}
 	payload, err := EffectPermitSigningPayload(p)
 	if err != nil {

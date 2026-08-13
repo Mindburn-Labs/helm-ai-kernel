@@ -305,6 +305,39 @@ func TestDeep_DailyLimitExact(t *testing.T) {
 	}
 }
 
+func TestDeep_UsageOverflowFailsClosed(t *testing.T) {
+	const maxInt64 = int64(^uint64(0) >> 1)
+	ctx := context.Background()
+	store := NewMemoryStorage()
+	enforcer := NewSimpleEnforcer(store)
+	requireBudget := &Budget{
+		TenantID:     "overflow-tenant",
+		DailyLimit:   maxInt64,
+		MonthlyLimit: maxInt64,
+		DailyUsed:    1,
+		MonthlyUsed:  1,
+		LastUpdated:  time.Now().UTC(),
+	}
+	if err := store.Set(ctx, requireBudget); err != nil {
+		t.Fatal(err)
+	}
+
+	decision, err := enforcer.Check(ctx, requireBudget.TenantID, Cost{Amount: maxInt64, Currency: "USD"})
+	if err == nil {
+		t.Fatal("overflowing usage addition must fail closed with an error")
+	}
+	if decision == nil || decision.Allowed || decision.Receipt == nil || decision.Receipt.Reason != "usage_overflow" {
+		t.Fatalf("overflow decision = %+v, want denied usage_overflow receipt", decision)
+	}
+	persisted, getErr := store.Get(ctx, requireBudget.TenantID)
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if persisted.DailyUsed != 1 || persisted.MonthlyUsed != 1 {
+		t.Fatalf("overflow corrupted persisted usage: %+v", persisted)
+	}
+}
+
 func TestDeep_BudgetRemainingHelpers(t *testing.T) {
 	b := &Budget{DailyLimit: 100, DailyUsed: 120, MonthlyLimit: 500, MonthlyUsed: 600}
 	if b.DailyRemaining() != 0 {

@@ -7,8 +7,9 @@ import (
 )
 
 // Enforcement labels whether a receipt records authority that was actually
-// enforced at the boundary, or a counterfactual ("would-have") verdict computed
-// under an observe grant without any enforcement or side effect.
+// enforced at the boundary, or a counterfactual ("would-have") verdict. A
+// counterfactual receipt grants no execution authority; a separate active
+// observe grant can still permit dispatch and real effects.
 //
 // This distinction is proof-semantics-critical: conflating a counterfactual
 // receipt with an enforced one would manufacture false execution authority. The
@@ -37,9 +38,10 @@ func IsCanonicalEnforcement(e string) bool {
 
 // CounterfactualReceipt is a signed, content-addressed proof of the verdict the
 // PDP would have issued under an observe grant, carrying the full verdict and
-// reason codes without enforcing anything. It is the artifact that turns the
-// "observe → enforce" on-ramp into a business case: the weekly summary becomes
-// "HELM would have blocked these N actions".
+// reason codes. The receipt grants no execution authority; dispatch and any
+// resulting effect require a separate active observe grant. It is the artifact
+// that turns the "observe → enforce" on-ramp into a business case: the weekly
+// summary becomes "HELM would have blocked these N actions".
 //
 // Despite the shared word, this is not a DenialCounterfactual. That value is
 // the nearest-allowed-envelope field on a denial the boundary actually

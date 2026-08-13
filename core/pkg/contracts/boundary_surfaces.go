@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -221,6 +222,68 @@ type BudgetCeiling struct {
 	Window                string    `json:"window"`
 	PolicyEpoch           string    `json:"policy_epoch,omitempty"`
 	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+func (b *BudgetCeiling) UnmarshalJSON(data []byte) error {
+	type rawBudgetCeiling BudgetCeiling
+	type budgetCeilingCompat struct {
+		rawBudgetCeiling
+		LegacyToolCallLimit         *int   `json:"max_tool_calls"`
+		LegacySpendLimitMinor       *int64 `json:"max_spend_minor"`
+		LegacyEgressLimitBytes      *int64 `json:"max_egress_bytes"`
+		LegacyWriteOperationLimit   *int   `json:"max_write_ops"`
+		LegacyApprovalRequiredAfter *int64 `json:"approval_required_after"`
+	}
+
+	var raw budgetCeilingCompat
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	normalized := BudgetCeiling(raw.rawBudgetCeiling)
+
+	if raw.LegacyToolCallLimit != nil {
+		switch {
+		case normalized.ToolCallLimit == 0:
+			normalized.ToolCallLimit = *raw.LegacyToolCallLimit
+		case normalized.ToolCallLimit != *raw.LegacyToolCallLimit:
+			return fmt.Errorf("tool_call_limit and max_tool_calls disagree")
+		}
+	}
+	if raw.LegacySpendLimitMinor != nil {
+		switch {
+		case normalized.SpendLimitCents == 0:
+			normalized.SpendLimitCents = *raw.LegacySpendLimitMinor
+		case normalized.SpendLimitCents != *raw.LegacySpendLimitMinor:
+			return fmt.Errorf("spend_limit_cents and max_spend_minor disagree")
+		}
+	}
+	if raw.LegacyEgressLimitBytes != nil {
+		switch {
+		case normalized.EgressLimitBytes == 0:
+			normalized.EgressLimitBytes = *raw.LegacyEgressLimitBytes
+		case normalized.EgressLimitBytes != *raw.LegacyEgressLimitBytes:
+			return fmt.Errorf("egress_limit_bytes and max_egress_bytes disagree")
+		}
+	}
+	if raw.LegacyWriteOperationLimit != nil {
+		switch {
+		case normalized.WriteOperationLimit == 0:
+			normalized.WriteOperationLimit = *raw.LegacyWriteOperationLimit
+		case normalized.WriteOperationLimit != *raw.LegacyWriteOperationLimit:
+			return fmt.Errorf("write_operation_limit and max_write_ops disagree")
+		}
+	}
+	if raw.LegacyApprovalRequiredAfter != nil {
+		switch {
+		case normalized.ApprovalRequiredAbove == 0:
+			normalized.ApprovalRequiredAbove = *raw.LegacyApprovalRequiredAfter
+		case normalized.ApprovalRequiredAbove != *raw.LegacyApprovalRequiredAfter:
+			return fmt.Errorf("approval_required_above_cents and approval_required_after disagree")
+		}
+	}
+
+	*b = normalized
+	return nil
 }
 
 type AuthzHealth struct {

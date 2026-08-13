@@ -2,10 +2,13 @@ package linear
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +16,40 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 )
+
+type recordingExecutionLifecycle struct {
+	mu       sync.Mutex
+	states   []string
+	startErr error
+}
+
+func (r *recordingExecutionLifecycle) append(state string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.states = append(r.states, state)
+	return nil
+}
+
+func (r *recordingExecutionLifecycle) MarkStarted(_ context.Context, _ effects.ExecutionLifecycleMeta) error {
+	if r.startErr != nil {
+		return r.startErr
+	}
+	return r.append("STARTED")
+}
+
+func (r *recordingExecutionLifecycle) MarkNotStarted(_ context.Context, _ effects.ExecutionLifecycleMeta) error {
+	return r.append("NOT_STARTED")
+}
+
+func (r *recordingExecutionLifecycle) MarkUncertain(_ context.Context, _ effects.ExecutionLifecycleMeta) error {
+	return r.append("UNCERTAIN")
+}
+
+func (r *recordingExecutionLifecycle) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.states...)
+}
 
 func permitTemplate(toolName, nonce string) *effects.EffectPermit {
 	effectType, ok := toolEffectTypeMap[toolName]
@@ -197,6 +234,166 @@ func TestExecute_GateEnforcesRateLimit(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "gate denied") || !strings.Contains(err.Error(), "RATE_LIMIT") {
 		t.Fatalf("expected rate limit error, got: %v", err)
+	}
+}
+
+func TestExecuteWithLifecycleMarksStartedAtCommentMutationBoundary(t *testing.T) {
+	lifecycle := &recordingExecutionLifecycle{}
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		if states := lifecycle.snapshot(); len(states) != 1 || states[0] != "STARTED" {
+			t.Errorf("request reached Linear before durable STARTED: %v", states)
+			http.Error(w, "missing durable start", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"commentCreate":{"success":true,"comment":{"id":"comment-1","createdAt":"2026-08-11T12:00:00Z"}}}}`))
+	}))
+	defer server.Close()
+
+	c := NewConnector(Config{BaseURL: server.URL, Token: "lin_api_test"})
+	c.client.httpClient = server.Client()
+	params := map[string]any{"issue_id": "issue-1", "body": "Lifecycle proof"}
+	permit := permitFor(t, "linear.add_comment", "nonce-lifecycle-success", params)
+
+	if _, err := c.ExecuteWithLifecycle(context.Background(), permit, "linear.add_comment", params, lifecycle); err != nil {
+		t.Fatalf("ExecuteWithLifecycle(): %v", err)
+	}
+	if states := lifecycle.snapshot(); len(states) != 1 || states[0] != "STARTED" {
+		t.Fatalf("success lifecycle states = %v, want STARTED", states)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("Linear mutation attempts = %d, want 1", got)
+	}
+}
+
+func TestExecuteWithLifecycleMarksPreDispatchDenialsNotStarted(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name   string
+		tool   string
+		params map[string]any
+		mutate func(*Connector, *effects.EffectPermit, *recordingExecutionLifecycle)
+	}{
+		{
+			name: "permit rejected", tool: "linear.add_comment",
+			params: map[string]any{"issue_id": "issue-1", "body": "Denied"},
+			mutate: func(_ *Connector, permit *effects.EffectPermit, _ *recordingExecutionLifecycle) {
+				permit.ConnectorID = "other"
+			},
+		},
+		{
+			name: "gate denied", tool: "linear.add_comment",
+			params: map[string]any{"issue_id": "issue-1", "body": "Denied"},
+			mutate: func(c *Connector, _ *effects.EffectPermit, _ *recordingExecutionLifecycle) {
+				c.gate.SetPolicy(&connector.TrustPolicy{ConnectorID: ConnectorID, TrustLevel: connector.TrustLevelUntrusted})
+			},
+		},
+		{
+			name: "client not connected", tool: "linear.add_comment",
+			params: map[string]any{"issue_id": "issue-1", "body": "Denied"},
+			mutate: func(c *Connector, _ *effects.EffectPermit, _ *recordingExecutionLifecycle) {
+				c.client.apiKey = ""
+			},
+		},
+		{
+			name: "malformed endpoint", tool: "linear.add_comment",
+			params: map[string]any{"issue_id": "issue-1", "body": "Denied"},
+			mutate: func(c *Connector, _ *effects.EffectPermit, _ *recordingExecutionLifecycle) {
+				c.client.baseURL = "://malformed"
+			},
+		},
+		{
+			name: "uncertified write", tool: "linear.create_issue",
+			params: map[string]any{"team_id": "team-1", "title": "Denied"},
+			mutate: func(_ *Connector, _ *effects.EffectPermit, _ *recordingExecutionLifecycle) {},
+		},
+		{
+			name: "start interlock denied", tool: "linear.add_comment",
+			params: map[string]any{"issue_id": "issue-1", "body": "Denied"},
+			mutate: func(_ *Connector, _ *effects.EffectPermit, lifecycle *recordingExecutionLifecycle) {
+				lifecycle.startErr = errors.Join(effects.ErrExecutionStartDenied, errors.New("scope fenced"))
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			before := requests.Load()
+			c := NewConnector(Config{BaseURL: server.URL, Token: "lin_api_test"})
+			c.client.httpClient = server.Client()
+			permit := permitFor(t, test.tool, "nonce-predispatch-"+test.name, test.params)
+			lifecycle := &recordingExecutionLifecycle{}
+			test.mutate(c, permit, lifecycle)
+
+			if _, err := c.ExecuteWithLifecycle(context.Background(), permit, test.tool, test.params, lifecycle); err == nil {
+				t.Fatal("expected pre-dispatch denial")
+			}
+			if states := lifecycle.snapshot(); len(states) != 1 || states[0] != "NOT_STARTED" {
+				t.Fatalf("pre-dispatch lifecycle states = %v, want NOT_STARTED", states)
+			}
+			if got := requests.Load(); got != before {
+				t.Fatalf("pre-dispatch denial made %d Linear request(s)", got-before)
+			}
+		})
+	}
+}
+
+func TestExecuteWithLifecycleRejectsReplayWithoutDuplicateMutation(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"commentCreate":{"success":true,"comment":{"id":"comment-1","createdAt":"2026-08-11T12:00:00Z"}}}}`))
+	}))
+	defer server.Close()
+
+	c := NewConnector(Config{BaseURL: server.URL, Token: "lin_api_test"})
+	c.client.httpClient = server.Client()
+	params := map[string]any{"issue_id": "issue-1", "body": "Once"}
+	permit := permitFor(t, "linear.add_comment", "nonce-lifecycle-replay", params)
+	if _, err := c.ExecuteWithLifecycle(context.Background(), permit, "linear.add_comment", params, &recordingExecutionLifecycle{}); err != nil {
+		t.Fatalf("first execution: %v", err)
+	}
+
+	replayLifecycle := &recordingExecutionLifecycle{}
+	if _, err := c.ExecuteWithLifecycle(context.Background(), permit, "linear.add_comment", params, replayLifecycle); err == nil || !strings.Contains(err.Error(), "already used") {
+		t.Fatalf("expected replay denial, got %v", err)
+	}
+	if states := replayLifecycle.snapshot(); len(states) != 1 || states[0] != "NOT_STARTED" {
+		t.Fatalf("replay lifecycle states = %v, want NOT_STARTED", states)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("replayed Linear mutation attempted %d times, want 1", got)
+	}
+}
+
+func TestExecuteWithLifecycleMarksTransportAmbiguityUncertainWithoutRetry(t *testing.T) {
+	var attempts atomic.Int64
+	c := NewConnector(Config{BaseURL: "https://linear.test/graphql", Token: "lin_api_test"})
+	c.client.httpClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		attempts.Add(1)
+		return nil, errors.New("response lost")
+	})}
+	params := map[string]any{"issue_id": "issue-1", "body": "Ambiguous"}
+	permit := permitFor(t, "linear.add_comment", "nonce-lifecycle-uncertain", params)
+	lifecycle := &recordingExecutionLifecycle{}
+
+	if _, err := c.ExecuteWithLifecycle(context.Background(), permit, "linear.add_comment", params, lifecycle); err == nil || !strings.Contains(err.Error(), "transport error") {
+		t.Fatalf("expected transport ambiguity, got %v", err)
+	}
+	if states := lifecycle.snapshot(); len(states) != 2 || states[0] != "STARTED" || states[1] != "UNCERTAIN" {
+		t.Fatalf("transport lifecycle states = %v, want STARTED -> UNCERTAIN", states)
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Fatalf("ambiguous mutation attempts = %d, want exactly 1", got)
 	}
 }
 

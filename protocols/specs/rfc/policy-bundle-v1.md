@@ -140,8 +140,7 @@ evaluate rules are responsible for compiling the expression and for reporting
 compile failures.
 
 Compiling a standalone Rego or Cedar policy is a **separate** pipeline reached
-through `bundle build`, and it neither reads nor produces the format in this
-section; see §6.3.
+through `bundle build`; see §6.3.
 
 ## 5. Integrity
 
@@ -159,9 +158,7 @@ Two consequences matter for integrators:
 Verification compares a recomputed hash against an expected one:
 
 ```bash
-# The hash is the one `bundle inspect` prints for the §4 example bundle.
-helm-ai-kernel bundle verify --file ./corporate-baseline.yaml \
-  --hash 4ca9fb0250d6603ef7e51771b19801d7152691c3335de11ebdcef582b2100475
+helm-ai-kernel bundle verify --file ./corporate-baseline.yaml --hash 4ca9fb0250d6603ef7e51771b19801d7152691c3335de11ebdcef582b2100475
 ```
 
 A mismatch returns `ErrBundleHashMismatch` and exit code 1.
@@ -218,10 +215,11 @@ trust_roots:
 ### 6.3 What `bundle build` actually does
 
 `bundle build` is implemented, but it does **not** operate on the format in §4
-and it does **not** sign anything. Its own usage line calls the output "a signed
-bundle"; that string is wrong. The command compiles one standalone policy source
-through the `policybundles` registry and prints the compiled bundle's identity as
-JSON. No signature, and no file, is written — the result goes to stdout.
+and does not produce a signature file. Its own usage line calls the output "a
+signed bundle"; that string is wrong. The command compiles one standalone policy
+source through the `policybundles` registry and prints the compiled bundle's
+identity as JSON. No signature, and no file, is written — the result goes to
+stdout.
 
 Only `rego` and `cedar` are routed through the registry:
 
@@ -233,8 +231,8 @@ helm-ai-kernel bundle build ./policy.rego     # language detected from extension
 
 `--language=cel` is **rejected** at compile time with
 `policybundles: language=cel is not yet routed through the registry; use the
-existing celcheck path` and exit code 1. CEL is accepted as a language *name*
-but has no registry path.
+existing celcheck path` and exit code 1. CEL is accepted as a language *name* but
+has no registry path.
 
 Output keys: `language`, `hash`, `bundle_id`, `name`, `version`. Language is
 detected from the file extension when `--language` is omitted.

@@ -6,7 +6,9 @@ package linear
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +24,7 @@ import (
 // Compile-time contracts for the governed execution path.
 var (
 	_ effects.Connector           = (*Connector)(nil)
+	_ effects.LifecycleConnector  = (*Connector)(nil)
 	_ effects.PermitScopeProvider = (*Connector)(nil)
 )
 
@@ -172,50 +175,109 @@ func (c *Connector) PermitScope(toolName string, params map[string]any) (effects
 // Execute dispatches a tool call through the zero-trust gate and records it in
 // the ProofGraph. Implements effects.Connector.
 func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, toolName string, params map[string]any) (any, error) {
+	return c.execute(ctx, permit, toolName, params, nil)
+}
+
+// ExecuteWithLifecycle exposes the final pre-mutation seam for the bounded
+// linear.add_comment write. Other Linear writes remain unavailable through the
+// durable governed bridge until they receive the same source-specific proof.
+func (c *Connector) ExecuteWithLifecycle(
+	ctx context.Context,
+	permit *effects.EffectPermit,
+	toolName string,
+	params map[string]any,
+	lifecycle effects.ExecutionLifecycle,
+) (any, error) {
+	if lifecycle == nil {
+		return nil, fmt.Errorf("linear: durable execution lifecycle is required")
+	}
+	return c.execute(ctx, permit, toolName, params, lifecycle)
+}
+
+func (c *Connector) execute(ctx context.Context, permit *effects.EffectPermit, toolName string, params map[string]any, lifecycle effects.ExecutionLifecycle) (any, error) {
 	if params == nil {
 		params = map[string]any{}
+	}
+	failNotStarted := func(reasonCode string, cause error) (any, error) {
+		if lifecycle != nil {
+			if transitionErr := lifecycle.MarkNotStarted(ctx, effects.ExecutionLifecycleMeta{ReasonCode: reasonCode}); transitionErr != nil {
+				return nil, fmt.Errorf("%v; linear: persist NOT_STARTED: %w", cause, transitionErr)
+			}
+		}
+		return nil, cause
+	}
+	if lifecycle != nil && toolName != "linear.add_comment" {
+		return failNotStarted("LINEAR_LIFECYCLE_TOOL_UNSUPPORTED", fmt.Errorf("linear: durable execution is not certified for tool %q", toolName))
 	}
 
 	// 1. Resolve governed classifications before any side effect.
 	dataClass, ok := toolDataClassMap[toolName]
 	if !ok {
-		return nil, fmt.Errorf("linear: unknown tool %q", toolName)
+		return failNotStarted("LINEAR_TOOL_UNKNOWN", fmt.Errorf("linear: unknown tool %q", toolName))
 	}
 	effectType, ok := toolEffectTypeMap[toolName]
 	if !ok {
-		return nil, fmt.Errorf("linear: missing effect classification for tool %q", toolName)
+		return failNotStarted("LINEAR_EFFECT_CLASS_MISSING", fmt.Errorf("linear: missing effect classification for tool %q", toolName))
 	}
 
 	// 2. Validate the EffectPermit scope. The connector is the last guard
 	// before Linear's GraphQL sinks, so it cannot rely on the bridge alone.
 	if err := c.validatePermit(permit, toolName, effectType, params); err != nil {
-		return nil, err
+		return failNotStarted("LINEAR_PERMIT_REJECTED", err)
 	}
 
 	// 3. Reserve before the gate records a call. A replay cannot consume
 	// rate-limit capacity, while a gate denial releases a fresh permit.
 	if err := c.reservePermitNonce(permit.Nonce, permit.ExpiresAt); err != nil {
-		return nil, err
+		return failNotStarted("LINEAR_PERMIT_REPLAY", err)
 	}
 
 	// 4. Gate check.
 	decision := c.gate.CheckCall(ctx, c.connectorID, dataClass)
 	if !decision.Allowed {
 		c.releasePermitNonce(permit.Nonce)
-		return nil, fmt.Errorf("linear: gate denied: %s (%s)", decision.Reason, decision.Violation)
+		return failNotStarted("LINEAR_GATE_DENIED", fmt.Errorf("linear: gate denied: %s (%s)", decision.Reason, decision.Violation))
 	}
 
 	// 5. Compute input hash via canonicalize.CanonicalHash.
 	inputHash, err := canonicalize.CanonicalHash(params)
 	if err != nil {
 		c.releasePermitNonce(permit.Nonce)
-		return nil, fmt.Errorf("linear: canonical hash of params: %w", err)
+		return failNotStarted("LINEAR_INPUT_HASH_FAILED", fmt.Errorf("linear: canonical hash of params: %w", err))
+	}
+
+	// Resolve every deterministic add-comment client input before STARTED. The
+	// client call below is then the last local seam before its GraphQL mutation.
+	var commentReq *AddCommentRequest
+	if lifecycle != nil {
+		commentReq = &AddCommentRequest{
+			IssueID: stringParam(params, "issue_id"),
+			Body:    stringParam(params, "body"),
+		}
+		var preflightErr error
+		switch {
+		case c.client == nil:
+			preflightErr = fmt.Errorf("linear: GraphQL client is unavailable")
+		case c.client.apiKey == "":
+			preflightErr = fmt.Errorf("linear: AddComment(issue=%q): not connected: requires API key", commentReq.IssueID)
+		case c.client.httpClient == nil:
+			preflightErr = fmt.Errorf("linear: GraphQL HTTP client is unavailable")
+		default:
+			_, preflightErr = http.NewRequestWithContext(ctx, http.MethodPost, c.client.baseURL, http.NoBody)
+			if preflightErr != nil {
+				preflightErr = fmt.Errorf("linear: build GraphQL request: %w", preflightErr)
+			}
+		}
+		if preflightErr != nil {
+			c.releasePermitNonce(permit.Nonce)
+			return failNotStarted("LINEAR_DISPATCH_PREFLIGHT_FAILED", preflightErr)
+		}
 	}
 
 	// 6. Consume the single-use permit only after all pre-execution validation
 	// and the gate succeed, but before any ProofGraph intent or Linear request.
 	if err := c.consumePermitNonce(permit.Nonce); err != nil {
-		return nil, err
+		return failNotStarted("LINEAR_PERMIT_REPLAY", err)
 	}
 
 	// 7. Append INTENT node to ProofGraph.
@@ -226,15 +288,46 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 		"permit_id":  permit.PermitID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("linear: marshal intent payload: %w", err)
+		return failNotStarted("LINEAR_INTENT_MARSHAL_FAILED", fmt.Errorf("linear: marshal intent payload: %w", err))
 	}
 	seq := c.seq.Add(1)
-	if _, err := c.graph.Append(proofgraph.NodeTypeIntent, intentPayload, c.connectorID, seq); err != nil {
-		return nil, fmt.Errorf("linear: append intent: %w", err)
+	intentNode, err := c.graph.Append(proofgraph.NodeTypeIntent, intentPayload, c.connectorID, seq)
+	if err != nil {
+		return failNotStarted("LINEAR_INTENT_APPEND_FAILED", fmt.Errorf("linear: append intent: %w", err))
 	}
 
-	// 8. Dispatch to the appropriate client method.
-	result, execErr := c.dispatch(ctx, toolName, params)
+	executionMeta := effects.ExecutionLifecycleMeta{
+		ConnectorExecutionRef: "linear-" + permit.PermitID,
+		IntentRef:             intentNode.NodeHash,
+	}
+	started := false
+	if lifecycle != nil {
+		if err := lifecycle.MarkStarted(ctx, executionMeta); err != nil {
+			if errors.Is(err, effects.ErrExecutionStartDenied) {
+				if transitionErr := lifecycle.MarkNotStarted(ctx, effects.ExecutionLifecycleMeta{
+					ReasonCode: "LINEAR_START_INTERLOCK_DENIED", IntentRef: executionMeta.IntentRef,
+				}); transitionErr != nil {
+					return nil, fmt.Errorf("linear: start interlock denied: %v; persist NOT_STARTED: %w", err, transitionErr)
+				}
+				return nil, fmt.Errorf("linear: start interlock denied before dispatch: %w", err)
+			}
+			_ = lifecycle.MarkUncertain(ctx, effects.ExecutionLifecycleMeta{
+				ReasonCode: "LINEAR_START_TRANSITION_AMBIGUOUS", ConnectorExecutionRef: executionMeta.ConnectorExecutionRef,
+				IntentRef: executionMeta.IntentRef,
+			})
+			return nil, fmt.Errorf("linear: persist STARTED before dispatch: %w", err)
+		}
+		started = true
+	}
+
+	// 8. Cross the GraphQL mutation boundary only after durable STARTED.
+	var result any
+	var execErr error
+	if lifecycle != nil {
+		result, execErr = c.client.AddComment(ctx, commentReq)
+	} else {
+		result, execErr = c.dispatch(ctx, toolName, params)
+	}
 
 	// 9. Append EFFECT node to ProofGraph.
 	effectEntry := map[string]any{
@@ -254,11 +347,26 @@ func (c *Connector) Execute(ctx context.Context, permit *effects.EffectPermit, t
 	}
 	effectPayload, _ := json.Marshal(effectEntry)
 	seq = c.seq.Add(1)
-	if _, err := c.graph.Append(proofgraph.NodeTypeEffect, effectPayload, c.connectorID, seq); err != nil {
-		return nil, fmt.Errorf("linear: append effect: %w", err)
+	effectNode, graphErr := c.graph.Append(proofgraph.NodeTypeEffect, effectPayload, c.connectorID, seq)
+	if graphErr != nil {
+		if lifecycle != nil && started {
+			_ = lifecycle.MarkUncertain(ctx, effects.ExecutionLifecycleMeta{
+				ReasonCode: "LINEAR_EFFECT_EVIDENCE_MISSING", ConnectorExecutionRef: executionMeta.ConnectorExecutionRef,
+				IntentRef: executionMeta.IntentRef,
+			})
+		}
+		return nil, fmt.Errorf("linear: append effect: %w", graphErr)
 	}
 
 	if execErr != nil {
+		if lifecycle != nil && started {
+			if transitionErr := lifecycle.MarkUncertain(ctx, effects.ExecutionLifecycleMeta{
+				ReasonCode: "LINEAR_DISPATCH_OUTCOME_UNCERTAIN", ConnectorExecutionRef: executionMeta.ConnectorExecutionRef,
+				IntentRef: executionMeta.IntentRef, EffectRef: effectNode.NodeHash,
+			}); transitionErr != nil {
+				return nil, fmt.Errorf("%v; linear: persist UNCERTAIN: %w", execErr, transitionErr)
+			}
+		}
 		return nil, execErr
 	}
 	return result, nil

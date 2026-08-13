@@ -2923,17 +2923,25 @@ var _ MappedNullable = &ApprovalCeremonyCreateRequest{}
 // ApprovalCeremonyCreateRequest struct for ApprovalCeremonyCreateRequest
 type ApprovalCeremonyCreateRequest struct {
 	// Optional stable identifier. Runtime derives one when omitted.
-	ApprovalId  *string  `json:"approval_id,omitempty"`
-	Subject     *string  `json:"subject,omitempty"`
-	Action      *string  `json:"action,omitempty"`
-	RequestedBy *string  `json:"requested_by,omitempty"`
-	Approvers   []string `json:"approvers,omitempty"`
-	Quorum      *int32   `json:"quorum,omitempty"`
-	TimelockMs  *int64   `json:"timelock_ms,omitempty"`
-	ExpiresInMs *int64   `json:"expires_in_ms,omitempty"`
-	Reason      *string  `json:"reason,omitempty"`
-	ReceiptId   *string  `json:"receipt_id,omitempty"`
-	BreakGlass  *bool    `json:"break_glass,omitempty"`
+	ApprovalId *string `json:"approval_id,omitempty"`
+	Subject    *string `json:"subject,omitempty"`
+	Action     *string `json:"action,omitempty"`
+	// Deprecated response-era field accepted for compatibility and ignored on create.
+	State         *string    `json:"state,omitempty"`
+	RequestedBy   *string    `json:"requested_by,omitempty"`
+	Approvers     []string   `json:"approvers,omitempty"`
+	Quorum        *int32     `json:"quorum,omitempty"`
+	TimelockUntil *time.Time `json:"timelock_until,omitempty"`
+	ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+	Reason        *string    `json:"reason,omitempty"`
+	ReceiptId     *string    `json:"receipt_id,omitempty"`
+	BreakGlass    *bool      `json:"break_glass,omitempty"`
+	// Deprecated response-era field accepted for compatibility and ignored on create.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	// Deprecated response-era field accepted for compatibility and ignored on create.
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	// Deprecated response-era field accepted for compatibility and ignored on create.
+	CeremonyHash *string `json:"ceremony_hash,omitempty"`
 }
 
 // NewApprovalCeremonyCreateRequest instantiates a new ApprovalCeremonyCreateRequest object
@@ -3049,6 +3057,38 @@ func (o *ApprovalCeremonyCreateRequest) SetAction(v string) {
 	o.Action = &v
 }
 
+// GetState returns the State field value if set, zero value otherwise.
+func (o *ApprovalCeremonyCreateRequest) GetState() string {
+	if o == nil || IsNil(o.State) {
+		var ret string
+		return ret
+	}
+	return *o.State
+}
+
+// GetStateOk returns a tuple with the State field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ApprovalCeremonyCreateRequest) GetStateOk() (*string, bool) {
+	if o == nil || IsNil(o.State) {
+		return nil, false
+	}
+	return o.State, true
+}
+
+// HasState returns a boolean if a field has been set.
+func (o *ApprovalCeremonyCreateRequest) HasState() bool {
+	if o != nil && !IsNil(o.State) {
+		return true
+	}
+
+	return false
+}
+
+// SetState gets a reference to the given string and assigns it to the State field.
+func (o *ApprovalCeremonyCreateRequest) SetState(v string) {
+	o.State = &v
+}
+
 // GetRequestedBy returns the RequestedBy field value if set, zero value otherwise.
 func (o *ApprovalCeremonyCreateRequest) GetRequestedBy() string {
 	if o == nil || IsNil(o.RequestedBy) {
@@ -3145,68 +3185,68 @@ func (o *ApprovalCeremonyCreateRequest) SetQuorum(v int32) {
 	o.Quorum = &v
 }
 
-// GetTimelockMs returns the TimelockMs field value if set, zero value otherwise.
-func (o *ApprovalCeremonyCreateRequest) GetTimelockMs() int64 {
-	if o == nil || IsNil(o.TimelockMs) {
-		var ret int64
+// GetTimelockUntil returns the TimelockUntil field value if set, zero value otherwise.
+func (o *ApprovalCeremonyCreateRequest) GetTimelockUntil() time.Time {
+	if o == nil || IsNil(o.TimelockUntil) {
+		var ret time.Time
 		return ret
 	}
-	return *o.TimelockMs
+	return *o.TimelockUntil
 }
 
-// GetTimelockMsOk returns a tuple with the TimelockMs field value if set, nil otherwise
+// GetTimelockUntilOk returns a tuple with the TimelockUntil field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ApprovalCeremonyCreateRequest) GetTimelockMsOk() (*int64, bool) {
-	if o == nil || IsNil(o.TimelockMs) {
+func (o *ApprovalCeremonyCreateRequest) GetTimelockUntilOk() (*time.Time, bool) {
+	if o == nil || IsNil(o.TimelockUntil) {
 		return nil, false
 	}
-	return o.TimelockMs, true
+	return o.TimelockUntil, true
 }
 
-// HasTimelockMs returns a boolean if a field has been set.
-func (o *ApprovalCeremonyCreateRequest) HasTimelockMs() bool {
-	if o != nil && !IsNil(o.TimelockMs) {
+// HasTimelockUntil returns a boolean if a field has been set.
+func (o *ApprovalCeremonyCreateRequest) HasTimelockUntil() bool {
+	if o != nil && !IsNil(o.TimelockUntil) {
 		return true
 	}
 
 	return false
 }
 
-// SetTimelockMs gets a reference to the given int64 and assigns it to the TimelockMs field.
-func (o *ApprovalCeremonyCreateRequest) SetTimelockMs(v int64) {
-	o.TimelockMs = &v
+// SetTimelockUntil gets a reference to the given time.Time and assigns it to the TimelockUntil field.
+func (o *ApprovalCeremonyCreateRequest) SetTimelockUntil(v time.Time) {
+	o.TimelockUntil = &v
 }
 
-// GetExpiresInMs returns the ExpiresInMs field value if set, zero value otherwise.
-func (o *ApprovalCeremonyCreateRequest) GetExpiresInMs() int64 {
-	if o == nil || IsNil(o.ExpiresInMs) {
-		var ret int64
+// GetExpiresAt returns the ExpiresAt field value if set, zero value otherwise.
+func (o *ApprovalCeremonyCreateRequest) GetExpiresAt() time.Time {
+	if o == nil || IsNil(o.ExpiresAt) {
+		var ret time.Time
 		return ret
 	}
-	return *o.ExpiresInMs
+	return *o.ExpiresAt
 }
 
-// GetExpiresInMsOk returns a tuple with the ExpiresInMs field value if set, nil otherwise
+// GetExpiresAtOk returns a tuple with the ExpiresAt field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ApprovalCeremonyCreateRequest) GetExpiresInMsOk() (*int64, bool) {
-	if o == nil || IsNil(o.ExpiresInMs) {
+func (o *ApprovalCeremonyCreateRequest) GetExpiresAtOk() (*time.Time, bool) {
+	if o == nil || IsNil(o.ExpiresAt) {
 		return nil, false
 	}
-	return o.ExpiresInMs, true
+	return o.ExpiresAt, true
 }
 
-// HasExpiresInMs returns a boolean if a field has been set.
-func (o *ApprovalCeremonyCreateRequest) HasExpiresInMs() bool {
-	if o != nil && !IsNil(o.ExpiresInMs) {
+// HasExpiresAt returns a boolean if a field has been set.
+func (o *ApprovalCeremonyCreateRequest) HasExpiresAt() bool {
+	if o != nil && !IsNil(o.ExpiresAt) {
 		return true
 	}
 
 	return false
 }
 
-// SetExpiresInMs gets a reference to the given int64 and assigns it to the ExpiresInMs field.
-func (o *ApprovalCeremonyCreateRequest) SetExpiresInMs(v int64) {
-	o.ExpiresInMs = &v
+// SetExpiresAt gets a reference to the given time.Time and assigns it to the ExpiresAt field.
+func (o *ApprovalCeremonyCreateRequest) SetExpiresAt(v time.Time) {
+	o.ExpiresAt = &v
 }
 
 // GetReason returns the Reason field value if set, zero value otherwise.
@@ -3305,6 +3345,102 @@ func (o *ApprovalCeremonyCreateRequest) SetBreakGlass(v bool) {
 	o.BreakGlass = &v
 }
 
+// GetCreatedAt returns the CreatedAt field value if set, zero value otherwise.
+func (o *ApprovalCeremonyCreateRequest) GetCreatedAt() time.Time {
+	if o == nil || IsNil(o.CreatedAt) {
+		var ret time.Time
+		return ret
+	}
+	return *o.CreatedAt
+}
+
+// GetCreatedAtOk returns a tuple with the CreatedAt field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ApprovalCeremonyCreateRequest) GetCreatedAtOk() (*time.Time, bool) {
+	if o == nil || IsNil(o.CreatedAt) {
+		return nil, false
+	}
+	return o.CreatedAt, true
+}
+
+// HasCreatedAt returns a boolean if a field has been set.
+func (o *ApprovalCeremonyCreateRequest) HasCreatedAt() bool {
+	if o != nil && !IsNil(o.CreatedAt) {
+		return true
+	}
+
+	return false
+}
+
+// SetCreatedAt gets a reference to the given time.Time and assigns it to the CreatedAt field.
+func (o *ApprovalCeremonyCreateRequest) SetCreatedAt(v time.Time) {
+	o.CreatedAt = &v
+}
+
+// GetUpdatedAt returns the UpdatedAt field value if set, zero value otherwise.
+func (o *ApprovalCeremonyCreateRequest) GetUpdatedAt() time.Time {
+	if o == nil || IsNil(o.UpdatedAt) {
+		var ret time.Time
+		return ret
+	}
+	return *o.UpdatedAt
+}
+
+// GetUpdatedAtOk returns a tuple with the UpdatedAt field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ApprovalCeremonyCreateRequest) GetUpdatedAtOk() (*time.Time, bool) {
+	if o == nil || IsNil(o.UpdatedAt) {
+		return nil, false
+	}
+	return o.UpdatedAt, true
+}
+
+// HasUpdatedAt returns a boolean if a field has been set.
+func (o *ApprovalCeremonyCreateRequest) HasUpdatedAt() bool {
+	if o != nil && !IsNil(o.UpdatedAt) {
+		return true
+	}
+
+	return false
+}
+
+// SetUpdatedAt gets a reference to the given time.Time and assigns it to the UpdatedAt field.
+func (o *ApprovalCeremonyCreateRequest) SetUpdatedAt(v time.Time) {
+	o.UpdatedAt = &v
+}
+
+// GetCeremonyHash returns the CeremonyHash field value if set, zero value otherwise.
+func (o *ApprovalCeremonyCreateRequest) GetCeremonyHash() string {
+	if o == nil || IsNil(o.CeremonyHash) {
+		var ret string
+		return ret
+	}
+	return *o.CeremonyHash
+}
+
+// GetCeremonyHashOk returns a tuple with the CeremonyHash field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ApprovalCeremonyCreateRequest) GetCeremonyHashOk() (*string, bool) {
+	if o == nil || IsNil(o.CeremonyHash) {
+		return nil, false
+	}
+	return o.CeremonyHash, true
+}
+
+// HasCeremonyHash returns a boolean if a field has been set.
+func (o *ApprovalCeremonyCreateRequest) HasCeremonyHash() bool {
+	if o != nil && !IsNil(o.CeremonyHash) {
+		return true
+	}
+
+	return false
+}
+
+// SetCeremonyHash gets a reference to the given string and assigns it to the CeremonyHash field.
+func (o *ApprovalCeremonyCreateRequest) SetCeremonyHash(v string) {
+	o.CeremonyHash = &v
+}
+
 func (o ApprovalCeremonyCreateRequest) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -3324,6 +3460,9 @@ func (o ApprovalCeremonyCreateRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Action) {
 		toSerialize["action"] = o.Action
 	}
+	if !IsNil(o.State) {
+		toSerialize["state"] = o.State
+	}
 	if !IsNil(o.RequestedBy) {
 		toSerialize["requested_by"] = o.RequestedBy
 	}
@@ -3333,11 +3472,11 @@ func (o ApprovalCeremonyCreateRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.Quorum) {
 		toSerialize["quorum"] = o.Quorum
 	}
-	if !IsNil(o.TimelockMs) {
-		toSerialize["timelock_ms"] = o.TimelockMs
+	if !IsNil(o.TimelockUntil) {
+		toSerialize["timelock_until"] = o.TimelockUntil
 	}
-	if !IsNil(o.ExpiresInMs) {
-		toSerialize["expires_in_ms"] = o.ExpiresInMs
+	if !IsNil(o.ExpiresAt) {
+		toSerialize["expires_at"] = o.ExpiresAt
 	}
 	if !IsNil(o.Reason) {
 		toSerialize["reason"] = o.Reason
@@ -3347,6 +3486,15 @@ func (o ApprovalCeremonyCreateRequest) ToMap() (map[string]interface{}, error) {
 	}
 	if !IsNil(o.BreakGlass) {
 		toSerialize["break_glass"] = o.BreakGlass
+	}
+	if !IsNil(o.CreatedAt) {
+		toSerialize["created_at"] = o.CreatedAt
+	}
+	if !IsNil(o.UpdatedAt) {
+		toSerialize["updated_at"] = o.UpdatedAt
+	}
+	if !IsNil(o.CeremonyHash) {
+		toSerialize["ceremony_hash"] = o.CeremonyHash
 	}
 	return toSerialize, nil
 }
@@ -3409,9 +3557,15 @@ type ApprovalRequest struct {
 	Nonce      *string `json:"nonce,omitempty"`
 	ApproverId *string `json:"approver_id,omitempty"`
 	// Hex-encoded Ed25519 public key or the hybrid key envelope.
-	PublicKey string `json:"public_key"`
+	PublicKey *string `json:"public_key,omitempty"`
+	// Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into public_key.
+	PublicKeyB64 *string `json:"public_key_b64,omitempty"`
 	// Hex-encoded Ed25519 signature or the hybrid signature envelope.
-	Signature          string            `json:"signature"`
+	Signature *string `json:"signature,omitempty"`
+	// Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into signature.
+	SignatureB64 *string `json:"signature_b64,omitempty"`
+	// Deprecated ceremony compatibility field. Runtime ignores it.
+	ChallengeResponse  *string           `json:"challenge_response,omitempty"`
 	SignatureProfile   *string           `json:"signature_profile,omitempty"`
 	SignatureAlgorithm *string           `json:"signature_algorithm,omitempty"`
 	KeyId              *string           `json:"key_id,omitempty"`
@@ -3430,11 +3584,9 @@ type _ApprovalRequest ApprovalRequest
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewApprovalRequest(intentHash string, publicKey string, signature string) *ApprovalRequest {
+func NewApprovalRequest(intentHash string) *ApprovalRequest {
 	this := ApprovalRequest{}
 	this.IntentHash = intentHash
-	this.PublicKey = publicKey
-	this.Signature = signature
 	return &this
 }
 
@@ -3598,52 +3750,164 @@ func (o *ApprovalRequest) SetApproverId(v string) {
 	o.ApproverId = &v
 }
 
-// GetPublicKey returns the PublicKey field value
+// GetPublicKey returns the PublicKey field value if set, zero value otherwise.
 func (o *ApprovalRequest) GetPublicKey() string {
-	if o == nil {
+	if o == nil || IsNil(o.PublicKey) {
 		var ret string
 		return ret
 	}
-
-	return o.PublicKey
+	return *o.PublicKey
 }
 
-// GetPublicKeyOk returns a tuple with the PublicKey field value
+// GetPublicKeyOk returns a tuple with the PublicKey field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *ApprovalRequest) GetPublicKeyOk() (*string, bool) {
-	if o == nil {
+	if o == nil || IsNil(o.PublicKey) {
 		return nil, false
 	}
-	return &o.PublicKey, true
+	return o.PublicKey, true
 }
 
-// SetPublicKey sets field value
+// HasPublicKey returns a boolean if a field has been set.
+func (o *ApprovalRequest) HasPublicKey() bool {
+	if o != nil && !IsNil(o.PublicKey) {
+		return true
+	}
+
+	return false
+}
+
+// SetPublicKey gets a reference to the given string and assigns it to the PublicKey field.
 func (o *ApprovalRequest) SetPublicKey(v string) {
-	o.PublicKey = v
+	o.PublicKey = &v
 }
 
-// GetSignature returns the Signature field value
-func (o *ApprovalRequest) GetSignature() string {
-	if o == nil {
+// GetPublicKeyB64 returns the PublicKeyB64 field value if set, zero value otherwise.
+func (o *ApprovalRequest) GetPublicKeyB64() string {
+	if o == nil || IsNil(o.PublicKeyB64) {
 		var ret string
 		return ret
 	}
-
-	return o.Signature
+	return *o.PublicKeyB64
 }
 
-// GetSignatureOk returns a tuple with the Signature field value
+// GetPublicKeyB64Ok returns a tuple with the PublicKeyB64 field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *ApprovalRequest) GetSignatureOk() (*string, bool) {
-	if o == nil {
+func (o *ApprovalRequest) GetPublicKeyB64Ok() (*string, bool) {
+	if o == nil || IsNil(o.PublicKeyB64) {
 		return nil, false
 	}
-	return &o.Signature, true
+	return o.PublicKeyB64, true
 }
 
-// SetSignature sets field value
+// HasPublicKeyB64 returns a boolean if a field has been set.
+func (o *ApprovalRequest) HasPublicKeyB64() bool {
+	if o != nil && !IsNil(o.PublicKeyB64) {
+		return true
+	}
+
+	return false
+}
+
+// SetPublicKeyB64 gets a reference to the given string and assigns it to the PublicKeyB64 field.
+func (o *ApprovalRequest) SetPublicKeyB64(v string) {
+	o.PublicKeyB64 = &v
+}
+
+// GetSignature returns the Signature field value if set, zero value otherwise.
+func (o *ApprovalRequest) GetSignature() string {
+	if o == nil || IsNil(o.Signature) {
+		var ret string
+		return ret
+	}
+	return *o.Signature
+}
+
+// GetSignatureOk returns a tuple with the Signature field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ApprovalRequest) GetSignatureOk() (*string, bool) {
+	if o == nil || IsNil(o.Signature) {
+		return nil, false
+	}
+	return o.Signature, true
+}
+
+// HasSignature returns a boolean if a field has been set.
+func (o *ApprovalRequest) HasSignature() bool {
+	if o != nil && !IsNil(o.Signature) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignature gets a reference to the given string and assigns it to the Signature field.
 func (o *ApprovalRequest) SetSignature(v string) {
-	o.Signature = v
+	o.Signature = &v
+}
+
+// GetSignatureB64 returns the SignatureB64 field value if set, zero value otherwise.
+func (o *ApprovalRequest) GetSignatureB64() string {
+	if o == nil || IsNil(o.SignatureB64) {
+		var ret string
+		return ret
+	}
+	return *o.SignatureB64
+}
+
+// GetSignatureB64Ok returns a tuple with the SignatureB64 field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ApprovalRequest) GetSignatureB64Ok() (*string, bool) {
+	if o == nil || IsNil(o.SignatureB64) {
+		return nil, false
+	}
+	return o.SignatureB64, true
+}
+
+// HasSignatureB64 returns a boolean if a field has been set.
+func (o *ApprovalRequest) HasSignatureB64() bool {
+	if o != nil && !IsNil(o.SignatureB64) {
+		return true
+	}
+
+	return false
+}
+
+// SetSignatureB64 gets a reference to the given string and assigns it to the SignatureB64 field.
+func (o *ApprovalRequest) SetSignatureB64(v string) {
+	o.SignatureB64 = &v
+}
+
+// GetChallengeResponse returns the ChallengeResponse field value if set, zero value otherwise.
+func (o *ApprovalRequest) GetChallengeResponse() string {
+	if o == nil || IsNil(o.ChallengeResponse) {
+		var ret string
+		return ret
+	}
+	return *o.ChallengeResponse
+}
+
+// GetChallengeResponseOk returns a tuple with the ChallengeResponse field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *ApprovalRequest) GetChallengeResponseOk() (*string, bool) {
+	if o == nil || IsNil(o.ChallengeResponse) {
+		return nil, false
+	}
+	return o.ChallengeResponse, true
+}
+
+// HasChallengeResponse returns a boolean if a field has been set.
+func (o *ApprovalRequest) HasChallengeResponse() bool {
+	if o != nil && !IsNil(o.ChallengeResponse) {
+		return true
+	}
+
+	return false
+}
+
+// SetChallengeResponse gets a reference to the given string and assigns it to the ChallengeResponse field.
+func (o *ApprovalRequest) SetChallengeResponse(v string) {
+	o.ChallengeResponse = &v
 }
 
 // GetSignatureProfile returns the SignatureProfile field value if set, zero value otherwise.
@@ -3989,8 +4253,21 @@ func (o ApprovalRequest) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.ApproverId) {
 		toSerialize["approver_id"] = o.ApproverId
 	}
-	toSerialize["public_key"] = o.PublicKey
-	toSerialize["signature"] = o.Signature
+	if !IsNil(o.PublicKey) {
+		toSerialize["public_key"] = o.PublicKey
+	}
+	if !IsNil(o.PublicKeyB64) {
+		toSerialize["public_key_b64"] = o.PublicKeyB64
+	}
+	if !IsNil(o.Signature) {
+		toSerialize["signature"] = o.Signature
+	}
+	if !IsNil(o.SignatureB64) {
+		toSerialize["signature_b64"] = o.SignatureB64
+	}
+	if !IsNil(o.ChallengeResponse) {
+		toSerialize["challenge_response"] = o.ChallengeResponse
+	}
 	if !IsNil(o.SignatureProfile) {
 		toSerialize["signature_profile"] = o.SignatureProfile
 	}
@@ -4030,8 +4307,6 @@ func (o *ApprovalRequest) UnmarshalJSON(data []byte) (err error) {
 	// that every required field exists as a key in the generic map.
 	requiredProperties := []string{
 		"intent_hash",
-		"public_key",
-		"signature",
 	}
 
 	allProperties := make(map[string]interface{})
@@ -46102,6 +46377,8 @@ var _ MappedNullable = &TransitionApprovalCeremonyRequest{}
 
 // TransitionApprovalCeremonyRequest struct for TransitionApprovalCeremonyRequest
 type TransitionApprovalCeremonyRequest struct {
+	// Deprecated compatibility field. Runtime ignores caller-supplied actor and uses the authenticated principal.
+	Actor     *string `json:"actor,omitempty"`
 	ReceiptId *string `json:"receipt_id,omitempty"`
 	Reason    *string `json:"reason,omitempty"`
 	// Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.
@@ -46123,6 +46400,38 @@ func NewTransitionApprovalCeremonyRequest() *TransitionApprovalCeremonyRequest {
 func NewTransitionApprovalCeremonyRequestWithDefaults() *TransitionApprovalCeremonyRequest {
 	this := TransitionApprovalCeremonyRequest{}
 	return &this
+}
+
+// GetActor returns the Actor field value if set, zero value otherwise.
+func (o *TransitionApprovalCeremonyRequest) GetActor() string {
+	if o == nil || IsNil(o.Actor) {
+		var ret string
+		return ret
+	}
+	return *o.Actor
+}
+
+// GetActorOk returns a tuple with the Actor field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *TransitionApprovalCeremonyRequest) GetActorOk() (*string, bool) {
+	if o == nil || IsNil(o.Actor) {
+		return nil, false
+	}
+	return o.Actor, true
+}
+
+// HasActor returns a boolean if a field has been set.
+func (o *TransitionApprovalCeremonyRequest) HasActor() bool {
+	if o != nil && !IsNil(o.Actor) {
+		return true
+	}
+
+	return false
+}
+
+// SetActor gets a reference to the given string and assigns it to the Actor field.
+func (o *TransitionApprovalCeremonyRequest) SetActor(v string) {
+	o.Actor = &v
 }
 
 // GetReceiptId returns the ReceiptId field value if set, zero value otherwise.
@@ -46231,6 +46540,9 @@ func (o TransitionApprovalCeremonyRequest) MarshalJSON() ([]byte, error) {
 
 func (o TransitionApprovalCeremonyRequest) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
+	if !IsNil(o.Actor) {
+		toSerialize["actor"] = o.Actor
+	}
 	if !IsNil(o.ReceiptId) {
 		toSerialize["receipt_id"] = o.ReceiptId
 	}

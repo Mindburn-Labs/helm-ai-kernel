@@ -4379,14 +4379,18 @@ public static class ApprovalCeremony {
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_APPROVAL_ID,
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_SUBJECT,
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_ACTION,
+  ApprovalCeremonyCreateRequest.JSON_PROPERTY_STATE,
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_REQUESTED_BY,
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_APPROVERS,
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_QUORUM,
-  ApprovalCeremonyCreateRequest.JSON_PROPERTY_TIMELOCK_MS,
-  ApprovalCeremonyCreateRequest.JSON_PROPERTY_EXPIRES_IN_MS,
+  ApprovalCeremonyCreateRequest.JSON_PROPERTY_TIMELOCK_UNTIL,
+  ApprovalCeremonyCreateRequest.JSON_PROPERTY_EXPIRES_AT,
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_REASON,
   ApprovalCeremonyCreateRequest.JSON_PROPERTY_RECEIPT_ID,
-  ApprovalCeremonyCreateRequest.JSON_PROPERTY_BREAK_GLASS
+  ApprovalCeremonyCreateRequest.JSON_PROPERTY_BREAK_GLASS,
+  ApprovalCeremonyCreateRequest.JSON_PROPERTY_CREATED_AT,
+  ApprovalCeremonyCreateRequest.JSON_PROPERTY_UPDATED_AT,
+  ApprovalCeremonyCreateRequest.JSON_PROPERTY_CEREMONY_HASH
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class ApprovalCeremonyCreateRequest {
@@ -4399,6 +4403,50 @@ public static class ApprovalCeremonyCreateRequest {
   public static final String JSON_PROPERTY_ACTION = "action";
   private String action;
 
+  /**
+   * Deprecated response-era field accepted for compatibility and ignored on create.
+   */
+  public enum StateEnum {
+    PENDING("pending"),
+
+    APPROVED("approved"),
+
+    DENIED("denied"),
+
+    REVOKED("revoked"),
+
+    EXPIRED("expired");
+
+    private String value;
+
+    StateEnum(String value) {
+      this.value = value;
+    }
+
+    @JsonValue
+    public String getValue() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.valueOf(value);
+    }
+
+    @JsonCreator
+    public static StateEnum fromValue(String value) {
+      for (StateEnum b : StateEnum.values()) {
+        if (b.value.equals(value)) {
+          return b;
+        }
+      }
+      throw new IllegalArgumentException("Unexpected value '" + value + "'");
+    }
+  }
+
+  public static final String JSON_PROPERTY_STATE = "state";
+  private StateEnum state;
+
   public static final String JSON_PROPERTY_REQUESTED_BY = "requested_by";
   private String requestedBy;
 
@@ -4408,11 +4456,11 @@ public static class ApprovalCeremonyCreateRequest {
   public static final String JSON_PROPERTY_QUORUM = "quorum";
   private Integer quorum;
 
-  public static final String JSON_PROPERTY_TIMELOCK_MS = "timelock_ms";
-  private Long timelockMs;
+  public static final String JSON_PROPERTY_TIMELOCK_UNTIL = "timelock_until";
+  private OffsetDateTime timelockUntil;
 
-  public static final String JSON_PROPERTY_EXPIRES_IN_MS = "expires_in_ms";
-  private Long expiresInMs;
+  public static final String JSON_PROPERTY_EXPIRES_AT = "expires_at";
+  private OffsetDateTime expiresAt;
 
   public static final String JSON_PROPERTY_REASON = "reason";
   private String reason;
@@ -4422,6 +4470,15 @@ public static class ApprovalCeremonyCreateRequest {
 
   public static final String JSON_PROPERTY_BREAK_GLASS = "break_glass";
   private Boolean breakGlass;
+
+  public static final String JSON_PROPERTY_CREATED_AT = "created_at";
+  private OffsetDateTime createdAt;
+
+  public static final String JSON_PROPERTY_UPDATED_AT = "updated_at";
+  private OffsetDateTime updatedAt;
+
+  public static final String JSON_PROPERTY_CEREMONY_HASH = "ceremony_hash";
+  private String ceremonyHash;
 
   public ApprovalCeremonyCreateRequest() {
   }
@@ -4498,6 +4555,31 @@ public static class ApprovalCeremonyCreateRequest {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setAction(String action) {
     this.action = action;
+  }
+
+
+  public ApprovalCeremonyCreateRequest state(StateEnum state) {
+    this.state = state;
+    return this;
+  }
+
+   /**
+   * Deprecated response-era field accepted for compatibility and ignored on create.
+   * @return state
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public StateEnum getState() {
+    return state;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setState(StateEnum state) {
+    this.state = state;
   }
 
 
@@ -4584,53 +4666,53 @@ public static class ApprovalCeremonyCreateRequest {
   }
 
 
-  public ApprovalCeremonyCreateRequest timelockMs(Long timelockMs) {
-    this.timelockMs = timelockMs;
+  public ApprovalCeremonyCreateRequest timelockUntil(OffsetDateTime timelockUntil) {
+    this.timelockUntil = timelockUntil;
     return this;
   }
 
    /**
-   * Get timelockMs
-   * @return timelockMs
+   * Get timelockUntil
+   * @return timelockUntil
   **/
   @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_TIMELOCK_MS)
+  @JsonProperty(JSON_PROPERTY_TIMELOCK_UNTIL)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
-  public Long getTimelockMs() {
-    return timelockMs;
+  public OffsetDateTime getTimelockUntil() {
+    return timelockUntil;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_TIMELOCK_MS)
+  @JsonProperty(JSON_PROPERTY_TIMELOCK_UNTIL)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setTimelockMs(Long timelockMs) {
-    this.timelockMs = timelockMs;
+  public void setTimelockUntil(OffsetDateTime timelockUntil) {
+    this.timelockUntil = timelockUntil;
   }
 
 
-  public ApprovalCeremonyCreateRequest expiresInMs(Long expiresInMs) {
-    this.expiresInMs = expiresInMs;
+  public ApprovalCeremonyCreateRequest expiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
     return this;
   }
 
    /**
-   * Get expiresInMs
-   * @return expiresInMs
+   * Get expiresAt
+   * @return expiresAt
   **/
   @javax.annotation.Nullable
-  @JsonProperty(JSON_PROPERTY_EXPIRES_IN_MS)
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
-  public Long getExpiresInMs() {
-    return expiresInMs;
+  public OffsetDateTime getExpiresAt() {
+    return expiresAt;
   }
 
 
-  @JsonProperty(JSON_PROPERTY_EXPIRES_IN_MS)
+  @JsonProperty(JSON_PROPERTY_EXPIRES_AT)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
-  public void setExpiresInMs(Long expiresInMs) {
-    this.expiresInMs = expiresInMs;
+  public void setExpiresAt(OffsetDateTime expiresAt) {
+    this.expiresAt = expiresAt;
   }
 
 
@@ -4709,6 +4791,81 @@ public static class ApprovalCeremonyCreateRequest {
   }
 
 
+  public ApprovalCeremonyCreateRequest createdAt(OffsetDateTime createdAt) {
+    this.createdAt = createdAt;
+    return this;
+  }
+
+   /**
+   * Deprecated response-era field accepted for compatibility and ignored on create.
+   * @return createdAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CREATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getCreatedAt() {
+    return createdAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CREATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCreatedAt(OffsetDateTime createdAt) {
+    this.createdAt = createdAt;
+  }
+
+
+  public ApprovalCeremonyCreateRequest updatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+    return this;
+  }
+
+   /**
+   * Deprecated response-era field accepted for compatibility and ignored on create.
+   * @return updatedAt
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getUpdatedAt() {
+    return updatedAt;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_UPDATED_AT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setUpdatedAt(OffsetDateTime updatedAt) {
+    this.updatedAt = updatedAt;
+  }
+
+
+  public ApprovalCeremonyCreateRequest ceremonyHash(String ceremonyHash) {
+    this.ceremonyHash = ceremonyHash;
+    return this;
+  }
+
+   /**
+   * Deprecated response-era field accepted for compatibility and ignored on create.
+   * @return ceremonyHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CEREMONY_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCeremonyHash() {
+    return ceremonyHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CEREMONY_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCeremonyHash(String ceremonyHash) {
+    this.ceremonyHash = ceremonyHash;
+  }
+
+
   /**
    * Return true if this ApprovalCeremonyCreateRequest object is equal to o.
    */
@@ -4724,19 +4881,23 @@ public static class ApprovalCeremonyCreateRequest {
     return Objects.equals(this.approvalId, approvalCeremonyCreateRequest.approvalId) &&
         Objects.equals(this.subject, approvalCeremonyCreateRequest.subject) &&
         Objects.equals(this.action, approvalCeremonyCreateRequest.action) &&
+        Objects.equals(this.state, approvalCeremonyCreateRequest.state) &&
         Objects.equals(this.requestedBy, approvalCeremonyCreateRequest.requestedBy) &&
         Objects.equals(this.approvers, approvalCeremonyCreateRequest.approvers) &&
         Objects.equals(this.quorum, approvalCeremonyCreateRequest.quorum) &&
-        Objects.equals(this.timelockMs, approvalCeremonyCreateRequest.timelockMs) &&
-        Objects.equals(this.expiresInMs, approvalCeremonyCreateRequest.expiresInMs) &&
+        Objects.equals(this.timelockUntil, approvalCeremonyCreateRequest.timelockUntil) &&
+        Objects.equals(this.expiresAt, approvalCeremonyCreateRequest.expiresAt) &&
         Objects.equals(this.reason, approvalCeremonyCreateRequest.reason) &&
         Objects.equals(this.receiptId, approvalCeremonyCreateRequest.receiptId) &&
-        Objects.equals(this.breakGlass, approvalCeremonyCreateRequest.breakGlass);
+        Objects.equals(this.breakGlass, approvalCeremonyCreateRequest.breakGlass) &&
+        Objects.equals(this.createdAt, approvalCeremonyCreateRequest.createdAt) &&
+        Objects.equals(this.updatedAt, approvalCeremonyCreateRequest.updatedAt) &&
+        Objects.equals(this.ceremonyHash, approvalCeremonyCreateRequest.ceremonyHash);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(approvalId, subject, action, requestedBy, approvers, quorum, timelockMs, expiresInMs, reason, receiptId, breakGlass);
+    return Objects.hash(approvalId, subject, action, state, requestedBy, approvers, quorum, timelockUntil, expiresAt, reason, receiptId, breakGlass, createdAt, updatedAt, ceremonyHash);
   }
 
   @Override
@@ -4746,14 +4907,18 @@ public static class ApprovalCeremonyCreateRequest {
     sb.append("    approvalId: ").append(toIndentedString(approvalId)).append("\n");
     sb.append("    subject: ").append(toIndentedString(subject)).append("\n");
     sb.append("    action: ").append(toIndentedString(action)).append("\n");
+    sb.append("    state: ").append(toIndentedString(state)).append("\n");
     sb.append("    requestedBy: ").append(toIndentedString(requestedBy)).append("\n");
     sb.append("    approvers: ").append(toIndentedString(approvers)).append("\n");
     sb.append("    quorum: ").append(toIndentedString(quorum)).append("\n");
-    sb.append("    timelockMs: ").append(toIndentedString(timelockMs)).append("\n");
-    sb.append("    expiresInMs: ").append(toIndentedString(expiresInMs)).append("\n");
+    sb.append("    timelockUntil: ").append(toIndentedString(timelockUntil)).append("\n");
+    sb.append("    expiresAt: ").append(toIndentedString(expiresAt)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
     sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
     sb.append("    breakGlass: ").append(toIndentedString(breakGlass)).append("\n");
+    sb.append("    createdAt: ").append(toIndentedString(createdAt)).append("\n");
+    sb.append("    updatedAt: ").append(toIndentedString(updatedAt)).append("\n");
+    sb.append("    ceremonyHash: ").append(toIndentedString(ceremonyHash)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -4816,6 +4981,11 @@ public static class ApprovalCeremonyCreateRequest {
       joiner.add(String.format("%saction%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAction()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `state` to the URL query string
+    if (getState() != null) {
+      joiner.add(String.format("%sstate%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getState()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `requested_by` to the URL query string
     if (getRequestedBy() != null) {
       joiner.add(String.format("%srequested_by%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequestedBy()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
@@ -4835,14 +5005,14 @@ public static class ApprovalCeremonyCreateRequest {
       joiner.add(String.format("%squorum%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getQuorum()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `timelock_ms` to the URL query string
-    if (getTimelockMs() != null) {
-      joiner.add(String.format("%stimelock_ms%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTimelockMs()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `timelock_until` to the URL query string
+    if (getTimelockUntil() != null) {
+      joiner.add(String.format("%stimelock_until%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTimelockUntil()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
-    // add `expires_in_ms` to the URL query string
-    if (getExpiresInMs() != null) {
-      joiner.add(String.format("%sexpires_in_ms%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExpiresInMs()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    // add `expires_at` to the URL query string
+    if (getExpiresAt() != null) {
+      joiner.add(String.format("%sexpires_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getExpiresAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `reason` to the URL query string
@@ -4858,6 +5028,21 @@ public static class ApprovalCeremonyCreateRequest {
     // add `break_glass` to the URL query string
     if (getBreakGlass() != null) {
       joiner.add(String.format("%sbreak_glass%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getBreakGlass()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `created_at` to the URL query string
+    if (getCreatedAt() != null) {
+      joiner.add(String.format("%screated_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCreatedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `updated_at` to the URL query string
+    if (getUpdatedAt() != null) {
+      joiner.add(String.format("%supdated_at%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getUpdatedAt()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `ceremony_hash` to the URL query string
+    if (getCeremonyHash() != null) {
+      joiner.add(String.format("%sceremony_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCeremonyHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     return joiner.toString();
@@ -4890,7 +5075,10 @@ public static class ApprovalCeremonyCreateRequest {
   ApprovalRequest.JSON_PROPERTY_NONCE,
   ApprovalRequest.JSON_PROPERTY_APPROVER_ID,
   ApprovalRequest.JSON_PROPERTY_PUBLIC_KEY,
+  ApprovalRequest.JSON_PROPERTY_PUBLIC_KEY_B64,
   ApprovalRequest.JSON_PROPERTY_SIGNATURE,
+  ApprovalRequest.JSON_PROPERTY_SIGNATURE_B64,
+  ApprovalRequest.JSON_PROPERTY_CHALLENGE_RESPONSE,
   ApprovalRequest.JSON_PROPERTY_SIGNATURE_PROFILE,
   ApprovalRequest.JSON_PROPERTY_SIGNATURE_ALGORITHM,
   ApprovalRequest.JSON_PROPERTY_KEY_ID,
@@ -4922,8 +5110,17 @@ public static class ApprovalRequest {
   public static final String JSON_PROPERTY_PUBLIC_KEY = "public_key";
   private String publicKey;
 
+  public static final String JSON_PROPERTY_PUBLIC_KEY_B64 = "public_key_b64";
+  private String publicKeyB64;
+
   public static final String JSON_PROPERTY_SIGNATURE = "signature";
   private String signature;
+
+  public static final String JSON_PROPERTY_SIGNATURE_B64 = "signature_b64";
+  private String signatureB64;
+
+  public static final String JSON_PROPERTY_CHALLENGE_RESPONSE = "challenge_response";
+  private String challengeResponse;
 
   public static final String JSON_PROPERTY_SIGNATURE_PROFILE = "signature_profile";
   private String signatureProfile;
@@ -5092,9 +5289,9 @@ public static class ApprovalRequest {
    * Hex-encoded Ed25519 public key or the hybrid key envelope.
    * @return publicKey
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_PUBLIC_KEY)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getPublicKey() {
     return publicKey;
@@ -5102,9 +5299,34 @@ public static class ApprovalRequest {
 
 
   @JsonProperty(JSON_PROPERTY_PUBLIC_KEY)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setPublicKey(String publicKey) {
     this.publicKey = publicKey;
+  }
+
+
+  public ApprovalRequest publicKeyB64(String publicKeyB64) {
+    this.publicKeyB64 = publicKeyB64;
+    return this;
+  }
+
+   /**
+   * Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into public_key.
+   * @return publicKeyB64
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PUBLIC_KEY_B64)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPublicKeyB64() {
+    return publicKeyB64;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PUBLIC_KEY_B64)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPublicKeyB64(String publicKeyB64) {
+    this.publicKeyB64 = publicKeyB64;
   }
 
 
@@ -5117,9 +5339,9 @@ public static class ApprovalRequest {
    * Hex-encoded Ed25519 signature or the hybrid signature envelope.
    * @return signature
   **/
-  @javax.annotation.Nonnull
+  @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_SIGNATURE)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
 
   public String getSignature() {
     return signature;
@@ -5127,9 +5349,59 @@ public static class ApprovalRequest {
 
 
   @JsonProperty(JSON_PROPERTY_SIGNATURE)
-  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setSignature(String signature) {
     this.signature = signature;
+  }
+
+
+  public ApprovalRequest signatureB64(String signatureB64) {
+    this.signatureB64 = signatureB64;
+    return this;
+  }
+
+   /**
+   * Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into signature.
+   * @return signatureB64
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_B64)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSignatureB64() {
+    return signatureB64;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SIGNATURE_B64)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSignatureB64(String signatureB64) {
+    this.signatureB64 = signatureB64;
+  }
+
+
+  public ApprovalRequest challengeResponse(String challengeResponse) {
+    this.challengeResponse = challengeResponse;
+    return this;
+  }
+
+   /**
+   * Deprecated ceremony compatibility field. Runtime ignores it.
+   * @return challengeResponse
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CHALLENGE_RESPONSE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getChallengeResponse() {
+    return challengeResponse;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CHALLENGE_RESPONSE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setChallengeResponse(String challengeResponse) {
+    this.challengeResponse = challengeResponse;
   }
 
 
@@ -5409,7 +5681,10 @@ public static class ApprovalRequest {
         Objects.equals(this.nonce, approvalRequest.nonce) &&
         Objects.equals(this.approverId, approvalRequest.approverId) &&
         Objects.equals(this.publicKey, approvalRequest.publicKey) &&
+        Objects.equals(this.publicKeyB64, approvalRequest.publicKeyB64) &&
         Objects.equals(this.signature, approvalRequest.signature) &&
+        Objects.equals(this.signatureB64, approvalRequest.signatureB64) &&
+        Objects.equals(this.challengeResponse, approvalRequest.challengeResponse) &&
         Objects.equals(this.signatureProfile, approvalRequest.signatureProfile) &&
         Objects.equals(this.signatureAlgorithm, approvalRequest.signatureAlgorithm) &&
         Objects.equals(this.keyId, approvalRequest.keyId) &&
@@ -5424,7 +5699,7 @@ public static class ApprovalRequest {
 
   @Override
   public int hashCode() {
-    return Objects.hash(intentHash, planHash, policyHash, nonce, approverId, publicKey, signature, signatureProfile, signatureAlgorithm, keyId, publicKeySet, verificationPolicy, downgradeRejected, acceptedAlgorithms, timestamp, biometricTier, sessionId);
+    return Objects.hash(intentHash, planHash, policyHash, nonce, approverId, publicKey, publicKeyB64, signature, signatureB64, challengeResponse, signatureProfile, signatureAlgorithm, keyId, publicKeySet, verificationPolicy, downgradeRejected, acceptedAlgorithms, timestamp, biometricTier, sessionId);
   }
 
   @Override
@@ -5437,7 +5712,10 @@ public static class ApprovalRequest {
     sb.append("    nonce: ").append(toIndentedString(nonce)).append("\n");
     sb.append("    approverId: ").append(toIndentedString(approverId)).append("\n");
     sb.append("    publicKey: ").append(toIndentedString(publicKey)).append("\n");
+    sb.append("    publicKeyB64: ").append(toIndentedString(publicKeyB64)).append("\n");
     sb.append("    signature: ").append(toIndentedString(signature)).append("\n");
+    sb.append("    signatureB64: ").append(toIndentedString(signatureB64)).append("\n");
+    sb.append("    challengeResponse: ").append(toIndentedString(challengeResponse)).append("\n");
     sb.append("    signatureProfile: ").append(toIndentedString(signatureProfile)).append("\n");
     sb.append("    signatureAlgorithm: ").append(toIndentedString(signatureAlgorithm)).append("\n");
     sb.append("    keyId: ").append(toIndentedString(keyId)).append("\n");
@@ -5525,9 +5803,24 @@ public static class ApprovalRequest {
       joiner.add(String.format("%spublic_key%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPublicKey()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `public_key_b64` to the URL query string
+    if (getPublicKeyB64() != null) {
+      joiner.add(String.format("%spublic_key_b64%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPublicKeyB64()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `signature` to the URL query string
     if (getSignature() != null) {
       joiner.add(String.format("%ssignature%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignature()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `signature_b64` to the URL query string
+    if (getSignatureB64() != null) {
+      joiner.add(String.format("%ssignature_b64%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSignatureB64()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `challenge_response` to the URL query string
+    if (getChallengeResponse() != null) {
+      joiner.add(String.format("%schallenge_response%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getChallengeResponse()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `signature_profile` to the URL query string
@@ -9357,10 +9650,15 @@ public static class BoundaryStatus {
   BudgetCeiling.JSON_PROPERTY_BUDGET_ID,
   BudgetCeiling.JSON_PROPERTY_SUBJECT,
   BudgetCeiling.JSON_PROPERTY_WINDOW,
+  BudgetCeiling.JSON_PROPERTY_MAX_TOOL_CALLS,
   BudgetCeiling.JSON_PROPERTY_TOOL_CALL_LIMIT,
+  BudgetCeiling.JSON_PROPERTY_MAX_SPEND_MINOR,
   BudgetCeiling.JSON_PROPERTY_SPEND_LIMIT_CENTS,
+  BudgetCeiling.JSON_PROPERTY_MAX_EGRESS_BYTES,
   BudgetCeiling.JSON_PROPERTY_EGRESS_LIMIT_BYTES,
+  BudgetCeiling.JSON_PROPERTY_MAX_WRITE_OPS,
   BudgetCeiling.JSON_PROPERTY_WRITE_OPERATION_LIMIT,
+  BudgetCeiling.JSON_PROPERTY_APPROVAL_REQUIRED_AFTER,
   BudgetCeiling.JSON_PROPERTY_APPROVAL_REQUIRED_ABOVE_CENTS,
   BudgetCeiling.JSON_PROPERTY_POLICY_EPOCH,
   BudgetCeiling.JSON_PROPERTY_UPDATED_AT
@@ -9376,17 +9674,32 @@ public static class BudgetCeiling {
   public static final String JSON_PROPERTY_WINDOW = "window";
   private String window;
 
+  public static final String JSON_PROPERTY_MAX_TOOL_CALLS = "max_tool_calls";
+  private Integer maxToolCalls;
+
   public static final String JSON_PROPERTY_TOOL_CALL_LIMIT = "tool_call_limit";
   private Integer toolCallLimit;
+
+  public static final String JSON_PROPERTY_MAX_SPEND_MINOR = "max_spend_minor";
+  private Long maxSpendMinor;
 
   public static final String JSON_PROPERTY_SPEND_LIMIT_CENTS = "spend_limit_cents";
   private Long spendLimitCents;
 
+  public static final String JSON_PROPERTY_MAX_EGRESS_BYTES = "max_egress_bytes";
+  private Long maxEgressBytes;
+
   public static final String JSON_PROPERTY_EGRESS_LIMIT_BYTES = "egress_limit_bytes";
   private Long egressLimitBytes;
 
+  public static final String JSON_PROPERTY_MAX_WRITE_OPS = "max_write_ops";
+  private Integer maxWriteOps;
+
   public static final String JSON_PROPERTY_WRITE_OPERATION_LIMIT = "write_operation_limit";
   private Integer writeOperationLimit;
+
+  public static final String JSON_PROPERTY_APPROVAL_REQUIRED_AFTER = "approval_required_after";
+  private Integer approvalRequiredAfter;
 
   public static final String JSON_PROPERTY_APPROVAL_REQUIRED_ABOVE_CENTS = "approval_required_above_cents";
   private Long approvalRequiredAboveCents;
@@ -9475,6 +9788,31 @@ public static class BudgetCeiling {
   }
 
 
+  public BudgetCeiling maxToolCalls(Integer maxToolCalls) {
+    this.maxToolCalls = maxToolCalls;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility alias for tool_call_limit.
+   * @return maxToolCalls
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MAX_TOOL_CALLS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Integer getMaxToolCalls() {
+    return maxToolCalls;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MAX_TOOL_CALLS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setMaxToolCalls(Integer maxToolCalls) {
+    this.maxToolCalls = maxToolCalls;
+  }
+
+
   public BudgetCeiling toolCallLimit(Integer toolCallLimit) {
     this.toolCallLimit = toolCallLimit;
     return this;
@@ -9497,6 +9835,31 @@ public static class BudgetCeiling {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setToolCallLimit(Integer toolCallLimit) {
     this.toolCallLimit = toolCallLimit;
+  }
+
+
+  public BudgetCeiling maxSpendMinor(Long maxSpendMinor) {
+    this.maxSpendMinor = maxSpendMinor;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility alias for spend_limit_cents.
+   * @return maxSpendMinor
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MAX_SPEND_MINOR)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getMaxSpendMinor() {
+    return maxSpendMinor;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MAX_SPEND_MINOR)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setMaxSpendMinor(Long maxSpendMinor) {
+    this.maxSpendMinor = maxSpendMinor;
   }
 
 
@@ -9525,6 +9888,31 @@ public static class BudgetCeiling {
   }
 
 
+  public BudgetCeiling maxEgressBytes(Long maxEgressBytes) {
+    this.maxEgressBytes = maxEgressBytes;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility alias for egress_limit_bytes.
+   * @return maxEgressBytes
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MAX_EGRESS_BYTES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Long getMaxEgressBytes() {
+    return maxEgressBytes;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MAX_EGRESS_BYTES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setMaxEgressBytes(Long maxEgressBytes) {
+    this.maxEgressBytes = maxEgressBytes;
+  }
+
+
   public BudgetCeiling egressLimitBytes(Long egressLimitBytes) {
     this.egressLimitBytes = egressLimitBytes;
     return this;
@@ -9550,6 +9938,31 @@ public static class BudgetCeiling {
   }
 
 
+  public BudgetCeiling maxWriteOps(Integer maxWriteOps) {
+    this.maxWriteOps = maxWriteOps;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility alias for write_operation_limit.
+   * @return maxWriteOps
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MAX_WRITE_OPS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Integer getMaxWriteOps() {
+    return maxWriteOps;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MAX_WRITE_OPS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setMaxWriteOps(Integer maxWriteOps) {
+    this.maxWriteOps = maxWriteOps;
+  }
+
+
   public BudgetCeiling writeOperationLimit(Integer writeOperationLimit) {
     this.writeOperationLimit = writeOperationLimit;
     return this;
@@ -9572,6 +9985,31 @@ public static class BudgetCeiling {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setWriteOperationLimit(Integer writeOperationLimit) {
     this.writeOperationLimit = writeOperationLimit;
+  }
+
+
+  public BudgetCeiling approvalRequiredAfter(Integer approvalRequiredAfter) {
+    this.approvalRequiredAfter = approvalRequiredAfter;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility alias for approval_required_above_cents.
+   * @return approvalRequiredAfter
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_APPROVAL_REQUIRED_AFTER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Integer getApprovalRequiredAfter() {
+    return approvalRequiredAfter;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_APPROVAL_REQUIRED_AFTER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setApprovalRequiredAfter(Integer approvalRequiredAfter) {
+    this.approvalRequiredAfter = approvalRequiredAfter;
   }
 
 
@@ -9665,10 +10103,15 @@ public static class BudgetCeiling {
     return Objects.equals(this.budgetId, budgetCeiling.budgetId) &&
         Objects.equals(this.subject, budgetCeiling.subject) &&
         Objects.equals(this.window, budgetCeiling.window) &&
+        Objects.equals(this.maxToolCalls, budgetCeiling.maxToolCalls) &&
         Objects.equals(this.toolCallLimit, budgetCeiling.toolCallLimit) &&
+        Objects.equals(this.maxSpendMinor, budgetCeiling.maxSpendMinor) &&
         Objects.equals(this.spendLimitCents, budgetCeiling.spendLimitCents) &&
+        Objects.equals(this.maxEgressBytes, budgetCeiling.maxEgressBytes) &&
         Objects.equals(this.egressLimitBytes, budgetCeiling.egressLimitBytes) &&
+        Objects.equals(this.maxWriteOps, budgetCeiling.maxWriteOps) &&
         Objects.equals(this.writeOperationLimit, budgetCeiling.writeOperationLimit) &&
+        Objects.equals(this.approvalRequiredAfter, budgetCeiling.approvalRequiredAfter) &&
         Objects.equals(this.approvalRequiredAboveCents, budgetCeiling.approvalRequiredAboveCents) &&
         Objects.equals(this.policyEpoch, budgetCeiling.policyEpoch) &&
         Objects.equals(this.updatedAt, budgetCeiling.updatedAt);
@@ -9676,7 +10119,7 @@ public static class BudgetCeiling {
 
   @Override
   public int hashCode() {
-    return Objects.hash(budgetId, subject, window, toolCallLimit, spendLimitCents, egressLimitBytes, writeOperationLimit, approvalRequiredAboveCents, policyEpoch, updatedAt);
+    return Objects.hash(budgetId, subject, window, maxToolCalls, toolCallLimit, maxSpendMinor, spendLimitCents, maxEgressBytes, egressLimitBytes, maxWriteOps, writeOperationLimit, approvalRequiredAfter, approvalRequiredAboveCents, policyEpoch, updatedAt);
   }
 
   @Override
@@ -9686,10 +10129,15 @@ public static class BudgetCeiling {
     sb.append("    budgetId: ").append(toIndentedString(budgetId)).append("\n");
     sb.append("    subject: ").append(toIndentedString(subject)).append("\n");
     sb.append("    window: ").append(toIndentedString(window)).append("\n");
+    sb.append("    maxToolCalls: ").append(toIndentedString(maxToolCalls)).append("\n");
     sb.append("    toolCallLimit: ").append(toIndentedString(toolCallLimit)).append("\n");
+    sb.append("    maxSpendMinor: ").append(toIndentedString(maxSpendMinor)).append("\n");
     sb.append("    spendLimitCents: ").append(toIndentedString(spendLimitCents)).append("\n");
+    sb.append("    maxEgressBytes: ").append(toIndentedString(maxEgressBytes)).append("\n");
     sb.append("    egressLimitBytes: ").append(toIndentedString(egressLimitBytes)).append("\n");
+    sb.append("    maxWriteOps: ").append(toIndentedString(maxWriteOps)).append("\n");
     sb.append("    writeOperationLimit: ").append(toIndentedString(writeOperationLimit)).append("\n");
+    sb.append("    approvalRequiredAfter: ").append(toIndentedString(approvalRequiredAfter)).append("\n");
     sb.append("    approvalRequiredAboveCents: ").append(toIndentedString(approvalRequiredAboveCents)).append("\n");
     sb.append("    policyEpoch: ").append(toIndentedString(policyEpoch)).append("\n");
     sb.append("    updatedAt: ").append(toIndentedString(updatedAt)).append("\n");
@@ -9751,9 +10199,19 @@ public static class BudgetCeiling {
       joiner.add(String.format("%swindow%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWindow()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `max_tool_calls` to the URL query string
+    if (getMaxToolCalls() != null) {
+      joiner.add(String.format("%smax_tool_calls%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMaxToolCalls()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `tool_call_limit` to the URL query string
     if (getToolCallLimit() != null) {
       joiner.add(String.format("%stool_call_limit%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getToolCallLimit()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `max_spend_minor` to the URL query string
+    if (getMaxSpendMinor() != null) {
+      joiner.add(String.format("%smax_spend_minor%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMaxSpendMinor()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `spend_limit_cents` to the URL query string
@@ -9761,14 +10219,29 @@ public static class BudgetCeiling {
       joiner.add(String.format("%sspend_limit_cents%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSpendLimitCents()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `max_egress_bytes` to the URL query string
+    if (getMaxEgressBytes() != null) {
+      joiner.add(String.format("%smax_egress_bytes%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMaxEgressBytes()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `egress_limit_bytes` to the URL query string
     if (getEgressLimitBytes() != null) {
       joiner.add(String.format("%segress_limit_bytes%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getEgressLimitBytes()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `max_write_ops` to the URL query string
+    if (getMaxWriteOps() != null) {
+      joiner.add(String.format("%smax_write_ops%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMaxWriteOps()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `write_operation_limit` to the URL query string
     if (getWriteOperationLimit() != null) {
       joiner.add(String.format("%swrite_operation_limit%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getWriteOperationLimit()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `approval_required_after` to the URL query string
+    if (getApprovalRequiredAfter() != null) {
+      joiner.add(String.format("%sapproval_required_after%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getApprovalRequiredAfter()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `approval_required_above_cents` to the URL query string
@@ -45173,11 +45646,15 @@ public static class LocalSessionExchangeResponse {
  */
 @JsonPropertyOrder({
   MCPAuthorizationProfile.JSON_PROPERTY_PROFILE_ID,
+  MCPAuthorizationProfile.JSON_PROPERTY_PROTOCOL_VERSION,
   MCPAuthorizationProfile.JSON_PROPERTY_RESOURCE,
+  MCPAuthorizationProfile.JSON_PROPERTY_REQUIRED_AUDIENCE,
   MCPAuthorizationProfile.JSON_PROPERTY_AUTHORIZATION_SERVERS,
   MCPAuthorizationProfile.JSON_PROPERTY_SCOPES_SUPPORTED,
+  MCPAuthorizationProfile.JSON_PROPERTY_TOOL_SCOPES,
   MCPAuthorizationProfile.JSON_PROPERTY_REQUIRED_SCOPES,
   MCPAuthorizationProfile.JSON_PROPERTY_PROTOCOL_VERSIONS,
+  MCPAuthorizationProfile.JSON_PROPERTY_STALE_AFTER,
   MCPAuthorizationProfile.JSON_PROPERTY_TOOL_SCOPE_HASH,
   MCPAuthorizationProfile.JSON_PROPERTY_PROFILE_HASH
 })
@@ -45186,8 +45663,14 @@ public static class MCPAuthorizationProfile {
   public static final String JSON_PROPERTY_PROFILE_ID = "profile_id";
   private String profileId;
 
+  public static final String JSON_PROPERTY_PROTOCOL_VERSION = "protocol_version";
+  private String protocolVersion;
+
   public static final String JSON_PROPERTY_RESOURCE = "resource";
   private String resource;
+
+  public static final String JSON_PROPERTY_REQUIRED_AUDIENCE = "required_audience";
+  private String requiredAudience;
 
   public static final String JSON_PROPERTY_AUTHORIZATION_SERVERS = "authorization_servers";
   private List<String> authorizationServers;
@@ -45195,11 +45678,17 @@ public static class MCPAuthorizationProfile {
   public static final String JSON_PROPERTY_SCOPES_SUPPORTED = "scopes_supported";
   private List<String> scopesSupported;
 
+  public static final String JSON_PROPERTY_TOOL_SCOPES = "tool_scopes";
+  private Map<String, Object> toolScopes = new HashMap<>();
+
   public static final String JSON_PROPERTY_REQUIRED_SCOPES = "required_scopes";
   private List<String> requiredScopes;
 
   public static final String JSON_PROPERTY_PROTOCOL_VERSIONS = "protocol_versions";
   private List<String> protocolVersions;
+
+  public static final String JSON_PROPERTY_STALE_AFTER = "stale_after";
+  private OffsetDateTime staleAfter;
 
   public static final String JSON_PROPERTY_TOOL_SCOPE_HASH = "tool_scope_hash";
   private String toolScopeHash;
@@ -45235,6 +45724,31 @@ public static class MCPAuthorizationProfile {
   }
 
 
+  public MCPAuthorizationProfile protocolVersion(String protocolVersion) {
+    this.protocolVersion = protocolVersion;
+    return this;
+  }
+
+   /**
+   * Deprecated singular compatibility alias for protocol_versions.
+   * @return protocolVersion
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_PROTOCOL_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getProtocolVersion() {
+    return protocolVersion;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_PROTOCOL_VERSION)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setProtocolVersion(String protocolVersion) {
+    this.protocolVersion = protocolVersion;
+  }
+
+
   public MCPAuthorizationProfile resource(String resource) {
     this.resource = resource;
     return this;
@@ -45257,6 +45771,31 @@ public static class MCPAuthorizationProfile {
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
   public void setResource(String resource) {
     this.resource = resource;
+  }
+
+
+  public MCPAuthorizationProfile requiredAudience(String requiredAudience) {
+    this.requiredAudience = requiredAudience;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility alias for resource.
+   * @return requiredAudience
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REQUIRED_AUDIENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getRequiredAudience() {
+    return requiredAudience;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REQUIRED_AUDIENCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setRequiredAudience(String requiredAudience) {
+    this.requiredAudience = requiredAudience;
   }
 
 
@@ -45326,6 +45865,31 @@ public static class MCPAuthorizationProfile {
   }
 
 
+  public MCPAuthorizationProfile toolScopes(Map<String, Object> toolScopes) {
+    this.toolScopes = toolScopes;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime hashes the legacy map into tool_scope_hash when supplied.
+   * @return toolScopes
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TOOL_SCOPES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getToolScopes() {
+    return toolScopes;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TOOL_SCOPES)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setToolScopes(Map<String, Object> toolScopes) {
+    this.toolScopes = toolScopes;
+  }
+
+
   public MCPAuthorizationProfile requiredScopes(List<String> requiredScopes) {
     this.requiredScopes = requiredScopes;
     return this;
@@ -45392,6 +45956,31 @@ public static class MCPAuthorizationProfile {
   }
 
 
+  public MCPAuthorizationProfile staleAfter(OffsetDateTime staleAfter) {
+    this.staleAfter = staleAfter;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field retained for additive schema compatibility.
+   * @return staleAfter
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_STALE_AFTER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public OffsetDateTime getStaleAfter() {
+    return staleAfter;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STALE_AFTER)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setStaleAfter(OffsetDateTime staleAfter) {
+    this.staleAfter = staleAfter;
+  }
+
+
   public MCPAuthorizationProfile toolScopeHash(String toolScopeHash) {
     this.toolScopeHash = toolScopeHash;
     return this;
@@ -45455,18 +46044,22 @@ public static class MCPAuthorizationProfile {
     }
     MCPAuthorizationProfile mcPAuthorizationProfile = (MCPAuthorizationProfile) o;
     return Objects.equals(this.profileId, mcPAuthorizationProfile.profileId) &&
+        Objects.equals(this.protocolVersion, mcPAuthorizationProfile.protocolVersion) &&
         Objects.equals(this.resource, mcPAuthorizationProfile.resource) &&
+        Objects.equals(this.requiredAudience, mcPAuthorizationProfile.requiredAudience) &&
         Objects.equals(this.authorizationServers, mcPAuthorizationProfile.authorizationServers) &&
         Objects.equals(this.scopesSupported, mcPAuthorizationProfile.scopesSupported) &&
+        Objects.equals(this.toolScopes, mcPAuthorizationProfile.toolScopes) &&
         Objects.equals(this.requiredScopes, mcPAuthorizationProfile.requiredScopes) &&
         Objects.equals(this.protocolVersions, mcPAuthorizationProfile.protocolVersions) &&
+        Objects.equals(this.staleAfter, mcPAuthorizationProfile.staleAfter) &&
         Objects.equals(this.toolScopeHash, mcPAuthorizationProfile.toolScopeHash) &&
         Objects.equals(this.profileHash, mcPAuthorizationProfile.profileHash);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(profileId, resource, authorizationServers, scopesSupported, requiredScopes, protocolVersions, toolScopeHash, profileHash);
+    return Objects.hash(profileId, protocolVersion, resource, requiredAudience, authorizationServers, scopesSupported, toolScopes, requiredScopes, protocolVersions, staleAfter, toolScopeHash, profileHash);
   }
 
   @Override
@@ -45474,11 +46067,15 @@ public static class MCPAuthorizationProfile {
     StringBuilder sb = new StringBuilder();
     sb.append("class MCPAuthorizationProfile {\n");
     sb.append("    profileId: ").append(toIndentedString(profileId)).append("\n");
+    sb.append("    protocolVersion: ").append(toIndentedString(protocolVersion)).append("\n");
     sb.append("    resource: ").append(toIndentedString(resource)).append("\n");
+    sb.append("    requiredAudience: ").append(toIndentedString(requiredAudience)).append("\n");
     sb.append("    authorizationServers: ").append(toIndentedString(authorizationServers)).append("\n");
     sb.append("    scopesSupported: ").append(toIndentedString(scopesSupported)).append("\n");
+    sb.append("    toolScopes: ").append(toIndentedString(toolScopes)).append("\n");
     sb.append("    requiredScopes: ").append(toIndentedString(requiredScopes)).append("\n");
     sb.append("    protocolVersions: ").append(toIndentedString(protocolVersions)).append("\n");
+    sb.append("    staleAfter: ").append(toIndentedString(staleAfter)).append("\n");
     sb.append("    toolScopeHash: ").append(toIndentedString(toolScopeHash)).append("\n");
     sb.append("    profileHash: ").append(toIndentedString(profileHash)).append("\n");
     sb.append("}");
@@ -45533,9 +46130,19 @@ public static class MCPAuthorizationProfile {
       joiner.add(String.format("%sprofile_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProfileId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
+    // add `protocol_version` to the URL query string
+    if (getProtocolVersion() != null) {
+      joiner.add(String.format("%sprotocol_version%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getProtocolVersion()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `resource` to the URL query string
     if (getResource() != null) {
       joiner.add(String.format("%sresource%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getResource()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `required_audience` to the URL query string
+    if (getRequiredAudience() != null) {
+      joiner.add(String.format("%srequired_audience%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRequiredAudience()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `authorization_servers` to the URL query string
@@ -45556,6 +46163,11 @@ public static class MCPAuthorizationProfile {
       }
     }
 
+    // add `tool_scopes` to the URL query string
+    if (getToolScopes() != null) {
+      joiner.add(String.format("%stool_scopes%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getToolScopes()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
     // add `required_scopes` to the URL query string
     if (getRequiredScopes() != null) {
       for (int i = 0; i < getRequiredScopes().size(); i++) {
@@ -45572,6 +46184,11 @@ public static class MCPAuthorizationProfile {
             "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
             URLEncoder.encode(String.valueOf(getProtocolVersions().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
+    }
+
+    // add `stale_after` to the URL query string
+    if (getStaleAfter() != null) {
+      joiner.add(String.format("%sstale_after%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStaleAfter()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `tool_scope_hash` to the URL query string
@@ -49644,7 +50261,8 @@ public static class MCPRemoteDiscovery {
   MCPScanRequest.JSON_PROPERTY_NAME,
   MCPScanRequest.JSON_PROPERTY_TRANSPORT,
   MCPScanRequest.JSON_PROPERTY_ENDPOINT,
-  MCPScanRequest.JSON_PROPERTY_TOOL_NAMES
+  MCPScanRequest.JSON_PROPERTY_TOOL_NAMES,
+  MCPScanRequest.JSON_PROPERTY_MANIFEST
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class MCPScanRequest {
@@ -49662,6 +50280,9 @@ public static class MCPScanRequest {
 
   public static final String JSON_PROPERTY_TOOL_NAMES = "tool_names";
   private List<String> toolNames;
+
+  public static final String JSON_PROPERTY_MANIFEST = "manifest";
+  private Map<String, Object> manifest = new HashMap<>();
 
   public MCPScanRequest() {
   }
@@ -49799,6 +50420,39 @@ public static class MCPScanRequest {
   }
 
 
+  public MCPScanRequest manifest(Map<String, Object> manifest) {
+    this.manifest = manifest;
+    return this;
+  }
+
+  public MCPScanRequest putManifestItem(String key, Object manifestItem) {
+    if (this.manifest == null) {
+      this.manifest = new HashMap<>();
+    }
+    this.manifest.put(key, manifestItem);
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime ignores the caller-supplied manifest.
+   * @return manifest
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MANIFEST)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Map<String, Object> getManifest() {
+    return manifest;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MANIFEST)
+  @JsonInclude(content = JsonInclude.Include.ALWAYS, value = JsonInclude.Include.USE_DEFAULTS)
+  public void setManifest(Map<String, Object> manifest) {
+    this.manifest = manifest;
+  }
+
+
   /**
    * Return true if this MCPScanRequest object is equal to o.
    */
@@ -49815,12 +50469,13 @@ public static class MCPScanRequest {
         Objects.equals(this.name, mcPScanRequest.name) &&
         Objects.equals(this.transport, mcPScanRequest.transport) &&
         Objects.equals(this.endpoint, mcPScanRequest.endpoint) &&
-        Objects.equals(this.toolNames, mcPScanRequest.toolNames);
+        Objects.equals(this.toolNames, mcPScanRequest.toolNames) &&
+        Objects.equals(this.manifest, mcPScanRequest.manifest);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(serverId, name, transport, endpoint, toolNames);
+    return Objects.hash(serverId, name, transport, endpoint, toolNames, manifest);
   }
 
   @Override
@@ -49832,6 +50487,7 @@ public static class MCPScanRequest {
     sb.append("    transport: ").append(toIndentedString(transport)).append("\n");
     sb.append("    endpoint: ").append(toIndentedString(endpoint)).append("\n");
     sb.append("    toolNames: ").append(toIndentedString(toolNames)).append("\n");
+    sb.append("    manifest: ").append(toIndentedString(manifest)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -49905,6 +50561,15 @@ public static class MCPScanRequest {
         joiner.add(String.format("%stool_names%s%s=%s", prefix, suffix,
             "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix),
             URLEncoder.encode(String.valueOf(getToolNames().get(i)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+      }
+    }
+
+    // add `manifest` to the URL query string
+    if (getManifest() != null) {
+      for (String _key : getManifest().keySet()) {
+        joiner.add(String.format("%smanifest%s%s=%s", prefix, suffix,
+            "".equals(suffix) ? "" : String.format("%s%s%s", containerPrefix, _key, containerSuffix),
+            URLEncoder.encode(String.valueOf(getManifest().get(_key)), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
       }
     }
 
@@ -63294,6 +63959,11 @@ public static class TeardownLaunchpadRuntimeRunRequest {
   TelemetryExportRequest.JSON_PROPERTY_FORMAT,
   TelemetryExportRequest.JSON_PROPERTY_RECEIPT_ID,
   TelemetryExportRequest.JSON_PROPERTY_RECORD_HASH,
+  TelemetryExportRequest.JSON_PROPERTY_POLICY_EPOCH,
+  TelemetryExportRequest.JSON_PROPERTY_VERDICT,
+  TelemetryExportRequest.JSON_PROPERTY_REASON_CODE,
+  TelemetryExportRequest.JSON_PROPERTY_SANDBOX_GRANT_HASH,
+  TelemetryExportRequest.JSON_PROPERTY_AUTHZ_SNAPSHOT_HASH,
   TelemetryExportRequest.JSON_PROPERTY_ATTRIBUTES
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
@@ -63306,6 +63976,21 @@ public static class TelemetryExportRequest {
 
   public static final String JSON_PROPERTY_RECORD_HASH = "record_hash";
   private String recordHash;
+
+  public static final String JSON_PROPERTY_POLICY_EPOCH = "policy_epoch";
+  private String policyEpoch;
+
+  public static final String JSON_PROPERTY_VERDICT = "verdict";
+  private String verdict;
+
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_SANDBOX_GRANT_HASH = "sandbox_grant_hash";
+  private String sandboxGrantHash;
+
+  public static final String JSON_PROPERTY_AUTHZ_SNAPSHOT_HASH = "authz_snapshot_hash";
+  private String authzSnapshotHash;
 
   public static final String JSON_PROPERTY_ATTRIBUTES = "attributes";
   private Map<String, String> attributes = new HashMap<>();
@@ -63388,6 +64073,131 @@ public static class TelemetryExportRequest {
   }
 
 
+  public TelemetryExportRequest policyEpoch(String policyEpoch) {
+    this.policyEpoch = policyEpoch;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime ignores it on export requests.
+   * @return policyEpoch
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_POLICY_EPOCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getPolicyEpoch() {
+    return policyEpoch;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_POLICY_EPOCH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setPolicyEpoch(String policyEpoch) {
+    this.policyEpoch = policyEpoch;
+  }
+
+
+  public TelemetryExportRequest verdict(String verdict) {
+    this.verdict = verdict;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime ignores it on export requests.
+   * @return verdict
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getVerdict() {
+    return verdict;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VERDICT)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setVerdict(String verdict) {
+    this.verdict = verdict;
+  }
+
+
+  public TelemetryExportRequest reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime ignores it on export requests.
+   * @return reasonCode
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public TelemetryExportRequest sandboxGrantHash(String sandboxGrantHash) {
+    this.sandboxGrantHash = sandboxGrantHash;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime ignores it on export requests.
+   * @return sandboxGrantHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_SANDBOX_GRANT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getSandboxGrantHash() {
+    return sandboxGrantHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_SANDBOX_GRANT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setSandboxGrantHash(String sandboxGrantHash) {
+    this.sandboxGrantHash = sandboxGrantHash;
+  }
+
+
+  public TelemetryExportRequest authzSnapshotHash(String authzSnapshotHash) {
+    this.authzSnapshotHash = authzSnapshotHash;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime ignores it on export requests.
+   * @return authzSnapshotHash
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_AUTHZ_SNAPSHOT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getAuthzSnapshotHash() {
+    return authzSnapshotHash;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_AUTHZ_SNAPSHOT_HASH)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setAuthzSnapshotHash(String authzSnapshotHash) {
+    this.authzSnapshotHash = authzSnapshotHash;
+  }
+
+
   public TelemetryExportRequest attributes(Map<String, String> attributes) {
     this.attributes = attributes;
     return this;
@@ -63428,12 +64238,17 @@ public static class TelemetryExportRequest {
     return Objects.equals(this.format, telemetryExportRequest.format) &&
         Objects.equals(this.receiptId, telemetryExportRequest.receiptId) &&
         Objects.equals(this.recordHash, telemetryExportRequest.recordHash) &&
+        Objects.equals(this.policyEpoch, telemetryExportRequest.policyEpoch) &&
+        Objects.equals(this.verdict, telemetryExportRequest.verdict) &&
+        Objects.equals(this.reasonCode, telemetryExportRequest.reasonCode) &&
+        Objects.equals(this.sandboxGrantHash, telemetryExportRequest.sandboxGrantHash) &&
+        Objects.equals(this.authzSnapshotHash, telemetryExportRequest.authzSnapshotHash) &&
         Objects.equals(this.attributes, telemetryExportRequest.attributes);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(format, receiptId, recordHash, attributes);
+    return Objects.hash(format, receiptId, recordHash, policyEpoch, verdict, reasonCode, sandboxGrantHash, authzSnapshotHash, attributes);
   }
 
   @Override
@@ -63443,6 +64258,11 @@ public static class TelemetryExportRequest {
     sb.append("    format: ").append(toIndentedString(format)).append("\n");
     sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
     sb.append("    recordHash: ").append(toIndentedString(recordHash)).append("\n");
+    sb.append("    policyEpoch: ").append(toIndentedString(policyEpoch)).append("\n");
+    sb.append("    verdict: ").append(toIndentedString(verdict)).append("\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    sandboxGrantHash: ").append(toIndentedString(sandboxGrantHash)).append("\n");
+    sb.append("    authzSnapshotHash: ").append(toIndentedString(authzSnapshotHash)).append("\n");
     sb.append("    attributes: ").append(toIndentedString(attributes)).append("\n");
     sb.append("}");
     return sb.toString();
@@ -63500,6 +64320,31 @@ public static class TelemetryExportRequest {
     // add `record_hash` to the URL query string
     if (getRecordHash() != null) {
       joiner.add(String.format("%srecord_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRecordHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `policy_epoch` to the URL query string
+    if (getPolicyEpoch() != null) {
+      joiner.add(String.format("%spolicy_epoch%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getPolicyEpoch()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `verdict` to the URL query string
+    if (getVerdict() != null) {
+      joiner.add(String.format("%sverdict%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getVerdict()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `sandbox_grant_hash` to the URL query string
+    if (getSandboxGrantHash() != null) {
+      joiner.add(String.format("%ssandbox_grant_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getSandboxGrantHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `authz_snapshot_hash` to the URL query string
+    if (getAuthzSnapshotHash() != null) {
+      joiner.add(String.format("%sauthz_snapshot_hash%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getAuthzSnapshotHash()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
     }
 
     // add `attributes` to the URL query string
@@ -64099,12 +64944,16 @@ public static class TelemetryOTelConfig {
  * TransitionApprovalCeremonyRequest
  */
 @JsonPropertyOrder({
+  TransitionApprovalCeremonyRequest.JSON_PROPERTY_ACTOR,
   TransitionApprovalCeremonyRequest.JSON_PROPERTY_RECEIPT_ID,
   TransitionApprovalCeremonyRequest.JSON_PROPERTY_REASON,
   TransitionApprovalCeremonyRequest.JSON_PROPERTY_EXPECTED_CEREMONY_HASH
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class TransitionApprovalCeremonyRequest {
+  public static final String JSON_PROPERTY_ACTOR = "actor";
+  private String actor;
+
   public static final String JSON_PROPERTY_RECEIPT_ID = "receipt_id";
   private String receiptId;
 
@@ -64116,6 +64965,31 @@ public static class TransitionApprovalCeremonyRequest {
 
   public TransitionApprovalCeremonyRequest() {
   }
+
+  public TransitionApprovalCeremonyRequest actor(String actor) {
+    this.actor = actor;
+    return this;
+  }
+
+   /**
+   * Deprecated compatibility field. Runtime ignores caller-supplied actor and uses the authenticated principal.
+   * @return actor
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_ACTOR)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getActor() {
+    return actor;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_ACTOR)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setActor(String actor) {
+    this.actor = actor;
+  }
+
 
   public TransitionApprovalCeremonyRequest receiptId(String receiptId) {
     this.receiptId = receiptId;
@@ -64204,20 +65078,22 @@ public static class TransitionApprovalCeremonyRequest {
       return false;
     }
     TransitionApprovalCeremonyRequest transitionApprovalCeremonyRequest = (TransitionApprovalCeremonyRequest) o;
-    return Objects.equals(this.receiptId, transitionApprovalCeremonyRequest.receiptId) &&
+    return Objects.equals(this.actor, transitionApprovalCeremonyRequest.actor) &&
+        Objects.equals(this.receiptId, transitionApprovalCeremonyRequest.receiptId) &&
         Objects.equals(this.reason, transitionApprovalCeremonyRequest.reason) &&
         Objects.equals(this.expectedCeremonyHash, transitionApprovalCeremonyRequest.expectedCeremonyHash);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(receiptId, reason, expectedCeremonyHash);
+    return Objects.hash(actor, receiptId, reason, expectedCeremonyHash);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class TransitionApprovalCeremonyRequest {\n");
+    sb.append("    actor: ").append(toIndentedString(actor)).append("\n");
     sb.append("    receiptId: ").append(toIndentedString(receiptId)).append("\n");
     sb.append("    reason: ").append(toIndentedString(reason)).append("\n");
     sb.append("    expectedCeremonyHash: ").append(toIndentedString(expectedCeremonyHash)).append("\n");
@@ -64263,6 +65139,11 @@ public static class TransitionApprovalCeremonyRequest {
     }
 
     StringJoiner joiner = new StringJoiner("&");
+
+    // add `actor` to the URL query string
+    if (getActor() != null) {
+      joiner.add(String.format("%sactor%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getActor()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
 
     // add `receipt_id` to the URL query string
     if (getReceiptId() != null) {

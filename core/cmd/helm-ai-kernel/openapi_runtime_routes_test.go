@@ -256,6 +256,7 @@ func TestRequestBodyContractMatchesRuntime(t *testing.T) {
 		}
 
 		properties, required := jsonObjectContractFromType(t, contract.Type)
+		properties = uniqueSorted(append(properties, contract.AcceptedProperties...))
 		unexpectedProperties := make([]string, 0, len(schema.Properties))
 		for name := range schema.Properties {
 			if !containsString(properties, name) {
@@ -322,9 +323,10 @@ type openAPIMediaType struct {
 }
 
 type requestBodyRuntimeContract struct {
-	Type   reflect.Type
-	Source string
-	Reason string
+	Type               reflect.Type
+	Source             string
+	Reason             string
+	AcceptedProperties []string
 }
 
 func readOpenAPIBoundaryStatusSchema(t *testing.T) openAPIObjectSchema {
@@ -539,22 +541,33 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 		"POST /api/v1/kernel/approve": {
 			Type:   reflect.TypeOf(contracts.ApprovalReceipt{}),
 			Source: "core/pkg/api/approve_handler.go:83",
+			AcceptedProperties: []string{
+				"public_key_b64",
+				"signature_b64",
+				"challenge_response",
+			},
 		},
 		"POST /api/v1/approvals": {
 			Type: reflect.TypeOf(struct {
-				ApprovalID  string   `json:"approval_id"`
-				Subject     string   `json:"subject"`
-				Action      string   `json:"action"`
-				RequestedBy string   `json:"requested_by"`
-				Approvers   []string `json:"approvers"`
-				Quorum      int      `json:"quorum"`
-				TimelockMs  int64    `json:"timelock_ms"`
-				ExpiresInMs int64    `json:"expires_in_ms"`
-				Reason      string   `json:"reason"`
-				ReceiptID   string   `json:"receipt_id"`
-				BreakGlass  bool     `json:"break_glass"`
+				ApprovalID    string    `json:"approval_id"`
+				Subject       string    `json:"subject"`
+				Action        string    `json:"action"`
+				RequestedBy   string    `json:"requested_by"`
+				Approvers     []string  `json:"approvers"`
+				Quorum        int       `json:"quorum"`
+				TimelockUntil time.Time `json:"timelock_until"`
+				ExpiresAt     time.Time `json:"expires_at"`
+				Reason        string    `json:"reason"`
+				ReceiptID     string    `json:"receipt_id"`
+				BreakGlass    bool      `json:"break_glass"`
 			}{}),
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1217",
+			AcceptedProperties: []string{
+				"state",
+				"created_at",
+				"updated_at",
+				"ceremony_hash",
+			},
 		},
 		"POST /api/v1/approvals/{approval_id}/webauthn/challenge": {
 			Type: reflect.TypeOf(struct {
@@ -573,7 +586,8 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 				Reason               string `json:"reason"`
 				ExpectedCeremonyHash string `json:"expected_ceremony_hash"`
 			}{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1312",
+			Source:             "core/cmd/helm-ai-kernel/contract_routes.go:1312",
+			AcceptedProperties: []string{"actor"},
 		},
 		"POST /api/v1/harness/change-contracts/{change_id}/approve": {
 			Type: reflect.TypeOf(struct {
@@ -584,18 +598,39 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 		"PUT /api/v1/budgets/{budget_id}": {
 			Type:   reflect.TypeOf(contracts.BudgetCeiling{}),
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1372",
+			AcceptedProperties: []string{
+				"max_tool_calls",
+				"max_spend_minor",
+				"max_egress_bytes",
+				"max_write_ops",
+				"approval_required_after",
+			},
 		},
 		"POST /api/v1/telemetry/export": {
 			Type:   reflect.TypeOf(contracts.TelemetryExportRequest{}),
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go:1421",
+			AcceptedProperties: []string{
+				"policy_epoch",
+				"verdict",
+				"reason_code",
+				"sandbox_grant_hash",
+				"authz_snapshot_hash",
+			},
 		},
 		"POST /api/v1/mcp/scan": {
-			Type:   reflect.TypeOf(contracts.MCPScanRequest{}),
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go:897",
+			Type:               reflect.TypeOf(contracts.MCPScanRequest{}),
+			Source:             "core/cmd/helm-ai-kernel/contract_routes.go:897",
+			AcceptedProperties: []string{"manifest"},
 		},
 		"PUT /api/v1/mcp/auth-profiles/{profile_id}": {
 			Type:   reflect.TypeOf(contracts.MCPAuthorizationProfile{}),
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go:955",
+			AcceptedProperties: []string{
+				"protocol_version",
+				"tool_scopes",
+				"required_audience",
+				"stale_after",
+			},
 		},
 		"POST /api/v1/mcp/authorize-call": {
 			Type:   reflect.TypeOf(contracts.MCPAuthorizeCallRequest{}),

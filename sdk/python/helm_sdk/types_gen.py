@@ -1117,15 +1117,30 @@ class ApprovalCeremonyCreateRequest(BaseModel):
     approval_id: Optional[StrictStr] = Field(default=None, description="Optional stable identifier. Runtime derives one when omitted.")
     subject: Optional[StrictStr] = None
     action: Optional[StrictStr] = None
+    state: Optional[StrictStr] = Field(default=None, description="Deprecated response-era field accepted for compatibility and ignored on create.")
     requested_by: Optional[StrictStr] = None
     approvers: Optional[List[StrictStr]] = None
     quorum: Optional[StrictInt] = None
-    timelock_ms: Optional[StrictInt] = None
-    expires_in_ms: Optional[StrictInt] = None
+    timelock_until: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
     reason: Optional[StrictStr] = None
     receipt_id: Optional[StrictStr] = None
     break_glass: Optional[StrictBool] = None
-    __properties: ClassVar[List[str]] = ["approval_id", "subject", "action", "requested_by", "approvers", "quorum", "timelock_ms", "expires_in_ms", "reason", "receipt_id", "break_glass"]
+    created_at: Optional[datetime] = Field(default=None, description="Deprecated response-era field accepted for compatibility and ignored on create.")
+    updated_at: Optional[datetime] = Field(default=None, description="Deprecated response-era field accepted for compatibility and ignored on create.")
+    ceremony_hash: Optional[StrictStr] = Field(default=None, description="Deprecated response-era field accepted for compatibility and ignored on create.")
+    __properties: ClassVar[List[str]] = ["approval_id", "subject", "action", "state", "requested_by", "approvers", "quorum", "timelock_until", "expires_at", "reason", "receipt_id", "break_glass", "created_at", "updated_at", "ceremony_hash"]
+
+    @field_validator('state')
+    @classmethod
+    def state_validate_enum(cls, value):
+        """Validates the enum"""
+        if value is None:
+            return value
+
+        if value not in set(['pending', 'approved', 'denied', 'revoked', 'expired']):
+            raise ValueError("must be one of enum values ('pending', 'approved', 'denied', 'revoked', 'expired')")
+        return value
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -1181,14 +1196,18 @@ class ApprovalCeremonyCreateRequest(BaseModel):
             "approval_id": obj.get("approval_id"),
             "subject": obj.get("subject"),
             "action": obj.get("action"),
+            "state": obj.get("state"),
             "requested_by": obj.get("requested_by"),
             "approvers": obj.get("approvers"),
             "quorum": obj.get("quorum"),
-            "timelock_ms": obj.get("timelock_ms"),
-            "expires_in_ms": obj.get("expires_in_ms"),
+            "timelock_until": obj.get("timelock_until"),
+            "expires_at": obj.get("expires_at"),
             "reason": obj.get("reason"),
             "receipt_id": obj.get("receipt_id"),
-            "break_glass": obj.get("break_glass")
+            "break_glass": obj.get("break_glass"),
+            "created_at": obj.get("created_at"),
+            "updated_at": obj.get("updated_at"),
+            "ceremony_hash": obj.get("ceremony_hash")
         })
         return _obj
 
@@ -1217,8 +1236,11 @@ class ApprovalRequest(BaseModel):
     policy_hash: Optional[StrictStr] = None
     nonce: Optional[StrictStr] = None
     approver_id: Optional[StrictStr] = None
-    public_key: StrictStr = Field(description="Hex-encoded Ed25519 public key or the hybrid key envelope.")
-    signature: StrictStr = Field(description="Hex-encoded Ed25519 signature or the hybrid signature envelope.")
+    public_key: Optional[StrictStr] = Field(default=None, description="Hex-encoded Ed25519 public key or the hybrid key envelope.")
+    public_key_b64: Optional[StrictStr] = Field(default=None, description="Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into public_key.")
+    signature: Optional[StrictStr] = Field(default=None, description="Hex-encoded Ed25519 signature or the hybrid signature envelope.")
+    signature_b64: Optional[StrictStr] = Field(default=None, description="Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into signature.")
+    challenge_response: Optional[StrictStr] = Field(default=None, description="Deprecated ceremony compatibility field. Runtime ignores it.")
     signature_profile: Optional[StrictStr] = None
     signature_algorithm: Optional[StrictStr] = None
     key_id: Optional[StrictStr] = None
@@ -1229,7 +1251,7 @@ class ApprovalRequest(BaseModel):
     timestamp: Optional[datetime] = None
     biometric_tier: Optional[StrictStr] = None
     session_id: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["intent_hash", "plan_hash", "policy_hash", "nonce", "approver_id", "public_key", "signature", "signature_profile", "signature_algorithm", "key_id", "public_key_set", "verification_policy", "downgrade_rejected", "accepted_algorithms", "timestamp", "biometric_tier", "session_id"]
+    __properties: ClassVar[List[str]] = ["intent_hash", "plan_hash", "policy_hash", "nonce", "approver_id", "public_key", "public_key_b64", "signature", "signature_b64", "challenge_response", "signature_profile", "signature_algorithm", "key_id", "public_key_set", "verification_policy", "downgrade_rejected", "accepted_algorithms", "timestamp", "biometric_tier", "session_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -1288,7 +1310,10 @@ class ApprovalRequest(BaseModel):
             "nonce": obj.get("nonce"),
             "approver_id": obj.get("approver_id"),
             "public_key": obj.get("public_key"),
+            "public_key_b64": obj.get("public_key_b64"),
             "signature": obj.get("signature"),
+            "signature_b64": obj.get("signature_b64"),
+            "challenge_response": obj.get("challenge_response"),
             "signature_profile": obj.get("signature_profile"),
             "signature_algorithm": obj.get("signature_algorithm"),
             "key_id": obj.get("key_id"),
@@ -2296,14 +2321,19 @@ class BudgetCeiling(BaseModel):
     budget_id: Optional[StrictStr] = None
     subject: Optional[StrictStr] = None
     window: Optional[StrictStr] = None
+    max_tool_calls: Optional[StrictInt] = Field(default=None, description="Deprecated compatibility alias for tool_call_limit.")
     tool_call_limit: Optional[StrictInt] = None
+    max_spend_minor: Optional[StrictInt] = Field(default=None, description="Deprecated compatibility alias for spend_limit_cents.")
     spend_limit_cents: Optional[StrictInt] = None
+    max_egress_bytes: Optional[StrictInt] = Field(default=None, description="Deprecated compatibility alias for egress_limit_bytes.")
     egress_limit_bytes: Optional[StrictInt] = None
+    max_write_ops: Optional[StrictInt] = Field(default=None, description="Deprecated compatibility alias for write_operation_limit.")
     write_operation_limit: Optional[StrictInt] = None
+    approval_required_after: Optional[StrictInt] = Field(default=None, description="Deprecated compatibility alias for approval_required_above_cents.")
     approval_required_above_cents: Optional[StrictInt] = None
     policy_epoch: Optional[StrictStr] = None
     updated_at: Optional[datetime] = None
-    __properties: ClassVar[List[str]] = ["budget_id", "subject", "window", "tool_call_limit", "spend_limit_cents", "egress_limit_bytes", "write_operation_limit", "approval_required_above_cents", "policy_epoch", "updated_at"]
+    __properties: ClassVar[List[str]] = ["budget_id", "subject", "window", "max_tool_calls", "tool_call_limit", "max_spend_minor", "spend_limit_cents", "max_egress_bytes", "egress_limit_bytes", "max_write_ops", "write_operation_limit", "approval_required_after", "approval_required_above_cents", "policy_epoch", "updated_at"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -2359,10 +2389,15 @@ class BudgetCeiling(BaseModel):
             "budget_id": obj.get("budget_id"),
             "subject": obj.get("subject"),
             "window": obj.get("window"),
+            "max_tool_calls": obj.get("max_tool_calls"),
             "tool_call_limit": obj.get("tool_call_limit"),
+            "max_spend_minor": obj.get("max_spend_minor"),
             "spend_limit_cents": obj.get("spend_limit_cents"),
+            "max_egress_bytes": obj.get("max_egress_bytes"),
             "egress_limit_bytes": obj.get("egress_limit_bytes"),
+            "max_write_ops": obj.get("max_write_ops"),
             "write_operation_limit": obj.get("write_operation_limit"),
+            "approval_required_after": obj.get("approval_required_after"),
             "approval_required_above_cents": obj.get("approval_required_above_cents"),
             "policy_epoch": obj.get("policy_epoch"),
             "updated_at": obj.get("updated_at")
@@ -11831,14 +11866,18 @@ class MCPAuthorizationProfile(BaseModel):
     MCPAuthorizationProfile
     """ # noqa: E501
     profile_id: Optional[StrictStr] = None
+    protocol_version: Optional[StrictStr] = Field(default=None, description="Deprecated singular compatibility alias for protocol_versions.")
     resource: Optional[StrictStr] = None
+    required_audience: Optional[StrictStr] = Field(default=None, description="Deprecated compatibility alias for resource.")
     authorization_servers: Optional[List[StrictStr]] = None
     scopes_supported: Optional[List[StrictStr]] = None
+    tool_scopes: Optional[Dict[str, Any]] = Field(default=None, description="Deprecated compatibility field. Runtime hashes the legacy map into tool_scope_hash when supplied.")
     required_scopes: Optional[List[StrictStr]] = None
     protocol_versions: Optional[List[StrictStr]] = None
+    stale_after: Optional[datetime] = Field(default=None, description="Deprecated compatibility field retained for additive schema compatibility.")
     tool_scope_hash: Optional[StrictStr] = None
     profile_hash: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["profile_id", "resource", "authorization_servers", "scopes_supported", "required_scopes", "protocol_versions", "tool_scope_hash", "profile_hash"]
+    __properties: ClassVar[List[str]] = ["profile_id", "protocol_version", "resource", "required_audience", "authorization_servers", "scopes_supported", "tool_scopes", "required_scopes", "protocol_versions", "stale_after", "tool_scope_hash", "profile_hash"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -11892,11 +11931,14 @@ class MCPAuthorizationProfile(BaseModel):
 
         _obj = cls.model_validate({
             "profile_id": obj.get("profile_id"),
+            "protocol_version": obj.get("protocol_version"),
             "resource": obj.get("resource"),
+            "required_audience": obj.get("required_audience"),
             "authorization_servers": obj.get("authorization_servers"),
             "scopes_supported": obj.get("scopes_supported"),
             "required_scopes": obj.get("required_scopes"),
             "protocol_versions": obj.get("protocol_versions"),
+            "stale_after": obj.get("stale_after"),
             "tool_scope_hash": obj.get("tool_scope_hash"),
             "profile_hash": obj.get("profile_hash")
         })
@@ -12595,7 +12637,8 @@ class MCPScanRequest(BaseModel):
     transport: Optional[StrictStr] = None
     endpoint: Optional[StrictStr] = None
     tool_names: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["server_id", "name", "transport", "endpoint", "tool_names"]
+    manifest: Optional[Dict[str, Any]] = Field(default=None, description="Deprecated compatibility field. Runtime ignores the caller-supplied manifest.")
+    __properties: ClassVar[List[str]] = ["server_id", "name", "transport", "endpoint", "tool_names", "manifest"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -12652,7 +12695,8 @@ class MCPScanRequest(BaseModel):
             "name": obj.get("name"),
             "transport": obj.get("transport"),
             "endpoint": obj.get("endpoint"),
-            "tool_names": obj.get("tool_names")
+            "tool_names": obj.get("tool_names"),
+            "manifest": obj.get("manifest")
         })
         return _obj
 
@@ -17083,8 +17127,13 @@ class TelemetryExportRequest(BaseModel):
     format: Optional[StrictStr] = None
     receipt_id: Optional[StrictStr] = None
     record_hash: Optional[StrictStr] = None
+    policy_epoch: Optional[StrictStr] = Field(default=None, description="Deprecated compatibility field. Runtime ignores it on export requests.")
+    verdict: Optional[StrictStr] = Field(default=None, description="Deprecated compatibility field. Runtime ignores it on export requests.")
+    reason_code: Optional[StrictStr] = Field(default=None, description="Deprecated compatibility field. Runtime ignores it on export requests.")
+    sandbox_grant_hash: Optional[StrictStr] = Field(default=None, description="Deprecated compatibility field. Runtime ignores it on export requests.")
+    authz_snapshot_hash: Optional[StrictStr] = Field(default=None, description="Deprecated compatibility field. Runtime ignores it on export requests.")
     attributes: Optional[Dict[str, StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["format", "receipt_id", "record_hash", "attributes"]
+    __properties: ClassVar[List[str]] = ["format", "receipt_id", "record_hash", "policy_epoch", "verdict", "reason_code", "sandbox_grant_hash", "authz_snapshot_hash", "attributes"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -17140,6 +17189,11 @@ class TelemetryExportRequest(BaseModel):
             "format": obj.get("format"),
             "receipt_id": obj.get("receipt_id"),
             "record_hash": obj.get("record_hash"),
+            "policy_epoch": obj.get("policy_epoch"),
+            "verdict": obj.get("verdict"),
+            "reason_code": obj.get("reason_code"),
+            "sandbox_grant_hash": obj.get("sandbox_grant_hash"),
+            "authz_snapshot_hash": obj.get("authz_snapshot_hash"),
         })
         return _obj
 
@@ -17333,10 +17387,11 @@ class TransitionApprovalCeremonyRequest(BaseModel):
     """
     TransitionApprovalCeremonyRequest
     """ # noqa: E501
+    actor: Optional[StrictStr] = Field(default=None, description="Deprecated compatibility field. Runtime ignores caller-supplied actor and uses the authenticated principal.")
     receipt_id: Optional[StrictStr] = None
     reason: Optional[StrictStr] = None
     expected_ceremony_hash: Optional[Annotated[str, Field(min_length=1, strict=True)]] = Field(default=None, description="Current ceremony hash returned by the most recent approval read; prevents stale transitions. Omission is accepted for v0.7.5 schema compatibility but receives 428 and performs no transition.")
-    __properties: ClassVar[List[str]] = ["receipt_id", "reason", "expected_ceremony_hash"]
+    __properties: ClassVar[List[str]] = ["actor", "receipt_id", "reason", "expected_ceremony_hash"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -17389,6 +17444,7 @@ class TransitionApprovalCeremonyRequest(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "actor": obj.get("actor"),
             "receipt_id": obj.get("receipt_id"),
             "reason": obj.get("reason"),
             "expected_ceremony_hash": obj.get("expected_ceremony_hash")

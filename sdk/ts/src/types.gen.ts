@@ -1315,6 +1315,12 @@ export interface ApprovalCeremonyCreateRequest {
      */
     action?: string;
     /**
+     * Deprecated response-era field accepted for compatibility and ignored on create.
+     * @type {string}
+     * @memberof ApprovalCeremonyCreateRequest
+     */
+    state?: ApprovalCeremonyCreateRequestStateEnum;
+    /**
      *
      * @type {string}
      * @memberof ApprovalCeremonyCreateRequest
@@ -1334,16 +1340,16 @@ export interface ApprovalCeremonyCreateRequest {
     quorum?: number;
     /**
      *
-     * @type {number}
+     * @type {Date}
      * @memberof ApprovalCeremonyCreateRequest
      */
-    timelock_ms?: number;
+    timelock_until?: Date;
     /**
      *
-     * @type {number}
+     * @type {Date}
      * @memberof ApprovalCeremonyCreateRequest
      */
-    expires_in_ms?: number;
+    expires_at?: Date;
     /**
      *
      * @type {string}
@@ -1362,7 +1368,39 @@ export interface ApprovalCeremonyCreateRequest {
      * @memberof ApprovalCeremonyCreateRequest
      */
     break_glass?: boolean;
+    /**
+     * Deprecated response-era field accepted for compatibility and ignored on create.
+     * @type {Date}
+     * @memberof ApprovalCeremonyCreateRequest
+     */
+    created_at?: Date;
+    /**
+     * Deprecated response-era field accepted for compatibility and ignored on create.
+     * @type {Date}
+     * @memberof ApprovalCeremonyCreateRequest
+     */
+    updated_at?: Date;
+    /**
+     * Deprecated response-era field accepted for compatibility and ignored on create.
+     * @type {string}
+     * @memberof ApprovalCeremonyCreateRequest
+     */
+    ceremony_hash?: string;
 }
+
+
+/**
+ * @export
+ */
+export const ApprovalCeremonyCreateRequestStateEnum = {
+    Pending: 'pending',
+    Approved: 'approved',
+    Denied: 'denied',
+    Revoked: 'revoked',
+    Expired: 'expired'
+} as const;
+export type ApprovalCeremonyCreateRequestStateEnum = typeof ApprovalCeremonyCreateRequestStateEnum[keyof typeof ApprovalCeremonyCreateRequestStateEnum];
+
 
 /**
  * Check if a given object implements the ApprovalCeremonyCreateRequest interface.
@@ -1384,14 +1422,18 @@ export function ApprovalCeremonyCreateRequestFromJSONTyped(json: any, ignoreDisc
         'approval_id': json['approval_id'] == null ? undefined : json['approval_id'],
         'subject': json['subject'] == null ? undefined : json['subject'],
         'action': json['action'] == null ? undefined : json['action'],
+        'state': json['state'] == null ? undefined : json['state'],
         'requested_by': json['requested_by'] == null ? undefined : json['requested_by'],
         'approvers': json['approvers'] == null ? undefined : json['approvers'],
         'quorum': json['quorum'] == null ? undefined : json['quorum'],
-        'timelock_ms': json['timelock_ms'] == null ? undefined : json['timelock_ms'],
-        'expires_in_ms': json['expires_in_ms'] == null ? undefined : json['expires_in_ms'],
+        'timelock_until': json['timelock_until'] == null ? undefined : (new Date(json['timelock_until'])),
+        'expires_at': json['expires_at'] == null ? undefined : (new Date(json['expires_at'])),
         'reason': json['reason'] == null ? undefined : json['reason'],
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'break_glass': json['break_glass'] == null ? undefined : json['break_glass'],
+        'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
+        'updated_at': json['updated_at'] == null ? undefined : (new Date(json['updated_at'])),
+        'ceremony_hash': json['ceremony_hash'] == null ? undefined : json['ceremony_hash'],
     };
 }
 
@@ -1404,14 +1446,18 @@ export function ApprovalCeremonyCreateRequestToJSON(value?: ApprovalCeremonyCrea
         'approval_id': value['approval_id'],
         'subject': value['subject'],
         'action': value['action'],
+        'state': value['state'],
         'requested_by': value['requested_by'],
         'approvers': value['approvers'],
         'quorum': value['quorum'],
-        'timelock_ms': value['timelock_ms'],
-        'expires_in_ms': value['expires_in_ms'],
+        'timelock_until': value['timelock_until'] == null ? undefined : ((value['timelock_until']).toISOString()),
+        'expires_at': value['expires_at'] == null ? undefined : ((value['expires_at']).toISOString()),
         'reason': value['reason'],
         'receipt_id': value['receipt_id'],
         'break_glass': value['break_glass'],
+        'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
+        'updated_at': value['updated_at'] == null ? undefined : ((value['updated_at']).toISOString()),
+        'ceremony_hash': value['ceremony_hash'],
     };
 }
 
@@ -1470,13 +1516,31 @@ export interface ApprovalRequest {
      * @type {string}
      * @memberof ApprovalRequest
      */
-    public_key: string;
+    public_key?: string;
+    /**
+     * Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into public_key.
+     * @type {string}
+     * @memberof ApprovalRequest
+     */
+    public_key_b64?: string;
     /**
      * Hex-encoded Ed25519 signature or the hybrid signature envelope.
      * @type {string}
      * @memberof ApprovalRequest
      */
-    signature: string;
+    signature?: string;
+    /**
+     * Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into signature.
+     * @type {string}
+     * @memberof ApprovalRequest
+     */
+    signature_b64?: string;
+    /**
+     * Deprecated ceremony compatibility field. Runtime ignores it.
+     * @type {string}
+     * @memberof ApprovalRequest
+     */
+    challenge_response?: string;
     /**
      *
      * @type {string}
@@ -1544,8 +1608,6 @@ export interface ApprovalRequest {
  */
 export function instanceOfApprovalRequest(value: object): boolean {
     if (!('intent_hash' in value)) return false;
-    if (!('public_key' in value)) return false;
-    if (!('signature' in value)) return false;
     return true;
 }
 
@@ -1564,8 +1626,11 @@ export function ApprovalRequestFromJSONTyped(json: any, ignoreDiscriminator: boo
         'policy_hash': json['policy_hash'] == null ? undefined : json['policy_hash'],
         'nonce': json['nonce'] == null ? undefined : json['nonce'],
         'approver_id': json['approver_id'] == null ? undefined : json['approver_id'],
-        'public_key': json['public_key'],
-        'signature': json['signature'],
+        'public_key': json['public_key'] == null ? undefined : json['public_key'],
+        'public_key_b64': json['public_key_b64'] == null ? undefined : json['public_key_b64'],
+        'signature': json['signature'] == null ? undefined : json['signature'],
+        'signature_b64': json['signature_b64'] == null ? undefined : json['signature_b64'],
+        'challenge_response': json['challenge_response'] == null ? undefined : json['challenge_response'],
         'signature_profile': json['signature_profile'] == null ? undefined : json['signature_profile'],
         'signature_algorithm': json['signature_algorithm'] == null ? undefined : json['signature_algorithm'],
         'key_id': json['key_id'] == null ? undefined : json['key_id'],
@@ -1591,7 +1656,10 @@ export function ApprovalRequestToJSON(value?: ApprovalRequest | null): any {
         'nonce': value['nonce'],
         'approver_id': value['approver_id'],
         'public_key': value['public_key'],
+        'public_key_b64': value['public_key_b64'],
         'signature': value['signature'],
+        'signature_b64': value['signature_b64'],
+        'challenge_response': value['challenge_response'],
         'signature_profile': value['signature_profile'],
         'signature_algorithm': value['signature_algorithm'],
         'key_id': value['key_id'],
@@ -2789,11 +2857,23 @@ export interface BudgetCeiling {
      */
     window?: string;
     /**
+     * Deprecated compatibility alias for tool_call_limit.
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_tool_calls?: number;
+    /**
      *
      * @type {number}
      * @memberof BudgetCeiling
      */
     tool_call_limit?: number;
+    /**
+     * Deprecated compatibility alias for spend_limit_cents.
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_spend_minor?: number;
     /**
      *
      * @type {number}
@@ -2801,17 +2881,35 @@ export interface BudgetCeiling {
      */
     spend_limit_cents?: number;
     /**
+     * Deprecated compatibility alias for egress_limit_bytes.
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_egress_bytes?: number;
+    /**
      *
      * @type {number}
      * @memberof BudgetCeiling
      */
     egress_limit_bytes?: number;
     /**
+     * Deprecated compatibility alias for write_operation_limit.
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    max_write_ops?: number;
+    /**
      *
      * @type {number}
      * @memberof BudgetCeiling
      */
     write_operation_limit?: number;
+    /**
+     * Deprecated compatibility alias for approval_required_above_cents.
+     * @type {number}
+     * @memberof BudgetCeiling
+     */
+    approval_required_after?: number;
     /**
      *
      * @type {number}
@@ -2852,10 +2950,15 @@ export function BudgetCeilingFromJSONTyped(json: any, ignoreDiscriminator: boole
         'budget_id': json['budget_id'] == null ? undefined : json['budget_id'],
         'subject': json['subject'] == null ? undefined : json['subject'],
         'window': json['window'] == null ? undefined : json['window'],
+        'max_tool_calls': json['max_tool_calls'] == null ? undefined : json['max_tool_calls'],
         'tool_call_limit': json['tool_call_limit'] == null ? undefined : json['tool_call_limit'],
+        'max_spend_minor': json['max_spend_minor'] == null ? undefined : json['max_spend_minor'],
         'spend_limit_cents': json['spend_limit_cents'] == null ? undefined : json['spend_limit_cents'],
+        'max_egress_bytes': json['max_egress_bytes'] == null ? undefined : json['max_egress_bytes'],
         'egress_limit_bytes': json['egress_limit_bytes'] == null ? undefined : json['egress_limit_bytes'],
+        'max_write_ops': json['max_write_ops'] == null ? undefined : json['max_write_ops'],
         'write_operation_limit': json['write_operation_limit'] == null ? undefined : json['write_operation_limit'],
+        'approval_required_after': json['approval_required_after'] == null ? undefined : json['approval_required_after'],
         'approval_required_above_cents': json['approval_required_above_cents'] == null ? undefined : json['approval_required_above_cents'],
         'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
         'updated_at': json['updated_at'] == null ? undefined : (new Date(json['updated_at'])),
@@ -2871,10 +2974,15 @@ export function BudgetCeilingToJSON(value?: BudgetCeiling | null): any {
         'budget_id': value['budget_id'],
         'subject': value['subject'],
         'window': value['window'],
+        'max_tool_calls': value['max_tool_calls'],
         'tool_call_limit': value['tool_call_limit'],
+        'max_spend_minor': value['max_spend_minor'],
         'spend_limit_cents': value['spend_limit_cents'],
+        'max_egress_bytes': value['max_egress_bytes'],
         'egress_limit_bytes': value['egress_limit_bytes'],
+        'max_write_ops': value['max_write_ops'],
         'write_operation_limit': value['write_operation_limit'],
+        'approval_required_after': value['approval_required_after'],
         'approval_required_above_cents': value['approval_required_above_cents'],
         'policy_epoch': value['policy_epoch'],
         'updated_at': value['updated_at'] == null ? undefined : ((value['updated_at']).toISOString()),
@@ -13362,11 +13470,23 @@ export interface MCPAuthorizationProfile {
      */
     profile_id?: string;
     /**
+     * Deprecated singular compatibility alias for protocol_versions.
+     * @type {string}
+     * @memberof MCPAuthorizationProfile
+     */
+    protocol_version?: string;
+    /**
      *
      * @type {string}
      * @memberof MCPAuthorizationProfile
      */
     resource?: string;
+    /**
+     * Deprecated compatibility alias for resource.
+     * @type {string}
+     * @memberof MCPAuthorizationProfile
+     */
+    required_audience?: string;
     /**
      *
      * @type {Array<string>}
@@ -13380,6 +13500,12 @@ export interface MCPAuthorizationProfile {
      */
     scopes_supported?: Array<string>;
     /**
+     * Deprecated compatibility field. Runtime hashes the legacy map into tool_scope_hash when supplied.
+     * @type {{ [key: string]: any; }}
+     * @memberof MCPAuthorizationProfile
+     */
+    tool_scopes?: { [key: string]: any; };
+    /**
      *
      * @type {Array<string>}
      * @memberof MCPAuthorizationProfile
@@ -13391,6 +13517,12 @@ export interface MCPAuthorizationProfile {
      * @memberof MCPAuthorizationProfile
      */
     protocol_versions?: Array<string>;
+    /**
+     * Deprecated compatibility field retained for additive schema compatibility.
+     * @type {Date}
+     * @memberof MCPAuthorizationProfile
+     */
+    stale_after?: Date;
     /**
      *
      * @type {string}
@@ -13423,11 +13555,15 @@ export function MCPAuthorizationProfileFromJSONTyped(json: any, ignoreDiscrimina
     return {
 
         'profile_id': json['profile_id'] == null ? undefined : json['profile_id'],
+        'protocol_version': json['protocol_version'] == null ? undefined : json['protocol_version'],
         'resource': json['resource'] == null ? undefined : json['resource'],
+        'required_audience': json['required_audience'] == null ? undefined : json['required_audience'],
         'authorization_servers': json['authorization_servers'] == null ? undefined : json['authorization_servers'],
         'scopes_supported': json['scopes_supported'] == null ? undefined : json['scopes_supported'],
+        'tool_scopes': json['tool_scopes'] == null ? undefined : json['tool_scopes'],
         'required_scopes': json['required_scopes'] == null ? undefined : json['required_scopes'],
         'protocol_versions': json['protocol_versions'] == null ? undefined : json['protocol_versions'],
+        'stale_after': json['stale_after'] == null ? undefined : (new Date(json['stale_after'])),
         'tool_scope_hash': json['tool_scope_hash'] == null ? undefined : json['tool_scope_hash'],
         'profile_hash': json['profile_hash'] == null ? undefined : json['profile_hash'],
     };
@@ -13440,11 +13576,15 @@ export function MCPAuthorizationProfileToJSON(value?: MCPAuthorizationProfile | 
     return {
 
         'profile_id': value['profile_id'],
+        'protocol_version': value['protocol_version'],
         'resource': value['resource'],
+        'required_audience': value['required_audience'],
         'authorization_servers': value['authorization_servers'],
         'scopes_supported': value['scopes_supported'],
+        'tool_scopes': value['tool_scopes'],
         'required_scopes': value['required_scopes'],
         'protocol_versions': value['protocol_versions'],
+        'stale_after': value['stale_after'] == null ? undefined : ((value['stale_after']).toISOString()),
         'tool_scope_hash': value['tool_scope_hash'],
         'profile_hash': value['profile_hash'],
     };
@@ -14653,6 +14793,12 @@ export interface MCPScanRequest {
      * @memberof MCPScanRequest
      */
     tool_names?: Array<string>;
+    /**
+     * Deprecated compatibility field. Runtime ignores the caller-supplied manifest.
+     * @type {{ [key: string]: any; }}
+     * @memberof MCPScanRequest
+     */
+    manifest?: { [key: string]: any; };
 }
 
 /**
@@ -14678,6 +14824,7 @@ export function MCPScanRequestFromJSONTyped(json: any, ignoreDiscriminator: bool
         'transport': json['transport'] == null ? undefined : json['transport'],
         'endpoint': json['endpoint'] == null ? undefined : json['endpoint'],
         'tool_names': json['tool_names'] == null ? undefined : json['tool_names'],
+        'manifest': json['manifest'] == null ? undefined : json['manifest'],
     };
 }
 
@@ -14692,6 +14839,7 @@ export function MCPScanRequestToJSON(value?: MCPScanRequest | null): any {
         'transport': value['transport'],
         'endpoint': value['endpoint'],
         'tool_names': value['tool_names'],
+        'manifest': value['manifest'],
     };
 }
 
@@ -18841,6 +18989,36 @@ export interface TelemetryExportRequest {
      */
     record_hash?: string;
     /**
+     * Deprecated compatibility field. Runtime ignores it on export requests.
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    policy_epoch?: string;
+    /**
+     * Deprecated compatibility field. Runtime ignores it on export requests.
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    verdict?: string;
+    /**
+     * Deprecated compatibility field. Runtime ignores it on export requests.
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    reason_code?: string;
+    /**
+     * Deprecated compatibility field. Runtime ignores it on export requests.
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    sandbox_grant_hash?: string;
+    /**
+     * Deprecated compatibility field. Runtime ignores it on export requests.
+     * @type {string}
+     * @memberof TelemetryExportRequest
+     */
+    authz_snapshot_hash?: string;
+    /**
      *
      * @type {{ [key: string]: string; }}
      * @memberof TelemetryExportRequest
@@ -18868,6 +19046,11 @@ export function TelemetryExportRequestFromJSONTyped(json: any, ignoreDiscriminat
         'format': json['format'] == null ? undefined : json['format'],
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'record_hash': json['record_hash'] == null ? undefined : json['record_hash'],
+        'policy_epoch': json['policy_epoch'] == null ? undefined : json['policy_epoch'],
+        'verdict': json['verdict'] == null ? undefined : json['verdict'],
+        'reason_code': json['reason_code'] == null ? undefined : json['reason_code'],
+        'sandbox_grant_hash': json['sandbox_grant_hash'] == null ? undefined : json['sandbox_grant_hash'],
+        'authz_snapshot_hash': json['authz_snapshot_hash'] == null ? undefined : json['authz_snapshot_hash'],
         'attributes': json['attributes'] == null ? undefined : json['attributes'],
     };
 }
@@ -18881,6 +19064,11 @@ export function TelemetryExportRequestToJSON(value?: TelemetryExportRequest | nu
         'format': value['format'],
         'receipt_id': value['receipt_id'],
         'record_hash': value['record_hash'],
+        'policy_epoch': value['policy_epoch'],
+        'verdict': value['verdict'],
+        'reason_code': value['reason_code'],
+        'sandbox_grant_hash': value['sandbox_grant_hash'],
+        'authz_snapshot_hash': value['authz_snapshot_hash'],
         'attributes': value['attributes'],
     };
 }
@@ -19088,6 +19276,12 @@ export function TelemetryOTelConfigToJSON(value?: TelemetryOTelConfig | null): a
  */
 export interface TransitionApprovalCeremonyRequest {
     /**
+     * Deprecated compatibility field. Runtime ignores caller-supplied actor and uses the authenticated principal.
+     * @type {string}
+     * @memberof TransitionApprovalCeremonyRequest
+     */
+    actor?: string;
+    /**
      *
      * @type {string}
      * @memberof TransitionApprovalCeremonyRequest
@@ -19124,6 +19318,7 @@ export function TransitionApprovalCeremonyRequestFromJSONTyped(json: any, ignore
     }
     return {
 
+        'actor': json['actor'] == null ? undefined : json['actor'],
         'receipt_id': json['receipt_id'] == null ? undefined : json['receipt_id'],
         'reason': json['reason'] == null ? undefined : json['reason'],
         'expected_ceremony_hash': json['expected_ceremony_hash'] == null ? undefined : json['expected_ceremony_hash'],
@@ -19136,6 +19331,7 @@ export function TransitionApprovalCeremonyRequestToJSON(value?: TransitionApprov
     }
     return {
 
+        'actor': value['actor'],
         'receipt_id': value['receipt_id'],
         'reason': value['reason'],
         'expected_ceremony_hash': value['expected_ceremony_hash'],

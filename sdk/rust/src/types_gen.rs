@@ -568,22 +568,34 @@ pub struct ApprovalCeremonyCreateRequest {
     pub subject: Option<String>,
     #[serde(rename = "action", skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
+    /// Deprecated response-era field accepted for compatibility and ignored on create.
+    #[serde(rename = "state", skip_serializing_if = "Option::is_none")]
+    pub state: Option<ApprovalCeremonyCreateRequestState>,
     #[serde(rename = "requested_by", skip_serializing_if = "Option::is_none")]
     pub requested_by: Option<String>,
     #[serde(rename = "approvers", skip_serializing_if = "Option::is_none")]
     pub approvers: Option<Vec<String>>,
     #[serde(rename = "quorum", skip_serializing_if = "Option::is_none")]
     pub quorum: Option<i32>,
-    #[serde(rename = "timelock_ms", skip_serializing_if = "Option::is_none")]
-    pub timelock_ms: Option<i64>,
-    #[serde(rename = "expires_in_ms", skip_serializing_if = "Option::is_none")]
-    pub expires_in_ms: Option<i64>,
+    #[serde(rename = "timelock_until", skip_serializing_if = "Option::is_none")]
+    pub timelock_until: Option<String>,
+    #[serde(rename = "expires_at", skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     #[serde(rename = "receipt_id", skip_serializing_if = "Option::is_none")]
     pub receipt_id: Option<String>,
     #[serde(rename = "break_glass", skip_serializing_if = "Option::is_none")]
     pub break_glass: Option<bool>,
+    /// Deprecated response-era field accepted for compatibility and ignored on create.
+    #[serde(rename = "created_at", skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    /// Deprecated response-era field accepted for compatibility and ignored on create.
+    #[serde(rename = "updated_at", skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    /// Deprecated response-era field accepted for compatibility and ignored on create.
+    #[serde(rename = "ceremony_hash", skip_serializing_if = "Option::is_none")]
+    pub ceremony_hash: Option<String>,
 }
 
 impl ApprovalCeremonyCreateRequest {
@@ -592,15 +604,39 @@ impl ApprovalCeremonyCreateRequest {
             approval_id: None,
             subject: None,
             action: None,
+            state: None,
             requested_by: None,
             approvers: None,
             quorum: None,
-            timelock_ms: None,
-            expires_in_ms: None,
+            timelock_until: None,
+            expires_at: None,
             reason: None,
             receipt_id: None,
             break_glass: None,
+            created_at: None,
+            updated_at: None,
+            ceremony_hash: None,
         }
+    }
+}
+/// Deprecated response-era field accepted for compatibility and ignored on create.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum ApprovalCeremonyCreateRequestState {
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "approved")]
+    Approved,
+    #[serde(rename = "denied")]
+    Denied,
+    #[serde(rename = "revoked")]
+    Revoked,
+    #[serde(rename = "expired")]
+    Expired,
+}
+
+impl Default for ApprovalCeremonyCreateRequestState {
+    fn default() -> ApprovalCeremonyCreateRequestState {
+        Self::Pending
     }
 }
 
@@ -629,11 +665,20 @@ pub struct ApprovalRequest {
     #[serde(rename = "approver_id", skip_serializing_if = "Option::is_none")]
     pub approver_id: Option<String>,
     /// Hex-encoded Ed25519 public key or the hybrid key envelope.
-    #[serde(rename = "public_key")]
-    pub public_key: String,
+    #[serde(rename = "public_key", skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
+    /// Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into public_key.
+    #[serde(rename = "public_key_b64", skip_serializing_if = "Option::is_none")]
+    pub public_key_b64: Option<String>,
     /// Hex-encoded Ed25519 signature or the hybrid signature envelope.
-    #[serde(rename = "signature")]
-    pub signature: String,
+    #[serde(rename = "signature", skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
+    /// Deprecated v0.8.4 alias. Runtime decodes canonical base64 Ed25519 bytes into signature.
+    #[serde(rename = "signature_b64", skip_serializing_if = "Option::is_none")]
+    pub signature_b64: Option<String>,
+    /// Deprecated ceremony compatibility field. Runtime ignores it.
+    #[serde(rename = "challenge_response", skip_serializing_if = "Option::is_none")]
+    pub challenge_response: Option<String>,
     #[serde(rename = "signature_profile", skip_serializing_if = "Option::is_none")]
     pub signature_profile: Option<String>,
     #[serde(rename = "signature_algorithm", skip_serializing_if = "Option::is_none")]
@@ -657,15 +702,18 @@ pub struct ApprovalRequest {
 }
 
 impl ApprovalRequest {
-    pub fn new(intent_hash: String, public_key: String, signature: String) -> ApprovalRequest {
+    pub fn new(intent_hash: String) -> ApprovalRequest {
         ApprovalRequest {
             intent_hash,
             plan_hash: None,
             policy_hash: None,
             nonce: None,
             approver_id: None,
-            public_key,
-            signature,
+            public_key: None,
+            public_key_b64: None,
+            signature: None,
+            signature_b64: None,
+            challenge_response: None,
             signature_profile: None,
             signature_algorithm: None,
             key_id: None,
@@ -1245,14 +1293,29 @@ pub struct BudgetCeiling {
     pub subject: Option<String>,
     #[serde(rename = "window", skip_serializing_if = "Option::is_none")]
     pub window: Option<String>,
+    /// Deprecated compatibility alias for tool_call_limit.
+    #[serde(rename = "max_tool_calls", skip_serializing_if = "Option::is_none")]
+    pub max_tool_calls: Option<i32>,
     #[serde(rename = "tool_call_limit", skip_serializing_if = "Option::is_none")]
     pub tool_call_limit: Option<i32>,
+    /// Deprecated compatibility alias for spend_limit_cents.
+    #[serde(rename = "max_spend_minor", skip_serializing_if = "Option::is_none")]
+    pub max_spend_minor: Option<i64>,
     #[serde(rename = "spend_limit_cents", skip_serializing_if = "Option::is_none")]
     pub spend_limit_cents: Option<i64>,
+    /// Deprecated compatibility alias for egress_limit_bytes.
+    #[serde(rename = "max_egress_bytes", skip_serializing_if = "Option::is_none")]
+    pub max_egress_bytes: Option<i64>,
     #[serde(rename = "egress_limit_bytes", skip_serializing_if = "Option::is_none")]
     pub egress_limit_bytes: Option<i64>,
+    /// Deprecated compatibility alias for write_operation_limit.
+    #[serde(rename = "max_write_ops", skip_serializing_if = "Option::is_none")]
+    pub max_write_ops: Option<i32>,
     #[serde(rename = "write_operation_limit", skip_serializing_if = "Option::is_none")]
     pub write_operation_limit: Option<i32>,
+    /// Deprecated compatibility alias for approval_required_above_cents.
+    #[serde(rename = "approval_required_after", skip_serializing_if = "Option::is_none")]
+    pub approval_required_after: Option<i32>,
     #[serde(rename = "approval_required_above_cents", skip_serializing_if = "Option::is_none")]
     pub approval_required_above_cents: Option<i64>,
     #[serde(rename = "policy_epoch", skip_serializing_if = "Option::is_none")]
@@ -1267,10 +1330,15 @@ impl BudgetCeiling {
             budget_id: None,
             subject: None,
             window: None,
+            max_tool_calls: None,
             tool_call_limit: None,
+            max_spend_minor: None,
             spend_limit_cents: None,
+            max_egress_bytes: None,
             egress_limit_bytes: None,
+            max_write_ops: None,
             write_operation_limit: None,
+            approval_required_after: None,
             approval_required_above_cents: None,
             policy_epoch: None,
             updated_at: None,
@@ -5695,16 +5763,28 @@ impl Default for LocalSessionExchangeResponseEntitlements {
 pub struct McpAuthorizationProfile {
     #[serde(rename = "profile_id", skip_serializing_if = "Option::is_none")]
     pub profile_id: Option<String>,
+    /// Deprecated singular compatibility alias for protocol_versions.
+    #[serde(rename = "protocol_version", skip_serializing_if = "Option::is_none")]
+    pub protocol_version: Option<String>,
     #[serde(rename = "resource", skip_serializing_if = "Option::is_none")]
     pub resource: Option<String>,
+    /// Deprecated compatibility alias for resource.
+    #[serde(rename = "required_audience", skip_serializing_if = "Option::is_none")]
+    pub required_audience: Option<String>,
     #[serde(rename = "authorization_servers", skip_serializing_if = "Option::is_none")]
     pub authorization_servers: Option<Vec<String>>,
     #[serde(rename = "scopes_supported", skip_serializing_if = "Option::is_none")]
     pub scopes_supported: Option<Vec<String>>,
+    /// Deprecated compatibility field. Runtime hashes the legacy map into tool_scope_hash when supplied.
+    #[serde(rename = "tool_scopes", skip_serializing_if = "Option::is_none")]
+    pub tool_scopes: Option<std::collections::HashMap<String, serde_json::Value>>,
     #[serde(rename = "required_scopes", skip_serializing_if = "Option::is_none")]
     pub required_scopes: Option<Vec<String>>,
     #[serde(rename = "protocol_versions", skip_serializing_if = "Option::is_none")]
     pub protocol_versions: Option<Vec<String>>,
+    /// Deprecated compatibility field retained for additive schema compatibility.
+    #[serde(rename = "stale_after", skip_serializing_if = "Option::is_none")]
+    pub stale_after: Option<String>,
     #[serde(rename = "tool_scope_hash", skip_serializing_if = "Option::is_none")]
     pub tool_scope_hash: Option<String>,
     #[serde(rename = "profile_hash", skip_serializing_if = "Option::is_none")]
@@ -5715,11 +5795,15 @@ impl McpAuthorizationProfile {
     pub fn new() -> McpAuthorizationProfile {
         McpAuthorizationProfile {
             profile_id: None,
+            protocol_version: None,
             resource: None,
+            required_audience: None,
             authorization_servers: None,
             scopes_supported: None,
+            tool_scopes: None,
             required_scopes: None,
             protocol_versions: None,
+            stale_after: None,
             tool_scope_hash: None,
             profile_hash: None,
         }
@@ -6116,6 +6200,9 @@ pub struct McpScanRequest {
     pub endpoint: Option<String>,
     #[serde(rename = "tool_names", skip_serializing_if = "Option::is_none")]
     pub tool_names: Option<Vec<String>>,
+    /// Deprecated compatibility field. Runtime ignores the caller-supplied manifest.
+    #[serde(rename = "manifest", skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 impl McpScanRequest {
@@ -6126,6 +6213,7 @@ impl McpScanRequest {
             transport: None,
             endpoint: None,
             tool_names: None,
+            manifest: None,
         }
     }
 }
@@ -8166,6 +8254,21 @@ pub struct TelemetryExportRequest {
     pub receipt_id: Option<String>,
     #[serde(rename = "record_hash", skip_serializing_if = "Option::is_none")]
     pub record_hash: Option<String>,
+    /// Deprecated compatibility field. Runtime ignores it on export requests.
+    #[serde(rename = "policy_epoch", skip_serializing_if = "Option::is_none")]
+    pub policy_epoch: Option<String>,
+    /// Deprecated compatibility field. Runtime ignores it on export requests.
+    #[serde(rename = "verdict", skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
+    /// Deprecated compatibility field. Runtime ignores it on export requests.
+    #[serde(rename = "reason_code", skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    /// Deprecated compatibility field. Runtime ignores it on export requests.
+    #[serde(rename = "sandbox_grant_hash", skip_serializing_if = "Option::is_none")]
+    pub sandbox_grant_hash: Option<String>,
+    /// Deprecated compatibility field. Runtime ignores it on export requests.
+    #[serde(rename = "authz_snapshot_hash", skip_serializing_if = "Option::is_none")]
+    pub authz_snapshot_hash: Option<String>,
     #[serde(rename = "attributes", skip_serializing_if = "Option::is_none")]
     pub attributes: Option<std::collections::HashMap<String, String>>,
 }
@@ -8176,6 +8279,11 @@ impl TelemetryExportRequest {
             format: None,
             receipt_id: None,
             record_hash: None,
+            policy_epoch: None,
+            verdict: None,
+            reason_code: None,
+            sandbox_grant_hash: None,
+            authz_snapshot_hash: None,
             attributes: None,
         }
     }
@@ -8268,6 +8376,9 @@ impl TelemetryOTelConfig {
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TransitionApprovalCeremonyRequest {
+    /// Deprecated compatibility field. Runtime ignores caller-supplied actor and uses the authenticated principal.
+    #[serde(rename = "actor", skip_serializing_if = "Option::is_none")]
+    pub actor: Option<String>,
     #[serde(rename = "receipt_id", skip_serializing_if = "Option::is_none")]
     pub receipt_id: Option<String>,
     #[serde(rename = "reason", skip_serializing_if = "Option::is_none")]
@@ -8280,6 +8391,7 @@ pub struct TransitionApprovalCeremonyRequest {
 impl TransitionApprovalCeremonyRequest {
     pub fn new() -> TransitionApprovalCeremonyRequest {
         TransitionApprovalCeremonyRequest {
+            actor: None,
             receipt_id: None,
             reason: None,
             expected_ceremony_hash: None,

@@ -166,9 +166,10 @@ These values are not exported:
 
 `source_pack_hash` is not a hash of source files, config bytes, receipt files,
 or other raw scan input. It is `sha256:` plus the SHA-256 digest of the
-RFC 8785-canonical JSON form of an anonymized projection summary. Static scans
-hash `sourceSummary`: `files_scanned`, `files_skipped`, aggregate vendor and
-severity counts, `boundary_grade`, `helm_present`, `mcp_server_count`, and
+HELM canonical JSON form of an anonymized projection summary, as produced by
+`canonicalize.CanonicalHash`. Static scans hash `sourceSummary`:
+`files_scanned`, `files_skipped`, aggregate vendor and severity counts,
+`boundary_grade`, `helm_present`, `mcp_server_count`, and
 `static_config_files_read`. Receipt scans hash the corresponding anonymized
 `receiptSourceSummary`: receipt, action, denial, and observe counts plus
 effect-type, tool-class, and risk-code buckets. Raw file content and raw

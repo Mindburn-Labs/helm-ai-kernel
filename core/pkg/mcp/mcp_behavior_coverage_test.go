@@ -663,6 +663,9 @@ func TestGovernanceFirewall_InterceptPlan_OneDenyMakesDeny(t *testing.T) {
 func TestGovernanceFirewall_WrapHandler_SetsReceiptID(t *testing.T) {
 	eval := &mockEvaluator{verdict: guardian.VerdictAllow}
 	catalog := NewToolCatalog()
+	if err := catalog.Register(context.Background(), ToolRef{Name: "t", EffectClass: "E0", RiskTier: contracts.RiskTierLow}); err != nil {
+		t.Fatalf("register classified tool: %v", err)
+	}
 	fw := NewGovernanceFirewall(eval, catalog)
 	handler := func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
 		return ToolExecutionResponse{Content: "done"}, nil

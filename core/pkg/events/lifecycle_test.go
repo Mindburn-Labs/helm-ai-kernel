@@ -157,6 +157,7 @@ func TestPolicyAppliedProjectsPolicyIdentity(t *testing.T) {
 	decision := contracts.DecisionRecord{
 		ID:                "dec_1",
 		CorrelationID:     "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+		PolicyBackend:     "helm",
 		PolicyVersion:     "v3",
 		PolicyContentHash: "sha256:policy",
 		PolicyEpoch:       "epoch_9",
@@ -169,6 +170,9 @@ func TestPolicyAppliedProjectsPolicyIdentity(t *testing.T) {
 	}
 	if got := event.Fields["policy_content_hash"]; got != "sha256:policy" {
 		t.Errorf("policy_content_hash = %v, want the decision's bound hash", got)
+	}
+	if got := event.Fields["policy_backend"]; got != "helm" {
+		t.Errorf("policy_backend = %v, want the approved backend", got)
 	}
 	rules, ok := event.Fields["rules_fired"].([]string)
 	if !ok || len(rules) != 2 {

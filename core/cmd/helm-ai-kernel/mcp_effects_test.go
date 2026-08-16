@@ -15,6 +15,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/receiptverify"
 	rtmcp "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters/mcp"
@@ -258,6 +259,23 @@ func TestGitHubEffectsRuntimeRefusesWithoutSigningSeed(t *testing.T) {
 	})
 	if seeded.PermitSigningPublicKey() == "" {
 		t.Fatal("a seeded bridge reported no signing key; permits would be unsigned")
+	}
+}
+
+func TestLifecycleFirewallOptionsRequireExactSyntheticEnvironment(t *testing.T) {
+	for _, env := range []string{events.EnvSynthetic, events.EnvPilot, events.EnvCustomerHosted, events.EnvProduction} {
+		t.Run(env, func(t *testing.T) {
+			t.Setenv("HELM_ENV", env)
+			if env == events.EnvSynthetic {
+				if got := len(lifecycleFirewallOptions()); got != 2 {
+					t.Fatalf("synthetic runtime options = %d, want environment plus slog publisher", got)
+				}
+				return
+			}
+			if got := len(lifecycleFirewallOptions()); got != 1 {
+				t.Fatalf("%s runtime options = %d, want environment only", env, got)
+			}
+		})
 	}
 }
 

@@ -39,6 +39,7 @@ func (e lifecycleEvaluator) EvaluateDecision(context.Context, guardian.DecisionR
 }
 
 func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T) {
+	t.Setenv("HELM_ENV", events.EnvSynthetic)
 	traceID, err := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +77,6 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 			arguments:    map[string]any{"path": "/tmp/input"},
 			wantTerminal: events.RequestCompleted,
 			wantHandler:  true,
-			tenantID:     "trusted-tenant",
 		},
 		{
 			name:         "allow dispatches only with authoritative receipt",
@@ -96,26 +96,30 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 			},
 		},
 		{
-			name:         "allow completes without catalog",
+			name:         "missing catalog classification fails closed",
 			verdict:      string(contracts.VerdictAllow),
-			wantTerminal: events.RequestCompleted,
-			wantHandler:  true,
+			wantTerminal: events.RequestFailed,
+			wantFailure:  "classification",
+			preflight:    true,
 		},
 		{
 			name:         "deny fails",
 			verdict:      string(contracts.VerdictDeny),
+			catalog:      readOnlyCatalog(t),
 			wantTerminal: events.RequestFailed,
 			wantFailure:  "policy",
 		},
 		{
 			name:         "escalate fails after escalation",
 			verdict:      string(contracts.VerdictEscalate),
+			catalog:      readOnlyCatalog(t),
 			wantTerminal: events.RequestFailed,
 			wantFailure:  "escalation",
 		},
 		{
 			name:         "evaluator failure closes",
 			verdict:      string(contracts.VerdictAllow),
+			catalog:      readOnlyCatalog(t),
 			evaluatorErr: errors.New("raw evaluator detail"),
 			wantTerminal: events.RequestFailed,
 			wantFailure:  "evaluator",
@@ -123,6 +127,7 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 		{
 			name:         "handler failure closes",
 			verdict:      string(contracts.VerdictAllow),
+			catalog:      readOnlyCatalog(t),
 			handlerErr:   errors.New("raw handler detail"),
 			wantTerminal: events.RequestFailed,
 			wantFailure:  "handler",
@@ -320,8 +325,8 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 			}
 			if !tt.preflight {
 				classified := firstEvent(capture.events, events.RequestClassified)
-				if classified.Fields["classification_source"] != "catalog_hint" {
-					t.Fatalf("classification source = %v, want catalog_hint", classified.Fields["classification_source"])
+				if classified.Fields["classification_source"] != "pep_catalog" {
+					t.Fatalf("classification source = %v, want pep_catalog", classified.Fields["classification_source"])
 				}
 			}
 			for _, event := range capture.events {
@@ -350,11 +355,142 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 	}
 }
 
+func TestGovernanceFirewallLifecyclePublicationHonorsTrustedEnvironment(t *testing.T) {
+	for _, env := range []string{events.EnvSynthetic, events.EnvPilot, events.EnvCustomerHosted, events.EnvProduction} {
+		t.Run(env, func(t *testing.T) {
+			t.Setenv("HELM_ENV", env)
+			capture := &lifecycleCapture{}
+			catalog := readOnlyCatalog(t)
+			fw := NewGovernanceFirewall(
+				lifecycleEvaluator{decision: &contracts.DecisionRecord{
+					ID: "decision-env", Action: "EXECUTE_TOOL", Resource: "read",
+					Verdict: string(contracts.VerdictAllow),
+				}},
+				catalog,
+				WithLifecyclePublisher(capture.publish),
+			)
+			called := false
+			resp, err := fw.WrapToolHandler(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+				called = true
+				return ToolExecutionResponse{Content: "ok"}, nil
+			})(context.Background(), ToolExecutionRequest{ToolName: "read", SessionID: "synthetic-session"})
+			if err != nil || !called || resp.IsError {
+				t.Fatalf("runtime behavior changed for %s: resp=%+v err=%v called=%v", env, resp, err, called)
+			}
+			if env == events.EnvSynthetic {
+				if len(capture.events) == 0 {
+					t.Fatal("synthetic runtime did not publish lifecycle events")
+				}
+				return
+			}
+			if len(capture.events) != 0 {
+				t.Fatalf("%s runtime published lifecycle events", env)
+			}
+		})
+	}
+
+	t.Run("tenant is not synthetic", func(t *testing.T) {
+		t.Setenv("HELM_ENV", events.EnvSynthetic)
+		capture := &lifecycleCapture{}
+		fw := NewGovernanceFirewall(
+			lifecycleEvaluator{decision: &contracts.DecisionRecord{
+				ID: "decision-tenant", Action: "EXECUTE_TOOL", Resource: "read",
+				Verdict: string(contracts.VerdictAllow),
+			}},
+			readOnlyCatalog(t),
+			WithLifecyclePublisher(capture.publish),
+		)
+		ctx := auth.WithPrincipal(context.Background(), &auth.BasePrincipal{TenantID: "tenant-real"})
+		_, err := fw.WrapToolHandler(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+			return ToolExecutionResponse{Content: "ok"}, nil
+		})(ctx, ToolExecutionRequest{ToolName: "read", SessionID: "synthetic-session"})
+		if err != nil {
+			t.Fatalf("tenant request failed: %v", err)
+		}
+		if len(capture.events) != 0 {
+			t.Fatal("tenant-bearing request was published as synthetic")
+		}
+	})
+}
+
+func TestGovernanceFirewallUsesExplicitCatalogClassification(t *testing.T) {
+	t.Setenv("HELM_ENV", events.EnvSynthetic)
+	catalog := NewToolCatalog()
+	if err := catalog.Register(context.Background(), ToolRef{
+		Name:        "hinted",
+		EffectClass: "E2",
+		RiskTier:    contracts.RiskTierMedium,
+		Annotations: &ToolAnnotations{DestructiveHint: true, ReadOnlyHint: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	capture := &lifecycleCapture{}
+	called := false
+	fw := NewGovernanceFirewall(lifecycleEvaluator{decision: &contracts.DecisionRecord{
+		ID: "decision-class", Action: "EXECUTE_TOOL", Resource: "hinted", Verdict: string(contracts.VerdictAllow),
+	}}, catalog, WithLifecyclePublisher(capture.publish))
+	_, err := fw.WrapToolHandler(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		called = true
+		return ToolExecutionResponse{Content: "ok"}, nil
+	})(context.Background(), ToolExecutionRequest{ToolName: "hinted", SessionID: "session"})
+	if err != nil || !called {
+		t.Fatalf("explicit classification request failed: err=%v called=%v", err, called)
+	}
+	classified := firstEvent(capture.events, events.RequestClassified)
+	if classified.Fields["effect_class"] != "E2" || classified.Fields["risk_tier"] != string(contracts.RiskTierMedium) {
+		t.Fatalf("annotation hints changed explicit classification: %+v", classified.Fields)
+	}
+	if classified.Fields["classification_source"] != "pep_catalog" {
+		t.Fatalf("classification source = %v, want pep_catalog", classified.Fields["classification_source"])
+	}
+}
+
+func TestGovernanceFirewallMissingOrInvalidClassificationFailsBeforeEvaluation(t *testing.T) {
+	t.Setenv("HELM_ENV", events.EnvSynthetic)
+	for _, tc := range []struct {
+		name        string
+		effectClass string
+		riskTier    contracts.RiskTier
+	}{
+		{name: "missing", riskTier: contracts.RiskTierLow},
+		{name: "invalid effect", effectClass: "E9", riskTier: contracts.RiskTierLow},
+		{name: "invalid risk", effectClass: "E2", riskTier: contracts.RiskTier("UNKNOWN")},
+		{name: "mismatched risk", effectClass: "E4", riskTier: contracts.RiskTierMedium},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			catalog := NewToolCatalog()
+			if err := catalog.Register(context.Background(), ToolRef{Name: "tool", EffectClass: tc.effectClass, RiskTier: tc.riskTier}); err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			evaluator := lifecycleEvaluator{calls: &calls, decision: &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)}}
+			capture := &lifecycleCapture{}
+			handlerCalled := false
+			fw := NewGovernanceFirewall(evaluator, catalog, WithLifecyclePublisher(capture.publish))
+			_, err := fw.WrapToolHandler(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+				handlerCalled = true
+				return ToolExecutionResponse{Content: "unexpected"}, nil
+			})(context.Background(), ToolExecutionRequest{ToolName: "tool", SessionID: "session"})
+			if err != nil {
+				t.Fatalf("wrapper error = %v", err)
+			}
+			if calls != 0 || handlerCalled {
+				t.Fatalf("classification failure reached evaluator/handler: evaluator=%d handler=%v", calls, handlerCalled)
+			}
+			if countEvent(capture.events, events.RequestReceived) != 1 || countTerminal(capture.events) != 1 || countEvent(capture.events, events.RequestClassified) != 0 {
+				t.Fatalf("unexpected lifecycle shape: %+v", capture.events)
+			}
+		})
+	}
+}
+
 func readOnlyCatalog(t *testing.T) *ToolCatalog {
 	t.Helper()
 	catalog := NewToolCatalog()
 	if err := catalog.Register(context.Background(), ToolRef{
 		Name:        "read",
+		EffectClass: "E0",
+		RiskTier:    contracts.RiskTierLow,
 		Annotations: &ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true},
 	}); err != nil {
 		t.Fatal(err)

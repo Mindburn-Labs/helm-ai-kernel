@@ -60,6 +60,9 @@ func TestGovernanceFirewall_Intercept_EvaluatorError(t *testing.T) {
 func TestGovernanceFirewall_WrapHandler_Allow(t *testing.T) {
 	eval := &mockEvaluator{verdict: guardian.VerdictAllow}
 	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name: "test", EffectClass: "E0", RiskTier: contracts.RiskTierLow,
+	}))
 	fw := NewGovernanceFirewall(eval, catalog)
 
 	executed := false

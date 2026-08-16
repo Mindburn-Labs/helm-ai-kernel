@@ -17,6 +17,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -112,9 +113,18 @@ func newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator mcppkg.PolicyEvaluator,
 			}
 		}
 	}
-	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog)
+	firewall := mcppkg.NewGovernanceFirewall(evaluator, catalog, lifecycleFirewallOptions()...)
 
 	return catalog, firewall.GovernedExecutor(localMCPToolHandler(evaluator, githubEffects)), nil
+}
+
+func lifecycleFirewallOptions() []mcppkg.GovernanceFirewallOption {
+	lifecycleEnv := os.Getenv("HELM_ENV")
+	options := []mcppkg.GovernanceFirewallOption{mcppkg.WithLifecycleEnvironment(lifecycleEnv)}
+	if lifecycleEnv == events.EnvSynthetic {
+		options = append(options, mcppkg.WithLifecyclePublisher(events.SlogPublisher(nil)))
+	}
+	return options
 }
 
 func newLocalMCPGateway() (*mcppkg.Gateway, error) {

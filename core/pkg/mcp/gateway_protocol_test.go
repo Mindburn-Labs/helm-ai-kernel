@@ -272,7 +272,11 @@ func TestGateway_AnonymousGovernedExecutorReachesScopedTool(t *testing.T) {
 		Schema:         map[string]any{"type": "object"},
 		RequiredScopes: []string{"mcp:tool:scoped"},
 	}))
-	firewall := NewGovernanceFirewall(&mockEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	governanceCatalog := NewToolCatalog()
+	require.NoError(t, governanceCatalog.Register(context.Background(), ToolRef{
+		Name: "scoped_tool", EffectClass: "E0", RiskTier: contracts.RiskTierLow,
+	}))
+	firewall := NewGovernanceFirewall(&mockEvaluator{verdict: string(contracts.VerdictAllow)}, governanceCatalog)
 	gw := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(handler)))
 	mux := http.NewServeMux()
 	gw.RegisterRoutes(mux)

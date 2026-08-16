@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // Catalog manages the registry of approved tools.
@@ -17,14 +19,19 @@ type Catalog interface {
 
 // ToolRef represents a tool reference for catalog search and definition.
 type ToolRef struct {
-	Name           string           `json:"name"`
-	Title          string           `json:"title,omitempty"`
-	Description    string           `json:"description"`
-	ServerID       string           `json:"server_id,omitempty"`
-	Schema         any              `json:"schema,omitempty"` // Legacy input schema alias for /mcp/v1/*
-	OutputSchema   any              `json:"output_schema,omitempty"`
-	Annotations    *ToolAnnotations `json:"annotations,omitempty"`
-	RequiredScopes []string         `json:"required_scopes,omitempty"`
+	Name         string           `json:"name"`
+	Title        string           `json:"title,omitempty"`
+	Description  string           `json:"description"`
+	ServerID     string           `json:"server_id,omitempty"`
+	Schema       any              `json:"schema,omitempty"` // Legacy input schema alias for /mcp/v1/*
+	OutputSchema any              `json:"output_schema,omitempty"`
+	Annotations  *ToolAnnotations `json:"annotations,omitempty"`
+	// EffectClass and RiskTier are the source-owned PEP classification anchor.
+	// MCP annotations remain presentation hints and never determine governance
+	// risk classification.
+	EffectClass    string             `json:"effect_class,omitempty"`
+	RiskTier       contracts.RiskTier `json:"risk_tier,omitempty"`
+	RequiredScopes []string           `json:"required_scopes,omitempty"`
 }
 
 // Validate checks that a ToolRef has a non-empty Name.
@@ -75,6 +82,8 @@ func (c *ToolCatalog) RegisterCommonTools() {
 				},
 				"required": []string{"path", "text", "size_bytes"},
 			},
+			EffectClass: "E0",
+			RiskTier:    contracts.RiskTierLow,
 			Annotations: &ToolAnnotations{
 				ReadOnlyHint:   true,
 				IdempotentHint: true,
@@ -102,6 +111,8 @@ func (c *ToolCatalog) RegisterCommonTools() {
 				},
 				"required": []string{"path", "bytes_written", "status"},
 			},
+			EffectClass: "E4",
+			RiskTier:    contracts.RiskTierHigh,
 			Annotations: &ToolAnnotations{
 				DestructiveHint: true,
 				IdempotentHint:  true,
@@ -143,6 +154,8 @@ func (c *ToolCatalog) RegisterGovernanceTools() {
 				},
 				"required": []string{"verdict", "receipt_id", "reason_code"},
 			},
+			EffectClass: "E0",
+			RiskTier:    contracts.RiskTierLow,
 			Annotations: &ToolAnnotations{
 				ReadOnlyHint:   true,
 				IdempotentHint: true,
@@ -187,6 +200,8 @@ func (c *ToolCatalog) RegisterGovernanceTools() {
 				},
 				"required": []string{"accepted", "receipt_id"},
 			},
+			EffectClass: "E0",
+			RiskTier:    contracts.RiskTierLow,
 			Annotations: &ToolAnnotations{
 				ReadOnlyHint:   true,
 				IdempotentHint: true,

@@ -12,6 +12,10 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 )
 
+// EnvProduction is the non-synthetic default data class used when a trusted
+// runtime does not explicitly select another lifecycle environment.
+const EnvProduction = "production"
+
 // Publisher is the narrow runtime seam for lifecycle publication. A function
 // keeps the default path on slog while allowing tests and local collectors to
 // capture events without another interface or dependency.

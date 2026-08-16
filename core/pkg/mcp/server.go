@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
@@ -74,8 +75,8 @@ const lifecycleSourceRef = "MCP"
 // GovernanceFirewallOption configures optional runtime seams.
 type GovernanceFirewallOption func(*GovernanceFirewall)
 
-// WithLifecyclePublisher injects a lifecycle capture/publisher. The default
-// is the process's structured slog logger.
+// WithLifecyclePublisher injects a lifecycle capture/publisher. Publication
+// stays disabled unless the trusted runtime explicitly supplies one.
 func WithLifecyclePublisher(publisher events.Publisher) GovernanceFirewallOption {
 	return func(f *GovernanceFirewall) {
 		if publisher != nil {
@@ -98,10 +99,14 @@ func WithLifecycleEnvironment(env string) GovernanceFirewallOption {
 // NewGovernanceFirewall creates a new firewall instance.
 // The guardian.Guardian satisfies the PolicyEvaluator interface.
 func NewGovernanceFirewall(evaluator PolicyEvaluator, catalog *ToolCatalog, opts ...GovernanceFirewallOption) *GovernanceFirewall {
+	lifecycleEnv := os.Getenv("HELM_ENV")
+	if lifecycleEnv == "" {
+		lifecycleEnv = events.EnvProduction
+	}
 	f := &GovernanceFirewall{
 		evaluator:    evaluator,
 		catalog:      catalog,
-		lifecycleEnv: events.EnvProduction,
+		lifecycleEnv: lifecycleEnv,
 	}
 	for _, opt := range opts {
 		opt(f)
@@ -510,6 +515,9 @@ func classifyTool(catalog *ToolCatalog, name string) (string, contracts.RiskTier
 	if !validRiskTier(ref.RiskTier) {
 		return "", "", fmt.Errorf("tool %q has invalid PEP risk tier", name)
 	}
+	if expected := riskTierForEffectClass(ref.EffectClass); ref.RiskTier != expected {
+		return "", "", fmt.Errorf("tool %q has mismatched PEP effect class and risk tier", name)
+	}
 	return ref.EffectClass, ref.RiskTier, nil
 }
 
@@ -528,6 +536,19 @@ func validRiskTier(riskTier contracts.RiskTier) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func riskTierForEffectClass(effectClass string) contracts.RiskTier {
+	switch effectClass {
+	case "E0", "E1":
+		return contracts.RiskTierLow
+	case "E2":
+		return contracts.RiskTierMedium
+	case "E3", "E4":
+		return contracts.RiskTierHigh
+	default:
+		return ""
 	}
 }
 

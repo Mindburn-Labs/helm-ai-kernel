@@ -416,9 +416,11 @@ func lifecycleContext(ctx context.Context, req ToolExecutionRequest, lifecycleEn
 		lifecycleEnv = events.EnvProduction
 	}
 	if lifecycleEnv == events.EnvSynthetic {
-		if tenantID, err := auth.GetTenantID(ctx); err == nil && tenantID != "" {
+		if tenantID, err := auth.GetTenantID(ctx); err == nil && tenantID != "" && tenantID != auth.SystemTenantID {
 			// A tenant-bearing request is not synthetic even when the process
-			// was started with the synthetic switch; do not relabel it.
+			// was started with the synthetic switch; do not relabel it. HELM's
+			// own system pseudo-tenant carries no customer tenancy and remains
+			// eligible for the explicitly enabled synthetic lane.
 			lifecycleEnv = events.EnvCustomerHosted
 		}
 	}

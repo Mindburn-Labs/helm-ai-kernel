@@ -22,6 +22,8 @@ import (
 const (
 	// AdminAPIKeyEnv is the environment variable used by standalone OSS admin authentication.
 	AdminAPIKeyEnv = "HELM_ADMIN_API_KEY"
+	// SystemTenantID identifies HELM's non-customer admin/service boundary.
+	SystemTenantID = "system"
 
 	systemAdminPrincipalID = "system-admin"
 )
@@ -96,7 +98,7 @@ func AdminPrincipalFromRequest(r *http.Request, adminKey string) (*BasePrincipal
 
 	return &BasePrincipal{
 		ID:       systemAdminPrincipalID,
-		TenantID: "system",
+		TenantID: SystemTenantID,
 		Roles:    []string{"admin"},
 	}, "", true
 }

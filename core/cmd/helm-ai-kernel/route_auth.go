@@ -182,7 +182,7 @@ func requireRuntimeService(handler http.HandlerFunc) http.HandlerFunc {
 
 		principal := &helmauth.BasePrincipal{
 			ID:       servicePrincipalID,
-			TenantID: "system",
+			TenantID: helmauth.SystemTenantID,
 			Roles:    []string{"service"},
 		}
 		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))

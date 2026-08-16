@@ -411,6 +411,34 @@ func TestGovernanceFirewallLifecyclePublicationHonorsTrustedEnvironment(t *testi
 			t.Fatal("tenant-bearing request was published as synthetic")
 		}
 	})
+
+	t.Run("system pseudo-tenant remains synthetic", func(t *testing.T) {
+		t.Setenv("HELM_ENV", events.EnvSynthetic)
+		capture := &lifecycleCapture{}
+		fw := NewGovernanceFirewall(
+			lifecycleEvaluator{decision: &contracts.DecisionRecord{
+				ID: "decision-system", Action: "EXECUTE_TOOL", Resource: "read",
+				Verdict: string(contracts.VerdictAllow),
+			}},
+			readOnlyCatalog(t),
+			WithLifecyclePublisher(capture.publish),
+		)
+		ctx := auth.WithPrincipal(context.Background(), &auth.BasePrincipal{TenantID: auth.SystemTenantID})
+		_, err := fw.WrapToolHandler(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+			return ToolExecutionResponse{Content: "ok"}, nil
+		})(ctx, ToolExecutionRequest{ToolName: "read", SessionID: "synthetic-session"})
+		if err != nil {
+			t.Fatalf("system request failed: %v", err)
+		}
+		if len(capture.events) == 0 {
+			t.Fatal("system pseudo-tenant suppressed synthetic lifecycle publication")
+		}
+		for _, event := range capture.events {
+			if event.Meta.Env != events.EnvSynthetic {
+				t.Fatalf("system event env = %q, want %q", event.Meta.Env, events.EnvSynthetic)
+			}
+		}
+	})
 }
 
 func TestGovernanceFirewallUsesExplicitCatalogClassification(t *testing.T) {

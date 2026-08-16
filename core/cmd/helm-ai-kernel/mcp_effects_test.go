@@ -81,6 +81,30 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 	if resp.IsError {
 		t.Fatalf("read call reported error: %s", resp.Content)
 	}
+	if resp.ExecutionReceipt == nil {
+		t.Fatal("successful governed dispatch did not retain its authoritative execution receipt")
+	}
+	if !strings.HasPrefix(resp.ExecutionReceipt.ReceiptID, "rcpt-") {
+		t.Fatalf("retained execution receipt id = %q, want canonical receipt id", resp.ExecutionReceipt.ReceiptID)
+	}
+	if resp.DispatchState != rtmcp.DispatchStateDispatched {
+		t.Fatalf("retained dispatch state = %q, want %q", resp.DispatchState, rtmcp.DispatchStateDispatched)
+	}
+	wire, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal public MCP response: %v", err)
+	}
+	var wireFields map[string]any
+	if err := json.Unmarshal(wire, &wireFields); err != nil {
+		t.Fatalf("decode public MCP response: %v", err)
+	}
+	for _, internalKey := range []string{
+		"execution_receipt", "dispatch_state", "approval_hash", "approver_id", "dispatch_admission_expiry",
+	} {
+		if _, exposed := wireFields[internalKey]; exposed {
+			t.Fatalf("runtime-only response field %q was serialized", internalKey)
+		}
+	}
 	doc := decodeEffectsDoc(t, resp)
 
 	// Acceptance 1 + 4: the call actually dispatched and the receipt binds the
@@ -234,6 +258,35 @@ func TestGitHubEffectsRuntimeRefusesWithoutSigningSeed(t *testing.T) {
 	})
 	if seeded.PermitSigningPublicKey() == "" {
 		t.Fatal("a seeded bridge reported no signing key; permits would be unsigned")
+	}
+}
+
+func TestAttachGovernedOutcomeKeepsRuntimeAnchorsOutOfJSON(t *testing.T) {
+	resp := mcppkg.ToolExecutionResponse{}
+	receipt := &contracts.Receipt{ReceiptID: "receipt-v5", EffectID: "effect-1"}
+	attachGovernedOutcome(&resp, rtmcp.GovernedOutcome{
+		ExecutionReceipt: receipt,
+		DispatchState:    rtmcp.DispatchStateDispatched,
+		Approval: &rtmcp.ApprovalEvidence{
+			ApprovalHash: "sha256:" + strings.Repeat("a", 64),
+			ApproverID:   "approver-internal",
+		},
+	})
+	if resp.ExecutionReceipt != receipt || resp.DispatchState != rtmcp.DispatchStateDispatched || resp.ApprovalHash == "" || resp.ApproverID == "" {
+		t.Fatal("authoritative receipt/dispatch/approval anchors were not retained")
+	}
+	wire, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(wire, &fields); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	for _, key := range []string{"execution_receipt", "dispatch_state", "approval_hash", "approver_id", "dispatch_admission_expiry"} {
+		if _, ok := fields[key]; ok {
+			t.Fatalf("internal field %q was exposed in JSON: %s", key, wire)
+		}
 	}
 }
 

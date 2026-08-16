@@ -140,9 +140,11 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 					"state": map[string]any{"type": "string", "enum": []string{"open", "closed", "all"}},
 				},
 				"required":             []string{"repo"},
-				"additionalProperties": false,
+					"additionalProperties": false,
+				},
+				EffectClass: "E0",
+				RiskTier:    contracts.RiskTierLow,
 			},
-		},
 		{
 			Name:        "github.read_pr",
 			Title:       "Read a GitHub pull request",
@@ -155,9 +157,11 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 					"number": map[string]any{"type": "integer"},
 				},
 				"required":             []string{"repo", "number"},
-				"additionalProperties": false,
+					"additionalProperties": false,
+				},
+				EffectClass: "E0",
+				RiskTier:    contracts.RiskTierLow,
 			},
-		},
 		{
 			Name:        "github.create_issue",
 			Title:       "Create a GitHub issue",
@@ -173,9 +177,11 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 					"assignees": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 				},
 				"required":             []string{"repo", "title"},
-				"additionalProperties": false,
+					"additionalProperties": false,
+				},
+				EffectClass: "E4",
+				RiskTier:    contracts.RiskTierHigh,
 			},
-		},
 		{
 			Name:        "github.add_comment",
 			Title:       "Comment on a GitHub issue",
@@ -189,9 +195,11 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 					"body":         map[string]any{"type": "string"},
 				},
 				"required":             []string{"repo", "issue_number", "body"},
-				"additionalProperties": false,
+					"additionalProperties": false,
+				},
+				EffectClass: "E3",
+				RiskTier:    contracts.RiskTierHigh,
 			},
-		},
 	}
 }
 
@@ -240,7 +248,12 @@ func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecu
 			"save receipt_bundle as bundle.json and run receipt_verify --receipt bundle.json --key-file <caller-trusted-root-key-file>",
 			"after verification, require receipts[0].effect_id to equal permits[0].permit_id",
 		}
-		return structuredLocalMCPResponse(doc)
+		resp, err := structuredLocalMCPResponse(doc)
+		if err != nil {
+			return resp, err
+		}
+		attachGovernedOutcome(&resp, outcome)
+		return resp, nil
 	}
 
 	doc["reason_code"] = outcome.ReasonCode
@@ -257,4 +270,24 @@ func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecu
 	}
 	resp.IsError = true
 	return resp, nil
+}
+
+// attachGovernedOutcome keeps authoritative dispatch evidence inside the
+// runtime response until the shared MCP firewall projects it. The fields on
+// ToolExecutionResponse are json:"-" so this bridge never adds receipt or
+// approval material to the public MCP response shape.
+func attachGovernedOutcome(resp *mcppkg.ToolExecutionResponse, outcome rtmcp.GovernedOutcome) {
+	if resp == nil {
+		return
+	}
+	resp.ExecutionReceipt = outcome.ExecutionReceipt
+	resp.DispatchState = outcome.DispatchState
+	if outcome.Approval == nil {
+		return
+	}
+	resp.ApprovalHash = outcome.Approval.ApprovalHash
+	resp.ApproverID = outcome.Approval.ApproverID
+	if outcome.Approval.DispatchAdmission != nil {
+		resp.DispatchAdmissionExpiry = outcome.Approval.DispatchAdmission.Admission.ExpiresAt
+	}
 }

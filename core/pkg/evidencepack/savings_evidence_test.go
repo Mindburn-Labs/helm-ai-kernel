@@ -1,3 +1,7 @@
+// quantum_posture: fixtures sign BudgetVerdict receipts with a classical
+// Ed25519 test key and hash content with SHA-256 to exercise the offline
+// verifier; no post-quantum primitives are used in this file.
+
 package evidencepack
 
 import (

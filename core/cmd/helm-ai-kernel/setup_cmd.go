@@ -168,6 +168,8 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 		return runSetupRepairCmd(args[1:], stdout, stderr)
 	case "remove":
 		return runSetupRemoveCmd(args[1:], stdout, stderr)
+	case "hermes":
+		return runSetupHermesCmd(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printSetupUsage(stdout)
 		return 0

@@ -15,6 +15,7 @@ package inferencegateway
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -201,6 +202,67 @@ func (l *BalanceLedger) Entries() []*economic.UsageLedgerEntry {
 	out := make([]*economic.UsageLedgerEntry, len(l.entries))
 	copy(out, l.entries)
 	return out
+}
+
+// RestoreSettlement re-registers a settlement committed in a previous process
+// run (loaded from a durable receipt store) into the idempotency index so a
+// replayed request after a restart returns the original receipts instead of
+// dispatching — and debiting — again.
+//
+// It never mutates the balance: callers must construct the BalanceAccount with
+// the already-debited amount reflected in its opening balance before replaying.
+// balanceAfterCents is the balance recorded when the settlement originally
+// committed and is returned verbatim on replay. Restoring the same settlement
+// twice is a no-op.
+func (l *BalanceLedger) RestoreSettlement(usage *economic.UsageReceipt, settlement *economic.SettlementReceipt, balanceAfterCents int64) error {
+	if err := usage.Validate(); err != nil {
+		return fmt.Errorf("inferencegateway: restored usage receipt invalid: %w", err)
+	}
+	if err := settlement.Validate(); err != nil {
+		return fmt.Errorf("inferencegateway: restored settlement receipt invalid: %w", err)
+	}
+	// Validate() checks internal arithmetic but not hash canonicality; restored
+	// evidence must also re-hash cleanly, exactly as the offline verifier
+	// demands, so a tampered-but-arithmetically-consistent receipt is refused.
+	if !usage.HasCanonicalContentHash() {
+		return errors.New("inferencegateway: restored usage receipt content hash mismatch")
+	}
+	if !settlement.HasCanonicalContentHash() {
+		return errors.New("inferencegateway: restored settlement receipt content hash mismatch")
+	}
+	if !settlement.Balanced() {
+		return errors.New("inferencegateway: restored settlement ledger is not balanced")
+	}
+	if settlement.SourceUsageReceiptHash != usage.ContentHash {
+		return errors.New("inferencegateway: restored settlement does not bind the usage receipt hash")
+	}
+	if !strings.HasPrefix(usage.SpendIntentID, intentPrefix) {
+		return fmt.Errorf("inferencegateway: restored usage receipt has non-engine spend intent id %q", usage.SpendIntentID)
+	}
+	idem := idempotencyFromIntent(usage.SpendIntentID)
+	if idem == "" {
+		return errors.New("inferencegateway: restored usage receipt has empty idempotency token")
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if usage.Currency != l.account.Currency {
+		return errors.New("inferencegateway: restored usage currency does not match balance account")
+	}
+	if _, ok := l.settled[idem]; ok {
+		return nil
+	}
+	l.settled[idem] = &SettlementRecord{
+		IdempotencyKey:    idem,
+		UsageReceipt:      usage,
+		SettlementReceipt: settlement,
+		BalanceDebitCents: usage.BalanceDebitCents,
+		BalanceAfterCents: balanceAfterCents,
+	}
+	// Reserve an entry-id slot so entry ids minted in this process never
+	// collide with ids already used in the restored history.
+	l.nextEntryID++
+	return nil
 }
 
 // commit posts the double-entry debit for a usage receipt against the governed

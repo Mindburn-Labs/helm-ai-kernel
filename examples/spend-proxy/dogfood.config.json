@@ -1,0 +1,74 @@
+{
+  "tenant_id": "mindburn-dogfood",
+  "treasury_id": "treasury-mindburn",
+  "route_policy_id": "dogfood-openrouter-v1",
+  "currency": "USD",
+  "platform_fee_bps": 0,
+  "quote_ttl_seconds": 600,
+  "price_ttl_hours": 168,
+  "balance": {
+    "account_id": "balance-dogfood",
+    "opening_cents": 2000
+  },
+  "request_defaults": {
+    "workspace_id": "ws-dogfood",
+    "agent_id": "agent-live-traffic",
+    "principal_id": "principal-dogfood",
+    "envelope_id": "env-baseline"
+  },
+  "providers": [
+    {
+      "id": "openrouter",
+      "account_mode": "BYOK",
+      "terms_version": "2026-08-17",
+      "legal_review_ref": "linear:HELM-615"
+    }
+  ],
+  "prices": [
+    {
+      "provider_id": "openrouter",
+      "model_id": "openai/gpt-4o",
+      "input_token_micro_cents": 250,
+      "output_token_micro_cents": 1000,
+      "source_uri": "https://openrouter.ai/models (captured 2026-08-17)"
+    },
+    {
+      "provider_id": "openrouter",
+      "model_id": "openai/gpt-4o-mini",
+      "input_token_micro_cents": 15,
+      "output_token_micro_cents": 60,
+      "source_uri": "https://openrouter.ai/models (captured 2026-08-17)"
+    }
+  ],
+  "envelopes": [
+    {
+      "id": "env-baseline",
+      "agent_id": "agent-live-traffic",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-baseline",
+      "max_amount_cents": 1000,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["openrouter"],
+      "allowed_models": ["openai/gpt-4o", "openai/gpt-4o-mini"],
+      "fallback_routes": [
+        { "provider_id": "openrouter", "model_id": "openai/gpt-4o" },
+        { "provider_id": "openrouter", "model_id": "openai/gpt-4o-mini" }
+      ],
+      "allow_model_substitution": false
+    },
+    {
+      "id": "env-substitute",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-substitute",
+      "max_amount_cents": 1000,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["openrouter"],
+      "allowed_models": ["openai/gpt-4o-mini"],
+      "fallback_routes": [
+        { "provider_id": "openrouter", "model_id": "openai/gpt-4o-mini" }
+      ],
+      "allow_model_substitution": true
+    }
+  ]
+}

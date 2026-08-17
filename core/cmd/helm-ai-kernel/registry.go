@@ -437,7 +437,7 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "use-helm",
 			Title: "Use HELM",
 			Commands: []string{
-				"watch", "receipts", "mcp", "launch", "app", "up", "run", "proxy", "local", "sandbox", "hook", "serve", "server", "dev", "scaffold", "shadow", "skills", "control-plane", "integrate", "health", "threat",
+				"watch", "receipts", "mcp", "launch", "app", "up", "run", "proxy", "spend-proxy", "local", "sandbox", "hook", "serve", "server", "dev", "scaffold", "shadow", "skills", "control-plane", "integrate", "health", "threat",
 			},
 		},
 		{

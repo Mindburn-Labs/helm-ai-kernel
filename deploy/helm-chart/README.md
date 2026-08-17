@@ -97,6 +97,7 @@ flowchart TD
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |
 | `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for canonical policy bundle signatures. |
 | `helm.policy.signature.existingSecret` | empty | Existing secret containing `HELM_POLICY_TRUST_PUBLIC_KEY`. |
+| `helm.policy.runtimeActions` | `[]` | Explicit mounted-file rules compiled into the chart-managed reference pack; empty remains fail-closed. Prefer signed control-plane/CRD policy in production. |
 | `helm.policy.reloadHints.httpWakeEndpoint` | `/internal/policy/reconcile` | Wake-only internal endpoint for sidecars/operators. |
 | `helm.policy.reloadHints.configReloaderSidecar.enabled` | `false` | Optional mounted-file wake hint; disabled by default. |
 | `persistence.enabled` | `true` | Creates or uses a PVC for `/data`. |

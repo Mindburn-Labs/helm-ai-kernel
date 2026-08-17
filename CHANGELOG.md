@@ -89,6 +89,13 @@ Keep research scaffolds and hardware-backed enforcement language out of the
 public changelog until a tagged release ships source-owned tests, verifier
 evidence, and release artifacts for that exact capability.
 
+### Added — chart-managed mounted-file runtime rules
+
+The Helm chart can render explicit `helm.policy.runtimeActions` into its
+reference pack for governed bootstrap and synthetic-stand policy proof. The
+default remains an empty fail-closed rule list; production deployments should
+prefer a signed control-plane or CRD policy source.
+
 ### Added — tenant-scoped receipt query predicates
 
 `GET /api/v1/receipts` can filter the authenticated tenant's V5 receipts by

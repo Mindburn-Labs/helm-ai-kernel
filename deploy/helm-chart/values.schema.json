@@ -813,6 +813,22 @@
             "referencePackLabel": {
               "type": "string",
               "description": "Human-readable label for the reference pack."
+            },
+            "runtimeActions": {
+              "type": "array",
+              "default": [],
+              "description": "Explicit mounted-file runtime rules compiled into the chart-managed reference pack. Empty remains fail-closed; use a signed control-plane or CRD source for production policy.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["action"],
+                "properties": {
+                  "action": { "type": "string", "minLength": 1 },
+                  "enabled": { "type": "boolean", "default": true },
+                  "expression": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
             }
           }
         }

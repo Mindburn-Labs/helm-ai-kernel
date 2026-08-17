@@ -815,3 +815,85 @@ func TestClassifyLeavesRemoteReadsAlone(t *testing.T) {
 		})
 	}
 }
+
+// TestClassifyReviewFindings covers the gaps and over-blocks an adversarial
+// review found in the first cut of the remote/volume matchers. Each row failed
+// before the fix.
+func TestClassifyReviewFindings(t *testing.T) {
+	decides := []struct{ name, command, reason string }{
+		// Attached flag forms are valid pflag syntax; matching only the detached
+		// spelling let `gh api --method=DELETE` delete a repo unclassified.
+		{"gh api attached long", "gh api --method=DELETE /repos/o/r", "gh api -X DELETE"},
+		{"gh api attached short", "gh api -XDELETE /repos/o/r", "gh api -X DELETE"},
+		// The verb is "sync", so no prefix rule sees it.
+		{"s3 sync delete", "aws s3 sync ./local s3://bucket --delete", "removes objects absent"},
+		{"s3 mv", "aws s3 mv s3://a/k s3://b/k", "aws s3 mv"},
+		// Prefix rule misses these; the explicit set catches them.
+		{"ecr batch delete", "aws ecr batch-delete-image --repository-name r", "batch-delete-image"},
+		{"org close", "aws organizations close-account --account-id 1", "close-account"},
+		{"kms disable", "aws kms disable-key --key-id k", "disable-key"},
+		// Second-most-common destructive push; shares nothing with --force.
+		{"git push delete", "git push --delete origin main", "deletes a remote ref"},
+		{"git push -d", "git push -d origin release", "deletes a remote ref"},
+		// Attached value on a volume flag.
+		{"compose attached volumes", "docker compose down --volumes=true", "removes named volumes"},
+	}
+	for _, tc := range decides {
+		t.Run("decide/"+tc.name, func(t *testing.T) {
+			res := Classify(tc.command)
+			if !res.Decide {
+				t.Fatalf("Classify(%q).Decide = false — reaches no decision and writes no receipt", tc.command)
+			}
+			if !strings.Contains(res.Reason, tc.reason) {
+				t.Fatalf("Classify(%q).Reason = %q, want substring %q", tc.command, res.Reason, tc.reason)
+			}
+		})
+	}
+
+	// Over-blocking is the uninstall trigger, and three of these are worse than
+	// noise: revoke-security-group-* CLOSES a firewall hole and remove-permission
+	// / remove-user-from-group REDUCE privilege. Denying them would block
+	// remediation of the incident class this boundary exists to prevent.
+	allows := []struct{ name, command string }{
+		{"compose with file flag", "docker compose -f docker-compose.prod.yml up -d"},
+		{"compose two files", "docker compose -f a.yml -f b.yml up --build"},
+		{"compose project name", "docker compose -p myproj up -d"},
+		{"compose long file flag", "docker compose --file compose.yaml ps"},
+		{"aws region flag then read", "aws ec2 --region us-west-2 describe-instances"},
+		{"sqs consume ack", "aws sqs delete-message --receipt-handle abc"},
+		{"sqs batch ack", "aws sqs delete-message-batch --entries x"},
+		{"blue-green deregister", "aws elbv2 deregister-targets --target-group-arn x"},
+		{"task def deregister", "aws ecs deregister-task-definition --task-definition t:1"},
+		{"closes a firewall hole", "aws ec2 revoke-security-group-ingress --group-id sg-1"},
+		{"reduces privilege", "aws lambda remove-permission --function-name f --statement-id s"},
+		{"reduces privilege iam", "aws iam remove-user-from-group --user-name u --group-name g"},
+		{"metadata only", "aws ec2 delete-tags --resources i-1"},
+		{"increases retention", "aws logs delete-retention-policy --log-group-name lg"},
+		{"sync without delete", "aws s3 sync ./local s3://bucket"},
+	}
+	for _, tc := range allows {
+		t.Run("allow/"+tc.name, func(t *testing.T) {
+			if res := Classify(tc.command); res.Decide {
+				t.Fatalf("Classify(%q).Decide = true — over-blocking ordinary work; reason=%q", tc.command, res.Reason)
+			}
+		})
+	}
+}
+
+// TestClassifyReasonIsBounded guards the channel, not the classification. Grok
+// truncates hook stdout at 64 KiB and appends " [truncated]", which makes the
+// JSON unparseable; it then falls back to the exit-code ladder. Interpolating an
+// unbounded command token into the deny reason would let an agent pad one
+// argument and convert its own DENY into an ALLOW.
+func TestClassifyReasonIsBounded(t *testing.T) {
+	for _, command := range []string{
+		"aws " + strings.Repeat("A", 70000) + " delete-thing",
+		"gh " + strings.Repeat("B", 70000) + " delete",
+		"docker " + strings.Repeat("C", 70000) + " prune",
+	} {
+		res := Classify(command)
+		if len(res.Reason) > 4096 {
+			t.Errorf("deny reason is %d bytes for a padded token; an oversized payload is silently downgraded to ALLOW by hosts that truncate stdout", len(res.Reason))
+		}
+	}
+}

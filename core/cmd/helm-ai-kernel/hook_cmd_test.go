@@ -29,7 +29,7 @@ func TestHookPreToolDeniesDestructiveBashAndWritesReceipt(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s1","cwd":"/repo"}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	var out hookDecisionOutput
@@ -204,7 +204,7 @@ func TestHookPreToolFailsClosedWhenCustomPolicyChangesAfterApproval(t *testing.T
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := runHookPreToolCmd(args, strings.NewReader(payload), &stdout, &stderr); code != 0 {
+	if code := runHookPreToolCmd(args, strings.NewReader(payload), &stdout, &stderr); code != hookDenyExitCode {
 		t.Fatalf("tampered hook exit = %d stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "policy profile is unavailable") {
@@ -493,7 +493,7 @@ func TestHookPreToolFailsClosedWhenLocalSigningKeyIsInsecure(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "signer is unavailable") {
@@ -509,7 +509,7 @@ func TestHookPreToolReportsPolicyProfileErrorSeparately(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", filepath.Join(tmp, "missing.json")}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "policy profile is unavailable") || strings.Contains(stdout.String(), "signer is unavailable") {
@@ -532,7 +532,7 @@ func TestHookPreToolProductionRequiresExplicitSigningSeedFile(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 || !strings.Contains(stdout.String(), "local receipt signer is unavailable") {
+	if code != hookDenyExitCode || !strings.Contains(stdout.String(), "local receipt signer is unavailable") {
 		t.Fatalf("production hook without signer = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 	if _, err := os.Stat(filepath.Join(tmp, workstationSigningKeyDirectory)); !os.IsNotExist(err) {
@@ -546,7 +546,7 @@ func TestHookPreToolProductionRequiresExplicitSigningSeedFile(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code = runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--signing-seed-file", seedFile}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+	if code != hookDenyExitCode || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
 		t.Fatalf("production hook with explicit signer = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 	if receipts := globReceipts(t, tmp); len(receipts) != 1 {
@@ -568,7 +568,7 @@ func TestHookPreToolFailsClosedWhenReceiptCannotPersist(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "receipt persistence is unavailable") {
@@ -589,7 +589,7 @@ func TestHookPreToolFailsClosedWhenAllowReceiptCannotPersist(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/allowed-by-profile"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", profileDigest}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "receipt persistence is unavailable") {
@@ -626,7 +626,7 @@ func TestHookPreToolDoesNotCreateCWDKeyWithoutHome(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code"}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 || !strings.Contains(stdout.String(), "local receipt signer is unavailable") {
+	if code != hookDenyExitCode || !strings.Contains(stdout.String(), "local receipt signer is unavailable") {
 		t.Fatalf("HOME-less hook = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 	if _, err := os.Stat(filepath.Join(workdir, "keys", workstationSigningSeedName)); !os.IsNotExist(err) {
@@ -646,7 +646,7 @@ func TestHookPreToolDeniesCodexMCPButSkipsHelmSelfMCP(t *testing.T) {
 	payload := `{"toolName":"mcp__filesystem__write_file","toolInput":{"path":"/tmp/x"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -678,7 +678,7 @@ func TestHookPreToolDeniesSensitiveWrite(t *testing.T) {
 	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -706,7 +706,7 @@ func TestHookPreToolDeniesProtectedHookConfigWrites(t *testing.T) {
 			payload := `{"tool_name":"Write","tool_input":{"file_path":"` + target + `"}}`
 			var stdout, stderr bytes.Buffer
 			code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
-			if code != 0 {
+			if code != hookDenyExitCode {
 				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 			}
 			if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -734,7 +734,7 @@ func TestHookPreToolDeniesProtectedShellConfigWriteEvenWithShellGrant(t *testing
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm .codex/hooks.json"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -770,7 +770,7 @@ func TestHookPreToolRequiresFileAndShellPermissionForCompoundSensitiveCommand(t 
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf .env /tmp/helm-cleanup"}}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp, "--policy-profile", profilePath, "--policy-profile-sha256", hookPolicyProfileDigest(t, profilePath)}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "shell operation") {
@@ -805,7 +805,7 @@ func TestHookPreToolDeniesCodexApplyPatchSensitiveWrite(t *testing.T) {
 	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "codex", "--data-dir", tmp, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -865,7 +865,7 @@ func TestHookPreToolDeniesEvasiveBashViaASTClassifier(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, bytes.NewReader(payload), &stdout, &stderr)
-			if code != 0 {
+			if code != hookDenyExitCode {
 				t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 			}
 			if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -883,7 +883,7 @@ func TestHookPreToolResolvesGeneratedScriptsAgainstCWD(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"printf 'rm --recursive --force /tmp/x\\n' > run.sh; bash /repo/run.sh"},"cwd":"/repo"}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
+	if code != hookDenyExitCode || !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
 		t.Fatalf("relative generated script = %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }
@@ -944,7 +944,7 @@ func TestHookPreToolDenyIncludesModelActionableFeedback(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-feedback","cwd":"/repo"}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	var out hookDecisionOutput
@@ -977,7 +977,7 @@ func TestHookPreToolFailClosedDenyIncludesSteeringCode(t *testing.T) {
 	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /srv/production"},"session_id":"s-signer"}`
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "signer is unavailable") {
@@ -997,7 +997,7 @@ func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
 	for i := 1; i <= 2; i++ {
 		var stdout, stderr bytes.Buffer
 		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-		if code != 0 {
+		if code != hookDenyExitCode {
 			t.Fatalf("attempt %d exit = %d stderr = %s", i, code, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "OPERATE_PERMISSIONS_EMPTY") {
@@ -1013,7 +1013,7 @@ func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
 	// breaker never short-circuits the authoritative policy path.
 	var stdout, stderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("tripped exit = %d stderr = %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) || !strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
@@ -1048,7 +1048,7 @@ func TestHookPreToolDoomLoopBreakerTripsOnIdenticalAttempts(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	code = runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(other), &stdout, &stderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("other session exit = %d stderr = %s", code, stderr.String())
 	}
 	if strings.Contains(stdout.String(), "INBOX_DOOM_LOOP_DETECTED") {
@@ -1097,24 +1097,26 @@ func TestHookPreToolDoomLoopLatchIsPerSignature(t *testing.T) {
 	sigA := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-latch","cwd":"/repo"}`
 	sigB := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /var/other-target"},"session_id":"s-latch","cwd":"/repo"}`
 
-	run := func(payload string) string {
+	// A denial exits with hookDenyExitCode; a safe call exits 0. The expected
+	// code is per-call so the helper cannot mask one for the other.
+	run := func(payload string, wantCode int) string {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
 		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-		if code != 0 {
-			t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+		if code != wantCode {
+			t.Fatalf("hook exit = %d, want %d; stderr = %s", code, wantCode, stderr.String())
 		}
 		return stdout.String()
 	}
 
 	// Trip the breaker on sigA (3 identical settled denials).
 	for i := 1; i <= 3; i++ {
-		run(sigA)
+		run(sigA, hookDenyExitCode)
 	}
 
 	// Post-trip, a different signature in the same session is a fresh
 	// evaluation: policy deny without doom-loop steering.
-	out := run(sigB)
+	out := run(sigB, hookDenyExitCode)
 	if !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, "OPERATE_PERMISSIONS_EMPTY") {
 		t.Fatalf("changed approach must follow the normal policy path: %s", out)
 	}
@@ -1124,7 +1126,7 @@ func TestHookPreToolDoomLoopLatchIsPerSignature(t *testing.T) {
 
 	// Retrying the tripped identical call keeps the escalation steering
 	// (latch is per signature and survives interleaved calls).
-	out = run(sigA)
+	out = run(sigA, hookDenyExitCode)
 	if !strings.Contains(out, "INBOX_DOOM_LOOP_DETECTED") {
 		t.Fatalf("retry of tripped signature must keep escalation steering: %s", out)
 	}
@@ -1140,36 +1142,38 @@ func TestHookPreToolDoomLoopSafeCallsBreakTheRun(t *testing.T) {
 	deny := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-gap","cwd":"/repo"}`
 	safe := `{"tool_name":"Bash","tool_input":{"command":"git status --short"},"session_id":"s-gap","cwd":"/repo"}`
 
-	run := func(payload string) string {
+	// A denial exits with hookDenyExitCode; a safe call exits 0. The expected
+	// code is per-call so the helper cannot mask one for the other.
+	run := func(payload string, wantCode int) string {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
 		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-		if code != 0 {
-			t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+		if code != wantCode {
+			t.Fatalf("hook exit = %d, want %d; stderr = %s", code, wantCode, stderr.String())
 		}
 		return stdout.String()
 	}
 
 	// Denial, successful safe work, denial, successful safe work, denial:
 	// three identical denials but never consecutive — no trip allowed.
-	run(deny)
-	if out := run(safe); out != "" {
+	run(deny, hookDenyExitCode)
+	if out := run(safe, 0); out != "" {
 		t.Fatalf("safe call must not emit output: %s", out)
 	}
-	run(deny)
-	if out := run(safe); out != "" {
+	run(deny, hookDenyExitCode)
+	if out := run(safe, 0); out != "" {
 		t.Fatalf("safe call must not emit output: %s", out)
 	}
-	out := run(deny)
+	out := run(deny, hookDenyExitCode)
 	if strings.Contains(out, "INBOX_DOOM_LOOP_DETECTED") {
 		t.Fatalf("denials separated by successful work must not trip the breaker: %s", out)
 	}
 
 	// And a genuinely consecutive triple in the same session still trips.
 	for i := 0; i < 2; i++ {
-		run(deny)
+		run(deny, hookDenyExitCode)
 	}
-	out = run(deny)
+	out = run(deny, hookDenyExitCode)
 	if !strings.Contains(out, "INBOX_DOOM_LOOP_DETECTED") {
 		t.Fatalf("consecutive identical denials must still trip: %s", out)
 	}
@@ -1187,7 +1191,7 @@ func TestHookPreToolDoomLoopSkipsSessionlessPayloads(t *testing.T) {
 	for i := 1; i <= 4; i++ {
 		var stdout, stderr bytes.Buffer
 		code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
-		if code != 0 {
+		if code != hookDenyExitCode {
 			t.Fatalf("attempt %d exit = %d stderr = %s", i, code, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -1409,7 +1413,7 @@ func TestHookDoomLoopNullSessionState(t *testing.T) {
 	hookPayload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"s-null"}`
 	var stdout, hookStderr bytes.Buffer
 	code := runHookPreToolCmd([]string{"--client", "claude-code", "--data-dir", tmp}, strings.NewReader(hookPayload), &stdout, &hookStderr)
-	if code != 0 {
+	if code != hookDenyExitCode {
 		t.Fatalf("hook exit = %d stderr = %s", code, hookStderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"permissionDecision":"deny"`) {
@@ -1494,8 +1498,9 @@ func TestHookDenyIsLegibleToEveryHost(t *testing.T) {
 			code := runHookPreToolCmd(
 				[]string{"--client", tc.client, "--data-dir", tmp},
 				strings.NewReader(payload), &stdout, &stderr)
-			if code != 0 {
-				t.Fatalf("exit = %d, want 0 (the verdict travels in stdout JSON, not the exit code); stderr=%s", code, stderr.String())
+			if code != hookDenyExitCode {
+				t.Fatalf("exit = %d, want %d — exit 2 is the block signal all three hosts agree on and the only one that survives a host failing to parse stdout; stderr=%s",
+					code, hookDenyExitCode, stderr.String())
 			}
 
 			var got hookDecisionOutput

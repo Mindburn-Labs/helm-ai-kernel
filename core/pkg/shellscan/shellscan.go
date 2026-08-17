@@ -2542,6 +2542,14 @@ func (c *collector) matchGitPush(args []wordTok) {
 			c.decide("git push force option requires a decision")
 			return
 		}
+		// `git push --delete origin main` removes the remote ref outright. It is
+		// the second-most-common destructive push and shares nothing with --force,
+		// so the force check above never sees it.
+		if tok.text == "--delete" || tok.text == "-d" {
+			c.recordDestructiveEffect()
+			c.decide("git push deletes a remote ref")
+			return
+		}
 		if strings.HasPrefix(tok.text, "-") && !strings.HasPrefix(tok.text, "--") {
 			for _, flag := range tok.text[1:] {
 				if flag == 'f' {
@@ -2599,9 +2607,9 @@ func (c *collector) matchAWS(args []wordTok) {
 	if !found {
 		return
 	}
-	operation, _, dynamic, found := firstSubcommand(args[serviceIndex+2:], nil, nil)
+	operation, _, dynamic, found := firstSubcommand(args[serviceIndex+2:], awsValueFlags, awsBoolFlags)
 	if dynamic {
-		c.decide("aws " + service + " invocation with a dynamic operation (fail-closed)")
+		c.decide("aws " + clampToken(service) + " invocation with a dynamic operation (fail-closed)")
 		return
 	}
 	if !found {
@@ -2609,7 +2617,12 @@ func (c *collector) matchAWS(args []wordTok) {
 	}
 	if destructiveAWSOperation(service, operation) {
 		c.recordDestructiveEffect()
-		c.decide("aws " + service + " " + operation)
+		c.decide("aws " + clampToken(service) + " " + clampToken(operation))
+		return
+	}
+	if awsSyncDeletesDestination(service, operation, args[serviceIndex+2:]) {
+		c.recordDestructiveEffect()
+		c.decide("aws s3 sync --delete removes objects absent from the source")
 	}
 }
 
@@ -2617,19 +2630,80 @@ func (c *collector) matchAWS(args []wordTok) {
 // destroys or detaches state. The AWS CLI names operations consistently, so this
 // keys on the verb rather than on a per-service allowlist: a service added by AWS
 // tomorrow is covered the day it ships, which a hand-maintained table cannot do.
+// awsVerbExceptions are operations whose name matches a destructive verb prefix
+// but which destroy nothing an operator would miss. They are carved out because
+// a boundary that stops routine work is uninstalled, and because three of them
+// are worse than noise: revoke-security-group-* CLOSES a firewall hole,
+// remove-permission and remove-user-from-group REDUCE privilege. Denying those
+// would block remediation of the exact incident class HELM exists to prevent.
+var awsVerbExceptions = map[string]bool{
+	// SQS consume-acknowledge; runs in a loop in every queue consumer.
+	"delete-message": true, "delete-message-batch": true,
+	// Ordinary blue/green deploy steps, each exactly reversible via register-*.
+	"deregister-targets": true, "deregister-task-definition": true,
+	"deregister-on-premises-instance": true, "deregister-instances-from-load-balancer": true,
+	// Privilege- and exposure-reducing. Never deny a control that tightens.
+	"revoke-security-group-ingress": true, "revoke-security-group-egress": true,
+	"remove-permission": true, "remove-user-from-group": true,
+	"remove-role-from-instance-profile": true, "disassociate-iam-instance-profile": true,
+	// Metadata only.
+	"delete-tags": true, "remove-tags": true, "remove-tags-from-resource": true,
+	"delete-bucket-website": true, "delete-monitoring-subscription": true,
+	// Increases retention rather than shortening it.
+	"delete-retention-policy": true,
+}
+
+// awsDestructiveExceptions destroy state but do not carry a destructive verb
+// prefix, so the prefix rule alone would miss them.
+var awsDestructiveExceptions = map[string]bool{
+	// s3/s3api shorthands, and operations whose name hides the verb.
+	"rm": true, "rb": true,
+	"schedule-key-deletion": true, "disable-key": true,
+	"purge-queue": true, "reset-db-cluster-parameter-group": true,
+	"batch-delete-image": true, "close-account": true,
+	"release-address": true, "detach-volume": true,
+}
+
+// destructiveAWSOperation reports whether an `aws <service> <operation>` pair
+// destroys or detaches state. The AWS CLI names operations consistently, so this
+// keys on the verb rather than on a per-service allowlist: a service added by AWS
+// tomorrow is covered the day it ships, which a hand-maintained table cannot do.
+// The two exception sets correct the places where the verb lies in either
+// direction.
 func destructiveAWSOperation(service, operation string) bool {
+	if awsVerbExceptions[operation] {
+		return false
+	}
+	if awsDestructiveExceptions[operation] {
+		return true
+	}
 	for _, prefix := range []string{"delete-", "terminate-", "remove-", "destroy-", "deregister-", "revoke-", "disassociate-"} {
 		if strings.HasPrefix(operation, prefix) {
 			return true
 		}
 	}
-	switch operation {
-	// s3/s3api shorthands, and the KMS operation whose name hides the verb.
-	case "rm", "rb", "schedule-key-deletion", "purge-queue", "reset-db-cluster-parameter-group":
+	// `aws s3 mv` removes the source object once the copy lands.
+	if service == "s3" && operation == "mv" {
 		return true
 	}
-	// `aws s3 sync --delete` mirrors a source over a destination and removes
-	// whatever is absent from the source.
+	return false
+}
+
+// awsSyncDeletesDestination reports whether an `aws s3 sync` mirrors a source
+// over a destination with --delete, which removes whatever is absent from the
+// source. The verb is "sync", so no prefix rule can see it.
+func awsSyncDeletesDestination(service, operation string, args []wordTok) bool {
+	if service != "s3" || operation != "sync" {
+		return false
+	}
+	for _, tok := range args {
+		if tok.dynamic {
+			return true
+		}
+		if tok.text == "--delete" {
+			return true
+		}
+	}
 	return false
 }
 
@@ -2770,6 +2844,14 @@ func (c *collector) matchGH(args []wordTok) {
 				c.decide("gh api with an unresolvable argument (fail-closed)")
 				return
 			}
+			// cobra/pflag accept the attached forms too; matching only the
+			// detached spelling let `gh api --method=DELETE` through.
+			if attached, ok := attachedFlagValue(tok.text, "-X", "--method"); ok {
+				if verdict := c.ghAPIMethodVerdict(attached); verdict {
+					return
+				}
+				continue
+			}
 			if tok.text != "-X" && tok.text != "--method" {
 				continue
 			}
@@ -2796,7 +2878,7 @@ func (c *collector) matchGH(args []wordTok) {
 
 	action, _, dynamic, found := firstSubcommand(args[groupIndex+2:], nil, nil)
 	if dynamic {
-		c.decide("gh " + group + " with a dynamic action (fail-closed)")
+		c.decide("gh " + clampToken(group) + " with a dynamic action (fail-closed)")
 		return
 	}
 	if !found {
@@ -2805,8 +2887,63 @@ func (c *collector) matchGH(args []wordTok) {
 	switch action {
 	case "delete", "archive", "remove", "transfer", "rename", "disable", "unlock":
 		c.recordDestructiveEffect()
-		c.decide("gh " + group + " " + action)
+		c.decide("gh " + clampToken(group) + " " + clampToken(action))
 	}
+}
+
+// attachedFlagValue splits `--flag=value` / `-Xvalue` into its value.
+func attachedFlagValue(tok string, names ...string) (string, bool) {
+	for _, name := range names {
+		if strings.HasPrefix(tok, name+"=") {
+			return tok[len(name)+1:], true
+		}
+		// Short flags may carry the value with no separator (-XDELETE).
+		if len(name) == 2 && strings.HasPrefix(name, "-") && !strings.HasPrefix(name, "--") &&
+			len(tok) > len(name) && strings.HasPrefix(tok, name) {
+			return tok[len(name):], true
+		}
+	}
+	return "", false
+}
+
+// ghAPIMethodVerdict decides a `gh api` call from its HTTP method. It reports
+// whether it decided.
+func (c *collector) ghAPIMethodVerdict(method string) bool {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case "DELETE":
+		c.recordDestructiveEffect()
+		c.decide("gh api -X DELETE")
+		return true
+	case "PUT", "PATCH", "POST":
+		c.decide("gh api -X " + strings.ToUpper(strings.TrimSpace(method)) + " mutates remote state")
+		return true
+	}
+	return false
+}
+
+// clampToken bounds a raw command token before it is interpolated into a deny
+// reason. Grok truncates hook stdout at 64 KiB and appends " [truncated]", which
+// makes the JSON unparseable; it then falls back to the exit-code ladder. An
+// agent that pads one token past that limit would otherwise convert a DENY into
+// an ALLOW. The reason is a one-line audit string, so 64 chars loses nothing.
+func clampToken(tok string) string {
+	const maxTokenChars = 64
+	runes := []rune(tok)
+	if len(runes) <= maxTokenChars {
+		return tok
+	}
+	return string(runes[:maxTokenChars]) + "\u2026"
+}
+
+// dockerComposeValueFlags are the compose flags whose following word is a value,
+// not a subcommand. Without them `docker compose -f prod.yml up -d` reads as an
+// unresolvable subcommand and fails closed — denying the single most common way
+// real projects invoke compose.
+var dockerComposeValueFlags = map[string]bool{
+	"-f": true, "--file": true,
+	"-p": true, "--project-name": true,
+	"--env-file": true, "--profile": true, "--project-directory": true,
+	"--ansi": true, "--parallel": true, "--progress": true,
 }
 
 // matchDockerDataLoss covers the docker subcommands that destroy persistent
@@ -2820,7 +2957,7 @@ func (c *collector) matchDockerDataLoss(sub string, after []wordTok) bool {
 				return false, true
 			}
 			for _, name := range names {
-				if tok.text == name {
+				if tok.text == name || strings.HasPrefix(tok.text, name+"=") {
 					return true, false
 				}
 			}
@@ -2830,9 +2967,9 @@ func (c *collector) matchDockerDataLoss(sub string, after []wordTok) bool {
 
 	switch sub {
 	case "compose", "stack":
-		next, _, dynamic, found := firstSubcommand(after, nil, nil)
+		next, _, dynamic, found := firstSubcommand(after, dockerComposeValueFlags, nil)
 		if dynamic {
-			c.decide("docker " + sub + " with a dynamic subcommand (fail-closed)")
+			c.decide("docker " + clampToken(sub) + " with a dynamic subcommand (fail-closed)")
 			return true
 		}
 		if !found || (next != "down" && next != "rm") {
@@ -2840,36 +2977,36 @@ func (c *collector) matchDockerDataLoss(sub string, after []wordTok) bool {
 		}
 		volumes, unresolvable := hasFlag("-v", "--volumes")
 		if unresolvable {
-			c.decide("docker " + sub + " " + next + " with unresolvable flags (fail-closed)")
+			c.decide("docker " + clampToken(sub) + " " + clampToken(next) + " with unresolvable flags (fail-closed)")
 			return true
 		}
 		if volumes {
 			c.recordDestructiveEffect()
-			c.decide("docker " + sub + " " + next + " removes named volumes")
+			c.decide("docker " + clampToken(sub) + " " + clampToken(next) + " removes named volumes")
 			return true
 		}
 		return false
 	case "volume", "network", "secret", "config":
 		next, _, dynamic, found := firstSubcommand(after, nil, nil)
 		if dynamic {
-			c.decide("docker " + sub + " with a dynamic subcommand (fail-closed)")
+			c.decide("docker " + clampToken(sub) + " with a dynamic subcommand (fail-closed)")
 			return true
 		}
 		if found && (next == "rm" || next == "remove" || next == "prune") {
 			c.recordDestructiveEffect()
-			c.decide("docker " + sub + " " + next)
+			c.decide("docker " + clampToken(sub) + " " + clampToken(next))
 			return true
 		}
 		return false
 	case "system", "image", "builder", "container":
 		next, _, dynamic, found := firstSubcommand(after, nil, nil)
 		if dynamic {
-			c.decide("docker " + sub + " with a dynamic subcommand (fail-closed)")
+			c.decide("docker " + clampToken(sub) + " with a dynamic subcommand (fail-closed)")
 			return true
 		}
 		if found && next == "prune" {
 			c.recordDestructiveEffect()
-			c.decide("docker " + sub + " prune")
+			c.decide("docker " + clampToken(sub) + " prune")
 			return true
 		}
 		return false

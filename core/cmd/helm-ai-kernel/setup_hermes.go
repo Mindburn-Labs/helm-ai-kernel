@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -163,8 +164,14 @@ func upsertHermesHookConfig(path, command string) error {
 	}
 	root := doc.Content[0]
 
-	hooks := yamlMappingChild(root, "hooks", yaml.MappingNode)
-	events := yamlMappingChild(hooks, hermesHookEvent, yaml.SequenceNode)
+	hooks, err := yamlMappingChild(root, "hooks", yaml.MappingNode)
+	if err != nil {
+		return err
+	}
+	events, err := yamlMappingChild(hooks, hermesHookEvent, yaml.SequenceNode)
+	if err != nil {
+		return err
+	}
 
 	entry := hermesHookEntryNode(command)
 	replaced := false
@@ -214,23 +221,42 @@ func hermesHookEntryNode(command string) *yaml.Node {
 
 // yamlMappingChild returns the value node stored under key in a mapping,
 // creating it with the requested kind when absent.
-func yamlMappingChild(parent *yaml.Node, key string, kind yaml.Kind) *yaml.Node {
+//
+// A kind mismatch is refused, never coerced. Coercing would blank the existing
+// node — and the node under `hooks.pre_tool_call` may be another operator's
+// security hook. Deleting a competing control in order to install ourselves is
+// the one thing this command must never do, so it stops and says what it found.
+func yamlMappingChild(parent *yaml.Node, key string, kind yaml.Kind) (*yaml.Node, error) {
 	for i := 0; i+1 < len(parent.Content); i += 2 {
 		if parent.Content[i].Value == key {
 			child := parent.Content[i+1]
 			if child.Kind != kind {
-				child.Kind = kind
-				child.Tag = ""
-				child.Value = ""
-				child.Content = nil
+				return nil, fmt.Errorf(
+					"%q is %s in this config but HELM needs %s; refusing to overwrite it — resolve it by hand, then re-run",
+					key, yamlKindName(child.Kind), yamlKindName(kind))
 			}
-			return child
+			return child, nil
 		}
 	}
 	child := &yaml.Node{Kind: kind}
 	parent.Content = append(parent.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, child)
-	return child
+	return child, nil
+}
+
+func yamlKindName(kind yaml.Kind) string {
+	switch kind {
+	case yaml.MappingNode:
+		return "a mapping"
+	case yaml.SequenceNode:
+		return "a list"
+	case yaml.ScalarNode:
+		return "a scalar"
+	case yaml.AliasNode:
+		return "an alias"
+	default:
+		return "an unexpected node"
+	}
 }
 
 func yamlScalarChild(mapping *yaml.Node, key string) string {
@@ -254,7 +280,36 @@ type hermesApproval struct {
 	ScriptMtimeAtApproval *string `json:"script_mtime_at_approval"`
 }
 
+// withHermesAllowlistLock holds the same exclusive lock Hermes takes before it
+// rewrites the allowlist: an flock on a sibling `<file>.lock`
+// (agent/shell_hooks.py _locked_update_approvals). Without it, a concurrent
+// `hermes hooks revoke` and this read-modify-write can interleave so that HELM
+// writes back a stale snapshot and restores an approval the operator had just
+// withdrawn — HELM granting authority for a hook that is not its own.
+func withHermesAllowlistLock(path string, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	lockPath := path + ".lock"
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open allowlist lock: %w", err)
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("lock allowlist: %w", err)
+	}
+	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
+	return fn()
+}
+
 func upsertHermesApproval(path, event, command string) error {
+	return withHermesAllowlistLock(path, func() error {
+		return upsertHermesApprovalLocked(path, event, command)
+	})
+}
+
+func upsertHermesApprovalLocked(path, event, command string) error {
 	payload := map[string]any{}
 	if raw, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(raw))) > 0 {
 		if err := json.Unmarshal(raw, &payload); err != nil {

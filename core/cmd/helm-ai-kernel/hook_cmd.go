@@ -246,15 +246,30 @@ func doomLoopSteeringText(classification hookClassification, runLength int) stri
 	return actioninbox.RenderSteeringText(d)
 }
 
+// hookDenyExitCode is the block signal every supported host agrees on, and it is
+// the only channel that survives a host failing to parse stdout:
+//
+//	Claude Code — exit 2 is the blocking error; stderr is fed to the model.
+//	Grok Build  — GATE_EXIT_CODE = 2 maps to Deny, using stderr's first line
+//	              (xai-grok-hooks/src/runner/command.rs).
+//	Hermes      — BLOCK_EXIT_CODE = 2 on a blocking event
+//	              (hermes-agent/agent/shell_hooks.py).
+//
+// Returning 0 with the verdict only in stdout made the denial destroyable: Grok
+// truncates hook stdout at 64 KiB and appends " [truncated]", so an oversized
+// payload fails to parse and falls through to the exit-code ladder, where 0
+// means ALLOW. The reason is also clamped at the source (shellscan.clampToken),
+// but the cap is a mitigation and this exit code is the invariant.
+const hookDenyExitCode = 2
+
 func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
 	if err := writeHookDeny(stdout, client, reason); err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
-		return 2
+		return hookDenyExitCode
 	}
-	// Hosts that fall back to stderr when they cannot parse stdout still get the
-	// reason. Harmless for the hosts that do parse it.
+	// First line of stderr is the deny reason for hosts that read it there.
 	fmt.Fprintln(stderr, reason)
-	return 0
+	return hookDenyExitCode
 }
 
 // normalizeHookClient accepts every host whose pre-tool hook HELM can answer.

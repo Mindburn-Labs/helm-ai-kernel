@@ -54,6 +54,9 @@
 {{- if and .Values.helm.emergencyStop.enabled .Values.helm.emergencyStop.commandReplayKeyringSecretKey (not .Values.helm.emergencyStop.existingSecret) -}}
 {{- fail "helm.emergencyStop.commandReplayKeyringSecretKey requires helm.emergencyStop.existingSecret" -}}
 {{- end -}}
+{{- if and .Values.telemetry.syntheticLifecycleEvents (not .Values.telemetry.enabled) -}}
+{{- fail "telemetry.syntheticLifecycleEvents=true requires telemetry.enabled=true" -}}
+{{- end -}}
 {{- if not (regexMatch "^.+@sha256:[0-9a-f]{64}$" .Values.runtimeInit.image) -}}
 {{- fail "runtimeInit.image must be pinned by immutable sha256 digest" -}}
 {{- end -}}
@@ -211,6 +214,10 @@ spec:
             {{- with .Values.telemetry.serviceName }}
             - name: OTEL_SERVICE_NAME
               value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.telemetry.syntheticLifecycleEvents }}
+            - name: HELM_ENV
+              value: "synthetic"
             {{- end }}
             {{- end }}
             - name: HELM_LIMIT_GLOBAL_RPS

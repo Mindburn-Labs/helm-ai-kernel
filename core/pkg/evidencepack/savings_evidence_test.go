@@ -6,7 +6,7 @@ package evidencepack
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 )
 
@@ -128,6 +129,20 @@ func buildSavingsFixture(t *testing.T, substituteFailsHoldout2 bool) *savingsFix
 	fix := &savingsFixture{priceSHA: priceSHA, signingKey: priv, keyID: keyID}
 
 	sets := map[string]SpendReceiptSet{}
+	sigs := map[string]map[string]DetachedSignature{}
+	signSet := func(intentID string, set SpendReceiptSet) {
+		m := map[string]DetachedSignature{}
+		if set.RouteQuote != nil {
+			m["route_quote"] = signDetachedForTest(t, priv, keyID, set.RouteQuote)
+		}
+		if set.Usage != nil {
+			m["usage"] = signDetachedForTest(t, priv, keyID, set.Usage)
+		}
+		if set.Settlement != nil {
+			m["settlement"] = signDetachedForTest(t, priv, keyID, set.Settlement)
+		}
+		sigs[intentID] = m
+	}
 	var results []SavingsTaskResult
 
 	// Parity pre-run on the selection set (before the freeze): baseline plus two
@@ -147,6 +162,7 @@ func buildSavingsFixture(t *testing.T, substituteFailsHoldout2 bool) *savingsFix
 			intentID := fmt.Sprintf("int-parity-%s-%s", route.env, task)
 			at := fixFreeze.Add(time.Duration(-60+ri*10+si) * time.Minute)
 			sets[intentID] = buildSavingsReceiptSet(t, intentID, route.env, fixBaseModel, route.selected, route.substituted, at, route.debit, priv, keyID, priceSHA)
+			signSet(intentID, sets[intentID])
 			passed := !(route.env == fixCandBEnv && task == "sel-2")
 			results = append(results, SavingsTaskResult{
 				TaskID: task, Phase: SavingsPhaseParity, EnvelopeID: route.env,
@@ -185,6 +201,7 @@ func buildSavingsFixture(t *testing.T, substituteFailsHoldout2 bool) *savingsFix
 
 		baseIntent := "int-hold-" + task + "-base"
 		sets[baseIntent] = buildSavingsReceiptSet(t, baseIntent, fixBaseEnv, fixBaseModel, fixBaseModel, false, at, 10, priv, keyID, priceSHA)
+		signSet(baseIntent, sets[baseIntent])
 		results = append(results, SavingsTaskResult{
 			TaskID: task, Phase: SavingsPhaseHoldout, EnvelopeID: fixBaseEnv,
 			RequestedModelID: fixBaseModel, IdempotencyKey: "k-" + baseIntent, SpendIntentID: baseIntent,
@@ -194,6 +211,7 @@ func buildSavingsFixture(t *testing.T, substituteFailsHoldout2 bool) *savingsFix
 
 		subIntent := "int-hold-" + task + "-sub"
 		sets[subIntent] = buildSavingsReceiptSet(t, subIntent, fixCandAEnv, fixBaseModel, fixCandAModel, true, at.Add(30*time.Second), 3, priv, keyID, priceSHA)
+		signSet(subIntent, sets[subIntent])
 		subPassed := !(substituteFailsHoldout2 && task == "hold-2")
 		failure := ""
 		if !subPassed {
@@ -250,6 +268,7 @@ func buildSavingsFixture(t *testing.T, substituteFailsHoldout2 bool) *savingsFix
 		RunID:             "run-sav-1",
 		PolicyHash:        "sha256:route-policy-sav",
 		ReceiptSets:       sets,
+		ReceiptSignatures: sigs,
 		TaskSplitManifest: manifestBytes,
 		TaskResults:       resultsBytes,
 		ParityResults:     parityBytes,
@@ -262,10 +281,7 @@ func buildSavingsFixture(t *testing.T, substituteFailsHoldout2 bool) *savingsFix
 
 func TestBuildAndVerifySavingsEvidenceOffline(t *testing.T) {
 	fix := buildSavingsFixture(t, false)
-	manifest, contents, view, err := BuildSavingsEvidencePack(fix.inputs)
-	if err != nil {
-		t.Fatalf("build savings pack: %v", err)
-	}
+	manifest, contents, view := buildSignedSavingsPack(t, fix)
 	if manifest.ManifestHash == "" {
 		t.Fatal("expected manifest hash")
 	}
@@ -301,7 +317,8 @@ func TestBuildAndVerifySavingsEvidenceOffline(t *testing.T) {
 		t.Fatalf("unexpected verification result: %+v", res)
 	}
 	for _, check := range []string{
-		"manifest_rederived", "receipts_rehashed", "price_book_bound",
+		"manifest_rederived", "receipts_rehashed", "receipt_signatures",
+		"manifest_signature", "price_book_bound",
 		"cpst_recomputed", "pass_rates_and_parity_recomputed", "paired_task_ids",
 		"selection_freeze_precedes_holdout", "verdict_signatures", "no_prompt_bodies",
 	} {
@@ -315,10 +332,7 @@ func TestBuildAndVerifySavingsEvidenceOffline(t *testing.T) {
 
 func TestSavingsEvidence_NegativeParityResultIsStillAPack(t *testing.T) {
 	fix := buildSavingsFixture(t, true)
-	_, contents, view, err := BuildSavingsEvidencePack(fix.inputs)
-	if err != nil {
-		t.Fatalf("build savings pack: %v", err)
-	}
+	_, contents, view := buildSignedSavingsPack(t, fix)
 	if view.ParityBarMet || view.SavingsClaimValid {
 		t.Fatalf("expected failed parity bar: %+v", view)
 	}
@@ -390,10 +404,7 @@ func TestSavingsEvidence_UnpairedHoldoutRefused(t *testing.T) {
 
 func TestSavingsEvidence_TamperedReceiptDetected(t *testing.T) {
 	fix := buildSavingsFixture(t, false)
-	_, contents, _, err := BuildSavingsEvidencePack(fix.inputs)
-	if err != nil {
-		t.Fatalf("build savings pack: %v", err)
-	}
+	_, contents, _ := buildSignedSavingsPack(t, fix)
 
 	path := "receipts/int-hold-hold-1-base/usage.json"
 	var usage economic.UsageReceipt
@@ -415,17 +426,25 @@ func TestSavingsEvidence_TamperedReceiptDetected(t *testing.T) {
 
 func TestSavingsEvidence_UnknownSignatureKeyFailsClosed(t *testing.T) {
 	fix := buildSavingsFixture(t, false)
-	// Replace the registry with one that does not hold the signing key id.
+	// A registry holding only a DIFFERENT key: every signature must fail to
+	// resolve.
+	otherPub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate other key: %v", err)
+	}
 	other, _ := json.MarshalIndent(map[string]any{
 		"version": "spend-proxy-trusted-keys.v1",
-		"keys":    map[string]any{},
+		"keys": map[string]any{
+			"someone-else": map[string]any{
+				"algorithm":     "ed25519",
+				"public_key":    "ed25519:" + hex.EncodeToString(otherPub),
+				"registered_at": fixFreeze,
+			},
+		},
 	}, "", "  ")
 	fix.inputs.TrustedKeys = other
 
-	_, contents, _, err := BuildSavingsEvidencePack(fix.inputs)
-	if err != nil {
-		t.Fatalf("build savings pack: %v", err)
-	}
+	_, contents, _ := buildSignedSavingsPack(t, fix)
 	if _, err := VerifySavingsEvidenceOffline(contents); err == nil {
 		t.Fatal("expected unknown signature key to fail closed")
 	} else if !strings.Contains(err.Error(), "unknown key") {
@@ -433,8 +452,257 @@ func TestSavingsEvidence_UnknownSignatureKeyFailsClosed(t *testing.T) {
 	}
 }
 
-// sha256Hex is a tiny helper keeping fixtures readable.
-func sha256Hex(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+func TestSavingsEvidence_RegistryRequiredAtBuild(t *testing.T) {
+	fix := buildSavingsFixture(t, false)
+	fix.inputs.TrustedKeys = nil
+	if _, _, _, err := BuildSavingsEvidencePack(fix.inputs); err == nil || !strings.Contains(err.Error(), "trusted-key registry is required") {
+		t.Fatalf("expected registry requirement, got: %v", err)
+	}
+}
+
+func TestSavingsEvidence_MissingReceiptSignatureRefusedAtBuild(t *testing.T) {
+	fix := buildSavingsFixture(t, false)
+	delete(fix.inputs.ReceiptSignatures["int-hold-hold-1-base"], "usage")
+	if _, _, _, err := BuildSavingsEvidencePack(fix.inputs); err == nil || !strings.Contains(err.Error(), "no detached signature") {
+		t.Fatalf("expected missing-signature refusal, got: %v", err)
+	}
+}
+
+// TestSavingsForge_TamperedTokensRejected is the reviewer's forge scenario:
+// token counts are OUTSIDE the sealed content-hash preimage, so a forger can
+// rewrite them, recompute the view, and re-pin the (self-referential)
+// manifest. Even when the manifest is RE-SIGNED with a leaked key, the
+// per-receipt detached signature over the JCS payload must catch the rewrite.
+func TestSavingsForge_TamperedTokensRejected(t *testing.T) {
+	fix := buildSavingsFixture(t, false)
+	_, contents, _ := buildSignedSavingsPack(t, fix)
+
+	path := "receipts/int-hold-hold-1-base/usage.json"
+	var usage economic.UsageReceipt
+	if err := json.Unmarshal(contents[path], &usage); err != nil {
+		t.Fatalf("decode usage: %v", err)
+	}
+	usage.OutputTokens *= 10 // NOT resealed: tokens are outside the preimage
+	if !usage.HasCanonicalContentHash() {
+		t.Fatal("precondition broken: token tamper should keep the sealed content hash valid")
+	}
+	raw, _ := json.MarshalIndent(&usage, "", "  ")
+	contents[path] = raw
+
+	// Forger recomputes the view from the doctored receipts and re-pins the
+	// manifest — everything possible without the signing key.
+	forgeRecomputeView(t, contents)
+	forgeRepinManifest(t, contents)
+	forgeResignManifest(t, fix, contents)
+
+	if _, err := VerifySavingsEvidenceOffline(contents); err == nil {
+		t.Fatal("expected forged token counts to be rejected")
+	} else if !strings.Contains(err.Error(), "usage receipt signature does not verify") {
+		t.Fatalf("expected usage signature failure, got: %v", err)
+	}
+}
+
+// TestSavingsForge_BackdatedQuoteRejected: RouteQuote.CreatedAt is outside the
+// sealed preimage; backdating must be caught by the detached signature.
+func TestSavingsForge_BackdatedQuoteRejected(t *testing.T) {
+	fix := buildSavingsFixture(t, false)
+	_, contents, _ := buildSignedSavingsPack(t, fix)
+
+	path := "receipts/int-hold-hold-1-base/route_quote.json"
+	var quote economic.RouteQuote
+	if err := json.Unmarshal(contents[path], &quote); err != nil {
+		t.Fatalf("decode quote: %v", err)
+	}
+	quote.CreatedAt = quote.CreatedAt.Add(-2 * time.Hour) // NOT resealed
+	if !quote.HasCanonicalContentHash() {
+		t.Fatal("precondition broken: CreatedAt tamper should keep the sealed content hash valid")
+	}
+	raw, _ := json.MarshalIndent(&quote, "", "  ")
+	contents[path] = raw
+
+	forgeRepinManifest(t, contents)
+	forgeResignManifest(t, fix, contents)
+
+	if _, err := VerifySavingsEvidenceOffline(contents); err == nil {
+		t.Fatal("expected backdated quote to be rejected")
+	} else if !strings.Contains(err.Error(), "route_quote receipt signature does not verify") {
+		t.Fatalf("expected quote signature failure, got: %v", err)
+	}
+}
+
+// TestSavingsForge_StrippedReceiptsRejected: removing a holdout receipt set
+// (to hide spend or a failure) must fail results->receipts completeness even
+// with a re-pinned, re-signed manifest.
+func TestSavingsForge_StrippedReceiptsRejected(t *testing.T) {
+	fix := buildSavingsFixture(t, false)
+	_, contents, _ := buildSignedSavingsPack(t, fix)
+
+	for name := range contents {
+		if strings.HasPrefix(name, "receipts/int-hold-hold-2-sub/") {
+			delete(contents, name)
+		}
+	}
+	forgeStripManifestEntries(t, contents, "receipts/int-hold-hold-2-sub/")
+	forgeRepinManifest(t, contents)
+	forgeResignManifest(t, fix, contents)
+
+	if _, err := VerifySavingsEvidenceOffline(contents); err == nil {
+		t.Fatal("expected stripped receipts to be rejected")
+	} else if !strings.Contains(err.Error(), "no route-quote receipt in the pack") {
+		t.Fatalf("expected completeness failure, got: %v", err)
+	}
+}
+
+// TestSavingsForge_MissingRegistryRejected: a pack without the registry is
+// self-attested and must not verify.
+func TestSavingsForge_MissingRegistryRejected(t *testing.T) {
+	fix := buildSavingsFixture(t, false)
+	_, contents, _ := buildSignedSavingsPack(t, fix)
+	delete(contents, "artifacts/trusted_keys.json")
+	forgeStripManifestEntries(t, contents, "artifacts/trusted_keys.json")
+	forgeRepinManifest(t, contents)
+	forgeResignManifest(t, fix, contents)
+	if _, err := VerifySavingsEvidenceOffline(contents); err == nil {
+		t.Fatal("expected registry-less pack to be rejected")
+	} else if !strings.Contains(err.Error(), "trusted-key registry missing") {
+		t.Fatalf("expected registry-missing failure, got: %v", err)
+	}
+}
+
+// TestSavingsForge_MissingManifestSignatureRejected: stripping manifest.sig.json
+// (it is not a manifest entry) must fail closed.
+func TestSavingsForge_MissingManifestSignatureRejected(t *testing.T) {
+	fix := buildSavingsFixture(t, false)
+	_, contents, _ := buildSignedSavingsPack(t, fix)
+	delete(contents, SavingsManifestSigPath)
+	if _, err := VerifySavingsEvidenceOffline(contents); err == nil {
+		t.Fatal("expected signature-less manifest to be rejected")
+	} else if !strings.Contains(err.Error(), "manifest.sig.json missing") {
+		t.Fatalf("expected manifest-signature-missing failure, got: %v", err)
+	}
+}
+
+// signDetachedForTest mirrors the spend proxy's detached signing: Ed25519 over
+// the JCS canonicalization of the receipt payload.
+func signDetachedForTest(t *testing.T, priv ed25519.PrivateKey, keyID string, payload any) DetachedSignature {
+	t.Helper()
+	canonical, err := canonicalize.JCS(payload)
+	if err != nil {
+		t.Fatalf("canonicalize payload: %v", err)
+	}
+	return DetachedSignature{KeyID: keyID, Signature: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, canonical))}
+}
+
+// buildSignedSavingsPack builds the pack and attaches the manifest signature
+// with the fixture key — the shape a legitimate export produces.
+func buildSignedSavingsPack(t *testing.T, fix *savingsFixture) (*Manifest, map[string][]byte, *SavingsView) {
+	t.Helper()
+	manifest, contents, view, err := BuildSavingsEvidencePack(fix.inputs)
+	if err != nil {
+		t.Fatalf("build savings pack: %v", err)
+	}
+	if err := AttachManifestSignature(contents, func(payload []byte) (string, []byte, error) {
+		return fix.keyID, ed25519.Sign(fix.signingKey, payload), nil
+	}); err != nil {
+		t.Fatalf("attach manifest signature: %v", err)
+	}
+	return manifest, contents, view
+}
+
+// forgeRepinManifest recomputes every entry hash and the manifest hash after a
+// forger has edited pack bytes — everything an attacker WITHOUT the signing
+// key can regenerate.
+func forgeRepinManifest(t *testing.T, contents map[string][]byte) {
+	t.Helper()
+	var manifest Manifest
+	if err := json.Unmarshal(contents["manifest.json"], &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	for i, entry := range manifest.Entries {
+		data, ok := contents[entry.Path]
+		if !ok {
+			t.Fatalf("manifest entry %s missing from contents", entry.Path)
+		}
+		manifest.Entries[i].ContentHash = HashContent(data)
+		manifest.Entries[i].Size = int64(len(data))
+	}
+	hash, err := ComputeManifestHash(&manifest)
+	if err != nil {
+		t.Fatalf("recompute manifest hash: %v", err)
+	}
+	manifest.ManifestHash = hash
+	root, err := ComputeEntriesMerkleRoot(manifest.Entries)
+	if err != nil {
+		t.Fatalf("recompute merkle root: %v", err)
+	}
+	manifest.EntriesMerkleRoot = root
+	raw, err := json.MarshalIndent(&manifest, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	contents["manifest.json"] = raw
+}
+
+// forgeRecomputeView recomputes views/savings_view.json from the (possibly
+// doctored) pack receipts and artifacts — the forger's step after editing
+// receipt bytes.
+func forgeRecomputeView(t *testing.T, contents map[string][]byte) {
+	t.Helper()
+	sets, _, _, err := collectSavingsReceiptSets(contents)
+	if err != nil {
+		t.Fatalf("forge: collect receipts: %v", err)
+	}
+	var man SavingsTaskSplitManifest
+	if err := decodeStrict(contents[savingsTaskSplitPath], &man, "manifest"); err != nil {
+		t.Fatalf("forge: decode manifest artifact: %v", err)
+	}
+	var results SavingsTaskResults
+	if err := decodeStrict(contents[savingsTaskResultsPath], &results, "results"); err != nil {
+		t.Fatalf("forge: decode results: %v", err)
+	}
+	view, err := ComputeSavingsView(sets, &man, &results, contents[savingsPriceBookPath])
+	if err != nil {
+		t.Fatalf("forge: recompute view: %v", err)
+	}
+	view.SelectionFreeze.TaskSplitManifestSHA256 = HashContent(contents[savingsTaskSplitPath])
+	raw, err := json.MarshalIndent(view, "", "  ")
+	if err != nil {
+		t.Fatalf("forge: marshal view: %v", err)
+	}
+	contents[savingsViewPath] = raw
+}
+
+// forgeStripManifestEntries drops manifest entries under a path prefix (used
+// together with deleting the files themselves).
+func forgeStripManifestEntries(t *testing.T, contents map[string][]byte, prefix string) {
+	t.Helper()
+	var manifest Manifest
+	if err := json.Unmarshal(contents["manifest.json"], &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	kept := manifest.Entries[:0]
+	for _, entry := range manifest.Entries {
+		if !strings.HasPrefix(entry.Path, prefix) {
+			kept = append(kept, entry)
+		}
+	}
+	manifest.Entries = kept
+	raw, err := json.MarshalIndent(&manifest, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	contents["manifest.json"] = raw
+}
+
+// forgeResignManifest re-signs the re-pinned manifest with the fixture key —
+// simulating the WORST case where the manifest-signing key leaked. The
+// per-receipt detached signatures must still catch payload rewrites.
+func forgeResignManifest(t *testing.T, fix *savingsFixture, contents map[string][]byte) {
+	t.Helper()
+	delete(contents, SavingsManifestSigPath)
+	if err := AttachManifestSignature(contents, func(payload []byte) (string, []byte, error) {
+		return fix.keyID, ed25519.Sign(fix.signingKey, payload), nil
+	}); err != nil {
+		t.Fatalf("re-sign manifest: %v", err)
+	}
 }

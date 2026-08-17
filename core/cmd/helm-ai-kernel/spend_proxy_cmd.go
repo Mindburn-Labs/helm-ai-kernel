@@ -215,12 +215,14 @@ func runSpendProxySavingsExport(args []string, stdout, stderr io.Writer) int {
 		captureDir  string
 		configPath  string
 		outDir      string
+		signSecret  string
 		jsonOut     bool
 	)
 	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-spend-receipts", "Directory holding the receipt log and trusted-key registry")
 	cmd.StringVar(&captureDir, "capture", "", "Directory holding task_split_manifest.json, task_results.json, parity_prerun.json (required)")
 	cmd.StringVar(&configPath, "config", "", "The exact spend-proxy config the capture ran with (required; embedded as the price-book snapshot)")
 	cmd.StringVar(&outDir, "out", "./helm-spend-evidence", "Output directory for the savings EvidencePack")
+	cmd.StringVar(&signSecret, "sign", "", "Signing seed for the pack manifest signature (or set HELM_SPEND_PROXY_SIGNING_SEED; must be the capture's signing key)")
 	cmd.BoolVar(&jsonOut, "json", false, "Print the export summary as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -229,12 +231,16 @@ func runSpendProxySavingsExport(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Error: --capture and --config are required")
 		return 2
 	}
+	if signSecret == "" {
+		signSecret = os.Getenv("HELM_SPEND_PROXY_SIGNING_SEED")
+	}
 
 	res, err := spendproxy.ExportSavingsEvidencePack(spendproxy.SavingsExportOptions{
-		ReceiptsDir: receiptsDir,
-		CaptureDir:  captureDir,
-		ConfigPath:  configPath,
-		OutDir:      outDir,
+		ReceiptsDir:   receiptsDir,
+		CaptureDir:    captureDir,
+		ConfigPath:    configPath,
+		OutDir:        outDir,
+		SigningSecret: signSecret,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)

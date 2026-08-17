@@ -273,13 +273,48 @@ referenced by `task_set_sha256`):
   && echo "no prompt-body markers in business views"
 ```
 
-## Verdict signatures (supplementary)
+## Receipt, manifest, and verdict signatures
 
-Every `budget_verdict.json` is Ed25519-signed; the registry is embedded at
-`artifacts/trusted_keys.json`. `savings-verify` checks every signature against
-it offline. To verify independently, resolve `signature_key_id` in the
-registry and check the Ed25519 signature over the receipt's canonical content
-hash with any Ed25519 implementation.
+The sealed `content_hash` on each receipt deliberately omits post-dispatch
+fields (token counts, quote timestamps, substitution flags). The pack
+therefore anchors them with **detached Ed25519 signatures**, and
+`savings-verify` REQUIRES all of the following (their absence fails
+verification):
+
+- `receipts/<intent>/receipt_signatures.json` — for every route-quote, usage,
+  and settlement receipt: an Ed25519 signature over the RFC 8785 (JCS)
+  canonicalization of the receipt JSON, made by the spend-proxy issuer at
+  persist time. Rewriting ANY receipt field — including token counts and
+  timestamps — breaks it.
+- `manifest.sig.json` — the issuer's signature over the raw ASCII bytes of the
+  manifest hash. The manifest alone is self-referential (a forger can re-pin
+  entry hashes and recompute it); this signature is what makes the pack
+  non-regenerable without the capture key.
+- `budget_verdict.json` — carries its own embedded seal, checked against the
+  same registry.
+
+Quick structural checks without an Ed25519 tool:
+
+```bash
+jq -r '.manifest_hash == $mh' --arg mh "$(jq -r .manifest_hash "$PACK/manifest.json")" "$PACK/manifest.sig.json"   && echo "manifest signature covers the pack manifest hash"
+KEYID=$(jq -r .key_id "$PACK/manifest.sig.json")
+jq -e --arg k "$KEYID" '.keys[$k]' "$PACK/artifacts/trusted_keys.json" >/dev/null   && echo "manifest signing key $KEYID is in the embedded registry"
+ls "$PACK"/receipts/*/receipt_signatures.json | wc -l
+```
+
+To verify the signatures independently of the HELM binary, use any Ed25519
+implementation: the manifest signature is over the `manifest_hash` string
+bytes; each receipt signature is over the JCS canonicalization of the receipt
+JSON (for these ASCII-only receipts, Python's
+`json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
+is byte-identical to JCS). Public keys are hex-encoded in
+`artifacts/trusted_keys.json` under `keys.<key_id>.public_key`.
+
+**Provenance note:** the registry travels inside the pack, so signature checks
+prove the pack is internally consistent under its declared keys. To prove WHO
+produced it, pin the expected `key_id` and public key out-of-band — the
+capture record (Linear HELM-618) publishes both for the reference pack — and
+compare against `artifacts/trusted_keys.json` before trusting the claim.
 
 ## What the claim means
 

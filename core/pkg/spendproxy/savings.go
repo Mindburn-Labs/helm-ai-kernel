@@ -37,6 +37,10 @@ type SavingsExportOptions struct {
 	ConfigPath string
 	// OutDir receives the pack contents under <OutDir>/<pack_id>/.
 	OutDir string
+	// SigningSecret seeds the issuer key that signs the pack manifest hash. It
+	// MUST resolve to a key id already present in the receipts dir's
+	// trusted-key registry (the same key that signed the capture's receipts).
+	SigningSecret string
 }
 
 // SavingsExportResult summarizes one exported savings EvidencePack.
@@ -59,6 +63,24 @@ type SavingsExportResult struct {
 func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult, error) {
 	if opts.ReceiptsDir == "" || opts.CaptureDir == "" || opts.ConfigPath == "" || opts.OutDir == "" {
 		return nil, errors.New("spendproxy: savings export requires receipts dir, capture dir, config path, and out dir")
+	}
+	if strings.TrimSpace(opts.SigningSecret) == "" {
+		return nil, errors.New("spendproxy: savings export requires the capture's signing seed (--sign or HELM_SPEND_PROXY_SIGNING_SEED) to sign the pack manifest")
+	}
+	issuer, _, err := NewIssuer(opts.SigningSecret)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := OpenTrustedKeys(opts.ReceiptsDir)
+	if err != nil {
+		return nil, err
+	}
+	registered, ok := keys.PublicKeyFor(issuer.KeyID())
+	if !ok {
+		return nil, fmt.Errorf("spendproxy: export signing key %s is not in the trusted-key registry; use the capture's signing seed", issuer.KeyID())
+	}
+	if !registered.Equal(issuer.PublicKey()) {
+		return nil, fmt.Errorf("spendproxy: export signing key %s does not match the registered public key", issuer.KeyID())
 	}
 
 	records, err := LoadRecords(filepath.Join(opts.ReceiptsDir, ReceiptLogName))
@@ -115,6 +137,19 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 	}
 
 	sets := make(map[string]evidencepack.SpendReceiptSet)
+	sigs := make(map[string]map[string]evidencepack.DetachedSignature)
+	recordSig := func(intentID, kind string, rec *ReceiptRecord) error {
+		if rec.PayloadSignature == "" || rec.PayloadSignatureKeyID == "" {
+			return fmt.Errorf("spendproxy: %s record for intent %s carries no detached signature; the capture must run with the signing proxy (re-capture required)", kind, intentID)
+		}
+		m := sigs[intentID]
+		if m == nil {
+			m = make(map[string]evidencepack.DetachedSignature, 4)
+			sigs[intentID] = m
+		}
+		m[kind] = evidencepack.DetachedSignature{KeyID: rec.PayloadSignatureKeyID, Signature: rec.PayloadSignature}
+		return nil
+	}
 	for _, rec := range records {
 		if rec.SpendIntentID == "" {
 			continue
@@ -135,6 +170,9 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 		case RecordRouteQuote:
 			if rec.RouteQuote != nil && set.RouteQuote == nil {
 				set.RouteQuote = rec.RouteQuote
+				if err := recordSig(rec.SpendIntentID, "route_quote", rec); err != nil {
+					return nil, err
+				}
 			}
 		case RecordBudgetVerdict:
 			if rec.BudgetVerdict != nil {
@@ -143,10 +181,16 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 		case RecordUsage:
 			if rec.Usage != nil {
 				set.Usage = rec.Usage
+				if err := recordSig(rec.SpendIntentID, "usage", rec); err != nil {
+					return nil, err
+				}
 			}
 		case RecordSettlement:
 			if rec.Settlement != nil {
 				set.Settlement = rec.Settlement
+				if err := recordSig(rec.SpendIntentID, "settlement", rec); err != nil {
+					return nil, err
+				}
 			}
 		}
 		sets[rec.SpendIntentID] = set
@@ -164,6 +208,7 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 		RunID:             man.RunID,
 		PolicyHash:        routePolicyHashFromSets(sets),
 		ReceiptSets:       sets,
+		ReceiptSignatures: sigs,
 		TaskSplitManifest: manifestBytes,
 		TaskResults:       resultsBytes,
 		ParityResults:     parityBytes,
@@ -172,6 +217,12 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 		Profile:           economic.DefaultRedactionProfile(),
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	// Sign the manifest hash with the capture key: without this the manifest
+	// would be self-referential and re-pinnable.
+	if err := evidencepack.AttachManifestSignature(contents, issuer.SignRaw); err != nil {
 		return nil, err
 	}
 

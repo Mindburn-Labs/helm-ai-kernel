@@ -139,10 +139,11 @@ func TestSavingsExportEndToEnd(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "packs")
 
 	res, err := ExportSavingsEvidencePack(SavingsExportOptions{
-		ReceiptsDir: f.receiptsDir,
-		CaptureDir:  captureDir,
-		ConfigPath:  f.configPath,
-		OutDir:      outDir,
+		ReceiptsDir:   f.receiptsDir,
+		CaptureDir:    captureDir,
+		ConfigPath:    f.configPath,
+		OutDir:        outDir,
+		SigningSecret: "0101010101010101010101010101010101010101010101010101010101010101",
 	})
 	if err != nil {
 		t.Fatalf("savings export: %v", err)
@@ -233,10 +234,11 @@ func TestSavingsExportRefusesUnattributedSpend(t *testing.T) {
 	}
 
 	_, err := ExportSavingsEvidencePack(SavingsExportOptions{
-		ReceiptsDir: f.receiptsDir,
-		CaptureDir:  captureDir,
-		ConfigPath:  f.configPath,
-		OutDir:      filepath.Join(t.TempDir(), "packs"),
+		ReceiptsDir:   f.receiptsDir,
+		CaptureDir:    captureDir,
+		ConfigPath:    f.configPath,
+		OutDir:        filepath.Join(t.TempDir(), "packs"),
+		SigningSecret: "0101010101010101010101010101010101010101010101010101010101010101",
 	})
 	if err == nil || !strings.Contains(err.Error(), "unattributed spend") {
 		t.Fatalf("expected unattributed-spend refusal, got: %v", err)
@@ -252,12 +254,84 @@ func TestSavingsExportRequiresArtifacts(t *testing.T) {
 	}
 
 	_, err := ExportSavingsEvidencePack(SavingsExportOptions{
-		ReceiptsDir: f.receiptsDir,
-		CaptureDir:  t.TempDir(),
-		ConfigPath:  f.configPath,
-		OutDir:      t.TempDir(),
+		ReceiptsDir:   f.receiptsDir,
+		CaptureDir:    t.TempDir(),
+		ConfigPath:    f.configPath,
+		OutDir:        t.TempDir(),
+		SigningSecret: "0101010101010101010101010101010101010101010101010101010101010101",
 	})
 	if err == nil || !strings.Contains(err.Error(), "task-split manifest") {
 		t.Fatalf("expected missing-manifest failure, got: %v", err)
+	}
+}
+
+func TestSavingsExportRequiresSigningSeed(t *testing.T) {
+	f := newProxyFixture(t)
+	captureDir := runSavingsCapture(t, f)
+	_, err := ExportSavingsEvidencePack(SavingsExportOptions{
+		ReceiptsDir: f.receiptsDir,
+		CaptureDir:  captureDir,
+		ConfigPath:  f.configPath,
+		OutDir:      t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "signing seed") {
+		t.Fatalf("expected signing-seed requirement, got: %v", err)
+	}
+}
+
+func TestSavingsExportRejectsForeignSigningSeed(t *testing.T) {
+	f := newProxyFixture(t)
+	captureDir := runSavingsCapture(t, f)
+	_, err := ExportSavingsEvidencePack(SavingsExportOptions{
+		ReceiptsDir:   f.receiptsDir,
+		CaptureDir:    captureDir,
+		ConfigPath:    f.configPath,
+		OutDir:        t.TempDir(),
+		SigningSecret: "0202020202020202020202020202020202020202020202020202020202020202",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not in the trusted-key registry") {
+		t.Fatalf("expected foreign-seed refusal, got: %v", err)
+	}
+}
+
+func TestSavingsExportRefusesUnsignedRecords(t *testing.T) {
+	// Receipts captured by a pre-signature proxy (no payload signatures) must
+	// be refused: the pack cannot anchor what was never signed.
+	f := newProxyFixture(t)
+	captureDir := runSavingsCapture(t, f)
+
+	logPath := filepath.Join(f.receiptsDir, ReceiptLogName)
+	records, err := LoadRecords(logPath)
+	if err != nil {
+		t.Fatalf("load records: %v", err)
+	}
+	stripped, err := os.OpenFile(logPath, os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatalf("truncate log: %v", err)
+	}
+	for _, rec := range records {
+		rec.PayloadSignature = ""
+		rec.PayloadSignatureKeyID = ""
+		line, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatalf("marshal record: %v", err)
+		}
+		if _, err := stripped.Write(append(line, '\n')); err != nil {
+			t.Fatalf("write record: %v", err)
+		}
+	}
+	if err := stripped.Close(); err != nil {
+		t.Fatalf("close log: %v", err)
+	}
+
+	_, err = ExportSavingsEvidencePack(SavingsExportOptions{
+		ReceiptsDir:   f.receiptsDir,
+		CaptureDir:    captureDir,
+		ConfigPath:    f.configPath,
+		OutDir:        t.TempDir(),
+		SigningSecret: "0101010101010101010101010101010101010101010101010101010101010101",
+	})
+	if err == nil || !strings.Contains(err.Error(), "no detached signature") {
+		t.Fatalf("expected unsigned-record refusal, got: %v", err)
 	}
 }

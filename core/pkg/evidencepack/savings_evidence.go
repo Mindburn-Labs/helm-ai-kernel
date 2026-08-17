@@ -25,6 +25,7 @@ package evidencepack
 
 import (
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 )
 
@@ -47,7 +49,32 @@ const (
 	savingsTrustedKeysPath = "artifacts/trusted_keys.json"
 
 	savingsViewPath = "views/savings_view.json"
+
+	// savingsSignaturesName is the per-intent detached-signature entry
+	// (receipts/<intent>/receipt_signatures.json).
+	savingsSignaturesName = "receipt_signatures.json"
+	// SavingsManifestSigPath is the issuer's detached signature over the
+	// manifest hash. It is a pack file OUTSIDE the manifest's entry list (the
+	// manifest cannot list a signature over itself), which is exactly what
+	// makes the otherwise self-referential manifest non-re-pinnable.
+	SavingsManifestSigPath = "manifest.sig.json"
 )
+
+// DetachedSignature is an Ed25519 signature over the RFC 8785 (JCS)
+// canonicalization of a receipt payload, resolved via the embedded
+// trusted-key registry.
+type DetachedSignature struct {
+	KeyID     string `json:"key_id"`
+	Signature string `json:"signature"`
+}
+
+// SavingsManifestSignature binds the pack manifest hash under the issuer key:
+// the signature is over the raw ASCII bytes of ManifestHash.
+type SavingsManifestSignature struct {
+	ManifestHash string `json:"manifest_hash"`
+	KeyID        string `json:"key_id"`
+	Signature    string `json:"signature"`
+}
 
 // Subset and phase labels used by the task-split manifest and results.
 const (
@@ -241,6 +268,9 @@ func decodeStrict(raw []byte, v interface{}, what string) error {
 	if err := dec.Decode(v); err != nil {
 		return fmt.Errorf("savings evidence: decode %s: %w", what, err)
 	}
+	if dec.More() {
+		return fmt.Errorf("savings evidence: decode %s: trailing data after JSON value", what)
+	}
 	return nil
 }
 
@@ -386,6 +416,16 @@ func ComputeSavingsView(sets map[string]SpendReceiptSet, man *SavingsTaskSplitMa
 			return nil, fmt.Errorf("savings evidence: spend intent %s referenced by both task %s and task %s", r.SpendIntentID, prev.TaskID, r.TaskID)
 		}
 		resultIntents[r.SpendIntentID] = r
+		// Forward completeness: every result must be backed by receipts in the
+		// pack — a stripped receipt set must fail, not silently drop from the
+		// aggregates.
+		backing, ok := sets[r.SpendIntentID]
+		if !ok || backing.RouteQuote == nil {
+			return nil, fmt.Errorf("savings evidence: result for task %s (phase %s, envelope %s) references intent %s with no route-quote receipt in the pack", r.TaskID, r.Phase, r.EnvelopeID, r.SpendIntentID)
+		}
+		if r.Passed && (backing.Usage == nil || backing.Settlement == nil) {
+			return nil, fmt.Errorf("savings evidence: passed task %s (intent %s) has no settled usage+settlement receipts", r.TaskID, r.SpendIntentID)
+		}
 		if r.Phase != SavingsPhaseHoldout {
 			continue
 		}
@@ -565,6 +605,11 @@ type SavingsPackInputs struct {
 	PolicyHash string
 
 	ReceiptSets map[string]SpendReceiptSet
+	// ReceiptSignatures holds the issuer's detached signatures per intent, keyed
+	// by receipt entry name ("route_quote", "usage", "settlement", and
+	// optionally "budget_verdict"). Required for every route_quote/usage/
+	// settlement receipt in ReceiptSets.
+	ReceiptSignatures map[string]map[string]DetachedSignature
 
 	TaskSplitManifest []byte
 	TaskResults       []byte
@@ -584,6 +629,27 @@ func BuildSavingsEvidencePack(in SavingsPackInputs) (*Manifest, map[string][]byt
 	}
 	if len(in.PriceBookConfig) == 0 {
 		return nil, nil, nil, errors.New("savings evidence pack: the price-book config snapshot is required")
+	}
+	if len(in.TrustedKeys) == 0 {
+		return nil, nil, nil, errors.New("savings evidence pack: the trusted-key registry is required (offline verification is anchored to it)")
+	}
+	for intentID, set := range in.ReceiptSets {
+		sigs := in.ReceiptSignatures[intentID]
+		if set.RouteQuote != nil {
+			if _, ok := sigs["route_quote"]; !ok {
+				return nil, nil, nil, fmt.Errorf("savings evidence pack: intent %s route quote has no detached signature", intentID)
+			}
+		}
+		if set.Usage != nil {
+			if _, ok := sigs["usage"]; !ok {
+				return nil, nil, nil, fmt.Errorf("savings evidence pack: intent %s usage receipt has no detached signature", intentID)
+			}
+		}
+		if set.Settlement != nil {
+			if _, ok := sigs["settlement"]; !ok {
+				return nil, nil, nil, fmt.Errorf("savings evidence pack: intent %s settlement receipt has no detached signature", intentID)
+			}
+		}
 	}
 
 	var man SavingsTaskSplitManifest
@@ -647,6 +713,11 @@ func BuildSavingsEvidencePack(in SavingsPackInputs) (*Manifest, map[string][]byt
 				return nil, nil, nil, err
 			}
 		}
+		if sigs := in.ReceiptSignatures[intentID]; len(sigs) > 0 {
+			if err := addJSON(b, prefix+savingsSignaturesName, sigs); err != nil {
+				return nil, nil, nil, err
+			}
+		}
 	}
 
 	b.AddRawEntry(savingsTaskSplitPath, "application/json", in.TaskSplitManifest)
@@ -670,6 +741,40 @@ func BuildSavingsEvidencePack(in SavingsPackInputs) (*Manifest, map[string][]byt
 	return manifest, contents, view, nil
 }
 
+// AttachManifestSignature signs the pack's manifest hash and adds
+// manifest.sig.json to the content map. The signature is over the raw ASCII
+// bytes of the manifest_hash string; sign is a caller-supplied closure so key
+// custody stays with the caller (spend-proxy issuer, test key, HSM). Call it
+// AFTER Build — the file is deliberately not a manifest entry.
+func AttachManifestSignature(contents map[string][]byte, sign func(payload []byte) (keyID string, signature []byte, err error)) error {
+	manifestJSON, ok := contents["manifest.json"]
+	if !ok {
+		return errors.New("savings evidence: manifest.json missing; build the pack first")
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestJSON, &manifest); err != nil {
+		return fmt.Errorf("savings evidence: decode manifest for signing: %w", err)
+	}
+	if manifest.ManifestHash == "" {
+		return errors.New("savings evidence: manifest has no hash to sign")
+	}
+	keyID, sigBytes, err := sign([]byte(manifest.ManifestHash))
+	if err != nil {
+		return fmt.Errorf("savings evidence: sign manifest hash: %w", err)
+	}
+	sig := SavingsManifestSignature{
+		ManifestHash: manifest.ManifestHash,
+		KeyID:        keyID,
+		Signature:    base64.StdEncoding.EncodeToString(sigBytes),
+	}
+	data, err := json.MarshalIndent(&sig, "", "  ")
+	if err != nil {
+		return fmt.Errorf("savings evidence: marshal manifest signature: %w", err)
+	}
+	contents[SavingsManifestSigPath] = data
+	return nil
+}
+
 // SavingsVerificationResult is the structured outcome of the offline
 // verification: each named check maps to the HELM-614 walkthrough.
 type SavingsVerificationResult struct {
@@ -679,7 +784,9 @@ type SavingsVerificationResult struct {
 	// receipts_rehashed, manifest_rederived, cpst_recomputed,
 	// pass_rates_and_parity_recomputed, paired_task_ids,
 	// selection_freeze_precedes_holdout, no_prompt_bodies, plus the
-	// supplementary price_book_bound and verdict_signatures.
+	// supplementary price_book_bound, receipt_signatures, manifest_signature,
+	// and verdict_signatures (with results-receipts completeness enforced
+	// inside the recompute).
 	ChecksPassed      []string `json:"checks_passed"`
 	ReceiptsVerified  int      `json:"receipts_verified"`
 	ParityBarMet      bool     `json:"parity_bar_met"`
@@ -714,12 +821,59 @@ func VerifySavingsEvidenceOffline(contents map[string][]byte) (*SavingsVerificat
 
 	// (a) Every receipt re-hashed against its canonical content hash, with the
 	// per-intent financial invariants re-validated.
-	sets, receiptCount, err := collectSavingsReceiptSets(contents)
+	sets, signatures, receiptCount, err := collectSavingsReceiptSets(contents)
 	if err != nil {
 		return res, err
 	}
 	res.ReceiptsVerified = receiptCount
 	res.ChecksPassed = append(res.ChecksPassed, "receipts_rehashed")
+
+	// The trusted-key registry is the pack's signature anchor and is REQUIRED:
+	// a savings pack without one is self-attested and must not verify.
+	rawKeys, hasKeys := contents[savingsTrustedKeysPath]
+	if !hasKeys {
+		return res, errors.New("savings evidence verify: trusted-key registry missing from pack; refusing self-attested pack")
+	}
+	registry, err := parseSavingsRegistry(rawKeys)
+	if err != nil {
+		return res, err
+	}
+
+	// Detached Ed25519 signatures over the JCS canonicalization of every
+	// route-quote/usage/settlement receipt. These cover the post-dispatch
+	// fields (token counts, timestamps, substitution flags) that the sealed
+	// content-hash preimages omit — without them the savings numbers would be
+	// rewritable.
+	if err := verifyDetachedSignatures(sets, signatures, registry); err != nil {
+		return res, err
+	}
+	res.ChecksPassed = append(res.ChecksPassed, "receipt_signatures")
+
+	// The manifest hash itself must be signed by a registry key: the manifest
+	// is otherwise self-referential and re-pinnable.
+	rawManifestSig, ok := contents[SavingsManifestSigPath]
+	if !ok {
+		return res, errors.New("savings evidence verify: manifest.sig.json missing; the manifest hash must be signed")
+	}
+	var manifestSig SavingsManifestSignature
+	if err := decodeStrict(rawManifestSig, &manifestSig, "manifest signature"); err != nil {
+		return res, err
+	}
+	if manifestSig.ManifestHash != manifest.ManifestHash {
+		return res, fmt.Errorf("savings evidence verify: manifest signature covers %s, not the pack manifest hash %s", manifestSig.ManifestHash, manifest.ManifestHash)
+	}
+	pub, ok := registry[manifestSig.KeyID]
+	if !ok {
+		return res, fmt.Errorf("savings evidence verify: manifest signed by unknown key %q", manifestSig.KeyID)
+	}
+	sigBytes, err := base64.StdEncoding.DecodeString(manifestSig.Signature)
+	if err != nil {
+		return res, fmt.Errorf("savings evidence verify: manifest signature is not base64: %w", err)
+	}
+	if !ed25519.Verify(pub, []byte(manifestSig.ManifestHash), sigBytes) {
+		return res, errors.New("savings evidence verify: manifest signature does not verify")
+	}
+	res.ChecksPassed = append(res.ChecksPassed, "manifest_signature")
 
 	// Artifacts.
 	rawManifestArtifact, ok := contents[savingsTaskSplitPath]
@@ -803,14 +957,11 @@ func VerifySavingsEvidenceOffline(contents map[string][]byte) (*SavingsVerificat
 	res.ParityBarMet = embedded.ParityBarMet
 	res.SavingsClaimValid = embedded.SavingsClaimValid
 
-	// Verdict signatures against the embedded registry (when present, all
-	// verdict receipts must verify; absence downgrades, it does not fail).
-	if rawKeys, hasKeys := contents[savingsTrustedKeysPath]; hasKeys {
-		if err := verifySavingsSignatures(rawKeys, sets); err != nil {
-			return res, err
-		}
-		res.ChecksPassed = append(res.ChecksPassed, "verdict_signatures")
+	// Sealed BudgetVerdict signatures against the same registry (mandatory).
+	if err := verifySavingsVerdictSeals(registry, sets); err != nil {
+		return res, err
 	}
+	res.ChecksPassed = append(res.ChecksPassed, "verdict_signatures")
 
 	// (g) No prompt bodies in any business view.
 	if err := verifyNoPromptBody(contents); err != nil {
@@ -824,7 +975,7 @@ func VerifySavingsEvidenceOffline(contents map[string][]byte) (*SavingsVerificat
 
 // collectSavingsReceiptSets walks receipts/<intent>/ entries, re-hashes each
 // receipt, re-validates per-intent invariants, and groups them by intent.
-func collectSavingsReceiptSets(contents map[string][]byte) (map[string]SpendReceiptSet, int, error) {
+func collectSavingsReceiptSets(contents map[string][]byte) (map[string]SpendReceiptSet, map[string]map[string]DetachedSignature, int, error) {
 	intents := make(map[string]map[string][]byte)
 	for path, data := range contents {
 		if !strings.HasPrefix(path, savingsReceiptsPrefix) {
@@ -833,20 +984,21 @@ func collectSavingsReceiptSets(contents map[string][]byte) (map[string]SpendRece
 		rest := strings.TrimPrefix(path, savingsReceiptsPrefix)
 		parts := strings.SplitN(rest, "/", 2)
 		if len(parts) != 2 {
-			return nil, 0, fmt.Errorf("savings evidence verify: unexpected receipt path %s", path)
+			return nil, nil, 0, fmt.Errorf("savings evidence verify: unexpected receipt path %s", path)
 		}
 		group := intents[parts[0]]
 		if group == nil {
-			group = make(map[string][]byte, 4)
+			group = make(map[string][]byte, 5)
 			intents[parts[0]] = group
 		}
 		group[parts[1]] = data
 	}
 	if len(intents) == 0 {
-		return nil, 0, errors.New("savings evidence verify: pack contains no receipts")
+		return nil, nil, 0, errors.New("savings evidence verify: pack contains no receipts")
 	}
 
 	sets := make(map[string]SpendReceiptSet, len(intents))
+	signatures := make(map[string]map[string]DetachedSignature, len(intents))
 	receiptCount := 0
 	for intentID, group := range intents {
 		// Reuse the per-intent verification from the spend pack by projecting the
@@ -862,14 +1014,20 @@ func collectSavingsReceiptSets(contents map[string][]byte) (map[string]SpendRece
 				projected[spendUsageReceiptPath] = data
 			case "settlement.json":
 				projected[spendSettlementReceiptPath] = data
+			case savingsSignaturesName:
+				sigs := map[string]DetachedSignature{}
+				if err := decodeStrict(data, &sigs, "receipt signatures for "+intentID); err != nil {
+					return nil, nil, 0, err
+				}
+				signatures[intentID] = sigs
 			default:
-				return nil, 0, fmt.Errorf("savings evidence verify: unexpected receipt entry %s for intent %s", name, intentID)
+				return nil, nil, 0, fmt.Errorf("savings evidence verify: unexpected receipt entry %s for intent %s", name, intentID)
 			}
 		}
 		var invariants []string
 		verified, err := verifySpendReceipts(projected, &invariants)
 		if err != nil {
-			return nil, 0, fmt.Errorf("savings evidence verify: intent %s: %w", intentID, err)
+			return nil, nil, 0, fmt.Errorf("savings evidence verify: intent %s: %w", intentID, err)
 		}
 		receiptCount += len(verified)
 
@@ -877,33 +1035,33 @@ func collectSavingsReceiptSets(contents map[string][]byte) (map[string]SpendRece
 		if raw, ok := projected[spendRouteReceiptPath]; ok {
 			set.RouteQuote = &economic.RouteQuote{}
 			if err := json.Unmarshal(raw, set.RouteQuote); err != nil {
-				return nil, 0, fmt.Errorf("savings evidence verify: intent %s route quote: %w", intentID, err)
+				return nil, nil, 0, fmt.Errorf("savings evidence verify: intent %s route quote: %w", intentID, err)
 			}
 			if set.RouteQuote.SpendIntentID != intentID {
-				return nil, 0, fmt.Errorf("savings evidence verify: receipt dir %s holds quote for intent %s", intentID, set.RouteQuote.SpendIntentID)
+				return nil, nil, 0, fmt.Errorf("savings evidence verify: receipt dir %s holds quote for intent %s", intentID, set.RouteQuote.SpendIntentID)
 			}
 		}
 		if raw, ok := projected[spendBudgetReceiptPath]; ok {
 			set.Budget = &economic.BudgetVerdictReceipt{}
 			if err := json.Unmarshal(raw, set.Budget); err != nil {
-				return nil, 0, fmt.Errorf("savings evidence verify: intent %s budget verdict: %w", intentID, err)
+				return nil, nil, 0, fmt.Errorf("savings evidence verify: intent %s budget verdict: %w", intentID, err)
 			}
 		}
 		if raw, ok := projected[spendUsageReceiptPath]; ok {
 			set.Usage = &economic.UsageReceipt{}
 			if err := json.Unmarshal(raw, set.Usage); err != nil {
-				return nil, 0, fmt.Errorf("savings evidence verify: intent %s usage: %w", intentID, err)
+				return nil, nil, 0, fmt.Errorf("savings evidence verify: intent %s usage: %w", intentID, err)
 			}
 		}
 		if raw, ok := projected[spendSettlementReceiptPath]; ok {
 			set.Settlement = &economic.SettlementReceipt{}
 			if err := json.Unmarshal(raw, set.Settlement); err != nil {
-				return nil, 0, fmt.Errorf("savings evidence verify: intent %s settlement: %w", intentID, err)
+				return nil, nil, 0, fmt.Errorf("savings evidence verify: intent %s settlement: %w", intentID, err)
 			}
 		}
 		sets[intentID] = set
 	}
-	return sets, receiptCount, nil
+	return sets, signatures, receiptCount, nil
 }
 
 // savingsViewsEqual compares the embedded view against the recomputed one
@@ -935,27 +1093,92 @@ type savingsTrustedKeyFile struct {
 	} `json:"keys"`
 }
 
-// verifySavingsSignatures checks every budget verdict signature against the
-// registry embedded in the pack. Unknown key ids fail closed.
-func verifySavingsSignatures(rawKeys []byte, sets map[string]SpendReceiptSet) error {
+// parseSavingsRegistry decodes the embedded trusted-key registry into usable
+// Ed25519 public keys. An empty registry fails closed.
+//
+// Provenance note: the registry travels INSIDE the pack, so signature checks
+// prove internal consistency under the pack's declared keys. True provenance
+// requires the consumer to pin the expected key id/public key out-of-band
+// (the capture record publishes both) and compare against this registry.
+func parseSavingsRegistry(rawKeys []byte) (map[string]ed25519.PublicKey, error) {
 	var file savingsTrustedKeyFile
 	if err := json.Unmarshal(rawKeys, &file); err != nil {
-		return fmt.Errorf("savings evidence verify: decode trusted keys: %w", err)
+		return nil, fmt.Errorf("savings evidence verify: decode trusted keys: %w", err)
 	}
+	if len(file.Keys) == 0 {
+		return nil, errors.New("savings evidence verify: trusted-key registry is empty")
+	}
+	out := make(map[string]ed25519.PublicKey, len(file.Keys))
+	for keyID, entry := range file.Keys {
+		raw := strings.TrimPrefix(entry.PublicKey, "ed25519:")
+		pub, err := hex.DecodeString(raw)
+		if err != nil || len(pub) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("savings evidence verify: registry key %q is not a valid ed25519 public key", keyID)
+		}
+		out[keyID] = ed25519.PublicKey(pub)
+	}
+	return out, nil
+}
+
+// verifyDetachedSignatures requires and verifies the issuer's detached
+// signature over the JCS canonicalization of every route-quote, usage, and
+// settlement receipt in the pack. Missing signatures and unknown keys fail
+// closed.
+func verifyDetachedSignatures(sets map[string]SpendReceiptSet, signatures map[string]map[string]DetachedSignature, registry map[string]ed25519.PublicKey) error {
+	verifyOne := func(intentID, kind string, payload any) error {
+		sig, ok := signatures[intentID][kind]
+		if !ok {
+			return fmt.Errorf("savings evidence verify: intent %s %s receipt has no detached signature", intentID, kind)
+		}
+		pub, ok := registry[sig.KeyID]
+		if !ok {
+			return fmt.Errorf("savings evidence verify: intent %s %s receipt signed by unknown key %q", intentID, kind, sig.KeyID)
+		}
+		canonical, err := canonicalize.JCS(payload)
+		if err != nil {
+			return fmt.Errorf("savings evidence verify: canonicalize intent %s %s receipt: %w", intentID, kind, err)
+		}
+		raw, err := base64.StdEncoding.DecodeString(sig.Signature)
+		if err != nil {
+			return fmt.Errorf("savings evidence verify: intent %s %s signature is not base64: %w", intentID, kind, err)
+		}
+		if !ed25519.Verify(pub, canonical, raw) {
+			return fmt.Errorf("savings evidence verify: intent %s %s receipt signature does not verify (post-dispatch fields may have been rewritten)", intentID, kind)
+		}
+		return nil
+	}
+	for intentID, set := range sets {
+		if set.RouteQuote != nil {
+			if err := verifyOne(intentID, "route_quote", set.RouteQuote); err != nil {
+				return err
+			}
+		}
+		if set.Usage != nil {
+			if err := verifyOne(intentID, "usage", set.Usage); err != nil {
+				return err
+			}
+		}
+		if set.Settlement != nil {
+			if err := verifyOne(intentID, "settlement", set.Settlement); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// verifySavingsVerdictSeals checks every sealed budget verdict signature
+// against the registry. Unknown key ids fail closed.
+func verifySavingsVerdictSeals(registry map[string]ed25519.PublicKey, sets map[string]SpendReceiptSet) error {
 	for intentID, set := range sets {
 		if set.Budget == nil {
 			continue
 		}
-		entry, ok := file.Keys[set.Budget.SignatureKeyID]
+		pub, ok := registry[set.Budget.SignatureKeyID]
 		if !ok {
 			return fmt.Errorf("savings evidence verify: intent %s verdict signed by unknown key %q", intentID, set.Budget.SignatureKeyID)
 		}
-		raw := strings.TrimPrefix(entry.PublicKey, "ed25519:")
-		pub, err := hex.DecodeString(raw)
-		if err != nil || len(pub) != ed25519.PublicKeySize {
-			return fmt.Errorf("savings evidence verify: registry key %q is not a valid ed25519 public key", set.Budget.SignatureKeyID)
-		}
-		if err := set.Budget.VerifySignature(ed25519.PublicKey(pub)); err != nil {
+		if err := set.Budget.VerifySignature(pub); err != nil {
 			return fmt.Errorf("savings evidence verify: intent %s verdict signature: %w", intentID, err)
 		}
 	}

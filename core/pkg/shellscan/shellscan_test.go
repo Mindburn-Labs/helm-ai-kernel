@@ -748,3 +748,70 @@ func TestPrefixFallback(t *testing.T) {
 		t.Fatalf("Prefix(rm -rf /) = %q, want rm", got)
 	}
 }
+
+// TestClassifyRemoteAndVolumeDestruction covers effect surfaces that leave no
+// trace on the filesystem, so nothing else in this package can see them: the AWS
+// control plane, the GitHub API, and docker's named volumes. Each of these was
+// verified to pass unclassified — reaching no decision and writing no receipt —
+// before these cases existed.
+func TestClassifyRemoteAndVolumeDestruction(t *testing.T) {
+	for _, tc := range []struct{ name, command, reason string }{
+		// AWS: the verb, not a per-service allowlist.
+		{"aws rds delete", "aws rds delete-db-instance --db-instance-identifier prod --skip-final-snapshot", "aws rds delete-db-instance"},
+		{"aws ec2 terminate", "aws ec2 terminate-instances --instance-ids i-0123", "aws ec2 terminate-instances"},
+		{"aws dynamodb delete-table", "aws dynamodb delete-table --table-name users", "aws dynamodb delete-table"},
+		{"aws kms schedule deletion", "aws kms schedule-key-deletion --key-id abc", "aws kms schedule-key-deletion"},
+		{"aws s3 rb", "aws s3 rb s3://bucket --force", "aws s3 rb"},
+		{"aws s3 rm still covered", "aws s3 rm s3://bucket --recursive", "aws s3 rm"},
+		// docker: persistent state, not containers.
+		{"compose down with volumes", "docker compose down -v", "removes named volumes"},
+		{"compose down long flag", "docker compose down --volumes", "removes named volumes"},
+		{"volume rm", "docker volume rm pgdata", "docker volume rm"},
+		{"system prune", "docker system prune -a --volumes", "docker system prune"},
+		{"network rm", "docker network rm bridge0", "docker network rm"},
+		// gh: remote, shared, frequently unrecoverable.
+		{"gh repo delete", "gh repo delete myorg/myrepo --yes", "gh repo delete"},
+		{"gh repo delete behind a value flag", "gh --repo myorg/myrepo repo delete --yes", "gh repo delete"},
+		{"gh release delete", "gh release delete v1.0 --yes", "gh release delete"},
+		{"gh secret delete", "gh secret delete DEPLOY_KEY", "gh secret delete"},
+		{"gh repo archive", "gh repo archive myorg/myrepo", "gh repo archive"},
+		{"gh api delete", "gh api -X DELETE /repos/o/r", "gh api -X DELETE"},
+		{"gh api post mutates", "gh api --method POST /repos/o/r/issues", "mutates remote state"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Classify(tc.command)
+			if !res.Decide {
+				t.Fatalf("Classify(%q).Decide = false, want true — this command reaches no decision and writes no receipt (commands=%+v)", tc.command, res.Commands)
+			}
+			if !strings.Contains(res.Reason, tc.reason) {
+				t.Fatalf("Classify(%q).Reason = %q, want substring %q", tc.command, res.Reason, tc.reason)
+			}
+		})
+	}
+}
+
+// TestClassifyLeavesRemoteReadsAlone is the other half of the contract: widening
+// the matcher must not convert everyday read-only work into a decision, because a
+// boundary that stops `gh pr list` is uninstalled the same day.
+func TestClassifyLeavesRemoteReadsAlone(t *testing.T) {
+	for _, command := range []string{
+		"aws s3 ls",
+		"aws s3 cp ./local s3://bucket/key",
+		"aws rds describe-db-instances",
+		"aws sts get-caller-identity",
+		"docker compose up -d",
+		"docker compose down",
+		"docker ps -a",
+		"docker volume ls",
+		"gh pr list",
+		"gh repo view myorg/myrepo",
+		"gh run watch",
+		"gh api /repos/o/r",
+	} {
+		t.Run(command, func(t *testing.T) {
+			if res := Classify(command); res.Decide {
+				t.Fatalf("Classify(%q).Decide = true, want false — over-blocking ordinary work; reason=%q", command, res.Reason)
+			}
+		})
+	}
+}

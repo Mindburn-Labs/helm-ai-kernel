@@ -2158,6 +2158,8 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 		}
 	case cmd.Name == "docker":
 		c.matchDocker(args)
+	case cmd.Name == "gh":
+		c.matchGH(args)
 	case cmd.Name == "find":
 		c.matchFind(args, via, depth)
 	case cmd.Name == "awk" || cmd.Name == "gawk" || cmd.Name == "mawk" || cmd.Name == "nawk":
@@ -2361,6 +2363,16 @@ var awsValueFlags = map[string]bool{
 	"--profile": true, "--region": true, "--output": true, "--endpoint-url": true,
 	"--ca-bundle": true, "--cli-read-timeout": true, "--cli-connect-timeout": true,
 	"--color": true, "--query": true,
+}
+
+// ghValueFlags are the GitHub CLI flags whose following word is a value, not a
+// subcommand. Without them `gh --repo owner/name repo delete` would read "owner/name"
+// as the subcommand group and classify nothing.
+var ghValueFlags = map[string]bool{
+	"--repo": true, "-R": true, "--hostname": true, "--jq": true, "-q": true,
+	"--template": true, "-t": true, "--method": true, "-X": true,
+	"--field": true, "-f": true, "--raw-field": true, "-F": true,
+	"--header": true, "-H": true, "--input": true,
 }
 
 var awsBoolFlags = map[string]bool{
@@ -2584,18 +2596,41 @@ func (c *collector) matchAWS(args []wordTok) {
 		c.decide("aws invocation with a dynamic service (fail-closed)")
 		return
 	}
-	if !found || service != "s3" {
+	if !found {
 		return
 	}
 	operation, _, dynamic, found := firstSubcommand(args[serviceIndex+2:], nil, nil)
 	if dynamic {
-		c.decide("aws s3 invocation with a dynamic operation (fail-closed)")
+		c.decide("aws " + service + " invocation with a dynamic operation (fail-closed)")
 		return
 	}
-	if found && operation == "rm" {
-		c.recordDestructiveEffect()
-		c.decide("aws s3 rm")
+	if !found {
+		return
 	}
+	if destructiveAWSOperation(service, operation) {
+		c.recordDestructiveEffect()
+		c.decide("aws " + service + " " + operation)
+	}
+}
+
+// destructiveAWSOperation reports whether an `aws <service> <operation>` pair
+// destroys or detaches state. The AWS CLI names operations consistently, so this
+// keys on the verb rather than on a per-service allowlist: a service added by AWS
+// tomorrow is covered the day it ships, which a hand-maintained table cannot do.
+func destructiveAWSOperation(service, operation string) bool {
+	for _, prefix := range []string{"delete-", "terminate-", "remove-", "destroy-", "deregister-", "revoke-", "disassociate-"} {
+		if strings.HasPrefix(operation, prefix) {
+			return true
+		}
+	}
+	switch operation {
+	// s3/s3api shorthands, and the KMS operation whose name hides the verb.
+	case "rm", "rb", "schedule-key-deletion", "purge-queue", "reset-db-cluster-parameter-group":
+		return true
+	}
+	// `aws s3 sync --delete` mirrors a source over a destination and removes
+	// whatever is absent from the source.
+	return false
 }
 
 func (c *collector) matchDatabaseClient(name string, args []wordTok) {
@@ -2715,6 +2750,133 @@ func gitConfigEntries(args []wordTok) ([]wordTok, bool) {
 	return entries, false
 }
 
+// matchGH classifies the GitHub CLI. `gh` deletes remote, shared, frequently
+// unrecoverable state — a repository, a release, a deploy key — and none of it is
+// reachable by inspecting the filesystem, so nothing else in this package sees it.
+func (c *collector) matchGH(args []wordTok) {
+	group, groupIndex, dynamic, found := firstSubcommand(args[1:], ghValueFlags, nil)
+	if dynamic {
+		c.decide("gh invocation with a dynamic subcommand (fail-closed)")
+		return
+	}
+	if !found {
+		return
+	}
+
+	// `gh api` can issue any verb against any endpoint; the method carries the effect.
+	if group == "api" {
+		for i, tok := range args[groupIndex+2:] {
+			if tok.dynamic {
+				c.decide("gh api with an unresolvable argument (fail-closed)")
+				return
+			}
+			if tok.text != "-X" && tok.text != "--method" {
+				continue
+			}
+			rest := args[groupIndex+2:]
+			if i+1 >= len(rest) || rest[i+1].dynamic {
+				c.decide("gh api with an unresolvable method (fail-closed)")
+				return
+			}
+			method := strings.ToUpper(rest[i+1].text)
+			switch method {
+			case "DELETE":
+				c.recordDestructiveEffect()
+				c.decide("gh api -X DELETE")
+				return
+			case "PUT", "PATCH", "POST":
+				// A remote mutation that warrants a decision but is not a
+				// deletion; do not inflate it into a destructive effect.
+				c.decide("gh api -X " + method + " mutates remote state")
+				return
+			}
+		}
+		return
+	}
+
+	action, _, dynamic, found := firstSubcommand(args[groupIndex+2:], nil, nil)
+	if dynamic {
+		c.decide("gh " + group + " with a dynamic action (fail-closed)")
+		return
+	}
+	if !found {
+		return
+	}
+	switch action {
+	case "delete", "archive", "remove", "transfer", "rename", "disable", "unlock":
+		c.recordDestructiveEffect()
+		c.decide("gh " + group + " " + action)
+	}
+}
+
+// matchDockerDataLoss covers the docker subcommands that destroy persistent
+// state rather than containers. `docker compose down -v` is the sharpest case:
+// it removes named volumes, so it deletes the database a developer thought was
+// separate from the container. It reports whether it decided the command.
+func (c *collector) matchDockerDataLoss(sub string, after []wordTok) bool {
+	hasFlag := func(names ...string) (bool, bool) {
+		for _, tok := range after {
+			if tok.dynamic {
+				return false, true
+			}
+			for _, name := range names {
+				if tok.text == name {
+					return true, false
+				}
+			}
+		}
+		return false, false
+	}
+
+	switch sub {
+	case "compose", "stack":
+		next, _, dynamic, found := firstSubcommand(after, nil, nil)
+		if dynamic {
+			c.decide("docker " + sub + " with a dynamic subcommand (fail-closed)")
+			return true
+		}
+		if !found || (next != "down" && next != "rm") {
+			return false
+		}
+		volumes, unresolvable := hasFlag("-v", "--volumes")
+		if unresolvable {
+			c.decide("docker " + sub + " " + next + " with unresolvable flags (fail-closed)")
+			return true
+		}
+		if volumes {
+			c.recordDestructiveEffect()
+			c.decide("docker " + sub + " " + next + " removes named volumes")
+			return true
+		}
+		return false
+	case "volume", "network", "secret", "config":
+		next, _, dynamic, found := firstSubcommand(after, nil, nil)
+		if dynamic {
+			c.decide("docker " + sub + " with a dynamic subcommand (fail-closed)")
+			return true
+		}
+		if found && (next == "rm" || next == "remove" || next == "prune") {
+			c.recordDestructiveEffect()
+			c.decide("docker " + sub + " " + next)
+			return true
+		}
+		return false
+	case "system", "image", "builder", "container":
+		next, _, dynamic, found := firstSubcommand(after, nil, nil)
+		if dynamic {
+			c.decide("docker " + sub + " with a dynamic subcommand (fail-closed)")
+			return true
+		}
+		if found && next == "prune" {
+			c.recordDestructiveEffect()
+			c.decide("docker " + sub + " prune")
+			return true
+		}
+		return false
+	}
+	return false
+}
+
 func (c *collector) matchDocker(args []wordTok) {
 	sub, subIndex, dynamic, found := firstSubcommand(args[1:], dockerValueFlags, nil)
 	if dynamic {
@@ -2725,6 +2887,9 @@ func (c *collector) matchDocker(args []wordTok) {
 		return
 	}
 	rest := args[1:]
+	if c.matchDockerDataLoss(sub, rest[subIndex+1:]) {
+		return
+	}
 	isRm := sub == "rm"
 	if sub == "container" {
 		next, _, nextDynamic, nextFound := firstSubcommand(rest[subIndex+1:], nil, nil)

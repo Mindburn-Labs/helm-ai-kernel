@@ -199,6 +199,12 @@ helm:
       enabled: false
       lowPriorityMax: 0
 
+  guardian:
+    # 0 keeps semantic assessment advisory-only. A positive basis-point
+    # threshold makes unavailable, truncated, or matching semantic assessment
+    # return ESCALATE before dispatch.
+    semanticThreatEscalationBP: 0
+
   # Policy configuration
   policy:
     # Kubernetes delivery is a policy-source backend, not runtime truth.

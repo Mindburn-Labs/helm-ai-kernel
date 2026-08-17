@@ -577,6 +577,20 @@
             }
           }
         },
+        "guardian": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Guardian verdict-authority configuration.",
+          "properties": {
+            "semanticThreatEscalationBP": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000,
+              "default": 0,
+              "description": "Semantic ESCALATE threshold in basis points. Zero keeps semantic assessment advisory-only; a positive threshold fails closed to ESCALATE when the configured assessment is unavailable or truncated."
+            }
+          }
+        },
         "policy": {
           "type": "object",
           "additionalProperties": true,

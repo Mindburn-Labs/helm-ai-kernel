@@ -96,6 +96,13 @@ reference pack for governed bootstrap and synthetic-stand policy proof. The
 default remains an empty fail-closed rule list; production deployments should
 prefer a signed control-plane or CRD policy source.
 
+### Added — daemon semantic escalation threshold
+
+The daemon and Helm chart can configure the Guardian's existing semantic
+threat escalation threshold in basis points. Zero remains advisory-only;
+positive thresholds return ESCALATE before dispatch when semantic assessment
+is unavailable, truncated, or meets the configured score.
+
 ### Added — tenant-scoped receipt query predicates
 
 `GET /api/v1/receipts` can filter the authenticated tenant's V5 receipts by

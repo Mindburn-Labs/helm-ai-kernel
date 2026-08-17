@@ -1467,3 +1467,70 @@ func globReceipts(t *testing.T, dataDir string) []string {
 	}
 	return receipts
 }
+
+// TestHookDenyIsLegibleToEveryHost locks the cross-host denial contract. The
+// hosts do not share a vocabulary, and the failure this guards is silent: Grok
+// Build's gate parser treats a missing top-level "decision" as an affirmative
+// ALLOW, so a denial expressed only as hookSpecificOutput lets the command run.
+func TestHookDenyIsLegibleToEveryHost(t *testing.T) {
+	payload := `{"tool_name":"Bash","tool_input":{"command":"rm -rf /Users/nobody/Documents"},"cwd":"/tmp"}`
+
+	for _, tc := range []struct {
+		client            string
+		wantTopLevelDeny  bool
+		wantTopLevelBlock bool
+	}{
+		// Hosts that read hookSpecificOutput keep the historical payload exactly.
+		{client: "claude-code"},
+		{client: "codex"},
+		// Hosts that read top-level fields must see their own dialect.
+		{client: "hermes", wantTopLevelDeny: true, wantTopLevelBlock: true},
+		{client: "grok", wantTopLevelDeny: true, wantTopLevelBlock: true},
+		{client: "cursor", wantTopLevelDeny: true, wantTopLevelBlock: true},
+	} {
+		t.Run(tc.client, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			tmp := t.TempDir()
+			code := runHookPreToolCmd(
+				[]string{"--client", tc.client, "--data-dir", tmp},
+				strings.NewReader(payload), &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("exit = %d, want 0 (the verdict travels in stdout JSON, not the exit code); stderr=%s", code, stderr.String())
+			}
+
+			var got hookDecisionOutput
+			if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+				t.Fatalf("stdout is not decodable: %v (stdout=%s)", err, stdout.String())
+			}
+			if got.HookSpecificOutput.PermissionDecision != "deny" {
+				t.Fatalf("hookSpecificOutput.permissionDecision = %q, want deny", got.HookSpecificOutput.PermissionDecision)
+			}
+			if tc.wantTopLevelDeny && got.Decision != "deny" {
+				t.Errorf("top-level decision = %q, want %q — Grok Build reads ALLOW without it", got.Decision, "deny")
+			}
+			if !tc.wantTopLevelDeny && got.Decision != "" {
+				t.Errorf("top-level decision = %q, want empty for %s (payload must not change for hookSpecificOutput hosts)", got.Decision, tc.client)
+			}
+			if tc.wantTopLevelBlock && got.Action != "block" {
+				t.Errorf("top-level action = %q, want %q — Hermes reads no block without it", got.Action, "block")
+			}
+			if !tc.wantTopLevelBlock && got.Action != "" {
+				t.Errorf("top-level action = %q, want empty for %s", got.Action, tc.client)
+			}
+			if tc.wantTopLevelDeny && strings.TrimSpace(got.Reason) == "" {
+				t.Error("top-level reason is empty; hosts that skip hookSpecificOutput would show no cause")
+			}
+		})
+	}
+}
+
+func TestNormalizeHookClientRejectsUnknownHost(t *testing.T) {
+	for _, in := range []string{"claude", "claude-code", "codex", "hermes", "HERMES", " grok ", "grok-build", "cursor"} {
+		if _, err := normalizeHookClient(in); err != nil {
+			t.Errorf("normalizeHookClient(%q) = %v, want accepted", in, err)
+		}
+	}
+	if _, err := normalizeHookClient("bogus"); err == nil {
+		t.Error("normalizeHookClient(\"bogus\") accepted an unknown host; the hook must not guess a dialect")
+	}
+}

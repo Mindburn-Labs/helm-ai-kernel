@@ -51,8 +51,29 @@ type preToolPayload struct {
 	CWD            string         `json:"cwd"`
 }
 
+// hookDecisionOutput carries one denial in every dialect the supported hosts
+// parse, because the hosts do not agree and each ignores the others' fields.
+//
+//	Claude Code / Codex read hookSpecificOutput.permissionDecision.
+//	Grok Build reads the top-level "decision" and treats a missing one as ALLOW
+//	  (xai-grok-hooks/src/runner/mod.rs gate_json_to_decision:
+//	  `Some("allow") | None => Ok(HookDecision::Allow)`), so emitting only
+//	  hookSpecificOutput turns a HELM denial into an affirmative allow.
+//	Hermes reads the top-level "action"/"decision" and wants the literal
+//	  "block" (hermes-agent/agent/shell_hooks.py pre_tool_call branch).
+//
+// The extra fields are omitempty so the allow path and the Claude Code payload
+// are byte-identical to before.
 type hookDecisionOutput struct {
 	HookSpecificOutput hookSpecificOutput `json:"hookSpecificOutput"`
+	// Decision is Grok Build's vocabulary: "deny".
+	Decision string `json:"decision,omitempty"`
+	// Action is Hermes's vocabulary: "block".
+	Action string `json:"action,omitempty"`
+	// Reason and Message carry the denial text for hosts that do not read
+	// hookSpecificOutput.
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type hookSpecificOutput struct {
@@ -102,7 +123,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	opts := hookOptions{DataDir: defaultSetupDataDir()}
 	fs := flag.NewFlagSet("hook pre-tool", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code or codex")
+	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code, codex, hermes, grok, or cursor")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
 	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path")
 	fs.StringVar(&opts.PolicyProfileSHA256, "policy-profile-sha256", "", "Approved SHA-256 digest for the policy profile")
@@ -111,7 +132,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	client, err := normalizeSetupTarget(opts.Client)
+	client, err := normalizeHookClient(opts.Client)
 	if err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 		return 2
@@ -140,7 +161,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 			fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
 			if errors.Is(err, errHookPolicyProfile) {
-				return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+				return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
 					"HELM denied operation: policy profile is unavailable",
 					actioninbox.ReasonPolicyProfileUnavailable,
 					"HELM cannot load or verify the selected workstation policy profile, so the operation fails closed.",
@@ -148,7 +169,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 					"Escalate to the human operator; policy profile repair is an operator action.",
 				)))
 			}
-			return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
 				"HELM denied operation: local receipt signer is unavailable",
 				actioninbox.ReasonSignerUnavailable,
 				"HELM cannot sign a local decision receipt, so the operation fails closed.",
@@ -160,7 +181,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		if err != nil {
 			fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
 			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
-			return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
 				"HELM denied operation: receipt persistence is unavailable",
 				actioninbox.ReasonReceiptPersistence,
 				"HELM cannot persist the signed decision receipt, so the operation fails closed.",
@@ -174,7 +195,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 			// decides the effect or bypasses receipt generation.
 			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
 			feedback := actioninbox.DenyFeedbackFor(receipt.ReasonCode, receipt.CreatedAt)
-			return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run,
+			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run,
 				fmt.Sprintf("HELM denied %s: %s (receipt: %s) %s",
 					decision.Reason, receipt.ReasonCode, receiptPath, actioninbox.RenderSteeringText(feedback))))
 		}
@@ -225,20 +246,61 @@ func doomLoopSteeringText(classification hookClassification, runLength int) stri
 	return actioninbox.RenderSteeringText(d)
 }
 
-func emitHookDenyOrFail(stdout, stderr io.Writer, reason string) int {
-	if err := writeHookDeny(stdout, reason); err != nil {
+func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
+	if err := writeHookDeny(stdout, client, reason); err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
 		return 2
 	}
+	// Hosts that fall back to stderr when they cannot parse stdout still get the
+	// reason. Harmless for the hosts that do parse it.
+	fmt.Fprintln(stderr, reason)
 	return 0
 }
 
-func writeHookDeny(stdout io.Writer, reason string) error {
+// normalizeHookClient accepts every host whose pre-tool hook HELM can answer.
+// It is deliberately wider than normalizeSetupTarget: `setup` still only writes
+// configuration for claude-code and codex, while the hook itself can be pointed
+// at any host that spawns it, including by a hand-written config.
+func normalizeHookClient(client string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(client)) {
+	case "hermes", "hermes-agent":
+		return "hermes", nil
+	case "grok", "grok-build":
+		return "grok", nil
+	case "cursor":
+		return "cursor", nil
+	}
+	target, err := normalizeSetupTarget(client)
+	if err != nil {
+		return "", fmt.Errorf("client must be claude-code, codex, hermes, grok or cursor, got %q", client)
+	}
+	return target, nil
+}
+
+// hostReadsHookSpecificOutputOnly reports whether the client takes its verdict
+// solely from hookSpecificOutput. For those hosts the payload is left exactly as
+// it has always been, so their verified behaviour cannot regress.
+func hostReadsHookSpecificOutputOnly(client string) bool {
+	switch client {
+	case "claude-code", "codex":
+		return true
+	default:
+		return false
+	}
+}
+
+func writeHookDeny(stdout io.Writer, client, reason string) error {
 	out := hookDecisionOutput{HookSpecificOutput: hookSpecificOutput{
 		HookEventName:            "PreToolUse",
 		PermissionDecision:       "deny",
 		PermissionDecisionReason: reason,
 	}}
+	if !hostReadsHookSpecificOutputOnly(client) {
+		out.Decision = "deny" // Grok Build
+		out.Action = "block"  // Hermes
+		out.Reason = reason
+		out.Message = reason
+	}
 	return json.NewEncoder(stdout).Encode(out)
 }
 

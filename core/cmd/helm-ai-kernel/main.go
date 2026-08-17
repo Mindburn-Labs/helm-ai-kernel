@@ -274,6 +274,10 @@ func runServerWithOptions(opts serverOptions) error {
 	if logConfigErr != nil {
 		return logConfigErr
 	}
+	semanticEscalationBP, semanticConfigErr := semanticThreatEscalationBPFromEnv()
+	if semanticConfigErr != nil {
+		return semanticConfigErr
+	}
 	// Consume the Desktop launch secret before any optional runtime setup can
 	// spawn a subprocess. The route retains only the in-memory copy below.
 	desktopReadyToken := takeDesktopReadyToken()
@@ -521,6 +525,9 @@ func runServerWithOptions(opts serverOptions) error {
 
 	// Guardian
 	guardianOpts := []guardian.GuardianOption{guardian.WithClock(runtimeClock)}
+	if semanticEscalationBP > 0 {
+		guardianOpts = append(guardianOpts, guardian.WithSemanticThreatEscalation(semanticEscalationBP))
+	}
 	if policyStore != nil {
 		guardianOpts = append(guardianOpts, guardian.WithPolicySnapshots(policyStore, policyScope))
 	}
@@ -785,6 +792,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func semanticThreatEscalationBPFromEnv() (int, error) {
+	value := strings.TrimSpace(os.Getenv("HELM_SEMANTIC_THREAT_ESCALATION_BP"))
+	if value == "" {
+		return 0, nil
+	}
+	threshold, err := strconv.Atoi(value)
+	if err != nil || threshold < 0 || threshold > 10000 {
+		return 0, fmt.Errorf("HELM_SEMANTIC_THREAT_ESCALATION_BP must be an integer from 0 to 10000")
+	}
+	return threshold, nil
 }
 
 // buildAPIHandler assembles the daemon's request pipeline.

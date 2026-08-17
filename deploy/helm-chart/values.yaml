@@ -199,6 +199,12 @@ helm:
       enabled: false
       lowPriorityMax: 0
 
+  guardian:
+    # 0 keeps semantic assessment advisory-only. A positive basis-point
+    # threshold makes unavailable, truncated, or matching semantic assessment
+    # return ESCALATE before dispatch.
+    semanticThreatEscalationBP: 0
+
   # Policy configuration
   policy:
     # Kubernetes delivery is a policy-source backend, not runtime truth.
@@ -280,6 +286,9 @@ helm:
     referencePackFileName: "reference-pack.json"
     referencePackID: "helm-chart-reference-pack"
     referencePackLabel: "HELM chart default fail-closed reference pack"
+    # Explicit mounted-file rules compiled by the runtime reconciler. Empty is
+    # fail-closed. Prefer signed control-plane/CRD policy for production.
+    runtimeActions: []
 
 # Telemetry (HELM-453). Off by default and it must stay that way: the
 # Application Readiness Gate is closed, and a stand handed an endpoint starts

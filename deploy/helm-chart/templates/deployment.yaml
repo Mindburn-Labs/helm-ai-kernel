@@ -234,6 +234,10 @@ spec:
               value: {{ ternary "1" "0" .Values.helm.limits.loadShed.enabled | quote }}
             - name: HELM_LOAD_SHED_LOW_PRIORITY_MAX
               value: {{ .Values.helm.limits.loadShed.lowPriorityMax | quote }}
+            {{- if gt (int .Values.helm.guardian.semanticThreatEscalationBP) 0 }}
+            - name: HELM_SEMANTIC_THREAT_ESCALATION_BP
+              value: {{ .Values.helm.guardian.semanticThreatEscalationBP | quote }}
+            {{- end }}
             - name: HELM_POLICY_SOURCE_KIND
               value: {{ .Values.helm.policy.source.kind | quote }}
             - name: HELM_POLICY_POLL_INTERVAL

@@ -109,6 +109,8 @@ assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
 assert_not_contains "$default_rendered" "HELM_ENV"
+assert_not_contains "$default_rendered" "HELM_SEMANTIC_THREAT_ESCALATION_BP"
+assert_contains "$default_rendered" '"runtime_actions": []'
 assert_contains "$default_rendered" "name: prepare-authority-state"
 assert_contains "$default_rendered" "HELM_AUTHORITY_DATA_DIR"
 assert_contains "$default_rendered" "/var/run/helm-signing-key"
@@ -175,6 +177,26 @@ if helm_runner template "$RELEASE" "$CHART" \
     exit 1
 fi
 assert_contains "$synthetic_without_telemetry_log" "telemetry.syntheticLifecycleEvents=true requires telemetry.enabled=true"
+
+runtime_actions_rendered="$RENDER_DIR/rendered-runtime-actions.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set-json 'helm.policy.runtimeActions=[{"action":"file_read","expression":"input.path == \"/etc/hostname\""}]' >"$runtime_actions_rendered"
+assert_contains "$runtime_actions_rendered" '"runtime_actions": [{"action":"file_read","expression":"input.path == \"/etc/hostname\""}]'
+
+semantic_escalation_rendered="$RENDER_DIR/rendered-semantic-escalation.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.guardian.semanticThreatEscalationBP=7000 >"$semantic_escalation_rendered"
+assert_contains "$semantic_escalation_rendered" "HELM_SEMANTIC_THREAT_ESCALATION_BP"
+assert_contains "$semantic_escalation_rendered" 'value: "7000"'
+
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.guardian.semanticThreatEscalationBP=10001 >"$RENDER_DIR/rendered-invalid-semantic-escalation.yaml" 2>&1; then
+    echo "::error::out-of-range semantic escalation threshold unexpectedly rendered"
+    exit 1
+fi
 
 authority_identity_rendered="$RENDER_DIR/rendered-authority-identity.yaml"
 helm_runner template "$RELEASE" "$CHART" \

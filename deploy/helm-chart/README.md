@@ -90,6 +90,7 @@ flowchart TD
 | `helm.limits.actor.burst` | `120` | Actor/resource burst. |
 | `helm.limits.concurrency.max` | `0` | Process in-flight request cap; `0` disables. |
 | `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
+| `helm.guardian.semanticThreatEscalationBP` | `0` | Semantic ESCALATE threshold in basis points; `0` is advisory-only, while a positive value fails closed when assessment is unavailable or truncated. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime reconciler polling interval. Lost hints are recovered by polling. |
 | `helm.policy.failClosed.onInvalidUpdate` | `keepLastKnownGood` | Retain only a snapshot with a fresh successful source verification after a fault, or `deny` to invalidate immediately. |
@@ -97,6 +98,7 @@ flowchart TD
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |
 | `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for canonical policy bundle signatures. |
 | `helm.policy.signature.existingSecret` | empty | Existing secret containing `HELM_POLICY_TRUST_PUBLIC_KEY`. |
+| `helm.policy.runtimeActions` | `[]` | Explicit mounted-file rules compiled into the chart-managed reference pack; empty remains fail-closed. Prefer signed control-plane/CRD policy in production. |
 | `helm.policy.reloadHints.httpWakeEndpoint` | `/internal/policy/reconcile` | Wake-only internal endpoint for sidecars/operators. |
 | `helm.policy.reloadHints.configReloaderSidecar.enabled` | `false` | Optional mounted-file wake hint; disabled by default. |
 | `persistence.enabled` | `true` | Creates or uses a PVC for `/data`. |

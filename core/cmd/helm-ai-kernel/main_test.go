@@ -362,6 +362,29 @@ func TestEnvIntFallback(t *testing.T) {
 	assert.Equal(t, 60, envInt("HELM_LIMIT_GLOBAL_RPS", 60))
 }
 
+func TestSemanticThreatEscalationBPFromEnv(t *testing.T) {
+	for _, test := range []struct {
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{value: "", want: 0},
+		{value: "0", want: 0},
+		{value: "1", want: 1},
+		{value: "10000", want: 10000},
+		{value: "-1", wantErr: true},
+		{value: "10001", wantErr: true},
+		{value: "invalid", wantErr: true},
+	} {
+		t.Run(test.value, func(t *testing.T) {
+			t.Setenv("HELM_SEMANTIC_THREAT_ESCALATION_BP", test.value)
+			got, err := semanticThreatEscalationBPFromEnv()
+			assert.Equal(t, test.wantErr, err != nil)
+			assert.Equal(t, test.want, got)
+		})
+	}
+}
+
 func TestConfigurePostgresPoolFromEnv(t *testing.T) {
 	db, _, err := sqlmock.New()
 	if err != nil {

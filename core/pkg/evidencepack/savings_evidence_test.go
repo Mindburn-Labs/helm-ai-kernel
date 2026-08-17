@@ -112,7 +112,13 @@ func buildSavingsFixture(t *testing.T, substituteFailsHoldout2 bool) *savingsFix
 		t.Fatalf("marshal trusted keys: %v", err)
 	}
 
-	priceBook := []byte(`{"prices":"savings-fixture-price-book"}`)
+	priceBook := []byte(`{
+  "prices": [
+    {"provider_id": "digitalocean", "model_id": "model-big", "input_token_micro_cents": 10, "output_token_micro_cents": 70},
+    {"provider_id": "digitalocean", "model_id": "model-small", "input_token_micro_cents": 5, "output_token_micro_cents": 45},
+    {"provider_id": "digitalocean", "model_id": "model-mid", "input_token_micro_cents": 25, "output_token_micro_cents": 55}
+  ]
+}`)
 	priceSHA := HashContent(priceBook)
 
 	fix := &savingsFixture{priceSHA: priceSHA, signingKey: priv, keyID: keyID}
@@ -260,18 +266,20 @@ func TestBuildAndVerifySavingsEvidenceOffline(t *testing.T) {
 		t.Fatal("expected manifest hash")
 	}
 
-	// The claim numbers: baseline 20 cents / 2 passed = 10_000_000 micro-cents per
-	// task; substitute 6 cents / 2 passed = 3_000_000. Savings 7_000_000 (7000 bps).
-	if view.Baseline.SpendCents != 20 || view.Baseline.TasksPassed != 2 || view.Baseline.CPSTMicroCents != 10_000_000 {
+	// Settled basis: baseline 20 cents / 2 passed = 10_000_000 micro-cents per
+	// task; substitute 6 cents / 2 passed = 3_000_000. Token-priced basis (60 in /
+	// 400 out per call): baseline 28_600 per call -> CPST 28_600; substitute
+	// 18_300 -> CPST 18_300; savings 10_300 per task = 3601 bps.
+	if view.Baseline.SpendCents != 20 || view.Baseline.TasksPassed != 2 || view.Baseline.CPSTSettledMicroCents != 10_000_000 || view.Baseline.CPSTTokenPricedMicroCents != 28_600 {
 		t.Fatalf("baseline stats wrong: %+v", view.Baseline)
 	}
-	if view.Substitute.SpendCents != 6 || view.Substitute.TasksPassed != 2 || view.Substitute.CPSTMicroCents != 3_000_000 {
+	if view.Substitute.SpendCents != 6 || view.Substitute.TasksPassed != 2 || view.Substitute.CPSTSettledMicroCents != 3_000_000 || view.Substitute.CPSTTokenPricedMicroCents != 18_300 {
 		t.Fatalf("substitute stats wrong: %+v", view.Substitute)
 	}
 	if !view.ParityBarMet || !view.SavingsClaimValid {
 		t.Fatalf("expected valid claim: %+v", view)
 	}
-	if view.SavingsPerTaskMicroCents != 7_000_000 || view.SavingsPercentBps != 7_000 {
+	if view.SavingsPerTaskMicroCents != 10_300 || view.SavingsPercentBps != 3_601 {
 		t.Fatalf("savings numbers wrong: per-task %d, bps %d", view.SavingsPerTaskMicroCents, view.SavingsPercentBps)
 	}
 	if view.CaptureWindow.Start != fixFreeze {
@@ -313,15 +321,21 @@ func TestSavingsEvidence_NegativeParityResultIsStillAPack(t *testing.T) {
 	if view.Substitute.TasksPassed != 1 || view.Baseline.TasksPassed != 2 {
 		t.Fatalf("pass counts wrong: %+v / %+v", view.Baseline, view.Substitute)
 	}
-	if len(view.Notes) == 0 || !strings.Contains(view.Notes[0], "Parity bar FAILED") {
+	foundNegative := false
+	for _, note := range view.Notes {
+		if strings.Contains(note, "Parity bar FAILED") {
+			foundNegative = true
+		}
+	}
+	if !foundNegative {
 		t.Fatalf("expected explicit negative-result note, got %v", view.Notes)
 	}
 	// CPST still reported for both routes; the failed call's spend still counts.
 	if view.Substitute.SpendCents != 6 {
 		t.Fatalf("substitute spend must include failed-task spend: %+v", view.Substitute)
 	}
-	if view.Substitute.CPSTMicroCents != 6_000_000 {
-		t.Fatalf("substitute CPST = %d, want 6000000 (6 cents / 1 passed)", view.Substitute.CPSTMicroCents)
+	if view.Substitute.CPSTSettledMicroCents != 6_000_000 || view.Substitute.CPSTTokenPricedMicroCents != 36_600 {
+		t.Fatalf("substitute CPST wrong: settled %d (want 6000000), token-priced %d (want 36600)", view.Substitute.CPSTSettledMicroCents, view.Substitute.CPSTTokenPricedMicroCents)
 	}
 
 	res, err := VerifySavingsEvidenceOffline(contents)

@@ -259,12 +259,12 @@ func printSavingsSummary(stdout io.Writer, res *spendproxy.SavingsExportResult) 
 	_, _ = fmt.Fprintf(stdout, "manifest hash:  %s\n", res.ManifestHash)
 	_, _ = fmt.Fprintf(stdout, "output:         %s\n", res.OutputDir)
 	_, _ = fmt.Fprintf(stdout, "offline verify: ok=%v checks=%d receipts=%d\n", res.OfflineVerified, len(res.ChecksPassed), res.ReceiptsVerified)
-	_, _ = fmt.Fprintf(stdout, "baseline:       %s -> %s, spend %d cents, %d/%d passed, CPST %d micro-cents\n",
-		view.Baseline.RequestedModelID, view.Baseline.DispatchedModelID, view.Baseline.SpendCents, view.Baseline.TasksPassed, view.Baseline.TasksTotal, view.Baseline.CPSTMicroCents)
-	_, _ = fmt.Fprintf(stdout, "substitute:     %s -> %s, spend %d cents, %d/%d passed, CPST %d micro-cents\n",
-		view.Substitute.RequestedModelID, view.Substitute.DispatchedModelID, view.Substitute.SpendCents, view.Substitute.TasksPassed, view.Substitute.TasksTotal, view.Substitute.CPSTMicroCents)
+	_, _ = fmt.Fprintf(stdout, "baseline:       %s -> %s, settled %d cents, token-priced %d micro-cents, %d/%d passed, CPST %d micro-cents (token-priced)\n",
+		view.Baseline.RequestedModelID, view.Baseline.DispatchedModelID, view.Baseline.SpendCents, view.Baseline.TokenPricedMicroCents, view.Baseline.TasksPassed, view.Baseline.TasksTotal, view.Baseline.CPSTTokenPricedMicroCents)
+	_, _ = fmt.Fprintf(stdout, "substitute:     %s -> %s, settled %d cents, token-priced %d micro-cents, %d/%d passed, CPST %d micro-cents (token-priced)\n",
+		view.Substitute.RequestedModelID, view.Substitute.DispatchedModelID, view.Substitute.SpendCents, view.Substitute.TokenPricedMicroCents, view.Substitute.TasksPassed, view.Substitute.TasksTotal, view.Substitute.CPSTTokenPricedMicroCents)
 	if view.SavingsClaimValid {
-		_, _ = fmt.Fprintf(stdout, "parity bar:     MET; savings %d micro-cents per successful task (%d bps)\n", view.SavingsPerTaskMicroCents, view.SavingsPercentBps)
+		_, _ = fmt.Fprintf(stdout, "parity bar:     MET; savings %d micro-cents per successful task (%d bps, token-priced basis)\n", view.SavingsPerTaskMicroCents, view.SavingsPercentBps)
 	} else {
 		_, _ = fmt.Fprintf(stdout, "parity bar:     NOT MET — no savings claim; the pack records the negative result\n")
 	}

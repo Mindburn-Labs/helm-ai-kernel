@@ -152,8 +152,19 @@ type SavingsParityResults struct {
 const SavingsParitySchemaVersion = "helm-savings-parity-prerun.v1"
 
 // SavingsRouteStats is one route's recomputable holdout-window aggregate.
-// SpendCents covers ALL settled spend on the route's envelope from the freeze
-// instant on — successes, failures, and retries — per the CPST definition.
+// Spend covers ALL settled spend on the route's envelope from the freeze
+// instant on — successes, failures, and retries — per the CPST definition,
+// on two bases:
+//
+//   - settled: the governed ledger's integer-cent debits. The SPEND3 engine
+//     ceils every call to a whole cent (billing-conservative budget
+//     enforcement), so at sub-cent per-call costs this basis quantizes.
+//   - token-priced: exact micro-cent cost of the settled usage receipts'
+//     token counts at the pack-embedded price book — the same snapshot every
+//     receipt binds via provider_price_snapshot_hash.
+//
+// The savings claim compares the token-priced basis; the settled basis is
+// disclosed alongside.
 type SavingsRouteStats struct {
 	Role              string `json:"role"`
 	EnvelopeID        string `json:"envelope_id"`
@@ -161,13 +172,20 @@ type SavingsRouteStats struct {
 	DispatchedModelID string `json:"dispatched_model_id"`
 	SettledCalls      int    `json:"settled_calls"`
 	SpendCents        int64  `json:"spend_cents"`
-	InputTokens       int64  `json:"input_tokens"`
-	OutputTokens      int64  `json:"output_tokens"`
-	TasksTotal        int    `json:"tasks_total"`
-	TasksPassed       int    `json:"tasks_passed"`
-	// CPSTMicroCents = SpendCents * 1_000_000 / TasksPassed, integer division
-	// truncated toward zero. Zero when TasksPassed is zero (CPST undefined).
-	CPSTMicroCents int64 `json:"cpst_micro_cents"`
+	// TokenPricedMicroCents = sum over settled usage receipts of
+	// input_tokens*input_price + output_tokens*output_price + request surcharge,
+	// at the embedded price book.
+	TokenPricedMicroCents int64 `json:"token_priced_micro_cents"`
+	InputTokens           int64 `json:"input_tokens"`
+	OutputTokens          int64 `json:"output_tokens"`
+	TasksTotal            int   `json:"tasks_total"`
+	TasksPassed           int   `json:"tasks_passed"`
+	// CPSTSettledMicroCents = SpendCents * 1_000_000 / TasksPassed, integer
+	// division truncated toward zero. Zero when TasksPassed is zero.
+	CPSTSettledMicroCents int64 `json:"cpst_settled_micro_cents"`
+	// CPSTTokenPricedMicroCents = TokenPricedMicroCents / TasksPassed, integer
+	// division truncated toward zero. Zero when TasksPassed is zero.
+	CPSTTokenPricedMicroCents int64 `json:"cpst_token_priced_micro_cents"`
 }
 
 // SavingsWindow is the capture window the claim is bound to. Start is the
@@ -190,7 +208,8 @@ type SavingsFreezeBinding struct {
 }
 
 // SavingsView is the business-readable savings claim. Every number is
-// recomputable offline from the pack's receipts and artifacts.
+// recomputable offline from the pack's receipts and artifacts. The savings
+// comparison uses the token-priced basis (see SavingsRouteStats).
 type SavingsView struct {
 	SchemaVersion            string               `json:"schema_version"`
 	RunID                    string               `json:"run_id"`
@@ -206,6 +225,10 @@ type SavingsView struct {
 	SelectionFreeze          SavingsFreezeBinding `json:"selection_freeze"`
 	Notes                    []string             `json:"notes,omitempty"`
 }
+
+// SavingsBasisNote is always present in the view's notes: it names the basis
+// of the savings comparison and discloses the settled-ledger quantization.
+const SavingsBasisNote = "Savings compare the token-priced basis (settled usage receipts' token counts at the embedded, hash-bound price book). The settled basis is disclosed alongside: the governed ledger ceils every call to a whole cent, which quantizes sub-cent per-call costs."
 
 // SavingsViewSchemaVersion is the accepted savings view schema version.
 const SavingsViewSchemaVersion = "helm-savings-view.v1"
@@ -288,12 +311,46 @@ func ValidateSavingsArtifacts(man *SavingsTaskSplitManifest, res *SavingsTaskRes
 	return nil
 }
 
-// ComputeSavingsView recomputes the full savings view from receipt sets and
-// artifacts. The exporter uses it to render views/savings_view.json and the
-// offline verifier re-runs it against the pack bytes, so a claim can never
-// drift from what the receipts support.
-func ComputeSavingsView(sets map[string]SpendReceiptSet, man *SavingsTaskSplitManifest, res *SavingsTaskResults, priceBookSHA256 string) (*SavingsView, error) {
+// savingsPriceBook is the minimal projection of the spend-proxy config the
+// savings computation needs: per provider/model token prices. Parsed leniently
+// (the config carries many other fields) but priced strictly — a settled model
+// missing from the book fails closed.
+type savingsPriceBook struct {
+	Prices []struct {
+		ProviderID            string `json:"provider_id"`
+		ModelID               string `json:"model_id"`
+		InputTokenMicroCents  int64  `json:"input_token_micro_cents"`
+		OutputTokenMicroCents int64  `json:"output_token_micro_cents"`
+		RequestCents          int64  `json:"request_cents"`
+	} `json:"prices"`
+}
+
+func parseSavingsPriceBook(raw []byte) (map[string][3]int64, error) {
+	var book savingsPriceBook
+	if err := json.Unmarshal(raw, &book); err != nil {
+		return nil, fmt.Errorf("savings evidence: parse price-book config: %w", err)
+	}
+	if len(book.Prices) == 0 {
+		return nil, errors.New("savings evidence: price-book config declares no prices")
+	}
+	out := make(map[string][3]int64, len(book.Prices))
+	for _, p := range book.Prices {
+		out[p.ProviderID+"\x00"+p.ModelID] = [3]int64{p.InputTokenMicroCents, p.OutputTokenMicroCents, p.RequestCents}
+	}
+	return out, nil
+}
+
+// ComputeSavingsView recomputes the full savings view from receipt sets,
+// artifacts, and the raw price-book config bytes. The exporter uses it to
+// render views/savings_view.json and the offline verifier re-runs it against
+// the pack bytes, so a claim can never drift from what the receipts support.
+func ComputeSavingsView(sets map[string]SpendReceiptSet, man *SavingsTaskSplitManifest, res *SavingsTaskResults, priceBookRaw []byte) (*SavingsView, error) {
 	if err := validateSavingsReceiptSets(sets); err != nil {
+		return nil, err
+	}
+	priceBookSHA256 := HashContent(priceBookRaw)
+	prices, err := parseSavingsPriceBook(priceBookRaw)
+	if err != nil {
 		return nil, err
 	}
 
@@ -429,8 +486,13 @@ func ComputeSavingsView(sets map[string]SpendReceiptSet, man *SavingsTaskSplitMa
 			if set.Usage.EnvelopeID != quote.EnvelopeID {
 				return nil, fmt.Errorf("savings evidence: intent %s usage envelope %q disagrees with quote envelope %q", intentID, set.Usage.EnvelopeID, quote.EnvelopeID)
 			}
+			price, ok := prices[set.Usage.ProviderID+"\x00"+set.Usage.ModelID]
+			if !ok {
+				return nil, fmt.Errorf("savings evidence: intent %s settled on %s/%s which has no entry in the embedded price book", intentID, set.Usage.ProviderID, set.Usage.ModelID)
+			}
 			stats.SettledCalls++
 			stats.SpendCents += set.Usage.BalanceDebitCents
+			stats.TokenPricedMicroCents += set.Usage.InputTokens*price[0] + set.Usage.OutputTokens*price[1] + price[2]*1_000_000
 			stats.InputTokens += set.Usage.InputTokens
 			stats.OutputTokens += set.Usage.OutputTokens
 			if set.Usage.CreatedAt.After(window.End) {
@@ -443,10 +505,12 @@ func ComputeSavingsView(sets map[string]SpendReceiptSet, man *SavingsTaskSplitMa
 	}
 
 	if baseline.TasksPassed > 0 {
-		baseline.CPSTMicroCents = baseline.SpendCents * 1_000_000 / int64(baseline.TasksPassed)
+		baseline.CPSTSettledMicroCents = baseline.SpendCents * 1_000_000 / int64(baseline.TasksPassed)
+		baseline.CPSTTokenPricedMicroCents = baseline.TokenPricedMicroCents / int64(baseline.TasksPassed)
 	}
 	if substitute.TasksPassed > 0 {
-		substitute.CPSTMicroCents = substitute.SpendCents * 1_000_000 / int64(substitute.TasksPassed)
+		substitute.CPSTSettledMicroCents = substitute.SpendCents * 1_000_000 / int64(substitute.TasksPassed)
+		substitute.CPSTTokenPricedMicroCents = substitute.TokenPricedMicroCents / int64(substitute.TasksPassed)
 	}
 
 	// Strict parity bar: substitute pass count >= baseline pass count over the
@@ -473,10 +537,11 @@ func ComputeSavingsView(sets map[string]SpendReceiptSet, man *SavingsTaskSplitMa
 			ChosenSubstituteModelID:    freeze.ChosenSubstituteModelID,
 		},
 	}
-	if baseline.CPSTMicroCents > 0 && substitute.CPSTMicroCents > 0 {
-		view.SavingsPerTaskMicroCents = baseline.CPSTMicroCents - substitute.CPSTMicroCents
-		view.SavingsPercentBps = (baseline.CPSTMicroCents - substitute.CPSTMicroCents) * 10_000 / baseline.CPSTMicroCents
+	if baseline.CPSTTokenPricedMicroCents > 0 && substitute.CPSTTokenPricedMicroCents > 0 {
+		view.SavingsPerTaskMicroCents = baseline.CPSTTokenPricedMicroCents - substitute.CPSTTokenPricedMicroCents
+		view.SavingsPercentBps = (baseline.CPSTTokenPricedMicroCents - substitute.CPSTTokenPricedMicroCents) * 10_000 / baseline.CPSTTokenPricedMicroCents
 	}
+	view.Notes = append(view.Notes, SavingsBasisNote)
 	if !parityBarMet {
 		view.Notes = append(view.Notes, "Parity bar FAILED: the substitute passed fewer holdout tasks than the baseline. No savings claim is made; this pack records the negative result.")
 	}
@@ -547,7 +612,7 @@ func BuildSavingsEvidencePack(in SavingsPackInputs) (*Manifest, map[string][]byt
 		}
 	}
 
-	view, err := ComputeSavingsView(in.ReceiptSets, &man, &res, priceBookSHA)
+	view, err := ComputeSavingsView(in.ReceiptSets, &man, &res, in.PriceBookConfig)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -721,7 +786,7 @@ func VerifySavingsEvidenceOffline(contents map[string][]byte) (*SavingsVerificat
 	// (c)+(d)+(e)+(f) Recompute the entire view from receipts + artifacts.
 	// ComputeSavingsView internally enforces paired task ids, holdout coverage,
 	// truthful substitution, and the freeze-precedes-holdout ordering.
-	recomputed, err := ComputeSavingsView(sets, &man, &results, priceBookSHA)
+	recomputed, err := ComputeSavingsView(sets, &man, &results, rawPriceBook)
 	if err != nil {
 		return res, err
 	}

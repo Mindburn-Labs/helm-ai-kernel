@@ -164,11 +164,21 @@ func TestSavingsExportEndToEnd(t *testing.T) {
 	if view.Baseline.SpendCents <= 0 || view.Substitute.SpendCents <= 0 {
 		t.Fatalf("spend must be positive: %+v / %+v", view.Baseline, view.Substitute)
 	}
-	// The mock upstream reports the same token usage on both routes; CPST must
-	// come out of receipts, not price arithmetic done here.
-	wantBaseCPST := view.Baseline.SpendCents * 1_000_000 / int64(view.Baseline.TasksPassed)
-	if view.Baseline.CPSTMicroCents != wantBaseCPST {
-		t.Fatalf("baseline CPST %d, want %d", view.Baseline.CPSTMicroCents, wantBaseCPST)
+	// Settled basis mirrors the ledger debits exactly.
+	wantBaseSettled := view.Baseline.SpendCents * 1_000_000 / int64(view.Baseline.TasksPassed)
+	if view.Baseline.CPSTSettledMicroCents != wantBaseSettled {
+		t.Fatalf("baseline settled CPST %d, want %d", view.Baseline.CPSTSettledMicroCents, wantBaseSettled)
+	}
+	// Token-priced basis: mock usage is 100 in / 20 out per call at
+	// base-model 5000/10000 and mini-model 1000/2000 micro-cents per token.
+	if view.Baseline.CPSTTokenPricedMicroCents != 700_000 {
+		t.Fatalf("baseline token-priced CPST %d, want 700000", view.Baseline.CPSTTokenPricedMicroCents)
+	}
+	if view.Substitute.CPSTTokenPricedMicroCents != 140_000 {
+		t.Fatalf("substitute token-priced CPST %d, want 140000", view.Substitute.CPSTTokenPricedMicroCents)
+	}
+	if view.SavingsPerTaskMicroCents != 560_000 || view.SavingsPercentBps != 8_000 {
+		t.Fatalf("savings numbers wrong: per-task %d, bps %d", view.SavingsPerTaskMicroCents, view.SavingsPercentBps)
 	}
 	if view.Substitute.DispatchedModelID != "mini-model" || view.Baseline.DispatchedModelID != "base-model" {
 		t.Fatalf("dispatched models wrong: %+v / %+v", view.Baseline, view.Substitute)

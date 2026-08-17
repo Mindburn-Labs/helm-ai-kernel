@@ -1,5 +1,9 @@
 # spend-proxy example
 
+<!-- quantum_posture: describes the classical Ed25519 verdict-signing flow
+implemented in core/pkg/spendproxy; this document adds no cryptographic
+surface of its own. -->
+
 Reference configuration for `helm-ai-kernel spend-proxy`, the locally runnable
 governed inference proxy: OpenAI-compatible routes over the SPEND3 RouteQuote
 engine with a real cloud provider dispatch, Ed25519-signed BudgetVerdict

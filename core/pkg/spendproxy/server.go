@@ -1,3 +1,8 @@
+// quantum_posture: the server orchestrates classical Ed25519 signing of
+// persisted receipt payloads through the issuer (issuer.go) and derives
+// idempotency keys with SHA-256; no post-quantum primitives are used in this
+// file.
+
 package spendproxy
 
 import (

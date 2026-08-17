@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -92,12 +93,34 @@ import (
 // The same mechanism is why the daemon's chain in cmd/helm-ai-kernel keeps this
 // wrapper BELOW RequestIDMiddleware, which copies the request the same way.
 func WrapEdgeHandler(h http.Handler, operation string) http.Handler {
-	return otelhttp.NewHandler(withRouteAttribute(dropRemoteSpanContext(h)), operation,
+	return otelhttp.NewHandler(withRouteAttribute(dropRemoteSpanContext(withCorrelationIdentity(h))), operation,
 		otelhttp.WithPropagators(propagation.TraceContext{}),
 		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
 		otelhttp.WithSpanNameFormatter(edgeSpanName),
 		otelhttp.WithMetricAttributesFn(edgeMetricAttributes),
 	)
+}
+
+// withCorrelationIdentity establishes the product request identity after the
+// server span exists and before any routed handler runs. The daemon registers
+// routes directly on its own mux, so this shared edge wrapper — not api.Server
+// — is the one place that covers the daemon, proxy, and embedded API server.
+//
+// The canonical value is written back to the request header so a nested edge
+// adopts the same ID instead of minting a second one. Updating the request in
+// place preserves http.ServeMux's route stamp for the outer otelhttp wrapper.
+func withCorrelationIdentity(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		corr, _ := correlation.AdoptOrMint(r.Header)
+		ctx := correlation.With(r.Context(), corr)
+		correlation.Inject(ctx, r.Header)
+		correlation.Inject(ctx, w.Header())
+		*r = *r.WithContext(ctx)
+		oteltrace.SpanFromContext(ctx).SetAttributes(
+			attribute.String("helm.correlation_id", string(corr)),
+		)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // dropRemoteSpanContext removes the extracted caller context only when the

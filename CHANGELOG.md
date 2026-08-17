@@ -99,6 +99,13 @@ are causal-chain-bound projections, and the listing does not prove
 completeness. Canonical rows fail closed if any filter projection differs from
 the hash-verified receipt envelope.
 
+### Fixed — daemon correlation propagation
+
+The shared HTTP edge now adopts or mints `X-Helm-Correlation-ID`, echoes the
+canonical value, carries it into governed MCP lifecycle events, and stamps it
+on the active server span. This closes the deployed daemon path that bypasses
+the embedded API server's equivalent correlation edge.
+
 ## [0.8.4] - pending tag
 
 Release target for the receipt tenant-isolation fix, the corrected EU AI Act

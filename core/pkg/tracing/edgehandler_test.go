@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/baggage"
@@ -17,6 +18,50 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
+
+func TestWrapEdgeHandlerAdoptsAndStampsCorrelation(t *testing.T) {
+	sr := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr))
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prev)
+		_ = tp.Shutdown(context.Background())
+	})
+
+	const inbound = "bf7171d9-4965-4c81-acf0-6dfe3042caa0"
+	var inner correlation.ID
+	h := tracing.WrapEdgeHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		inner, _ = correlation.From(r.Context())
+		if got := r.Header.Get(correlation.Header); got != inbound {
+			t.Errorf("downstream correlation header = %q, want %q", got, inbound)
+		}
+	}), "test.edge")
+	req := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", nil)
+	req.Header.Set(correlation.Header, inbound)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if string(inner) != inbound {
+		t.Errorf("downstream correlation = %q, want %q", inner, inbound)
+	}
+	if got := rec.Header().Get(correlation.Header); got != inbound {
+		t.Errorf("response correlation header = %q, want %q", got, inbound)
+	}
+	spans := sr.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("recorded %d server spans, want 1", len(spans))
+	}
+	for _, attr := range spans[0].Attributes() {
+		if string(attr.Key) == "helm.correlation_id" {
+			if got := attr.Value.AsString(); got != inbound {
+				t.Errorf("span correlation = %q, want %q", got, inbound)
+			}
+			return
+		}
+	}
+	t.Error("server span has no helm.correlation_id attribute")
+}
 
 func TestWrapEdgeHandlerRootsInboundTraceAndLinksRemote(t *testing.T) {
 	sr := tracetest.NewSpanRecorder()

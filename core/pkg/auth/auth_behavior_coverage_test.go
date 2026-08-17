@@ -132,6 +132,8 @@ func TestCORSMiddlewareDefaultDeniesOrigin(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 	assert.Empty(t, rr.Header().Get("Access-Control-Allow-Origin"))
 	assert.Contains(t, rr.Header().Get("Access-Control-Allow-Headers"), "X-Helm-Tenant-ID")
+	assert.Contains(t, rr.Header().Get("Access-Control-Allow-Headers"), "X-Helm-Correlation-ID")
+	assert.Contains(t, rr.Header().Get("Access-Control-Expose-Headers"), "X-Helm-Correlation-ID")
 }
 
 func TestCORSMiddlewarePreflightReturns204(t *testing.T) {

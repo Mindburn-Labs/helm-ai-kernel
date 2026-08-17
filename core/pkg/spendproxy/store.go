@@ -49,10 +49,36 @@ type ReceiptRecord struct {
 	BalanceAfterCents int64  `json:"balance_after_cents,omitempty"`
 	Note              string `json:"note,omitempty"`
 
+	// PayloadSignature is the issuer's detached Ed25519 signature over the RFC
+	// 8785 (JCS) canonicalization of the receipt payload carried by this record.
+	// It covers post-dispatch fields (token counts, timestamps, substitution
+	// flags) that the receipt types' sealed content-hash preimages omit, so
+	// exported evidence can anchor them. PayloadSignatureKeyID resolves in the
+	// trusted-key registry.
+	PayloadSignature      string `json:"payload_signature,omitempty"`
+	PayloadSignatureKeyID string `json:"payload_signature_key_id,omitempty"`
+
 	RouteQuote    *economic.RouteQuote           `json:"route_quote,omitempty"`
 	BudgetVerdict *economic.BudgetVerdictReceipt `json:"budget_verdict,omitempty"`
 	Usage         *economic.UsageReceipt         `json:"usage,omitempty"`
 	Settlement    *economic.SettlementReceipt    `json:"settlement,omitempty"`
+}
+
+// Payload returns the receipt payload carried by this record (exactly one
+// pointer is set, matching Kind), or nil for kinds without a payload.
+func (r *ReceiptRecord) Payload() any {
+	switch {
+	case r.RouteQuote != nil:
+		return r.RouteQuote
+	case r.BudgetVerdict != nil:
+		return r.BudgetVerdict
+	case r.Usage != nil:
+		return r.Usage
+	case r.Settlement != nil:
+		return r.Settlement
+	default:
+		return nil
+	}
 }
 
 // ReceiptLogName is the stable file name of the append-only receipt log inside

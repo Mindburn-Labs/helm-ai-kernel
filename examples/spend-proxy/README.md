@@ -17,6 +17,19 @@ receipts, and durable JSONL receipt persistence.
   from this file alone. Prices were captured manually from
   <https://openrouter.ai/models> on 2026-08-17; re-capture and update this file
   (the hash changes with it) when prices move.
+- `dogfood.do-gradient.config.json` — the HELM-618 DigitalOcean Gradient
+  serverless-inference price book and paired-replay envelope set (baseline
+  `openai-gpt-oss-120b` plus three substitute-candidate envelopes). Prices from
+  <https://docs.digitalocean.com/products/inference/details/pricing/> (page
+  updated 2026-08-15, captured 2026-08-17). Run against
+  `--upstream https://inference.do-ai.run/v1` with a DigitalOcean model access
+  key in `HELM_SPEND_PROXY_UPSTREAM_KEY`.
+- `paired-replay/` — the standalone HELM-618 capture runner and its committed
+  task set (`tasks.json`, selection/holdout split fixed in-repo). It drives
+  each task through the proxy once per envelope with deterministic
+  `X-HELM-Idempotency-Key`s and records `task_results.json` /
+  `parity_prerun.json` for `spend-proxy savings-export`. Responses are stored
+  as SHA-256 only — no prompt or answer bodies leave the capture machine.
 
 ## Run
 
@@ -75,3 +88,30 @@ helm-ai-kernel spend-proxy export \
 Each pack re-verifies offline (canonical content hashes, financial invariants,
 prompt-body-off-graph) and the BudgetVerdict signature is checked against the
 trusted-key registry at `<receipts-dir>/trusted_keys.json`.
+
+## Savings EvidencePack (HELM-614 methodology)
+
+A paired capture (parity pre-run on the selection set, a committed selection
+freeze, then the holdout set through the baseline and the frozen substitute)
+exports as ONE savings EvidencePack with a recomputable
+`views/savings_view.json` — cost-per-successful-task per route, the strict
+parity bar, and the savings claim bound to capture-window prices:
+
+```bash
+helm-ai-kernel spend-proxy savings-export \
+  --receipts-dir ./helm-spend-receipts \
+  --capture ./capture \
+  --config examples/spend-proxy/dogfood.do-gradient.config.json \
+  --out ./helm-spend-evidence
+```
+
+`--capture` holds `task_split_manifest.json` (task ids, selection/holdout
+assignment, the frozen substitute choice), `task_results.json`, and
+`parity_prerun.json` — the paired-replay runner produces the latter two. The
+export refuses unattributed settled spend on the capture envelopes and
+offline-verifies the pack before writing it. A skeptic re-verifies with no
+receipts dir, ledger, or network:
+
+```bash
+helm-ai-kernel spend-proxy savings-verify --pack ./helm-spend-evidence/savingspack-<run-id>
+```

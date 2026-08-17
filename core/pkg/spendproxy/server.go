@@ -1,3 +1,8 @@
+// quantum_posture: the server orchestrates classical Ed25519 signing of
+// persisted receipt payloads through the issuer (issuer.go) and derives
+// idempotency keys with SHA-256; no post-quantum primitives are used in this
+// file.
+
 package spendproxy
 
 import (
@@ -223,12 +228,16 @@ func (s *Server) modelList() []api.GatewayModel {
 // provider is called; a store failure refuses dispatch. This is the
 // no-unreceipted-dispatch invariant in code.
 func (s *Server) governedDispatch(r *http.Request, quote *economic.RouteQuote, body []byte) (api.DispatchOutcome, error) {
-	if err := s.store.Append(&ReceiptRecord{
+	rec := &ReceiptRecord{
 		Kind:          RecordRouteQuote,
 		TenantID:      quote.TenantID,
 		SpendIntentID: quote.SpendIntentID,
 		RouteQuote:    quote,
-	}); err != nil {
+	}
+	if err := s.signRecord(rec); err != nil {
+		return api.DispatchOutcome{}, fmt.Errorf("receipt signing failed; refusing dispatch: %w", err)
+	}
+	if err := s.store.Append(rec); err != nil {
 		return api.DispatchOutcome{}, fmt.Errorf("receipt store append failed; refusing dispatch: %w", err)
 	}
 	return s.upstream.Dispatch(r.Context(), r.URL.Path, quote, body)
@@ -414,9 +423,29 @@ func (s *Server) persistOutcome(meta *api.GatewayMetadata) {
 }
 
 func (s *Server) appendOrLog(rec *ReceiptRecord) {
+	if err := s.signRecord(rec); err != nil {
+		s.logf("spend-proxy: ERROR signing %s record (persisting unsigned; savings export will refuse it): %v", rec.Kind, err)
+	}
 	if err := s.store.Append(rec); err != nil {
 		s.logf("spend-proxy: ERROR persisting %s record: %v", rec.Kind, err)
 	}
+}
+
+// signRecord attaches the issuer's detached Ed25519 signature over the JCS
+// canonicalization of the record's receipt payload. Records without a payload
+// pass through unsigned.
+func (s *Server) signRecord(rec *ReceiptRecord) error {
+	payload := rec.Payload()
+	if payload == nil {
+		return nil
+	}
+	keyID, sig, err := s.issuer.SignDetached(payload)
+	if err != nil {
+		return err
+	}
+	rec.PayloadSignature = sig
+	rec.PayloadSignatureKeyID = keyID
+	return nil
 }
 
 // handleStream is the streaming counterpart of the governed gateway's
@@ -478,17 +507,18 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request, body []byt
 		writeJSONError(w, http.StatusInternalServerError, "failed to sign budget verdict receipt", "helm_internal_error", "")
 		return
 	}
-	if err := s.store.Append(&ReceiptRecord{
-		Kind: RecordRouteQuote, TenantID: quote.TenantID, SpendIntentID: quote.SpendIntentID, RouteQuote: quote,
-	}); err != nil {
-		writeJSONError(w, http.StatusBadGateway, "receipt store append failed; refusing dispatch", "helm_receipt_store_error", "")
-		return
-	}
-	if err := s.store.Append(&ReceiptRecord{
-		Kind: RecordBudgetVerdict, TenantID: quote.TenantID, SpendIntentID: quote.SpendIntentID, BudgetVerdict: quoteRes.Receipt,
-	}); err != nil {
-		writeJSONError(w, http.StatusBadGateway, "receipt store append failed; refusing dispatch", "helm_receipt_store_error", "")
-		return
+	for _, rec := range []*ReceiptRecord{
+		{Kind: RecordRouteQuote, TenantID: quote.TenantID, SpendIntentID: quote.SpendIntentID, RouteQuote: quote},
+		{Kind: RecordBudgetVerdict, TenantID: quote.TenantID, SpendIntentID: quote.SpendIntentID, BudgetVerdict: quoteRes.Receipt},
+	} {
+		if err := s.signRecord(rec); err != nil {
+			writeJSONError(w, http.StatusBadGateway, "receipt signing failed; refusing dispatch", "helm_receipt_store_error", "")
+			return
+		}
+		if err := s.store.Append(rec); err != nil {
+			writeJSONError(w, http.StatusBadGateway, "receipt store append failed; refusing dispatch", "helm_receipt_store_error", "")
+			return
+		}
 	}
 
 	w.Header().Set("X-HELM-Governed", "true")

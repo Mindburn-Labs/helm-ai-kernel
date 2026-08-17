@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 )
 
@@ -105,6 +106,27 @@ func (i *Issuer) Sign(r *economic.BudgetVerdictReceipt) error {
 		return nil
 	}
 	return r.Seal(i.keyID, i.priv)
+}
+
+// SignDetached signs the RFC 8785 (JCS) canonicalization of an arbitrary
+// receipt payload with the issuer key, returning the key id and the base64
+// signature. Detached signatures cover EVERY field of the payload — including
+// post-dispatch fields (token counts, timestamps, substitution flags) that the
+// receipt types' sealed content-hash preimages deliberately omit — so a pack
+// carrying them cannot have those fields rewritten without the signing key.
+func (i *Issuer) SignDetached(payload any) (keyID, signature string, err error) {
+	canonical, err := canonicalize.JCS(payload)
+	if err != nil {
+		return "", "", fmt.Errorf("spendproxy: canonicalize payload for detached signature: %w", err)
+	}
+	sig := ed25519.Sign(i.priv, canonical)
+	return i.keyID, base64.StdEncoding.EncodeToString(sig), nil
+}
+
+// SignRaw signs arbitrary bytes with the issuer key (used for the savings
+// pack manifest-hash signature), returning the key id and raw signature.
+func (i *Issuer) SignRaw(payload []byte) (keyID string, signature []byte, err error) {
+	return i.keyID, ed25519.Sign(i.priv, payload), nil
 }
 
 // TrustedKeyFileName is the trusted-key registry file inside a receipts dir.

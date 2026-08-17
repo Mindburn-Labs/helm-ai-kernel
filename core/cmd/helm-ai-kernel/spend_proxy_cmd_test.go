@@ -89,3 +89,46 @@ func TestSpendProxyExportFlagErrors(t *testing.T) {
 		t.Fatalf("exit = %d, want 2 for unknown flag", code)
 	}
 }
+
+func TestSpendProxySavingsExportRequiresFlags(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := runSpendProxyCmd([]string{"savings-export"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "--capture and --config are required") {
+		t.Fatalf("stderr = %q, want capture/config requirement", stderr.String())
+	}
+}
+
+func TestSpendProxySavingsVerifyRequiresPack(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := runSpendProxyCmd([]string{"savings-verify"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "--pack is required") {
+		t.Fatalf("stderr = %q, want pack requirement", stderr.String())
+	}
+}
+
+func TestSpendProxyGenericUpstreamKeyEnv(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.json")
+	// Invalid config on purpose: with the generic key env set, the command must
+	// get PAST the key check and fail on config parsing instead.
+	if err := os.WriteFile(config, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("OPENROUTER_API_KEY", "")
+	t.Setenv("HELM_SPEND_PROXY_SIGNING_SEED", "")
+	t.Setenv("HELM_SPEND_PROXY_UPSTREAM_KEY", "generic-key")
+	var stdout, stderr bytes.Buffer
+	if code := runSpendProxyCmd([]string{"--config", config}, &stdout, &stderr); code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if strings.Contains(stderr.String(), "upstream API key is required") {
+		t.Fatalf("generic env var was not honored: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "tenant_id is required") {
+		t.Fatalf("expected config validation failure, got: %q", stderr.String())
+	}
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": "helm-paired-replay-tasks.v1",
+  "source_note": "Task shape extracted from the launchpad smoke suite (scripts/ci/launchpad_k8s_smoke.sh; hermes runs a single-turn query through an OpenAI-compatible provider and passes when the run completes). The smoke's own pass criterion is completion (exit 0); the deterministic content checks below are an extension recorded per HELM-618 so the parity bar measures answer quality, not just liveness. The selection/holdout split is fixed here, before any capture.",
+  "tasks": [
+    { "task_id": "sel-01", "subset": "selection", "prompt": "What is 847 * 293? Reply with the number only.", "check": { "kind": "number", "value": "248171" } },
+    { "task_id": "sel-02", "subset": "selection", "prompt": "Spell the word 'boundary' backwards. Reply with the reversed word only.", "check": { "kind": "contains", "value": "yradnuob" } },
+    { "task_id": "sel-03", "subset": "selection", "prompt": "How many days are there in February 2028? Reply with the number only.", "check": { "kind": "number", "value": "29" } },
+    { "task_id": "sel-04", "subset": "selection", "prompt": "What is the chemical symbol for tungsten? Reply with the symbol only.", "check": { "kind": "regex", "value": "\\bW\\b" } },
+    { "task_id": "sel-05", "subset": "selection", "prompt": "Convert 2500 millimeters to meters. Reply with the number only.", "check": { "kind": "number", "value": "2.5" } },
+    { "task_id": "sel-06", "subset": "selection", "prompt": "What HTTP status code means 'Payment Required'? Reply with the number only.", "check": { "kind": "number", "value": "402" } },
+    { "task_id": "sel-07", "subset": "selection", "prompt": "Count the letter 'e' in the word 'ephemeralness'. Reply with the number only.", "check": { "kind": "number", "value": "4" } },
+    { "task_id": "sel-08", "subset": "selection", "prompt": "If a train leaves at 09:40 and arrives at 13:15 the same day, how many minutes did the trip take? Reply with the number only.", "check": { "kind": "number", "value": "215" } },
+    { "task_id": "hold-01", "subset": "holdout", "prompt": "What is 1024 * 768? Reply with the number only.", "check": { "kind": "number", "value": "786432" } },
+    { "task_id": "hold-02", "subset": "holdout", "prompt": "What is 15% of 340? Reply with the number only.", "check": { "kind": "number", "value": "51" } },
+    { "task_id": "hold-03", "subset": "holdout", "prompt": "Spell 'receipt' backwards. Reply with the reversed word only.", "check": { "kind": "contains", "value": "tpiecer" } },
+    { "task_id": "hold-04", "subset": "holdout", "prompt": "What is the ISO 4217 currency code for the Swiss franc? Reply with the code only.", "check": { "kind": "contains", "value": "chf" } },
+    { "task_id": "hold-05", "subset": "holdout", "prompt": "How many bytes are in 4 kibibytes? Reply with the number only.", "check": { "kind": "number", "value": "4096" } },
+    { "task_id": "hold-06", "subset": "holdout", "prompt": "In what year did the Unix epoch begin? Reply with the year only.", "check": { "kind": "number", "value": "1970" } },
+    { "task_id": "hold-07", "subset": "holdout", "prompt": "What is 7 factorial? Reply with the number only.", "check": { "kind": "number", "value": "5040" } },
+    { "task_id": "hold-08", "subset": "holdout", "prompt": "Convert 98.6 degrees Fahrenheit to Celsius. Reply with the number only.", "check": { "kind": "number", "value": "37" } },
+    { "task_id": "hold-09", "subset": "holdout", "prompt": "How many prime numbers are there strictly between 10 and 30? Reply with the number only.", "check": { "kind": "number", "value": "6" } },
+    { "task_id": "hold-10", "subset": "holdout", "prompt": "What is the greatest common divisor of 252 and 105? Reply with the number only.", "check": { "kind": "number", "value": "21" } },
+    { "task_id": "hold-11", "subset": "holdout", "prompt": "Spell 'kernel' backwards. Reply with the reversed word only.", "check": { "kind": "contains", "value": "lenrek" } },
+    { "task_id": "hold-12", "subset": "holdout", "prompt": "What HTTP status code means 'Too Many Requests'? Reply with the number only.", "check": { "kind": "number", "value": "429" } },
+    { "task_id": "hold-13", "subset": "holdout", "prompt": "How many minutes are there in a fortnight? Reply with the number only.", "check": { "kind": "number", "value": "20160" } },
+    { "task_id": "hold-14", "subset": "holdout", "prompt": "What is the chemical symbol for potassium? Reply with the symbol only.", "check": { "kind": "regex", "value": "\\bK\\b" } },
+    { "task_id": "hold-15", "subset": "holdout", "prompt": "What is 2 to the power of 16? Reply with the number only.", "check": { "kind": "number", "value": "65536" } },
+    { "task_id": "hold-16", "subset": "holdout", "prompt": "Count the letter 's' in the word 'suspiciousness'. Reply with the number only.", "check": { "kind": "number", "value": "5" } }
+  ]
+}

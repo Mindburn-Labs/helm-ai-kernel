@@ -1,0 +1,115 @@
+{
+  "tenant_id": "mindburn-dogfood",
+  "treasury_id": "treasury-mindburn",
+  "route_policy_id": "dogfood-do-gradient-v1",
+  "currency": "USD",
+  "platform_fee_bps": 0,
+  "quote_ttl_seconds": 600,
+  "price_ttl_hours": 168,
+  "balance": {
+    "account_id": "balance-dogfood-do",
+    "opening_cents": 2000
+  },
+  "request_defaults": {
+    "workspace_id": "ws-dogfood",
+    "agent_id": "agent-live-traffic",
+    "principal_id": "principal-dogfood",
+    "envelope_id": "env-baseline"
+  },
+  "providers": [
+    {
+      "id": "digitalocean",
+      "account_mode": "DIRECT",
+      "terms_version": "2026-08-17",
+      "legal_review_ref": "linear:HELM-618"
+    }
+  ],
+  "prices": [
+    {
+      "provider_id": "digitalocean",
+      "model_id": "openai-gpt-oss-120b",
+      "input_token_micro_cents": 10,
+      "output_token_micro_cents": 70,
+      "source_uri": "https://docs.digitalocean.com/products/inference/details/pricing/ (page updated 2026-08-15, captured 2026-08-17)"
+    },
+    {
+      "provider_id": "digitalocean",
+      "model_id": "openai-gpt-oss-20b",
+      "input_token_micro_cents": 5,
+      "output_token_micro_cents": 45,
+      "source_uri": "https://docs.digitalocean.com/products/inference/details/pricing/ (page updated 2026-08-15, captured 2026-08-17)"
+    },
+    {
+      "provider_id": "digitalocean",
+      "model_id": "alibaba-qwen3-32b",
+      "input_token_micro_cents": 25,
+      "output_token_micro_cents": 55,
+      "source_uri": "https://docs.digitalocean.com/products/inference/details/pricing/ (page updated 2026-08-15, captured 2026-08-17)"
+    },
+    {
+      "provider_id": "digitalocean",
+      "model_id": "llama3.3-70b-instruct",
+      "input_token_micro_cents": 65,
+      "output_token_micro_cents": 65,
+      "source_uri": "https://docs.digitalocean.com/products/inference/details/pricing/ (page updated 2026-08-15, captured 2026-08-17)"
+    }
+  ],
+  "envelopes": [
+    {
+      "id": "env-baseline",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-do-baseline",
+      "max_amount_cents": 1000,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["digitalocean"],
+      "allowed_models": ["openai-gpt-oss-120b"],
+      "fallback_routes": [
+        { "provider_id": "digitalocean", "model_id": "openai-gpt-oss-120b" }
+      ],
+      "allow_model_substitution": false
+    },
+    {
+      "id": "env-cand-gpt-oss-20b",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-do-cand-20b",
+      "max_amount_cents": 500,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["digitalocean"],
+      "allowed_models": ["openai-gpt-oss-20b"],
+      "fallback_routes": [
+        { "provider_id": "digitalocean", "model_id": "openai-gpt-oss-20b" }
+      ],
+      "allow_model_substitution": true
+    },
+    {
+      "id": "env-cand-qwen3-32b",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-do-cand-qwen",
+      "max_amount_cents": 500,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["digitalocean"],
+      "allowed_models": ["alibaba-qwen3-32b"],
+      "fallback_routes": [
+        { "provider_id": "digitalocean", "model_id": "alibaba-qwen3-32b" }
+      ],
+      "allow_model_substitution": true
+    },
+    {
+      "id": "env-cand-llama33-70b",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-do-cand-llama",
+      "max_amount_cents": 500,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["digitalocean"],
+      "allowed_models": ["llama3.3-70b-instruct"],
+      "fallback_routes": [
+        { "provider_id": "digitalocean", "model_id": "llama3.3-70b-instruct" }
+      ],
+      "allow_model_substitution": true
+    }
+  ]
+}

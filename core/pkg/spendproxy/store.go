@@ -1,3 +1,7 @@
+// quantum_posture: this file only persists receipts whose classical Ed25519
+// signatures are produced and verified elsewhere (issuer.go); it implements no
+// cryptographic control itself beyond SHA-256-hashed content pass-through.
+
 package spendproxy
 
 import (

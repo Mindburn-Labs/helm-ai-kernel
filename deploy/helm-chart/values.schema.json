@@ -828,6 +828,11 @@
           "default": false,
           "description": "Export traces to telemetry.endpoint. A stand handed an endpoint starts exporting the moment it boots, so keep this false until the stand is meant to report."
         },
+        "syntheticLifecycleEvents": {
+          "type": "boolean",
+          "default": false,
+          "description": "Publish governed lifecycle events from a synthetic stand by rendering HELM_ENV=synthetic. Requires telemetry.enabled=true so lifecycle events remain joinable to exported traces. Never enable for pilot or customer namespaces."
+        },
         "endpoint": {
           "type": "string",
           "description": "OTLP gRPC target of the in-cluster gateway, e.g. http://telemetry-gateway.telemetry-system.svc.cluster.local:4317. Required when enabled is true. Keep the http:// prefix: the kernel strips the scheme before dialing and uses its presence to select an insecure connection, and the gateway does not terminate TLS in-cluster."

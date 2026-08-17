@@ -286,6 +286,10 @@ helm:
 # exporting the moment it boots. Enabled per stand, never in a chart default.
 telemetry:
   enabled: false
+  # Publish governed lifecycle events only from a synthetic stand. This maps
+  # to the kernel's fail-closed HELM_ENV=synthetic publisher gate and requires
+  # telemetry.enabled so the events remain joinable to exported traces.
+  syntheticLifecycleEvents: false
   # In-cluster gateway. Plaintext on purpose: TLS terminates at the central
   # frontdoor, not inside the cluster. Example:
   #   http://telemetry-gateway.telemetry-system.svc.cluster.local:4317

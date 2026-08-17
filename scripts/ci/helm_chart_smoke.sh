@@ -108,6 +108,7 @@ assert_not_contains "$default_rendered" "configmap-reload"
 assert_not_contains "$default_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
+assert_not_contains "$default_rendered" "HELM_ENV"
 assert_contains "$default_rendered" "name: prepare-authority-state"
 assert_contains "$default_rendered" "HELM_AUTHORITY_DATA_DIR"
 assert_contains "$default_rendered" "/var/run/helm-signing-key"
@@ -156,6 +157,24 @@ if helm_runner template "$RELEASE" "$CHART" \
     exit 1
 fi
 assert_contains "$runtime_init_fail_log" "runtimeInit.image"
+
+synthetic_telemetry_rendered="$RENDER_DIR/rendered-synthetic-telemetry.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set telemetry.enabled=true \
+    --set telemetry.syntheticLifecycleEvents=true \
+    --set telemetry.endpoint=http://telemetry-gateway.telemetry-system.svc.cluster.local:4317 >"$synthetic_telemetry_rendered"
+assert_contains "$synthetic_telemetry_rendered" "HELM_ENV"
+assert_contains "$synthetic_telemetry_rendered" 'value: "synthetic"'
+
+synthetic_without_telemetry_log="$RENDER_DIR/synthetic-without-telemetry.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set telemetry.syntheticLifecycleEvents=true >"$RENDER_DIR/synthetic-without-telemetry.yaml" 2>"$synthetic_without_telemetry_log"; then
+    echo "::error::synthetic lifecycle publication without telemetry unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$synthetic_without_telemetry_log" "telemetry.syntheticLifecycleEvents=true requires telemetry.enabled=true"
 
 authority_identity_rendered="$RENDER_DIR/rendered-authority-identity.yaml"
 helm_runner template "$RELEASE" "$CHART" \

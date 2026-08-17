@@ -132,3 +132,34 @@ func TestSpendProxyGenericUpstreamKeyEnv(t *testing.T) {
 		t.Fatalf("expected config validation failure, got: %q", stderr.String())
 	}
 }
+
+func TestSpendProxyDOGradientExampleConfigLoads(t *testing.T) {
+	// The checked-in DigitalOcean Gradient config must stay loadable: it is the
+	// price-book source of record for the HELM-618 savings capture window.
+	path := filepath.Join("..", "..", "..", "examples", "spend-proxy", "dogfood.do-gradient.config.json")
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("example config not present in this checkout: %v", err)
+	}
+	cfg, sourceHash, err := spendproxy.LoadConfig(path)
+	if err != nil {
+		t.Fatalf("DO Gradient config failed to load: %v", err)
+	}
+	if !strings.HasPrefix(sourceHash, "sha256:") {
+		t.Fatalf("source hash = %q, want sha256 prefix", sourceHash)
+	}
+	if len(cfg.Envelopes) < 4 {
+		t.Fatalf("DO Gradient config must declare the baseline and three candidate envelopes, got %d", len(cfg.Envelopes))
+	}
+	var baseline bool
+	for _, env := range cfg.Envelopes {
+		if env.ID == "env-baseline" && !env.AllowModelSubstitution {
+			baseline = true
+		}
+		if env.ID != "env-baseline" && !env.AllowModelSubstitution {
+			t.Fatalf("candidate envelope %s must allow substitution", env.ID)
+		}
+	}
+	if !baseline {
+		t.Fatal("env-baseline with substitution disabled is required")
+	}
+}

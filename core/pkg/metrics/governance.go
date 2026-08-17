@@ -4,11 +4,15 @@ package metrics
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/expfmt"
 )
 
 // GovernanceMetrics tracks governance decision metrics.
@@ -237,46 +241,98 @@ func (m *GovernanceMetrics) Handler() http.HandlerFunc {
 	}
 }
 
-// PrometheusHandler returns Prometheus text format metrics.
+// PrometheusHandlerFor returns Prometheus text format metrics for the governance
+// families PLUS every family held by the supplied gatherers.
+//
+// The kernel has two metric surfaces that grew independently (HELM-477): these
+// hand-written governance families, and everything registered with
+// prometheus/client_golang or recorded through the OpenTelemetry MeterProvider.
+// Only the first was ever served, so the second was unreachable by any path —
+// including helm_kernel_decisions_total, a live promauto counter incremented on
+// every PDP decision, and the go_*/process_* runtime families the kernel had
+// none of.
+//
+// Gatherers are typically prometheus.DefaultGatherer (go_*, process_*,
+// helm_kernel_decisions_total) and the registry holding the OTel prometheus
+// reader (otelhttp's http.server.* RED families).
+//
+// Composition is by concatenation of the text exposition format, which is legal
+// as long as no family name appears twice; the gathered names (helm_kernel_*,
+// http_server_*, go_*, process_*) are disjoint from the hand-written helm_*
+// families below. A gatherer that fails is skipped rather than failing the
+// scrape: a partial /metrics keeps the governance families readable during an
+// incident, which is when they matter most.
+func (m *GovernanceMetrics) PrometheusHandlerFor(gatherers ...prometheus.Gatherer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		for _, g := range gatherers {
+			if g == nil {
+				continue
+			}
+			families, err := g.Gather()
+			if err != nil && len(families) == 0 {
+				continue
+			}
+			for _, mf := range families {
+				if _, err := expfmt.MetricFamilyToText(w, mf); err != nil {
+					return
+				}
+			}
+		}
+		m.writeGovernanceFamilies(w)
+	}
+}
+
+// PrometheusHandler returns Prometheus text format metrics for the governance
+// families only.
+//
+// Prefer PrometheusHandlerFor: on its own this serves neither the runtime
+// families nor the RED instruments (HELM-477).
 func (m *GovernanceMetrics) PrometheusHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		snap := m.Snapshot()
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		fmt.Fprintf(w, "# HELP helm_decisions_total Total governance decisions\n")
-		fmt.Fprintf(w, "# TYPE helm_decisions_total counter\n")
-		fmt.Fprintf(w, "helm_decisions_total %d\n", snap.Decisions)
-		fmt.Fprintf(w, "# HELP helm_allows_total Total allowed decisions\n")
-		fmt.Fprintf(w, "# TYPE helm_allows_total counter\n")
-		fmt.Fprintf(w, "helm_allows_total %d\n", snap.Allows)
-		fmt.Fprintf(w, "# HELP helm_denials_total Total denied decisions\n")
-		fmt.Fprintf(w, "# TYPE helm_denials_total counter\n")
-		fmt.Fprintf(w, "helm_denials_total %d\n", snap.Denials)
-		fmt.Fprintf(w, "# HELP helm_verifications_total EvidencePack verifications run (north-star adoption metric)\n")
-		fmt.Fprintf(w, "# TYPE helm_verifications_total counter\n")
-		fmt.Fprintf(w, "helm_verifications_total %d\n", snap.Verifications)
-		fmt.Fprintf(w, "# HELP helm_decision_latency_ms Average decision latency\n")
-		fmt.Fprintf(w, "# TYPE helm_decision_latency_ms gauge\n")
-		fmt.Fprintf(w, "helm_decision_latency_ms %.3f\n", snap.AvgLatencyMs)
-		fmt.Fprintf(w, "# HELP helm_decision_latency_p95_ms Recent p95 decision latency\n")
-		fmt.Fprintf(w, "# TYPE helm_decision_latency_p95_ms gauge\n")
-		fmt.Fprintf(w, "helm_decision_latency_p95_ms %.3f\n", snap.P95LatencyMs)
-		fmt.Fprintf(w, "# HELP helm_decision_latency_p99_ms Recent p99 decision latency\n")
-		fmt.Fprintf(w, "# TYPE helm_decision_latency_p99_ms gauge\n")
-		fmt.Fprintf(w, "helm_decision_latency_p99_ms %.3f\n", snap.P99LatencyMs)
-		fmt.Fprintf(w, "# HELP helm_chain_length Current receipt chain length\n")
-		fmt.Fprintf(w, "# TYPE helm_chain_length gauge\n")
-		fmt.Fprintf(w, "helm_chain_length %d\n", snap.ChainLength)
-		fmt.Fprintf(w, "# HELP helm_active_agents Number of agents seen in the last 5 minutes\n")
-		fmt.Fprintf(w, "# TYPE helm_active_agents gauge\n")
-		fmt.Fprintf(w, "helm_active_agents %d\n", snap.ActiveAgents)
-		fmt.Fprintf(w, "# HELP helm_budget_used_pct Budget utilization percentage\n")
-		fmt.Fprintf(w, "# TYPE helm_budget_used_pct gauge\n")
-		fmt.Fprintf(w, "helm_budget_used_pct %.1f\n", snap.BudgetUsed)
-		for tool, count := range snap.ToolCounts {
-			fmt.Fprintf(w, "helm_tool_decisions{tool=%q} %d\n", tool, count)
-		}
-		for reason, count := range snap.ReasonCounts {
-			fmt.Fprintf(w, "helm_denial_reasons{reason=%q} %d\n", reason, count)
-		}
+		m.writeGovernanceFamilies(w)
+	}
+}
+
+// writeGovernanceFamilies writes the hand-written governance families in the
+// Prometheus text exposition format.
+func (m *GovernanceMetrics) writeGovernanceFamilies(w io.Writer) {
+	snap := m.Snapshot()
+	fmt.Fprintf(w, "# HELP helm_decisions_total Total governance decisions\n")
+	fmt.Fprintf(w, "# TYPE helm_decisions_total counter\n")
+	fmt.Fprintf(w, "helm_decisions_total %d\n", snap.Decisions)
+	fmt.Fprintf(w, "# HELP helm_allows_total Total allowed decisions\n")
+	fmt.Fprintf(w, "# TYPE helm_allows_total counter\n")
+	fmt.Fprintf(w, "helm_allows_total %d\n", snap.Allows)
+	fmt.Fprintf(w, "# HELP helm_denials_total Total denied decisions\n")
+	fmt.Fprintf(w, "# TYPE helm_denials_total counter\n")
+	fmt.Fprintf(w, "helm_denials_total %d\n", snap.Denials)
+	fmt.Fprintf(w, "# HELP helm_verifications_total EvidencePack verifications run (north-star adoption metric)\n")
+	fmt.Fprintf(w, "# TYPE helm_verifications_total counter\n")
+	fmt.Fprintf(w, "helm_verifications_total %d\n", snap.Verifications)
+	fmt.Fprintf(w, "# HELP helm_decision_latency_ms Average decision latency\n")
+	fmt.Fprintf(w, "# TYPE helm_decision_latency_ms gauge\n")
+	fmt.Fprintf(w, "helm_decision_latency_ms %.3f\n", snap.AvgLatencyMs)
+	fmt.Fprintf(w, "# HELP helm_decision_latency_p95_ms Recent p95 decision latency\n")
+	fmt.Fprintf(w, "# TYPE helm_decision_latency_p95_ms gauge\n")
+	fmt.Fprintf(w, "helm_decision_latency_p95_ms %.3f\n", snap.P95LatencyMs)
+	fmt.Fprintf(w, "# HELP helm_decision_latency_p99_ms Recent p99 decision latency\n")
+	fmt.Fprintf(w, "# TYPE helm_decision_latency_p99_ms gauge\n")
+	fmt.Fprintf(w, "helm_decision_latency_p99_ms %.3f\n", snap.P99LatencyMs)
+	fmt.Fprintf(w, "# HELP helm_chain_length Current receipt chain length\n")
+	fmt.Fprintf(w, "# TYPE helm_chain_length gauge\n")
+	fmt.Fprintf(w, "helm_chain_length %d\n", snap.ChainLength)
+	fmt.Fprintf(w, "# HELP helm_active_agents Number of agents seen in the last 5 minutes\n")
+	fmt.Fprintf(w, "# TYPE helm_active_agents gauge\n")
+	fmt.Fprintf(w, "helm_active_agents %d\n", snap.ActiveAgents)
+	fmt.Fprintf(w, "# HELP helm_budget_used_pct Budget utilization percentage\n")
+	fmt.Fprintf(w, "# TYPE helm_budget_used_pct gauge\n")
+	fmt.Fprintf(w, "helm_budget_used_pct %.1f\n", snap.BudgetUsed)
+	for tool, count := range snap.ToolCounts {
+		fmt.Fprintf(w, "helm_tool_decisions{tool=%q} %d\n", tool, count)
+	}
+	for reason, count := range snap.ReasonCounts {
+		fmt.Fprintf(w, "helm_denial_reasons{reason=%q} %d\n", reason, count)
 	}
 }

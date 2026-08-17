@@ -35,6 +35,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/obligation"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Services holds all initialized subsystems for the HELM runtime.
@@ -51,6 +53,15 @@ type Services struct {
 	Config        *config.Config
 	Observability *observability.Provider
 	AuditStore    *store.AuditStore
+
+	// OTelMetrics gathers the OpenTelemetry instruments — otelhttp's
+	// http.server.* RED families among them — that the MeterProvider's
+	// prometheus reader exports. It is a registry of its own rather than
+	// prometheus.DefaultRegisterer so that constructing Services twice in one
+	// process (tests) cannot fail on a duplicate collector registration, and so
+	// that a library consumer's global registry stays untouched. /metrics serves
+	// it alongside prometheus.DefaultGatherer — see metrics.PrometheusHandlerFor.
+	OTelMetrics prometheus.Gatherer
 
 	// --- Authorization ---
 	Authz *authz.Engine
@@ -135,25 +146,40 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	logger.Info("subsystem ready", "component", " Config loaded")
 
 	// --- 2. Observability ---
-	// Inert unless an OTLP endpoint is explicitly configured — same posture
-	// as the edge tracing and the console (unset = no exporter). Without this
-	// gate the default localhost:4317 exporter dials a collector that doesn't
-	// exist and logs an export failure every 15s.
-	if endpoint, insecure := otlpEndpointFromEnv(); endpoint == "" {
-		logger.Info("Observability init skipped (no OTLP endpoint configured)")
+	// The two signals are gated independently (HELM-477).
+	//
+	// Traces stay inert unless an OTLP endpoint is explicitly configured — same
+	// posture as the edge tracing and the console (unset = no exporter). Without
+	// that gate the default localhost:4317 exporter dials a collector that
+	// doesn't exist and logs an export failure every 15s.
+	//
+	// Metrics are ALWAYS initialised, because the kernel's metric transport is
+	// pull-based (HELM-469): the MeterProvider is what feeds /metrics, so gating
+	// it on an OTLP endpoint left the otelhttp http.server.* RED instruments
+	// recorded into a provider nothing could read. The OTLP metric PUSH remains
+	// opt-in through OTEL_METRICS_EXPORTER and is off by default.
+	//
+	// This must run before buildAPIHandler: otelhttp binds its meter once, at
+	// handler construction (see initMetricProvider).
+	endpoint, insecure := otlpEndpointFromEnv()
+	otelRegistry := prometheus.NewRegistry()
+	s.OTelMetrics = otelRegistry
+	obsCfg := observability.DefaultConfig()
+	obsCfg.OTLPEndpoint = endpoint
+	obsCfg.TracesEnabled = endpoint != ""
+	obsCfg.MetricsExporter = observability.MetricsExporterFromEnv()
+	obsCfg.PrometheusRegisterer = otelRegistry
+	if insecure {
+		obsCfg.Insecure = true
+	}
+	if endpoint == "" {
+		logger.Info("Observability traces skipped (no OTLP endpoint configured)")
+	}
+	if obs, err := observability.New(ctx, obsCfg); err != nil {
+		logger.Warn("Observability init failed", "error", err)
 	} else {
-		obsCfg := observability.DefaultConfig()
-		obsCfg.OTLPEndpoint = endpoint
-		if insecure {
-			obsCfg.Insecure = true
-		}
-		obs, err := observability.New(ctx, obsCfg)
-		if err != nil {
-			logger.Warn("Observability init failed", "error", err)
-		} else {
-			s.Observability = obs
-			logger.Info("subsystem ready", "component", " Observability provider initialized")
-		}
+		s.Observability = obs
+		logger.Info("subsystem ready", "component", " Observability provider initialized")
 	}
 
 	// --- 3. Authorization ---

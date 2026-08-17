@@ -106,6 +106,7 @@ flowchart TD
 | `telemetry.enabled` | `false` | Renders the OTLP variables into the kernel container. Enable per stand, never in a chart default. |
 | `telemetry.endpoint` | empty | OTLP gRPC target, e.g. `http://telemetry-gateway.telemetry-system.svc.cluster.local:4317`. Required when `telemetry.enabled=true`; keep the `http://` prefix. |
 | `telemetry.serviceName` | empty | `service.name` on exported spans, rendered as `OTEL_SERVICE_NAME` when `telemetry.enabled=true`. Empty renders nothing and the kernel reports `helm-sovereign-os`. No leading or trailing whitespace. |
+| `telemetry.metricsExporter` | `none` | OTLP metric **push**, rendered as `OTEL_METRICS_EXPORTER` when `telemetry.enabled=true`. `none` or `otlp`. Independent of the trace endpoint since HELM-477. Metrics normally reach VictoriaMetrics by scrape of `/metrics` (`helm.metrics.enabled`), which this value does not affect. |
 
 ## Production Notes
 

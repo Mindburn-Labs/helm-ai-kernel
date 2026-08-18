@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
@@ -45,14 +46,19 @@ type SavingsExportOptions struct {
 
 // SavingsExportResult summarizes one exported savings EvidencePack.
 type SavingsExportResult struct {
-	PackID           string                    `json:"pack_id"`
-	RunID            string                    `json:"run_id"`
-	ManifestHash     string                    `json:"manifest_hash"`
-	OutputDir        string                    `json:"output_dir"`
-	OfflineVerified  bool                      `json:"offline_verified"`
-	ChecksPassed     []string                  `json:"checks_passed"`
-	ReceiptsVerified int                       `json:"receipts_verified"`
-	View             *evidencepack.SavingsView `json:"view"`
+	// PreWindowUnattributedCalls counts settled calls on capture envelopes that
+	// predate the selection freeze and match no task result (validation/smoke
+	// spend). They cannot enter CPST, which aggregates post-freeze holdout
+	// receipts only, but are reported rather than silently dropped.
+	PreWindowUnattributedCalls int                       `json:"pre_window_unattributed_calls"`
+	PackID                     string                    `json:"pack_id"`
+	RunID                      string                    `json:"run_id"`
+	ManifestHash               string                    `json:"manifest_hash"`
+	OutputDir                  string                    `json:"output_dir"`
+	OfflineVerified            bool                      `json:"offline_verified"`
+	ChecksPassed               []string                  `json:"checks_passed"`
+	ReceiptsVerified           int                       `json:"receipts_verified"`
+	View                       *evidencepack.SavingsView `json:"view"`
 }
 
 // ExportSavingsEvidencePack builds the HELM-614 savings EvidencePack from a
@@ -136,6 +142,20 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 		captureEnvelopes[c.EnvelopeID] = true
 	}
 
+	// Quote index over ALL records: the unattributed-spend guard needs each
+	// intent's quote timestamp to tell claim-window spend from pre-window
+	// validation spend (e.g. a startup smoke call before the freeze).
+	quoteAt := make(map[string]time.Time)
+	for _, rec := range records {
+		if rec.Kind == RecordRouteQuote && rec.RouteQuote != nil && rec.SpendIntentID != "" {
+			if _, seen := quoteAt[rec.SpendIntentID]; !seen {
+				quoteAt[rec.SpendIntentID] = rec.RouteQuote.CreatedAt
+			}
+		}
+	}
+	frozenAt := man.SelectionFreeze.FrozenAt
+	preWindowUnattributed := 0
+
 	sets := make(map[string]evidencepack.SpendReceiptSet)
 	sigs := make(map[string]map[string]evidencepack.DetachedSignature)
 	recordSig := func(intentID, kind string, rec *ReceiptRecord) error {
@@ -161,7 +181,16 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 				continue
 			}
 			if rec.Kind == RecordUsage && rec.Usage != nil && captureEnvelopes[rec.Usage.EnvelopeID] {
-				return nil, fmt.Errorf("spendproxy: settled spend on intent %s (envelope %s) is not referenced by any task result; refusing to export a savings claim over unattributed spend", rec.SpendIntentID, rec.Usage.EnvelopeID)
+				at, ok := quoteAt[rec.SpendIntentID]
+				// Fail closed on anything inside the claim window (the CPST
+				// window opens at the freeze): hidden retries or extra calls
+				// there would distort the savings claim. Spend that provably
+				// predates the freeze cannot enter CPST — it is counted and
+				// disclosed instead of blocking the export.
+				if !ok || !at.Before(frozenAt) {
+					return nil, fmt.Errorf("spendproxy: settled spend on intent %s (envelope %s) inside the claim window is not referenced by any task result; refusing to export a savings claim over unattributed spend", rec.SpendIntentID, rec.Usage.EnvelopeID)
+				}
+				preWindowUnattributed++
 			}
 			continue
 		}
@@ -235,15 +264,21 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 	if err := writePackContents(dir, contents); err != nil {
 		return nil, err
 	}
+	if preWindowUnattributed > 0 {
+		// Disclosed, never hidden: these calls are outside the CPST window by
+		// construction (their quotes predate the frozen selection).
+		fmt.Fprintf(os.Stderr, "spend-proxy: note: %d settled pre-freeze call(s) on capture envelopes are not task results (validation/smoke spend, outside the claim window)\n", preWindowUnattributed)
+	}
 	return &SavingsExportResult{
-		PackID:           packID,
-		RunID:            man.RunID,
-		ManifestHash:     manifest.ManifestHash,
-		OutputDir:        dir,
-		OfflineVerified:  verification.OK,
-		ChecksPassed:     verification.ChecksPassed,
-		ReceiptsVerified: verification.ReceiptsVerified,
-		View:             view,
+		PreWindowUnattributedCalls: preWindowUnattributed,
+		PackID:                     packID,
+		RunID:                      man.RunID,
+		ManifestHash:               manifest.ManifestHash,
+		OutputDir:                  dir,
+		OfflineVerified:            verification.OK,
+		ChecksPassed:               verification.ChecksPassed,
+		ReceiptsVerified:           verification.ReceiptsVerified,
+		View:                       view,
 	}, nil
 }
 

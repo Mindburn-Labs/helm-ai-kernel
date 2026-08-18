@@ -1,0 +1,31 @@
+{
+  "id": "ur-df40d6282a2eeca6e1af8257",
+  "tenant_id": "mindburn-dogfood",
+  "route_quote_id": "rq-02aa27689c82c7e836b6f6ae",
+  "spend_intent_id": "si-02aa27689c82c7e836b6f6ae",
+  "envelope_id": "env-cand-gpt41-mini",
+  "agent_id": "agent-paired-replay",
+  "provider_id": "inference-net",
+  "model_id": "gpt-4.1-mini",
+  "provider_request_id": "chatcmpl-EEGJuzoJWSDjQUKaFqRb5GCX6jijs",
+  "provider_price_snapshot_hash": "sha256:cadf6b96efa5b98c768b80e930b13e7be290ed5a5edf5cdb6f43fd7b05132bb5",
+  "quoted_amount_cents": 1,
+  "actual_amount_cents": 1,
+  "provider_cost_cents": 1,
+  "platform_fee_cents": 0,
+  "balance_debit_cents": 1,
+  "currency": "USD",
+  "input_tokens": 27,
+  "output_tokens": 2,
+  "budget_verdict": "ALLOW",
+  "reason_code": "OK_WITHIN_ENVELOPE",
+  "policy_hash": "sha256:4ec3ba6e825e0aad0e60074f83810977201809b138fd4ec2b81c6821acb0b278",
+  "ledger_entry_ids": [
+    "sle-ur-df40d6282a2eeca6e1af8257-debit",
+    "sle-ur-df40d6282a2eeca6e1af8257-credit"
+  ],
+  "settlement_receipt_hash": "sha256:603832e0d4e6bcf58a5df0411554dd88084c382f789ebe2adb90824f6827f33e",
+  "evidence_pack_ref": "evidence://route-quote/mindburn-dogfood/b17845639fd87336a37ad796",
+  "created_at": "2026-08-18T15:47:14.819706Z",
+  "content_hash": "sha256:e6049ba7f067d1944645fac52a79c5c5f706f539edefbe925fb41a6acfc9bd03"
+}

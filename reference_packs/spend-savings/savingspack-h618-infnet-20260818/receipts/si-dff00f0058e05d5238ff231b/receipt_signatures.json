@@ -1,0 +1,14 @@
+{
+  "route_quote": {
+    "key_id": "spend-proxy-d11333ad0bbd",
+    "signature": "m883MVDN5aL9I7Py52sJpYLuvtU1rTpPDzEr1JIeG9UBWZTM/MKWcKfuhw29AJLgOJS+47b5TErL7z34flhPAQ=="
+  },
+  "settlement": {
+    "key_id": "spend-proxy-d11333ad0bbd",
+    "signature": "cZ0vv7B+7y7np8lpF0cr18pqJnRe20m9YxZj2qBWR53qLr7sVWD0oY/YlJmbVYXjzO0DWXuNwQbhIV/ZR2owAA=="
+  },
+  "usage": {
+    "key_id": "spend-proxy-d11333ad0bbd",
+    "signature": "sBA7aI0dNCyspPfyfsc1AP1oTWDJDp4+Tr4uW+8bZTviADCAe33vK5pFrM2NFZv66mW/rrL81O84dZ8OM4jLCg=="
+  }
+}

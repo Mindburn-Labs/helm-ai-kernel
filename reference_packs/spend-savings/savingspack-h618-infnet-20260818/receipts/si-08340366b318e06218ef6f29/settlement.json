@@ -1,0 +1,30 @@
+{
+  "id": "settle-ur-ce0eebec459d3fb0a4b2bdbd",
+  "tenant_id": "mindburn-dogfood",
+  "usage_receipt_id": "ur-ce0eebec459d3fb0a4b2bdbd",
+  "route_quote_id": "rq-08340366b318e06218ef6f29",
+  "treasury_account_id": "treasury-mindburn",
+  "source_usage_receipt_hash": "sha256:7e56e4546248431b9754f7d6e603ee59ccdf84600856777cedf6f6035f03f15f",
+  "ledger_entries": [
+    {
+      "id": "sle-ur-ce0eebec459d3fb0a4b2bdbd-debit",
+      "account_id": "balance-dogfood-infnet",
+      "direction": "DEBIT",
+      "amount_cents": 1,
+      "currency": "USD",
+      "reference": "balance:balance-dogfood-infnet"
+    },
+    {
+      "id": "sle-ur-ce0eebec459d3fb0a4b2bdbd-credit",
+      "account_id": "treasury-mindburn",
+      "direction": "CREDIT",
+      "amount_cents": 1,
+      "currency": "USD",
+      "reference": "treasury:treasury-mindburn"
+    }
+  ],
+  "currency": "USD",
+  "evidence_pack_ref": "evidence://route-quote/mindburn-dogfood/1b0310f7d0a035352536b70c",
+  "created_at": "2026-08-18T15:48:59.100438Z",
+  "content_hash": "sha256:5e7013696eb612363a2d2e5bf0235f306cf7a289343b7f01d07e341437e2c908"
+}

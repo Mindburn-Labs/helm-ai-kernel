@@ -89,6 +89,16 @@ Keep research scaffolds and hardware-backed enforcement language out of the
 public changelog until a tagged release ships source-owned tests, verifier
 evidence, and release artifacts for that exact capability.
 
+### Added — offline Kernel receipt.v5 file verify (Building)
+
+Evaluate persist writes a copyable `receipt.v5` JSON file under
+`<data-dir>/receipts/evaluate/<receipt_id>/` plus `expected-ed25519.pub`.
+`helm-ai-kernel verify receipt --receipt <file> --trusted-public-key-file <key>`
+verifies that file offline. Exit 0 requires integrity and signer trust
+against the caller-supplied key. Hop fixtures are labeled DENY / no permit.
+This is Foundation/offline verify, not AI OS live, not helm-ai-kernel#859,
+and not self-attested EvidencePack verification.
+
 ### Added — chart-managed mounted-file runtime rules
 
 The Helm chart can render explicit `helm.policy.runtimeActions` into its

@@ -41,6 +41,9 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "external-receipt" {
 		return runVerifyExternalReceiptCmd(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "receipt" {
+		return runVerifyReceiptCmd(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && args[0] == "decision-receipt" {
 		return runVerifyDecisionReceiptCmd(args[1:], stdout, stderr)
 	}
@@ -784,5 +787,5 @@ func checkTEEAttestations(bundleRoot string, platform string) []verifier.CheckRe
 }
 
 func init() {
-	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-eidas, --require-tee) or a single redacted entry (--entry <path> --proof <file>) or an external decision receipt (decision-receipt <file> --format --public-key --json)", RunFn: runVerifyCmd})
+	Register(Subcommand{Name: "verify", Aliases: []string{}, Usage: "Verify EvidencePack bundle ([path] --bundle, --json, --online, --require-eidas, --require-tee), a Kernel receipt.v5 file (receipt --receipt --trusted-public-key-file), a single redacted entry (--entry <path> --proof <file>), or an external decision receipt (decision-receipt <file> --format --public-key --json)", RunFn: runVerifyCmd})
 }

@@ -654,6 +654,7 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 		// same chain hash.
 		timestamp = normalizer.NormalizeReceiptTimestamp(timestamp)
 	}
+	var issued *contracts.Receipt
 	build := func(_ *contracts.Receipt, lamport uint64, prevHash string) (*contracts.Receipt, error) {
 		receipt := &contracts.Receipt{
 			ReceiptID:    receiptID,
@@ -684,6 +685,7 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 		if err := anchorReceiptTransparency(svc, receipt); err != nil {
 			return nil, err
 		}
+		issued = receipt
 		return receipt, nil
 	}
 	var err error
@@ -694,6 +696,9 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 	}
 	if err != nil {
 		return fmt.Errorf("store receipt %s: %w", receiptID, err)
+	}
+	if err := writePortableEvaluateEvidencePack(svc, issued); err != nil {
+		return fmt.Errorf("write portable evaluate evidence pack %s: %w", receiptID, err)
 	}
 	return nil
 }

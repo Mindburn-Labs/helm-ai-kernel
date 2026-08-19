@@ -299,6 +299,7 @@ func TestNestedHelpReachesLeafFlagSets(t *testing.T) {
 		{"receipts tail", []string{"receipts", "tail", "--help"}, "-agent string", "Usage: helm-ai-kernel receipts [options]"},
 		{"mcp authorize-call", []string{"mcp", "authorize-call", "--help"}, "-server-id string", "Usage: helm-ai-kernel mcp [options]"},
 		{"workstation verify-decision", []string{"workstation", "verify-decision", "--help"}, "-receipt string", "Usage: helm-ai-kernel workstation [options]"},
+		{"verify receipt", []string{"verify", "receipt", "--help"}, "-trusted-public-key-file string", "Usage: helm-ai-kernel verify [options]"},
 		{"setup install", []string{"setup", "codex", "--help"}, "--scope user|project", "Choose a local agent profile"},
 		{"setup status", []string{"setup", "status", "codex", "--help"}, "Usage: helm-ai-kernel setup status", "Choose a local agent profile"},
 		{"setup remove", []string{"setup", "remove", "codex", "--help"}, "--yes", "Choose a local agent profile"},

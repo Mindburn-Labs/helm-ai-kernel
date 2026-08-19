@@ -1,7 +1,9 @@
 ---
 title: Receipts
-last_reviewed: 2026-07-10
+last_reviewed: 2026-08-19
 ---
+
+<!-- quantum_posture: this page documents classical Ed25519 receipt checks and adds no post-quantum cryptographic control. -->
 
 # Receipts
 
@@ -32,6 +34,18 @@ helm-ai-kernel mcp receipts --json
 helm-ai-kernel mcp pending --json
 helm-ai-kernel boundary records --json
 ```
+
+For a Kernel evaluate `receipt.v5` file copied off-box (Foundation/offline
+verify, not AI OS live, not #859, not self-attested EvidencePack):
+
+```bash
+helm-ai-kernel verify receipt \
+  --receipt <receipt.v5.json> \
+  --trusted-public-key-file <expected-ed25519.pub>
+```
+
+Exit 0 only when integrity and signer trust both hold against the
+caller-supplied key. Hop fixtures are labeled DENY / no permit.
 
 For a single workstation receipt:
 

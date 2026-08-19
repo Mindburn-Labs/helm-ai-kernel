@@ -462,9 +462,39 @@ func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts V
 		case mcpGovernedEffectClass:
 			return verifyMCPGovernedEffectReceiptSignature(document, sig, opts)
 		default:
+			return verifyEvaluateReceiptV5AgainstCallerKey(document, sig)
+		}
+	}
+}
+
+// verifyEvaluateReceiptV5AgainstCallerKey checks a Kernel evaluate receipt.v5
+// against HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX (or HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX).
+// A public_key_set carried inside the receipt is compared for mismatch only;
+// it is never a trust root. This is the brew 0.8.4 stranger path for
+// `helm-ai-kernel verify <evidence-pack.tar>`, not --allow-self-attested.
+func verifyEvaluateReceiptV5AgainstCallerKey(document map[string]any, sig string) bool {
+	if firstString(document, "signature_version") != contracts.ReceiptSignatureV5 {
+		return false
+	}
+	trusted := strings.TrimSpace(firstNonEmptyEnv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", "HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX"))
+	if trusted == "" {
+		return false
+	}
+	if keySet, ok := document["public_key_set"].(map[string]any); ok {
+		if embedded := strings.TrimSpace(firstString(keySet, "ed25519")); embedded != "" && !strings.EqualFold(embedded, trusted) {
 			return false
 		}
 	}
+	return verifyEd25519CanonicalReceipt(document, sig, trusted)
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // verifyMCPGovernedEffectReceiptSignature verifies the SafeExecutor receipt

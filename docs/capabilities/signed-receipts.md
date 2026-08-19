@@ -1,6 +1,6 @@
 ---
 title: Signed Receipts
-last_reviewed: 2026-07-16
+last_reviewed: 2026-08-19
 ---
 
 <!-- quantum_posture: this page documents classical Ed25519 receipt signing and does not claim post-quantum or hybrid cryptographic protection. -->
@@ -34,6 +34,27 @@ The command succeeds only when both `integrity` and `trusted` are true. To
 verify a copied receipt, pass `--trusted-public-key-file <path>` for the
 expected Ed25519 public key; do not accept a public key bundled by the receipt
 itself as the trust decision.
+
+## Verify A Kernel Evaluate Receipt Offline
+
+This is Foundation/offline `receipt.v5` verify. It is not AI OS live, not
+helm-ai-kernel#859, and not self-attested EvidencePack verification.
+
+Evaluate persist writes a copyable JSON file under
+`<data-dir>/receipts/evaluate/<receipt_id>/` plus `expected-ed25519.pub`.
+Exit 0 only when integrity and signer trust both hold against the
+caller-supplied key:
+
+```bash
+helm-ai-kernel verify receipt \
+  --receipt <receipt.v5.json> \
+  --trusted-public-key-file <expected-ed25519.pub>
+```
+
+A public key embedded in the receipt is not enough.
+`workstation verify-decision` is the hook `wpd_` path. Do not use
+`--allow-self-attested` as this path. Hop fixtures are labeled DENY / no
+permit.
 
 ## Inspect Runtime Receipts
 

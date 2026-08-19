@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise classical Ed25519 receipt.v5
+// verify-receipt checks only; they add no post-quantum assurance.
 package main
 
 import (
@@ -14,14 +16,14 @@ import (
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
 
-func persistEvaluateReceiptFile(t *testing.T) (receiptPath, keyPath string, receipt *contracts.Receipt) {
+func persistEvaluateArtifacts(t *testing.T) (dataDir string, receipt *contracts.Receipt) {
 	t.Helper()
 	isolateVerifyReceiptTest(t)
 	signer, err := helmcrypto.NewEd25519Signer("verify-receipt-test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dataDir := t.TempDir()
+	dataDir = t.TempDir()
 	store := &captureReceiptStore{}
 	svc := &Services{DataDir: dataDir, ReceiptStore: store, ReceiptSigner: signer}
 	decision := &contracts.DecisionRecord{
@@ -40,16 +42,22 @@ func persistEvaluateReceiptFile(t *testing.T) (receiptPath, keyPath string, rece
 	if store.stored == nil {
 		t.Fatal("receipt was not stored")
 	}
-	src := portableEvaluateEvidencePackPath(dataDir, store.stored.ReceiptID)
+	return dataDir, store.stored
+}
+
+func persistEvaluateReceiptFile(t *testing.T) (receiptPath, keyPath string, receipt *contracts.Receipt) {
+	t.Helper()
+	dataDir, stored := persistEvaluateArtifacts(t)
+	src := portableEvaluateReceiptPath(dataDir, stored.ReceiptID)
 	raw, err := os.ReadFile(src)
 	if err != nil {
-		t.Fatalf("read persisted evaluate evidence pack: %v", err)
+		t.Fatalf("read persisted evaluate receipt: %v", err)
 	}
-	offBox := filepath.Join(t.TempDir(), "evidence-pack.tar")
+	offBox := filepath.Join(t.TempDir(), "evaluate-receipt.v5.json")
 	if err := os.WriteFile(offBox, raw, 0o600); err != nil {
-		t.Fatalf("copy evidence pack off-box: %v", err)
+		t.Fatalf("copy receipt off-box: %v", err)
 	}
-	keySrc := portableEvaluatePublicKeyPath(dataDir, store.stored.ReceiptID)
+	keySrc := portableEvaluatePublicKeyPath(dataDir, stored.ReceiptID)
 	keyRaw, err := os.ReadFile(keySrc)
 	if err != nil {
 		t.Fatalf("read persisted public key: %v", err)
@@ -58,21 +66,7 @@ func persistEvaluateReceiptFile(t *testing.T) (receiptPath, keyPath string, rece
 	if err := os.WriteFile(keyPath, keyRaw, 0o644); err != nil {
 		t.Fatalf("copy trusted key: %v", err)
 	}
-	return offBox, keyPath, store.stored
-}
-
-func extractEvaluateReceiptJSON(t *testing.T, packPath string, receipt *contracts.Receipt) string {
-	t.Helper()
-	name := "02_PROOFGRAPH/receipts/" + sanitizeReceiptFileName(receipt.ReceiptID) + ".json"
-	raw, err := readTarEntry(packPath, name)
-	if err != nil {
-		t.Fatalf("extract packed receipt: %v", err)
-	}
-	out := filepath.Join(t.TempDir(), "evaluate-receipt.v5.json")
-	if err := os.WriteFile(out, raw, 0o600); err != nil {
-		t.Fatalf("write extracted receipt: %v", err)
-	}
-	return out
+	return offBox, keyPath, stored
 }
 
 func isolateVerifyReceiptTest(t *testing.T) {
@@ -87,8 +81,7 @@ func isolateVerifyReceiptTest(t *testing.T) {
 }
 
 func TestVerifyReceiptCLITrustedCopiedFile(t *testing.T) {
-	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
-	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
+	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"helm-ai-kernel", "verify", "receipt",
@@ -104,8 +97,7 @@ func TestVerifyReceiptCLITrustedCopiedFile(t *testing.T) {
 }
 
 func TestVerifyReceiptCLITamperedVerdict(t *testing.T) {
-	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
-	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
+	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
 	raw, err := os.ReadFile(receiptPath)
 	if err != nil {
 		t.Fatal(err)
@@ -133,8 +125,7 @@ func TestVerifyReceiptCLITamperedVerdict(t *testing.T) {
 }
 
 func TestVerifyReceiptCLITamperedSignature(t *testing.T) {
-	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
-	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
+	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
 	raw, err := os.ReadFile(receiptPath)
 	if err != nil {
 		t.Fatal(err)
@@ -171,8 +162,7 @@ func TestVerifyReceiptCLITamperedSignature(t *testing.T) {
 }
 
 func TestVerifyReceiptCLIMissingTrustedKey(t *testing.T) {
-	packPath, _, stored := persistEvaluateReceiptFile(t)
-	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
+	receiptPath, _, _ := persistEvaluateReceiptFile(t)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"helm-ai-kernel", "verify", "receipt",
@@ -190,8 +180,7 @@ func TestVerifyReceiptCLIMissingTrustedKey(t *testing.T) {
 }
 
 func TestVerifyReceiptCLIWrongTrustedKey(t *testing.T) {
-	packPath, _, stored := persistEvaluateReceiptFile(t)
-	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
+	receiptPath, _, _ := persistEvaluateReceiptFile(t)
 	wrong := filepath.Join(t.TempDir(), "wrong-trusted.pub")
 	if err := os.WriteFile(wrong, []byte(strings.Repeat("f", 64)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -211,8 +200,7 @@ func TestVerifyReceiptCLIWrongTrustedKey(t *testing.T) {
 }
 
 func TestVerifyReceiptCLIJSONReportsAdmissible(t *testing.T) {
-	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
-	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
+	receiptPath, keyPath, stored := persistEvaluateReceiptFile(t)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"helm-ai-kernel", "verify", "receipt",

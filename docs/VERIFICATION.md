@@ -3,6 +3,8 @@ title: Receipts
 last_reviewed: 2026-08-19
 ---
 
+<!-- quantum_posture: this page documents classical Ed25519 receipt checks and adds no post-quantum cryptographic control. -->
+
 # Receipts
 
 Every governed action should leave a local record. For public HELM, that record
@@ -33,18 +35,17 @@ helm-ai-kernel mcp pending --json
 helm-ai-kernel boundary records --json
 ```
 
-For a Kernel evaluate `receipt.v5` copied off-box inside an EvidencePack
-(Foundation/offline, not AI OS live, not #859, not `--allow-self-attested`).
-Brew 0.8.4 stranger command — not `workstation verify-decision`, not
-`verify receipt` (that command is not on 0.8.4):
+For a Kernel evaluate `receipt.v5` file copied off-box (Foundation/offline
+verify, not AI OS live, not #859, not self-attested EvidencePack):
 
 ```bash
-export HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX="$(tr -d '[:space:]' < expected-ed25519.pub)"
-helm-ai-kernel verify evidence-pack.tar
+helm-ai-kernel verify receipt \
+  --receipt <receipt.v5.json> \
+  --trusted-public-key-file <expected-ed25519.pub>
 ```
 
-Hop fixtures are labeled DENY / no permit. Never treat the pack as sent
-mail, ALLOW-looking delivery, or a stamp of delivery.
+Exit 0 only when integrity and signer trust both hold against the
+caller-supplied key. Hop fixtures are labeled DENY / no permit.
 
 For a single workstation receipt:
 

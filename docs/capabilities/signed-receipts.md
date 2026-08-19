@@ -37,25 +37,24 @@ itself as the trust decision.
 
 ## Verify A Kernel Evaluate Receipt Offline
 
-This is Foundation/offline EvidencePack verify of an evaluate `receipt.v5`.
-It is not AI OS live, not helm-ai-kernel#859, and not
-`--allow-self-attested`. The brew 0.8.4 stranger command is
-`helm-ai-kernel verify <evidence-pack.tar>` — not
-`workstation verify-decision` (hook `wpd_` only) and not `verify receipt`
-(that command is not on brew 0.8.4).
+This is Foundation/offline `receipt.v5` verify. It is not AI OS live, not
+helm-ai-kernel#859, and not self-attested EvidencePack verification.
 
-Evaluate persist writes a copyable pack under
-`<data-dir>/receipts/evaluate/<receipt_id>/evidence-pack.tar` that contains
-the signed receipt.v5. Hop fixtures are labeled DENY / no permit — not
-sent, not ALLOW-looking mail, not a stamp of delivery.
+Evaluate persist writes a copyable JSON file under
+`<data-dir>/receipts/evaluate/<receipt_id>/` plus `expected-ed25519.pub`.
+Exit 0 only when integrity and signer trust both hold against the
+caller-supplied key:
 
 ```bash
-export HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX="$(tr -d '[:space:]' < expected-ed25519.pub)"
-helm-ai-kernel verify evidence-pack.tar
+helm-ai-kernel verify receipt \
+  --receipt <receipt.v5.json> \
+  --trusted-public-key-file <expected-ed25519.pub>
 ```
 
-A key embedded only in the pack is not a trust root. Do not use
-`--allow-self-attested` as the stranger path.
+A public key embedded in the receipt is not enough.
+`workstation verify-decision` is the hook `wpd_` path. Do not use
+`--allow-self-attested` as this path. Hop fixtures are labeled DENY / no
+permit.
 
 ## Inspect Runtime Receipts
 

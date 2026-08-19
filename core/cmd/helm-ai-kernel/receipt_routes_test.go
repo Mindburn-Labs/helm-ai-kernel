@@ -223,6 +223,18 @@ func TestPersistDecisionReceiptWritesPortableEvidencePack(t *testing.T) {
 	if store.stored == nil {
 		t.Fatal("receipt was not stored")
 	}
+	receiptFile := portableEvaluateReceiptPath(dataDir, store.stored.ReceiptID)
+	receiptRaw, err := os.ReadFile(receiptFile)
+	if err != nil {
+		t.Fatalf("portable receipt.v5 JSON missing: %v", err)
+	}
+	var fromFile contracts.Receipt
+	if err := json.Unmarshal(receiptRaw, &fromFile); err != nil {
+		t.Fatalf("decode portable receipt JSON: %v", err)
+	}
+	if fromFile.SignatureVersion != contracts.ReceiptSignatureV5 || fromFile.Verdict != string(contracts.VerdictDeny) {
+		t.Fatalf("portable receipt JSON = %+v", fromFile)
+	}
 	path := portableEvaluateEvidencePackPath(dataDir, store.stored.ReceiptID)
 	raw, err := os.ReadFile(path)
 	if err != nil {

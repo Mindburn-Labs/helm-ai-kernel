@@ -15,8 +15,9 @@ import (
 func persistEvaluateEvidencePack(t *testing.T) (packPath, keyHex string, receipt *contracts.Receipt) {
 	t.Helper()
 	isolateEvaluatePackVerify(t)
-	receiptPath, keyPath, stored := persistEvaluateReceiptFile(t)
-	raw, err := os.ReadFile(receiptPath)
+	dataDir, stored := persistEvaluateArtifacts(t)
+	src := portableEvaluateEvidencePackPath(dataDir, stored.ReceiptID)
+	raw, err := os.ReadFile(src)
 	if err != nil {
 		t.Fatalf("read persisted pack: %v", err)
 	}
@@ -24,7 +25,7 @@ func persistEvaluateEvidencePack(t *testing.T) (packPath, keyHex string, receipt
 	if err := os.WriteFile(offBox, raw, 0o600); err != nil {
 		t.Fatalf("copy pack off-box: %v", err)
 	}
-	keyRaw, err := os.ReadFile(keyPath)
+	keyRaw, err := os.ReadFile(portableEvaluatePublicKeyPath(dataDir, stored.ReceiptID))
 	if err != nil {
 		t.Fatalf("read trusted key: %v", err)
 	}

@@ -44,6 +44,11 @@ func portableEvaluatePublicKeyPath(dataDir, receiptID string) string {
 	return filepath.Join(portableEvaluateEvidencePackDir(dataDir, receiptID), portableEvaluatePublicKeyName)
 }
 
+func portableEvaluateReceiptPath(dataDir, receiptID string) string {
+	name := sanitizeReceiptFileName(receiptID)
+	return filepath.Join(portableEvaluateEvidencePackDir(dataDir, receiptID), name+".json")
+}
+
 func sanitizeReceiptFileName(receiptID string) string {
 	id := strings.TrimSpace(receiptID)
 	if id == "" {
@@ -57,14 +62,15 @@ func sanitizeReceiptFileName(receiptID string) string {
 	}, id)
 }
 
-// writePortableEvaluateEvidencePack writes a copyable EvidencePack that
-// contains the signed evaluate receipt.v5. A 0.8.4 stranger verifies it
-// with `helm-ai-kernel verify <evidence-pack.tar>` plus
-// HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX — not `verify receipt`, not
-// workstation verify-decision, and not --allow-self-attested.
+// writePortableEvaluateEvidencePack writes a copyable receipt.v5 JSON file
+// and an EvidencePack that contains that same receipt. The command for the
+// JSON file is:
 //
-// Empty DataDir skips the write so existing in-memory persist tests stay
-// unchanged. When DataDir is set, a write failure fails persist.
+//	helm-ai-kernel verify receipt --receipt <file> --trusted-public-key-file <key>
+//
+// Exit 0 requires integrity and the caller-supplied key. Empty DataDir
+// skips the write so existing in-memory persist tests stay unchanged.
+// When DataDir is set, a write failure fails persist.
 func writePortableEvaluateEvidencePack(svc *Services, receipt *contracts.Receipt) error {
 	if svc == nil {
 		return nil
@@ -90,6 +96,13 @@ func writePortableEvaluateEvidencePack(svc *Services, receipt *contracts.Receipt
 	destDir := portableEvaluateEvidencePackDir(dataDir, receipt.ReceiptID)
 	if err := os.MkdirAll(destDir, 0o750); err != nil {
 		return fmt.Errorf("create portable evaluate pack dir: %w", err)
+	}
+	receiptJSON, err := json.MarshalIndent(receipt, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode portable evaluate receipt %s: %w", receipt.ReceiptID, err)
+	}
+	if err := os.WriteFile(portableEvaluateReceiptPath(dataDir, receipt.ReceiptID), append(receiptJSON, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write portable evaluate receipt: %w", err)
 	}
 	if err := writeDirectoryTar(packDir, portableEvaluateEvidencePackPath(dataDir, receipt.ReceiptID)); err != nil {
 		return err

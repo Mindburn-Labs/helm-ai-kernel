@@ -47,6 +47,7 @@ type preToolPayload struct {
 	ToolNameCamel  string         `json:"toolName"`
 	ToolInput      map[string]any `json:"tool_input"`
 	ToolInputCamel map[string]any `json:"toolInput"`
+	Args           map[string]any `json:"args"`
 	SessionID      string         `json:"session_id"`
 	CWD            string         `json:"cwd"`
 }
@@ -102,7 +103,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	opts := hookOptions{DataDir: defaultSetupDataDir()}
 	fs := flag.NewFlagSet("hook pre-tool", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code or codex")
+	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code, codex, or hermes")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
 	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path")
 	fs.StringVar(&opts.PolicyProfileSHA256, "policy-profile-sha256", "", "Approved SHA-256 digest for the policy profile")
@@ -140,7 +141,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 			fmt.Fprintf(stderr, "hook pre-tool: %v\n", err)
 			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
 			if errors.Is(err, errHookPolicyProfile) {
-				return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+				return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
 					"HELM denied operation: policy profile is unavailable",
 					actioninbox.ReasonPolicyProfileUnavailable,
 					"HELM cannot load or verify the selected workstation policy profile, so the operation fails closed.",
@@ -148,7 +149,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 					"Escalate to the human operator; policy profile repair is an operator action.",
 				)))
 			}
-			return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
 				"HELM denied operation: local receipt signer is unavailable",
 				actioninbox.ReasonSignerUnavailable,
 				"HELM cannot sign a local decision receipt, so the operation fails closed.",
@@ -160,7 +161,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 		if err != nil {
 			fmt.Fprintf(stderr, "hook pre-tool: write receipt: %v\n", err)
 			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
-			return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
+			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run, failClosedSteeringText(
 				"HELM denied operation: receipt persistence is unavailable",
 				actioninbox.ReasonReceiptPersistence,
 				"HELM cannot persist the signed decision receipt, so the operation fails closed.",
@@ -174,7 +175,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 			// decides the effect or bypasses receipt generation.
 			tripped, run := recordHookDoomLoopOutcome(opts, payload, decision, true, stderr)
 			feedback := actioninbox.DenyFeedbackFor(receipt.ReasonCode, receipt.CreatedAt)
-			return emitHookDenyOrFail(stdout, stderr, withDoomLoopSteering(tripped, decision, run,
+			return emitHookDenyOrFail(stdout, stderr, opts.Client, withDoomLoopSteering(tripped, decision, run,
 				fmt.Sprintf("HELM denied %s: %s (receipt: %s) %s",
 					decision.Reason, receipt.ReasonCode, receiptPath, actioninbox.RenderSteeringText(feedback))))
 		}
@@ -225,7 +226,17 @@ func doomLoopSteeringText(classification hookClassification, runLength int) stri
 	return actioninbox.RenderSteeringText(d)
 }
 
-func emitHookDenyOrFail(stdout, stderr io.Writer, reason string) int {
+func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
+	if client == "hermes" {
+		if err := writeHermesHookBlock(stdout, reason); err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
+			return hermesBlockExitCode
+		}
+		// Hermes honors {"action":"block"} and treats exit 2 as a block even
+		// when stdout is empty. Claude hookSpecificOutput + exit 0 is not a
+		// Hermes block — that combination is fail-open.
+		return hermesBlockExitCode
+	}
 	if err := writeHookDeny(stdout, reason); err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
 		return 2
@@ -242,8 +253,48 @@ func writeHookDeny(stdout io.Writer, reason string) error {
 	return json.NewEncoder(stdout).Encode(out)
 }
 
+func writeHermesHookBlock(stdout io.Writer, reason string) error {
+	return json.NewEncoder(stdout).Encode(hermesHookBlock{
+		Action:  "block",
+		Message: reason,
+	})
+}
+
+const hermesBlockExitCode = 2
+
+type hermesHookBlock struct {
+	Action  string `json:"action"`
+	Message string `json:"message"`
+}
+
+// hermesPreToolCallBlocks mirrors the NousResearch/hermes-agent shell hook
+// interpreter (agent/shell_hooks.py): exit 2 blocks; stdout {"action":"block"}
+// or Claude-style {"decision":"block"} blocks. Claude Code hookSpecificOutput
+// JSON with exit 0 is valid JSON that is not a block directive, so Hermes
+// proceeds. This function exists so tests can prove that fail-open shape.
+func hermesPreToolCallBlocks(stdout string, exitCode int) bool {
+	if exitCode == hermesBlockExitCode {
+		return true
+	}
+	stdout = strings.TrimSpace(stdout)
+	if stdout == "" {
+		return false
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(stdout), &data); err != nil {
+		return false
+	}
+	if action, _ := data["action"].(string); action == "block" {
+		return true
+	}
+	if decision, _ := data["decision"].(string); decision == "block" {
+		return true
+	}
+	return false
+}
+
 func printHookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex|hermes> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
 }
 
 // hookDoomLoopFile is the on-disk circuit-breaker state for the pre-tool
@@ -550,6 +601,9 @@ func decodePreToolPayload(stdin io.Reader) (preToolPayload, error) {
 		payload.ToolInput = payload.ToolInputCamel
 	}
 	if payload.ToolInput == nil {
+		payload.ToolInput = payload.Args
+	}
+	if payload.ToolInput == nil {
 		payload.ToolInput = map[string]any{}
 	}
 	return payload, nil
@@ -566,7 +620,7 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 	tool := strings.TrimSpace(payload.ToolName)
 	switch {
-	case strings.EqualFold(tool, "Bash"):
+	case strings.EqualFold(tool, "Bash"), strings.EqualFold(tool, "terminal"):
 		command := inputString(payload.ToolInput, "command", "cmd")
 		// Structural (AST-based) pre-flight classification. The classifier is
 		// advisory input only: it decides whether the command reaches the
@@ -595,7 +649,9 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 			classifications = append(classifications, shellscanGenericClassification(command, scan))
 		}
 		return appendRequiredShellPermission(classifications, command)
-	case strings.HasPrefix(tool, "mcp__"):
+	case strings.HasPrefix(tool, "mcp_"):
+		// Claude/Codex emit mcp__server__tool. Hermes has used that shape and
+		// the older mcp_server_tool form. mcp__ is a prefix of mcp_.
 		if isHelmSelfMCPTool(tool) {
 			return nil
 		}
@@ -607,12 +663,12 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 			ToolID:       tool,
 			Reason:       "MCP tool call",
 		}}
-	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "apply_patch"):
+	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "apply_patch"), strings.EqualFold(tool, "write_file"), strings.EqualFold(tool, "patch"):
 		target := inputString(payload.ToolInput, "file_path", "path", "target_file")
-		if target == "" && strings.EqualFold(tool, "apply_patch") {
-			target = sensitiveApplyPatchTarget(inputString(payload.ToolInput, "command", "cmd", "patch"))
+		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
+			target = sensitiveApplyPatchTarget(inputString(payload.ToolInput, "command", "cmd", "patch", "diff"))
 		}
-		if target == "" && strings.EqualFold(tool, "apply_patch") {
+		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
 			target = "apply_patch"
 		}
 		if isSensitiveWriteTarget(target) {
@@ -844,8 +900,10 @@ func isSensitiveWriteTarget(path string) bool {
 		".git\\",
 		".claude/settings.json",
 		".codex/hooks.json",
+		".hermes/config.yaml",
 		".claude\\settings.json",
 		".codex\\hooks.json",
+		".hermes\\config.yaml",
 	}
 	for _, needle := range sensitive {
 		if strings.Contains(p, needle) {

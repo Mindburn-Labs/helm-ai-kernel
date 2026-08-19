@@ -41,6 +41,7 @@ func TestSetupNoArgsPrintsChooser(t *testing.T) {
 	for _, want := range []string{
 		"helm-ai-kernel setup claude-code --yes",
 		"helm-ai-kernel setup codex --yes",
+		"helm-ai-kernel setup hermes --scope user --yes",
 		"helm-ai-kernel setup --quickstart --profile mcp --yes",
 		"helm-ai-kernel setup --client cursor --print-config",
 		"project scope is the default",
@@ -630,7 +631,7 @@ func TestSetupJSONSupportMatrix(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &matrix); err != nil {
 		t.Fatalf("support matrix JSON: %v\n%s", err, stdout.String())
 	}
-	for _, want := range []string{"claude-code", "codex"} {
+	for _, want := range []string{"claude-code", "codex", "hermes"} {
 		if !containsSetupString(matrix.DirectSetup, want) {
 			t.Fatalf("direct setup missing %q: %#v", want, matrix.DirectSetup)
 		}
@@ -1402,7 +1403,7 @@ func TestSetupUserScopeRequiresAbsoluteHomeEvenWithDataDir(t *testing.T) {
 			name := strings.Join(command[1:3], "-")
 			t.Run(home+"/"+name, func(t *testing.T) {
 				t.Setenv("HOME", home)
-				for _, target := range []string{"claude-code", "codex"} {
+				for _, target := range []string{"claude-code", "codex", "hermes"} {
 					opts := setupOptions{Target: target, Scope: "user"}
 					if path := setupClientConfigPath(opts); path != "" {
 						t.Fatalf("HOME=%q %s client path = %q, want empty", home, target, path)
@@ -1858,6 +1859,8 @@ func writeSetupMCPTestConfig(t *testing.T, target, path, bin, dataDir string) {
 		}
 	case "codex":
 		raw = []byte("[mcp_servers." + setupMCPServerName + "]\ncommand = " + strconv.Quote(bin) + "\nargs = [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n")
+	case "hermes":
+		raw = []byte("mcp_servers:\n  " + setupMCPServerName + ":\n    command: " + strconv.Quote(bin) + "\n    args: [\"mcp\", \"serve\", \"--transport\", \"stdio\", \"--data-dir\", " + strconv.Quote(dataDir) + "]\n")
 	default:
 		t.Fatalf("unsupported test target %q", target)
 	}

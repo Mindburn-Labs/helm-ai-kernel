@@ -34,6 +34,7 @@ make build
 | Local proof | `helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs` |
 | Codex setup | `helm-ai-kernel setup codex --dry-run --json` |
 | Claude Code setup | `helm-ai-kernel setup claude-code --dry-run --json` |
+| Hermes setup | `helm-ai-kernel setup hermes --scope user --dry-run --json` |
 | Cursor / Windsurf / VS Code config | `helm-ai-kernel setup --client cursor --print-config` |
 | OpenClaw / Hermes adapters | [tool runtime adapters](INTEGRATIONS/tool-runtime-adapters.md) |
 | Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
@@ -146,6 +147,14 @@ For Codex:
 
 ```bash
 helm-ai-kernel setup codex --yes
+```
+
+For Hermes (writes a fail-closed `pre_tool_call` hook in
+`~/.hermes/config.yaml`; this does not mean Hermes already sees DENY in
+the wild, and it does not write MCP):
+
+```bash
+helm-ai-kernel setup hermes --scope user --yes
 ```
 
 Preview writes first:

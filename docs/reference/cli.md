@@ -25,6 +25,7 @@ helm-ai-kernel setup
 helm-ai-kernel setup --json
 helm-ai-kernel setup claude-code --yes
 helm-ai-kernel setup codex --yes
+helm-ai-kernel setup hermes --scope user --yes
 helm-ai-kernel setup codex --dry-run --json
 helm-ai-kernel setup --client cursor --print-config
 ```

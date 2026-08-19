@@ -18,6 +18,7 @@ brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party t
 brew install helm-ai-kernel
 helm-ai-kernel setup claude-code --yes
 # Codex: helm-ai-kernel setup codex --yes
+# Hermes: helm-ai-kernel setup hermes --scope user --yes
 ```
 
 Ask your agent to do something risky. HELM blocks or escalates the action before

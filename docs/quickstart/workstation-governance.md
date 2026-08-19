@@ -1,19 +1,20 @@
 # Protect Local Coding Agents
 
-HELM can sit around Codex, Claude Code, and similar local agent workflows. The
-goal is narrow: selected effects cross a HELM boundary before dispatch, and
-each decision leaves a local receipt.
+HELM can sit around Codex, Claude Code, Hermes, and similar local agent
+workflows. The goal is narrow: selected effects cross a HELM boundary before
+dispatch, and each decision leaves a local receipt.
 
 HELM is not a competing coding agent. It evaluates the actions your agent wants
 to take.
 
 ## Agent Adapters
 
-Codex and Claude Code use local setup hooks. OpenClaw and Hermes use adapter
-helpers from `helm-agent-integrations`:
+Codex, Claude Code, and Hermes use local setup hooks. OpenClaw still uses
+adapter helpers from `helm-agent-integrations`; those demos are not the
+Hermes ship.
 
 - [OpenClaw](/integrations/openclaw) normalizes skill calls before dispatch.
-- [Hermes](/integrations/hermes) normalizes tool proposals before dispatch.
+- [Hermes](/integrations/hermes) installs a native `pre_tool_call` gate.
 
 ## Install A Local Hook
 
@@ -22,6 +23,7 @@ Inspect the writes first:
 ```bash
 helm-ai-kernel setup codex --dry-run --json
 helm-ai-kernel setup claude-code --dry-run --json
+helm-ai-kernel setup hermes --scope user --dry-run --json
 ```
 
 Install the local integration:
@@ -29,6 +31,7 @@ Install the local integration:
 ```bash
 helm-ai-kernel setup codex --yes
 helm-ai-kernel setup claude-code --yes
+helm-ai-kernel setup hermes --scope user --yes
 ```
 
 Setup writes draft policy and quarantine artifacts. It does not approve tools

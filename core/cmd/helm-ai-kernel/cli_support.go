@@ -20,7 +20,7 @@ type cliSupportMatrix struct {
 
 func supportMatrix() cliSupportMatrix {
 	return cliSupportMatrix{
-		DirectSetup:       []string{"claude-code", "codex"},
+		DirectSetup:       []string{"claude-code", "codex", "hermes"},
 		ConfigPrint:       []string{"cursor", "windsurf", "vscode"},
 		Bundle:            []string{"claude-desktop"},
 		WrapperExamples:   []string{"openclaw", "hermes", "mastra", "browser-use", "tinyfish", "e2b", "composio"},
@@ -40,7 +40,7 @@ func printFrontDoor(out io.Writer) {
 		{
 			Status: ui.StatusWait,
 			Title:  "Connect the coding agent you use",
-			Detail: "helm-ai-kernel setup codex or helm-ai-kernel setup claude-code. Interactive terminals show the scoped change before confirmation.",
+			Detail: "helm-ai-kernel setup codex, helm-ai-kernel setup claude-code, or helm-ai-kernel setup hermes --scope user. Interactive terminals show the scoped change before confirmation.",
 		},
 		{
 			Status: ui.StatusWait,

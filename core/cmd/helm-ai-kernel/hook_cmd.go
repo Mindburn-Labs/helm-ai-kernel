@@ -242,9 +242,10 @@ func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
 			fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
 			return deepseekBlockExitCode
 		}
-		// DeepSeek Harness maps native {kind:"deny"} and DSH hook-protocol
-		// exit 2 onto PreToolDecision.deny. Claude hookSpecificOutput +
-		// exit 0 is not that adapter shape.
+		// DeepSeek stays an adapter: native {kind:"deny"} and DSH
+		// hook-protocol exit 2 are the stock-bridge deny shape. Claude
+		// hookSpecificOutput + exit 0 is not that adapter shape. This is
+		// not a HELM-native agent runtime.
 		return deepseekBlockExitCode
 	}
 	if err := writeHookDeny(stdout, reason); err != nil {

@@ -15,7 +15,7 @@ Hermes or DeepSeek ship.
 
 - [OpenClaw](/integrations/openclaw) normalizes skill calls before dispatch.
 - [Hermes](/integrations/hermes) installs a fail-closed `pre_tool_call` shell hook only.
-- [DeepSeek](/integrations/deepseek) installs a fail-closed hook file plus a DSH profile `configPath`.
+- [DeepSeek](/integrations/deepseek) installs a fail-closed Kernel hook file plus a stock DSH hook-bridge `configPath`.
 
 ## Install A Local Hook
 

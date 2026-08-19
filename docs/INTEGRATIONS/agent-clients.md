@@ -19,7 +19,7 @@ helm-ai-kernel setup --json
 | Claude Code | `helm-ai-kernel setup claude-code --yes` |
 | Codex | `helm-ai-kernel setup codex --yes` |
 | Hermes | `helm-ai-kernel setup hermes --scope user --yes` (fail-closed shell hook only; not MCP) |
-| DeepSeek | `helm-ai-kernel setup deepseek --scope user --yes` (fail-closed hook + DSH profile `configPath`; not MCP) |
+| DeepSeek | `helm-ai-kernel setup deepseek --scope user --yes` (Kernel hook + stock DSH `dsh-hooks-claude-code` `configPath`; not a HELM-native runtime) |
 
 Preview writes first:
 

@@ -73,6 +73,14 @@ func TestSetupDeepSeekWritesFailClosedUserConfig(t *testing.T) {
 	if !strings.Contains(string(profileRaw), "configPath") {
 		t.Fatalf("DSH profile missing configPath:\n%s", profileRaw)
 	}
+	if !strings.Contains(string(profileRaw), deepseekHooksPluginName) {
+		t.Fatalf("DSH profile must use the stock hook bridge %q:\n%s", deepseekHooksPluginName, profileRaw)
+	}
+	for _, banned := range []string{"helm-ai-kernel-hooks", "dsh-hooks-helm", "helm-native", "agent_class"} {
+		if strings.Contains(string(profileRaw), banned) {
+			t.Fatalf("profile must not invent a HELM plugin or agent class %q:\n%s", banned, profileRaw)
+		}
+	}
 	absHook, err := filepath.Abs(wantHook)
 	if err != nil {
 		t.Fatal(err)
@@ -390,6 +398,44 @@ func TestNormalizeSetupTargetAcceptsDeepSeek(t *testing.T) {
 	got, err := normalizeSetupTarget("deepseek")
 	if err != nil || got != "deepseek" {
 		t.Fatalf("normalize deepseek = %q err=%v", got, err)
+	}
+}
+
+func TestSetupDeepSeekProfileIsStockBridgeNotHelmPlugin(t *testing.T) {
+	entry := deepseekProfileEntry("/abs/hooks.json")
+	if yamlString(entry["id"]) != deepseekHooksPluginID || yamlString(entry["name"]) != deepseekHooksPluginName {
+		t.Fatalf("stock bridge identity = %#v", entry)
+	}
+	if _, ok := entry[deepseekHooksPluginShort]; ok {
+		t.Fatal("canonical write uses the stock id/name form, not a HELM shorthand plugin")
+	}
+	for key := range entry {
+		if strings.Contains(key, "helm") {
+			t.Fatalf("profile key %q invents a HELM plugin", key)
+		}
+	}
+	if deepseekProfileConfigPath(entry) != deepseekAbsPath("/abs/hooks.json") {
+		t.Fatalf("configPath = %q", deepseekProfileConfigPath(entry))
+	}
+	shorthand := map[string]any{deepseekHooksPluginShort: map[string]any{"configPath": "/abs/hooks.json"}}
+	if !deepseekProfileEntryOwned(shorthand) || !deepseekProfileEntryOwned(map[string]any{
+		"id":   deepseekHooksPluginAltID,
+		"name": deepseekHooksPluginName,
+		"config": map[string]any{
+			"configPath": "/abs/hooks.json",
+		},
+	}) {
+		t.Fatal("stock claude-code / hooks-cc aliases must still count as owned")
+	}
+	codex := map[string]any{
+		"id":   "hooks-codex",
+		"name": "@deepseek-ai/dsh-hooks-codex",
+		"config": map[string]any{
+			"configPath": "/abs/hooks.json",
+		},
+	}
+	if deepseekProfileEntryOwned(codex) {
+		t.Fatal("stock Codex bridge is not this hop; do not overwrite a user's Codex configPath")
 	}
 }
 

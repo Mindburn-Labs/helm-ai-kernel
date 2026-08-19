@@ -181,7 +181,7 @@ func runSetupGuidedChooser(input *bufio.Reader, stdout, stderr io.Writer, caps u
 	fmt.Fprintln(stderr, "  1) Claude Code (recommended, default)")
 	fmt.Fprintln(stderr, "  2) Codex")
 	fmt.Fprintln(stderr, "  3) Hermes — fail-closed shell pre_tool_call (user scope)")
-	fmt.Fprintln(stderr, "  4) DeepSeek — fail-closed DSH hook + profile (user scope)")
+	fmt.Fprintln(stderr, "  4) DeepSeek — fail-closed Kernel hook + stock DSH bridge (user scope)")
 	fmt.Fprintln(stderr, "  q) Quit without changes")
 	fmt.Fprint(stderr, "Choose [1]: ")
 
@@ -974,7 +974,7 @@ func printSetupInstallUsage(w io.Writer) {
 	fmt.Fprintln(w, "Install a scoped HELM integration for one local coding agent.")
 	fmt.Fprintln(w, "Claude Code and Codex write an MCP server plus a PreToolUse hook.")
 	fmt.Fprintln(w, "Hermes writes a fail-closed pre_tool_call shell hook only.")
-	fmt.Fprintln(w, "DeepSeek writes a fail-closed DSH hook file plus a profile configPath.")
+	fmt.Fprintln(w, "DeepSeek writes a fail-closed Kernel hook file plus a stock DSH hook-bridge configPath.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
 	fmt.Fprintln(w, "  --scope user|project                          Install scope (default project)")
@@ -1461,7 +1461,7 @@ func setupNextAction(summary setupSummary) string {
 		return "accept the Hermes first-use hook allowlist (--accept-hooks, HERMES_ACCEPT_HOOKS, or hooks_auto_accept), then restart Hermes. Non-TTY sessions never register the hook without that consent. This does not mean DENY is visible in the Hermes UI."
 	}
 	if summary.Target == "deepseek" {
-		return "keep the DSH profile configPath pointed at the hook file, then restart DeepSeek Harness. A missing configPath leaves the hook file dead. This does not mean `npx @deepseek-ai/dsh web` sees DENY."
+		return "keep the stock dsh-hooks-claude-code configPath pointed at the Kernel hook file, then restart DeepSeek Harness. A missing configPath leaves the hook file dead. This is an adapter hop, not a HELM-native agent runtime. This does not mean `npx @deepseek-ai/dsh web` sees DENY."
 	}
 	return "restart " + summary.Target + " to activate governance"
 }
@@ -1994,7 +1994,7 @@ func installSetupMCP(opts setupOptions, bin string) error {
 		// Hermes MCP is unverified. The hop is the fail-closed shell hook.
 		return nil
 	case "deepseek":
-		// DeepSeek MCP is out of scope. The hop is the fail-closed hook + profile.
+		// DeepSeek MCP is out of scope. The hop is the Kernel hook + stock DSH bridge.
 		return nil
 	default:
 		return fmt.Errorf("unsupported target %q", opts.Target)

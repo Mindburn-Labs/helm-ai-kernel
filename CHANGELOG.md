@@ -101,9 +101,10 @@ and not self-attested EvidencePack verification.
 
 ### Added — setup deepseek fail-closed hook target
 
-`helm-ai-kernel setup deepseek` writes a Kernel `PreToolUse` hook file and a
-DSH profile `configPath` that points at that file. The hop is the Kernel CLI,
-not a Cordis or DeepSeek Harness plugin. DENY uses the native
+`helm-ai-kernel setup deepseek` writes a Kernel `PreToolUse` hook file and
+points the stock DSH `dsh-hooks-claude-code` bridge `configPath` at that
+file. DeepSeek stays an adapter on Kernel: not a Cordis plugin, not a new
+harness, and not a HELM-native agent runtime. DENY uses the native
 `{"kind":"deny"}` shape and exit 2. This does not claim
 `npx @deepseek-ai/dsh web` already sees DENY.
 

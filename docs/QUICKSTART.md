@@ -158,10 +158,11 @@ the wild, and it does not write MCP):
 helm-ai-kernel setup hermes --scope user --yes
 ```
 
-For DeepSeek (writes a fail-closed `PreToolUse` hook in
-`~/.dsh/hooks.json` and points `~/.dsh/cordis.patch.yml` `configPath` at
-that file; this does not mean `npx @deepseek-ai/dsh web` sees DENY, and
-it does not write MCP):
+For DeepSeek (writes a fail-closed Kernel `PreToolUse` hook in
+`~/.dsh/hooks.json` and points the stock DSH `dsh-hooks-claude-code`
+bridge `configPath` at that file; this is an adapter hop, not a
+HELM-native agent runtime, and it does not mean
+`npx @deepseek-ai/dsh web` sees DENY):
 
 ```bash
 helm-ai-kernel setup deepseek --scope user --yes

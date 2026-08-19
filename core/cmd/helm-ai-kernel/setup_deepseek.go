@@ -1,5 +1,16 @@
 package main
 
+// setup deepseek is a Kernel adapter hop only. Grok/Hermes/Claude/DeepSeek
+// stay adapters on Kernel. This file writes a Kernel-owned hook file and
+// points the stock DSH dsh-hooks-claude-code/codex bridge configPath at it.
+// It does not add a Cordis plugin, a new harness, a new agent class, or a
+// HELM-native agent runtime / bot platform. If a hop would require those,
+// stop instead of inventing one.
+//
+// The hook file is Claude-shaped PreToolUse JSON, so setup writes the stock
+// Claude-code bridge. The Codex sibling is the other stock bridge, not a
+// HELM plugin; this hop does not rewrite a user's Codex bridge.
+
 import (
 	"fmt"
 	"os"
@@ -15,6 +26,7 @@ const (
 	deepseekHooksPluginID      = "hooks-claude-code"
 	deepseekHooksPluginName    = "@deepseek-ai/dsh-hooks-claude-code"
 	deepseekHooksPluginShort   = "dsh-hooks-claude-code"
+	deepseekHooksPluginAltID   = "hooks-cc"
 	deepseekProfileFilename    = "cordis.patch.yml"
 	deepseekHookFilename       = "hooks.json"
 )
@@ -265,6 +277,7 @@ func deepseekProfileEntryOwned(obj map[string]any) bool {
 	name := yamlString(obj["name"])
 	return id == deepseekHooksPluginID ||
 		id == deepseekHooksPluginShort ||
+		id == deepseekHooksPluginAltID ||
 		name == deepseekHooksPluginName ||
 		name == deepseekHooksPluginShort
 }
@@ -280,8 +293,11 @@ func deepseekProfileConfigPath(obj map[string]any) string {
 }
 
 func deepseekProfileEntry(hookPath string) map[string]any {
+	// Stock DSH Claude-code hook bridge. Not a HELM/Cordis plugin package.
 	return map[string]any{
-		deepseekHooksPluginShort: map[string]any{
+		"id":   deepseekHooksPluginID,
+		"name": deepseekHooksPluginName,
+		"config": map[string]any{
 			"configPath": hookPath,
 		},
 	}

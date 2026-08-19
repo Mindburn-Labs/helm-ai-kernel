@@ -5,10 +5,12 @@ last_reviewed: 2026-08-19
 
 # DeepSeek
 
-Use HELM as a local pre-dispatch gate for DeepSeek Harness tool calls. The
-shipped path is a Kernel `setup deepseek` hook plus a DSH profile
-`configPath`, not MCP, not a Cordis plugin, and not a DeepSeek Harness
-plugin that Kernel mounts into.
+Use HELM as a local pre-dispatch gate for DeepSeek Harness tool calls.
+Grok, Hermes, Claude, and DeepSeek stay adapters on Kernel. The shipped
+path is a Kernel-owned hook file plus a DSH profile `configPath` that
+points the stock `dsh-hooks-claude-code` / `dsh-hooks-codex` bridge at
+that file. It is not MCP, not a Cordis plugin, not a new harness, not a
+new agent class, and not a HELM-native agent runtime or bot platform.
 
 ```text
 DeepSeek tool proposal
@@ -64,12 +66,15 @@ Setup writes two files:
    - command `helm-ai-kernel hook pre-tool --client deepseek`
    - `fail_closed: true`
    - `timeout: 30`
-2. `cordis.patch.yml` with `dsh-hooks-claude-code.configPath` set to the
-   absolute hook file path. Without `configPath`, DSH registers no hooks
+2. `cordis.patch.yml` pointing the stock
+   `@deepseek-ai/dsh-hooks-claude-code` bridge `configPath` at that
+   absolute hook file. The hook file is Claude-shaped, so setup writes
+   the Claude-code stock bridge, not a HELM plugin and not a rewrite of
+   a user's Codex bridge. Without `configPath`, DSH registers no hooks
    and the hook file is dead.
 
-It does not write MCP. Kernel is the hop; this is not a Cordis/DeepSeek
-Harness plugin.
+It does not write MCP. Kernel is the hop. If a hop would require a
+HELM-native agent runtime, stop instead of inventing one.
 
 `fail_closed: true` is required for Kernel to treat the hook as installed.
 Without the hook entry, or without a profile `configPath` that points at
@@ -99,6 +104,7 @@ denial.
 
 ## Scope
 
-This page covers the Kernel `setup deepseek` hook and profile only. It
-does not claim upstream endorsement, a hosted DeepSeek runtime, live/GA
-proof, or that `npx @deepseek-ai/dsh web` sees DENY.
+This page covers the Kernel `setup deepseek` adapter hook only. It does
+not claim a HELM-native agent runtime, a Cordis plugin, a new harness,
+upstream endorsement, a hosted DeepSeek runtime, live/GA proof, or that
+`npx @deepseek-ai/dsh web` sees DENY.

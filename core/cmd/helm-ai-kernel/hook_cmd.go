@@ -238,19 +238,15 @@ func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
 		return hermesBlockExitCode
 	}
 	if client == "deepseek" {
-		if err := writeDeepSeekHookDeny(stdout, reason); err != nil {
+		if err := writeDeepSeekHookDeny(stdout, stderr, reason); err != nil {
 			fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
-			_ = writeDeepSeekHookReason(stderr, reason)
 			return deepseekBlockExitCode
 		}
 		// DSH parseHookOutput blocks on exit 2 and takes the reason from
 		// stderr. Structured stdout is parsed only on exit 0, and
-		// {"kind":"deny"} is never read. Keep the native JSON on stdout
-		// for the Kernel dialect; the adapter-visible reason is stderr.
+		// {"kind":"deny"} is never read. writeDeepSeekHookDeny keeps the
+		// native JSON on stdout and writes the same HELM reason on stderr.
 		// Claude hookSpecificOutput + exit 0 is not a DSH block.
-		if err := writeDeepSeekHookReason(stderr, reason); err != nil {
-			fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
-		}
 		return deepseekBlockExitCode
 	}
 	if err := writeHookDeny(stdout, reason); err != nil {
@@ -276,15 +272,19 @@ func writeHermesHookBlock(stdout io.Writer, reason string) error {
 	})
 }
 
-func writeDeepSeekHookDeny(stdout io.Writer, reason string) error {
-	return json.NewEncoder(stdout).Encode(deepseekHookDeny{
+func writeDeepSeekHookDeny(stdout, stderr io.Writer, reason string) error {
+	if err := json.NewEncoder(stdout).Encode(deepseekHookDeny{
 		Kind:   "deny",
 		Reason: reason,
-	})
+	}); err != nil {
+		_ = writeDeepSeekHookReason(stderr, reason)
+		return err
+	}
+	return writeDeepSeekHookReason(stderr, reason)
 }
 
 func writeDeepSeekHookReason(stderr io.Writer, reason string) error {
-	if strings.TrimSpace(reason) == "" {
+	if stderr == nil || strings.TrimSpace(reason) == "" {
 		return nil
 	}
 	_, err := fmt.Fprintln(stderr, reason)

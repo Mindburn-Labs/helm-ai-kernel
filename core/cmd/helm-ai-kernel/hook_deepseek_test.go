@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -67,9 +69,12 @@ func TestClaudeShapedStdoutExit0IsNotADeepSeekBlock(t *testing.T) {
 		t.Fatalf("Claude hookSpecificOutput + exit 0 must not be a DeepSeek block:\n%s", claude.String())
 	}
 
-	var deepseek bytes.Buffer
-	if err := writeDeepSeekHookDeny(&deepseek, "HELM denied shell operation"); err != nil {
+	var deepseek, reasonBuf bytes.Buffer
+	if err := writeDeepSeekHookDeny(&deepseek, &reasonBuf, "HELM denied shell operation"); err != nil {
 		t.Fatal(err)
+	}
+	if strings.TrimSpace(reasonBuf.String()) != "HELM denied shell operation" {
+		t.Fatalf("writeDeepSeekHookDeny stderr = %q, want the HELM reason", reasonBuf.String())
 	}
 	if !deepseekPreToolBlocks(deepseek.String(), deepseekBlockExitCode) {
 		t.Fatalf("DeepSeek exit 2 must block even with native stdout:\n%s", deepseek.String())
@@ -162,6 +167,56 @@ func TestHookClaudeDenyIsNotADeepSeekBlock(t *testing.T) {
 	}
 	if deepseekPreToolBlocks(stdout.String(), code) {
 		t.Fatalf("existing Claude DENY shape must remain fail-open for DeepSeek:\n%s", stdout.String())
+	}
+}
+
+func TestWriteDeepSeekHookDenyPutsMatchingReasonOnStderr(t *testing.T) {
+	reason := "HELM denied shell operation: OPERATE_PERMISSIONS_EMPTY (receipt: /tmp/x)"
+	var stdout, stderr bytes.Buffer
+	if err := writeDeepSeekHookDeny(&stdout, &stderr, reason); err != nil {
+		t.Fatal(err)
+	}
+	var deny deepseekHookDeny
+	if err := json.Unmarshal(stdout.Bytes(), &deny); err != nil {
+		t.Fatalf("stdout JSON: %v\n%s", err, stdout.String())
+	}
+	if deny.Kind != "deny" || deny.Reason != reason {
+		t.Fatalf("stdout deny = %#v, want kind=deny reason=%q", deny, reason)
+	}
+	got := strings.TrimSpace(stderr.String())
+	if got == "" || got != reason {
+		t.Fatalf("stderr reason = %q, want non-empty match of stdout reason %q", got, reason)
+	}
+	block, parsed := deepseekParseHookOutput(stdout.String(), stderr.String(), deepseekBlockExitCode)
+	if !block || parsed != reason {
+		t.Fatalf("parseHookOutput block=%v reason=%q, want block with %q", block, parsed, reason)
+	}
+}
+
+func TestHookDeepSeekFailClosedDenyWritesReasonToStderr(t *testing.T) {
+	tmp := t.TempDir()
+	keyDir := filepath.Join(tmp, workstationSigningKeyDirectory)
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(workstationSigningSeedPath(tmp), []byte(strings.Repeat("0", 64)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"tool_name":"bash","tool_input":{"command":"rm -rf /srv/production"},"session_id":"deepseek-fail-closed","cwd":"/repo"}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "deepseek", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != deepseekBlockExitCode {
+		t.Fatalf("fail-closed exit = %d, want %d stderr=%s stdout=%s", code, deepseekBlockExitCode, stderr.String(), stdout.String())
+	}
+	var deny deepseekHookDeny
+	if err := json.Unmarshal(stdout.Bytes(), &deny); err != nil {
+		t.Fatalf("stdout JSON: %v\n%s", err, stdout.String())
+	}
+	if deny.Kind != "deny" || !strings.Contains(deny.Reason, "signer is unavailable") {
+		t.Fatalf("fail-closed stdout deny = %#v", deny)
+	}
+	if strings.TrimSpace(deny.Reason) == "" || !strings.Contains(stderr.String(), deny.Reason) {
+		t.Fatalf("fail-closed stderr must carry the same HELM reason as stdout\nstdout=%q\nstderr=%q", deny.Reason, stderr.String())
 	}
 }
 

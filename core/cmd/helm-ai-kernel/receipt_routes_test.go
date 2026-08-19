@@ -1,10 +1,13 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -195,7 +198,7 @@ func TestPersistDecisionReceiptSignsAndStoresReceipt(t *testing.T) {
 	}
 }
 
-func TestPersistDecisionReceiptWritesPortableJSONFile(t *testing.T) {
+func TestPersistDecisionReceiptWritesPortableEvidencePack(t *testing.T) {
 	signer, err := helmcrypto.NewEd25519Signer("test")
 	if err != nil {
 		t.Fatal(err)
@@ -220,27 +223,50 @@ func TestPersistDecisionReceiptWritesPortableJSONFile(t *testing.T) {
 	if store.stored == nil {
 		t.Fatal("receipt was not stored")
 	}
-	path := portableEvaluateReceiptPath(dataDir, store.stored.ReceiptID)
+	path := portableEvaluateEvidencePackPath(dataDir, store.stored.ReceiptID)
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("portable receipt file missing: %v", err)
+		t.Fatalf("portable evidence pack missing: %v", err)
 	}
-	offBox := filepath.Join(t.TempDir(), "copied-receipt.json")
+	offBox := filepath.Join(t.TempDir(), "evidence-pack.tar")
 	if err := os.WriteFile(offBox, raw, 0o600); err != nil {
-		t.Fatalf("copy portable receipt off-box: %v", err)
+		t.Fatalf("copy portable evidence pack off-box: %v", err)
+	}
+	receiptName := "02_PROOFGRAPH/receipts/" + sanitizeReceiptFileName(store.stored.ReceiptID) + ".json"
+	copiedRaw, err := readTarEntry(offBox, receiptName)
+	if err != nil {
+		t.Fatalf("read receipt from copied pack: %v", err)
 	}
 	var copied contracts.Receipt
-	if err := json.Unmarshal(raw, &copied); err != nil {
-		t.Fatalf("decode portable receipt: %v", err)
+	if err := json.Unmarshal(copiedRaw, &copied); err != nil {
+		t.Fatalf("decode packed receipt: %v", err)
 	}
 	if copied.SignatureVersion != contracts.ReceiptSignatureV5 || copied.ReceiptID != store.stored.ReceiptID {
-		t.Fatalf("portable receipt = %+v", copied)
+		t.Fatalf("packed receipt = %+v", copied)
+	}
+	if copied.Verdict != string(contracts.VerdictDeny) {
+		t.Fatalf("hop pack verdict = %q, want DENY / no permit", copied.Verdict)
+	}
+	if copied.Metadata != nil {
+		if _, ok := copied.Metadata["effect_permit_ref"]; ok {
+			t.Fatal("DENY evaluate receipt carried permit material")
+		}
 	}
 	valid, err := signer.VerifyReceipt(&copied)
 	if err != nil || !valid {
-		t.Fatalf("copied portable receipt signature invalid: valid=%v err=%v", valid, err)
+		t.Fatalf("copied packed receipt signature invalid: valid=%v err=%v", valid, err)
 	}
-	pubRaw, err := os.ReadFile(portableEvaluatePublicKeyPath(dataDir))
+	scoreRaw, err := readTarEntry(offBox, "01_SCORE.json")
+	if err != nil {
+		t.Fatalf("read pack score: %v", err)
+	}
+	if !strings.Contains(string(scoreRaw), `"label": "DENY / no permit"`) {
+		t.Fatalf("pack score missing DENY / no permit label: %s", scoreRaw)
+	}
+	if strings.Contains(strings.ToLower(string(scoreRaw)), "sent") || strings.Contains(string(scoreRaw), "ALLOW") {
+		t.Fatalf("pack score looks like sent/ALLOW mail: %s", scoreRaw)
+	}
+	pubRaw, err := os.ReadFile(portableEvaluatePublicKeyPath(dataDir, store.stored.ReceiptID))
 	if err != nil {
 		t.Fatalf("portable public key missing: %v", err)
 	}
@@ -1198,5 +1224,26 @@ func TestEvaluateRouteRefusesMissingOrMismatchedWorkspaceBindingWhenFenceEnabled
 				t.Fatalf("rejected workspace binding must not execute or persist a receipt: %+v", receipts.stored)
 			}
 		})
+	}
+}
+
+func readTarEntry(packPath, name string) ([]byte, error) {
+	file, err := os.Open(packPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	tr := tar.NewReader(file)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return nil, fmt.Errorf("tar entry %s not found", name)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if filepath.ToSlash(hdr.Name) == name {
+			return io.ReadAll(tr)
+		}
 	}
 }

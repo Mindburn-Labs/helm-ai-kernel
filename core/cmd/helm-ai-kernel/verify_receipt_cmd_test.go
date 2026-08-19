@@ -40,20 +40,39 @@ func persistEvaluateReceiptFile(t *testing.T) (receiptPath, keyPath string, rece
 	if store.stored == nil {
 		t.Fatal("receipt was not stored")
 	}
-	src := portableEvaluateReceiptPath(dataDir, store.stored.ReceiptID)
+	src := portableEvaluateEvidencePackPath(dataDir, store.stored.ReceiptID)
 	raw, err := os.ReadFile(src)
 	if err != nil {
-		t.Fatalf("read persisted receipt: %v", err)
+		t.Fatalf("read persisted evaluate evidence pack: %v", err)
 	}
-	offBox := filepath.Join(t.TempDir(), "copied-evaluate-receipt.json")
+	offBox := filepath.Join(t.TempDir(), "evidence-pack.tar")
 	if err := os.WriteFile(offBox, raw, 0o600); err != nil {
-		t.Fatalf("copy receipt off-box: %v", err)
+		t.Fatalf("copy evidence pack off-box: %v", err)
+	}
+	keySrc := portableEvaluatePublicKeyPath(dataDir, store.stored.ReceiptID)
+	keyRaw, err := os.ReadFile(keySrc)
+	if err != nil {
+		t.Fatalf("read persisted public key: %v", err)
 	}
 	keyPath = filepath.Join(t.TempDir(), "expected-ed25519.pub")
-	if err := os.WriteFile(keyPath, []byte(signer.PublicKey()+"\n"), 0o644); err != nil {
-		t.Fatalf("write trusted key: %v", err)
+	if err := os.WriteFile(keyPath, keyRaw, 0o644); err != nil {
+		t.Fatalf("copy trusted key: %v", err)
 	}
 	return offBox, keyPath, store.stored
+}
+
+func extractEvaluateReceiptJSON(t *testing.T, packPath string, receipt *contracts.Receipt) string {
+	t.Helper()
+	name := "02_PROOFGRAPH/receipts/" + sanitizeReceiptFileName(receipt.ReceiptID) + ".json"
+	raw, err := readTarEntry(packPath, name)
+	if err != nil {
+		t.Fatalf("extract packed receipt: %v", err)
+	}
+	out := filepath.Join(t.TempDir(), "evaluate-receipt.v5.json")
+	if err := os.WriteFile(out, raw, 0o600); err != nil {
+		t.Fatalf("write extracted receipt: %v", err)
+	}
+	return out
 }
 
 func isolateVerifyReceiptTest(t *testing.T) {
@@ -68,7 +87,8 @@ func isolateVerifyReceiptTest(t *testing.T) {
 }
 
 func TestVerifyReceiptCLITrustedCopiedFile(t *testing.T) {
-	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
+	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
+	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"helm-ai-kernel", "verify", "receipt",
@@ -84,7 +104,8 @@ func TestVerifyReceiptCLITrustedCopiedFile(t *testing.T) {
 }
 
 func TestVerifyReceiptCLITamperedVerdict(t *testing.T) {
-	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
+	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
+	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
 	raw, err := os.ReadFile(receiptPath)
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +133,8 @@ func TestVerifyReceiptCLITamperedVerdict(t *testing.T) {
 }
 
 func TestVerifyReceiptCLITamperedSignature(t *testing.T) {
-	receiptPath, keyPath, _ := persistEvaluateReceiptFile(t)
+	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
+	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
 	raw, err := os.ReadFile(receiptPath)
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +171,8 @@ func TestVerifyReceiptCLITamperedSignature(t *testing.T) {
 }
 
 func TestVerifyReceiptCLIMissingTrustedKey(t *testing.T) {
-	receiptPath, _, _ := persistEvaluateReceiptFile(t)
+	packPath, _, stored := persistEvaluateReceiptFile(t)
+	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"helm-ai-kernel", "verify", "receipt",
@@ -167,7 +190,8 @@ func TestVerifyReceiptCLIMissingTrustedKey(t *testing.T) {
 }
 
 func TestVerifyReceiptCLIWrongTrustedKey(t *testing.T) {
-	receiptPath, _, _ := persistEvaluateReceiptFile(t)
+	packPath, _, stored := persistEvaluateReceiptFile(t)
+	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
 	wrong := filepath.Join(t.TempDir(), "wrong-trusted.pub")
 	if err := os.WriteFile(wrong, []byte(strings.Repeat("f", 64)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -187,7 +211,8 @@ func TestVerifyReceiptCLIWrongTrustedKey(t *testing.T) {
 }
 
 func TestVerifyReceiptCLIJSONReportsAdmissible(t *testing.T) {
-	receiptPath, keyPath, stored := persistEvaluateReceiptFile(t)
+	packPath, keyPath, stored := persistEvaluateReceiptFile(t)
+	receiptPath := extractEvaluateReceiptJSON(t, packPath, stored)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{
 		"helm-ai-kernel", "verify", "receipt",

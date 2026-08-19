@@ -89,15 +89,17 @@ Keep research scaffolds and hardware-backed enforcement language out of the
 public changelog until a tagged release ships source-owned tests, verifier
 evidence, and release artifacts for that exact capability.
 
-### Added — offline Kernel receipt.v5 file verify
+### Added — evaluate persist writes a copyable EvidencePack (Building)
 
-Evaluate persist writes a copyable `receipt.v5` JSON file under
-`<data-dir>/receipts/evaluate/` plus `expected-ed25519.pub`.
-`helm-ai-kernel verify receipt --receipt <file> --trusted-public-key-file <key>`
-verifies that file offline (Kernel off). Exit 0 requires integrity and
-signer trust against the caller-supplied key. This is Foundation/offline
-verify, not AI OS live, not helm-ai-kernel#859, and not self-attested
-EvidencePack verification.
+Evaluate persist writes a copyable EvidencePack under
+`<data-dir>/receipts/evaluate/<receipt_id>/evidence-pack.tar` that contains
+the signed evaluate `receipt.v5`, plus `expected-ed25519.pub`. A brew 0.8.4
+stranger verifies that pack with `helm-ai-kernel verify <evidence-pack.tar>`
+and `HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX` — not `workstation verify-decision`,
+not `verify receipt` (that command is not on brew 0.8.4), and not
+`--allow-self-attested`. Hop fixtures are labeled DENY / no permit. This is
+Foundation/offline EvidencePack verify, not AI OS live, not helm-ai-kernel#859,
+and not a live/GA/join claim.
 
 ### Added — chart-managed mounted-file runtime rules
 

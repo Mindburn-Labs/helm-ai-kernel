@@ -65,7 +65,7 @@ helm-ai-kernel boundary verify --record-id <record-id> --json
 helm-ai-kernel receipts tail --agent <agent-id>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-public-key-file <expected-ed25519-public-key>
-helm-ai-kernel verify receipt --receipt <receipt.v5.json> --trusted-public-key-file <expected-ed25519.pub>
+helm-ai-kernel verify evidence-pack.tar
 ```
 
 `ALLOW`, `DENY`, and `ESCALATE` records include a reason code. `DENY` and
@@ -75,10 +75,11 @@ Workstation verification exits successfully only when receipt integrity and
 the signer trust anchor both verify. A signature that validates against the
 key embedded in a receipt is not, by itself, proof of an expected signer.
 
-`verify receipt` is the Foundation/offline path for a Kernel `receipt.v5`
-evaluate file. It is not AI OS live, not helm-ai-kernel#859, and not
-self-attested EvidencePack verify. Exit 0 requires the caller-supplied
-`--trusted-public-key-file`.
+`helm-ai-kernel verify <evidence-pack.tar>` is the brew 0.8.4 stranger
+path for an evaluate `receipt.v5` carried inside an EvidencePack. It is
+not AI OS live, not helm-ai-kernel#859, not `--allow-self-attested`, and
+not `workstation verify-decision`. `verify receipt` is not on brew 0.8.4
+and is not the stranger path. Hop fixtures are DENY / no permit.
 
 ## OpenAI-Compatible Proxy
 

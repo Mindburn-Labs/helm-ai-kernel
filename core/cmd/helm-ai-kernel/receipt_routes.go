@@ -697,8 +697,8 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 	if err != nil {
 		return fmt.Errorf("store receipt %s: %w", receiptID, err)
 	}
-	if err := writePortableEvaluateReceipt(svc, issued); err != nil {
-		return fmt.Errorf("write portable evaluate receipt %s: %w", receiptID, err)
+	if err := writePortableEvaluateEvidencePack(svc, issued); err != nil {
+		return fmt.Errorf("write portable evaluate evidence pack %s: %w", receiptID, err)
 	}
 	return nil
 }

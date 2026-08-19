@@ -18,13 +18,16 @@ DeepSeek tool proposal
 -> ~/.dsh/hooks.json PreToolUse
 -> helm-ai-kernel hook pre-tool --client deepseek
 -> ALLOW: tool runs
--> DENY: hook returns {"kind":"deny","reason":"..."} and exit 2; receipt
-   lands under ~/.helm-ai-kernel/receipts/hooks/
+-> DENY: hook writes {"kind":"deny","reason":"..."} on stdout, the same
+   reason on stderr, and exits 2. DSH parseHookOutput blocks on exit 2
+   and reads the reason from stderr; {"kind":"deny"} is never read.
+   Receipt lands under ~/.helm-ai-kernel/receipts/hooks/
 ```
 
 Do not drop `--client claude-code` into the DeepSeek hook file. That dialect
-writes `hookSpecificOutput.permissionDecision=deny` and exits 0. That is
-not the DeepSeek adapter deny shape, so the gate fails open.
+writes `hookSpecificOutput.permissionDecision=deny` and exits 0. DSH does
+not treat that as a block. Kernel `{kind:deny}` plus exit 2 already
+blocks because of exit 2, not because DSH reads the JSON.
 
 DeepSeek Harness has no HELM DENY screen in this path. Installing this
 target writes the hook file and points the DSH profile `configPath` at it.

@@ -26,8 +26,15 @@ func TestHookDeepSeekDenyEmitsNativeDenyAndExit2(t *testing.T) {
 	if deny.Kind != "deny" || strings.TrimSpace(deny.Reason) == "" {
 		t.Fatalf("deepseek deny = %#v", deny)
 	}
+	if !strings.Contains(stderr.String(), deny.Reason) {
+		t.Fatalf("DSH parseHookOutput reads the reason from stderr; stderr=%q want %q", stderr.String(), deny.Reason)
+	}
+	block, reason := deepseekParseHookOutput(stdout.String(), stderr.String(), code)
+	if !block || reason != strings.TrimSpace(deny.Reason) {
+		t.Fatalf("DSH parseHookOutput block=%v reason=%q, want block with %q", block, reason, deny.Reason)
+	}
 	if !deepseekPreToolBlocks(stdout.String(), code) {
-		t.Fatalf("native DeepSeek interpreter did not treat the DENY as a block:\n%s", stdout.String())
+		t.Fatalf("exit 2 must be a DSH block; stdout=%s", stdout.String())
 	}
 
 	var claude hookDecisionOutput
@@ -65,10 +72,17 @@ func TestClaudeShapedStdoutExit0IsNotADeepSeekBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !deepseekPreToolBlocks(deepseek.String(), deepseekBlockExitCode) {
-		t.Fatalf("DeepSeek native deny + exit 2 must block:\n%s", deepseek.String())
+		t.Fatalf("DeepSeek exit 2 must block even with native stdout:\n%s", deepseek.String())
 	}
 	if !deepseekPreToolBlocks("", deepseekBlockExitCode) {
 		t.Fatal("DeepSeek exit 2 must block even with empty stdout")
+	}
+	if deepseekPreToolBlocks(`{"kind":"deny","reason":"ignored"}`, 0) {
+		t.Fatal(`{"kind":"deny"} is never read; exit 0 must not be a DSH block`)
+	}
+	block, reason := deepseekParseHookOutput(`{"kind":"deny","reason":"ignored"}`, "HELM denied shell operation", deepseekBlockExitCode)
+	if !block || reason != "HELM denied shell operation" {
+		t.Fatalf("exit 2 must take the reason from stderr, got block=%v reason=%q", block, reason)
 	}
 }
 
@@ -91,11 +105,14 @@ func TestHookDeepSeekClassifiesNativeToolNames(t *testing.T) {
 				t.Fatalf("exit = %d, want %d stderr=%s stdout=%s", code, deepseekBlockExitCode, stderr.String(), stdout.String())
 			}
 			if !deepseekPreToolBlocks(stdout.String(), code) {
-				t.Fatalf("classified DeepSeek tool %s did not produce a native deny:\n%s", tc.name, stdout.String())
+				t.Fatalf("classified DeepSeek tool %s did not exit 2:\n%s", tc.name, stdout.String())
 			}
 			var deny deepseekHookDeny
 			if err := json.Unmarshal(stdout.Bytes(), &deny); err != nil || deny.Kind != "deny" {
 				t.Fatalf("deny JSON = %s err=%v", stdout.String(), err)
+			}
+			if !strings.Contains(stderr.String(), deny.Reason) {
+				t.Fatalf("classified DeepSeek tool %s stderr missing reason %q:\n%s", tc.name, deny.Reason, stderr.String())
 			}
 		})
 	}
@@ -145,5 +162,36 @@ func TestHookClaudeDenyIsNotADeepSeekBlock(t *testing.T) {
 	}
 	if deepseekPreToolBlocks(stdout.String(), code) {
 		t.Fatalf("existing Claude DENY shape must remain fail-open for DeepSeek:\n%s", stdout.String())
+	}
+}
+
+func TestHookDeepSeekDenyWritesReasonToStderr(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := `{"tool_name":"bash","tool_input":{"command":"rm -rf /tmp/helm-demo"},"session_id":"deepseek-stderr","cwd":"/repo"}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "deepseek", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != deepseekBlockExitCode {
+		t.Fatalf("exit = %d, want %d stderr=%s stdout=%s", code, deepseekBlockExitCode, stderr.String(), stdout.String())
+	}
+	var deny deepseekHookDeny
+	if err := json.Unmarshal(stdout.Bytes(), &deny); err != nil {
+		t.Fatalf("stdout JSON: %v\n%s", err, stdout.String())
+	}
+	if deny.Kind != "deny" || strings.TrimSpace(deny.Reason) == "" {
+		t.Fatalf("stdout deny = %#v", deny)
+	}
+	if strings.TrimSpace(stderr.String()) == "" {
+		t.Fatal("stderr must carry the HELM deny reason for DSH parseHookOutput")
+	}
+	if !strings.Contains(stderr.String(), deny.Reason) {
+		t.Fatalf("stderr must carry the same reason as stdout kind/reason\nstdout=%q\nstderr=%q", deny.Reason, stderr.String())
+	}
+	block, reason := deepseekParseHookOutput(stdout.String(), stderr.String(), code)
+	if !block {
+		t.Fatal("exit 2 must block")
+	}
+	if reason != strings.TrimSpace(deny.Reason) {
+		t.Fatalf("parsed reason = %q, want %q", reason, deny.Reason)
 	}
 }

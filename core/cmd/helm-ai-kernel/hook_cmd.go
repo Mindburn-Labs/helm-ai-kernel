@@ -240,12 +240,17 @@ func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
 	if client == "deepseek" {
 		if err := writeDeepSeekHookDeny(stdout, reason); err != nil {
 			fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
+			_ = writeDeepSeekHookReason(stderr, reason)
 			return deepseekBlockExitCode
 		}
-		// DeepSeek stays an adapter: native {kind:"deny"} and DSH
-		// hook-protocol exit 2 are the stock-bridge deny shape. Claude
-		// hookSpecificOutput + exit 0 is not that adapter shape. This is
-		// not a HELM-native agent runtime.
+		// DSH parseHookOutput blocks on exit 2 and takes the reason from
+		// stderr. Structured stdout is parsed only on exit 0, and
+		// {"kind":"deny"} is never read. Keep the native JSON on stdout
+		// for the Kernel dialect; the adapter-visible reason is stderr.
+		// Claude hookSpecificOutput + exit 0 is not a DSH block.
+		if err := writeDeepSeekHookReason(stderr, reason); err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
+		}
 		return deepseekBlockExitCode
 	}
 	if err := writeHookDeny(stdout, reason); err != nil {
@@ -276,6 +281,14 @@ func writeDeepSeekHookDeny(stdout io.Writer, reason string) error {
 		Kind:   "deny",
 		Reason: reason,
 	})
+}
+
+func writeDeepSeekHookReason(stderr io.Writer, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		return nil
+	}
+	_, err := fmt.Fprintln(stderr, reason)
+	return err
 }
 
 const hermesBlockExitCode = 2
@@ -317,27 +330,22 @@ func hermesPreToolCallBlocks(stdout string, exitCode int) bool {
 	return false
 }
 
-// deepseekPreToolBlocks mirrors DeepSeek Harness adapter visibility for a
-// shell-hook hop: native {"kind":"deny"} is a PreToolDecision.deny, and DSH
-// hook-protocol exit 2 is a block. Claude Code hookSpecificOutput JSON with
-// exit 0 is valid JSON that is not that adapter shape, so DeepSeek proceeds.
-// This function exists so tests can prove that fail-open shape.
-func deepseekPreToolBlocks(stdout string, exitCode int) bool {
+// deepseekParseHookOutput mirrors DSH parseHookOutput for a shell-hook hop:
+// exit 2 is a block and the reason is taken from stderr. Structured stdout
+// is parsed only on exit 0, and {"kind":"deny"} is never read. Claude Code
+// hookSpecificOutput JSON with exit 0 is therefore not a DSH block. This
+// function exists so tests can prove that honest shape; it does not claim a
+// live DeepSeek session already observed DENY.
+func deepseekParseHookOutput(stdout, stderr string, exitCode int) (block bool, reason string) {
 	if exitCode == deepseekBlockExitCode {
-		return true
+		return true, strings.TrimSpace(stderr)
 	}
-	stdout = strings.TrimSpace(stdout)
-	if stdout == "" {
-		return false
-	}
-	var data map[string]any
-	if err := json.Unmarshal([]byte(stdout), &data); err != nil {
-		return false
-	}
-	if kind, _ := data["kind"].(string); kind == "deny" {
-		return true
-	}
-	return false
+	return false, ""
+}
+
+func deepseekPreToolBlocks(stdout string, exitCode int) bool {
+	block, _ := deepseekParseHookOutput(stdout, "", exitCode)
+	return block
 }
 
 func printHookUsage(w io.Writer) {

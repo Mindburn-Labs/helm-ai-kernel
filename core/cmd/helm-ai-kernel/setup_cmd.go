@@ -140,7 +140,7 @@ type setupRecoveryMarker struct {
 func init() {
 	Register(Subcommand{
 		Name:  "setup",
-		Usage: "Install local Claude Code or Codex MCP/hook integration, or a Hermes fail-closed shell hook",
+		Usage: "Install local Claude Code or Codex MCP/hook integration, or a Hermes or DeepSeek fail-closed shell hook",
 		RunFn: runSetupCmd,
 	})
 }
@@ -181,6 +181,7 @@ func runSetupGuidedChooser(input *bufio.Reader, stdout, stderr io.Writer, caps u
 	fmt.Fprintln(stderr, "  1) Claude Code (recommended, default)")
 	fmt.Fprintln(stderr, "  2) Codex")
 	fmt.Fprintln(stderr, "  3) Hermes — fail-closed shell pre_tool_call (user scope)")
+	fmt.Fprintln(stderr, "  4) DeepSeek — fail-closed Kernel hook + stock DSH bridge (user scope)")
 	fmt.Fprintln(stderr, "  q) Quit without changes")
 	fmt.Fprint(stderr, "Choose [1]: ")
 
@@ -198,11 +199,13 @@ func runSetupGuidedChooser(input *bufio.Reader, stdout, stderr io.Writer, caps u
 		return runSetupInstallCmdWithInput([]string{"codex", "--scope", "project"}, stdout, stderr, input, caps)
 	case "3", "hermes":
 		return runSetupInstallCmdWithInput([]string{"hermes", "--scope", "user"}, stdout, stderr, input, caps)
+	case "4", "deepseek":
+		return runSetupInstallCmdWithInput([]string{"deepseek", "--scope", "user"}, stdout, stderr, input, caps)
 	case "q", "quit", "cancel":
 		fmt.Fprintln(stderr, "setup: no changes made; run `helm-ai-kernel setup claude-code --scope project --dry-run` when ready")
 		return 0
 	default:
-		fmt.Fprintf(stderr, "setup: unknown choice %q; choose 1, 2, 3, or q\n", strings.TrimSpace(choice))
+		fmt.Fprintf(stderr, "setup: unknown choice %q; choose 1, 2, 3, 4, or q\n", strings.TrimSpace(choice))
 		fmt.Fprintln(stderr, "setup: no changes made; run `helm-ai-kernel setup claude-code --scope project --dry-run` when ready")
 		return 2
 	}
@@ -928,6 +931,7 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "  helm-ai-kernel setup claude-code --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup hermes --scope user --yes")
+	fmt.Fprintln(w, "  helm-ai-kernel setup deepseek --scope user --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup --quickstart --profile mcp --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup --client cursor --print-config")
 	fmt.Fprintln(w, "")
@@ -937,9 +941,9 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Manage:")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --scope project --workspace DIR --dry-run --json")
-	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex|hermes> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
-	fmt.Fprintln(w, "  helm-ai-kernel setup repair <claude-code|codex|hermes> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
-	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex|hermes> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex|hermes|deepseek> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup repair <claude-code|codex|hermes|deepseek> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex|hermes|deepseek> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "")
 	printSupportMatrix(w)
 	fmt.Fprintln(w, "")
@@ -966,10 +970,11 @@ func printSetupFrontDoorUsage(w io.Writer) {
 }
 
 func printSetupInstallUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel setup <claude-code|codex|hermes> [options]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel setup <claude-code|codex|hermes|deepseek> [options]")
 	fmt.Fprintln(w, "Install a scoped HELM integration for one local coding agent.")
 	fmt.Fprintln(w, "Claude Code and Codex write an MCP server plus a PreToolUse hook.")
 	fmt.Fprintln(w, "Hermes writes a fail-closed pre_tool_call shell hook only.")
+	fmt.Fprintln(w, "DeepSeek writes a fail-closed Kernel hook file plus a stock DSH hook-bridge configPath.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
 	fmt.Fprintln(w, "  --scope user|project                          Install scope (default project)")
@@ -984,7 +989,7 @@ func printSetupInstallUsage(w io.Writer) {
 }
 
 func printSetupInspectUsage(w io.Writer, operation string, includeYes bool) {
-	fmt.Fprintf(w, "Usage: helm-ai-kernel setup %s <claude-code|codex|hermes> [options]\n", operation)
+	fmt.Fprintf(w, "Usage: helm-ai-kernel setup %s <claude-code|codex|hermes|deepseek> [options]\n", operation)
 	if operation == "status" {
 		fmt.Fprintln(w, "Inspect the installed local HELM integration without changing configuration.")
 	} else {
@@ -1054,7 +1059,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 func parseSetupInspectArgs(name string, args []string, stderr io.Writer, includeYes bool) (setupOptions, int) {
 	opts := setupOptions{Scope: "user"}
 	if len(args) == 0 {
-		fmt.Fprintf(stderr, "%s: expected <claude-code|codex|hermes>\n", name)
+		fmt.Fprintf(stderr, "%s: expected <claude-code|codex|hermes|deepseek>\n", name)
 		return opts, 2
 	}
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
@@ -1183,6 +1188,8 @@ func discoverSetupStatusPolicyProfile(opts *setupOptions, path, bin string) erro
 	var commands []string
 	if opts.Target == "hermes" {
 		commands = hermesInstalledHookCommands(path)
+	} else if opts.Target == "deepseek" {
+		commands = deepseekInstalledHookCommands(path)
 	} else {
 		root, err := readJSONObject(path)
 		if err != nil {
@@ -1335,8 +1342,10 @@ func normalizeSetupTarget(target string) (string, error) {
 		return "codex", nil
 	case "hermes":
 		return "hermes", nil
+	case "deepseek":
+		return "deepseek", nil
 	default:
-		return "", fmt.Errorf("target must be claude-code, codex, or hermes, got %q", target)
+		return "", fmt.Errorf("target must be claude-code, codex, hermes, or deepseek, got %q", target)
 	}
 }
 
@@ -1377,14 +1386,32 @@ func setupPlannedActions(opts setupOptions) []string {
 }
 
 func setupIncludesMCP(target string) bool {
-	return target != "hermes"
+	return target != "hermes" && target != "deepseek"
 }
 
 func setupHookInstallAction(target, path string) string {
-	if target == "hermes" {
+	switch target {
+	case "hermes":
 		return "configure the fail-closed Hermes pre_tool_call hook in " + path
+	case "deepseek":
+		return "configure the fail-closed DeepSeek PreToolUse hook in " + path
+	default:
+		return "configure the HELM PreToolUse hook in " + path
 	}
-	return "configure the HELM PreToolUse hook in " + path
+}
+
+func setupProfileInstallAction(target, path string) string {
+	if target == "deepseek" {
+		return "point the DSH profile configPath at the hook file in " + path
+	}
+	return ""
+}
+
+func setupProfileRemoveAction(target, path string) string {
+	if target == "deepseek" {
+		return "remove the DSH profile configPath from " + path
+	}
+	return ""
 }
 
 func setupConfirmationDetails(summary setupSummary) []ui.KeyValue {
@@ -1394,6 +1421,8 @@ func setupConfirmationDetails(summary setupSummary) []ui.KeyValue {
 	}
 	if setupIncludesMCP(summary.Target) {
 		details = append(details, ui.KeyValue{Key: "MCP config", Value: summary.ClientConfigPath})
+	} else if summary.Target == "deepseek" {
+		details = append(details, ui.KeyValue{Key: "DSH profile", Value: summary.ClientConfigPath})
 	}
 	details = append(details,
 		ui.KeyValue{Key: "Hook config", Value: summary.HookConfigPath},
@@ -1412,8 +1441,11 @@ func setupOutcomeFields(summary setupSummary) []ui.KeyValue {
 		fields = append(fields, ui.KeyValue{Key: "MCP server", Value: summary.ClientConfigPath})
 	}
 	hookKey := "PreToolUse hook"
-	if summary.Target == "hermes" {
+	switch summary.Target {
+	case "hermes":
 		hookKey = "pre_tool_call hook"
+	case "deepseek":
+		hookKey = "PreToolUse hook"
 	}
 	return append(fields,
 		ui.KeyValue{Key: hookKey, Value: summary.HookConfigPath},
@@ -1427,6 +1459,9 @@ func setupNextAction(summary setupSummary) string {
 	}
 	if summary.Target == "hermes" {
 		return "accept the Hermes first-use hook allowlist (--accept-hooks, HERMES_ACCEPT_HOOKS, or hooks_auto_accept), then restart Hermes. Non-TTY sessions never register the hook without that consent. This does not mean DENY is visible in the Hermes UI."
+	}
+	if summary.Target == "deepseek" {
+		return "keep the stock dsh-hooks-claude-code configPath pointed at the Kernel hook file, then restart DeepSeek Harness. A missing configPath leaves the hook file dead. This is an adapter hop, not a HELM-native agent runtime. This does not mean `npx @deepseek-ai/dsh web` sees DENY."
 	}
 	return "restart " + summary.Target + " to activate governance"
 }
@@ -1450,6 +1485,9 @@ func setupInstallActions(opts setupOptions) []string {
 		actions = append(actions, "configure the HELM MCP server in "+setupClientConfigPath(opts))
 	}
 	actions = append(actions, setupHookInstallAction(opts.Target, setupHookConfigPath(opts)))
+	if action := setupProfileInstallAction(opts.Target, setupClientConfigPath(opts)); action != "" {
+		actions = append(actions, action)
+	}
 	if !opts.NoQuickstart {
 		action := "start the local Quickstart proof path"
 		if opts.Console {
@@ -1470,6 +1508,9 @@ func setupRepairActions(summary setupSummary) []string {
 	}
 	if !summary.HookInstalled {
 		actions = append(actions, setupHookInstallAction(summary.Target, summary.HookConfigPath))
+		if action := setupProfileInstallAction(summary.Target, summary.ClientConfigPath); action != "" {
+			actions = append(actions, action)
+		}
 	}
 	return actions
 }
@@ -1592,10 +1633,16 @@ func setupRemoveActions(summary setupSummary) []string {
 		actions = append(actions, "remove the HELM MCP server from "+summary.ClientConfigPath)
 	}
 	if summary.HookInstalled {
-		if summary.Target == "hermes" {
+		switch summary.Target {
+		case "hermes":
 			actions = append(actions, "remove the fail-closed Hermes pre_tool_call hook from "+summary.HookConfigPath)
-		} else {
+		case "deepseek":
+			actions = append(actions, "remove the fail-closed DeepSeek PreToolUse hook from "+summary.HookConfigPath)
+		default:
 			actions = append(actions, "remove the HELM PreToolUse hook from "+summary.HookConfigPath)
+		}
+		if action := setupProfileRemoveAction(summary.Target, summary.ClientConfigPath); action != "" {
+			actions = append(actions, action)
 		}
 	}
 	return actions
@@ -1607,6 +1654,8 @@ func setupClientCommand(target string) string {
 		return "claude"
 	case "hermes":
 		return "hermes"
+	case "deepseek":
+		return "dsh"
 	default:
 		return "codex"
 	}
@@ -1678,6 +1727,10 @@ func preflightSetupClientConfig(opts setupOptions) error {
 		if _, err := readYAMLObject(path); err != nil {
 			return fmt.Errorf("parse existing Hermes config: %w", err)
 		}
+	case "deepseek":
+		if _, err := readYAMLList(path); err != nil {
+			return fmt.Errorf("parse existing DeepSeek profile: %w", err)
+		}
 	}
 	return nil
 }
@@ -1690,6 +1743,12 @@ func preflightSetupHookConfig(opts setupOptions) error {
 	if opts.Target == "hermes" {
 		if _, err := readYAMLObject(path); err != nil {
 			return fmt.Errorf("parse existing Hermes hook config: %w", err)
+		}
+		return nil
+	}
+	if opts.Target == "deepseek" {
+		if _, err := readJSONObject(path); err != nil {
+			return fmt.Errorf("parse existing DeepSeek hook config: %w", err)
 		}
 		return nil
 	}
@@ -1732,6 +1791,11 @@ func observeSetupClientState(opts setupOptions, summary *setupSummary) {
 		summary.ClientState = "configured_unverified"
 		return
 	}
+	// DeepSeek Harness has no probe that proves the profile configPath is loaded.
+	if opts.Target == "deepseek" {
+		summary.ClientState = "configured_unverified"
+		return
+	}
 	if err := setupProbeClient(opts.Target, setupCommandDir(opts)); err != nil {
 		summary.ClientState = "configured_unverified"
 		return
@@ -1752,6 +1816,9 @@ func printSetupPlan(w io.Writer, summary setupSummary) {
 				actions = append(actions, "configure the HELM MCP server in "+summary.ClientConfigPath)
 			}
 			actions = append(actions, setupHookInstallAction(summary.Target, summary.HookConfigPath))
+			if action := setupProfileInstallAction(summary.Target, summary.ClientConfigPath); action != "" {
+				actions = append(actions, action)
+			}
 		case "repair", "remove":
 			actions = []string{"no HELM-owned configuration changes are needed"}
 		}
@@ -1845,6 +1912,8 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	fmt.Fprintf(stdout, "  Workspace:     %s\n", summary.Workspace)
 	if setupIncludesMCP(summary.Target) {
 		fmt.Fprintf(stdout, "  MCP config:    %s\n", summary.ClientConfigPath)
+	} else if summary.Target == "deepseek" {
+		fmt.Fprintf(stdout, "  DSH profile:   %s\n", summary.ClientConfigPath)
 	} else {
 		fmt.Fprintf(stdout, "  Hermes config: %s\n", summary.HookConfigPath)
 	}
@@ -1924,6 +1993,9 @@ func installSetupMCP(opts setupOptions, bin string) error {
 	case "hermes":
 		// Hermes MCP is unverified. The hop is the fail-closed shell hook.
 		return nil
+	case "deepseek":
+		// DeepSeek MCP is out of scope. The hop is the Kernel hook + stock DSH bridge.
+		return nil
 	default:
 		return fmt.Errorf("unsupported target %q", opts.Target)
 	}
@@ -1945,6 +2017,8 @@ func removeSetupMCP(opts setupOptions) error {
 		return setupExecCommand(setupCommandDir(opts), "codex", "mcp", "remove", setupMCPServerName)
 	case "hermes":
 		return removeHermesMCP(setupClientConfigPath(opts), setupPrivateFileRoot(opts))
+	case "deepseek":
+		return nil
 	default:
 		return fmt.Errorf("unsupported target %q", opts.Target)
 	}
@@ -1968,12 +2042,26 @@ func installSetupHook(opts setupOptions, bin string) error {
 	if opts.Target == "hermes" {
 		return upsertHermesHookConfig(setupHookConfigPath(opts), setupHookMatcher(opts.Target), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
 	}
+	if opts.Target == "deepseek" {
+		hookPath := setupHookConfigPath(opts)
+		if err := upsertDeepSeekHookConfig(hookPath, setupHookMatcher(opts.Target), setupHookCommand(opts, bin), setupPrivateFileRoot(opts)); err != nil {
+			return err
+		}
+		return upsertDeepSeekProfile(setupClientConfigPath(opts), hookPath, setupPrivateFileRoot(opts))
+	}
 	return upsertHookConfig(setupHookConfigPath(opts), setupHookMatcher(opts.Target), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
 }
 
 func removeSetupHook(opts setupOptions, bin string) error {
 	if opts.Target == "hermes" {
 		return removeHermesHookConfig(setupHookConfigPath(opts), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
+	}
+	if opts.Target == "deepseek" {
+		hookPath := setupHookConfigPath(opts)
+		if err := removeDeepSeekHookConfig(hookPath, setupHookCommand(opts, bin), setupPrivateFileRoot(opts)); err != nil {
+			return err
+		}
+		return removeDeepSeekProfile(setupClientConfigPath(opts), hookPath, setupPrivateFileRoot(opts))
 	}
 	return removeHookConfig(setupHookConfigPath(opts), setupHookCommand(opts, bin), setupPrivateFileRoot(opts))
 }
@@ -1997,6 +2085,8 @@ func setupMCPInstalled(opts setupOptions, path, bin string) bool {
 		return codexMCPInstalled(readPath, bin, opts.DataDir)
 	case "hermes":
 		return hermesMCPInstalled(readPath, bin, opts.DataDir)
+	case "deepseek":
+		return false
 	default:
 		return false
 	}
@@ -2017,6 +2107,13 @@ func setupHookInstalled(opts setupOptions, path, bin string) bool {
 	if opts.Target == "hermes" {
 		return hermesHookInstalled(readPath, setupHookCommand(opts, bin))
 	}
+	if opts.Target == "deepseek" {
+		command := setupHookCommand(opts, bin)
+		if !deepseekHookInstalled(readPath, command) {
+			return false
+		}
+		return deepseekProfileInstalled(setupClientConfigPath(opts), readPath)
+	}
 	config, err := readJSONObject(readPath)
 	if err != nil {
 		return false
@@ -2032,7 +2129,7 @@ func setupQuickstartProfile(target string) string {
 	switch target {
 	case "codex":
 		return "codex"
-	case "hermes":
+	case "hermes", "deepseek":
 		return "mcp"
 	default:
 		return "claude"
@@ -2053,6 +2150,8 @@ func setupClientConfigPath(opts setupOptions) string {
 		return setupUserPath(".codex", "config.toml")
 	case "hermes":
 		return hermesConfigPath(opts)
+	case "deepseek":
+		return deepseekProfilePath(opts)
 	default:
 		return ""
 	}
@@ -2072,6 +2171,8 @@ func setupHookConfigPath(opts setupOptions) string {
 		return setupUserPath(".codex", "hooks.json")
 	case "hermes":
 		return hermesConfigPath(opts)
+	case "deepseek":
+		return deepseekHookPath(opts)
 	default:
 		return ""
 	}
@@ -2083,6 +2184,8 @@ func setupHookMatcher(target string) string {
 		return "^(Bash|apply_patch|mcp__.*)$"
 	case "hermes":
 		return "^(terminal|write_file|patch|mcp_.*)$"
+	case "deepseek":
+		return "^(bash|write|edit|mcp_.*)$"
 	default:
 		return "^(Bash|Edit|Write|MultiEdit|mcp__.*)$"
 	}

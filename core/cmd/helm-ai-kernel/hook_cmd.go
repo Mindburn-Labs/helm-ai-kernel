@@ -103,7 +103,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	opts := hookOptions{DataDir: defaultSetupDataDir()}
 	fs := flag.NewFlagSet("hook pre-tool", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code, codex, or hermes")
+	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code, codex, hermes, or deepseek")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
 	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path")
 	fs.StringVar(&opts.PolicyProfileSHA256, "policy-profile-sha256", "", "Approved SHA-256 digest for the policy profile")
@@ -237,6 +237,18 @@ func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
 		// Hermes block — that combination is fail-open.
 		return hermesBlockExitCode
 	}
+	if client == "deepseek" {
+		if err := writeDeepSeekHookDeny(stdout, stderr, reason); err != nil {
+			fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
+			return deepseekBlockExitCode
+		}
+		// DSH parseHookOutput blocks on exit 2 and takes the reason from
+		// stderr. Structured stdout is parsed only on exit 0, and
+		// {"kind":"deny"} is never read. writeDeepSeekHookDeny keeps the
+		// native JSON on stdout and writes the same HELM reason on stderr.
+		// Claude hookSpecificOutput + exit 0 is not a DSH block.
+		return deepseekBlockExitCode
+	}
 	if err := writeHookDeny(stdout, reason); err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
 		return 2
@@ -260,11 +272,36 @@ func writeHermesHookBlock(stdout io.Writer, reason string) error {
 	})
 }
 
+func writeDeepSeekHookDeny(stdout, stderr io.Writer, reason string) error {
+	if err := json.NewEncoder(stdout).Encode(deepseekHookDeny{
+		Kind:   "deny",
+		Reason: reason,
+	}); err != nil {
+		_ = writeDeepSeekHookReason(stderr, reason)
+		return err
+	}
+	return writeDeepSeekHookReason(stderr, reason)
+}
+
+func writeDeepSeekHookReason(stderr io.Writer, reason string) error {
+	if stderr == nil || strings.TrimSpace(reason) == "" {
+		return nil
+	}
+	_, err := fmt.Fprintln(stderr, reason)
+	return err
+}
+
 const hermesBlockExitCode = 2
+const deepseekBlockExitCode = 2
 
 type hermesHookBlock struct {
 	Action  string `json:"action"`
 	Message string `json:"message"`
+}
+
+type deepseekHookDeny struct {
+	Kind   string `json:"kind"`
+	Reason string `json:"reason"`
 }
 
 // hermesPreToolCallBlocks mirrors the NousResearch/hermes-agent shell hook
@@ -293,8 +330,26 @@ func hermesPreToolCallBlocks(stdout string, exitCode int) bool {
 	return false
 }
 
+// deepseekParseHookOutput mirrors DSH parseHookOutput for a shell-hook hop:
+// exit 2 is a block and the reason is taken from stderr. Structured stdout
+// is parsed only on exit 0, and {"kind":"deny"} is never read. Claude Code
+// hookSpecificOutput JSON with exit 0 is therefore not a DSH block. This
+// function exists so tests can prove that honest shape; it does not claim a
+// live DeepSeek session already observed DENY.
+func deepseekParseHookOutput(stdout, stderr string, exitCode int) (block bool, reason string) {
+	if exitCode == deepseekBlockExitCode {
+		return true, strings.TrimSpace(stderr)
+	}
+	return false, ""
+}
+
+func deepseekPreToolBlocks(stdout string, exitCode int) bool {
+	block, _ := deepseekParseHookOutput(stdout, "", exitCode)
+	return block
+}
+
 func printHookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex|hermes> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex|hermes|deepseek> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
 }
 
 // hookDoomLoopFile is the on-disk circuit-breaker state for the pre-tool
@@ -663,6 +718,7 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 			ToolID:       tool,
 			Reason:       "MCP tool call",
 		}}
+	// DeepSeek Harness emits lowercase bash/write/edit; EqualFold matches those.
 	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "apply_patch"), strings.EqualFold(tool, "write_file"), strings.EqualFold(tool, "patch"):
 		target := inputString(payload.ToolInput, "file_path", "path", "target_file")
 		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
@@ -901,9 +957,13 @@ func isSensitiveWriteTarget(path string) bool {
 		".claude/settings.json",
 		".codex/hooks.json",
 		".hermes/config.yaml",
+		".dsh/hooks.json",
+		".dsh/cordis.patch.yml",
 		".claude\\settings.json",
 		".codex\\hooks.json",
 		".hermes\\config.yaml",
+		".dsh\\hooks.json",
+		".dsh\\cordis.patch.yml",
 	}
 	for _, needle := range sensitive {
 		if strings.Contains(p, needle) {

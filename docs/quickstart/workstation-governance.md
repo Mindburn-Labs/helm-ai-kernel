@@ -1,20 +1,21 @@
 # Protect Local Coding Agents
 
-HELM can sit around Codex, Claude Code, Hermes, and similar local agent
-workflows. The goal is narrow: selected effects cross a HELM boundary before
-dispatch, and each decision leaves a local receipt.
+HELM can sit around Codex, Claude Code, Hermes, DeepSeek Harness, and similar
+local agent workflows. The goal is narrow: selected effects cross a HELM
+boundary before dispatch, and each decision leaves a local receipt.
 
 HELM is not a competing coding agent. It evaluates the actions your agent wants
 to take.
 
 ## Agent Adapters
 
-Codex, Claude Code, and Hermes use local setup hooks. OpenClaw still uses
-adapter helpers from `helm-agent-integrations`; those demos are not the
-Hermes ship.
+Codex, Claude Code, Hermes, and DeepSeek use local setup hooks. OpenClaw still
+uses adapter helpers from `helm-agent-integrations`; those demos are not the
+Hermes or DeepSeek ship.
 
 - [OpenClaw](/integrations/openclaw) normalizes skill calls before dispatch.
 - [Hermes](/integrations/hermes) installs a fail-closed `pre_tool_call` shell hook only.
+- [DeepSeek](/integrations/deepseek) installs a fail-closed Kernel hook file plus a stock DSH hook-bridge `configPath`.
 
 ## Install A Local Hook
 
@@ -24,6 +25,7 @@ Inspect the writes first:
 helm-ai-kernel setup codex --dry-run --json
 helm-ai-kernel setup claude-code --dry-run --json
 helm-ai-kernel setup hermes --scope user --dry-run --json
+helm-ai-kernel setup deepseek --scope user --dry-run --json
 ```
 
 Install the local integration:
@@ -32,6 +34,7 @@ Install the local integration:
 helm-ai-kernel setup codex --yes
 helm-ai-kernel setup claude-code --yes
 helm-ai-kernel setup hermes --scope user --yes
+helm-ai-kernel setup deepseek --scope user --yes
 ```
 
 Setup writes draft policy and quarantine artifacts. It does not approve tools

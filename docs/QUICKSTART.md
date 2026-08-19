@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-07-24
+last_reviewed: 2026-08-19
 ---
 
 # Quickstart
@@ -35,6 +35,7 @@ make build
 | Codex setup | `helm-ai-kernel setup codex --dry-run --json` |
 | Claude Code setup | `helm-ai-kernel setup claude-code --dry-run --json` |
 | Hermes setup | `helm-ai-kernel setup hermes --scope user --dry-run --json` |
+| DeepSeek setup | `helm-ai-kernel setup deepseek --scope user --dry-run --json` |
 | Cursor / Windsurf / VS Code config | `helm-ai-kernel setup --client cursor --print-config` |
 | OpenClaw / Hermes adapters | [tool runtime adapters](INTEGRATIONS/tool-runtime-adapters.md) |
 | Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
@@ -155,6 +156,16 @@ the wild, and it does not write MCP):
 
 ```bash
 helm-ai-kernel setup hermes --scope user --yes
+```
+
+For DeepSeek (writes a fail-closed Kernel `PreToolUse` hook in
+`~/.dsh/hooks.json` and points the stock DSH `dsh-hooks-claude-code`
+bridge `configPath` at that file; this is an adapter hop, not a
+HELM-native agent runtime, and it does not mean
+`npx @deepseek-ai/dsh web` sees DENY):
+
+```bash
+helm-ai-kernel setup deepseek --scope user --yes
 ```
 
 Preview writes first:

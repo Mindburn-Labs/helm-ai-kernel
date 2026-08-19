@@ -341,8 +341,9 @@ func TestNormalizeSetupTargetAcceptsHermes(t *testing.T) {
 	if err != nil || got != "hermes" {
 		t.Fatalf("normalize hermes = %q err=%v", got, err)
 	}
-	if _, err := normalizeSetupTarget("deepseek"); err == nil {
-		t.Fatal("deepseek must remain out of scope")
+	got, err = normalizeSetupTarget("deepseek")
+	if err != nil || got != "deepseek" {
+		t.Fatalf("normalize deepseek = %q err=%v", got, err)
 	}
 }
 

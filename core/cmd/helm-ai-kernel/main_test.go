@@ -70,6 +70,7 @@ func TestRunNoArgsPrintsFrontDoor(t *testing.T) {
 	assert.Contains(t, stdout.String(), "helm-ai-kernel setup claude-code")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel setup codex")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel setup hermes --scope user")
+	assert.Contains(t, stdout.String(), "helm-ai-kernel setup deepseek --scope user")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel watch")
 	assert.Contains(t, stdout.String(), "helm-ai-kernel help --json")
 	assert.Empty(t, stderr.String())

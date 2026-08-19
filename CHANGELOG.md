@@ -99,6 +99,14 @@ against the caller-supplied key. Hop fixtures are labeled DENY / no permit.
 This is Foundation/offline verify, not AI OS live, not helm-ai-kernel#859,
 and not self-attested EvidencePack verification.
 
+### Added — setup deepseek fail-closed hook target
+
+`helm-ai-kernel setup deepseek` writes a Kernel `PreToolUse` hook file and a
+DSH profile `configPath` that points at that file. The hop is the Kernel CLI,
+not a Cordis or DeepSeek Harness plugin. DENY uses the native
+`{"kind":"deny"}` shape and exit 2. This does not claim
+`npx @deepseek-ai/dsh web` already sees DENY.
+
 ### Added — chart-managed mounted-file runtime rules
 
 The Helm chart can render explicit `helm.policy.runtimeActions` into its

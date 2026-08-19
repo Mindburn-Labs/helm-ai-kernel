@@ -30,6 +30,7 @@ it does not claim that a live docs route or runtime is available.
 - [OpenAI Proxy](INTEGRATIONS/openai_baseurl.md)
 - [OpenClaw](INTEGRATIONS/openclaw.md)
 - [Hermes](INTEGRATIONS/hermes.md)
+- [DeepSeek](INTEGRATIONS/deepseek.md)
 - [Agent Clients](INTEGRATIONS/agent-clients.md)
 - [Framework Adapters](INTEGRATIONS/framework-adapters.md)
 - [Tool Runtime Adapters](INTEGRATIONS/tool-runtime-adapters.md)

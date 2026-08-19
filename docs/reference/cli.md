@@ -26,13 +26,16 @@ helm-ai-kernel setup --json
 helm-ai-kernel setup claude-code --yes
 helm-ai-kernel setup codex --yes
 helm-ai-kernel setup hermes --scope user --yes
+helm-ai-kernel setup deepseek --scope user --yes
 helm-ai-kernel setup codex --dry-run --json
 helm-ai-kernel setup --client cursor --print-config
 ```
 
 Setup writes local client configuration and draft policy artifacts. It does not
 approve tools. Hermes setup writes a fail-closed `pre_tool_call` shell hook
-only; it does not write MCP.
+only; it does not write MCP. DeepSeek setup writes a fail-closed hook file and
+a DSH profile `configPath`; it does not write MCP and does not claim
+`npx @deepseek-ai/dsh web` sees DENY.
 
 ## MCP Authorization Commands
 

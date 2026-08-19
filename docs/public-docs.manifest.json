@@ -650,6 +650,31 @@
       "sensitivity": "public"
     },
     {
+      "slug": "integrations/deepseek",
+      "title": "DeepSeek",
+      "section": "integrations",
+      "category": "build",
+      "tasks": [
+        "integrate",
+        "configure-boundary"
+      ],
+      "audiences": [
+        "local-operator",
+        "integrator"
+      ],
+      "publication_status": "source-public",
+      "runtime_scope": "local-runtime",
+      "inbound_human_path": [
+        "index",
+        "public-docs",
+        "integrations/deepseek"
+      ],
+      "source_path": "docs/INTEGRATIONS/deepseek.md",
+      "docs_origin_hint": "helm.docs.mindburn.org/integrations/deepseek",
+      "access": "public",
+      "sensitivity": "public"
+    },
+    {
       "slug": "integrations/agent-clients",
       "title": "Agent Clients",
       "section": "integrations",

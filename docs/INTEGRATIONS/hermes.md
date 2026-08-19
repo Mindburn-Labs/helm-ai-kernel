@@ -6,9 +6,8 @@ last_reviewed: 2026-08-19
 # Hermes
 
 Use HELM as a local pre-dispatch gate for Hermes tool calls. The shipped
-path is the same Kernel setup used for Claude Code and Codex: MCP plus a
-native `pre_tool_call` command. This is not a skill, not a console screen,
-and not the `helm-agent-integrations` demo adapter.
+path is a Kernel `setup hermes` shell hook, not MCP, not a skill, not a
+console screen, and not the `helm-agent-integrations` demo adapter.
 
 ```text
 Hermes tool proposal
@@ -19,10 +18,15 @@ Hermes tool proposal
    lands under ~/.helm-ai-kernel/receipts/hooks/
 ```
 
+Do not drop `--client claude-code` into Hermes config. That dialect writes
+`hookSpecificOutput.permissionDecision=deny` and exits 0. Hermes does not
+honor that shape, so the gate fails open.
+
 Hermes has no HELM DENY screen. A blocked tool is a native hook failure
 returned to the model. Installing this target does **not** mean Hermes
-already sees DENY in the wild. A stranger still must offline-verify a
-signed hook receipt.
+already sees DENY in the wild, and it does **not** mean DENY is visible
+in the Hermes UI. A stranger still must offline-verify a signed hook
+receipt.
 
 ## Quick Setup
 
@@ -44,22 +48,39 @@ Check what was written:
 helm-ai-kernel setup status hermes --scope user
 ```
 
-Remove the owned MCP server and hook, leaving other Hermes keys in place:
+Remove the owned hook (and any leftover HELM MCP entry from an earlier
+revision), leaving other Hermes keys in place:
 
 ```bash
 helm-ai-kernel setup remove hermes --scope user --yes
 ```
 
-Setup writes:
+Setup writes `hooks.pre_tool_call` with:
 
-- `mcp_servers.helm-ai-kernel-governance` pointing at `helm-ai-kernel mcp serve`
-- `hooks.pre_tool_call` with matcher `^(terminal|write_file|patch|mcp__.*)$`,
-  command `helm-ai-kernel hook pre-tool --client hermes`, and
-  `fail_closed: true`
+- matcher `^(terminal|write_file|patch|mcp_.*)$` (Hermes tool names, plus
+  MCP names as Hermes emits them: `mcp__server__tool` or older
+  `mcp_server_tool`)
+- command `helm-ai-kernel hook pre-tool --client hermes`
+- `fail_closed: true`
+- `timeout: 30`
 
-`fail_closed: true` is required. Without the hook entry, Hermes never
-calls Kernel and the tool runs. A DENY path cannot be skipped by omitting
-the hook and still claiming the gate is active.
+It does not write `mcp_servers`. The Hermes MCP path is unverified; the
+smallest hop is this shell hook.
+
+`fail_closed: true` is required. Hermes shell hooks default fail-open.
+Without the hook entry, Hermes never calls Kernel and the tool runs. A
+DENY path cannot be skipped by omitting the hook and still claiming the
+gate is active.
+
+Unclassified tools are pass-through and write no receipt. The classifier
+decides `terminal`, `write_file`, `patch`, and Hermes-emitted MCP names.
+
+## First-use consent
+
+Hermes uses a first-use hook allowlist. Setup writes the hook; it does
+**not** write `hooks_auto_accept: true` (that would auto-accept every
+hook). Without `--accept-hooks`, `HERMES_ACCEPT_HOOKS`, or
+`hooks_auto_accept`, a non-TTY session never registers the hook.
 
 ## Verify a Hook Decision
 

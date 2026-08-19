@@ -8,7 +8,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const hermesHookEvent = "pre_tool_call"
+const (
+	hermesHookEvent          = "pre_tool_call"
+	hermesHookTimeoutSeconds = 30
+)
 
 func hermesConfigPath(opts setupOptions) string {
 	if opts.Scope == "project" {
@@ -99,6 +102,7 @@ func upsertHermesHookConfig(path, matcher, command, allowedRoot string) error {
 		obj["command"] = command
 		obj["matcher"] = matcher
 		obj["fail_closed"] = true
+		obj["timeout"] = hermesHookTimeoutSeconds
 		updated = true
 	}
 	if !updated {
@@ -106,6 +110,7 @@ func upsertHermesHookConfig(path, matcher, command, allowedRoot string) error {
 			"matcher":     matcher,
 			"command":     command,
 			"fail_closed": true,
+			"timeout":     hermesHookTimeoutSeconds,
 		})
 	}
 	hooks[hermesHookEvent] = pre
@@ -167,9 +172,17 @@ func hermesHookInstalled(path, command string) bool {
 		if hookCommandConfigKey(yamlString(obj["command"])) != key {
 			continue
 		}
-		return yamlBool(obj["fail_closed"]) || yamlBool(obj["failClosed"])
+		return hermesFailClosed(obj) && hermesTimeoutOK(obj)
 	}
 	return false
+}
+
+func hermesFailClosed(entry map[string]any) bool {
+	return yamlBool(entry["fail_closed"]) || yamlBool(entry["failClosed"])
+}
+
+func hermesTimeoutOK(entry map[string]any) bool {
+	return yamlInt(entry["timeout"]) == hermesHookTimeoutSeconds
 }
 
 func hermesInstalledHookCommands(path string) []string {
@@ -257,6 +270,37 @@ func yamlString(v any) string {
 func yamlBool(v any) bool {
 	b, _ := v.(bool)
 	return b
+}
+
+func yamlInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int8:
+		return int(n)
+	case int16:
+		return int(n)
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case uint:
+		return int(n)
+	case uint8:
+		return int(n)
+	case uint16:
+		return int(n)
+	case uint32:
+		return int(n)
+	case uint64:
+		return int(n)
+	case float32:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
 }
 
 func yamlStringSlice(v any) []string {

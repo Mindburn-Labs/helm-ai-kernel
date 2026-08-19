@@ -14,7 +14,7 @@ adapter helpers from `helm-agent-integrations`; those demos are not the
 Hermes ship.
 
 - [OpenClaw](/integrations/openclaw) normalizes skill calls before dispatch.
-- [Hermes](/integrations/hermes) installs a native `pre_tool_call` gate.
+- [Hermes](/integrations/hermes) installs a fail-closed `pre_tool_call` shell hook only.
 
 ## Install A Local Hook
 

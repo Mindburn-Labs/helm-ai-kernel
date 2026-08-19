@@ -18,7 +18,7 @@ helm-ai-kernel setup --json
 | --- | --- |
 | Claude Code | `helm-ai-kernel setup claude-code --yes` |
 | Codex | `helm-ai-kernel setup codex --yes` |
-| Hermes | `helm-ai-kernel setup hermes --scope user --yes` |
+| Hermes | `helm-ai-kernel setup hermes --scope user --yes` (fail-closed shell hook only; not MCP) |
 
 Preview writes first:
 

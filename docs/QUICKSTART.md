@@ -149,8 +149,9 @@ For Codex:
 helm-ai-kernel setup codex --yes
 ```
 
-For Hermes (writes `~/.hermes/config.yaml`; this does not mean Hermes
-already sees DENY in the wild):
+For Hermes (writes a fail-closed `pre_tool_call` hook in
+`~/.hermes/config.yaml`; this does not mean Hermes already sees DENY in
+the wild, and it does not write MCP):
 
 ```bash
 helm-ai-kernel setup hermes --scope user --yes

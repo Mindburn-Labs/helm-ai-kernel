@@ -101,6 +101,32 @@ func TestHookHermesClassifiesNativeToolNames(t *testing.T) {
 	}
 }
 
+func TestClassifyHermesMCPToolNames(t *testing.T) {
+	for _, tool := range []string{"mcp__filesystem__write_file", "mcp_filesystem_write_file"} {
+		got := classifyPreToolPayload(preToolPayload{ToolName: tool})
+		if !got.ShouldDecide || got.Class != "mcp" || got.Target != tool {
+			t.Fatalf("%s classified as %#v", tool, got)
+		}
+	}
+}
+
+func TestHookHermesUnclassifiedIsPassthroughWithoutReceipt(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	payload := `{"tool_name":"read_file","args":{"path":"README.md"},"session_id":"h-pass","cwd":"/repo"}`
+	var stdout, stderr bytes.Buffer
+	code := runHookPreToolCmd([]string{"--client", "hermes", "--data-dir", tmp}, strings.NewReader(payload), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("unclassified exit = %d, want 0 stderr=%s stdout=%s", code, stderr.String(), stdout.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("unclassified must not emit a Hermes block:\n%s", stdout.String())
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
+		t.Fatalf("unclassified must not write a receipt: %v", receipts)
+	}
+}
+
 func TestHookClaudeDenyStillUsesClaudeJSONAndExit0(t *testing.T) {
 	tmp := t.TempDir()
 	restoreHookClock(t)

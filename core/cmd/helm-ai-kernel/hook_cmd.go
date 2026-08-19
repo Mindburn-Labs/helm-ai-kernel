@@ -649,7 +649,9 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 			classifications = append(classifications, shellscanGenericClassification(command, scan))
 		}
 		return appendRequiredShellPermission(classifications, command)
-	case strings.HasPrefix(tool, "mcp__"):
+	case strings.HasPrefix(tool, "mcp_"):
+		// Claude/Codex emit mcp__server__tool. Hermes has used that shape and
+		// the older mcp_server_tool form. mcp__ is a prefix of mcp_.
 		if isHelmSelfMCPTool(tool) {
 			return nil
 		}

@@ -31,7 +31,8 @@ helm-ai-kernel setup --client cursor --print-config
 ```
 
 Setup writes local client configuration and draft policy artifacts. It does not
-approve tools.
+approve tools. Hermes setup writes a fail-closed `pre_tool_call` shell hook
+only; it does not write MCP.
 
 ## MCP Authorization Commands
 

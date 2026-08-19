@@ -140,7 +140,7 @@ type setupRecoveryMarker struct {
 func init() {
 	Register(Subcommand{
 		Name:  "setup",
-		Usage: "Install local Claude Code, Codex, or Hermes MCP/hook integration",
+		Usage: "Install local Claude Code or Codex MCP/hook integration, or a Hermes fail-closed shell hook",
 		RunFn: runSetupCmd,
 	})
 }
@@ -180,7 +180,7 @@ func runSetupGuidedChooser(input *bufio.Reader, stdout, stderr io.Writer, caps u
 	fmt.Fprintln(stderr, "HELM setup configures one client for this project (project scope is the default).")
 	fmt.Fprintln(stderr, "  1) Claude Code (recommended, default)")
 	fmt.Fprintln(stderr, "  2) Codex")
-	fmt.Fprintln(stderr, "  3) Hermes")
+	fmt.Fprintln(stderr, "  3) Hermes — fail-closed shell pre_tool_call (user scope)")
 	fmt.Fprintln(stderr, "  q) Quit without changes")
 	fmt.Fprint(stderr, "Choose [1]: ")
 
@@ -462,14 +462,7 @@ func confirmSetupInstall(input io.Reader, chrome io.Writer, caps ui.Capabilities
 		Action:  ui.DecisionApprove,
 		Subject: "setup " + summary.Target,
 		Summary: "Write only the scoped local HELM configuration below.",
-		Details: []ui.KeyValue{
-			{Key: "Scope", Value: summary.Scope},
-			{Key: "Workspace", Value: summary.Workspace},
-			{Key: "MCP config", Value: summary.ClientConfigPath},
-			{Key: "Hook config", Value: summary.HookConfigPath},
-			{Key: "Data dir", Value: summary.DataDir},
-			{Key: "Recovery", Value: summary.RecoveryCommand},
-		},
+		Details: setupConfirmationDetails(summary),
 	}, apply)
 }
 
@@ -484,13 +477,26 @@ func applySetupSteps(opts setupOptions, summary *setupSummary) ([]ui.Step, error
 	type setupStep struct {
 		title string
 		run   func() error
+		wrap  string
 	}
 	plan := []setupStep{
-		{"provision the local signing key and draft policy artifacts", func() error { return provisionSetupLocalState(opts, summary) }},
-		{"configure the HELM MCP server in " + summary.ClientConfigPath, func() error { return setupInstallMCP(opts, summary.BinaryPath) }},
-		{"configure the HELM PreToolUse hook in " + summary.HookConfigPath, func() error { return setupInstallHook(opts, summary.BinaryPath) }},
-		{"clear the recovery marker", func() error { return clearSetupRecovery(opts) }},
+		{"provision the local signing key and draft policy artifacts", func() error { return provisionSetupLocalState(opts, summary) }, ""},
 	}
+	if setupIncludesMCP(opts.Target) {
+		plan = append(plan, setupStep{
+			"configure the HELM MCP server in " + summary.ClientConfigPath,
+			func() error { return setupInstallMCP(opts, summary.BinaryPath) },
+			"install MCP server",
+		})
+	}
+	plan = append(plan,
+		setupStep{
+			setupHookInstallAction(opts.Target, summary.HookConfigPath),
+			func() error { return setupInstallHook(opts, summary.BinaryPath) },
+			"install pre-tool hook",
+		},
+		setupStep{"clear the recovery marker", func() error { return clearSetupRecovery(opts) }, "clear recovery marker"},
+	)
 	steps := make([]ui.Step, len(plan))
 	var applyErr error
 	failed := -1
@@ -504,14 +510,9 @@ func applySetupSteps(opts setupOptions, summary *setupSummary) ([]ui.Step, error
 			failed = i
 			// Wrap with the same context the previous per-call errors carried,
 			// so recovery reporting reads identically to before this refactor.
-			switch i {
-			case 1:
-				applyErr = fmt.Errorf("install MCP server: %w", err)
-			case 2:
-				applyErr = fmt.Errorf("install pre-tool hook: %w", err)
-			case 3:
-				applyErr = fmt.Errorf("clear recovery marker: %w", err)
-			default:
+			if s.wrap != "" {
+				applyErr = fmt.Errorf("%s: %w", s.wrap, err)
+			} else {
 				applyErr = err
 			}
 			continue
@@ -537,20 +538,10 @@ func renderSetupOutcome(chrome io.Writer, caps ui.Capabilities, summary setupSum
 		})
 		return
 	}
-	next := "restart " + summary.Target + " to activate governance"
-	if summary.CodexTrustPending {
-		next = "trust this workspace in Codex, then restart it — governance is not active until then"
-	}
 	r.WriteCompletion(ui.CompletionCard{
-		Title: "Setup complete",
-		Fields: []ui.KeyValue{
-			{Key: "Client", Value: summary.Target},
-			{Key: "Scope", Value: summary.Scope},
-			{Key: "MCP server", Value: summary.ClientConfigPath},
-			{Key: "PreToolUse hook", Value: summary.HookConfigPath},
-			{Key: "Data dir", Value: summary.DataDir},
-		},
-		NextAction: next,
+		Title:      "Setup complete",
+		Fields:     setupOutcomeFields(summary),
+		NextAction: setupNextAction(summary),
 	})
 }
 
@@ -576,8 +567,8 @@ func describeSetupResidue(steps []ui.Step) string {
 		switch {
 		case strings.Contains(s.Title, "MCP server"):
 			written = append(written, "MCP server config")
-		case strings.Contains(s.Title, "PreToolUse hook"):
-			written = append(written, "PreToolUse hook")
+		case strings.Contains(s.Title, "hook"):
+			written = append(written, "hook")
 		case strings.Contains(s.Title, "signing key"):
 			written = append(written, "local signing key and draft artifacts")
 		}
@@ -665,7 +656,7 @@ func runSetupInstallCmdWithInput(args []string, stdout, stderr io.Writer, input 
 	if applyErr != nil {
 		return reportSetupRecovery(stderr, opts, applyErr)
 	}
-	summary.MCPInstalled = true
+	summary.MCPInstalled = setupIncludesMCP(opts.Target)
 	summary.HookInstalled = true
 	summary.ClientDetected = true
 	summary.ClientState = "configured"
@@ -757,7 +748,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	printSetupSummary(stdout, summary, opts.JSON)
 	// On-disk config alone is not healthy: the client must be present and
 	// confirm that it loaded HELM, with no explicit trust step still pending.
-	if summary.MCPInstalled && summary.HookInstalled && summary.ClientDetected && summary.NativeLoaded && !summary.CodexTrustPending {
+	if setupStatusHealthy(summary) {
 		return 0
 	}
 	return 1
@@ -830,7 +821,7 @@ func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
 			return reportSetupRecovery(stderr, opts, err)
 		}
 	}
-	if !summary.MCPInstalled {
+	if !summary.MCPInstalled && setupIncludesMCP(opts.Target) {
 		if err := setupInstallMCP(opts, summary.BinaryPath); err != nil {
 			if recoveryPending {
 				return reportSetupRecovery(stderr, opts, fmt.Errorf("install MCP server: %w", err))
@@ -976,7 +967,9 @@ func printSetupFrontDoorUsage(w io.Writer) {
 
 func printSetupInstallUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: helm-ai-kernel setup <claude-code|codex|hermes> [options]")
-	fmt.Fprintln(w, "Install a scoped HELM MCP server and PreToolUse hook for one local coding agent.")
+	fmt.Fprintln(w, "Install a scoped HELM integration for one local coding agent.")
+	fmt.Fprintln(w, "Claude Code and Codex write an MCP server plus a PreToolUse hook.")
+	fmt.Fprintln(w, "Hermes writes a fail-closed pre_tool_call shell hook only.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Options:")
 	fmt.Fprintln(w, "  --scope user|project                          Install scope (default project)")
@@ -1383,13 +1376,80 @@ func setupPlannedActions(opts setupOptions) []string {
 	}
 }
 
+func setupIncludesMCP(target string) bool {
+	return target != "hermes"
+}
+
+func setupHookInstallAction(target, path string) string {
+	if target == "hermes" {
+		return "configure the fail-closed Hermes pre_tool_call hook in " + path
+	}
+	return "configure the HELM PreToolUse hook in " + path
+}
+
+func setupConfirmationDetails(summary setupSummary) []ui.KeyValue {
+	details := []ui.KeyValue{
+		{Key: "Scope", Value: summary.Scope},
+		{Key: "Workspace", Value: summary.Workspace},
+	}
+	if setupIncludesMCP(summary.Target) {
+		details = append(details, ui.KeyValue{Key: "MCP config", Value: summary.ClientConfigPath})
+	}
+	details = append(details,
+		ui.KeyValue{Key: "Hook config", Value: summary.HookConfigPath},
+		ui.KeyValue{Key: "Data dir", Value: summary.DataDir},
+		ui.KeyValue{Key: "Recovery", Value: summary.RecoveryCommand},
+	)
+	return details
+}
+
+func setupOutcomeFields(summary setupSummary) []ui.KeyValue {
+	fields := []ui.KeyValue{
+		{Key: "Client", Value: summary.Target},
+		{Key: "Scope", Value: summary.Scope},
+	}
+	if setupIncludesMCP(summary.Target) {
+		fields = append(fields, ui.KeyValue{Key: "MCP server", Value: summary.ClientConfigPath})
+	}
+	hookKey := "PreToolUse hook"
+	if summary.Target == "hermes" {
+		hookKey = "pre_tool_call hook"
+	}
+	return append(fields,
+		ui.KeyValue{Key: hookKey, Value: summary.HookConfigPath},
+		ui.KeyValue{Key: "Data dir", Value: summary.DataDir},
+	)
+}
+
+func setupNextAction(summary setupSummary) string {
+	if summary.CodexTrustPending {
+		return "trust this workspace in Codex, then restart it — governance is not active until then"
+	}
+	if summary.Target == "hermes" {
+		return "accept the Hermes first-use hook allowlist (--accept-hooks, HERMES_ACCEPT_HOOKS, or hooks_auto_accept), then restart Hermes. Non-TTY sessions never register the hook without that consent. This does not mean DENY is visible in the Hermes UI."
+	}
+	return "restart " + summary.Target + " to activate governance"
+}
+
+func setupStatusHealthy(summary setupSummary) bool {
+	if !summary.HookInstalled || !summary.ClientDetected || !summary.NativeLoaded || summary.CodexTrustPending {
+		return false
+	}
+	if setupIncludesMCP(summary.Target) && !summary.MCPInstalled {
+		return false
+	}
+	return true
+}
+
 func setupInstallActions(opts setupOptions) []string {
 	actions := []string{
 		"create or reuse the local receipt signing key under " + filepath.Join(opts.DataDir, workstationSigningKeyDirectory),
 		"write draft-only inventory and policy artifacts under " + filepath.Join(opts.DataDir, "autoconfigure"),
-		"configure the HELM MCP server in " + setupClientConfigPath(opts),
-		"configure the HELM PreToolUse hook in " + setupHookConfigPath(opts),
 	}
+	if setupIncludesMCP(opts.Target) {
+		actions = append(actions, "configure the HELM MCP server in "+setupClientConfigPath(opts))
+	}
+	actions = append(actions, setupHookInstallAction(opts.Target, setupHookConfigPath(opts)))
 	if !opts.NoQuickstart {
 		action := "start the local Quickstart proof path"
 		if opts.Console {
@@ -1405,11 +1465,11 @@ func setupRepairActions(summary setupSummary) []string {
 	if summary.RecoveryRequired {
 		actions = append(actions, "resume the incomplete HELM setup")
 	}
-	if !summary.MCPInstalled {
+	if !summary.MCPInstalled && setupIncludesMCP(summary.Target) {
 		actions = append(actions, "configure the HELM MCP server in "+summary.ClientConfigPath)
 	}
 	if !summary.HookInstalled {
-		actions = append(actions, "configure the HELM PreToolUse hook in "+summary.HookConfigPath)
+		actions = append(actions, setupHookInstallAction(summary.Target, summary.HookConfigPath))
 	}
 	return actions
 }
@@ -1532,7 +1592,11 @@ func setupRemoveActions(summary setupSummary) []string {
 		actions = append(actions, "remove the HELM MCP server from "+summary.ClientConfigPath)
 	}
 	if summary.HookInstalled {
-		actions = append(actions, "remove the HELM PreToolUse hook from "+summary.HookConfigPath)
+		if summary.Target == "hermes" {
+			actions = append(actions, "remove the fail-closed Hermes pre_tool_call hook from "+summary.HookConfigPath)
+		} else {
+			actions = append(actions, "remove the HELM PreToolUse hook from "+summary.HookConfigPath)
+		}
 	}
 	return actions
 }
@@ -1638,11 +1702,11 @@ func preflightSetupHookConfig(opts setupOptions) error {
 func observeSetupClientState(opts setupOptions, summary *setupSummary) {
 	summary.ClientDetected = false
 	summary.NativeLoaded = false
-	if !summary.MCPInstalled && !summary.HookInstalled {
+	if !summary.HookInstalled && !summary.MCPInstalled {
 		summary.ClientState = "absent"
 		return
 	}
-	if !summary.MCPInstalled || !summary.HookInstalled {
+	if !summary.HookInstalled || (setupIncludesMCP(opts.Target) && !summary.MCPInstalled) {
 		summary.ClientState = "degraded"
 		return
 	}
@@ -1683,9 +1747,11 @@ func printSetupPlan(w io.Writer, summary setupSummary) {
 		case "install":
 			actions = []string{
 				"create or reuse local HELM state under " + summary.DataDir,
-				"configure the HELM MCP server in " + summary.ClientConfigPath,
-				"configure the HELM PreToolUse hook in " + summary.HookConfigPath,
 			}
+			if setupIncludesMCP(summary.Target) {
+				actions = append(actions, "configure the HELM MCP server in "+summary.ClientConfigPath)
+			}
+			actions = append(actions, setupHookInstallAction(summary.Target, summary.HookConfigPath))
 		case "repair", "remove":
 			actions = []string{"no HELM-owned configuration changes are needed"}
 		}
@@ -1777,7 +1843,11 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 	}
 	fmt.Fprintf(stdout, "HELM setup for %s\n", summary.Target)
 	fmt.Fprintf(stdout, "  Workspace:     %s\n", summary.Workspace)
-	fmt.Fprintf(stdout, "  MCP config:    %s\n", summary.ClientConfigPath)
+	if setupIncludesMCP(summary.Target) {
+		fmt.Fprintf(stdout, "  MCP config:    %s\n", summary.ClientConfigPath)
+	} else {
+		fmt.Fprintf(stdout, "  Hermes config: %s\n", summary.HookConfigPath)
+	}
 	fmt.Fprintf(stdout, "  Hook config:   %s\n", summary.HookConfigPath)
 	fmt.Fprintf(stdout, "  Data dir:      %s\n", summary.DataDir)
 	if summary.KernelURL != "" {
@@ -1809,7 +1879,7 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 		// repair. Printing the repair command after every success — including a
 		// clean install and a removal preview — trained users to treat repair
 		// as routine and gave the lifecycle no terminal "you're done" state.
-		fmt.Fprintf(stdout, "  Next:          restart %s to activate governance\n", summary.Target)
+		fmt.Fprintf(stdout, "  Next:          %s\n", setupNextAction(summary))
 	}
 	if summary.RetainedData {
 		fmt.Fprintln(stdout, "  Local state:   retained (keys, evidence, and receipts were not removed)")
@@ -1852,7 +1922,8 @@ func installSetupMCP(opts setupOptions, bin string) error {
 		}
 		return setupExecCommand(setupCommandDir(opts), "codex", "mcp", "add", setupMCPServerName, "--", bin, "mcp", "serve", "--transport", "stdio", "--data-dir", opts.DataDir)
 	case "hermes":
-		return upsertHermesMCP(setupClientConfigPath(opts), bin, opts.DataDir, setupPrivateFileRoot(opts))
+		// Hermes MCP is unverified. The hop is the fail-closed shell hook.
+		return nil
 	default:
 		return fmt.Errorf("unsupported target %q", opts.Target)
 	}
@@ -2011,7 +2082,7 @@ func setupHookMatcher(target string) string {
 	case "codex":
 		return "^(Bash|apply_patch|mcp__.*)$"
 	case "hermes":
-		return "^(terminal|write_file|patch|mcp__.*)$"
+		return "^(terminal|write_file|patch|mcp_.*)$"
 	default:
 		return "^(Bash|Edit|Write|MultiEdit|mcp__.*)$"
 	}

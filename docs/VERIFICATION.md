@@ -1,6 +1,6 @@
 ---
 title: Receipts
-last_reviewed: 2026-07-10
+last_reviewed: 2026-08-19
 ---
 
 # Receipts
@@ -31,6 +31,15 @@ effect scope.
 helm-ai-kernel mcp receipts --json
 helm-ai-kernel mcp pending --json
 helm-ai-kernel boundary records --json
+```
+
+For a Kernel evaluate `receipt.v5` file copied off-box (Foundation/offline
+verify, not AI OS live, not #859, not self-attested EvidencePack):
+
+```bash
+helm-ai-kernel verify receipt \
+  --receipt <data-dir>/receipts/evaluate/<receipt_id>.json \
+  --trusted-public-key-file <data-dir>/receipts/evaluate/expected-ed25519.pub
 ```
 
 For a single workstation receipt:

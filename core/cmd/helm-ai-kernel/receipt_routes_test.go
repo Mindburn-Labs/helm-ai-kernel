@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -190,6 +192,60 @@ func TestPersistDecisionReceiptSignsAndStoresReceipt(t *testing.T) {
 	}
 	if store.stored.Timestamp != decision.Timestamp {
 		t.Fatalf("timestamp = %s, want %s", store.stored.Timestamp, decision.Timestamp)
+	}
+}
+
+func TestPersistDecisionReceiptWritesPortableJSONFile(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataDir := t.TempDir()
+	store := &captureReceiptStore{}
+	svc := &Services{DataDir: dataDir, ReceiptStore: store, ReceiptSigner: signer}
+	decision := &contracts.DecisionRecord{
+		ID:                 "dec-portable",
+		Action:             "EXECUTE_TOOL",
+		Verdict:            string(contracts.VerdictDeny),
+		ReasonCode:         string(contracts.ReasonEmergencyStopFenced),
+		PolicyContentHash:  "sha256:policy-content",
+		PolicyDecisionHash: "sha256:pdp",
+		InputContext:       map[string]any{"session_id": "session-portable"},
+		Timestamp:          time.Unix(1700000000, 0).UTC(),
+	}
+
+	if err := persistDecisionReceipt(context.Background(), svc, decision, "agent.test", []byte("EXECUTE_TOOL:tool"), map[string]any{"source": "api.evaluate"}); err != nil {
+		t.Fatalf("persist receipt: %v", err)
+	}
+	if store.stored == nil {
+		t.Fatal("receipt was not stored")
+	}
+	path := portableEvaluateReceiptPath(dataDir, store.stored.ReceiptID)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("portable receipt file missing: %v", err)
+	}
+	offBox := filepath.Join(t.TempDir(), "copied-receipt.json")
+	if err := os.WriteFile(offBox, raw, 0o600); err != nil {
+		t.Fatalf("copy portable receipt off-box: %v", err)
+	}
+	var copied contracts.Receipt
+	if err := json.Unmarshal(raw, &copied); err != nil {
+		t.Fatalf("decode portable receipt: %v", err)
+	}
+	if copied.SignatureVersion != contracts.ReceiptSignatureV5 || copied.ReceiptID != store.stored.ReceiptID {
+		t.Fatalf("portable receipt = %+v", copied)
+	}
+	valid, err := signer.VerifyReceipt(&copied)
+	if err != nil || !valid {
+		t.Fatalf("copied portable receipt signature invalid: valid=%v err=%v", valid, err)
+	}
+	pubRaw, err := os.ReadFile(portableEvaluatePublicKeyPath(dataDir))
+	if err != nil {
+		t.Fatalf("portable public key missing: %v", err)
+	}
+	if strings.TrimSpace(string(pubRaw)) != signer.PublicKey() {
+		t.Fatalf("portable public key = %q, want %q", strings.TrimSpace(string(pubRaw)), signer.PublicKey())
 	}
 }
 

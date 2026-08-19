@@ -84,6 +84,8 @@ func TestCLIErrorFormatterGolden(t *testing.T) {
 			"Error: receipts: unknown command: bogus"},
 		{"verify decision-receipt missing file", "verify", []string{"decision-receipt"}, 2,
 			"Error: verify decision-receipt: provide a receipt file (positional argument or --file)"},
+		{"verify receipt missing flags", "verify", []string{"receipt"}, 2,
+			"Error: verify receipt: --receipt and --trusted-public-key-file are required"},
 		{"verify entry missing proof", "verify", []string{"--entry", "receipts/x.json"}, 2,
 			"Error: verify entry: --proof <file> is required for single-entry verification"},
 		{"export aat missing inputs", "export", []string{"aat"}, 2,

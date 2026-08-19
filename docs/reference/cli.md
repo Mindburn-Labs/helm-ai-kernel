@@ -1,6 +1,6 @@
 ---
 title: CLI
-last_reviewed: 2026-07-16
+last_reviewed: 2026-08-19
 ---
 
 <!-- quantum_posture: this page documents CLI use of classical Ed25519 receipt checks and adds no post-quantum cryptographic control. -->
@@ -65,6 +65,7 @@ helm-ai-kernel boundary verify --record-id <record-id> --json
 helm-ai-kernel receipts tail --agent <agent-id>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-public-key-file <expected-ed25519-public-key>
+helm-ai-kernel verify receipt --receipt <receipt.v5.json> --trusted-public-key-file <expected-ed25519.pub>
 ```
 
 `ALLOW`, `DENY`, and `ESCALATE` records include a reason code. `DENY` and
@@ -73,6 +74,11 @@ helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-pu
 Workstation verification exits successfully only when receipt integrity and
 the signer trust anchor both verify. A signature that validates against the
 key embedded in a receipt is not, by itself, proof of an expected signer.
+
+`verify receipt` is the Foundation/offline path for a Kernel `receipt.v5`
+evaluate file. It is not AI OS live, not helm-ai-kernel#859, and not
+self-attested EvidencePack verify. Exit 0 requires the caller-supplied
+`--trusted-public-key-file`.
 
 ## OpenAI-Compatible Proxy
 

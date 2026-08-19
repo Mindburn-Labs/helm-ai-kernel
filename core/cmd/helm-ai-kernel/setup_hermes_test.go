@@ -233,3 +233,92 @@ func TestSetupHermesApprovalSurvivesConcurrentWriters(t *testing.T) {
 		t.Errorf("approvals = %d after %d concurrent installs, want 1 (interleaved read-modify-write)", len(allow.Approvals), writers)
 	}
 }
+
+// TestSetupHermesRemoveIsAFullRoundTrip closes the asymmetry an adversarial
+// review raised: HELM writes into two third-party consent stores, so a grant it
+// can write and only a human can withdraw by hand is a self-grant in effect.
+// Removal must undo exactly what install wrote and nothing else.
+func TestSetupHermesRemoveIsAFullRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	configPath := filepath.Join(home, hermesConfigFilename)
+	operatorHook := "# operator comment\nmodel:\n  provider: anthropic\nhooks:\n  pre_tool_call:\n    - command: /opt/mine/guard.sh\n      fail_closed: true\n"
+	if err := os.WriteFile(configPath, []byte(operatorHook), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := runSetupHermesCmd([]string{"--hermes-home", home, "--data-dir", t.TempDir()}, &stdout, &stderr); code != 0 {
+		t.Fatalf("install = %d, stderr=%s", code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := runSetupRemoveHermesCmd([]string{"--hermes-home", home}, &stdout, &stderr); code != 0 {
+		t.Fatalf("remove = %d, stderr=%s", code, stderr.String())
+	}
+
+	after, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(after)
+	if strings.Contains(text, "--client hermes") {
+		t.Errorf("remove left HELM's hook entry behind:\n%s", text)
+	}
+	if !strings.Contains(text, "/opt/mine/guard.sh") {
+		t.Errorf("remove took the operator's hook with it:\n%s", text)
+	}
+	if !strings.Contains(text, "# operator comment") {
+		t.Errorf("remove dropped the operator's comment:\n%s", text)
+	}
+
+	allowRaw, err := os.ReadFile(filepath.Join(home, hermesAllowlistFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var allow struct {
+		Approvals []struct {
+			Command string `json:"command"`
+		} `json:"approvals"`
+	}
+	if err := json.Unmarshal(allowRaw, &allow); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range allow.Approvals {
+		if isHelmHermesHookCommand(a.Command) {
+			t.Errorf("remove left a HELM approval behind: %q", a.Command)
+		}
+	}
+
+	// Removing twice is not an error and reports honestly.
+	stdout.Reset()
+	if code := runSetupRemoveHermesCmd([]string{"--hermes-home", home}, &stdout, &stderr); code != 0 {
+		t.Errorf("second remove = %d, want 0", code)
+	}
+	if !strings.Contains(stdout.String(), "Nothing to remove") {
+		t.Errorf("second remove did not report a no-op: %s", stdout.String())
+	}
+}
+
+func TestSetupGrokRemoveDeletesOnlyHelmsFile(t *testing.T) {
+	home := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	if code := runSetupGrokCmd([]string{"--grok-home", home, "--data-dir", t.TempDir()}, &stdout, &stderr); code != 0 {
+		t.Fatalf("install = %d", code)
+	}
+	other := filepath.Join(home, grokHooksDirName, "operator-own.json")
+	if err := os.WriteFile(other, []byte(`{"hooks":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	if code := runSetupRemoveGrokCmd([]string{"--grok-home", home}, &stdout, &stderr); code != 0 {
+		t.Fatalf("remove = %d, stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, grokHooksDirName, grokHookFilename)); !os.IsNotExist(err) {
+		t.Error("remove left HELM's hook file behind")
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("remove deleted an operator hook file: %v", err)
+	}
+}

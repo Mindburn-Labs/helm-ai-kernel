@@ -167,6 +167,14 @@ func runSetupCmd(args []string, stdout, stderr io.Writer) int {
 	case "repair":
 		return runSetupRepairCmd(args[1:], stdout, stderr)
 	case "remove":
+		if len(args) > 1 {
+			switch args[1] {
+			case "hermes":
+				return runSetupRemoveHermesCmd(args[2:], stdout, stderr)
+			case "grok":
+				return runSetupRemoveGrokCmd(args[2:], stdout, stderr)
+			}
+		}
 		return runSetupRemoveCmd(args[1:], stdout, stderr)
 	case "hermes":
 		return runSetupHermesCmd(args[1:], stdout, stderr)
@@ -937,6 +945,8 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "Choose a local agent profile (project scope is the default):")
 	fmt.Fprintln(w, "  helm-ai-kernel setup claude-code --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --yes")
+	fmt.Fprintln(w, "  helm-ai-kernel setup hermes            # fail-closed pre_tool_call hook")
+	fmt.Fprintln(w, "  helm-ai-kernel setup grok              # native ~/.grok/hooks entry")
 	fmt.Fprintln(w, "  helm-ai-kernel setup --quickstart --profile mcp --yes")
 	fmt.Fprintln(w, "  helm-ai-kernel setup --client cursor --print-config")
 	fmt.Fprintln(w, "")
@@ -949,6 +959,8 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup repair <claude-code|codex> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup remove hermes [--hermes-home DIR] [--dry-run]   # drops HELM's hook entry and its allowlist approval")
+	fmt.Fprintln(w, "  helm-ai-kernel setup remove grok   [--grok-home DIR]   [--dry-run]")
 	fmt.Fprintln(w, "")
 	printSupportMatrix(w)
 	fmt.Fprintln(w, "")

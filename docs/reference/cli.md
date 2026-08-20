@@ -1,6 +1,6 @@
 ---
 title: CLI
-last_reviewed: 2026-08-19
+last_reviewed: 2026-08-20
 ---
 
 <!-- quantum_posture: this page documents CLI use of classical Ed25519 receipt checks and adds no post-quantum cryptographic control. -->
@@ -14,8 +14,11 @@ inspect receipts.
 
 ```bash
 helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
-helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/<run-id> --profile dev-local --json
+helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> --profile dev-local --allow-self-attested --json
 ```
+
+The explicit opt-in accepts the locally generated seal as proof of internal
+consistency, not provenance.
 
 ## Local Agent Setup
 

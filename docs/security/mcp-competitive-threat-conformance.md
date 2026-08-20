@@ -1,6 +1,6 @@
 ---
 title: MCP Competitive Threat Conformance
-last_reviewed: 2026-06-09
+last_reviewed: 2026-08-13
 ---
 
 # MCP Competitive Threat Conformance
@@ -24,8 +24,11 @@ helm-ai-kernel mcp proof \
 Then verify the EvidencePack reported by the command:
 
 ```bash
-helm-ai-kernel verify --bundle /tmp/helm-mcp-proof/public_mcp_proof/evidencepacks/public_mcp_proof --profile dev-local --json
+helm-ai-kernel verify --bundle /tmp/helm-mcp-proof/public_mcp_proof/evidencepacks/public_mcp_proof --profile dev-local --allow-self-attested --json
 ```
+
+The explicit opt-in accepts the proof run's locally generated seal as evidence
+of internal consistency, not provenance.
 
 ## Golden Cases
 

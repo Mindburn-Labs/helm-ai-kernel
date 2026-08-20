@@ -10,6 +10,10 @@ import (
 )
 
 func TestRunMCPProofProducesNoDispatchEvidencePack(t *testing.T) {
+	t.Setenv("HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX", "")
+	t.Setenv("HELM_EVIDENCE_SIGNER_PUBLIC_KEY_HEX", "")
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
+
 	outRoot := t.TempDir()
 	var stdout, stderr bytes.Buffer
 
@@ -45,6 +49,25 @@ func TestRunMCPProofProducesNoDispatchEvidencePack(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outRoot, "mcp_proof_test", "verification_report.json")); err != nil {
 		t.Fatalf("verification report missing: %v", err)
+	}
+
+	var verifyStdout, verifyStderr bytes.Buffer
+	defaultArgs := []string{"--bundle", summary.EvidencePackRef, "--profile", "dev-local", "--json"}
+	if code := runVerifyCmd(defaultArgs, &verifyStdout, &verifyStderr); code != 1 {
+		t.Fatalf("default verifier code=%d, want 1; stdout=%s stderr=%s", code, verifyStdout.String(), verifyStderr.String())
+	}
+	if !strings.Contains(verifyStdout.String(), "self-attested") {
+		t.Fatalf("default verifier did not explain self-attestation: %s", verifyStdout.String())
+	}
+
+	emittedArgs := strings.Fields(summary.VerificationCommand)
+	if len(emittedArgs) < 2 || emittedArgs[0] != "helm-ai-kernel" {
+		t.Fatalf("invalid emitted verification command: %q", summary.VerificationCommand)
+	}
+	verifyStdout.Reset()
+	verifyStderr.Reset()
+	if code := runVerifyCmd(emittedArgs[1:], &verifyStdout, &verifyStderr); code != 0 {
+		t.Fatalf("emitted verification command code=%d, want 0; command=%q stdout=%s stderr=%s", code, summary.VerificationCommand, verifyStdout.String(), verifyStderr.String())
 	}
 
 	reasons := map[string]bool{}

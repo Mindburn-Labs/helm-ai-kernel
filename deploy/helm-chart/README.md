@@ -48,6 +48,7 @@ flowchart TD
   snapshot --> pod["helm-ai-kernel serve pod"]
   signing["signing-key Secret"] --> pod
   auth["admin/service API-key Secret"] --> pod
+  github["optional GitHub token Secret"] --> pod
   pvc["data volume"] --> pod
   pod --> service["ClusterIP Service"]
   service --> ingress["optional Ingress"]
@@ -74,6 +75,9 @@ flowchart TD
 | `helm.auth.adminAPIKey` | empty | Admin API key written to the generated auth secret. |
 | `helm.auth.serviceAPIKey` | empty | Service API key written to the generated auth secret. |
 | `helm.auth.existingSecret` | empty | Existing secret containing auth key entries. |
+| `helm.githubEffects.existingSecret` | empty | Existing Secret containing the GitHub token; non-empty activates the shipped signed-permit `github.*` runtime. |
+| `helm.githubEffects.tokenSecretKey` | `HELM_GITHUB_TOKEN` | Key inside the GitHub effects Secret. Raw tokens are not accepted in chart values. |
+| `helm.githubEffects.apiURL` | empty | Optional GitHub-compatible API base URL; requires `existingSecret`. Empty uses github.com. |
 | `helm.auth.tenantID` | `default` | Server-bound tenant for tenant-scoped runtime routes; request tenant headers must match. |
 | `helm.auth.principalID` | `system-admin` | Server-bound principal for tenant-scoped runtime routes; request principal headers must match. |
 | `helm.emergencyStop.commandReplayKeyring` | empty | Optional strict JSON FENCE replay-authority keyring. Use only during a deliberate command key/audience rotation. |
@@ -140,6 +144,11 @@ flowchart TD
   provide a companion `serve-policy.toml.sig` file in the same volume.
 - Keep connector credentials in Kubernetes Secrets or an external secret
   manager. Policy bundles should reference credentials, not embed raw secrets.
+- Set `helm.githubEffects.existingSecret` only when the release should register
+  the shipped `github.*` tools. Read operations dispatch under signed,
+  single-use permits and return authoritative execution receipts; bounded
+  writes remain fail-closed and do not dispatch in this runtime. Use `apiURL`
+  only for an explicitly trusted GitHub-compatible endpoint.
 - Use a persistent volume or external PostgreSQL for durable receipts and
   evidence.
 - Keep `serviceAccount.automountServiceAccountToken=false` unless CRD mode is

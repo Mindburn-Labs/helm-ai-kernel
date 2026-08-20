@@ -359,6 +359,30 @@
             }
           }
         },
+        "githubEffects": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Secret-backed activation of the shipped governed GitHub effects runtime. Reads dispatch under signed single-use permits and produce authoritative execution receipts; bounded writes remain fail-closed in this runtime.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Existing Secret containing the GitHub token. Empty keeps github.* tools unregistered."
+            },
+            "tokenSecretKey": {
+              "type": "string",
+              "minLength": 1,
+              "default": "HELM_GITHUB_TOKEN",
+              "description": "Key inside existingSecret containing HELM_GITHUB_TOKEN."
+            },
+            "apiURL": {
+              "type": "string",
+              "default": "",
+              "pattern": "^$|^https?://[^\\s]+$",
+              "description": "Optional GitHub-compatible API base URL rendered as HELM_GITHUB_API_URL. Empty uses github.com."
+            }
+          }
+        },
         "emergencyStop": {
           "type": "object",
           "additionalProperties": false,

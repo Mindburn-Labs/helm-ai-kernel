@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -144,13 +145,22 @@ func TestMountedPackRuntimeActionsReconcileIntoAllowRules(t *testing.T) {
 // tools outside the pack stay fail-closed.
 func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 	dir := t.TempDir()
-	policyPath, _ := writeMountedServePolicyFixture(t, dir, `{
-  "pack_id": "runtime-pack",
-  "version": 1,
-  "runtime_actions": [
-    {"action": "file_read", "expression": "true"}
-  ]
-}`)
+	target := filepath.Join(dir, "allowed.txt")
+	if err := os.WriteFile(target, []byte("helm-362-allow"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pack, err := json.Marshal(map[string]any{
+		"pack_id": "runtime-pack",
+		"version": 1,
+		"runtime_actions": []map[string]any{{
+			"action":     "file_read",
+			"expression": "input.effect.params.path == " + strconv.Quote(target),
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyPath, _ := writeMountedServePolicyFixture(t, dir, string(pack))
 
 	source := policyreconcile.NewMountedFileSource(policyPath, policyreconcile.DefaultScope)
 	store := policyreconcile.NewAtomicSnapshotStore()
@@ -190,13 +200,18 @@ func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 		return recorder.Body.String()
 	}
 
-	target := filepath.Join(dir, "allowed.txt")
-	if err := os.WriteFile(target, []byte("helm-362-allow"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	body := callTool(t, "file_read", map[string]any{"path": target})
 	if !strings.Contains(body, "helm-362-allow") || strings.Contains(body, "Access Denied") {
 		t.Fatalf("pack-allowed file_read did not reach ALLOW: %s", body)
+	}
+
+	deniedTarget := filepath.Join(dir, "not-allowed.txt")
+	if err := os.WriteFile(deniedTarget, []byte("must-stay-denied"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body = callTool(t, "file_read", map[string]any{"path": deniedTarget})
+	if !strings.Contains(body, "Access Denied") {
+		t.Fatalf("file_read path outside the rule was not fail-closed: %s", body)
 	}
 
 	body = callTool(t, "file_write", map[string]any{"path": filepath.Join(dir, "denied.txt"), "content": "x"})

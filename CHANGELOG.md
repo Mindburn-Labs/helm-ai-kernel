@@ -97,6 +97,12 @@ flows now include `--profile dev-local --allow-self-attested`; this accepts
 internal consistency without claiming provenance. The demos also execute that
 CLI verification before printing completion.
 
+### Fixed — executable mounted-policy chart example
+
+The Helm chart smoke fixture now scopes `file_read` through the runtime CEL
+path `input.effect.params.path`. The deployed gateway regression test executes
+that same path-scoped rule and keeps other paths and tools fail-closed.
+
 ### Fixed — governed MCP lifecycle closure and GitHub dispatch wiring
 
 Governed MCP calls rejected at the REST or JSON-RPC ingress boundary now emit

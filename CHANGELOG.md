@@ -89,6 +89,15 @@ Keep research scaffolds and hardware-backed enforcement language out of the
 public changelog until a tagged release ships source-owned tests, verifier
 evidence, and release artifacts for that exact capability.
 
+### Fixed — governed MCP lifecycle closure and GitHub dispatch wiring
+
+Governed MCP calls rejected at the REST or JSON-RPC ingress boundary now emit
+one `helm.request.received.v1` and one `helm.request.failed.v1` event without
+reaching policy evaluation or a tool handler. The Helm chart can also activate
+the existing signed-permit GitHub effects runtime through an existing Secret;
+raw GitHub tokens are never accepted as chart values, and the default remains
+off.
+
 ### Added — offline Kernel receipt.v5 file verify (Building)
 
 Evaluate persist writes a copyable `receipt.v5` JSON file under

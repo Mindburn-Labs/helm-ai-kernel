@@ -110,6 +110,8 @@ assert_not_contains "$default_rendered" "HelmPolicyBundle"
 assert_not_contains "$default_rendered" "policy-reader"
 assert_not_contains "$default_rendered" "HELM_ENV"
 assert_not_contains "$default_rendered" "HELM_SEMANTIC_THREAT_ESCALATION_BP"
+assert_not_contains "$default_rendered" "HELM_GITHUB_TOKEN"
+assert_not_contains "$default_rendered" "HELM_GITHUB_API_URL"
 assert_contains "$default_rendered" '"runtime_actions": []'
 assert_contains "$default_rendered" "name: prepare-authority-state"
 assert_contains "$default_rendered" "HELM_AUTHORITY_DATA_DIR"
@@ -177,6 +179,26 @@ if helm_runner template "$RELEASE" "$CHART" \
     exit 1
 fi
 assert_contains "$synthetic_without_telemetry_log" "telemetry.syntheticLifecycleEvents=true requires telemetry.enabled=true"
+
+github_effects_rendered="$RENDER_DIR/rendered-github-effects.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.githubEffects.existingSecret=helm-github-effects \
+    --set helm.githubEffects.apiURL=http://github-api.qa.svc.cluster.local >"$github_effects_rendered"
+assert_contains "$github_effects_rendered" "HELM_GITHUB_TOKEN"
+assert_contains "$github_effects_rendered" "name: helm-github-effects"
+assert_contains "$github_effects_rendered" "key: HELM_GITHUB_TOKEN"
+assert_contains "$github_effects_rendered" "HELM_GITHUB_API_URL"
+assert_contains "$github_effects_rendered" "http://github-api.qa.svc.cluster.local"
+
+github_effects_missing_secret_log="$RENDER_DIR/github-effects-missing-secret.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.githubEffects.apiURL=http://github-api.qa.svc.cluster.local >"$RENDER_DIR/github-effects-missing-secret.yaml" 2>"$github_effects_missing_secret_log"; then
+    echo "::error::GitHub effects API URL without a token Secret unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$github_effects_missing_secret_log" "helm.githubEffects.apiURL requires helm.githubEffects.existingSecret"
 
 runtime_actions_rendered="$RENDER_DIR/rendered-runtime-actions.yaml"
 helm_runner template "$RELEASE" "$CHART" \

@@ -57,6 +57,9 @@
 {{- if and .Values.telemetry.syntheticLifecycleEvents (not .Values.telemetry.enabled) -}}
 {{- fail "telemetry.syntheticLifecycleEvents=true requires telemetry.enabled=true" -}}
 {{- end -}}
+{{- if and .Values.helm.githubEffects.apiURL (not .Values.helm.githubEffects.existingSecret) -}}
+{{- fail "helm.githubEffects.apiURL requires helm.githubEffects.existingSecret" -}}
+{{- end -}}
 {{- if not (regexMatch "^.+@sha256:[0-9a-f]{64}$" .Values.runtimeInit.image) -}}
 {{- fail "runtimeInit.image must be pinned by immutable sha256 digest" -}}
 {{- end -}}
@@ -344,6 +347,17 @@ spec:
                 secretKeyRef:
                   name: {{ include "helm-ai-kernel.authSecretName" . }}
                   key: {{ .Values.helm.auth.serviceAPIKeySecretKey }}
+            {{- end }}
+            {{- if .Values.helm.githubEffects.existingSecret }}
+            - name: HELM_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.helm.githubEffects.existingSecret }}
+                  key: {{ required "helm.githubEffects.tokenSecretKey is required when helm.githubEffects.existingSecret is set" .Values.helm.githubEffects.tokenSecretKey }}
+            {{- if .Values.helm.githubEffects.apiURL }}
+            - name: HELM_GITHUB_API_URL
+              value: {{ .Values.helm.githubEffects.apiURL | quote }}
+            {{- end }}
             {{- end }}
             - name: HELM_RUNTIME_TENANT_ID
               value: {{ .Values.helm.auth.tenantID | quote }}

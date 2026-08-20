@@ -203,8 +203,8 @@ assert_contains "$github_effects_missing_secret_log" "helm.githubEffects.apiURL 
 runtime_actions_rendered="$RENDER_DIR/rendered-runtime-actions.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
-    --set-json 'helm.policy.runtimeActions=[{"action":"file_read","expression":"input.path == \"/etc/hostname\""}]' >"$runtime_actions_rendered"
-assert_contains "$runtime_actions_rendered" '"runtime_actions": [{"action":"file_read","expression":"input.path == \"/etc/hostname\""}]'
+    --set-json 'helm.policy.runtimeActions=[{"action":"file_read","expression":"input.effect.params.path == \"/etc/hostname\""}]' >"$runtime_actions_rendered"
+assert_contains "$runtime_actions_rendered" '"runtime_actions": [{"action":"file_read","expression":"input.effect.params.path == \"/etc/hostname\""}]'
 
 semantic_escalation_rendered="$RENDER_DIR/rendered-semantic-escalation.yaml"
 helm_runner template "$RELEASE" "$CHART" \

@@ -31,8 +31,14 @@ func TestDemoTerminalSummaryCard(t *testing.T) {
 	if strings.Contains(output, "run-report."+"html") {
 		t.Error("summary card should not reference HTML reports")
 	}
-	if !strings.Contains(output, "helm-ai-kernel verify") {
-		t.Error("missing verify command in summary card")
+	if !strings.Contains(output, "--profile dev-local --allow-self-attested") {
+		t.Error("missing explicit dev-local self-attested verify command in summary card")
+	}
+	if !strings.Contains(output, "VERIFIED") {
+		t.Error("demo did not run the offline CLI verifier")
+	}
+	if strings.Contains(output, "Deny path:     fail-closed verified") || strings.Contains(output, "Maintenance:   incident auto-resolved with conformance") {
+		t.Error("demo should not print constant verification claims")
 	}
 	if !strings.Contains(output, "opensandbox") {
 		t.Error("missing provider switch hint in summary card")

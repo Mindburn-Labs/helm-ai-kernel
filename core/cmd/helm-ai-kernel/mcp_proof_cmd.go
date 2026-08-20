@@ -151,7 +151,7 @@ func runMCPProof(args []string, stdout, stderr io.Writer) int {
 		GeneratedAt:         generatedAt.Format(time.RFC3339),
 		EvidencePackRef:     packDir,
 		EvidencePackArchive: archivePath,
-		VerificationCommand: fmt.Sprintf("helm-ai-kernel verify --bundle %s --profile dev-local --json", packDir),
+		VerificationCommand: evidencepkg.BuildEvidencePackVerifyCommand(packDir, evidencepkg.EvidenceTrustProfileDevLocal, "") + " --json",
 		Scenarios:           results,
 	}
 	if verify {

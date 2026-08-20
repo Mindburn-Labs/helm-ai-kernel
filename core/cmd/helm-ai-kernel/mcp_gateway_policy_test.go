@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -153,7 +154,7 @@ func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 		"version": 1,
 		"runtime_actions": []map[string]any{{
 			"action":     "file_read",
-			"expression": `input.effect.params.path == "` + target + `"`,
+			"expression": "input.effect.params.path == " + strconv.Quote(target),
 		}},
 	})
 	if err != nil {

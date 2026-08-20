@@ -86,18 +86,23 @@ func TestCatalog_ConcurrentRegisterAndSearch(t *testing.T) {
 // ── Session TTL Boundary ────────────────────────────────────
 
 func TestSessionStore_AccessRefreshesTTL(t *testing.T) {
-	s := NewSessionStore(100 * time.Millisecond)
+	ttl := 250 * time.Millisecond
+	s := NewSessionStore(ttl)
 	defer s.Stop()
 	id, _ := s.Create("v1", "c")
-	time.Sleep(60 * time.Millisecond)
+	time.Sleep(ttl / 3)
 	session := s.Get(id) // should refresh LastAccess
 	if session == nil {
 		t.Fatal("session should still be alive after refresh")
 	}
-	time.Sleep(60 * time.Millisecond)
+	firstRefresh := session.LastAccess
+	time.Sleep(ttl / 3)
 	session = s.Get(id) // refresh again
 	if session == nil {
 		t.Fatal("session should still be alive after second refresh within TTL")
+	}
+	if !session.LastAccess.After(firstRefresh) {
+		t.Fatal("session access should advance LastAccess")
 	}
 }
 

@@ -198,7 +198,7 @@ signed closure are promoted together through the deployed Data Plane.
 | Schema                                         | Conformance | Status    | Description                   |
 | ---------------------------------------------- | ----------- | --------- | ----------------------------- |
 | `orgdna/orggenome.v1.schema.json`              | L2          | normative | Organization genome           |
-| `orgdna/orgphenotype.schema.json`              | L2          | normative | Compiled organization runtime |
+| `orgdna/orgphenotype.schema.json`              | L2          | normative | Compiled organization configuration input; not the live OrganizationRuntime |
 | `orgdna/module.schema.json`                    | L2          | normative | Organization module           |
 | `orgdna/environment_profile.schema.json`       | L2          | normative | Environment bindings          |
 | `morphogenesis/confluence_strategy.schema.json` | L2         | normative | Morphogenesis confluence      |

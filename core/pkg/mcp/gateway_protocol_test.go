@@ -14,12 +14,102 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGatewayGovernedIngressRejectionsPublishClosedLifecycle(t *testing.T) {
+	t.Setenv("HELM_ENV", events.EnvSynthetic)
+	transportCatalog := NewInMemoryCatalog()
+	for _, tool := range []ToolRef{
+		{
+			Name: "read",
+			Schema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"path": map[string]any{"type": "string"}},
+				"required":   []string{"path"},
+			},
+		},
+		{Name: "scoped", Schema: map[string]any{"type": "object"}, RequiredScopes: []string{"mcp:tool:scoped"}},
+	} {
+		require.NoError(t, transportCatalog.Register(context.Background(), tool))
+	}
+
+	governanceCatalog := NewToolCatalog()
+	for _, name := range []string{"read", "scoped"} {
+		require.NoError(t, governanceCatalog.Register(context.Background(), ToolRef{
+			Name: name, EffectClass: "E0", RiskTier: contracts.RiskTierLow,
+		}))
+	}
+	capture := &lifecycleCapture{}
+	evaluatorCalls := 0
+	handlerCalls := 0
+	firewall := NewGovernanceFirewall(
+		lifecycleEvaluator{calls: &evaluatorCalls, decision: &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)}},
+		governanceCatalog,
+		WithLifecyclePublisher(capture.publish),
+	)
+	gateway := NewGateway(
+		transportCatalog,
+		GatewayConfig{AuthMode: "oauth"},
+		WithGovernedExecutor(firewall.GovernedExecutor(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+			handlerCalls++
+			return ToolExecutionResponse{Content: "unexpected"}, nil
+		})),
+	)
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	tests := []struct {
+		name       string
+		tool       string
+		arguments  map[string]any
+		reasonCode string
+		status     int
+	}{
+		{name: "unknown", tool: "missing", reasonCode: string(contracts.ReasonNoPolicy), status: http.StatusNotFound},
+		{name: "schema", tool: "read", arguments: map[string]any{}, reasonCode: string(contracts.ReasonSchemaViolation), status: http.StatusBadRequest},
+		{name: "scope", tool: "scoped", reasonCode: "MCP.OAUTH.INSUFFICIENT_SCOPE", status: http.StatusForbidden},
+	}
+	for _, transport := range []string{"rest", "jsonrpc"} {
+		for _, tt := range tests {
+			t.Run(transport+"/"+tt.name, func(t *testing.T) {
+				start := len(capture.events)
+				if transport == "rest" {
+					body, err := json.Marshal(MCPToolCallRequest{Method: tt.tool, Params: tt.arguments})
+					require.NoError(t, err)
+					req := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+					rec := httptest.NewRecorder()
+					mux.ServeHTTP(rec, req)
+					require.Equal(t, tt.status, rec.Code)
+				} else {
+					rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+						"jsonrpc": "2.0",
+						"id":      42,
+						"method":  "tools/call",
+						"params":  map[string]any{"name": tt.tool, "arguments": tt.arguments},
+					}, nil)
+					require.Equal(t, http.StatusOK, rec.Code)
+					require.Contains(t, rec.Body.String(), "error")
+				}
+
+				sequence := capture.events[start:]
+				require.NoError(t, events.ValidateRequestSequence(sequence))
+				require.Equal(t, 1, countEvent(sequence, events.RequestReceived))
+				require.Equal(t, 1, countEvent(sequence, events.RequestFailed))
+				require.Zero(t, countEvent(sequence, events.RequestClassified))
+				require.Equal(t, "ingress", fieldString(sequence, events.RequestFailed, "failure_class"))
+				require.Equal(t, tt.reasonCode, fieldString(sequence, events.RequestFailed, "reason_code"))
+			})
+		}
+	}
+	require.Zero(t, evaluatorCalls)
+	require.Zero(t, handlerCalls)
+}
 
 func TestGateway_StreamableInitializeNegotiatesProtocol(t *testing.T) {
 	mux := newProtocolTestMux(t, GatewayConfig{}, nil)

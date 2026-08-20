@@ -34,6 +34,12 @@ type ToolExecutionRequest struct {
 	RequiredScopes []string `json:"required_scopes,omitempty"`
 	OAuthScopes    []string `json:"oauth_scopes,omitempty"`
 	OAuthResources []string `json:"oauth_resources,omitempty"`
+
+	// ingressFailureReasonCode is set only by the trusted Gateway after it has
+	// rejected a syntactically valid tool call before policy evaluation. Keeping
+	// it private prevents callers from bypassing governance through the wire
+	// contract while allowing the lifecycle wrapper to close the request.
+	ingressFailureReasonCode string
 }
 
 // ToolExecutionResponse represents the result of a tool execution.
@@ -280,6 +286,10 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 				Tool:     req.ToolName,
 			},
 		))
+		if req.ingressFailureReasonCode != "" {
+			emitFailure(req.ingressFailureReasonCode, "ingress")
+			return deniedResponse(fmt.Errorf("MCP ingress rejected: %s", req.ingressFailureReasonCode)), nil
+		}
 		decisionCtx, preflightErr := f.prepareToolExecution(req)
 		if preflightErr != nil {
 			emitFailure(string(preflightReasonCode(f, req)), "preflight")

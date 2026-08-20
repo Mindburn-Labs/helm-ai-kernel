@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -299,9 +300,11 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{Error: "invalid request body"})
 		return
 	}
+	execReq := toolExecutionRequestFromHTTP(r, req.Method, req.Params)
 
 	tool, ok := findToolRef(g.catalog, req.Method)
 	if !ok {
+		g.recordGovernedIngressFailure(r.Context(), execReq, string(contracts.ReasonNoPolicy))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
@@ -310,7 +313,9 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	execReq.RequiredScopes = append([]string(nil), tool.RequiredScopes...)
 	if !g.hasRequiredScopes(r.Context(), tool) {
+		g.recordGovernedIngressFailure(r.Context(), execReq, "MCP.OAUTH.INSUFFICIENT_SCOPE")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
@@ -323,6 +328,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	// 1. Validate and canonicalize args via PEP boundary
 	argsHash, err := ValidateToolArguments(tool, req.Params)
 	if err != nil {
+		g.recordGovernedIngressFailure(r.Context(), execReq, string(contracts.ReasonSchemaViolation))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
@@ -336,28 +342,6 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	resp := MCPToolCallResponse{ArgsHash: argsHash}
 
 	if g.exec != nil {
-		// Build execution request with delegation context from headers.
-		execReq := ToolExecutionRequest{
-			ToolName:       req.Method,
-			Arguments:      req.Params,
-			SessionID:      fmt.Sprintf("mcp-http-%s-%p", r.RemoteAddr, r),
-			RequiredScopes: append([]string(nil), tool.RequiredScopes...),
-		}
-		if auth, ok := OAuthAuthorizationFromContext(r.Context()); ok {
-			execReq.OAuthScopes = append([]string(nil), auth.Scopes...)
-			execReq.OAuthResources = append([]string(nil), auth.Resources...)
-		}
-		if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
-			execReq.DelegationSessionID = delegationID
-			execReq.DelegationVerifier = r.Header.Get("X-HELM-Delegation-Verifier")
-			if allowedCSV := r.Header.Get("X-HELM-Delegation-Allowed-Tools"); allowedCSV != "" {
-				for _, t := range strings.Split(allowedCSV, ",") {
-					if trimmed := strings.TrimSpace(t); trimmed != "" {
-						execReq.DelegationAllowedTools = append(execReq.DelegationAllowedTools, trimmed)
-					}
-				}
-			}
-		}
 		execResp, execErr := g.exec(r.Context(), execReq)
 		if execErr != nil {
 			w.Header().Set("Content-Type", "application/json")
@@ -524,30 +508,25 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if err := json.Unmarshal(params, &req); err != nil {
 			return writeError(-32602, "invalid tools/call params")
 		}
+		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, "mcp-http-jsonrpc")
 		tool, ok := findToolRef(g.catalog, req.Name)
 		if !ok {
+			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonNoPolicy))
 			return writeError(-32602, fmt.Sprintf("tool %q not found", req.Name))
 		}
+		execReq.RequiredScopes = append([]string(nil), tool.RequiredScopes...)
 		if !g.hasRequiredScopes(ctx, tool) {
+			g.recordGovernedIngressFailure(ctx, execReq, "MCP.OAUTH.INSUFFICIENT_SCOPE")
 			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
 		}
 		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
+			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonSchemaViolation))
 			return writeError(-32602, fmt.Sprintf("PEP validation failed: %v", err))
 		}
 		if g.exec == nil {
 			return writeError(-32603, "tool executor is not configured")
 		}
 
-		execReq := ToolExecutionRequest{
-			ToolName:       req.Name,
-			Arguments:      req.Arguments,
-			SessionID:      "mcp-http-jsonrpc",
-			RequiredScopes: append([]string(nil), tool.RequiredScopes...),
-		}
-		if auth, ok := OAuthAuthorizationFromContext(ctx); ok {
-			execReq.OAuthScopes = append([]string(nil), auth.Scopes...)
-			execReq.OAuthResources = append([]string(nil), auth.Resources...)
-		}
 		execResp, err := g.exec(ctx, execReq)
 		if err != nil {
 			return writeError(-32603, err.Error())
@@ -556,6 +535,39 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		return response, true, http.StatusOK
 	default:
 		return writeError(-32601, fmt.Sprintf("method %q not found", method))
+	}
+}
+
+func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string) ToolExecutionRequest {
+	req := ToolExecutionRequest{ToolName: toolName, Arguments: arguments, SessionID: sessionID}
+	if auth, ok := OAuthAuthorizationFromContext(ctx); ok {
+		req.OAuthScopes = append([]string(nil), auth.Scopes...)
+		req.OAuthResources = append([]string(nil), auth.Resources...)
+	}
+	return req
+}
+
+func toolExecutionRequestFromHTTP(r *http.Request, toolName string, arguments map[string]any) ToolExecutionRequest {
+	req := newToolExecutionRequest(r.Context(), toolName, arguments, fmt.Sprintf("mcp-http-%s-%p", r.RemoteAddr, r))
+	if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
+		req.DelegationSessionID = delegationID
+		req.DelegationVerifier = r.Header.Get("X-HELM-Delegation-Verifier")
+		for _, tool := range strings.Split(r.Header.Get("X-HELM-Delegation-Allowed-Tools"), ",") {
+			if tool = strings.TrimSpace(tool); tool != "" {
+				req.DelegationAllowedTools = append(req.DelegationAllowedTools, tool)
+			}
+		}
+	}
+	return req
+}
+
+func (g *Gateway) recordGovernedIngressFailure(ctx context.Context, req ToolExecutionRequest, reasonCode string) {
+	if !g.governed || g.exec == nil {
+		return
+	}
+	req.ingressFailureReasonCode = reasonCode
+	if _, err := g.exec(ctx, req); err != nil {
+		slog.Warn("mcp_gateway: lifecycle ingress rejection publication failed", "reason_code", reasonCode)
 	}
 }
 

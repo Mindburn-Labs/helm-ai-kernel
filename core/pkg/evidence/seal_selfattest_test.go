@@ -1,5 +1,8 @@
 package evidence
 
+// quantum_posture: these tests exercise classical Ed25519 self-attested seal
+// trust gating only; they do not assert post-quantum signature resistance.
+
 import (
 	"strings"
 	"testing"

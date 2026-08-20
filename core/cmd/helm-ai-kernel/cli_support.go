@@ -40,7 +40,7 @@ func printFrontDoor(out io.Writer) {
 		{
 			Status: ui.StatusWait,
 			Title:  "Connect the coding agent you use",
-			Detail: "helm-ai-kernel setup codex, helm-ai-kernel setup claude-code, helm-ai-kernel setup hermes --scope user, or helm-ai-kernel setup deepseek --scope user. Interactive terminals show the scoped change before confirmation.",
+			Detail: "helm-ai-kernel setup codex, helm-ai-kernel setup claude-code, or helm-ai-kernel setup hermes --scope user. Also setup deepseek --scope user. Interactive terminals show the scoped change before confirmation.",
 		},
 		{
 			Status: ui.StatusWait,

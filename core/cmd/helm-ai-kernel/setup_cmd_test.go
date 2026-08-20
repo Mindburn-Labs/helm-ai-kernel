@@ -42,6 +42,7 @@ func TestSetupNoArgsPrintsChooser(t *testing.T) {
 		"helm-ai-kernel setup claude-code --yes",
 		"helm-ai-kernel setup codex --yes",
 		"helm-ai-kernel setup hermes --scope user --yes",
+		"helm-ai-kernel setup deepseek --scope user --yes",
 		"helm-ai-kernel setup --quickstart --profile mcp --yes",
 		"helm-ai-kernel setup --client cursor --print-config",
 		"project scope is the default",
@@ -631,7 +632,7 @@ func TestSetupJSONSupportMatrix(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &matrix); err != nil {
 		t.Fatalf("support matrix JSON: %v\n%s", err, stdout.String())
 	}
-	for _, want := range []string{"claude-code", "codex", "hermes"} {
+	for _, want := range []string{"claude-code", "codex", "hermes", "deepseek"} {
 		if !containsSetupString(matrix.DirectSetup, want) {
 			t.Fatalf("direct setup missing %q: %#v", want, matrix.DirectSetup)
 		}
@@ -1403,7 +1404,7 @@ func TestSetupUserScopeRequiresAbsoluteHomeEvenWithDataDir(t *testing.T) {
 			name := strings.Join(command[1:3], "-")
 			t.Run(home+"/"+name, func(t *testing.T) {
 				t.Setenv("HOME", home)
-				for _, target := range []string{"claude-code", "codex", "hermes"} {
+				for _, target := range []string{"claude-code", "codex", "hermes", "deepseek"} {
 					opts := setupOptions{Target: target, Scope: "user"}
 					if path := setupClientConfigPath(opts); path != "" {
 						t.Fatalf("HOME=%q %s client path = %q, want empty", home, target, path)

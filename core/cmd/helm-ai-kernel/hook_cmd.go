@@ -103,7 +103,7 @@ func runHookPreToolCmd(args []string, stdin io.Reader, stdout, stderr io.Writer)
 	opts := hookOptions{DataDir: defaultSetupDataDir()}
 	fs := flag.NewFlagSet("hook pre-tool", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code, codex, or hermes")
+	fs.StringVar(&opts.Client, "client", "", "Client name: claude-code, codex, hermes, or deepseek")
 	fs.StringVar(&opts.DataDir, "data-dir", opts.DataDir, "Directory for HELM local state")
 	fs.StringVar(&opts.PolicyProfile, "policy-profile", "", "Policy profile JSON path")
 	fs.StringVar(&opts.PolicyProfileSHA256, "policy-profile-sha256", "", "Approved SHA-256 digest for the policy profile")
@@ -237,6 +237,10 @@ func emitHookDenyOrFail(stdout, stderr io.Writer, client, reason string) int {
 		// Hermes block — that combination is fail-open.
 		return hermesBlockExitCode
 	}
+	// Claude Code, Codex, and DeepSeek Harness (dsh-hooks-claude-code via
+	// dsh-hook-protocol parseHookOutput) honor PreToolUse
+	// hookSpecificOutput.permissionDecision=deny with matching hookEventName
+	// on exit 0. Hermes {"action":"block"} + exit 0 is not a DSH block.
 	if err := writeHookDeny(stdout, reason); err != nil {
 		fmt.Fprintf(stderr, "hook pre-tool: emit denial: %v\n", err)
 		return 2
@@ -293,8 +297,78 @@ func hermesPreToolCallBlocks(stdout string, exitCode int) bool {
 	return false
 }
 
+func isPreToolShellTool(tool string) bool {
+	switch strings.ToLower(strings.TrimSpace(tool)) {
+	case "bash", "pwsh", "terminal", "terminal_open", "terminal_send", "terminal_signal":
+		return true
+	default:
+		return false
+	}
+}
+
+func isPreToolWriteTool(tool string) bool {
+	switch strings.ToLower(strings.TrimSpace(tool)) {
+	case "edit", "write", "multiedit", "apply_patch", "write_file", "patch", "str_replace_editor":
+		return true
+	default:
+		return false
+	}
+}
+
+// dshPreToolUseBlocks mirrors @deepseek-ai/dsh-hook-protocol parseHookOutput
+// plus mergeHookOutputs, then the stock dsh-hooks-claude-code /
+// dsh-hooks-codex PreToolUse mapping (`merged.decision === 'deny'`).
+//
+// Evidence (deepseek-ai/deepseek-harness packages/hooks/hook-protocol/src/codec.ts
+// and merge.ts, packages/hooks/hooks-claude-code/src/index.ts):
+//   - exit 2 sets decision "block"; merge folds block/deny → deny → blocks
+//   - exit 0 JSON hookSpecificOutput.permissionDecision=deny with
+//     hookEventName=PreToolUse → deny → blocks
+//   - exit 0 top-level decision "block" (not "deny") → block → merge deny → blocks
+//   - exit 0 Hermes {"action":"block"} is ignored (no `action` field) → not a block
+//   - mismatched or missing hookEventName discards permissionDecision
+func dshPreToolUseBlocks(stdout string, exitCode int) bool {
+	return dshMergedPreToolDecision(stdout, exitCode) == "deny"
+}
+
+func dshMergedPreToolDecision(stdout string, exitCode int) string {
+	decision := ""
+	if exitCode == 2 {
+		decision = "block"
+	}
+	if exitCode == 0 {
+		trimmed := strings.TrimSpace(stdout)
+		if strings.HasPrefix(trimmed, "{") {
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil && parsed != nil {
+				if top, _ := parsed["decision"].(string); top == "approve" || top == "block" {
+					decision = top
+				}
+				if hso, _ := parsed["hookSpecificOutput"].(map[string]any); hso != nil {
+					eventName, _ := hso["hookEventName"].(string)
+					if eventName == "PreToolUse" {
+						if perm, _ := hso["permissionDecision"].(string); perm == "allow" || perm == "deny" || perm == "ask" {
+							decision = perm
+						}
+					}
+				}
+			}
+		}
+	}
+	switch decision {
+	case "deny", "block":
+		return "deny"
+	case "ask":
+		return "ask"
+	case "allow", "approve":
+		return "allow"
+	default:
+		return "none"
+	}
+}
+
 func printHookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex|hermes> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
+	fmt.Fprintln(w, "Usage: helm-ai-kernel hook pre-tool --client <claude-code|codex|hermes|deepseek> [--data-dir DIR] [--policy-profile PATH --policy-profile-sha256 SHA256] [--signing-seed-file PATH]")
 }
 
 // hookDoomLoopFile is the on-disk circuit-breaker state for the pre-tool
@@ -620,8 +694,12 @@ func classifyPreToolPayload(payload preToolPayload) hookClassification {
 func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 	tool := strings.TrimSpace(payload.ToolName)
 	switch {
-	case strings.EqualFold(tool, "Bash"), strings.EqualFold(tool, "terminal"):
+	case isPreToolShellTool(tool):
 		command := inputString(payload.ToolInput, "command", "cmd")
+		if command == "" && strings.HasPrefix(strings.ToLower(tool), "terminal_") {
+			// DSH terminal_send writes to a PTY via `text`, not Claude's `command`.
+			command = inputString(payload.ToolInput, "text")
+		}
 		// Structural (AST-based) pre-flight classification. The classifier is
 		// advisory input only: it decides whether the command reaches the
 		// existing signed decision path; the permit/receipt verdict is still
@@ -663,7 +741,13 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 			ToolID:       tool,
 			Reason:       "MCP tool call",
 		}}
-	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "apply_patch"), strings.EqualFold(tool, "write_file"), strings.EqualFold(tool, "patch"):
+	case isPreToolWriteTool(tool):
+		if strings.EqualFold(tool, "str_replace_editor") {
+			cmd := strings.ToLower(inputString(payload.ToolInput, "command"))
+			if cmd == "view" || cmd == "" {
+				return nil
+			}
+		}
 		target := inputString(payload.ToolInput, "file_path", "path", "target_file")
 		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
 			target = sensitiveApplyPatchTarget(inputString(payload.ToolInput, "command", "cmd", "patch", "diff"))
@@ -901,9 +985,13 @@ func isSensitiveWriteTarget(path string) bool {
 		".claude/settings.json",
 		".codex/hooks.json",
 		".hermes/config.yaml",
+		".dsh/cordis.patch.yml",
+		".dsh/helm-ai-kernel-hooks.json",
 		".claude\\settings.json",
 		".codex\\hooks.json",
 		".hermes\\config.yaml",
+		".dsh\\cordis.patch.yml",
+		".dsh\\helm-ai-kernel-hooks.json",
 	}
 	for _, needle := range sensitive {
 		if strings.Contains(p, needle) {

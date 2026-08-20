@@ -250,6 +250,7 @@ if [ "$CLUSTER_MODE" = "minikube" ]; then
             --driver="${LAUNCHPAD_SMOKE_DRIVER:-docker}"
     fi
     kubectl config use-context "$PROFILE"
+    kubectl -n kube-system rollout status daemonset/calico-node --timeout=8m
 else
     if [ -n "$KUBE_CONTEXT" ]; then
         kubectl config use-context "$KUBE_CONTEXT"
@@ -497,6 +498,11 @@ cleanup_ad_hoc_runtime_secrets
 
 # Leak audit (k8s analogue of GAP #17): after uninstall, no launchpad-app or
 # kernel resources should remain in the smoke namespace.
+# Helm waits for its direct resources, but their Pods may still be completing
+# the normal termination grace period. Observe that bounded grace before
+# treating a terminating Pod as a leak; a genuinely stuck Pod still fails.
+kubectl -n "$NAMESPACE" wait --for=delete pod \
+    -l app.kubernetes.io/part-of=helm-ai-kernel --timeout=120s
 leftover="$(kubectl -n "$NAMESPACE" get all -l app.kubernetes.io/part-of=helm-ai-kernel --no-headers 2>/dev/null || true)"
 if [ -n "$leftover" ]; then
     echo "::error::leftover resources detected after helm uninstall:"

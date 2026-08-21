@@ -1,4 +1,7 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# quantum_posture: this release configuration references existing classical
+# Cosign/signature verification and adds no cryptographic primitive or
+# post-quantum assurance.
 version: 2
 
 project_name: helm-ai-kernel
@@ -71,7 +74,7 @@ docker_signs:
 brews:
   - name: helm-ai-kernel
     repository:
-      owner: mindburnlabs
+      owner: Mindburn-Labs
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula

@@ -15,7 +15,7 @@ trusting *who* signed is a separate, explicit step — see
 ```bash
 brew tap mindburn-labs/tap
 brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
-brew install helm-ai-kernel
+brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel setup claude-code --yes
 # Codex: helm-ai-kernel setup codex --yes
 # Hermes: helm-ai-kernel setup hermes --scope user --yes
@@ -113,12 +113,25 @@ logo use is covered by [TRADEMARK.md](TRADEMARK.md).
 
 ## Source Build
 
+The source build uses Go 1.25.12 (the version pinned by `go.work` and
+`mise.toml`). The supported reproducible recipe explicitly trusts the
+checked-out mise configuration and installs the pinned toolchain. If mise is
+unavailable, use a compatible native Go toolchain instead.
+
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
-make build
+git checkout v0.8.4
+mise trust
+mise install
+mise exec -- make build
 bin/helm-ai-kernel setup claude-code --yes
 ```
+
+The [Quickstart delivery matrix](docs/QUICKSTART.md#delivery-surfaces) lists
+the released binaries, container images, OCI chart, release-only MCPB and
+Console bundles, and SDK package surfaces. SDKs are client libraries, not
+Kernel executable installs.
 
 ## Project
 

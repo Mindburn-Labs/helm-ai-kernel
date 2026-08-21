@@ -3,6 +3,10 @@ title: Launchpad Conformance
 last_reviewed: 2026-08-09
 ---
 
+<!-- quantum_posture: this conformance guide references existing classical
+Cosign/signature verification and adds no cryptographic primitive or
+post-quantum assurance. -->
+
 # Launchpad Conformance
 
 Status: OpenClaw and Hermes are `oss_supported` / `agent_live`. They passed the

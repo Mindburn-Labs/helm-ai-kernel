@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 // ── Incident ────────────────────────────────────────────────────────────────
@@ -163,7 +165,7 @@ func runIncidentCreate(args []string, stdout, stderr io.Writer) int {
 		"severity": severity, "category": category, "title": title,
 	})
 
-	fmt.Fprintf(stdout, "\n%s🚨 Incident Created%s\n", ColorBold+ColorRed, ColorReset)
+	fmt.Fprintf(stdout, "\n%sIncident Created%s\n", ColorBold+ColorRed, ColorReset)
 	fmt.Fprintf(stdout, "   ID:        %s\n", id)
 	fmt.Fprintf(stdout, "   Title:     %s\n", title)
 	fmt.Fprintf(stdout, "   Severity:  %s\n", severity)
@@ -185,11 +187,13 @@ func runIncidentList(args []string, stdout, stderr io.Writer) int {
 	)
 	cmd.StringVar(&status, "status", "", "Filter by status (open, acked, resolved, closed)")
 	cmd.StringVar(&severity, "severity", "", "Filter by severity")
-	cmd.BoolVar(&jsonOut, "json", false, "JSON output")
+	cmd.BoolVar(&jsonOut, "json", false, "JSON output (alias for --format=json)")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "incident list", cliui.FormatText); !ok {
+		return code
 	}
+	jsonOut = jsonOut || formatFlag.IsJSON()
 
 	incidents := loadAllIncidents()
 
@@ -217,26 +221,21 @@ func runIncidentList(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	fmt.Fprintf(stdout, "\n%s📋 Incident Registry%s (%d total)\n\n", ColorBold+ColorBlue, ColorReset, len(filtered))
+	fmt.Fprintf(stdout, "Incident Registry (%d total)\n", len(filtered))
 
 	if len(filtered) == 0 {
-		fmt.Fprintln(stdout, "  No incidents found.")
-		fmt.Fprintln(stdout, "")
+		fmt.Fprintln(stdout, "  [PASS]  No incidents found.")
 		return 0
 	}
 
 	for _, inc := range filtered {
-		severityIcon := map[string]string{
-			"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢",
-		}[inc.Severity]
-		statusIcon := map[string]string{
-			"open": "⚪", "acked": "🔵", "resolved": "✅", "closed": "⬛",
-		}[inc.Status]
-
-		fmt.Fprintf(stdout, "  %s %s %s [%s] %s\n",
-			severityIcon, statusIcon, inc.ID, inc.Category, inc.Title)
+		st := strings.ToUpper(strings.TrimSpace(inc.Status))
+		if st == "" {
+			st = "WAIT"
+		}
+		fmt.Fprintf(stdout, "  [%s]  %s  %s  %s  %s\n",
+			st, strings.ToUpper(inc.Severity), inc.ID, inc.Category, inc.Title)
 	}
-	fmt.Fprintln(stdout, "")
 
 	return 0
 }
@@ -261,7 +260,7 @@ func runIncidentShow(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "\n%s📝 Incident Detail%s\n\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(stdout, "\n%sIncident Detail%s\n\n", ColorBold+ColorBlue, ColorReset)
 	fmt.Fprintf(stdout, "  ID:                %s\n", inc.ID)
 	fmt.Fprintf(stdout, "  Title:             %s\n", inc.Title)
 	fmt.Fprintf(stdout, "  Severity:          %s\n", inc.Severity)
@@ -322,7 +321,7 @@ func runIncidentAck(args []string, stdout, stderr io.Writer) int {
 		"severity": inc.Severity, "title": inc.Title,
 	})
 
-	fmt.Fprintf(stdout, "\n%s🔵 Incident Acknowledged%s\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(stdout, "\n%sIncident Acknowledged%s\n", ColorBold+ColorBlue, ColorReset)
 	fmt.Fprintf(stdout, "   ID:      %s\n", inc.ID)
 	fmt.Fprintf(stdout, "   Title:   %s\n", inc.Title)
 	fmt.Fprintf(stdout, "   Receipt: %s\n\n", receiptID)
@@ -372,7 +371,7 @@ func runMaintenanceCmd(args []string, stdout, stderr io.Writer) int {
 		actionable = actionable[:maxItems]
 	}
 
-	fmt.Fprintf(stdout, "\n%s🔧 Maintenance Run%s\n", ColorBold+ColorYellow, ColorReset)
+	fmt.Fprintf(stdout, "\n%sMaintenance Run%s\n", ColorBold+ColorYellow, ColorReset)
 	fmt.Fprintf(stdout, "   Actionable incidents: %d\n\n", len(actionable))
 
 	if len(actionable) == 0 {
@@ -449,7 +448,7 @@ func runMaintenanceCmd(args []string, stdout, stderr io.Writer) int {
 	maintData, _ := json.MarshalIndent(result, "", "  ")
 	_ = os.WriteFile(filepath.Join(maintDir, runID+".json"), maintData, 0644)
 
-	fmt.Fprintf(stdout, "   %s✅ Maintenance Complete%s\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "   %sMaintenance Complete%s\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "   Run ID:      %s\n", runID)
 	fmt.Fprintf(stdout, "   Resolved:    %d incidents\n", result.IncidentsHandled)
 	fmt.Fprintf(stdout, "   Evidence:    %s\n\n", result.EvidencePackHash[:32])
@@ -544,7 +543,7 @@ func runBriefDaily(stdout, stderr io.Writer) int {
 	}
 
 	// Render
-	fmt.Fprintf(stdout, "\n%s📊 HELM Daily Brief — %s%s\n", ColorBold+ColorBlue, today, ColorReset)
+	fmt.Fprintf(stdout, "\n%sHELM Daily Brief — %s%s\n", ColorBold+ColorBlue, today, ColorReset)
 	fmt.Fprintf(stdout, "══════════════════════════════════════\n\n")
 	fmt.Fprintf(stdout, "  System Health:     %s%s%s\n", healthColor, strings.ToUpper(health), ColorReset)
 	fmt.Fprintf(stdout, "  Open Incidents:    %d\n", brief.OpenIncidents)
@@ -555,7 +554,7 @@ func runBriefDaily(stdout, stderr io.Writer) int {
 	if len(topIncidents) > 0 {
 		fmt.Fprintf(stdout, "\n  Top Incidents:\n")
 		for _, ti := range topIncidents {
-			icon := map[string]string{"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}[ti.Severity]
+			icon := map[string]string{"critical": "", "high": "", "medium": "", "low": ""}[ti.Severity]
 			fmt.Fprintf(stdout, "    %s %s — %s [%s]\n", icon, ti.ID, ti.Title, ti.Status)
 		}
 	}

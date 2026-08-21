@@ -437,7 +437,7 @@ func runAutoconfigureActivate(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "\n%s✅ Activated (%s).%s Attestation: %s\n", ColorBold+ColorGreen, summary.ActivationMode, ColorReset, filepath.Join(outDir, "activation_attestation.json"))
+	fmt.Fprintf(stdout, "\n%sActivated (%s).%s Attestation: %s\n", ColorBold+ColorGreen, summary.ActivationMode, ColorReset, filepath.Join(outDir, "activation_attestation.json"))
 	fmt.Fprintf(stdout, "%s%s%s\n\n", ColorBold, autoconfigureDoctrine, ColorReset)
 	return 0
 }

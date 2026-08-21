@@ -45,6 +45,7 @@ it does not claim that a live docs route or runtime is available.
 ## Operate
 
 - [Troubleshooting](TROUBLESHOOTING.md)
+- [CLI I/O Convention (TUI, format, escape hatches)](guides/cli-io-convention.md)
 - [Implementation Partner Handoff](guides/implementation-partner.md)
 
 ## Reference

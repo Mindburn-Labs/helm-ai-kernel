@@ -1,6 +1,6 @@
 ---
 title: Developer Journey
-last_reviewed: 2026-07-10
+last_reviewed: 2026-08-21
 ---
 
 # Developer Journey
@@ -61,15 +61,13 @@ Java SDK consumers can use the source-target Maven coordinate
 </dependency>
 ```
 
-Current source release target: `v0.8.4`.
-The expected release URL is
-`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4`. Do not
-treat its assets as present until the normal release workflow attaches and
-verifies them, including `v0.8.4.openvex.json` and `v0.8.4.json`.
+Current public release: `v0.8.4`
+(`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4`).
+Published assets include `v0.8.4.openvex.json`, `v0.8.4.json`, checksums,
+SBOM, attestation, EvidencePack, and Cosign bundles.
 
-After the source subdirectory tag is published and verified, Go SDK consumers
-can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.4`; the expected
-tag is `sdk/go/v0.8.4`.
+Go SDK consumers can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.4`
+(subdirectory tag `sdk/go/v0.8.4`) once that tag is present and verified.
 
 ## Local Boundary
 
@@ -110,11 +108,12 @@ helm-ai-kernel verify evidence-pack.tar
 Run the doctor before deeper debugging:
 
 ```bash
-helm-ai-kernel doctor --json
+helm-ai-kernel doctor --format json
 ```
 
 Then use [Troubleshooting](TROUBLESHOOTING.md) for ports, setup, policy, proxy,
-receipt, and verification failures.
+receipt, and verification failures. Interactive TTY opens the operator TUI by
+default; use `HELM_NO_TUI=1` or `TERM=dumb` for the text front door.
 
 ## Source Truth
 

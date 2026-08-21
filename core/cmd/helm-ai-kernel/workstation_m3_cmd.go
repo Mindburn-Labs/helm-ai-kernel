@@ -147,17 +147,17 @@ func runWorkstationVerifyDecisionCmd(args []string, stdout, stderr io.Writer) in
 		admissible := integrityValid && signerTrusted
 		switch {
 		case !integrityValid:
-			_, _ = fmt.Fprintf(stdout, "%s✗ TAMPERED — this receipt does not match its own signature%s\n", ColorRed, ColorReset)
+			_, _ = fmt.Fprintf(stdout, "%sTAMPERED — this receipt does not match its own signature%s\n", ColorRed, ColorReset)
 			_, _ = fmt.Fprintf(stdout, "  Its contents were altered after signing. Do not act on anything below.\n")
 		case !signerTrusted:
-			_, _ = fmt.Fprintf(stdout, "%s✗ UNVERIFIED — signature is intact but the signer is not a trusted anchor%s\n", ColorRed, ColorReset)
+			_, _ = fmt.Fprintf(stdout, "%sUNVERIFIED — signature is intact but the signer is not a trusted anchor%s\n", ColorRed, ColorReset)
 			if !trustAnchorAvailable {
 				_, _ = fmt.Fprintf(stdout, "  No trust anchor was available. Pass --trusted-public-key-file to name the key you trust.\n")
 			} else {
 				_, _ = fmt.Fprintf(stdout, "  The receipt was signed by a key you have not anchored. A key that arrives with the receipt is not a trust root.\n")
 			}
 		default:
-			_, _ = fmt.Fprintf(stdout, "%s✓ ADMISSIBLE — signature verifies under a trusted anchor%s\n", ColorGreen, ColorReset)
+			_, _ = fmt.Fprintf(stdout, "%sADMISSIBLE — signature verifies under a trusted anchor%s\n", ColorGreen, ColorReset)
 		}
 		_, _ = fmt.Fprintf(stdout, "%sWorkstation Policy Decision Verification%s\n", ColorBold, ColorReset)
 		_, _ = fmt.Fprintf(stdout, "  receipt:   %s\n", receiptPath)

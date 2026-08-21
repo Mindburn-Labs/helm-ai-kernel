@@ -1,6 +1,6 @@
 ---
 title: Receipts
-last_reviewed: 2026-08-19
+last_reviewed: 2026-08-21
 ---
 
 <!-- quantum_posture: this page documents classical Ed25519 receipt checks and adds no post-quantum cryptographic control. -->
@@ -20,11 +20,11 @@ For MCP and boundary decisions, HELM records:
 - reason code
 - server id, tool name, and effect scope when available
 - receipt path
-- approval hint for resolvable escalations
+- approval hint when a credential-verified admission path is available
 - policy epoch and record hash
 
 Approvals and revocations also write receipts. A later evaluation must fail
-closed when an approval is expired, revoked, or outside its server, tool, or
+closed when an admission is expired, revoked, or outside its server, tool, or
 effect scope.
 
 ## Inspect Local Receipts
@@ -33,6 +33,8 @@ effect scope.
 helm-ai-kernel mcp receipts --json
 helm-ai-kernel mcp pending --json
 helm-ai-kernel boundary records --json
+helm-ai-kernel receipts status --format json
+helm-ai-kernel receipts list --format json
 ```
 
 For a Kernel evaluate `receipt.v5` file copied off-box (Foundation/offline
@@ -85,11 +87,12 @@ Start with these fields:
 | `verdict` | `ALLOW`, `DENY`, or `ESCALATE` |
 | `reason_code` | Why the boundary returned that verdict |
 | `receipt_path` | Local file written for the decision |
-| `approval_command` | Scoped command to run when the verdict is `ESCALATE` |
 | `record_hash` | Tamper-evidence handle for the boundary record |
 
-An `ESCALATE` receipt is not permission to continue. Approve the exact scope,
-then rerun the original action so HELM evaluates it again.
+An `ESCALATE` receipt is not permission to continue. Obtain a
+credential-verified durable dispatch admission for the exact scope, then
+rerun the original action so HELM evaluates it again. Local `mcp approve`
+does not mint that authority.
 
 ## Export Evidence
 
@@ -108,14 +111,11 @@ EvidencePacks are portable proof bundles for local review and offline replay.
 
 ## Release Evidence
 
-Current source release target: `v0.8.4`.
-
-The `v0.8.4` release is complete only after the listed local verification
-assets appear on the GitHub release and verify locally.
+Current public release: `v0.8.4`
+(https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4).
 
 Check the GitHub release and local verification artifacts together:
 
-- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4`
-- v0.8.4 Asset Contract
-- `v0.8.4.openvex.json`
-- `v0.8.4.json`
+- `SHA256SUMS.txt`, `sbom.json`, `release-attestation.json`
+- `v0.8.4.openvex.json`, `v0.8.4.json`
+- offline `evidence-pack.tar` and matching `*.cosign.bundle` files

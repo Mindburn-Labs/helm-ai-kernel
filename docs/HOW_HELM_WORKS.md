@@ -1,6 +1,6 @@
 ---
 title: How HELM Works
-last_reviewed: 2026-07-01
+last_reviewed: 2026-08-21
 ---
 
 # How HELM Works
@@ -25,13 +25,17 @@ approval scope.
 `DENY` means the action is unsafe, mismatched, expired, revoked, outside scope,
 or policy-forbidden.
 
-`ESCALATE` means a developer can safely resolve the block with an exact local
-approval. HELM writes a receipt and returns a short approval hint. It never
+`ESCALATE` means HELM blocked the action and wrote a receipt. Nothing
+dispatches on `ESCALATE`. Local `helm-ai-kernel mcp approve` does not mint
+approval authority; a credential-verified durable dispatch admission from the
+governing approval integration is required before re-evaluation. HELM never
 continues the original action silently.
 
 ## Approvals
 
-Approvals are local-first and narrow:
+Bounded MCP dispatch requires a credential-verified durable admission. Opaque
+local approver strings, receipt ids, tool lists, and TTLs are not executable
+authority. When a verifier-backed grant exists, scope stays narrow:
 
 - exact server id
 - exact tool list
@@ -42,7 +46,8 @@ Approvals are local-first and narrow:
 - revocable
 
 Read-only is the default effect. Write, deploy, network, and payment effects
-must be approved explicitly and use a shorter TTL.
+must be admitted explicitly and use a shorter TTL. Ceremony decisions in the
+operator TUI require typing `APPROVE` or `DENY`; a click never decides.
 
 ## Receipts
 

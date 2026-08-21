@@ -35,7 +35,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  install       Install HELM MCP server for a client")
 		fmt.Fprintln(stderr, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stderr, "  print-config  Print MCP config for a specific client")
-		fmt.Fprintln(stderr, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
+		fmt.Fprintln(stderr, "  scan          Inspect local MCP configs or a manifest for pin/hash/shadow findings")
 		fmt.Fprintln(stderr, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
 		fmt.Fprintln(stderr, "  proof         Emit a no-dispatch MCP quarantine proof EvidencePack")
 		fmt.Fprintln(stderr, "  list          List local MCP registry records")
@@ -94,7 +94,7 @@ func runMCPCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  install       Install HELM MCP server for a client")
 		fmt.Fprintln(stdout, "  pack          Generate a .mcpb bundle for desktop clients")
 		fmt.Fprintln(stdout, "  print-config  Print MCP config for a specific client")
-		fmt.Fprintln(stdout, "  scan          Static scan of an MCP tool catalog for DDIPE / typosquat / suspicious patterns")
+		fmt.Fprintln(stdout, "  scan          Inspect local MCP configs or a manifest for pin/hash/shadow findings")
 		fmt.Fprintln(stdout, "  wrap          Emit a clean-room execution-firewall wrapper profile for an upstream MCP server")
 		fmt.Fprintln(stdout, "  proof         Emit a no-dispatch MCP quarantine proof EvidencePack")
 		fmt.Fprintln(stdout, "  list          List local MCP registry records")
@@ -173,7 +173,7 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 2
 		}
-		fmt.Fprintf(stdout, "\n%s🔌 HELM MCP Server%s\n", ColorBold+ColorBlue, ColorReset)
+		fmt.Fprintf(stdout, "\n%sHELM MCP Server%s\n", ColorBold+ColorBlue, ColorReset)
 		fmt.Fprintf(stdout, "   Transport: %s\n", transport)
 		fmt.Fprintf(stdout, "   Port: %d\n", port)
 		fmt.Fprintf(stdout, "   Auth: %s\n\n", authMode)
@@ -261,7 +261,7 @@ func generateClaudeCodePlugin(stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "%s✅ Claude Code plugin generated%s\n\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "%sClaude Code plugin generated%s\n\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "  Directory: %s/\n", pluginDir)
 	fmt.Fprintf(stdout, "  Files:     plugin.json, .mcp.json\n\n")
 	fmt.Fprintf(stdout, "  The MCP server auto-starts when the plugin is enabled.\n")

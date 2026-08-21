@@ -124,7 +124,7 @@ func runScaffoldCmd(args []string, stdout, stderr io.Writer) int {
 	_ = os.WriteFile(hintsPath, []byte(hint), 0644)
 
 	// Print success.
-	fmt.Fprintf(stdout, "\n%s✅ HELM initialized%s\n\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "\n%sHELM initialized%s\n\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "  Directory:     %s/\n", helmDir)
 	fmt.Fprintf(stdout, "  Framework:     %s\n", framework)
 	fmt.Fprintf(stdout, "  Policy:        %s (policies/default.cel)\n", policyBackend)
@@ -178,7 +178,7 @@ func runDevCmd(args []string, stdout, stderr io.Writer) int {
 	// Delegate to MCP serve with HTTP transport.
 	mcpArgs := []string{"--transport", "http", "--port", fmt.Sprintf("%d", port)}
 	if verbose {
-		fmt.Fprintf(stdout, "\n%s🔧 HELM Dev Server%s\n", ColorBold+ColorBlue, ColorReset)
+		fmt.Fprintf(stdout, "\n%sHELM Dev Server%s\n", ColorBold+ColorBlue, ColorReset)
 		fmt.Fprintf(stdout, "   Port:     %d\n", port)
 		fmt.Fprintf(stdout, "   Config:   %s\n", config)
 		fmt.Fprintf(stdout, "   Verbose:  %v\n\n", verbose)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
@@ -173,6 +174,7 @@ func runHarnessObjectCommand(args []string, stdout, stderr io.Writer, usage stri
 	fs.SetOutput(stderr)
 	id := fs.String("id", "", "Object id")
 	input := fs.String("input", "", "Input JSON file; for approve, receipt ref")
+	jsonOutput := fs.Bool("json", false, "Output as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -191,7 +193,42 @@ func runHarnessObjectCommand(args []string, stdout, stderr io.Writer, usage stri
 		}
 		return 1
 	}
+	if action == "list" {
+		return writeHarnessList(stdout, stderr, usage, value, *jsonOutput)
+	}
 	return writeSurfaceJSON(stdout, value)
+}
+
+// writeHarnessList matches the receipts/risk-summary empty-list honesty
+// pattern: JSON emits [] on stdout; text emits an explicit chrome count and
+// keeps stdout empty when there is nothing to list. Non-empty text keeps the
+// historical JSON document on stdout (harness lists are JSON-native).
+func writeHarnessList(stdout, stderr io.Writer, usage string, value any, jsonOut bool) int {
+	n := harnessListLen(value)
+	if jsonOut {
+		if value == nil {
+			return writeSurfaceJSON(stdout, []any{})
+		}
+		return writeSurfaceJSON(stdout, value)
+	}
+	if n == 0 {
+		fmt.Fprintf(stderr, "%s: 0\n", usage)
+		return 0
+	}
+	return writeSurfaceJSON(stdout, value)
+}
+
+func harnessListLen(value any) int {
+	if value == nil {
+		return 0
+	}
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Slice, reflect.Array:
+		return v.Len()
+	default:
+		return 1
+	}
 }
 
 func needsHarnessID(action string) bool {

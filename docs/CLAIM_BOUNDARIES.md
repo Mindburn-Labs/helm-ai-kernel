@@ -1,6 +1,6 @@
 ---
 title: Claim Boundaries
-last_reviewed: 2026-07-01
+last_reviewed: 2026-08-21
 ---
 
 # Claim Boundaries
@@ -15,7 +15,9 @@ or release artifacts.
 - HELM AI Kernel is a fail-closed execution firewall for AI agents.
 - Selected effects can be denied before dispatch when they pass through a HELM
   adapter, wrapper, hook, proxy, or API route.
-- Unknown or unapproved MCP paths can escalate into local scoped approval.
+- Unknown or unapproved MCP paths can escalate and stay blocked until a
+  credential-verified durable dispatch admission exists. Local
+  `mcp approve` does not mint that authority.
 - Decisions, approvals, and revocations write local receipts.
 - EvidencePacks can be checked from local material without trusting a hosted
   service.

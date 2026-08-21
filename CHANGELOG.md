@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-21
 ---
 
 # Changelog
@@ -89,6 +89,47 @@ Keep research scaffolds and hardware-backed enforcement language out of the
 public changelog until a tagged release ships source-owned tests, verifier
 evidence, and release artifacts for that exact capability.
 
+### Added — security instrument operator TUI
+
+On an interactive TTY, bare `helm-ai-kernel` (aliases `tui` / `ui` /
+`dashboard`) opens a full-screen operator session. Escape hatches:
+`HELM_NO_TUI=1`, `TERM=dumb`, pipes, `--help`, `--json`. Ceremony requires
+typing `APPROVE` or `DENY`; click / digits / Ctrl+O never decide. Listeners
+(`server`, `serve --policy`, `proxy`, `receipts tail`, non-dry-run
+`quickstart`/`onboard`, non-help `scan`) are refused in-TUI. Empty
+composer argv uses the same fail-closed defaults as the palette.
+`policy init` and `scaffold` require a full-invocation confirm (they write
+`policies/` / `helm/`).
+No upgrade CTA, YOLO, or GA copy on this surface.
+
+### Added — catalog `--format text|json` contract
+
+Operator-data commands reject unknown `--format` values before work (exit 2).
+Legacy `--json` remains an alias. Collision verbs (`verify`, `import`,
+`skills`) keep domain `--format` meanings. Listeners and `tui` are document-
+exempt. `help --json` is the stable machine catalog.
+
+### Changed — receipts canonical inspect verbs
+
+`receipts status|list|show|verify|export|tail` is the canonical inspect
+surface. `status` / `list` / `show` are bounded HTTP; `tail` is SSE and
+listener-class in the TUI; `verify` / `export` alias existing routes. None
+invent evidence.
+
+### Changed — setup client lifecycle projection
+
+`setup status` reports `client_state` and projected `lifecycle`
+(`absent` / `planned` / `pending` / `configured` / `active` / `degraded` /
+`repairable`). Only `native_loaded` is an active claim; Cursor / Windsurf /
+VS Code never claim native load. Doctor and setup repair suggestions stay
+inspect-first and `--dry-run`; they do not recommend `--yes`.
+
+### Changed — doctor agreement
+
+Doctor JSON reports PASS / WARN / FAIL with a `healthy` boolean. Exit 0 =
+no WARN/FAIL; exit 1 = WARN only; exit 2 = FAIL. Suggestions point at
+`setup status` and `setup repair … --dry-run`.
+
 ### Changed — explicit opt-in for locally self-attested EvidencePacks
 
 `helm-ai-kernel verify` continues to reject self-attested EvidencePack seals by
@@ -165,9 +206,9 @@ canonical value, carries it into governed MCP lifecycle events, and stamps it
 on the active server span. This closes the deployed daemon path that bypasses
 the embedded API server's equivalent correlation edge.
 
-## [0.8.4] - pending tag
+## [0.8.4] - 2026-08-12
 
-Release target for the receipt tenant-isolation fix, the corrected EU AI Act
+Published GitHub Release for the receipt tenant-isolation fix, the corrected EU AI Act
 applicability mapping, and a sweep of public claim corrections. v0.8.3 completed
 its publication, so this is an ordinary successor rather than another attempt at
 a stranded train.

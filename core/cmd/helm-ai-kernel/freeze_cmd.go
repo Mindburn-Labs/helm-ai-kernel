@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
@@ -74,11 +75,13 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 	)
 	cmd.StringVar(&principal, "principal", "", "Principal performing the action (REQUIRED for freeze/unfreeze)")
 	cmd.BoolVar(&status, "status", false, "Show freeze status only")
-	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON")
+	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON (alias for --format=json)")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
 
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "freeze", cliui.FormatText); !ok {
+		return code
 	}
+	jsonOutput = jsonOutput || formatFlag.IsJSON()
 
 	// Status mode
 	if status || action == "freeze-status" {
@@ -92,9 +95,9 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 			_, _ = fmt.Fprintln(stdout, string(data))
 		} else {
 			if state.Frozen {
-				_, _ = fmt.Fprintf(stdout, "🔴 FROZEN by %s at %s\n", state.FrozenBy, state.FrozenAt.Format(time.RFC3339))
+				_, _ = fmt.Fprintf(stdout, "FROZEN by %s at %s\n", state.FrozenBy, state.FrozenAt.Format(time.RFC3339))
 			} else {
-				_, _ = fmt.Fprintln(stdout, "🟢 System is NOT frozen")
+				_, _ = fmt.Fprintln(stdout, "System is NOT frozen")
 			}
 			if len(state.Receipts) > 0 {
 				_, _ = fmt.Fprintf(stdout, "   %d transition(s) in audit trail\n", len(state.Receipts))
@@ -159,10 +162,10 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 	} else {
 		switch action {
 		case "freeze":
-			_, _ = fmt.Fprintf(stdout, "🔴 FROZEN by %s at %s\n", receipt.Principal, receipt.Timestamp.Format(time.RFC3339))
+			_, _ = fmt.Fprintf(stdout, "FROZEN by %s at %s\n", receipt.Principal, receipt.Timestamp.Format(time.RFC3339))
 			_, _ = fmt.Fprintf(stdout, "   Content Hash: %s\n", receipt.ContentHash[:16]+"…")
 		case "unfreeze":
-			_, _ = fmt.Fprintf(stdout, "🟢 UNFROZEN by %s at %s\n", receipt.Principal, receipt.Timestamp.Format(time.RFC3339))
+			_, _ = fmt.Fprintf(stdout, "UNFROZEN by %s at %s\n", receipt.Principal, receipt.Timestamp.Format(time.RFC3339))
 			_, _ = fmt.Fprintf(stdout, "   Content Hash: %s\n", receipt.ContentHash[:16]+"…")
 		}
 	}

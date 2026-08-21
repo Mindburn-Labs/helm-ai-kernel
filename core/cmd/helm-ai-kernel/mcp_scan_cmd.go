@@ -1,15 +1,15 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"sort"
-	"time"
+	"strings"
 
+	cliui "github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
 
@@ -54,107 +54,128 @@ var knownPopularMCPTools = []string{
 	"sql_query", "db_query",
 }
 
-// runMCPScan implements `helm-ai-kernel mcp scan` — static scan of an MCP server catalog.
+// runMCPScan implements `helm-ai-kernel mcp scan` — inspect-only supply-chain scan.
 //
 // Exit codes:
 //
-//	0 = clean (no findings above --fail-on-severity)
-//	1 = findings at or above fail-on-severity
-//	2 = config error
+//	0 = scan ran (and no --fail-on threshold was crossed)
+//	1 = findings at or above --fail-on
+//	2 = usage or config error
 func runMCPScan(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("mcp scan", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
 
 	var (
 		manifestPath string
+		inspectPath  string
 		jsonOut      bool
 		failOn       string
+		failOnLegacy string
 	)
 
-	cmd.StringVar(&manifestPath, "manifest", "", "Path to a JSON manifest of MCP tools (REQUIRED)")
-	cmd.BoolVar(&jsonOut, "json", false, "Emit JSON report to stdout instead of text")
-	cmd.StringVar(&failOn, "fail-on-severity", "high", "Exit 1 if any finding is >= this severity (low|medium|high|critical)")
-
-	if err := cmd.Parse(args); err != nil {
-		return 2
+	cmd.StringVar(&manifestPath, "manifest", "", "Path to a JSON tool manifest")
+	cmd.StringVar(&inspectPath, "path", "", "MCP client config file or directory")
+	cmd.BoolVar(&jsonOut, "json", false, "Emit JSON report (alias for --format=json)")
+	cmd.StringVar(&failOn, "fail-on", "", "Exit 1 if any finding is >= this severity (low|medium|high|critical)")
+	cmd.StringVar(&failOnLegacy, "fail-on-severity", "", "Alias of --fail-on")
+	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
+	if code, ok := cliui.ParseFlags(cmd, args, stderr, "mcp scan", cliui.FormatText); !ok {
+		return code
+	}
+	jsonOut = jsonOut || formatFlag.IsJSON()
+	errFormat := cliui.FormatText
+	if jsonOut {
+		errFormat = cliui.FormatJSON
+	}
+	if cmd.NArg() > 0 {
+		return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("mcp scan", "unexpected argument: %s", cmd.Arg(0)).
+			WithHint("scan inspects files; it does not start a server"), errFormat)
 	}
 
-	if manifestPath == "" {
-		fmt.Fprintln(stderr, "Error: --manifest is required")
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel mcp scan --manifest tools.json [--json] [--fail-on-severity high]")
-		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "The manifest shape is:")
-		fmt.Fprintln(stderr, `  { "server_id": "my-server", "tools": [{"name":"tool","description":"...","input_schema":{...}}, ...] }`)
-		return 2
+	thresholdSet := false
+	threshold := 0
+	if failOn == "" {
+		failOn = failOnLegacy
+	}
+	if failOn != "" {
+		rank, ok := parseSeverityFlag(failOn)
+		if !ok {
+			return cliui.WriteErrorFormat(stderr, cliui.UsageErrorf("mcp scan", "--fail-on must be one of low, medium, high, critical (got %q)", failOn), errFormat)
+		}
+		threshold = rank
+		thresholdSet = true
 	}
 
-	threshold, ok := parseSeverityFlag(failOn)
-	if !ok {
-		fmt.Fprintf(stderr, "Error: --fail-on-severity must be one of low, medium, high, critical (got %q)\n", failOn)
-		return 2
-	}
-
-	manifest, err := loadMCPScanManifest(manifestPath)
+	sources, servers, manifests, err := collectMCPScanTargets(manifestPath, inspectPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "Error loading manifest: %v\n", err)
-		return 2
+		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "mcp scan", "load scan input"), errFormat)
 	}
 
-	// 1. DocScanner — DDIPE + suspicious description patterns
+	var findings []mcpScanFinding
+	findings = append(findings, supplyChainFindings(servers)...)
+	toolsScanned := 0
 	docScanner := mcppkg.NewDocScanner()
-	docFindings := docScanner.ScanAll(manifest.ServerID, manifest.Tools)
-
-	// 2. Typosquat check — tool names edit-distance-close to well-known tools
-	typoFindings := scanTyposquat(manifest.ServerID, manifest.Tools)
-
-	maxSev := maxDocSeverity(docFindings)
-
-	report := mcpScanReport{
-		ServerID:      manifest.ServerID,
-		ToolsScanned:  len(manifest.Tools),
-		MaxSeverity:   maxSev,
-		DocFindings:   docFindings,
-		TypoFindings:  typoFindings,
-		SummaryByTool: summarizeByTool(docFindings),
+	for _, manifest := range manifests {
+		toolsScanned += len(manifest.Tools)
+		for _, f := range docScanner.ScanAll(manifest.ServerID, manifest.Tools) {
+			findings = append(findings, mcpScanFinding{
+				Kind:        "doc",
+				Severity:    strings.ToLower(string(f.Severity)),
+				ServerID:    f.ServerID,
+				Subject:     f.ToolName,
+				Source:      manifest.ServerID,
+				Description: f.Description,
+			})
+		}
+		for _, f := range scanTyposquat(manifest.ServerID, manifest.Tools) {
+			findings = append(findings, mcpScanFinding{
+				Kind:        "typosquat",
+				Severity:    strings.ToLower(f.Severity),
+				ServerID:    f.ServerID,
+				Subject:     f.ToolName,
+				Source:      f.Resembles,
+				Description: f.Description,
+			})
+		}
 	}
+	sort.Slice(findings, func(i, j int) bool {
+		if findings[i].Kind != findings[j].Kind {
+			return findings[i].Kind < findings[j].Kind
+		}
+		if findings[i].ServerID != findings[j].ServerID {
+			return findings[i].ServerID < findings[j].ServerID
+		}
+		return findings[i].Subject < findings[j].Subject
+	})
 
 	exitCode := 0
-	if severityRank(maxSev) >= threshold || len(typoFindings) > 0 {
-		exitCode = 1
+	if thresholdSet {
+		for _, f := range findings {
+			if findingSeverityRank(f.Severity) >= threshold {
+				exitCode = 1
+				break
+			}
+		}
 	}
-	report.ExitCode = exitCode
-	if manifest.ServerID != "" {
-		toolNames := make([]string, 0, len(manifest.Tools))
-		for _, tool := range manifest.Tools {
-			toolNames = append(toolNames, tool.Name)
-		}
-		risk := mcppkg.ServerRiskMedium
-		reason := "mcp scan requires review before dispatch"
-		if exitCode != 0 {
-			risk = mcppkg.ServerRiskHigh
-			reason = "mcp scan findings require quarantine"
-		}
-		registry := mcppkg.NewQuarantineRegistry()
-		record, err := registry.Discover(context.Background(), mcppkg.DiscoverServerRequest{
-			ServerID:     manifest.ServerID,
-			ToolNames:    toolNames,
-			Risk:         risk,
-			DiscoveredAt: time.Now().UTC(),
-			Reason:       reason,
-		})
-		if err == nil {
-			_, _ = newLocalSurfaceRegistry().PutMCPServer(record)
-		}
+
+	report := mcpScanV1Report{
+		Schema:         mcpScanSchema,
+		Sources:        sources,
+		Servers:        reportServers(servers),
+		ServersScanned: len(servers),
+		ToolsScanned:   toolsScanned,
+		Findings:       findings,
+		MaxSeverity:    maxFindingSeverity(findings),
+		Authorizes:     false,
+		ExitCode:       exitCode,
 	}
 
 	if jsonOut {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(report)
+		if err := cliui.WriteJSON(stdout, report); err != nil {
+			return 1
+		}
 		return exitCode
 	}
-
-	writeHumanReport(stdout, report)
+	writeSupplyScanReport(stdout, report)
 	return exitCode
 }
 
@@ -305,6 +326,21 @@ func maxDocSeverity(findings []mcppkg.DocScanFinding) mcppkg.DocScanSeverity {
 		}
 	}
 	return top
+}
+
+func writeSupplyScanReport(w io.Writer, r mcpScanV1Report) {
+	fmt.Fprintf(w, "MCP scan (inspect only; does not authorize)\n")
+	fmt.Fprintf(w, "  servers: %d\n", r.ServersScanned)
+	fmt.Fprintf(w, "  tools:   %d\n", r.ToolsScanned)
+	fmt.Fprintf(w, "  findings:%d\n", len(r.Findings))
+	fmt.Fprintf(w, "  max:     %s\n", r.MaxSeverity)
+	if len(r.Findings) == 0 {
+		fmt.Fprintln(w, "  No findings.")
+		return
+	}
+	for _, f := range r.Findings {
+		fmt.Fprintf(w, "  [%s] %s %s %s\n", f.Severity, f.Kind, f.ServerID, f.Description)
+	}
 }
 
 func writeHumanReport(w io.Writer, r mcpScanReport) {

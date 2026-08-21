@@ -45,6 +45,7 @@ coverage.html
 *.pprof
 *.prof
 core/helm
+core/cmd/helm-ai-kernel/helm/
 core/helm-ai-kernel
 core/bootstrap
 core/firewall.out
@@ -120,3 +121,6 @@ helm.yaml
 sdk/ts/*.tgz
 version-status.json
 /helm-ai-kernel
+
+# Unlazy session ledger (not product source)
+/GATES.md

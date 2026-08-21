@@ -149,7 +149,7 @@ func runBundleList(args []string, stdout, stderr io.Writer) int {
 	for _, f := range files {
 		bundle, err := bundles.LoadFromFile(f)
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "  ⚠ %s: %v\n", filepath.Base(f), err)
+			_, _ = fmt.Fprintf(stderr, "  %s: %v\n", filepath.Base(f), err)
 			continue
 		}
 		infos = append(infos, bundles.Inspect(bundle))
@@ -208,7 +208,7 @@ func runBundleVerify(args []string, stdout, stderr io.Writer) int {
 			}, "", "  ")
 			_, _ = fmt.Fprintln(stdout, string(data))
 		} else {
-			_, _ = fmt.Fprintf(stderr, "❌ Verification failed: %v\n", err)
+			_, _ = fmt.Fprintf(stderr, "Verification failed: %v\n", err)
 		}
 		return 1
 	}
@@ -221,7 +221,7 @@ func runBundleVerify(args []string, stdout, stderr io.Writer) int {
 		}, "", "  ")
 		_, _ = fmt.Fprintln(stdout, string(data))
 	} else {
-		_, _ = fmt.Fprintf(stdout, "✅ Bundle verified: %s\n", filepath.Base(file))
+		_, _ = fmt.Fprintf(stdout, "Bundle verified: %s\n", filepath.Base(file))
 	}
 	return 0
 }

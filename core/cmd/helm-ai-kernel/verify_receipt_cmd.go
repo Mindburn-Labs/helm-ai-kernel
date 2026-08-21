@@ -100,13 +100,13 @@ func runVerifyReceiptCmd(args []string, stdout, stderr io.Writer) int {
 		admissible := integrityValid && signerTrusted
 		switch {
 		case !integrityValid:
-			_, _ = fmt.Fprintf(stdout, "%s✗ TAMPERED — this receipt.v5 file does not match its own signature%s\n", ColorRed, ColorReset)
+			_, _ = fmt.Fprintf(stdout, "%sTAMPERED — this receipt.v5 file does not match its own signature%s\n", ColorRed, ColorReset)
 			_, _ = fmt.Fprintf(stdout, "  Its contents were altered after signing. Do not act on anything below.\n")
 		case !signerTrusted:
-			_, _ = fmt.Fprintf(stdout, "%s✗ UNVERIFIED — signature is intact but the signer is not the supplied trust anchor%s\n", ColorRed, ColorReset)
+			_, _ = fmt.Fprintf(stdout, "%sUNVERIFIED — signature is intact but the signer is not the supplied trust anchor%s\n", ColorRed, ColorReset)
 			_, _ = fmt.Fprintf(stdout, "  A key that arrives inside the receipt is not a trust root. Pass --trusted-public-key-file.\n")
 		default:
-			_, _ = fmt.Fprintf(stdout, "%s✓ ADMISSIBLE — receipt.v5 signature verifies under the caller-supplied key%s\n", ColorGreen, ColorReset)
+			_, _ = fmt.Fprintf(stdout, "%sADMISSIBLE — receipt.v5 signature verifies under the caller-supplied key%s\n", ColorGreen, ColorReset)
 		}
 		_, _ = fmt.Fprintf(stdout, "%sKernel receipt.v5 offline verification%s\n", ColorBold, ColorReset)
 		_, _ = fmt.Fprintf(stdout, "  receipt:   %s\n", receiptPath)

@@ -230,7 +230,7 @@ func deriveCloudMCPURL(base string) string {
 }
 
 func printConnectSummary(stdout io.Writer, result lpcmd.ConnectResult, edge, target, scope, configPath string, noConfig, nativeHTTP bool) {
-	fmt.Fprintf(stdout, "\n✅ Connected to cloud HELM\n")
+	fmt.Fprintf(stdout, "\nConnected to cloud HELM\n")
 	fmt.Fprintf(stdout, "   Workspace:  %s\n", result.WorkspaceID)
 	if result.Principal != "" {
 		fmt.Fprintf(stdout, "   Approved by: %s\n", result.Principal)

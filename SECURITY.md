@@ -15,9 +15,9 @@ Security fixes are expected on the current minor version and, when practical, th
 
 | Version | Supported |
 | --- | --- |
-| `0.5.x` | Yes |
-| `0.4.x` | Yes |
-| `0.3.x` | Best effort |
+| `0.8.x` | Yes |
+| `0.7.x` | Yes |
+| `0.6.x` | Best effort |
 | Older | No |
 
 ## Verification Material
@@ -57,9 +57,9 @@ The signing identity is the GitHub Actions workflow itself
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-The current public GitHub release, `v0.5.8`, attaches
+The current public GitHub release, `v0.8.4`, attaches
 OpenVEX and Cosign bundle material for every primary asset. Verify
-`SHA256SUMS.txt`, `sbom.json`, `v0.5.8.openvex.json`,
+`SHA256SUMS.txt`, `sbom.json`, `v0.8.4.openvex.json`,
 `release-attestation.json`, offline `evidence-pack.tar`, and matching
 `*.cosign.bundle` files.
 

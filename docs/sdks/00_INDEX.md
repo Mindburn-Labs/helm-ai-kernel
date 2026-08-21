@@ -107,7 +107,7 @@ console.log(demo, verification);
 | --- | --- |
 | `ALLOW` | Continue only through the wrapper or executor that requested the decision |
 | `DENY` | Stop and show the reason code |
-| `ESCALATE` | Keep the call blocked; show the scoped approval hint |
+| `ESCALATE` | Keep the call blocked; credential-verified admission required before rerun (local `mcp approve` does not mint authority) |
 | Missing receipt | Confirm the application called HELM instead of the upstream directly |
 | Required header missing | Stop and use a client path that can send the server-required scope |
 

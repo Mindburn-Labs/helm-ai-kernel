@@ -56,13 +56,15 @@ helm-ai-kernel mcp receipts --json
 helm-ai-kernel verify \
   --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> \
   --profile dev-local \
+  --allow-self-attested \
   --json
 ```
 
 Before a live rollout, prove client load, policy-graph wiring, the exact routed
 call, a real executor or upstream proxy, no-dispatch on `DENY` and `ESCALATE`,
 revocation, schema drift, and offline verification. The profile-generation path
-alone is not a general-purpose MCP proxy.
+alone is not a general-purpose MCP proxy. The explicit `--allow-self-attested`
+opt-in accepts internal consistency for this local proof, not provenance.
 
 ## Source Truth
 

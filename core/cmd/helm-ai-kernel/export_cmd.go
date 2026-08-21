@@ -193,10 +193,10 @@ func runExportCmd(args []string, stdout, stderr io.Writer) int {
 	} else {
 		_, _ = fmt.Fprintf(stdout, "Exported %d items to %s\n", len(exported), result["output_path"])
 		for _, item := range exported {
-			_, _ = fmt.Fprintf(stdout, "  ✅ %s\n", item)
+			_, _ = fmt.Fprintf(stdout, "  %s\n", item)
 		}
 		if tarPath, ok := result["tar_path"].(string); ok {
-			_, _ = fmt.Fprintf(stdout, "  📦 Deterministic archive: %s\n", tarPath)
+			_, _ = fmt.Fprintf(stdout, "  Deterministic archive: %s\n", tarPath)
 		}
 	}
 

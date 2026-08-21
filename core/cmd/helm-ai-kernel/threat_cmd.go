@@ -76,11 +76,11 @@ func runThreatScan(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, string(data))
 	} else {
 		if result.FindingCount == 0 {
-			fmt.Fprintf(stdout, "%s✅ Clean%s — no threat signals detected\n", ColorGreen, ColorReset)
+			fmt.Fprintf(stdout, "%sClean%s — no threat signals detected\n", ColorGreen, ColorReset)
 			fmt.Fprintf(stdout, "   Source:  %s (trust=%s)\n", result.SourceChannel, result.TrustLevel)
 			fmt.Fprintf(stdout, "   Hash:    %s\n", result.RawInputHash)
 		} else {
-			fmt.Fprintf(stdout, "%s⚠️  %d threat signal(s) detected%s (max severity: %s%s%s)\n",
+			fmt.Fprintf(stdout, "%s %d threat signal(s) detected%s (max severity: %s%s%s)\n",
 				ColorYellow, result.FindingCount, ColorReset,
 				severityColor(result.MaxSeverity), result.MaxSeverity, ColorReset)
 			fmt.Fprintf(stdout, "   Source:  %s (trust=%s)\n", result.SourceChannel, result.TrustLevel)
@@ -148,9 +148,9 @@ func runThreatTest(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "\n%sThreat Scanner Adversarial Suite%s\n\n", ColorBold, ColorReset)
 		for _, r := range results {
 			if r.Passed {
-				fmt.Fprintf(stdout, "  %s✅ PASS%s  %s\n", ColorGreen, ColorReset, r.Name)
+				fmt.Fprintf(stdout, "  %sPASS%s  %s\n", ColorGreen, ColorReset, r.Name)
 			} else {
-				fmt.Fprintf(stdout, "  %s❌ FAIL%s  %s — %s\n", ColorRed, ColorReset, r.Name, r.Reason)
+				fmt.Fprintf(stdout, "  %sFAIL%s  %s — %s\n", ColorRed, ColorReset, r.Name, r.Reason)
 			}
 			fmt.Fprintf(stdout, "          %s\n", r.Summary)
 		}
@@ -160,7 +160,7 @@ func runThreatTest(args []string, stdout, stderr io.Writer) int {
 		if failed > 0 {
 			fmt.Fprintf(stdout, "\n  %s%d scenario(s) failed%s\n", ColorRed, failed, ColorReset)
 		} else {
-			fmt.Fprintf(stdout, "\n  %sAll scenarios passed ✓%s\n", ColorGreen, ColorReset)
+			fmt.Fprintf(stdout, "\n  %sAll scenarios passed %s\n", ColorGreen, ColorReset)
 		}
 		fmt.Fprintln(stdout)
 	}

@@ -16,6 +16,8 @@ import (
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/financedemo"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 // financeDemoPolicyID is the policy identity bound into the finance demo's
@@ -71,59 +73,64 @@ func runDemoFinance(args []string, stdout, stderr io.Writer) int {
 
 	printFinanceNarrative(stdout, res)
 
-	fmt.Fprintf(stdout, "\n%sExporting EvidencePack...%s\n", ColorBold, ColorReset)
+	p := ui.NewPrinter(stdout)
+	p.Title("Exporting EvidencePack...")
 	if err := writeFinanceEvidencePack(outDir, res); err != nil {
 		fmt.Fprintf(stderr, "Error sealing EvidencePack: %v\n", err)
 		return 2
 	}
-	fmt.Fprintf(stdout, "  📦 %d receipts → %s/\n", len(res.Receipts), outDir)
-	fmt.Fprintf(stdout, "  🔏 Sealed (dev-local) → %s/%s\n", outDir, evidencepkg.EvidencePackSealPath)
+	p.Line("  %d receipts → %s/", len(res.Receipts), outDir)
+	p.Line("  Sealed (dev-local) → %s/%s", outDir, evidencepkg.EvidencePackSealPath)
 	if code := runVerifyCmd([]string{"--bundle", outDir, "--profile", "dev-local", "--allow-self-attested"}, stdout, stderr); code != 0 {
 		fmt.Fprintf(stderr, "Error verifying generated EvidencePack (exit %d)\n", code)
 		return 1
 	}
-	fmt.Fprintf(stdout, "  🔍 Verify: %s\n", evidencepkg.BuildEvidencePackVerifyCommand(outDir, evidencepkg.EvidenceTrustProfileDevLocal, ""))
-
-	fmt.Fprintf(stdout, "\n%s🎉 Finance demo complete.%s Payment above limit escalated, approved, then executed (simulated).\n", ColorBold+ColorGreen, ColorReset)
+	p.Line("  Verify: %s", evidencepkg.BuildEvidencePackVerifyCommand(outDir, evidencepkg.EvidenceTrustProfileDevLocal, ""))
+	p.Card(ui.CompletionCard{
+		Title: "HELM Demo Complete",
+		Fields: []ui.KeyValue{
+			{Key: "Scenario", Value: "Finance payment approval"},
+			{Key: "Evidence", Value: outDir + "/"},
+			{Key: "Result", Value: "Payment above limit escalated, approved, then executed (simulated)."},
+		},
+	})
 	return 0
 }
 
 func printFinanceNarrative(stdout io.Writer, res *financedemo.ScenarioResult) {
-	p := res.Policy
+	p := ui.NewPrinter(stdout)
+	pol := res.Policy
 	instr := res.Instruction
-	fmt.Fprintf(stdout, "\n%s💳 HELM Demo: Finance Payment Approval%s\n", ColorBold+ColorBlue, ColorReset)
-	fmt.Fprintf(stdout, "%s   Scenario: vendor payment above policy limit routes to CFO/Finance approval%s\n", ColorGray, ColorReset)
-	fmt.Fprintf(stdout, "%s   Mode: deterministic scripted smoke (no real payment; connector stubbed)%s\n\n", ColorYellow, ColorReset)
-
-	fmt.Fprintf(stdout, "%sThreshold policy:%s %s\n", ColorBold, ColorReset, p.PolicyID)
-	fmt.Fprintf(stdout, "  • Limit:    $%s above which approval is required\n", dollars(p.ApprovalRequiredAboveCents))
-	fmt.Fprintf(stdout, "  • Approval: quorum %d of %v\n", p.ApprovalQuorum, p.RequiredApprovers)
-	fmt.Fprintf(stdout, "  • Hash:     %s\n\n", p.PolicyHash)
-
-	fmt.Fprintf(stdout, "%sConnector/action context:%s\n", ColorBold, ColorReset)
-	fmt.Fprintf(stdout, "  • Connector: %s  Action: %s\n", instr.ConnectorID, instr.Action)
-	fmt.Fprintf(stdout, "  • Vendor:    %s  Invoice: %s\n", instr.Vendor, instr.InvoiceRef)
-	fmt.Fprintf(stdout, "  • Amount:    $%s %s\n\n", dollars(instr.AmountCents), instr.Currency)
+	p.Blank()
+	p.Title("HELM Demo: Finance Payment Approval")
+	p.Muted("   Scenario: vendor payment above policy limit routes to CFO/Finance approval")
+	p.Muted("   Mode: deterministic scripted smoke (no real payment; connector stubbed)")
+	p.Blank()
+	p.Title("Threshold policy")
+	p.KV("Policy", pol.PolicyID)
+	p.KV("Limit", "$"+dollars(pol.ApprovalRequiredAboveCents)+" above which approval is required")
+	p.KV("Approval", fmt.Sprintf("quorum %d of %v", pol.ApprovalQuorum, pol.RequiredApprovers))
+	p.KV("Hash", pol.PolicyHash)
+	p.Blank()
+	p.Title("Connector/action context")
+	p.KV("Connector", instr.ConnectorID+"  Action: "+instr.Action)
+	p.KV("Vendor", instr.Vendor+"  Invoice: "+instr.InvoiceRef)
+	p.KV("Amount", "$"+dollars(instr.AmountCents)+" "+instr.Currency)
+	p.Blank()
 
 	for _, r := range res.Receipts {
-		icon, color := "✅", ColorGreen
-		switch r.Verdict {
-		case "ESCALATE":
-			icon, color = "⛔", ColorYellow
-		case "PENDING":
-			icon, color = "⏳", ColorYellow
-		case "DENY":
-			icon, color = "❌", ColorRed
-		}
-		fmt.Fprintf(stdout, "  %s %s[%s]%s %s → %s%s%s %s(%s, L=%d)%s\n",
-			icon, color, r.Verdict, ColorReset,
-			r.Principal, ColorBold, r.Action, ColorReset,
-			ColorGray, r.ReasonCode, r.Lamport, ColorReset)
+		p.Event(ui.EventLine{
+			Status: ui.StatusFromVerdict(r.Verdict),
+			Actor:  r.Principal,
+			Action: r.Action,
+			Meta:   fmt.Sprintf("%s, L=%d", r.ReasonCode, r.Lamport),
+		})
 	}
 
-	fmt.Fprintf(stdout, "\n%sHuman approval result:%s state=%s ceremony_hash=%s\n", ColorBold, ColorReset, res.Ceremony.State, res.Ceremony.CeremonyHash)
-	fmt.Fprintf(stdout, "%sExecution receipt:%s simulated=%t hash=%s\n", ColorBold, ColorReset, res.ExecutionReceipt.Simulated, res.ExecutionReceipt.ContentHash)
-	fmt.Fprintf(stdout, "%sProof chain:%s %d receipts, root=%s\n", ColorBold, ColorReset, len(res.Receipts), res.RootHash)
+	p.Blank()
+	p.Line("Human approval result: state=%s ceremony_hash=%s", res.Ceremony.State, res.Ceremony.CeremonyHash)
+	p.Line("Execution receipt: simulated=%t hash=%s", res.ExecutionReceipt.Simulated, res.ExecutionReceipt.ContentHash)
+	p.Line("Proof chain: %d receipts, root=%s", len(res.Receipts), res.RootHash)
 }
 
 func dollars(cents int64) string {

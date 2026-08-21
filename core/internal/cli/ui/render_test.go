@@ -9,7 +9,7 @@ import (
 
 func TestStatusAlwaysHasPlainLabel(t *testing.T) {
 	plain := NewRenderer(nil, Capabilities{Width: 80})
-	for _, status := range []Status{StatusPass, StatusWarn, StatusFail, StatusDeny, StatusEscalate} {
+	for _, status := range []Status{StatusPass, StatusAllow, StatusWarn, StatusFail, StatusDeny, StatusEscalate} {
 		got := plain.Status(status)
 		if !strings.Contains(got, "["+status.Label()+"]") {
 			t.Fatalf("%s marker = %q, missing visible label", status, got)
@@ -59,12 +59,12 @@ func TestCompletionUsesWideASCIICardAndChromeOnly(t *testing.T) {
 	if data.Len() != 0 {
 		t.Fatalf("renderer polluted data stream: %q", data.String())
 	}
-	for _, want := range []string{"+ HELM is active", "| Scope: this project", "Next: helm-ai-kernel receipts tail"} {
+	for _, want := range []string{"HELM is active", "Scope:", "this project", "Next:", "helm-ai-kernel receipts tail"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("completion = %q, missing %q", got, want)
 		}
 	}
-	if strings.Contains(got, "\x1b") || strings.Contains(got, "┌") {
+	if strings.Contains(got, "\x1b") || strings.Contains(got, "┌") || strings.Contains(got, "╭") {
 		t.Fatalf("ASCII completion contains unsupported decoration: %q", got)
 	}
 }

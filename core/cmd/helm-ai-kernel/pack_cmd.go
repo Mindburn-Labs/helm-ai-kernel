@@ -277,7 +277,7 @@ func runPackPropose(args []string, stdout, stderr io.Writer) int {
 		"name": name, "risk": risk, "purpose": purpose,
 	})
 
-	fmt.Fprintf(stdout, "\n%s📋 SkillCandidate Created%s\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(stdout, "\n%sSkillCandidate Created%s\n", ColorBold+ColorBlue, ColorReset)
 	fmt.Fprintf(stdout, "   Name:      %s\n", name)
 	fmt.Fprintf(stdout, "   Purpose:   %s\n", purpose)
 	fmt.Fprintf(stdout, "   Risk:      %s\n", risk)
@@ -366,7 +366,7 @@ func runPackBuild(args []string, stdout, stderr io.Writer) int {
 
 	_ = candidatePath // used to find candidate
 
-	fmt.Fprintf(stdout, "\n%s📦 SkillPack Built%s\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "\n%sSkillPack Built%s\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "   Name:           %s v%s\n", candidate.Name, candidate.Version)
 	fmt.Fprintf(stdout, "   Candidate:      %s\n", candidate.Hash[:16])
 	fmt.Fprintf(stdout, "   Pack Hash:      %s\n", pack.PackHash[:32])
@@ -404,7 +404,7 @@ func runPackTest(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// Run conformance tests
-	fmt.Fprintf(stdout, "\n%s🧪 Pack Conformance Test%s\n", ColorBold+ColorYellow, ColorReset)
+	fmt.Fprintf(stdout, "\n%sPack Conformance Test%s\n", ColorBold+ColorYellow, ColorReset)
 	fmt.Fprintf(stdout, "   Pack:  %s (%s v%s)\n\n", pack.PackHash[:16], pack.Manifest.Name, pack.Manifest.Version)
 
 	tests := []struct {
@@ -421,9 +421,9 @@ func runPackTest(args []string, stdout, stderr io.Writer) int {
 
 	allPass := true
 	for _, t := range tests {
-		icon := "✅"
+		icon := ""
 		if !t.pass {
-			icon = "❌"
+			icon = ""
 			allPass = false
 		}
 		fmt.Fprintf(stdout, "   %s %s — %s\n", icon, t.name, t.detail)
@@ -548,7 +548,7 @@ func runPackPromote(args []string, stdout, stderr io.Writer) int {
 		Details:   cert,
 	})
 
-	fmt.Fprintf(stdout, "\n%s🏅 Pack Promoted%s\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "\n%sPack Promoted%s\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "   Pack:             %s (%s)\n", pack.PackHash[:16], pack.Manifest.Name)
 	fmt.Fprintf(stdout, "   Candidate:        %s\n", pack.CandidateHash[:16])
 	fmt.Fprintf(stdout, "   Policy Hash:      %s\n", cert.PolicyHash[:16])
@@ -616,7 +616,7 @@ func runPackInstall(args []string, stdout, stderr io.Writer) int {
 		"name": pack.Manifest.Name, "version": pack.Manifest.Version,
 	})
 
-	fmt.Fprintf(stdout, "\n%s✅ Pack Installed%s\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "\n%sPack Installed%s\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "   Name:        %s v%s\n", pack.Manifest.Name, pack.Manifest.Version)
 	fmt.Fprintf(stdout, "   Pack Hash:   %s\n", pack.PackHash[:32])
 	fmt.Fprintf(stdout, "   Installed:   %s\n", now)
@@ -638,7 +638,7 @@ func runPackList(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "\n%s📋 Skill Lifecycle Status%s\n\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(stdout, "\n%sSkill Lifecycle Status%s\n\n", ColorBold+ColorBlue, ColorReset)
 
 	// List candidates
 	candidatesDir := filepath.Join("data", "candidates")
@@ -893,7 +893,7 @@ func handlePackCreate(args []string) int {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Println(string(data))
 	} else {
-		fmt.Printf("✅ Evidence pack created: %s (%d files)\n", outPath, len(files))
+		fmt.Printf("Evidence pack created: %s (%d files)\n", outPath, len(files))
 	}
 
 	return 0
@@ -1031,7 +1031,7 @@ func handlePackVerify(args []string) int {
 			data, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(data))
 		} else {
-			fmt.Fprintf(os.Stderr, "❌ Verification failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Verification failed: %v\n", err)
 		}
 		return 1
 	}
@@ -1051,7 +1051,7 @@ func handlePackVerify(args []string) int {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		fmt.Println(string(data))
 	} else {
-		fmt.Fprintf(os.Stderr, "❌ Pack authenticity not verified: trusted signature verification is required\n")
+		fmt.Fprintf(os.Stderr, "Pack authenticity not verified: trusted signature verification is required\n")
 		fmt.Printf("Integrity check passed: %s\n", bundlePath)
 		fmt.Printf("   Session:  %s\n", manifest.SessionID)
 		fmt.Printf("   Version:  %s\n", manifest.Version)

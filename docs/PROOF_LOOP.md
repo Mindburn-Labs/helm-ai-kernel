@@ -1,6 +1,6 @@
 ---
 title: HELM Proof Loop
-last_reviewed: 2026-08-12
+last_reviewed: 2026-08-21
 ---
 
 # HELM Proof Loop
@@ -60,8 +60,9 @@ pre-v0.7.3 derivable-seed receipts remain untrusted.
 
 - HELM only governs effects routed through an adapter, wrapper, hook, proxy, or
   API route.
-- `ESCALATE` is not permission to continue. Approve the exact scope, then rerun
-  the original action.
+- `ESCALATE` is not permission to continue. Obtain a credential-verified
+  durable dispatch admission for the exact scope, then rerun the original
+  action. Local `mcp approve` does not mint that authority.
 - Receipts prove the evaluated action and verdict. They do not prove every
   tool outside the boundary was governed.
 - EvidencePacks are portable proof bundles, not marketing screenshots.

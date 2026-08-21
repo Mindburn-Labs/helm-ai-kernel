@@ -13,10 +13,11 @@ files. It is not a complete copy of any GitHub release.
 | `vex/policies.yaml` | Maintainer policy file consumed by `scripts/release/generate_vex.sh`. |
 | `version-surfaces.yaml` | Version-surface contract consumed by `make prepare-version` and `check_version_drift.py`; every in-tree version claim (SDK manifests, docs, `mcp-bundle.json`) must be listed here. |
 
-## Current Release Target
+## Current Public Release
 
-The current source release target is `v0.8.4`. Its expected visible release
-assets are platform binaries for Darwin, Linux, and Windows,
+The current public GitHub release is `v0.8.4`
+(https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4). Visible
+assets include platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
 `v0.8.4.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,

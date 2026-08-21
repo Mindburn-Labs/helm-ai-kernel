@@ -53,9 +53,10 @@ flowchart TD
 ```
 
 
-Current public release: `v0.8.4`
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4>. GitHub
-shows Darwin/Linux/Windows binaries, `SHA256SUMS.txt`, `sbom.json`,
+Current source release target: `v0.8.4`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4>. The
+release is complete only when GitHub shows Darwin/Linux/Windows binaries,
+`SHA256SUMS.txt`, `sbom.json`,
 `v0.8.4.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,

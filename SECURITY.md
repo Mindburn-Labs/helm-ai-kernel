@@ -1,5 +1,7 @@
 # Security Policy
 
+<!-- quantum_posture: this policy page mentions Cosign/OIDC verification of release artifacts; it implements no cryptographic control and makes no post-quantum claim. -->
+
 ## Reporting a Vulnerability
 
 Do not open public issues for security-sensitive reports.

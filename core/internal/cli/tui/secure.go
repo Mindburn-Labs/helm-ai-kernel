@@ -1,5 +1,8 @@
 package tui
 
+// quantum_posture: redacts JWT-shaped tokens from TUI output; this is display
+// hygiene, not token verification or a post-quantum control.
+
 import (
 	"regexp"
 	"strings"

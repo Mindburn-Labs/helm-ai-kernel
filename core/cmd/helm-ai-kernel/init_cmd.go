@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: helm init generates a classical Ed25519 signing keypair
+// under helm/.keys; no hybrid or post-quantum profile is implemented or claimed.
+
 import (
 	"crypto/ed25519"
 	"crypto/rand"

@@ -22,10 +22,10 @@ brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version
 ```
 
-The pinned CLI for this packet is `0.8.4` from the
+The expected source release target for this packet is `0.8.4`. This is not a
+registry availability claim. If the registry or local cache does not return
+that release after publication, stop and use the signed asset from the
 [v0.8.4 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4).
-If the registry or local cache does not return that release, stop and use the
-signed asset from the GitHub release.
 
 ## 2. Run A Clean Local Proof
 

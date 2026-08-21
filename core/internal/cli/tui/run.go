@@ -1,5 +1,8 @@
 package tui
 
+// quantum_posture: TUI chrome tells operators to trust only Ed25519/SHA-256/JCS
+// receipts; the TUI is not a verifier and claims no post-quantum control.
+
 import (
 	"context"
 	"fmt"

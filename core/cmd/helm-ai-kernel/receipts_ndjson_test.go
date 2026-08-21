@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: fixture signatures are classical ed25519: labels only;
+// this test parses NDJSON and does not verify or claim a post-quantum path.
+
 import (
 	"bufio"
 	"encoding/json"

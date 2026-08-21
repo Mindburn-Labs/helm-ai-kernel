@@ -1,5 +1,8 @@
 package tui
 
+// quantum_posture: doctor fixture copy mentions "Ed25519 key present" as
+// status text; this file does not generate keys or claim post-quantum control.
+
 import (
 	"context"
 	"strings"

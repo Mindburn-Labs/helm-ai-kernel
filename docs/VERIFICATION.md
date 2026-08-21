@@ -111,11 +111,14 @@ EvidencePacks are portable proof bundles for local review and offline replay.
 
 ## Release Evidence
 
-Current public release: `v0.8.4`
-(https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4).
+Current source release target: `v0.8.4`.
+
+The `v0.8.4` release is complete only after the listed local verification
+assets appear on the GitHub release and verify locally.
 
 Check the GitHub release and local verification artifacts together:
 
-- `SHA256SUMS.txt`, `sbom.json`, `release-attestation.json`
-- `v0.8.4.openvex.json`, `v0.8.4.json`
-- offline `evidence-pack.tar` and matching `*.cosign.bundle` files
+- release: `https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4`
+- v0.8.4 Asset Contract
+- `v0.8.4.openvex.json`
+- `v0.8.4.json`

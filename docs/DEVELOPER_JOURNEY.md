@@ -69,13 +69,15 @@ Java SDK consumers can use the source-target Maven coordinate
 </dependency>
 ```
 
-Current public release: `v0.8.4`
-(`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4`).
-Published assets include `v0.8.4.openvex.json`, `v0.8.4.json`, checksums,
-SBOM, attestation, EvidencePack, and Cosign bundles.
+Current source release target: `v0.8.4`.
+The expected release URL is
+`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4`. Do not
+treat its assets as present until the normal release workflow attaches and
+verifies them, including `v0.8.4.openvex.json` and `v0.8.4.json`.
 
-Go SDK consumers can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.4`
-(subdirectory tag `sdk/go/v0.8.4`) once that tag is present and verified.
+After the source subdirectory tag is published and verified, Go SDK consumers
+can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.4`; the expected
+tag is `sdk/go/v0.8.4`.
 
 ## Local Boundary
 

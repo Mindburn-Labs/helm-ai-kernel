@@ -153,7 +153,11 @@ func newConfiguredLocalMCPGatewayWithSigner(cfg mcppkg.GatewayConfig, signer hel
 // governance evaluator (typically the kernel Guardian bound to the reconciled
 // policy snapshot store).
 func newLocalMCPGatewayWithEvaluator(cfg mcppkg.GatewayConfig, evaluator mcppkg.PolicyEvaluator) (*mcppkg.Gateway, error) {
-	catalog, executor, err := newLocalMCPRuntimeWithEvaluator(evaluator)
+	return newLocalMCPGatewayWithEvaluatorAndEffects(cfg, evaluator, nil)
+}
+
+func newLocalMCPGatewayWithEvaluatorAndEffects(cfg mcppkg.GatewayConfig, evaluator mcppkg.PolicyEvaluator, githubEffects *githubEffectsRuntime) (*mcppkg.Gateway, error) {
+	catalog, executor, err := newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator, githubEffects)
 	if err != nil {
 		return nil, err
 	}

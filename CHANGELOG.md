@@ -109,8 +109,9 @@ Governed MCP calls rejected at the REST or JSON-RPC ingress boundary now emit
 one `helm.request.received.v1` and one `helm.request.failed.v1` event without
 reaching policy evaluation or a tool handler. The Helm chart can also activate
 the existing signed-permit GitHub effects runtime through an existing Secret;
-raw GitHub tokens are never accepted as chart values, and the default remains
-off.
+the deployed snapshot-bound gateway now registers those configured tools
+instead of dropping the effects runtime. Raw GitHub tokens are never accepted
+as chart values, and the default remains off.
 
 ### Added — offline Kernel receipt.v5 file verify (Building)
 

@@ -481,6 +481,68 @@ func TestGovernedDeployedMCPGatewayRequiresReceiptComponents(t *testing.T) {
 	}
 }
 
+func TestDeployedMCPGatewayRegistersConfiguredGitHubEffects(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv(githubEffectsTokenEnv, "inert-test-token")
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gateway, err := newDeployedMCPGateway(&Services{
+		DataDir:       dataDir,
+		Guardian:      &guardian.Guardian{},
+		ReceiptStore:  &captureReceiptStore{},
+		ReceiptSigner: signer,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("tools/list status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	for _, tool := range []string{"github.list_prs", "github.read_pr", "github.create_issue", "github.add_comment"} {
+		if !strings.Contains(recorder.Body.String(), `"name":"`+tool+`"`) {
+			t.Fatalf("configured deployed gateway did not register %s: %s", tool, recorder.Body.String())
+		}
+	}
+}
+
+func TestDeployedMCPGatewayLeavesGitHubEffectsDisabledWithoutToken(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv(githubEffectsTokenEnv, "")
+	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gateway, err := newDeployedMCPGateway(&Services{
+		DataDir:       dataDir,
+		Guardian:      &guardian.Guardian{},
+		ReceiptStore:  &captureReceiptStore{},
+		ReceiptSigner: signer,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("tools/list status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), `"name":"github.`) {
+		t.Fatalf("unconfigured deployed gateway widened tool surface: %s", recorder.Body.String())
+	}
+}
+
 func TestUnavailableMCPGatewayLogsWarning(t *testing.T) {
 	previousLogger := slog.Default()
 	var output bytes.Buffer

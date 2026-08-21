@@ -21,7 +21,7 @@ Install and open the CLI front door:
 
 ```bash
 brew tap mindburn-labs/tap
-brew install helm-ai-kernel
+brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel
 ```
 

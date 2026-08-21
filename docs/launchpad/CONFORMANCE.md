@@ -157,7 +157,7 @@ No additional app may move to `oss_supported` until it passes the same bar.
 
 ```bash
 brew update
-brew install mindburnlabs/tap/helm-ai-kernel
+brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel launch matrix --json
 helm-ai-kernel launch secrets set model_gateway --provider openai --value-env OPENAI_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json

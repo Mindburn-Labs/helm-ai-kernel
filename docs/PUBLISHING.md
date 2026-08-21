@@ -68,7 +68,7 @@ The repository retains packaging metadata for the kernel binaries, container ima
 
 | Surface | Package Identity |
 | --- | --- |
-| CLI/Homebrew | GitHub Release binaries, attached `helm-ai-kernel.rb`, and `mindburnlabs/tap/helm-ai-kernel` |
+| CLI/Homebrew | GitHub Release binaries, attached `helm-ai-kernel.rb`, and `mindburn-labs/tap/helm-ai-kernel` |
 | TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
@@ -106,7 +106,7 @@ The retained workflow set under `.github/workflows/` covers:
 
 - main CI
 - GitHub Release creation for tagged versions
-- Homebrew formula generation for `mindburnlabs/homebrew-tap`
+- Homebrew formula generation for `Mindburn-Labs/homebrew-tap`
 - GHCR image publication for `latest`, version tag, and slim tag
 - Go SDK subdirectory tag publication for `sdk/go/v0.8.4`
 - tag-triggered npm, PyPI, crates.io, and Maven-compatible SDK publication
@@ -148,9 +148,9 @@ AI Act high-risk reference pack. The local Console sidecars and standalone
 browser UI layouts are Kernel release assets; the Homebrew formula does not
 install them.
 The retained release workflow attaches a `helm-ai-kernel.rb` formula asset for version `0.8.4`
-and publishes the same version to `mindburnlabs/homebrew-tap`;
+and publishes the same version to `Mindburn-Labs/homebrew-tap`;
 `version-status.json` must include a passing `homebrew-tap` surface before
-documenting `brew install mindburnlabs/tap/helm-ai-kernel` as current.
+documenting `brew install mindburn-labs/tap/helm-ai-kernel` as current.
 
 SDK package manifests and registry versions must remain lockstep with the
 GitHub release tag. npm, PyPI, crates.io, Maven, and Homebrew publication

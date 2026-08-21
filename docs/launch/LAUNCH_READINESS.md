@@ -4,7 +4,7 @@ This is a frozen snapshot of one `scripts/launch/launch-ready.sh --write` run.
 It is **not** a live status page and nothing keeps it current.
 
 - Snapshot taken: 2026-05-19T17:15:07Z, against launch target `0.5.0`.
-- `VERSION` is now `0.8.3`, and the tool derives its launch target from
+- `VERSION` is now `0.8.4`, and the tool derives its launch target from
   `cat VERSION`, so a fresh run would check a different target.
 - The tool writes to `${HELM_LAUNCH_READY_REPORT}` and otherwise to
   `$LOG_DIR/launch-readiness.txt` in a `mktemp` directory. `make launch-ready`
@@ -12,12 +12,9 @@ It is **not** a live status page and nothing keeps it current.
   pointing `HELM_LAUNCH_READY_REPORT` here once and committing the result.
 - The tool no longer emits the "Config Boundary: wrangler.toml…" row below;
   there is no `wrangler.toml` tracked in this repository.
-- The "Homebrew" row below is false as of 2026-08-09. The tool's check is
-  `rg -q 'brew install mindburnlabs/tap/helm-ai-kernel' README.md`, and
-  `README.md` instead documents `brew tap mindburn-labs/tap` followed by
-  `brew install helm-ai-kernel`. Either the check or the README is wrong;
-  neither has been changed here, because deciding which tap name is canonical
-  is a public-claims call.
+- The "Homebrew" row below is a historical snapshot. Current active docs use
+  the fully qualified formula `mindburn-labs/tap/helm-ai-kernel` so a second
+  legacy tap cannot make an unqualified install ambiguous.
 
 To get current state, run the tool rather than reading this file:
 
@@ -40,8 +37,8 @@ not committed to the repository.
 - [x] **PR Boundary: No open PRs contain commercial infrastructure terminology.**
 - [x] **Config Boundary: wrangler.toml does not enforce hosted domains.** (row no longer emitted)
 - [x] **Terminology Boundary: VERDICT_CANONICALIZATION.md exists and resolves the ALLOW/DENY/ESCALATE vs. DEFER drift.**
-- [x] **Version: VERSION is set to launch target 0.5.0.** (target is now 0.8.3)
-- [x] **Homebrew: README points to canonical mindburnlabs/tap/helm-ai-kernel.** (false as of 2026-08-09)
+- [x] **Version: VERSION is set to launch target 0.5.0.** (historical snapshot; current target is 0.8.4)
+- [x] **Homebrew: README points to canonical mindburn-labs/tap/helm-ai-kernel.** (current active-doc command)
 
 ### Phase 1: Implementation & Proof
 - [x] **Build: make build completes cleanly.**

@@ -29,16 +29,24 @@ Published macOS CLI:
 ```bash
 brew tap mindburn-labs/tap
 brew trust mindburn-labs/tap
-brew install helm-ai-kernel
+brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version
 ```
 
 Source build:
 
+The source build uses Go 1.25.12, pinned by `go.work` and `mise.toml`. The
+recipe explicitly trusts the checked-out mise configuration and installs the
+pinned toolchain before building. If mise is unavailable, use a compatible
+native Go toolchain instead.
+
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
-make build
+git checkout v0.8.4
+mise trust
+mise install
+mise exec -- make build
 ./bin/helm-ai-kernel --version
 ```
 

@@ -56,6 +56,11 @@ CANONICAL_REPO_RENAMES = {
 CANONICAL_PUBLIC_OPENAPI_PATH = 'api/openapi/helm.openapi.yaml'
 PUBLIC_HTTP_API_SLUG = 'reference/http-api'
 PUBLIC_HTTP_API_SOURCE_PATH = 'docs/reference/http-api.md'
+CANONICAL_HOMEBREW_INSTALL = 'brew install mindburn-labs/tap/helm-ai-kernel'
+BROKEN_HOMEBREW_INSTALL_RE = re.compile(
+    r'brew\s+install\s+(?:helm-ai-kernel|mindburnlabs/tap/helm-ai-kernel)(?![\w-])',
+    re.IGNORECASE,
+)
 SHA256_DIGEST_RE = re.compile(r'^sha256:[0-9a-f]{64}$')
 GIT_BLOB_SHA1_RE = re.compile(r'^[0-9a-f]{40}$')
 OPENAPI_EXAMPLE_SOURCE_TEST_RE = re.compile(
@@ -542,6 +547,25 @@ def validate_sdk_freshness_docs(failures: list[str]) -> None:
         failures.append(f'docs/EXAMPLES.md is missing current Java coordinate {java_coordinate}')
 
 
+def validate_homebrew_install_docs(failures: list[str]) -> None:
+    """Keep active public install guidance on the canonical tap coordinate."""
+    active_docs = [ROOT / 'README.md', *sorted((ROOT / 'docs').rglob('*.md'))]
+    for path in active_docs:
+        if not path.exists():
+            failures.append(f'{path.relative_to(ROOT)} is missing from active installation docs check')
+            continue
+        text = read_text(path)
+        match = BROKEN_HOMEBREW_INSTALL_RE.search(text)
+        if match:
+            failures.append(
+                f'{path.relative_to(ROOT)} contains a non-canonical Homebrew install: {match.group(0)!r}'
+            )
+
+    for path in (ROOT / 'README.md', ROOT / 'docs' / 'QUICKSTART.md'):
+        if path.exists() and CANONICAL_HOMEBREW_INSTALL not in read_text(path):
+            failures.append(f'{path.relative_to(ROOT)} is missing canonical Homebrew install {CANONICAL_HOMEBREW_INSTALL!r}')
+
+
 def main() -> int:
     coverage = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'check_documentation_coverage.py')], cwd=ROOT)
     if coverage.returncode != 0:
@@ -579,6 +603,7 @@ def main() -> int:
                 failures.append(f'sdk/go/go.mod is missing standalone generated SDK dependency {module}')
 
     validate_sdk_freshness_docs(failures)
+    validate_homebrew_install_docs(failures)
 
     for row in rows:
         source = ROOT if row['source_path'] == '.' else ROOT / row['source_path']

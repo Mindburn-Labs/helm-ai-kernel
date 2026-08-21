@@ -356,7 +356,7 @@ main() {
   resolve_egress_proxy_image || final_status="FAIL"
 
   run_step brew_update "brew update" "brew update" || final_status="FAIL"
-  run_step brew_install "brew install mindburnlabs/tap/helm-ai-kernel" "brew install mindburnlabs/tap/helm-ai-kernel" || final_status="FAIL"
+  run_step brew_install "brew install mindburn-labs/tap/helm-ai-kernel" "brew install mindburn-labs/tap/helm-ai-kernel" || final_status="FAIL"
   run_step docker_version "docker version" "docker version" || final_status="FAIL"
   run_step helm_version "helm-ai-kernel --version" "helm-ai-kernel --version" || final_status="FAIL"
   run_step launch_matrix "helm-ai-kernel launch matrix --json" "helm-ai-kernel launch matrix --json" || final_status="FAIL"

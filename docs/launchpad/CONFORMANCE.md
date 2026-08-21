@@ -3,6 +3,10 @@ title: Launchpad Conformance
 last_reviewed: 2026-08-09
 ---
 
+<!-- quantum_posture: this conformance guide references existing classical
+Cosign/signature verification and adds no cryptographic primitive or
+post-quantum assurance. -->
+
 # Launchpad Conformance
 
 Status: OpenClaw and Hermes are `oss_supported` / `agent_live`. They passed the
@@ -157,7 +161,7 @@ No additional app may move to `oss_supported` until it passes the same bar.
 
 ```bash
 brew update
-brew install mindburnlabs/tap/helm-ai-kernel
+brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel launch matrix --json
 helm-ai-kernel launch secrets set model_gateway --provider openai --value-env OPENAI_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json

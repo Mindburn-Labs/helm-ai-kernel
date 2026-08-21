@@ -1,12 +1,12 @@
 ---
 title: Launchpad Clean Install GA
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-21
 ---
 
 # Launchpad Clean Install GA
 
 Status: the gate is implemented and its release target tracks the current
-release tag, `v0.8.3`. The supported-app clean-install set is OpenClaw and
+release tag, `v0.8.4`. The supported-app clean-install set is OpenClaw and
 Hermes, which passed signed artifact, live conformance, teardown, receipts, and
 offline EvidencePack verification in workflow `26198407296`. OpenCode and Kilo
 Code are in the verify-only set, not the supported set.
@@ -30,7 +30,7 @@ offline verification.
 
 ## Source Truth
 
-- Release target: `v0.8.3`. Do not hand-edit that number here. It is the
+- Release target: `v0.8.4`. Do not hand-edit that number here. It is the
   `RELEASE_TAG` default in `scripts/launch/clean_install_gate.sh` and the
   `release_tag` input default in `.github/workflows/launchpad-clean-install.yml`,
   and `tests/launchpad/claims_truth_test.go` fails the build unless both equal
@@ -39,7 +39,7 @@ offline verification.
 - Last executed macOS Homebrew clean-install workflow: <https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/26199878246>.
   That run was against release tag `v0.5.5`, not against the current target;
   `docs/launchpad/clean_install_report.json` is its recorded output. No
-  clean-install run has been executed against `v0.8.3`.
+  clean-install run has been executed against `v0.8.4`.
 - Current Launchpad v1 report: `docs/launchpad/v1_report.json`
 - Historical `v0.5.4` release report: `docs/launchpad/final_report.json`
 - Clean-install report: `docs/launchpad/clean_install_report.json`
@@ -94,7 +94,7 @@ Docker-compatible runtime such as Docker Desktop or Colima:
 
 ```bash
 brew update
-brew install mindburnlabs/tap/helm-ai-kernel
+brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel launch matrix --json
 helm-ai-kernel launch secrets set model_gateway --provider openai --value-env OPENAI_API_KEY
 helm-ai-kernel launch openclaw local-container --headless --output json
@@ -110,7 +110,7 @@ Use the repo-native gate to collect redacted evidence:
 ```bash
 export OPENAI_API_KEY='<fresh CI-only key>'
 bash scripts/launch/clean_install_gate.sh \
-  --release-tag v0.8.3 \
+  --release-tag v0.8.4 \
   --artifact-run-id 26198407296 \
   --host-kind developer_macos \
   --output docs/launchpad/clean_install_report.json
@@ -151,7 +151,7 @@ Manual CI entrypoint:
 ```bash
 gh workflow run launchpad-clean-install.yml \
   --repo Mindburn-Labs/helm-ai-kernel \
-  -f release_tag=v0.8.3 \
+  -f release_tag=v0.8.4 \
   -f artifact_run_id=26198407296
 ```
 

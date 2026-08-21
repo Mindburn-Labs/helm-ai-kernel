@@ -21,7 +21,7 @@ Install, then open the operator surface:
 
 ```bash
 brew tap mindburn-labs/tap
-brew install helm-ai-kernel
+brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel                 # interactive TTY → operator TUI
 HELM_NO_TUI=1 helm-ai-kernel   # text front door (also TERM=dumb / pipes)
 helm-ai-kernel help --all

@@ -1,6 +1,6 @@
 ---
 title: Local Proof Journey
-last_reviewed: 2026-07-18
+last_reviewed: 2026-08-21
 ---
 
 # Local Proof Journey
@@ -17,5 +17,6 @@ runtime-availability statement.
    decision, reason, and approval context.
 5. [Verify the EvidencePack](guides/export-verify-evidencepacks.md) offline.
 
-An `ESCALATE` result does not continue the original action. Use the scoped
-approval path, then rerun the action so the Kernel evaluates it again.
+An `ESCALATE` result does not continue the original action. A
+credential-verified durable dispatch admission is required before rerun;
+local `mcp approve` does not mint that authority.

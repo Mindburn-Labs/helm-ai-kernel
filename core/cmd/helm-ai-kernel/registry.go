@@ -6,6 +6,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 // Subcommand represents a registered CLI command.
@@ -33,6 +35,7 @@ type commandCatalogEntry struct {
 	Aliases []string `json:"aliases"`
 	Usage   string   `json:"usage"`
 	Group   string   `json:"group,omitempty"`
+	Format  string   `json:"format,omitempty"`
 }
 
 type commandCatalogSection struct {
@@ -91,7 +94,11 @@ func Dispatch(name string, args []string, stdout, stderr io.Writer) (int, bool) 
 		_ = cmd.RunFn(helpArgs, stdout, stdout)
 		return 0, true
 	}
-	return cmd.RunFn(args, stdout, stderr), true
+	rest, code, ok := applyOperatorFormat(cmd.Name, args, stderr)
+	if !ok {
+		return code, true
+	}
+	return cmd.RunFn(rest, stdout, stderr), true
 }
 
 func isHelpRequest(args []string) bool {
@@ -238,19 +245,25 @@ func printUnknownCommand(out io.Writer, typed string) {
 
 func printUsageAll(out io.Writer) {
 	catalog := commandCatalog()
-	fmt.Fprintf(out, "%s: Canonical Execution Verifier (Version %s, Commit %s)\n\n", terminalTitle(out, "HELM AI Kernel"), displayVersion(), displayCommit())
-	fmt.Fprintln(out, "Usage: helm-ai-kernel <command> [options]")
+	p := ui.NewPrinter(out)
+	p.Brand(ui.BrandHeader{
+		Name:    "HELM",
+		Tagline: "Fail-closed execution firewall for AI agents.",
+		Version: displayVersion(),
+		Commit:  displayCommit(),
+		Hint:    "Canonical Execution Verifier. Usage: helm-ai-kernel <command> [options]",
+	})
+	p.Blank()
+	p.Muted("Common outcomes first; `help --json` keeps the stable machine catalog.")
+	p.Muted("Operator-data commands accept --format text|json (legacy --json stays). Unknown formats exit 2.")
 	fmt.Fprintln(out, "\nCommands:")
-	fmt.Fprintln(out, "Common outcomes first; `help --json` keeps the stable machine catalog.")
 	for _, section := range catalog.Sections {
 		fmt.Fprintf(out, "\n%s:\n", section.Title)
+		rows := make([]ui.CommandRow, 0, len(section.Commands))
 		for _, cmd := range section.Commands {
-			aliasStr := ""
-			if len(cmd.Aliases) > 0 {
-				aliasStr = fmt.Sprintf(" (aliases: %s)", strings.Join(cmd.Aliases, ", "))
-			}
-			fmt.Fprintf(out, "  %-20s %s%s\n", cmd.Name, cmd.Usage, aliasStr)
+			rows = append(rows, ui.CommandRow{Name: cmd.Name, Usage: cmd.Usage, Aliases: cmd.Aliases})
 		}
+		p.Table(rows)
 	}
 }
 
@@ -277,6 +290,7 @@ func canonicalRegisteredCommands() []commandCatalogEntry {
 			Aliases: aliases,
 			Usage:   cmd.Usage,
 			Group:   commandGroupTitle(cmd.Name),
+			Format:  catalogFormatContract(cmd.Name),
 		})
 	}
 	sort.Slice(commands, func(i, j int) bool { return commands[i].Name < commands[j].Name })
@@ -285,12 +299,12 @@ func canonicalRegisteredCommands() []commandCatalogEntry {
 
 func explicitGlobalCommands() []commandCatalogEntry {
 	return []commandCatalogEntry{
-		{Name: "completion", Aliases: []string{}, Usage: "Generate static shell completion", Group: commandGroupTitle("completion")},
-		{Name: "help", Aliases: []string{"--help", "-h"}, Usage: "Show command help", Group: commandGroupTitle("help")},
-		{Name: "server", Aliases: []string{}, Usage: "Start the HELM Guardian API and proxy services", Group: commandGroupTitle("server")},
-		{Name: "serve", Aliases: []string{}, Usage: "Start a local HELM boundary from --policy", Group: commandGroupTitle("serve")},
-		{Name: "threat", Aliases: []string{}, Usage: "Run a threat scan or test", Group: commandGroupTitle("threat")},
-		{Name: "version", Aliases: []string{"--version", "-v"}, Usage: "Print version and schema information", Group: commandGroupTitle("version")},
+		{Name: "completion", Aliases: []string{}, Usage: "Generate static shell completion", Group: commandGroupTitle("completion"), Format: catalogFormatContract("completion")},
+		{Name: "help", Aliases: []string{"--help", "-h"}, Usage: "Show command help", Group: commandGroupTitle("help"), Format: catalogFormatContract("help")},
+		{Name: "server", Aliases: []string{}, Usage: "Start the HELM Guardian API and proxy services", Group: commandGroupTitle("server"), Format: catalogFormatContract("server")},
+		{Name: "serve", Aliases: []string{}, Usage: "Start a local HELM boundary from --policy", Group: commandGroupTitle("serve"), Format: catalogFormatContract("serve")},
+		{Name: "threat", Aliases: []string{}, Usage: "Run a threat scan or test", Group: commandGroupTitle("threat"), Format: catalogFormatContract("threat")},
+		{Name: "version", Aliases: []string{"--version", "-v"}, Usage: "Print version and schema information", Group: commandGroupTitle("version"), Format: catalogFormatContract("version")},
 	}
 }
 
@@ -430,7 +444,7 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "get-started",
 			Title: "Get started",
 			Commands: []string{
-				"setup", "quickstart", "scan", "doctor", "help", "completion", "version", "onboard", "init", "connect", "login",
+				"tui", "setup", "quickstart", "scan", "doctor", "help", "completion", "version", "onboard", "init", "connect", "login", "demo",
 			},
 		},
 		{
@@ -466,8 +480,11 @@ func completionContexts() []completionContext {
 		{Path: []string{"launch", "evidence"}, Candidates: []string{"--export", "--json", "--output"}},
 		{Path: []string{"launch", "plan"}, Candidates: []string{"--json"}},
 		{Path: []string{"quickstart"}, Candidates: []string{"--addr", "--port", "--data-dir", "--reset", "--offline", "--profile", "claude", "codex", "mcp", "openai-compatible", "--json", "--dry-run", "--yes", "--console", "--console-port", "--no-open"}},
-		{Path: []string{"receipts"}, Candidates: []string{"tail"}},
+		{Path: []string{"receipts"}, Candidates: []string{"status", "list", "show", "tail", "verify", "export"}},
 		{Path: []string{"receipts", "tail"}, Candidates: []string{"--agent", "--server", "--since", "--json", "--format", "text", "json", "--limit"}},
+		{Path: []string{"receipts", "list"}, Candidates: []string{"--server", "--limit", "--json", "--format", "text", "json"}},
+		{Path: []string{"receipts", "show"}, Candidates: []string{"--id", "--file", "--server", "--json", "--format", "text", "json"}},
+		{Path: []string{"receipts", "status"}, Candidates: []string{"--json", "--format", "text", "json"}},
 		{Path: []string{"scan"}, Candidates: []string{"--path", "--from-receipts", "--cohort", "unknown", "1-10repos", "11-50repos", "51-200repos", "201plusrepos", "--salt-file", "--risk-envelope", "--preview", "--evidence-pack", "--no-user-config", "--upload", "--upload-url", "--yes"}},
 		{Path: []string{"setup"}, Candidates: []string{"claude-code", "codex", "hermes", "deepseek", "status", "repair", "remove", "--client", "--print-config", "--json", "--quickstart", "--profile", "claude", "codex", "mcp", "openai-compatible", "--yes", "--dry-run", "--data-dir", "--console", "--console-port", "--no-open", "--offline", "--reset"}},
 		{Path: []string{"setup", "claude-code"}, Candidates: []string{"--scope", "user", "project", "--workspace", "--data-dir", "--dry-run", "--json", "--yes", "--no-quickstart", "--quickstart", "--console", "--console-port", "--no-open", "--signing-seed-file", "--policy-profile", "--policy-profile-sha256"}},
@@ -476,7 +493,7 @@ func completionContexts() []completionContext {
 		{Path: []string{"setup", "deepseek"}, Candidates: []string{"--scope", "user", "project", "--workspace", "--data-dir", "--dry-run", "--json", "--yes", "--no-quickstart", "--quickstart", "--console", "--console-port", "--no-open", "--signing-seed-file", "--policy-profile", "--policy-profile-sha256"}},
 		{Path: []string{"setup", "remove"}, Candidates: []string{"claude-code", "codex", "hermes", "deepseek", "--scope", "user", "project", "--workspace", "--yes", "--dry-run", "--json", "--data-dir"}},
 		{Path: []string{"setup", "repair"}, Candidates: []string{"claude-code", "codex", "hermes", "deepseek", "--scope", "user", "project", "--workspace", "--yes", "--dry-run", "--json", "--data-dir"}},
-		{Path: []string{"setup", "status"}, Candidates: []string{"claude-code", "codex", "hermes", "deepseek", "--scope", "user", "project", "--workspace", "--json", "--data-dir"}},
+		{Path: []string{"setup", "status"}, Candidates: []string{"claude-code", "codex", "hermes", "deepseek", "cursor", "vscode", "windsurf", "--all", "--scope", "user", "project", "--workspace", "--json", "--format", "text", "json", "--data-dir"}},
 		{Path: []string{"version"}, Candidates: []string{"--json"}},
 		{Path: []string{"watch"}, Candidates: []string{"--url", "--api-key-file", "--once", "--json"}},
 	})

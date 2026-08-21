@@ -135,7 +135,7 @@ func runSandboxExec(args []string, stdout, stderr io.Writer) int {
 		}, "", "  ")
 		fmt.Fprintln(stdout, string(data))
 	} else {
-		fmt.Fprintf(stderr, "❌ Preflight DENIED: %s\n", preflight.Reason)
+		fmt.Fprintf(stderr, "Preflight DENIED: %s\n", preflight.Reason)
 		fmt.Fprintf(stderr, "   Provider: %s  Version: %s\n", preflight.Provider, preflight.Version)
 	}
 	return 1
@@ -236,16 +236,16 @@ func runSandboxConform(args []string, stdout, stderr io.Writer) int {
 	} else {
 		fmt.Fprintf(stdout, "\n%sSandbox Conformance: %s (%s)%s\n\n", ColorBold, provider, tier, ColorReset)
 		for _, c := range checks {
-			icon := "✅"
+			icon := ""
 			if !c.Pass {
-				icon = "❌"
+				icon = ""
 			}
 			fmt.Fprintf(stdout, "  %s %s\n", icon, c.Name)
 		}
 		if allPass {
-			fmt.Fprintf(stdout, "\n%sResult: ✅ %s tier PASS%s\n\n", ColorGreen+ColorBold, strings.ToUpper(tier), ColorReset)
+			fmt.Fprintf(stdout, "\n%sResult: %s tier PASS%s\n\n", ColorGreen+ColorBold, strings.ToUpper(tier), ColorReset)
 		} else {
-			fmt.Fprintf(stdout, "\n%sResult: ❌ %s tier FAIL%s\n\n", ColorRed+ColorBold, strings.ToUpper(tier), ColorReset)
+			fmt.Fprintf(stdout, "\n%sResult: %s tier FAIL%s\n\n", ColorRed+ColorBold, strings.ToUpper(tier), ColorReset)
 		}
 	}
 

@@ -26,6 +26,10 @@ Shared implementation: `core/internal/cli/ui` (import as `cliui`).
 
 These codes are load-bearing for scripts and must not change per command.
 
+**Exception — `doctor` / `diag`:** exit 0 = no WARN/FAIL, exit 1 = WARN only,
+exit 2 = one or more FAIL. That health ranking is intentional and covered by
+doctor tests; do not generalize it to other verbs.
+
 ## Errors: `cliui.CliError`
 
 User-facing errors are `*cliui.CliError` values rendered by the single
@@ -60,7 +64,14 @@ return cliui.WriteError(stderr, cliui.UsageErrorf("trust", "unknown subcommand: 
 
 ## Output format: `--format text|json`
 
-Commands with machine-readable output register the unified flag:
+Catalog contract: every command except domain-collision verbs (`verify`,
+`import`, `skills`) rejects unknown `--format` values before work starts.
+Commands that register `--format` themselves (`plan`, `doctor`, `setup`,
+`receipts`, …) keep the token so RequestedFormat last-wins still works.
+Other operator-data commands rewrite `--format=json` to the legacy `--json`
+alias. Listeners, `tui`, `completion`, `onboard`, and `quickstart` still fail
+closed on unknown formats; they are exempt from emitting a JSON operator
+document.
 
 ```go
 formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText) // adds --format text|json
@@ -76,26 +87,111 @@ Rules:
   removing it is a separate, explicitly-flagged breaking change.
 - **Collision exception:** if a command already uses `--format` for a
   different meaning (e.g. `verify decision-receipt --format <receipt-format-id>`),
-  keep that flag and do NOT register the output-format flag on that command.
+  keep that flag and do NOT consume it at Dispatch.
 - JSON payloads are emitted with `cliui.WriteJSON(stdout, v)`.
+- `help --json` / `help --format=json` is the generated machine catalog.
+  `help --all` prints the same command set.
 
-## Migrated reference slice (Wave 1)
+## Operator TUI
 
-`receipts`, `risk-summary`, `verify decision-receipt`, `verify --entry`,
-`scan`, `trust`, `export aat`, `log`, `plan` — 9 commands. Golden tests in
-`core/cmd/helm-ai-kernel/cli_ui_convention_test.go` pin their flag surface,
-error text, and stream discipline; `core/internal/cli/ui/ui_test.go` pins the
-helper contracts. `--format` is registered on `receipts tail`, `risk-summary`,
-`verify --entry`, `trust eu-list status`, and `plan compile` (whose output is
-PlanSpec-JSON-only; `--format=text` is a no-op there, matching the historical
-`--json=false` quirk).
+On an interactive TTY, `helm-ai-kernel` with no args (or `tui` / `ui` /
+`dashboard`) opens a full-screen operator session. Pipes, `TERM=dumb`,
+`HELM_NO_TUI=1`, `--help`, `--json`, and tests keep the text front door.
+JSON catalogs, exit codes, `--format`, and typed APPROVE/DENY confirmation
+are unchanged.
 
-## Fan-out checklist (follow-up PRs, leaf-first)
+The TUI is the **operator instrument for a fail-closed execution firewall**,
+not a convenience shell and not a chat composer. Overlay grammar may follow
+Grok-class chrome; security invariants win when they conflict with convenience.
 
-1. Pick a command file; read its existing tests for pinned output.
-2. Replace `fmt.Fprintf(stderr, "Error: …")` + bare `return N` with
-   `cliui.WriteError(...)` using the same exit code.
-3. If the command has `--json`, register `--format` and OR it in; keep `--json`.
-4. Move any stray stdout chrome (warnings, summaries) to stderr.
-5. Add a golden case to `cli_ui_convention_test.go`.
-6. Do not batch more than ~10 commands per PR.
+### Keyboard map
+
+| Key | Action |
+| --- | --- |
+| `j` / `k` or arrows | Move |
+| `1`–`6` | Doctor / Watch / Policy / Freeze / Threat / Catalog (home only) |
+| Enter | Open, run, or open ceremony (does **not** APPROVE) |
+| `/` | Command catalog filter |
+| `r` | Refresh doctor or watch |
+| Esc | Close overlay or abort a run |
+| Click | Select row or `[x]` — never APPROVE |
+| `?` | Show this shortcuts overlay |
+| `q` / Ctrl+C | Quit |
+
+Ceremony: type `APPROVE` or `DENY`. Click, `1`–`9`, Enter-on-row, and Ctrl+O
+never transition state.
+
+### Security invariants
+
+- **Header** (always): brand, version+commit, Kernel `[WAIT]`/`[PASS]`/`[FAIL]`
+  (FAIL if the Kernel is unreachable; never PASS before watch returns),
+  pending ceremony count as a security queue (`1 pending ceremony`).
+  The TUI catalog ranks Doctor, Watch, Policy, Freeze, Threat, and Incident
+  before Get started convenience. Headless `help --all` section order is
+  unchanged.
+- **Fail-closed defaults**: palette clicks never `--yes`, never freeze/unfreeze
+  without `--status`, never start a listener (`server`/`serve --policy`/
+  `quickstart`/`dev`/`proxy`). Empty composer argv uses the same
+  `DefaultArgs` as the palette. `scan` defaults to `--help`; any non-help
+  `scan` (including `--path`) is refused — a cwd walk is unbounded and Esc
+  cannot abort Kernel `Run`. Other missing args execute real CLI usage in
+  the Output overlay. Composer argv is field-split, never `sh -c`.
+- **Destructive confirm**: teardown / freeze-mutate / setup `--yes` / `init`
+  and `scaffold` (write `helm/`) / `policy init` (writes `policies/`) /
+  `mcp revoke|authorize-call|approve|install|pack|proof|auth-profile put`
+  / `incident ack|create` require typing the full invocation. A single key
+  never mutates. Palette defaults stay inspect.
+- **Secrets**: captured stdout/stderr are redacted before the overlay.
+- **Workspace**: Home, Watch, Demo. Overlays (Commands, Doctor, Setup,
+  Receipts, Policy/Threat/Incident/MCP pickers, Output, Confirm, Ceremony,
+  Shortcuts) float with `[x]`, Esc, and click-to-close.
+- **Composer** (always): `>` prompt. `/` filters Commands. Enter executes
+  argv in-TUI. After a run, `/` starts another command without quitting.
+- **Listeners**: refused in-TUI because cancel cannot reclaim a bind or a
+  cwd walk. `onboard` and `setup --quickstart` without `--dry-run` are
+  listeners. Non-help `scan` is refused for the same reason. Esc abort
+  discards the session result; it does not cancel an in-flight Kernel
+  `Run`. No TUI-started listener is left behind.
+- **Live inspect**: Doctor, Watch, Setup clients, and Receipts edge
+  load on first paint and refresh while those overlays are open. Setup
+  rows stay `--dry-run`. Receipts preload is `receipts status` (bounded
+  HTTP), never SSE `tail`.
+
+No upgrade CTA. No YOLO. No public GA or “world-class” copy on this surface.
+
+## Receipts front
+
+`receipts` is the canonical inspect surface: `status` / `list` / `show` /
+`verify` / `export` / `tail`. `status`, `list`, and `show` are bounded HTTP
+(or `--file` for show). `tail` is SSE and is a listener-class verb in the
+TUI. `verify` aliases verify receipt. `export --ndjson` emits compact
+newline-delimited signed receipt envelopes (verify with
+`receipts verify --receipt FILE --trusted-public-key-file KEY`). `export`
+without `--ndjson` still aliases EvidencePack export. None invent evidence.
+
+## MCP scan
+
+`mcp scan` inspects configured/local MCP client configs, `--path`, or
+`--manifest`. It reports missing pins/hashes and obviously shadowed names as
+findings. It does not authorize, ALLOW, or start a listener. `--format
+text|json`. Exit 0 if the scan ran; exit 1 only when `--fail-on` is set and
+a finding meets that threshold; exit 2 on usage. Doctor may suggest
+`mcp scan` and must not add `--yes`. `mcp approve` stays unavailable.
+
+## Policy dialect view
+
+`policy export --dialect cedar|opa` emits a read-only view of CLI-visible
+policy records (templates, fixture JSON, or a serve `.toml`). HELM policy
+remains authoritative. The view is not a dual-write and does not map the
+Kernel PDP, Cedar/IdP interchange, or a live policy store. `--format json`
+wraps the document with `source_of_truth: false`.
+
+## Migrated reference slice
+
+Golden tests in `core/cmd/helm-ai-kernel/cli_ui_convention_test.go` and
+`format_contract_test.go` pin the flag contract, representative JSON verbs,
+and the catalog loop. `core/internal/cli/ui/ui_test.go` pins the helper
+contracts. `--format` on collision verbs stays a domain flag.
+
+Doctor and setup repair suggestions share inspect-first, `--dry-run`
+defaults. They do not recommend `--yes`.

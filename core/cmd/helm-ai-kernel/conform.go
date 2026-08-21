@@ -205,7 +205,7 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 			}
 			sigData, _ := json.MarshalIndent(sigPayload, "", "  ")
 			_ = os.WriteFile(sigPath, sigData, 0644)
-			_, _ = fmt.Fprintf(stdout, "⚠️  Unsigned digest-only artifacts written to %s/ (set HELM_SIGNING_KEY_HEX for Ed25519)\n", artDir)
+			_, _ = fmt.Fprintf(stdout, " Unsigned digest-only artifacts written to %s/ (set HELM_SIGNING_KEY_HEX for Ed25519)\n", artDir)
 		}
 		_, _ = fmt.Fprintf(stdout, "  conform_report.json\n")
 		_, _ = fmt.Fprintf(stdout, "  conform_report.sha256\n")
@@ -515,9 +515,9 @@ func printConformanceReport(w io.Writer, report *conform.ConformanceReport) {
 	_, _ = fmt.Fprintf(w, "Duration:  %s\n\n", report.Duration)
 
 	for _, gr := range report.GateResults {
-		status := "✅ PASS"
+		status := "PASS"
 		if !gr.Pass {
-			status = "❌ FAIL"
+			status = "FAIL"
 		}
 		_, _ = fmt.Fprintf(w, "  %s  %s", status, gr.GateID)
 		if len(gr.Reasons) > 0 {
@@ -531,7 +531,7 @@ func printConformanceReport(w io.Writer, report *conform.ConformanceReport) {
 
 	_, _ = fmt.Fprintln(w)
 	if report.Pass {
-		_, _ = fmt.Fprintf(w, "Result: ✅ PASS (%d gates)\n", len(report.GateResults))
+		_, _ = fmt.Fprintf(w, "Result: PASS (%d gates)\n", len(report.GateResults))
 	} else {
 		failed := 0
 		for _, gr := range report.GateResults {
@@ -539,7 +539,7 @@ func printConformanceReport(w io.Writer, report *conform.ConformanceReport) {
 				failed++
 			}
 		}
-		_, _ = fmt.Fprintf(w, "Result: ❌ FAIL (%d/%d gates failed)\n", failed, len(report.GateResults))
+		_, _ = fmt.Fprintf(w, "Result: FAIL (%d/%d gates failed)\n", failed, len(report.GateResults))
 	}
 }
 

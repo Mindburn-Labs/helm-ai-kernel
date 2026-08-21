@@ -34,13 +34,14 @@ type PolicyTemplate struct {
 // runPolicyCmd implements `helm-ai-kernel policy test` — policy fixture testing.
 func runPolicyCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel policy <test|templates|init|simulate> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel policy <test|templates|init|simulate|export> [flags]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Subcommands:")
 		fmt.Fprintln(stderr, "  test       Run policy fixtures from directory")
 		fmt.Fprintln(stderr, "  templates  List available policy starter templates")
 		fmt.Fprintln(stderr, "  init       Generate starter policy in current directory")
 		fmt.Fprintln(stderr, "  simulate   Simulate least-privilege Launchpad policy for an app")
+		fmt.Fprintln(stderr, "  export     Emit a Cedar or OPA view of CLI-visible policy (not source of truth)")
 		return 2
 	}
 
@@ -53,8 +54,10 @@ func runPolicyCmd(args []string, stdout, stderr io.Writer) int {
 		return runPolicyInit(args[1:], stdout, stderr)
 	case "simulate":
 		return runPolicySimulate(args[1:], stdout, stderr)
+	case "export":
+		return runPolicyExport(args[1:], stdout, stderr)
 	case "--help", "-h":
-		fmt.Fprintln(stdout, "Usage: helm-ai-kernel policy <test|templates|init|simulate> [flags]")
+		fmt.Fprintln(stdout, "Usage: helm-ai-kernel policy <test|templates|init|simulate|export> [flags]")
 		return 0
 	default:
 		fmt.Fprintf(stderr, "Unknown policy subcommand: %s\n", args[0])
@@ -126,7 +129,7 @@ func runPolicyTest(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "\n%s🧪 Policy Test Runner%s\n\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(stdout, "\n%sPolicy Test Runner%s\n\n", ColorBold+ColorBlue, ColorReset)
 
 	var total, passed, failed int
 	type Result struct {
@@ -150,7 +153,7 @@ func runPolicyTest(args []string, stdout, stderr io.Writer) int {
 			continue
 		}
 
-		fmt.Fprintf(stdout, "  %s📋 %s%s — %s\n", ColorBold, tmpl.Name, ColorReset, tmpl.Description)
+		fmt.Fprintf(stdout, "  %s%s%s — %s\n", ColorBold, tmpl.Name, ColorReset, tmpl.Description)
 
 		for _, fix := range tmpl.Fixtures {
 			total++
@@ -159,10 +162,10 @@ func runPolicyTest(args []string, stdout, stderr io.Writer) int {
 
 			if pass {
 				passed++
-				fmt.Fprintf(stdout, "    %s✅ %s%s\n", ColorGreen, fix.Name, ColorReset)
+				fmt.Fprintf(stdout, "    %s%s%s\n", ColorGreen, fix.Name, ColorReset)
 			} else {
 				failed++
-				fmt.Fprintf(stdout, "    %s❌ %s%s — expected %s, got %s\n",
+				fmt.Fprintf(stdout, "    %s%s%s — expected %s, got %s\n",
 					ColorRed, fix.Name, ColorReset, fix.Expected, verdict)
 			}
 
@@ -230,7 +233,7 @@ func runPolicyTemplates(stdout io.Writer) int {
 		{"safe-deploy", "Allow deployment tools with approval gate"},
 	}
 
-	fmt.Fprintf(stdout, "\n%s📋 Policy Templates%s\n\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(stdout, "\n%sPolicy Templates%s\n\n", ColorBold+ColorBlue, ColorReset)
 	for _, t := range templates {
 		fmt.Fprintf(stdout, "  %s%-15s%s %s\n", ColorBold, t.Name, ColorReset, t.Desc)
 	}
@@ -268,7 +271,7 @@ func runPolicyInit(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "\n%s✅ Policy initialized%s\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "\n%sPolicy initialized%s\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "   Template: %s\n", template)
 	fmt.Fprintf(stdout, "   File:     %s\n", outPath)
 	fmt.Fprintf(stdout, "\n   Next: helm-ai-kernel policy test --dir policies\n\n")

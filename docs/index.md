@@ -1,6 +1,6 @@
 ---
 title: HELM documentation
-last_reviewed: 2026-07-15
+last_reviewed: 2026-08-21
 ---
 
 # HELM documentation
@@ -17,15 +17,17 @@ agent/tool requests action
 -> ESCALATE: action is blocked and a decision receipt is written
 ```
 
-Install and open the CLI front door:
+Install, then open the operator surface:
 
 ```bash
 brew tap mindburn-labs/tap
 brew install mindburn-labs/tap/helm-ai-kernel
-helm-ai-kernel
+helm-ai-kernel                 # interactive TTY → operator TUI
+HELM_NO_TUI=1 helm-ai-kernel   # text front door (also TERM=dumb / pipes)
+helm-ai-kernel help --all
 ```
 
-Then choose one path.
+Pick a path below.
 
 ## Start
 

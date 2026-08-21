@@ -1,6 +1,6 @@
 ---
 title: CLI
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-22
 ---
 
 <!-- quantum_posture: this page documents CLI use of classical Ed25519 receipt checks and adds no post-quantum cryptographic control. -->
@@ -9,6 +9,23 @@ last_reviewed: 2026-08-20
 
 Use `helm-ai-kernel` to run the local proof path, connect agent clients, and
 inspect receipts.
+
+## Operator Front Door
+
+On an interactive TTY, bare `helm-ai-kernel` (or `tui` / `ui` / `dashboard`)
+opens the full-screen operator TUI. Escape hatches keep the text catalog:
+
+```bash
+HELM_NO_TUI=1 helm-ai-kernel
+TERM=dumb helm-ai-kernel
+helm-ai-kernel help --all
+helm-ai-kernel help --json
+```
+
+Press `?` inside the TUI for the keyboard map. The catalog ranks Doctor,
+Watch, Policy, Freeze, and Threat before setup convenience. Ceremony
+decisions require typing `APPROVE` or `DENY`; a click never decides. See
+[CLI I/O Convention](../guides/cli-io-convention.md#operator-tui).
 
 ## First Proof
 
@@ -24,15 +41,22 @@ consistency, not provenance.
 
 ```bash
 helm-ai-kernel
-helm-ai-kernel setup
-helm-ai-kernel setup --json
-helm-ai-kernel setup claude-code --yes
-helm-ai-kernel setup codex --yes
-helm-ai-kernel setup hermes --scope user --yes
-helm-ai-kernel setup deepseek --scope user --yes
-helm-ai-kernel setup codex --dry-run --json
+helm-ai-kernel setup status --format json
+helm-ai-kernel setup status cursor --format json
+helm-ai-kernel setup claude-code --dry-run --format json
+helm-ai-kernel setup repair claude-code --dry-run
+helm-ai-kernel setup remove claude-code --dry-run
 helm-ai-kernel setup --client cursor --print-config
 ```
+
+Inspect first. Apply, repair, and remove require `--dry-run` or explicit
+`--yes` / typed APPROVE. Cursor/VS Code status names the documented config
+path and never claims the editor loaded HELM. Windsurf is print-config-only.
+
+Setup JSON reports `client_state` and a projected `lifecycle`
+(`absent` / `planned` / `pending` / `configured` / `active` / `degraded` /
+`repairable`). Only `native_loaded` is an active claim; Cursor/Windsurf/VS Code
+never report `native_loaded`.
 
 Setup writes local client configuration and draft policy artifacts. It does not
 approve tools. Hermes setup writes a fail-closed `pre_tool_call` shell hook
@@ -69,11 +93,20 @@ helm-ai-kernel boundary verify --record-id <record-id> --json
 ## Receipts
 
 ```bash
+helm-ai-kernel receipts status --format json
+helm-ai-kernel receipts list --format json
+helm-ai-kernel receipts show <receipt-id> --format json
+helm-ai-kernel receipts verify --receipt <receipt.v5.json> --trusted-public-key-file <expected-ed25519.pub>
+helm-ai-kernel receipts export --evidence DIR --out DIR
 helm-ai-kernel receipts tail --agent <agent-id>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json>
 helm-ai-kernel workstation verify-decision --receipt <receipt.json> --trusted-public-key-file <expected-ed25519-public-key>
 helm-ai-kernel verify receipt --receipt <receipt.v5.json> --trusted-public-key-file <expected-ed25519.pub>
 ```
+
+`status`, `list`, and `show` are bounded inspect. `tail` streams SSE and is
+refused as a listener inside the operator TUI. `verify` and `export` are
+aliases of the existing routes.
 
 `ALLOW`, `DENY`, and `ESCALATE` records include a reason code. `DENY` and
 `ESCALATE` do not dispatch in enforce mode.
@@ -88,6 +121,18 @@ evaluate file. Exit 0 only when integrity and the caller-supplied
 helm-ai-kernel#859, not `--allow-self-attested`, and not
 `workstation verify-decision`. Hop fixtures are DENY / no permit.
 
+## Doctor
+
+```bash
+helm-ai-kernel doctor --format json
+helm-ai-kernel diag --format json   # alias
+```
+
+Doctor reports PASS / WARN / FAIL checks and a `healthy` boolean. Suggestions
+point at inspect-first setup commands (`setup status`, `setup repair … --dry-run`);
+they do not recommend `--yes`. Exit 0 means no WARN/FAIL; exit 1 means WARN
+only; exit 2 means one or more FAIL.
+
 ## OpenAI-Compatible Proxy
 
 ```bash
@@ -98,6 +143,14 @@ helm-ai-kernel proxy \
 ```
 
 Point an OpenAI-compatible client at `http://127.0.0.1:9090/v1`.
+
+## Format Contract
+
+Operator-data commands accept `--format text|json` (legacy `--json` stays as
+an alias). Unknown formats exit 2. Collision verbs (`verify`, `import`,
+`skills`) keep domain `--format` meanings. Listeners and `tui` are exempt from
+emitting a JSON operator document. Details:
+[CLI I/O Convention](../guides/cli-io-convention.md).
 
 ## Help
 

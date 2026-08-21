@@ -74,14 +74,36 @@ type utcRuntimeClock struct{}
 
 func (utcRuntimeClock) Now() time.Time { return time.Now().UTC() }
 
+// RunWithContext dispatches argv. A cancelled ctx prevents Dispatch from
+// starting. After start, Kernel Run/Dispatch do not observe ctx — callers
+// must discard late results. The operator TUI never starts listeners, so
+// Esc abort cannot leak a bind the TUI started.
+func RunWithContext(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return 2
+		default:
+		}
+	}
+	return Run(args, stdout, stderr)
+}
+
 // Run is the entrypoint for testing
 func Run(args []string, stdout, stderr io.Writer) int {
+	if shouldLaunchTUI(args, stdout) {
+		return runKernelTUI(stdout, stderr)
+	}
 	if len(args) < 2 {
 		printFrontDoor(stdout)
 		return 0
 	}
 	if args[1] == "help" {
-		return runHelpCommand(args[2:], stdout, stderr)
+		rest, code, ok := applyOperatorFormat("help", args[2:], stderr)
+		if !ok {
+			return code
+		}
+		return runHelpCommand(rest, stdout, stderr)
 	}
 	if len(args) == 3 && isHelpRequest(args[2:]) {
 		if code, ok := Dispatch(args[1], []string{"--help"}, stdout, stderr); ok {
@@ -99,9 +121,17 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	// Handle specific global commands that don't fit the registry pattern
 	switch args[1] {
 	case "completion":
-		return runCompletionCommand(args[2:], stdout, stderr)
+		rest, code, ok := applyOperatorFormat("completion", args[2:], stderr)
+		if !ok {
+			return code
+		}
+		return runCompletionCommand(rest, stdout, stderr)
 	case "server", "serve":
-		return runServerCommand(args[1], args[2:], stdout, stderr)
+		rest, code, ok := applyOperatorFormat(args[1], args[2:], stderr)
+		if !ok {
+			return code
+		}
+		return runServerCommand(args[1], rest, stdout, stderr)
 
 	case "trust":
 		if len(args) < 3 {
@@ -110,11 +140,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 		return runTrustCmd(args[2:], stdout, stderr)
 	case "threat":
-		if len(args) < 3 {
+		rest, code, ok := applyOperatorFormat("threat", args[2:], stderr)
+		if !ok {
+			return code
+		}
+		if len(rest) < 1 {
 			_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel threat <scan|test> [flags]")
 			return 2
 		}
-		return runThreatCmd(args[2:], stdout, stderr)
+		return runThreatCmd(rest, stdout, stderr)
 	case "run":
 		if len(args) > 2 && args[2] == "maintenance" {
 			return runMaintenanceCmd(args[3:], stdout, stderr)
@@ -122,9 +156,17 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel run maintenance [--once|--schedule]")
 		return 2
 	case "version":
-		return runVersionCommand(args[2:], stdout, stderr)
+		rest, code, ok := applyOperatorFormat("version", args[2:], stderr)
+		if !ok {
+			return code
+		}
+		return runVersionCommand(rest, stdout, stderr)
 	case "--version", "-v":
-		return runVersionFlag(args[2:], stdout, stderr)
+		rest, code, ok := applyOperatorFormat("version", args[2:], stderr)
+		if !ok {
+			return code
+		}
+		return runVersionFlag(rest, stdout, stderr)
 	case "--help", "-h":
 		printFrontDoor(stdout)
 		return 0
@@ -148,7 +190,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 }
 
 func runHelpCommand(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 1 && args[0] == "--json" {
+	if operatorJSONRequested(args) {
 		return writeCommandCatalogJSON(stdout)
 	}
 	if len(args) > 0 && args[0] == "--all" {
@@ -422,7 +464,7 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	verifier, _ := crypto.NewEd25519Verifier(signer.PublicKeyBytes())
 	writeServerNarration(logger, logFormat, narration,
-		"🔑 Trust Root: "+ColorBold+ColorGreen+signer.PublicKey()+ColorReset,
+		"Trust Root: "+ColorBold+ColorGreen+signer.PublicKey()+ColorReset,
 		"trust root ready", "public_key", signer.PublicKey())
 
 	// 2. Registry
@@ -1072,11 +1114,12 @@ func init() {
 		Name:    "health",
 		Aliases: []string{},
 		Usage:   "Check local HELM server health",
-		RunFn:   func(args []string, stdout, stderr io.Writer) int { return runHealthCmd(stdout, stderr) },
+		RunFn:   func(args []string, stdout, stderr io.Writer) int { return runHealthCmd(args, stdout, stderr) },
 	})
 }
 
-func runHealthCmd(out, errOut io.Writer) int {
+func runHealthCmd(args []string, out, errOut io.Writer) int {
+	jsonOut := operatorJSONRequested(args)
 	healthPort := 8081
 	if envHP := os.Getenv("HELM_HEALTH_PORT"); envHP != "" {
 		if p, parseErr := strconv.Atoi(envHP); parseErr == nil {
@@ -1084,18 +1127,36 @@ func runHealthCmd(out, errOut io.Writer) int {
 		}
 	}
 
+	type healthDoc struct {
+		Status string `json:"status"`
+		Port   int    `json:"port"`
+		Error  string `json:"error,omitempty"`
+	}
+
 	resp, err := http.Get(fmt.Sprintf("http://localhost:%d/healthz", healthPort))
 	if err != nil {
+		if jsonOut {
+			_ = json.NewEncoder(out).Encode(healthDoc{Status: "FAIL", Port: healthPort, Error: err.Error()})
+			return 1
+		}
 		fmt.Fprintf(errOut, "Health check failed: %v\n", err)
 		return 1
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if jsonOut {
+			_ = json.NewEncoder(out).Encode(healthDoc{Status: "FAIL", Port: healthPort, Error: fmt.Sprintf("status %d", resp.StatusCode)})
+			return 1
+		}
 		fmt.Fprintf(errOut, "Health check failed: status %d\n", resp.StatusCode)
 		return 1
 	}
 
+	if jsonOut {
+		_ = json.NewEncoder(out).Encode(healthDoc{Status: "OK", Port: healthPort})
+		return 0
+	}
 	fmt.Fprintln(out, "OK")
 	return 0
 }

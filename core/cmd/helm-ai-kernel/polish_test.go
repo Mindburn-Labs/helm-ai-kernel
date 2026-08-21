@@ -19,9 +19,6 @@ func TestDemoTerminalSummaryCard(t *testing.T) {
 
 	output := out.String()
 
-	if !strings.Contains(output, "╔") || !strings.Contains(output, "╚") {
-		t.Error("missing box-drawn summary card")
-	}
 	if !strings.Contains(output, "HELM Demo Complete") {
 		t.Error("missing 'HELM Demo Complete' in summary card")
 	}

@@ -47,7 +47,9 @@ type CheckResult struct {
 	Suggestion string      `json:"suggestion,omitempty"`
 }
 
-const doctorOnboardingSuggestion = "Run: helm-ai-kernel setup --quickstart --profile mcp --yes"
+const doctorOnboardingSuggestion = "Run: helm-ai-kernel setup status"
+const doctorRepairSuggestion = "Run: helm-ai-kernel setup repair claude-code --dry-run"
+const doctorMCPScanSuggestion = "Run: helm-ai-kernel mcp scan"
 
 // doctorSummary is the JSON-serializable summary.
 type doctorSummary struct {
@@ -81,30 +83,16 @@ func runDoctorCmd(args []string, stdout, stderr io.Writer) int {
 		jsonOutput bool
 		verbose    bool
 	)
-	fs.BoolVar(&jsonOutput, "json", false, "Output as JSON")
+	fs.BoolVar(&jsonOutput, "json", false, "Output as JSON (alias for --format=json)")
+	formatFlag := ui.RegisterFormat(fs, ui.FormatText)
 	fs.BoolVar(&verbose, "verbose", false, "Show detailed check info")
 
-	if err := fs.Parse(args); err != nil {
-		return 2
+	if code, ok := ui.ParseFlags(fs, args, stderr, "doctor", ui.FormatText); !ok {
+		return code
 	}
+	jsonOutput = jsonOutput || formatFlag.IsJSON()
 
-	checks := []checkFunc{
-		checkCryptoKeys,
-		checkDataDirectory,
-		checkConfig,
-		checkDatabase,
-		checkPolicyBundles,
-		checkEvidenceStore,
-		checkPortAvailability,
-		checkGoVersion,
-		checkHELMVersion,
-		checkDiskSpace,
-	}
-
-	results := make([]CheckResult, 0, len(checks))
-	for _, check := range checks {
-		results = append(results, check(verbose))
-	}
+	results := collectDoctorResults(verbose)
 
 	// Tally summary.
 	var summary doctorSummary
@@ -154,31 +142,82 @@ func renderJSON(out io.Writer, results []CheckResult, summary doctorSummary, hea
 	return 0
 }
 
+func collectDoctorResults(verbose bool) []CheckResult {
+	checks := []checkFunc{
+		checkCryptoKeys,
+		checkDataDirectory,
+		checkConfig,
+		checkDatabase,
+		checkPolicyBundles,
+		checkEvidenceStore,
+		checkPortAvailability,
+		checkGoVersion,
+		checkHELMVersion,
+		checkDiskSpace,
+		checkSetupLifecycle,
+		checkMCPConfigs,
+	}
+	results := make([]CheckResult, 0, len(checks))
+	for _, check := range checks {
+		results = append(results, check(verbose))
+	}
+	return results
+}
+
 func renderText(out io.Writer, results []CheckResult, summary doctorSummary, verbose bool) int {
 	return renderTextWithCaps(out, results, summary, verbose, doctorCapabilities(out))
 }
 
 func renderTextWithCaps(out io.Writer, results []CheckResult, summary doctorSummary, verbose bool, caps ui.Capabilities) int {
-	renderer := ui.NewRenderer(out, caps)
-	_, _ = fmt.Fprint(out, "\nHELM Doctor -- Diagnostic Report\n\n")
+	p := ui.NewPrinterWithCaps(out, caps)
+	p.Brand(ui.BrandHeader{
+		Name:    "HELM Doctor",
+		Tagline: "Diagnose keys, policy, store, and ports.",
+		Hint:    "Words stay intact without color. JSON twin: helm-ai-kernel doctor --json",
+	})
+	p.Blank()
 
+	groups := []struct {
+		title string
+		names []string
+	}{
+		{title: "Environment", names: []string{"go_version", "helm_version", "disk_space", "port_availability"}},
+		{title: "Store", names: []string{"crypto_keys", "data_directory", "database", "evidence_store"}},
+		{title: "Policy", names: []string{"config", "policy_bundles"}},
+	}
+	seen := map[string]struct{}{}
+	for _, group := range groups {
+		p.Title(group.title)
+		for _, name := range group.names {
+			for _, r := range results {
+				if r.Name != name {
+					continue
+				}
+				seen[name] = struct{}{}
+				writeDoctorRow(p, r, verbose)
+			}
+		}
+		p.Blank()
+	}
+	var leftover []CheckResult
 	for _, r := range results {
-		_, _ = fmt.Fprintf(out, "  %s %s\n", doctorStatusMarker(renderer, r.Status), r.Name)
-		_, _ = fmt.Fprintf(out, "     %s\n", r.Message)
-
-		if verbose && r.Detail != "" {
-			_, _ = fmt.Fprintf(out, "     Detail: %s\n", r.Detail)
+		if _, ok := seen[r.Name]; ok {
+			continue
 		}
-		if (r.Status == statusFail || r.Status == statusWarn) && r.Suggestion != "" {
-			_, _ = fmt.Fprintf(out, "     Next action: %s\n", r.Suggestion)
+		leftover = append(leftover, r)
+	}
+	if len(leftover) > 0 {
+		p.Title("Findings")
+		for _, r := range leftover {
+			writeDoctorRow(p, r, verbose)
 		}
+		p.Blank()
 	}
 
-	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintf(out, "Summary: %s %d, %s %d, %s %d\n",
-		renderer.Status(ui.StatusPass), summary.Pass,
-		renderer.Status(ui.StatusWarn), summary.Warn,
-		renderer.Status(ui.StatusFail), summary.Fail,
+		p.R.Status(ui.StatusPass), summary.Pass,
+		p.R.Status(ui.StatusWarn), summary.Warn,
+		p.R.Status(ui.StatusFail), summary.Fail,
 	)
 
 	if summary.Fail > 0 {
@@ -188,8 +227,19 @@ func renderTextWithCaps(out io.Writer, results []CheckResult, summary doctorSumm
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(out, "\n%s All checks passed. HELM is ready.\n", renderer.Status(ui.StatusPass))
+	_, _ = fmt.Fprintf(out, "\n%s All checks passed. HELM is ready.\n", p.R.Status(ui.StatusPass))
 	return 0
+}
+
+func writeDoctorRow(p ui.Printer, r CheckResult, verbose bool) {
+	p.Line("  %s %s", doctorStatusMarker(p.R, r.Status), r.Name)
+	p.Muted("     " + r.Message)
+	if verbose && r.Detail != "" {
+		p.Muted("     Detail: " + r.Detail)
+	}
+	if (r.Status == statusFail || r.Status == statusWarn) && r.Suggestion != "" {
+		p.Muted("     Next action: " + r.Suggestion)
+	}
 }
 
 func doctorCapabilities(out io.Writer) ui.Capabilities {
@@ -556,6 +606,70 @@ func checkDiskSpace(verbose bool) CheckResult {
 	r.Status = statusPass
 	r.Message = fmt.Sprintf("%s available", availableStr)
 	r.Detail = absTarget
+	return r
+}
+
+func checkSetupLifecycle(verbose bool) CheckResult {
+	r := CheckResult{Name: "setup_lifecycle"}
+	opts := setupOptions{Scope: "user", Operation: "status", NoQuickstart: true, DataDir: resolveDataDir()}
+	if workspace, err := os.Getwd(); err == nil {
+		opts.Workspace = workspace
+	}
+	var degraded []string
+	var configured []string
+	for _, target := range supportMatrix().DirectSetup {
+		summary, err := inspectSetupTarget(opts, target)
+		if err != nil {
+			continue
+		}
+		switch summary.Lifecycle {
+		case "degraded", "repairable":
+			degraded = append(degraded, target)
+		case "configured", "pending", "active":
+			configured = append(configured, target)
+		}
+	}
+	if len(degraded) > 0 {
+		r.Status = statusFail
+		r.Message = "HELM client integration needs repair: " + strings.Join(degraded, ", ")
+		r.Suggestion = doctorRepairSuggestion
+		return r
+	}
+	if len(configured) > 0 {
+		r.Status = statusPass
+		r.Message = "HELM client integration present: " + strings.Join(configured, ", ")
+		if verbose {
+			r.Detail = "loaded vs trust vs config path is reported by setup status; this check does not claim OrganizationRuntime"
+		}
+		return r
+	}
+	r.Status = statusWarn
+	r.Message = "No HELM client integration detected"
+	r.Suggestion = doctorOnboardingSuggestion
+	return r
+}
+
+func checkMCPConfigs(verbose bool) CheckResult {
+	r := CheckResult{Name: "mcp_configs"}
+	var found []string
+	for _, path := range defaultMCPConfigPaths() {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			found = append(found, path)
+		}
+	}
+	if len(found) == 0 {
+		r.Status = statusInfo
+		r.Message = "No local MCP client configs found"
+		r.Suggestion = doctorMCPScanSuggestion
+		if verbose {
+			r.Detail = "mcp scan inspects configs or --manifest/--path; it does not authorize"
+		}
+		return r
+	}
+	r.Status = statusInfo
+	r.Message = fmt.Sprintf("%d local MCP config(s) present", len(found))
+	r.Detail = strings.Join(found, ", ")
+	r.Suggestion = doctorMCPScanSuggestion
 	return r
 }
 

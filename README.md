@@ -1,6 +1,6 @@
 # HELM AI Kernel
 
-**A local firewall for AI-agent actions.**
+**Fail-closed execution firewall for AI agents.**
 
 HELM sits between Claude Code, Codex, MCP tools, shell commands, and other agent
 actions. It decides `ALLOW`, `DENY`, or `ESCALATE`, then writes a signed receipt
@@ -16,6 +16,8 @@ trusting *who* signed is a separate, explicit step — see
 brew tap mindburn-labs/tap
 brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
 brew install mindburn-labs/tap/helm-ai-kernel
+helm-ai-kernel                 # interactive TTY → operator TUI
+# Text catalog: HELM_NO_TUI=1 helm-ai-kernel   (also TERM=dumb / pipes)
 helm-ai-kernel setup claude-code --yes
 # Codex: helm-ai-kernel setup codex --yes
 # Hermes: helm-ai-kernel setup hermes --scope user --yes
@@ -38,6 +40,19 @@ from another machine, pin the signer's key out of band with
 (retired in the security patch line) always remain untrusted.
 
 No cloud account. No model key. No Docker. No production credentials.
+
+## Security Model (short)
+
+Fail-closed by default: unknown tools escalate or deny before dispatch; signed
+receipts prove the verdict; EvidencePacks verify offline. HELM does not replace
+host OS isolation, secret scanning, or network firewalls, and it only governs
+effects that cross a HELM adapter, hook, wrapper, proxy, or API route. Full
+model: [Execution security model](docs/EXECUTION_SECURITY_MODEL.md).
+
+Ceremony in the operator TUI requires typing `APPROVE` or `DENY`. The catalog
+ranks Doctor, Watch, Policy, Freeze, and Threat before setup convenience.
+Local `mcp approve` does not mint MCP authority. Escape hatches: `HELM_NO_TUI=1`,
+`TERM=dumb`, pipes. Details: [CLI I/O Convention](docs/guides/cli-io-convention.md).
 
 ## What It Does
 

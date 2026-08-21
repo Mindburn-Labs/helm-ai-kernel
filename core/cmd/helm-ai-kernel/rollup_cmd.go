@@ -199,7 +199,7 @@ func rollupBuild(
 		data, _ := json.MarshalIndent(record, "", "  ")
 		fmt.Fprintln(stdout, string(data))
 	} else {
-		fmt.Fprintf(stdout, "%s✅ Merkle Rollup Complete%s\n\n", ColorBold+ColorGreen, ColorReset)
+		fmt.Fprintf(stdout, "%sMerkle Rollup Complete%s\n\n", ColorBold+ColorGreen, ColorReset)
 		fmt.Fprintf(stdout, "  Rollup ID:     %s\n", record.ID)
 		fmt.Fprintf(stdout, "  Merkle Root:   %s\n", record.MerkleRoot)
 		fmt.Fprintf(stdout, "  Receipts:      %d\n", record.ReceiptCount)
@@ -255,11 +255,11 @@ func rollupVerify(
 		fmt.Fprintln(stdout, string(data))
 	} else {
 		if match {
-			fmt.Fprintf(stdout, "%s✅ Merkle root verified%s\n", ColorBold+ColorGreen, ColorReset)
+			fmt.Fprintf(stdout, "%sMerkle root verified%s\n", ColorBold+ColorGreen, ColorReset)
 			fmt.Fprintf(stdout, "  Root:     %s\n", computedRoot)
 			fmt.Fprintf(stdout, "  Receipts: %d\n", len(receipts))
 		} else {
-			fmt.Fprintf(stdout, "%s❌ Merkle root MISMATCH%s\n", ColorBold+ColorRed, ColorReset)
+			fmt.Fprintf(stdout, "%sMerkle root MISMATCH%s\n", ColorBold+ColorRed, ColorReset)
 			fmt.Fprintf(stdout, "  Expected: %s\n", rootHash)
 			fmt.Fprintf(stdout, "  Computed: %s\n", computedRoot)
 			fmt.Fprintf(stdout, "  Receipts: %d\n", len(receipts))

@@ -29,8 +29,16 @@ func supportMatrix() cliSupportMatrix {
 }
 
 func printFrontDoor(out io.Writer) {
-	fmt.Fprintf(out, "%s %s (%s)\n\n", terminalTitle(out, "HELM AI Kernel"), displayVersion(), displayCommit())
-	renderer := ui.NewRenderer(out, frontDoorCapabilities(out))
+	p := ui.NewPrinter(out)
+	p.Brand(ui.BrandHeader{
+		Name:    "HELM",
+		Tagline: "Fail-closed execution firewall for AI agents.",
+		Version: displayVersion(),
+		Commit:  displayCommit(),
+		Hint:    "On a terminal, helm-ai-kernel (no args) opens the operator TUI.",
+	})
+	p.Blank()
+	renderer := p.R
 	renderer.WriteTimeline("Your first governed-agent run", []ui.Step{
 		{
 			Status: ui.StatusWait,
@@ -52,21 +60,10 @@ func printFrontDoor(out io.Writer) {
 		Title: "Useful next commands",
 		Fields: []ui.KeyValue{
 			{Key: "Inspect", Value: "helm-ai-kernel scan --path . --preview out.md"},
-			{Key: "Receipts", Value: "helm-ai-kernel receipts tail --agent <id>"},
+			{Key: "Receipts", Value: "helm-ai-kernel receipts status  (list|show|verify|export; tail needs --agent)"},
 			{Key: "Automation", Value: "helm-ai-kernel help --json"},
 		},
 		NextAction: "Run helm-ai-kernel help --all for every command.",
-	})
-}
-
-func frontDoorCapabilities(out io.Writer) ui.Capabilities {
-	file, ok := out.(*os.File)
-	if !ok {
-		return ui.Capabilities{Width: ui.DefaultTerminalWidth}
-	}
-	return ui.DetectCapabilities(os.Stdin, file, ui.TerminalOptions{
-		Format: ui.FormatText,
-		Color:  ui.ColorAuto,
 	})
 }
 
@@ -102,10 +99,10 @@ func runVersionFlag(args []string, stdout, stderr io.Writer) int {
 	case len(args) == 0:
 		fmt.Fprintln(stdout, displayVersion())
 		return 0
-	case len(args) == 1 && args[0] == "--json":
+	case operatorJSONRequested(args) && versionOnlyFormatArgs(args):
 		return writeVersionJSON(stdout)
 	default:
-		fmt.Fprintf(stderr, "Usage: helm-ai-kernel --version [--json]\n")
+		fmt.Fprintf(stderr, "Usage: helm-ai-kernel --version [--json|--format text|json]\n")
 		return 2
 	}
 }
@@ -114,12 +111,12 @@ func runVersionCommand(args []string, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0:
 		// full block below
-	case len(args) == 1 && args[0] == "--json":
+	case operatorJSONRequested(args) && versionOnlyFormatArgs(args):
 		return writeVersionJSON(stdout)
 	default:
 		// An unknown arg used to be ignored and still exit 0, so `version
 		// --bogus` looked like it succeeded. Reject it.
-		fmt.Fprintf(stderr, "Usage: helm-ai-kernel version [--json]\n")
+		fmt.Fprintf(stderr, "Usage: helm-ai-kernel version [--json|--format text|json]\n")
 		return 2
 	}
 	fmt.Fprintf(stdout, "%s %s (%s)\n", terminalTitle(stdout, "HELM AI Kernel"), displayVersion(), displayCommit())

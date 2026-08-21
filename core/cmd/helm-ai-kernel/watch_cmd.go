@@ -1,5 +1,6 @@
 // watch_cmd.go provides a terminal-native approval snapshot and review loop.
-// It intentionally has no full-screen dependency and no approval hotkeys.
+// Typed APPROVE/DENY confirmation is required; the operator TUI never reduces
+// a ceremony to a hotkey.
 package main
 
 import (

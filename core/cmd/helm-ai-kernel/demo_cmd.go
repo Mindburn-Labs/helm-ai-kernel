@@ -17,6 +17,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 	evidencepkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidence"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/evidencepack"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/cli/ui"
 )
 
 // quantum_posture: demo EvidencePacks are sealed with the kernel's classical
@@ -134,7 +136,7 @@ func demoScenarioFor(kind string) demoScenarioConfig {
 		}
 		return demoScenarioConfig{
 			key:                "research-lab",
-			header:             "🧪 HELM Demo: Northstar Research Lab",
+			header:             "HELM Demo: Northstar Research Lab",
 			scenarioLine:       "Scenario: Launch retrieval benchmark pipeline | Sandbox: %s",
 			organizationID:     "northstar-research",
 			scopeID:            "lab.benchmarks.pipeline",
@@ -158,7 +160,7 @@ func demoScenarioFor(kind string) demoScenarioConfig {
 			buildResultNote:    "→ Benchmark artifact: retrieval-v3-report.tar.gz signed and stored",
 			validationNote:     "→ Eval suite: 84 checks passed, recall and latency thresholds satisfied",
 			deployNote:         "→ kubectl apply -f lab/benchmarks/retrieval-v3.yaml (2 replicas, bounded egress)",
-			denyNote:           "→ Blocked: export raw participant dataset — data egress outside approved scope",
+			denyNote:           "→ Blocked: export raw participant dataset - data egress outside approved scope",
 			skillGapNote:       "→ Gap: team lacks automated HPA tuning for lab benchmark bursts",
 			incidentTitle:      "Latency spike in retrieval benchmark worker",
 			incidentComponent:  "retrieval-v3",
@@ -177,7 +179,7 @@ func demoScenarioFor(kind string) demoScenarioConfig {
 		}
 		return demoScenarioConfig{
 			key:                "organization",
-			header:             "🏢 HELM Demo: Acme Operations",
+			header:             "HELM Demo: mock organization",
 			scenarioLine:       "Scenario: Deploy v2.4 API to prod | Sandbox: %s",
 			organizationID:     "acme-operations",
 			scopeID:            "platform.prod.deploy",
@@ -201,7 +203,7 @@ func demoScenarioFor(kind string) demoScenarioConfig {
 			buildResultNote:    "→ Docker image acme/api:2.4.0 pushed to registry",
 			validationNote:     "→ E2E suite: 84 scenarios passed, p99 latency < 200ms",
 			deployNote:         "→ kubectl apply -f k8s/api-v2.4.yaml (3 replicas, rolling update)",
-			denyNote:           "→ Blocked: DROP TABLE users — destructive action not in allowlist",
+			denyNote:           "→ Blocked: DROP TABLE users - destructive action not in allowlist",
 			skillGapNote:       "→ Gap: team lacks HPA auto-scaling configuration expertise",
 			incidentTitle:      "Memory leak in /v1/embeddings after 10k requests",
 			incidentComponent:  "api-v2.4",
@@ -238,25 +240,19 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "\n%s%s%s\n", ColorBold+ColorBlue, cfg.header, ColorReset)
-	fmt.Fprintf(stdout, "%s   "+cfg.scenarioLine+"%s\n", ColorGray, provider, ColorReset)
+	p := ui.NewPrinter(stdout)
+	p.Blank()
+	p.Title(cfg.header)
+	p.Muted("   " + fmt.Sprintf(cfg.scenarioLine, provider))
 	if dryRun {
-		fmt.Fprintf(stdout, "%s   Mode: policy simulation / dry-run (organization-scoped metadata bound into receipts)%s\n", ColorYellow, ColorReset)
+		p.Muted("   Mode: policy simulation / dry-run (organization-scoped metadata bound into receipts)")
 	}
-	fmt.Fprintln(stdout, "")
-
-	fmt.Fprintf(stdout, "%sTeam:%s\n", ColorBold, ColorReset)
+	p.Blank()
+	p.Title("Team")
 	for _, a := range cfg.team {
-		icon := "📋"
-		switch a.Role {
-		case "executor":
-			icon = "⚙️ "
-		case "auditor":
-			icon = "🔒"
-		}
-		fmt.Fprintf(stdout, "  %s %s%s%s (%s)\n", icon, ColorBold, a.Name, ColorReset, a.Role)
+		p.Line("  %s  %s", p.R.Bold(a.Name), a.Role)
 	}
-	fmt.Fprintln(stdout, "")
+	p.Blank()
 
 	var receipts []demoReceipt
 	var prevHash string
@@ -298,72 +294,75 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 		prevHash = hash
 		receipts = append(receipts, r)
 
-		icon := "✅"
-		color := ColorGreen
-		switch verdict {
-		case "DENY":
-			icon = "❌"
-			color = ColorRed
-		case "PENDING":
-			icon = "⏳"
-			color = ColorYellow
+		status := ui.StatusFromVerdict(verdict)
+		if verdict == "PENDING" {
+			status = ui.StatusWait
 		}
-		fmt.Fprintf(stdout, "  %s %s[%s]%s %s → %s%s%s %s(L=%d)%s\n",
-			icon, color, verdict, ColorReset,
-			principal, ColorBold, action, ColorReset,
-			ColorGray, lamport, ColorReset)
-
+		p.Event(ui.EventLine{
+			Status: status,
+			Actor:  principal,
+			Action: action,
+			Meta:   fmt.Sprintf("L=%d", lamport),
+		})
 		return r
 	}
 
-	fmt.Fprintf(stdout, "%s━━━ %s ━━━%s\n\n", ColorBold+ColorCyan, cfg.initiativeTitle, ColorReset)
+	p.Title(cfg.initiativeTitle)
 
-	fmt.Fprintf(stdout, "%sStep 1: Sprint Planning%s\n", ColorBold, ColorReset)
+	p.Title("Step 1: Sprint Planning")
 	emitReceipt(cfg.plannerSecondary, "DEFINE_REQUIREMENTS", "jira", "ALLOW", "POLICY_PASS")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.requirementsNote, ColorReset)
+	p.Muted("    " + cfg.requirementsNote)
 	emitReceipt(cfg.plannerPrimary, "PLAN_INITIATIVE", "jira", "ALLOW", "POLICY_PASS")
-	fmt.Fprintf(stdout, "    %s→ Created INIT-2847: %s%s\n", ColorGray, cfg.initiativeTitle, ColorReset)
+	p.Muted(fmt.Sprintf("    → Created INIT-2847: %s", cfg.initiativeTitle))
 	emitReceipt(cfg.plannerPrimary, "ASSIGN_TASK", "jira", "ALLOW", "POLICY_PASS")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.assignNote, ColorReset)
+	p.Muted("    " + cfg.assignNote)
 
-	fmt.Fprintf(stdout, "\n%sStep 2: %s%s\n", ColorBold, cfg.phase2Title, ColorReset)
+	p.Blank()
+	p.Title("Step 2: " + cfg.phase2Title)
 	emitReceipt(cfg.auditor, "AUDIT_REVIEW", "snyk_scan", "ALLOW", "AUDIT_PASS")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.reviewNote, ColorReset)
+	p.Muted("    " + cfg.reviewNote)
 	emitReceipt(cfg.executorPrimary, "REQUEST_APPROVAL", "deploy_staging", "PENDING", "APPROVAL_REQUIRED")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.approvalRequest, ColorReset)
+	p.Muted("    " + cfg.approvalRequest)
 	emitReceipt(cfg.plannerPrimary, "APPROVE_EXECUTION", "deploy_production", "ALLOW", "APPROVAL_GRANTED")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.approvalGranted, ColorReset)
+	p.Muted("    " + cfg.approvalGranted)
 
-	fmt.Fprintf(stdout, "\n%sStep 3: Sandboxed Build & Test (%s)%s\n", ColorBold, provider, ColorReset)
+	p.Blank()
+	p.Title("Step 3: Sandboxed Build & Test (" + provider + ")")
 	emitReceipt(cfg.executorPrimary, "SANDBOX_EXEC", "sandbox_run", "ALLOW", "PREFLIGHT_PASS")
 	if provider == "mock" {
-		fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.sandboxNote, ColorReset)
-		fmt.Fprintf(stdout, "    %s→ 247 checks passed, 0 failed. Scoped artifacts prepared for export%s\n", ColorGray, ColorReset)
+		p.Muted("    " + cfg.sandboxNote)
+		p.Muted("    → 247 checks passed, 0 failed. Scoped artifacts prepared for export")
 	}
 	emitReceipt(cfg.executorPrimary, "SANDBOX_RESULT", "artifact_build", "ALLOW", "EXECUTION_COMPLETE")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.buildResultNote, ColorReset)
+	p.Muted("    " + cfg.buildResultNote)
 
-	fmt.Fprintf(stdout, "\n%sStep 4: %s%s\n", ColorBold, cfg.phase4Title, ColorReset)
+	p.Blank()
+	p.Title("Step 4: " + cfg.phase4Title)
 	emitReceipt(cfg.validator, "RUN_ACCEPTANCE", "validator", "ALLOW", "TESTS_PASS")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.validationNote, ColorReset)
+	p.Muted("    " + cfg.validationNote)
 	emitReceipt(cfg.executorSecondary, "SANDBOX_EXEC", "apply_change", "ALLOW", "POLICY_PASS")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.deployNote, ColorReset)
+	p.Muted("    " + cfg.deployNote)
 
-	fmt.Fprintf(stdout, "\n%sStep 5: Governance Deny (fail-closed)%s\n", ColorBold, ColorReset)
+	p.Blank()
+	p.Title("Step 5: Governance Deny (fail-closed)")
 	emitReceipt(cfg.executorPrimary, "EXECUTE_TOOL", "psql_drop_table", "DENY", "ERR_TOOL_NOT_ALLOWED")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.denyNote, ColorReset)
-	fmt.Fprintf(stdout, "    %s┌─ Deny Details ─────────────────────────────────────────%s\n", ColorRed, ColorReset)
-	fmt.Fprintf(stdout, "    %s│ Reason:      ERR_TOOL_NOT_ALLOWED%s\n", ColorRed, ColorReset)
-	fmt.Fprintf(stdout, "    %s│ Explanation: tool is not in the allowed-tools list for this organizational scope%s\n", ColorRed, ColorReset)
-	fmt.Fprintf(stdout, "    %s│ Policy:      policy.allowed_tools%s\n", ColorRed, ColorReset)
-	fmt.Fprintf(stdout, "    %s│ Fix:         Add psql_drop_table to allowed_tools only if the authority scope explicitly permits it%s\n", ColorRed, ColorReset)
-	fmt.Fprintf(stdout, "    %s└────────────────────────────────────────────────────────%s\n", ColorRed, ColorReset)
+	p.Muted("    " + cfg.denyNote)
+	p.Card(ui.CompletionCard{
+		Title: "Deny Details",
+		Fields: []ui.KeyValue{
+			{Key: "Reason", Value: "ERR_TOOL_NOT_ALLOWED"},
+			{Key: "Explanation", Value: "tool is not in the allowed-tools list for this organizational scope"},
+			{Key: "Policy", Value: "policy.allowed_tools"},
+			{Key: "Fix", Value: "Add psql_drop_table to allowed_tools only if the authority scope explicitly permits it"},
+		},
+	})
 
-	fmt.Fprintf(stdout, "\n%s━━━ Deployment Complete ━━━%s\n\n", ColorBold+ColorCyan, ColorReset)
+	p.Blank()
+	p.Title("Deployment Complete")
 
-	fmt.Fprintf(stdout, "%sStep 6: Skill Gap Detection%s\n", ColorBold, ColorReset)
+	p.Title("Step 6: Skill Gap Detection")
 	emitReceipt(cfg.executorSecondary, "DETECT_SKILL_GAP", "k8s_hpa_config", "ALLOW", "SKILL_GAP_DETECTED")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.skillGapNote, ColorReset)
+	p.Muted("    " + cfg.skillGapNote)
 
 	candidatesDir := filepath.Join("data", "candidates")
 	_ = os.MkdirAll(candidatesDir, 0750)
@@ -385,9 +384,10 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	_ = os.WriteFile(filepath.Join(candidatesDir, "k8s_hpa_config-demo.json"), candidateData, 0644)
 
 	emitReceipt(cfg.plannerPrimary, "AUTO_APPROVE_SKILL", "k8s_hpa_config", "ALLOW", "DEMO_AUTO_APPROVE")
-	fmt.Fprintf(stdout, "    %s→ SkillCandidate ‹k8s_hpa_config› proposed and auto-approved (%s)%s\n", ColorGray, mode, ColorReset)
+	p.Muted(fmt.Sprintf("    → SkillCandidate ‹k8s_hpa_config› proposed and auto-approved (%s)", mode))
 
-	fmt.Fprintf(stdout, "\n%sStep 7: %s%s\n", ColorBold, cfg.phase7Title, ColorReset)
+	p.Blank()
+	p.Title("Step 7: " + cfg.phase7Title)
 	incDir := filepath.Join("data", "incidents")
 	_ = os.MkdirAll(incDir, 0750)
 	demoIncident := Incident{
@@ -405,46 +405,47 @@ func runDemoScenario(kind string, args []string, stdout, stderr io.Writer) int {
 	_ = saveIncident(&demoIncident)
 
 	emitReceipt("System", "INCIDENT_CREATED", "pagerduty", "ALLOW", "INCIDENT_OPEN")
-	fmt.Fprintf(stdout, "    %s→ INC-demo-001: %s (severity: high)%s\n", ColorGray, cfg.incidentTitle, ColorReset)
+	p.Muted(fmt.Sprintf("    → INC-demo-001: %s (severity: high)", cfg.incidentTitle))
 	emitReceipt("System", "MAINTENANCE_RUN", "gc_tuning_patch", "ALLOW", "CONFORMANCE_PASS")
-	fmt.Fprintf(stdout, "    %s%s%s\n", ColorGray, cfg.maintenanceNote, ColorReset)
+	p.Muted("    " + cfg.maintenanceNote)
 
 	demoIncident.Status = "resolved"
 	demoIncident.Resolution = cfg.incidentResolution
 	demoIncident.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	_ = saveIncident(&demoIncident)
 
-	fmt.Fprintf(stdout, "    %s→ Resolved: %s%s\n", ColorGray, cfg.incidentResolution, ColorReset)
-	fmt.Fprintf(stdout, "\n%s━━━ All Phases Complete ━━━%s\n\n", ColorBold+ColorCyan, ColorReset)
+	p.Muted(fmt.Sprintf("    → Resolved: %s", cfg.incidentResolution))
+	p.Title("All Phases Complete")
 
-	fmt.Fprintf(stdout, "%sExporting EvidencePack...%s\n", ColorBold, ColorReset)
+	p.Title("Exporting EvidencePack...")
 	if err := writeVerifiableEvidencePack(outDir, cfg, receipts, template, provider, mode, prevHash, lamport); err != nil {
 		fmt.Fprintf(stderr, "Error sealing EvidencePack: %v\n", err)
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "  📦 %d receipts → %s/\n", len(receipts), outDir)
-	fmt.Fprintf(stdout, "  🔏 Sealed (dev-local) → %s/%s\n", outDir, evidencepkg.EvidencePackSealPath)
-	fmt.Fprintf(stdout, "  📊 Run Report → %s/%s\n", outDir, demoRunReportRelPath)
+	p.Line("  %d receipts → %s/", len(receipts), outDir)
+	p.Line("  Sealed (dev-local) → %s/%s", outDir, evidencepkg.EvidencePackSealPath)
+	p.Line("  Run Report → %s/%s", outDir, demoRunReportRelPath)
 
-	fmt.Fprintf(stdout, "\n%sVerifying EvidencePack...%s\n", ColorBold, ColorReset)
+	p.Title("Verifying EvidencePack...")
 	if code := runVerifyCmd([]string{"--bundle", outDir, "--profile", "dev-local", "--allow-self-attested"}, stdout, stderr); code != 0 {
 		fmt.Fprintf(stderr, "Error verifying generated EvidencePack (exit %d)\n", code)
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "\n%s🎉 Demo complete.%s Evidence at %s/\n", ColorBold+ColorGreen, ColorReset, outDir)
-	fmt.Fprintf(stdout, "%s   Bound scope:%s org=%s scope=%s mode=%s\n", ColorGray, ColorReset, cfg.organizationID, cfg.scopeID, mode)
-
 	reportPath := filepath.Join(outDir, demoRunReportRelPath)
-	fmt.Fprintf(stdout, "\n%s╔════════════════════════════════════════════════════════════╗%s\n", ColorBold+ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║  HELM Demo Complete                                        ║%s\n", ColorBold+ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s╠════════════════════════════════════════════════════════════╣%s\n", ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s  📊 Report:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, reportPath, ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s  📦 Evidence: %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorBold, outDir+"/", ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s  🔍 Verify:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, evidencepkg.BuildEvidencePackVerifyCommand(outDir, evidencepkg.EvidenceTrustProfileDevLocal, ""), ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s║%s  🔄 Switch:   %s%-43s%s %s║%s\n", ColorCyan, ColorReset, ColorGray, "helm-ai-kernel demo organization --provider opensandbox", ColorReset, ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s╚════════════════════════════════════════════════════════════╝%s\n\n", ColorCyan, ColorReset)
+	verifyCmd := evidencepkg.BuildEvidencePackVerifyCommand(outDir, evidencepkg.EvidenceTrustProfileDevLocal, "")
+	p.Card(ui.CompletionCard{
+		Title: "HELM Demo Complete",
+		Fields: []ui.KeyValue{
+			{Key: "Report", Value: reportPath},
+			{Key: "Evidence", Value: outDir + "/"},
+			{Key: "Verify", Value: verifyCmd},
+			{Key: "Switch", Value: "helm-ai-kernel demo organization --provider opensandbox"},
+			{Key: "Scope", Value: fmt.Sprintf("org=%s scope=%s mode=%s", cfg.organizationID, cfg.scopeID, mode)},
+		},
+	})
+	p.Line("%s", verifyCmd)
 
 	return 0
 }

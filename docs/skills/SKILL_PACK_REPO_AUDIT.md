@@ -47,7 +47,10 @@ Date: 2026-05-18
 - Revoke writes `SKILL_REVOKE_RECEIPT`.
 - Codex plugin export marks MCP as `pending_quarantined` and hooks `off_by_default`.
 
-## Missing For 100%
+## Missing For Full Coverage
+
+Historical audit heading. "Full coverage" here means inventory completeness for
+this skill-pack survey, not a product completeness or GA claim.
 
 [REFACTOR] Add signature verification backed by actual public keys instead of first-party repo references.
 

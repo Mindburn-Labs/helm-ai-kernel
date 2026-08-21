@@ -128,37 +128,37 @@ func runLegacyOnboardCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	fmt.Fprintf(stdout, "\n%s🚀 HELM Onboard%s\n", ColorBold+ColorBlue, ColorReset)
+	fmt.Fprintf(stdout, "\n%sHELM Onboard%s\n", ColorBold+ColorBlue, ColorReset)
 	fmt.Fprintf(stdout, "%s   Local fail-closed execution controls.%s\n\n", ColorGray, ColorReset)
 
 	fmt.Fprintf(stdout, "%s[1/5]%s Creating data directory...  ", ColorBold, ColorReset)
 	if err := os.MkdirAll(filepath.Join(dataDir, "artifacts"), 0750); err != nil {
-		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
+		fmt.Fprintf(stderr, "\nFailed: %v\n", err)
 		return 2
 	}
 	if err := os.MkdirAll(filepath.Join(dataDir, "evidence"), 0750); err != nil {
-		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
+		fmt.Fprintf(stderr, "\nFailed: %v\n", err)
 		return 2
 	}
-	fmt.Fprintf(stdout, "%s✓%s %s\n", ColorGreen, ColorReset, dataDir)
+	fmt.Fprintf(stdout, "[PASS] %s\n", dataDir)
 
 	fmt.Fprintf(stdout, "%s[2/5]%s Initializing local store...  ", ColorBold, ColorReset)
 	db, _, _, err := setupLiteModeWithDataDir(context.Background(), dataDir)
 	if err != nil {
-		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
+		fmt.Fprintf(stderr, "\nFailed: %v\n", err)
 		return 2
 	}
 	defer db.Close()
-	fmt.Fprintf(stdout, "%s✓%s SQLite at %s/helm.db\n", ColorGreen, ColorReset, dataDir)
+	fmt.Fprintf(stdout, "[PASS] SQLite at %s/helm.db\n", dataDir)
 
 	fmt.Fprintf(stdout, "%s[3/5]%s Generating trust root...    ", ColorBold, ColorReset)
 	signer, err := loadOrGenerateSignerWithDataDir(dataDir)
 	if err != nil {
-		fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
+		fmt.Fprintf(stderr, "\nFailed: %v\n", err)
 		return 2
 	}
 	pubKeyHex := hex.EncodeToString(signer.PublicKeyBytes())
-	fmt.Fprintf(stdout, "%s✓%s Ed25519 %s...%s\n", ColorGreen, ColorReset, pubKeyHex[:16], pubKeyHex[len(pubKeyHex)-8:])
+	fmt.Fprintf(stdout, "[PASS] Ed25519 %s...%s\n", pubKeyHex[:16], pubKeyHex[len(pubKeyHex)-8:])
 
 	fmt.Fprintf(stdout, "%s[4/5]%s Writing configuration...    ", ColorBold, ColorReset)
 	if _, err := os.Stat("helm.yaml"); os.IsNotExist(err) {
@@ -172,12 +172,12 @@ trust:
   root_public_key: "` + pubKeyHex + `"
 `
 		if err := os.WriteFile("helm.yaml", []byte(config), 0600); err != nil {
-			fmt.Fprintf(stderr, "\n❌ Failed: %v\n", err)
+			fmt.Fprintf(stderr, "\nFailed: %v\n", err)
 			return 2
 		}
-		fmt.Fprintf(stdout, "%s✓%s helm.yaml\n", ColorGreen, ColorReset)
+		fmt.Fprintf(stdout, "[PASS] helm.yaml\n")
 	} else {
-		fmt.Fprintf(stdout, "%s✓%s helm.yaml (exists)\n", ColorGreen, ColorReset)
+		fmt.Fprintf(stdout, "[PASS] helm.yaml (exists)\n")
 	}
 
 	fmt.Fprintf(stdout, "%s[5/5]%s Detecting agent surface...  ", ColorBold, ColorReset)
@@ -185,11 +185,11 @@ trust:
 	if scanErr != nil {
 		fmt.Fprintf(stdout, "%sskipped (%v)%s\n", ColorYellow, scanErr, ColorReset)
 	} else {
-		fmt.Fprintf(stdout, "%s✓%s grade %s — %s\n", ColorGreen, ColorReset, report.Grade.Letter, report.Grade.Reason)
+		fmt.Fprintf(stdout, "[PASS] grade %s — %s\n", report.Grade.Letter, report.Grade.Reason)
 	}
 
 	fmt.Fprintf(stdout, "\n%s────────────────────────────────────────────────%s\n", ColorCyan, ColorReset)
-	fmt.Fprintf(stdout, "%s✅ HELM is ready.%s\n\n", ColorBold+ColorGreen, ColorReset)
+	fmt.Fprintf(stdout, "%sHELM is ready.%s\n\n", ColorBold+ColorGreen, ColorReset)
 	fmt.Fprintf(stdout, "%sNext steps:%s\n\n", ColorBold, ColorReset)
 	fmt.Fprintf(stdout, "  %s1.%s Continue with the guided local proof:\n", ColorBold+ColorCyan, ColorReset)
 	quickstartDataDir := filepath.Join(dataDir, "quickstart")

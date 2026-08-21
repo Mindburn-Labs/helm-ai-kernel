@@ -122,19 +122,19 @@ func runRiskCmd(args []string, stdout, stderr io.Writer) int {
 		if rs.BudgetImpact || rs.EgressRisk || rs.IdentityRisk || !rs.ContextMatch || rs.Frozen {
 			_, _ = fmt.Fprintln(stdout, "  Flags:")
 			if rs.BudgetImpact {
-				_, _ = fmt.Fprintln(stdout, "    ⚠️  Budget Impact")
+				_, _ = fmt.Fprintln(stdout, "     Budget Impact")
 			}
 			if rs.EgressRisk {
-				_, _ = fmt.Fprintln(stdout, "    ⚠️  Egress Risk")
+				_, _ = fmt.Fprintln(stdout, "     Egress Risk")
 			}
 			if rs.IdentityRisk {
-				_, _ = fmt.Fprintln(stdout, "    ⚠️  Identity Risk")
+				_, _ = fmt.Fprintln(stdout, "     Identity Risk")
 			}
 			if !rs.ContextMatch {
-				_, _ = fmt.Fprintln(stdout, "    🔴 Context Mismatch")
+				_, _ = fmt.Fprintln(stdout, "    Context Mismatch")
 			}
 			if rs.Frozen {
-				_, _ = fmt.Fprintln(stdout, "    🔴 System Frozen")
+				_, _ = fmt.Fprintln(stdout, "    System Frozen")
 			}
 		}
 	}

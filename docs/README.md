@@ -31,6 +31,7 @@ This tree is the canonical public documentation source for HELM AI Kernel. Publi
 
 ## How-To
 
+- [CLI I/O Convention](guides/cli-io-convention.md)
 - [Conformance](CONFORMANCE.md)
 - [Verification](VERIFICATION.md)
 - [Publishing](PUBLISHING.md)

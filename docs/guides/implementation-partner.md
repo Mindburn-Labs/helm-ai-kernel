@@ -35,11 +35,13 @@ helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs
 helm-ai-kernel verify \
   --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<run-id> \
   --profile dev-local \
+  --allow-self-attested \
   --json
 ```
 
-Keep the emitted run ID, receipt paths, verification result, CLI version, and
-environment in the implementation record.
+`--allow-self-attested` accepts internal consistency for this local proof, not
+provenance. Keep the emitted run ID, receipt paths, verification result, CLI
+version, and environment in the implementation record.
 
 ## 3. Choose One Documented Surface
 

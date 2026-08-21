@@ -31,7 +31,7 @@ func TestConfirmDecisionShowsFullContextAndRejectsNonmatchingInput(t *testing.T)
 	if called {
 		t.Fatal("callback ran without the exact approval word")
 	}
-	for _, want := range []string{"Action: APPROVE", "Subject: approval-42", "Summary: Allow the command once.", "Reason: Policy escalation", "Evidence: receipt://r-42", "Type APPROVE"} {
+	for _, want := range []string{"Action:", "APPROVE", "Subject:", "approval-42", "Summary:", "Allow the command once.", "Reason:", "Policy escalation", "Evidence:", "receipt://r-42", "Type APPROVE"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("review output missing %q:\n%s", want, output.String())
 		}

@@ -1,6 +1,6 @@
 ---
 title: Developer Journey
-last_reviewed: 2026-07-10
+last_reviewed: 2026-08-21
 ---
 
 # Developer Journey
@@ -118,11 +118,12 @@ helm-ai-kernel verify evidence-pack.tar
 Run the doctor before deeper debugging:
 
 ```bash
-helm-ai-kernel doctor --json
+helm-ai-kernel doctor --format json
 ```
 
 Then use [Troubleshooting](TROUBLESHOOTING.md) for ports, setup, policy, proxy,
-receipt, and verification failures.
+receipt, and verification failures. Interactive TTY opens the operator TUI by
+default; use `HELM_NO_TUI=1` or `TERM=dumb` for the text front door.
 
 ## Source Truth
 

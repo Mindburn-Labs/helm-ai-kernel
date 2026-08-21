@@ -134,7 +134,7 @@ func runReportCmd(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if outputPath != "" {
-		fmt.Fprintf(stdout, "%s✅ Report generated%s → %s\n", ColorBold+ColorGreen, ColorReset, outputPath)
+		fmt.Fprintf(stdout, "%sReport generated%s → %s\n", ColorBold+ColorGreen, ColorReset, outputPath)
 	}
 
 	if !report.ChainIntegrity.Verified {
@@ -186,7 +186,7 @@ type ChainIntegrityReport struct {
 type RequirementMapping struct {
 	Requirement string `json:"requirement"`
 	Description string `json:"description"`
-	Status      string `json:"status"` // ✅ MET, ❌ NOT_MET, ⚠️ PARTIAL
+	Status      string `json:"status"` // MET, NOT_MET, PARTIAL
 	Evidence    string `json:"evidence"`
 }
 
@@ -321,9 +321,9 @@ func mapRequirements(standard string, report *ComplianceReport) []RequirementMap
 
 func boolStatus(ok bool) string {
 	if ok {
-		return "✅ MET"
+		return "MET"
 	}
-	return "❌ NOT_MET"
+	return "NOT_MET"
 }
 
 // ── Output Formatters ──────────────────────────────────────────────────────
@@ -344,9 +344,9 @@ func writeTextReport(w io.Writer, r *ComplianceReport) {
 
 	fmt.Fprintf(w, "\n── Chain Integrity ─────────────────────\n")
 	if r.ChainIntegrity.Verified {
-		fmt.Fprintf(w, "  %s✅ VERIFIED%s\n", ColorBold+ColorGreen, ColorReset)
+		fmt.Fprintf(w, "  %sVERIFIED%s\n", ColorBold+ColorGreen, ColorReset)
 	} else {
-		fmt.Fprintf(w, "  %s❌ FAILED%s (%d gaps)\n", ColorBold+ColorRed, ColorReset, r.ChainIntegrity.Gaps)
+		fmt.Fprintf(w, "  %sFAILED%s (%d gaps)\n", ColorBold+ColorRed, ColorReset, r.ChainIntegrity.Gaps)
 	}
 	fmt.Fprintf(w, "  Chain length:    %d\n", r.ChainIntegrity.ChainLength)
 	if r.ChainIntegrity.MerkleRoot != "" {

@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-21
 ---
 
 # Quickstart
@@ -54,7 +54,8 @@ are client libraries, not executable Kernel installs.
 | Surface | Public proof |
 | --- | --- |
 | Install | `brew install mindburn-labs/tap/helm-ai-kernel` or the tagged source build above |
-| CLI chooser | `helm-ai-kernel` or `helm-ai-kernel setup` |
+| Operator TUI | `helm-ai-kernel` or `helm-ai-kernel tui` (escape: `HELM_NO_TUI=1`, `TERM=dumb`). Catalog ranks Doctor/Watch/Policy/Freeze/Threat first. Ceremony is typed `APPROVE`/`DENY` only. |
+| Setup inspect | `helm-ai-kernel setup status --format json` |
 | Local proof | `helm-ai-kernel mcp proof --json --out ~/.helm-ai-kernel/proofs` |
 | Codex setup | `helm-ai-kernel setup codex --dry-run --json` |
 | Claude Code setup | `helm-ai-kernel setup claude-code --dry-run --json` |
@@ -67,7 +68,7 @@ are client libraries, not executable Kernel installs.
 | Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
 | MCP quarantine and recovery | `mcp authorize-call`, `mcp quarantine`, `mcp pending`, `mcp receipts`, `mcp revoke`; `mcp approve` rejects opaque local approval metadata |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
-| Receipts | `helm-ai-kernel mcp receipts --json` and `helm-ai-kernel boundary records --json` |
+| Receipts | `helm-ai-kernel receipts status --format json`, `mcp receipts --json`, `boundary records --json` |
 | Conformance | `helm-ai-kernel conform --level L1 --json` and `--level L2` |
 | SDKs | source clients under `sdk/` with local test targets |
 

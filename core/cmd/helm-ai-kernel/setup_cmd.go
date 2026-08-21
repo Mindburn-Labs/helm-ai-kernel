@@ -57,7 +57,8 @@ var (
 	setupFindClient = func(target string) (string, error) {
 		return exec.LookPath(setupClientCommand(target))
 	}
-	setupProbeClient = func(target, dir string) error {
+	setupCompensateMCP = removeSetupMCP
+	setupProbeClient   = func(target, dir string) error {
 		client, err := setupFindClient(target)
 		if err != nil {
 			return err
@@ -116,6 +117,9 @@ type setupSummary struct {
 	ClientDetected bool   `json:"client_detected"`
 	NativeLoaded   bool   `json:"native_loaded"`
 	ClientState    string `json:"client_state,omitempty"`
+	// Lifecycle is the coarse operator model: absent|planned|configured|pending|active|degraded|repairable.
+	// It is a projection of ClientState. native_loaded is the only active claim.
+	Lifecycle string `json:"lifecycle,omitempty"`
 	// CodexTrustPending is true when a project-scoped Codex config is written
 	// but the workspace is not recorded as trusted in ~/.codex/config.toml.
 	// Codex ignores project-scoped config until trust is granted, so the
@@ -221,6 +225,7 @@ func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
 	client := fs.String("client", "", "Client to print config for")
 	printConfig := fs.Bool("print-config", false, "Print config for --client")
 	jsonOut := fs.Bool("json", false, "Print machine-readable support matrix")
+	formatFlag := ui.RegisterFormat(fs, ui.FormatText)
 	quickstart := fs.Bool("quickstart", false, "Start the local first-run proof path")
 	profile := fs.String("profile", "mcp", "First-run profile: claude, codex, mcp, openai-compatible")
 	yes := fs.Bool("yes", false, "Confirm first-run changes without prompting")
@@ -233,6 +238,9 @@ func runSetupFrontDoorFlags(args []string, stdout, stderr io.Writer) int {
 	reset := fs.Bool("reset", false, "Replace HELM-owned first-run state")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if formatFlag.IsJSON() {
+		*jsonOut = true
 	}
 	if fs.NArg() != 0 {
 		fmt.Fprintf(stderr, "setup: unexpected argument %q\n", fs.Arg(0))
@@ -657,6 +665,7 @@ func runSetupInstallCmdWithInput(args []string, stdout, stderr io.Writer, input 
 		renderSetupOutcome(stderr, caps, summary, steps, applyErr)
 	}
 	if applyErr != nil {
+		compensateFailedSetupApply(opts, steps)
 		return reportSetupRecovery(stderr, opts, applyErr)
 	}
 	summary.MCPInstalled = setupIncludesMCP(opts.Target)
@@ -703,6 +712,12 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		printSetupInspectUsage(stdout, "status", false)
 		return 0
 	}
+	if isSetupFleetStatusArgs(args) {
+		return runSetupStatusFleetCmd(args, stdout, stderr)
+	}
+	if len(args) > 0 && isPrintConfigTarget(args[0]) {
+		return runSetupStatusPrintConfigCmd(args, stdout, stderr)
+	}
 	opts, code := parseSetupInspectArgs("setup status", args, stderr, false)
 	if code != 0 {
 		return code
@@ -729,6 +744,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		summary.MCPInstalled = setupMCPInstalled(recoveryOpts, summary.ClientConfigPath, summary.BinaryPath)
 		summary.HookInstalled = setupHookInstalled(recoveryOpts, summary.HookConfigPath, summary.BinaryPath)
 		summary.ClientState = "recovery_required"
+		assignSetupLifecycle(&summary)
 		printSetupSummary(stdout, summary, opts.JSON)
 		return 1
 	}
@@ -748,6 +764,7 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 	if grade := readSetupScanGrade(filepath.Join(opts.DataDir, "autoconfigure", "inventory.json")); grade != "" {
 		summary.ScanGrade = grade
 	}
+	assignSetupLifecycle(&summary)
 	printSetupSummary(stdout, summary, opts.JSON)
 	// On-disk config alone is not healthy: the client must be present and
 	// confirm that it loaded HELM, with no explicit trust step still pending.
@@ -755,6 +772,243 @@ func runSetupStatusCmd(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	return 1
+}
+
+type setupFleetStatus struct {
+	Operation string         `json:"operation"`
+	DataDir   string         `json:"data_dir"`
+	Clients   []setupSummary `json:"clients"`
+}
+
+func isSetupFleetStatusArgs(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	if args[0] == "all" {
+		return true
+	}
+	return strings.HasPrefix(args[0], "-")
+}
+
+func isPrintConfigTarget(target string) bool {
+	switch strings.ToLower(strings.TrimSpace(target)) {
+	case "cursor", "vscode", "vs-code", "windsurf":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizePrintConfigTarget(target string) string {
+	switch strings.ToLower(strings.TrimSpace(target)) {
+	case "vs-code":
+		return "vscode"
+	default:
+		return strings.ToLower(strings.TrimSpace(target))
+	}
+}
+
+func runSetupStatusFleetCmd(args []string, stdout, stderr io.Writer) int {
+	opts, code := parseSetupFleetArgs("setup status", args, stderr)
+	if code != 0 {
+		return code
+	}
+	targets := append(append([]string{}, supportMatrix().DirectSetup...), supportMatrix().ConfigPrint...)
+	clients := make([]setupSummary, 0, len(targets))
+	exit := 0
+	for _, target := range targets {
+		summary, err := inspectSetupTarget(opts, target)
+		if err != nil {
+			fmt.Fprintf(stderr, "setup status %s: %v\n", target, err)
+			exit = 1
+			continue
+		}
+		clients = append(clients, summary)
+		if !setupStatusHealthy(summary) && summary.ClientState != "print_config_only" && summary.ClientState != "absent" {
+			exit = 1
+		}
+	}
+	fleet := setupFleetStatus{Operation: "status", DataDir: opts.DataDir, Clients: clients}
+	if opts.JSON {
+		if err := json.NewEncoder(stdout).Encode(fleet); err != nil {
+			return 1
+		}
+		return exit
+	}
+	fmt.Fprintf(stdout, "HELM setup status (%s)\n", fleet.DataDir)
+	for _, client := range clients {
+		fmt.Fprintf(stdout, "  %-12s  lifecycle=%-10s  state=%s  loaded=%v  config=%s\n",
+			client.Target, client.Lifecycle, client.ClientState, client.NativeLoaded, client.ClientConfigPath)
+	}
+	return exit
+}
+
+func runSetupStatusPrintConfigCmd(args []string, stdout, stderr io.Writer) int {
+	opts, code := parseSetupFleetArgs("setup status", args[1:], stderr)
+	if code != 0 {
+		return code
+	}
+	opts.Target = normalizePrintConfigTarget(args[0])
+	summary, err := inspectPrintConfigClient(opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "setup status: %v\n", err)
+		return 2
+	}
+	printSetupSummary(stdout, summary, opts.JSON)
+	return 1
+}
+
+func parseSetupFleetArgs(name string, args []string, stderr io.Writer) (setupOptions, int) {
+	opts := setupOptions{Scope: "user", Operation: "status", NoQuickstart: true}
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
+	formatFlag := ui.RegisterFormat(fs, ui.FormatText)
+	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
+	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace used to resolve project config paths")
+	all := fs.Bool("all", false, "Inspect every supported client")
+	_ = all
+	if err := fs.Parse(args); err != nil {
+		return opts, 2
+	}
+	opts.JSON = opts.JSON || formatFlag.IsJSON()
+	if opts.DataDir == "" {
+		opts.DataDir = defaultSetupDataDir()
+	}
+	if opts.DataDir == "" {
+		fmt.Fprintln(stderr, "setup: --data-dir is required when the home directory is unavailable")
+		return opts, 2
+	}
+	if abs, err := filepath.Abs(opts.DataDir); err == nil {
+		opts.DataDir = abs
+	}
+	if opts.Workspace == "" {
+		workspace, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "setup: determine workspace: %v\n", err)
+			return opts, 2
+		}
+		opts.Workspace = workspace
+	}
+	if abs, err := filepath.Abs(opts.Workspace); err == nil {
+		opts.Workspace = abs
+	}
+	return opts, 0
+}
+
+func inspectSetupTarget(opts setupOptions, target string) (setupSummary, error) {
+	if isPrintConfigTarget(target) {
+		printOpts := opts
+		printOpts.Target = normalizePrintConfigTarget(target)
+		return inspectPrintConfigClient(printOpts)
+	}
+	inspect := opts
+	inspect.Target = target
+	inspect.Operation = "status"
+	normalized, code := normalizeSetupOptions(inspect, io.Discard)
+	if code != 0 {
+		return setupSummary{}, fmt.Errorf("normalize %s", target)
+	}
+	summary, err := buildSetupSummary(normalized)
+	if err != nil {
+		return setupSummary{}, err
+	}
+	summary.MCPInstalled = setupMCPInstalled(normalized, summary.ClientConfigPath, summary.BinaryPath)
+	summary.HookInstalled = setupHookInstalled(normalized, summary.HookConfigPath, summary.BinaryPath)
+	observeSetupClientState(normalized, &summary)
+	assignSetupLifecycle(&summary)
+	return summary, nil
+}
+
+func inspectPrintConfigClient(opts setupOptions) (setupSummary, error) {
+	target := normalizePrintConfigTarget(opts.Target)
+	summary := setupSummary{
+		Operation:        "status",
+		Target:           target,
+		Workspace:        opts.Workspace,
+		DataDir:          opts.DataDir,
+		ClientConfigPath: printConfigInspectPath(target, opts.Workspace),
+		NativeLoaded:     false,
+	}
+	path := summary.ClientConfigPath
+	if path == "" {
+		summary.ClientState = "print_config_only"
+		summary.Lifecycle = "absent"
+		summary.PlannedActions = []string{"HELM prints config only; it does not own a canonical " + target + " path and does not claim the client loaded it"}
+		return summary, nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		summary.ClientState = "absent"
+		summary.Lifecycle = "absent"
+		return summary, nil
+	}
+	if !strings.Contains(string(raw), setupMCPServerName) {
+		summary.ClientState = "config_present_no_helm"
+		summary.Lifecycle = "absent"
+		return summary, nil
+	}
+	summary.MCPInstalled = true
+	summary.ClientState = "configured_unverified"
+	summary.Lifecycle = "configured"
+	return summary, nil
+}
+
+func printConfigInspectPath(target, workspace string) string {
+	switch target {
+	case "cursor":
+		return filepath.Join(workspace, ".cursor", "mcp.json")
+	case "vscode":
+		return filepath.Join(workspace, ".vscode", "settings.json")
+	default:
+		return ""
+	}
+}
+
+func assignSetupLifecycle(summary *setupSummary) {
+	if summary.Lifecycle != "" {
+		return
+	}
+	summary.Lifecycle = setupLifecycleOf(summary.ClientState)
+}
+
+func setupLifecycleOf(state string) string {
+	switch state {
+	case "absent", "removed", "config_present_no_helm", "print_config_only":
+		return "absent"
+	case "planned", "planned_removal":
+		return "planned"
+	case "trust_pending":
+		return "pending"
+	case "native_loaded":
+		return "active"
+	case "degraded":
+		return "degraded"
+	case "recovery_required":
+		return "repairable"
+	case "configured", "configured_client_missing", "configured_unverified", "config_present":
+		return "configured"
+	default:
+		if state == "" {
+			return "absent"
+		}
+		return state
+	}
+}
+
+func compensateFailedSetupApply(opts setupOptions, steps []ui.Step) {
+	mcpPassed, hookFailed := false, false
+	for _, step := range steps {
+		if strings.Contains(step.Title, "MCP") && step.Status == ui.StatusPass {
+			mcpPassed = true
+		}
+		if strings.Contains(strings.ToLower(step.Title), "hook") && step.Status == ui.StatusFail {
+			hookFailed = true
+		}
+	}
+	if mcpPassed && hookFailed {
+		_ = setupCompensateMCP(opts)
+	}
 }
 
 func runSetupRepairCmd(args []string, stdout, stderr io.Writer) int {
@@ -941,7 +1195,8 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Manage:")
 	fmt.Fprintln(w, "  helm-ai-kernel setup codex --scope project --workspace DIR --dry-run --json")
-	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex|hermes|deepseek> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
+	fmt.Fprintln(w, "  helm-ai-kernel setup status [--all|--format json]   inspect every supported client")
+	fmt.Fprintln(w, "  helm-ai-kernel setup status <claude-code|codex|hermes|deepseek|cursor|vscode|windsurf> [--scope user|project] [--workspace DIR] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup repair <claude-code|codex|hermes|deepseek> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "  helm-ai-kernel setup remove <claude-code|codex|hermes|deepseek> [--scope user|project] [--workspace DIR] [--yes] [--dry-run] [--json] [--data-dir DIR]")
 	fmt.Fprintln(w, "")
@@ -989,10 +1244,12 @@ func printSetupInstallUsage(w io.Writer) {
 }
 
 func printSetupInspectUsage(w io.Writer, operation string, includeYes bool) {
-	fmt.Fprintf(w, "Usage: helm-ai-kernel setup %s <claude-code|codex|hermes|deepseek> [options]\n", operation)
 	if operation == "status" {
-		fmt.Fprintln(w, "Inspect the installed local HELM integration without changing configuration.")
+		fmt.Fprintln(w, "Usage: helm-ai-kernel setup status [<claude-code|codex|hermes|deepseek|cursor|vscode|windsurf>|--all] [options]")
+		fmt.Fprintln(w, "Inspect local HELM integration without changing configuration.")
+		fmt.Fprintln(w, "No target inspects every supported client. Print-config clients never claim native_loaded.")
 	} else {
+		fmt.Fprintf(w, "Usage: helm-ai-kernel setup %s <claude-code|codex|hermes|deepseek> [options]\n", operation)
 		fmt.Fprintf(w, "%s HELM-owned local integration configuration.\n", strings.ToUpper(operation[:1])+operation[1:])
 	}
 	fmt.Fprintln(w, "")
@@ -1017,6 +1274,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	fs.BoolVar(&opts.Yes, "yes", false, "Install without prompting")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
+	formatFlag := ui.RegisterFormat(fs, ui.FormatText)
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", opts.NoQuickstart, "Install without starting the blocking Quickstart server")
 	fs.BoolVar(&opts.Quickstart, "quickstart", false, "Start the blocking Quickstart server after setup")
 	fs.BoolVar(&opts.Console, "console", false, "Start the packaged local Console with Quickstart")
@@ -1028,6 +1286,7 @@ func parseSetupInstallArgs(args []string, stderr io.Writer) (setupOptions, int) 
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
+	opts.JSON = opts.JSON || formatFlag.IsJSON()
 	consolePortSet := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "workspace" {
@@ -1068,6 +1327,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	fs.StringVar(&opts.Workspace, "workspace", "", "Workspace to inspect or remove from (defaults to the current directory for project scope)")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Print planned changes without writing config")
 	fs.BoolVar(&opts.JSON, "json", false, "Print machine-readable summary")
+	formatFlag := ui.RegisterFormat(fs, ui.FormatText)
 	fs.BoolVar(&opts.NoQuickstart, "no-quickstart", false, "Report a headless setup without a Quickstart server")
 	fs.StringVar(&opts.DataDir, "data-dir", "", "Directory for HELM local state")
 	fs.StringVar(&opts.SigningSeedFile, "signing-seed-file", "", "Path to 0600 file containing a 32-byte Ed25519 seed as hex")
@@ -1078,6 +1338,7 @@ func parseSetupInspectArgs(name string, args []string, stderr io.Writer, include
 	if err := fs.Parse(args[1:]); err != nil {
 		return opts, 2
 	}
+	opts.JSON = opts.JSON || formatFlag.IsJSON()
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "workspace":
@@ -1802,6 +2063,7 @@ func observeSetupClientState(opts setupOptions, summary *setupSummary) {
 	}
 	summary.NativeLoaded = true
 	summary.ClientState = "native_loaded"
+	assignSetupLifecycle(summary)
 }
 
 func printSetupPlan(w io.Writer, summary setupSummary) {
@@ -1904,6 +2166,7 @@ func setupRecoveryCommand(opts setupOptions) string {
 }
 
 func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
+	assignSetupLifecycle(&summary)
 	if jsonOut {
 		_ = json.NewEncoder(stdout).Encode(summary)
 		return
@@ -1936,7 +2199,7 @@ func printSetupSummary(stdout io.Writer, summary setupSummary, jsonOut bool) {
 		fmt.Fprintf(stdout, "  Configured:    mcp=%v hook=%v\n", summary.MCPInstalled, summary.HookInstalled)
 	}
 	if summary.ClientState != "" {
-		fmt.Fprintf(stdout, "  Client state:  %s (detected=%v native_loaded=%v)\n", summary.ClientState, summary.ClientDetected, summary.NativeLoaded)
+		fmt.Fprintf(stdout, "  Client state:  %s (lifecycle=%s detected=%v native_loaded=%v)\n", summary.ClientState, summary.Lifecycle, summary.ClientDetected, summary.NativeLoaded)
 	}
 	if summary.CodexTrustPending {
 		fmt.Fprintf(stdout, "  Codex trust:   PENDING — Codex will ignore this project config until you trust the workspace (run `codex` in %s and approve it, or set trust_level=\"trusted\" in ~/.codex/config.toml). Governance is not active until then.\n", summary.Workspace)

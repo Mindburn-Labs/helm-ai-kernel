@@ -1,6 +1,6 @@
 ---
 title: Write Policies
-last_reviewed: 2026-07-01
+last_reviewed: 2026-08-21
 ---
 
 # Write Policies
@@ -63,10 +63,11 @@ the same input can be verified later.
 ## Build And Test
 
 ```bash
-helm-ai-kernel bundle build --policy ./policy.cel --out ./policy.bundle
-helm-ai-kernel evaluate --bundle ./policy.bundle --input ./request.json
+helm-ai-kernel bundle build --language=cel ./policy.cel
+helm-ai-kernel policy test --dir policies
 helm-ai-kernel conform --level L1 --json
 ```
 
-Use `DENY` for unsafe or mismatched actions. Use `ESCALATE` only when a
-developer can resolve the block with a local scoped approval.
+Use `DENY` for unsafe or mismatched actions. Use `ESCALATE` when the call
+must stay blocked until a credential-verified durable dispatch admission
+exists; local `mcp approve` does not mint that authority.

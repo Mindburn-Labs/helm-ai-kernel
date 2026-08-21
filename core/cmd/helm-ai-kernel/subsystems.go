@@ -343,7 +343,11 @@ func newDeployedMCPGateway(svc *Services) (*mcppkg.Gateway, error) {
 	case svc.Guardian != nil:
 		// Bind the reconciled policy authority and receipt every decision.
 		evaluator := &receiptPersistingEvaluator{svc: svc, inner: svc.Guardian}
-		return newLocalMCPGatewayWithEvaluator(mcppkg.GatewayConfig{}, evaluator)
+		githubEffects, err := newGitHubEffectsRuntimeFromEnv(svc.DataDir)
+		if err != nil {
+			return nil, err
+		}
+		return newLocalMCPGatewayWithEvaluatorAndEffects(mcppkg.GatewayConfig{}, evaluator, githubEffects)
 	case svc.ReceiptSigner != nil:
 		return newConfiguredLocalMCPGatewayWithSigner(mcppkg.GatewayConfig{}, svc.ReceiptSigner)
 	default:

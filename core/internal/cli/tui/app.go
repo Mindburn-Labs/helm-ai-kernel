@@ -703,10 +703,6 @@ func (m model) View() string {
 func (m model) registerHeaderHits(header string) {
 	pending := pendingQueueLabel(len(m.approvals))
 	first := strings.Split(header, "\n")[0]
-	idx := strings.LastIndex(first, pending)
-	if idx < 0 {
-		idx = strings.LastIndex(stripAnsi(first), pending)
-	}
 	plain := stripAnsi(first)
 	at := strings.LastIndex(plain, pending)
 	if at >= 0 {

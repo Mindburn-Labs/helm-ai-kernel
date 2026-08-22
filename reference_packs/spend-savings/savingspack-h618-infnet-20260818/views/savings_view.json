@@ -1,0 +1,56 @@
+{
+  "schema_version": "helm-savings-view.v1",
+  "run_id": "h618-infnet-20260818",
+  "wording": "Savings at capture-window prices; every cost is bound to the per-call provider_price_snapshot_hash in the receipts. No forward-looking guarantee: a new price regime requires a new pack.",
+  "capture_window": {
+    "start": "2026-08-18T15:48:10.98901Z",
+    "end": "2026-08-18T15:49:26.384073Z"
+  },
+  "price_book_sha256": "sha256:cadf6b96efa5b98c768b80e930b13e7be290ed5a5edf5cdb6f43fd7b05132bb5",
+  "baseline": {
+    "role": "baseline",
+    "envelope_id": "env-baseline",
+    "requested_model_id": "gpt-4.1",
+    "dispatched_model_id": "gpt-4.1",
+    "settled_calls": 16,
+    "spend_cents": 16,
+    "token_priced_micro_cents": 106800,
+    "input_tokens": 370,
+    "output_tokens": 41,
+    "tasks_total": 16,
+    "tasks_passed": 16,
+    "cpst_settled_micro_cents": 1000000,
+    "cpst_token_priced_micro_cents": 6675
+  },
+  "substitute": {
+    "role": "substitute",
+    "envelope_id": "env-cand-gpt41-nano",
+    "requested_model_id": "gpt-4.1",
+    "dispatched_model_id": "gpt-4.1-nano",
+    "settled_calls": 16,
+    "spend_cents": 16,
+    "token_priced_micro_cents": 5580,
+    "input_tokens": 370,
+    "output_tokens": 47,
+    "tasks_total": 16,
+    "tasks_passed": 12,
+    "cpst_settled_micro_cents": 1333333,
+    "cpst_token_priced_micro_cents": 465
+  },
+  "parity_bar_met": false,
+  "savings_claim_valid": false,
+  "savings_per_task_micro_cents": 6210,
+  "savings_percent_bps": 9303,
+  "selection_freeze": {
+    "frozen_at": "2026-08-18T15:48:10.98901Z",
+    "task_split_manifest_sha256": "sha256:0f33e09255797d1e51f516724ac7690fc9f274d15fcfcb6e9b7540473642ae9e",
+    "parity_results_sha256": "sha256:38d10ec7e4f8a34cfb4b543518d8f7e82b5cf5cc3bb03e5bcca1d653c75aea0d",
+    "git_commit": "c518b02859a14f75b3e0e58ee0f218771e4aeff2",
+    "chosen_substitute_envelope_id": "env-cand-gpt41-nano",
+    "chosen_substitute_model_id": "gpt-4.1-nano"
+  },
+  "notes": [
+    "Savings compare the token-priced basis (settled usage receipts' token counts at the embedded, hash-bound price book). The settled basis is disclosed alongside: the governed ledger ceils every call to a whole cent, which quantizes sub-cent per-call costs.",
+    "Parity bar FAILED: the substitute passed fewer holdout tasks than the baseline. No savings claim is made; this pack records the negative result."
+  ]
+}

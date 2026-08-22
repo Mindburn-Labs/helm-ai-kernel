@@ -265,6 +265,39 @@ func TestSavingsExportRequiresArtifacts(t *testing.T) {
 	}
 }
 
+// TestSavingsExportAllowsDisclosedPreFreezeSpend: validation/smoke spend whose
+// quote predates the freeze cannot enter CPST (which aggregates post-freeze
+// holdout receipts only), so it is counted and disclosed instead of blocking
+// the export. The in-window case stays fail-closed
+// (TestSavingsExportRefusesUnattributedSpend).
+func TestSavingsExportAllowsDisclosedPreFreezeSpend(t *testing.T) {
+	f := newProxyFixture(t)
+	// Smoke call BEFORE any capture artifact exists — exactly the live-capture
+	// startup validation call.
+	resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "pre-freeze-smoke", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("smoke call failed: %d", resp.StatusCode)
+	}
+	captureDir := runSavingsCapture(t, f)
+
+	res, err := ExportSavingsEvidencePack(SavingsExportOptions{
+		ReceiptsDir:   f.receiptsDir,
+		CaptureDir:    captureDir,
+		ConfigPath:    f.configPath,
+		OutDir:        filepath.Join(t.TempDir(), "packs"),
+		SigningSecret: "0101010101010101010101010101010101010101010101010101010101010101",
+	})
+	if err != nil {
+		t.Fatalf("pre-freeze smoke spend must not block export: %v", err)
+	}
+	if res.PreWindowUnattributedCalls != 1 {
+		t.Fatalf("pre-window unattributed calls = %d, want 1 (disclosed)", res.PreWindowUnattributedCalls)
+	}
+	if !res.OfflineVerified {
+		t.Fatalf("pack did not offline-verify: %+v", res)
+	}
+}
+
 func TestSavingsExportRequiresSigningSeed(t *testing.T) {
 	f := newProxyFixture(t)
 	captureDir := runSavingsCapture(t, f)

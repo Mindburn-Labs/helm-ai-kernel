@@ -1,0 +1,128 @@
+{
+  "schema_version": "helm-savings-task-split.v1",
+  "run_id": "h618-infnet-20260818",
+  "tenant_id": "mindburn-dogfood",
+  "task_set_sha256": "sha256:690b2d9f419f95b857e5f9d91d49402492e2de7510bd762a5510fd6aa0f377e8",
+  "baseline_envelope_id": "env-baseline",
+  "baseline_model_id": "gpt-4.1",
+  "candidate_routes": [
+    {
+      "envelope_id": "env-cand-gpt41-mini",
+      "model_id": "gpt-4.1-mini"
+    },
+    {
+      "envelope_id": "env-cand-gpt41-nano",
+      "model_id": "gpt-4.1-nano"
+    },
+    {
+      "envelope_id": "env-cand-glm52",
+      "model_id": "glm-5.2"
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "sel-01",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-02",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-03",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-04",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-05",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-06",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-07",
+      "subset": "selection"
+    },
+    {
+      "task_id": "sel-08",
+      "subset": "selection"
+    },
+    {
+      "task_id": "hold-01",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-02",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-03",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-04",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-05",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-06",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-07",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-08",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-09",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-10",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-11",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-12",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-13",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-14",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-15",
+      "subset": "holdout"
+    },
+    {
+      "task_id": "hold-16",
+      "subset": "holdout"
+    }
+  ],
+  "selection_freeze": {
+    "frozen_at": "2026-08-18T15:48:10.989010Z",
+    "chosen_substitute_envelope_id": "env-cand-gpt41-nano",
+    "chosen_substitute_model_id": "gpt-4.1-nano",
+    "parity_results_sha256": "sha256:38d10ec7e4f8a34cfb4b543518d8f7e82b5cf5cc3bb03e5bcca1d653c75aea0d",
+    "git_commit": "c518b02859a14f75b3e0e58ee0f218771e4aeff2",
+    "rationale": "Cheapest candidate (output-weighted price-book rank) with selection-set pass count >= baseline (6/8); candidates: env-cand-gpt41-mini=8/8, env-cand-gpt41-nano=6/8, env-cand-glm52=8/8"
+  }
+}

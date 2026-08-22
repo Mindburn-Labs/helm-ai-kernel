@@ -1,0 +1,30 @@
+{
+  "id": "rq-d379da63fccbb5d945837659",
+  "tenant_id": "mindburn-dogfood",
+  "spend_intent_id": "si-d379da63fccbb5d945837659",
+  "envelope_id": "env-baseline",
+  "agent_id": "agent-paired-replay",
+  "principal_id": "principal-dogfood",
+  "requested_provider_id": "inference-net",
+  "requested_model_id": "gpt-4.1",
+  "selected_provider_id": "inference-net",
+  "selected_model_id": "gpt-4.1",
+  "provider_price_snapshot_hash": "sha256:cadf6b96efa5b98c768b80e930b13e7be290ed5a5edf5cdb6f43fd7b05132bb5",
+  "quoted_amount_cents": 2,
+  "max_amount_cents": 2,
+  "currency": "USD",
+  "input_tokens": 31,
+  "output_tokens": 2048,
+  "model_substituted": false,
+  "route_policy_hash": "sha256:4ec3ba6e825e0aad0e60074f83810977201809b138fd4ec2b81c6821acb0b278",
+  "budget_verdict": "ALLOW",
+  "reason_code": "OK_WITHIN_ENVELOPE",
+  "receipt_hash": "sha256:f67a7417b00a70337e3ddb00f24d2da0caa7604b8a8ed8e0379bd84730cd123d",
+  "metadata": {
+    "evidence_pack_ref": "evidence://route-quote/mindburn-dogfood/684710de80da1c6ea502f49c",
+    "workspace_id": "ws-dogfood"
+  },
+  "created_at": "2026-08-18T15:48:35.267324Z",
+  "expires_at": "2026-08-18T15:58:35.267324Z",
+  "content_hash": "sha256:727f7dde4d906464b45b0fcdc003ad48cc67c9bdfb06d4172da0debc54031f08"
+}

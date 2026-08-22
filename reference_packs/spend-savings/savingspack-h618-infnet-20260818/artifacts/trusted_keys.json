@@ -1,0 +1,10 @@
+{
+  "version": "spend-proxy-trusted-keys.v1",
+  "keys": {
+    "spend-proxy-d11333ad0bbd": {
+      "algorithm": "ed25519",
+      "public_key": "ed25519:66b4789478701145b64834a7293cb14d94fd8b6bbf34c370bf39e483ab19c5e6",
+      "registered_at": "2026-08-18T15:46:28.039027Z"
+    }
+  }
+}

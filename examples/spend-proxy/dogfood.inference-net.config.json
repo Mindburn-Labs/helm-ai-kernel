@@ -1,0 +1,115 @@
+{
+  "tenant_id": "mindburn-dogfood",
+  "treasury_id": "treasury-mindburn",
+  "route_policy_id": "dogfood-inference-net-v1",
+  "currency": "USD",
+  "platform_fee_bps": 0,
+  "quote_ttl_seconds": 600,
+  "price_ttl_hours": 168,
+  "balance": {
+    "account_id": "balance-dogfood-infnet",
+    "opening_cents": 2000
+  },
+  "request_defaults": {
+    "workspace_id": "ws-dogfood",
+    "agent_id": "agent-live-traffic",
+    "principal_id": "principal-dogfood",
+    "envelope_id": "env-baseline"
+  },
+  "providers": [
+    {
+      "id": "inference-net",
+      "account_mode": "DIRECT",
+      "terms_version": "2026-08-18",
+      "legal_review_ref": "linear:HELM-618"
+    }
+  ],
+  "prices": [
+    {
+      "provider_id": "inference-net",
+      "model_id": "gpt-4.1",
+      "input_token_micro_cents": 200,
+      "output_token_micro_cents": 800,
+      "source_uri": "https://inference.net/models (captured 2026-08-18)"
+    },
+    {
+      "provider_id": "inference-net",
+      "model_id": "gpt-4.1-mini",
+      "input_token_micro_cents": 40,
+      "output_token_micro_cents": 160,
+      "source_uri": "https://inference.net/models (captured 2026-08-18)"
+    },
+    {
+      "provider_id": "inference-net",
+      "model_id": "gpt-4.1-nano",
+      "input_token_micro_cents": 10,
+      "output_token_micro_cents": 40,
+      "source_uri": "https://inference.net/models (captured 2026-08-18)"
+    },
+    {
+      "provider_id": "inference-net",
+      "model_id": "glm-5.2",
+      "input_token_micro_cents": 130,
+      "output_token_micro_cents": 440,
+      "source_uri": "https://inference.net/models (captured 2026-08-18)"
+    }
+  ],
+  "envelopes": [
+    {
+      "id": "env-baseline",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-infnet-baseline",
+      "max_amount_cents": 1000,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["inference-net"],
+      "allowed_models": ["gpt-4.1"],
+      "fallback_routes": [
+        { "provider_id": "inference-net", "model_id": "gpt-4.1" }
+      ],
+      "allow_model_substitution": false
+    },
+    {
+      "id": "env-cand-gpt41-mini",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-infnet-cand-mini",
+      "max_amount_cents": 500,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["inference-net"],
+      "allowed_models": ["gpt-4.1-mini"],
+      "fallback_routes": [
+        { "provider_id": "inference-net", "model_id": "gpt-4.1-mini" }
+      ],
+      "allow_model_substitution": true
+    },
+    {
+      "id": "env-cand-gpt41-nano",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-infnet-cand-nano",
+      "max_amount_cents": 500,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["inference-net"],
+      "allowed_models": ["gpt-4.1-nano"],
+      "fallback_routes": [
+        { "provider_id": "inference-net", "model_id": "gpt-4.1-nano" }
+      ],
+      "allow_model_substitution": true
+    },
+    {
+      "id": "env-cand-glm52",
+      "agent_id": "agent-paired-replay",
+      "principal_id": "principal-dogfood",
+      "budget_id": "budget-dogfood-infnet-cand-glm",
+      "max_amount_cents": 500,
+      "per_request_max_cents": 50,
+      "allowed_providers": ["inference-net"],
+      "allowed_models": ["glm-5.2"],
+      "fallback_routes": [
+        { "provider_id": "inference-net", "model_id": "glm-5.2" }
+      ],
+      "allow_model_substitution": true
+    }
+  ]
+}

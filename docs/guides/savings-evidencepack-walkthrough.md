@@ -16,14 +16,24 @@ pack. Every command below runs **offline**: no provider console, no network,
 no live ledger, no receipts directory — only the pack bytes.
 
 The reference pack this walkthrough is written against was captured on
-<FILL-CAPTURE-DATE> through DigitalOcean Gradient serverless inference and
-lives in this repository:
+2026-08-18 through the Inference.net OpenAI-compatible gateway and lives in
+this repository:
 
 ```bash
-PACK=reference_packs/spend-savings/<FILL-PACK-DIR>
+PACK=reference_packs/spend-savings/savingspack-h618-infnet-20260818
 ```
 
-Its manifest hash is `<FILL-MANIFEST-HASH>`.
+Its manifest hash is
+`sha256:261cc3cf051a9a4f66696d0ef880526bdd2f74c9fcb44ac4edf2972d13c8f457`,
+signed by key `spend-proxy-d11333ad0bbd` (pin this pair out-of-band; see the
+provenance note below).
+
+**This reference pack records a NEGATIVE result.** The frozen substitute
+(`gpt-4.1-nano`) passed 12 of 16 holdout tasks against the baseline
+(`gpt-4.1`) 16 of 16, so the strict parity bar failed and **no savings claim
+is made** — even though the substitute's cost per successful task was ~14x
+lower. That is the meter working: it can say "no". A pack that fails the
+parity bar still verifies; `savings_claim_valid` is simply `false`.
 
 ## One command, all checks
 

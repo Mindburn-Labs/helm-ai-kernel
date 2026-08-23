@@ -1,6 +1,5 @@
 // otel.go provides OpenTelemetry instrumentation for the effects gateway.
-// It records traces for effect execution, permit validation, and connector
-// calls, plus metrics for throughput, latency, and validation overhead.
+// It records traces and metrics for effect execution, throughput, and latency.
 //
 // Usage: create with NewEffectsOTelInstrumentation() and pass to your
 // Gateway implementation. All methods are nil-safe — a nil receiver is
@@ -9,7 +8,6 @@
 // Design invariants:
 //   - OTel is optional — the gateway works without it
 //   - Zero allocation on hot path when OTel is disabled
-//   - Traces include sub-spans for permit validation and connector calls
 //   - Metrics use HELM namespace: "helm.effects.*"
 //   - No sensitive data (params, outputs) in traces
 package effects
@@ -45,8 +43,7 @@ type EffectsOTelInstrumentation struct {
 	executionsTotal metric.Int64Counter
 
 	// Histograms
-	executionDuration        metric.Float64Histogram
-	permitValidationDuration metric.Float64Histogram
+	executionDuration metric.Float64Histogram
 }
 
 // NewEffectsOTelInstrumentation creates an EffectsOTelInstrumentation using
@@ -79,16 +76,6 @@ func NewEffectsOTelInstrumentation() (*EffectsOTelInstrumentation, error) {
 		return nil, err
 	}
 
-	o.permitValidationDuration, err = o.meter.Float64Histogram(
-		"helm.effects.permit_validation_duration_ms",
-		metric.WithDescription("Permit validation latency in milliseconds"),
-		metric.WithUnit("ms"),
-		metric.WithExplicitBucketBoundaries(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	return o, nil
 }
 
@@ -108,29 +95,6 @@ func (o *EffectsOTelInstrumentation) StartExecution(ctx context.Context, effectT
 		),
 	)
 	return ctx, span
-}
-
-// StartPermitValidation begins a child span for permit validation.
-func (o *EffectsOTelInstrumentation) StartPermitValidation(ctx context.Context) (context.Context, trace.Span) {
-	if o == nil {
-		return ctx, noopSpan()
-	}
-	return o.tracer.Start(ctx, "effects.permit_validate",
-		trace.WithSpanKind(trace.SpanKindInternal),
-	)
-}
-
-// StartConnectorCall begins a child span for the actual connector execution.
-func (o *EffectsOTelInstrumentation) StartConnectorCall(ctx context.Context, connectorID string) (context.Context, trace.Span) {
-	if o == nil {
-		return ctx, noopSpan()
-	}
-	return o.tracer.Start(ctx, "effects.connector_call",
-		trace.WithSpanKind(trace.SpanKindClient),
-		trace.WithAttributes(
-			attribute.String(attrConnectorID, connectorID),
-		),
-	)
 }
 
 // EndSpan finalizes a span. Convenience wrapper for consistency.
@@ -164,14 +128,6 @@ func (o *EffectsOTelInstrumentation) RecordExecution(ctx context.Context, effect
 	)
 	o.executionsTotal.Add(ctx, 1, attrs)
 	o.executionDuration.Record(ctx, float64(duration.Microseconds())/1000.0, attrs)
-}
-
-// RecordPermitValidation records the permit validation duration.
-func (o *EffectsOTelInstrumentation) RecordPermitValidation(ctx context.Context, duration time.Duration) {
-	if o == nil {
-		return
-	}
-	o.permitValidationDuration.Record(ctx, float64(duration.Microseconds())/1000.0)
 }
 
 // ── noop helpers ────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 // otel.go provides OpenTelemetry instrumentation for the Guardian pipeline.
-// It records traces for each decision evaluation and metrics for latency,
-// verdict distribution, and gate-level performance.
+// It records traces for each decision evaluation and metrics for latency and
+// verdict distribution.
 //
 // Usage: attach via GuardianOption:
 //
@@ -9,7 +9,6 @@
 // Design invariants:
 //   - OTel is optional — Guardian works without it
 //   - Zero allocation on hot path when OTel is disabled
-//   - Traces include gate-level spans for debugging
 //   - Metrics use HELM namespace: "helm.guardian.*"
 //   - No sensitive data (principal IDs, payloads) in traces
 package guardian
@@ -29,10 +28,6 @@ import (
 const (
 	attrVerdict    = "helm.verdict"
 	attrReasonCode = "helm.reason_code"
-	attrPrincipal  = "helm.principal"
-	attrAction     = "helm.action"
-	attrGatePassed = "helm.gate.passed"
-	attrGate       = "gate"
 )
 
 // ── OTelInstrumentation ─────────────────────────────────────────
@@ -45,12 +40,10 @@ type OTelInstrumentation struct {
 	meter  metric.Meter
 
 	// Counters
-	decisionsTotal   metric.Int64Counter
-	gateDenialsTotal metric.Int64Counter
+	decisionsTotal metric.Int64Counter
 
 	// Histograms
 	decisionDuration metric.Float64Histogram
-	gateDuration     metric.Float64Histogram
 }
 
 // newOTelInstrumentation creates an OTelInstrumentation using the global
@@ -73,30 +66,11 @@ func newOTelInstrumentation() (*OTelInstrumentation, error) {
 		return nil, err
 	}
 
-	o.gateDenialsTotal, err = o.meter.Int64Counter(
-		"helm.guardian.gate_denials_total",
-		metric.WithDescription("Total gate denials"),
-		metric.WithUnit("{denial}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	o.decisionDuration, err = o.meter.Float64Histogram(
 		"helm.guardian.decision_duration_ms",
 		metric.WithDescription("Full pipeline decision latency in milliseconds"),
 		metric.WithUnit("ms"),
 		metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	o.gateDuration, err = o.meter.Float64Histogram(
-		"helm.guardian.gate_duration_ms",
-		metric.WithDescription("Per-gate evaluation latency in milliseconds"),
-		metric.WithUnit("ms"),
-		metric.WithExplicitBucketBoundaries(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10),
 	)
 	if err != nil {
 		return nil, err
@@ -131,26 +105,6 @@ func (o *OTelInstrumentation) EndDecision(span trace.Span, verdict, reasonCode s
 	span.End()
 }
 
-// StartGate begins a child span for a specific guardian gate.
-// The returned span MUST be ended by the caller (defer span.End()).
-func (o *OTelInstrumentation) StartGate(ctx context.Context, gateName string) (context.Context, trace.Span) {
-	if o == nil {
-		return ctx, noopSpan()
-	}
-	return o.tracer.Start(ctx, "guardian.gate."+gateName,
-		trace.WithSpanKind(trace.SpanKindInternal),
-	)
-}
-
-// EndGate finalizes a gate span and sets the passed attribute.
-func (o *OTelInstrumentation) EndGate(span trace.Span, passed bool) {
-	if o == nil {
-		return
-	}
-	span.SetAttributes(attribute.Bool(attrGatePassed, passed))
-	span.End()
-}
-
 // StartPDP begins a span for the policy decision point evaluation.
 func (o *OTelInstrumentation) StartPDP(ctx context.Context) (context.Context, trace.Span) {
 	if o == nil {
@@ -182,26 +136,6 @@ func (o *OTelInstrumentation) RecordDecision(ctx context.Context, verdict string
 	attrs := metric.WithAttributes(attribute.String(attrVerdict, verdict))
 	o.decisionsTotal.Add(ctx, 1, attrs)
 	o.decisionDuration.Record(ctx, float64(duration.Microseconds())/1000.0, attrs)
-}
-
-// RecordGateDenial increments the gate denial counter for the named gate.
-func (o *OTelInstrumentation) RecordGateDenial(ctx context.Context, gateName string) {
-	if o == nil {
-		return
-	}
-	o.gateDenialsTotal.Add(ctx, 1, metric.WithAttributes(
-		attribute.String(attrGate, gateName),
-	))
-}
-
-// RecordGateDuration records a per-gate duration measurement.
-func (o *OTelInstrumentation) RecordGateDuration(ctx context.Context, gateName string, duration time.Duration) {
-	if o == nil {
-		return
-	}
-	o.gateDuration.Record(ctx, float64(duration.Microseconds())/1000.0, metric.WithAttributes(
-		attribute.String(attrGate, gateName),
-	))
 }
 
 // ── GuardianOption ──────────────────────────────────────────────

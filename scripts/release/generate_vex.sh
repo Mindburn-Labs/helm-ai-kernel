@@ -58,6 +58,8 @@ DOC_ID="https://mindburn.org/vex/helm-ai-kernel/v${RAW_VERSION}"
 # live findings — it only emits ids a maintainer has explicitly triaged into
 # policies.yaml; anything else stays absent from this document (i.e. implicit
 # "under_investigation" by omission, per the default described above).
+# Dependency findings set product_purl explicitly so VEX consumers can match
+# the scanner's package identity; application findings default to the root.
 #
 # Parsed with plain awk against the flat "key: value" schema documented at
 # the top of policies.yaml — no YAML library dependency, so this behaves
@@ -89,7 +91,7 @@ if [ -f "$POLICIES" ]; then
             gsub(/\n/, "\\n", s)
             return s
         }
-        function flush() {
+        function flush(    statement_purl) {
             if (!have) return
             have = 0
             if (cve !~ /^(CVE|GO)-[0-9]/) {
@@ -104,7 +106,8 @@ if [ -f "$POLICIES" ]; then
                 print "::warning::generate_vex.sh: skipping policies.yaml entry " cve ": not_affected requires a justification (see policies.yaml schema)" > "/dev/stderr"
                 return
             }
-            obj = "{\"vulnerability\":{\"name\":\"" esc(cve) "\"},\"timestamp\":\"" esc(ts) "\",\"products\":[{\"@id\":\"" esc(purl) "\"}],\"status\":\"" esc(status) "\""
+            statement_purl = product_purl != "" ? product_purl : purl
+            obj = "{\"vulnerability\":{\"name\":\"" esc(cve) "\"},\"timestamp\":\"" esc(ts) "\",\"products\":[{\"@id\":\"" esc(statement_purl) "\"}],\"status\":\"" esc(status) "\""
             if (justification != "") obj = obj ",\"justification\":\"" esc(justification) "\""
             if (statement != "") obj = obj ",\"status_notes\":\"" esc(statement) "\""
             obj = obj "}"
@@ -113,9 +116,12 @@ if [ -f "$POLICIES" ]; then
         /^[ \t]*-[ \t]*cve_id:/ {
             flush()
             cve = $0; sub(/^[ \t]*-[ \t]*cve_id:[ \t]*/, "", cve); cve = unquote(trim(cve))
-            status = ""; justification = ""; statement = ""
+            product_purl = ""; status = ""; justification = ""; statement = ""
             have = 1
             next
+        }
+        /^[ \t]*product_purl:/ {
+            v = $0; sub(/^[ \t]*product_purl:[ \t]*/, "", v); product_purl = unquote(trim(v)); next
         }
         /^[ \t]*status:/ {
             v = $0; sub(/^[ \t]*status:[ \t]*/, "", v); status = unquote(trim(v)); next

@@ -66,6 +66,21 @@ for path in paths:
     payload = json.load(open(path))
     if payload.get("@context") != "https://openvex.dev/ns/v0.2.0":
         raise SystemExit(f"{path} has unexpected OpenVEX context")
+
+payload = json.load(open("release/vex/vrelease-smoke.openvex.json"))
+products = {
+    statement["vulnerability"]["name"]: statement["products"][0]["@id"]
+    for statement in payload["statements"]
+}
+expected = {
+    "GO-2026-5932": "pkg:golang/golang.org/x/crypto@v0.53.0",
+    "CVE-2026-46600": "pkg:golang/stdlib@1.25.13",
+}
+for vulnerability, product in expected.items():
+    if products.get(vulnerability) != product:
+        raise SystemExit(
+            f"{vulnerability} VEX product {products.get(vulnerability)!r} != {product!r}"
+        )
 PY
 
 if find "$COSIGN_DIR" -name '*.cosign.bundle' -type f 2>/dev/null | grep -q .; then

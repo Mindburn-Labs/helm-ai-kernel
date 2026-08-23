@@ -1,3 +1,3 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/tools/launchpad/egressproxy
 
-go 1.23
+go 1.25.13

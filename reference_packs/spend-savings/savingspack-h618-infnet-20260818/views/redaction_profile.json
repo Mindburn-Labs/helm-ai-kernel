@@ -1,0 +1,27 @@
+{
+  "name": "default-prompt-off-graph",
+  "redact_prompt_body": true,
+  "denied_metadata_keys": [
+    "prompt",
+    "prompt_body",
+    "prompt_text",
+    "input",
+    "input_body",
+    "messages",
+    "completion",
+    "completion_body",
+    "output_text",
+    "system_prompt",
+    "user_message",
+    "request_body",
+    "response_body"
+  ],
+  "denied_metadata_substrings": [
+    "prompt",
+    "message",
+    "completion",
+    "_body",
+    "payload",
+    "transcript"
+  ]
+}

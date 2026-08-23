@@ -163,3 +163,33 @@ func TestSpendProxyDOGradientExampleConfigLoads(t *testing.T) {
 		t.Fatal("env-baseline with substitution disabled is required")
 	}
 }
+
+func TestSpendProxyInferenceNetExampleConfigLoads(t *testing.T) {
+	// The checked-in Inference.net config is the price-book source of record
+	// for the HELM-618 savings capture window.
+	path := filepath.Join("..", "..", "..", "examples", "spend-proxy", "dogfood.inference-net.config.json")
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("example config not present in this checkout: %v", err)
+	}
+	cfg, sourceHash, err := spendproxy.LoadConfig(path)
+	if err != nil {
+		t.Fatalf("Inference.net config failed to load: %v", err)
+	}
+	if !strings.HasPrefix(sourceHash, "sha256:") {
+		t.Fatalf("source hash = %q, want sha256 prefix", sourceHash)
+	}
+	if len(cfg.Envelopes) < 4 {
+		t.Fatalf("config must declare the baseline and three candidate envelopes, got %d", len(cfg.Envelopes))
+	}
+	if cfg.Balance.OpeningCents > 2000 {
+		t.Fatalf("opening balance %d exceeds the $20 capture ceiling", cfg.Balance.OpeningCents)
+	}
+	for _, env := range cfg.Envelopes {
+		if env.PerRequestMaxCents > 50 {
+			t.Fatalf("envelope %s per-request cap %d exceeds 50 cents", env.ID, env.PerRequestMaxCents)
+		}
+		if (env.ID == "env-baseline") == env.AllowModelSubstitution {
+			t.Fatalf("envelope %s has the wrong substitution posture", env.ID)
+		}
+	}
+}

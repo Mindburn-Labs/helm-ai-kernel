@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-08-21
+last_reviewed: 2026-08-23
 ---
 
 # Changelog
@@ -39,6 +39,8 @@ flowchart TD
     subgraph Ingestion["1. Ingestion & Context Plane"]
         Page["HELM AI Kernel Changelog"]
         A["[Unreleased]"]
+        R5["[0.8.5] - 2026-08-23"]
+        R4["[0.8.4] - 2026-08-12"]
         A00["[0.7.2] - 2026-07-13"]
         A0["[0.7.1] - 2026-07-07"]
         A1["[0.7.0] - 2026-07-05"]
@@ -59,7 +61,9 @@ flowchart TD
 
     %% Operational Flow Edges
     Page --> A
-    A --> A00
+    A --> R5
+    R5 --> R4
+    R4 --> A00
     A00 --> A0
     A0 --> A1
     A1 --> A2
@@ -84,10 +88,52 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-Entries in this section describe merged source, not a tagged public release.
-Keep research scaffolds and hardware-backed enforcement language out of the
-public changelog until a tagged release ships source-owned tests, verifier
-evidence, and release artifacts for that exact capability.
+No public feature claim is active in this section. Keep future work, research
+scaffolds, and hardware-backed enforcement language out of the public changelog
+until a tagged release ships source-owned tests, verifier evidence, and release
+artifacts for that exact capability.
+
+## [0.8.5] - 2026-08-23
+
+Source-prepared v0.8.5 notes for the current Kernel tree. These entries do not
+claim tag publication, registry availability, hosted or production telemetry,
+customer use, GA status, live OrganizationRuntime proof, or positive savings.
+
+### Added — local Prometheus and OTel metrics surfaces (HELM-477)
+
+Local configured scrape surfaces compose existing governance families with
+`otelhttp` request RED and Go/process runtime families. Guardian and effects
+decision/execution instruments are wired to real local paths with bounded
+attributes. This is local observability source and test coverage, not a hosted
+or live production telemetry claim.
+
+### Added — paired-replay savings EvidencePack (HELM-618)
+
+The first salvaged paired-replay EvidencePack and its offline verification path
+are retained as source-owned evidence. Its parity verdict is negative and its
+savings claim is invalid, so no savings, customer, or production result is
+implied.
+
+### Changed — Go toolchain and SDK security maintenance (HELM-607)
+
+Source-owned Go modules converge on Go 1.25.13, `cel-go` 0.30.0, and
+`klauspost/compress` 1.18.7. SDK TypeScript and Rust lockfiles refresh patched
+transitive dependencies. These are source maintenance changes, not publication
+or registry claims.
+
+### Changed — Console-sidecar and Quickstart release preflight (HELM-651)
+
+The v0.8.5 Console-sidecar pin records the exact source contract, including
+commit/tree, package-lock digest, and workflow reference. Quickstart Console
+`--dry-run` shares the real path's read-only trusted-bundle preflight: missing
+or untrusted bundles fail before mutation, while a trusted bundle succeeds
+without mutation.
+
+### Changed — v0.8.5 source/version preparation
+
+The source-owned `VERSION`, generated release surfaces, and release checks are
+prepared for v0.8.5. This is a release-preparation state, not a published
+release or deployment claim.
 
 ### Added — security instrument operator TUI
 
@@ -141,8 +187,8 @@ CLI verification before printing completion.
 ### Fixed — executable mounted-policy chart example
 
 The Helm chart smoke fixture now scopes `file_read` through the runtime CEL
-path `input.effect.params.path`. The deployed gateway regression test executes
-that same path-scoped rule and keeps other paths and tools fail-closed.
+path `input.effect.params.path`. The gateway regression test executes that same
+path-scoped rule and keeps other paths and tools fail-closed.
 
 ### Fixed — governed MCP lifecycle closure and GitHub dispatch wiring
 
@@ -150,9 +196,9 @@ Governed MCP calls rejected at the REST or JSON-RPC ingress boundary now emit
 one `helm.request.received.v1` and one `helm.request.failed.v1` event without
 reaching policy evaluation or a tool handler. The Helm chart can also activate
 the existing signed-permit GitHub effects runtime through an existing Secret;
-the deployed snapshot-bound gateway now registers those configured tools
-instead of dropping the effects runtime. Raw GitHub tokens are never accepted
-as chart values, and the default remains off.
+the snapshot-bound gateway path now registers those configured tools instead of
+dropping the effects runtime. Raw GitHub tokens are never accepted as chart
+values, and the default remains off.
 
 ### Added — offline Kernel receipt.v5 file verify (Building)
 
@@ -179,8 +225,8 @@ stderr; `{"kind":"deny"}` is never read. This does not claim
 
 The Helm chart can render explicit `helm.policy.runtimeActions` into its
 reference pack for governed bootstrap and synthetic-stand policy proof. The
-default remains an empty fail-closed rule list; production deployments should
-prefer a signed control-plane or CRD policy source.
+default remains an empty fail-closed rule list; operators should prefer a
+signed control-plane or CRD policy source.
 
 ### Added — daemon semantic escalation threshold
 
@@ -203,8 +249,8 @@ the hash-verified receipt envelope.
 
 The shared HTTP edge now adopts or mints `X-Helm-Correlation-ID`, echoes the
 canonical value, carries it into governed MCP lifecycle events, and stamps it
-on the active server span. This closes the deployed daemon path that bypasses
-the embedded API server's equivalent correlation edge.
+on the active server span. This closes the daemon path that bypasses the
+embedded API server's equivalent correlation edge.
 
 ## [0.8.4] - 2026-08-12
 

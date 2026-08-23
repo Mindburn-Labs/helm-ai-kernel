@@ -43,7 +43,7 @@ native Go toolchain instead.
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
-git checkout v0.8.4
+git checkout v0.8.5
 mise trust
 mise install
 mise exec -- make build

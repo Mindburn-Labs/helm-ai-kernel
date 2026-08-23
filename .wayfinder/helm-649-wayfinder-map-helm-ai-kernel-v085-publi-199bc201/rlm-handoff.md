@@ -51,4 +51,3 @@
 - Repository-native tests, security scans, release rehearsal, and artifact verification.
 - Real clean-machine install/rollback and real OrganizationRuntime provider/effect proof.
 - Exact-head CI, merges, immutable publication readback, downstream sync, deployment readback, and final independent gauntlet.
-

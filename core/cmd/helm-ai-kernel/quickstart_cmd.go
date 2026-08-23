@@ -332,13 +332,6 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	if err != nil {
 		return quickstartPrepared{}, err
 	}
-	if opts.Console {
-		bundle, err := discoverLocalConsoleBundle()
-		if err != nil {
-			return quickstartPrepared{}, err
-		}
-		prepared.ConsoleBundle = bundle
-	}
 	if opts.Reset {
 		if err := os.RemoveAll(opts.DataDir); err != nil {
 			return quickstartPrepared{}, fmt.Errorf("reset data dir %q: %w", opts.DataDir, err)
@@ -384,10 +377,11 @@ func prepareQuickstart(opts quickstartOptions) (quickstartPrepared, error) {
 	return prepared, nil
 }
 
-// preflightQuickstartReset performs the non-mutating data-directory validation
-// shared by real initialization and dry-run previews. It also keeps the
-// prepared paths canonical after symlink resolution. Non-reset previews must
-// validate an existing target before claiming that their plan can be applied.
+// preflightQuickstartReset performs the non-mutating data-directory and
+// packaged Console validation shared by real initialization and dry-run
+// previews. It also keeps the prepared paths canonical after symlink
+// resolution. Non-reset previews must validate an existing target before
+// claiming that their plan can be applied.
 func preflightQuickstartReset(opts quickstartOptions, prepared quickstartPrepared) (quickstartOptions, quickstartPrepared, error) {
 	opts.DataDir = prepared.DataDir
 	if !opts.Reset {
@@ -396,15 +390,22 @@ func preflightQuickstartReset(opts quickstartOptions, prepared quickstartPrepare
 				return opts, prepared, err
 			}
 		}
-		return opts, prepared, nil
+	} else {
+		resetTarget, err := validateQuickstartResetTarget(opts)
+		if err != nil {
+			return opts, prepared, err
+		}
+		opts.DataDir = resetTarget
+		prepared.DataDir = resetTarget
+		prepared.PolicyPath = filepath.Join(resetTarget, "quickstart", "oss_local_first_run.toml")
 	}
-	resetTarget, err := validateQuickstartResetTarget(opts)
-	if err != nil {
-		return opts, prepared, err
+	if opts.Console {
+		bundle, err := discoverLocalConsoleBundle()
+		if err != nil {
+			return opts, prepared, err
+		}
+		prepared.ConsoleBundle = bundle
 	}
-	opts.DataDir = resetTarget
-	prepared.DataDir = resetTarget
-	prepared.PolicyPath = filepath.Join(resetTarget, "quickstart", "oss_local_first_run.toml")
 	return opts, prepared, nil
 }
 

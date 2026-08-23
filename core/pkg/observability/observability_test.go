@@ -1,5 +1,8 @@
 package observability
 
+// quantum_posture: this test exercises telemetry labeling only; it is not a
+// cryptographic control.
+
 import (
 	"context"
 	"errors"

@@ -2,6 +2,9 @@
 
 All resolved requirements begin `UNVERIFIED`. Compilation is not execution.
 
+> quantum_posture: this Wayfinder answer key is a planning/evidence description,
+> not a cryptographic control or post-quantum assurance.
+
 ## AK-001 — Exact candidate source
 
 - **Category:** source identity

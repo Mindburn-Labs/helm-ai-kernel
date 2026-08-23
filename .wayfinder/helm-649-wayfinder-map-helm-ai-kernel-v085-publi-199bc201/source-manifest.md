@@ -3,6 +3,9 @@
 > The issue-tracker map and decision tickets remain the canonical decision
 > history. These local files are derived build and verification artifacts.
 
+> quantum_posture: this Wayfinder source manifest records planning/evidence
+> provenance only; it is not a cryptographic control or post-quantum assurance.
+
 ## Primary sources
 
 | Source | Resolved revision / update | Role | Load result |

@@ -1,6 +1,6 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/core
 
-go 1.25.12
+go 1.25.13
 
 require (
 	cloud.google.com/go/storage v1.62.1

@@ -128,7 +128,7 @@ logo use is covered by [TRADEMARK.md](TRADEMARK.md).
 
 ## Source Build
 
-The source build uses Go 1.25.12 (the version pinned by `go.work` and
+The source build uses Go 1.25.13 (the version pinned by `go.work` and
 `mise.toml`). The supported reproducible recipe explicitly trusts the
 checked-out mise configuration and installs the pinned toolchain. If mise is
 unavailable, use a compatible native Go toolchain instead.

@@ -9,7 +9,7 @@
 # -diff landed in Go 1.23, and GOTOOLCHAIN=auto honours each module's own `go`
 # directive, so modules pinned below 1.23 run a toolchain that does not have the
 # flag. Those are skipped and named below rather than silently passed. Raising
-# their `go` directive to the repo's 1.25.12 removes the exception.
+# their `go` directive to the repo's 1.25.13 removes the exception.
 set -euo pipefail
 
 MIN_DIFF_GO=1.23

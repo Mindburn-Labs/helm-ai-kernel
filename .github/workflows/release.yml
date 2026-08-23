@@ -168,7 +168,7 @@ jobs:
           rg --version
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
@@ -217,7 +217,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - name: Docker, Compose, and chart smoke
         run: |
@@ -232,7 +232,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
@@ -247,7 +247,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - name: Reproducibility, SBOM, and VEX smoke
         run: make release-smoke
@@ -412,7 +412,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - name: Require explicit external release EvidencePack trust
         run: |
@@ -497,7 +497,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - name: First reproducible build
         run: |
@@ -716,7 +716,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - name: Run benchmark report
         run: make bench-report
@@ -902,7 +902,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - name: Publish immutable Go SDK subdirectory tag
         run: |
@@ -1319,7 +1319,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.25.12"
+          go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:

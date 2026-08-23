@@ -1,6 +1,6 @@
 # ── Stage 1: Build ─────────────────────────────────────
 # SC-004: Base images pinned by digest for supply chain integrity
-FROM --platform=$BUILDPLATFORM golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25.13-alpine@sha256:1e0126852075c9c60731c8ba49088448b91f63e2aed97ca9d1a9791622a05946 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 # Build metadata for /version. See /Dockerfile for the full explanation.

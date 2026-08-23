@@ -28,7 +28,7 @@ mise exec -- make build
 ./bin/helm-ai-kernel --version
 ```
 
-The source build uses Go 1.25.12, pinned by `go.work` and `mise.toml`. The
+The source build uses Go 1.25.13, pinned by `go.work` and `mise.toml`. The
 recipe explicitly trusts the checked-out mise configuration and installs the
 pinned toolchain before building. If mise is unavailable, use a compatible
 native Go toolchain instead.

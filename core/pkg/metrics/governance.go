@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // GovernanceMetrics tracks governance decision metrics.
@@ -278,5 +280,68 @@ func (m *GovernanceMetrics) PrometheusHandler() http.HandlerFunc {
 		for reason, count := range snap.ReasonCounts {
 			fmt.Fprintf(w, "helm_denial_reasons{reason=%q} %d\n", reason, count)
 		}
+	}
+}
+
+// PrometheusCollector exposes the bounded governance snapshot as a collector
+// so callers can compose it with other registries before promhttp encodes a
+// response. This keeps OpenMetrics' terminal # EOF marker last on the wire.
+func (m *GovernanceMetrics) PrometheusCollector() prometheus.Collector {
+	return &governanceCollector{metrics: m}
+}
+
+// PrometheusGatherer returns an isolated registry containing this collector.
+// It is used when governance metrics must be encoded alongside another
+// registry in one scrape response.
+func (m *GovernanceMetrics) PrometheusGatherer() prometheus.Gatherer {
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(m.PrometheusCollector())
+	return registry
+}
+
+type governanceCollector struct {
+	metrics *GovernanceMetrics
+}
+
+func (c *governanceCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- prometheus.NewDesc("helm_decisions_total", "Total governance decisions", nil, nil)
+	ch <- prometheus.NewDesc("helm_allows_total", "Total allowed decisions", nil, nil)
+	ch <- prometheus.NewDesc("helm_denials_total", "Total denied decisions", nil, nil)
+	ch <- prometheus.NewDesc("helm_verifications_total", "EvidencePack verifications run (north-star adoption metric)", nil, nil)
+	ch <- prometheus.NewDesc("helm_decision_latency_ms", "Average decision latency", nil, nil)
+	ch <- prometheus.NewDesc("helm_decision_latency_p95_ms", "Recent p95 decision latency", nil, nil)
+	ch <- prometheus.NewDesc("helm_decision_latency_p99_ms", "Recent p99 decision latency", nil, nil)
+	ch <- prometheus.NewDesc("helm_chain_length", "Current receipt chain length", nil, nil)
+	ch <- prometheus.NewDesc("helm_active_agents", "Number of agents seen in the last 5 minutes", nil, nil)
+	ch <- prometheus.NewDesc("helm_budget_used_pct", "Budget utilization percentage", nil, nil)
+	ch <- prometheus.NewDesc("helm_tool_decisions", "Governance decisions by tool", []string{"tool"}, nil)
+	ch <- prometheus.NewDesc("helm_denial_reasons", "Governance denials by reason", []string{"reason"}, nil)
+}
+
+func (c *governanceCollector) Collect(ch chan<- prometheus.Metric) {
+	if c == nil || c.metrics == nil {
+		return
+	}
+	snap := c.metrics.Snapshot()
+	constMetric := func(name, help string, valueType prometheus.ValueType, value float64) {
+		ch <- prometheus.MustNewConstMetric(prometheus.NewDesc(name, help, nil, nil), valueType, value)
+	}
+	constMetric("helm_decisions_total", "Total governance decisions", prometheus.CounterValue, float64(snap.Decisions))
+	constMetric("helm_allows_total", "Total allowed decisions", prometheus.CounterValue, float64(snap.Allows))
+	constMetric("helm_denials_total", "Total denied decisions", prometheus.CounterValue, float64(snap.Denials))
+	constMetric("helm_verifications_total", "EvidencePack verifications run (north-star adoption metric)", prometheus.CounterValue, float64(snap.Verifications))
+	constMetric("helm_decision_latency_ms", "Average decision latency", prometheus.GaugeValue, snap.AvgLatencyMs)
+	constMetric("helm_decision_latency_p95_ms", "Recent p95 decision latency", prometheus.GaugeValue, snap.P95LatencyMs)
+	constMetric("helm_decision_latency_p99_ms", "Recent p99 decision latency", prometheus.GaugeValue, snap.P99LatencyMs)
+	constMetric("helm_chain_length", "Current receipt chain length", prometheus.GaugeValue, float64(snap.ChainLength))
+	constMetric("helm_active_agents", "Number of agents seen in the last 5 minutes", prometheus.GaugeValue, float64(snap.ActiveAgents))
+	constMetric("helm_budget_used_pct", "Budget utilization percentage", prometheus.GaugeValue, snap.BudgetUsed)
+	toolDesc := prometheus.NewDesc("helm_tool_decisions", "Governance decisions by tool", []string{"tool"}, nil)
+	for tool, count := range snap.ToolCounts {
+		ch <- prometheus.MustNewConstMetric(toolDesc, prometheus.GaugeValue, float64(count), tool)
+	}
+	reasonDesc := prometheus.NewDesc("helm_denial_reasons", "Governance denials by reason", []string{"reason"}, nil)
+	for reason, count := range snap.ReasonCounts {
+		ch <- prometheus.MustNewConstMetric(reasonDesc, prometheus.GaugeValue, float64(count), reason)
 	}
 }

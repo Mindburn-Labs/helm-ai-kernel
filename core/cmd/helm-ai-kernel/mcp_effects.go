@@ -13,10 +13,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/connectors/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters"
 	rtmcp "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtimeadapters/mcp"
@@ -44,6 +46,7 @@ const (
 // here, so bounded writes always escalate and never dispatch).
 type githubEffectsRuntime struct {
 	bridge *rtmcp.GovernedBridge
+	otel   *effects.EffectsOTelInstrumentation
 }
 
 // newGitHubEffectsRuntimeFromEnv builds the governed GitHub dispatch runtime,
@@ -83,7 +86,8 @@ func newGitHubEffectsRuntime(token, baseURL string, seed []byte) (*githubEffects
 	if bridge.PermitSigningPublicKey() == "" {
 		return nil, fmt.Errorf("github effects: permit signer unavailable; a valid Ed25519 signing seed is required")
 	}
-	return &githubEffectsRuntime{bridge: bridge}, nil
+	instrumentation, _ := effects.NewEffectsOTelInstrumentation()
+	return &githubEffectsRuntime{bridge: bridge, otel: instrumentation}, nil
 }
 
 // localPermitSigningSeed reads the Ed25519 seed the local runtime already uses
@@ -207,6 +211,19 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 // the outcome as a machine document: verdict, dispatch state, the signed
 // permit, and a canonical receipt bundle for offline receipt_verify use.
 func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+	effectType := effects.EffectTypeRead
+	if strings.HasPrefix(req.ToolName, "github.create_") || req.ToolName == "github.add_comment" {
+		effectType = effects.EffectTypeWrite
+	}
+	started := time.Now()
+	ctx, span := r.otel.StartExecution(ctx, effectType, "github")
+	succeeded := false
+	defer func() {
+		r.otel.MarkSuccess(span, succeeded)
+		r.otel.RecordExecution(ctx, effectType, "github", succeeded, time.Since(started))
+		r.otel.EndSpan(span)
+	}()
+
 	adapted := &runtimeadapters.AdaptedRequest{
 		RuntimeType:         "mcp",
 		ToolName:            req.ToolName,
@@ -253,6 +270,7 @@ func (r *githubEffectsRuntime) execute(ctx context.Context, req mcppkg.ToolExecu
 			return resp, err
 		}
 		attachGovernedOutcome(&resp, outcome)
+		succeeded = true
 		return resp, nil
 	}
 

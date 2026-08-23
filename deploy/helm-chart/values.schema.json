@@ -882,6 +882,12 @@
           "default": false,
           "description": "Export traces to telemetry.endpoint. A stand handed an endpoint starts exporting the moment it boots, so keep this false until the stand is meant to report."
         },
+        "metricsExporter": {
+          "type": "string",
+          "enum": ["none", "otlp"],
+          "default": "none",
+          "description": "Independent OTLP metric push switch. none keeps metrics on the Prometheus scrape surface only; otlp additionally pushes metric batches to telemetry.endpoint."
+        },
         "syntheticLifecycleEvents": {
           "type": "boolean",
           "default": false,

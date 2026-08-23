@@ -150,8 +150,8 @@ func TestOTelSpanAttributes(t *testing.T) {
 	}
 
 	s := spans[0]
-	assertAttr(t, s.Attributes, attrPrincipal, "principal-42")
-	assertAttr(t, s.Attributes, attrAction, "delete_file")
+	assertAttrAbsent(t, s.Attributes, attrPrincipal)
+	assertAttrAbsent(t, s.Attributes, attrAction)
 	assertAttr(t, s.Attributes, attrVerdict, "DENY")
 	assertAttr(t, s.Attributes, attrReasonCode, "budget_exceeded")
 }
@@ -248,6 +248,48 @@ func TestWithOTelOption(t *testing.T) {
 	}
 }
 
+func TestEvaluateDecisionRecordsGuardianOTelMetrics(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	defer func() { _ = mp.Shutdown(context.Background()) }()
+	tp := sdktrace.NewTracerProvider()
+	defer func() { _ = tp.Shutdown(context.Background()) }()
+
+	inst := &OTelInstrumentation{tracer: tp.Tracer("helm.guardian.test"), meter: mp.Meter("helm.guardian.test")}
+	var err error
+	inst.decisionsTotal, err = inst.meter.Int64Counter("helm.guardian.decisions_total")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst.decisionDuration, err = inst.meter.Float64Histogram("helm.guardian.decision_duration_ms")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	guard := NewGuardian(&MockSigner{}, nil, nil, WithOTelInstrumentation(inst), WithClock(wallClock{}))
+	_, _ = guard.EvaluateDecision(context.Background(), DecisionRequest{
+		Principal: "agent",
+		Action:    "read",
+		Resource:  "resource",
+	})
+
+	var rm metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &rm); err != nil {
+		t.Fatalf("collect metrics: %v", err)
+	}
+	found := false
+	for _, sm := range rm.ScopeMetrics {
+		for _, metric := range sm.Metrics {
+			if metric.Name == "helm.guardian.decisions_total" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("EvaluateDecision did not record helm.guardian.decisions_total")
+	}
+}
+
 func TestWithOTelInstrumentationOption(t *testing.T) {
 	inst, err := newOTelInstrumentation()
 	if err != nil {
@@ -273,6 +315,16 @@ func assertAttr(t *testing.T, attrs []attribute.KeyValue, key, want string) {
 		}
 	}
 	t.Errorf("attribute %q not found", key)
+}
+
+func assertAttrAbsent(t *testing.T, attrs []attribute.KeyValue, key string) {
+	t.Helper()
+	for _, a := range attrs {
+		if string(a.Key) == key {
+			t.Errorf("attribute %q must not be exported", key)
+			return
+		}
+	}
 }
 
 // assertAttrBool checks that a bool attribute exists with the expected value.

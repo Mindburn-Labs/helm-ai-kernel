@@ -115,10 +115,6 @@ func (o *OTelInstrumentation) StartDecision(ctx context.Context, principal, acti
 	}
 	ctx, span := o.tracer.Start(ctx, "guardian.evaluate_decision",
 		trace.WithSpanKind(trace.SpanKindInternal),
-		trace.WithAttributes(
-			attribute.String(attrPrincipal, principal),
-			attribute.String(attrAction, action),
-		),
 	)
 	return ctx, span
 }

@@ -11,14 +11,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -30,18 +35,26 @@ import (
 
 // Config configures the OpenTelemetry providers.
 type Config struct {
-	ServiceName    string
-	ServiceVersion string
-	Environment    string
-	OTLPEndpoint   string        // e.g., "localhost:4317" for gRPC
-	SampleRate     float64       // 0.0 to 1.0, default 1.0 (sample all)
-	BatchTimeout   time.Duration // How long to wait before sending batched spans
-	Enabled        bool          // Enable/disable telemetry
-	Insecure       bool          // Use insecure connection (dev only)
-	CertFile       string        // Path to client certificate
-	KeyFile        string        // Path to client key
-	CAFile         string        // Path to CA certificate
+	ServiceName     string
+	ServiceVersion  string
+	Environment     string
+	OTLPEndpoint    string        // e.g., "localhost:4317" for gRPC
+	MetricsExporter string        // "none" (default) or "otlp"
+	SampleRate      float64       // 0.0 to 1.0, default 1.0 (sample all)
+	BatchTimeout    time.Duration // How long to wait before sending batched spans
+	Enabled         bool          // Enable/disable telemetry
+	Insecure        bool          // Use insecure connection (dev only)
+	CertFile        string        // Path to client certificate
+	KeyFile         string        // Path to client key
+	CAFile          string        // Path to CA certificate
 }
+
+const (
+	// MetricsExporterNone keeps metrics local to the Prometheus scrape surface.
+	MetricsExporterNone = "none"
+	// MetricsExporterOTLP enables the optional OTLP metric push reader.
+	MetricsExporterOTLP = "otlp"
+)
 
 // DefaultServiceName is the service.name every span carries unless
 // OTEL_SERVICE_NAME says otherwise.
@@ -63,14 +76,15 @@ func ServiceNameFromEnv() string {
 // DefaultConfig returns production-ready defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		ServiceName:    ServiceNameFromEnv(),
-		ServiceVersion: "2.0.0",
-		Environment:    "development",
-		OTLPEndpoint:   "localhost:4317",
-		SampleRate:     1.0, // Sample everything in dev
-		BatchTimeout:   5 * time.Second,
-		Enabled:        true,
-		Insecure:       false, // Secure by default
+		ServiceName:     ServiceNameFromEnv(),
+		ServiceVersion:  "2.0.0",
+		Environment:     "development",
+		OTLPEndpoint:    "localhost:4317",
+		MetricsExporter: MetricsExporterNone,
+		SampleRate:      1.0, // Sample everything in dev
+		BatchTimeout:    5 * time.Second,
+		Enabled:         true,
+		Insecure:        false, // Secure by default
 	}
 }
 
@@ -82,6 +96,13 @@ type Provider struct {
 	tracer         trace.Tracer
 	meter          metric.Meter
 	logger         *slog.Logger
+
+	// prometheusRegistry is provider-local. Keeping the exporter off the
+	// process-wide default registry makes repeated Services construction safe:
+	// each provider owns one collector set and no registration can collide with
+	// a previous provider.
+	prometheusRegistry *prometheus.Registry
+	otlpMetricReader   sdkmetric.Reader
 
 	// RED metrics (Rate, Errors, Duration)
 	requestCounter   metric.Int64Counter
@@ -95,6 +116,11 @@ func New(ctx context.Context, config *Config) (*Provider, error) {
 	if config == nil {
 		config = DefaultConfig()
 	}
+	metricsExporter, err := normalizeMetricsExporter(config.MetricsExporter)
+	if err != nil {
+		return nil, err
+	}
+	config.MetricsExporter = metricsExporter
 
 	p := &Provider{
 		config: config,
@@ -121,9 +147,13 @@ func New(ctx context.Context, config *Config) (*Provider, error) {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	// Initialize trace provider
-	if err := p.initTraceProvider(ctx, res); err != nil {
-		return nil, fmt.Errorf("failed to init trace provider: %w", err)
+	// Initialize tracing only when an OTLP endpoint is configured. A local
+	// Prometheus scrape must not require a collector or create a background
+	// trace exporter pointed at an empty target.
+	if strings.TrimSpace(config.OTLPEndpoint) != "" {
+		if err := p.initTraceProvider(ctx, res); err != nil {
+			return nil, fmt.Errorf("failed to init trace provider: %w", err)
+		}
 	}
 
 	// Initialize metric provider
@@ -148,6 +178,7 @@ func New(ctx context.Context, config *Config) (*Provider, error) {
 		"service", config.ServiceName,
 		"environment", config.Environment,
 		"endpoint", config.OTLPEndpoint,
+		"metrics_exporter", config.MetricsExporter,
 		"sample_rate", config.SampleRate,
 		"insecure", config.Insecure,
 	)
@@ -205,23 +236,51 @@ func (p *Provider) initTraceProvider(ctx context.Context, res *resource.Resource
 
 // initMetricProvider initializes the OpenTelemetry metric provider.
 func (p *Provider) initMetricProvider(ctx context.Context, res *resource.Resource) error {
-	opts := []otlpmetricgrpc.Option{
-		otlpmetricgrpc.WithEndpoint(p.config.OTLPEndpoint),
-	}
-
-	if p.config.Insecure {
-		opts = append(opts, otlpmetricgrpc.WithInsecure())
-	}
-
-	exporter, err := otlpmetricgrpc.New(ctx, opts...)
+	metricsExporter, err := normalizeMetricsExporter(p.config.MetricsExporter)
 	if err != nil {
-		return fmt.Errorf("failed to create metric exporter: %w", err)
+		return err
+	}
+	p.config.MetricsExporter = metricsExporter
+
+	registry := prometheus.NewRegistry()
+	for _, collector := range []prometheus.Collector{
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	} {
+		if err := registry.Register(collector); err != nil {
+			return fmt.Errorf("failed to register process metrics collector: %w", err)
+		}
 	}
 
-	reader := sdkmetric.NewPeriodicReader(exporter,
-		sdkmetric.WithInterval(15*time.Second),
+	prometheusExporter, err := otelprom.New(
+		otelprom.WithRegisterer(registry),
+		otelprom.WithoutTargetInfo(),
 	)
-	p.meterProvider = sdkmetric.NewMeterProvider(meterProviderOptions(res, reader)...)
+	if err != nil {
+		return fmt.Errorf("failed to create Prometheus metric exporter: %w", err)
+	}
+	readers := []sdkmetric.Reader{prometheusExporter}
+	p.otlpMetricReader = nil
+	if metricsExporter == MetricsExporterOTLP {
+		opts := []otlpmetricgrpc.Option{
+			otlpmetricgrpc.WithEndpoint(p.config.OTLPEndpoint),
+		}
+		if p.config.Insecure {
+			opts = append(opts, otlpmetricgrpc.WithInsecure())
+		}
+
+		exporter, err := otlpmetricgrpc.New(ctx, opts...)
+		if err != nil {
+			return fmt.Errorf("failed to create metric exporter: %w", err)
+		}
+		p.otlpMetricReader = sdkmetric.NewPeriodicReader(exporter,
+			sdkmetric.WithInterval(15*time.Second),
+		)
+		readers = append(readers, p.otlpMetricReader)
+	}
+
+	p.prometheusRegistry = registry
+	p.meterProvider = sdkmetric.NewMeterProvider(meterProviderOptions(res, readers...)...)
 
 	// Set as global provider. otelhttp resolves its meter from the global
 	// provider (tracing.WrapEdgeHandler passes no WithMeterProvider), so this
@@ -238,15 +297,52 @@ func (p *Provider) initMetricProvider(ctx context.Context, res *resource.Resourc
 // provider with a ManualReader in place of the OTLP PeriodicReader. A
 // cardinality view exercised only on a provider the test assembled itself would
 // prove nothing about the provider the daemon runs.
-func meterProviderOptions(res *resource.Resource, reader sdkmetric.Reader) []sdkmetric.Option {
+func meterProviderOptions(res *resource.Resource, readers ...sdkmetric.Reader) []sdkmetric.Option {
 	opts := []sdkmetric.Option{
 		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(reader),
+	}
+	for _, reader := range readers {
+		if reader != nil {
+			opts = append(opts, sdkmetric.WithReader(reader))
+		}
 	}
 	for _, view := range HTTPServerMetricViews() {
 		opts = append(opts, sdkmetric.WithView(view))
 	}
 	return opts
+}
+
+func normalizeMetricsExporter(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return MetricsExporterNone, nil
+	}
+	switch value {
+	case MetricsExporterNone, MetricsExporterOTLP:
+		return value, nil
+	default:
+		return "", fmt.Errorf("metrics exporter must be %q or %q, got %q", MetricsExporterNone, MetricsExporterOTLP, value)
+	}
+}
+
+// PrometheusHandler returns this provider's local Prometheus scrape surface.
+// It includes the OTel RED metrics, otelhttp server metrics, and the standard
+// Go/process collectors. Governance counters are appended by the daemon's
+// metrics handler because they have their own bounded in-memory collector.
+func (p *Provider) PrometheusHandler() http.Handler {
+	if p == nil || p.prometheusRegistry == nil {
+		return nil
+	}
+	return promhttp.HandlerFor(p.prometheusRegistry, promhttp.HandlerOpts{})
+}
+
+// PrometheusGatherer returns this provider's local collector registry so a
+// caller can compose it with other collectors before encoding one response.
+func (p *Provider) PrometheusGatherer() prometheus.Gatherer {
+	if p == nil || p.prometheusRegistry == nil {
+		return nil
+	}
+	return p.prometheusRegistry
 }
 
 // httpServerMetricAttributeAllowlist is the complete set of attribute keys the

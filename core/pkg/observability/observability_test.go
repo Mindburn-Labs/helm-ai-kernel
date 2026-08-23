@@ -3,11 +3,17 @@ package observability
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/resource"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -19,6 +25,116 @@ func TestDefaultConfig(t *testing.T) {
 	require.Equal(t, 1.0, config.SampleRate)
 	require.True(t, config.Enabled)
 	require.False(t, config.Insecure)
+	require.Equal(t, MetricsExporterNone, config.MetricsExporter)
+}
+
+func TestPrometheusHandlerIncludesRuntimeAndHTTPMetrics(t *testing.T) {
+	p := newPrometheusTestProvider(t, MetricsExporterNone)
+	p.RecordRequest(context.Background(), attribute.String("operation", "scrape"))
+
+	previous := otel.GetMeterProvider()
+	otel.SetMeterProvider(p.meterProvider)
+	t.Cleanup(func() { otel.SetMeterProvider(previous) })
+
+	handler := tracing.WrapEdgeHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "observability.test")
+	request := httptest.NewRequest(http.MethodGet, "http://kernel.test/health", nil)
+	request.Host = "attacker-controlled.example"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	scrape := httptest.NewRecorder()
+	p.PrometheusHandler().ServeHTTP(scrape, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := scrape.Body.String()
+	require.Contains(t, body, "go_goroutines")
+	require.Contains(t, body, "process_cpu_seconds_total")
+	require.Contains(t, body, "helm_requests_total")
+	require.Contains(t, body, "http_server_request_duration_seconds")
+	require.NotContains(t, body, "server_address")
+	require.NotContains(t, body, "attacker-controlled.example")
+	require.Equal(t, http.StatusOK, scrape.Code)
+	require.True(t, strings.Contains(scrape.Header().Get("Content-Type"), "text/plain"))
+}
+
+func TestNewProviderWithMetricsOnlyEndpointUnset(t *testing.T) {
+	previous := otel.GetMeterProvider()
+	t.Cleanup(func() { otel.SetMeterProvider(previous) })
+	provider, err := New(context.Background(), &Config{
+		ServiceName:     "observability.metrics-only.test",
+		ServiceVersion:  "test",
+		Environment:     "test",
+		OTLPEndpoint:    "",
+		MetricsExporter: MetricsExporterNone,
+		SampleRate:      1,
+		BatchTimeout:    time.Second,
+		Enabled:         true,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = provider.Shutdown(context.Background())
+	})
+	provider.RecordRequest(context.Background(), attribute.String("operation", "metrics-only"))
+	traced := tracing.WrapEdgeHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "observability.metrics-only.test")
+	traced.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/metrics-probe", nil))
+
+	response := httptest.NewRecorder()
+	provider.PrometheusHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := response.Body.String()
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, body, "go_goroutines")
+	require.Contains(t, body, "process_cpu_seconds_total")
+	require.Contains(t, body, "helm_requests_total")
+	require.Contains(t, body, "http_server_request_duration_seconds")
+}
+
+func TestPrometheusRegistriesDoNotCollideAcrossProviders(t *testing.T) {
+	first := newPrometheusTestProvider(t, MetricsExporterNone)
+	second := newPrometheusTestProvider(t, MetricsExporterNone)
+
+	for name, provider := range map[string]*Provider{"first": first, "second": second} {
+		t.Run(name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			provider.PrometheusHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+			require.Equal(t, http.StatusOK, response.Code)
+			require.Contains(t, response.Body.String(), "go_goroutines")
+		})
+	}
+}
+
+func TestMetricExporterSwitchIsIndependentFromTraceEndpoint(t *testing.T) {
+	none := newPrometheusTestProvider(t, MetricsExporterNone)
+	require.Nil(t, none.otlpMetricReader)
+
+	otlp := newPrometheusTestProvider(t, MetricsExporterOTLP)
+	require.NotNil(t, otlp.otlpMetricReader)
+}
+
+func newPrometheusTestProvider(t *testing.T, metricsExporter string) *Provider {
+	t.Helper()
+	provider := &Provider{
+		config: &Config{
+			Enabled:         true,
+			OTLPEndpoint:    "localhost:4317",
+			Insecure:        true,
+			MetricsExporter: metricsExporter,
+		},
+	}
+	if err := provider.initMetricProvider(context.Background(), resource.Empty()); err != nil {
+		t.Fatalf("initMetricProvider() error = %v", err)
+	}
+	provider.meter = provider.meterProvider.Meter("observability.test")
+	if err := provider.initREDMetrics(); err != nil {
+		t.Fatalf("initREDMetrics() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = provider.meterProvider.Shutdown(ctx)
+	})
+	return provider
 }
 
 func TestNewProviderWithTLS(t *testing.T) {

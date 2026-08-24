@@ -39,6 +39,12 @@ V084_RELEASE_SOURCE_PIN = {
     "version": "0.2.1",
     "package_lock_sha256": "0e0d41a1b3f04b088e4930b6d534ef9cf2e1d0fdd664f767da30f9fe762566e1",
 }
+V085_RELEASE_SOURCE_PIN = {
+    "commit": "9c0e4d6685aec89240e7707c442578bd4cbd8f89",
+    "tree": "9976e98fdbab184f7a66fd3951a3150a4760e560",
+    "version": "0.2.1",
+    "package_lock_sha256": "0e0d41a1b3f04b088e4930b6d534ef9cf2e1d0fdd664f767da30f9fe762566e1",
+}
 RELEASE_WORKFLOW_REF = "refs/tags/helm-console-sidecar-v0.8.1"
 TEST_WORKFLOW_REF = "refs/tags/test-console-source"
 
@@ -588,6 +594,18 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
         self.assertEqual(
             pin["workflow_ref"],
             "refs/tags/helm-console-sidecar-v0.8.4",
+        )
+
+    def test_v085_source_pin_matches_the_exact_console_release_contract(self) -> None:
+        pin = sidecar.resolve_pin(
+            REPOSITORY_ROOT / "release/console-local-sidecar-pins.json",
+            "v0.8.5",
+        )
+        self.assertEqual(pin["source_repository"], sidecar.CONSOLE_REPOSITORY)
+        self.assertEqual(pin["source"], V085_RELEASE_SOURCE_PIN)
+        self.assertEqual(
+            pin["workflow_ref"],
+            "refs/tags/helm-console-sidecar-v0.8.5",
         )
 
     def test_manifest_digest_flows_into_normal_and_reproducible_linker_flags(self) -> None:

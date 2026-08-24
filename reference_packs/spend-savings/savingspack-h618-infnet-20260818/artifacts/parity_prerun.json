@@ -1,0 +1,40 @@
+{
+  "schema_version": "helm-savings-parity-prerun.v1",
+  "run_id": "h618-infnet-20260818",
+  "selection_task_ids": [
+    "sel-01",
+    "sel-02",
+    "sel-03",
+    "sel-04",
+    "sel-05",
+    "sel-06",
+    "sel-07",
+    "sel-08"
+  ],
+  "baseline": {
+    "envelope_id": "env-baseline",
+    "dispatched_model_id": "gpt-4.1",
+    "tasks_run": 8,
+    "tasks_passed": 6
+  },
+  "candidates": [
+    {
+      "envelope_id": "env-cand-gpt41-mini",
+      "dispatched_model_id": "gpt-4.1-mini",
+      "tasks_run": 8,
+      "tasks_passed": 8
+    },
+    {
+      "envelope_id": "env-cand-gpt41-nano",
+      "dispatched_model_id": "gpt-4.1-nano",
+      "tasks_run": 8,
+      "tasks_passed": 6
+    },
+    {
+      "envelope_id": "env-cand-glm52",
+      "dispatched_model_id": "glm-5.2",
+      "tasks_run": 8,
+      "tasks_passed": 8
+    }
+  ]
+}

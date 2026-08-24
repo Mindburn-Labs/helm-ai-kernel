@@ -1,6 +1,6 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/tests/skills
 
-go 1.25.12
+go 1.25.13
 
 require github.com/Mindburn-Labs/helm-ai-kernel/core v0.0.0
 

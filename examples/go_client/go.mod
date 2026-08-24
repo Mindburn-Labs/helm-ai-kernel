@@ -1,6 +1,6 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/examples/go_client
 
-go 1.25.0
+go 1.25.13
 
 require github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.0.0
 

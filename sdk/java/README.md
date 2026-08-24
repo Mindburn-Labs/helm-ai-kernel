@@ -5,7 +5,7 @@ Typed Java client for the retained HELM kernel API.
 ## Package Status
 
 Package metadata in this source tree targets a future Maven Central coordinate.
-The current source target is `0.8.4`.
+The current source target is `0.8.5`.
 This source target does not claim that remote artifacts have been published or
 that the endpoint surface is conformance-certified; verify Maven Central and
 tagged release evidence before using a coordinate. After the tag-driven

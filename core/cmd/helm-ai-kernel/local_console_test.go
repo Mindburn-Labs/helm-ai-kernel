@@ -562,25 +562,111 @@ func TestQuickstartConsoleFailsBeforeMutationForExternalOverrideOrMissingBundle(
 	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
 		t.Fatal(err)
 	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", strings.Repeat("a", 64))
 	original := localConsoleExecutable
 	localConsoleExecutable = func() (string, error) { return executable, nil }
 	t.Cleanup(func() { localConsoleExecutable = original })
 	dataDir := filepath.Join(dir, "quickstart-data")
 	var stdout, stderr bytes.Buffer
-	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 0 {
+	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 1 {
 		t.Fatalf("dry-run exit code = %d, stdout = %s stderr = %s", code, stdout.String(), stderr.String())
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("dry-run wrote stderr = %s", stderr.String())
+	if stdout.Len() != 0 {
+		t.Fatalf("missing bundle dry-run wrote stdout = %s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "\"operation\":\"preview\"") {
-		t.Fatalf("missing preview summary = %s", stdout.String())
-	}
-	if !strings.Contains(stdout.String(), "Console-including packaged layout") {
-		t.Fatalf("missing Console layout warning = %s", stdout.String())
+	if !strings.Contains(stderr.String(), "Console-including packaged layout") {
+		t.Fatalf("missing bundle error = %s", stderr.String())
 	}
 	if _, statErr := os.Stat(dataDir); !os.IsNotExist(statErr) {
 		t.Fatalf("missing bundle dry-run mutated %q: %v", dataDir, statErr)
+	}
+}
+
+func TestQuickstartConsoleDryRunUsesTrustedBundleWithoutMutation(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	_, manifestDigest := writeTrustedLocalConsoleRelease(t, executable, target)
+	consoleLocalSidecarManifestSHA256 = manifestDigest
+	original := localConsoleExecutable
+	discoveryCalls := 0
+	localConsoleExecutable = func() (string, error) {
+		discoveryCalls++
+		return executable, nil
+	}
+	t.Cleanup(func() { localConsoleExecutable = original })
+
+	dataDir := filepath.Join(dir, "quickstart-data")
+	var stdout, stderr bytes.Buffer
+	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 0 {
+		t.Fatalf("trusted dry-run exit code = %d, stdout = %s stderr = %s", code, stdout.String(), stderr.String())
+	}
+	if discoveryCalls != 1 {
+		t.Fatalf("trusted bundle discovery calls = %d, want 1", discoveryCalls)
+	}
+	if stderr.Len() != 0 || !strings.Contains(stdout.String(), "\"operation\":\"preview\"") {
+		t.Fatalf("trusted dry-run output stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("trusted dry-run mutated %q: %v", dataDir, err)
+	}
+}
+
+func TestQuickstartConsoleDryRunRejectsTamperedBundleBeforeMutation(t *testing.T) {
+	target, err := localConsoleTarget()
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "bin", "helm-ai-kernel")
+	if err := os.MkdirAll(filepath.Dir(executable), 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, []byte("kernel"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	setLocalConsoleReleaseBuildInfo(t, "0.8.0", "")
+	_, manifestDigest := writeTrustedLocalConsoleRelease(t, executable, target)
+	consoleLocalSidecarManifestSHA256 = manifestDigest
+	manifestPath := filepath.Join(filepath.Dir(executable), localConsoleDirectory, localConsoleReleaseManifestFile)
+	manifestBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, append(manifestBytes, ' '), 0600); err != nil {
+		t.Fatal(err)
+	}
+	original := localConsoleExecutable
+	discoveryCalls := 0
+	localConsoleExecutable = func() (string, error) {
+		discoveryCalls++
+		return executable, nil
+	}
+	t.Cleanup(func() { localConsoleExecutable = original })
+
+	dataDir := filepath.Join(dir, "quickstart-data")
+	var stdout, stderr bytes.Buffer
+	if code := runQuickstartCmdWithReady([]string{"--console", "--dry-run", "--data-dir", dataDir}, &stdout, &stderr, nil); code != 1 {
+		t.Fatalf("tampered dry-run exit code = %d, stdout = %s stderr = %s", code, stdout.String(), stderr.String())
+	}
+	if discoveryCalls != 1 {
+		t.Fatalf("tampered bundle discovery calls = %d, want 1", discoveryCalls)
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "does not match the compiled digest") {
+		t.Fatalf("tampered dry-run output stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(dataDir); !os.IsNotExist(err) {
+		t.Fatalf("tampered dry-run mutated %q: %v", dataDir, err)
 	}
 }
 

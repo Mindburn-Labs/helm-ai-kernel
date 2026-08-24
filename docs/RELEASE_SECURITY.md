@@ -53,14 +53,14 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.8.4`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4>. The
+Current source release target: `v0.8.5`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.5>. The
 release is complete only when GitHub shows Darwin/Linux/Windows binaries,
 `SHA256SUMS.txt`, `sbom.json`,
-`v0.8.4.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.8.5.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,
-`v0.8.4.json`, `version-status.json`, and matching `*.cosign.bundle` files for
+`v0.8.5.json`, `version-status.json`, and matching `*.cosign.bundle` files for
 each primary asset. Browser UI bundles are not Kernel release assets. Where a
 release declares the loopback Console local-sidecar, it is a verified standalone
 native closure—not a Homebrew resource or a hosted UI.

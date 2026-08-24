@@ -57,6 +57,9 @@
 {{- if and .Values.telemetry.syntheticLifecycleEvents (not .Values.telemetry.enabled) -}}
 {{- fail "telemetry.syntheticLifecycleEvents=true requires telemetry.enabled=true" -}}
 {{- end -}}
+{{- if and (eq .Values.telemetry.metricsExporter "otlp") (not .Values.telemetry.enabled) -}}
+{{- fail "telemetry.metricsExporter=otlp requires telemetry.enabled=true" -}}
+{{- end -}}
 {{- if and .Values.helm.githubEffects.apiURL (not .Values.helm.githubEffects.existingSecret) -}}
 {{- fail "helm.githubEffects.apiURL requires helm.githubEffects.existingSecret" -}}
 {{- end -}}
@@ -214,6 +217,8 @@ spec:
             {{- if .Values.telemetry.enabled }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ required "telemetry.endpoint is required when telemetry.enabled is true" .Values.telemetry.endpoint | quote }}
+            - name: OTEL_METRICS_EXPORTER
+              value: {{ .Values.telemetry.metricsExporter | quote }}
             {{- with .Values.telemetry.serviceName }}
             - name: OTEL_SERVICE_NAME
               value: {{ . | quote }}

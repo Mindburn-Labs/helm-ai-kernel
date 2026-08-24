@@ -35,7 +35,7 @@ helm-ai-kernel --version
 
 Source build:
 
-The source build uses Go 1.25.12, pinned by `go.work` and `mise.toml`. The
+The source build uses Go 1.25.13, pinned by `go.work` and `mise.toml`. The
 recipe explicitly trusts the checked-out mise configuration and installs the
 pinned toolchain before building. If mise is unavailable, use a compatible
 native Go toolchain instead.
@@ -43,7 +43,7 @@ native Go toolchain instead.
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
-git checkout v0.8.4
+git checkout v0.8.5
 mise trust
 mise install
 mise exec -- make build
@@ -59,25 +59,25 @@ docker compose up -d
 
 After the tag-driven release and published registry verification complete,
 Java SDK consumers can use the source-target Maven coordinate
-`io.github.mindburnlabs:helm-sdk:0.8.4`:
+`io.github.mindburnlabs:helm-sdk:0.8.5`:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.8.4</version>
+  <version>0.8.5</version>
 </dependency>
 ```
 
-Current source release target: `v0.8.4`.
+Current source release target: `v0.8.5`.
 The expected release URL is
-`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.4`. Do not
+`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.5`. Do not
 treat its assets as present until the normal release workflow attaches and
-verifies them, including `v0.8.4.openvex.json` and `v0.8.4.json`.
+verifies them, including `v0.8.5.openvex.json` and `v0.8.5.json`.
 
 After the source subdirectory tag is published and verified, Go SDK consumers
-can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.4`; the expected
-tag is `sdk/go/v0.8.4`.
+can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.5`; the expected
+tag is `sdk/go/v0.8.5`.
 
 ## Local Boundary
 

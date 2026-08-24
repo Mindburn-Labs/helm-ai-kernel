@@ -219,6 +219,16 @@ func TestGitHubEffectsRuntimeDispatchesReadUnderVerifiedPermit(t *testing.T) {
 	}
 }
 
+func TestGitHubEffectsRuntimeHasHotPathOTelInstrumentation(t *testing.T) {
+	rt, err := newGitHubEffectsRuntime("ghp-test", "https://api.github.test", testSigningSeed())
+	if err != nil {
+		t.Fatalf("construct runtime: %v", err)
+	}
+	if rt.otel == nil {
+		t.Fatal("shipped GitHub effects runtime did not initialize its OTel instrumentation")
+	}
+}
+
 // TestGitHubEffectsRuntimeRefusesWithoutSigningSeed is the vacuous-pass guard.
 // The dispatch gate is a no-op when the bridge has no permit signer, so the
 // wiring must refuse to construct without a valid seed rather than arm dispatch

@@ -864,7 +864,30 @@ type SessionAction struct {
 // It constructs a DecisionRecord and returns it.
 // When a PDP is configured, policy evaluation is delegated to it and the result
 // is bound into the DecisionRecord for receipt chain verification.
-func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (*contracts.DecisionRecord, error) {
+func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (decision *contracts.DecisionRecord, err error) {
+	decisionStarted := time.Time{}
+	if g.clock != nil {
+		decisionStarted = g.clock.Now()
+	}
+	decisionCtx, decisionSpan := g.otel.StartDecision(ctx, req.Principal, req.Action)
+	defer func() {
+		verdict := VerdictBlock
+		reasonCode := "error"
+		if decision != nil {
+			verdict = decision.Verdict
+			reasonCode = decision.ReasonCode
+		}
+		g.otel.EndDecision(decisionSpan, verdict, reasonCode)
+		duration := time.Duration(0)
+		if g.clock != nil && !decisionStarted.IsZero() {
+			duration = g.clock.Now().Sub(decisionStarted)
+			if duration < 0 {
+				duration = 0
+			}
+		}
+		g.otel.RecordDecision(decisionCtx, verdict, duration)
+	}()
+	ctx = decisionCtx
 	ctx, span := otel.Tracer("helm.kernel").Start(ctx, "Guardian.EvaluateDecision")
 	defer span.End()
 

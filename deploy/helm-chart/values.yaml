@@ -304,6 +304,10 @@ helm:
 # exporting the moment it boots. Enabled per stand, never in a chart default.
 telemetry:
   enabled: false
+  # OTLP metric push is independent from trace export. The Prometheus
+  # /metrics scrape surface remains available when telemetry is enabled;
+  # choose otlp only when the gateway is meant to receive metric batches.
+  metricsExporter: "none"
   # Publish governed lifecycle events only from a synthetic stand. This maps
   # to the kernel's fail-closed HELM_ENV=synthetic publisher gate and requires
   # telemetry.enabled so the events remain joinable to exported traces.

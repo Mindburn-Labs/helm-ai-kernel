@@ -28,7 +28,7 @@ mise exec -- make build
 ./bin/helm-ai-kernel --version
 ```
 
-The source build uses Go 1.25.12, pinned by `go.work` and `mise.toml`. The
+The source build uses Go 1.25.13, pinned by `go.work` and `mise.toml`. The
 recipe explicitly trusts the checked-out mise configuration and installs the
 pinned toolchain before building. If mise is unavailable, use a compatible
 native Go toolchain instead.
@@ -100,7 +100,7 @@ helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<
 The explicit opt-in is required because this local proof creates its own
 signing key. It proves internal consistency, not provenance.
 
-When the `v0.8.4` GitHub Release publishes an `evidence-pack.tar`, use that
+When the `v0.8.5` GitHub Release publishes an `evidence-pack.tar`, use that
 release asset for release verification instead of a local proof bundle. Until
 then, the local proof bundle above is the verifiable path.
 

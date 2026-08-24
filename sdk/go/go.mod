@@ -1,6 +1,6 @@
 module github.com/Mindburn-Labs/helm-ai-kernel/sdk/go
 
-go 1.25.0
+go 1.25.13
 
 require (
 	google.golang.org/grpc v1.82.1

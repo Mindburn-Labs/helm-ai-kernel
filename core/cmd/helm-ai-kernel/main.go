@@ -38,6 +38,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	_ "github.com/lib/pq" // Postgres Driver
 )
@@ -576,6 +578,9 @@ func runServerWithOptions(opts serverOptions) error {
 	if services != nil && services.EmergencyStops != nil {
 		guardianOpts = append(guardianOpts, guardian.WithScopedStopReader(services.EmergencyStops))
 	}
+	if services != nil && services.Observability != nil {
+		guardianOpts = append(guardianOpts, guardian.WithOTel())
+	}
 
 	if envBool("HELM_ENABLE_WARM_POOL") {
 		poolSize := 4
@@ -696,7 +701,7 @@ func runServerWithOptions(opts serverOptions) error {
 		healthMux.HandleFunc("/health", healthHandler)
 		healthMux.HandleFunc("/healthz", healthHandler)
 		if metricsEnabled && metricsPort == healthPort {
-			healthMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+			healthMux.HandleFunc("/metrics", metricsHandler(services))
 		}
 		healthServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
@@ -716,7 +721,7 @@ func runServerWithOptions(opts serverOptions) error {
 	var metricsServer *http.Server
 	if metricsEnabled && metricsPort != healthPort {
 		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", verificationMetrics.PrometheusHandler())
+		metricsMux.HandleFunc("/metrics", metricsHandler(services))
 		metricsServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
 			Handler:           metricsMux,
@@ -789,6 +794,20 @@ func runServerWithOptions(opts serverOptions) error {
 	shutdown()
 	log.Println("[helm] shutdown complete")
 	return runtimeErr
+}
+
+// metricsHandler composes the provider-local OTel scrape surface with the
+// bounded governance collector before promhttp encodes the response. A single
+// encoder is required because OpenMetrics responses terminate with # EOF.
+func metricsHandler(services *Services) http.HandlerFunc {
+	gatherers := prometheus.Gatherers{}
+	if services != nil && services.Observability != nil {
+		if gatherer := services.Observability.PrometheusGatherer(); gatherer != nil {
+			gatherers = append(gatherers, gatherer)
+		}
+	}
+	gatherers = append(gatherers, verificationMetrics.PrometheusGatherer())
+	return promhttp.HandlerFor(gatherers, promhttp.HandlerOpts{EnableOpenMetrics: true}).ServeHTTP
 }
 
 func writeServerReady(opts serverOptions, logger *slog.Logger, logFormat, bindAddr string, port int) error {

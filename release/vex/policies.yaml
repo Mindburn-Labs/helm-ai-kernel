@@ -7,6 +7,7 @@
 # Schema:
 #   policies:
 #     - cve_id: <CVE-YYYY-NNNNN or GO-YYYY-NNNNN>
+#       product_purl: <optional package purl; defaults to the released Kernel>
 #       status: not_affected | fixed | affected | under_investigation
 #       justification: <OpenVEX justification token; required when status=not_affected>
 #       statement: <free-form explanation that ships in the published VEX>
@@ -25,6 +26,12 @@
 
 policies:
   - cve_id: GO-2026-5932
+    product_purl: "pkg:golang/golang.org/x/crypto@v0.53.0"
     status: not_affected
     justification: vulnerable_code_not_present
     statement: "golang.org/x/crypto/openpgp is never imported; only x/crypto/hkdf is compiled into the binary; module-granularity gobinary scan flags the whole module"
+  - cve_id: CVE-2026-46600
+    product_purl: "pkg:golang/stdlib@1.25.13"
+    status: not_affected
+    justification: vulnerable_code_not_present
+    statement: "Go 1.25.13 predates the affected stdlib range, which GO-2026-5942 records as introduced in Go 1.26.0; Grype's go1.25.13 match is outside that reviewed range"

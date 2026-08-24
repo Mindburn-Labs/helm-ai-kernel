@@ -146,6 +146,29 @@ def is_signed_fixture_receipt(path: pathlib.Path, text: str) -> bool:
     )
 
 
+def is_immutable_savings_pack_payload(path: pathlib.Path) -> bool:
+    """Keep signed savings-pack payload bytes out of source annotation scope.
+
+    The savings EvidencePack manifest hashes every receipt and its trusted-key
+    registry, and the manifest signature authenticates that hash.  Adding a
+    quantum_posture field to one of those JSON files would invalidate the
+    historical pack rather than annotate executable cryptographic source.  The
+    exception is deliberately limited to the source-owned savings-pack
+    receipt payloads; ordinary reference-pack JSON remains in inventory scope.
+    """
+    parts = path.parts
+    try:
+        root = parts.index("reference_packs")
+    except ValueError:
+        return False
+    if len(parts) <= root + 3 or parts[root + 1] != "spend-savings":
+        return False
+    if not parts[root + 2].startswith("savingspack-"):
+        return False
+    relative = parts[root + 3 :]
+    return "receipts" in relative or path.name == "trusted_keys.json"
+
+
 def needs_annotation(path: pathlib.Path) -> bool:
     if should_skip(path) or not path.is_file():
         return False
@@ -154,6 +177,8 @@ def needs_annotation(path: pathlib.Path) -> bool:
     except UnicodeDecodeError:
         return False
     if is_signed_fixture_receipt(path, text):
+        return False
+    if is_immutable_savings_pack_payload(path):
         return False
     if not CRYPTO_RE.search(text):
         return False

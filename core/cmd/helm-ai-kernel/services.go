@@ -135,15 +135,26 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	logger.Info("subsystem ready", "component", " Config loaded")
 
 	// --- 2. Observability ---
-	// Inert unless an OTLP endpoint is explicitly configured — same posture
-	// as the edge tracing and the console (unset = no exporter). Without this
-	// gate the default localhost:4317 exporter dials a collector that doesn't
-	// exist and logs an export failure every 15s.
-	if endpoint, insecure := otlpEndpointFromEnv(); endpoint == "" {
+	// Keep tracing inert unless an OTLP endpoint is explicitly configured, but
+	// still initialize the local Prometheus provider when the scrape surface is
+	// enabled. Without this distinction HELM_METRICS_ENABLED only exposed the
+	// bounded governance counters and omitted RED/go/process families.
+	if endpoint, insecure := otlpEndpointFromEnv(); !shouldInitializeObservability(endpoint) {
 		logger.Info("Observability init skipped (no OTLP endpoint configured)")
 	} else {
 		obsCfg := observability.DefaultConfig()
 		obsCfg.OTLPEndpoint = endpoint
+		metricsExporter := observability.MetricsExporterNone
+		if configured, exporterErr := metricsExporterFromEnv(); exporterErr != nil {
+			logger.Warn("Invalid OTEL_METRICS_EXPORTER; OTLP metric push disabled", "error", exporterErr)
+		} else {
+			metricsExporter = configured
+		}
+		if endpoint == "" && metricsExporter == observability.MetricsExporterOTLP {
+			logger.Warn("OTEL_METRICS_EXPORTER=otlp requires an OTLP endpoint; metric push disabled")
+			metricsExporter = observability.MetricsExporterNone
+		}
+		obsCfg.MetricsExporter = metricsExporter
 		if insecure {
 			obsCfg.Insecure = true
 		}
@@ -336,6 +347,26 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 
 	logger.Info("subsystem ready", "component", " All subsystems initialized successfully")
 	return s, nil
+}
+
+// metricsExporterFromEnv resolves the explicit OTLP metric push switch. The
+// trace endpoint is intentionally independent: an endpoint alone still
+// enables traces, while metrics remain scrape-only unless this is set to
+// "otlp".
+func metricsExporterFromEnv() (string, error) {
+	value := strings.TrimSpace(os.Getenv("OTEL_METRICS_EXPORTER"))
+	switch value {
+	case "":
+		return observability.MetricsExporterNone, nil
+	case observability.MetricsExporterNone, observability.MetricsExporterOTLP:
+		return value, nil
+	default:
+		return "", fmt.Errorf("OTEL_METRICS_EXPORTER must be %q or %q, got %q", observability.MetricsExporterNone, observability.MetricsExporterOTLP, value)
+	}
+}
+
+func shouldInitializeObservability(endpoint string) bool {
+	return strings.TrimSpace(endpoint) != "" || envBool("HELM_METRICS_ENABLED")
 }
 
 // kmsKeystorePath resolves the on-disk location of the KMS keystore. The path

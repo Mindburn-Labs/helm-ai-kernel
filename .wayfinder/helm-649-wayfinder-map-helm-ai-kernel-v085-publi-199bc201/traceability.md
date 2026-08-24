@@ -1,49 +1,49 @@
 # Traceability — HELM AI Kernel v0.8.5 release convergence
 
-Blank delivery/evidence cells are intentionally populated by `to-tickets` and the verified gauntlet; compilation does not claim execution.
+Delivery cells record the current execution state. A local pass is never promoted to merge, publication, deployment, runtime, or public-claim proof.
 
 | Decision source | Specification section / stories | Answer-key requirement | Implementation ticket | Test or inspection | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| HELM-649 exact-source boundary; HELM-221 | Implementation Decisions; stories 11, 43 | AK-001 | TBD | TBD | TBD |
-| HELM-650 build identity decision | stories 1, 11 | AK-002 | TBD | TBD | TBD |
-| HELM-647 merged TUI contract | story 2 | AK-003 | TBD | TBD | TBD |
-| HELM-647 fail-closed operator decisions | stories 3–6 | AK-004 | TBD | TBD | TBD |
-| HELM-647 automation/catalog decisions | stories 7–8 | AK-005 | TBD | TBD | TBD |
-| Source-owned contracts/reference packs; ADR 0003; Kernel AGENTS | story 9; Testing Decisions | AK-006 | TBD | TBD | TBD |
-| ADR 0003 scoped integrity rule; HELM-221 | story 10 | AK-007 | TBD | TBD | TBD |
-| HELM-430 estate contract | stories 12, 14 | AK-008 | TBD | TBD | TBD |
-| HELM-430 preservation contract | stories 13, 50 | AK-009 | TBD | TBD | TBD |
-| HELM-607 toolchain decision | story 15 | AK-010 | TBD | TBD | TBD |
-| HELM-607 image acceptance | stories 15–17 | AK-011 | TBD | TBD | TBD |
-| HELM-649 validation boundary; Kernel AGENTS | story 18; Testing Decisions | AK-012 | TBD | TBD | TBD |
-| HELM-650 release-rehearsal decision | stories 22–23 | AK-013 | TBD | matching plus isolated version/tag/source mismatch rehearsal | TBD |
-| HELM-650 configured-target decision | stories 19–21, 26 | AK-014 | TBD | TBD | TBD |
-| HELM-650 artifact integrity | story 19 | AK-015 | TBD | TBD | TBD |
-| HELM-650 provenance decision | story 20 | AK-016 | TBD | TBD | TBD |
-| HELM-607 and source-truth supply-chain boundary | story 21 | AK-017 | TBD | TBD | TBD |
-| HELM-221/230/531 publication boundary | story 48 | AK-018 | TBD | TBD | TBD |
-| HELM-229/513/531 Homebrew boundary | stories 24, 28 | AK-019 | TBD | TBD | TBD |
-| Repo-topology SDK ownership; HELM-229/531 | story 29 | AK-020 | TBD | TBD | TBD |
-| HELM-513 clean-machine contract | story 24 | AK-021 | TBD | TBD | TBD |
-| HELM-650 clean-target contract | stories 25–26 | AK-022 | TBD | TBD | TBD |
-| HELM-230/513 rollback contract | story 27 | AK-023 | TBD | TBD | TBD |
-| HELM-229/531 public drift contract | stories 30–31 | AK-024 | TBD | TBD | TBD |
-| HELM-230 and source-truth GitOps boundary | story 32 | AK-025 | TBD | TBD | TBD |
-| HELM-230/531 deployment evidence boundary | stories 33–34 | AK-026 | TBD | TBD | TBD |
-| HELM-637; HELM-639/640/643/644/645/646 prerequisite chain; HELM-638/641 | stories 35, 39–40 | AK-027 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-646, HELM-638, HELM-641 | TBD | TBD |
-| HELM-637; HELM-639/640/643/644/645/646 prerequisite chain; HELM-638/641 | stories 35, 39–40 | AK-028 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-646, HELM-638, HELM-641 | TBD | TBD |
-| HELM-637; HELM-639/640/643/644/645 prerequisite chain; HELM-638/641 | story 36 | AK-029 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-638, HELM-641 | TBD | TBD |
-| HELM-637; HELM-639/640/643/644/645 prerequisite chain; HELM-638/641 | story 37 | AK-030 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-638, HELM-641 | TBD | TBD |
-| HELM-637; HELM-639/640/643/644/645/646 prerequisite chain; HELM-638/641 | stories 38–39 | AK-031 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-646, HELM-638, HELM-641 | TBD | TBD |
-| HELM-637; HELM-639/640/643/644/645 prerequisite chain; HELM-638/641/642 | Testing Decisions denied/unresolved/provider-failure/ambiguous paths; story 42 | AK-032 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-638, HELM-641, HELM-642 | durable no-effect failure plus read-only reconciliation tests | TBD |
-| HELM-637/642 claim boundary | stories 41–42 | AK-033 | HELM-642 | TBD | TBD |
-| Workspace public messaging boundary; HELM-647 | stories 31, 47–48 | AK-034 | TBD | TBD | TBD |
-| HELM-649/650 tracker decision; issue-tracker implementation graph | stories 43–44 | AK-035 | HELM-650 parent and all v0.8.5 child implementation tickets | parent/order/blocker/AK/repository/`Owns`/overlap/acceptance/conductor/integration-validation/external-blocker audit | TBD |
-| HELM-642; verified-gauntlet contract | stories 45, 49 | AK-036 | HELM-642 plus release final-verifier ticket | TBD | TBD |
-| Kernel AGENTS and workspace privilege policy | stories 46–47 | AK-037 | TBD | TBD | TBD |
-| HELM-430 cleanup decision | story 50 | AK-038 | HELM-430 | TBD | TBD |
-| HELM-649 binary completion; gauntlet contract | story 49 | AK-039 | TBD | TBD | TBD |
-| HELM-647 exclusions; HELM-650 communication decision | stories 31, 41–42, 48 | AK-040 | TBD | TBD | TBD |
+| HELM-649 exact-source boundary; HELM-221 | Implementation Decisions; stories 11, 43 | AK-001 | HELM-649, HELM-650 | clean branch/HEAD/tree, ancestry, `VERSION`, and status readback after every source change | Source-prepared PASS at `2ff74c78640aa6bd5aaeeb94a14e93f6adb8f52c`; final candidate must be rebound after this traceability commit and remote merge |
+| HELM-650 build identity decision | stories 1, 11 | AK-002 | HELM-649 | release-flag Go build, binary SHA-256, and `helm-ai-kernel version` comparison | Local PASS: release-style build reports `HELM AI Kernel v0.8.5`; final published binary digest/readback pending |
+| HELM-647 merged TUI contract | story 2 | AK-003 | HELM-647, HELM-649 | focused TUI production-seam tests and deterministic header identity assertion | Local candidate tests PASS; exact final-head CI and released-binary rendering remain pending |
+| HELM-647 fail-closed operator decisions | stories 3–6 | AK-004 | HELM-647, HELM-649 | listener/mutation/ceremony/input/redaction adversarial test matrix | Local production-seam suite PASS; remote exact-head CI pending |
+| HELM-647 automation/catalog decisions | stories 7–8 | AK-005 | HELM-647, HELM-649 | TTY/non-TTY/JSON/format/`HELM_NO_TUI`/`TERM=dumb` and bounded catalog-default matrix | Local candidate suite PASS with no unauthorized bind/write; final CI pending |
+| Source-owned contracts/reference packs; ADR 0003; Kernel AGENTS | story 9; Testing Decisions | AK-006 | HELM-649, HELM-652 contracts-catalog slice | boundary manifest, OpenAPI byte equality, SDK codegen/parity, protected-path and compatibility checks | `tools/verify-boundary.sh` PASS for 1,114 entries; catalog candidate `c7414dd` matches OpenAPI blob `c656b057...`; catalog merge/CI pending |
+| ADR 0003 scoped integrity rule; HELM-221 | story 10 | AK-007 | HELM-649, HELM-221 | receipt.v5/named-pack Go parity, independent Python verifier, negative mutations, release-binary offline verification | Direct full conformance chain PASS; public release-binary verification pending; no generic EvidencePack claim |
+| HELM-430 estate contract | stories 12, 14 | AK-008 | HELM-430, HELM-649 | fresh PR metadata/diff/check/ancestry ledger and replacement-pointer readback | PRs #846/#870/#878/#884 mapped to candidate salvage commits; remote close remains blocked until replacement PR is public |
+| HELM-430 preservation contract | stories 13, 50 | AK-009 | HELM-430 | local/remote branch and worktree porcelain, reachability, dirty/unique-work ledger | Audit ledger exists and task worktrees are preserved; final scoped cleanup/requery pending |
+| HELM-607 toolchain decision | story 15 | AK-010 | HELM-607, HELM-649 | exact Go 1.25.13 readback, 13-module tidy check, active-pin/digest inventory, build/tests | Local PASS at candidate; `go mod tidy` reports 13 tidy modules and no active 1.25.12 release pin |
+| HELM-607 image acceptance | stories 15–17 | AK-011 | HELM-607, HELM-649 | immutable-digest Trivy and Grype/VEX scans, then published digest and Artifact Hub comparison | Partial PASS: local image digest `sha256:68aad4af...` has Trivy zero High/Critical and Grype zero after package-bound VEX; published digest/Artifact Hub pending |
+| HELM-649 validation boundary; Kernel AGENTS | story 18; Testing Decisions | AK-012 | HELM-649 | focused-to-release validation matrix plus required CI on identical head | Broad local/containerized ladder PASS; native Make/Cargo rerun blocked by Xcode license exit 69 and remote exact-head CI pending |
+| HELM-650 release-rehearsal decision | stories 22–23 | AK-013 | HELM-650, HELM-649 | matching rehearsal plus isolated version/tag/source mismatch denial with no public mutation | Matching containerized release rehearsal PASS; three isolated mismatch receipts and hosted preflight remain pending |
+| HELM-650 configured-target decision | stories 19–21, 26 | AK-014 | HELM-650, HELM-649 | source-configured target inventory, clean build, unpack/identity/digest inspection | Local release asset and Docker/Compose/Helm/kind rehearsal PASS; authoritative workflow asset set pending |
+| HELM-650 artifact integrity | story 19 | AK-015 | HELM-650, HELM-649 | exact asset/checksum set recomputation plus one isolated mutation | Local release-smoke checksum assertions PASS; final public asset manifest and mutation receipt pending |
+| HELM-650 provenance decision | story 20 | AK-016 | HELM-650, HELM-649 | Cosign/SLSA subject, source SHA, workflow identity, run/attempt and issuer verification | BLOCKED on authorized tag workflow; no local file is promoted to public signature/provenance evidence |
+| HELM-607 and source-truth supply-chain boundary | story 21 | AK-017 | HELM-607, HELM-650, HELM-649 | SBOM/OpenVEX/provenance parsing, subject/package identity and scanner reconciliation | Local SBOM/VEX generation and package-identity assertions PASS; public subject/provenance binding pending |
+| HELM-221/230/531 publication boundary | story 48 | AK-018 | HELM-221, HELM-531, HELM-650 | exact identity/permission preflight, annotated tag, workflow monitoring, release/registry/version-drift readback | BLOCKED: active GitHub identity is `ironwrap`; `v0.8.5` release and tags do not exist; no publication write performed |
+| HELM-229/513/531 Homebrew boundary | stories 24, 28 | AK-019 | HELM-229, HELM-513, HELM-531 | generated formula URL/hash audit, clean-prefix install/test, binary identity comparison | BLOCKED by AK-018; current `homebrew-tap/main` correctly remains v0.8.4 at `53ae7e9` |
+| Repo-topology SDK ownership; HELM-229/531 | story 29 | AK-020 | HELM-229, HELM-531, HELM-650 | SDK codegen/tests, package manifests, registry/tag/proxy and docs-drift readback | Local TypeScript/Python/Rust/Java/Go SDK gates and 0.8.5 manifests PASS; public registry/Go/MCP coordinates pending AK-018 |
+| HELM-513 clean-machine contract | story 24 | AK-021 | HELM-513, HELM-650 | disposable macOS/Homebrew install and complete allowed/denied/revoked/readback journey | BLOCKED by unpublished formula/assets and Xcode license; no developer-checkout result is substituted |
+| HELM-650 clean-target contract | stories 25–26 | AK-022 | HELM-650, HELM-649 | disposable Linux/direct checksum/install/version/offline verification and structural inspection | Partial PASS through containerized clean-machine direct install; public-download and all final configured artifacts pending |
+| HELM-230/513 rollback contract | story 27 | AK-023 | HELM-230, HELM-513 | clean v0.8.5 to v0.8.4 to v0.8.5 transition with hashes/state/readback | BLOCKED by AK-018/AK-021; v0.8.4 remains the verified rollback baseline |
+| HELM-229/531 public drift contract | stories 30–31 | AK-024 | HELM-229, HELM-531 | owning docs/web truth gates, deploy receipts, route/manifest HTTP hashes | Intentionally pending post-publication; public docs/site continue to state verified v0.8.4 |
+| HELM-230 and source-truth GitOps boundary | story 32 | AK-025 | HELM-230, HELM-650 | published digest versus GitOps diff, native validation, PR/check/merge readback | Pending AK-018; no mutable or local-only digest is eligible for GitOps pinning |
+| HELM-230/531 deployment evidence boundary | stories 33–34 | AK-026 | HELM-230, HELM-531 | Flux/Helm/workload image/readiness/smoke/rollback readback in approved non-production context | BLOCKED by AK-025 and environment access/authority; no production inference |
+| HELM-637; HELM-639/640/643/644/645/646 prerequisite chain; HELM-638/641 | stories 35, 39–40 | AK-027 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-646, HELM-638, HELM-641 | public OpenAI run, joined events/usage/decision/effect and independent GitHub readback | BLOCKED before paid call/effect: source candidates exist, but least-privilege GitHub execution identity and merged-head prerequisites are not complete |
+| HELM-637; HELM-639/640/643/644/645/646 prerequisite chain; HELM-638/641 | stories 35, 39–40 | AK-028 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-646, HELM-638, HELM-641 | same public path with pinned Anthropic model and independent readbacks | BLOCKED before paid call/effect on the same prerequisite/identity boundary; no fixture substitution |
+| HELM-637; HELM-639/640/643/644/645 prerequisite chain; HELM-638/641 | story 36 | AK-029 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-638, HELM-641 | distinct Release Auditor fixture/hash through identical merged binaries and live readbacks | Fixture semantics/hash tests PASS; live second-organization run remains blocked by AK-027/028 |
+| HELM-637; HELM-639/640/643/644/645 prerequisite chain; HELM-638/641 | story 37 | AK-030 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-638, HELM-641 | durable interruption, process restart, attempt/idempotency/reconcile and PR-count comparison | Partial: seven-service no-effect stack restart changed every PID and returned healthy; external-effect exactly-once proof pending |
+| HELM-637; HELM-639/640/643/644/645/646 prerequisite chain; HELM-638/641 | stories 38–39 | AK-031 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-646, HELM-638, HELM-641 | runner referential-integrity/signature/hash/usage tests plus live joined evidence validation | Local 48/372 runner and 15/105 stack assertions PASS with zero-secret evidence scan; live joined bundle pending |
+| HELM-637; HELM-639/640/643/644/645 prerequisite chain; HELM-638/641/642 | Testing Decisions denied/unresolved/provider-failure/ambiguous paths; story 42 | AK-032 | HELM-639, HELM-640, HELM-643, HELM-644, HELM-645, HELM-638, HELM-641, HELM-642 | durable no-effect failures, provider-failure readback, and read-only reconciliation tests | Local preflight/negative no-effect matrix PASS; real-provider failure and ambiguous external-effect reconciliation pending |
+| HELM-637/642 claim boundary | stories 41–42 | AK-033 | HELM-642, HELM-638 | claim inventory against exact runtime evidence and forbidden-inference list | Local proof packet explicitly limits evidence to transport/process/trust/restart; final live runtime report pending |
+| Workspace public messaging boundary; HELM-647 | stories 31, 47–48 | AK-034 | HELM-647, HELM-649, HELM-531 | changelog/public-copy inventory, docs truth, claim review/approval, deployed hash readback | Source changelog is bounded and docs gates pass; separate public-claim approval and deployed readback pending |
+| HELM-649/650 tracker decision; issue-tracker implementation graph | stories 43–44 | AK-035 | HELM-650 parent and all v0.8.5 child implementation tickets | parent/order/blocker/AK/repository/`Owns`/overlap/acceptance/conductor/integration-validation/external-blocker audit | Live HELM issue/source snapshot exists; final evidence comments/status reconciliation pending, with current Linear MCP tools unavailable in this host turn |
+| HELM-642; verified-gauntlet contract | stories 45, 49 | AK-036 | HELM-642 plus release final-verifier ticket | independent answer-key/source delta reviews, exact hashes/status, then final integrated gauntlet | Answer-key critic READY and exact Kernel `2ff74c78640aa6bd5aaeeb94a14e93f6adb8f52c` delta reviewer GO; candidate-changing traceability edit and final integrated verifier pending |
+| Kernel AGENTS and workspace privilege policy | stories 46–47 | AK-037 | HELM-650, HELM-649 | three separate identity/target/action/readback/rollback/abort packet audits | Authority boundaries recorded; exact GitHub identity-switch and Xcode commands are prepared, while final tag/public-claim/production packets remain unused/pending exact identities |
+| HELM-430 cleanup decision | story 50 | AK-038 | HELM-430 | fresh pre/post branch/worktree/PR reachability and scoped normal deletion | Pending release merge/publication; no broad cleanup performed and user-owned dirt remains preserved |
+| HELM-649 binary completion; gauntlet contract | story 49 | AK-039 | HELM-649, HELM-642 | full gate ledger plus fresh final verifier across source/CI/merge/artifact/deploy/runtime/public states | 59-gate local release ledger is active; final GO is prohibited while mandatory remote/public/runtime gates remain open |
+| HELM-647 exclusions; HELM-650 communication decision | stories 31, 41–42, 48 | AK-040 | HELM-649, HELM-650, HELM-531 | exact v0.8.4..candidate log/diff-to-note mapping, docs truth and claim review | Dated v0.8.5 source-preparation changelog and docs truth PASS; final merged range, public receipt, and claim approval pending |
 
 ## Explicit out-of-scope traceability
 

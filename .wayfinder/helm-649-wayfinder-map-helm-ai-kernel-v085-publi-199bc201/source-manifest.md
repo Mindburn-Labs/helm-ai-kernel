@@ -15,6 +15,21 @@
 | `helm-ai-kernel` | `24a64557611fc25efde60254d9fe40e84dc261ca` | Kernel candidate baseline | loaded; tracked source tree clean before compilation, with only untracked `.wayfinder/` compiler artifacts afterward |
 | Public tag v0.8.4 | `01a7ab27731e2ddb9bb14db2caf48b2700c98b3d` | rollback/public baseline | loaded from current-state audit and Git readback |
 
+## Execution refresh — 2026-08-24
+
+| Source/evidence | Exact identity | Current result |
+| --- | --- | --- |
+| Kernel pre-traceability candidate | `2ff74c78640aa6bd5aaeeb94a14e93f6adb8f52c` | clean; reproducible clean-machine release smoke, Docker/Compose/Helm/kind, deterministic builds, Trivy zero High/Critical, and Grype zero after package-bound VEX; independent delta review GO |
+| Contract catalog candidate | `c7414dda943a4f0ff539fcdff8d9c5986920f3e6` | Kernel/catalog OpenAPI blob `c656b057b8690641cee1c3dcd7175b289ac8a48e` matches; remote PR/merge pending |
+| Control Plane usage candidate | `f05d13f1fb6b54b602935aa931ad95b8d96ddf26` | rebased over founder RunPermit mainline; `CGO_ENABLED=0` focused tests/vet pass; native CGO Xcode-blocked |
+| Certification trust candidate | `ea39af5154749061e066d0de2fec9f7572cfd7f9` | rebased over current main; full tests/vet pass |
+| Data Plane signer | `ecf30df4bdabbcf06cf2e9fe5c2f3c7c4468d103` | merged on canonical main |
+| Integration proof candidate | `aee83f9d1cf2dc16726ab54836ddc3c0fd06bf29` | reconciled with canonical main; runner 48/372 and stack 15/105 pass |
+| Bounded runtime evidence | stack `helm638-local-2ff74c7-c` | seven exact-source services healthy before/after restart, public JWKS 200, private Kernel mTLS denied without/allowed with client cert, ten mode-0600 evidence files, zero secret matches, no provider/GitHub calls, clean teardown |
+| Remote/public boundary | active GitHub identity `ironwrap`; stored `mindburnlabs` permission readback | private-repository admin/push permission exists under stored identity, but no switch/write occurred; v0.8.5 tags/release absent; Xcode license check exits 69 |
+
+The traceability compilation commit necessarily supersedes the pre-traceability Kernel HEAD. AK-001 must bind and revalidate the final clean candidate after this documentation change; the earlier executable evidence remains source-addressable and is not presented as remote/public proof.
+
 ## One-hop tracker source closure
 
 | Source | Updated | Role | Load result |

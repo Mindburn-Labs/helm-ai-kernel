@@ -390,10 +390,7 @@ func runServerWithOptions(opts serverOptions) error {
 		"HELM AI Kernel starting")
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
-	dataDir := opts.DataDir
-	if dataDir == "" {
-		dataDir = "data"
-	}
+	dataDir := normalizedDataDir(opts.DataDir)
 
 	var (
 		db                    *sql.DB

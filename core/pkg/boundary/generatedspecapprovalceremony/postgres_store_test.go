@@ -338,7 +338,6 @@ func TestPostgresLifecycleSingleIssueConsumeAndFence(t *testing.T) {
 		t.Fatalf("connect runtime role: %v", err)
 	}
 	store := NewPostgresStore(runtimeDB, fixture.verifier)
-	store.clock = func() time.Time { return fixture.now }
 	service, err := newService(
 		store,
 		bindingStub{binding: fixture.binding},

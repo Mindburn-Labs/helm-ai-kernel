@@ -7,6 +7,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -33,6 +35,7 @@ const (
 	generatedSpecApprovalSourceURLEnv             = "HELM_GENERATED_SPEC_APPROVAL_SOURCE_URL"
 	generatedSpecApprovalSourceTokenEnv           = "HELM_GENERATED_SPEC_APPROVAL_SOURCE_TOKEN"
 	generatedSpecApprovalJWKSURLEnv               = "HELM_GENERATED_SPEC_APPROVAL_JWKS_URL"
+	generatedSpecApprovalOutboundCAFileEnv        = "HELM_GENERATED_SPEC_APPROVAL_OUTBOUND_CA_BUNDLE_FILE"
 	generatedSpecApprovalIssuerEnv                = "HELM_GENERATED_SPEC_APPROVAL_ISSUER"
 	generatedSpecApprovalAudienceEnv              = "HELM_GENERATED_SPEC_APPROVAL_AUDIENCE"
 	generatedSpecApprovalResourceEnv              = "HELM_GENERATED_SPEC_APPROVAL_RESOURCE"
@@ -66,6 +69,7 @@ type generatedSpecApprovalRuntimeConfig struct {
 	SourceURL            string
 	SourceToken          string
 	JWKSURL              string
+	OutboundCAFile       string
 	Issuer               string
 	Audience             string
 	Resource             string
@@ -96,7 +100,8 @@ func generatedSpecApprovalRuntimeConfigFromEnv() (generatedSpecApprovalRuntimeCo
 	}
 	cfg := generatedSpecApprovalRuntimeConfig{
 		SourceURL: strings.TrimSpace(os.Getenv(generatedSpecApprovalSourceURLEnv)), SourceToken: strings.TrimSpace(os.Getenv(generatedSpecApprovalSourceTokenEnv)),
-		JWKSURL: strings.TrimSpace(os.Getenv(generatedSpecApprovalJWKSURLEnv)), Issuer: strings.TrimSpace(os.Getenv(generatedSpecApprovalIssuerEnv)),
+		JWKSURL: strings.TrimSpace(os.Getenv(generatedSpecApprovalJWKSURLEnv)), OutboundCAFile: strings.TrimSpace(os.Getenv(generatedSpecApprovalOutboundCAFileEnv)),
+		Issuer:   strings.TrimSpace(os.Getenv(generatedSpecApprovalIssuerEnv)),
 		Audience: strings.TrimSpace(os.Getenv(generatedSpecApprovalAudienceEnv)), Resource: strings.TrimSpace(os.Getenv(generatedSpecApprovalResourceEnv)),
 		ControlScope: strings.TrimSpace(os.Getenv(generatedSpecApprovalControlScopeEnv)), ConsumerScope: strings.TrimSpace(os.Getenv(generatedSpecApprovalConsumerScopeEnv)),
 		MaxTokenTTL: defaultGeneratedSpecApprovalMaxTokenTTL, MinHoldDuration: defaultGeneratedSpecApprovalMinHoldDuration,
@@ -164,7 +169,7 @@ func validateGeneratedSpecApprovalRuntimeConfig(cfg generatedSpecApprovalRuntime
 	return nil
 }
 
-func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMode string, signer helmcrypto.Signer, stops kernel.ScopedStopReader) (*generatedSpecApprovalRuntime, error) {
+func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMode string, signer helmcrypto.Signer, stops *kernel.ScopedStopStore) (*generatedSpecApprovalRuntime, error) {
 	cfg, enabled, err := generatedSpecApprovalRuntimeConfigFromEnv()
 	if err != nil || !enabled {
 		return nil, err
@@ -184,7 +189,11 @@ func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMo
 	if err := store.Init(ctx); err != nil {
 		return nil, fmt.Errorf("initialize generated spec approval ceremony store: %w", err)
 	}
-	source, err := newGeneratedSpecApprovalSourceClient(cfg.SourceURL, cfg.SourceToken, nil, false)
+	outboundClient, err := newGeneratedSpecApprovalOutboundClient(cfg.OutboundCAFile)
+	if err != nil {
+		return nil, err
+	}
+	source, err := newGeneratedSpecApprovalSourceClient(cfg.SourceURL, cfg.SourceToken, outboundClient, false)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +210,7 @@ func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMo
 	if err != nil {
 		return nil, fmt.Errorf("initialize generated spec approval service: %w", err)
 	}
-	validatorConfig := mcppkg.JWKSConfig{JWKSURL: cfg.JWKSURL, Issuer: cfg.Issuer, Audience: cfg.Audience, Resource: cfg.Resource}
+	validatorConfig := mcppkg.JWKSConfig{JWKSURL: cfg.JWKSURL, Issuer: cfg.Issuer, Audience: cfg.Audience, Resource: cfg.Resource, HTTPClient: outboundClient}
 	validatorConfig.Scopes = []string{cfg.ControlScope}
 	controlValidator := mcppkg.NewJWKSValidator(validatorConfig)
 	validatorConfig.Scopes = []string{cfg.ConsumerScope}
@@ -210,6 +219,23 @@ func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMo
 		service: service, controlValidator: controlValidator, consumerValidator: consumerValidator,
 		audience: cfg.Audience, maxTokenTTL: cfg.MaxTokenTTL,
 	}, nil
+}
+
+func newGeneratedSpecApprovalOutboundClient(caFile string) (*http.Client, error) {
+	if caFile == "" {
+		return nil, nil
+	}
+	caPEM, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("read generated spec approval outbound CA: %w", err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, errors.New("generated spec approval outbound CA is invalid")
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
+	return &http.Client{Transport: transport, Timeout: generatedSpecApprovalSourceTimeout}, nil
 }
 
 type generatedSpecApprovalSourceClient struct {

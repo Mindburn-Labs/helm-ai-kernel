@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
@@ -553,7 +554,7 @@ func newScopedProtocolTestMux(t *testing.T, exec ToolExecutor) *http.ServeMux {
 	return mux
 }
 
-func performJSONRPCRequest(t *testing.T, mux *http.ServeMux, method, path string, payload map[string]any, headers map[string]string) *httptest.ResponseRecorder {
+func performJSONRPCRequest(t *testing.T, handler http.Handler, method, path string, payload map[string]any, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	body, err := json.Marshal(payload)
@@ -566,7 +567,7 @@ func performJSONRPCRequest(t *testing.T, mux *http.ServeMux, method, path string
 	}
 
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 	return rec
 }
 
@@ -633,7 +634,7 @@ func TestGateway_InvalidSessionIdRejected(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "invalid or expired MCP session")
 }
 
-func TestGateway_GovernedToolCallsBindDistinctTransportSessions(t *testing.T) {
+func TestGateway_GovernedToolCallsBindStableAuthenticatedCredentialAcrossSessions(t *testing.T) {
 	transportCatalog := NewInMemoryCatalog()
 	require.NoError(t, transportCatalog.Register(context.Background(), ToolRef{
 		Name:   "session_bound_tool",
@@ -661,9 +662,15 @@ func TestGateway_GovernedToolCallsBindDistinctTransportSessions(t *testing.T) {
 	)
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
+	const credential = "shared-authenticated-credential"
+	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := auth.WithPrincipal(r.Context(), &auth.BasePrincipal{ID: "mcp-user", TenantID: "tenant-a"})
+		ctx = auth.WithAuthenticatedCredential(ctx, credential)
+		mux.ServeHTTP(w, r.WithContext(ctx))
+	})
 
 	initialize := func(id int) string {
-		rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		rec := performJSONRPCRequest(t, authenticated, http.MethodPost, "/mcp", map[string]any{
 			"jsonrpc": "2.0",
 			"id":      id,
 			"method":  "initialize",
@@ -681,7 +688,7 @@ func TestGateway_GovernedToolCallsBindDistinctTransportSessions(t *testing.T) {
 	require.NotEqual(t, sessions[0], sessions[1])
 
 	for i, sessionID := range sessions {
-		rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		rec := performJSONRPCRequest(t, authenticated, http.MethodPost, "/mcp", map[string]any{
 			"jsonrpc": "2.0",
 			"id":      i + 10,
 			"method":  "tools/call",
@@ -696,11 +703,12 @@ func TestGateway_GovernedToolCallsBindDistinctTransportSessions(t *testing.T) {
 
 	require.Len(t, captured, 2)
 	for i, decision := range captured {
-		require.Equal(t, sessions[i], decision.Principal)
+		require.Equal(t, "mcp-user", decision.Principal)
 		require.Equal(t, sessions[i], decision.Context[guardian.ContextSessionID])
-		require.Equal(t, canonicalize.HashBytes([]byte(sessions[i])), decision.Context[guardian.ContextCredentialHash])
+		require.Equal(t, canonicalize.HashBytes([]byte(credential)), decision.Context[guardian.ContextCredentialHash])
+		require.Equal(t, "E0", decision.Context[guardian.ContextEffectClass])
 	}
-	require.NotEqual(t,
+	require.Equal(t,
 		captured[0].Context[guardian.ContextCredentialHash],
 		captured[1].Context[guardian.ContextCredentialHash],
 	)

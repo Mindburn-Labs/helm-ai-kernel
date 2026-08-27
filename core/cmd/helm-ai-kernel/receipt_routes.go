@@ -75,6 +75,15 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
+		if err := bindAuthenticatedGuardianContext(r.Context(), req.Context, guardianTransportBinding{
+			EffectClass:   req.EffectLevel,
+			SessionID:     req.SessionID,
+			SourceChannel: contracts.SourceChannelAPIRequest,
+			TrustLevel:    contracts.InputTrustExternalUntrusted,
+		}); err != nil {
+			api.WriteInternalR(w, r, fmt.Errorf("bind evaluate transport evidence: %w", err))
+			return
+		}
 		// Authentication is the only authority for identity and scope. Remove
 		// every authority-bearing spelling recognized by this boundary or
 		// Guardian before publishing canonical authenticated values to policy.
@@ -91,7 +100,6 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		// The external session ID remains a signed field. Durable storage may
 		// derive a private tenant-qualified ordering key from this authenticated
 		// context, but that key is not part of the public API contract.
-		req.Context["session_id"] = req.SessionID
 		if req.Args != nil {
 			req.Context["args"] = req.Args
 		}

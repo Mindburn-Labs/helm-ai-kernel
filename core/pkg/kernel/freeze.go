@@ -23,14 +23,27 @@ import (
 //   - All transitions are receipted and timestamped
 //   - Clock is injected for deterministic testing
 type FreezeController struct {
-	frozen atomic.Bool
+	frozen         atomic.Bool
+	hasStateSource atomic.Bool
 
-	mu       sync.Mutex
-	frozenBy string
-	frozenAt time.Time
-	receipts []FreezeReceipt
-	clock    func() time.Time
+	mu          sync.Mutex
+	frozenBy    string
+	frozenAt    time.Time
+	receipts    []FreezeReceipt
+	clock       func() time.Time
+	stateSource FreezeStateSource
 }
+
+// FreezeStateSnapshot is the authoritative state read from a persisted
+// operator surface.
+type FreezeStateSnapshot struct {
+	Frozen   bool
+	FrozenBy string
+	FrozenAt time.Time
+}
+
+// FreezeStateSource loads the latest persisted freeze state.
+type FreezeStateSource func() (FreezeStateSnapshot, error)
 
 // FreezeReceipt is the audit record for a freeze/unfreeze transition.
 type FreezeReceipt struct {
@@ -53,16 +66,56 @@ func (fc *FreezeController) WithClock(clock func() time.Time) *FreezeController 
 	return fc
 }
 
+// WithStateSource connects the controller to an external operator-owned state
+// surface. Controllers without a source retain the lock-free in-memory path.
+func (fc *FreezeController) WithStateSource(source FreezeStateSource) *FreezeController {
+	fc.mu.Lock()
+	fc.stateSource = source
+	fc.mu.Unlock()
+	fc.hasStateSource.Store(source != nil)
+	return fc
+}
+
+// RefreshState synchronizes the controller with its external source. A read
+// failure forces the atomic state to frozen so an unavailable or malformed
+// kill-switch file cannot open the decision boundary.
+func (fc *FreezeController) RefreshState() error {
+	if !fc.hasStateSource.Load() {
+		return nil
+	}
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	state, err := fc.stateSource()
+	if err != nil {
+		fc.frozen.Store(true)
+		return err
+	}
+	fc.frozen.Store(state.Frozen)
+	if state.Frozen {
+		fc.frozenBy = state.FrozenBy
+		fc.frozenAt = state.FrozenAt
+	} else {
+		fc.frozenBy = ""
+		fc.frozenAt = time.Time{}
+	}
+	return nil
+}
+
 // IsFrozen returns whether the system is currently in a global freeze state.
 // This is the hot-path check used by the Guardian before any policy evaluation.
-// It is lock-free for maximum throughput.
+// In-memory controllers read the atomic state directly; sourced controllers
+// refresh the operator-owned state before reading it.
 func (fc *FreezeController) IsFrozen() bool {
+	if err := fc.RefreshState(); err != nil {
+		return true
+	}
 	return fc.frozen.Load()
 }
 
 // FreezeState returns the current freeze state details.
 // Returns (isFrozen, principal, timestamp).
 func (fc *FreezeController) FreezeState() (bool, string, time.Time) {
+	_ = fc.RefreshState()
 	fc.mu.Lock()
 	defer fc.mu.Unlock()
 	return fc.frozen.Load(), fc.frozenBy, fc.frozenAt

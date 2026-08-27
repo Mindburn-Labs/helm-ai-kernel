@@ -233,3 +233,47 @@ func TestProductionGuardianFactoryRejectsNilRequiredOverride(t *testing.T) {
 		t.Fatalf("nil required override = (%v, %v), want (nil, error)", g, err)
 	}
 }
+
+func TestProductionGuardianTracksPersistedFreezeState(t *testing.T) {
+	t.Setenv("HELM_DATA_DIR", t.TempDir())
+	clock := fixedProductionGuardianClock{now: time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)}
+	if err := saveFreezeState(&persistedFreezeState{Frozen: true, FrozenBy: "operator", FrozenAt: clock.now}); err != nil {
+		t.Fatal(err)
+	}
+	signer, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x71}, 32), "production-freeze-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := newProductionGuardian(signer, nil, nil, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := guardian.DecisionRequest{
+		Principal: "agent-a",
+		Action:    "READ",
+		Resource:  "status",
+		Context: map[string]any{
+			guardian.ContextSecurityTrusted: true,
+			guardian.ContextCredentialHash:  "credential-a",
+			guardian.ContextEffectClass:     "E0",
+		},
+	}
+	decision, err := g.EvaluateDecision(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.ReasonCode != string(contracts.ReasonSystemFrozen) {
+		t.Fatalf("frozen decision = %+v", decision)
+	}
+
+	if err := saveFreezeState(&persistedFreezeState{}); err != nil {
+		t.Fatal(err)
+	}
+	decision, err = g.EvaluateDecision(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.ReasonCode == string(contracts.ReasonSystemFrozen) {
+		t.Fatalf("Guardian did not observe persisted unfreeze: %+v", decision)
+	}
+}

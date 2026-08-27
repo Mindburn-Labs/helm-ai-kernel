@@ -34,7 +34,7 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			}
 
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Operator-ID, X-Helm-Tenant-ID, X-Helm-Principal-ID, X-Helm-Correlation-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Operator-ID, X-HELM-API-Key, X-Helm-Tenant-ID, X-Helm-Principal-ID, X-Helm-Correlation-ID")
 			w.Header().Set("Access-Control-Expose-Headers", "Retry-After, X-Request-ID, X-Helm-Correlation-ID")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
@@ -551,6 +552,12 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 
 func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string) ToolExecutionRequest {
 	req := ToolExecutionRequest{ToolName: toolName, Arguments: arguments, SessionID: sessionID}
+	if principal, err := auth.GetPrincipal(ctx); err == nil && principal != nil {
+		req.PrincipalID = strings.TrimSpace(principal.GetID())
+	}
+	if credentialHash, ok := auth.AuthenticatedCredentialHash(ctx); ok {
+		req.CredentialHash = credentialHash
+	}
 	if auth, ok := OAuthAuthorizationFromContext(ctx); ok {
 		req.OAuthScopes = append([]string(nil), auth.Scopes...)
 		req.OAuthResources = append([]string(nil), auth.Resources...)

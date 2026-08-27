@@ -135,7 +135,7 @@ func (e *MissingProductionDependencyError) Error() string {
 // remains available for focused tests, analysis commands, and development
 // compositions that exercise a partial pipeline.
 func NewProductionGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.Registry, opts ...GuardianOption) (*Guardian, error) {
-	if isNilProductionSigner(signer) {
+	if isNilProductionDependency(signer) {
 		return nil, &MissingProductionDependencyError{Dependency: "decision signer"}
 	}
 
@@ -153,10 +153,13 @@ func NewProductionGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_
 	var missing []GateID
 	for _, id := range profile.Required {
 		present := active[id]
-		if id == GateThreat {
+		switch id {
+		case GateThreat:
 			// Semantic escalation is a useful threat control, but it cannot
 			// replace the deterministic scanner required by this profile.
 			present = g.threatScanner != nil
+		case GateDelegation:
+			present = !isNilProductionDependency(g.delegationStore)
 		}
 		if !present {
 			missing = append(missing, id)
@@ -169,11 +172,11 @@ func NewProductionGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_
 	return g, nil
 }
 
-func isNilProductionSigner(signer crypto.Signer) bool {
-	if signer == nil {
+func isNilProductionDependency(dependency any) bool {
+	if dependency == nil {
 		return true
 	}
-	value := reflect.ValueOf(signer)
+	value := reflect.ValueOf(dependency)
 	switch value.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
 		return value.IsNil()

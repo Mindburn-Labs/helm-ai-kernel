@@ -27,10 +27,24 @@ func newProductionGuardian(
 	if clock == nil {
 		return nil, fmt.Errorf("production Guardian authority clock is required")
 	}
+	freezeController := kernel.NewFreezeController().WithClock(clock.Now).WithStateSource(func() (kernel.FreezeStateSnapshot, error) {
+		state, err := loadFreezeState()
+		if err != nil {
+			return kernel.FreezeStateSnapshot{}, err
+		}
+		return kernel.FreezeStateSnapshot{
+			Frozen:   state.Frozen,
+			FrozenBy: state.FrozenBy,
+			FrozenAt: state.FrozenAt,
+		}, nil
+	})
+	if err := freezeController.RefreshState(); err != nil {
+		return nil, fmt.Errorf("load production freeze state: %w", err)
+	}
 
 	options := []guardian.GuardianOption{
 		guardian.WithClock(clock),
-		guardian.WithFreezeController(kernel.NewFreezeController().WithClock(clock.Now)),
+		guardian.WithFreezeController(freezeController),
 		guardian.WithContextGuard(kernel.NewContextGuard().WithClock(clock.Now)),
 		guardian.WithIsolationChecker(identity.NewIsolationChecker().WithClock(clock.Now)),
 		guardian.WithEgressChecker(firewall.NewEgressChecker(nil).WithClock(clock.Now)),

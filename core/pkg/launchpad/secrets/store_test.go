@@ -138,3 +138,52 @@ func TestSecretBindingDoesNotStoreUnsetValueEnv(t *testing.T) {
 		t.Fatal("expected unset value env to fail")
 	}
 }
+
+func TestExplicitSecretBindingOverridesAmbientTargetCredential(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("OPENROUTER_API_KEY", "ambient-daemon-key")
+	t.Setenv("HELM_LAUNCH_OPENROUTER", "launch-scoped-key")
+
+	store := NewStore(root)
+	if _, err := store.Set("model_gateway", "openrouter", "HELM_LAUNCH_OPENROUTER"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
+		ModelGatewayEnv: []string{"OPENROUTER_API_KEY"},
+		RequiredSecrets: []string{"model_gateway"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveAppEnv: %v", err)
+	}
+	if got := resolved.RuntimeEnv["OPENROUTER_API_KEY"]; got != "launch-scoped-key" {
+		t.Fatalf("runtime credential = %q, want launch-scoped binding", got)
+	}
+	if len(resolved.Accesses) != 1 || resolved.Accesses[0].Source != "binding_store" || resolved.Accesses[0].SourceEnvName != "HELM_LAUNCH_OPENROUTER" {
+		t.Fatalf("access evidence = %#v", resolved.Accesses)
+	}
+}
+
+func TestMissingExplicitSecretBindingDoesNotFallBackToAmbientTargetCredential(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("OPENROUTER_API_KEY", "ambient-daemon-key")
+	t.Setenv("HELM_LAUNCH_OPENROUTER", "launch-scoped-key")
+
+	store := NewStore(root)
+	if _, err := store.Set("model_gateway", "openrouter", "HELM_LAUNCH_OPENROUTER"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	t.Setenv("HELM_LAUNCH_OPENROUTER", "")
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
+		ModelGatewayEnv: []string{"OPENROUTER_API_KEY"},
+		RequiredSecrets: []string{"model_gateway"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveAppEnv: %v", err)
+	}
+	if _, ok := resolved.RuntimeEnv["OPENROUTER_API_KEY"]; ok {
+		t.Fatalf("ambient credential bypassed unavailable binding: %#v", resolved.RuntimeEnv)
+	}
+	if len(resolved.Accesses) != 1 || resolved.Accesses[0].Verdict != "DENY" || resolved.Accesses[0].Source != "binding_store" {
+		t.Fatalf("access evidence = %#v", resolved.Accesses)
+	}
+}

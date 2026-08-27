@@ -22,6 +22,7 @@ func TestDelegationScope_ToolInScope(t *testing.T) {
 	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
 		ToolName:               "file_read",
 		SessionID:              "sess-delegate",
+		CredentialHash:         canonicalize.HashBytes([]byte("trusted-credential")),
 		DelegationSessionID:    "deleg-001",
 		DelegationAllowedTools: []string{"file_read", "file_write"},
 	})
@@ -75,6 +76,7 @@ func TestDelegationScope_ContextForwarded(t *testing.T) {
 	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
 		ToolName:               "file_read",
 		SessionID:              "sess-delegate",
+		CredentialHash:         canonicalize.HashBytes([]byte("trusted-credential")),
 		DelegationSessionID:    "deleg-001",
 		DelegationVerifier:     "verifier-xyz",
 		DelegationAllowedTools: []string{"file_read"},
@@ -89,7 +91,7 @@ func TestDelegationScope_ContextForwarded(t *testing.T) {
 	assert.Equal(t, "/tmp/test.txt", capturedCtx["path"])
 	assert.Equal(t, true, capturedCtx[guardian.ContextSecurityTrusted])
 	assert.Equal(t, "sess-delegate", capturedCtx[guardian.ContextSessionID])
-	assert.Equal(t, canonicalize.HashBytes([]byte("sess-delegate")), capturedCtx[guardian.ContextCredentialHash])
+	assert.Equal(t, canonicalize.HashBytes([]byte("trusted-credential")), capturedCtx[guardian.ContextCredentialHash])
 	assert.Equal(t, string(contracts.SourceChannelMCPClient), capturedCtx[guardian.ContextSourceChannel])
 	assert.Equal(t, string(contracts.InputTrustExternalUntrusted), capturedCtx[guardian.ContextTrustLevel])
 }

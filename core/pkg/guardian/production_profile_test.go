@@ -143,6 +143,21 @@ func TestNewProductionGuardianRejectsNilSigner(t *testing.T) {
 	}
 }
 
+func TestNewProductionGuardianRejectsTypedNilDelegationStore(t *testing.T) {
+	var typedNil *identity.FileStore
+	options := productionProfileOptions(GateDelegation)
+	options = append(options, WithDelegationStore(typedNil))
+
+	g, err := NewProductionGuardian(productionProfileTestSigner(t), nil, nil, options...)
+	if g != nil {
+		t.Fatal("production Guardian with typed-nil delegation store must not be returned")
+	}
+	var profileErr *IncompleteGateProfileError
+	if !errors.As(err, &profileErr) || !reflect.DeepEqual(profileErr.Missing, []GateID{GateDelegation}) {
+		t.Fatalf("error = %v, want missing delegation gate", err)
+	}
+}
+
 func TestNewGuardianStillAllowsPartialDevelopmentConstruction(t *testing.T) {
 	if got := NewGuardian(nil, nil, nil); got == nil {
 		t.Fatal("development constructor unexpectedly rejected a partial roster")

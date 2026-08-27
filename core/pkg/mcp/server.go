@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
@@ -22,6 +22,10 @@ type ToolExecutionRequest struct {
 	ToolName  string                 `json:"tool_name"`
 	Arguments map[string]interface{} `json:"arguments"`
 	SessionID string                 `json:"session_id"`
+	// PrincipalID and CredentialHash are installed by a trusted transport
+	// boundary. They are never decoded from MCP request JSON.
+	PrincipalID    string `json:"-"`
+	CredentialHash string `json:"-"`
 
 	// Delegation-aware fields (defense-in-depth, complements Guardian Gate 5).
 	// When DelegationSessionID is set, the firewall enforces tool scope
@@ -139,6 +143,12 @@ func (f *GovernanceFirewall) evaluateToolExecution(ctx context.Context, req Tool
 	if err != nil {
 		return nil, err
 	}
+	if f.catalog != nil {
+		_, _, err := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return f.evaluatePreparedToolExecution(ctx, req, decisionCtx)
 }
 
@@ -173,13 +183,8 @@ func (f *GovernanceFirewall) prepareToolExecution(req ToolExecutionRequest) (map
 	}
 	decisionCtx[guardian.ContextSecurityTrusted] = true
 	decisionCtx[guardian.ContextSessionID] = req.SessionID
-	if req.SessionID != "" {
-		// SessionID is minted or selected by the trusted MCP transport, not
-		// copied from tool arguments. Bind its digest as the stable transport
-		// credential so the production identity-isolation gate can detect one
-		// credential being reused under a different principal without exposing
-		// the bearer-like session identifier as credential evidence.
-		decisionCtx[guardian.ContextCredentialHash] = canonicalize.HashBytes([]byte(req.SessionID))
+	if credentialHash := strings.TrimSpace(req.CredentialHash); credentialHash != "" {
+		decisionCtx[guardian.ContextCredentialHash] = credentialHash
 	}
 	decisionCtx[guardian.ContextSourceChannel] = string(contracts.SourceChannelMCPClient)
 	decisionCtx[guardian.ContextTrustLevel] = string(contracts.InputTrustExternalUntrusted)
@@ -200,8 +205,12 @@ func (f *GovernanceFirewall) prepareToolExecution(req ToolExecutionRequest) (map
 }
 
 func (f *GovernanceFirewall) evaluatePreparedToolExecution(ctx context.Context, req ToolExecutionRequest, decisionCtx map[string]interface{}) (*contracts.DecisionRecord, error) {
+	principalID := strings.TrimSpace(req.PrincipalID)
+	if principalID == "" {
+		principalID = req.SessionID
+	}
 	decision, err := f.evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{
-		Principal: req.SessionID,
+		Principal: principalID,
 		Action:    "EXECUTE_TOOL",
 		Resource:  req.ToolName,
 		Context:   decisionCtx,
@@ -305,7 +314,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			return deniedResponse(preflightErr), nil
 		}
 
-		effectClass, riskTier, classificationErr := classifyTool(f.catalog, req.ToolName)
+		effectClass, riskTier, classificationErr := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx)
 		if classificationErr != nil {
 			emitFailure(string(contracts.ReasonSchemaViolation), "classification")
 			return deniedResponse(classificationErr), nil
@@ -522,22 +531,37 @@ func preflightReasonCode(f *GovernanceFirewall, req ToolExecutionRequest) contra
 	return contracts.ReasonPDPError
 }
 
-func classifyTool(catalog *ToolCatalog, name string) (string, contracts.RiskTier, error) {
+func classifyTool(catalog *ToolCatalog, name string) (ToolRef, error) {
 	if catalog == nil {
-		return "", "", fmt.Errorf("tool classification is unavailable")
+		return ToolRef{}, fmt.Errorf("tool classification is unavailable")
 	}
 	ref, ok := catalog.Lookup(name)
 	if !ok {
-		return "", "", fmt.Errorf("tool %q is not classified in the PEP catalog", name)
+		return ToolRef{}, fmt.Errorf("tool %q is not classified in the PEP catalog", name)
 	}
 	if !validEffectClass(ref.EffectClass) {
-		return "", "", fmt.Errorf("tool %q has invalid PEP effect classification", name)
+		return ToolRef{}, fmt.Errorf("tool %q has invalid PEP effect classification", name)
 	}
 	if !validRiskTier(ref.RiskTier) {
-		return "", "", fmt.Errorf("tool %q has invalid PEP risk tier", name)
+		return ToolRef{}, fmt.Errorf("tool %q has invalid PEP risk tier", name)
 	}
 	if expected := riskTierForEffectClass(ref.EffectClass); ref.RiskTier != expected {
-		return "", "", fmt.Errorf("tool %q has mismatched PEP effect class and risk tier", name)
+		return ToolRef{}, fmt.Errorf("tool %q has mismatched PEP effect class and risk tier", name)
+	}
+	return ref, nil
+}
+
+func bindCatalogSecurityContext(catalog *ToolCatalog, name string, decisionCtx map[string]interface{}) (string, contracts.RiskTier, error) {
+	ref, err := classifyTool(catalog, name)
+	if err != nil {
+		return "", "", err
+	}
+	decisionCtx[guardian.ContextEffectClass] = ref.EffectClass
+	if ref.EgressDestinationRequired {
+		decisionCtx[guardian.ContextEgressDestinationRequired] = true
+	}
+	if destination := strings.TrimSpace(ref.EgressDestination); destination != "" {
+		decisionCtx[guardian.ContextDestination] = destination
 	}
 	return ref.EffectClass, ref.RiskTier, nil
 }
@@ -593,13 +617,7 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 	overallStatus := string(contracts.VerdictAllow)
 
 	for _, step := range plan.Steps {
-		// Evaluate each step
-		decision, err := f.evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{
-			Principal: step.SessionID,
-			Action:    "EXECUTE_TOOL",
-			Resource:  step.ToolName,
-			Context:   step.Arguments,
-		})
+		decision, err := f.evaluateToolExecution(ctx, step)
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate step %s: %w", step.ToolName, err)
 		}
@@ -613,7 +631,7 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		// Aggregate Status
 		if decision.Verdict == string(contracts.VerdictDeny) {
 			overallStatus = string(contracts.VerdictDeny)
-		} else if decision.Verdict == string(contracts.VerdictEscalate) && overallStatus != string(contracts.VerdictDeny) {
+		} else if (decision.Verdict == string(contracts.VerdictEscalate) || decision.Verdict == "PENDING") && overallStatus != string(contracts.VerdictDeny) {
 			overallStatus = string(contracts.VerdictEscalate)
 		}
 

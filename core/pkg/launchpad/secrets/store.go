@@ -119,6 +119,16 @@ func (s Store) ResolveAppEnv(app registry.AppSpec) (Resolution, error) {
 	}
 	envNames := modelGatewayEnvNames(app, catalog)
 	for _, envName := range envNames {
+		if binding, ok := explicitBindingForEnv(app, catalog, bindings, envName); ok {
+			value := os.Getenv(binding.ValueEnv)
+			verdict := "DENY"
+			if value != "" {
+				resolved.RuntimeEnv[envName] = value
+				verdict = "ALLOW"
+			}
+			resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, verdict))
+			continue
+		}
 		if value, ok := os.LookupEnv(envName); ok && value != "" {
 			provider := ""
 			if spec, found := catalog.ProviderForEnv(envName); found {
@@ -130,42 +140,6 @@ func (s Store) ResolveAppEnv(app registry.AppSpec) (Resolution, error) {
 			})
 			continue
 		}
-		for _, providerID := range catalog.ProviderIDsForEnv(envName) {
-			if !providerCanProjectCredential(catalog, providerID, envName) {
-				continue
-			}
-			if binding, ok := bindings[bindingKey("model_gateway", providerID)]; ok {
-				value := os.Getenv(binding.ValueEnv)
-				if value == "" {
-					resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "DENY"))
-					continue
-				}
-				resolved.RuntimeEnv[envName] = value
-				resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "ALLOW"))
-				goto nextEnv
-			}
-		}
-		for _, logical := range app.RequiredSecrets {
-			binding, ok := bindings[logical]
-			if !ok || binding.ValueEnv == "" {
-				continue
-			}
-			if logical == "model_gateway" && binding.Provider != "" && !providerMatchesEnv(catalog, binding.Provider, envName) {
-				continue
-			}
-			if logical == "model_gateway" && binding.Provider != "" && !providerCanProjectCredential(catalog, binding.Provider, envName) {
-				continue
-			}
-			value := os.Getenv(binding.ValueEnv)
-			if value == "" {
-				resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "DENY"))
-				continue
-			}
-			resolved.RuntimeEnv[envName] = value
-			resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "ALLOW"))
-			break
-		}
-	nextEnv:
 	}
 	sort.SliceStable(resolved.Accesses, func(i, j int) bool {
 		left, right := resolved.Accesses[i], resolved.Accesses[j]
@@ -181,6 +155,31 @@ func (s Store) ResolveAppEnv(app registry.AppSpec) (Resolution, error) {
 		return left.Verdict < right.Verdict
 	})
 	return resolved, nil
+}
+
+func explicitBindingForEnv(app registry.AppSpec, catalog modelproviders.Catalog, bindings map[string]Binding, envName string) (Binding, bool) {
+	for _, providerID := range catalog.ProviderIDsForEnv(envName) {
+		if !providerCanProjectCredential(catalog, providerID, envName) {
+			continue
+		}
+		if binding, ok := bindings[bindingKey("model_gateway", providerID)]; ok && binding.ValueEnv != "" {
+			return binding, true
+		}
+	}
+	for _, logical := range app.RequiredSecrets {
+		binding, ok := bindings[logical]
+		if !ok || binding.ValueEnv == "" {
+			continue
+		}
+		if logical == "model_gateway" && binding.Provider != "" && !providerMatchesEnv(catalog, binding.Provider, envName) {
+			continue
+		}
+		if logical == "model_gateway" && binding.Provider != "" && !providerCanProjectCredential(catalog, binding.Provider, envName) {
+			continue
+		}
+		return binding, true
+	}
+	return Binding{}, false
 }
 
 func secretAccess(binding Binding, runtimeEnvName, verdict string) session.RuntimeSecretAccess {

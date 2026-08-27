@@ -216,7 +216,7 @@ func (m *mockPolicyEvaluator) EvaluateDecision(_ context.Context, _ guardian.Dec
 }
 
 func TestStress_GovernanceFirewall100Allows(t *testing.T) {
-	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, nil)
 	for i := 0; i < 100; i++ {
 		err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{ToolName: fmt.Sprintf("tool-%d", i), SessionID: "s"})
 		if err != nil {
@@ -226,7 +226,7 @@ func TestStress_GovernanceFirewall100Allows(t *testing.T) {
 }
 
 func TestStress_GovernanceFirewall100Denies(t *testing.T) {
-	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictDeny), reason: "policy"}, NewToolCatalog())
+	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictDeny), reason: "policy"}, nil)
 	for i := 0; i < 100; i++ {
 		err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{ToolName: "t", SessionID: "s"})
 		if err == nil {
@@ -236,7 +236,7 @@ func TestStress_GovernanceFirewall100Denies(t *testing.T) {
 }
 
 func TestStress_GovernanceFirewallEscalateReturnsError(t *testing.T) {
-	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictEscalate), reason: "needs approval"}, NewToolCatalog())
+	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictEscalate), reason: "needs approval"}, nil)
 	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{ToolName: "t", SessionID: "s"})
 	if err == nil {
 		t.Fatal("expected escalate error")
@@ -244,7 +244,7 @@ func TestStress_GovernanceFirewallEscalateReturnsError(t *testing.T) {
 }
 
 func TestStress_GovernanceFirewallDelegationScopeViolation(t *testing.T) {
-	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, nil)
 	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
 		ToolName:               "forbidden-tool",
 		SessionID:              "s",
@@ -256,7 +256,7 @@ func TestStress_GovernanceFirewallDelegationScopeViolation(t *testing.T) {
 }
 
 func TestStress_GovernanceFirewallDelegationScopeAllowed(t *testing.T) {
-	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, nil)
 	err := fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
 		ToolName:               "tool-a",
 		SessionID:              "s",
@@ -268,7 +268,7 @@ func TestStress_GovernanceFirewallDelegationScopeAllowed(t *testing.T) {
 }
 
 func TestStress_GovernanceFirewallInterceptPlanAllAllow(t *testing.T) {
-	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	fw := NewGovernanceFirewall(&mockPolicyEvaluator{verdict: string(contracts.VerdictAllow)}, nil)
 	steps := make([]ToolExecutionRequest, 10)
 	for i := range steps {
 		steps[i] = ToolExecutionRequest{ToolName: fmt.Sprintf("t-%d", i), SessionID: "s"}
@@ -281,7 +281,7 @@ func TestStress_GovernanceFirewallInterceptPlanAllAllow(t *testing.T) {
 
 func TestStress_GovernanceFirewallInterceptPlanOneDeny(t *testing.T) {
 	eval := &mockPolicyEvaluator{verdict: string(contracts.VerdictDeny)}
-	fw := NewGovernanceFirewall(eval, NewToolCatalog())
+	fw := NewGovernanceFirewall(eval, nil)
 	steps := []ToolExecutionRequest{{ToolName: "t", SessionID: "s"}}
 	pd, _ := fw.InterceptPlan(context.Background(), ToolExecutionPlan{PlanID: "p1", Steps: steps})
 	if pd.Status != string(contracts.VerdictDeny) {

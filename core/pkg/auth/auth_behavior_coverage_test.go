@@ -37,6 +37,23 @@ func TestWithPrincipalAndGetPrincipal(t *testing.T) {
 	assert.Equal(t, "p-1", p.GetID())
 }
 
+func TestAuthenticatedCredentialHashIsStableAndOneWay(t *testing.T) {
+	ctx := WithAuthenticatedCredential(context.Background(), "shared-secret")
+	hash, ok := AuthenticatedCredentialHash(ctx)
+	require.True(t, ok)
+	require.Len(t, hash, 64)
+	assert.NotEqual(t, "shared-secret", hash)
+
+	same, ok := AuthenticatedCredentialHash(WithAuthenticatedCredential(context.Background(), "shared-secret"))
+	require.True(t, ok)
+	assert.Equal(t, hash, same)
+	different, ok := AuthenticatedCredentialHash(WithAuthenticatedCredential(context.Background(), "different-secret"))
+	require.True(t, ok)
+	assert.NotEqual(t, hash, different)
+	_, ok = AuthenticatedCredentialHash(context.Background())
+	assert.False(t, ok)
+}
+
 func TestGetPrincipalFromEmptyContext(t *testing.T) {
 	_, err := GetPrincipal(context.Background())
 	assert.Error(t, err)
@@ -131,6 +148,7 @@ func TestCORSMiddlewareDefaultDeniesOrigin(t *testing.T) {
 	req.Header.Set("Origin", "https://any.com")
 	handler.ServeHTTP(rr, req)
 	assert.Empty(t, rr.Header().Get("Access-Control-Allow-Origin"))
+	assert.Contains(t, rr.Header().Get("Access-Control-Allow-Headers"), "X-HELM-API-Key")
 	assert.Contains(t, rr.Header().Get("Access-Control-Allow-Headers"), "X-Helm-Tenant-ID")
 	assert.Contains(t, rr.Header().Get("Access-Control-Allow-Headers"), "X-Helm-Correlation-ID")
 	assert.Contains(t, rr.Header().Get("Access-Control-Expose-Headers"), "X-Helm-Correlation-ID")

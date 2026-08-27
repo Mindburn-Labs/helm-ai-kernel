@@ -34,6 +34,7 @@ const (
 	tenantHeader           = "X-Helm-Tenant-ID"
 	principalHeader        = "X-Helm-Principal-ID"
 	workspaceHeader        = "X-Helm-Workspace-ID"
+	runtimeAPIKeyHeader    = "X-HELM-API-Key"
 	runtimeTenantIDEnv     = "HELM_RUNTIME_TENANT_ID"
 	runtimePrincipalIDEnv  = "HELM_RUNTIME_PRINCIPAL_ID"
 	runtimeWorkspaceIDEnv  = "HELM_RUNTIME_WORKSPACE_ID"
@@ -51,6 +52,8 @@ func protectRuntimeHandler(auth RouteAuth, handler http.HandlerFunc) http.Handle
 		return requireRuntimeAdmin(handler)
 	case RouteAuthTenant:
 		return requireRuntimeTenant(handler)
+	case RouteAuthConfiguredTenant:
+		return requireRuntimeConfiguredTenant(handler)
 	case RouteAuthService:
 		return requireRuntimeService(handler)
 	default:
@@ -58,10 +61,19 @@ func protectRuntimeHandler(auth RouteAuth, handler http.HandlerFunc) http.Handle
 	}
 }
 
-func requireRuntimeAdmin(handler http.HandlerFunc) http.HandlerFunc {
+// requireRuntimeConfiguredTenant authenticates the standalone control key and
+// binds the one server-configured tenant/principal pair. Optional identity
+// headers are assertions only: when present they must match the configured
+// values exactly, so callers cannot select a different Guardian identity.
+func requireRuntimeConfiguredTenant(handler http.HandlerFunc) http.HandlerFunc {
 	adminKey := os.Getenv(helmauth.AdminAPIKeyEnv)
 	return func(w http.ResponseWriter, r *http.Request) {
-		principal, detail, ok := helmauth.AdminPrincipalFromRequest(r, adminKey)
+		token, detail, ok := runtimeCredentialToken(r)
+		if !ok {
+			httperr.WriteUnauthorized(w, detail)
+			return
+		}
+		adminPrincipal, detail, ok := helmauth.AdminPrincipalFromToken(token, adminKey)
 		if !ok {
 			httperr.WriteUnauthorized(w, detail)
 			return
@@ -70,14 +82,60 @@ func requireRuntimeAdmin(handler http.HandlerFunc) http.HandlerFunc {
 			httperr.WriteUnauthorized(w, "Local quickstart session expired")
 			return
 		}
-		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))
+		tenantID := configuredRuntimeTenantID()
+		principalID := configuredRuntimePrincipalID(adminPrincipal)
+		if requested := selectedTenantID(r); requested != "" && requested != tenantID {
+			api.WriteForbidden(w, "Configured tenant route tenant mismatch")
+			return
+		}
+		if requested := strings.TrimSpace(r.Header.Get(principalHeader)); requested != "" && requested != principalID {
+			api.WriteForbidden(w, "Configured tenant route principal mismatch")
+			return
+		}
+
+		principal := &helmauth.BasePrincipal{
+			ID:       principalID,
+			TenantID: tenantID,
+			Roles:    append([]string(nil), adminPrincipal.GetRoles()...),
+		}
+		ctx := helmauth.WithPrincipal(r.Context(), principal)
+		ctx = helmauth.WithAuthenticatedCredential(ctx, token)
+		handler(w, r.WithContext(ctx))
+	}
+}
+
+func requireRuntimeAdmin(handler http.HandlerFunc) http.HandlerFunc {
+	adminKey := os.Getenv(helmauth.AdminAPIKeyEnv)
+	return func(w http.ResponseWriter, r *http.Request) {
+		token, detail, ok := helmauth.BearerToken(r)
+		if !ok {
+			httperr.WriteUnauthorized(w, detail)
+			return
+		}
+		principal, detail, ok := helmauth.AdminPrincipalFromToken(token, adminKey)
+		if !ok {
+			httperr.WriteUnauthorized(w, detail)
+			return
+		}
+		if expired, configured := quickstartSessionExpired(time.Now()); configured && expired {
+			httperr.WriteUnauthorized(w, "Local quickstart session expired")
+			return
+		}
+		ctx := helmauth.WithPrincipal(r.Context(), principal)
+		ctx = helmauth.WithAuthenticatedCredential(ctx, token)
+		handler(w, r.WithContext(ctx))
 	}
 }
 
 func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 	adminKey := os.Getenv(helmauth.AdminAPIKeyEnv)
 	return func(w http.ResponseWriter, r *http.Request) {
-		adminPrincipal, detail, ok := helmauth.AdminPrincipalFromRequest(r, adminKey)
+		token, detail, ok := helmauth.BearerToken(r)
+		if !ok {
+			httperr.WriteUnauthorized(w, detail)
+			return
+		}
+		adminPrincipal, detail, ok := helmauth.AdminPrincipalFromToken(token, adminKey)
 		if !ok {
 			httperr.WriteUnauthorized(w, detail)
 			return
@@ -129,8 +187,17 @@ func requireRuntimeTenant(handler http.HandlerFunc) http.HandlerFunc {
 			TenantID: requestedTenantID,
 			Roles:    append([]string(nil), adminPrincipal.GetRoles()...),
 		}
-		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))
+		ctx := helmauth.WithPrincipal(r.Context(), principal)
+		ctx = helmauth.WithAuthenticatedCredential(ctx, token)
+		handler(w, r.WithContext(ctx))
 	}
+}
+
+func runtimeCredentialToken(r *http.Request) (string, string, bool) {
+	if token := r.Header.Get(runtimeAPIKeyHeader); strings.TrimSpace(token) != "" {
+		return token, "", true
+	}
+	return helmauth.BearerToken(r)
 }
 
 func configuredRuntimeTenantID() string {
@@ -185,7 +252,9 @@ func requireRuntimeService(handler http.HandlerFunc) http.HandlerFunc {
 			TenantID: helmauth.SystemTenantID,
 			Roles:    []string{"service"},
 		}
-		handler(w, r.WithContext(helmauth.WithPrincipal(r.Context(), principal)))
+		ctx := helmauth.WithPrincipal(r.Context(), principal)
+		ctx = helmauth.WithAuthenticatedCredential(ctx, token)
+		handler(w, r.WithContext(ctx))
 	}
 }
 

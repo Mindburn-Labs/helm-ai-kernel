@@ -1,3 +1,5 @@
+// quantum_posture: these tests cover SHA-256 plan identities and classical
+// cosign evidence metadata only; they do not claim post-quantum assurance.
 package plan
 
 import (

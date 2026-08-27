@@ -1,3 +1,6 @@
+// quantum_posture: launch plans use SHA-256 identities and require classical
+// cosign evidence metadata; this compiler does not verify signatures or claim
+// post-quantum assurance.
 package plan
 
 import (

@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,7 +131,26 @@ func TestProductionGuardianFactoryRunsEveryRequiredDenyGate(t *testing.T) {
 }
 
 func TestProductionEntrypointsCannotBypassCheckedGuardianFactory(t *testing.T) {
-	for _, filename := range []string{"main.go", "proxy_cmd.go", "mcp_runtime.go"} {
+	productionEntrypoints := map[string]bool{
+		"main.go":        false,
+		"proxy_cmd.go":   false,
+		"mcp_runtime.go": false,
+	}
+	partialConstructorAllowlist := map[string]string{
+		"plan_cmd.go":    "offline analysis command does not dispatch external effects",
+		"demo_routes.go": "receipt-only demo evaluates sample policy and cannot dispatch external effects",
+	}
+	allowlistHits := make(map[string]int, len(partialConstructorAllowlist))
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read command package: %v", err)
+	}
+	for _, entry := range entries {
+		filename := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(filename, ".go") || strings.HasSuffix(filename, "_test.go") {
+			continue
+		}
 		file, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
 		if err != nil {
 			t.Fatalf("parse %s: %v", filename, err)
@@ -145,20 +168,67 @@ func TestProductionEntrypointsCannotBypassCheckedGuardianFactory(t *testing.T) {
 				}
 			case *ast.SelectorExpr:
 				if fun.Sel.Name == "NewGuardian" {
-					t.Errorf("%s directly calls partial Guardian constructor", filename)
+					if _, allowed := partialConstructorAllowlist[filename]; !allowed {
+						t.Errorf("%s directly calls partial Guardian constructor", filename)
+					} else {
+						allowlistHits[filename]++
+					}
 				}
 			}
 			return true
 		})
-		if checkedCalls == 0 {
+		if _, required := productionEntrypoints[filename]; required && checkedCalls == 0 {
 			t.Errorf("%s does not call checked production Guardian factory", filename)
+		} else if required {
+			productionEntrypoints[filename] = true
 		}
 	}
+	for filename, seen := range productionEntrypoints {
+		if !seen {
+			t.Errorf("production entrypoint %s was not scanned or did not call checked factory", filename)
+		}
+	}
+	for filename, rationale := range partialConstructorAllowlist {
+		if allowlistHits[filename] != 1 {
+			t.Errorf("partial constructor allowlist %s (%s) has %d calls, want exactly 1", filename, rationale, allowlistHits[filename])
+		}
+	}
+
+	demoSource, err := os.ReadFile(filepath.Clean("demo_routes.go"))
+	if err != nil {
+		t.Fatalf("read demo_routes.go: %v", err)
+	}
+	if !bytes.Contains(demoSource, []byte(`"side_effect_dispatched": false`)) {
+		t.Error("demo route must retain an explicit no-external-effect receipt marker")
+	}
+	demoFile, err := parser.ParseFile(token.NewFileSet(), "demo_routes.go", demoSource, 0)
+	if err != nil {
+		t.Fatalf("parse demo_routes.go: %v", err)
+	}
+	ast.Inspect(demoFile, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		switch selector.Sel.Name {
+		case "Execute", "Dispatch", "ExecuteEffect", "DispatchEffect", "RunEffect":
+			t.Errorf("demo_routes.go calls external-effect-like method %s", selector.Sel.Name)
+		}
+		return true
+	})
 }
 
 func TestProductionGuardianFactoryRejectsNilRequiredOverride(t *testing.T) {
 	clock := fixedProductionGuardianClock{now: time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)}
-	g, err := newProductionGuardian(nil, nil, nil, clock, guardian.WithDelegationStore(identity.DelegationStore(nil)))
+	signer, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x65}, 32), "production-profile-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := newProductionGuardian(signer, nil, nil, clock, guardian.WithDelegationStore(identity.DelegationStore(nil)))
 	if err == nil || g != nil {
 		t.Fatalf("nil required override = (%v, %v), want (nil, error)", g, err)
 	}

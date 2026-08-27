@@ -1,15 +1,26 @@
 package guardian
 
 import (
+	"bytes"
 	"errors"
 	"reflect"
 	"testing"
 
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 )
+
+func productionProfileTestSigner(t *testing.T) helmcrypto.Signer {
+	t.Helper()
+	signer, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x65}, 32), "production-profile-test")
+	if err != nil {
+		t.Fatalf("construct production profile test signer: %v", err)
+	}
+	return signer
+}
 
 func productionProfileOptions(omit GateID) []GuardianOption {
 	options := []struct {
@@ -52,10 +63,11 @@ func TestProductionGateProfileClassifiesEveryDeclaredGate(t *testing.T) {
 }
 
 func TestNewProductionGuardianRejectsEachMissingRequiredGate(t *testing.T) {
+	signer := productionProfileTestSigner(t)
 	for _, missing := range ProductionGateProfile().Required {
 		missing := missing
 		t.Run(string(missing), func(t *testing.T) {
-			got, err := NewProductionGuardian(nil, nil, nil, productionProfileOptions(missing)...)
+			got, err := NewProductionGuardian(signer, nil, nil, productionProfileOptions(missing)...)
 			if got != nil {
 				t.Fatal("incomplete production Guardian must not be returned")
 			}
@@ -74,7 +86,7 @@ func TestNewProductionGuardianRequiresConcreteThreatScanner(t *testing.T) {
 	options := productionProfileOptions(GateThreat)
 	options = append(options, WithSemanticThreatEscalation(5000))
 
-	got, err := NewProductionGuardian(nil, nil, nil, options...)
+	got, err := NewProductionGuardian(productionProfileTestSigner(t), nil, nil, options...)
 	if got != nil {
 		t.Fatal("semantic escalation without a scanner must not satisfy the production threat gate")
 	}
@@ -85,7 +97,7 @@ func TestNewProductionGuardianRequiresConcreteThreatScanner(t *testing.T) {
 }
 
 func TestNewProductionGuardianAcceptsCompleteRequiredRoster(t *testing.T) {
-	g, err := NewProductionGuardian(nil, nil, nil, productionProfileOptions("")...)
+	g, err := NewProductionGuardian(productionProfileTestSigner(t), nil, nil, productionProfileOptions("")...)
 	if err != nil {
 		t.Fatalf("construct complete production Guardian: %v", err)
 	}
@@ -101,6 +113,33 @@ func TestNewProductionGuardianAcceptsCompleteRequiredRoster(t *testing.T) {
 		if !active[required] {
 			t.Errorf("required gate %q is not active in accepted production roster", required)
 		}
+	}
+}
+
+func TestNewProductionGuardianRejectsNilSigner(t *testing.T) {
+	var typedNil *helmcrypto.Ed25519Signer
+
+	tests := []struct {
+		name   string
+		signer helmcrypto.Signer
+	}{
+		{name: "nil interface"},
+		{name: "typed nil", signer: typedNil},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			g, err := NewProductionGuardian(test.signer, nil, nil, productionProfileOptions("")...)
+			if g != nil {
+				t.Fatal("production Guardian with nil signer must not be returned")
+			}
+			var dependencyErr *MissingProductionDependencyError
+			if !errors.As(err, &dependencyErr) {
+				t.Fatalf("error = %v, want MissingProductionDependencyError", err)
+			}
+			if dependencyErr.Dependency != "decision signer" {
+				t.Fatalf("dependency = %q, want decision signer", dependencyErr.Dependency)
+			}
+		})
 	}
 }
 

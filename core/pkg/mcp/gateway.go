@@ -197,7 +197,7 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion)
+		resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
 		if !respond {
 			w.WriteHeader(status)
 			return
@@ -229,12 +229,15 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid or expired MCP session", http.StatusUnauthorized)
 			return
 		}
+	} else if g.governed && req.Method == "tools/call" {
+		http.Error(w, "valid MCP session is required for governed tools/call", http.StatusUnauthorized)
+		return
 	} else if !isNotification {
 		// Session ID is recommended for non-notification requests after initialize.
 		// For backward compatibility, we allow requests without session ID but log a warning.
 	}
 
-	resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion)
+	resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
 	if !respond {
 		w.WriteHeader(status)
 		return
@@ -453,7 +456,7 @@ func (g *Gateway) handleProtectedResourceMetadata(w http.ResponseWriter, _ *http
 	})
 }
 
-func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion string) (map[string]any, bool, int) {
+func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion, sessionID string) (map[string]any, bool, int) {
 	response := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -501,6 +504,14 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		response["result"] = map[string]any{"tools": payload}
 		return response, true, http.StatusOK
 	case "tools/call":
+		if sessionID == "" {
+			if g.governed {
+				return writeError(-32002, "valid MCP session is required for governed tools/call")
+			}
+			// Preserve the pre-session identity only for explicitly raw/local
+			// executors. Governed HTTP calls must carry a transport-minted ID.
+			sessionID = "mcp-http-jsonrpc"
+		}
 		var req struct {
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments"`
@@ -508,7 +519,7 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if err := json.Unmarshal(params, &req); err != nil {
 			return writeError(-32602, "invalid tools/call params")
 		}
-		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, "mcp-http-jsonrpc")
+		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, sessionID)
 		tool, ok := findToolRef(g.catalog, req.Name)
 		if !ok {
 			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonNoPolicy))

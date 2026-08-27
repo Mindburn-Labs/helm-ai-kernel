@@ -315,7 +315,7 @@ func TestCoverageGatewayJSONRPCBranches(t *testing.T) {
 		"unknown":      {method: "unknown", want: http.StatusOK, errSub: "not found"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			resp, respond, status := gateway.handleJSONRPCRequest(context.Background(), 1, tc.method, tc.params, LatestProtocolVersion)
+			resp, respond, status := gateway.handleJSONRPCRequest(context.Background(), 1, tc.method, tc.params, LatestProtocolVersion, "")
 			if status != tc.want {
 				t.Fatalf("status = %d, want %d resp=%+v", status, tc.want, resp)
 			}
@@ -337,7 +337,7 @@ func TestCoverageGatewayJSONRPCBranches(t *testing.T) {
 	execGateway := NewGateway(catalog, GatewayConfig{}, WithExecutor(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
 		return ToolExecutionResponse{}, errors.New("exec failed")
 	}))
-	resp, respond, status := execGateway.handleJSONRPCRequest(context.Background(), 1, "tools/call", json.RawMessage(`{"name":"echo","arguments":{"text":"hi"}}`), LatestProtocolVersion)
+	resp, respond, status := execGateway.handleJSONRPCRequest(context.Background(), 1, "tools/call", json.RawMessage(`{"name":"echo","arguments":{"text":"hi"}}`), LatestProtocolVersion, "direct-test-session")
 	if !respond || status != http.StatusOK || !strings.Contains(marshalMCPTestValue(t, resp), "exec failed") {
 		t.Fatalf("exec error JSON-RPC response=%+v respond=%v status=%d", resp, respond, status)
 	}

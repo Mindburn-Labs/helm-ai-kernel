@@ -2,6 +2,7 @@ package guardian
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -119,11 +120,25 @@ func (e *IncompleteGateProfileError) Error() string {
 	return fmt.Sprintf("guardian: gate profile %q is incomplete; missing required gates: %v", e.Profile, e.Missing)
 }
 
+// MissingProductionDependencyError reports a non-gate dependency without
+// which the production Guardian cannot establish its governance contract.
+type MissingProductionDependencyError struct {
+	Dependency string
+}
+
+func (e *MissingProductionDependencyError) Error() string {
+	return fmt.Sprintf("guardian: production %s is required", e.Dependency)
+}
+
 // NewProductionGuardian constructs a Guardian only when the universal
 // production enforcement roster is complete. NewGuardian intentionally
 // remains available for focused tests, analysis commands, and development
 // compositions that exercise a partial pipeline.
 func NewProductionGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.Registry, opts ...GuardianOption) (*Guardian, error) {
+	if isNilProductionSigner(signer) {
+		return nil, &MissingProductionDependencyError{Dependency: "decision signer"}
+	}
+
 	profile := ProductionGateProfile()
 	if err := profile.ValidateDefinition(); err != nil {
 		return nil, err
@@ -152,4 +167,17 @@ func NewProductionGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_
 		return nil, &IncompleteGateProfileError{Profile: profile.Name, Missing: missing}
 	}
 	return g, nil
+}
+
+func isNilProductionSigner(signer crypto.Signer) bool {
+	if signer == nil {
+		return true
+	}
+	value := reflect.ValueOf(signer)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }

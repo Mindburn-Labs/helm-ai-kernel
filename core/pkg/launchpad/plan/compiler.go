@@ -20,6 +20,14 @@ func Compile(app registry.AppSpec, substrate registry.SubstrateSpec, principal s
 }
 
 func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, principal, root string) (LaunchPlan, error) {
+	return CompileWithRootAndEnv(app, substrate, principal, root, nil)
+}
+
+// CompileWithRootAndEnv evaluates secret preflight against a launch-scoped
+// overlay before falling back to the legitimate process environment. The
+// overlay is used only for availability checks and is never stored in the
+// LaunchPlan.
+func CompileWithRootAndEnv(app registry.AppSpec, substrate registry.SubstrateSpec, principal, root string, runtimeSecretEnv map[string]string) (LaunchPlan, error) {
 	if principal == "" {
 		principal = "local.operator"
 	}
@@ -101,7 +109,7 @@ func CompileWithRoot(app registry.AppSpec, substrate registry.SubstrateSpec, pri
 		finalizeStableIR(&base)
 		return base, fmt.Errorf("app %s artifact verification failed: %s", app.ID, reason)
 	}
-	if missing := missingRequiredSecretEnv(app, modelGatewayEnv); missing != "" {
+	if missing := missingRequiredSecretEnv(app, modelGatewayEnv, runtimeSecretEnv); missing != "" {
 		base.KernelVerdict = "ESCALATE"
 		base.Status = "ESCALATED"
 		base.ReasonCode = "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING"
@@ -314,7 +322,13 @@ func requiredSecretEnvNames(app registry.AppSpec, modelGatewayEnv []string) []st
 	return cloneStrings(app.RequiredSecrets)
 }
 
-func missingRequiredSecretEnv(app registry.AppSpec, modelGatewayEnv []string) string {
+func missingRequiredSecretEnv(app registry.AppSpec, modelGatewayEnv []string, runtimeSecretEnv map[string]string) string {
+	lookup := func(name string) (string, bool) {
+		if value := runtimeSecretEnv[name]; value != "" {
+			return value, true
+		}
+		return os.LookupEnv(name)
+	}
 	names := requiredSecretEnvNames(app, modelGatewayEnv)
 	if len(names) == 0 {
 		return ""
@@ -323,7 +337,7 @@ func missingRequiredSecretEnv(app registry.AppSpec, modelGatewayEnv []string) st
 		for _, group := range modelGatewayRequiredEnvGroups(app, modelGatewayEnv) {
 			complete := true
 			for _, name := range group {
-				if value, ok := os.LookupEnv(name); !ok || value == "" {
+				if value, ok := lookup(name); !ok || value == "" {
 					complete = false
 					break
 				}
@@ -335,7 +349,7 @@ func missingRequiredSecretEnv(app registry.AppSpec, modelGatewayEnv []string) st
 		return missingProviderEnvGroupMessage(modelGatewayRequiredEnvGroups(app, modelGatewayEnv))
 	}
 	for _, name := range names {
-		if value, ok := os.LookupEnv(name); !ok || value == "" {
+		if value, ok := lookup(name); !ok || value == "" {
 			return name
 		}
 	}

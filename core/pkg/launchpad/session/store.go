@@ -57,6 +57,7 @@ type LaunchRun struct {
 	SandboxGrantRefs      []string                `json:"sandbox_grant_refs"`
 	EgressReceiptRefs     []string                `json:"egress_receipt_refs,omitempty"`
 	MCPRefs               []string                `json:"mcp_refs"`
+	SecretAccessRefs      []string                `json:"secret_access_refs,omitempty"`
 	SecretGrantRefs       []string                `json:"secret_grant_refs,omitempty"`
 	ModelGatewayGrantRefs []string                `json:"model_gateway_grant_refs,omitempty"`
 	InstallReceiptRefs    []string                `json:"install_receipt_refs"`

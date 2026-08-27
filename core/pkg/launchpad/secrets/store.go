@@ -35,6 +35,14 @@ type Store struct {
 	root string
 }
 
+// Resolution is a launch-scoped child environment plus redacted audit
+// metadata. RuntimeEnv is intentionally excluded from JSON so callers cannot
+// accidentally serialize resolved secret values in compile-only responses.
+type Resolution struct {
+	RuntimeEnv map[string]string             `json:"-"`
+	Accesses   []session.RuntimeSecretAccess `json:"accesses,omitempty"`
+}
+
 func NewStore(root string) Store {
 	if root == "" {
 		root = session.DefaultRoot()
@@ -99,16 +107,27 @@ func (s Store) Statuses() ([]Status, error) {
 	return statuses, nil
 }
 
-func (s Store) ApplyAppEnv(app registry.AppSpec) (map[string]string, error) {
+func (s Store) ResolveAppEnv(app registry.AppSpec) (Resolution, error) {
 	bindings, err := s.load()
 	if err != nil {
-		return nil, err
+		return Resolution{}, err
 	}
-	projected := map[string]string{}
-	catalog, _ := modelproviders.DefaultCatalog()
+	resolved := Resolution{RuntimeEnv: map[string]string{}}
+	catalog, err := modelproviders.DefaultCatalog()
+	if err != nil {
+		return Resolution{}, err
+	}
 	envNames := modelGatewayEnvNames(app, catalog)
 	for _, envName := range envNames {
-		if os.Getenv(envName) != "" {
+		if value, ok := os.LookupEnv(envName); ok && value != "" {
+			provider := ""
+			if spec, found := catalog.ProviderForEnv(envName); found {
+				provider = spec.ID
+			}
+			resolved.Accesses = append(resolved.Accesses, session.RuntimeSecretAccess{
+				SecretRef: envName, Provider: provider, Source: "process_env",
+				SourceEnvName: envName, RuntimeEnvName: envName, Verdict: "ALLOW",
+			})
 			continue
 		}
 		for _, providerID := range catalog.ProviderIDsForEnv(envName) {
@@ -118,12 +137,11 @@ func (s Store) ApplyAppEnv(app registry.AppSpec) (map[string]string, error) {
 			if binding, ok := bindings[bindingKey("model_gateway", providerID)]; ok {
 				value := os.Getenv(binding.ValueEnv)
 				if value == "" {
+					resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "DENY"))
 					continue
 				}
-				if err := os.Setenv(envName, value); err != nil {
-					return nil, err
-				}
-				projected[envName] = binding.Name + ":" + binding.Provider
+				resolved.RuntimeEnv[envName] = value
+				resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "ALLOW"))
 				goto nextEnv
 			}
 		}
@@ -140,17 +158,40 @@ func (s Store) ApplyAppEnv(app registry.AppSpec) (map[string]string, error) {
 			}
 			value := os.Getenv(binding.ValueEnv)
 			if value == "" {
+				resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "DENY"))
 				continue
 			}
-			if err := os.Setenv(envName, value); err != nil {
-				return nil, err
-			}
-			projected[envName] = logical
+			resolved.RuntimeEnv[envName] = value
+			resolved.Accesses = append(resolved.Accesses, secretAccess(binding, envName, "ALLOW"))
 			break
 		}
 	nextEnv:
 	}
-	return projected, nil
+	sort.SliceStable(resolved.Accesses, func(i, j int) bool {
+		left, right := resolved.Accesses[i], resolved.Accesses[j]
+		if left.RuntimeEnvName != right.RuntimeEnvName {
+			return left.RuntimeEnvName < right.RuntimeEnvName
+		}
+		if left.SecretRef != right.SecretRef {
+			return left.SecretRef < right.SecretRef
+		}
+		if left.Provider != right.Provider {
+			return left.Provider < right.Provider
+		}
+		return left.Verdict < right.Verdict
+	})
+	return resolved, nil
+}
+
+func secretAccess(binding Binding, runtimeEnvName, verdict string) session.RuntimeSecretAccess {
+	ref := binding.Name
+	if binding.Provider != "" {
+		ref += ":" + binding.Provider
+	}
+	return session.RuntimeSecretAccess{
+		SecretRef: ref, Provider: binding.Provider, Source: "binding_store",
+		SourceEnvName: binding.ValueEnv, RuntimeEnvName: runtimeEnvName, Verdict: verdict,
+	}
 }
 
 func (s Store) load() (map[string]Binding, error) {

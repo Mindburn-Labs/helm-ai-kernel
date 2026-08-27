@@ -74,11 +74,14 @@ func (s *Server) handleLaunchpadLaunch(w http.ResponseWriter, r *http.Request, c
 	if !ok {
 		return
 	}
-	compiled, err := compileLaunchpadPlan(catalog, req)
+	compiled, secretResolution, err := resolveLaunchpadPlan(catalog, req)
 	if err != nil {
 		compiled.ReasonCode = coalesce(compiled.ReasonCode, err.Error())
 	}
-	run, saveErr := session.NewExecutor(session.NewStore("")).ExecuteLaunch(compiled, session.ExecuteOptions{Reason: "launch requested through OSS Console API"})
+	run, saveErr := session.NewExecutor(session.NewStore("")).ExecuteLaunch(compiled, session.ExecuteOptions{
+		Reason: "launch requested through OSS Console API", RuntimeSecretEnv: secretResolution.RuntimeEnv,
+		RuntimeSecretAccesses: secretResolution.Accesses,
+	})
 	if saveErr != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": saveErr.Error()})
 		return
@@ -161,15 +164,25 @@ func decodeLaunchpadPlanRequest(w http.ResponseWriter, r *http.Request) (launchp
 }
 
 func compileLaunchpadPlan(catalog *registry.Catalog, req launchpadPlanRequest) (plan.LaunchPlan, error) {
+	compiled, _, err := resolveLaunchpadPlan(catalog, req)
+	return compiled, err
+}
+
+func resolveLaunchpadPlan(catalog *registry.Catalog, req launchpadPlanRequest) (plan.LaunchPlan, secrets.Resolution, error) {
 	app, ok := catalog.App(req.AppID)
 	if !ok {
-		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_APP"), fmt.Errorf("unknown app: %s", req.AppID)
+		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_APP"), secrets.Resolution{}, fmt.Errorf("unknown app: %s", req.AppID)
 	}
 	substrate, ok := catalog.Substrate(req.SubstrateID)
 	if !ok {
-		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_SUBSTRATE"), fmt.Errorf("unknown substrate: %s", req.SubstrateID)
+		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_SUBSTRATE"), secrets.Resolution{}, fmt.Errorf("unknown substrate: %s", req.SubstrateID)
 	}
-	return plan.CompileWithRoot(app, substrate, req.Principal, catalog.Root)
+	secretResolution, err := secrets.NewStore("").ResolveAppEnv(app)
+	if err != nil {
+		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_SECRET_BINDING_INVALID"), secrets.Resolution{}, err
+	}
+	compiled, err := plan.CompileWithRootAndEnv(app, substrate, req.Principal, catalog.Root, secretResolution.RuntimeEnv)
+	return compiled, secretResolution, err
 }
 
 func coalesce(left, right string) string {

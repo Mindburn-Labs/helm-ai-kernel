@@ -1,6 +1,8 @@
 package plan
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -24,6 +26,35 @@ func TestCompileEscalatesMissingSecretBeforeRuntime(t *testing.T) {
 	}
 	if got := compiled.Nodes["missing_secret"]; got != "HELM_TEST_OPENAI_API_KEY" {
 		t.Fatalf("missing secret was not bound into proof nodes: %#v", compiled.Nodes)
+	}
+}
+
+func TestCompileUsesLaunchScopedSecretOverlayWithoutSerializingValues(t *testing.T) {
+	t.Setenv("HELM_TEST_SCOPED_SECRET", "")
+	app := verifiedAppSpec()
+	app.RequiredSecrets = []string{"HELM_TEST_SCOPED_SECRET"}
+
+	missing, err := Compile(app, supportedSubstrate(), "console-test")
+	if err == nil || missing.ReasonCode != "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING" {
+		t.Fatalf("missing overlay did not fail closed: plan=%#v err=%v", missing, err)
+	}
+
+	const secretValue = "launch-only-value-that-must-not-serialize"
+	compiled, err := CompileWithRootAndEnv(app, supportedSubstrate(), "console-test", "", map[string]string{
+		"HELM_TEST_SCOPED_SECRET": secretValue,
+	})
+	if err != nil || compiled.KernelVerdict != "ALLOW" {
+		t.Fatalf("launch-scoped overlay did not satisfy preflight: verdict=%s err=%v", compiled.KernelVerdict, err)
+	}
+	encoded, err := json.Marshal(compiled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secretValue) {
+		t.Fatalf("compile-only plan serialized launch secret: %s", encoded)
+	}
+	if got := os.Getenv("HELM_TEST_SCOPED_SECRET"); got != "" {
+		t.Fatalf("compile mutated process env: %q", got)
 	}
 }
 

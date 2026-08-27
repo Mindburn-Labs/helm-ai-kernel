@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	launchpadmcp "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/mcp"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 )
@@ -82,7 +84,7 @@ func TestMCPMediationProofTransportsRouteToolCallsThroughExecutor(t *testing.T) 
 	}
 }
 
-func TestMCPStdioPreservesLargeJSONNumberLexeme(t *testing.T) {
+func TestMCPStdioPreservesInteroperableJSONNumberLexemeAndRejectsPAN(t *testing.T) {
 	catalog := mcppkg.NewToolCatalog()
 	if err := catalog.Register(context.Background(), mcppkg.ToolRef{
 		Name: "proof.numeric",
@@ -101,17 +103,63 @@ func TestMCPStdioPreservesLargeJSONNumberLexeme(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      float64(1),
 		Method:  "tools/call",
-		Params:  json.RawMessage("{\"name\":\"proof.numeric\",\"arguments\":{\"pan\":4000000000000000006}}"),
+		Params:  json.RawMessage("{\"name\":\"proof.numeric\",\"arguments\":{\"pan\":9007199254740991}}"),
 	}, catalog, func(_ context.Context, request mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
 		called = true
 		number, ok := request.Arguments["pan"].(json.Number)
-		if !ok || number.String() != "4000000000000000006" {
-			t.Fatalf("stdio PAN = %#v, want exact json.Number", request.Arguments["pan"])
+		if !ok || number.String() != "9007199254740991" {
+			t.Fatalf("stdio number = %#v, want exact json.Number", request.Arguments["pan"])
 		}
 		return mcppkg.ToolExecutionResponse{Content: "mediated", ProtectedArgsHash: "test-protected-args-hash"}, nil
 	})
 	if err != nil || response.Error != nil || !called {
 		t.Fatalf("stdio numeric tools/call = response=%#v called=%v err=%v", response, called, err)
+	}
+
+	called = false
+	response, err = handleMCPRPCRequest(&mcpRPCRequest{
+		JSONRPC: "2.0",
+		ID:      float64(2),
+		Method:  "tools/call",
+		Params:  json.RawMessage("{\"name\":\"proof.numeric\",\"arguments\":{\"pan\":4000000000000000006}}"),
+	}, catalog, func(_ context.Context, _ mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		called = true
+		return mcppkg.ToolExecutionResponse{}, nil
+	})
+	if err != nil || response.Error == nil || response.Error.Message != string(contracts.ReasonDataEgressBlocked) || called {
+		t.Fatalf("stdio restricted numeric tools/call = response=%#v called=%v err=%v", response, called, err)
+	}
+}
+
+func TestMCPStdioPreservesGovernedHandlerErrorAnchors(t *testing.T) {
+	catalog := proofCatalog(t)
+	params, err := json.Marshal(map[string]any{
+		"name":      "proof.echo",
+		"arguments": map[string]any{"message": "safe"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := handleMCPRPCRequest(&mcpRPCRequest{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params:  params,
+	}, catalog, func(_ context.Context, _ mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		return mcppkg.ToolExecutionResponse{
+			Content:           "safe handler failure",
+			IsError:           true,
+			ReceiptID:         "receipt-handler-failure",
+			ProtectedArgsHash: "sha256:protected-handler-args",
+		}, errors.New("raw provider detail")
+	})
+	if err != nil || response.Error != nil {
+		t.Fatalf("stdio handler error became transport error: response=%#v err=%v", response, err)
+	}
+	result, ok := response.Result.(map[string]any)
+	if !ok || result["isError"] != true || result["receipt_id"] != "receipt-handler-failure" ||
+		result["args_hash"] != "sha256:protected-handler-args" {
+		t.Fatalf("stdio handler error anchors = %#v", response.Result)
 	}
 }
 

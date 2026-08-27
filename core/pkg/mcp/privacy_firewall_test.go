@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
@@ -348,8 +349,81 @@ func TestGovernanceFirewallHandlerErrorIsValueFree(t *testing.T) {
 	require.Nil(t, errors.Unwrap(err))
 	require.Equal(t, "TOOL_HANDLER_FAILED", err.Error())
 	require.Contains(t, response.Content, "REDACTED_EMAIL")
+	require.True(t, response.IsError)
+	require.Equal(t, contracts.ReasonVerification, response.RuntimeReasonCode)
+	require.NotEmpty(t, response.ProtectedArgsHash)
+	require.NotEmpty(t, response.ReceiptID)
 	require.NotContains(t, err.Error(), "person@example.com")
 	require.NotContains(t, err.Error(), "123-45-6789")
+}
+
+func TestGatewayPreservesGovernedHandlerErrorAnchorsAcrossTransports(t *testing.T) {
+	catalog := privacyCatalog(t)
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	firewall := NewGovernanceFirewall(evaluator, catalog)
+	gateway := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{Content: "provider failed for person@example.com"}, errors.New("raw provider person@example.com")
+	})))
+	defer gateway.sessions.Stop()
+
+	restBody := []byte(`{"method":"privacy-tool","params":{"message":"safe"}}`)
+	recorder := httptest.NewRecorder()
+	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(restBody)))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var rest MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &rest))
+	require.Equal(t, string(contracts.ReasonVerification), rest.ReasonCode)
+	require.NotEmpty(t, rest.ArgsHash)
+	require.NotEmpty(t, rest.ReceiptID)
+	require.Contains(t, rest.Error, "REDACTED_EMAIL")
+	require.NotContains(t, recorder.Body.String(), "person@example.com")
+
+	params := json.RawMessage(`{"name":"privacy-tool","arguments":{"message":"safe"}}`)
+	response, write, status := gateway.handleJSONRPCRequestWithSession(
+		context.Background(), 1, "tools/call", params, LatestProtocolVersion, "session-handler-error", nil,
+	)
+	require.True(t, write)
+	require.Equal(t, http.StatusOK, status)
+	result := response["result"].(map[string]any)
+	require.Equal(t, true, result["isError"])
+	require.NotEmpty(t, result["args_hash"])
+	require.NotEmpty(t, result["receipt_id"])
+	require.NotContains(t, string(mustJSON(t, response)), "person@example.com")
+}
+
+func TestGovernanceFirewallRejectsSerializedOutputBudget(t *testing.T) {
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	firewall := NewGovernanceFirewall(evaluator, privacyCatalog(t))
+	raw := strings.Repeat("\x00", 800_000)
+	response, err := firewall.WrapToolHandler(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{Content: raw}, nil
+	})(context.Background(), ToolExecutionRequest{ToolName: "privacy-tool", SessionID: "session-budget"})
+	require.NoError(t, err)
+	require.True(t, response.IsError)
+	require.Equal(t, "Access Denied: "+string(contracts.ReasonDataEgressBlocked), response.Content)
+}
+
+func TestDirectInterceptionRejectsArgumentsThatNeedRedaction(t *testing.T) {
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	firewall := NewGovernanceFirewall(evaluator, privacyCatalog(t))
+	err := firewall.InterceptToolExecution(context.Background(), ToolExecutionRequest{
+		ToolName:  "privacy-tool",
+		SessionID: "session-direct",
+		Arguments: map[string]any{"message": "person@example.com"},
+	})
+	require.ErrorIs(t, err, privacy.ErrDataEgressBlocked)
+	require.Equal(t, 0, evaluator.callCount())
+}
+
+func TestValidateToolArgumentsRejectsNonInteroperableNumbers(t *testing.T) {
+	for _, literal := range []string{"1e2", "1.0", "-0", "9007199254740993"} {
+		t.Run(literal, func(t *testing.T) {
+			_, err := ValidateToolArguments(ToolRef{}, map[string]any{"value": json.Number(literal)})
+			require.ErrorIs(t, err, canonicalize.ErrNonInteroperableNumber)
+		})
+	}
+	_, err := ValidateToolArguments(ToolRef{}, map[string]any{"value": json.Number("100")})
+	require.NoError(t, err)
 }
 
 func TestGovernanceFirewallNonCanonicalArgumentsFailBeforeHandler(t *testing.T) {

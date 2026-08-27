@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/google/uuid"
@@ -324,12 +326,18 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	// 1. Validate and canonicalize args via PEP boundary
 	validatedArgsHash, err := ValidateToolArguments(tool, req.Params)
 	if err != nil {
-		g.recordGovernedIngressFailure(r.Context(), execReq, string(contracts.ReasonSchemaViolation))
+		reasonCode := contracts.ReasonSchemaViolation
+		status := http.StatusBadRequest
+		if errors.Is(err, canonicalize.ErrNonInteroperableNumber) {
+			reasonCode = contracts.ReasonDataEgressBlocked
+			status = http.StatusForbidden
+		}
+		g.recordGovernedIngressFailure(r.Context(), execReq, string(reasonCode))
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
 			Error:      "PEP validation failed",
-			ReasonCode: string(contracts.ReasonSchemaViolation),
+			ReasonCode: string(reasonCode),
 		})
 		return
 	}
@@ -340,6 +348,16 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	if g.exec != nil {
 		execResp, execErr := g.exec(r.Context(), execReq)
 		if execErr != nil {
+			if g.governed && errors.Is(execErr, errToolHandlerFailed) && execResp.IsError && execResp.ProtectedArgsHash != "" {
+				resp.ArgsHash = execResp.ProtectedArgsHash
+				resp.ReceiptID = execResp.ReceiptID
+				resp.Error = execResp.Content
+				resp.ReasonCode = string(contracts.ReasonVerification)
+				resp.Content = execResp.ContentItems
+				resp.StructuredContent = execResp.StructuredContent
+				writeMCPToolCallResponse(w, http.StatusOK, resp)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
@@ -368,9 +386,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			}
 			resp.Content = execResp.ContentItems
 			resp.StructuredContent = execResp.StructuredContent
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(w).Encode(resp)
+			writeMCPToolCallResponse(w, http.StatusForbidden, resp)
 			return
 		}
 
@@ -425,8 +441,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeMCPToolCallResponse(w, http.StatusOK, resp)
 }
 
 func (g *Gateway) handleProtectedResourceMetadata(w http.ResponseWriter, _ *http.Request) {
@@ -537,7 +552,14 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 			return writeError(-32001, "tool requires OAuth scopes: "+strings.Join(tool.RequiredScopes, ", "))
 		}
 		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
-			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonSchemaViolation))
+			reasonCode := contracts.ReasonSchemaViolation
+			if errors.Is(err, canonicalize.ErrNonInteroperableNumber) {
+				reasonCode = contracts.ReasonDataEgressBlocked
+			}
+			g.recordGovernedIngressFailure(ctx, execReq, string(reasonCode))
+			if reasonCode == contracts.ReasonDataEgressBlocked {
+				return writeError(-32000, string(reasonCode))
+			}
 			return writeError(-32602, "PEP validation failed")
 		}
 		if g.exec == nil {
@@ -546,12 +568,23 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 
 		execResp, err := g.exec(ctx, execReq)
 		if err != nil {
+			if g.governed && errors.Is(err, errToolHandlerFailed) && execResp.IsError && execResp.ProtectedArgsHash != "" {
+				response["result"] = ToolResultPayload(execResp)
+				if serializedMCPResponseWithinBudget(response) {
+					return response, true, http.StatusOK
+				}
+				response["result"] = ToolResultPayload(dataEgressBlockedExecutionResponse(execResp))
+				return response, true, http.StatusOK
+			}
 			return writeError(-32603, err.Error())
 		}
 		if g.governed && !execResp.IsError && execResp.ProtectedArgsHash == "" {
 			return writeError(-32603, "governed execution did not attest protected arguments")
 		}
 		response["result"] = ToolResultPayload(execResp)
+		if !serializedMCPResponseWithinBudget(response) {
+			response["result"] = ToolResultPayload(dataEgressBlockedExecutionResponse(execResp))
+		}
 		return response, true, http.StatusOK
 	default:
 		return writeError(-32601, "method not found")
@@ -659,11 +692,45 @@ func ValidateToolArguments(tool ToolRef, args map[string]any) (string, error) {
 	if args == nil {
 		args = map[string]any{}
 	}
+	if err := canonicalize.CheckInteroperableNumbers(args); err != nil {
+		return "", err
+	}
 	result, err := manifest.ValidateAndCanonicalizeToolArgs(catalogSchemaToArgSchema(tool.Schema), args)
 	if err != nil {
 		return "", err
 	}
 	return result.ArgsHash, nil
+}
+
+func writeMCPToolCallResponse(w http.ResponseWriter, status int, resp MCPToolCallResponse) {
+	if !serializedMCPResponseWithinBudget(resp) {
+		status = http.StatusForbidden
+		resp = MCPToolCallResponse{
+			Error:      string(contracts.ReasonDataEgressBlocked),
+			ReasonCode: string(contracts.ReasonDataEgressBlocked),
+			ArgsHash:   resp.ArgsHash,
+			ReceiptID:  resp.ReceiptID,
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func serializedMCPResponseWithinBudget(value any) bool {
+	encoded, err := json.Marshal(value)
+	return err == nil && len(encoded)+1 <= maxMCPResponseBytes
+}
+
+func dataEgressBlockedExecutionResponse(resp ToolExecutionResponse) ToolExecutionResponse {
+	return ToolExecutionResponse{
+		Content:           string(contracts.ReasonDataEgressBlocked),
+		IsError:           true,
+		Evaluated:         true,
+		ReceiptID:         resp.ReceiptID,
+		ProtectedArgsHash: resp.ProtectedArgsHash,
+		RuntimeReasonCode: contracts.ReasonDataEgressBlocked,
+	}
 }
 
 func catalogSchemaToArgSchema(raw any) *manifest.ToolArgSchema {

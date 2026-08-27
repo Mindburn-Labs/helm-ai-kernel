@@ -55,9 +55,8 @@ type ToolExecutionResponse struct {
 	ReceiptID         string            `json:"receipt_id,omitempty"`
 
 	// These fields are runtime-only anchors for the lifecycle wrapper. They are
-	// intentionally excluded from every MCP response serialization: the signed
-	// receipt is projected into lifecycle events, while the public response
-	// continues to carry only the established tool result contract.
+	// excluded from automatic JSON serialization; the gateway explicitly projects
+	// only ProtectedArgsHash as the safe proof anchor alongside the audit receipt.
 	ExecutionReceipt        *contracts.Receipt   `json:"-"`
 	DispatchState           string               `json:"-"`
 	ApprovalHash            string               `json:"-"`
@@ -152,34 +151,36 @@ func NewGovernanceFirewall(evaluator PolicyEvaluator, catalog *ToolCatalog, opts
 // When DelegationAllowedTools is set, tool scope is checked BEFORE the
 // Guardian evaluation (defense-in-depth — see ARCHITECTURE.md §2.1).
 func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req ToolExecutionRequest) error {
-	decision, err := f.evaluateToolExecution(ctx, req)
+	protectedReq, decisionCtx, findings, err := f.prepareToolExecutionRequest(ctx, req)
+	if err != nil {
+		return err
+	}
+	// This API returns only a verdict, not the protected request. Allowing a
+	// redaction here would let a caller execute the original value after Guardian
+	// evaluated a different payload, so direct interception must fail closed.
+	if len(findings) > 0 {
+		return privacy.ErrDataEgressBlocked
+	}
+	decision, err := f.evaluatePreparedToolExecution(ctx, protectedReq, decisionCtx)
 	if err != nil {
 		return err
 	}
 	return f.decisionError(decision)
 }
 
-func (f *GovernanceFirewall) evaluateToolExecution(ctx context.Context, req ToolExecutionRequest) (*contracts.DecisionRecord, error) {
-	protectedReq, decisionCtx, err := f.prepareToolExecutionRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return f.evaluatePreparedToolExecution(ctx, protectedReq, decisionCtx)
-}
-
 // prepareToolExecutionRequest creates the protected request and the trusted
 // Guardian context from the same sanitized argument map. This is the single
 // admission boundary used by direct interception, wrapped handlers, and plans.
-func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, req ToolExecutionRequest) (ToolExecutionRequest, map[string]interface{}, error) {
+func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, req ToolExecutionRequest) (ToolExecutionRequest, map[string]interface{}, []string, error) {
 	if f.evaluator == nil {
-		return ToolExecutionRequest{}, nil, fmt.Errorf("governance evaluator is required")
+		return ToolExecutionRequest{}, nil, nil, fmt.Errorf("governance evaluator is required")
 	}
 	// Preserve the transport-boundary contract for security context keys. This
 	// check precedes value inspection so a caller cannot turn a reserved-key
 	// violation into a different privacy verdict.
 	for key := range req.Arguments {
 		if guardian.IsReservedSecurityContextKey(key) {
-			return ToolExecutionRequest{}, nil, errReservedSecurityArgument
+			return ToolExecutionRequest{}, nil, nil, errReservedSecurityArgument
 		}
 	}
 
@@ -187,13 +188,13 @@ func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, re
 	if manager == nil {
 		manager = privacy.NewPrivacyManager()
 	}
-	protected, _, err := manager.Protect(ctx, req.Arguments)
+	protected, findings, err := manager.Protect(ctx, req.Arguments)
 	if err != nil {
-		return ToolExecutionRequest{}, nil, privacy.ErrDataEgressBlocked
+		return ToolExecutionRequest{}, nil, nil, privacy.ErrDataEgressBlocked
 	}
 	protectedArguments, ok := protected.(map[string]interface{})
 	if !ok && protected != nil {
-		return ToolExecutionRequest{}, nil, privacy.ErrDataEgressBlocked
+		return ToolExecutionRequest{}, nil, nil, privacy.ErrDataEgressBlocked
 	}
 	protectedReq := req
 	protectedReq.Arguments = protectedArguments
@@ -210,7 +211,7 @@ func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, re
 			}
 		}
 		if !allowed {
-			return ToolExecutionRequest{}, nil, errDelegationScopeViolation
+			return ToolExecutionRequest{}, nil, nil, errDelegationScopeViolation
 		}
 	}
 
@@ -218,7 +219,7 @@ func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, re
 	decisionCtx := make(map[string]interface{})
 	for k, v := range protectedReq.Arguments {
 		if guardian.IsReservedSecurityContextKey(k) {
-			return ToolExecutionRequest{}, nil, errReservedSecurityArgument
+			return ToolExecutionRequest{}, nil, nil, errReservedSecurityArgument
 		}
 		decisionCtx[k] = v
 	}
@@ -239,7 +240,7 @@ func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, re
 	if len(req.OAuthResources) > 0 {
 		decisionCtx["oauth_resources"] = append([]string(nil), req.OAuthResources...)
 	}
-	return protectedReq, decisionCtx, nil
+	return protectedReq, decisionCtx, findings, nil
 }
 
 func (f *GovernanceFirewall) evaluatePreparedToolExecution(ctx context.Context, req ToolExecutionRequest, decisionCtx map[string]interface{}) (*contracts.DecisionRecord, error) {
@@ -366,7 +367,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			emitFailure(req.ingressFailureReasonCode, "ingress")
 			return deniedResponse(fmt.Errorf("MCP ingress rejected: %s", req.ingressFailureReasonCode)), nil
 		}
-		protectedReq, decisionCtx, preflightErr := f.prepareToolExecutionRequest(ctx, req)
+		protectedReq, decisionCtx, _, preflightErr := f.prepareToolExecutionRequest(ctx, req)
 		if preflightErr != nil {
 			reasonCode := preflightReasonCode(f, req)
 			if errors.Is(preflightErr, privacy.ErrDataEgressBlocked) || errors.Is(preflightErr, privacy.ErrDataEgressInvalid) {
@@ -451,6 +452,10 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		}
 		resp = protectedResp
 		resp.Evaluated = true
+		if handlerErr != nil {
+			resp.IsError = true
+			resp.RuntimeReasonCode = contracts.ReasonVerification
+		}
 
 		var receipt ToolCallReceipt
 		var auditErr error
@@ -642,6 +647,12 @@ func responseWithinPrivacyBudget(resp ToolExecutionResponse, includeStructured b
 	if len(resp.ContentItems) > maxMCPResponseItems {
 		return false
 	}
+	if includeStructured {
+		encodedResponse, responseErr := json.Marshal(resp)
+		encodedToolResult, resultErr := json.Marshal(ToolResultPayload(resp))
+		return responseErr == nil && resultErr == nil &&
+			len(encodedResponse)+1 <= maxMCPResponseBytes && len(encodedToolResult)+1 <= maxMCPResponseBytes
+	}
 	total := 0
 	add := func(size int) bool {
 		if size < 0 || size > maxMCPResponseBytes-total {
@@ -656,12 +667,6 @@ func responseWithinPrivacyBudget(resp ToolExecutionResponse, includeStructured b
 	for _, item := range resp.ContentItems {
 		if !add(len(item.Type)) || !add(len(item.Text)) || !add(len(item.URI)) ||
 			!add(len(item.MimeType)) || !add(len(item.Name)) {
-			return false
-		}
-	}
-	if includeStructured && resp.StructuredContent != nil {
-		encoded, err := json.Marshal(resp.StructuredContent)
-		if err != nil || !add(len(encoded)) {
 			return false
 		}
 	}
@@ -900,7 +905,7 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		// Plans use the same protected admission boundary as direct tool
 		// execution. This prevents a plan from becoming a raw-arguments side
 		// channel around the firewall.
-		protectedStep, decisionCtx, err := f.prepareToolExecutionRequest(ctx, step)
+		protectedStep, decisionCtx, _, err := f.prepareToolExecutionRequest(ctx, step)
 		if err != nil {
 			return nil, err
 		}

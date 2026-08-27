@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -591,6 +592,10 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 			return response, nil
 		}
 		if _, err := mcppkg.ValidateToolArguments(tool, params.Arguments); err != nil {
+			if errors.Is(err, canonicalize.ErrNonInteroperableNumber) {
+				response.Error = &mcpRPCError{Code: -32000, Message: string(contracts.ReasonDataEgressBlocked)}
+				return response, nil
+			}
 			response.Error = &mcpRPCError{Code: -32602, Message: "PEP validation failed"}
 			return response, nil
 		}
@@ -606,6 +611,10 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 
 		execResp, err := executor(context.Background(), execReq)
 		if err != nil {
+			if execResp.IsError && execResp.ProtectedArgsHash != "" {
+				response.Result = mcppkg.ToolResultPayload(execResp)
+				return response, nil
+			}
 			response.Error = &mcpRPCError{Code: -32603, Message: "tool execution failed"}
 			return response, nil
 		}

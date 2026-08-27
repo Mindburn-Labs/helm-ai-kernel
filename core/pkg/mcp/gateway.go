@@ -14,6 +14,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/google/uuid"
 )
 
 // GatewayConfig configures the MCP gateway server.
@@ -308,7 +309,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
-			Error:      fmt.Sprintf("tool %q not found", req.Method),
+			Error:      "tool not found",
 			ReasonCode: string(contracts.ReasonNoPolicy),
 		})
 		return
@@ -319,7 +320,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
-			Error:      fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Method, strings.Join(tool.RequiredScopes, ", ")),
+			Error:      "tool requires OAuth scopes: " + strings.Join(tool.RequiredScopes, ", "),
 			ReasonCode: "MCP.OAUTH.INSUFFICIENT_SCOPE",
 		})
 		return
@@ -332,7 +333,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
-			Error:      fmt.Sprintf("PEP validation failed: %v", err),
+			Error:      "PEP validation failed",
 			ReasonCode: string(contracts.ReasonSchemaViolation),
 		})
 		return
@@ -512,16 +513,16 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		tool, ok := findToolRef(g.catalog, req.Name)
 		if !ok {
 			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonNoPolicy))
-			return writeError(-32602, fmt.Sprintf("tool %q not found", req.Name))
+			return writeError(-32602, "tool not found")
 		}
 		execReq.RequiredScopes = append([]string(nil), tool.RequiredScopes...)
 		if !g.hasRequiredScopes(ctx, tool) {
 			g.recordGovernedIngressFailure(ctx, execReq, "MCP.OAUTH.INSUFFICIENT_SCOPE")
-			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
+			return writeError(-32001, "tool requires OAuth scopes: "+strings.Join(tool.RequiredScopes, ", "))
 		}
 		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
 			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonSchemaViolation))
-			return writeError(-32602, fmt.Sprintf("PEP validation failed: %v", err))
+			return writeError(-32602, "PEP validation failed")
 		}
 		if g.exec == nil {
 			return writeError(-32603, "tool executor is not configured")
@@ -534,7 +535,7 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		response["result"] = ToolResultPayload(execResp)
 		return response, true, http.StatusOK
 	default:
-		return writeError(-32601, fmt.Sprintf("method %q not found", method))
+		return writeError(-32601, "method not found")
 	}
 }
 
@@ -548,7 +549,11 @@ func newToolExecutionRequest(ctx context.Context, toolName string, arguments map
 }
 
 func toolExecutionRequestFromHTTP(r *http.Request, toolName string, arguments map[string]any) ToolExecutionRequest {
-	req := newToolExecutionRequest(r.Context(), toolName, arguments, fmt.Sprintf("mcp-http-%s-%p", r.RemoteAddr, r))
+	// RemoteAddr is client-controlled personal data. It must never become a
+	// session identity that reaches governance, handlers, receipts, or
+	// lifecycle telemetry. Each HTTP request receives an opaque identifier so
+	// correlation remains unique without retaining network identity.
+	req := newToolExecutionRequest(r.Context(), toolName, arguments, "mcp-http-"+uuid.NewString())
 	if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
 		req.DelegationSessionID = delegationID
 		req.DelegationVerifier = r.Header.Get("X-HELM-Delegation-Verifier")

@@ -132,6 +132,15 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 			wantTerminal: events.RequestFailed,
 			wantFailure:  "handler",
 			wantHandler:  true,
+			wantDispatch: true,
+			receipt: &contracts.Receipt{
+				ReceiptID:  "handler-failure-receipt",
+				Status:     "FAILED",
+				ArgsHash:   "sha256:handler-failure-args",
+				EffectID:   "handler-failure-effect",
+				EffectType: "TOOL_EXECUTION",
+				RetryCount: 1,
+			},
 		},
 		{
 			name:         "handler response error",
@@ -151,13 +160,13 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 			wantFailure:  "handler",
 		},
 		{
-			name:         "audit failure closes",
+			name:         "unsupported input fails closed",
 			verdict:      string(contracts.VerdictAllow),
 			catalog:      readOnlyCatalog(t),
 			arguments:    map[string]any{"bad": make(chan int)},
 			wantTerminal: events.RequestFailed,
-			wantFailure:  "audit",
-			wantHandler:  true,
+			wantFailure:  "preflight",
+			preflight:    true,
 		},
 		{
 			name:         "delegation scope rejection",
@@ -210,9 +219,6 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 			if !tt.nilHandler {
 				handler = func(ctx context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
 					called = true
-					if tt.handlerErr != nil {
-						return ToolExecutionResponse{Content: "raw response payload"}, tt.handlerErr
-					}
 					response := ToolExecutionResponse{Content: "raw response payload", IsError: tt.respIsError}
 					if tt.receipt != nil {
 						response.ExecutionReceipt = tt.receipt
@@ -220,6 +226,9 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 						response.ApprovalHash = "approval-secret"
 						response.ApproverID = "approver-raw"
 						response.DispatchAdmissionExpiry = time.UnixMilli(1_754_000_000_000).UTC()
+					}
+					if tt.handlerErr != nil {
+						return response, tt.handlerErr
 					}
 					return response, nil
 				}
@@ -243,8 +252,14 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 			resp, runErr := fw.WrapToolHandler(handler)(ctx, req)
 
 			if tt.handlerErr != nil {
-				if !errors.Is(runErr, tt.handlerErr) {
-					t.Fatalf("wrapper error = %v, want handler error", runErr)
+				if runErr == nil || runErr.Error() != errToolHandlerFailed.Error() {
+					t.Fatalf("wrapper error = %v, want value-free handler error", runErr)
+				}
+				if errors.Unwrap(runErr) != nil {
+					t.Fatalf("wrapper error retained a recoverable raw cause: %v", runErr)
+				}
+				if strings.Contains(runErr.Error(), "raw handler detail") {
+					t.Fatal("wrapper error exposed raw handler detail")
 				}
 			} else if tt.nilHandler {
 				if runErr == nil {

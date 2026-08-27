@@ -42,7 +42,7 @@ func TestDelegationScope_ToolNotInScope(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "delegation scope violation")
-	assert.Contains(t, err.Error(), "shell_exec")
+	assert.NotContains(t, err.Error(), "shell_exec")
 }
 
 // TestDelegationScope_NoDelegation verifies backwards compatibility:

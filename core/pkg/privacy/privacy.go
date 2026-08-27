@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"net/netip"
 	"reflect"
 	"regexp"
 	"sort"
@@ -42,10 +43,10 @@ var (
 	// public data-egress denial.
 	ErrDataEgressInvalid = errors.New("DATA_EGRESS_INVALID")
 
-	phonePattern      = regexp.MustCompile(`(?:\+[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,15}\b)`)
+	phonePattern      = regexp.MustCompile(`(?:(?:\+|00)[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,15}\b)`)
 	ssnPattern        = regexp.MustCompile(`\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b`)
 	compactSSNPattern = regexp.MustCompile(`(?i)\b(?:ssn|social[ _-]*security(?:[ _-]*(?:number|no))?)\b["']?\s*[:=#-]?\s*["']?[0-9]{9}\b`)
-	cardPattern       = regexp.MustCompile(`(?:[0-9][ -]?){13,19}`)
+	cardPattern       = regexp.MustCompile(`(?:[0-9][ -]?){12,19}`)
 	ibanPattern       = regexp.MustCompile(`(?i)\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b`)
 	assignmentPattern = regexp.MustCompile(`(?i)(?:"([^"\r\n]{1,128})"|'([^'\r\n]{1,128})'|([a-z][a-z0-9_.-]{0,127}))\s*[:=]`)
 	secretPattern     = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b["']?\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
@@ -267,7 +268,7 @@ func (p *protector) numeric(lexical string, value any) (any, error) {
 	if exact := exactIntegerDigits(lexical); exact != "" {
 		classified = exact
 	}
-	if hasValidNumericCard(classified) || plausibleCompactPhoneDigits(classified) {
+	if hasValidNumericCard(classified) {
 		return nil, ErrDataEgressBlocked
 	}
 	return value, nil
@@ -384,6 +385,10 @@ func (p *protector) mapAny(value map[string]any, depth int) (map[string]any, err
 			return nil, ErrDataEgressInvalid
 		}
 		item, err := p.value(value[key], depth+1)
+		if err != nil {
+			return nil, err
+		}
+		item, err = p.redactNumericPhone(key, value[key], item)
 		if err != nil {
 			return nil, err
 		}
@@ -564,7 +569,12 @@ func (p *protector) reflectValue(value reflect.Value, depth int) (any, error) {
 			if _, exists := protected[protectedKey]; exists {
 				return nil, ErrDataEgressInvalid
 			}
-			item, err := p.value(value.MapIndex(key).Interface(), depth+1)
+			rawItem := value.MapIndex(key).Interface()
+			item, err := p.value(rawItem, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			item, err = p.redactNumericPhone(key.String(), rawItem, item)
 			if err != nil {
 				return nil, err
 			}
@@ -590,8 +600,71 @@ func (p *protector) reflectValue(value reflect.Value, depth int) (any, error) {
 			}
 		}
 		return protected, nil
+	case reflect.String:
+		protected, err := p.text(value.String())
+		if err != nil {
+			return nil, err
+		}
+		result := reflect.New(value.Type()).Elem()
+		result.SetString(protected)
+		return result.Interface(), nil
+	case reflect.Bool:
+		return value.Interface(), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return p.numeric(strconv.FormatInt(value.Int(), 10), value.Interface())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return p.numeric(strconv.FormatUint(value.Uint(), 10), value.Interface())
+	case reflect.Float32, reflect.Float64:
+		bits := value.Type().Bits()
+		numeric := value.Float()
+		maxExact := float64(maxExactFloat64Int)
+		if bits == 32 {
+			maxExact = maxExactFloat32Int
+		}
+		if unsafeJSONFloat(numeric, maxExact) {
+			return nil, ErrDataEgressInvalid
+		}
+		return p.numeric(strconv.FormatFloat(numeric, 'f', -1, bits), value.Interface())
 	default:
 		return nil, ErrDataEgressInvalid
+	}
+}
+
+func (p *protector) redactNumericPhone(key string, original, protected any) (any, error) {
+	if !isPhoneKey(key) {
+		return protected, nil
+	}
+	digits := exactNumericDigits(original)
+	if digits == "" || !plausibleCompactPhoneDigits(digits) {
+		return protected, nil
+	}
+	const marker = "[REDACTED_PHONE]"
+	if len(marker) > len(digits) {
+		if err := p.accountBytes(len(marker) - len(digits)); err != nil {
+			return nil, err
+		}
+	}
+	p.findings["phone"] = struct{}{}
+	return marker, nil
+}
+
+func exactNumericDigits(value any) string {
+	if number, ok := value.(json.Number); ok {
+		return exactIntegerDigits(string(number))
+	}
+	rv := reflect.ValueOf(value)
+	if !rv.IsValid() {
+		return ""
+	}
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return exactIntegerDigits(strconv.FormatInt(rv.Int(), 10))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return exactIntegerDigits(strconv.FormatUint(rv.Uint(), 10))
+	case reflect.Float32, reflect.Float64:
+		return exactIntegerDigits(strconv.FormatFloat(rv.Float(), 'f', -1, rv.Type().Bits()))
+	default:
+		return ""
 	}
 }
 
@@ -644,6 +717,10 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 		return "", nil, ErrDataEgressBlocked
 	}
 
+	canonical, unresolvedPercent := canonicalizePercentEscapes(canonical)
+	if unresolvedPercent || !utf8.ValidString(canonical) {
+		return "", nil, ErrDataEgressBlocked
+	}
 	quotedCanonical, unresolvedQuotes := canonicalizeQuotedEscapes(canonical)
 	if unresolvedQuotes || restrictedText(quotedCanonical) {
 		return "", nil, ErrDataEgressBlocked
@@ -678,7 +755,10 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 		return value, nil, nil
 	}
 	remaining, unresolved := canonicalizeUnicode(protected)
-	if unresolved || emailRegex.MatchString(remaining) || len(findPhoneMatches(remaining)) > 0 {
+	remaining, unresolvedPercent = canonicalizePercentEscapes(remaining)
+	quotedRemaining, unresolvedQuotes := canonicalizeQuotedEscapes(remaining)
+	if unresolved || unresolvedPercent || unresolvedQuotes || restrictedText(quotedRemaining) ||
+		emailRegex.MatchString(remaining) || len(findPhoneMatches(remaining)) > 0 {
 		return "", nil, ErrDataEgressBlocked
 	}
 	return protected, labels, nil
@@ -727,8 +807,16 @@ func findPhoneMatches(value string) []string {
 		if (index[0] > 0 && isDigit(value[index[0]-1])) || (index[1] < len(value) && isDigit(value[index[1]])) {
 			continue
 		}
+		if addr, err := netip.ParseAddr(candidate); err == nil && addr.Is4() {
+			continue
+		}
 		if digitCount(candidate) < 10 || digitCount(candidate) > 15 || !plausiblePhone(candidate) {
 			continue
+		}
+		if digitCount(candidate) == len(candidate) {
+			if key, ok := precedingAssignmentKey(value, index[0]); ok && !isPhoneKey(key) {
+				continue
+			}
 		}
 		matches = append(matches, candidate)
 	}
@@ -740,6 +828,7 @@ func redactCanonicalMatches(original string, matches []string, marker string) (s
 	variants := make(map[string]struct{}, len(matches)*(maxUnicodeEscapeDepth+1))
 	replacements := make([]string, 0, len(matches)*(maxUnicodeEscapeDepth+1)*2)
 	hasUnicodeEscapes := strings.Contains(original, `\u`)
+	hasPercentEscapes := strings.Contains(original, "%")
 	for _, match := range matches {
 		if _, ok := seen[match]; ok {
 			continue
@@ -756,6 +845,14 @@ func redactCanonicalMatches(original string, matches []string, marker string) (s
 				}
 			}
 		}
+		if hasPercentEscapes {
+			for _, candidate := range percentEscapeVariants(match) {
+				if _, ok := variants[candidate]; !ok {
+					variants[candidate] = struct{}{}
+					replacements = append(replacements, candidate, marker)
+				}
+			}
+		}
 		if _, ok := variants[match]; !ok {
 			variants[match] = struct{}{}
 			replacements = append(replacements, match, marker)
@@ -766,6 +863,119 @@ func redactCanonicalMatches(original string, matches []string, marker string) (s
 	}
 	protected := strings.NewReplacer(replacements...).Replace(original)
 	return protected, protected != original
+}
+
+func canonicalizePercentEscapes(value string) (string, bool) {
+	canonical := value
+	for depth := 0; depth < maxUnicodeEscapeDepth; depth++ {
+		next, changed := decodePercentEscapes(canonical)
+		if !changed {
+			return canonical, false
+		}
+		canonical = next
+	}
+	_, unresolved := decodePercentEscapes(canonical)
+	return canonical, unresolved
+}
+
+func decodePercentEscapes(value string) (string, bool) {
+	if !strings.Contains(value, "%") {
+		return value, false
+	}
+	var builder strings.Builder
+	builder.Grow(len(value))
+	changed := false
+	for index := 0; index < len(value); index++ {
+		if value[index] == '%' && index+2 < len(value) {
+			high, highOK := hexValue(value[index+1])
+			low, lowOK := hexValue(value[index+2])
+			if highOK && lowOK {
+				builder.WriteByte(high<<4 | low)
+				index += 2
+				changed = true
+				continue
+			}
+		}
+		builder.WriteByte(value[index])
+	}
+	return builder.String(), changed
+}
+
+func hexValue(value byte) (byte, bool) {
+	switch {
+	case value >= '0' && value <= '9':
+		return value - '0', true
+	case value >= 'a' && value <= 'f':
+		return value - 'a' + 10, true
+	case value >= 'A' && value <= 'F':
+		return value - 'A' + 10, true
+	default:
+		return 0, false
+	}
+}
+
+func percentEscapeVariants(value string) []string {
+	return []string{
+		percentEscape(value, "@+%", false),
+		percentEscape(value, "@.+%", false),
+		percentEscape(value, "@+%", true),
+		percentEscape(value, "@.+%", true),
+		percentEscape(value, "", false),
+		percentEscape(value, "", true),
+	}
+}
+
+func percentEscape(value, selected string, lowerHex bool) string {
+	upper := "0123456789ABCDEF"
+	hex := upper
+	if lowerHex {
+		hex = "0123456789abcdef"
+	}
+	encodeAll := selected == ""
+	var builder strings.Builder
+	builder.Grow(len(value) * 3)
+	for index := 0; index < len(value); index++ {
+		char := value[index]
+		if !encodeAll && !strings.ContainsRune(selected, rune(char)) {
+			builder.WriteByte(char)
+			continue
+		}
+		builder.WriteByte('%')
+		builder.WriteByte(hex[char>>4])
+		builder.WriteByte(hex[char&0x0f])
+	}
+	return builder.String()
+}
+
+func precedingAssignmentKey(value string, start int) (string, bool) {
+	if start <= 0 {
+		return "", false
+	}
+	windowStart := max(0, start-160)
+	prefix := strings.TrimRight(value[windowStart:start], " \t")
+	indices := assignmentPattern.FindAllStringSubmatchIndex(prefix, -1)
+	if len(indices) == 0 || indices[len(indices)-1][1] != len(prefix) {
+		return "", false
+	}
+	last := indices[len(indices)-1]
+	for group := 2; group < len(last); group += 2 {
+		if last[group] >= 0 {
+			return prefix[last[group]:last[group+1]], true
+		}
+	}
+	return "", false
+}
+
+func isPhoneKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	normalized = strings.NewReplacer("-", "_", " ", "_", ".", "_").Replace(normalized)
+	compact := strings.ReplaceAll(normalized, "_", "")
+	switch compact {
+	case "phone", "phonenumber", "mobile", "mobilephone", "telephone", "tel", "contactphone":
+		return true
+	default:
+		return strings.HasSuffix(normalized, "_phone") || strings.HasSuffix(normalized, "_phone_number")
+	}
 }
 
 func canonicalizeQuotedEscapes(value string) (string, bool) {
@@ -818,7 +1028,7 @@ func isDigit(value byte) bool {
 }
 
 func plausiblePhone(value string) bool {
-	if strings.HasPrefix(value, "+") || strings.HasPrefix(value, "(") {
+	if strings.HasPrefix(value, "+") || strings.HasPrefix(value, "00") || strings.HasPrefix(value, "(") {
 		return true
 	}
 	if digitCount(value) == len(value) {
@@ -873,7 +1083,7 @@ func hasValidCard(value string) bool {
 			}
 			return -1
 		}, match)
-		if len(digits) >= 13 && len(digits) <= 19 && luhnValid(digits) &&
+		if len(digits) >= 12 && len(digits) <= 19 && luhnValid(digits) &&
 			(isKnownPaymentCardNumber(digits) || paymentContext.MatchString(value)) {
 			return true
 		}
@@ -882,7 +1092,7 @@ func hasValidCard(value string) bool {
 }
 
 func hasValidNumericCard(value string) bool {
-	if len(value) < 13 || len(value) > 19 {
+	if len(value) < 12 || len(value) > 19 {
 		return false
 	}
 	for index := 0; index < len(value); index++ {
@@ -911,6 +1121,8 @@ func isKnownPaymentCardNumber(value string) bool {
 		return true
 	case length >= 16 && length <= 19 && (prefixBetween(value, 4, 3528, 3589) ||
 		strings.HasPrefix(value, "62")):
+		return true
+	case length >= 12 && length <= 19 && (strings.HasPrefix(value, "50") || prefixBetween(value, 2, 56, 69)):
 		return true
 	default:
 		return false

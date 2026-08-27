@@ -86,6 +86,7 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 		{name: "escaped quoted JSON password", value: `{\"password\":\"abc123\"}`, raw: "abc123"},
 		{name: "camel-case JSON token", value: `{"refreshToken":"abc123"}`, raw: "abc123"},
 		{name: "escaped camel-case JSON token", value: `{\"refreshToken\":\"abc123\"}`, raw: "abc123"},
+		{name: "basic authorization header", value: "Authorization: Basic dXNlcjpwYXNzd29yZA==", raw: "dXNlcjpwYXNzd29yZA=="},
 		{name: "short token assignment", value: "token: x", raw: "x"},
 		{name: "labeled jwt", value: "jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature1234", raw: "signature1234"},
 		{name: "URL jwt", value: "https://example.test/callback?jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature1234&next=1", raw: "signature1234"},
@@ -102,6 +103,111 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 				t.Fatalf("error contains raw restricted value: %v", err)
 			}
 		})
+	}
+}
+
+func TestProtectEncodedPIIAndInternationalPhones(t *testing.T) {
+	manager := NewPrivacyManager()
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{
+			name:  "percent encoded email",
+			value: "https://example.test/?email=alice%40example.com&next=1",
+			want:  "https://example.test/?email=[REDACTED_EMAIL]&next=1",
+		},
+		{
+			name:  "double percent encoded email fails closed",
+			value: "https://example.test/?email=alice%2540example.com",
+		},
+		{
+			name:  "00 prefixed phone",
+			value: "call 0044 20 7946 0958 now",
+			want:  "call [REDACTED_PHONE] now",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			protected, _, err := manager.Protect(context.Background(), tc.value)
+			if tc.want == "" {
+				if !errors.Is(err, ErrDataEgressBlocked) {
+					t.Fatalf("Protect() error = %v, want ErrDataEgressBlocked", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Protect() error = %v", err)
+			}
+			if protected != tc.want {
+				t.Fatalf("Protect() = %q, want %q", protected, tc.want)
+			}
+		})
+	}
+}
+
+func TestProtectDistinguishesNumericIDsPhonesAndIPv4(t *testing.T) {
+	manager := NewPrivacyManager()
+	input := map[string]any{
+		"comment_id": int64(12345678901),
+		"phone":      json.Number("442079460958"),
+		"endpoint":   "http://192.168.100.200/api",
+		"document":   `{"comment_id":12345678901}`,
+	}
+	protected, findings, err := manager.Protect(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Protect() error = %v", err)
+	}
+	got := protected.(map[string]any)
+	if got["comment_id"] != input["comment_id"] {
+		t.Fatalf("comment id changed: %#v", got["comment_id"])
+	}
+	if got["phone"] != "[REDACTED_PHONE]" {
+		t.Fatalf("numeric phone = %#v, want redaction", got["phone"])
+	}
+	if got["endpoint"] != input["endpoint"] || got["document"] != input["document"] {
+		t.Fatalf("clean network/id values changed: %#v", got)
+	}
+	if !reflect.DeepEqual(findings, []string{"phone"}) {
+		t.Fatalf("findings = %v, want phone", findings)
+	}
+	for _, value := range []any{int64(12345678901), json.Number("12345678901")} {
+		if protected, findings, err := manager.Protect(context.Background(), value); err != nil || protected != value || len(findings) != 0 {
+			t.Fatalf("bare numeric id = %#v findings=%v err=%v", protected, findings, err)
+		}
+	}
+}
+
+func TestProtectAcceptsJSONSafeNamedPrimitives(t *testing.T) {
+	type status string
+	type count int64
+	type ratio float64
+	type enabled bool
+
+	input := map[string]any{
+		"status":  status("ready"),
+		"count":   count(42),
+		"ratio":   ratio(1.5),
+		"enabled": enabled(true),
+	}
+	protected, findings, err := NewPrivacyManager().Protect(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Protect() error = %v", err)
+	}
+	if len(findings) != 0 || !reflect.DeepEqual(protected, input) {
+		t.Fatalf("Protect() = %#v findings=%v, want named primitives preserved", protected, findings)
+	}
+}
+
+func TestProtectRejectsMaestroPANs(t *testing.T) {
+	for _, value := range []any{
+		"6759649826438453",
+		json.Number("6759649826438453"),
+		int64(6759649826438453),
+	} {
+		if _, _, err := NewPrivacyManager().Protect(context.Background(), value); !errors.Is(err, ErrDataEgressBlocked) {
+			t.Fatalf("Maestro PAN %#v error = %v, want ErrDataEgressBlocked", value, err)
+		}
 	}
 }
 

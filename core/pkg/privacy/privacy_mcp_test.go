@@ -84,6 +84,8 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 		{name: "short password assignment", value: "password=abc123", raw: "abc123"},
 		{name: "quoted JSON password", value: `{"password":"abc123"}`, raw: "abc123"},
 		{name: "escaped quoted JSON password", value: `{\"password\":\"abc123\"}`, raw: "abc123"},
+		{name: "camel-case JSON token", value: `{"refreshToken":"abc123"}`, raw: "abc123"},
+		{name: "escaped camel-case JSON token", value: `{\"refreshToken\":\"abc123\"}`, raw: "abc123"},
 		{name: "short token assignment", value: "token: x", raw: "x"},
 		{name: "labeled jwt", value: "jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature1234", raw: "signature1234"},
 		{name: "URL jwt", value: "https://example.test/callback?jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature1234&next=1", raw: "signature1234"},
@@ -173,6 +175,11 @@ func TestProtectAllowsTokenMetadataAndLuhnDeviceIdentifiers(t *testing.T) {
 	if len(findings) != 0 || !reflect.DeepEqual(protected, input) {
 		t.Fatalf("Protect() metadata = value=%#v findings=%v", protected, findings)
 	}
+	for _, value := range []string{`{"token_count":42}`, `tokenizer=cl100k_base`} {
+		if protected, findings, err := manager.Protect(context.Background(), value); err != nil || protected != value || len(findings) != 0 {
+			t.Fatalf("Protect() text metadata = value=%#v findings=%v err=%v", protected, findings, err)
+		}
+	}
 	if _, _, err := manager.Protect(context.Background(), map[string]any{"auth_token": "abc123"}); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("auth_token error = %v, want ErrDataEgressBlocked", err)
 	}
@@ -225,6 +232,25 @@ func TestProtectDoubleEscapedRestrictedJSONValueFailsClosed(t *testing.T) {
 	}
 	if _, _, err := manager.Protect(context.Background(), float64(4000000000000000006)); !errors.Is(err, ErrDataEgressInvalid) {
 		t.Fatalf("imprecise float PAN error = %v, want ErrDataEgressInvalid", err)
+	}
+}
+
+func TestExactIntegerDigitsBoundsExponentExpansion(t *testing.T) {
+	if got := exactIntegerDigits("4.111111111111111e15"); got != "4111111111111111" {
+		t.Fatalf("scientific integer = %q, want exact PAN digits", got)
+	}
+	if got := exactIntegerDigits("41111111111111110e-1"); got != "4111111111111111" {
+		t.Fatalf("negative exponent integer = %q, want exact PAN digits", got)
+	}
+	var got string
+	allocs := testing.AllocsPerRun(10, func() {
+		got = exactIntegerDigits("1e1000000")
+	})
+	if got != "" {
+		t.Fatalf("huge exponent expanded to %d digits", len(got))
+	}
+	if allocs > 8 {
+		t.Fatalf("huge exponent allocations = %.0f, want <= 8", allocs)
 	}
 }
 

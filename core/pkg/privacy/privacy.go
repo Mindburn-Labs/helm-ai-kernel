@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"math"
-	"math/big"
 	"reflect"
 	"regexp"
 	"sort"
@@ -48,6 +47,7 @@ var (
 	compactSSNPattern = regexp.MustCompile(`(?i)\b(?:ssn|social[ _-]*security(?:[ _-]*(?:number|no))?)\b["']?\s*[:=#-]?\s*["']?[0-9]{9}\b`)
 	cardPattern       = regexp.MustCompile(`(?:[0-9][ -]?){13,19}`)
 	ibanPattern       = regexp.MustCompile(`(?i)\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b`)
+	assignmentPattern = regexp.MustCompile(`(?i)(?:"([^"\r\n]{1,128})"|'([^'\r\n]{1,128})'|([a-z][a-z0-9_.-]{0,127}))\s*[:=]`)
 	secretPattern     = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b["']?\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
 	privateKeyPattern = regexp.MustCompile(`(?i)-----begin [a-z0-9 ]*private key-----`)
 	jwtPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:$|[^A-Za-z0-9_-])`)
@@ -274,11 +274,60 @@ func (p *protector) numeric(lexical string, value any) (any, error) {
 }
 
 func exactIntegerDigits(value string) string {
-	rational, ok := new(big.Rat).SetString(value)
-	if !ok || !rational.IsInt() {
+	if value == "" || value[0] == '-' {
 		return ""
 	}
-	return rational.Num().String()
+	mantissa := value
+	var exponent int64
+	if index := strings.IndexAny(value, "eE"); index >= 0 {
+		parsed, err := strconv.ParseInt(value[index+1:], 10, 32)
+		if err != nil {
+			return ""
+		}
+		exponent = parsed
+		mantissa = value[:index]
+	}
+	integerDigits := len(mantissa)
+	if point := strings.IndexByte(mantissa, '.'); point >= 0 {
+		if strings.Contains(mantissa[point+1:], ".") {
+			return ""
+		}
+		integerDigits = point
+		mantissa = mantissa[:point] + mantissa[point+1:]
+	}
+	if mantissa == "" {
+		return ""
+	}
+	firstNonZero := -1
+	for index := range mantissa {
+		if !isDigit(mantissa[index]) {
+			return ""
+		}
+		if firstNonZero < 0 && mantissa[index] != '0' {
+			firstNonZero = index
+		}
+	}
+	if firstNonZero < 0 {
+		return "0"
+	}
+	decimalPosition := int64(integerDigits) + exponent
+	if decimalPosition <= 0 {
+		return ""
+	}
+	if decimalPosition < int64(len(mantissa)) {
+		for _, digit := range mantissa[decimalPosition:] {
+			if digit != '0' {
+				return ""
+			}
+		}
+	}
+	end := min(decimalPosition, int64(len(mantissa)))
+	digits := strings.TrimLeft(mantissa[:end], "0")
+	trailingZeros := max(decimalPosition-int64(len(mantissa)), 0)
+	if int64(len(digits))+trailingZeros > 19 {
+		return ""
+	}
+	return digits + strings.Repeat("0", int(trailingZeros))
 }
 
 func unsafeJSONFloat(value, maxExactInteger float64) bool {
@@ -639,13 +688,32 @@ var defaultEmailRegex = regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a
 
 func restrictedText(value string) bool {
 	if ssnPattern.MatchString(value) || compactSSNPattern.MatchString(value) ||
-		secretPattern.MatchString(value) || privateKeyPattern.MatchString(value) {
+		secretPattern.MatchString(value) || hasRestrictedAssignment(value) || privateKeyPattern.MatchString(value) {
 		return true
 	}
 	if hasValidCard(value) || hasValidIBAN(value) {
 		return true
 	}
 	return looksLikeJWTText(value)
+}
+
+func hasRestrictedAssignment(value string) bool {
+	if !strings.ContainsAny(value, ":=") {
+		return false
+	}
+	for len(value) > 0 {
+		indices := assignmentPattern.FindStringSubmatchIndex(value)
+		if indices == nil {
+			return false
+		}
+		for group := 2; group < len(indices); group += 2 {
+			if indices[group] >= 0 && isRestrictedKey(value[indices[group]:indices[group+1]]) {
+				return true
+			}
+		}
+		value = value[indices[1]:]
+	}
+	return false
 }
 
 func findPhoneMatches(value string) []string {

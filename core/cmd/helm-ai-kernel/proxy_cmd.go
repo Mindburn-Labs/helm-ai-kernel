@@ -31,7 +31,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
@@ -497,7 +496,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	artRegistry := artifacts.NewRegistry(artStore, kernelSigner)
-	g := guardian.NewGuardian(kernelSigner, prgGraph, artRegistry)
+	g, guardianErr := newProductionGuardian(kernelSigner, prgGraph, artRegistry, utcRuntimeClock{})
+	if guardianErr != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: failed to initialize production Guardian: %v\n", guardianErr)
+		return 2
+	}
 	pg := proofgraph.NewGraph()
 
 	// Budget enforcer (in-memory for sidecar mode)

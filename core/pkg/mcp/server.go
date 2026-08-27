@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
@@ -172,6 +173,14 @@ func (f *GovernanceFirewall) prepareToolExecution(req ToolExecutionRequest) (map
 	}
 	decisionCtx[guardian.ContextSecurityTrusted] = true
 	decisionCtx[guardian.ContextSessionID] = req.SessionID
+	if req.SessionID != "" {
+		// SessionID is minted or selected by the trusted MCP transport, not
+		// copied from tool arguments. Bind its digest as the stable transport
+		// credential so the production identity-isolation gate can detect one
+		// credential being reused under a different principal without exposing
+		// the bearer-like session identifier as credential evidence.
+		decisionCtx[guardian.ContextCredentialHash] = canonicalize.HashBytes([]byte(req.SessionID))
+	}
 	decisionCtx[guardian.ContextSourceChannel] = string(contracts.SourceChannelMCPClient)
 	decisionCtx[guardian.ContextTrustLevel] = string(contracts.InputTrustExternalUntrusted)
 	if req.DelegationSessionID != "" {

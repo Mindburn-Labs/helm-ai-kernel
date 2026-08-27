@@ -87,7 +87,11 @@ func newLocalMCPRuntimeWithSignerPolicyAndEffects(signer helmcrypto.Signer, poli
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
 	}
-	return newLocalMCPRuntimeWithEvaluatorAndEffects(guardian.NewGuardian(signer, policyGraph, nil), githubEffects)
+	guard, err := newProductionGuardian(signer, policyGraph, nil, utcRuntimeClock{})
+	if err != nil {
+		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("initialize local MCP production Guardian: %w", err)
+	}
+	return newLocalMCPRuntimeWithEvaluatorAndEffects(guard, githubEffects)
 }
 
 // newLocalMCPRuntimeWithEvaluator builds the local MCP runtime whose governance

@@ -161,7 +161,7 @@ func TestMCPMediationProofSchemaErrorsBlockBeforeExecutor(t *testing.T) {
 	unknownJSONRPCReq.Header.Set("MCP-Protocol-Version", mcppkg.LatestProtocolVersion)
 	unknownJSONRPCRec := httptest.NewRecorder()
 	mux.ServeHTTP(unknownJSONRPCRec, unknownJSONRPCReq)
-	if unknownJSONRPCRec.Code != http.StatusOK || !strings.Contains(unknownJSONRPCRec.Body.String(), "tool \\\"proof.missing\\\" not found") || len(calls) != 0 {
+	if unknownJSONRPCRec.Code != http.StatusOK || !strings.Contains(unknownJSONRPCRec.Body.String(), "tool not found") || strings.Contains(unknownJSONRPCRec.Body.String(), "proof.missing") || len(calls) != 0 {
 		t.Fatalf("HTTP JSON-RPC unknown tool reached executor: status=%d body=%s calls=%#v", unknownJSONRPCRec.Code, unknownJSONRPCRec.Body.String(), calls)
 	}
 

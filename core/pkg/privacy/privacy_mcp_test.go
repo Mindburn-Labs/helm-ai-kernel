@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise classical SHA-256 stable references
+// and privacy filtering only; no post-quantum assurance is added or claimed.
 package privacy
 
 import (

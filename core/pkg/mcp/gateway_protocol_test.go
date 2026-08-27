@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
@@ -63,6 +64,8 @@ func TestGatewayGovernedIngressRejectionsPublishClosedLifecycle(t *testing.T) {
 	)
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
 
 	tests := []struct {
 		name       string
@@ -83,6 +86,7 @@ func TestGatewayGovernedIngressRejectionsPublishClosedLifecycle(t *testing.T) {
 					body, err := json.Marshal(MCPToolCallRequest{Method: tt.tool, Params: tt.arguments})
 					require.NoError(t, err)
 					req := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+					req.Header.Set("MCP-Session-Id", sessionID)
 					rec := httptest.NewRecorder()
 					mux.ServeHTTP(rec, req)
 					require.Equal(t, tt.status, rec.Code)
@@ -92,7 +96,7 @@ func TestGatewayGovernedIngressRejectionsPublishClosedLifecycle(t *testing.T) {
 						"id":      42,
 						"method":  "tools/call",
 						"params":  map[string]any{"name": tt.tool, "arguments": tt.arguments},
-					}, nil)
+					}, map[string]string{"MCP-Session-Id": sessionID})
 					require.Equal(t, http.StatusOK, rec.Code)
 					require.Contains(t, rec.Body.String(), "error")
 				}
@@ -288,6 +292,49 @@ func TestGateway_ToolsCallRejectsMissingRequiredOAuthScope(t *testing.T) {
 	assert.Contains(t, errPayload["message"], "mcp:tool:scoped")
 }
 
+func TestGateway_OversizedReceiptCannotEscapeBoundedFallbacks(t *testing.T) {
+	exec := func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{
+			Content:           strings.Repeat("x", MaxResponseBytes),
+			ReceiptID:         strings.Repeat("r", MaxResponseBytes),
+			ProtectedArgsHash: strings.Repeat("h", MaxResponseBytes),
+		}, nil
+	}
+	mux := newProtocolTestMux(t, GatewayConfig{}, exec)
+
+	body, err := json.Marshal(MCPToolCallRequest{
+		Method: "file_read",
+		Params: map[string]any{"path": "/tmp/demo.txt"},
+	})
+	require.NoError(t, err)
+	rest := httptest.NewRecorder()
+	mux.ServeHTTP(rest, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+	require.Equal(t, http.StatusForbidden, rest.Code)
+	require.LessOrEqual(t, rest.Body.Len(), MaxResponseBytes)
+	var restPayload MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(rest.Body.Bytes(), &restPayload))
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), restPayload.ReasonCode)
+	require.Empty(t, restPayload.ReceiptID)
+
+	jsonRPC := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      7,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "file_read",
+			"arguments": map[string]any{"path": "/tmp/demo.txt"},
+		},
+	}, nil)
+	require.Equal(t, http.StatusOK, jsonRPC.Code)
+	require.LessOrEqual(t, jsonRPC.Body.Len(), MaxResponseBytes)
+	var rpcPayload map[string]any
+	require.NoError(t, json.Unmarshal(jsonRPC.Body.Bytes(), &rpcPayload))
+	result := rpcPayload["result"].(map[string]any)
+	require.Equal(t, true, result["isError"])
+	require.NotContains(t, result, "receipt_id")
+	require.Contains(t, string(mustJSON(t, result)), string(contracts.ReasonDataEgressBlocked))
+}
+
 func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
 	exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
 		assert.Equal(t, "scoped_tool", req.ToolName)
@@ -370,13 +417,15 @@ func TestGateway_AnonymousGovernedExecutorReachesScopedTool(t *testing.T) {
 	gw := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(handler)))
 	mux := http.NewServeMux()
 	gw.RegisterRoutes(mux)
+	defer gw.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
 
 	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
 		"jsonrpc": "2.0",
 		"id":      23,
 		"method":  "tools/call",
 		"params":  map[string]any{"name": "scoped_tool"},
-	}, nil)
+	}, map[string]string{"MCP-Session-Id": sessionID})
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "ok")
@@ -545,6 +594,23 @@ func performJSONRPCRequest(t *testing.T, mux *http.ServeMux, method, path string
 	return rec
 }
 
+func initializeMCPTestSession(t *testing.T, mux *http.ServeMux) string {
+	t.Helper()
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": LatestProtocolVersion,
+			"clientInfo":      map[string]any{"name": "test-client"},
+		},
+	}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	sessionID := rec.Header().Get("MCP-Session-Id")
+	require.NotEmpty(t, sessionID)
+	return sessionID
+}
+
 func TestGateway_InitializeIssuesSessionId(t *testing.T) {
 	mux := newProtocolTestMux(t, GatewayConfig{}, nil)
 
@@ -692,10 +758,13 @@ func TestGateway_JSONRPCEnforcesDelegationHeaders(t *testing.T) {
 	})))
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
 	headers := map[string]string{
 		"X-HELM-Delegation-Session-ID":    "delegation-1",
 		"X-HELM-Delegation-Verifier":      "did:example:verifier",
 		"X-HELM-Delegation-Allowed-Tools": "allowed",
+		"MCP-Session-Id":                  sessionID,
 	}
 
 	listed := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
@@ -732,11 +801,13 @@ func TestGateway_JSONRPCRejectsUnattestedGovernedSuccess(t *testing.T) {
 	}}))
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
 
 	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": map[string]any{"name": "tool", "arguments": map[string]any{}},
-	}, nil)
+	}, map[string]string{"MCP-Session-Id": sessionID})
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "governed execution did not attest protected arguments")
 	assert.NotContains(t, rec.Body.String(), `"result"`)

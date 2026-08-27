@@ -162,6 +162,39 @@ func TestGovernanceFirewallRestrictedOutputIsNotReturnedOrAudited(t *testing.T) 
 	require.Equal(t, 1, evaluator.callCount())
 }
 
+func TestGovernanceFirewallRejectsMismatchedReceiptArgsHash(t *testing.T) {
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	var lifecycle []events.LifecycleEvent
+	firewall := NewGovernanceFirewall(
+		evaluator,
+		privacyCatalog(t),
+		WithLifecycleEnvironment(events.EnvSynthetic),
+		WithLifecyclePublisher(func(_ context.Context, event events.LifecycleEvent) error {
+			lifecycle = append(lifecycle, event)
+			return nil
+		}),
+	)
+	response, err := firewall.WrapToolHandler(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{
+			Content: "provider output must not be trusted",
+			ExecutionReceipt: &contracts.Receipt{
+				ReceiptID: "receipt-stale",
+				ArgsHash:  "sha256:stale",
+			},
+		}, nil
+	})(context.Background(), ToolExecutionRequest{ToolName: "privacy-tool", SessionID: "session-privacy"})
+
+	require.ErrorIs(t, err, errToolHandlerFailed)
+	require.True(t, response.IsError)
+	require.Equal(t, contracts.ReasonVerification, response.runtimeReasonCode)
+	require.NotEmpty(t, response.ProtectedArgsHash)
+	require.Empty(t, response.ReceiptID)
+	require.Nil(t, response.ExecutionReceipt)
+	require.NotContains(t, response.Content, "provider output")
+	require.Equal(t, 0, countEvent(lifecycle, events.DispatchCompleted))
+	require.Equal(t, "receipt", fieldString(lifecycle, events.RequestFailed, "failure_class"))
+}
+
 func TestGovernanceFirewallRejectsAggregateOutputBudget(t *testing.T) {
 	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
 	firewall := NewGovernanceFirewall(evaluator, privacyCatalog(t))
@@ -182,7 +215,7 @@ func TestGovernanceFirewallRejectsAggregateOutputBudget(t *testing.T) {
 	require.Equal(t, 1, evaluator.callCount())
 }
 
-func TestGatewayHTTPSessionIDIsOpaqueAndOmitsRemoteAddress(t *testing.T) {
+func TestGatewayHTTPBindsValidatedSessionAndOmitsRemoteAddress(t *testing.T) {
 	const remoteAddress = "203.0.113.7:4567"
 	transportCatalog := NewInMemoryCatalog()
 	require.NoError(t, transportCatalog.Register(context.Background(), ToolRef{
@@ -206,15 +239,19 @@ func TestGatewayHTTPSessionIDIsOpaqueAndOmitsRemoteAddress(t *testing.T) {
 		return ToolExecutionResponse{Content: "ok"}, nil
 	})))
 	defer gateway.sessions.Stop()
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	sessionID := initializeMCPTestSession(t, mux)
 
 	body := []byte(`{"method":"privacy-tool","params":{}}`)
 	request := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
 	request.RemoteAddr = remoteAddress
+	request.Header.Set("MCP-Session-Id", sessionID)
 	recorder := httptest.NewRecorder()
 	gateway.handleExecute(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.NotEmpty(t, handlerSessionID)
+	require.Equal(t, sessionID, handlerSessionID)
 	require.NotEqual(t, remoteAddress, handlerSessionID)
 	require.NotContains(t, handlerSessionID, remoteAddress)
 	contextValue := evaluator.firstContext()[guardian.ContextSessionID]
@@ -229,6 +266,7 @@ func TestGatewayHTTPSessionIDIsOpaqueAndOmitsRemoteAddress(t *testing.T) {
 	unknownBody := []byte(`{"method":"person@example.com","params":{}}`)
 	unknown := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(unknownBody))
 	unknown.RemoteAddr = remoteAddress
+	unknown.Header.Set("MCP-Session-Id", sessionID)
 	unknownRecorder := httptest.NewRecorder()
 	gateway.handleExecute(unknownRecorder, unknown)
 	require.Equal(t, http.StatusNotFound, unknownRecorder.Code)
@@ -237,13 +275,15 @@ func TestGatewayHTTPSessionIDIsOpaqueAndOmitsRemoteAddress(t *testing.T) {
 		require.NotContains(t, string(mustJSON(t, event)), "person@example.com")
 	}
 
-	second := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
-	second.RemoteAddr = remoteAddress
-	secondRequest := toolExecutionRequestFromHTTP(second, "privacy-tool", nil)
-	require.NotEqual(t, handlerSessionID, secondRequest.SessionID)
+	sessionless := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+	sessionless.RemoteAddr = remoteAddress
+	sessionlessRecorder := httptest.NewRecorder()
+	gateway.handleExecute(sessionlessRecorder, sessionless)
+	require.Equal(t, http.StatusUnauthorized, sessionlessRecorder.Code)
+	require.Equal(t, sessionID, handlerSessionID)
 }
 
-func TestGatewayJSONRPCBindsValidatedAndLegacyOpaqueSessionIDs(t *testing.T) {
+func TestGatewayJSONRPCBindsValidatedSessionsAndRejectsSessionlessGovernedCalls(t *testing.T) {
 	catalog := privacyCatalog(t)
 	var evaluatorSessions []string
 	evaluator := &capturingEvaluator{
@@ -293,7 +333,7 @@ func TestGatewayJSONRPCBindsValidatedAndLegacyOpaqueSessionIDs(t *testing.T) {
 	secondSession := initialize()
 	require.NotEqual(t, firstSession, secondSession)
 
-	call := func(sessionID, remoteAddress string) {
+	call := func(sessionID, remoteAddress string) *httptest.ResponseRecorder {
 		body, err := json.Marshal(map[string]any{
 			"jsonrpc": "2.0",
 			"id":      2,
@@ -312,22 +352,17 @@ func TestGatewayJSONRPCBindsValidatedAndLegacyOpaqueSessionIDs(t *testing.T) {
 		}
 		recorder := httptest.NewRecorder()
 		mux.ServeHTTP(recorder, request)
-		require.Equal(t, http.StatusOK, recorder.Code)
 		require.NotContains(t, recorder.Body.String(), remoteAddress)
+		return recorder
 	}
 
-	call(firstSession, "203.0.113.7:4567")
-	call(secondSession, "203.0.113.7:4567")
-	call("", "203.0.113.7:4567")
-	call("", "203.0.113.7:4567")
+	require.Equal(t, http.StatusOK, call(firstSession, "203.0.113.7:4567").Code)
+	require.Equal(t, http.StatusOK, call(secondSession, "203.0.113.7:4567").Code)
+	require.Equal(t, http.StatusUnauthorized, call("", "203.0.113.7:4567").Code)
+	require.Equal(t, http.StatusUnauthorized, call("", "203.0.113.7:4567").Code)
 
-	require.Equal(t, []string{firstSession, secondSession}, handlerSessions[:2])
-	require.Len(t, handlerSessions, 4)
-	require.NotEmpty(t, handlerSessions[2])
-	require.NotEmpty(t, handlerSessions[3])
-	require.NotEqual(t, handlerSessions[2], handlerSessions[3])
-	require.NotEqual(t, firstSession, handlerSessions[2])
-	require.Len(t, evaluatorSessions, 4)
+	require.Equal(t, []string{firstSession, secondSession}, handlerSessions)
+	require.Len(t, evaluatorSessions, 2)
 	require.Equal(t, handlerSessions, evaluatorSessions)
 	for _, sessionID := range handlerSessions {
 		require.NotContains(t, sessionID, "203.0.113.7:4567")
@@ -380,10 +415,15 @@ func TestGatewayPreservesGovernedHandlerErrorAnchorsAcrossTransports(t *testing.
 		return ToolExecutionResponse{Content: "provider failed for person@example.com"}, errors.New("raw provider person@example.com")
 	})))
 	defer gateway.sessions.Stop()
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	sessionID := initializeMCPTestSession(t, mux)
 
 	restBody := []byte(`{"method":"privacy-tool","params":{"message":"safe"}}`)
+	restRequest := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(restBody))
+	restRequest.Header.Set("MCP-Session-Id", sessionID)
 	recorder := httptest.NewRecorder()
-	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(restBody)))
+	gateway.handleExecute(recorder, restRequest)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	var rest MCPToolCallResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &rest))
@@ -395,7 +435,7 @@ func TestGatewayPreservesGovernedHandlerErrorAnchorsAcrossTransports(t *testing.
 
 	params := json.RawMessage(`{"name":"privacy-tool","arguments":{"message":"safe"}}`)
 	response, write, status := gateway.handleJSONRPCRequestWithSession(
-		context.Background(), 1, "tools/call", params, LatestProtocolVersion, "session-handler-error", nil,
+		context.Background(), 1, "tools/call", params, LatestProtocolVersion, sessionID, nil,
 	)
 	require.True(t, write)
 	require.Equal(t, http.StatusOK, status)
@@ -682,12 +722,17 @@ func TestGatewayGovernedHashBindsProtectedArgumentsAndReason(t *testing.T) {
 		return ToolExecutionResponse{Content: "ok"}, nil
 	})))
 	defer gateway.sessions.Stop()
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	sessionID := initializeMCPTestSession(t, mux)
 
 	rawArguments := map[string]any{"message": "person@example.com"}
 	body, err := json.Marshal(MCPToolCallRequest{Method: "privacy-tool", Params: rawArguments})
 	require.NoError(t, err)
+	request := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+	request.Header.Set("MCP-Session-Id", sessionID)
 	recorder := httptest.NewRecorder()
-	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+	gateway.handleExecute(recorder, request)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	var allowed MCPToolCallResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &allowed))
@@ -704,8 +749,10 @@ func TestGatewayGovernedHashBindsProtectedArgumentsAndReason(t *testing.T) {
 		Params: map[string]any{"restricted_output": true},
 	})
 	require.NoError(t, err)
+	request = httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+	request.Header.Set("MCP-Session-Id", sessionID)
 	recorder = httptest.NewRecorder()
-	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+	gateway.handleExecute(recorder, request)
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	var denied MCPToolCallResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &denied))
@@ -722,10 +769,15 @@ func TestGatewayPreservesRestrictedNumericPrecisionAcrossTransports(t *testing.T
 		return ToolExecutionResponse{Content: "must not run"}, nil
 	})))
 	defer gateway.sessions.Stop()
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	sessionID := initializeMCPTestSession(t, mux)
 
 	restBody := []byte("{\"method\":\"privacy-tool\",\"params\":{\"pan\":4000000000000000006}}")
+	restRequest := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(restBody))
+	restRequest.Header.Set("MCP-Session-Id", sessionID)
 	recorder := httptest.NewRecorder()
-	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(restBody)))
+	gateway.handleExecute(recorder, restRequest)
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.Contains(t, recorder.Body.String(), string(contracts.ReasonDataEgressBlocked))
 
@@ -733,7 +785,8 @@ func TestGatewayPreservesRestrictedNumericPrecisionAcrossTransports(t *testing.T
 	recorder = httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(jsonRPCBody))
 	request.Header.Set("MCP-Protocol-Version", LatestProtocolVersion)
-	gateway.handleTransportPOST(recorder, request)
+	request.Header.Set("MCP-Session-Id", sessionID)
+	mux.ServeHTTP(recorder, request)
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Contains(t, recorder.Body.String(), string(contracts.ReasonDataEgressBlocked))
 	require.Equal(t, 0, handlerCalls)
@@ -813,7 +866,12 @@ func TestGovernanceFirewallEscapedProviderOutputIsProtected(t *testing.T) {
 func TestGovernanceFirewallDataEgressLifecycleReasonIsCanonical(t *testing.T) {
 	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
 	var captured []events.LifecycleEvent
-	firewall := NewGovernanceFirewall(evaluator, privacyCatalog(t), WithLifecycleEnvironment(events.EnvSynthetic), WithLifecyclePublisher(func(_ context.Context, event events.LifecycleEvent) error {
+	catalog := privacyCatalog(t)
+	tool, ok := findToolRef(catalog, "privacy-tool")
+	require.True(t, ok)
+	expectedArgsHash, err := ValidateToolArguments(tool, map[string]any{})
+	require.NoError(t, err)
+	firewall := NewGovernanceFirewall(evaluator, catalog, WithLifecycleEnvironment(events.EnvSynthetic), WithLifecyclePublisher(func(_ context.Context, event events.LifecycleEvent) error {
 		captured = append(captured, event)
 		return nil
 	}))
@@ -828,7 +886,7 @@ func TestGovernanceFirewallDataEgressLifecycleReasonIsCanonical(t *testing.T) {
 			ExecutionReceipt: &contracts.Receipt{
 				ReceiptID:  rawReceiptEmail,
 				Status:     "SSN " + rawReceiptSSN,
-				ArgsHash:   rawReceiptSecret,
+				ArgsHash:   expectedArgsHash,
 				EffectID:   rawEffectEmail,
 				EffectType: rawReceiptSecret,
 			},

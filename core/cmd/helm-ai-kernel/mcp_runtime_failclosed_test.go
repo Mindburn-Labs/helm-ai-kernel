@@ -125,8 +125,9 @@ func TestLocalMCPRuntimeExecutesAdvertisedGovernanceTools(t *testing.T) {
 	gateway := mcppkg.NewGateway(catalog, mcppkg.GatewayConfig{}, mcppkg.WithGovernedExecutor(executor))
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
+	sessionID := initializeLocalMCPTestSession(t, mux)
 
-	verify := callLocalMCPTool(t, mux, "helm.verify", map[string]any{
+	verify := callLocalMCPTool(t, mux, sessionID, "helm.verify", map[string]any{
 		"action":    "file_read",
 		"principal": "agent-test",
 		"resource":  "allowed.txt",
@@ -137,7 +138,7 @@ func TestLocalMCPRuntimeExecutesAdvertisedGovernanceTools(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	evaluate := callLocalMCPTool(t, mux, "helm.evaluate", map[string]any{
+	evaluate := callLocalMCPTool(t, mux, sessionID, "helm.evaluate", map[string]any{
 		"envelope": map[string]any{
 			"envelope_id":       "envelope-test",
 			"schema_version":    a2a.CurrentVersion,
@@ -156,7 +157,34 @@ func TestLocalMCPRuntimeExecutesAdvertisedGovernanceTools(t *testing.T) {
 	}
 }
 
-func callLocalMCPTool(t *testing.T, mux *http.ServeMux, name string, arguments map[string]any) map[string]any {
+func initializeLocalMCPTestSession(t *testing.T, mux *http.ServeMux) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": mcppkg.LatestProtocolVersion,
+			"clientInfo":      map[string]any{"name": "kernel-test-client"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("initialize status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	sessionID := rec.Header().Get("MCP-Session-Id")
+	if sessionID == "" {
+		t.Fatal("initialize did not return MCP-Session-Id")
+	}
+	return sessionID
+}
+
+func callLocalMCPTool(t *testing.T, mux *http.ServeMux, sessionID, name string, arguments map[string]any) map[string]any {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -169,6 +197,7 @@ func callLocalMCPTool(t *testing.T, mux *http.ServeMux, name string, arguments m
 	}
 	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
 	req.Header.Set("MCP-Protocol-Version", mcppkg.LatestProtocolVersion)
+	req.Header.Set("MCP-Session-Id", sessionID)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

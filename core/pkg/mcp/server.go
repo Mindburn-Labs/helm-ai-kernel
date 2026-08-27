@@ -445,6 +445,10 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		} else {
 			resp, handlerErr = handler(ctx, protectedReq)
 		}
+		if resp.ExecutionReceipt != nil && resp.ExecutionReceipt.ArgsHash != protectedArgsHash {
+			emitFailure(string(contracts.ReasonVerification), "receipt")
+			return anchorResponse(deniedResponse(errToolHandlerFailed)), errToolHandlerFailed
+		}
 		resp.runtimeReasonCode = ""
 		resp.ProtectedArgsHash = protectedArgsHash
 

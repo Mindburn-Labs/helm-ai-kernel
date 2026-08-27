@@ -198,6 +198,19 @@ func TestGovernanceFirewallWrapPublishesCompleteLifecycleSequences(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.receipt != nil {
+				tool, ok := findToolRef(tt.catalog, "read")
+				if !ok {
+					t.Fatal("read tool missing from lifecycle test catalog")
+				}
+				argsHash, err := ValidateToolArguments(tool, tt.arguments)
+				if err != nil {
+					t.Fatalf("hash lifecycle test arguments: %v", err)
+				}
+				receipt := *tt.receipt
+				receipt.ArgsHash = argsHash
+				tt.receipt = &receipt
+			}
 			capture := &lifecycleCapture{}
 			decision := &contracts.DecisionRecord{
 				ID:            "decision-1",

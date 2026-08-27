@@ -230,7 +230,13 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 	// Require valid MCP-Session-Id for non-notification methods.
 	sessionID := r.Header.Get("MCP-Session-Id")
 	isNotification := strings.HasPrefix(req.Method, "notifications/")
-	if sessionID != "" {
+	if g.governed && req.Method == "tools/call" {
+		var ok bool
+		sessionID, ok = g.validatedGovernedSession(w, r)
+		if !ok {
+			return
+		}
+	} else if sessionID != "" {
 		if session := g.sessions.Get(sessionID); session == nil {
 			http.Error(w, "invalid or expired MCP session", http.StatusUnauthorized)
 			return
@@ -238,7 +244,7 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 	} else if !isNotification {
 		// Session ID is recommended for non-notification requests after initialize.
 		// For backward compatibility, we allow requests without session ID, but
-		// still bind this request to a fresh opaque identity.
+		// still bind non-governed requests to a fresh opaque identity.
 	}
 	if sessionID == "" {
 		sessionID = newOpaqueMCPRequestID()
@@ -299,6 +305,13 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	execReq := toolExecutionRequestFromHTTP(r, req.Method, req.Params)
+	if g.governed {
+		sessionID, ok := g.validatedGovernedSession(w, r)
+		if !ok {
+			return
+		}
+		execReq.SessionID = sessionID
+	}
 
 	tool, ok := findToolRef(g.catalog, req.Method)
 	if !ok {
@@ -576,7 +589,7 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 				if serializedMCPResponseWithinBudget(response) {
 					return response, true, http.StatusOK
 				}
-				response["result"] = ToolResultPayload(dataEgressBlockedExecutionResponse(execResp))
+				setBoundedDataEgressBlockedResult(response, execResp)
 				return response, true, http.StatusOK
 			}
 			return writeError(-32603, err.Error())
@@ -586,7 +599,7 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 		}
 		response["result"] = ToolResultPayload(execResp)
 		if !serializedMCPResponseWithinBudget(response) {
-			response["result"] = ToolResultPayload(dataEgressBlockedExecutionResponse(execResp))
+			setBoundedDataEgressBlockedResult(response, execResp)
 		}
 		return response, true, http.StatusOK
 	default:
@@ -596,6 +609,19 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 
 func newOpaqueMCPRequestID() string {
 	return "mcp-http-" + uuid.NewString()
+}
+
+func (g *Gateway) validatedGovernedSession(w http.ResponseWriter, r *http.Request) (string, bool) {
+	sessionID := r.Header.Get("MCP-Session-Id")
+	if sessionID == "" {
+		http.Error(w, "MCP-Session-Id is required for governed tool execution", http.StatusUnauthorized)
+		return "", false
+	}
+	if session := g.sessions.Get(sessionID); session == nil {
+		http.Error(w, "invalid or expired MCP session", http.StatusUnauthorized)
+		return "", false
+	}
+	return sessionID, true
 }
 
 func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string, headers http.Header) ToolExecutionRequest {
@@ -714,6 +740,12 @@ func writeMCPToolCallResponse(w http.ResponseWriter, status int, resp MCPToolCal
 			ArgsHash:   resp.ArgsHash,
 			ReceiptID:  resp.ReceiptID,
 		}
+		if !serializedMCPResponseWithinBudget(resp) {
+			resp.ReceiptID = ""
+		}
+		if !serializedMCPResponseWithinBudget(resp) {
+			resp.ArgsHash = ""
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -734,6 +766,25 @@ func dataEgressBlockedExecutionResponse(resp ToolExecutionResponse) ToolExecutio
 		ProtectedArgsHash: resp.ProtectedArgsHash,
 		runtimeReasonCode: contracts.ReasonDataEgressBlocked,
 	}
+}
+
+func setBoundedDataEgressBlockedResult(response map[string]any, resp ToolExecutionResponse) {
+	denied := dataEgressBlockedExecutionResponse(resp)
+	response["result"] = ToolResultPayload(denied)
+	if serializedMCPResponseWithinBudget(response) {
+		return
+	}
+	denied.ReceiptID = ""
+	response["result"] = ToolResultPayload(denied)
+	if serializedMCPResponseWithinBudget(response) {
+		return
+	}
+	response["id"] = nil
+	if serializedMCPResponseWithinBudget(response) {
+		return
+	}
+	denied.ProtectedArgsHash = ""
+	response["result"] = ToolResultPayload(denied)
 }
 
 func catalogSchemaToArgSchema(raw any) *manifest.ToolArgSchema {

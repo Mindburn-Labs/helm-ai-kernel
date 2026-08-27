@@ -381,8 +381,8 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		if execResp.IsError {
 			resp.Error = execResp.Content
 			resp.ReasonCode = string(contracts.ReasonPolicyViolation)
-			if g.governed && contracts.IsCanonicalReasonCode(string(execResp.RuntimeReasonCode)) {
-				resp.ReasonCode = string(execResp.RuntimeReasonCode)
+			if g.governed && contracts.IsCanonicalReasonCode(string(execResp.runtimeReasonCode)) {
+				resp.ReasonCode = string(execResp.runtimeReasonCode)
 			}
 			resp.Content = execResp.ContentItems
 			resp.StructuredContent = execResp.StructuredContent
@@ -729,7 +729,7 @@ func dataEgressBlockedExecutionResponse(resp ToolExecutionResponse) ToolExecutio
 		Evaluated:         true,
 		ReceiptID:         resp.ReceiptID,
 		ProtectedArgsHash: resp.ProtectedArgsHash,
-		RuntimeReasonCode: contracts.ReasonDataEgressBlocked,
+		runtimeReasonCode: contracts.ReasonDataEgressBlocked,
 	}
 }
 

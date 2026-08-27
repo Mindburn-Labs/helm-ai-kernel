@@ -269,10 +269,13 @@ func TestProtectRedactsPIIWithoutDecodingUnrelatedEscapes(t *testing.T) {
 func TestProtectAllowsTokenMetadataAndLuhnDeviceIdentifiers(t *testing.T) {
 	manager := NewPrivacyManager()
 	input := map[string]any{
-		"max_tokens":  2048,
-		"token_count": 42,
-		"tokenizer":   "cl100k_base",
-		"device_id":   "490154203237518",
+		"max_tokens":           2048,
+		"token_count":          42,
+		"tokenizer":            "cl100k_base",
+		"device_id":            "490154203237518",
+		"product_code":         "5600000000069",
+		"authorization_status": "approved",
+		"authorizationStatus":  "approved",
 	}
 	protected, findings, err := manager.Protect(context.Background(), input)
 	if err != nil {
@@ -294,9 +297,14 @@ func TestProtectAllowsTokenMetadataAndLuhnDeviceIdentifiers(t *testing.T) {
 			t.Fatalf("%s error = %v, want ErrDataEgressBlocked", key, err)
 		}
 	}
-	for _, value := range []any{"490154203237518", json.Number("490154203237518")} {
+	for _, value := range []any{
+		"490154203237518",
+		json.Number("490154203237518"),
+		"5600000000069",
+		json.Number("5600000000069"),
+	} {
 		if _, _, err := manager.Protect(context.Background(), value); err != nil {
-			t.Fatalf("IMEI-like Luhn identifier %v was blocked: %v", value, err)
+			t.Fatalf("non-payment Luhn identifier %v was blocked: %v", value, err)
 		}
 	}
 }
@@ -395,13 +403,13 @@ func TestProtectManyDistinctEmailsAllocationBound(t *testing.T) {
 
 func TestProtectEscapedRestrictedKeyFailsClosed(t *testing.T) {
 	manager := NewPrivacyManager()
-	_, _, err := manager.Protect(context.Background(), map[string]any{
-		`\\u0061pi\\u005fkey`: "sk_live_1234567890",
-	})
-	if !errors.Is(err, ErrDataEgressBlocked) {
-		t.Fatalf("Protect() error = %v, want ErrDataEgressBlocked", err)
+	for _, key := range []string{`\\u0061pi\\u005fkey`, "api%5Fkey"} {
+		_, _, err := manager.Protect(context.Background(), map[string]any{key: "not-safe"})
+		if !errors.Is(err, ErrDataEgressBlocked) {
+			t.Fatalf("restricted key %q error = %v, want ErrDataEgressBlocked", key, err)
+		}
 	}
-	_, _, err = manager.Protect(context.Background(), map[string]any{"clientSecret": "not-safe"})
+	_, _, err := manager.Protect(context.Background(), map[string]any{"clientSecret": "not-safe"})
 	if !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("camel-case restricted key error = %v, want ErrDataEgressBlocked", err)
 	}

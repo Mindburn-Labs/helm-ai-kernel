@@ -77,6 +77,11 @@ var restrictedKeyMarkers = []string{
 	"cc_number",
 	"iban",
 	"bank_account",
+	"authorization_header",
+	"cookie_header",
+	"set_cookie",
+	"private_key_pem",
+	"password_hash",
 }
 
 // PIIClassification defines the sensitivity level of data.
@@ -436,6 +441,14 @@ func (p *protector) key(key string) (string, error) {
 		return "", ErrDataEgressInvalid
 	}
 	canonical, unresolved := canonicalizeUnicode(key)
+	if unresolved {
+		return "", ErrDataEgressBlocked
+	}
+	canonical, unresolved = canonicalizePercentEscapes(canonical)
+	if unresolved || !utf8.ValidString(canonical) {
+		return "", ErrDataEgressBlocked
+	}
+	canonical, unresolved = canonicalizeQuotedEscapes(canonical)
 	if unresolved || isRestrictedKey(canonical) {
 		return "", ErrDataEgressBlocked
 	}
@@ -688,7 +701,9 @@ func isRestrictedKey(key string) bool {
 			}
 			continue
 		}
-		if strings.Contains(normalized, marker) || strings.Contains(compact, strings.ReplaceAll(marker, "_", "")) {
+		markerCompact := strings.ReplaceAll(marker, "_", "")
+		if normalized == marker || strings.HasSuffix(normalized, "_"+marker) ||
+			compact == markerCompact || strings.HasSuffix(compact, markerCompact) {
 			return true
 		}
 	}
@@ -1058,9 +1073,30 @@ func plausibleCompactPhoneDigits(value string) bool {
 	if len(value) < 11 || len(value) > 15 || value[0] == '0' || looksLikeDateIdentifier(value) {
 		return false
 	}
+	if gtin13Valid(value) {
+		return false
+	}
 	// A 15-digit Luhn-valid value is much more likely to be the IMEI-like
 	// identifier covered by this package's existing non-payment control.
 	return len(value) != 15 || !luhnValid(value)
+}
+
+func gtin13Valid(value string) bool {
+	if len(value) != 13 {
+		return false
+	}
+	sum := 0
+	for index := 0; index < 12; index++ {
+		if !isDigit(value[index]) {
+			return false
+		}
+		weight := 1
+		if index%2 == 1 {
+			weight = 3
+		}
+		sum += int(value[index]-'0') * weight
+	}
+	return isDigit(value[12]) && int(value[12]-'0') == (10-sum%10)%10
 }
 
 func looksLikeDateIdentifier(value string) bool {
@@ -1122,7 +1158,8 @@ func isKnownPaymentCardNumber(value string) bool {
 	case length >= 16 && length <= 19 && (prefixBetween(value, 4, 3528, 3589) ||
 		strings.HasPrefix(value, "62")):
 		return true
-	case length >= 12 && length <= 19 && (strings.HasPrefix(value, "50") || prefixBetween(value, 2, 56, 69)):
+	case length >= 12 && length <= 19 && (prefixBetween(value, 8, 63900000, 63909999) ||
+		prefixBetween(value, 8, 67000000, 67999999)):
 		return true
 	default:
 		return false

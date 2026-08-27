@@ -350,11 +350,26 @@ func TestGovernanceFirewallHandlerErrorIsValueFree(t *testing.T) {
 	require.Equal(t, "TOOL_HANDLER_FAILED", err.Error())
 	require.Contains(t, response.Content, "REDACTED_EMAIL")
 	require.True(t, response.IsError)
-	require.Equal(t, contracts.ReasonVerification, response.RuntimeReasonCode)
+	require.Equal(t, contracts.ReasonVerification, response.runtimeReasonCode)
 	require.NotEmpty(t, response.ProtectedArgsHash)
 	require.NotEmpty(t, response.ReceiptID)
 	require.NotContains(t, err.Error(), "person@example.com")
 	require.NotContains(t, err.Error(), "123-45-6789")
+}
+
+func TestGovernanceFirewallOwnsHandlerReasonCode(t *testing.T) {
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	firewall := NewGovernanceFirewall(evaluator, privacyCatalog(t))
+	response, err := firewall.WrapToolHandler(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{
+			Content:           "failed",
+			IsError:           true,
+			runtimeReasonCode: contracts.ReasonDataEgressBlocked,
+		}, nil
+	})(context.Background(), ToolExecutionRequest{ToolName: "privacy-tool", SessionID: "session-reason"})
+	require.NoError(t, err)
+	require.True(t, response.IsError)
+	require.Equal(t, contracts.ReasonVerification, response.runtimeReasonCode)
 }
 
 func TestGatewayPreservesGovernedHandlerErrorAnchorsAcrossTransports(t *testing.T) {
@@ -461,7 +476,7 @@ func TestGovernanceFirewallNonCanonicalArgumentsFailBeforeHandler(t *testing.T) 
 	require.True(t, response.IsError)
 	require.True(t, response.Evaluated)
 	require.Equal(t, "Access Denied: DATA_EGRESS_BLOCKED", response.Content)
-	require.Equal(t, contracts.ReasonDataEgressBlocked, response.RuntimeReasonCode)
+	require.Equal(t, contracts.ReasonDataEgressBlocked, response.runtimeReasonCode)
 	require.Empty(t, response.ProtectedArgsHash)
 	require.Empty(t, response.ReceiptID)
 	require.NotContains(t, response.Content, "provider output")
@@ -470,6 +485,36 @@ func TestGovernanceFirewallNonCanonicalArgumentsFailBeforeHandler(t *testing.T) 
 	require.Equal(t, 1, countTerminal(lifecycle))
 	require.Equal(t, events.RequestFailed, lifecycle[len(lifecycle)-1].Meta.EventType)
 	require.Equal(t, "preflight", fieldString(lifecycle, events.RequestFailed, "failure_class"))
+}
+
+func TestGovernanceFirewallRevalidatesProtectedArgumentsAgainstToolSchema(t *testing.T) {
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	catalog := NewToolCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name: "phone-tool", EffectClass: "E0", RiskTier: contracts.RiskTierLow,
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"phone": map[string]any{"type": "number"},
+			},
+			"required": []string{"phone"},
+		},
+	}))
+	firewall := NewGovernanceFirewall(evaluator, catalog)
+	handlerCalled := false
+	response, err := firewall.WrapToolHandler(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		handlerCalled = true
+		return ToolExecutionResponse{Content: "must not run"}, nil
+	})(context.Background(), ToolExecutionRequest{
+		ToolName:  "phone-tool",
+		SessionID: "session-schema",
+		Arguments: map[string]any{"phone": json.Number("442079460958")},
+	})
+	require.NoError(t, err)
+	require.False(t, handlerCalled)
+	require.Equal(t, 0, evaluator.callCount())
+	require.True(t, response.IsError)
+	require.Equal(t, contracts.ReasonDataEgressBlocked, response.runtimeReasonCode)
 }
 
 func TestGovernanceFirewallDenialsAndLifecycleAreValueFree(t *testing.T) {

@@ -57,13 +57,13 @@ type ToolExecutionResponse struct {
 	// These fields are runtime-only anchors for the lifecycle wrapper. They are
 	// excluded from automatic JSON serialization; the gateway explicitly projects
 	// only ProtectedArgsHash as the safe proof anchor alongside the audit receipt.
-	ExecutionReceipt        *contracts.Receipt   `json:"-"`
-	DispatchState           string               `json:"-"`
-	ApprovalHash            string               `json:"-"`
-	ApproverID              string               `json:"-"`
-	DispatchAdmissionExpiry time.Time            `json:"-"`
-	ProtectedArgsHash       string               `json:"-"`
-	RuntimeReasonCode       contracts.ReasonCode `json:"-"`
+	ExecutionReceipt        *contracts.Receipt `json:"-"`
+	DispatchState           string             `json:"-"`
+	ApprovalHash            string             `json:"-"`
+	ApproverID              string             `json:"-"`
+	DispatchAdmissionExpiry time.Time          `json:"-"`
+	ProtectedArgsHash       string             `json:"-"`
+	runtimeReasonCode       contracts.ReasonCode
 }
 
 // PolicyEvaluator abstracts the governance decision evaluation.
@@ -376,18 +376,19 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			emitFailure(string(reasonCode), "preflight")
 			return deniedResponse(preflightErr), nil
 		}
+		tool, classificationErr := classifyTool(f.catalog, req.ToolName)
+		if classificationErr != nil {
+			emitFailure(string(contracts.ReasonSchemaViolation), "classification")
+			return anchorResponse(deniedResponse(errClassificationFailed)), nil
+		}
 		var hashErr error
-		protectedArgsHash, hashErr = ValidateToolArguments(ToolRef{}, protectedReq.Arguments)
+		protectedArgsHash, hashErr = ValidateToolArguments(tool, protectedReq.Arguments)
 		if hashErr != nil {
 			emitFailure(string(contracts.ReasonDataEgressBlocked), "preflight")
 			return anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked)), nil
 		}
 
-		effectClass, riskTier, classificationErr := classifyTool(f.catalog, req.ToolName)
-		if classificationErr != nil {
-			emitFailure(string(contracts.ReasonSchemaViolation), "classification")
-			return anchorResponse(deniedResponse(errClassificationFailed)), nil
-		}
+		effectClass, riskTier := tool.EffectClass, tool.RiskTier
 		emit(events.NewRequestClassified(
 			meta(), effectClass, string(riskTier),
 			events.LifecycleEnrichment{
@@ -442,6 +443,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		} else {
 			resp, handlerErr = handler(ctx, protectedReq)
 		}
+		resp.runtimeReasonCode = ""
 		resp.ProtectedArgsHash = protectedArgsHash
 
 		protectedResp, protectErr := f.protectToolExecutionResponse(ctx, resp)
@@ -454,7 +456,9 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		resp.Evaluated = true
 		if handlerErr != nil {
 			resp.IsError = true
-			resp.RuntimeReasonCode = contracts.ReasonVerification
+		}
+		if resp.IsError {
+			resp.runtimeReasonCode = contracts.ReasonVerification
 		}
 
 		var receipt ToolCallReceipt
@@ -719,7 +723,7 @@ func deniedResponse(err error) ToolExecutionResponse {
 		Content:           "Access Denied: " + message,
 		IsError:           true,
 		Evaluated:         true,
-		RuntimeReasonCode: reasonCode,
+		runtimeReasonCode: reasonCode,
 	}
 }
 
@@ -824,24 +828,24 @@ func preflightReasonCode(f *GovernanceFirewall, req ToolExecutionRequest) contra
 	return contracts.ReasonPDPError
 }
 
-func classifyTool(catalog *ToolCatalog, name string) (string, contracts.RiskTier, error) {
+func classifyTool(catalog *ToolCatalog, name string) (ToolRef, error) {
 	if catalog == nil {
-		return "", "", fmt.Errorf("tool classification is unavailable")
+		return ToolRef{}, fmt.Errorf("tool classification is unavailable")
 	}
 	ref, ok := catalog.Lookup(name)
 	if !ok {
-		return "", "", fmt.Errorf("tool %q is not classified in the PEP catalog", name)
+		return ToolRef{}, fmt.Errorf("tool %q is not classified in the PEP catalog", name)
 	}
 	if !validEffectClass(ref.EffectClass) {
-		return "", "", fmt.Errorf("tool %q has invalid PEP effect classification", name)
+		return ToolRef{}, fmt.Errorf("tool %q has invalid PEP effect classification", name)
 	}
 	if !validRiskTier(ref.RiskTier) {
-		return "", "", fmt.Errorf("tool %q has invalid PEP risk tier", name)
+		return ToolRef{}, fmt.Errorf("tool %q has invalid PEP risk tier", name)
 	}
 	if expected := riskTierForEffectClass(ref.EffectClass); ref.RiskTier != expected {
-		return "", "", fmt.Errorf("tool %q has mismatched PEP effect class and risk tier", name)
+		return ToolRef{}, fmt.Errorf("tool %q has mismatched PEP effect class and risk tier", name)
 	}
-	return ref.EffectClass, ref.RiskTier, nil
+	return ref, nil
 }
 
 func validEffectClass(effectClass string) bool {

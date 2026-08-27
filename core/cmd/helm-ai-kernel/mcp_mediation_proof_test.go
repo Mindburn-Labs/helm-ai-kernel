@@ -163,6 +163,48 @@ func TestMCPStdioPreservesGovernedHandlerErrorAnchors(t *testing.T) {
 	}
 }
 
+func TestMCPStdioBudgetsCompleteHandlerErrorEnvelope(t *testing.T) {
+	catalog := proofCatalog(t)
+	params, err := json.Marshal(map[string]any{
+		"name":      "proof.echo",
+		"arguments": map[string]any{"message": "safe"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := handleMCPRPCRequest(&mcpRPCRequest{
+		JSONRPC: "2.0",
+		ID:      strings.Repeat("x", mcppkg.MaxResponseBytes),
+		Method:  "tools/call",
+		Params:  params,
+	}, catalog, func(_ context.Context, _ mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		return mcppkg.ToolExecutionResponse{
+			Content:           "safe handler failure",
+			IsError:           true,
+			ReceiptID:         "receipt-handler-failure",
+			ProtectedArgsHash: "sha256:protected-handler-args",
+		}, errors.New("raw provider detail")
+	})
+	if err != nil || response.Error != nil {
+		t.Fatalf("handler error response = %#v err=%v", response, err)
+	}
+	var stdout bytes.Buffer
+	if err := writeMCPResponse(&stdout, response); err != nil {
+		t.Fatal(err)
+	}
+	if stdout.Len() > mcppkg.MaxResponseBytes {
+		t.Fatalf("stdio response bytes = %d, max = %d", stdout.Len(), mcppkg.MaxResponseBytes)
+	}
+	var written mcpRPCResponse
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &written); err != nil {
+		t.Fatal(err)
+	}
+	if written.ID != nil || written.Result != nil || written.Error == nil ||
+		written.Error.Message != string(contracts.ReasonDataEgressBlocked) {
+		t.Fatalf("oversized stdio response did not fail closed: %#v", written)
+	}
+}
+
 func TestMCPMediationProofInstallArtifactsUseGovernedStdioServer(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

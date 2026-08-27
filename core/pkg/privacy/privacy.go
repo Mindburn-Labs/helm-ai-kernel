@@ -44,13 +44,14 @@ var (
 	ErrDataEgressInvalid = errors.New("DATA_EGRESS_INVALID")
 
 	phonePattern      = regexp.MustCompile(`(?:(?:\+|00)[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,15}\b)`)
-	ssnPattern        = regexp.MustCompile(`\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b`)
+	ssnPattern        = regexp.MustCompile(`\b[0-9]{3}[ -][0-9]{2}[ -][0-9]{4}\b`)
 	compactSSNPattern = regexp.MustCompile(`(?i)\b(?:ssn|social[ _-]*security(?:[ _-]*(?:number|no))?)\b["']?\s*[:=#-]?\s*["']?[0-9]{9}\b`)
-	cardPattern       = regexp.MustCompile(`(?:[0-9][ -]?){12,19}`)
+	cardPattern       = regexp.MustCompile(`(?:[0-9][ .-]?){12,19}`)
 	ibanPattern       = regexp.MustCompile(`(?i)\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b`)
 	assignmentPattern = regexp.MustCompile(`(?i)(?:"([^"\r\n]{1,128})"|'([^'\r\n]{1,128})'|([a-z][a-z0-9_.-]{0,127}))\s*[:=]`)
 	secretPattern     = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b["']?\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
-	privateKeyPattern = regexp.MustCompile(`(?i)-----begin [a-z0-9 ]*private key-----`)
+	credentialURI     = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^/\s@]*:[^/\s@]+@`)
+	privateKeyPattern = regexp.MustCompile(`(?i)-----begin [a-z0-9 ]*private key(?: block)?-----`)
 	jwtPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:$|[^A-Za-z0-9_-])`)
 	paymentContext    = regexp.MustCompile(`(?i)\b(?:card|credit|debit|payment|pan|cc[ _-]*(?:number|no))\b`)
 )
@@ -783,7 +784,8 @@ var defaultEmailRegex = regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a
 
 func restrictedText(value string) bool {
 	if ssnPattern.MatchString(value) || compactSSNPattern.MatchString(value) ||
-		secretPattern.MatchString(value) || hasRestrictedAssignment(value) || privateKeyPattern.MatchString(value) {
+		secretPattern.MatchString(value) || credentialURI.MatchString(value) ||
+		hasRestrictedAssignment(value) || privateKeyPattern.MatchString(value) {
 		return true
 	}
 	if hasValidCard(value) || hasValidIBAN(value) {

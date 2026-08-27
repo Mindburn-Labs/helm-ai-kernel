@@ -719,7 +719,7 @@ func writeMCPToolCallResponse(w http.ResponseWriter, status int, resp MCPToolCal
 
 func serializedMCPResponseWithinBudget(value any) bool {
 	encoded, err := json.Marshal(value)
-	return err == nil && len(encoded)+1 <= maxMCPResponseBytes
+	return err == nil && len(encoded)+1 <= MaxResponseBytes
 }
 
 func dataEgressBlockedExecutionResponse(resp ToolExecutionResponse) ToolExecutionResponse {

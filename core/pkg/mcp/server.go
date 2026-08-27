@@ -84,7 +84,9 @@ type GovernanceFirewall struct {
 const (
 	lifecycleSourceRef  = "MCP"
 	maxMCPResponseItems = 10000
-	maxMCPResponseBytes = 4 << 20
+	// MaxResponseBytes bounds every serialized MCP response, including its
+	// transport envelope and trailing newline.
+	MaxResponseBytes = 4 << 20
 )
 
 var (
@@ -655,11 +657,11 @@ func responseWithinPrivacyBudget(resp ToolExecutionResponse, includeStructured b
 		encodedResponse, responseErr := json.Marshal(resp)
 		encodedToolResult, resultErr := json.Marshal(ToolResultPayload(resp))
 		return responseErr == nil && resultErr == nil &&
-			len(encodedResponse)+1 <= maxMCPResponseBytes && len(encodedToolResult)+1 <= maxMCPResponseBytes
+			len(encodedResponse)+1 <= MaxResponseBytes && len(encodedToolResult)+1 <= MaxResponseBytes
 	}
 	total := 0
 	add := func(size int) bool {
-		if size < 0 || size > maxMCPResponseBytes-total {
+		if size < 0 || size > MaxResponseBytes-total {
 			return false
 		}
 		total += size
@@ -927,7 +929,7 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		if err != nil {
 			return nil, err
 		}
-		if decisionBytes > maxMCPResponseBytes-totalDecisionBytes {
+		if decisionBytes > MaxResponseBytes-totalDecisionBytes {
 			return nil, errPlanDecisionEgressBlocked
 		}
 		totalDecisionBytes += decisionBytes
@@ -952,7 +954,7 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		Status:    overallStatus,
 	}
 	encoded, err := json.Marshal(result)
-	if err != nil || len(encoded) > maxMCPResponseBytes {
+	if err != nil || len(encoded) > MaxResponseBytes {
 		return nil, errPlanDecisionEgressBlocked
 	}
 	return result, nil
@@ -978,7 +980,7 @@ func (f *GovernanceFirewall) validatePlanDecision(ctx context.Context, decision 
 		return 0, errPlanEvaluationFailed
 	}
 	encoded, err := json.Marshal(decision)
-	if err != nil || len(encoded) > maxMCPResponseBytes {
+	if err != nil || len(encoded) > MaxResponseBytes {
 		return 0, errPlanDecisionEgressBlocked
 	}
 	manager := f.privacy

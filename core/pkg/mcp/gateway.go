@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -170,7 +171,9 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 		Method  string          `json:"method"`
 		Params  json.RawMessage `json:"params,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
 		http.Error(w, "invalid JSON-RPC request body", http.StatusBadRequest)
 		return
 	}
@@ -300,7 +303,9 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req MCPToolCallRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{Error: "invalid request body"})
 		return
@@ -331,7 +336,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Validate and canonicalize args via PEP boundary
-	argsHash, err := ValidateToolArguments(tool, req.Params)
+	validatedArgsHash, err := ValidateToolArguments(tool, req.Params)
 	if err != nil {
 		g.recordGovernedIngressFailure(r.Context(), execReq, string(contracts.ReasonSchemaViolation))
 		w.Header().Set("Content-Type", "application/json")
@@ -344,7 +349,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Governance via KernelBridge (if configured)
-	resp := MCPToolCallResponse{ArgsHash: argsHash}
+	resp := MCPToolCallResponse{}
 
 	if g.exec != nil {
 		execResp, execErr := g.exec(r.Context(), execReq)
@@ -354,15 +359,27 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
 				Error:      execErr.Error(),
 				ReasonCode: string(contracts.ReasonPDPError),
-				ArgsHash:   argsHash,
+			})
+			return
+		}
+		if g.governed && !execResp.IsError && execResp.ProtectedArgsHash == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+				Error:      "governed execution did not attest protected arguments",
+				ReasonCode: string(contracts.ReasonVerification),
 			})
 			return
 		}
 
+		resp.ArgsHash = execResp.ProtectedArgsHash
 		resp.ReceiptID = execResp.ReceiptID
 		if execResp.IsError {
 			resp.Error = execResp.Content
 			resp.ReasonCode = string(contracts.ReasonPolicyViolation)
+			if g.governed && contracts.IsCanonicalReasonCode(string(execResp.RuntimeReasonCode)) {
+				resp.ReasonCode = string(execResp.RuntimeReasonCode)
+			}
 			resp.Content = execResp.ContentItems
 			resp.StructuredContent = execResp.StructuredContent
 			w.Header().Set("Content-Type", "application/json")
@@ -375,10 +392,11 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		resp.Content = execResp.ContentItems
 		resp.StructuredContent = execResp.StructuredContent
 	} else if g.bridge != nil {
+		resp.ArgsHash = validatedArgsHash
 		// No per-call monetary cost signal is available at MCP method dispatch.
 		// When a budget enforcer is configured, the bridge therefore fails closed
 		// with BUDGET_ERROR rather than inventing cents from a nil breakdown.
-		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, argsHash, nil)
+		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, validatedArgsHash, nil)
 		if govErr != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
@@ -412,6 +430,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			"message": fmt.Sprintf("tool %q approved by Guardian governance", req.Method),
 		}
 	} else {
+		resp.ArgsHash = validatedArgsHash
 		// No bridge is configured; return a governed local response.
 		resp.Result = map[string]any{
 			"status":  "local-no-bridge",
@@ -514,7 +533,9 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments"`
 		}
-		if err := json.Unmarshal(params, &req); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(params))
+		decoder.UseNumber()
+		if err := decoder.Decode(&req); err != nil {
 			return writeError(-32602, "invalid tools/call params")
 		}
 		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, sessionID)

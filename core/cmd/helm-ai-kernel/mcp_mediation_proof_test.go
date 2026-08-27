@@ -82,6 +82,39 @@ func TestMCPMediationProofTransportsRouteToolCallsThroughExecutor(t *testing.T) 
 	}
 }
 
+func TestMCPStdioPreservesLargeJSONNumberLexeme(t *testing.T) {
+	catalog := mcppkg.NewToolCatalog()
+	if err := catalog.Register(context.Background(), mcppkg.ToolRef{
+		Name: "proof.numeric",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"pan": map[string]any{"type": "number"},
+			},
+			"required": []string{"pan"},
+		},
+	}); err != nil {
+		t.Fatalf("register numeric proof tool: %v", err)
+	}
+	called := false
+	response, err := handleMCPRPCRequest(&mcpRPCRequest{
+		JSONRPC: "2.0",
+		ID:      float64(1),
+		Method:  "tools/call",
+		Params:  json.RawMessage("{\"name\":\"proof.numeric\",\"arguments\":{\"pan\":4000000000000000006}}"),
+	}, catalog, func(_ context.Context, request mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		called = true
+		number, ok := request.Arguments["pan"].(json.Number)
+		if !ok || number.String() != "4000000000000000006" {
+			t.Fatalf("stdio PAN = %#v, want exact json.Number", request.Arguments["pan"])
+		}
+		return mcppkg.ToolExecutionResponse{Content: "mediated"}, nil
+	})
+	if err != nil || response.Error != nil || !called {
+		t.Fatalf("stdio numeric tools/call = response=%#v called=%v err=%v", response, called, err)
+	}
+}
+
 func TestMCPMediationProofInstallArtifactsUseGovernedStdioServer(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)

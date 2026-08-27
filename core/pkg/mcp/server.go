@@ -58,11 +58,13 @@ type ToolExecutionResponse struct {
 	// intentionally excluded from every MCP response serialization: the signed
 	// receipt is projected into lifecycle events, while the public response
 	// continues to carry only the established tool result contract.
-	ExecutionReceipt        *contracts.Receipt `json:"-"`
-	DispatchState           string             `json:"-"`
-	ApprovalHash            string             `json:"-"`
-	ApproverID              string             `json:"-"`
-	DispatchAdmissionExpiry time.Time          `json:"-"`
+	ExecutionReceipt        *contracts.Receipt   `json:"-"`
+	DispatchState           string               `json:"-"`
+	ApprovalHash            string               `json:"-"`
+	ApproverID              string               `json:"-"`
+	DispatchAdmissionExpiry time.Time            `json:"-"`
+	ProtectedArgsHash       string               `json:"-"`
+	RuntimeReasonCode       contracts.ReasonCode `json:"-"`
 }
 
 // PolicyEvaluator abstracts the governance decision evaluation.
@@ -300,6 +302,11 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 	return func(ctx context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
 		startedAt := time.Now()
 		ctx, baseMeta := lifecycleContext(ctx, req, f.lifecycleEnv)
+		protectedArgsHash := ""
+		anchorResponse := func(response ToolExecutionResponse) ToolExecutionResponse {
+			response.ProtectedArgsHash = protectedArgsHash
+			return response
+		}
 		sequence := make([]events.LifecycleEvent, 0, len(events.LifecycleEventTypes()))
 		emit := func(event events.LifecycleEvent) {
 			sequence = append(sequence, event)
@@ -368,11 +375,17 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			emitFailure(string(reasonCode), "preflight")
 			return deniedResponse(preflightErr), nil
 		}
+		var hashErr error
+		protectedArgsHash, hashErr = ValidateToolArguments(ToolRef{}, protectedReq.Arguments)
+		if hashErr != nil {
+			emitFailure(string(contracts.ReasonDataEgressBlocked), "preflight")
+			return anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked)), nil
+		}
 
 		effectClass, riskTier, classificationErr := classifyTool(f.catalog, req.ToolName)
 		if classificationErr != nil {
 			emitFailure(string(contracts.ReasonSchemaViolation), "classification")
-			return deniedResponse(errClassificationFailed), nil
+			return anchorResponse(deniedResponse(errClassificationFailed)), nil
 		}
 		emit(events.NewRequestClassified(
 			meta(), effectClass, string(riskTier),
@@ -389,7 +402,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		decisionLatency := time.Since(decisionStarted).Milliseconds()
 		if evalErr != nil {
 			emitFailure(string(contracts.ReasonPDPError), "evaluator")
-			return deniedResponse(evalErr), nil
+			return anchorResponse(deniedResponse(evalErr)), nil
 		}
 
 		publicDecision := f.publicDecisionProjection(ctx, *decision)
@@ -401,7 +414,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		switch decision.Verdict {
 		case string(contracts.VerdictDeny):
 			emitFailure(decisionReasonCode(decision, contracts.ReasonPDPDeny), "policy")
-			return deniedResponse(f.decisionError(decision)), nil
+			return anchorResponse(deniedResponse(f.decisionError(decision))), nil
 		case string(contracts.VerdictEscalate), "PENDING":
 			escalationDecision := f.publicDecisionProjection(ctx, *decision)
 			if escalationDecision.Verdict == "PENDING" {
@@ -413,12 +426,12 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 				slog.Error("governance_firewall: escalation projection failed")
 			}
 			emitFailure(decisionReasonCode(decision, contracts.ReasonApprovalRequired), "escalation")
-			return deniedResponse(f.decisionError(decision)), nil
+			return anchorResponse(deniedResponse(f.decisionError(decision))), nil
 		case string(contracts.VerdictAllow):
 			// Continue to the handler and the catalog audit below.
 		default:
 			emitFailure(string(contracts.ReasonPDPError), "evaluator")
-			return deniedResponse(f.decisionError(decision)), nil
+			return anchorResponse(deniedResponse(f.decisionError(decision))), nil
 		}
 
 		var resp ToolExecutionResponse
@@ -428,12 +441,13 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		} else {
 			resp, handlerErr = handler(ctx, protectedReq)
 		}
+		resp.ProtectedArgsHash = protectedArgsHash
 
 		protectedResp, protectErr := f.protectToolExecutionResponse(ctx, resp)
 		if protectErr != nil {
 			emitDispatch(resp)
 			emitFailure(string(contracts.ReasonDataEgressBlocked), "egress")
-			return deniedResponse(privacy.ErrDataEgressBlocked), nil
+			return anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked)), nil
 		}
 		resp = protectedResp
 		resp.Evaluated = true
@@ -465,7 +479,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		if auditErr != nil {
 			emitDispatch(resp)
 			emitFailure(string(contracts.ReasonVerification), "audit")
-			return deniedResponse(errAuditDenied), nil
+			return anchorResponse(deniedResponse(errAuditDenied)), nil
 		}
 
 		emitDispatch(resp)
@@ -507,7 +521,10 @@ func (f *GovernanceFirewall) protectDispatchString(ctx context.Context, value st
 	protected, _, err := manager.Protect(ctx, value)
 	if err == nil {
 		if protectedString, ok := protected.(string); ok {
-			return protectedString
+			if protectedString == value {
+				return value
+			}
+			return events.StableRef(value)
 		}
 	}
 	// A restricted or unsupported projection cannot be emitted verbatim. A
@@ -665,26 +682,39 @@ func protectResponseString(ctx context.Context, manager *privacy.StandardPrivacy
 
 func deniedResponse(err error) ToolExecutionResponse {
 	message := "GOVERNANCE_DENIED"
+	reasonCode := contracts.ReasonPolicyViolation
 	switch {
 	case errors.Is(err, privacy.ErrDataEgressBlocked), errors.Is(err, privacy.ErrDataEgressInvalid):
 		message = string(contracts.ReasonDataEgressBlocked)
+		reasonCode = contracts.ReasonDataEgressBlocked
 	case errors.Is(err, errDelegationScopeViolation):
 		message = errDelegationScopeViolation.Error()
+		reasonCode = contracts.ReasonDelegationScopeViolation
 	case errors.Is(err, errReservedSecurityArgument):
 		message = errReservedSecurityArgument.Error()
+		reasonCode = contracts.ReasonSchemaViolation
 	case errors.Is(err, errGovernanceCheckFailed):
 		message = errGovernanceCheckFailed.Error()
+		reasonCode = contracts.ReasonPDPError
 	case errors.Is(err, errGovernanceBlocked):
 		message = errGovernanceBlocked.Error()
+		reasonCode = contracts.ReasonPDPDeny
 	case errors.Is(err, errGovernanceApprovalRequired):
 		message = errGovernanceApprovalRequired.Error()
+		reasonCode = contracts.ReasonApprovalRequired
 	case errors.Is(err, errGovernanceNonCanonical):
 		message = errGovernanceNonCanonical.Error()
+		reasonCode = contracts.ReasonPDPError
+	case errors.Is(err, errClassificationFailed):
+		reasonCode = contracts.ReasonSchemaViolation
+	case errors.Is(err, errAuditDenied), errors.Is(err, errToolHandlerFailed):
+		reasonCode = contracts.ReasonVerification
 	}
 	return ToolExecutionResponse{
-		Content:   "Access Denied: " + message,
-		IsError:   true,
-		Evaluated: true,
+		Content:           "Access Denied: " + message,
+		IsError:           true,
+		Evaluated:         true,
+		RuntimeReasonCode: reasonCode,
 	}
 }
 
@@ -864,6 +894,7 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 	}
 	decisions := make([]*contracts.DecisionRecord, 0, len(plan.Steps))
 	overallStatus := string(contracts.VerdictAllow)
+	totalDecisionBytes := 0
 
 	for _, step := range plan.Steps {
 		// Plans use the same protected admission boundary as direct tool
@@ -883,9 +914,14 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		if !isCanonicalToolVerdict(decision.Verdict) && decision.Verdict != "PENDING" {
 			return nil, errPlanEvaluationFailed
 		}
-		if err := f.validatePlanDecision(ctx, decision); err != nil {
+		decisionBytes, err := f.validatePlanDecision(ctx, decision)
+		if err != nil {
 			return nil, err
 		}
+		if decisionBytes > maxMCPResponseBytes-totalDecisionBytes {
+			return nil, errPlanDecisionEgressBlocked
+		}
+		totalDecisionBytes += decisionBytes
 
 		// Aggregate Status. PENDING is a legacy spelling of an escalation;
 		// normalize only the plan aggregate and never mutate the signed record.
@@ -901,11 +937,16 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		decisions = append(decisions, decision)
 	}
 
-	return &PlanDecision{
+	result := &PlanDecision{
 		PlanID:    plan.PlanID,
 		Decisions: decisions,
 		Status:    overallStatus,
-	}, nil
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil || len(encoded) > maxMCPResponseBytes {
+		return nil, errPlanDecisionEgressBlocked
+	}
+	return result, nil
 }
 
 func (f *GovernanceFirewall) validatePlanPublicValue(ctx context.Context, value string) error {
@@ -923,13 +964,13 @@ func (f *GovernanceFirewall) validatePlanPublicValue(ctx context.Context, value 
 	return nil
 }
 
-func (f *GovernanceFirewall) validatePlanDecision(ctx context.Context, decision *contracts.DecisionRecord) error {
+func (f *GovernanceFirewall) validatePlanDecision(ctx context.Context, decision *contracts.DecisionRecord) (int, error) {
 	if decision == nil {
-		return errPlanEvaluationFailed
+		return 0, errPlanEvaluationFailed
 	}
 	encoded, err := json.Marshal(decision)
 	if err != nil || len(encoded) > maxMCPResponseBytes {
-		return errPlanDecisionEgressBlocked
+		return 0, errPlanDecisionEgressBlocked
 	}
 	manager := f.privacy
 	if manager == nil {
@@ -937,9 +978,9 @@ func (f *GovernanceFirewall) validatePlanDecision(ctx context.Context, decision 
 	}
 	_, findings, err := manager.Protect(ctx, json.RawMessage(encoded))
 	if err != nil || len(findings) > 0 {
-		return errPlanDecisionEgressBlocked
+		return 0, errPlanDecisionEgressBlocked
 	}
-	return nil
+	return len(encoded), nil
 }
 
 func isCanonicalToolVerdict(verdict string) bool {

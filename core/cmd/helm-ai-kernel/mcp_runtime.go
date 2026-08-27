@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -577,18 +578,20 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments"`
 		}
-		if err := json.Unmarshal(req.Params, &params); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(req.Params))
+		decoder.UseNumber()
+		if err := decoder.Decode(&params); err != nil {
 			response.Error = &mcpRPCError{Code: -32602, Message: "invalid tools/call params"}
 			return response, nil
 		}
 
 		tool, ok := catalog.Lookup(params.Name)
 		if !ok {
-			response.Error = &mcpRPCError{Code: -32602, Message: fmt.Sprintf("tool %q not found", params.Name)}
+			response.Error = &mcpRPCError{Code: -32602, Message: "tool not found"}
 			return response, nil
 		}
 		if _, err := mcppkg.ValidateToolArguments(tool, params.Arguments); err != nil {
-			response.Error = &mcpRPCError{Code: -32602, Message: fmt.Sprintf("PEP validation failed: %v", err)}
+			response.Error = &mcpRPCError{Code: -32602, Message: "PEP validation failed"}
 			return response, nil
 		}
 
@@ -603,7 +606,7 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 
 		execResp, err := executor(context.Background(), execReq)
 		if err != nil {
-			response.Error = &mcpRPCError{Code: -32603, Message: err.Error()}
+			response.Error = &mcpRPCError{Code: -32603, Message: "tool execution failed"}
 			return response, nil
 		}
 

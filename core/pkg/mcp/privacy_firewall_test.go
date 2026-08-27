@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -145,6 +144,8 @@ func TestGovernanceFirewallProtectsAllPublicOutputRepresentationsAndAudit(t *tes
 	receipt, err = catalog.AuditToolCall("privacy-tool", map[string]any{}, response)
 	require.NoError(t, err)
 	require.NotContains(t, receipt.Outputs, "must-not-be-audited")
+	require.NotEmpty(t, response.ProtectedArgsHash)
+	require.NotContains(t, receipt.Outputs, response.ProtectedArgsHash)
 }
 
 func TestGovernanceFirewallRestrictedOutputIsNotReturnedOrAudited(t *testing.T) {
@@ -351,7 +352,7 @@ func TestGovernanceFirewallHandlerErrorIsValueFree(t *testing.T) {
 	require.NotContains(t, err.Error(), "123-45-6789")
 }
 
-func TestGovernanceFirewallAuditFailureReturnsValueFreeDeniedResponse(t *testing.T) {
+func TestGovernanceFirewallNonCanonicalArgumentsFailBeforeHandler(t *testing.T) {
 	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
 	var lifecycle []events.LifecycleEvent
 	firewall := NewGovernanceFirewall(
@@ -379,32 +380,22 @@ func TestGovernanceFirewallAuditFailureReturnsValueFreeDeniedResponse(t *testing
 	})(context.Background(), ToolExecutionRequest{
 		ToolName:  "privacy-tool",
 		SessionID: "session-privacy",
-		// NaN is accepted by the protected Go value boundary but cannot be
-		// JSON-encoded by the catalog audit, forcing the post-handler audit
-		// failure path.
-		Arguments: map[string]any{"numeric": math.NaN()},
+		Arguments: map[string]any{"unsupported": make(chan struct{})},
 	})
 	require.NoError(t, err)
-	require.True(t, handlerCalled)
+	require.False(t, handlerCalled)
 	require.True(t, response.IsError)
 	require.True(t, response.Evaluated)
-	require.Equal(t, "Access Denied: GOVERNANCE_DENIED", response.Content)
+	require.Equal(t, "Access Denied: DATA_EGRESS_BLOCKED", response.Content)
+	require.Equal(t, contracts.ReasonDataEgressBlocked, response.RuntimeReasonCode)
+	require.Empty(t, response.ProtectedArgsHash)
 	require.Empty(t, response.ReceiptID)
 	require.NotContains(t, response.Content, "provider output")
-	require.Equal(t, 1, countEvent(lifecycle, events.DispatchCompleted))
+	require.Equal(t, 0, evaluator.callCount())
+	require.Equal(t, 0, countEvent(lifecycle, events.DispatchCompleted))
 	require.Equal(t, 1, countTerminal(lifecycle))
 	require.Equal(t, events.RequestFailed, lifecycle[len(lifecycle)-1].Meta.EventType)
-	require.Equal(t, "audit", fieldString(lifecycle, events.RequestFailed, "failure_class"))
-	dispatchIndex, failedIndex := -1, -1
-	for index, event := range lifecycle {
-		switch event.Meta.EventType {
-		case events.DispatchCompleted:
-			dispatchIndex = index
-		case events.RequestFailed:
-			failedIndex = index
-		}
-	}
-	require.Less(t, dispatchIndex, failedIndex)
+	require.Equal(t, "preflight", fieldString(lifecycle, events.RequestFailed, "failure_class"))
 }
 
 func TestGovernanceFirewallDenialsAndLifecycleAreValueFree(t *testing.T) {
@@ -541,6 +532,95 @@ func TestGovernanceFirewallInterceptPlanPendingNeverAggregatesToAllow(t *testing
 	require.Equal(t, string(contracts.VerdictDeny), denyPlan.Status)
 }
 
+func TestGovernanceFirewallInterceptPlanRejectsAggregateDecisionBudget(t *testing.T) {
+	firewall := NewGovernanceFirewall(lifecycleEvaluator{decision: &contracts.DecisionRecord{
+		ID:      "large-decision",
+		Verdict: string(contracts.VerdictAllow),
+		Reason:  strings.Repeat("x", 700<<10),
+	}}, nil)
+	steps := make([]ToolExecutionRequest, 8)
+	for index := range steps {
+		steps[index] = ToolExecutionRequest{ToolName: "privacy-tool"}
+	}
+	decision, err := firewall.InterceptPlan(context.Background(), ToolExecutionPlan{
+		PlanID: "aggregate-budget",
+		Steps:  steps,
+	})
+	require.Nil(t, decision)
+	require.ErrorIs(t, err, privacy.ErrDataEgressBlocked)
+}
+
+func TestGatewayGovernedHashBindsProtectedArgumentsAndReason(t *testing.T) {
+	catalog := privacyCatalog(t)
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	var handlerArguments map[string]any
+	firewall := NewGovernanceFirewall(evaluator, catalog)
+	gateway := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(func(_ context.Context, request ToolExecutionRequest) (ToolExecutionResponse, error) {
+		handlerArguments = request.Arguments
+		if request.Arguments["restricted_output"] == true {
+			return ToolExecutionResponse{Content: "4111 1111 1111 1111"}, nil
+		}
+		return ToolExecutionResponse{Content: "ok"}, nil
+	})))
+	defer gateway.sessions.Stop()
+
+	rawArguments := map[string]any{"message": "person@example.com"}
+	body, err := json.Marshal(MCPToolCallRequest{Method: "privacy-tool", Params: rawArguments})
+	require.NoError(t, err)
+	recorder := httptest.NewRecorder()
+	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var allowed MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &allowed))
+	protectedHash, err := ValidateToolArguments(ToolRef{}, handlerArguments)
+	require.NoError(t, err)
+	rawHash, err := ValidateToolArguments(ToolRef{}, rawArguments)
+	require.NoError(t, err)
+	require.Equal(t, "[REDACTED_EMAIL]", handlerArguments["message"])
+	require.Equal(t, protectedHash, allowed.ArgsHash)
+	require.NotEqual(t, rawHash, allowed.ArgsHash)
+
+	body, err = json.Marshal(MCPToolCallRequest{
+		Method: "privacy-tool",
+		Params: map[string]any{"restricted_output": true},
+	})
+	require.NoError(t, err)
+	recorder = httptest.NewRecorder()
+	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	var denied MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &denied))
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), denied.ReasonCode)
+}
+
+func TestGatewayPreservesRestrictedNumericPrecisionAcrossTransports(t *testing.T) {
+	catalog := privacyCatalog(t)
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	handlerCalls := 0
+	firewall := NewGovernanceFirewall(evaluator, catalog)
+	gateway := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		handlerCalls++
+		return ToolExecutionResponse{Content: "must not run"}, nil
+	})))
+	defer gateway.sessions.Stop()
+
+	restBody := []byte("{\"method\":\"privacy-tool\",\"params\":{\"pan\":4000000000000000006}}")
+	recorder := httptest.NewRecorder()
+	gateway.handleExecute(recorder, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(restBody)))
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Contains(t, recorder.Body.String(), string(contracts.ReasonDataEgressBlocked))
+
+	jsonRPCBody := []byte("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"privacy-tool\",\"arguments\":{\"pan\":4000000000000000006}}}")
+	recorder = httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(jsonRPCBody))
+	request.Header.Set("MCP-Protocol-Version", LatestProtocolVersion)
+	gateway.handleTransportPOST(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), string(contracts.ReasonDataEgressBlocked))
+	require.Equal(t, 0, handlerCalls)
+	require.Equal(t, 0, evaluator.callCount())
+}
+
 func TestGovernanceFirewallEscapedValuesAreProtectedBeforeDispatch(t *testing.T) {
 	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
 	firewall := NewGovernanceFirewall(evaluator, privacyCatalog(t))
@@ -619,6 +699,7 @@ func TestGovernanceFirewallDataEgressLifecycleReasonIsCanonical(t *testing.T) {
 		return nil
 	}))
 	const rawReceiptEmail = "receipt-person@example.com"
+	const rawEffectEmail = "effect-person@example.com"
 	const rawReceiptSecret = "password=abc123"
 	const rawReceiptSSN = "123-45-6789"
 	response, err := firewall.WrapToolHandler(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
@@ -629,7 +710,7 @@ func TestGovernanceFirewallDataEgressLifecycleReasonIsCanonical(t *testing.T) {
 				ReceiptID:  rawReceiptEmail,
 				Status:     "SSN " + rawReceiptSSN,
 				ArgsHash:   rawReceiptSecret,
-				EffectID:   rawReceiptEmail,
+				EffectID:   rawEffectEmail,
 				EffectType: rawReceiptSecret,
 			},
 		}, nil
@@ -645,9 +726,14 @@ func TestGovernanceFirewallDataEgressLifecycleReasonIsCanonical(t *testing.T) {
 	require.Equal(t, 1, countEvent(captured, events.DispatchCompleted))
 	require.Equal(t, 1, countTerminal(captured))
 	for _, event := range captured {
-		encoded := mustJSON(t, event)
-		for _, raw := range []string{rawReceiptEmail, rawReceiptSecret, rawReceiptSSN} {
+		encoded := string(mustJSON(t, event))
+		for _, raw := range []string{rawReceiptEmail, rawEffectEmail, rawReceiptSecret, rawReceiptSSN} {
 			require.NotContains(t, encoded, raw)
+		}
+		if event.Meta.EventType == events.DispatchCompleted {
+			require.Contains(t, encoded, events.StableRef(rawReceiptEmail))
+			require.Contains(t, encoded, events.StableRef(rawEffectEmail))
+			require.NotContains(t, encoded, "[REDACTED_EMAIL]")
 		}
 	}
 	dispatchIndex, failedIndex := -1, -1

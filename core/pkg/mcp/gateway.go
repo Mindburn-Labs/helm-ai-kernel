@@ -201,7 +201,7 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
+		resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID, r.Header)
 		if !respond {
 			w.WriteHeader(status)
 			return
@@ -242,7 +242,7 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 		sessionID = newOpaqueMCPRequestID()
 	}
 
-	resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
+	resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID, r.Header)
 	if !respond {
 		w.WriteHeader(status)
 		return
@@ -266,21 +266,7 @@ func (g *Gateway) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	// Delegation-aware tool filtering: if a delegation session specifies
 	// allowed tools, only expose those tools in the capabilities response.
 	// This prevents delegated agents from even discovering out-of-scope tools.
-	if allowedCSV := r.Header.Get("X-HELM-Delegation-Allowed-Tools"); allowedCSV != "" {
-		allowedSet := make(map[string]bool)
-		for _, t := range strings.Split(allowedCSV, ",") {
-			if trimmed := strings.TrimSpace(t); trimmed != "" {
-				allowedSet[trimmed] = true
-			}
-		}
-		var filtered []ToolRef
-		for _, tool := range tools {
-			if allowedSet[tool.Name] {
-				filtered = append(filtered, tool)
-			}
-		}
-		tools = filtered
-	}
+	tools = filterToolsByDelegation(tools, r.Header.Get("X-HELM-Delegation-Allowed-Tools"))
 
 	m := MCPCapabilityManifest{
 		ServerName:       "helm-mcp-gateway",
@@ -478,10 +464,10 @@ func (g *Gateway) handleProtectedResourceMetadata(w http.ResponseWriter, _ *http
 }
 
 func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion string) (map[string]any, bool, int) {
-	return g.handleJSONRPCRequestWithSession(ctx, id, method, params, protocolVersion, newOpaqueMCPRequestID())
+	return g.handleJSONRPCRequestWithSession(ctx, id, method, params, protocolVersion, newOpaqueMCPRequestID(), nil)
 }
 
-func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion, sessionID string) (map[string]any, bool, int) {
+func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion, sessionID string, headers http.Header) (map[string]any, bool, int) {
 	response := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -522,6 +508,7 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 		if err != nil {
 			return writeError(-32603, err.Error())
 		}
+		tools = filterToolsByDelegation(tools, headers.Get("X-HELM-Delegation-Allowed-Tools"))
 		payload := make([]map[string]any, 0, len(tools))
 		for _, tool := range tools {
 			payload = append(payload, ToolDescriptorPayload(tool))
@@ -538,7 +525,7 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 		if err := decoder.Decode(&req); err != nil {
 			return writeError(-32602, "invalid tools/call params")
 		}
-		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, sessionID)
+		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, sessionID, headers)
 		tool, ok := findToolRef(g.catalog, req.Name)
 		if !ok {
 			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonNoPolicy))
@@ -561,6 +548,9 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 		if err != nil {
 			return writeError(-32603, err.Error())
 		}
+		if g.governed && !execResp.IsError && execResp.ProtectedArgsHash == "" {
+			return writeError(-32603, "governed execution did not attest protected arguments")
+		}
 		response["result"] = ToolResultPayload(execResp)
 		return response, true, http.StatusOK
 	default:
@@ -572,11 +562,20 @@ func newOpaqueMCPRequestID() string {
 	return "mcp-http-" + uuid.NewString()
 }
 
-func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string) ToolExecutionRequest {
+func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string, headers http.Header) ToolExecutionRequest {
 	req := ToolExecutionRequest{ToolName: toolName, Arguments: arguments, SessionID: sessionID}
 	if auth, ok := OAuthAuthorizationFromContext(ctx); ok {
 		req.OAuthScopes = append([]string(nil), auth.Scopes...)
 		req.OAuthResources = append([]string(nil), auth.Resources...)
+	}
+	if delegationID := headers.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
+		req.DelegationSessionID = delegationID
+		req.DelegationVerifier = headers.Get("X-HELM-Delegation-Verifier")
+		for _, tool := range strings.Split(headers.Get("X-HELM-Delegation-Allowed-Tools"), ",") {
+			if tool = strings.TrimSpace(tool); tool != "" {
+				req.DelegationAllowedTools = append(req.DelegationAllowedTools, tool)
+			}
+		}
 	}
 	return req
 }
@@ -586,17 +585,26 @@ func toolExecutionRequestFromHTTP(r *http.Request, toolName string, arguments ma
 	// session identity that reaches governance, handlers, receipts, or
 	// lifecycle telemetry. Each HTTP request receives an opaque identifier so
 	// correlation remains unique without retaining network identity.
-	req := newToolExecutionRequest(r.Context(), toolName, arguments, newOpaqueMCPRequestID())
-	if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
-		req.DelegationSessionID = delegationID
-		req.DelegationVerifier = r.Header.Get("X-HELM-Delegation-Verifier")
-		for _, tool := range strings.Split(r.Header.Get("X-HELM-Delegation-Allowed-Tools"), ",") {
-			if tool = strings.TrimSpace(tool); tool != "" {
-				req.DelegationAllowedTools = append(req.DelegationAllowedTools, tool)
-			}
+	return newToolExecutionRequest(r.Context(), toolName, arguments, newOpaqueMCPRequestID(), r.Header)
+}
+
+func filterToolsByDelegation(tools []ToolRef, allowedCSV string) []ToolRef {
+	if allowedCSV == "" {
+		return tools
+	}
+	allowed := make(map[string]struct{})
+	for _, tool := range strings.Split(allowedCSV, ",") {
+		if tool = strings.TrimSpace(tool); tool != "" {
+			allowed[tool] = struct{}{}
 		}
 	}
-	return req
+	filtered := make([]ToolRef, 0, len(allowed))
+	for _, tool := range tools {
+		if _, ok := allowed[tool.Name]; ok {
+			filtered = append(filtered, tool)
+		}
+	}
+	return filtered
 }
 
 func (g *Gateway) recordGovernedIngressFailure(ctx context.Context, req ToolExecutionRequest, reasonCode string) {

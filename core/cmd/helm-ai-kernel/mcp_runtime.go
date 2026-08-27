@@ -609,6 +609,10 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 			response.Error = &mcpRPCError{Code: -32603, Message: "tool execution failed"}
 			return response, nil
 		}
+		if !execResp.IsError && execResp.ProtectedArgsHash == "" {
+			response.Error = &mcpRPCError{Code: -32603, Message: "governed execution did not attest protected arguments"}
+			return response, nil
+		}
 
 		response.Result = mcppkg.ToolResultPayload(execResp)
 		return response, nil

@@ -18,10 +18,11 @@ func TestProtectDeepValuesRedactsOnlyOrdinaryPII(t *testing.T) {
 	input := map[string]any{
 		"email": "person@example.com",
 		"nested": map[string]string{
-			"phone":         "+1 (415) 555-2671",
-			"compact_phone": "4155552671",
-			"id":            "2026082712345",
-			"date":          "2026-08-27",
+			"phone":               "+1 (415) 555-2671",
+			"compact_phone":       "4155552671",
+			"international_phone": "442079460958",
+			"id":                  "2026082712345",
+			"date":                "2026-08-27",
 		},
 		"values": []string{"person@example.com", "+44 20 7946 0958", "2026-08-27"},
 	}
@@ -42,7 +43,7 @@ func TestProtectDeepValuesRedactsOnlyOrdinaryPII(t *testing.T) {
 		t.Fatalf("marshal protected value: %v", err)
 	}
 	output := string(encoded)
-	for _, raw := range []string{"person@example.com", "+1 (415) 555-2671", "4155552671", "+44 20 7946 0958"} {
+	for _, raw := range []string{"person@example.com", "+1 (415) 555-2671", "4155552671", "442079460958", "+44 20 7946 0958"} {
 		if strings.Contains(output, raw) {
 			t.Fatalf("protected value contains raw PII %q: %s", raw, output)
 		}
@@ -59,6 +60,10 @@ func TestProtectDeepValuesRedactsOnlyOrdinaryPII(t *testing.T) {
 	cleanDate, _, err := manager.Protect(context.Background(), "2026-08-27")
 	if err != nil || cleanDate.(string) != "2026-08-27" {
 		t.Fatalf("ISO date changed or failed: value=%v err=%v", cleanDate, err)
+	}
+	barePhone, findings, err := manager.Protect(context.Background(), "442079460958")
+	if err != nil || barePhone != "[REDACTED_PHONE]" || !reflect.DeepEqual(findings, []string{"phone"}) {
+		t.Fatalf("international phone protection = value=%v findings=%v err=%v", barePhone, findings, err)
 	}
 }
 
@@ -78,6 +83,7 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 		{name: "private key", value: "-----BEGIN RSA PRIVATE KEY-----\nsecret\n-----END RSA PRIVATE KEY-----", raw: "-----BEGIN RSA PRIVATE KEY-----"},
 		{name: "short password assignment", value: "password=abc123", raw: "abc123"},
 		{name: "quoted JSON password", value: `{"password":"abc123"}`, raw: "abc123"},
+		{name: "escaped quoted JSON password", value: `{\"password\":\"abc123\"}`, raw: "abc123"},
 		{name: "short token assignment", value: "token: x", raw: "x"},
 		{name: "labeled jwt", value: "jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature1234", raw: "signature1234"},
 		{name: "URL jwt", value: "https://example.test/callback?jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature1234&next=1", raw: "signature1234"},
@@ -170,6 +176,11 @@ func TestProtectAllowsTokenMetadataAndLuhnDeviceIdentifiers(t *testing.T) {
 	if _, _, err := manager.Protect(context.Background(), map[string]any{"auth_token": "abc123"}); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("auth_token error = %v, want ErrDataEgressBlocked", err)
 	}
+	for _, key := range []string{"refreshToken", "oauthToken", "tokenValue"} {
+		if _, _, err := manager.Protect(context.Background(), map[string]any{key: "abc123"}); !errors.Is(err, ErrDataEgressBlocked) {
+			t.Fatalf("%s error = %v, want ErrDataEgressBlocked", key, err)
+		}
+	}
 	for _, value := range []any{"490154203237518", json.Number("490154203237518")} {
 		if _, _, err := manager.Protect(context.Background(), value); err != nil {
 			t.Fatalf("IMEI-like Luhn identifier %v was blocked: %v", value, err)
@@ -202,6 +213,7 @@ func TestProtectDoubleEscapedRestrictedJSONValueFailsClosed(t *testing.T) {
 	}
 	for _, value := range []any{
 		json.Number("4111111111111111"),
+		json.Number("4.111111111111111e15"),
 		json.Number("4000000000000000006"),
 		json.RawMessage("4111111111111111"),
 		int64(4111111111111111),
@@ -213,6 +225,39 @@ func TestProtectDoubleEscapedRestrictedJSONValueFailsClosed(t *testing.T) {
 	}
 	if _, _, err := manager.Protect(context.Background(), float64(4000000000000000006)); !errors.Is(err, ErrDataEgressInvalid) {
 		t.Fatalf("imprecise float PAN error = %v, want ErrDataEgressInvalid", err)
+	}
+}
+
+func BenchmarkProtectManyDistinctEmails(b *testing.B) {
+	manager := NewPrivacyManager()
+	var input strings.Builder
+	for i := 0; i < 2000; i++ {
+		fmt.Fprintf(&input, "person%d@example%d.test ", i, i)
+	}
+	value := input.String()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, _, err := manager.Protect(context.Background(), value); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestProtectManyDistinctEmailsAllocationBound(t *testing.T) {
+	manager := NewPrivacyManager()
+	var input strings.Builder
+	for i := 0; i < 2000; i++ {
+		fmt.Fprintf(&input, "person%d@example%d.test ", i, i)
+	}
+	value := input.String()
+	allocs := testing.AllocsPerRun(1, func() {
+		if _, _, err := manager.Protect(context.Background(), value); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if allocs > 50_000 {
+		t.Fatalf("Protect() allocations = %.0f, want <= 50000", allocs)
 	}
 }
 

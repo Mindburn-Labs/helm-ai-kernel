@@ -7,11 +7,13 @@ import (
 	"errors"
 	"io"
 	"math"
+	"math/big"
 	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 )
@@ -41,7 +43,7 @@ var (
 	// public data-egress denial.
 	ErrDataEgressInvalid = errors.New("DATA_EGRESS_INVALID")
 
-	phonePattern      = regexp.MustCompile(`(?:\+[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,11}\b)`)
+	phonePattern      = regexp.MustCompile(`(?:\+[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,15}\b)`)
 	ssnPattern        = regexp.MustCompile(`\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b`)
 	compactSSNPattern = regexp.MustCompile(`(?i)\b(?:ssn|social[ _-]*security(?:[ _-]*(?:number|no))?)\b["']?\s*[:=#-]?\s*["']?[0-9]{9}\b`)
 	cardPattern       = regexp.MustCompile(`(?:[0-9][ -]?){13,19}`)
@@ -261,10 +263,22 @@ func (p *protector) numeric(lexical string, value any) (any, error) {
 	if err := p.accountBytes(len(lexical)); err != nil {
 		return nil, err
 	}
-	if hasValidNumericCard(lexical) || plausibleCompactPhoneDigits(lexical) {
+	classified := lexical
+	if exact := exactIntegerDigits(lexical); exact != "" {
+		classified = exact
+	}
+	if hasValidNumericCard(classified) || plausibleCompactPhoneDigits(classified) {
 		return nil, ErrDataEgressBlocked
 	}
 	return value, nil
+}
+
+func exactIntegerDigits(value string) string {
+	rational, ok := new(big.Rat).SetString(value)
+	if !ok || !rational.IsInt() {
+		return ""
+	}
+	return rational.Num().String()
 }
 
 func unsafeJSONFloat(value, maxExactInteger float64) bool {
@@ -560,11 +574,12 @@ func isRestrictedKey(key string) bool {
 }
 
 func isRestrictedTokenKey(normalized string) bool {
-	if normalized == "token" || strings.HasSuffix(normalized, "_token") {
+	compact := strings.ReplaceAll(normalized, "_", "")
+	if normalized == "token" || strings.HasSuffix(normalized, "_token") || strings.HasSuffix(compact, "token") {
 		return true
 	}
-	switch normalized {
-	case "token_value", "token_secret", "token_data", "token_credential":
+	switch compact {
+	case "tokenvalue", "tokensecret", "tokendata", "tokencredential":
 		return true
 	default:
 		return false
@@ -580,7 +595,8 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 		return "", nil, ErrDataEgressBlocked
 	}
 
-	if restrictedText(canonical) {
+	quotedCanonical, unresolvedQuotes := canonicalizeQuotedEscapes(canonical)
+	if unresolvedQuotes || restrictedText(quotedCanonical) {
 		return "", nil, ErrDataEgressBlocked
 	}
 	labels := make([]string, 0, 2)
@@ -652,30 +668,49 @@ func findPhoneMatches(value string) []string {
 }
 
 func redactCanonicalMatches(original string, matches []string, marker string) (string, bool) {
-	protected := original
 	seen := make(map[string]struct{}, len(matches))
+	variants := make(map[string]struct{}, len(matches)*(maxUnicodeEscapeDepth+1))
+	replacements := make([]string, 0, len(matches)*(maxUnicodeEscapeDepth+1)*2)
+	hasUnicodeEscapes := strings.Contains(original, `\u`)
 	for _, match := range matches {
 		if _, ok := seen[match]; ok {
 			continue
 		}
 		seen[match] = struct{}{}
-		replaced := false
-		for slashCount := maxUnicodeEscapeDepth; slashCount >= 1; slashCount-- {
-			candidate := unicodeEscapeVariant(match, slashCount)
-			if candidate != "" && strings.Contains(protected, candidate) {
-				protected = strings.ReplaceAll(protected, candidate, marker)
-				replaced = true
+		if hasUnicodeEscapes {
+			for slashCount := maxUnicodeEscapeDepth; slashCount >= 1; slashCount-- {
+				candidate := unicodeEscapeVariant(match, slashCount)
+				if candidate != "" {
+					if _, ok := variants[candidate]; !ok {
+						variants[candidate] = struct{}{}
+						replacements = append(replacements, candidate, marker)
+					}
+				}
 			}
 		}
-		if strings.Contains(protected, match) {
-			protected = strings.ReplaceAll(protected, match, marker)
-			replaced = true
-		}
-		if !replaced {
-			return "", false
+		if _, ok := variants[match]; !ok {
+			variants[match] = struct{}{}
+			replacements = append(replacements, match, marker)
 		}
 	}
-	return protected, true
+	if len(replacements) == 0 {
+		return original, false
+	}
+	protected := strings.NewReplacer(replacements...).Replace(original)
+	return protected, protected != original
+}
+
+func canonicalizeQuotedEscapes(value string) (string, bool) {
+	canonical := value
+	replacer := strings.NewReplacer(`\"`, `"`, `\'`, `'`)
+	for depth := 0; depth < maxUnicodeEscapeDepth; depth++ {
+		next := replacer.Replace(canonical)
+		if next == canonical {
+			return canonical, false
+		}
+		canonical = next
+	}
+	return canonical, strings.Contains(canonical, `\"`) || strings.Contains(canonical, `\'`)
 }
 
 func unicodeEscapeVariant(value string, slashCount int) string {
@@ -683,15 +718,19 @@ func unicodeEscapeVariant(value string, slashCount int) string {
 		return ""
 	}
 	var builder strings.Builder
+	builder.Grow(len(value) * (slashCount + len("u0000")))
+	slashes := strings.Repeat("\\", slashCount)
+	const hex = "0123456789abcdef"
 	for _, char := range value {
 		if char > 0x7f {
 			return ""
 		}
-		builder.WriteString(strings.Repeat("\\", slashCount))
+		builder.WriteString(slashes)
 		builder.WriteByte('u')
-		hex := strconv.FormatInt(int64(char), 16)
-		builder.WriteString(strings.Repeat("0", 4-len(hex)))
-		builder.WriteString(hex)
+		builder.WriteByte('0')
+		builder.WriteByte('0')
+		builder.WriteByte(hex[byte(char)>>4])
+		builder.WriteByte(hex[byte(char)&0x0f])
 	}
 	return builder.String()
 }
@@ -727,18 +766,31 @@ func plausiblePhone(value string) bool {
 }
 
 func plausibleCompactPhoneDigits(value string) bool {
-	if len(value) == 11 && value[0] == '1' {
-		value = value[1:]
-	}
-	if len(value) != 10 {
-		return false
-	}
 	for index := range value {
 		if !isDigit(value[index]) {
 			return false
 		}
 	}
-	return value[0] >= '2' && value[0] <= '9' && value[3] >= '2' && value[3] <= '9'
+	if len(value) == 10 {
+		return value[0] >= '2' && value[0] <= '9' && value[3] >= '2' && value[3] <= '9'
+	}
+	if len(value) == 11 && value[0] == '1' {
+		return value[1] >= '2' && value[1] <= '9' && value[4] >= '2' && value[4] <= '9'
+	}
+	if len(value) < 11 || len(value) > 15 || value[0] == '0' || looksLikeDateIdentifier(value) {
+		return false
+	}
+	// A 15-digit Luhn-valid value is much more likely to be the IMEI-like
+	// identifier covered by this package's existing non-payment control.
+	return len(value) != 15 || !luhnValid(value)
+}
+
+func looksLikeDateIdentifier(value string) bool {
+	if len(value) < len("20060102") {
+		return false
+	}
+	date, err := time.Parse("20060102", value[:8])
+	return err == nil && date.Year() >= 1900 && date.Year() <= 2100
 }
 
 func hasValidCard(value string) bool {

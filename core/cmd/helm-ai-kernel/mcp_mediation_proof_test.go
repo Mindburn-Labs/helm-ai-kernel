@@ -21,7 +21,7 @@ func TestMCPMediationProofTransportsRouteToolCallsThroughExecutor(t *testing.T) 
 	var calls []mcppkg.ToolExecutionRequest
 	executor := func(_ context.Context, req mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
 		calls = append(calls, req)
-		return mcppkg.ToolExecutionResponse{Content: "mediated", ReceiptID: "receipt://proof"}, nil
+		return mcppkg.ToolExecutionResponse{Content: "mediated", ReceiptID: "receipt://proof", ProtectedArgsHash: "test-protected-args-hash"}, nil
 	}
 
 	params, _ := json.Marshal(map[string]any{
@@ -108,7 +108,7 @@ func TestMCPStdioPreservesLargeJSONNumberLexeme(t *testing.T) {
 		if !ok || number.String() != "4000000000000000006" {
 			t.Fatalf("stdio PAN = %#v, want exact json.Number", request.Arguments["pan"])
 		}
-		return mcppkg.ToolExecutionResponse{Content: "mediated"}, nil
+		return mcppkg.ToolExecutionResponse{Content: "mediated", ProtectedArgsHash: "test-protected-args-hash"}, nil
 	})
 	if err != nil || response.Error != nil || !called {
 		t.Fatalf("stdio numeric tools/call = response=%#v called=%v err=%v", response, called, err)

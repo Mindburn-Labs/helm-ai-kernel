@@ -669,6 +669,79 @@ func TestGateway_RESTExecutePropagatesDelegationHeaders(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "delegated")
 }
 
+func TestGateway_JSONRPCEnforcesDelegationHeaders(t *testing.T) {
+	transportCatalog := NewInMemoryCatalog()
+	governanceCatalog := NewToolCatalog()
+	for _, name := range []string{"allowed", "blocked"} {
+		tool := ToolRef{Name: name, Schema: map[string]any{"type": "object"}, EffectClass: "E0", RiskTier: contracts.RiskTierLow}
+		require.NoError(t, transportCatalog.Register(context.Background(), tool))
+		require.NoError(t, governanceCatalog.Register(context.Background(), tool))
+	}
+	handlerCalls := 0
+	evaluatorCalls := 0
+	firewall := NewGovernanceFirewall(lifecycleEvaluator{
+		calls:    &evaluatorCalls,
+		decision: &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)},
+	}, governanceCatalog)
+	gateway := NewGateway(transportCatalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		handlerCalls++
+		assert.Equal(t, "delegation-1", req.DelegationSessionID)
+		assert.Equal(t, "did:example:verifier", req.DelegationVerifier)
+		assert.Equal(t, []string{"allowed"}, req.DelegationAllowedTools)
+		return ToolExecutionResponse{Content: "delegated"}, nil
+	})))
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	headers := map[string]string{
+		"X-HELM-Delegation-Session-ID":    "delegation-1",
+		"X-HELM-Delegation-Verifier":      "did:example:verifier",
+		"X-HELM-Delegation-Allowed-Tools": "allowed",
+	}
+
+	listed := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/list",
+	}, headers)
+	require.Equal(t, http.StatusOK, listed.Code)
+	assert.Contains(t, listed.Body.String(), `"name":"allowed"`)
+	assert.NotContains(t, listed.Body.String(), `"name":"blocked"`)
+
+	denied := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]any{"name": "blocked", "arguments": map[string]any{}},
+	}, headers)
+	require.Equal(t, http.StatusOK, denied.Code)
+	assert.Contains(t, denied.Body.String(), `"isError":true`)
+	assert.Zero(t, evaluatorCalls)
+	assert.Zero(t, handlerCalls)
+
+	allowed := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+		"params": map[string]any{"name": "allowed", "arguments": map[string]any{}},
+	}, headers)
+	require.Equal(t, http.StatusOK, allowed.Code)
+	assert.Contains(t, allowed.Body.String(), "delegated")
+	assert.Equal(t, 1, evaluatorCalls)
+	assert.Equal(t, 1, handlerCalls)
+}
+
+func TestGateway_JSONRPCRejectsUnattestedGovernedSuccess(t *testing.T) {
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{Name: "tool", Schema: map[string]any{"type": "object"}}))
+	gateway := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(GovernedExecutor{execute: func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{Content: "unattested"}, nil
+	}}))
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": "tool", "arguments": map[string]any{}},
+	}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "governed execution did not attest protected arguments")
+	assert.NotContains(t, rec.Body.String(), `"result"`)
+}
+
 func TestGateway_JSONRPCAndSchemaFallbackEdges(t *testing.T) {
 	errGateway := NewGateway(errorCatalog{}, GatewayConfig{})
 	resp, respond, status := errGateway.handleJSONRPCRequest(context.Background(), 1, "tools/list", nil, LatestProtocolVersion)

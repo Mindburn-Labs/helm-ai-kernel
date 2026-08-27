@@ -85,6 +85,27 @@ func TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph(t *testing.T) {
 	}
 }
 
+func TestStdioMCPRejectsUnattestedGovernedSuccess(t *testing.T) {
+	catalog := mcppkg.NewInMemoryCatalog()
+	if err := catalog.Register(context.Background(), mcppkg.ToolRef{Name: "tool", Schema: map[string]any{"type": "object"}}); err != nil {
+		t.Fatal(err)
+	}
+	response, err := handleMCPRPCRequest(&mcpRPCRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"tool","arguments":{}}`),
+	}, catalog, func(context.Context, mcppkg.ToolExecutionRequest) (mcppkg.ToolExecutionResponse, error) {
+		return mcppkg.ToolExecutionResponse{Content: "unattested"}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Error == nil || response.Error.Message != "governed execution did not attest protected arguments" || response.Result != nil {
+		t.Fatalf("stdio accepted unattested governed response: %#v", response)
+	}
+}
+
 func TestLocalMCPRuntimeExecutesAdvertisedGovernanceTools(t *testing.T) {
 	evaluator := fixedMCPDecisionEvaluator{decision: &contracts.DecisionRecord{
 		ID:                 "decision-governance-tool",

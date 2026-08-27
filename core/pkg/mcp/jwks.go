@@ -100,7 +100,7 @@ func NewJWKSValidator(config JWKSConfig) *JWKSValidator {
 	return &JWKSValidator{
 		config: config,
 		client: &clientCopy,
-		keys: make(map[string]*rsa.PublicKey),
+		keys:   make(map[string]*rsa.PublicKey),
 	}
 }
 

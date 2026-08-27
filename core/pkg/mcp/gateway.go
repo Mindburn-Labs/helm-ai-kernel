@@ -198,7 +198,7 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion)
+		resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
 		if !respond {
 			w.WriteHeader(status)
 			return
@@ -232,10 +232,14 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if !isNotification {
 		// Session ID is recommended for non-notification requests after initialize.
-		// For backward compatibility, we allow requests without session ID but log a warning.
+		// For backward compatibility, we allow requests without session ID, but
+		// still bind this request to a fresh opaque identity.
+	}
+	if sessionID == "" {
+		sessionID = newOpaqueMCPRequestID()
 	}
 
-	resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion)
+	resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
 	if !respond {
 		w.WriteHeader(status)
 		return
@@ -455,6 +459,10 @@ func (g *Gateway) handleProtectedResourceMetadata(w http.ResponseWriter, _ *http
 }
 
 func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion string) (map[string]any, bool, int) {
+	return g.handleJSONRPCRequestWithSession(ctx, id, method, params, protocolVersion, newOpaqueMCPRequestID())
+}
+
+func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion, sessionID string) (map[string]any, bool, int) {
 	response := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -509,7 +517,7 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if err := json.Unmarshal(params, &req); err != nil {
 			return writeError(-32602, "invalid tools/call params")
 		}
-		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, "mcp-http-jsonrpc")
+		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, sessionID)
 		tool, ok := findToolRef(g.catalog, req.Name)
 		if !ok {
 			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonNoPolicy))
@@ -539,6 +547,10 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 	}
 }
 
+func newOpaqueMCPRequestID() string {
+	return "mcp-http-" + uuid.NewString()
+}
+
 func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string) ToolExecutionRequest {
 	req := ToolExecutionRequest{ToolName: toolName, Arguments: arguments, SessionID: sessionID}
 	if auth, ok := OAuthAuthorizationFromContext(ctx); ok {
@@ -553,7 +565,7 @@ func toolExecutionRequestFromHTTP(r *http.Request, toolName string, arguments ma
 	// session identity that reaches governance, handlers, receipts, or
 	// lifecycle telemetry. Each HTTP request receives an opaque identifier so
 	// correlation remains unique without retaining network identity.
-	req := newToolExecutionRequest(r.Context(), toolName, arguments, "mcp-http-"+uuid.NewString())
+	req := newToolExecutionRequest(r.Context(), toolName, arguments, newOpaqueMCPRequestID())
 	if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
 		req.DelegationSessionID = delegationID
 		req.DelegationVerifier = r.Header.Get("X-HELM-Delegation-Verifier")

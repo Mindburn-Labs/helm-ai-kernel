@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -240,6 +241,100 @@ func TestGatewayHTTPSessionIDIsOpaqueAndOmitsRemoteAddress(t *testing.T) {
 	require.NotEqual(t, handlerSessionID, secondRequest.SessionID)
 }
 
+func TestGatewayJSONRPCBindsValidatedAndLegacyOpaqueSessionIDs(t *testing.T) {
+	catalog := privacyCatalog(t)
+	var evaluatorSessions []string
+	evaluator := &capturingEvaluator{
+		verdict: string(contracts.VerdictAllow),
+		capture: func(request guardian.DecisionRequest) {
+			evaluatorSessions = append(evaluatorSessions, request.Principal)
+		},
+	}
+	var handlerSessions []string
+	var lifecycle []events.LifecycleEvent
+	firewall := NewGovernanceFirewall(
+		evaluator,
+		catalog,
+		WithLifecycleEnvironment(events.EnvSynthetic),
+		WithLifecyclePublisher(func(_ context.Context, event events.LifecycleEvent) error {
+			lifecycle = append(lifecycle, event)
+			return nil
+		}),
+	)
+	gateway := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(func(_ context.Context, request ToolExecutionRequest) (ToolExecutionResponse, error) {
+		handlerSessions = append(handlerSessions, request.SessionID)
+		return ToolExecutionResponse{Content: "ok"}, nil
+	})))
+	defer gateway.sessions.Stop()
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	initialize := func() string {
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "initialize",
+			"params":  map[string]any{"protocolVersion": LatestProtocolVersion},
+		})
+		require.NoError(t, err)
+		request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
+		request.RemoteAddr = "198.51.100.10:1000"
+		recorder := httptest.NewRecorder()
+		gateway.handleTransportPOST(recorder, request)
+		require.Equal(t, http.StatusOK, recorder.Code)
+		sessionID := recorder.Header().Get("MCP-Session-Id")
+		require.NotEmpty(t, sessionID)
+		return sessionID
+	}
+
+	firstSession := initialize()
+	secondSession := initialize()
+	require.NotEqual(t, firstSession, secondSession)
+
+	call := func(sessionID, remoteAddress string) {
+		body, err := json.Marshal(map[string]any{
+			"jsonrpc": "2.0",
+			"id":      2,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name":      "privacy-tool",
+				"arguments": map[string]any{},
+			},
+		})
+		require.NoError(t, err)
+		request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
+		request.RemoteAddr = remoteAddress
+		request.Header.Set("MCP-Protocol-Version", LatestProtocolVersion)
+		if sessionID != "" {
+			request.Header.Set("MCP-Session-Id", sessionID)
+		}
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, request)
+		require.Equal(t, http.StatusOK, recorder.Code)
+		require.NotContains(t, recorder.Body.String(), remoteAddress)
+	}
+
+	call(firstSession, "203.0.113.7:4567")
+	call(secondSession, "203.0.113.7:4567")
+	call("", "203.0.113.7:4567")
+	call("", "203.0.113.7:4567")
+
+	require.Equal(t, []string{firstSession, secondSession}, handlerSessions[:2])
+	require.Len(t, handlerSessions, 4)
+	require.NotEmpty(t, handlerSessions[2])
+	require.NotEmpty(t, handlerSessions[3])
+	require.NotEqual(t, handlerSessions[2], handlerSessions[3])
+	require.NotEqual(t, firstSession, handlerSessions[2])
+	require.Len(t, evaluatorSessions, 4)
+	require.Equal(t, handlerSessions, evaluatorSessions)
+	for _, sessionID := range handlerSessions {
+		require.NotContains(t, sessionID, "203.0.113.7:4567")
+	}
+	for _, event := range lifecycle {
+		require.NotContains(t, string(mustJSON(t, event)), "203.0.113.7:4567")
+	}
+}
+
 func TestGovernanceFirewallHandlerErrorIsValueFree(t *testing.T) {
 	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
 	firewall := NewGovernanceFirewall(evaluator, privacyCatalog(t))
@@ -254,6 +349,62 @@ func TestGovernanceFirewallHandlerErrorIsValueFree(t *testing.T) {
 	require.Contains(t, response.Content, "REDACTED_EMAIL")
 	require.NotContains(t, err.Error(), "person@example.com")
 	require.NotContains(t, err.Error(), "123-45-6789")
+}
+
+func TestGovernanceFirewallAuditFailureReturnsValueFreeDeniedResponse(t *testing.T) {
+	evaluator := &privacyRecordingEvaluator{verdict: string(contracts.VerdictAllow)}
+	var lifecycle []events.LifecycleEvent
+	firewall := NewGovernanceFirewall(
+		evaluator,
+		privacyCatalog(t),
+		WithLifecycleEnvironment(events.EnvSynthetic),
+		WithLifecyclePublisher(func(_ context.Context, event events.LifecycleEvent) error {
+			lifecycle = append(lifecycle, event)
+			return nil
+		}),
+	)
+	handlerCalled := false
+	response, err := firewall.WrapToolHandler(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		handlerCalled = true
+		return ToolExecutionResponse{
+			Content: "provider output must not be reported as successful",
+			ExecutionReceipt: &contracts.Receipt{
+				ReceiptID:  "audit-receipt",
+				Status:     "SUCCESS",
+				ArgsHash:   "sha256:audit",
+				EffectID:   "audit-effect",
+				EffectType: "TOOL_EXECUTION",
+			},
+		}, nil
+	})(context.Background(), ToolExecutionRequest{
+		ToolName:  "privacy-tool",
+		SessionID: "session-privacy",
+		// NaN is accepted by the protected Go value boundary but cannot be
+		// JSON-encoded by the catalog audit, forcing the post-handler audit
+		// failure path.
+		Arguments: map[string]any{"numeric": math.NaN()},
+	})
+	require.NoError(t, err)
+	require.True(t, handlerCalled)
+	require.True(t, response.IsError)
+	require.True(t, response.Evaluated)
+	require.Equal(t, "Access Denied: GOVERNANCE_DENIED", response.Content)
+	require.Empty(t, response.ReceiptID)
+	require.NotContains(t, response.Content, "provider output")
+	require.Equal(t, 1, countEvent(lifecycle, events.DispatchCompleted))
+	require.Equal(t, 1, countTerminal(lifecycle))
+	require.Equal(t, events.RequestFailed, lifecycle[len(lifecycle)-1].Meta.EventType)
+	require.Equal(t, "audit", fieldString(lifecycle, events.RequestFailed, "failure_class"))
+	dispatchIndex, failedIndex := -1, -1
+	for index, event := range lifecycle {
+		switch event.Meta.EventType {
+		case events.DispatchCompleted:
+			dispatchIndex = index
+		case events.RequestFailed:
+			failedIndex = index
+		}
+	}
+	require.Less(t, dispatchIndex, failedIndex)
 }
 
 func TestGovernanceFirewallDenialsAndLifecycleAreValueFree(t *testing.T) {
@@ -357,6 +508,37 @@ func TestGovernanceFirewallInterceptPlanRejectsUnsafeDecisionProjection(t *testi
 	require.ErrorIs(t, err, privacy.ErrDataEgressBlocked)
 	require.NotContains(t, err.Error(), rawEmail)
 	require.NotContains(t, err.Error(), rawSSN)
+}
+
+func TestGovernanceFirewallInterceptPlanPendingNeverAggregatesToAllow(t *testing.T) {
+	evaluator := &smartMockEvaluator{decisions: map[string]string{
+		"allow":   string(contracts.VerdictAllow),
+		"pending": "PENDING",
+		"deny":    string(contracts.VerdictDeny),
+	}}
+	firewall := NewGovernanceFirewall(evaluator, nil)
+
+	pendingPlan, err := firewall.InterceptPlan(context.Background(), ToolExecutionPlan{
+		PlanID: "plan-pending",
+		Steps: []ToolExecutionRequest{
+			{ToolName: "allow"},
+			{ToolName: "pending"},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, string(contracts.VerdictEscalate), pendingPlan.Status)
+	require.Equal(t, "PENDING", pendingPlan.Decisions[1].Verdict)
+
+	denyPlan, err := firewall.InterceptPlan(context.Background(), ToolExecutionPlan{
+		PlanID: "plan-deny",
+		Steps: []ToolExecutionRequest{
+			{ToolName: "allow"},
+			{ToolName: "pending"},
+			{ToolName: "deny"},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, string(contracts.VerdictDeny), denyPlan.Status)
 }
 
 func TestGovernanceFirewallEscapedValuesAreProtectedBeforeDispatch(t *testing.T) {

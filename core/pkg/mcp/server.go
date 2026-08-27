@@ -98,6 +98,7 @@ var (
 	errPlanEvaluationFailed       = errors.New("failed to evaluate plan step")
 	errPlanDecisionEgressBlocked  = fmt.Errorf("%w: plan decision rejected", privacy.ErrDataEgressBlocked)
 	errToolHandlerFailed          = errors.New("TOOL_HANDLER_FAILED")
+	errAuditDenied                = errors.New("audit denied")
 )
 
 // GovernanceFirewallOption configures optional runtime seams.
@@ -464,7 +465,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		if auditErr != nil {
 			emitDispatch(resp)
 			emitFailure(string(contracts.ReasonVerification), "audit")
-			return resp, nil
+			return deniedResponse(errAuditDenied), nil
 		}
 
 		emitDispatch(resp)
@@ -886,11 +887,15 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 			return nil, err
 		}
 
-		// Aggregate Status
-		if decision.Verdict == string(contracts.VerdictDeny) {
+		// Aggregate Status. PENDING is a legacy spelling of an escalation;
+		// normalize only the plan aggregate and never mutate the signed record.
+		switch decision.Verdict {
+		case string(contracts.VerdictDeny):
 			overallStatus = string(contracts.VerdictDeny)
-		} else if decision.Verdict == string(contracts.VerdictEscalate) && overallStatus != string(contracts.VerdictDeny) {
-			overallStatus = string(contracts.VerdictEscalate)
+		case string(contracts.VerdictEscalate), "PENDING":
+			if overallStatus != string(contracts.VerdictDeny) {
+				overallStatus = string(contracts.VerdictEscalate)
+			}
 		}
 
 		decisions = append(decisions, decision)

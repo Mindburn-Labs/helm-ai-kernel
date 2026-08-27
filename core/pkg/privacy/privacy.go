@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"reflect"
 	"regexp"
 	"sort"
@@ -18,7 +19,7 @@ import (
 // DetectorVersion identifies the deterministic egress detector used by the
 // shared privacy boundary. It is intentionally a version, not a description
 // of any detected value.
-const DetectorVersion = "helm-privacy-v1"
+const DetectorVersion = "helm-privacy-v2"
 
 const (
 	maxProtectDepth       = 32
@@ -26,6 +27,8 @@ const (
 	maxProtectStringBytes = 1 << 20
 	maxProtectTotalBytes  = 4 << 20
 	maxUnicodeEscapeDepth = 4
+	maxExactFloat32Int    = 1<<24 - 1
+	maxExactFloat64Int    = 1<<53 - 1
 )
 
 var (
@@ -38,12 +41,15 @@ var (
 	// public data-egress denial.
 	ErrDataEgressInvalid = errors.New("DATA_EGRESS_INVALID")
 
-	phonePattern      = regexp.MustCompile(`(?:\+[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4})`)
+	phonePattern      = regexp.MustCompile(`(?:\+[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,11}\b)`)
 	ssnPattern        = regexp.MustCompile(`\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b`)
+	compactSSNPattern = regexp.MustCompile(`(?i)\b(?:ssn|social[ _-]*security(?:[ _-]*(?:number|no))?)\b["']?\s*[:=#-]?\s*["']?[0-9]{9}\b`)
 	cardPattern       = regexp.MustCompile(`(?:[0-9][ -]?){13,19}`)
 	ibanPattern       = regexp.MustCompile(`(?i)\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b`)
-	secretPattern     = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
+	secretPattern     = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b["']?\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
 	privateKeyPattern = regexp.MustCompile(`(?i)-----begin [a-z0-9 ]*private key-----`)
+	jwtPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:$|[^A-Za-z0-9_-])`)
+	paymentContext    = regexp.MustCompile(`(?i)\b(?:card|credit|debit|payment|pan|cc[ _-]*(?:number|no))\b`)
 )
 
 var restrictedKeyMarkers = []string{
@@ -232,14 +238,17 @@ func (p *protector) value(value any, depth int) (any, error) {
 		return p.numeric(strconv.FormatUint(typed, 10), value)
 	case uintptr:
 		return p.numeric(strconv.FormatUint(uint64(typed), 10), value)
-	case float32, float64:
-		if typed, ok := value.(float32); ok {
-			return p.numeric(strconv.FormatFloat(float64(typed), 'f', -1, 32), value)
+	case float32:
+		numeric := float64(typed)
+		if unsafeJSONFloat(numeric, maxExactFloat32Int) {
+			return nil, ErrDataEgressInvalid
 		}
-		if typed, ok := value.(float64); ok {
-			return p.numeric(strconv.FormatFloat(typed, 'f', -1, 64), value)
+		return p.numeric(strconv.FormatFloat(numeric, 'f', -1, 32), value)
+	case float64:
+		if unsafeJSONFloat(typed, maxExactFloat64Int) {
+			return nil, ErrDataEgressInvalid
 		}
-		return value, nil
+		return p.numeric(strconv.FormatFloat(typed, 'f', -1, 64), value)
 	}
 
 	// Support typed map/slice values without turning arbitrary structs or
@@ -252,10 +261,15 @@ func (p *protector) numeric(lexical string, value any) (any, error) {
 	if err := p.accountBytes(len(lexical)); err != nil {
 		return nil, err
 	}
-	if hasValidNumericCard(lexical) {
+	if hasValidNumericCard(lexical) || plausibleCompactPhoneDigits(lexical) {
 		return nil, ErrDataEgressBlocked
 	}
 	return value, nil
+}
+
+func unsafeJSONFloat(value, maxExactInteger float64) bool {
+	return math.IsNaN(value) || math.IsInf(value, 0) ||
+		(math.Trunc(value) == value && math.Abs(value) > maxExactInteger)
 }
 
 func (p *protector) text(value string) (string, error) {
@@ -532,11 +546,29 @@ func isRestrictedKey(key string) bool {
 	normalized = strings.NewReplacer("-", "_", " ", "_", ".", "_").Replace(normalized)
 	compact := strings.ReplaceAll(normalized, "_", "")
 	for _, marker := range restrictedKeyMarkers {
+		if marker == "token" {
+			if isRestrictedTokenKey(normalized) {
+				return true
+			}
+			continue
+		}
 		if strings.Contains(normalized, marker) || strings.Contains(compact, strings.ReplaceAll(marker, "_", "")) {
 			return true
 		}
 	}
 	return false
+}
+
+func isRestrictedTokenKey(normalized string) bool {
+	if normalized == "token" || strings.HasSuffix(normalized, "_token") {
+		return true
+	}
+	switch normalized {
+	case "token_value", "token_secret", "token_data", "token_credential":
+		return true
+	default:
+		return false
+	}
 }
 
 func sanitizeText(value string, manager *StandardPrivacyManager) (string, []string, error) {
@@ -552,17 +584,27 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 		return "", nil, ErrDataEgressBlocked
 	}
 	labels := make([]string, 0, 2)
-	protected := canonical
+	protected := value
 	emailRegex := defaultEmailRegex
 	if manager != nil && manager.emailRegex != nil {
 		emailRegex = manager.emailRegex
 	}
-	if emailRegex.MatchString(protected) {
-		protected = emailRegex.ReplaceAllString(protected, "[REDACTED_EMAIL]")
+	emailMatches := emailRegex.FindAllString(canonical, -1)
+	if len(emailMatches) > 0 {
+		var replaced bool
+		protected, replaced = redactCanonicalMatches(protected, emailMatches, "[REDACTED_EMAIL]")
+		if !replaced {
+			return "", nil, ErrDataEgressBlocked
+		}
 		labels = append(labels, "email")
 	}
-	if redacted, changed := redactPhones(protected); changed {
-		protected = redacted
+	phoneMatches := findPhoneMatches(canonical)
+	if len(phoneMatches) > 0 {
+		var replaced bool
+		protected, replaced = redactCanonicalMatches(protected, phoneMatches, "[REDACTED_PHONE]")
+		if !replaced {
+			return "", nil, ErrDataEgressBlocked
+		}
 		labels = append(labels, "phone")
 	}
 	if len(labels) == 0 {
@@ -570,13 +612,18 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 		// value byte-for-byte, including literal escaped code text.
 		return value, nil, nil
 	}
+	remaining, unresolved := canonicalizeUnicode(protected)
+	if unresolved || emailRegex.MatchString(remaining) || len(findPhoneMatches(remaining)) > 0 {
+		return "", nil, ErrDataEgressBlocked
+	}
 	return protected, labels, nil
 }
 
 var defaultEmailRegex = regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`)
 
 func restrictedText(value string) bool {
-	if ssnPattern.MatchString(value) || secretPattern.MatchString(value) || privateKeyPattern.MatchString(value) {
+	if ssnPattern.MatchString(value) || compactSSNPattern.MatchString(value) ||
+		secretPattern.MatchString(value) || privateKeyPattern.MatchString(value) {
 		return true
 	}
 	if hasValidCard(value) || hasValidIBAN(value) {
@@ -585,14 +632,12 @@ func restrictedText(value string) bool {
 	return looksLikeJWTText(value)
 }
 
-func redactPhones(value string) (string, bool) {
+func findPhoneMatches(value string) []string {
 	indices := phonePattern.FindAllStringIndex(value, -1)
 	if len(indices) == 0 {
-		return value, false
+		return nil
 	}
-	var builder strings.Builder
-	last := 0
-	changed := false
+	matches := make([]string, 0, len(indices))
 	for _, index := range indices {
 		candidate := value[index[0]:index[1]]
 		if (index[0] > 0 && isDigit(value[index[0]-1])) || (index[1] < len(value) && isDigit(value[index[1]])) {
@@ -601,16 +646,54 @@ func redactPhones(value string) (string, bool) {
 		if digitCount(candidate) < 10 || digitCount(candidate) > 15 || !plausiblePhone(candidate) {
 			continue
 		}
-		builder.WriteString(value[last:index[0]])
-		builder.WriteString("[REDACTED_PHONE]")
-		last = index[1]
-		changed = true
+		matches = append(matches, candidate)
 	}
-	if !changed {
-		return value, false
+	return matches
+}
+
+func redactCanonicalMatches(original string, matches []string, marker string) (string, bool) {
+	protected := original
+	seen := make(map[string]struct{}, len(matches))
+	for _, match := range matches {
+		if _, ok := seen[match]; ok {
+			continue
+		}
+		seen[match] = struct{}{}
+		replaced := false
+		for slashCount := maxUnicodeEscapeDepth; slashCount >= 1; slashCount-- {
+			candidate := unicodeEscapeVariant(match, slashCount)
+			if candidate != "" && strings.Contains(protected, candidate) {
+				protected = strings.ReplaceAll(protected, candidate, marker)
+				replaced = true
+			}
+		}
+		if strings.Contains(protected, match) {
+			protected = strings.ReplaceAll(protected, match, marker)
+			replaced = true
+		}
+		if !replaced {
+			return "", false
+		}
 	}
-	builder.WriteString(value[last:])
-	return builder.String(), true
+	return protected, true
+}
+
+func unicodeEscapeVariant(value string, slashCount int) string {
+	if slashCount < 1 {
+		return ""
+	}
+	var builder strings.Builder
+	for _, char := range value {
+		if char > 0x7f {
+			return ""
+		}
+		builder.WriteString(strings.Repeat("\\", slashCount))
+		builder.WriteByte('u')
+		hex := strconv.FormatInt(int64(char), 16)
+		builder.WriteString(strings.Repeat("0", 4-len(hex)))
+		builder.WriteString(hex)
+	}
+	return builder.String()
 }
 
 func digitCount(value string) int {
@@ -631,6 +714,9 @@ func plausiblePhone(value string) bool {
 	if strings.HasPrefix(value, "+") || strings.HasPrefix(value, "(") {
 		return true
 	}
+	if digitCount(value) == len(value) {
+		return plausibleCompactPhoneDigits(value)
+	}
 	// A four-digit first group is common in dates and identifiers, but not in
 	// the local phone formats this boundary recognizes.
 	firstGroup := value
@@ -638,6 +724,21 @@ func plausiblePhone(value string) bool {
 		firstGroup = firstGroup[:separator]
 	}
 	return len(firstGroup) <= 3
+}
+
+func plausibleCompactPhoneDigits(value string) bool {
+	if len(value) == 11 && value[0] == '1' {
+		value = value[1:]
+	}
+	if len(value) != 10 {
+		return false
+	}
+	for index := range value {
+		if !isDigit(value[index]) {
+			return false
+		}
+	}
+	return value[0] >= '2' && value[0] <= '9' && value[3] >= '2' && value[3] <= '9'
 }
 
 func hasValidCard(value string) bool {
@@ -652,7 +753,8 @@ func hasValidCard(value string) bool {
 			}
 			return -1
 		}, match)
-		if len(digits) >= 13 && len(digits) <= 19 && luhnValid(digits) {
+		if len(digits) >= 13 && len(digits) <= 19 && luhnValid(digits) &&
+			(isKnownPaymentCardNumber(digits) || paymentContext.MatchString(value)) {
 			return true
 		}
 	}
@@ -668,7 +770,39 @@ func hasValidNumericCard(value string) bool {
 			return false
 		}
 	}
-	return luhnValid(value)
+	return luhnValid(value) && isKnownPaymentCardNumber(value)
+}
+
+func isKnownPaymentCardNumber(value string) bool {
+	length := len(value)
+	switch {
+	case value[0] == '4' && (length == 13 || length == 16 || length == 19):
+		return true
+	case length == 15 && (strings.HasPrefix(value, "34") || strings.HasPrefix(value, "37")):
+		return true
+	case length == 16 && (prefixBetween(value, 2, 51, 55) || prefixBetween(value, 4, 2221, 2720)):
+		return true
+	case length == 14 && (prefixBetween(value, 3, 300, 305) || strings.HasPrefix(value, "36") ||
+		strings.HasPrefix(value, "38") || strings.HasPrefix(value, "39")):
+		return true
+	case (length == 16 || length == 19) && (strings.HasPrefix(value, "6011") ||
+		strings.HasPrefix(value, "65") || prefixBetween(value, 3, 644, 649) ||
+		prefixBetween(value, 6, 622126, 622925)):
+		return true
+	case length >= 16 && length <= 19 && (prefixBetween(value, 4, 3528, 3589) ||
+		strings.HasPrefix(value, "62")):
+		return true
+	default:
+		return false
+	}
+}
+
+func prefixBetween(value string, digits, minimum, maximum int) bool {
+	if len(value) < digits {
+		return false
+	}
+	prefix, err := strconv.Atoi(value[:digits])
+	return err == nil && prefix >= minimum && prefix <= maximum
 }
 
 func luhnValid(value string) bool {
@@ -733,33 +867,7 @@ func ibanMod97(value string) int {
 }
 
 func looksLikeJWTText(value string) bool {
-	for _, field := range strings.Fields(value) {
-		trimmed := strings.Trim(field, "\"'`,;()[]{}")
-		parts := strings.Split(trimmed, ".")
-		if len(parts) != 3 {
-			continue
-		}
-		valid := true
-		for _, part := range parts {
-			if len(part) < 8 {
-				valid = false
-				break
-			}
-			for _, char := range part {
-				if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '-' && char != '_' {
-					valid = false
-					break
-				}
-			}
-			if !valid {
-				break
-			}
-		}
-		if valid {
-			return true
-		}
-	}
-	return false
+	return jwtPattern.MatchString(value)
 }
 
 func canonicalizeUnicode(value string) (string, bool) {

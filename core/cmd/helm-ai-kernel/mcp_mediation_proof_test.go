@@ -54,6 +54,17 @@ func TestMCPMediationProofTransportsRouteToolCallsThroughExecutor(t *testing.T) 
 	if executeRec.Code != http.StatusOK || len(calls) != 2 {
 		t.Fatalf("/mcp/v1/execute did not route through executor: status=%d body=%s calls=%#v", executeRec.Code, executeRec.Body.String(), calls)
 	}
+	var executeResp mcppkg.MCPToolCallResponse
+	if err := json.Unmarshal(executeRec.Body.Bytes(), &executeResp); err != nil {
+		t.Fatal(err)
+	}
+	wantArgsHash, err := mcppkg.ValidateToolArguments(mcppkg.ToolRef{}, calls[1].Arguments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if executeResp.ArgsHash != wantArgsHash {
+		t.Fatalf("raw executor args hash = %q, want validated %q", executeResp.ArgsHash, wantArgsHash)
+	}
 
 	jsonrpcBody, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -202,6 +213,24 @@ func TestMCPStdioBudgetsCompleteHandlerErrorEnvelope(t *testing.T) {
 	if written.ID != nil || written.Result != nil || written.Error == nil ||
 		written.Error.Message != string(contracts.ReasonDataEgressBlocked) {
 		t.Fatalf("oversized stdio response did not fail closed: %#v", written)
+	}
+
+	stdout.Reset()
+	const smallID = float64(7)
+	if err := writeMCPResponse(&stdout, &mcpRPCResponse{
+		JSONRPC: "2.0",
+		ID:      smallID,
+		Result:  strings.Repeat("x", mcppkg.MaxResponseBytes),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	written = mcpRPCResponse{}
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &written); err != nil {
+		t.Fatal(err)
+	}
+	if written.ID != smallID || written.Result != nil || written.Error == nil ||
+		written.Error.Message != string(contracts.ReasonDataEgressBlocked) {
+		t.Fatalf("bounded stdio response lost small request id: %#v", written)
 	}
 }
 

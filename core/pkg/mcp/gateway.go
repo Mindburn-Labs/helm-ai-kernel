@@ -376,7 +376,10 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp.ArgsHash = execResp.ProtectedArgsHash
+		resp.ArgsHash = validatedArgsHash
+		if g.governed {
+			resp.ArgsHash = execResp.ProtectedArgsHash
+		}
 		resp.ReceiptID = execResp.ReceiptID
 		if execResp.IsError {
 			resp.Error = execResp.Content

@@ -75,6 +75,7 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 		raw   string
 	}{
 		{name: "secret key", value: map[string]any{"api_key": "sk_live_1234567890"}, raw: "sk_live_1234567890"},
+		{name: "AWS secret access key", value: map[string]any{"aws_secret_access_key": "ordinary40charactercredentialmaterial000"}, raw: "ordinary40charactercredentialmaterial000"},
 		{name: "ssn", value: "SSN: 123-45-6789", raw: "123-45-6789"},
 		{name: "space separated ssn", value: "SSN: 123 45 6789", raw: "123 45 6789"},
 		{name: "compact ssn", value: "SSN: 123456789", raw: "123456789"},
@@ -82,6 +83,7 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 		{name: "dot separated card", value: "card: 4111.1111.1111.1111", raw: "4111.1111.1111.1111"},
 		{name: "iban", value: "GB82 WEST 1234 5698 7654 32", raw: "GB82 WEST 1234 5698 7654 32"},
 		{name: "jwt", value: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature1234", raw: "eyJhbGciOiJIUzI1NiJ9"},
+		{name: "jwt with short claims segment", value: "eyJhbGciOiJIUzI1NiJ9.e30.signature1234", raw: "signature1234"},
 		{name: "private key", value: "-----BEGIN RSA PRIVATE KEY-----\nsecret\n-----END RSA PRIVATE KEY-----", raw: "-----BEGIN RSA PRIVATE KEY-----"},
 		{name: "PGP private key", value: "-----BEGIN PGP PRIVATE KEY BLOCK-----\nsecret\n-----END PGP PRIVATE KEY BLOCK-----", raw: "-----BEGIN PGP PRIVATE KEY BLOCK-----"},
 		{name: "connection URI credential", value: "postgres://alice:pA55word!@db:5432/app", raw: "pA55word!"},

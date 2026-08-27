@@ -452,7 +452,15 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		if protectErr != nil {
 			emitDispatch(resp)
 			emitFailure(string(contracts.ReasonDataEgressBlocked), "egress")
-			return anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked)), nil
+			denied := anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked))
+			if resp.ExecutionReceipt != nil {
+				receipt := f.protectDispatchReceipt(ctx, *resp.ExecutionReceipt)
+				denied.ReceiptID = receipt.ReceiptID
+				if denied.ReceiptID == "" {
+					denied.ReceiptID = receipt.ID
+				}
+			}
+			return denied, nil
 		}
 		resp = protectedResp
 		resp.Evaluated = true

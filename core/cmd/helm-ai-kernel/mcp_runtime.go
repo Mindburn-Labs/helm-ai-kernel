@@ -510,10 +510,16 @@ func writeMCPResponse(stdout io.Writer, resp *mcpRPCResponse) error {
 		return fmt.Errorf("encode MCP response: %w", err)
 	}
 	if len(data)+1 > mcppkg.MaxResponseBytes {
-		data, err = json.Marshal(&mcpRPCResponse{
+		bounded := &mcpRPCResponse{
 			JSONRPC: "2.0",
+			ID:      resp.ID,
 			Error:   &mcpRPCError{Code: -32000, Message: string(contracts.ReasonDataEgressBlocked)},
-		})
+		}
+		data, err = json.Marshal(bounded)
+		if err == nil && len(data)+1 > mcppkg.MaxResponseBytes {
+			bounded.ID = nil
+			data, err = json.Marshal(bounded)
+		}
 		if err != nil || len(data)+1 > mcppkg.MaxResponseBytes {
 			return fmt.Errorf("encode bounded MCP response")
 		}

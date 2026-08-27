@@ -3,6 +3,7 @@ package privacy
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -52,7 +53,7 @@ var (
 	secretPattern     = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b["']?\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
 	credentialURI     = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^/\s@]*:[^/\s@]+@`)
 	privateKeyPattern = regexp.MustCompile(`(?i)-----begin [a-z0-9 ]*private key(?: block)?-----`)
-	jwtPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:$|[^A-Za-z0-9_-])`)
+	jwtPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]*)(?:$|[^A-Za-z0-9_-])`)
 	paymentContext    = regexp.MustCompile(`(?i)\b(?:card|credit|debit|payment|pan|cc[ _-]*(?:number|no))\b`)
 )
 
@@ -69,6 +70,7 @@ var restrictedKeyMarkers = []string{
 	"apikey",
 	"access_token",
 	"client_secret",
+	"secret_access_key",
 	"ssn",
 	"social_security",
 	"tax_id",
@@ -1238,7 +1240,21 @@ func ibanMod97(value string) int {
 }
 
 func looksLikeJWTText(value string) bool {
-	return jwtPattern.MatchString(value)
+	for _, match := range jwtPattern.FindAllStringSubmatch(value, -1) {
+		if jwtJSONSegment(match[1]) && jwtJSONSegment(match[2]) {
+			return true
+		}
+	}
+	return false
+}
+
+func jwtJSONSegment(segment string) bool {
+	decoded, err := base64.RawURLEncoding.DecodeString(segment)
+	if err != nil {
+		return false
+	}
+	var object map[string]json.RawMessage
+	return json.Unmarshal(decoded, &object) == nil && object != nil
 }
 
 func canonicalizeUnicode(value string) (string, bool) {

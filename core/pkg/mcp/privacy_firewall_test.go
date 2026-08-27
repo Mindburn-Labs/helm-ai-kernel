@@ -836,6 +836,7 @@ func TestGovernanceFirewallDataEgressLifecycleReasonIsCanonical(t *testing.T) {
 	})(context.Background(), ToolExecutionRequest{ToolName: "privacy-tool", SessionID: "session-privacy"})
 	require.NoError(t, err)
 	require.True(t, response.IsError)
+	require.Equal(t, events.StableRef(rawReceiptEmail), response.ReceiptID)
 	if len(captured) == 0 {
 		t.Fatal("expected synthetic lifecycle events")
 	}

@@ -82,11 +82,13 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 		{name: "card", value: "4111 1111 1111 1111", raw: "4111 1111 1111 1111"},
 		{name: "dot separated card", value: "card: 4111.1111.1111.1111", raw: "4111.1111.1111.1111"},
 		{name: "iban", value: "GB82 WEST 1234 5698 7654 32", raw: "GB82 WEST 1234 5698 7654 32"},
+		{name: "Irish iban", value: "IE29 AIBK 9311 5212 3456 78", raw: "IE29 AIBK 9311 5212 3456 78"},
 		{name: "jwt", value: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature1234", raw: "eyJhbGciOiJIUzI1NiJ9"},
 		{name: "jwt with short claims segment", value: "eyJhbGciOiJIUzI1NiJ9.e30.signature1234", raw: "signature1234"},
 		{name: "private key", value: "-----BEGIN RSA PRIVATE KEY-----\nsecret\n-----END RSA PRIVATE KEY-----", raw: "-----BEGIN RSA PRIVATE KEY-----"},
 		{name: "PGP private key", value: "-----BEGIN PGP PRIVATE KEY BLOCK-----\nsecret\n-----END PGP PRIVATE KEY BLOCK-----", raw: "-----BEGIN PGP PRIVATE KEY BLOCK-----"},
 		{name: "connection URI credential", value: "postgres://alice:pA55word!@db:5432/app", raw: "pA55word!"},
+		{name: "Google API key", value: "AIza" + strings.Repeat("A", 35), raw: "AIza"},
 		{name: "short password assignment", value: "password=abc123", raw: "abc123"},
 		{name: "quoted JSON password", value: `{"password":"abc123"}`, raw: "abc123"},
 		{name: "escaped quoted JSON password", value: `{\"password\":\"abc123\"}`, raw: "abc123"},
@@ -137,6 +139,14 @@ func TestProtectEncodedPIIAndInternationalPhones(t *testing.T) {
 		{
 			name:  "double percent encoded email fails closed",
 			value: "https://example.test/?email=alice%2540example.com",
+		},
+		{
+			name:  "HTML entity encoded email fails closed",
+			value: "alice&#64;example.com",
+		},
+		{
+			name:  "Unicode and HTML entity encoded email fails closed",
+			value: `alice\u0026#64;example.com`,
 		},
 		{
 			name:  "00 prefixed phone",
@@ -340,6 +350,19 @@ func TestProtectAllowsTokenMetadataAndLuhnDeviceIdentifiers(t *testing.T) {
 	} {
 		if _, _, err := manager.Protect(context.Background(), value); err != nil {
 			t.Fatalf("non-payment Luhn identifier %v was blocked: %v", value, err)
+		}
+	}
+}
+
+func TestProtectDoesNotMisclassifyNonRegisteredIBANShapes(t *testing.T) {
+	manager := NewPrivacyManager()
+	for _, value := range []string{
+		"ZZ8112345678901",
+		"GB3312345678901",
+	} {
+		protected, findings, err := manager.Protect(context.Background(), value)
+		if err != nil || protected != value || len(findings) != 0 {
+			t.Fatalf("Protect(%q) = value=%#v findings=%v err=%v", value, protected, findings, err)
 		}
 	}
 }

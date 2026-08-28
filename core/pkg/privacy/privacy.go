@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"html"
 	"io"
 	"math"
 	"net/netip"
@@ -24,7 +25,7 @@ import (
 // DetectorVersion identifies the deterministic egress detector used by the
 // shared privacy boundary. It is intentionally a version, not a description
 // of any detected value.
-const DetectorVersion = "helm-privacy-v3"
+const DetectorVersion = "helm-privacy-v4"
 
 const (
 	maxProtectDepth       = 32
@@ -46,17 +47,18 @@ var (
 	// public data-egress denial.
 	ErrDataEgressInvalid = errors.New("DATA_EGRESS_INVALID")
 
-	phonePattern      = regexp.MustCompile(`(?:(?:\+|00)[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,15}\b)`)
-	ssnPattern        = regexp.MustCompile(`\b[0-9]{3}[ -][0-9]{2}[ -][0-9]{4}\b`)
-	compactSSNPattern = regexp.MustCompile(`(?i)\b(?:ssn|social[ _-]*security(?:[ _-]*(?:number|no))?)\b["']?\s*[:=#-]?\s*["']?[0-9]{9}\b`)
-	cardPattern       = regexp.MustCompile(`(?:[0-9][ .-]?){12,19}`)
-	ibanPattern       = regexp.MustCompile(`(?i)\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b`)
-	assignmentPattern = regexp.MustCompile(`(?i)(?:"([^"\r\n]{1,128})"|'([^'\r\n]{1,128})'|([a-z][a-z0-9_.-]{0,127}))\s*[:=]`)
-	secretPattern     = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b["']?\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
-	credentialURI     = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^/\s@]*:[^/\s@]+@`)
-	privateKeyPattern = regexp.MustCompile(`(?i)-----begin [a-z0-9 ]*private key(?: block)?-----`)
-	jwtPattern        = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]*)(?:$|[^A-Za-z0-9_-])`)
-	paymentContext    = regexp.MustCompile(`(?i)\b(?:card|credit|debit|payment|pan|cc[ _-]*(?:number|no))\b`)
+	phonePattern        = regexp.MustCompile(`(?:(?:\+|00)[1-9][0-9]{0,2}(?:[ .()-]*[0-9]){7,14}|(?:\([0-9]{2,4}\)|[0-9]{3,4})(?:[ .-]+[0-9]{2,4}){2,4}|\b[0-9]{10,15}\b)`)
+	ssnPattern          = regexp.MustCompile(`\b[0-9]{3}[ -][0-9]{2}[ -][0-9]{4}\b`)
+	compactSSNPattern   = regexp.MustCompile(`(?i)\b(?:ssn|social[ _-]*security(?:[ _-]*(?:number|no))?)\b["']?\s*[:=#-]?\s*["']?[0-9]{9}\b`)
+	cardPattern         = regexp.MustCompile(`(?:[0-9][ .-]?){12,19}`)
+	ibanPattern         = regexp.MustCompile(`(?i)\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b`)
+	assignmentPattern   = regexp.MustCompile(`(?i)(?:"([^"\r\n]{1,128})"|'([^'\r\n]{1,128})'|([a-z][a-z0-9_.-]{0,127}))\s*[:=]`)
+	secretPattern       = regexp.MustCompile(`(?i)(?:\b(?:api[_-]?key|access[_-]?token|client[_-]?secret|password|passwd|secret|credential|token)\b["']?\s*[:=]\s*(?:"[^"\r\n]{1,}"|'[^'\r\n]{1,}'|[^\s,;]+)|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9_-]{4,}\b|\b(?:sk|rk)[_-](?:live|test)?[_-]?[A-Za-z0-9_-]{8,}\b|\b(?:ghp|github_pat|gho|ghs|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b|\b(?:hf|npm|pypi)[_-][A-Za-z0-9_-]{12,}\b|\bAKIA[0-9A-Z]{16}\b|\bBearer\s+[A-Za-z0-9._~+/=-]{8,})`)
+	googleAPIKeyPattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])AIza[A-Za-z0-9_-]{35}(?:$|[^A-Za-z0-9_-])`)
+	credentialURI       = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^/\s@]*:[^/\s@]+@`)
+	privateKeyPattern   = regexp.MustCompile(`(?i)-----begin [a-z0-9 ]*private key(?: block)?-----`)
+	jwtPattern          = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]*)(?:$|[^A-Za-z0-9_-])`)
+	paymentContext      = regexp.MustCompile(`(?i)\b(?:card|credit|debit|payment|pan|cc[ _-]*(?:number|no))\b`)
 )
 
 var restrictedKeyMarkers = []string{
@@ -802,7 +804,7 @@ func validEmailDomain(domain string) bool {
 
 func restrictedText(value string) bool {
 	if ssnPattern.MatchString(value) || compactSSNPattern.MatchString(value) ||
-		secretPattern.MatchString(value) || credentialURI.MatchString(value) ||
+		secretPattern.MatchString(value) || googleAPIKeyPattern.MatchString(value) || credentialURI.MatchString(value) ||
 		hasRestrictedAssignment(value) || privateKeyPattern.MatchString(value) {
 		return true
 	}
@@ -1041,6 +1043,7 @@ func canonicalizeTextEncodings(value string) (string, bool) {
 		if unresolved {
 			return "", true
 		}
+		next = html.UnescapeString(next)
 		if next == canonical {
 			return canonical, false
 		}
@@ -1252,12 +1255,61 @@ func hasValidIBAN(value string) bool {
 				return r
 			}
 		}, match)
-		if len(compact) < 15 || len(compact) > 34 || ibanMod97(compact) != 1 {
+		if !validIBANCountryLength(compact) || ibanMod97(compact) != 1 {
 			continue
 		}
 		return true
 	}
 	return false
+}
+
+// validIBANCountryLength reflects SWIFT IBAN Registry Release 102 (June 2026).
+func validIBANCountryLength(value string) bool {
+	if len(value) < 2 {
+		return false
+	}
+	expected := 0
+	switch value[:2] {
+	case "NO":
+		expected = 15
+	case "BE":
+		expected = 16
+	case "DK", "FI", "FK", "FO", "GL", "NL", "SD":
+		expected = 18
+	case "MK", "SI":
+		expected = 19
+	case "AT", "BA", "EE", "KZ", "LT", "LU", "MN", "XK":
+		expected = 20
+	case "CH", "HR", "LI", "LV":
+		expected = 21
+	case "BG", "BH", "CR", "DE", "GB", "GE", "IE", "ME", "RS", "VA":
+		expected = 22
+	case "AE", "GI", "IL", "IQ", "OM", "SO", "TL":
+		expected = 23
+	case "AD", "CZ", "ES", "MD", "PK", "RO", "SA", "SE", "SK", "TN", "VG":
+		expected = 24
+	case "LY", "PT", "ST":
+		expected = 25
+	case "IS", "TR":
+		expected = 26
+	case "BI", "DJ", "FR", "GR", "IT", "MC", "MR", "SM":
+		expected = 27
+	case "AL", "AZ", "BY", "CY", "DO", "GT", "HN", "HU", "LB", "NI", "PL", "SV":
+		expected = 28
+	case "BR", "EG", "PS", "QA", "UA":
+		expected = 29
+	case "JO", "KW", "MU", "YE":
+		expected = 30
+	case "MT", "SC":
+		expected = 31
+	case "LC":
+		expected = 32
+	case "RU":
+		expected = 33
+	default:
+		return false
+	}
+	return len(value) == expected
 }
 
 func ibanMod97(value string) int {

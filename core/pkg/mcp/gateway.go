@@ -208,6 +208,9 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(status)
 			return
 		}
+		if !serializedMCPResponseWithinBudget(resp) {
+			setBoundedDataEgressBlockedError(resp)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("MCP-Protocol-Version", protocolVersion)

@@ -17,12 +17,14 @@ import (
 	"time"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"golang.org/x/net/idna"
 )
 
 // DetectorVersion identifies the deterministic egress detector used by the
 // shared privacy boundary. It is intentionally a version, not a description
 // of any detected value.
-const DetectorVersion = "helm-privacy-v2"
+const DetectorVersion = "helm-privacy-v3"
 
 const (
 	maxProtectDepth       = 32
@@ -112,7 +114,7 @@ type StandardPrivacyManager struct {
 // NewPrivacyManager returns a new instance of StandardPrivacyManager.
 func NewPrivacyManager() *StandardPrivacyManager {
 	return &StandardPrivacyManager{
-		emailRegex: regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`),
+		emailRegex: defaultEmailRegex,
 	}
 }
 
@@ -122,8 +124,8 @@ func (pm *StandardPrivacyManager) Scrub(ctx context.Context, text string, level 
 		return text
 	}
 
-	// Simple redaction for emails as a proof of concept
-	return pm.emailRegex.ReplaceAllString(text, "[REDACTED_EMAIL]")
+	protected, _ := redactCanonicalMatches(text, findEmailMatches(text, pm.emailRegex), "[REDACTED_EMAIL]")
+	return protected
 }
 
 // Validate checks for privacy compliance.
@@ -749,7 +751,7 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 	if manager != nil && manager.emailRegex != nil {
 		emailRegex = manager.emailRegex
 	}
-	emailMatches := emailRegex.FindAllString(canonical, -1)
+	emailMatches := findEmailMatches(canonical, emailRegex)
 	if len(emailMatches) > 0 {
 		var replaced bool
 		protected, replaced = redactCanonicalMatches(protected, emailMatches, "[REDACTED_EMAIL]")
@@ -776,13 +778,49 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 	remaining, unresolvedPercent = canonicalizePercentEscapes(remaining)
 	quotedRemaining, unresolvedQuotes := canonicalizeQuotedEscapes(remaining)
 	if unresolved || unresolvedPercent || unresolvedQuotes || restrictedText(quotedRemaining) ||
-		emailRegex.MatchString(remaining) || len(findPhoneMatches(remaining)) > 0 {
+		len(findEmailMatches(remaining, emailRegex)) > 0 || len(findPhoneMatches(remaining)) > 0 {
 		return "", nil, ErrDataEgressBlocked
 	}
 	return protected, labels, nil
 }
 
-var defaultEmailRegex = regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`)
+var defaultEmailRegex = regexp.MustCompile(`[\p{L}\p{N}\p{M}\p{So}._%+-]+@[\p{L}\p{N}\p{M}-]+(?:[.。．｡][\p{L}\p{N}\p{M}-]+)+`)
+
+func findEmailMatches(value string, pattern *regexp.Regexp) []string {
+	if pattern == nil {
+		pattern = defaultEmailRegex
+	}
+	candidates := pattern.FindAllString(value, -1)
+	matches := candidates[:0]
+	for _, candidate := range candidates {
+		at := strings.LastIndexByte(candidate, '@')
+		if at <= 0 || at == len(candidate)-1 {
+			continue
+		}
+		local := candidate[:at]
+		if len(local) > 64 || strings.HasPrefix(local, ".") || strings.HasSuffix(local, ".") || strings.Contains(local, "..") {
+			continue
+		}
+		domain, err := idna.Lookup.ToASCII(candidate[at+1:])
+		if err != nil || !validEmailDomain(domain) {
+			continue
+		}
+		matches = append(matches, candidate)
+	}
+	return matches
+}
+
+func validEmailDomain(domain string) bool {
+	if len(domain) == 0 || len(domain) > 253 || !strings.Contains(domain, ".") {
+		return false
+	}
+	for _, label := range strings.Split(domain, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+	}
+	return true
+}
 
 func restrictedText(value string) bool {
 	if ssnPattern.MatchString(value) || compactSSNPattern.MatchString(value) ||

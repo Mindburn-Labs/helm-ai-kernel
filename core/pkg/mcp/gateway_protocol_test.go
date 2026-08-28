@@ -221,6 +221,26 @@ func TestGateway_ToolsListResponseIsBounded(t *testing.T) {
 	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload["error"].(map[string]any)["message"])
 }
 
+func TestGateway_InitializeResponseIsBounded(t *testing.T) {
+	mux := newProtocolTestMux(t, GatewayConfig{}, nil)
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      strings.Repeat("i", MaxResponseBytes),
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": LatestProtocolVersion,
+		},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.LessOrEqual(t, rec.Body.Len(), MaxResponseBytes)
+	require.NotEmpty(t, rec.Header().Get("MCP-Session-Id"))
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Nil(t, payload["id"])
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload["error"].(map[string]any)["message"])
+}
+
 func TestGateway_ToolsListIncludesRequiredScopes(t *testing.T) {
 	mux := newScopedProtocolTestMux(t, nil)
 

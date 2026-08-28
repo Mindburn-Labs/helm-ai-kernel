@@ -152,6 +152,25 @@ func TestProtectEncodedPIIAndInternationalPhones(t *testing.T) {
 	}
 }
 
+func TestProtectRedactsInternationalizedEmailAddresses(t *testing.T) {
+	manager := NewPrivacyManager()
+	for _, address := range []string{
+		"用户@例子.公司",
+		"alice@例子。公司",
+	} {
+		protected, findings, err := manager.Protect(context.Background(), address)
+		if err != nil {
+			t.Fatalf("Protect(%q) error = %v", address, err)
+		}
+		if protected != "[REDACTED_EMAIL]" || !reflect.DeepEqual(findings, []string{"email"}) {
+			t.Fatalf("Protect(%q) = value=%v findings=%v", address, protected, findings)
+		}
+		if scrubbed := manager.Scrub(context.Background(), address, PIISensitive); scrubbed != "[REDACTED_EMAIL]" {
+			t.Fatalf("Scrub(%q) = %q", address, scrubbed)
+		}
+	}
+}
+
 func TestProtectDistinguishesNumericIDsPhonesAndIPv4(t *testing.T) {
 	manager := NewPrivacyManager()
 	input := map[string]any{

@@ -158,10 +158,13 @@ func TestToolResultPayload_StructuredContentIncluded(t *testing.T) {
 }
 
 func TestToolResultPayload_ReceiptIDIncluded(t *testing.T) {
-	resp := ToolExecutionResponse{Content: "x", ReceiptID: "rec-123"}
+	resp := ToolExecutionResponse{Content: "x", ReceiptID: "rec-123", ProtectedArgsHash: "sha256:protected"}
 	p := ToolResultPayload(resp)
 	if p["receipt_id"] != "rec-123" {
 		t.Fatalf("receipt_id mismatch")
+	}
+	if p["args_hash"] != "sha256:protected" {
+		t.Fatalf("args_hash mismatch")
 	}
 }
 

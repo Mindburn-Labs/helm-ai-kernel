@@ -255,6 +255,9 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		return
 	}
+	if !serializedMCPResponseWithinBudget(resp) {
+		setBoundedDataEgressBlockedError(resp)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("MCP-Protocol-Version", protocolVersion)
@@ -755,6 +758,20 @@ func writeMCPToolCallResponse(w http.ResponseWriter, status int, resp MCPToolCal
 func serializedMCPResponseWithinBudget(value any) bool {
 	encoded, err := json.Marshal(value)
 	return err == nil && len(encoded)+1 <= MaxResponseBytes
+}
+
+func setBoundedDataEgressBlockedError(response map[string]any) {
+	id := response["id"]
+	clear(response)
+	response["jsonrpc"] = "2.0"
+	response["id"] = id
+	response["error"] = map[string]any{
+		"code":    -32000,
+		"message": string(contracts.ReasonDataEgressBlocked),
+	}
+	if !serializedMCPResponseWithinBudget(response) {
+		response["id"] = nil
+	}
 }
 
 func dataEgressBlockedExecutionResponse(resp ToolExecutionResponse) ToolExecutionResponse {

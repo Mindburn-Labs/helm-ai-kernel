@@ -195,6 +195,32 @@ func TestGateway_ToolsListIncludesStructuredToolMetadata(t *testing.T) {
 	assert.Equal(t, true, annotations["idempotentHint"])
 }
 
+func TestGateway_ToolsListResponseIsBounded(t *testing.T) {
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:        "oversized",
+		Description: strings.Repeat("x", MaxResponseBytes),
+		Schema:      map[string]any{"type": "object"},
+	}))
+	gateway := NewGateway(catalog, GatewayConfig{})
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.LessOrEqual(t, rec.Body.Len(), MaxResponseBytes)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.NotContains(t, payload, "result")
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload["error"].(map[string]any)["message"])
+}
+
 func TestGateway_ToolsListIncludesRequiredScopes(t *testing.T) {
 	mux := newScopedProtocolTestMux(t, nil)
 

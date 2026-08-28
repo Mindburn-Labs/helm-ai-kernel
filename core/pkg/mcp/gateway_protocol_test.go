@@ -219,6 +219,11 @@ func TestGateway_ToolsListResponseIsBounded(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
 	require.NotContains(t, payload, "result")
 	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload["error"].(map[string]any)["message"])
+
+	capabilities := httptest.NewRecorder()
+	mux.ServeHTTP(capabilities, httptest.NewRequest(http.MethodGet, "/mcp/v1/capabilities", nil))
+	require.Equal(t, http.StatusForbidden, capabilities.Code)
+	require.LessOrEqual(t, capabilities.Body.Len(), MaxResponseBytes)
 }
 
 func TestGateway_InitializeResponseIsBounded(t *testing.T) {
@@ -379,6 +384,27 @@ func TestGateway_OversizedReceiptCannotEscapeBoundedFallbacks(t *testing.T) {
 	require.Equal(t, true, result["isError"])
 	require.NotContains(t, result, "receipt_id")
 	require.Contains(t, string(mustJSON(t, result)), string(contracts.ReasonDataEgressBlocked))
+}
+
+func TestGateway_OversizedExecutorErrorCannotEscapeREST(t *testing.T) {
+	exec := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{}, fmt.Errorf("executor failed: %s", strings.Repeat("x", MaxResponseBytes))
+	}
+	mux := newProtocolTestMux(t, GatewayConfig{}, exec)
+	body, err := json.Marshal(MCPToolCallRequest{
+		Method: "file_read",
+		Params: map[string]any{"path": "/tmp/demo.txt"},
+	})
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.LessOrEqual(t, rec.Body.Len(), MaxResponseBytes)
+	var payload MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload.ReasonCode)
+	require.NotContains(t, payload.Error, "executor failed")
 }
 
 func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {

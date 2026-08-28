@@ -272,8 +272,10 @@ func (g *Gateway) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	tools, err := g.catalog.Search(ctx, "")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{Error: err.Error()})
+		writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
+			Error:      err.Error(),
+			ReasonCode: string(contracts.ReasonPDPError),
+		})
 		return
 	}
 
@@ -292,6 +294,13 @@ func (g *Gateway) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		AuthMode:         g.authMode(),
 	}
 
+	if !serializedMCPResponseWithinBudget(m) {
+		writeMCPToolCallResponse(w, http.StatusForbidden, MCPToolCallResponse{
+			Error:      string(contracts.ReasonDataEgressBlocked),
+			ReasonCode: string(contracts.ReasonDataEgressBlocked),
+		})
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(m)
 }
@@ -306,8 +315,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	decoder.UseNumber()
 	if err := decoder.Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{Error: "invalid request body"})
+		writeMCPToolCallResponse(w, http.StatusBadRequest, MCPToolCallResponse{Error: "invalid request body"})
 		return
 	}
 	execReq := toolExecutionRequestFromHTTP(r, req.Method, req.Params)
@@ -322,9 +330,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	tool, ok := findToolRef(g.catalog, req.Method)
 	if !ok {
 		g.recordGovernedIngressFailure(r.Context(), execReq, string(contracts.ReasonNoPolicy))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+		writeMCPToolCallResponse(w, http.StatusNotFound, MCPToolCallResponse{
 			Error:      "tool not found",
 			ReasonCode: string(contracts.ReasonNoPolicy),
 		})
@@ -333,9 +339,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	execReq.RequiredScopes = append([]string(nil), tool.RequiredScopes...)
 	if !g.hasRequiredScopes(r.Context(), tool) {
 		g.recordGovernedIngressFailure(r.Context(), execReq, "MCP.OAUTH.INSUFFICIENT_SCOPE")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+		writeMCPToolCallResponse(w, http.StatusForbidden, MCPToolCallResponse{
 			Error:      "tool requires OAuth scopes: " + strings.Join(tool.RequiredScopes, ", "),
 			ReasonCode: "MCP.OAUTH.INSUFFICIENT_SCOPE",
 		})
@@ -352,9 +356,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusForbidden
 		}
 		g.recordGovernedIngressFailure(r.Context(), execReq, string(reasonCode))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+		writeMCPToolCallResponse(w, status, MCPToolCallResponse{
 			Error:      "PEP validation failed",
 			ReasonCode: string(reasonCode),
 		})
@@ -377,18 +379,14 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 				writeMCPToolCallResponse(w, http.StatusOK, resp)
 				return
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+			writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
 				Error:      execErr.Error(),
 				ReasonCode: string(contracts.ReasonPDPError),
 			})
 			return
 		}
 		if g.governed && !execResp.IsError && execResp.ProtectedArgsHash == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+			writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
 				Error:      "governed execution did not attest protected arguments",
 				ReasonCode: string(contracts.ReasonVerification),
 			})
@@ -422,9 +420,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		// with BUDGET_ERROR rather than inventing cents from a nil breakdown.
 		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, validatedArgsHash, nil)
 		if govErr != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+			writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
 				Error:      fmt.Sprintf("governance error: %v", govErr),
 				ReasonCode: string(contracts.ReasonPDPError),
 			})
@@ -441,10 +437,8 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			if resp.ReasonCode == "" {
 				resp.ReasonCode = string(contracts.ReasonPolicyViolation)
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
 			resp.Error = fmt.Sprintf("tool %q denied by governance: %s", req.Method, govResult.ReasonCode)
-			_ = json.NewEncoder(w).Encode(resp)
+			writeMCPToolCallResponse(w, http.StatusForbidden, resp)
 			return
 		}
 

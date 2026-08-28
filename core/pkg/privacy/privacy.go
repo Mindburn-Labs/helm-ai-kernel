@@ -445,16 +445,8 @@ func (p *protector) key(key string) (string, error) {
 	if len(key) > maxProtectStringBytes {
 		return "", ErrDataEgressInvalid
 	}
-	canonical, unresolved := canonicalizeUnicode(key)
-	if unresolved {
-		return "", ErrDataEgressBlocked
-	}
-	canonical, unresolved = canonicalizePercentEscapes(canonical)
-	if unresolved || !utf8.ValidString(canonical) {
-		return "", ErrDataEgressBlocked
-	}
-	canonical, unresolved = canonicalizeQuotedEscapes(canonical)
-	if unresolved || isRestrictedKey(canonical) {
+	canonical, unresolved := canonicalizeTextEncodings(key)
+	if unresolved || !utf8.ValidString(canonical) || isRestrictedKey(canonical) {
 		return "", ErrDataEgressBlocked
 	}
 	return p.text(key)
@@ -729,20 +721,8 @@ func isRestrictedTokenKey(normalized string) bool {
 }
 
 func sanitizeText(value string, manager *StandardPrivacyManager) (string, []string, error) {
-	canonical, unresolved := canonicalizeUnicode(value)
-	if unresolved {
-		// An unresolved escape layer is not safe to forward. It may be an
-		// encoded secret/PII value whose final representation is hidden by the
-		// layer cap, so fail closed rather than guessing.
-		return "", nil, ErrDataEgressBlocked
-	}
-
-	canonical, unresolvedPercent := canonicalizePercentEscapes(canonical)
-	if unresolvedPercent || !utf8.ValidString(canonical) {
-		return "", nil, ErrDataEgressBlocked
-	}
-	quotedCanonical, unresolvedQuotes := canonicalizeQuotedEscapes(canonical)
-	if unresolvedQuotes || restrictedText(quotedCanonical) {
+	canonical, unresolved := canonicalizeTextEncodings(value)
+	if unresolved || !utf8.ValidString(canonical) || restrictedText(canonical) {
 		return "", nil, ErrDataEgressBlocked
 	}
 	labels := make([]string, 0, 2)
@@ -774,10 +754,8 @@ func sanitizeText(value string, manager *StandardPrivacyManager) (string, []stri
 		// value byte-for-byte, including literal escaped code text.
 		return value, nil, nil
 	}
-	remaining, unresolved := canonicalizeUnicode(protected)
-	remaining, unresolvedPercent = canonicalizePercentEscapes(remaining)
-	quotedRemaining, unresolvedQuotes := canonicalizeQuotedEscapes(remaining)
-	if unresolved || unresolvedPercent || unresolvedQuotes || restrictedText(quotedRemaining) ||
+	remaining, unresolved := canonicalizeTextEncodings(protected)
+	if unresolved || restrictedText(remaining) ||
 		len(findEmailMatches(remaining, emailRegex)) > 0 || len(findPhoneMatches(remaining)) > 0 {
 		return "", nil, ErrDataEgressBlocked
 	}
@@ -1046,6 +1024,32 @@ func canonicalizeQuotedEscapes(value string) (string, bool) {
 		canonical = next
 	}
 	return canonical, strings.Contains(canonical, `\"`) || strings.Contains(canonical, `\'`)
+}
+
+func canonicalizeTextEncodings(value string) (string, bool) {
+	canonical := value
+	for depth := 0; depth <= maxUnicodeEscapeDepth; depth++ {
+		next, unresolved := canonicalizeUnicode(canonical)
+		if unresolved {
+			return "", true
+		}
+		next, unresolved = canonicalizePercentEscapes(next)
+		if unresolved {
+			return "", true
+		}
+		next, unresolved = canonicalizeQuotedEscapes(next)
+		if unresolved {
+			return "", true
+		}
+		if next == canonical {
+			return canonical, false
+		}
+		if depth == maxUnicodeEscapeDepth {
+			return "", true
+		}
+		canonical = next
+	}
+	return "", true
 }
 
 func unicodeEscapeVariant(value string, slashCount int) string {

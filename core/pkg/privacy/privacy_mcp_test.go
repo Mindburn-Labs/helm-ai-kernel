@@ -112,6 +112,16 @@ func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 	}
 }
 
+func TestProtectRejectsMixedEncodedRestrictedKey(t *testing.T) {
+	manager := NewPrivacyManager()
+	_, _, err := manager.Protect(context.Background(), map[string]any{
+		"%5Cu0061pi_key": "opaque",
+	})
+	if !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("Protect() error = %v, want ErrDataEgressBlocked", err)
+	}
+}
+
 func TestProtectEncodedPIIAndInternationalPhones(t *testing.T) {
 	manager := NewPrivacyManager()
 	for _, tc := range []struct {

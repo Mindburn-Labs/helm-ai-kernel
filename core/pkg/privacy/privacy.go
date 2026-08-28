@@ -20,12 +20,13 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/net/idna"
+	"golang.org/x/text/unicode/norm"
 )
 
 // DetectorVersion identifies the deterministic egress detector used by the
 // shared privacy boundary. It is intentionally a version, not a description
 // of any detected value.
-const DetectorVersion = "helm-privacy-v4"
+const DetectorVersion = "helm-privacy-v5"
 
 const (
 	maxProtectDepth       = 32
@@ -400,7 +401,7 @@ func (p *protector) mapAny(value map[string]any, depth int) (map[string]any, err
 		if err != nil {
 			return nil, err
 		}
-		item, err = p.redactNumericPhone(key, value[key], item)
+		item, err = p.redactNumericPhone(key, item)
 		if err != nil {
 			return nil, err
 		}
@@ -516,15 +517,9 @@ func (p *protector) rawJSON(raw json.RawMessage, depth int) (json.RawMessage, er
 	if err := p.accountBytes(len(raw)); err != nil {
 		return nil, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var decoded any
-	if err := decoder.Decode(&decoded); err != nil {
-		return nil, ErrDataEgressInvalid
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return nil, ErrDataEgressInvalid
+	decoded, err := decodeJSONValue(raw)
+	if err != nil {
+		return nil, err
 	}
 	protected, err := p.value(decoded, depth+1)
 	if err != nil {
@@ -540,6 +535,20 @@ func (p *protector) rawJSON(raw json.RawMessage, depth int) (json.RawMessage, er
 		}
 	}
 	return json.RawMessage(canonical), nil
+}
+
+func decodeJSONValue(raw json.RawMessage) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return nil, ErrDataEgressInvalid
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, ErrDataEgressInvalid
+	}
+	return decoded, nil
 }
 
 func (p *protector) accountBytes(size int) error {
@@ -586,7 +595,7 @@ func (p *protector) reflectValue(value reflect.Value, depth int) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			item, err = p.redactNumericPhone(key.String(), rawItem, item)
+			item, err = p.redactNumericPhone(key.String(), item)
 			if err != nil {
 				return nil, err
 			}
@@ -642,16 +651,65 @@ func (p *protector) reflectValue(value reflect.Value, depth int) (any, error) {
 	}
 }
 
-func (p *protector) redactNumericPhone(key string, original, protected any) (any, error) {
+func (p *protector) redactNumericPhone(key string, protected any) (any, error) {
 	if !isPhoneKey(key) {
 		return protected, nil
 	}
-	digits := exactNumericDigits(original)
+	return p.redactNumericPhoneValue(protected, true)
+}
+
+func (p *protector) redactNumericPhoneValue(value any, accountGrowth bool) (any, error) {
+	digits := exactNumericDigits(value)
 	if digits == "" || !plausibleCompactPhoneDigits(digits) {
-		return protected, nil
+		switch typed := value.(type) {
+		case []any:
+			for index := range typed {
+				redacted, err := p.redactNumericPhoneValue(typed[index], accountGrowth)
+				if err != nil {
+					return nil, err
+				}
+				typed[index] = redacted
+			}
+		case []map[string]any:
+			for index := range typed {
+				redacted, err := p.redactNumericPhoneValue(typed[index], accountGrowth)
+				if err != nil {
+					return nil, err
+				}
+				typed[index] = redacted.(map[string]any)
+			}
+		case map[string]any:
+			for _, key := range sortedKeysAny(typed) {
+				redacted, err := p.redactNumericPhoneValue(typed[key], accountGrowth)
+				if err != nil {
+					return nil, err
+				}
+				typed[key] = redacted
+			}
+		case json.RawMessage:
+			decoded, err := decodeJSONValue(typed)
+			if err != nil {
+				return nil, err
+			}
+			redacted, err := p.redactNumericPhoneValue(decoded, false)
+			if err != nil {
+				return nil, err
+			}
+			canonical, err := json.Marshal(redacted)
+			if err != nil || len(canonical) > maxProtectStringBytes {
+				return nil, ErrDataEgressInvalid
+			}
+			if accountGrowth && len(canonical) > len(typed) {
+				if err := p.accountBytes(len(canonical) - len(typed)); err != nil {
+					return nil, err
+				}
+			}
+			return json.RawMessage(canonical), nil
+		}
+		return value, nil
 	}
 	const marker = "[REDACTED_PHONE]"
-	if len(marker) > len(digits) {
+	if accountGrowth && len(marker) > len(digits) {
 		if err := p.accountBytes(len(marker) - len(digits)); err != nil {
 			return nil, err
 		}
@@ -693,20 +751,39 @@ func isRestrictedKey(key string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(key))
 	normalized = strings.NewReplacer("-", "_", " ", "_", ".", "_").Replace(normalized)
 	compact := strings.ReplaceAll(normalized, "_", "")
+	baseNormalized := normalized
+	for _, suffix := range []string{"_value", "_data"} {
+		if strings.HasSuffix(baseNormalized, suffix) {
+			baseNormalized = strings.TrimSuffix(baseNormalized, suffix)
+			break
+		}
+	}
+	baseCompact := compact
+	for _, suffix := range []string{"value", "data"} {
+		if strings.HasSuffix(baseCompact, suffix) {
+			baseCompact = strings.TrimSuffix(baseCompact, suffix)
+			break
+		}
+	}
 	for _, marker := range restrictedKeyMarkers {
 		if marker == "token" {
-			if isRestrictedTokenKey(normalized) {
+			if isRestrictedTokenKey(normalized) || isRestrictedTokenKey(baseNormalized) {
 				return true
 			}
 			continue
 		}
 		markerCompact := strings.ReplaceAll(marker, "_", "")
-		if normalized == marker || strings.HasSuffix(normalized, "_"+marker) ||
-			compact == markerCompact || strings.HasSuffix(compact, markerCompact) {
+		if matchesRestrictedKeyMarker(normalized, compact, marker, markerCompact) ||
+			matchesRestrictedKeyMarker(baseNormalized, baseCompact, marker, markerCompact) {
 			return true
 		}
 	}
 	return false
+}
+
+func matchesRestrictedKeyMarker(normalized, compact, marker, markerCompact string) bool {
+	return normalized == marker || strings.HasSuffix(normalized, "_"+marker) ||
+		compact == markerCompact || strings.HasSuffix(compact, markerCompact)
 }
 
 func isRestrictedTokenKey(normalized string) bool {
@@ -1044,6 +1121,7 @@ func canonicalizeTextEncodings(value string) (string, bool) {
 			return "", true
 		}
 		next = html.UnescapeString(next)
+		next = norm.NFKC.String(next)
 		if next == canonical {
 			return canonical, false
 		}

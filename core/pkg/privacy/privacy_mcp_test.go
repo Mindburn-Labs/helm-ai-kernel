@@ -149,6 +149,10 @@ func TestProtectEncodedPIIAndInternationalPhones(t *testing.T) {
 			value: `alice\u0026#64;example.com`,
 		},
 		{
+			name:  "compatibility encoded email fails closed",
+			value: "alice＠example．com",
+		},
+		{
 			name:  "00 prefixed phone",
 			value: "call 0044 20 7946 0958 now",
 			want:  "call [REDACTED_PHONE] now",
@@ -220,6 +224,35 @@ func TestProtectDistinguishesNumericIDsPhonesAndIPv4(t *testing.T) {
 		if protected, findings, err := manager.Protect(context.Background(), value); err != nil || protected != value || len(findings) != 0 {
 			t.Fatalf("bare numeric id = %#v findings=%v err=%v", protected, findings, err)
 		}
+	}
+}
+
+func TestProtectPropagatesPhoneContextThroughCollections(t *testing.T) {
+	manager := NewPrivacyManager()
+	input := map[string]any{
+		"phone": []any{
+			json.Number("2025550123"),
+			[]uint64{442079460958},
+			map[string]any{"primary": int64(4155552671)},
+			json.RawMessage(`[2025550123]`),
+		},
+	}
+	protected, findings, err := manager.Protect(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Protect() error = %v", err)
+	}
+	encoded, err := json.Marshal(protected)
+	if err != nil {
+		t.Fatalf("marshal protected value: %v", err)
+	}
+	output := string(encoded)
+	for _, raw := range []string{"2025550123", "442079460958", "4155552671"} {
+		if strings.Contains(output, raw) {
+			t.Fatalf("protected phone collection contains %q: %s", raw, output)
+		}
+	}
+	if strings.Count(output, "[REDACTED_PHONE]") != 4 || !reflect.DeepEqual(findings, []string{"phone"}) {
+		t.Fatalf("protected phone collection = %s findings=%v", output, findings)
 	}
 }
 
@@ -317,6 +350,7 @@ func TestProtectAllowsTokenMetadataAndLuhnDeviceIdentifiers(t *testing.T) {
 		"max_tokens":           2048,
 		"token_count":          42,
 		"tokenizer":            "cl100k_base",
+		"token_count_value":    42,
 		"device_id":            "490154203237518",
 		"product_code":         "5600000000069",
 		"authorization_status": "approved",
@@ -337,7 +371,7 @@ func TestProtectAllowsTokenMetadataAndLuhnDeviceIdentifiers(t *testing.T) {
 	if _, _, err := manager.Protect(context.Background(), map[string]any{"auth_token": "abc123"}); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("auth_token error = %v, want ErrDataEgressBlocked", err)
 	}
-	for _, key := range []string{"refreshToken", "oauthToken", "tokenValue"} {
+	for _, key := range []string{"refreshToken", "oauthToken", "tokenValue", "client_secret_value", "apiKeyData"} {
 		if _, _, err := manager.Protect(context.Background(), map[string]any{key: "abc123"}); !errors.Is(err, ErrDataEgressBlocked) {
 			t.Fatalf("%s error = %v, want ErrDataEgressBlocked", key, err)
 		}

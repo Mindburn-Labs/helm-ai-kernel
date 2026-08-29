@@ -113,6 +113,9 @@ flowchart TD
 | `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
 | `helm.guardian.semanticThreatEscalationBP` | `0` | Semantic ESCALATE threshold in basis points; `0` is advisory-only, while a positive value fails closed when assessment is unavailable or truncated. |
 | `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
+| `helm.policy.source.controlplane.auth.mode` | `serviceAccountJWT` | `serviceAccountJWT` uses a rotating projected token; `bearerToken` requires explicit static Secret material. |
+| `helm.policy.source.controlplane.auth.serviceAccountJWT.audience` | `helm-control-plane` | Audience required from the policy authority's Kubernetes TokenReview verifier. |
+| `helm.policy.source.controlplane.auth.serviceAccountJWT.expirationSeconds` | `600` | Projected token TTL, constrained to 600–3600 seconds. |
 | `helm.policy.source.pollInterval` | `10s` | Runtime reconciler polling interval. Lost hints are recovered by polling. |
 | `helm.policy.failClosed.onInvalidUpdate` | `keepLastKnownGood` | Retain only a snapshot with a fresh successful source verification after a fault, or `deny` to invalidate immediately. |
 | `helm.policy.failClosed.lastKnownGoodMaxAge` | `10m` | Positive maximum age since the last successful source verification after a source fault. |
@@ -145,6 +148,11 @@ flowchart TD
 - Set `helm.auth.tenantID` and `helm.auth.principalID` to the runtime identity
   expected by tenant-scoped API clients. Caller-supplied tenant and principal
   headers are accepted only when they match these server-bound values.
+- For a `controlplane` policy source, prefer `serviceAccountJWT`. The chart
+  keeps general ServiceAccount automount disabled and projects only a
+  short-lived, audience-bound token into the Kernel container. The policy
+  authority must verify that token and bind its namespace/ServiceAccount to the
+  requested tenant and workspace.
 - Keep `helm.emergencyStop.commandReplayKeyring` empty unless the Control Plane
   has queued signed FENCE envelopes across a deliberate key or audience
   rotation. Prefer `helm.emergencyStop.existingSecret` plus

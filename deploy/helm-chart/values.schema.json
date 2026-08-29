@@ -697,6 +697,24 @@
                           "default": "serviceAccountJWT",
                           "description": "serviceAccountJWT (recommended) projects the pod's Kubernetes ServiceAccount token; bearerToken uses a static token from existingSecret."
                         },
+                        "serviceAccountJWT": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "description": "Short-lived projected Kubernetes ServiceAccount token settings.",
+                          "properties": {
+                            "audience": {
+                              "type": "string",
+                              "minLength": 1,
+                              "default": "helm-control-plane"
+                            },
+                            "expirationSeconds": {
+                              "type": "integer",
+                              "minimum": 600,
+                              "maximum": 3600,
+                              "default": 600
+                            }
+                          }
+                        },
                         "bearerToken": {
                           "type": "string",
                           "description": "Static bearer token. Prefer existingSecret over inline values; required only when mode=bearerToken."

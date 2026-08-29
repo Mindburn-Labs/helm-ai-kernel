@@ -11,7 +11,12 @@ verification, compile, validation, and atomic snapshot swap.
 
 - `HELM_POLICY_SOURCE_KIND`: `mountedFile` (default), `controlplane`, or `crd`.
 - `HELM_POLICY_CONTROLPLANE_URL`: required when `HELM_POLICY_SOURCE_KIND=controlplane`.
-- `HELM_POLICY_BEARER_TOKEN`: optional bearer token for the control-plane source.
+- `HELM_POLICY_CONTROLPLANE_AUTH_MODE`: required for a control-plane source;
+  choose `serviceAccountJWT` or `bearerToken`.
+- `HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE`: projected token path for
+  `serviceAccountJWT`; defaults to `/var/run/secrets/helm-policy/token` and is
+  re-read before every request so kubelet rotation takes effect.
+- `HELM_POLICY_BEARER_TOKEN`: required when auth mode is `bearerToken`.
 - `HELM_POLICY_SIGNATURE_REQUIRED`: when true, unsigned bundles fail closed.
 - `HELM_POLICY_TRUST_PUBLIC_KEY`: hex Ed25519 public key used when signatures are required.
 - `HELM_POLICY_ON_INVALID_UPDATE`: `keepLastKnownGood` (default) or `deny`.

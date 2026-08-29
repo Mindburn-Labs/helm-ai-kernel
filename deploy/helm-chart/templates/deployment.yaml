@@ -6,8 +6,17 @@
 {{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not .Values.helm.policy.source.controlplane.url) -}}
 {{- fail "helm.production=true with helm.policy.source.kind=controlplane requires helm.policy.source.controlplane.url" -}}
 {{- end -}}
-{{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "bearerToken") (not (or .Values.helm.policy.source.controlplane.auth.bearerToken .Values.helm.policy.source.controlplane.auth.existingSecret)) -}}
-{{- fail "helm.production=true with controlplane bearerToken auth requires helm.policy.source.controlplane.auth.bearerToken or existingSecret" -}}
+{{- if and (eq .Values.helm.policy.source.kind "controlplane") (not (or (eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT") (eq .Values.helm.policy.source.controlplane.auth.mode "bearerToken"))) -}}
+{{- fail "controlplane auth mode must be serviceAccountJWT or bearerToken" -}}
+{{- end -}}
+{{- if and (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT") (not .Values.helm.policy.source.controlplane.auth.serviceAccountJWT.audience) -}}
+{{- fail "controlplane serviceAccountJWT auth requires a non-empty audience" -}}
+{{- end -}}
+{{- if and (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT") (or .Values.helm.policy.source.controlplane.auth.bearerToken .Values.helm.policy.source.controlplane.auth.existingSecret) -}}
+{{- fail "controlplane serviceAccountJWT auth cannot also configure a static bearer token" -}}
+{{- end -}}
+{{- if and (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "bearerToken") (not (or .Values.helm.policy.source.controlplane.auth.bearerToken .Values.helm.policy.source.controlplane.auth.existingSecret)) -}}
+{{- fail "controlplane bearerToken auth requires helm.policy.source.controlplane.auth.bearerToken or existingSecret" -}}
 {{- end -}}
 {{- if and .Values.helm.policy.signature.publicKey (not (regexMatch "^[0-9a-fA-F]{64}$" .Values.helm.policy.signature.publicKey)) -}}
 {{- fail "helm.policy.signature.publicKey must be a 64-character hex Ed25519 public key" -}}
@@ -302,6 +311,10 @@ spec:
               value: {{ .Values.helm.policy.source.controlplane.url | quote }}
             - name: HELM_POLICY_CONTROLPLANE_AUTH_MODE
               value: {{ .Values.helm.policy.source.controlplane.auth.mode | quote }}
+            {{- if eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT" }}
+            - name: HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE
+              value: "/var/run/secrets/helm-policy/token"
+            {{- end }}
             {{- if or .Values.helm.policy.source.controlplane.auth.bearerToken .Values.helm.policy.source.controlplane.auth.existingSecret }}
             - name: HELM_POLICY_BEARER_TOKEN
               valueFrom:
@@ -440,6 +453,11 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- if and (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT") }}
+            - name: policy-service-account-token
+              mountPath: /var/run/secrets/helm-policy
+              readOnly: true
+            {{- end }}
         {{- if and .Values.helm.policy.reloadHints.enabled .Values.helm.policy.reloadHints.configReloaderSidecar.enabled }}
         - name: config-reloader
           image: {{ .Values.helm.policy.reloadHints.configReloaderSidecar.image | quote }}
@@ -479,6 +497,16 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if and (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT") }}
+        - name: policy-service-account-token
+          projected:
+            defaultMode: 256
+            sources:
+              - serviceAccountToken:
+                  audience: {{ required "helm.policy.source.controlplane.auth.serviceAccountJWT.audience is required" .Values.helm.policy.source.controlplane.auth.serviceAccountJWT.audience | quote }}
+                  expirationSeconds: {{ .Values.helm.policy.source.controlplane.auth.serviceAccountJWT.expirationSeconds }}
+                  path: token
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

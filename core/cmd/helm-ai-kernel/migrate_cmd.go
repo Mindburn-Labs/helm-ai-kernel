@@ -29,7 +29,7 @@ func runMigrateCommand(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Usage: helm-ai-kernel migrate")
 		return 2
 	}
-	dsn, err := migrationDatabaseURL(os.Getenv)
+	dsn, err := validatedMigrationDatabaseURL(os.Getenv)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -63,6 +63,17 @@ func migrationDatabaseURL(getenv func(string) string) (string, error) {
 	dsn := strings.TrimSpace(getenv("HELM_MIGRATION_DATABASE_URL"))
 	if dsn == "" {
 		return "", fmt.Errorf("HELM_MIGRATION_DATABASE_URL is required")
+	}
+	return dsn, nil
+}
+
+func validatedMigrationDatabaseURL(getenv func(string) string) (string, error) {
+	dsn, err := migrationDatabaseURL(getenv)
+	if err != nil {
+		return "", err
+	}
+	if err := validateRuntimePostgresURLWithEnv(dsn, getenv); err != nil {
+		return "", fmt.Errorf("invalid migration database TLS: %w", err)
 	}
 	return dsn, nil
 }

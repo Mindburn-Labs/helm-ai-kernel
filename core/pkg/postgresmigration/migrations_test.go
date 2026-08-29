@@ -3,6 +3,7 @@ package postgresmigration
 import (
 	"context"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -17,102 +18,109 @@ var baseRuntimeTables = []string{
 	"registry_bundles",
 	"registry_rollouts",
 	"registry_installations",
+	"credentials",
+	"credential_audit_log",
 	"boundary_surface_snapshots",
 	"boundary_surface_events",
 	"boundary_records_index",
 }
 
-var baseRuntimeColumns = []struct {
-	table  string
-	column string
-}{
-	{"kernel_schema_migrations", "version"},
-	{"kernel_schema_migrations", "name"},
-	{"kernel_schema_migrations", "applied_at"},
-	{"obligations", "id"},
-	{"obligations", "created_at"},
-	{"obligations", "hash"},
-	{"obligations", "tenant_id"},
-	{"receipts", "receipt_id"},
-	{"receipts", "decision_id"},
-	{"receipts", "timestamp"},
-	{"receipts", "append_sequence"},
-	{"principal_bindings", "tenant_id"},
-	{"principal_bindings", "principal_id"},
-	{"principal_bindings", "created_at"},
-	{"registry_bundles", "name"},
-	{"registry_bundles", "version"},
-	{"registry_bundles", "bundle_json"},
-	{"registry_bundles", "created_at"},
-	{"registry_rollouts", "name"},
-	{"registry_rollouts", "updated_at"},
-	{"registry_installations", "tenant_id"},
-	{"registry_installations", "pack_id"},
-	{"registry_installations", "installed_at"},
-	{"boundary_surface_snapshots", "id"},
-	{"boundary_surface_snapshots", "snapshot_json"},
-	{"boundary_surface_snapshots", "updated_at"},
-	{"boundary_surface_events", "sequence"},
-	{"boundary_surface_events", "event_kind"},
-	{"boundary_surface_events", "object_json"},
-	{"boundary_surface_events", "created_at"},
-	{"boundary_records_index", "record_id"},
-	{"boundary_records_index", "verdict"},
-	{"boundary_records_index", "policy_epoch"},
-	{"boundary_records_index", "record_hash"},
-	{"boundary_records_index", "created_at"},
+func expectRuntimeTables(mock sqlmock.Sqlmock, options RuntimeOptions) {
+	expectRuntimeTablesForOptions(mock, options)
 }
 
-func expectRuntimeTables(mock sqlmock.Sqlmock, options RuntimeOptions) {
+func expectRuntimeTablesForOptions(mock sqlmock.Sqlmock, options RuntimeOptions, omit ...string) {
+	omitted := make(map[string]struct{}, len(omit))
+	for _, table := range omit {
+		omitted[table] = struct{}{}
+	}
 	rows := sqlmock.NewRows([]string{"table_name"})
 	for _, table := range baseRuntimeTables {
+		if _, skip := omitted[table]; skip {
+			continue
+		}
 		rows.AddRow(table)
 	}
 	if options.EmergencyStops {
-		rows.AddRow("emergency_stop_fences")
+		if _, skip := omitted["emergency_stop_fences"]; !skip {
+			rows.AddRow("emergency_stop_fences")
+		}
 	}
 	if options.ApprovalConsumption {
-		rows.AddRow("approval_ceremonies")
-		rows.AddRow("approval_dispatch_admissions")
-		rows.AddRow("approval_effect_reservation_events")
-		rows.AddRow("approval_effect_closures")
-		rows.AddRow("approval_effect_dispositions")
+		for _, table := range []string{
+			"approval_ceremonies", "approval_dispatch_admissions", "approval_effect_reservation_events",
+			"approval_effect_closures", "approval_effect_dispositions",
+		} {
+			if _, skip := omitted[table]; !skip {
+				rows.AddRow(table)
+			}
+		}
 	}
 	if options.GeneratedSpecApproval {
-		rows.AddRow("generated_spec_approval_ceremonies")
+		if _, skip := omitted["generated_spec_approval_ceremonies"]; !skip {
+			rows.AddRow("generated_spec_approval_ceremonies")
+		}
 	}
 	if options.ReleaseAuthority {
-		rows.AddRow("connector_release_authorities")
+		if _, skip := omitted["connector_release_authorities"]; !skip {
+			rows.AddRow("connector_release_authorities")
+		}
 	}
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT table_name\n\t\tFROM information_schema.tables")).WillReturnRows(rows)
 }
 
 func expectRuntimeVersion(mock sqlmock.Sqlmock, count, min, max int) {
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*), COALESCE(MIN(version), 0), COALESCE(MAX(version), 0) FROM kernel_schema_migrations")).
-		WillReturnRows(sqlmock.NewRows([]string{"count", "min", "max"}).AddRow(count, min, max))
+	expectRuntimeVersionNamed(mock, count, min, max, kernelPostgresMigrationName)
+}
+
+func expectRuntimeVersionNamed(mock sqlmock.Sqlmock, count, min, max int, name string) {
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*), COALESCE(MIN(version), 0), COALESCE(MAX(version), 0), COALESCE(MAX(name), '') FROM kernel_schema_migrations")).
+		WillReturnRows(sqlmock.NewRows([]string{"count", "min", "max", "name"}).AddRow(count, min, max, name))
 }
 
 func expectRuntimeColumns(mock sqlmock.Sqlmock, omit ...struct{ table, column string }) {
+	expectRuntimeColumnsForOptions(mock, RuntimeOptions{}, omit...)
+}
+
+func expectRuntimeColumnsForOptions(mock sqlmock.Sqlmock, options RuntimeOptions, omit ...struct{ table, column string }) {
 	omitted := make(map[struct{ table, column string }]struct{}, len(omit))
 	for _, column := range omit {
 		omitted[column] = struct{}{}
 	}
 	rows := sqlmock.NewRows([]string{"table_name", "column_name"})
-	for _, column := range baseRuntimeColumns {
-		if _, skip := omitted[struct{ table, column string }{column.table, column.column}]; !skip {
-			rows.AddRow(column.table, column.column)
+	tables := make([]string, 0, len(requiredKernelPostgresColumns))
+	for table := range requiredKernelPostgresColumns {
+		if kernelTableRequired(table, options) {
+			tables = append(tables, table)
+		}
+	}
+	sort.Strings(tables)
+	for _, table := range tables {
+		columns := make([]string, 0, len(requiredKernelPostgresColumns[table]))
+		for column := range requiredKernelPostgresColumns[table] {
+			columns = append(columns, column)
+		}
+		sort.Strings(columns)
+		for _, column := range columns {
+			if _, skip := omitted[struct{ table, column string }{table, column}]; !skip {
+				rows.AddRow(table, column)
+			}
 		}
 	}
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT table_name, column_name\n\t\tFROM information_schema.columns")).WillReturnRows(rows)
 }
 
 func expectRuntimeRole(mock sqlmock.Sqlmock, canLogin, createRole, trigger bool) {
+	expectRuntimeRoleValues(mock, canLogin, createRole, false, trigger)
+}
+
+func expectRuntimeRoleValues(mock sqlmock.Sqlmock, canLogin, createRole, replication, trigger bool) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT current_user,")).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"current_user", "session_user", "rolcanlogin", "rolsuper", "rolbypassrls",
-			"rolcreaterole", "rolcreatedb", "has_schema_privilege", "owns_objects",
+			"rolcreaterole", "rolcreatedb", "rolreplication", "has_schema_privilege", "owns_objects",
 			"has_trigger", "has_replication_role",
-		}).AddRow("helm_runtime", "helm_runtime", canLogin, false, false, createRole, false, false, false, trigger, false))
+		}).AddRow("helm_runtime", "helm_runtime", canLogin, false, false, createRole, false, replication, false, false, trigger, false))
 }
 
 func TestValidateRuntimeRejectsMissingSchemaWithoutDDL(t *testing.T) {
@@ -167,6 +175,23 @@ func TestValidateRuntimeRejectsAheadSchemaVersionWithoutDDL(t *testing.T) {
 	}
 }
 
+func TestValidateRuntimeRejectsWrongSchemaJournalNameWithoutDDL(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	expectRuntimeTables(mock, RuntimeOptions{})
+	expectRuntimeVersionNamed(mock, 1, 1, 1, "unrelated_schema")
+	if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err == nil || !strings.Contains(err.Error(), "exact version") {
+		t.Fatalf("ValidateRuntime accepted an unrelated schema journal, err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+	}
+}
+
 func TestValidateRuntimeRejectsMissingRequiredColumnWithoutDDL(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -179,6 +204,102 @@ func TestValidateRuntimeRejectsMissingRequiredColumnWithoutDDL(t *testing.T) {
 	expectRuntimeColumns(mock, struct{ table, column string }{"obligations", "hash"})
 	if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err == nil || !strings.Contains(err.Error(), "obligations.hash") {
 		t.Fatalf("ValidateRuntime accepted missing required column, err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+	}
+}
+
+func TestValidateRuntimeRejectsMissingActiveWriterColumnsWithoutDDL(t *testing.T) {
+	for _, missing := range []struct {
+		table  string
+		column string
+	}{
+		{table: "receipts", column: "chain_hash"},
+		{table: "boundary_surface_events", column: "object_id"},
+		{table: "boundary_records_index", column: "reason_code"},
+		{table: "boundary_records_index", column: "tool_name"},
+		{table: "boundary_records_index", column: "mcp_server_id"},
+		{table: "boundary_records_index", column: "receipt_id"},
+	} {
+		t.Run(missing.table+"."+missing.column, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatalf("sqlmock.New: %v", err)
+			}
+			defer db.Close()
+
+			expectRuntimeTables(mock, RuntimeOptions{})
+			expectRuntimeVersion(mock, 1, 1, 1)
+			expectRuntimeColumns(mock, struct{ table, column string }{missing.table, missing.column})
+			if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err == nil || !strings.Contains(err.Error(), missing.table+"."+missing.column) {
+				t.Fatalf("ValidateRuntime accepted missing active writer column, err=%v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRuntimeRejectsMissingCredentialColumnWithoutDDL(t *testing.T) {
+	for _, missing := range []struct {
+		table  string
+		column string
+	}{
+		{table: "credentials", column: "access_token"},
+		{table: "credential_audit_log", column: "action"},
+	} {
+		t.Run(missing.table+"."+missing.column, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatalf("sqlmock.New: %v", err)
+			}
+			defer db.Close()
+
+			expectRuntimeTables(mock, RuntimeOptions{})
+			expectRuntimeVersion(mock, 1, 1, 1)
+			expectRuntimeColumns(mock, struct{ table, column string }{missing.table, missing.column})
+			if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err == nil || !strings.Contains(err.Error(), missing.table+"."+missing.column) {
+				t.Fatalf("ValidateRuntime accepted missing credential column, err=%v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRuntimeRejectsMissingOptionalTableWithoutDDL(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	options := RuntimeOptions{ApprovalConsumption: true}
+	expectRuntimeTablesForOptions(mock, options, "approval_effect_reservation_events")
+	if err := ValidateRuntime(context.Background(), db, options); err == nil || !strings.Contains(err.Error(), "approval_effect_reservation_events") {
+		t.Fatalf("ValidateRuntime accepted missing optional table, err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+	}
+}
+
+func TestValidateRuntimeRejectsMissingOptionalColumnWithoutDDL(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	options := RuntimeOptions{ApprovalConsumption: true}
+	expectRuntimeTables(mock, options)
+	expectRuntimeVersion(mock, 1, 1, 1)
+	expectRuntimeColumnsForOptions(mock, options, struct{ table, column string }{"approval_effect_reservation_events", "connector_execution_ref"})
+	if err := ValidateRuntime(context.Background(), db, options); err == nil || !strings.Contains(err.Error(), "approval_effect_reservation_events.connector_execution_ref") {
+		t.Fatalf("ValidateRuntime accepted missing optional column, err=%v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
@@ -219,6 +340,46 @@ func TestValidateRuntimeRejectsNonLoginTriggerRoleWithoutDDL(t *testing.T) {
 
 	if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err == nil || !strings.Contains(err.Error(), "direct non-superuser login") {
 		t.Fatalf("ValidateRuntime accepted non-login/TRIGGER role, err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+	}
+}
+
+func TestValidateRuntimeRejectsReplicationRoleWithoutDDL(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	expectRuntimeTables(mock, RuntimeOptions{})
+	expectRuntimeVersion(mock, 1, 1, 1)
+	expectRuntimeColumns(mock)
+	expectRuntimeRoleValues(mock, true, false, true, false)
+
+	if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err == nil || !strings.Contains(err.Error(), "replication privileges") {
+		t.Fatalf("ValidateRuntime accepted replication-capable role, err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+	}
+}
+
+func TestValidateRuntimeAcceptsRestrictedRoleWithoutDDL(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	expectRuntimeTables(mock, RuntimeOptions{})
+	expectRuntimeVersion(mock, 1, 1, 1)
+	expectRuntimeColumns(mock)
+	expectRuntimeRole(mock, true, false, false)
+
+	if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err != nil {
+		t.Fatalf("ValidateRuntime rejected restricted role: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)

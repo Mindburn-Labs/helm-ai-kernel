@@ -427,10 +427,8 @@ func runServerWithOptions(opts serverOptions) error {
 		}
 	} else {
 		databaseMode = "postgres"
-		if envBool("HELM_PRODUCTION") {
-			if err := validateProductionDatabaseURL(dbURL); err != nil {
-				return fmt.Errorf("invalid production DATABASE_URL: %w", err)
-			}
+		if err := validateRuntimePostgresURL(dbURL); err != nil {
+			return fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
 		}
 		db, err = sql.Open("postgres", dbURL)
 		if err != nil {

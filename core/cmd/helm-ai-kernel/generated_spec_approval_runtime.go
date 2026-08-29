@@ -181,9 +181,8 @@ func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMo
 		return nil, fmt.Errorf("initialize generated spec approval verifier: %w", err)
 	}
 	store := generatedspecapprovalceremony.NewPostgresStore(db, verifier)
-	if err := store.Init(ctx); err != nil {
-		return nil, fmt.Errorf("initialize generated spec approval ceremony store: %w", err)
-	}
+	// The one-shot helm-ai-kernel migrate command owns ceremony schema DDL;
+	// startup reaches this path only after read-only runtime schema validation.
 	source, err := newGeneratedSpecApprovalSourceClient(cfg.SourceURL, cfg.SourceToken, nil, false)
 	if err != nil {
 		return nil, err

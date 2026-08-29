@@ -164,6 +164,62 @@ func NewSQLSurfaceRegistry(ctx context.Context, db *sql.DB, now func() time.Time
 	)`); err != nil {
 		return nil, fmt.Errorf("init boundary record index: %w", err)
 	}
+	return loadSQLSurfaceRegistry(ctx, db, now)
+}
+
+// NewRuntimeSQLSurfaceRegistry opens the boundary surface registry using an
+// already migrated Postgres database. It performs only reads followed by the
+// normal snapshot DML; it never executes DDL.
+func NewRuntimeSQLSurfaceRegistry(ctx context.Context, db *sql.DB, now func() time.Time) (*SurfaceRegistry, error) {
+	if db == nil {
+		return NewSurfaceRegistry(now), nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return loadSQLSurfaceRegistry(ctx, db, now)
+}
+
+// MigratePostgresSurfaceRegistry applies the Postgres boundary surface schema
+// as an explicit owner operation. The SQLite-compatible schema above remains
+// available to the local combined constructor.
+func MigratePostgresSurfaceRegistry(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("postgres boundary surface migration requires database")
+	}
+	if _, err := db.ExecContext(ctx, postgresSurfaceRegistrySchema); err != nil {
+		return fmt.Errorf("init postgres boundary surface schema: %w", err)
+	}
+	return nil
+}
+
+const postgresSurfaceRegistrySchema = `
+CREATE TABLE IF NOT EXISTS boundary_surface_snapshots (
+	id TEXT PRIMARY KEY,
+	snapshot_json TEXT NOT NULL,
+	updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS boundary_surface_events (
+	sequence BIGSERIAL PRIMARY KEY,
+	event_kind TEXT NOT NULL,
+	object_id TEXT NOT NULL,
+	object_json TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS boundary_records_index (
+	record_id TEXT PRIMARY KEY,
+	verdict TEXT NOT NULL,
+	reason_code TEXT,
+	tool_name TEXT,
+	mcp_server_id TEXT,
+	policy_epoch TEXT NOT NULL,
+	receipt_id TEXT,
+	record_hash TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+`
+
+func loadSQLSurfaceRegistry(ctx context.Context, db *sql.DB, now func() time.Time) (*SurfaceRegistry, error) {
 	r := newSurfaceRegistry(now)
 	var snapshotJSON string
 	err := db.QueryRowContext(ctx, `SELECT snapshot_json FROM boundary_surface_snapshots WHERE id = $1`, "default").Scan(&snapshotJSON)

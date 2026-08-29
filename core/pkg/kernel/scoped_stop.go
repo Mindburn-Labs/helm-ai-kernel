@@ -292,6 +292,15 @@ func NewScopedStopStore(db *sql.DB, now func() time.Time, options ...ScopedStopS
 	return store
 }
 
+// MigratePostgres applies the scoped emergency-stop schema and its Postgres
+// RLS/locking controls as an explicit owner operation.
+func MigratePostgres(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return fmt.Errorf("%w: scoped emergency-stop migration requires a database", ErrScopedStopInvalid)
+	}
+	return NewScopedStopStore(db, time.Now, WithPostgresScopeLocks()).Init(ctx)
+}
+
 func (s *ScopedStopStore) Init(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("%w: scoped emergency-stop store requires a database", ErrScopedStopInvalid)

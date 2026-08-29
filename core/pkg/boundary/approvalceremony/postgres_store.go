@@ -149,6 +149,19 @@ func NewPostgresStore(db *sql.DB, verifier GrantSignatureVerifier) *PostgresStor
 	return &PostgresStore{db: db, grantVerifier: verifier, clock: time.Now}
 }
 
+// MigratePostgres applies the complete approval, dispatch, reservation,
+// closure, and disposition schema as an explicit owner operation. It does not
+// require a signing verifier because migration only prepares storage.
+func MigratePostgres(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("approval ceremony postgres migration requires database")
+	}
+	if _, err := db.ExecContext(ctx, postgresSchema+dispatchAdmissionPostgresSchema+approvalCeremonyBaselinePostgresSchema+effectReservationPostgresSchema+effectClosurePostgresSchema+effectDispositionPostgresSchema); err != nil {
+		return fmt.Errorf("initialize approval ceremony schema: %w", err)
+	}
+	return nil
+}
+
 func (s *PostgresStore) transitionTime(fallback time.Time) time.Time {
 	if s == nil || s.clock == nil {
 		return fallback.UTC().Truncate(time.Microsecond)
@@ -163,10 +176,7 @@ func (s *PostgresStore) Init(ctx context.Context) error {
 	if s.grantVerifier == nil {
 		return fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
 	}
-	if _, err := s.db.ExecContext(ctx, postgresSchema+dispatchAdmissionPostgresSchema+approvalCeremonyBaselinePostgresSchema+effectReservationPostgresSchema+effectClosurePostgresSchema+effectDispositionPostgresSchema); err != nil {
-		return fmt.Errorf("initialize approval ceremony schema: %w", err)
-	}
-	return nil
+	return MigratePostgres(ctx, s.db)
 }
 
 func (s *PostgresStore) createHold(ctx context.Context, record Record) (Record, error) {

@@ -31,17 +31,22 @@ type PostgresPrincipalBindingStore struct {
 	db *sql.DB
 }
 
-// NewPostgresPrincipalBindingStore constructs a PostgresPrincipalBindingStore
-// and ensures the backing table exists.
+// NewPostgresPrincipalBindingStore constructs a PostgresPrincipalBindingStore.
+// It does not execute DDL; serving code must use a database prepared by the
+// explicit owner migration command.
 func NewPostgresPrincipalBindingStore(db *sql.DB) (*PostgresPrincipalBindingStore, error) {
-	s := &PostgresPrincipalBindingStore{db: db}
-	if err := s.migrate(context.Background()); err != nil {
-		return nil, err
+	if db == nil {
+		return nil, errors.New("postgres principal binding store requires database")
 	}
-	return s, nil
+	return &PostgresPrincipalBindingStore{db: db}, nil
 }
 
-func (s *PostgresPrincipalBindingStore) migrate(ctx context.Context) error {
+// MigratePostgresPrincipalBindings applies the principal binding schema as an
+// explicit owner operation.
+func MigratePostgresPrincipalBindings(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("postgres principal binding migration requires database")
+	}
 	query := `
 		CREATE TABLE IF NOT EXISTS principal_bindings (
 			tenant_id TEXT NOT NULL,
@@ -49,7 +54,7 @@ func (s *PostgresPrincipalBindingStore) migrate(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			PRIMARY KEY (tenant_id, principal_id)
 		);`
-	_, err := s.db.ExecContext(ctx, query)
+	_, err := db.ExecContext(ctx, query)
 	return err
 }
 

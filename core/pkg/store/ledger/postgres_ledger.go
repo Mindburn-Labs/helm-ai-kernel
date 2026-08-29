@@ -19,6 +19,16 @@ func NewPostgresLedger(db *sql.DB) *PostgresLedger {
 	return &PostgresLedger{db: db}
 }
 
+// MigratePostgres applies the ledger schema as an explicit owner operation.
+// Serving code should construct NewPostgresLedger and use an already migrated
+// database instead.
+func MigratePostgres(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("postgres ledger migration requires database")
+	}
+	return NewPostgresLedger(db).Init(ctx)
+}
+
 // Ensure Schema
 const pgSchema = `
 CREATE TABLE IF NOT EXISTS obligations (

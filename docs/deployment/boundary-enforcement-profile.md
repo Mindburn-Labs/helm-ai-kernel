@@ -81,7 +81,8 @@ is **hash-bound** into the compile receipt (`policy_input_hash`).
 Signed-input status, stated precisely: no canonical *signed policy-bundle
 record contract* exists yet as a compiler input in this repository — existing
 bundle types are content-hash-verified, and `policy/reconcile`'s
-`Ed25519PolicyVerifier` verifies reconciler bundle signatures. When a signed
+`Ed25519PolicyVerifier` verifies versioned complete policy-head signatures
+whose `policy_hash` commits the exact bundle bytes. When a signed
 input envelope lands, its verification slots in ahead of `Compile`, binding
 to that verifier pattern, without changing the receipt format.
 

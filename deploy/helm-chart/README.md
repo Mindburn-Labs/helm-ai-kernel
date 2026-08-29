@@ -27,6 +27,7 @@ the pinned containerized Helm runner.
 
 ```bash
 helm install helm-ai-kernel deploy/helm-chart \
+  --values ./production-network-policy.yaml \
   --set helm.production=true \
   --set helm.signing.key=<64-char-ed25519-seed-hex> \
   --set helm.auth.adminAPIKey=<admin-api-key> \
@@ -36,6 +37,13 @@ helm install helm-ai-kernel deploy/helm-chart \
 ```
 
 Review `values.yaml` before use in a real environment.
+
+`production-network-policy.yaml` must set `networkPolicy.enabled=true` and
+provide explicit ingress and egress rules. Production rendering rejects empty
+rules, implicit all-port peers, empty selectors, and non-host `ipBlock` ranges;
+use `/32` for an IPv4 dependency or `/128` for IPv6. Prefer namespace/pod
+selectors for in-cluster Control Plane, database-proxy, telemetry, and egress-
+broker dependencies.
 
 ## Runtime Contract
 
@@ -62,6 +70,9 @@ flowchart TD
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image repository. |
 | `image.tag` | chart `appVersion` | Container image tag. |
 | `imagePullSecrets` | `[]` | Pull secrets applied to the kernel and optional launchpad app Pods/Jobs/test Pod. |
+| `networkPolicy.enabled` | `false` | Renders the Kernel Pod NetworkPolicy; required in production. |
+| `networkPolicy.ingress` | `[]` | Explicit production ingress peers and ports. Empty or broad selectors fail production rendering. |
+| `networkPolicy.egress` | `[]` | Explicit production egress peers and ports. `ipBlock` peers must be exact `/32` or `/128` hosts. |
 | `launchpadApps.hermes.mode` | `job` | `job` renders the promoted single-query smoke Job; `deployment` renders a long-lived Hermes gateway Deployment without claiming live F2 promotion. |
 | `launchpadApps.hermes.provider` | `openrouter` | Provider passed to the default Hermes Job command. |
 | `launchpadApps.hermes.model` | `openai/gpt-4o-mini` | Model passed to the default Hermes Job command. |
@@ -119,6 +130,9 @@ flowchart TD
 
 - Set `helm.production=true` and provide `helm.signing.key` or
   `helm.signing.existingSecret`.
+- Enable `networkPolicy` and supply explicit ingress/egress allowlists. This is
+  a rendered contract only until the target cluster proves a CNI that enforces
+  `networking.k8s.io/v1` NetworkPolicy and records prohibited-egress denial.
 - Provide `helm.auth.adminAPIKey` and `helm.auth.serviceAPIKey`, or
   `helm.auth.existingSecret`; production rendering fails closed without auth
   material.

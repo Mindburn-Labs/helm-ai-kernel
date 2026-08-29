@@ -153,6 +153,37 @@
         }
       }
     },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "ingress", "egress"],
+      "description": "NetworkPolicy boundary for the kernel Pod. Production requires it and validates explicit allowlist peers and ports before rendering.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render a kernel NetworkPolicy. helm.production=true refuses to render when this is false."
+        },
+        "ingress": {
+          "type": "array",
+          "default": [],
+          "description": "Kubernetes NetworkPolicy ingress rules. Production requires at least one rule with non-empty from peers and explicit ports.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "egress": {
+          "type": "array",
+          "default": [],
+          "description": "Kubernetes NetworkPolicy egress rules. Production requires at least one rule with non-empty to peers and explicit ports; ipBlock peers must be exact /32 or /128 hosts.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
     "ingress": {
       "type": "object",
       "additionalProperties": false,

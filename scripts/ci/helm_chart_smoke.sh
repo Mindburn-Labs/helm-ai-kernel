@@ -76,6 +76,12 @@ assert_not_contains() {
     fi
 }
 
+PRODUCTION_NETWORK_POLICY_VALUES="scripts/ci/helm_production_network_policy_values.yaml"
+
+production_helm_runner() {
+    helm_runner "$@" --values "$PRODUCTION_NETWORK_POLICY_VALUES"
+}
+
 default_rendered="$RENDER_DIR/rendered-default.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
@@ -112,6 +118,7 @@ assert_not_contains "$default_rendered" "HELM_ENV"
 assert_not_contains "$default_rendered" "HELM_SEMANTIC_THREAT_ESCALATION_BP"
 assert_not_contains "$default_rendered" "HELM_GITHUB_TOKEN"
 assert_not_contains "$default_rendered" "HELM_GITHUB_API_URL"
+assert_not_contains "$default_rendered" "kernel ingress and egress are allowlist-only"
 assert_contains "$default_rendered" '"runtime_actions": []'
 assert_contains "$default_rendered" "name: prepare-authority-state"
 assert_contains "$default_rendered" "HELM_AUTHORITY_DATA_DIR"
@@ -355,7 +362,7 @@ fi
 assert_contains "$hermes_mode_fail_log" "launchpadApps.hermes.mode"
 
 fail_log="$RENDER_DIR/production-missing-key.log"
-if helm_runner template "$RELEASE" "$CHART" \
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true >"$RENDER_DIR/production-missing-key.yaml" 2>"$fail_log"; then
     echo "::error::production render without signing key unexpectedly succeeded"
@@ -363,8 +370,33 @@ if helm_runner template "$RELEASE" "$CHART" \
 fi
 assert_contains "$fail_log" "requires helm.signing.key"
 
-tenant_fail_log="$RENDER_DIR/production-missing-runtime-tenant.log"
+network_policy_disabled_log="$RENDER_DIR/production-network-policy-disabled.log"
 if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" >"$RENDER_DIR/production-network-policy-disabled.yaml" 2>"$network_policy_disabled_log"; then
+    echo "::error::production render without a kernel NetworkPolicy unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$network_policy_disabled_log" "networkPolicy.enabled=true"
+
+network_policy_wildcard_log="$RENDER_DIR/production-network-policy-wildcard.log"
+if production_helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set-string 'networkPolicy.egress[1].to[0].ipBlock.cidr=0.0.0.0/0' >"$RENDER_DIR/production-network-policy-wildcard.yaml" 2>"$network_policy_wildcard_log"; then
+    echo "::error::production render with wildcard kernel egress unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$network_policy_wildcard_log" "exact /32 or /128 host CIDRs"
+
+tenant_fail_log="$RENDER_DIR/production-missing-runtime-tenant.log"
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -377,7 +409,7 @@ fi
 assert_contains "$tenant_fail_log" "helm.auth.tenantID"
 
 principal_fail_log="$RENDER_DIR/production-missing-runtime-principal.log"
-if helm_runner template "$RELEASE" "$CHART" \
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -390,7 +422,7 @@ fi
 assert_contains "$principal_fail_log" "helm.auth.principalID"
 
 postgres_inline_fail_log="$RENDER_DIR/postgres-inline-production.log"
-if helm_runner template "$RELEASE" "$CHART" \
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -405,7 +437,7 @@ fi
 assert_contains "$postgres_inline_fail_log" "requires helm.storage.postgres.existingSecret"
 
 postgres_tls_fail_log="$RENDER_DIR/postgres-weak-tls-production.log"
-if helm_runner template "$RELEASE" "$CHART" \
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -420,7 +452,7 @@ fi
 assert_contains "$postgres_tls_fail_log" "requires helm.storage.postgres.sslMode"
 
 postgres_subchart_fail_log="$RENDER_DIR/postgres-subchart-production.log"
-if helm_runner template "$RELEASE" "$CHART" \
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -435,7 +467,7 @@ fi
 assert_contains "$postgres_subchart_fail_log" "does not support the bundled postgresql subchart"
 
 postgres_rendered="$RENDER_DIR/rendered-postgres-secret.yaml"
-helm_runner template "$RELEASE" "$CHART" \
+production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -451,7 +483,7 @@ assert_not_contains "$postgres_rendered" "postgres://"
 assert_not_contains "$postgres_rendered" "POSTGRES_PASSWORD"
 assert_not_contains "$postgres_rendered" "sslmode=disable"
 
-helm_runner lint "$CHART" \
+production_helm_runner lint "$CHART" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
@@ -463,7 +495,7 @@ helm_runner lint "$CHART" \
     --set image.pullPolicy=IfNotPresent >/dev/null
 
 rendered="$RENDER_DIR/rendered.yaml"
-helm_runner template "$RELEASE" "$CHART" \
+production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -504,9 +536,14 @@ assert_not_contains "$rendered" "configmap-reload"
 assert_not_contains "$rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$rendered" "HelmPolicyBundle"
 assert_not_contains "$rendered" "policy-reader"
+assert_contains "$rendered" "kind: NetworkPolicy"
+assert_contains "$rendered" "kernel ingress and egress are allowlist-only"
+assert_contains "$rendered" "app.kubernetes.io/name: svc-helm-control-plane"
+assert_contains "$rendered" "cidr: 10.116.0.8/32"
+assert_contains "$rendered" "port: 5432"
 
 controlplane_fail_log="$RENDER_DIR/controlplane-missing-url.log"
-if helm_runner template "$RELEASE" "$CHART" \
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -519,7 +556,7 @@ fi
 assert_contains "$controlplane_fail_log" "helm.policy.source.controlplane.url"
 
 controlplane_unsigned_log="$RENDER_DIR/controlplane-missing-signature.log"
-if helm_runner template "$RELEASE" "$CHART" \
+if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -533,7 +570,7 @@ fi
 assert_contains "$controlplane_unsigned_log" "helm.policy.signature.required=true"
 
 controlplane_rendered="$RENDER_DIR/rendered-controlplane.yaml"
-helm_runner template "$RELEASE" "$CHART" \
+production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -558,7 +595,7 @@ assert_not_contains "$controlplane_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$controlplane_rendered" "policy-reader"
 
 crd_rendered="$RENDER_DIR/rendered-crd.yaml"
-helm_runner template "$RELEASE" "$CHART" \
+production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \

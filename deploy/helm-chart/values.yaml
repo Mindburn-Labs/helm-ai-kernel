@@ -59,6 +59,14 @@ service:
   healthPort: 8081
   metricsPort: 9090
 
+# Kernel Pod network boundary. Development keeps the object opt-in for
+# compatibility. Production rendering requires explicit, non-empty ingress and
+# egress allowlists; ipBlock peers must identify one /32 or /128 host.
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []
+
 ingress:
   enabled: false
   className: ""

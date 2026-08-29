@@ -167,6 +167,52 @@ func TestProjectionLifecycleUpgradeRollbackAndRevoke(t *testing.T) {
 	}
 }
 
+func TestProjectionLifecycleRejectsRetainedArtifactInstallWithoutRollbackPermit(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 30, 0, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	v1 := newProjectionFixture(t, "1.0.0", "retained prompt v1", 1, now)
+	v2 := newProjectionFixture(t, "2.0.0", "active prompt v2", 2, now)
+	if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	upgrade, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reinstall := actionEffect(t, v1.effect, contracts.SkillProjectionActionInstall, 3, "reinstall-v1", "attempt-reinstall-v1", testHash("d"))
+	livePath := projectionLivePath(root, v2.effect)
+	statePath := filepath.Join(root, lifecycle.stateRel(v2.effect))
+	liveBefore, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := lifecycle.Apply(reinstall, &v1.artifact, reinstall.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRollbackRequired) {
+		t.Fatalf("retained artifact reinstall error = %v", err)
+	}
+	liveAfter, err := os.ReadFile(livePath)
+	if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+		t.Fatalf("retained artifact reinstall changed live projection: %q err=%v", liveAfter, err)
+	}
+	stateAfter, err := os.ReadFile(statePath)
+	if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+		t.Fatalf("retained artifact reinstall changed state: %q err=%v", stateAfter, err)
+	}
+	state, err := lifecycle.readState(v2.effect, upgrade.RelativePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Generations) != 2 {
+		t.Fatalf("retained artifact reinstall appended generation: %+v", state.Generations)
+	}
+}
+
 func TestProjectionLifecycleFailsClosedOnPathsArtifactsAndDrift(t *testing.T) {
 	now := time.Date(2026, 8, 30, 14, 0, 0, 0, time.UTC)
 
@@ -510,6 +556,102 @@ func TestProjectionLifecycleCrossInstanceLockFailsClosed(t *testing.T) {
 	if _, err := second.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); err != nil {
 		t.Fatalf("apply after lock release: %v", err)
 	}
+}
+
+func TestProjectionLifecycleRevalidatesAuthorityAfterLock(t *testing.T) {
+	now := time.Date(2026, 8, 30, 16, 30, 0, 0, time.UTC)
+
+	t.Run("effect expires while waiting", func(t *testing.T) {
+		root := t.TempDir()
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		fixture := newProjectionFixture(t, "1.0.0", "expiring prompt", 1, now)
+		calls := 0
+		lifecycle.clock = func() time.Time {
+			calls++
+			if calls == 1 {
+				return now
+			}
+			return fixture.effect.ExpiresAt
+		}
+
+		if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, contracts.ErrSkillProjectionEffectInactive) {
+			t.Fatalf("post-lock effect expiry error = %v", err)
+		}
+		if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expired effect mutated live projection: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.stateRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expired effect mutated state: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.generationParentRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expired effect retained a generation: %v", err)
+		}
+	})
+
+	t.Run("rollback permit expires while waiting", func(t *testing.T) {
+		root := t.TempDir()
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		v1 := newProjectionFixture(t, "1.0.0", "rollback expiry v1", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "rollback expiry v2", 2, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		rollback := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, "rollback-expiry", "attempt-rollback-expiry", testHash("7"))
+		permit := contracts.SkillProjectionRollbackPermit{
+			SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+			PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+			TenantID: rollback.TenantID, WorkspaceID: rollback.WorkspaceID,
+			SkillID: rollback.SkillID, AgentTarget: rollback.AgentTarget,
+			FromGeneration: 2, TargetGeneration: 1,
+			TargetSkillVersion: rollback.SkillVersion, TargetArtifactHash: rollback.ArtifactHash, TargetPolicyHash: rollback.PolicyHash,
+			IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+		}
+		var err error
+		permit, err = permit.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rollback.RollbackPermitHash = permit.PermitHash
+		rollback.CanonicalRequestHash = ""
+		rollback, err = rollback.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		livePath := projectionLivePath(root, v2.effect)
+		statePath := filepath.Join(root, lifecycle.stateRel(v2.effect))
+		liveBefore, err := os.ReadFile(livePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stateBefore, err := os.ReadFile(statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		calls := 0
+		lifecycle.clock = func() time.Time {
+			calls++
+			if calls == 1 {
+				return now
+			}
+			return permit.ExpiresAt
+		}
+
+		if _, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); !errors.Is(err, contracts.ErrSkillProjectionEffectInactive) {
+			t.Fatalf("post-lock rollback expiry error = %v", err)
+		}
+		liveAfter, err := os.ReadFile(livePath)
+		if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+			t.Fatalf("expired rollback mutated live projection: %q err=%v", liveAfter, err)
+		}
+		stateAfter, err := os.ReadFile(statePath)
+		if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+			t.Fatalf("expired rollback mutated state: %q err=%v", stateAfter, err)
+		}
+	})
 }
 
 func TestProjectionDurabilityHelpers(t *testing.T) {

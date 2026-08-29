@@ -36,13 +36,14 @@ const (
 )
 
 var (
-	ErrProjectionDrift           = errors.New("skillpacks: managed projection drift")
-	ErrUnmanagedProjection       = errors.New("skillpacks: unmanaged projection exists")
-	ErrProjectionReplayConflict  = errors.New("skillpacks: projection replay conflict")
-	ErrProjectionPathUnsafe      = errors.New("skillpacks: unsafe managed path")
-	ErrProjectionLockContended   = errors.New("skillpacks: projection root lock contended")
-	ErrProjectionLockUnsupported = errors.New("skillpacks: projection root lock unsupported")
-	ErrProjectionFileTooLarge    = errors.New("skillpacks: managed projection file exceeds size limit")
+	ErrProjectionDrift            = errors.New("skillpacks: managed projection drift")
+	ErrUnmanagedProjection        = errors.New("skillpacks: unmanaged projection exists")
+	ErrProjectionReplayConflict   = errors.New("skillpacks: projection replay conflict")
+	ErrProjectionPathUnsafe       = errors.New("skillpacks: unsafe managed path")
+	ErrProjectionLockContended    = errors.New("skillpacks: projection root lock contended")
+	ErrProjectionLockUnsupported  = errors.New("skillpacks: projection root lock unsupported")
+	ErrProjectionFileTooLarge     = errors.New("skillpacks: managed projection file exceeds size limit")
+	ErrProjectionRollbackRequired = errors.New("skillpacks: retained artifact requires rollback authority")
 )
 
 // SkillProjectionArtifact is the exact artifact submitted to the lifecycle.
@@ -172,21 +173,8 @@ func (l *ProjectionLifecycle) Apply(
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: projection lifecycle is nil")
 	}
 	now := l.clock().UTC()
-	if err := effect.ValidateAt(now); err != nil {
+	if err := validateProjectionAuthority(effect, consumedPermitRef, rollbackPermit, now); err != nil {
 		return ProjectionLifecycleResult{}, err
-	}
-	if !constantStringEqual(effect.ConsumedPermitRef, consumedPermitRef) {
-		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: consumed permit reference mismatch")
-	}
-	if effect.Action == contracts.SkillProjectionActionRollback {
-		if rollbackPermit == nil {
-			return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: rollback permit is required")
-		}
-		if err := effect.ValidateRollbackPermit(*rollbackPermit, now); err != nil {
-			return ProjectionLifecycleResult{}, err
-		}
-	} else if rollbackPermit != nil {
-		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: rollback permit is only valid for rollback")
 	}
 
 	var installGeneration projectionGeneration
@@ -213,6 +201,12 @@ func (l *ProjectionLifecycle) Apply(
 			returnErr = errors.Join(returnErr, fmt.Errorf("skillpacks: release projection root lock: %w", err))
 		}
 	}()
+	// Authority can expire while waiting for either lock. Revalidate at the
+	// single-writer boundary before reading or mutating any projection state.
+	now = l.clock().UTC()
+	if err := validateProjectionAuthority(effect, consumedPermitRef, rollbackPermit, now); err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
 
 	projection, err := projectionRelativePath(effect.SkillID, effect.AgentTarget)
 	if err != nil {
@@ -287,6 +281,30 @@ func (l *ProjectionLifecycle) Apply(
 	}
 }
 
+func validateProjectionAuthority(
+	effect contracts.SkillProjectionEffect,
+	consumedPermitRef string,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+	now time.Time,
+) error {
+	if err := effect.ValidateAt(now); err != nil {
+		return err
+	}
+	if !constantStringEqual(effect.ConsumedPermitRef, consumedPermitRef) {
+		return fmt.Errorf("skillpacks: consumed permit reference mismatch")
+	}
+	if effect.Action == contracts.SkillProjectionActionRollback {
+		if rollbackPermit == nil {
+			return fmt.Errorf("skillpacks: rollback permit is required")
+		}
+		return effect.ValidateRollbackPermit(*rollbackPermit, now)
+	}
+	if rollbackPermit != nil {
+		return fmt.Errorf("skillpacks: rollback permit is only valid for rollback")
+	}
+	return nil
+}
+
 func (l *ProjectionLifecycle) applyInstall(
 	effect contracts.SkillProjectionEffect,
 	current *projectionLifecycleState,
@@ -294,6 +312,13 @@ func (l *ProjectionLifecycle) applyInstall(
 	generation projectionGeneration,
 	manifestBytes, contentBytes []byte,
 ) (ProjectionLifecycleResult, error) {
+	if current != nil {
+		for _, retained := range current.Generations {
+			if constantStringEqual(retained.ArtifactHash, generation.ArtifactHash) {
+				return ProjectionLifecycleResult{}, ErrProjectionRollbackRequired
+			}
+		}
+	}
 	if err := l.persistGeneration(effect, generation, manifestBytes, contentBytes); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}

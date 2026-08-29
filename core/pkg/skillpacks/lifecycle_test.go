@@ -326,7 +326,7 @@ func TestProjectionLifecycleRejectsOversizedManagedReadsWithoutMutation(t *testi
 			t.Fatal(err)
 		}
 
-		if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionFileTooLarge) {
+		if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) || !errors.Is(err, ErrProjectionFileTooLarge) {
 			t.Fatalf("oversized state error = %v", err)
 		}
 		liveAfter, err := os.ReadFile(livePath)
@@ -336,6 +336,65 @@ func TestProjectionLifecycleRejectsOversizedManagedReadsWithoutMutation(t *testi
 		stateAfter, err := os.Stat(statePath)
 		if err != nil || stateAfter.Size() != stateBefore.Size() || !stateAfter.ModTime().Equal(stateBefore.ModTime()) {
 			t.Fatalf("oversized state was mutated: before=%+v after=%+v err=%v", stateBefore, stateAfter, err)
+		}
+	})
+
+	t.Run("retained generation", func(t *testing.T) {
+		root := t.TempDir()
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		v1 := newProjectionFixture(t, "1.0.0", "bounded retained v1", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "bounded retained v2", 2, now)
+		v3 := newProjectionFixture(t, "3.0.0", "bounded retained v3", 3, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		upgrade, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		state, err := lifecycle.readState(v2.effect, upgrade.RelativePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		retained, ok := findProjectionGeneration(state.Generations, 1)
+		if !ok {
+			t.Fatal("retained generation 1 is missing")
+		}
+		statePath := filepath.Join(root, lifecycle.stateRel(v2.effect))
+		stateBefore, err := os.ReadFile(statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		livePath := projectionLivePath(root, v2.effect)
+		liveBefore, err := os.ReadFile(livePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		retainedPath := filepath.Join(root, lifecycle.generationParentRel(v1.effect), projectionGenerationDirName(retained), "SKILL.md")
+		if err := os.Truncate(retainedPath, maxProjectionArtifactBytes+1); err != nil {
+			t.Fatal(err)
+		}
+		retainedBefore, err := os.Stat(retainedPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = lifecycle.Apply(v3.effect, &v3.artifact, v3.effect.ConsumedPermitRef, nil)
+		if !errors.Is(err, ErrProjectionDrift) || !errors.Is(err, ErrProjectionFileTooLarge) {
+			t.Fatalf("oversized retained generation error = %v", err)
+		}
+		stateAfter, err := os.ReadFile(statePath)
+		if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+			t.Fatalf("oversized retained generation changed state: %q err=%v", stateAfter, err)
+		}
+		liveAfter, err := os.ReadFile(livePath)
+		if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+			t.Fatalf("oversized retained generation changed live projection: %q err=%v", liveAfter, err)
+		}
+		retainedAfter, err := os.Stat(retainedPath)
+		if err != nil || retainedAfter.Size() != retainedBefore.Size() || !retainedAfter.ModTime().Equal(retainedBefore.ModTime()) {
+			t.Fatalf("oversized retained generation was mutated: before=%+v after=%+v err=%v", retainedBefore, retainedAfter, err)
 		}
 	})
 

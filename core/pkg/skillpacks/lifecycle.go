@@ -608,11 +608,11 @@ func (l *ProjectionLifecycle) readGeneration(
 	}
 	manifestBytes, err := readManagedFile(l.root, filepath.Join(dirRel, "skillpack.json"), maxProjectionArtifactBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("%w: read immutable generation manifest: %w", ErrProjectionDrift, err)
 	}
 	contentBytes, err := readManagedFile(l.root, filepath.Join(dirRel, "SKILL.md"), maxProjectionArtifactBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("%w: read immutable generation content: %w", ErrProjectionDrift, err)
 	}
 	manifestHash, contentHash := HashBytes(manifestBytes), HashBytes(contentBytes)
 	artifactHash, hashErr := contracts.ComputeSkillProjectionArtifactHash(manifestHash, contentHash)
@@ -739,7 +739,7 @@ func (l *ProjectionLifecycle) readState(effect contracts.SkillProjectionEffect, 
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: read projection state: %w", ErrProjectionDrift, err)
 	}
 	var state projectionLifecycleState
 	if err := decodeStrictProjectionJSON(data, &state); err != nil {

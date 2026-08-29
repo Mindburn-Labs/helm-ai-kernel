@@ -1,3 +1,5 @@
+// quantum_posture: this gate detects leaked classical private-key markers; it
+// performs no cryptography and makes no post-quantum protection claim.
 package gates
 
 import (

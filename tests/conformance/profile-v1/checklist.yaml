@@ -1,3 +1,5 @@
+# quantum_posture: this checklist documents classical Ed25519 conformance; it
+# implements no cryptography and makes no post-quantum protection claim.
 # HELM Conformance Profile v1 — machine-readable acceptance criteria.
 #
 # Consumed by:

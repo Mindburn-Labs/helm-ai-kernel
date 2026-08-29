@@ -54,6 +54,7 @@ type JWKSConfig struct {
 	Resource              string   // HELM_OAUTH_RESOURCE — expected RFC 8707 resource indicator
 	Scopes                []string // HELM_OAUTH_SCOPES — required scopes
 	AllowInsecureLoopback bool     // test/dev-only allowance for httptest loopback JWKS endpoints
+	HTTPClient            *http.Client
 }
 
 // OAuthTokenClaims contains validated token claims needed by MCP authorization.
@@ -88,12 +89,18 @@ const jwksRefreshInterval = 5 * time.Minute
 
 // NewJWKSValidator creates a validator with the given config.
 func NewJWKSValidator(config JWKSConfig) *JWKSValidator {
+	client := config.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	clientCopy := *client
+	if clientCopy.Timeout <= 0 {
+		clientCopy.Timeout = 10 * time.Second
+	}
 	return &JWKSValidator{
 		config: config,
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
-		keys: make(map[string]*rsa.PublicKey),
+		client: &clientCopy,
+		keys:   make(map[string]*rsa.PublicKey),
 	}
 }
 

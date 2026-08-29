@@ -1,11 +1,19 @@
+// quantum_posture: these tests exercise classical X.509/TLS and JWK trust
+// wiring only; no post-quantum cryptographic control or assurance is added.
 package main
 
 import (
+	"context"
+	"crypto/x509"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +52,15 @@ func TestGeneratedSpecApprovalConfigIsExplicitAndFailClosed(t *testing.T) {
 	t.Setenv(generatedSpecApprovalSourceURLEnv, "http://control.example.test")
 	if _, _, err := generatedSpecApprovalRuntimeConfigFromEnv(); err == nil {
 		t.Fatal("HTTP source URL was accepted")
+	}
+}
+
+func TestGeneratedSpecApprovalRuntimeRequiresEmergencyStopCoordination(t *testing.T) {
+	generatedSpecApprovalTestEnv(t)
+	setCompleteGeneratedSpecApprovalEnv(t)
+	_, err := newGeneratedSpecApprovalRuntime(context.Background(), new(sql.DB), "postgres", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "emergency-stop scope coordination") {
+		t.Fatalf("missing stop coordination error = %v", err)
 	}
 }
 
@@ -105,6 +122,33 @@ func TestGeneratedSpecApprovalSourceClientPinsBindingAndAuthority(t *testing.T) 
 	}
 }
 
+func TestGeneratedSpecApprovalOutboundClientTrustsConfiguredCA(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	certificate, err := x509.ParseCertificate(server.Certificate().Raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Raw}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := newGeneratedSpecApprovalOutboundClient(caFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("status=%d", response.StatusCode)
+	}
+}
+
 func TestGeneratedSpecApprovalVerifierErrorsRemainActionable(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -130,7 +174,7 @@ func generatedSpecApprovalTestEnv(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{
 		generatedSpecApprovalEnabledEnv, generatedSpecApprovalSourceURLEnv, generatedSpecApprovalSourceTokenEnv,
-		generatedSpecApprovalJWKSURLEnv, generatedSpecApprovalIssuerEnv, generatedSpecApprovalAudienceEnv,
+		generatedSpecApprovalJWKSURLEnv, generatedSpecApprovalOutboundCAFileEnv, generatedSpecApprovalIssuerEnv, generatedSpecApprovalAudienceEnv,
 		generatedSpecApprovalResourceEnv, generatedSpecApprovalControlScopeEnv, generatedSpecApprovalConsumerScopeEnv,
 		generatedSpecApprovalMaxTokenTTLEnv, generatedSpecApprovalMinHoldDurationEnv, generatedSpecApprovalChallengeTTLEnv,
 		generatedSpecApprovalMaxChallengeLifetimeEnv, generatedSpecApprovalGrantTTLEnv, generatedSpecApprovalMaxAssertionsEnv,

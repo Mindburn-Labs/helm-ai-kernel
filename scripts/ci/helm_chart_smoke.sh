@@ -592,6 +592,32 @@ assert_contains "$rendered" "app.kubernetes.io/name: svc-helm-control-plane"
 assert_contains "$rendered" "cidr: 10.116.0.8/32"
 assert_contains "$rendered" "port: 5432"
 
+ephemeral_production_log="$RENDER_DIR/production-ephemeral-policy-state.log"
+if production_helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set persistence.enabled=false >"$RENDER_DIR/production-ephemeral-policy-state.yaml" 2>"$ephemeral_production_log"; then
+    echo "::error::production render without durable policy state unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$ephemeral_production_log" "persistence.enabled=true"
+
+multi_replica_production_log="$RENDER_DIR/production-multi-replica-policy-state.log"
+if production_helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set replicaCount=2 >"$RENDER_DIR/production-multi-replica-policy-state.yaml" 2>"$multi_replica_production_log"; then
+    echo "::error::production multi-writer policy state unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$multi_replica_production_log" "replicaCount=1"
+
 controlplane_fail_log="$RENDER_DIR/controlplane-missing-url.log"
 if production_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \

@@ -101,6 +101,15 @@ bundle-only signatures and `VerifyPolicyBundle` implementations must migrate
 before adopting this source revision. This entry does not claim a tagged release
 or production deployment.
 
+### Changed — production policy replay persistence
+
+Production policy reconciliation now persists private, atomic per-scope epoch
+and policy-head commitments before activating a snapshot, so restart does not
+erase rollback and equivocation detection. The chart requires a persistent data
+volume and one Kernel writer in production until this watermark uses a
+distributed transactional store. This entry does not claim a tagged release or
+production deployment.
+
 ## [0.8.5] - 2026-08-23
 
 Source-prepared v0.8.5 notes for the current Kernel tree. These entries do not

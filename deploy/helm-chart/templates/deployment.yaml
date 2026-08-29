@@ -3,6 +3,12 @@
 {{- if not (or (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.kind "crd") (eq .Values.helm.policy.source.kind "mountedFile")) -}}
 {{- fail "helm.policy.source.kind must be one of controlplane, crd, mountedFile" -}}
 {{- end -}}
+{{- if and .Values.helm.production (not .Values.persistence.enabled) -}}
+{{- fail "helm.production=true requires persistence.enabled=true for durable policy replay protection" -}}
+{{- end -}}
+{{- if and .Values.helm.production (ne (int .Values.replicaCount) 1) -}}
+{{- fail "helm.production=true requires replicaCount=1 until policy replay state has a distributed store" -}}
+{{- end -}}
 {{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not .Values.helm.policy.source.controlplane.url) -}}
 {{- fail "helm.production=true with helm.policy.source.kind=controlplane requires helm.policy.source.controlplane.url" -}}
 {{- end -}}

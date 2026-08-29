@@ -521,7 +521,14 @@ func runServerWithOptions(opts serverOptions) error {
 		if lkgConfigErr != nil {
 			return fmt.Errorf("configure last-known-good policy retention: %w", lkgConfigErr)
 		}
-		policyStore = policyreconcile.NewAtomicSnapshotStore()
+		if envBool("HELM_PRODUCTION") {
+			policyStore, err = policyreconcile.NewPersistentSnapshotStore(filepath.Join(dataDir, "policy-replay-watermarks.json"))
+			if err != nil {
+				return fmt.Errorf("open policy replay watermark store: %w", err)
+			}
+		} else {
+			policyStore = policyreconcile.NewAtomicSnapshotStore()
+		}
 		policyReconciler, err = policyreconcile.NewReconciler(policyreconcile.ReconcilerConfig{
 			Source:              policySource,
 			Store:               policyStore,

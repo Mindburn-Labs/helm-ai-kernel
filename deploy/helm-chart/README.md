@@ -84,6 +84,7 @@ flowchart TD
 | `launchpadApps.hermes.model` | `openai/gpt-4o-mini` | Model passed to the default Hermes Job command. |
 | `launchpadApps.hermes.query` | `ping` | Single query passed to the default Hermes Job command. |
 | `launchpadApps.hermes.commandOverride` | `[]` | Full command array replacement for operator-specific Hermes runtime evidence. |
+| `replicaCount` | `1` | Kernel pod count. Production is single-writer until policy replay watermarks move to a distributed transactional store. |
 | `helm.*` | retained | Legacy values root retained for one compatibility window. |
 | `helm.bindAddr` | `0.0.0.0` | Required inside Kubernetes pods. |
 | `helm.production` | `false` | Refuses generated signing/auth material when set to `true`. |
@@ -125,7 +126,7 @@ flowchart TD
 | `helm.policy.runtimeActions` | `[]` | Explicit mounted-file rules compiled into the chart-managed reference pack; empty remains fail-closed. Prefer signed control-plane/CRD policy in production. |
 | `helm.policy.reloadHints.httpWakeEndpoint` | `/internal/policy/reconcile` | Wake-only internal endpoint for sidecars/operators. |
 | `helm.policy.reloadHints.configReloaderSidecar.enabled` | `false` | Optional mounted-file wake hint; disabled by default. |
-| `persistence.enabled` | `true` | Creates or uses a PVC for `/data`. |
+| `persistence.enabled` | `true` | Creates or uses a PVC for `/data`; required in production so policy replay watermarks survive restarts. |
 | `ingress.enabled` | `false` | Enables Kubernetes ingress. |
 | `helm.metrics.enabled` | `false` | Enables `/metrics` on `service.metricsPort`. |
 | `helm.metrics.serviceMonitor.enabled` | `false` | Emits a Prometheus Operator `ServiceMonitor`. |
@@ -139,6 +140,10 @@ flowchart TD
 
 - Set `helm.production=true` and provide `helm.signing.key` or
   `helm.signing.existingSecret`.
+- Keep `persistence.enabled=true` and `replicaCount=1`. Production writes a
+  private, atomic policy replay watermark under `helm.dataDir` before activating
+  a snapshot; multi-writer deployment requires a distributed transactional
+  watermark store first.
 - Enable `networkPolicy` and supply explicit ingress/egress allowlists. This is
   a rendered contract only until the target cluster proves a CNI that enforces
   `networking.k8s.io/v1` NetworkPolicy and records prohibited-egress denial.

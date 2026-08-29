@@ -51,6 +51,9 @@ def check_kind_smoke(path: Path) -> None:
         "kind-${CLUSTER}",
         "-control-plane:6443",
         "pod-security.kubernetes.io/enforce=restricted",
+        "ctr --namespace k8s.io images inspect",
+        "ctr --namespace k8s.io images tag --force",
+        "--set image.digest=",
     ]
     for token in required:
         if token not in text:
@@ -60,6 +63,24 @@ def check_kind_smoke(path: Path) -> None:
 def check_chart_smoke(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     require_digest_default(path, text)
+    for token in [
+        "PRODUCTION_IMAGE_DIGEST",
+        "requires image.digest pinned by immutable sha256 digest",
+        "--set image.digest=",
+    ]:
+        require(text, token, path)
+
+
+def check_launchpad_smoke(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    for token in [
+        "--container-runtime=containerd",
+        "ctr --namespace k8s.io images inspect",
+        "ctr --namespace k8s.io images tag --force",
+        'crictl inspecti "$KERNEL_IMAGE_DIGEST_REF"',
+        '--set "image.digest=${KERNEL_IMAGE_DIGEST}"',
+    ]:
+        require(text, token, path)
 
 
 def check_authority_state_chart(path: Path) -> None:
@@ -102,6 +123,7 @@ def check_authority_state_chart(path: Path) -> None:
 def main() -> None:
     check_kind_smoke(ROOT / "scripts/ci/kind_smoke.sh")
     check_chart_smoke(ROOT / "scripts/ci/helm_chart_smoke.sh")
+    check_launchpad_smoke(ROOT / "scripts/ci/launchpad_k8s_smoke.sh")
     check_authority_state_chart(ROOT / "deploy/helm-chart/templates/deployment.yaml")
     print("Helm smoke hardening checks passed.")
 

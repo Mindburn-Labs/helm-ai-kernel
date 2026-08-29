@@ -28,6 +28,7 @@ the pinned containerized Helm runner.
 ```bash
 helm install helm-ai-kernel deploy/helm-chart \
   --values ./production-network-policy.yaml \
+  --set image.digest="$KERNEL_IMAGE_DIGEST" \
   --set helm.production=true \
   --set helm.signing.key=<64-char-ed25519-seed-hex> \
   --set helm.auth.adminAPIKey=<admin-api-key> \
@@ -37,6 +38,10 @@ helm install helm-ai-kernel deploy/helm-chart \
 ```
 
 Review `values.yaml` before use in a real environment.
+
+`KERNEL_IMAGE_DIGEST` must be the promoted release's immutable
+`sha256:<64-lowercase-hex>` digest. `helm.production=true` refuses mutable tag-
+only Kernel images; when a digest is set, `image.tag` is ignored.
 
 `production-network-policy.yaml` must set `networkPolicy.enabled=true` and
 provide explicit ingress and egress rules. Production rendering rejects empty
@@ -69,6 +74,7 @@ flowchart TD
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/mindburn-labs/helm-ai-kernel` | Container image repository. |
 | `image.tag` | chart `appVersion` | Container image tag. |
+| `image.digest` | empty | Immutable `sha256` digest; required in production and takes precedence over `image.tag`. |
 | `imagePullSecrets` | `[]` | Pull secrets applied to the kernel and optional launchpad app Pods/Jobs/test Pod. |
 | `networkPolicy.enabled` | `false` | Renders the Kernel Pod NetworkPolicy; required in production. |
 | `networkPolicy.ingress` | `[]` | Explicit production ingress peers and ports. Empty or broad selectors fail production rendering. |

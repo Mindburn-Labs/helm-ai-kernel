@@ -16,6 +16,7 @@ ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
+PRODUCTION_IMAGE_DIGEST="${HELM_CHART_SMOKE_IMAGE_DIGEST:-sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 REPLAY_KEYRING='{"keyring_version":"emergency-stop-fence-command-replay-keyring.v1","keys":[{"command_key_id":"cp-stop-before-rotation","command_audience":"kernel-before-rotation","command_public_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}'
 RENDER_DIR="${HELM_CHART_RENDER_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-chart.XXXXXX")}"
 
@@ -79,7 +80,9 @@ assert_not_contains() {
 PRODUCTION_NETWORK_POLICY_VALUES="scripts/ci/helm_production_network_policy_values.yaml"
 
 production_helm_runner() {
-    helm_runner "$@" --values "$PRODUCTION_NETWORK_POLICY_VALUES"
+    helm_runner "$@" \
+        --values "$PRODUCTION_NETWORK_POLICY_VALUES" \
+        --set image.digest="$PRODUCTION_IMAGE_DIGEST"
 }
 
 default_rendered="$RENDER_DIR/rendered-default.yaml"
@@ -90,6 +93,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --set image.pullPolicy=IfNotPresent >"$default_rendered"
 
 assert_contains "$default_rendered" "kind: Deployment"
+assert_contains "$default_rendered" 'image: "ghcr.io/mindburn-labs/helm-ai-kernel:local"'
 assert_contains "$default_rendered" "HELM_POLICY_SOURCE_KIND"
 assert_contains "$default_rendered" "mountedFile"
 assert_contains "$default_rendered" "HELM_POLICY_ON_INVALID_UPDATE"
@@ -370,13 +374,40 @@ if production_helm_runner template "$RELEASE" "$CHART" \
 fi
 assert_contains "$fail_log" "requires helm.signing.key"
 
+image_digest_fail_log="$RENDER_DIR/production-missing-image-digest.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --values "$PRODUCTION_NETWORK_POLICY_VALUES" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" >"$RENDER_DIR/production-missing-image-digest.yaml" 2>"$image_digest_fail_log"; then
+    echo "::error::production render without an immutable Kernel image digest unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$image_digest_fail_log" "requires image.digest pinned by immutable sha256 digest"
+
+image_digest_invalid_log="$RENDER_DIR/invalid-image-digest.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set image.digest=sha256:not-a-digest >"$RENDER_DIR/invalid-image-digest.yaml" 2>"$image_digest_invalid_log"; then
+    echo "::error::render with a malformed Kernel image digest unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$image_digest_invalid_log" "image.digest"
+
 network_policy_disabled_log="$RENDER_DIR/production-network-policy-disabled.log"
 if helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
-    --set helm.auth.serviceAPIKey="$SERVICE_KEY" >"$RENDER_DIR/production-network-policy-disabled.yaml" 2>"$network_policy_disabled_log"; then
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
+    --set image.digest="$PRODUCTION_IMAGE_DIGEST" >"$RENDER_DIR/production-network-policy-disabled.yaml" 2>"$network_policy_disabled_log"; then
     echo "::error::production render without a kernel NetworkPolicy unexpectedly succeeded"
     exit 1
 fi
@@ -491,7 +522,6 @@ production_helm_runner lint "$CHART" \
     --set helm.auth.tenantID="$TENANT_ID" \
     --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
-    --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >/dev/null
 
 rendered="$RENDER_DIR/rendered.yaml"
@@ -504,10 +534,10 @@ production_helm_runner template "$RELEASE" "$CHART" \
     --set helm.auth.tenantID="$TENANT_ID" \
     --set helm.auth.principalID="$AGENT_ID" \
     --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
-    --set image.tag=local \
     --set image.pullPolicy=IfNotPresent >"$rendered"
 
 assert_contains "$rendered" "kind: Deployment"
+assert_contains "$rendered" "image: \"ghcr.io/mindburn-labs/helm-ai-kernel@${PRODUCTION_IMAGE_DIGEST}\""
 assert_contains "$rendered" "serve"
 assert_contains "$rendered" "--policy"
 assert_contains "$rendered" "/etc/helm-ai-kernel/policy/serve-policy.toml"

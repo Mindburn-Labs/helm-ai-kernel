@@ -56,7 +56,7 @@ Environment overrides:
   LAUNCHPAD_SMOKE_PROFILE       minikube profile name (default launchpad-smoke)
   LAUNCHPAD_SMOKE_NAMESPACE     release namespace (default helm-launchpad-smoke)
   LAUNCHPAD_SMOKE_RELEASE       helm release name (default kernel)
-  LAUNCHPAD_SMOKE_KERNEL_IMAGE  kernel image to load into minikube (default ghcr.io/mindburn-labs/helm-ai-kernel:local)
+  LAUNCHPAD_SMOKE_KERNEL_IMAGE  kernel image to load into minikube; reuse clusters require repo@sha256 (default ghcr.io/mindburn-labs/helm-ai-kernel:local)
   LAUNCHPAD_SMOKE_KEEP_CLUSTER  set to 1 to skip the final minikube delete
   LAUNCHPAD_SMOKE_FRESH_CLUSTER set to 0 to reuse an existing minikube profile (assumes the cluster is already running and kernel image is loaded)
   LAUNCHPAD_SMOKE_MANAGE_NAMESPACE set to 0 when the namespace already exists and the kubeconfig has namespace-scoped RBAC only
@@ -247,6 +247,7 @@ if [ "$CLUSTER_MODE" = "minikube" ]; then
             --disk-size="${LAUNCHPAD_SMOKE_DISK:-20g}" \
             --kubernetes-version="${LAUNCHPAD_SMOKE_K8S_VERSION:-v1.30.0}" \
             --cni=calico \
+            --container-runtime=containerd \
             --driver="${LAUNCHPAD_SMOKE_DRIVER:-docker}"
     fi
     kubectl config use-context "$PROFILE"
@@ -265,6 +266,14 @@ fi
 echo "::endgroup::"
 
 echo "::group::stage 2 — local kernel image + optional launchpad image debug"
+KERNEL_IMAGE_REPOSITORY="${KERNEL_IMAGE%%@*}"
+KERNEL_IMAGE_DIGEST=""
+if [[ "$KERNEL_IMAGE" == *@* ]]; then
+    KERNEL_IMAGE_DIGEST="${KERNEL_IMAGE##*@}"
+elif [[ "${KERNEL_IMAGE##*/}" == *:* ]]; then
+    KERNEL_IMAGE_REPOSITORY="${KERNEL_IMAGE%:*}"
+fi
+
 if [ "$CLUSTER_MODE" = "minikube" ]; then
     # Kernel image: built locally by the caller (CI step or developer make target).
     # Skip the load if it is already inside minikube (common when the caller built
@@ -276,8 +285,30 @@ if [ "$CLUSTER_MODE" = "minikube" ]; then
     else
         echo "::warning::kernel image $KERNEL_IMAGE not in local docker; relying on imagePullPolicy=IfNotPresent against registry"
     fi
+
+    if [ -z "$KERNEL_IMAGE_DIGEST" ]; then
+        KERNEL_IMAGE_DIGEST="$(
+            minikube -p "$PROFILE" ssh -- \
+                sudo ctr --namespace k8s.io images inspect "$KERNEL_IMAGE" \
+                | tr -d '\r' \
+                | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p' \
+                | sed -n '1p'
+        )"
+        if [[ ! "$KERNEL_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::could not resolve the loaded Kernel image to an immutable sha256 digest" >&2
+            exit 1
+        fi
+        KERNEL_IMAGE_DIGEST_REF="${KERNEL_IMAGE_REPOSITORY}@${KERNEL_IMAGE_DIGEST}"
+        minikube -p "$PROFILE" ssh -- \
+            sudo ctr --namespace k8s.io images tag --force "$KERNEL_IMAGE" "$KERNEL_IMAGE_DIGEST_REF" >/dev/null
+        minikube -p "$PROFILE" ssh -- sudo crictl inspecti "$KERNEL_IMAGE_DIGEST_REF" >/dev/null
+    fi
 else
     echo "reused-cluster mode: kubelet must pull kernel image $KERNEL_IMAGE from a registry or node cache"
+fi
+if [[ ! "$KERNEL_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "::error::LAUNCHPAD_SMOKE_KERNEL_IMAGE must be repo@sha256 for reused clusters" >&2
+    exit 1
 fi
 
 if [ "$PRE_LOAD_LAUNCHPAD_IMAGES" = "1" ] && [ "$MODE" != "baseline" ]; then
@@ -334,8 +365,8 @@ helm_args=(
     --set "helm.signing.key=${SIGNING_KEY}"
     --set "helm.auth.adminAPIKey=${ADMIN_KEY}"
     --set "helm.auth.serviceAPIKey=${SERVICE_KEY}"
-    --set "image.repository=${KERNEL_IMAGE%:*}"
-    --set "image.tag=${KERNEL_IMAGE##*:}"
+    --set "image.repository=${KERNEL_IMAGE_REPOSITORY}"
+    --set "image.digest=${KERNEL_IMAGE_DIGEST}"
     --set "image.pullPolicy=IfNotPresent"
     --set "persistence.enabled=${PERSISTENCE_ENABLED}"
 )

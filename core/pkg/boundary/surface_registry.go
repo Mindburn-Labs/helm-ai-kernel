@@ -236,6 +236,7 @@ CREATE TABLE IF NOT EXISTS boundary_records_index (
 
 func loadSQLSurfaceRegistry(ctx context.Context, db *sql.DB, now func() time.Time) (*SurfaceRegistry, error) {
 	r := newSurfaceRegistry(now)
+	seeded := false
 	var snapshotJSON string
 	err := db.QueryRowContext(ctx, `SELECT snapshot_json FROM boundary_surface_snapshots WHERE id = $1`, "default").Scan(&snapshotJSON)
 	if err == nil {
@@ -244,16 +245,19 @@ func loadSQLSurfaceRegistry(ctx context.Context, db *sql.DB, now func() time.Tim
 		}
 	} else if err == sql.ErrNoRows {
 		r.seed()
+		seeded = true
 	} else {
 		return nil, fmt.Errorf("read boundary surface snapshot: %w", err)
 	}
 	r.db = db
 	r.ctx = ctx
-	r.mu.Lock()
-	err = r.persistLocked()
-	r.mu.Unlock()
-	if err != nil {
-		return nil, err
+	if seeded {
+		r.mu.Lock()
+		err = r.persistLocked()
+		r.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return r, nil
 }

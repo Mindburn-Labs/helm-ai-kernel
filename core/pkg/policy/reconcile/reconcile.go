@@ -835,6 +835,9 @@ type ControlPlaneSource struct {
 	HTTPClient  *http.Client
 	Scope       PolicyScope
 	BearerToken string
+	// BearerTokenFile is re-read for every request so projected Kubernetes
+	// ServiceAccount token rotation takes effect without restarting Kernel.
+	BearerTokenFile string
 }
 
 func NewControlPlaneSource(baseURL string, scope PolicyScope) *ControlPlaneSource {
@@ -899,7 +902,9 @@ func (s *ControlPlaneSource) Load(ctx context.Context, scope PolicyScope, epoch 
 	if err != nil {
 		return nil, err
 	}
-	s.authorize(req)
+	if err := s.authorize(req); err != nil {
+		return nil, err
+	}
 	resp, err := s.client().Do(req)
 	if err != nil {
 		return nil, err
@@ -937,7 +942,9 @@ func (s *ControlPlaneSource) getJSON(ctx context.Context, endpoint string, out a
 	if err != nil {
 		return err
 	}
-	s.authorize(req)
+	if err := s.authorize(req); err != nil {
+		return err
+	}
 	resp, err := s.client().Do(req)
 	if err != nil {
 		return err
@@ -956,10 +963,39 @@ func (s *ControlPlaneSource) client() *http.Client {
 	return http.DefaultClient
 }
 
-func (s *ControlPlaneSource) authorize(req *http.Request) {
-	if strings.TrimSpace(s.BearerToken) != "" {
-		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(s.BearerToken))
+func (s *ControlPlaneSource) authorize(req *http.Request) error {
+	token, err := s.currentBearerToken()
+	if err != nil {
+		return err
 	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return nil
+}
+
+func (s *ControlPlaneSource) currentBearerToken() (string, error) {
+	token := s.BearerToken
+	tokenFile := strings.TrimSpace(s.BearerTokenFile)
+	if tokenFile != "" {
+		if strings.TrimSpace(token) != "" {
+			return "", fmt.Errorf("controlplane policy authentication must use either a bearer token or a token file")
+		}
+		if !filepath.IsAbs(tokenFile) {
+			return "", fmt.Errorf("controlplane policy authentication token file must be an absolute path")
+		}
+		data, err := os.ReadFile(filepath.Clean(tokenFile))
+		if err != nil {
+			return "", fmt.Errorf("read controlplane policy authentication token: %w", err)
+		}
+		token = string(data)
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", fmt.Errorf("controlplane policy authentication token is empty")
+	}
+	if len(token) > 64*1024 || strings.ContainsAny(token, "\r\n") {
+		return "", fmt.Errorf("controlplane policy authentication token is invalid")
+	}
+	return token, nil
 }
 
 // StaticSource is useful for tests and bootstrap code.

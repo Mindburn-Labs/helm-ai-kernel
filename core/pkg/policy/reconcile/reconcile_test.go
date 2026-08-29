@@ -171,6 +171,7 @@ func TestControlPlaneSourcePublishesPolicyToReconciler(t *testing.T) {
 	defer server.Close()
 
 	source := NewControlPlaneSource(server.URL, scope)
+	source.BearerToken = "policy-reader-token"
 	store := NewAtomicSnapshotStore()
 	reconciler, err := NewReconciler(ReconcilerConfig{
 		Source:            source,

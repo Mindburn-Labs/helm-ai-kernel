@@ -162,6 +162,7 @@ func TestControlPlaneSourceErrorAndHeaderBranches(t *testing.T) {
 	}))
 	defer errorServer.Close()
 	source = NewControlPlaneSource(errorServer.URL, scope)
+	source.BearerToken = "token-1"
 	if _, err := source.Head(context.Background(), scope); err == nil {
 		t.Fatal("expected controlplane head status error")
 	}
@@ -174,8 +175,49 @@ func TestControlPlaneSourceErrorAndHeaderBranches(t *testing.T) {
 	}))
 	defer invalidJSON.Close()
 	source = NewControlPlaneSource(invalidJSON.URL, scope)
+	source.BearerToken = "token-1"
 	if _, err := source.Head(context.Background(), scope); err == nil {
 		t.Fatal("expected controlplane decode error")
+	}
+}
+
+func TestControlPlaneSourceReloadsProjectedBearerToken(t *testing.T) {
+	tokenPath := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenPath, []byte("token-1"), 0o600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+	scope := PolicyScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+	bundle := []byte("policy")
+	head := PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)}
+	var authorizations []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorizations = append(authorizations, r.Header.Get("Authorization"))
+		if r.URL.Path == "/api/v1/policy/head" {
+			_ = json.NewEncoder(w).Encode(head)
+			return
+		}
+		_, _ = w.Write(bundle)
+	}))
+	defer server.Close()
+
+	source := NewControlPlaneSource(server.URL, scope)
+	source.BearerTokenFile = tokenPath
+	if _, err := source.Head(context.Background(), scope); err != nil {
+		t.Fatalf("head with projected token: %v", err)
+	}
+	if err := os.WriteFile(tokenPath, []byte("token-2"), 0o600); err != nil {
+		t.Fatalf("rotate token: %v", err)
+	}
+	if _, err := source.Load(context.Background(), scope, 1); err != nil {
+		t.Fatalf("load with rotated token: %v", err)
+	}
+	if len(authorizations) != 2 || authorizations[0] != "Bearer token-1" || authorizations[1] != "Bearer token-2" {
+		t.Fatalf("projected token rotation was not observed: %v", authorizations)
+	}
+
+	source.BearerToken = "static-token"
+	if _, err := source.Head(context.Background(), scope); err == nil || !strings.Contains(err.Error(), "either a bearer token or a token file") {
+		t.Fatalf("expected conflicting credential error, got %v", err)
 	}
 }
 

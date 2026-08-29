@@ -237,6 +237,9 @@ helm:
         url: ""
         auth:
           mode: "serviceAccountJWT" # serviceAccountJWT | bearerToken
+          serviceAccountJWT:
+            audience: "helm-control-plane"
+            expirationSeconds: 600
           bearerToken: ""
           existingSecret: ""
           existingSecretKey: "HELM_POLICY_BEARER_TOKEN"

@@ -1191,7 +1191,7 @@
         "model": {
           "type": "string",
           "pattern": "^openrouter/.+",
-          "default": "openrouter/auto",
+          "default": "openrouter/openai/gpt-4o-mini",
           "description": "OpenClaw provider/model reference. The provider must remain openrouter because the chart projects only an OpenRouter credential and allows only the OpenRouter egress origin."
         },
         "tmpfsSize": {

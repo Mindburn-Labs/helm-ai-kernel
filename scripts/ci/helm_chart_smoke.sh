@@ -320,8 +320,7 @@ assert_contains "$emergency_stop_missing_authority_log" "helm.emergencyStop.comm
 openclaw_rendered="$RENDER_DIR/rendered-openclaw.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
-    --set launchpadApps.openclaw.enabled=true \
-    --set-string launchpadApps.openclaw.model=openrouter/openai/gpt-4o-mini >"$openclaw_rendered"
+    --set launchpadApps.openclaw.enabled=true >"$openclaw_rendered"
 assert_contains "$openclaw_rendered" 'openclaw models set "$OPENCLAW_MODEL"'
 assert_contains "$openclaw_rendered" 'value: "openrouter/openai/gpt-4o-mini"'
 assert_contains "$openclaw_rendered" "OPENROUTER_API_KEY"

@@ -444,7 +444,7 @@ launchpadApps:
     gatewayPort: 18789
     # OpenClaw routes by provider/model prefix. Keep the provider explicit so
     # the workload uses the OpenRouter credential and allowed egress origin.
-    model: "openrouter/auto"
+    model: "openrouter/openai/gpt-4o-mini"
     tmpfsSize: "256Mi"
     appStateSize: "1Gi"
     # Resources sized for the ~6.36 GiB OCI image plus 8-plugin warm-up. Trim

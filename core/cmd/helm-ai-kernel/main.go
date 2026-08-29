@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -30,12 +31,11 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/postgresmigration"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	dockersandbox "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox/docker"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/tracing"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/translog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -401,6 +401,9 @@ func runServerWithOptions(opts serverOptions) error {
 	)
 
 	// 0.2 Connect to Database (Infrastructure)
+	if strings.TrimSpace(os.Getenv("HELM_MIGRATION_DATABASE_URL")) != "" {
+		return errors.New("HELM_MIGRATION_DATABASE_URL must not be present in the Kernel serving process; run `helm-ai-kernel migrate` with that credential")
+	}
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		writeServerNarration(logger, logFormat, narration,
@@ -421,10 +424,8 @@ func runServerWithOptions(opts serverOptions) error {
 		}
 	} else {
 		databaseMode = "postgres"
-		if envBool("HELM_PRODUCTION") {
-			if err := validateProductionDatabaseURL(dbURL); err != nil {
-				return fmt.Errorf("invalid production DATABASE_URL: %w", err)
-			}
+		if err := validateRuntimePostgresURL(dbURL); err != nil {
+			return fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
 		}
 		db, err = sql.Open("postgres", dbURL)
 		if err != nil {
@@ -435,17 +436,17 @@ func runServerWithOptions(opts serverOptions) error {
 			return fmt.Errorf("ping DB: %w", err)
 		}
 		log.Println("[helm] postgres: connected")
+		if err := postgresmigration.ValidateRuntime(ctx, db, postgresmigration.RuntimeOptions{
+			EmergencyStops:        emergencyStopFenceEnabled(),
+			ApprovalConsumption:   envBool(approvalConsumptionEnabledEnv),
+			GeneratedSpecApproval: envBool(generatedSpecApprovalEnabledEnv),
+			ReleaseAuthority:      envBool(effectDispositionEnabledEnv) || envBool(effectReconciliationCandidatesEnabledEnv),
+		}); err != nil {
+			return fmt.Errorf("validate postgres runtime schema: %w", err)
+		}
 
-		// Initialize Postgres stores (used by Services layer)
-		pl := ledger.NewPostgresLedger(db)
-		if err := pl.Init(ctx); err != nil {
-			return fmt.Errorf("init ledger: %w", err)
-		}
-		_ = pl // Ledger is managed via Services layer
+		// Construct Postgres stores (the one-shot migration command owns DDL).
 		ps := store.NewPostgresReceiptStore(db)
-		if err := ps.Init(ctx); err != nil {
-			return fmt.Errorf("init receipt store: %w", err)
-		}
 		receiptStore = ps
 		pbs, pbErr := store.NewPostgresPrincipalBindingStore(db)
 		if pbErr != nil {
@@ -465,13 +466,6 @@ func runServerWithOptions(opts serverOptions) error {
 	writeServerNarration(logger, logFormat, narration,
 		"Trust Root: "+ColorBold+ColorGreen+signer.PublicKey()+ColorReset,
 		"trust root ready", "public_key", signer.PublicKey())
-
-	// 2. Registry
-	reg := registry.NewPostgresRegistry(db)
-	if err := reg.Init(ctx); err != nil {
-		return fmt.Errorf("init registry: %w", err)
-	}
-	log.Println("[helm] registry: ready")
 
 	// Pack verification is handled via the CLI subcommands (pack verify, etc.)
 

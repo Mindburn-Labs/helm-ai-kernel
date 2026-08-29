@@ -41,6 +41,18 @@ func NewPostgresStore(db *sql.DB, verifier GrantSignatureVerifier) *PostgresStor
 	return &PostgresStore{db: db, verifier: verifier}
 }
 
+// MigratePostgres applies this package's ceremony schema as an explicit owner
+// operation. Runtime construction never invokes this function.
+func MigratePostgres(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("generated spec approval postgres migration requires database")
+	}
+	if _, err := db.ExecContext(ctx, generatedSpecApprovalPostgresSchema); err != nil {
+		return fmt.Errorf("initialize generated spec approval ceremony schema: %w", err)
+	}
+	return nil
+}
+
 func (s *PostgresStore) setMaxChallengeLifetime(value time.Duration) {
 	if s != nil {
 		s.maxChallengeLifetime = value
@@ -54,10 +66,7 @@ func (s *PostgresStore) Init(ctx context.Context) error {
 	if err := s.requireReady(); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, generatedSpecApprovalPostgresSchema); err != nil {
-		return fmt.Errorf("initialize generated spec approval ceremony schema: %w", err)
-	}
-	return nil
+	return MigratePostgres(ctx, s.db)
 }
 
 func (s *PostgresStore) CreateHold(ctx context.Context, record Record) (Record, error) {

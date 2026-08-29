@@ -186,8 +186,10 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 			stopOptions = append(stopOptions, kernel.WithPostgresScopeLocks())
 		}
 		emergencyStops := kernel.NewScopedStopStore(db, time.Now, stopOptions...)
-		if err := emergencyStops.Init(ctx); err != nil {
-			return nil, fmt.Errorf("init scoped emergency-stop store: %w", err)
+		if databaseMode != "postgres" {
+			if err := emergencyStops.Init(ctx); err != nil {
+				return nil, fmt.Errorf("init scoped emergency-stop store: %w", err)
+			}
 		}
 		s.EmergencyStops = emergencyStops
 		logger.Info("subsystem ready", "component", " Scoped emergency-stop fence store initialized")
@@ -262,7 +264,15 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 			}
 		})
 	}
-	surfaces, surfaceErr := boundary.NewSQLSurfaceRegistry(ctx, db, databaseMode, time.Now)
+	var (
+		surfaces   *boundary.SurfaceRegistry
+		surfaceErr error
+	)
+	if databaseMode == "postgres" {
+		surfaces, surfaceErr = boundary.NewRuntimeSQLSurfaceRegistry(ctx, db, time.Now)
+	} else {
+		surfaces, surfaceErr = boundary.NewSQLSurfaceRegistry(ctx, db, databaseMode, time.Now)
+	}
 	if surfaceErr != nil {
 		return nil, fmt.Errorf("boundary surface registry persistence: %w", surfaceErr)
 	}

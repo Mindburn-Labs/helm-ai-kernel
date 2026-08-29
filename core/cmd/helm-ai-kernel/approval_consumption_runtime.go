@@ -231,9 +231,8 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 		return nil, fmt.Errorf("initialize approval grant verifier: %w", err)
 	}
 	store := approvalceremony.NewPostgresStore(db, verifier)
-	if err := store.Init(ctx); err != nil {
-		return nil, fmt.Errorf("initialize approval ceremony store: %w", err)
-	}
+	// The one-shot helm-ai-kernel migrate command owns approval schema DDL;
+	// startup reaches this path only after read-only runtime schema validation.
 	consumer, err := approvalceremony.NewGrantConsumer(
 		store, approvalceremony.ContextConsumerIdentityProvider{}, approvalSigner,
 	)

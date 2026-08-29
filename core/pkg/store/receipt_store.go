@@ -297,6 +297,15 @@ func NewPostgresReceiptStore(db *sql.DB) *PostgresReceiptStore {
 	return &PostgresReceiptStore{db: db}
 }
 
+// MigratePostgresReceipts applies the receipt schema and its source-owned
+// backfills as an explicit owner operation. Serving code must not call Init.
+func MigratePostgresReceipts(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("postgres receipt migration requires database")
+	}
+	return NewPostgresReceiptStore(db).Init(ctx)
+}
+
 func (s *PostgresReceiptStore) Init(ctx context.Context) error {
 	schemaQuery := `
 		CREATE SEQUENCE IF NOT EXISTS receipts_append_sequence_seq AS BIGINT;

@@ -138,6 +138,7 @@ kubectl label namespace "$NAMESPACE" \
 
 helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --namespace "$NAMESPACE" \
+    --values scripts/ci/helm_production_network_policy_values.yaml \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \

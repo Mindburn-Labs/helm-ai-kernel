@@ -329,6 +329,7 @@ echo "::group::stage 4 — helm render + install"
 helm_args=(
     "$RELEASE" "${ROOT}/deploy/helm-chart"
     --namespace "$NAMESPACE"
+    --values "${ROOT}/scripts/ci/helm_production_network_policy_values.yaml"
     --set "helm.production=true"
     --set "helm.signing.key=${SIGNING_KEY}"
     --set "helm.auth.adminAPIKey=${ADMIN_KEY}"

@@ -603,8 +603,10 @@ func (l *ProjectionLifecycle) verifyManagedState(state projectionLifecycleState)
 		return fmt.Errorf("%w: archive generation is missing", ErrProjectionDrift)
 	}
 	effect := contracts.SkillProjectionEffect{TenantID: state.TenantID, WorkspaceID: state.WorkspaceID, SkillID: state.SkillID, AgentTarget: state.AgentTarget}
-	if _, _, err := l.readGeneration(effect, record); err != nil {
-		return err
+	for _, retained := range state.Generations {
+		if _, _, err := l.readGeneration(effect, retained); err != nil {
+			return err
+		}
 	}
 	fullRel := filepath.Join(l.workspaceRel(effect), filepath.FromSlash(state.RelativePath))
 	data, err := readManagedFile(l.root, fullRel)

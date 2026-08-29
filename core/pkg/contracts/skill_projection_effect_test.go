@@ -57,6 +57,22 @@ func TestSkillProjectionEffectSealsAndFailsClosed(t *testing.T) {
 	}
 }
 
+func TestSkillProjectionEffectCanonicalHashVector(t *testing.T) {
+	now := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
+	effect := validSkillProjectionEffect(t, now)
+
+	if effect.ArtifactHash != "sha256:7485bc0f65e565ec21749f4c7fd417deccd7713ea3bb9a1908633cb436501202" {
+		t.Fatalf("artifact hash = %s", effect.ArtifactHash)
+	}
+	sealed, err := effect.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sealed.CanonicalRequestHash != "sha256:60b549ffc380a992c88f298f74afd32d7d252dda012db63588346fc5247e7c30" {
+		t.Fatalf("canonical request hash = %s", sealed.CanonicalRequestHash)
+	}
+}
+
 func TestSkillProjectionRollbackPermitIsSeparateAndActionBound(t *testing.T) {
 	now := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
 	effect := validSkillProjectionEffect(t, now)

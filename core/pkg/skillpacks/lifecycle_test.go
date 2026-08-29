@@ -265,6 +265,39 @@ func TestProjectionLifecycleFailsClosedOnPathsArtifactsAndDrift(t *testing.T) {
 			t.Fatalf("drift was overwritten: %q err=%v", data, err)
 		}
 	})
+
+	t.Run("retained generation drift", func(t *testing.T) {
+		root := t.TempDir()
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		v1 := newProjectionFixture(t, "1.0.0", "safe retained v1", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "safe retained v2", 2, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		upgrade, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state, err := lifecycle.readState(v2.effect, upgrade.RelativePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		retained, ok := findProjectionGeneration(state.Generations, 1)
+		if !ok {
+			t.Fatal("retained generation 1 is missing")
+		}
+		retainedPath := filepath.Join(root, lifecycle.generationParentRel(v1.effect), projectionGenerationDirName(retained), "SKILL.md")
+		if err := os.WriteFile(retainedPath, []byte("tampered retained bytes"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) {
+			t.Fatalf("retained drift error = %v", err)
+		}
+		live, err := os.ReadFile(projectionLivePath(root, v2.effect))
+		if err != nil || !reflect.DeepEqual(live, v2.artifact.Files["SKILL.md"]) {
+			t.Fatalf("retained drift changed live projection: %q err=%v", live, err)
+		}
+	})
 }
 
 func TestProjectionLifecycleConcurrentReplayIsSingleMutation(t *testing.T) {

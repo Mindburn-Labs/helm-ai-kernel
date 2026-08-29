@@ -130,6 +130,20 @@ kubectl cluster-info --context "kind-${CLUSTER}" >/dev/null
 kubectl config use-context "kind-${CLUSTER}" >/dev/null
 
 kind load docker-image "$IMAGE" --name "$CLUSTER"
+IMAGE_DIGEST="$(
+    docker exec "${CLUSTER}-control-plane" \
+        ctr --namespace k8s.io images inspect "$IMAGE" \
+        | sed -nE 's/.*@(sha256:[0-9a-f]{64}).*/\1/p' \
+        | sed -n '1p'
+)"
+if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "::error::could not resolve the loaded Kernel image to an immutable sha256 digest"
+    exit 1
+fi
+IMAGE_REPOSITORY="${IMAGE%:*}"
+IMAGE_DIGEST_REF="${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+docker exec "${CLUSTER}-control-plane" \
+    ctr --namespace k8s.io images tag --force "$IMAGE" "$IMAGE_DIGEST_REF" >/dev/null
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl label namespace "$NAMESPACE" \
     pod-security.kubernetes.io/enforce=restricted \
@@ -145,8 +159,8 @@ helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --set helm.auth.serviceAPIKey="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}" \
     --set helm.auth.tenantID="$TENANT_ID" \
     --set helm.auth.principalID="$AGENT_ID" \
-    --set image.repository="${IMAGE%:*}" \
-    --set image.tag="${IMAGE##*:}" \
+    --set image.repository="$IMAGE_REPOSITORY" \
+    --set image.digest="$IMAGE_DIGEST" \
     --set image.pullPolicy=IfNotPresent \
     --set persistence.enabled=true \
     --wait --timeout 180s

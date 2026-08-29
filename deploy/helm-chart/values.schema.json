@@ -28,11 +28,16 @@
           "type": "string",
           "enum": ["Always", "IfNotPresent", "Never"],
           "default": "IfNotPresent",
-          "description": "Kubernetes image pull policy. Use IfNotPresent for pinned tags and Always when consuming the floating :latest tag."
+          "description": "Kubernetes image pull policy. Use IfNotPresent for digest-pinned images and release tags; use Always only for floating tags."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^(|sha256:[0-9a-f]{64})$",
+          "description": "Immutable sha256 image digest including the `sha256:` prefix. Required when helm.production=true; when set, the rendered image uses repository@digest and ignores tag."
         },
         "tag": {
           "type": "string",
-          "description": "Overrides the image tag. Leave empty to inherit the chart's appVersion. Set explicitly when pinning to a digest-resolved release or to a development build."
+          "description": "Overrides the image tag. Leave empty to inherit the chart's appVersion. Ignored when image.digest is set."
         }
       }
     },

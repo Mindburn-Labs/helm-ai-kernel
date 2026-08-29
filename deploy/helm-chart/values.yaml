@@ -7,6 +7,9 @@ replicaCount: 1
 image:
   repository: ghcr.io/mindburn-labs/helm-ai-kernel
   pullPolicy: IfNotPresent
+  # Immutable sha256 digest. Required when helm.production=true and preferred
+  # over tag whenever set.
+  digest: ""
   # Overrides the image tag whose default is the chart appVersion
   tag: ""
 

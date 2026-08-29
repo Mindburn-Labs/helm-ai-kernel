@@ -66,8 +66,17 @@ Create the name of the service account to use
 Return the image name
 */}}
 {{- define "helm-ai-kernel.image" -}}
+{{- if .Values.image.digest -}}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.image.digest) -}}
+{{- fail "image.digest must be a sha256 digest with 64 lowercase hex characters" -}}
+{{- end -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else if .Values.helm.production -}}
+{{- fail "helm.production=true requires image.digest pinned by immutable sha256 digest" -}}
+{{- else -}}
 {{- $tag := default .Chart.AppVersion .Values.image.tag -}}
-{{- printf "%s:%s" .Values.image.repository $tag }}
+{{- printf "%s:%s" .Values.image.repository $tag -}}
+{{- end -}}
 {{- end }}
 
 {{/*

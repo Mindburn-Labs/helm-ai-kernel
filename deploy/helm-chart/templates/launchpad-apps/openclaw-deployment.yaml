@@ -57,19 +57,23 @@ spec:
               drop:
                 - ALL
           command:
-            - openclaw
-            - gateway
-            - run
-            - --port
-            - {{ $cfg.gatewayPort | quote }}
-            - --allow-unconfigured
-            - --auth
-            - none
-            - --bind
-            - loopback
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              openclaw models set "$OPENCLAW_MODEL"
+              exec openclaw gateway run \
+                --port "$OPENCLAW_GATEWAY_PORT" \
+                --allow-unconfigured \
+                --auth none \
+                --bind loopback
           env:
             - name: HOME
               value: /opt/openclaw/.openclaw
+            - name: OPENCLAW_MODEL
+              value: {{ required "launchpadApps.openclaw.model is required" $cfg.model | quote }}
+            - name: OPENCLAW_GATEWAY_PORT
+              value: {{ $cfg.gatewayPort | quote }}
             # No HTTP_PROXY/HTTPS_PROXY: egress is enforced transparently by the
             # egress-init iptables REDIRECT, not by the workload honoring proxy env.
             # HELM_EGRESS_TRANSPARENT tells helm-launchpad-openrouter-check that
@@ -78,22 +82,6 @@ spec:
             - name: HELM_EGRESS_TRANSPARENT
               value: "1"
             - name: OPENROUTER_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}
-                  key: {{ .Values.openrouter.apiKeySecretRef.key | quote }}
-            # Route openclaw's OpenAI-compatible agent calls through OpenRouter —
-            # the only host the egress allowlist permits. openclaw's built-in agent
-            # model defaults to the `openai/*` provider, which dials api.openai.com
-            # directly; under the transparent-egress REDIRECT that connection is
-            # dropped ("stream disconnected before completion"), so the embedded
-            # agent fails. OpenRouter is OpenAI-API-compatible, so pointing
-            # OPENAI_BASE_URL at it (authenticated with the same OpenRouter key)
-            # makes those calls leave through the allowed host. Mirrors hermes,
-            # which already runs `--provider openrouter`.
-            - name: OPENAI_BASE_URL
-              value: "https://openrouter.ai/api/v1"
-            - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.openrouter.apiKeySecretRef.name | quote }}

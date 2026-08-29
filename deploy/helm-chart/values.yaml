@@ -442,6 +442,9 @@ launchpadApps:
       digest: "sha256:3c8c7069b9b8e69f584adc7de34b42a3f2b2721a19c069af342e1cbd7cf6d9af"
       pullPolicy: "IfNotPresent"
     gatewayPort: 18789
+    # OpenClaw routes by provider/model prefix. Keep the provider explicit so
+    # the workload uses the OpenRouter credential and allowed egress origin.
+    model: "openrouter/auto"
     tmpfsSize: "256Mi"
     appStateSize: "1Gi"
     # Resources sized for the ~6.36 GiB OCI image plus 8-plugin warm-up. Trim

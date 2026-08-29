@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +37,7 @@ func TestPolicySourceFromEnvControlPlaneRequiresURL(t *testing.T) {
 func TestPolicySourceFromEnvControlPlaneUsesBearerToken(t *testing.T) {
 	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
 	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "https://controlplane.example")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_AUTH_MODE", "bearerToken")
 	t.Setenv("HELM_POLICY_BEARER_TOKEN", "token-1")
 	source, kind, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
 	if err != nil {
@@ -55,6 +58,8 @@ func TestPolicySourceFromEnvControlPlaneUsesBearerToken(t *testing.T) {
 func TestPolicySourceFromEnvControlPlaneAllowsLoopbackHTTP(t *testing.T) {
 	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
 	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "http://127.0.0.1:18080")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_AUTH_MODE", "bearerToken")
+	t.Setenv("HELM_POLICY_BEARER_TOKEN", "local-token")
 	source, kind, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
 	if err != nil {
 		t.Fatalf("source from env: %v", err)
@@ -64,6 +69,55 @@ func TestPolicySourceFromEnvControlPlaneAllowsLoopbackHTTP(t *testing.T) {
 	}
 	if _, ok := source.(*policyreconcile.ControlPlaneSource); !ok {
 		t.Fatalf("expected ControlPlaneSource, got %T", source)
+	}
+}
+
+func TestPolicySourceFromEnvControlPlaneUsesProjectedServiceAccountJWT(t *testing.T) {
+	tokenPath := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenPath, []byte("projected-jwt\n"), 0o600); err != nil {
+		t.Fatalf("write projected token: %v", err)
+	}
+	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "https://controlplane.example")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_AUTH_MODE", "serviceAccountJWT")
+	t.Setenv("HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE", tokenPath)
+
+	source, kind, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
+	if err != nil {
+		t.Fatalf("source from env: %v", err)
+	}
+	cp, ok := source.(*policyreconcile.ControlPlaneSource)
+	if kind != "controlplane" || !ok || cp.BearerToken != "" || cp.BearerTokenFile != tokenPath {
+		t.Fatalf("projected service account token not configured: kind=%s source=%+v", kind, source)
+	}
+}
+
+func TestPolicySourceFromEnvControlPlaneAuthFailsClosed(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		mode      string
+		token     string
+		tokenFile string
+		want      string
+	}{
+		{name: "missing mode", want: "AUTH_MODE is required"},
+		{name: "empty bearer", mode: "bearerToken", want: "token is empty"},
+		{name: "missing projected token", mode: "serviceAccountJWT", tokenFile: filepath.Join(t.TempDir(), "missing"), want: "read projected"},
+		{name: "unknown mode", mode: "anonymous", want: "must be serviceAccountJWT or bearerToken"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
+			t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "https://controlplane.example")
+			t.Setenv("HELM_POLICY_CONTROLPLANE_AUTH_MODE", tc.mode)
+			t.Setenv("HELM_POLICY_BEARER_TOKEN", tc.token)
+			if tc.tokenFile != "" {
+				t.Setenv("HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE", tc.tokenFile)
+			}
+			_, _, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q error, got %v", tc.want, err)
+			}
+		})
 	}
 }
 

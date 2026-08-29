@@ -1078,14 +1078,62 @@ func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (
 		if err := policyreconcile.ValidateControlPlaneURL(baseURL); err != nil {
 			return nil, "controlplane", err
 		}
+		bearerToken, bearerTokenFile, err := policyControlPlaneAuthFromEnv()
+		if err != nil {
+			return nil, "controlplane", err
+		}
 		source := policyreconcile.NewControlPlaneSource(baseURL, scope)
-		source.BearerToken = os.Getenv("HELM_POLICY_BEARER_TOKEN")
+		source.BearerToken = bearerToken
+		source.BearerTokenFile = bearerTokenFile
 		return source, "controlplane", nil
 	case "crd":
 		return nil, "crd", fmt.Errorf("HELM_POLICY_SOURCE_KIND=crd requires a CRD source implementation in the runtime build; this OSS binary only ships the chart CRD/RBAC contract")
 	default:
 		return nil, kind, fmt.Errorf("unsupported HELM_POLICY_SOURCE_KIND %q", kind)
 	}
+}
+
+func policyControlPlaneAuthFromEnv() (string, string, error) {
+	authMode := strings.TrimSpace(os.Getenv("HELM_POLICY_CONTROLPLANE_AUTH_MODE"))
+	if authMode == "" && strings.TrimSpace(os.Getenv("HELM_POLICY_BEARER_TOKEN")) != "" {
+		authMode = "bearerToken"
+	}
+
+	var token string
+	var tokenFile string
+	switch strings.ToLower(authMode) {
+	case "bearertoken", "bearer-token", "bearer_token":
+		token = os.Getenv("HELM_POLICY_BEARER_TOKEN")
+	case "serviceaccountjwt", "service-account-jwt", "service_account_jwt":
+		tokenFile = strings.TrimSpace(os.Getenv("HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE"))
+		if tokenFile == "" {
+			tokenFile = "/var/run/secrets/helm-policy/token"
+		}
+		if !filepath.IsAbs(tokenFile) {
+			return "", "", fmt.Errorf("HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE must be an absolute path")
+		}
+		data, err := os.ReadFile(filepath.Clean(tokenFile))
+		if err != nil {
+			return "", "", fmt.Errorf("read projected policy service account token: %w", err)
+		}
+		token = string(data)
+	case "":
+		return "", "", fmt.Errorf("HELM_POLICY_CONTROLPLANE_AUTH_MODE is required when HELM_POLICY_SOURCE_KIND=controlplane")
+	default:
+		return "", "", fmt.Errorf("HELM_POLICY_CONTROLPLANE_AUTH_MODE must be serviceAccountJWT or bearerToken")
+	}
+
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", "", fmt.Errorf("controlplane policy authentication token is empty")
+	}
+	if len(token) > 64*1024 || strings.ContainsAny(token, "\r\n") {
+		return "", "", fmt.Errorf("controlplane policy authentication token is invalid")
+	}
+	if tokenFile != "" {
+		return "", tokenFile, nil
+	}
+	return token, "", nil
 }
 
 func policySignatureVerifierFromEnv(sourceKind string) (policyreconcile.SignatureVerifier, bool, error) {

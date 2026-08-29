@@ -638,11 +638,42 @@ assert_contains "$controlplane_rendered" "HELM_POLICY_SOURCE_KIND"
 assert_contains "$controlplane_rendered" "controlplane"
 assert_contains "$controlplane_rendered" "HELM_POLICY_CONTROLPLANE_URL"
 assert_contains "$controlplane_rendered" "https://helm-controlplane.example.internal"
+assert_contains "$controlplane_rendered" "HELM_POLICY_CONTROLPLANE_AUTH_MODE"
+assert_contains "$controlplane_rendered" "serviceAccountJWT"
+assert_contains "$controlplane_rendered" "HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE"
+assert_contains "$controlplane_rendered" "/var/run/secrets/helm-policy/token"
+assert_contains "$controlplane_rendered" "name: policy-service-account-token"
+assert_contains "$controlplane_rendered" "audience: \"helm-control-plane\""
+assert_contains "$controlplane_rendered" "expirationSeconds: 600"
+assert_contains "$controlplane_rendered" "automountServiceAccountToken: false"
+assert_not_contains "$controlplane_rendered" "HELM_POLICY_BEARER_TOKEN"
 assert_contains "$controlplane_rendered" "HELM_POLICY_SIGNATURE_REQUIRED"
 assert_contains "$controlplane_rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_not_contains "$controlplane_rendered" "configmap-reload"
 assert_not_contains "$controlplane_rendered" "kind: CustomResourceDefinition"
 assert_not_contains "$controlplane_rendered" "policy-reader"
+
+controlplane_bearer_rendered="$RENDER_DIR/rendered-controlplane-bearer.yaml"
+production_helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.policy.source.kind=controlplane \
+    --set helm.policy.source.controlplane.url=https://helm-controlplane.example.internal \
+    --set helm.policy.source.controlplane.auth.mode=bearerToken \
+    --set helm.policy.source.controlplane.auth.existingSecret=policy-reader \
+    --set helm.policy.signature.required=true \
+    --set helm.policy.signature.publicKey="$TRUST_PUBLIC_KEY" \
+    --set image.repository=ghcr.io/mindburn-labs/helm-ai-kernel \
+    --set image.tag=local \
+    --set image.pullPolicy=IfNotPresent >"$controlplane_bearer_rendered"
+
+assert_contains "$controlplane_bearer_rendered" "HELM_POLICY_BEARER_TOKEN"
+assert_contains "$controlplane_bearer_rendered" "name: policy-reader"
+assert_not_contains "$controlplane_bearer_rendered" "policy-service-account-token"
+assert_not_contains "$controlplane_bearer_rendered" "HELM_POLICY_SERVICE_ACCOUNT_TOKEN_FILE"
 
 crd_rendered="$RENDER_DIR/rendered-crd.yaml"
 production_helm_runner template "$RELEASE" "$CHART" \

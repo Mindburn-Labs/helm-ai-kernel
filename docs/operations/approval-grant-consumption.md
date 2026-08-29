@@ -9,7 +9,9 @@ This runtime lets one authenticated workload consume one live, signed
 Kernel ceremony. It also exposes a read-only recovery operation for response
 loss, a separately scoped signed near-effect dispatch admission, and an
 optional separately scoped signed-disposition record/recovery boundary for
-already active work. It does not create approval authority, mint a generic
+already active work. An optional control facet creates the existing durable
+ceremony only from authenticated, source-owned binding and authority readback;
+it does not accept browser or legacy decision approval, mint a generic
 `EffectPermit`, dispatch a connector, cancel admitted work, or prove a
 production deployment.
 
@@ -26,7 +28,7 @@ transaction-scoped advisory lock for the verified tenant/workspace.
 | Variable | Requirement |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL DSN. The configured role must be non-superuser, must not have `BYPASSRLS`, and currently must own the target schema/tables because startup runs idempotent source-owned DDL. A separate migration/runtime credential split is not implemented in this slice. |
-| `HELM_APPROVAL_CONSUMPTION_ENABLED` | Set to `1` to mount the four internal consumption/admission routes. Two additional disposition routes are mounted only when `HELM_EFFECT_DISPOSITION_ENABLED=1`. |
+| `HELM_APPROVAL_CONSUMPTION_ENABLED` | Set to `1` to mount the four internal consumption/admission routes. Control and disposition routes require their own flags below. |
 | `HELM_EMERGENCY_STOP_FENCE_ENABLED` | Must be `1`; approval consumption will not start without the durable scoped-stop coordinator. |
 | `HELM_APPROVAL_CONSUMER_JWKS_URL` | Absolute HTTPS JWKS URL for workload access-token verification. |
 | `HELM_APPROVAL_CONSUMER_ISSUER` | Exact expected JWT `iss`. |
@@ -35,6 +37,17 @@ transaction-scoped advisory lock for the verified tenant/workspace.
 | `HELM_APPROVAL_CONSUMER_SCOPE` | Required scope; defaults to `helm.approval.consume`. |
 | `HELM_APPROVAL_DISPATCH_SCOPE` | Separate dispatch-admission scope; defaults to `helm.approval.dispatch` and must differ from the consumption scope. |
 | `HELM_APPROVAL_DISPATCH_ADMISSION_TTL` | Immutable admission lifetime; defaults to `30s`, cannot exceed `1m`, and is capped by the signed grant expiry. |
+| `HELM_APPROVAL_CONTROL_ENABLED` | Optional, default off. Set to `1` to mount the four internal ceremony-control routes. It is invalid unless approval consumption is also enabled. |
+| `HELM_APPROVAL_CONTROL_SOURCE_URL` | Required with control enabled. Absolute HTTPS base URL of the authenticated source-owned binding/authority adapter; user info, raw paths, query strings, and fragments are rejected. |
+| `HELM_APPROVAL_CONTROL_SOURCE_TOKEN` | Required non-whitespace service bearer token sent only to the configured source URL. |
+| `HELM_APPROVAL_CONTROL_OUTBOUND_CA_BUNDLE_FILE` | Optional PEM CA bundle for the source and control-JWT JWKS connections. |
+| `HELM_APPROVAL_CONTROL_SCOPE` | Dedicated workload scope; defaults to `helm.approval.control` and must differ from consume, dispatch, and any enabled disposition/reconciliation scope. |
+| `HELM_APPROVAL_CONTROL_SERVER_IDENTITY` | Exact Kernel identity bound into source bindings and every issued challenge/grant. |
+| `HELM_APPROVAL_CONTROL_MIN_HOLD_DURATION` | Minimum hold before a challenge; defaults to `5s`. |
+| `HELM_APPROVAL_CONTROL_CHALLENGE_TTL` | Challenge lifetime after the hold; defaults to `10m`. |
+| `HELM_APPROVAL_CONTROL_MAX_CHALLENGE_LIFETIME` | Maximum lifetime measured from hold start; defaults to `30m` and must leave room for the configured challenge TTL. |
+| `HELM_APPROVAL_CONTROL_GRANT_TTL` | Signed grant lifetime, capped by challenge expiry; defaults to `2m`. |
+| `HELM_APPROVAL_CONTROL_MAX_ASSERTIONS` | Maximum submitted assertions; defaults to `8` and cannot exceed `64`. |
 | `HELM_EFFECT_DISPOSITION_ENABLED` | Optional, default off. Set to `1` only with the disposition scope and both pinned authority keyrings described in `docs/operations/effect-disposition.md`. |
 | `HELM_EFFECT_DISPOSITION_SCOPE` | Separate disposition scope; defaults to `helm.effect.disposition` and must differ from both consumption and dispatch scopes. |
 | `HELM_APPROVAL_CONSUMER_MAX_TOKEN_TTL` | Maximum `iat` to `exp` interval; defaults to `5m` and cannot exceed `15m`. |
@@ -72,6 +85,51 @@ rewriting old signed artifacts are prohibited. This rule does not authorize a
 production rollout; the remaining blockers below still apply.
 
 ## Internal routes
+
+### Ceremony control
+
+When `HELM_APPROVAL_CONTROL_ENABLED=1`, only workload JWTs carrying the
+dedicated control scope may call:
+
+- `POST /internal/v1/approval-ceremonies` with exactly
+  `{"binding_ref":"<opaque source reference>"}`. The Kernel derives a stable
+  approval ID from the authenticated tenant/workspace plus that reference.
+  Concurrent calls and restart retries return the exact persisted ceremony.
+  Reusing the reference after any source binding change fails closed.
+- `GET /internal/v1/approval-ceremonies/{approval_id}` with no body or query.
+  It is read-only and remains observable during a FENCE.
+- `POST /internal/v1/approval-ceremonies/{approval_id}/challenge` with no body
+  or query. It issues the server nonce only after the hold and returns an
+  already-issued/advanced record on an exact retry.
+- `POST /internal/v1/approval-ceremonies/{approval_id}/assertions` with exactly
+  `{"assertions":[...]}`. The existing verifier requires a distinct Ed25519
+  signer quorum, then the existing service issues the signed, single-use
+  `ApprovalGrant`. Exact concurrent/restart retries converge on that grant.
+
+Begin, challenge, and assertion submission fail closed when scoped-stop status
+is fenced or unavailable. Request JSON cannot supply tenant, workspace,
+binding material, authority metadata, keys, challenge state, or grant state.
+Responses contain lifecycle metadata plus the server-issued challenge and
+signed grant; they omit the authority snapshot, public keys, and raw submitted
+assertions.
+
+For every begin/retry, the Kernel sends authenticated strict JSON to the source
+adapter at `/internal/v1/approval-ceremony/source/binding`, passing the verified
+tenant/workspace and opaque `binding_ref`. It validates the returned
+`ChallengeSpec`, expected workload audience, connector/effect binding, and
+server identity. It then reads the exact authority version/hash from
+`/internal/v1/approval-ceremony/source/authority`. The returned
+`approval-authority-snapshot.v1` is normalized and SHA-256/JCS re-sealed before
+its canonical lowercase Ed25519 keys can enter quorum verification. Redirects,
+non-JSON/unknown/oversized responses, scope substitution, metadata mismatch,
+and hash tampering are rejected.
+
+These source endpoints are the contract for a future Control Plane
+activation-completion hook; this Kernel slice does not implement or deploy
+that hook. It also does not expose the public `/api/v1/approvals` browser/raw
+decision flow as authority for these grants.
+
+### Consumption and dispatch
 
 The consume and consumption-recovery routes accept the same strict JSON object
 and reject unknown fields, trailing JSON, non-JSON content types, uppercase or

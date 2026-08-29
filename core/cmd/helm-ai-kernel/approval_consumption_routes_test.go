@@ -37,6 +37,86 @@ type fakeApprovalGrantConsumer struct {
 	identity     approvalceremony.ConsumerIdentity
 }
 
+type fakeApprovalCeremonyController struct {
+	record          approvalceremony.Record
+	beginRecord     approvalceremony.Record
+	issueRecord     approvalceremony.Record
+	verifyRecord    approvalceremony.Record
+	grantRecord     approvalceremony.Record
+	err             error
+	issueConflicts  int
+	verifyConflicts int
+	beginCalls      int
+	getCalls        int
+	issueCalls      int
+	verifyCalls     int
+	grantCalls      int
+	bindingRef      string
+	approvalID      string
+	assertions      []contracts.ApprovalAssertion
+	identity        approvalceremony.ControlIdentity
+}
+
+func (f *fakeApprovalCeremonyController) BeginOrResume(ctx context.Context, bindingRef string) (approvalceremony.Record, error) {
+	f.beginCalls++
+	f.bindingRef = bindingRef
+	f.captureControlIdentity(ctx)
+	if f.err != nil {
+		return approvalceremony.Record{}, f.err
+	}
+	f.record = f.beginRecord
+	return f.record, nil
+}
+
+func (f *fakeApprovalCeremonyController) Get(ctx context.Context, approvalID string) (approvalceremony.Record, error) {
+	f.getCalls++
+	f.approvalID = approvalID
+	f.captureControlIdentity(ctx)
+	if f.err != nil {
+		return approvalceremony.Record{}, f.err
+	}
+	return f.record, nil
+}
+
+func (f *fakeApprovalCeremonyController) IssueChallenge(ctx context.Context, approvalID string) (approvalceremony.Record, error) {
+	f.issueCalls++
+	f.approvalID = approvalID
+	f.captureControlIdentity(ctx)
+	if f.issueConflicts > 0 {
+		f.issueConflicts--
+		f.record = f.issueRecord
+		return approvalceremony.Record{}, approvalceremony.ErrTransitionConflict
+	}
+	f.record = f.issueRecord
+	return f.record, f.err
+}
+
+func (f *fakeApprovalCeremonyController) VerifyQuorum(ctx context.Context, approvalID string, assertions []contracts.ApprovalAssertion) (approvalceremony.Record, error) {
+	f.verifyCalls++
+	f.approvalID = approvalID
+	f.assertions = append([]contracts.ApprovalAssertion(nil), assertions...)
+	f.captureControlIdentity(ctx)
+	if f.verifyConflicts > 0 {
+		f.verifyConflicts--
+		f.record = f.verifyRecord
+		return approvalceremony.Record{}, approvalceremony.ErrTransitionConflict
+	}
+	f.record = f.verifyRecord
+	return f.record, f.err
+}
+
+func (f *fakeApprovalCeremonyController) IssueGrant(ctx context.Context, approvalID string) (approvalceremony.Record, error) {
+	f.grantCalls++
+	f.approvalID = approvalID
+	f.captureControlIdentity(ctx)
+	f.record = f.grantRecord
+	return f.record, f.err
+}
+
+func (f *fakeApprovalCeremonyController) captureControlIdentity(ctx context.Context) {
+	f.identity, _ = (approvalControlIdentityProvider{}).LoadControlIdentity(ctx)
+}
+
 type fakeApprovalDispatchAdmitter struct {
 	record       approvalceremony.DispatchAdmissionRecord
 	err          error
@@ -123,6 +203,152 @@ func (c *fakeApprovalGrantConsumer) RecoverGrantConsumption(ctx context.Context,
 
 func (c *fakeApprovalGrantConsumer) captureIdentity(ctx context.Context) {
 	c.identity, _ = (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+}
+
+func TestApprovalCeremonyControlRoutesUseVerifiedScopeAndConverge(t *testing.T) {
+	hold := approvalControlRouteRecord(approvalceremony.StateHoldPending)
+	challenged := approvalControlRouteRecord(approvalceremony.StateChallengeIssued)
+	verified := approvalControlRouteRecord(approvalceremony.StateQuorumVerified)
+	granted := approvalControlRouteRecord(approvalceremony.StateGrantIssued)
+	granted.GrantSignatureAlgorithm = approvalceremony.GrantSignatureEd25519
+	granted.GrantSignature = strings.Repeat("a", 128)
+	controller := &fakeApprovalCeremonyController{
+		record: hold, beginRecord: hold, issueRecord: challenged, verifyRecord: verified, grantRecord: granted,
+		issueConflicts: 1, verifyConflicts: 1,
+	}
+	runtime := approvalControlRouteRuntime(controller)
+	mux := http.NewServeMux()
+	registerApprovalGrantConsumptionRoutes(mux, runtime)
+
+	begin := approvalControlRouteRequest(t, mux, http.MethodPost, approvalCeremoniesPath,
+		`{"binding_ref":"decision://helm/policy/approval-a"}`, "control-token", true)
+	if begin.Code != http.StatusOK || controller.beginCalls != 1 || controller.bindingRef != hold.Spec.BindingRef {
+		t.Fatalf("begin status=%d calls=%d binding=%q body=%s", begin.Code, controller.beginCalls, controller.bindingRef, begin.Body.String())
+	}
+	wantIdentity := approvalceremony.ControlIdentity{
+		Subject: "spiffe://helm/control-plane-a", TenantID: "tenant-a", WorkspaceID: "workspace-a",
+	}
+	if controller.identity != wantIdentity || runtime.stops.(*fakeApprovalScopedStopReader).calls != 1 {
+		t.Fatalf("begin identity=%+v stop=%+v", controller.identity, runtime.stops)
+	}
+
+	get := approvalControlRouteRequest(t, mux, http.MethodGet, approvalCeremoniesPath+"/approval-a", "", "control-token", false)
+	if get.Code != http.StatusOK || controller.getCalls != 1 {
+		t.Fatalf("get status=%d calls=%d body=%s", get.Code, controller.getCalls, get.Body.String())
+	}
+	if runtime.stops.(*fakeApprovalScopedStopReader).calls != 1 {
+		t.Fatal("read-only GET consulted the mutation fence")
+	}
+
+	controller.record = hold
+	challenge := approvalControlRouteRequest(t, mux, http.MethodPost,
+		approvalCeremoniesPath+"/approval-a/challenge", "", "control-token", false)
+	if challenge.Code != http.StatusOK || controller.issueCalls != 1 || controller.getCalls != 3 ||
+		controller.record.State != approvalceremony.StateChallengeIssued {
+		t.Fatalf("challenge status=%d get=%d issue=%d record=%+v body=%s", challenge.Code, controller.getCalls, controller.issueCalls, controller.record, challenge.Body.String())
+	}
+
+	controller.record = challenged
+	assertions := approvalControlRouteRequest(t, mux, http.MethodPost,
+		approvalCeremoniesPath+"/approval-a/assertions", `{"assertions":[{}]}`, "control-token", true)
+	if assertions.Code != http.StatusOK || controller.verifyCalls != 1 || controller.grantCalls != 1 ||
+		controller.record.State != approvalceremony.StateGrantIssued || len(controller.assertions) != 1 {
+		t.Fatalf("assertions status=%d verify=%d grant=%d record=%+v body=%s", assertions.Code, controller.verifyCalls, controller.grantCalls, controller.record, assertions.Body.String())
+	}
+	var response approvalCeremonyControlResponse
+	if json.NewDecoder(assertions.Body).Decode(&response) != nil || response.BindingRef != hold.Spec.BindingRef ||
+		response.GrantSignature == "" || assertions.Header().Get("Cache-Control") != "no-store" ||
+		assertions.Header().Get("X-Helm-Contract-Status") != approvalCeremonyControlStatus {
+		t.Fatalf("response=%+v headers=%v", response, assertions.Header())
+	}
+}
+
+func TestApprovalCeremonyControlRoutesFailClosedOnAuthSchemaAndFence(t *testing.T) {
+	hold := approvalControlRouteRecord(approvalceremony.StateHoldPending)
+	controller := &fakeApprovalCeremonyController{record: hold, beginRecord: hold, issueRecord: approvalControlRouteRecord(approvalceremony.StateChallengeIssued)}
+
+	t.Run("consume capability cannot authorize control", func(t *testing.T) {
+		runtime := approvalControlRouteRuntime(controller)
+		runtime.controlValidator = nil
+		runtime.validator = fakeApprovalConsumerTokenValidator{claims: approvalControlRouteClaims(5 * time.Minute)}
+		mux := http.NewServeMux()
+		registerApprovalGrantConsumptionRoutes(mux, runtime)
+		response := approvalControlRouteRequest(t, mux, http.MethodPost, approvalCeremoniesPath,
+			`{"binding_ref":"decision://helm/policy/approval-a"}`, "consume-token", true)
+		if response.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+		}
+	})
+
+	t.Run("missing bearer", func(t *testing.T) {
+		mux := http.NewServeMux()
+		registerApprovalGrantConsumptionRoutes(mux, approvalControlRouteRuntime(controller))
+		response := approvalControlRouteRequest(t, mux, http.MethodPost, approvalCeremoniesPath,
+			`{"binding_ref":"decision://helm/policy/approval-a"}`, "", true)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+		}
+	})
+
+	t.Run("missing control scope", func(t *testing.T) {
+		runtime := approvalControlRouteRuntime(controller)
+		runtime.controlValidator = fakeApprovalConsumerTokenValidator{err: &mcppkg.JWKSValidationError{Kind: mcppkg.JWKSErrMissingScope}}
+		mux := http.NewServeMux()
+		registerApprovalGrantConsumptionRoutes(mux, runtime)
+		response := approvalControlRouteRequest(t, mux, http.MethodPost, approvalCeremoniesPath,
+			`{"binding_ref":"decision://helm/policy/approval-a"}`, "wrong-scope-token", true)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+		}
+	})
+
+	t.Run("strict caller inputs", func(t *testing.T) {
+		controller.beginCalls = 0
+		controller.getCalls = 0
+		controller.issueCalls = 0
+		mux := http.NewServeMux()
+		registerApprovalGrantConsumptionRoutes(mux, approvalControlRouteRuntime(controller))
+		tests := []struct {
+			method      string
+			path        string
+			body        string
+			contentType bool
+		}{
+			{http.MethodPost, approvalCeremoniesPath, `{"binding_ref":"decision://helm/policy/approval-a","tenant_id":"attacker"}`, true},
+			{http.MethodPost, approvalCeremoniesPath, `{"binding_ref":"decision://helm/policy/approval-a"}{}`, true},
+			{http.MethodPost, approvalCeremoniesPath + "?workspace_id=attacker", `{"binding_ref":"decision://helm/policy/approval-a"}`, true},
+			{http.MethodGet, approvalCeremoniesPath + "/approval-a?tenant_id=attacker", "", false},
+			{http.MethodPost, approvalCeremoniesPath + "/approval-a/challenge", `{}`, false},
+			{http.MethodPost, approvalCeremoniesPath + "/approval-a/assertions", `{"assertions":[],"authority_snapshot":{}}`, true},
+		}
+		for _, test := range tests {
+			response := approvalControlRouteRequest(t, mux, test.method, test.path, test.body, "control-token", test.contentType)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("%s %s status=%d body=%s", test.method, test.path, response.Code, response.Body.String())
+			}
+		}
+		if controller.beginCalls != 0 || controller.getCalls != 0 || controller.issueCalls != 0 {
+			t.Fatalf("malformed input reached controller: begin=%d get=%d issue=%d", controller.beginCalls, controller.getCalls, controller.issueCalls)
+		}
+	})
+
+	t.Run("mutation fenced but GET observable", func(t *testing.T) {
+		controller.beginCalls = 0
+		reader := &fakeApprovalScopedStopReader{fenced: true}
+		runtime := approvalControlRouteRuntime(controller)
+		runtime.stops = reader
+		mux := http.NewServeMux()
+		registerApprovalGrantConsumptionRoutes(mux, runtime)
+		begin := approvalControlRouteRequest(t, mux, http.MethodPost, approvalCeremoniesPath,
+			`{"binding_ref":"decision://helm/policy/approval-a"}`, "control-token", true)
+		if begin.Code != http.StatusConflict || begin.Header().Get(approvalConsumptionReasonHeader) != approvalConsumptionFencedReason || controller.beginCalls != 0 {
+			t.Fatalf("fenced begin status=%d reason=%q calls=%d", begin.Code, begin.Header().Get(approvalConsumptionReasonHeader), controller.beginCalls)
+		}
+		get := approvalControlRouteRequest(t, mux, http.MethodGet, approvalCeremoniesPath+"/approval-a", "", "control-token", false)
+		if get.Code != http.StatusOK || reader.calls != 1 {
+			t.Fatalf("GET status=%d fence calls=%d body=%s", get.Code, reader.calls, get.Body.String())
+		}
+	})
 }
 
 func TestApprovalGrantConsumptionRoutesUseVerifiedWorkloadIdentity(t *testing.T) {
@@ -615,6 +841,29 @@ func approvalDispatchRouteRuntime(admitter approvalDispatchAdmitter) *approvalCo
 	}
 }
 
+func approvalControlRouteRuntime(controller approvalCeremonyController) *approvalConsumptionRuntime {
+	return &approvalConsumptionRuntime{
+		controller:       controller,
+		controlValidator: fakeApprovalConsumerTokenValidator{claims: approvalControlRouteClaims(5 * time.Minute)},
+		stops:            &fakeApprovalScopedStopReader{}, audience: "helm-data-plane", maxTokenTTL: 5 * time.Minute,
+	}
+}
+
+func approvalControlRouteClaims(ttl time.Duration) *mcppkg.OAuthTokenClaims {
+	claims := approvalConsumerRouteClaims(ttl)
+	claims.RegisteredClaims.Subject = "spiffe://helm/control-plane-a"
+	return claims
+}
+
+func approvalControlRouteRecord(state approvalceremony.State) approvalceremony.Record {
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	return approvalceremony.Record{
+		ApprovalID: "approval-a", TenantID: "tenant-a", WorkspaceID: "workspace-a", State: state,
+		HoldStartedAt: now, Spec: approvalControlTestBinding("sha256:" + strings.Repeat("9", 64)),
+		CreatedAt: now, UpdatedAt: now, Version: 1,
+	}
+}
+
 func approvalConsumerRouteClaims(ttl time.Duration) *mcppkg.OAuthTokenClaims {
 	now := time.Date(2026, 7, 16, 17, 0, 0, 0, time.UTC)
 	return &mcppkg.OAuthTokenClaims{
@@ -725,6 +974,20 @@ func postApprovalConsumptionRoute(t *testing.T, mux *http.ServeMux, path, body, 
 	t.Helper()
 	request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
 	request.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+	return response
+}
+
+func approvalControlRouteRequest(t *testing.T, mux *http.ServeMux, method, path, body, token string, contentType bool) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	if contentType {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}

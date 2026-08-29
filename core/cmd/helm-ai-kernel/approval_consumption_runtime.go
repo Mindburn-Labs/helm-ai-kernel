@@ -13,12 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
@@ -38,6 +40,17 @@ const (
 	approvalSigningKeyRefEnv                   = "HELM_APPROVAL_SIGNING_KEY_REF"
 	approvalKernelTrustRootIDEnv               = "HELM_APPROVAL_KERNEL_TRUST_ROOT_ID"
 	approvalConsumerMaxTokenTTLEnv             = "HELM_APPROVAL_CONSUMER_MAX_TOKEN_TTL"
+	approvalControlEnabledEnv                  = "HELM_APPROVAL_CONTROL_ENABLED"
+	approvalControlSourceURLEnv                = "HELM_APPROVAL_CONTROL_SOURCE_URL"
+	approvalControlSourceTokenEnv              = "HELM_APPROVAL_CONTROL_SOURCE_TOKEN"
+	approvalControlOutboundCAFileEnv           = "HELM_APPROVAL_CONTROL_OUTBOUND_CA_BUNDLE_FILE"
+	approvalControlScopeEnv                    = "HELM_APPROVAL_CONTROL_SCOPE"
+	approvalControlMinHoldDurationEnv          = "HELM_APPROVAL_CONTROL_MIN_HOLD_DURATION"
+	approvalControlChallengeTTLEnv             = "HELM_APPROVAL_CONTROL_CHALLENGE_TTL"
+	approvalControlMaxChallengeLifetimeEnv     = "HELM_APPROVAL_CONTROL_MAX_CHALLENGE_LIFETIME"
+	approvalControlGrantTTLEnv                 = "HELM_APPROVAL_CONTROL_GRANT_TTL"
+	approvalControlMaxAssertionsEnv            = "HELM_APPROVAL_CONTROL_MAX_ASSERTIONS"
+	approvalControlServerIdentityEnv           = "HELM_APPROVAL_CONTROL_SERVER_IDENTITY"
 	effectDispositionEnabledEnv                = "HELM_EFFECT_DISPOSITION_ENABLED"
 	effectDispositionScopeEnv                  = "HELM_EFFECT_DISPOSITION_SCOPE"
 	effectReconciliationCandidatesEnabledEnv   = "HELM_EFFECT_RECONCILIATION_CANDIDATES_ENABLED"
@@ -47,6 +60,7 @@ const (
 	connectorReleaseAuthorityKeyringEnv        = "HELM_CONNECTOR_RELEASE_AUTHORITY_KEYRING"
 	defaultApprovalConsumerScope               = "helm.approval.consume"
 	defaultApprovalDispatchScope               = "helm.approval.dispatch"
+	defaultApprovalControlScope                = "helm.approval.control"
 	defaultEffectDispositionScope              = "helm.effect.disposition"
 	defaultEffectReconciliationCandidatesScope = "helm.effect.reconciliation.read"
 	effectDispositionCommandKeyringV1          = "effect-disposition-command-keyring.v1"
@@ -54,6 +68,13 @@ const (
 	defaultApprovalDispatchAdmissionTTL        = 30 * time.Second
 	defaultApprovalConsumerMaxTokenTTL         = 5 * time.Minute
 	maximumApprovalConsumerMaxTokenTTL         = 15 * time.Minute
+	defaultApprovalControlMinHoldDuration      = 5 * time.Second
+	defaultApprovalControlChallengeTTL         = 10 * time.Minute
+	defaultApprovalControlMaxChallengeLifetime = 30 * time.Minute
+	defaultApprovalControlGrantTTL             = 2 * time.Minute
+	defaultApprovalControlMaxAssertions        = 8
+	approvalCeremonyBindingSourcePath          = "/internal/v1/approval-ceremony/source/binding"
+	approvalCeremonyAuthoritySourcePath        = "/internal/v1/approval-ceremony/source/authority"
 )
 
 type approvalConsumptionConfig struct {
@@ -67,6 +88,17 @@ type approvalConsumptionConfig struct {
 	KernelTrustRootID                string
 	MaxTokenTTL                      time.Duration
 	DispatchAdmissionTTL             time.Duration
+	ControlEnabled                   bool
+	ControlSourceURL                 string
+	ControlSourceToken               string
+	ControlOutboundCAFile            string
+	ControlScope                     string
+	ControlMinHoldDuration           time.Duration
+	ControlChallengeTTL              time.Duration
+	ControlMaxChallengeLifetime      time.Duration
+	ControlGrantTTL                  time.Duration
+	ControlMaxAssertions             int
+	ControlServerIdentity            string
 	DispositionEnabled               bool
 	DispositionScope                 string
 	ReconciliationCandidatesEnabled  bool
@@ -94,8 +126,8 @@ type runtimeAuthorityKeyringKey struct {
 
 func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error) {
 	if !envBool(approvalConsumptionEnabledEnv) {
-		if envBool(effectDispositionEnabledEnv) || envBool(effectReconciliationCandidatesEnabledEnv) {
-			return approvalConsumptionConfig{}, true, errors.New("effect disposition and reconciliation transports require approval consumption runtime")
+		if envBool(approvalControlEnabledEnv) || envBool(effectDispositionEnabledEnv) || envBool(effectReconciliationCandidatesEnabledEnv) {
+			return approvalConsumptionConfig{}, true, errors.New("approval control, effect disposition, and reconciliation transports require approval consumption runtime")
 		}
 		return approvalConsumptionConfig{}, false, nil
 	}
@@ -110,6 +142,17 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 		KernelTrustRootID:                strings.TrimSpace(os.Getenv(approvalKernelTrustRootIDEnv)),
 		MaxTokenTTL:                      defaultApprovalConsumerMaxTokenTTL,
 		DispatchAdmissionTTL:             defaultApprovalDispatchAdmissionTTL,
+		ControlEnabled:                   envBool(approvalControlEnabledEnv),
+		ControlSourceURL:                 strings.TrimSpace(os.Getenv(approvalControlSourceURLEnv)),
+		ControlSourceToken:               strings.TrimSpace(os.Getenv(approvalControlSourceTokenEnv)),
+		ControlOutboundCAFile:            strings.TrimSpace(os.Getenv(approvalControlOutboundCAFileEnv)),
+		ControlScope:                     strings.TrimSpace(os.Getenv(approvalControlScopeEnv)),
+		ControlMinHoldDuration:           defaultApprovalControlMinHoldDuration,
+		ControlChallengeTTL:              defaultApprovalControlChallengeTTL,
+		ControlMaxChallengeLifetime:      defaultApprovalControlMaxChallengeLifetime,
+		ControlGrantTTL:                  defaultApprovalControlGrantTTL,
+		ControlMaxAssertions:             defaultApprovalControlMaxAssertions,
+		ControlServerIdentity:            strings.TrimSpace(os.Getenv(approvalControlServerIdentityEnv)),
 		DispositionEnabled:               envBool(effectDispositionEnabledEnv),
 		DispositionScope:                 strings.TrimSpace(os.Getenv(effectDispositionScopeEnv)),
 		ReconciliationCandidatesEnabled:  envBool(effectReconciliationCandidatesEnabledEnv),
@@ -121,6 +164,9 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 	}
 	if config.DispatchScope == "" {
 		config.DispatchScope = defaultApprovalDispatchScope
+	}
+	if config.ControlScope == "" {
+		config.ControlScope = defaultApprovalControlScope
 	}
 	if config.DispositionScope == "" {
 		config.DispositionScope = defaultEffectDispositionScope
@@ -154,6 +200,25 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 		}
 		config.DispatchAdmissionTTL = parsedTTL
 	}
+	if config.ControlEnabled {
+		for name, target := range map[string]*time.Duration{
+			approvalControlMinHoldDurationEnv:      &config.ControlMinHoldDuration,
+			approvalControlChallengeTTLEnv:         &config.ControlChallengeTTL,
+			approvalControlMaxChallengeLifetimeEnv: &config.ControlMaxChallengeLifetime,
+			approvalControlGrantTTLEnv:             &config.ControlGrantTTL,
+		} {
+			if raw := strings.TrimSpace(os.Getenv(name)); raw != "" {
+				parsed, parseErr := time.ParseDuration(raw)
+				if parseErr != nil {
+					return approvalConsumptionConfig{}, true, fmt.Errorf("parse %s: %w", name, parseErr)
+				}
+				*target = parsed
+			}
+		}
+		if raw := strings.TrimSpace(os.Getenv(approvalControlMaxAssertionsEnv)); raw != "" {
+			config.ControlMaxAssertions = envInt(approvalControlMaxAssertionsEnv, -1)
+		}
+	}
 	if config.MaxTokenTTL <= 0 || config.MaxTokenTTL > maximumApprovalConsumerMaxTokenTTL {
 		return approvalConsumptionConfig{}, true, fmt.Errorf(
 			"%s must be greater than zero and no more than %s",
@@ -176,8 +241,20 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 		!validWorkloadClaim(config.DispatchScope) || config.DispatchScope == config.Scope {
 		return approvalConsumptionConfig{}, true, errors.New("approval consumption issuer, audience, resource, scope, signing key, and trust root must be non-whitespace tokens")
 	}
+	if config.ControlEnabled {
+		if !validApprovalControlSourceURL(config.ControlSourceURL) || !validWorkloadClaim(config.ControlSourceToken) ||
+			!validWorkloadClaim(config.ControlScope) || !validWorkloadClaim(config.ControlServerIdentity) ||
+			config.ControlScope == config.Scope || config.ControlScope == config.DispatchScope ||
+			config.ControlMinHoldDuration <= 0 || config.ControlChallengeTTL <= 0 ||
+			config.ControlMaxChallengeLifetime <= config.ControlMinHoldDuration ||
+			config.ControlChallengeTTL > config.ControlMaxChallengeLifetime-config.ControlMinHoldDuration ||
+			config.ControlGrantTTL <= 0 || config.ControlMaxAssertions <= 0 || config.ControlMaxAssertions > 64 {
+			return approvalConsumptionConfig{}, true, errors.New("approval control source, scope, identity, or lifecycle limits are invalid")
+		}
+	}
 	if config.DispositionEnabled {
-		if !validWorkloadClaim(config.DispositionScope) || config.DispositionScope == config.Scope || config.DispositionScope == config.DispatchScope {
+		if !validWorkloadClaim(config.DispositionScope) || config.DispositionScope == config.Scope || config.DispositionScope == config.DispatchScope ||
+			(config.ControlEnabled && config.DispositionScope == config.ControlScope) {
 			return approvalConsumptionConfig{}, true, errors.New("effect disposition scope must be a distinct non-whitespace token")
 		}
 	}
@@ -185,7 +262,9 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 		if !validEffectReconciliationCandidatesResource(config.ReconciliationCandidatesResource) || !validWorkloadClaim(config.ReconciliationCandidatesScope) ||
 			config.ReconciliationCandidatesScope != defaultEffectReconciliationCandidatesScope ||
 			config.ReconciliationCandidatesScope == config.Scope || config.ReconciliationCandidatesScope == config.DispatchScope ||
-			config.ReconciliationCandidatesScope == config.DispositionScope || config.ReconciliationCandidatesResource == config.Resource {
+			config.ReconciliationCandidatesScope == config.DispositionScope ||
+			(config.ControlEnabled && config.ReconciliationCandidatesScope == config.ControlScope) ||
+			config.ReconciliationCandidatesResource == config.Resource {
 			return approvalConsumptionConfig{}, true, errors.New("effect reconciliation candidates require the exact route resource and read scope")
 		}
 	}
@@ -196,6 +275,16 @@ func approvalConsumptionConfigFromEnv() (approvalConsumptionConfig, bool, error)
 		}
 	}
 	return config, true, nil
+}
+
+func validApprovalControlSourceURL(value string) bool {
+	if !validWorkloadClaim(value) {
+		return false
+	}
+	parsed, err := url.Parse(value)
+	return err == nil && strings.EqualFold(parsed.Scheme, "https") && parsed.Host != "" &&
+		parsed.User == nil && parsed.Opaque == "" && parsed.RawPath == "" &&
+		parsed.RawQuery == "" && !parsed.ForceQuery && parsed.Fragment == ""
 }
 
 func validEffectReconciliationCandidatesResource(value string) bool {
@@ -253,6 +342,37 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 		JWKSURL: config.JWKSURL, Issuer: config.Issuer, Audience: config.Audience,
 		Resource: config.Resource, Scopes: []string{config.DispatchScope},
 	})
+	var controller approvalCeremonyController
+	var controlValidator approvalConsumerTokenValidator
+	if config.ControlEnabled {
+		outboundClient, clientErr := newGeneratedSpecApprovalOutboundClient(config.ControlOutboundCAFile)
+		if clientErr != nil {
+			return nil, fmt.Errorf("initialize approval control outbound client: %w", clientErr)
+		}
+		source, sourceErr := newApprovalCeremonySourceClient(
+			config.ControlSourceURL, config.ControlSourceToken, outboundClient, config.Audience, false,
+		)
+		if sourceErr != nil {
+			return nil, sourceErr
+		}
+		controller, err = approvalceremony.NewService(
+			store, source, source, approvalControlIdentityProvider{},
+			approvalceremony.ContextConsumerIdentityProvider{}, approvalSigner,
+			approvalceremony.ServiceConfig{
+				MinHoldDuration: config.ControlMinHoldDuration, ChallengeTTL: config.ControlChallengeTTL,
+				MaxChallengeLifetime: config.ControlMaxChallengeLifetime, GrantTTL: config.ControlGrantTTL,
+				MaxAssertions: config.ControlMaxAssertions, ServerIdentity: config.ControlServerIdentity,
+				KernelTrustRootID: config.KernelTrustRootID, SigningKeyRef: config.SigningKeyRef,
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("initialize approval ceremony controller: %w", err)
+		}
+		controlValidator = mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
+			JWKSURL: config.JWKSURL, Issuer: config.Issuer, Audience: config.Audience,
+			Resource: config.Resource, Scopes: []string{config.ControlScope}, HTTPClient: outboundClient,
+		})
+	}
 	var disposition effectDispositionRecorder
 	var reconciliationCandidates effectReconciliationCandidateProvider
 	var dispositionValidator approvalConsumerTokenValidator
@@ -293,12 +413,84 @@ func newApprovalConsumptionRuntime(ctx context.Context, db *sql.DB, databaseMode
 	}
 	return &approvalConsumptionRuntime{
 		consumer: consumer, admitter: admitter, validator: validator, dispatchValidator: dispatchValidator,
+		controller: controller, controlValidator: controlValidator,
 		disposition: disposition, dispositionValidator: dispositionValidator,
 		reconciliationCandidates: reconciliationCandidates, reconciliationValidator: reconciliationValidator,
 		stops: stops, audience: config.Audience,
 		maxTokenTTL: config.MaxTokenTTL,
 	}, nil
 }
+
+type approvalCeremonySourceClient struct {
+	transport *generatedSpecApprovalSourceClient
+	audience  string
+}
+
+type approvalCeremonyBindingSourceRequest struct {
+	TenantID    string `json:"tenant_id"`
+	WorkspaceID string `json:"workspace_id"`
+	BindingRef  string `json:"binding_ref"`
+}
+
+type approvalCeremonyAuthoritySourceRequest struct {
+	TenantID              string `json:"tenant_id"`
+	WorkspaceID           string `json:"workspace_id"`
+	AuthoritySource       string `json:"authority_source"`
+	AuthorityVersion      string `json:"authority_version"`
+	AuthoritySnapshotHash string `json:"authority_snapshot_hash"`
+}
+
+func newApprovalCeremonySourceClient(rawURL, token string, client *http.Client, audience string, allowInsecure bool) (*approvalCeremonySourceClient, error) {
+	if !validWorkloadClaim(audience) {
+		return nil, errors.New("approval ceremony source audience is invalid")
+	}
+	transport, err := newGeneratedSpecApprovalSourceClient(rawURL, token, client, allowInsecure)
+	if err != nil {
+		return nil, fmt.Errorf("initialize approval ceremony source: %w", err)
+	}
+	return &approvalCeremonySourceClient{transport: transport, audience: audience}, nil
+}
+
+func (client *approvalCeremonySourceClient) LoadApprovalBinding(ctx context.Context, tenantID, workspaceID, bindingRef string) (approvalceremony.ChallengeSpec, error) {
+	var binding approvalceremony.ChallengeSpec
+	if client == nil || client.transport == nil {
+		return approvalceremony.ChallengeSpec{}, approvalceremony.ErrBindingUnavailable
+	}
+	err := client.transport.post(ctx, approvalCeremonyBindingSourcePath, approvalCeremonyBindingSourceRequest{
+		TenantID: tenantID, WorkspaceID: workspaceID, BindingRef: bindingRef,
+	}, &binding)
+	if err != nil {
+		return approvalceremony.ChallengeSpec{}, fmt.Errorf("%w: %v", approvalceremony.ErrBindingUnavailable, err)
+	}
+	if binding.TenantID != tenantID || binding.WorkspaceID != workspaceID || binding.BindingRef != bindingRef ||
+		binding.Audience != client.audience || binding.Validate() != nil {
+		return approvalceremony.ChallengeSpec{}, fmt.Errorf("%w: source binding mismatch", approvalceremony.ErrBindingUnavailable)
+	}
+	return binding, nil
+}
+
+func (client *approvalCeremonySourceClient) LoadApprovalAuthority(ctx context.Context, tenantID, workspaceID, source, version, snapshotHash string) (approvalverify.TrustStore, error) {
+	var snapshot approvalceremony.AuthoritySnapshot
+	if client == nil || client.transport == nil {
+		return approvalverify.TrustStore{}, approvalceremony.ErrAuthorityUnavailable
+	}
+	err := client.transport.post(ctx, approvalCeremonyAuthoritySourcePath, approvalCeremonyAuthoritySourceRequest{
+		TenantID: tenantID, WorkspaceID: workspaceID, AuthoritySource: source,
+		AuthorityVersion: version, AuthoritySnapshotHash: snapshotHash,
+	}, &snapshot)
+	if err != nil {
+		return approvalverify.TrustStore{}, fmt.Errorf("%w: %v", approvalceremony.ErrAuthorityUnavailable, err)
+	}
+	store, err := snapshot.TrustStore()
+	if err != nil || store.AuthoritySource != source || store.AuthorityVersion != version ||
+		store.AuthoritySnapshotHash != snapshotHash {
+		return approvalverify.TrustStore{}, fmt.Errorf("%w: source authority mismatch", approvalceremony.ErrAuthorityUnavailable)
+	}
+	return store, nil
+}
+
+var _ approvalceremony.BindingProvider = (*approvalCeremonySourceClient)(nil)
+var _ approvalceremony.AuthorityProvider = (*approvalCeremonySourceClient)(nil)
 
 func configuredEffectDispositionAuthorities(audience string) (
 	[]approvalceremony.TrustedEffectDispositionCommandKey,

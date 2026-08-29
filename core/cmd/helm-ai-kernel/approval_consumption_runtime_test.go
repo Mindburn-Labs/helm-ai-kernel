@@ -10,12 +10,162 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
+
+func TestApprovalControlRuntimeConfigRequiresConsumptionAndDistinctScope(t *testing.T) {
+	approvalConsumptionTestEnv(t)
+	t.Setenv(approvalControlEnabledEnv, "1")
+	if _, enabled, err := approvalConsumptionConfigFromEnv(); err == nil || !enabled {
+		t.Fatalf("standalone control enabled=%t err=%v", enabled, err)
+	}
+
+	approvalConsumptionTestEnv(t)
+	setCompleteApprovalConsumptionEnv(t)
+	t.Setenv(approvalControlEnabledEnv, "1")
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("approval control accepted missing source configuration")
+	}
+	t.Setenv(approvalControlSourceURLEnv, "https://control.example.test")
+	t.Setenv(approvalControlSourceTokenEnv, "source-service-token")
+	t.Setenv(approvalControlServerIdentityEnv, "spiffe://helm/kernel-a")
+	config, enabled, err := approvalConsumptionConfigFromEnv()
+	if err != nil || !enabled || !config.ControlEnabled || config.ControlScope != defaultApprovalControlScope ||
+		config.ControlMinHoldDuration != defaultApprovalControlMinHoldDuration ||
+		config.ControlMaxAssertions != defaultApprovalControlMaxAssertions {
+		t.Fatalf("approval control config=%+v enabled=%t err=%v", config, enabled, err)
+	}
+	for name, value := range map[string]string{
+		"consume collision":  defaultApprovalConsumerScope,
+		"dispatch collision": defaultApprovalDispatchScope,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(approvalControlScopeEnv, value)
+			if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+				t.Fatalf("approval control accepted shared scope %q", value)
+			}
+		})
+	}
+	t.Setenv(approvalControlScopeEnv, "")
+	for name, value := range map[string]string{
+		"http":  "http://control.example.test",
+		"query": "https://control.example.test?tenant_id=attacker",
+		"user":  "https://attacker@control.example.test",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(approvalControlSourceURLEnv, value)
+			if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+				t.Fatalf("approval control accepted source URL %q", value)
+			}
+		})
+	}
+	t.Setenv(approvalControlSourceURLEnv, "https://control.example.test")
+	t.Setenv(approvalControlChallengeTTLEnv, "30m")
+	if _, _, err := approvalConsumptionConfigFromEnv(); err == nil {
+		t.Fatal("approval control accepted challenge TTL outside the lifetime budget")
+	}
+}
+
+func TestApprovalCeremonySourceClientPinsBindingAndAuthority(t *testing.T) {
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	snapshot, err := approvalceremony.SealAuthoritySnapshot(approvalceremony.AuthoritySnapshot{
+		AuthoritySource: "control-plane-approver-registry", AuthorityVersion: "authority-v1",
+		Keys: []approvalceremony.AuthoritySnapshotKey{{
+			KeyID: "key-1", TenantID: "tenant-a", PrincipalID: "approver-a", CredentialID: "credential-a",
+			DeviceID: "device-a", PublicKey: strings.Repeat("ab", ed25519.PublicKeySize),
+			WorkspaceIDs: []string{"workspace-a"}, Roles: []string{"reviewer"},
+			Actions: []string{contracts.ApprovalGrantActionInstall}, Audiences: []string{"helm-data-plane"},
+			Enabled: true, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(time.Hour),
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := approvalControlTestBinding(snapshot.AuthoritySnapshotHash)
+	authorityResponse := snapshot
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer source-service-token" ||
+			r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("source request method=%s headers=%v", r.Method, r.Header)
+			http.Error(w, "rejected", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case approvalCeremonyBindingSourcePath:
+			var request approvalCeremonyBindingSourceRequest
+			if json.NewDecoder(r.Body).Decode(&request) != nil || request.TenantID != "tenant-a" ||
+				request.WorkspaceID != "workspace-a" || request.BindingRef != binding.BindingRef {
+				t.Errorf("binding source request = %+v", request)
+				http.Error(w, "rejected", http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(binding)
+		case approvalCeremonyAuthoritySourcePath:
+			var request approvalCeremonyAuthoritySourceRequest
+			if json.NewDecoder(r.Body).Decode(&request) != nil || request.TenantID != "tenant-a" ||
+				request.WorkspaceID != "workspace-a" || request.AuthoritySource != snapshot.AuthoritySource ||
+				request.AuthorityVersion != snapshot.AuthorityVersion || request.AuthoritySnapshotHash != snapshot.AuthoritySnapshotHash {
+				t.Errorf("authority source request = %+v", request)
+				http.Error(w, "rejected", http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(authorityResponse)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	client, err := newApprovalCeremonySourceClient(server.URL, "source-service-token", server.Client(), "helm-data-plane", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := client.LoadApprovalBinding(t.Context(), "tenant-a", "workspace-a", binding.BindingRef)
+	if err != nil || loaded != binding {
+		t.Fatalf("LoadApprovalBinding()=%+v err=%v", loaded, err)
+	}
+	store, err := client.LoadApprovalAuthority(
+		t.Context(), "tenant-a", "workspace-a", snapshot.AuthoritySource,
+		snapshot.AuthorityVersion, snapshot.AuthoritySnapshotHash,
+	)
+	if err != nil || len(store.Keys) != 1 || requests != 2 {
+		t.Fatalf("LoadApprovalAuthority()=%+v requests=%d err=%v", store, requests, err)
+	}
+	authorityResponse.Keys = append([]approvalceremony.AuthoritySnapshotKey(nil), snapshot.Keys...)
+	authorityResponse.Keys[0].Roles = []string{"administrator"}
+	if _, err := client.LoadApprovalAuthority(
+		t.Context(), "tenant-a", "workspace-a", snapshot.AuthoritySource,
+		snapshot.AuthorityVersion, snapshot.AuthoritySnapshotHash,
+	); !errors.Is(err, approvalceremony.ErrAuthorityUnavailable) {
+		t.Fatalf("tampered authority error=%v, want ErrAuthorityUnavailable", err)
+	}
+}
+
+func approvalControlTestBinding(snapshotHash string) approvalceremony.ChallengeSpec {
+	authority := approvalRouteConnectorAuthority()
+	return approvalceremony.ChallengeSpec{
+		BindingRef: authority.BindingRef, TenantID: authority.TenantID, WorkspaceID: authority.WorkspaceID,
+		Audience: "helm-data-plane", PackID: authority.PackID, PackVersion: authority.PackVersion,
+		PackManifestHash: authority.PackManifestHash, Action: authority.Action, ConnectorAuthority: authority,
+		IntentHash: "sha256:" + strings.Repeat("d", 64), EffectHash: authority.EffectHash,
+		PlanHash: "sha256:" + strings.Repeat("f", 64), Decision: contracts.ApprovalGrantDecisionAllow,
+		PolicyVersion: "policy-v1", PolicyEpoch: "epoch-1", PolicyHash: authority.PolicyHash,
+		AuthoritySource: "control-plane-approver-registry", AuthorityVersion: "authority-v1",
+		AuthoritySnapshotHash: snapshotHash, RequiredRole: "reviewer", Quorum: 1,
+		ServerIdentity: "spiffe://helm/kernel-a",
+	}
+}
 
 func TestApprovalConsumptionConfigIsExplicitAndFailClosed(t *testing.T) {
 	approvalConsumptionTestEnv(t)
@@ -204,6 +354,10 @@ func approvalConsumptionTestEnv(t *testing.T) {
 		approvalConsumerAudienceEnv, approvalConsumerResourceEnv, approvalConsumerScopeEnv,
 		approvalDispatchScopeEnv, approvalDispatchAdmissionTTLEnv, approvalSigningKeyRefEnv,
 		approvalKernelTrustRootIDEnv, approvalConsumerMaxTokenTTLEnv,
+		approvalControlEnabledEnv, approvalControlSourceURLEnv, approvalControlSourceTokenEnv,
+		approvalControlOutboundCAFileEnv, approvalControlScopeEnv, approvalControlMinHoldDurationEnv,
+		approvalControlChallengeTTLEnv, approvalControlMaxChallengeLifetimeEnv,
+		approvalControlGrantTTLEnv, approvalControlMaxAssertionsEnv, approvalControlServerIdentityEnv,
 		effectDispositionEnabledEnv, effectDispositionScopeEnv, effectDispositionCommandKeyringEnv,
 		effectReconciliationCandidatesEnabledEnv, effectReconciliationCandidatesResourceEnv, effectReconciliationCandidatesScopeEnv,
 		connectorReleaseAuthorityKeyringEnv,

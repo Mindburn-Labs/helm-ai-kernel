@@ -127,41 +127,100 @@ func newService(store ceremonyStore, bindings BindingProvider, authority Authori
 }
 
 func (s *Service) BeginHold(ctx context.Context, bindingRef string) (Record, error) {
-	if !validToken(bindingRef) {
-		return Record{}, invalidRecord("binding_ref is required")
-	}
-	identity, err := s.controlIdentity(ctx)
+	identity, spec, err := s.loadBinding(ctx, bindingRef)
 	if err != nil {
-		return Record{}, err
-	}
-	spec, err := s.bindings.LoadApprovalBinding(
-		ctx, identity.TenantID, identity.WorkspaceID, bindingRef,
-	)
-	if err != nil {
-		return Record{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)
-	}
-	if err := spec.Validate(); err != nil {
-		return Record{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)
-	}
-	if spec.TenantID != identity.TenantID || spec.WorkspaceID != identity.WorkspaceID || spec.BindingRef != bindingRef {
-		return Record{}, fmt.Errorf("%w: binding scope or reference mismatch", ErrBindingUnavailable)
-	}
-	if spec.ServerIdentity != s.config.ServerIdentity || spec.Quorum > s.config.MaxAssertions {
-		return Record{}, invalidRecord("challenge_spec exceeds configured authority")
-	}
-	if _, err := s.loadAuthority(ctx, spec); err != nil {
 		return Record{}, err
 	}
 	approvalID, err := s.randomToken("approval", 16)
 	if err != nil {
 		return Record{}, err
 	}
+	return s.createHold(ctx, identity, spec, approvalID)
+}
+
+// BeginOrResume starts the one ceremony bound to the authenticated scope and
+// immutable source reference, or returns that exact persisted ceremony after a
+// retry/restart. A source is not allowed to reuse a binding_ref for changed
+// authority or effect material: such drift fails closed instead of minting a
+// second approval lifecycle.
+func (s *Service) BeginOrResume(ctx context.Context, bindingRef string) (Record, error) {
+	identity, spec, err := s.loadBinding(ctx, bindingRef)
+	if err != nil {
+		return Record{}, err
+	}
+	approvalID, err := deterministicApprovalID(identity, bindingRef)
+	if err != nil {
+		return Record{}, err
+	}
+	record, err := s.createHold(ctx, identity, spec, approvalID)
+	if err == nil {
+		return record, nil
+	}
+	if !errors.Is(err, ErrTransitionConflict) {
+		return Record{}, err
+	}
+	persisted, getErr := s.store.get(ctx, identity.TenantID, identity.WorkspaceID, approvalID)
+	if getErr != nil {
+		return Record{}, getErr
+	}
+	if persisted.Spec != spec {
+		return Record{}, fmt.Errorf("%w: binding_ref was reused with changed source material", ErrBindingUnavailable)
+	}
+	return persisted, nil
+}
+
+func (s *Service) loadBinding(ctx context.Context, bindingRef string) (ControlIdentity, ChallengeSpec, error) {
+	if !validToken(bindingRef) {
+		return ControlIdentity{}, ChallengeSpec{}, invalidRecord("binding_ref is required")
+	}
+	identity, err := s.controlIdentity(ctx)
+	if err != nil {
+		return ControlIdentity{}, ChallengeSpec{}, err
+	}
+	spec, err := s.bindings.LoadApprovalBinding(
+		ctx, identity.TenantID, identity.WorkspaceID, bindingRef,
+	)
+	if err != nil {
+		return ControlIdentity{}, ChallengeSpec{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)
+	}
+	if err := spec.Validate(); err != nil {
+		return ControlIdentity{}, ChallengeSpec{}, fmt.Errorf("%w: %v", ErrBindingUnavailable, err)
+	}
+	if spec.TenantID != identity.TenantID || spec.WorkspaceID != identity.WorkspaceID || spec.BindingRef != bindingRef {
+		return ControlIdentity{}, ChallengeSpec{}, fmt.Errorf("%w: binding scope or reference mismatch", ErrBindingUnavailable)
+	}
+	if spec.ServerIdentity != s.config.ServerIdentity || spec.Quorum > s.config.MaxAssertions {
+		return ControlIdentity{}, ChallengeSpec{}, invalidRecord("challenge_spec exceeds configured authority")
+	}
+	if _, err := s.loadAuthority(ctx, spec); err != nil {
+		return ControlIdentity{}, ChallengeSpec{}, err
+	}
+	return identity, spec, nil
+}
+
+func (s *Service) createHold(ctx context.Context, identity ControlIdentity, spec ChallengeSpec, approvalID string) (Record, error) {
 	now := s.now()
 	return s.store.createHold(ctx, Record{
 		ApprovalID: approvalID, TenantID: spec.TenantID, WorkspaceID: spec.WorkspaceID,
 		State: StateHoldPending, HoldStartedAt: now, Spec: spec,
 		CreatedAt: now, UpdatedAt: now, Version: 1,
 	})
+}
+
+func deterministicApprovalID(identity ControlIdentity, bindingRef string) (string, error) {
+	digest, err := canonicalize.CanonicalHash(struct {
+		Domain      string `json:"domain"`
+		TenantID    string `json:"tenant_id"`
+		WorkspaceID string `json:"workspace_id"`
+		BindingRef  string `json:"binding_ref"`
+	}{
+		Domain: "HELM/ApprovalCeremonyIdempotency/v1", TenantID: identity.TenantID,
+		WorkspaceID: identity.WorkspaceID, BindingRef: bindingRef,
+	})
+	if err != nil {
+		return "", fmt.Errorf("derive approval ceremony id: %w", err)
+	}
+	return "approval-" + digest, nil
 }
 
 func (s *Service) IssueChallenge(ctx context.Context, approvalID string) (Record, error) {

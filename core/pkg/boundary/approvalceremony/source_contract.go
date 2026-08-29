@@ -1,4 +1,4 @@
-package generatedspecapprovalceremony
+package approvalceremony
 
 // quantum_posture: approver authority snapshots carry classical Ed25519
 // public keys and SHA-256 commitments only; they make no post-quantum claim.
@@ -6,8 +6,8 @@ package generatedspecapprovalceremony
 import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalverify"
 
 const (
-	AuthoritySnapshotDomainV1 = "HELM/GeneratedSpecApprovalAuthoritySnapshot/v1"
-	AuthoritySnapshotSchemaV1 = "generated-spec-approval-authority-snapshot.v1"
+	AuthoritySnapshotDomainV1 = "HELM/ApprovalAuthoritySnapshot/v1"
+	AuthoritySnapshotSchemaV1 = "approval-authority-snapshot.v1"
 )
 
 type AuthoritySnapshot approvalverify.AuthoritySnapshot

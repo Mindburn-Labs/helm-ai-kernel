@@ -1443,7 +1443,8 @@ func (r *SurfaceRegistry) persistLocked() error {
 		}
 		_, err := r.db.ExecContext(ctx, `INSERT INTO boundary_surface_snapshots (id, snapshot_json, updated_at)
 			VALUES ($1, $2, $3)
-			ON CONFLICT(id) DO UPDATE SET snapshot_json = excluded.snapshot_json, updated_at = excluded.updated_at`,
+			ON CONFLICT(id) DO UPDATE SET snapshot_json = excluded.snapshot_json, updated_at = excluded.updated_at
+			WHERE boundary_surface_snapshots.snapshot_json != excluded.snapshot_json`,
 			"default", string(data), r.now().UTC().Format(time.RFC3339Nano))
 		if err != nil {
 			return fmt.Errorf("persist boundary surface snapshot: %w", err)

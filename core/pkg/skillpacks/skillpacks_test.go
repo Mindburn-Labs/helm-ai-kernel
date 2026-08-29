@@ -227,6 +227,21 @@ func TestProjectionPathsCoverSupportedAgents(t *testing.T) {
 	}
 }
 
+func TestCursorProjectionPathsPreserveSkillNamespace(t *testing.T) {
+	root := t.TempDir()
+	first, err := ProjectionPaths(root, "a-b/c", "cursor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ProjectionPaths(root, "a/b-c", "cursor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first[0].Path == second[0].Path {
+		t.Fatalf("cursor projection collision: %s", first[0].Path)
+	}
+}
+
 func TestGitHubSkillRefRequiresPinnedDigestAndImmutableRef(t *testing.T) {
 	if _, err := ParseGitHubSkillRef("github:owner/repo/skills/example@v1.0.0"); err == nil {
 		t.Fatal("expected missing digest to fail")

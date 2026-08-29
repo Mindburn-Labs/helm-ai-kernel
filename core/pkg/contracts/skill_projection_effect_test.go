@@ -37,8 +37,10 @@ func TestSkillProjectionEffectSealsAndFailsClosed(t *testing.T) {
 		"schema":       func(e *SkillProjectionEffect) { e.SchemaVersion = "other" },
 		"action":       func(e *SkillProjectionEffect) { e.Action = "execute" },
 		"workspace":    func(e *SkillProjectionEffect) { e.WorkspaceID = "../escape" },
+		"scope case":   func(e *SkillProjectionEffect) { e.TenantID = "Tenant-1" },
 		"skill":        func(e *SkillProjectionEffect) { e.SkillID = "../escape" },
 		"agent":        func(e *SkillProjectionEffect) { e.AgentTarget = "shell" },
+		"agent alias":  func(e *SkillProjectionEffect) { e.AgentTarget = "generic" },
 		"artifact":     func(e *SkillProjectionEffect) { e.ArtifactHash = hash64("f") },
 		"policy":       func(e *SkillProjectionEffect) { e.PolicyHash = "sha256:BAD" },
 		"certificates": func(e *SkillProjectionEffect) { e.CertificationRefs = []string{"z", "a"} },
@@ -46,6 +48,7 @@ func TestSkillProjectionEffectSealsAndFailsClosed(t *testing.T) {
 		"generation":   func(e *SkillProjectionEffect) { e.Generation = 0 },
 		"nonce":        func(e *SkillProjectionEffect) { e.Nonce = "short" },
 		"sandbox":      func(e *SkillProjectionEffect) { e.SandboxProfile = "shell" },
+		"invalid utf8": func(e *SkillProjectionEffect) { e.IdempotencyKey = string([]byte{0xff}) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := effect

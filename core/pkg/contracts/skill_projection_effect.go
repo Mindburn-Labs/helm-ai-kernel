@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -32,7 +33,7 @@ var (
 	ErrSkillProjectionEffectInactive  = errors.New("skill projection effect inactive")
 	ErrSkillProjectionEffectIntegrity = errors.New("skill projection effect integrity failure")
 
-	skillProjectionScopeIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	skillProjectionScopeIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
 	skillProjectionSkillIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}/[a-z0-9][a-z0-9-]{0,63}$`)
 )
 
@@ -351,7 +352,7 @@ func validateSkillProjectionCertificationRefs(refs []string) error {
 }
 
 func skillProjectionBoundedToken(value string, limit int) bool {
-	return value != "" && len(value) <= limit && strings.IndexFunc(value, func(r rune) bool {
+	return value != "" && len(value) <= limit && utf8.ValidString(value) && strings.IndexFunc(value, func(r rune) bool {
 		return r == 0 || r == '\u007f' || r == '\u2028' || r == '\u2029' ||
 			r == '\n' || r == '\r' || r == '\t' || r == ' '
 	}) == -1
@@ -359,7 +360,7 @@ func skillProjectionBoundedToken(value string, limit int) bool {
 
 func isSkillProjectionAgentTarget(value string) bool {
 	switch value {
-	case "codex", "generic", "claude-code", "cursor", "opencode":
+	case "codex", "claude-code", "cursor", "opencode":
 		return true
 	default:
 		return false

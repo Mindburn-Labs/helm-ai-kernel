@@ -93,7 +93,7 @@ func projectionRelativePath(skillID, agent string) (Projection, error) {
 	case "claude", "claude-code":
 		return Projection{Agent: "claude-code", Path: filepath.Join(".claude", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
 	case "cursor":
-		return Projection{Agent: "cursor", Path: filepath.Join(".cursor", "rules", safeParts[0]+"-"+safeParts[1]+".md")}, nil
+		return Projection{Agent: "cursor", Path: filepath.Join(".cursor", "rules", safeParts[0], safeParts[1]+".md")}, nil
 	case "opencode":
 		return Projection{Agent: "opencode", Path: filepath.Join(".opencode", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
 	default:

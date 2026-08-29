@@ -139,6 +139,7 @@ func NewMiddleware(validator *JWTValidator) func(http.Handler) http.Handler {
 
 			// 6. Inject into context
 			ctx := WithPrincipal(r.Context(), principal)
+			ctx = WithAuthenticatedCredential(ctx, tokenStr)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

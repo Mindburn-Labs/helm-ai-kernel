@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/a2a"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -89,7 +90,11 @@ func newLocalMCPRuntimeWithSignerPolicyAndEffects(signer helmcrypto.Signer, poli
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
 	}
-	return newLocalMCPRuntimeWithEvaluatorAndEffects(guardian.NewGuardian(signer, policyGraph, nil), githubEffects)
+	guard, err := newProductionGuardian(signer, policyGraph, nil, utcRuntimeClock{})
+	if err != nil {
+		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("initialize local MCP production Guardian: %w", err)
+	}
+	return newLocalMCPRuntimeWithEvaluatorAndEffects(guard, githubEffects)
 }
 
 // newLocalMCPRuntimeWithEvaluator builds the local MCP runtime whose governance
@@ -616,9 +621,11 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 		}
 
 		execReq := mcppkg.ToolExecutionRequest{
-			ToolName:  params.Name,
-			Arguments: params.Arguments,
-			SessionID: "mcp-stdio",
+			ToolName:       params.Name,
+			Arguments:      params.Arguments,
+			SessionID:      "mcp-stdio",
+			PrincipalID:    "mcp-stdio",
+			CredentialHash: canonicalize.HashBytes([]byte("mcp-stdio-transport")),
 		}
 		// NOTE: Delegation context (X-HELM-Delegation-*) is only available via
 		// HTTP transport headers and is handled by the Gateway's HTTP server.
@@ -712,7 +719,10 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, error) {
 	switch authMode {
 	case "none":
-		return next, nil
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := withMCPTransportIdentity(r.Context(), "mcp-local", "mcp-local:"+baseURL)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}), nil
 	case "static-header":
 		expectedKey := os.Getenv("HELM_API_KEY")
 		if expectedKey == "" {
@@ -727,7 +737,8 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 				http.Error(w, "missing or invalid MCP API key", http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r)
+			ctx := withMCPTransportIdentity(r.Context(), "mcp-static", provided)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		}), nil
 	case "oauth":
 		jwksURL := os.Getenv("HELM_OAUTH_JWKS_URL")
@@ -776,7 +787,13 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 					http.Error(w, err.Error(), http.StatusUnauthorized)
 					return
 				}
-				ctx := mcppkg.WithOAuthAuthorization(r.Context(), mcppkg.OAuthAuthorization{
+				principalID := strings.TrimSpace(claims.RegisteredClaims.Subject)
+				if principalID == "" {
+					http.Error(w, "OAuth token subject is required", http.StatusUnauthorized)
+					return
+				}
+				ctx := withMCPTransportIdentity(r.Context(), principalID, tokenStr)
+				ctx = mcppkg.WithOAuthAuthorization(ctx, mcppkg.OAuthAuthorization{
 					Scopes:    claims.Scopes,
 					Resources: claims.Resources,
 				})
@@ -802,7 +819,8 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 				http.Error(w, "missing or invalid OAuth bearer token", http.StatusUnauthorized)
 				return
 			}
-			ctx := mcppkg.WithOAuthAuthorization(r.Context(), mcppkg.OAuthAuthorization{
+			ctx := withMCPTransportIdentity(r.Context(), "mcp-oauth-dev", provided)
+			ctx = mcppkg.WithOAuthAuthorization(ctx, mcppkg.OAuthAuthorization{
 				Scopes:    parseMCPEnvList(os.Getenv("HELM_OAUTH_SCOPES")),
 				Resources: []string{resource},
 			})
@@ -811,6 +829,15 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 	default:
 		return nil, fmt.Errorf("unknown auth mode %q", authMode)
 	}
+}
+
+func withMCPTransportIdentity(ctx context.Context, principalID, credential string) context.Context {
+	ctx = helmauth.WithPrincipal(ctx, &helmauth.BasePrincipal{
+		ID:       principalID,
+		TenantID: helmauth.SystemTenantID,
+		Roles:    []string{"service"},
+	})
+	return helmauth.WithAuthenticatedCredential(ctx, credential)
 }
 
 func parseMCPEnvList(raw string) []string {

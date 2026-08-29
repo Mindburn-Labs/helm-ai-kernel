@@ -46,12 +46,18 @@ func AdminAPIKeyMiddleware() func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			principal, detail, ok := AdminPrincipalFromRequest(r, adminKey)
+			token, detail, ok := BearerToken(r)
+			if !ok {
+				httperr.WriteUnauthorized(w, detail)
+				return
+			}
+			principal, detail, ok := AdminPrincipalFromToken(token, adminKey)
 			if !ok {
 				httperr.WriteUnauthorized(w, detail)
 				return
 			}
 			ctx := WithPrincipal(r.Context(), principal)
+			ctx = WithAuthenticatedCredential(ctx, token)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -83,13 +89,19 @@ func BearerToken(r *http.Request) (string, string, bool) {
 // AdminPrincipalFromRequest validates the configured admin key and returns the
 // standalone system admin principal. An empty configured key fails closed.
 func AdminPrincipalFromRequest(r *http.Request, adminKey string) (*BasePrincipal, string, bool) {
-	if adminKey == "" {
-		return nil, "Admin API key not configured (set HELM_ADMIN_API_KEY)", false
-	}
-
 	token, detail, ok := BearerToken(r)
 	if !ok {
 		return nil, detail, false
+	}
+	return AdminPrincipalFromToken(token, adminKey)
+}
+
+// AdminPrincipalFromToken validates an already-extracted admin credential.
+// Transport adapters use this when Authorization belongs to a downstream
+// protocol and the HELM control credential is carried in a separate header.
+func AdminPrincipalFromToken(token, adminKey string) (*BasePrincipal, string, bool) {
+	if adminKey == "" {
+		return nil, "Admin API key not configured (set HELM_ADMIN_API_KEY)", false
 	}
 
 	if subtle.ConstantTimeCompare([]byte(token), []byte(adminKey)) != 1 {

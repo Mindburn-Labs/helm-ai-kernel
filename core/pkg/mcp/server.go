@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
@@ -24,6 +25,10 @@ type ToolExecutionRequest struct {
 	ToolName  string                 `json:"tool_name"`
 	Arguments map[string]interface{} `json:"arguments"`
 	SessionID string                 `json:"session_id"`
+	// PrincipalID and CredentialHash are installed by a trusted transport
+	// boundary. They are never decoded from MCP request JSON.
+	PrincipalID    string `json:"-"`
+	CredentialHash string `json:"-"`
 
 	// Delegation-aware fields (defense-in-depth, complements Guardian Gate 5).
 	// When DelegationSessionID is set, the firewall enforces tool scope
@@ -163,6 +168,11 @@ func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req Too
 	if len(findings) > 0 {
 		return privacy.ErrDataEgressBlocked
 	}
+	if f.catalog != nil {
+		if _, err := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx); err != nil {
+			return err
+		}
+	}
 	decision, err := f.evaluatePreparedToolExecution(ctx, protectedReq, decisionCtx)
 	if err != nil {
 		return err
@@ -227,6 +237,9 @@ func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, re
 	}
 	decisionCtx[guardian.ContextSecurityTrusted] = true
 	decisionCtx[guardian.ContextSessionID] = req.SessionID
+	if credentialHash := strings.TrimSpace(req.CredentialHash); credentialHash != "" {
+		decisionCtx[guardian.ContextCredentialHash] = credentialHash
+	}
 	decisionCtx[guardian.ContextSourceChannel] = string(contracts.SourceChannelMCPClient)
 	decisionCtx[guardian.ContextTrustLevel] = string(contracts.InputTrustExternalUntrusted)
 	if req.DelegationSessionID != "" {
@@ -246,8 +259,12 @@ func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, re
 }
 
 func (f *GovernanceFirewall) evaluatePreparedToolExecution(ctx context.Context, req ToolExecutionRequest, decisionCtx map[string]interface{}) (*contracts.DecisionRecord, error) {
+	principalID := strings.TrimSpace(req.PrincipalID)
+	if principalID == "" {
+		principalID = req.SessionID
+	}
 	decision, err := f.evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{
-		Principal: req.SessionID,
+		Principal: principalID,
 		Action:    "EXECUTE_TOOL",
 		Resource:  req.ToolName,
 		Context:   decisionCtx,
@@ -378,7 +395,7 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			emitFailure(string(reasonCode), "preflight")
 			return deniedResponse(preflightErr), nil
 		}
-		tool, classificationErr := classifyTool(f.catalog, req.ToolName)
+		tool, classificationErr := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx)
 		if classificationErr != nil {
 			emitFailure(string(contracts.ReasonSchemaViolation), "classification")
 			return anchorResponse(deniedResponse(errClassificationFailed)), nil
@@ -862,6 +879,21 @@ func classifyTool(catalog *ToolCatalog, name string) (ToolRef, error) {
 	return ref, nil
 }
 
+func bindCatalogSecurityContext(catalog *ToolCatalog, name string, decisionCtx map[string]interface{}) (ToolRef, error) {
+	ref, err := classifyTool(catalog, name)
+	if err != nil {
+		return ToolRef{}, err
+	}
+	decisionCtx[guardian.ContextEffectClass] = ref.EffectClass
+	if ref.EgressDestinationRequired {
+		decisionCtx[guardian.ContextEgressDestinationRequired] = true
+	}
+	if destination := strings.TrimSpace(ref.EgressDestination); destination != "" {
+		decisionCtx[guardian.ContextDestination] = destination
+	}
+	return ref, nil
+}
+
 func validEffectClass(effectClass string) bool {
 	switch effectClass {
 	case "E0", "E1", "E2", "E3", "E4":
@@ -926,6 +958,11 @@ func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecuti
 		protectedStep, decisionCtx, _, err := f.prepareToolExecutionRequest(ctx, step)
 		if err != nil {
 			return nil, err
+		}
+		if f.catalog != nil {
+			if _, err := bindCatalogSecurityContext(f.catalog, step.ToolName, decisionCtx); err != nil {
+				return nil, err
+			}
 		}
 		decision, err := f.evaluatePreparedToolExecution(ctx, protectedStep, decisionCtx)
 		if err != nil {

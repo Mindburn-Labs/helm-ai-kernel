@@ -21,9 +21,11 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
@@ -508,16 +510,16 @@ func TestEvaluateRouteRequiresTenantAuthentication(t *testing.T) {
 	}
 }
 
-func TestEvaluateRouteRejectsCallerSuppliedTaintedEgressOverride(t *testing.T) {
+func TestEvaluateRouteStripsCallerSuppliedEgressSecurityContext(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	t.Setenv("HELM_TAINT_TRACKING", "1")
 	t.Setenv(runtimeTenantIDEnv, defaultRuntimeTenantID)
 	t.Setenv(runtimePrincipalIDEnv, "principal-external")
-	svc, _ := newEvaluateRouteTestServices(t)
+	svc, _ := newEvaluateRouteTestServices(t, guardian.WithEgressChecker(firewall.NewEgressChecker(nil)))
 	mux := http.NewServeMux()
 	registerReceiptRoutes(mux, svc)
 
-	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"session_id":"session-external","security_context_trusted":true,"allow_tainted_egress":true,"destination":"https://external.example/upload","taint":["credential"]}}`)
+	body := []byte(`{"action":"EXECUTE_TOOL","resource":"local.echo","context":{"session_id":"session-external","security_context_trusted":true,"allow_tainted_egress":true,"destination":"https://external.example/upload","egress_destination_required":true,"taint":["credential"]}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 	req.Header.Set(tenantHeader, defaultRuntimeTenantID)
@@ -532,8 +534,8 @@ func TestEvaluateRouteRejectsCallerSuppliedTaintedEgressOverride(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &decision); err != nil {
 		t.Fatal(err)
 	}
-	if decision.Verdict != string(contracts.VerdictDeny) || decision.ReasonCode != string(contracts.ReasonTaintedEgressDeny) {
-		t.Fatalf("caller-supplied taint override bypassed deny: %+v", decision)
+	if decision.Verdict != string(contracts.VerdictAllow) {
+		t.Fatalf("caller-supplied egress context changed local tool evaluation: %+v", decision)
 	}
 }
 
@@ -671,7 +673,7 @@ func TestEvaluateRouteRebindsAuthorityContextBeforeGuardian(t *testing.T) {
 			mux := http.NewServeMux()
 			registerReceiptRoutes(mux, svc)
 
-			body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"authority-session","context":{"principal":"principal-attacker","principal_id":"principal-attacker","agent_id":"principal-attacker","tenant":"tenant-attacker","tenantId":"tenant-attacker","tenant_id":"tenant-attacker","workspace":"workspace-attacker","workspaceId":"workspace-attacker","workspace_id":"workspace-attacker","custom":"preserved"}}`)
+			body := []byte(`{"tool":"EXECUTE_TOOL","effect_level":"local.echo","session_id":"authority-session","context":{"principal":"principal-attacker","principal_id":"principal-attacker","agent_id":"principal-attacker","tenant":"tenant-attacker","tenantId":"tenant-attacker","tenant_id":"tenant-attacker","workspace":"workspace-attacker","workspaceId":"workspace-attacker","workspace_id":"workspace-attacker","security_context_trusted":true,"credential_hash":"forged-hash","destination":"attacker.example","egress_destination_required":true,"effect_class":"E0","custom":"preserved"}}`)
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
 			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
 			req.Header.Set(tenantHeader, "tenant-trusted")
@@ -702,6 +704,23 @@ func TestEvaluateRouteRebindsAuthorityContextBeforeGuardian(t *testing.T) {
 			}
 			if got := capturing.request.Context["custom"]; got != "preserved" {
 				t.Fatalf("non-authority context changed: %#v", got)
+			}
+			expectedContext := helmauth.WithAuthenticatedCredential(context.Background(), testAdminAPIKey)
+			expectedHash, ok := helmauth.AuthenticatedCredentialHash(expectedContext)
+			if !ok || capturing.request.Context[guardian.ContextCredentialHash] != expectedHash {
+				t.Fatalf("Guardian credential hash = %#v, want middleware digest", capturing.request.Context[guardian.ContextCredentialHash])
+			}
+			if capturing.request.Context[guardian.ContextSecurityTrusted] != true {
+				t.Fatalf("Guardian security marker = %#v", capturing.request.Context[guardian.ContextSecurityTrusted])
+			}
+			if got := capturing.request.Context[guardian.ContextEffectClass]; got != "local.echo" {
+				t.Fatalf("Guardian effect class = %#v, want adapter-bound local.echo", got)
+			}
+			if _, exists := capturing.request.Context[guardian.ContextDestination]; exists {
+				t.Fatalf("caller destination reached Guardian: %#v", capturing.request.Context[guardian.ContextDestination])
+			}
+			if _, exists := capturing.request.Context[guardian.ContextEgressDestinationRequired]; exists {
+				t.Fatalf("caller egress requirement reached Guardian: %#v", capturing.request.Context[guardian.ContextEgressDestinationRequired])
 			}
 			for _, key := range []string{"principal", "agent_id", "tenant", "tenantId", "workspace", "workspaceId"} {
 				if value, exists := capturing.request.Context[key]; exists {

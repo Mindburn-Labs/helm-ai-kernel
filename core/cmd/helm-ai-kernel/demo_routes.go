@@ -268,6 +268,9 @@ func buildDemoReceipt(svc *Services, decision *contracts.DecisionRecord, body []
 }
 
 func demoGuardian(svc *Services, action demoAction) (*guardian.Guardian, error) {
+	// This route is intentionally evaluation-and-receipt-only. It must never
+	// invoke an executor, connector, or any other external-effect dispatcher;
+	// the production constructor allowlist test ratchets that boundary.
 	graph := prg.NewGraph()
 	for _, item := range demoActions {
 		set := prg.RequirementSet{ID: demoPolicyID + ":" + item.ID, Logic: prg.AND}

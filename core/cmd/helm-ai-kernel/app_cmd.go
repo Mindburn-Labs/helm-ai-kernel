@@ -69,8 +69,11 @@ func runAppRun(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return 1
 	}
-	compiled, _ := compileLaunchPlan(catalog, appID, substrateID, "local.operator", stderr)
-	run, err := session.NewExecutor(session.NewStore("")).ExecuteLaunch(compiled, session.ExecuteOptions{Reason: "app run requested through CLI"})
+	compiled, secretResolution, _ := resolveLaunchPlan(catalog, appID, substrateID, "local.operator", stderr)
+	run, err := session.NewExecutor(session.NewStore("")).ExecuteLaunch(compiled, session.ExecuteOptions{
+		Reason: "app run requested through CLI", RuntimeSecretEnv: secretResolution.RuntimeEnv,
+		RuntimeSecretAccesses: secretResolution.Accesses,
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "app run error: %v\n", err)
 		return 1

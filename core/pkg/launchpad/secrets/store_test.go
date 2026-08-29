@@ -1,7 +1,9 @@
 package secrets
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
@@ -10,35 +12,34 @@ import (
 func TestSecretBindingProjectsLogicalModelGatewayToRuntimeEnv(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HELM_TEST_OPENROUTER", "sk-test-value")
-	previous := os.Getenv("OPENROUTER_API_KEY")
-	had := previous != ""
-	if err := os.Unsetenv("OPENROUTER_API_KEY"); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if had {
-			_ = os.Setenv("OPENROUTER_API_KEY", previous)
-		} else {
-			_ = os.Unsetenv("OPENROUTER_API_KEY")
-		}
-	})
+	t.Setenv("OPENROUTER_API_KEY", "")
 
 	store := NewStore(root)
 	if _, err := store.Set("model_gateway", "openrouter", "HELM_TEST_OPENROUTER"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	projected, err := store.ApplyAppEnv(registry.AppSpec{
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
 		ModelGatewayEnv: []string{"OPENROUTER_API_KEY"},
 		RequiredSecrets: []string{"model_gateway"},
 	})
 	if err != nil {
-		t.Fatalf("ApplyAppEnv: %v", err)
+		t.Fatalf("ResolveAppEnv: %v", err)
 	}
-	if projected["OPENROUTER_API_KEY"] != "model_gateway:openrouter" {
-		t.Fatalf("projected = %#v", projected)
+	if resolved.RuntimeEnv["OPENROUTER_API_KEY"] != "sk-test-value" {
+		t.Fatalf("runtime env = %#v", resolved.RuntimeEnv)
 	}
-	if os.Getenv("OPENROUTER_API_KEY") != "sk-test-value" {
-		t.Fatal("OPENROUTER_API_KEY was not projected from the logical binding")
+	if os.Getenv("OPENROUTER_API_KEY") != "" {
+		t.Fatal("launch-scoped resolution mutated the process environment")
+	}
+	if len(resolved.Accesses) != 1 || resolved.Accesses[0].SecretRef != "model_gateway:openrouter" || resolved.Accesses[0].Verdict != "ALLOW" {
+		t.Fatalf("redacted accesses = %#v", resolved.Accesses)
+	}
+	encoded, err := json.Marshal(resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "sk-test-value") || strings.Contains(string(encoded), "RuntimeEnv") {
+		t.Fatalf("resolution serialization exposed secret material: %s", encoded)
 	}
 	statuses, err := store.Statuses()
 	if err != nil {
@@ -54,18 +55,7 @@ func TestSecretBindingProjectsProviderSpecificGatewayKeys(t *testing.T) {
 	t.Setenv("HELM_TEST_OPENROUTER", "sk-openrouter")
 	t.Setenv("HELM_TEST_ANTHROPIC", "sk-anthropic")
 	for _, envName := range []string{"OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"} {
-		previous := os.Getenv(envName)
-		had := previous != ""
-		if err := os.Unsetenv(envName); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			if had {
-				_ = os.Setenv(envName, previous)
-			} else {
-				_ = os.Unsetenv(envName)
-			}
-		})
+		t.Setenv(envName, "")
 	}
 
 	store := NewStore(root)
@@ -75,42 +65,31 @@ func TestSecretBindingProjectsProviderSpecificGatewayKeys(t *testing.T) {
 	if _, err := store.Set("model_gateway", "anthropic", "HELM_TEST_ANTHROPIC"); err != nil {
 		t.Fatalf("Set anthropic: %v", err)
 	}
-	projected, err := store.ApplyAppEnv(registry.AppSpec{
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
 		ModelGatewayEnv: []string{"OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"},
 		RequiredSecrets: []string{"model_gateway"},
 	})
 	if err != nil {
-		t.Fatalf("ApplyAppEnv: %v", err)
+		t.Fatalf("ResolveAppEnv: %v", err)
 	}
-	if projected["OPENROUTER_API_KEY"] != "model_gateway:openrouter" || os.Getenv("OPENROUTER_API_KEY") != "sk-openrouter" {
-		t.Fatalf("OpenRouter projection failed: projected=%#v env=%q", projected, os.Getenv("OPENROUTER_API_KEY"))
+	if resolved.RuntimeEnv["OPENROUTER_API_KEY"] != "sk-openrouter" || os.Getenv("OPENROUTER_API_KEY") != "" {
+		t.Fatalf("OpenRouter resolution failed: runtime=%#v env=%q", resolved.RuntimeEnv, os.Getenv("OPENROUTER_API_KEY"))
 	}
-	if projected["ANTHROPIC_API_KEY"] != "model_gateway:anthropic" || os.Getenv("ANTHROPIC_API_KEY") != "sk-anthropic" {
-		t.Fatalf("Anthropic projection failed: projected=%#v env=%q", projected, os.Getenv("ANTHROPIC_API_KEY"))
+	if resolved.RuntimeEnv["ANTHROPIC_API_KEY"] != "sk-anthropic" || os.Getenv("ANTHROPIC_API_KEY") != "" {
+		t.Fatalf("Anthropic resolution failed: runtime=%#v env=%q", resolved.RuntimeEnv, os.Getenv("ANTHROPIC_API_KEY"))
 	}
 }
 
 func TestSecretBindingProjectsCatalogScopedBYOEnv(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HELM_TEST_ANTHROPIC", "sk-anthropic")
-	previous := os.Getenv("ANTHROPIC_API_KEY")
-	had := previous != ""
-	if err := os.Unsetenv("ANTHROPIC_API_KEY"); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if had {
-			_ = os.Setenv("ANTHROPIC_API_KEY", previous)
-		} else {
-			_ = os.Unsetenv("ANTHROPIC_API_KEY")
-		}
-	})
+	t.Setenv("ANTHROPIC_API_KEY", "")
 
 	store := NewStore(root)
 	if _, err := store.Set("model_gateway", "anthropic", "HELM_TEST_ANTHROPIC"); err != nil {
 		t.Fatalf("Set anthropic: %v", err)
 	}
-	projected, err := store.ApplyAppEnv(registry.AppSpec{
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
 		ModelGateway: registry.ModelGatewaySpec{
 			Provider:    "byo",
 			ProviderIDs: []string{"openai", "anthropic"},
@@ -118,10 +97,10 @@ func TestSecretBindingProjectsCatalogScopedBYOEnv(t *testing.T) {
 		RequiredSecrets: []string{"model_gateway"},
 	})
 	if err != nil {
-		t.Fatalf("ApplyAppEnv: %v", err)
+		t.Fatalf("ResolveAppEnv: %v", err)
 	}
-	if projected["ANTHROPIC_API_KEY"] != "model_gateway:anthropic" || os.Getenv("ANTHROPIC_API_KEY") != "sk-anthropic" {
-		t.Fatalf("catalog-scoped BYO projection failed: projected=%#v env=%q", projected, os.Getenv("ANTHROPIC_API_KEY"))
+	if resolved.RuntimeEnv["ANTHROPIC_API_KEY"] != "sk-anthropic" || os.Getenv("ANTHROPIC_API_KEY") != "" {
+		t.Fatalf("catalog-scoped BYO resolution failed: runtime=%#v env=%q", resolved.RuntimeEnv, os.Getenv("ANTHROPIC_API_KEY"))
 	}
 }
 
@@ -135,7 +114,7 @@ func TestSecretBindingDoesNotProjectDynamicEndpointFromCredential(t *testing.T) 
 	if _, err := store.Set("model_gateway", "azure-openai", "HELM_TEST_AZURE"); err != nil {
 		t.Fatalf("Set azure-openai: %v", err)
 	}
-	projected, err := store.ApplyAppEnv(registry.AppSpec{
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
 		ModelGateway: registry.ModelGatewaySpec{
 			Provider:    "byo",
 			ProviderIDs: []string{"azure-openai"},
@@ -143,13 +122,13 @@ func TestSecretBindingDoesNotProjectDynamicEndpointFromCredential(t *testing.T) 
 		RequiredSecrets: []string{"model_gateway"},
 	})
 	if err != nil {
-		t.Fatalf("ApplyAppEnv: %v", err)
+		t.Fatalf("ResolveAppEnv: %v", err)
 	}
-	if projected["AZURE_OPENAI_API_KEY"] != "model_gateway:azure-openai" || os.Getenv("AZURE_OPENAI_API_KEY") != "sk-azure" {
-		t.Fatalf("Azure credential projection failed: projected=%#v env=%q", projected, os.Getenv("AZURE_OPENAI_API_KEY"))
+	if resolved.RuntimeEnv["AZURE_OPENAI_API_KEY"] != "sk-azure" || os.Getenv("AZURE_OPENAI_API_KEY") != "" {
+		t.Fatalf("Azure credential resolution failed: runtime=%#v env=%q", resolved.RuntimeEnv, os.Getenv("AZURE_OPENAI_API_KEY"))
 	}
-	if _, projectedEndpoint := projected["AZURE_OPENAI_ENDPOINT"]; projectedEndpoint || os.Getenv("AZURE_OPENAI_ENDPOINT") != "" {
-		t.Fatalf("Azure endpoint must not be projected from credential binding: projected=%#v env=%q", projected, os.Getenv("AZURE_OPENAI_ENDPOINT"))
+	if _, resolvedEndpoint := resolved.RuntimeEnv["AZURE_OPENAI_ENDPOINT"]; resolvedEndpoint || os.Getenv("AZURE_OPENAI_ENDPOINT") != "" {
+		t.Fatalf("Azure endpoint must not be resolved from credential binding: runtime=%#v env=%q", resolved.RuntimeEnv, os.Getenv("AZURE_OPENAI_ENDPOINT"))
 	}
 }
 
@@ -157,5 +136,54 @@ func TestSecretBindingDoesNotStoreUnsetValueEnv(t *testing.T) {
 	_, err := NewStore(t.TempDir()).Set("model_gateway", "openrouter", "HELM_TEST_MISSING")
 	if err == nil {
 		t.Fatal("expected unset value env to fail")
+	}
+}
+
+func TestExplicitSecretBindingOverridesAmbientTargetCredential(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("OPENROUTER_API_KEY", "ambient-daemon-key")
+	t.Setenv("HELM_LAUNCH_OPENROUTER", "launch-scoped-key")
+
+	store := NewStore(root)
+	if _, err := store.Set("model_gateway", "openrouter", "HELM_LAUNCH_OPENROUTER"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
+		ModelGatewayEnv: []string{"OPENROUTER_API_KEY"},
+		RequiredSecrets: []string{"model_gateway"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveAppEnv: %v", err)
+	}
+	if got := resolved.RuntimeEnv["OPENROUTER_API_KEY"]; got != "launch-scoped-key" {
+		t.Fatalf("runtime credential = %q, want launch-scoped binding", got)
+	}
+	if len(resolved.Accesses) != 1 || resolved.Accesses[0].Source != "binding_store" || resolved.Accesses[0].SourceEnvName != "HELM_LAUNCH_OPENROUTER" {
+		t.Fatalf("access evidence = %#v", resolved.Accesses)
+	}
+}
+
+func TestMissingExplicitSecretBindingDoesNotFallBackToAmbientTargetCredential(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("OPENROUTER_API_KEY", "ambient-daemon-key")
+	t.Setenv("HELM_LAUNCH_OPENROUTER", "launch-scoped-key")
+
+	store := NewStore(root)
+	if _, err := store.Set("model_gateway", "openrouter", "HELM_LAUNCH_OPENROUTER"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	t.Setenv("HELM_LAUNCH_OPENROUTER", "")
+	resolved, err := store.ResolveAppEnv(registry.AppSpec{
+		ModelGatewayEnv: []string{"OPENROUTER_API_KEY"},
+		RequiredSecrets: []string{"model_gateway"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveAppEnv: %v", err)
+	}
+	if _, ok := resolved.RuntimeEnv["OPENROUTER_API_KEY"]; ok {
+		t.Fatalf("ambient credential bypassed unavailable binding: %#v", resolved.RuntimeEnv)
+	}
+	if len(resolved.Accesses) != 1 || resolved.Accesses[0].Verdict != "DENY" || resolved.Accesses[0].Source != "binding_store" {
+		t.Fatalf("access evidence = %#v", resolved.Accesses)
 	}
 }

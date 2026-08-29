@@ -69,30 +69,37 @@ func registerExtAuthzRoutes(mux *http.ServeMux, svc *Services) {
 }
 
 func authorizeExtAuthzRequest(ctx context.Context, svc *Services, req extauthz.AuthorizationRequest, now time.Time) (extauthz.AuthorizationResponse, error) {
+	decisionContext := map[string]interface{}{
+		"request_id":               req.RequestID,
+		"tenant_id":                req.TenantID,
+		"workspace_id":             req.WorkspaceID,
+		"connector_id":             req.ConnectorID,
+		"connector_contract_hash":  req.ConnectorContractHash,
+		"executor_kind":            req.ExecutorKind,
+		"risk_class":               req.RiskClass,
+		"args_c14n_hash":           req.ArgsC14NHash,
+		"request_body_hash":        req.RequestBodyHash,
+		"plan_hash":                req.PlanHash,
+		"policy_hash":              req.PolicyHash,
+		"p0_hash":                  req.P0Hash,
+		"policy_epoch":             req.PolicyEpoch,
+		"payload_class":            req.PayloadClass,
+		"redaction_profile":        req.RedactionProfile,
+		"risk_context_hash":        req.RiskContextHash,
+		"extauthz_contract_status": "internal_non_production",
+	}
+	if err := bindAuthenticatedGuardianContext(ctx, decisionContext, guardianTransportBinding{
+		EffectClass:   req.EffectClass,
+		SourceChannel: contracts.SourceChannelExternalAgent,
+		TrustLevel:    contracts.InputTrustInternalUnverified,
+	}); err != nil {
+		return extauthz.AuthorizationResponse{}, fmt.Errorf("bind ext-authz transport evidence: %w", err)
+	}
 	decision, err := svc.Guardian.EvaluateDecision(ctx, guardian.DecisionRequest{
 		Principal: req.PrincipalID,
 		Action:    req.ActionURN,
 		Resource:  req.ToolURN,
-		Context: map[string]interface{}{
-			"request_id":               req.RequestID,
-			"tenant_id":                req.TenantID,
-			"workspace_id":             req.WorkspaceID,
-			"connector_id":             req.ConnectorID,
-			"connector_contract_hash":  req.ConnectorContractHash,
-			"executor_kind":            req.ExecutorKind,
-			"effect_class":             req.EffectClass,
-			"risk_class":               req.RiskClass,
-			"args_c14n_hash":           req.ArgsC14NHash,
-			"request_body_hash":        req.RequestBodyHash,
-			"plan_hash":                req.PlanHash,
-			"policy_hash":              req.PolicyHash,
-			"p0_hash":                  req.P0Hash,
-			"policy_epoch":             req.PolicyEpoch,
-			"payload_class":            req.PayloadClass,
-			"redaction_profile":        req.RedactionProfile,
-			"risk_context_hash":        req.RiskContextHash,
-			"extauthz_contract_status": "internal_non_production",
-		},
+		Context:   decisionContext,
 	})
 	if err != nil {
 		decision = &contracts.DecisionRecord{

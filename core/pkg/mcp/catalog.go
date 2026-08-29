@@ -32,6 +32,11 @@ type ToolRef struct {
 	EffectClass    string             `json:"effect_class,omitempty"`
 	RiskTier       contracts.RiskTier `json:"risk_tier,omitempty"`
 	RequiredScopes []string           `json:"required_scopes,omitempty"`
+	// EgressDestinationRequired and EgressDestination are trusted adapter
+	// metadata. They are intentionally excluded from MCP JSON so a discovered
+	// or caller-authored tool descriptor cannot assert its own egress policy.
+	EgressDestinationRequired bool   `json:"-"`
+	EgressDestination         string `json:"-"`
 }
 
 // Validate checks that a ToolRef has a non-empty Name.

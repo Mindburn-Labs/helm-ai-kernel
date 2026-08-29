@@ -113,7 +113,7 @@ flowchart TD
 | `helm.limits.concurrency.max` | `0` | Process in-flight request cap; `0` disables. |
 | `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
 | `helm.guardian.semanticThreatEscalationBP` | `0` | Semantic ESCALATE threshold in basis points; `0` is advisory-only, while a positive value fails closed when assessment is unavailable or truncated. |
-| `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
+| `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or non-production `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.controlplane.auth.mode` | `serviceAccountJWT` | `serviceAccountJWT` uses a rotating projected token; `bearerToken` requires explicit static Secret material. |
 | `helm.policy.source.controlplane.auth.serviceAccountJWT.audience` | `helm-control-plane` | Audience required from the policy authority's Kubernetes TokenReview verifier. |
 | `helm.policy.source.controlplane.auth.serviceAccountJWT.expirationSeconds` | `600` | Projected token TTL, constrained to 600–3600 seconds. |
@@ -164,7 +164,9 @@ flowchart TD
   rotation. Prefer `helm.emergencyStop.existingSecret` plus
   `commandReplayKeyringSecretKey` for deployment configuration; the chart
   rejects a direct value and secret key together.
-- Prefer `helm.policy.source.kind=controlplane` for production deployments.
+- Production rejects `helm.policy.source.kind=mountedFile` because filesystem
+  timestamps are not source-owned monotonic publication epochs. Use
+  `helm.policy.source.kind=controlplane` for the shipped runtime.
   The chart configures where policy truth is published; the runtime still
   polls, verifies hash/signature/provenance, compiles, and atomically swaps
   immutable snapshots. Production control-plane renders require
@@ -173,7 +175,7 @@ flowchart TD
 - Use `helm.policy.source.kind=crd` for Kubernetes-native self-hosted control
   in runtime builds that include a CRD `PolicySource`. The OSS chart renders
   the optional `HelmPolicyBundle` CRD and RBAC only in CRD mode.
-- `mountedFile` mode is retained for OSS/local/bootstrap/demo use. ConfigMap
+- `mountedFile` mode is retained only for OSS/local/bootstrap/demo use. ConfigMap
   or Secret bytes are delivery backends only and the sidecar, when enabled,
   only calls `/internal/policy/reconcile`. Signed mounted-file policies can
   provide a companion `serve-policy.toml.sig`; it must sign the versioned

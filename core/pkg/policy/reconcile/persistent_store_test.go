@@ -131,6 +131,43 @@ func TestPersistentSnapshotStoreFailsClosedOnInvalidOrUnwritableState(t *testing
 		}
 	})
 
+	t.Run("post-rename failure retains replay floor", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "policy-replay-watermarks.json")
+		store, err := NewPersistentSnapshotStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		realWriter := store.writeWatermarks
+		firstWrite := true
+		store.writeWatermarks = func(path string, watermarks map[string]policyReplayWatermark) (bool, error) {
+			committed, err := realWriter(path, watermarks)
+			if err == nil && firstWrite {
+				firstWrite = false
+				return committed, errors.New("simulated directory sync failure")
+			}
+			return committed, err
+		}
+
+		scope := PolicyScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+		epochTwo := replayTestSnapshot(scope, 2, "policy-v2", "head-v2")
+		if err := store.Swap(scope, epochTwo); err == nil {
+			t.Fatal("post-rename durability failure was accepted")
+		}
+		if _, ok := store.Get(scope); ok {
+			t.Fatal("unconfirmed watermark activated the policy snapshot")
+		}
+		if err := store.Swap(scope, replayTestSnapshot(scope, 1, "policy-v1", "head-v1")); !errors.Is(err, ErrPolicyEpochRollback) {
+			t.Fatalf("rollback after post-rename failure error=%v", err)
+		}
+		if err := store.Swap(scope, epochTwo); err != nil {
+			t.Fatalf("retry durability confirmation: %v", err)
+		}
+		active, ok := store.Get(scope)
+		if !ok || active.PolicyEpoch != 2 {
+			t.Fatalf("confirmed snapshot=%+v", active)
+		}
+	})
+
 	t.Run("oversized state", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "policy-replay-watermarks.json")
 		watermark := policyReplayWatermark{
@@ -140,7 +177,8 @@ func TestPersistentSnapshotStoreFailsClosedOnInvalidOrUnwritableState(t *testing
 			PolicyHash:     HashBytes([]byte("policy-v1")),
 			PolicyHeadHash: HashBytes([]byte("head-v1")),
 		}
-		if err := writePolicyReplayWatermarks(path, map[string]policyReplayWatermark{watermark.scope().Key(): watermark}); !errors.Is(err, ErrPolicyReplayStateInvalid) {
+		committed, err := writePolicyReplayWatermarks(path, map[string]policyReplayWatermark{watermark.scope().Key(): watermark})
+		if committed || !errors.Is(err, ErrPolicyReplayStateInvalid) {
 			t.Fatalf("oversized state error=%v", err)
 		}
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {

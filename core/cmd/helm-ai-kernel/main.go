@@ -1076,6 +1076,9 @@ func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (
 	}
 	switch strings.ToLower(kind) {
 	case "mountedfile", "mounted-file", "mounted_file":
+		if envBool("HELM_PRODUCTION") {
+			return nil, "mountedFile", fmt.Errorf("HELM_PRODUCTION=1 rejects mountedFile policy sources because filesystem timestamps are not source-owned monotonic publication epochs; use controlplane")
+		}
 		return policyreconcile.NewMountedFileSource(policyPath, scope), "mountedFile", nil
 	case "controlplane", "control-plane", "control_plane":
 		baseURL := strings.TrimSpace(os.Getenv("HELM_POLICY_CONTROLPLANE_URL"))

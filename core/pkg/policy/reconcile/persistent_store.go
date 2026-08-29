@@ -43,10 +43,12 @@ type policyReplayWatermark struct {
 // ponytail: file serialization is process-local; move this state to a
 // transactional shared store before running multiple Kernel writers.
 type PersistentSnapshotStore struct {
-	mu         sync.Mutex
-	path       string
-	memory     *AtomicSnapshotStore
-	watermarks map[string]policyReplayWatermark
+	mu                    sync.Mutex
+	path                  string
+	memory                *AtomicSnapshotStore
+	watermarks            map[string]policyReplayWatermark
+	writeWatermarks       func(string, map[string]policyReplayWatermark) (bool, error)
+	durabilityUnconfirmed bool
 }
 
 func NewPersistentSnapshotStore(path string) (*PersistentSnapshotStore, error) {
@@ -59,9 +61,10 @@ func NewPersistentSnapshotStore(path string) (*PersistentSnapshotStore, error) {
 		return nil, err
 	}
 	store := &PersistentSnapshotStore{
-		path:       path,
-		memory:     NewAtomicSnapshotStore(),
-		watermarks: watermarks,
+		path:            path,
+		memory:          NewAtomicSnapshotStore(),
+		watermarks:      watermarks,
+		writeWatermarks: writePolicyReplayWatermarks,
 	}
 	for _, watermark := range watermarks {
 		if err := store.memory.Swap(watermark.scope(), watermark.snapshot()); err != nil {
@@ -92,16 +95,30 @@ func (s *PersistentSnapshotStore) Swap(scope PolicyScope, snapshot *EffectivePol
 		(watermark.PolicyHash != existing.PolicyHash || watermark.PolicyHeadHash != existing.PolicyHeadHash) {
 		return fmt.Errorf("%w: epoch %d changed persisted policy head", ErrPolicyEpochEquivocation, watermark.PolicyEpoch)
 	}
-	if !ok || watermark != existing {
+	if !ok || watermark != existing || s.durabilityUnconfirmed {
 		next := make(map[string]policyReplayWatermark, len(s.watermarks)+1)
 		for storedKey, stored := range s.watermarks {
 			next[storedKey] = stored
 		}
 		next[key] = watermark
-		if err := writePolicyReplayWatermarks(s.path, next); err != nil {
+		committed, err := s.writeWatermarks(s.path, next)
+		if committed {
+			// Rename already made the higher floor visible. Retain it even when
+			// the following directory sync fails so this process cannot write a
+			// lower epoch while durability is retried.
+			s.watermarks = next
+		}
+		if err != nil {
+			if committed {
+				s.durabilityUnconfirmed = true
+			}
 			return fmt.Errorf("persist policy replay watermark: %w", err)
 		}
+		if !committed {
+			return errors.New("persist policy replay watermark: writer returned without committing state")
+		}
 		s.watermarks = next
+		s.durabilityUnconfirmed = false
 	}
 	return s.memory.Swap(scope, snapshot)
 }
@@ -182,9 +199,11 @@ func loadPolicyReplayWatermarks(path string) (map[string]policyReplayWatermark, 
 	return watermarks, nil
 }
 
-func writePolicyReplayWatermarks(path string, watermarks map[string]policyReplayWatermark) error {
+// writePolicyReplayWatermarks reports committed=true once rename makes the new
+// state visible, even if the following directory sync cannot confirm durability.
+func writePolicyReplayWatermarks(path string, watermarks map[string]policyReplayWatermark) (committed bool, err error) {
 	if len(watermarks) > maxPolicyReplayWatermarks {
-		return fmt.Errorf("%w: watermark count exceeds %d", ErrPolicyReplayStateInvalid, maxPolicyReplayWatermarks)
+		return false, fmt.Errorf("%w: watermark count exceeds %d", ErrPolicyReplayStateInvalid, maxPolicyReplayWatermarks)
 	}
 	state := policyReplayWatermarkState{Version: policyReplayWatermarkVersion}
 	state.Watermarks = make([]policyReplayWatermark, 0, len(watermarks))
@@ -196,25 +215,25 @@ func writePolicyReplayWatermarks(path string, watermarks map[string]policyReplay
 	})
 	data, err := json.Marshal(state)
 	if err != nil {
-		return err
+		return false, err
 	}
 	data = append(data, '\n')
 	if len(data) > maxPolicyReplayWatermarkBytes {
-		return fmt.Errorf("%w: watermark state exceeds %d bytes", ErrPolicyReplayStateInvalid, maxPolicyReplayWatermarkBytes)
+		return false, fmt.Errorf("%w: watermark state exceeds %d bytes", ErrPolicyReplayStateInvalid, maxPolicyReplayWatermarkBytes)
 	}
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
+		return false, err
 	}
 	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
-		return fmt.Errorf("%w: watermark target must be a regular file", ErrPolicyReplayStateInvalid)
+		return false, fmt.Errorf("%w: watermark target must be a regular file", ErrPolicyReplayStateInvalid)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return false, err
 	}
 	temporary, err := os.CreateTemp(dir, "."+filepath.Base(path)+"-*")
 	if err != nil {
-		return err
+		return false, err
 	}
 	temporaryPath := temporary.Name()
 	removeTemporary := true
@@ -225,27 +244,30 @@ func writePolicyReplayWatermarks(path string, watermarks map[string]policyReplay
 		}
 	}()
 	if err := temporary.Chmod(0o600); err != nil {
-		return err
+		return false, err
 	}
 	if _, err := temporary.Write(data); err != nil {
-		return err
+		return false, err
 	}
 	if err := temporary.Sync(); err != nil {
-		return err
+		return false, err
 	}
 	if err := temporary.Close(); err != nil {
-		return err
+		return false, err
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
-		return err
+		return false, err
 	}
 	removeTemporary = false
 	directory, err := os.Open(dir)
 	if err != nil {
-		return err
+		return true, err
 	}
 	defer func() { _ = directory.Close() }()
-	return directory.Sync()
+	if err := directory.Sync(); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 func validatePolicyReplayWatermark(watermark policyReplayWatermark) error {

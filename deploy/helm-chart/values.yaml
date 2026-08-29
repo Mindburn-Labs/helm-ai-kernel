@@ -230,7 +230,7 @@ helm:
     # Kubernetes delivery is a policy-source backend, not runtime truth.
     # Runtime reconciliation verifies and compiles an EffectivePolicySnapshot.
     source:
-      kind: "mountedFile" # controlplane | crd | mountedFile
+      kind: "mountedFile" # controlplane | crd | mountedFile (non-production only)
       pollInterval: "10s"
       initialReconcileTimeout: "30s"
       controlplane:

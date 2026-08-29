@@ -31,7 +31,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
@@ -444,6 +443,10 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error: invalid upstream URL: %v\n", err)
 		return 2
 	}
+	if helmcrypto.ProductionMode() {
+		_, _ = fmt.Fprintln(stderr, "Error: helm proxy is disabled under HELM_PRODUCTION: request, response, and SSE payloads do not have verified inline personal-data inspection")
+		return 2
+	}
 
 	// Initialize receipt store
 	receiptPath := filepath.Join(receiptsDir, fmt.Sprintf("receipts-%s.jsonl", time.Now().Format("2006-01-02")))
@@ -497,7 +500,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	artRegistry := artifacts.NewRegistry(artStore, kernelSigner)
-	g := guardian.NewGuardian(kernelSigner, prgGraph, artRegistry)
+	g, guardianErr := newProductionGuardian(kernelSigner, prgGraph, artRegistry, utcRuntimeClock{})
+	if guardianErr != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: failed to initialize production Guardian: %v\n", guardianErr)
+		return 2
+	}
 	pg := proofgraph.NewGraph()
 
 	// Budget enforcer (in-memory for sidecar mode)

@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
@@ -63,6 +66,8 @@ func TestGatewayGovernedIngressRejectionsPublishClosedLifecycle(t *testing.T) {
 	)
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
 
 	tests := []struct {
 		name       string
@@ -83,6 +88,7 @@ func TestGatewayGovernedIngressRejectionsPublishClosedLifecycle(t *testing.T) {
 					body, err := json.Marshal(MCPToolCallRequest{Method: tt.tool, Params: tt.arguments})
 					require.NoError(t, err)
 					req := httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body))
+					req.Header.Set("MCP-Session-Id", sessionID)
 					rec := httptest.NewRecorder()
 					mux.ServeHTTP(rec, req)
 					require.Equal(t, tt.status, rec.Code)
@@ -92,7 +98,7 @@ func TestGatewayGovernedIngressRejectionsPublishClosedLifecycle(t *testing.T) {
 						"id":      42,
 						"method":  "tools/call",
 						"params":  map[string]any{"name": tt.tool, "arguments": tt.arguments},
-					}, nil)
+					}, map[string]string{"MCP-Session-Id": sessionID})
 					require.Equal(t, http.StatusOK, rec.Code)
 					require.Contains(t, rec.Body.String(), "error")
 				}
@@ -189,6 +195,57 @@ func TestGateway_ToolsListIncludesStructuredToolMetadata(t *testing.T) {
 	annotations := fileRead["annotations"].(map[string]any)
 	assert.Equal(t, true, annotations["readOnlyHint"])
 	assert.Equal(t, true, annotations["idempotentHint"])
+}
+
+func TestGateway_ToolsListResponseIsBounded(t *testing.T) {
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:        "oversized",
+		Description: strings.Repeat("x", MaxResponseBytes),
+		Schema:      map[string]any{"type": "object"},
+	}))
+	gateway := NewGateway(catalog, GatewayConfig{})
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.LessOrEqual(t, rec.Body.Len(), MaxResponseBytes)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.NotContains(t, payload, "result")
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload["error"].(map[string]any)["message"])
+
+	capabilities := httptest.NewRecorder()
+	mux.ServeHTTP(capabilities, httptest.NewRequest(http.MethodGet, "/mcp/v1/capabilities", nil))
+	require.Equal(t, http.StatusForbidden, capabilities.Code)
+	require.LessOrEqual(t, capabilities.Body.Len(), MaxResponseBytes)
+}
+
+func TestGateway_InitializeResponseIsBounded(t *testing.T) {
+	mux := newProtocolTestMux(t, GatewayConfig{}, nil)
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      strings.Repeat("i", MaxResponseBytes),
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": LatestProtocolVersion,
+		},
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.LessOrEqual(t, rec.Body.Len(), MaxResponseBytes)
+	require.NotEmpty(t, rec.Header().Get("MCP-Session-Id"))
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Nil(t, payload["id"])
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload["error"].(map[string]any)["message"])
 }
 
 func TestGateway_ToolsListIncludesRequiredScopes(t *testing.T) {
@@ -288,6 +345,70 @@ func TestGateway_ToolsCallRejectsMissingRequiredOAuthScope(t *testing.T) {
 	assert.Contains(t, errPayload["message"], "mcp:tool:scoped")
 }
 
+func TestGateway_OversizedReceiptCannotEscapeBoundedFallbacks(t *testing.T) {
+	exec := func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{
+			Content:           strings.Repeat("x", MaxResponseBytes),
+			ReceiptID:         strings.Repeat("r", MaxResponseBytes),
+			ProtectedArgsHash: strings.Repeat("h", MaxResponseBytes),
+		}, nil
+	}
+	mux := newProtocolTestMux(t, GatewayConfig{}, exec)
+
+	body, err := json.Marshal(MCPToolCallRequest{
+		Method: "file_read",
+		Params: map[string]any{"path": "/tmp/demo.txt"},
+	})
+	require.NoError(t, err)
+	rest := httptest.NewRecorder()
+	mux.ServeHTTP(rest, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+	require.Equal(t, http.StatusForbidden, rest.Code)
+	require.LessOrEqual(t, rest.Body.Len(), MaxResponseBytes)
+	var restPayload MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(rest.Body.Bytes(), &restPayload))
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), restPayload.ReasonCode)
+	require.Empty(t, restPayload.ReceiptID)
+
+	jsonRPC := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      7,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "file_read",
+			"arguments": map[string]any{"path": "/tmp/demo.txt"},
+		},
+	}, nil)
+	require.Equal(t, http.StatusOK, jsonRPC.Code)
+	require.LessOrEqual(t, jsonRPC.Body.Len(), MaxResponseBytes)
+	var rpcPayload map[string]any
+	require.NoError(t, json.Unmarshal(jsonRPC.Body.Bytes(), &rpcPayload))
+	result := rpcPayload["result"].(map[string]any)
+	require.Equal(t, true, result["isError"])
+	require.NotContains(t, result, "receipt_id")
+	require.Contains(t, string(mustJSON(t, result)), string(contracts.ReasonDataEgressBlocked))
+}
+
+func TestGateway_OversizedExecutorErrorCannotEscapeREST(t *testing.T) {
+	exec := func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{}, fmt.Errorf("executor failed: %s", strings.Repeat("x", MaxResponseBytes))
+	}
+	mux := newProtocolTestMux(t, GatewayConfig{}, exec)
+	body, err := json.Marshal(MCPToolCallRequest{
+		Method: "file_read",
+		Params: map[string]any{"path": "/tmp/demo.txt"},
+	})
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/v1/execute", bytes.NewReader(body)))
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.LessOrEqual(t, rec.Body.Len(), MaxResponseBytes)
+	var payload MCPToolCallResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Equal(t, string(contracts.ReasonDataEgressBlocked), payload.ReasonCode)
+	require.NotContains(t, payload.Error, "executor failed")
+}
+
 func TestGateway_RESTExecuteEnforcesRequiredOAuthScope(t *testing.T) {
 	exec := func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
 		assert.Equal(t, "scoped_tool", req.ToolName)
@@ -370,13 +491,15 @@ func TestGateway_AnonymousGovernedExecutorReachesScopedTool(t *testing.T) {
 	gw := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(handler)))
 	mux := http.NewServeMux()
 	gw.RegisterRoutes(mux)
+	defer gw.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
 
 	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
 		"jsonrpc": "2.0",
 		"id":      23,
 		"method":  "tools/call",
 		"params":  map[string]any{"name": "scoped_tool"},
-	}, nil)
+	}, map[string]string{"MCP-Session-Id": sessionID})
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "ok")
@@ -528,7 +651,7 @@ func newScopedProtocolTestMux(t *testing.T, exec ToolExecutor) *http.ServeMux {
 	return mux
 }
 
-func performJSONRPCRequest(t *testing.T, mux *http.ServeMux, method, path string, payload map[string]any, headers map[string]string) *httptest.ResponseRecorder {
+func performJSONRPCRequest(t *testing.T, handler http.Handler, method, path string, payload map[string]any, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	body, err := json.Marshal(payload)
@@ -541,8 +664,25 @@ func performJSONRPCRequest(t *testing.T, mux *http.ServeMux, method, path string
 	}
 
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	handler.ServeHTTP(rec, req)
 	return rec
+}
+
+func initializeMCPTestSession(t *testing.T, mux *http.ServeMux) string {
+	t.Helper()
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": LatestProtocolVersion,
+			"clientInfo":      map[string]any{"name": "test-client"},
+		},
+	}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	sessionID := rec.Header().Get("MCP-Session-Id")
+	require.NotEmpty(t, sessionID)
+	return sessionID
 }
 
 func TestGateway_InitializeIssuesSessionId(t *testing.T) {
@@ -608,6 +748,141 @@ func TestGateway_InvalidSessionIdRejected(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "invalid or expired MCP session")
 }
 
+func TestGateway_GovernedToolCallsBindStableAuthenticatedCredentialAcrossSessions(t *testing.T) {
+	transportCatalog := NewInMemoryCatalog()
+	require.NoError(t, transportCatalog.Register(context.Background(), ToolRef{
+		Name:   "session_bound_tool",
+		Schema: map[string]any{"type": "object"},
+	}))
+	governanceCatalog := NewToolCatalog()
+	require.NoError(t, governanceCatalog.Register(context.Background(), ToolRef{
+		Name: "session_bound_tool", EffectClass: "E0", RiskTier: contracts.RiskTierLow,
+	}))
+
+	var captured []guardian.DecisionRequest
+	evaluator := &capturingEvaluator{
+		verdict: string(contracts.VerdictAllow),
+		capture: func(req guardian.DecisionRequest) {
+			captured = append(captured, req)
+		},
+	}
+	firewall := NewGovernanceFirewall(evaluator, governanceCatalog)
+	gateway := NewGateway(
+		transportCatalog,
+		GatewayConfig{},
+		WithGovernedExecutor(firewall.GovernedExecutor(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+			return ToolExecutionResponse{Content: "ok"}, nil
+		})),
+	)
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	const credential = "shared-authenticated-credential"
+	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := auth.WithPrincipal(r.Context(), &auth.BasePrincipal{ID: "mcp-user", TenantID: "tenant-a"})
+		ctx = auth.WithAuthenticatedCredential(ctx, credential)
+		mux.ServeHTTP(w, r.WithContext(ctx))
+	})
+
+	initialize := func(id int) string {
+		rec := performJSONRPCRequest(t, authenticated, http.MethodPost, "/mcp", map[string]any{
+			"jsonrpc": "2.0",
+			"id":      id,
+			"method":  "initialize",
+			"params": map[string]any{
+				"protocolVersion": LatestProtocolVersion,
+				"clientInfo":      map[string]any{"name": fmt.Sprintf("client-%d", id)},
+			},
+		}, nil)
+		require.Equal(t, http.StatusOK, rec.Code)
+		sessionID := rec.Header().Get("MCP-Session-Id")
+		require.NotEmpty(t, sessionID)
+		return sessionID
+	}
+	sessions := []string{initialize(1), initialize(2)}
+	require.NotEqual(t, sessions[0], sessions[1])
+
+	for i, sessionID := range sessions {
+		rec := performJSONRPCRequest(t, authenticated, http.MethodPost, "/mcp", map[string]any{
+			"jsonrpc": "2.0",
+			"id":      i + 10,
+			"method":  "tools/call",
+			"params":  map[string]any{"name": "session_bound_tool", "arguments": map[string]any{}},
+		}, map[string]string{
+			"MCP-Protocol-Version": LatestProtocolVersion,
+			"MCP-Session-Id":       sessionID,
+		})
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Contains(t, rec.Body.String(), "ok")
+	}
+
+	require.Len(t, captured, 2)
+	for i, decision := range captured {
+		require.Equal(t, "mcp-user", decision.Principal)
+		require.Equal(t, sessions[i], decision.Context[guardian.ContextSessionID])
+		require.Equal(t, canonicalize.HashBytes([]byte(credential)), decision.Context[guardian.ContextCredentialHash])
+		require.Equal(t, "E0", decision.Context[guardian.ContextEffectClass])
+	}
+	require.Equal(t,
+		captured[0].Context[guardian.ContextCredentialHash],
+		captured[1].Context[guardian.ContextCredentialHash],
+	)
+}
+
+func TestGateway_GovernedToolCallRejectsMissingOrInvalidTransportSession(t *testing.T) {
+	transportCatalog := NewInMemoryCatalog()
+	require.NoError(t, transportCatalog.Register(context.Background(), ToolRef{
+		Name:   "guarded_tool",
+		Schema: map[string]any{"type": "object"},
+	}))
+	governanceCatalog := NewToolCatalog()
+	require.NoError(t, governanceCatalog.Register(context.Background(), ToolRef{
+		Name: "guarded_tool", EffectClass: "E0", RiskTier: contracts.RiskTierLow,
+	}))
+	evaluatorCalls := 0
+	handlerCalls := 0
+	firewall := NewGovernanceFirewall(&capturingEvaluator{
+		verdict: string(contracts.VerdictAllow),
+		capture: func(guardian.DecisionRequest) {
+			evaluatorCalls++
+		},
+	}, governanceCatalog)
+	gateway := NewGateway(
+		transportCatalog,
+		GatewayConfig{},
+		WithGovernedExecutor(firewall.GovernedExecutor(func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+			handlerCalls++
+			return ToolExecutionResponse{Content: "unexpected"}, nil
+		})),
+	)
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+
+	for _, test := range []struct {
+		name      string
+		sessionID string
+	}{
+		{name: "missing"},
+		{name: "invalid", sessionID: "not-a-valid-session"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			headers := map[string]string{"MCP-Protocol-Version": LatestProtocolVersion}
+			if test.sessionID != "" {
+				headers["MCP-Session-Id"] = test.sessionID
+			}
+			rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+				"jsonrpc": "2.0",
+				"id":      1,
+				"method":  "tools/call",
+				"params":  map[string]any{"name": "guarded_tool", "arguments": map[string]any{}},
+			}, headers)
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+			require.Contains(t, rec.Body.String(), "MCP session")
+		})
+	}
+	require.Zero(t, evaluatorCalls)
+	require.Zero(t, handlerCalls)
+}
+
 func TestGateway_TransportEdgeBranches(t *testing.T) {
 	catalog := NewInMemoryCatalog()
 	gateway := NewGateway(catalog, GatewayConfig{})
@@ -669,6 +944,84 @@ func TestGateway_RESTExecutePropagatesDelegationHeaders(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "delegated")
 }
 
+func TestGateway_JSONRPCEnforcesDelegationHeaders(t *testing.T) {
+	transportCatalog := NewInMemoryCatalog()
+	governanceCatalog := NewToolCatalog()
+	for _, name := range []string{"allowed", "blocked"} {
+		tool := ToolRef{Name: name, Schema: map[string]any{"type": "object"}, EffectClass: "E0", RiskTier: contracts.RiskTierLow}
+		require.NoError(t, transportCatalog.Register(context.Background(), tool))
+		require.NoError(t, governanceCatalog.Register(context.Background(), tool))
+	}
+	handlerCalls := 0
+	evaluatorCalls := 0
+	firewall := NewGovernanceFirewall(lifecycleEvaluator{
+		calls:    &evaluatorCalls,
+		decision: &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)},
+	}, governanceCatalog)
+	gateway := NewGateway(transportCatalog, GatewayConfig{}, WithGovernedExecutor(firewall.GovernedExecutor(func(_ context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
+		handlerCalls++
+		assert.Equal(t, "delegation-1", req.DelegationSessionID)
+		assert.Equal(t, "did:example:verifier", req.DelegationVerifier)
+		assert.Equal(t, []string{"allowed"}, req.DelegationAllowedTools)
+		return ToolExecutionResponse{Content: "delegated"}, nil
+	})))
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
+	headers := map[string]string{
+		"X-HELM-Delegation-Session-ID":    "delegation-1",
+		"X-HELM-Delegation-Verifier":      "did:example:verifier",
+		"X-HELM-Delegation-Allowed-Tools": "allowed",
+		"MCP-Session-Id":                  sessionID,
+	}
+
+	listed := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/list",
+	}, headers)
+	require.Equal(t, http.StatusOK, listed.Code)
+	assert.Contains(t, listed.Body.String(), `"name":"allowed"`)
+	assert.NotContains(t, listed.Body.String(), `"name":"blocked"`)
+
+	denied := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+		"params": map[string]any{"name": "blocked", "arguments": map[string]any{}},
+	}, headers)
+	require.Equal(t, http.StatusOK, denied.Code)
+	assert.Contains(t, denied.Body.String(), `"isError":true`)
+	assert.Zero(t, evaluatorCalls)
+	assert.Zero(t, handlerCalls)
+
+	allowed := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+		"params": map[string]any{"name": "allowed", "arguments": map[string]any{}},
+	}, headers)
+	require.Equal(t, http.StatusOK, allowed.Code)
+	assert.Contains(t, allowed.Body.String(), "delegated")
+	assert.Equal(t, 1, evaluatorCalls)
+	assert.Equal(t, 1, handlerCalls)
+}
+
+func TestGateway_JSONRPCRejectsUnattestedGovernedSuccess(t *testing.T) {
+	catalog := NewInMemoryCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{Name: "tool", Schema: map[string]any{"type": "object"}}))
+	gateway := NewGateway(catalog, GatewayConfig{}, WithGovernedExecutor(GovernedExecutor{execute: func(context.Context, ToolExecutionRequest) (ToolExecutionResponse, error) {
+		return ToolExecutionResponse{Content: "unattested"}, nil
+	}}))
+	mux := http.NewServeMux()
+	gateway.RegisterRoutes(mux)
+	defer gateway.sessions.Stop()
+	sessionID := initializeMCPTestSession(t, mux)
+
+	rec := performJSONRPCRequest(t, mux, http.MethodPost, "/mcp", map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": "tool", "arguments": map[string]any{}},
+	}, map[string]string{"MCP-Session-Id": sessionID})
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "governed execution did not attest protected arguments")
+	assert.NotContains(t, rec.Body.String(), `"result"`)
+}
+
 func TestGateway_JSONRPCAndSchemaFallbackEdges(t *testing.T) {
 	errGateway := NewGateway(errorCatalog{}, GatewayConfig{})
 	resp, respond, status := errGateway.handleJSONRPCRequest(context.Background(), 1, "tools/list", nil, LatestProtocolVersion)
@@ -693,7 +1046,7 @@ func TestGateway_JSONRPCAndSchemaFallbackEdges(t *testing.T) {
 		Scopes:    []string{"mcp:tool:scoped"},
 		Resources: []string{"https://resource.example/mcp"},
 	})
-	resp, respond, status = execGateway.handleJSONRPCRequest(ctx, 2, "tools/call", json.RawMessage(`{"name":"scoped","arguments":{}}`), LatestProtocolVersion)
+	resp, respond, status = execGateway.handleJSONRPCRequestWithSession(ctx, 2, "tools/call", json.RawMessage(`{"name":"scoped","arguments":{}}`), LatestProtocolVersion, "direct-test-session", nil)
 	require.True(t, respond)
 	assert.Equal(t, http.StatusOK, status)
 	assert.Contains(t, marshalMCPTestValue(t, resp), "ok")

@@ -12,6 +12,7 @@ import (
 
 	helmapi "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/extauthz"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -220,6 +221,46 @@ func TestExtAuthzAuthorizeRouteRequiresServiceAuth(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestExtAuthzAuthorizeRouteBindsAuthenticatedCredentialEvidence(t *testing.T) {
+	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	signer, err := helmcrypto.NewEd25519Signer("extauthz-identity-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturing := &evaluateRouteCapturingPDP{}
+	svc := &Services{
+		Guardian: guardian.NewGuardian(
+			signer,
+			allowGraphForExtAuthzTest("local.echo"),
+			artifacts.NewRegistry(nil, nil),
+			guardian.WithPDP(capturing),
+		),
+		ReceiptSigner: signer,
+	}
+	mux := http.NewServeMux()
+	registerExtAuthzRoutes(mux, svc)
+	fixture := extAuthzRouteFixture("req-credential", "tenant-a", "epoch-1")
+	fixture.EffectClass = "E0"
+	req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(mustJSONExtAuthzRoute(t, fixture)))
+	req.Header.Set("Authorization", "Bearer route-secret")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if capturing.request == nil {
+		t.Fatal("Guardian PDP did not receive ext-authz request")
+	}
+	expectedCtx := helmauth.WithAuthenticatedCredential(context.Background(), "route-secret")
+	expectedHash, _ := helmauth.AuthenticatedCredentialHash(expectedCtx)
+	if capturing.request.Context[guardian.ContextCredentialHash] != expectedHash || capturing.request.Context[guardian.ContextSecurityTrusted] != true {
+		t.Fatalf("credential evidence = %#v", capturing.request.Context)
+	}
+	if capturing.request.Context[guardian.ContextEffectClass] != "E0" {
+		t.Fatalf("effect class = %#v", capturing.request.Context[guardian.ContextEffectClass])
 	}
 }
 

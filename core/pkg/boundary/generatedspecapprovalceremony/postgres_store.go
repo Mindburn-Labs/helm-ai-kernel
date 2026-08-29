@@ -34,12 +34,11 @@ created_at, updated_at, expires_at, consumed_at, consumed_by, version
 type PostgresStore struct {
 	db                   *sql.DB
 	verifier             GrantSignatureVerifier
-	clock                func() time.Time
 	maxChallengeLifetime time.Duration
 }
 
 func NewPostgresStore(db *sql.DB, verifier GrantSignatureVerifier) *PostgresStore {
-	return &PostgresStore{db: db, verifier: verifier, clock: time.Now}
+	return &PostgresStore{db: db, verifier: verifier}
 }
 
 // MigratePostgres applies this package's ceremony schema as an explicit owner
@@ -600,11 +599,8 @@ func (s *PostgresStore) requireReady() error {
 	return nil
 }
 
-func (s *PostgresStore) transitionTime(fallback time.Time) time.Time {
-	if s == nil || s.clock == nil {
-		return fallback.UTC().Truncate(time.Microsecond)
-	}
-	return s.clock().UTC().Truncate(time.Microsecond)
+func (s *PostgresStore) transitionTime(requestedAt time.Time) time.Time {
+	return requestedAt.UTC().Truncate(time.Microsecond)
 }
 
 func requireGeneratedSpecApprovalUnfencedScope(ctx context.Context, tx *sql.Tx, tenantID, workspaceID string) error {

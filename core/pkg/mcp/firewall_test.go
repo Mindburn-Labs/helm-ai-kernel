@@ -170,3 +170,154 @@ func TestGovernanceFirewall_InterceptPlan(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(contracts.VerdictEscalate), decision.Status)
 }
+
+func TestGovernanceFirewall_InterceptPlanRawPendingAggregatesAsEscalate(t *testing.T) {
+	eval := &smartMockEvaluator{decisions: map[string]string{
+		"allow":       string(contracts.VerdictAllow),
+		"raw-pending": "PENDING",
+		"deny":        string(contracts.VerdictDeny),
+	}}
+	fw := NewGovernanceFirewall(eval, nil)
+
+	decision, err := fw.InterceptPlan(context.Background(), ToolExecutionPlan{
+		PlanID: "plan-raw-pending",
+		Steps: []ToolExecutionRequest{
+			{ToolName: "allow"},
+			{ToolName: "raw-pending"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, string(contracts.VerdictEscalate), decision.Status)
+
+	decision, err = fw.InterceptPlan(context.Background(), ToolExecutionPlan{
+		PlanID: "plan-deny-wins-over-raw-pending",
+		Steps: []ToolExecutionRequest{
+			{ToolName: "raw-pending"},
+			{ToolName: "deny"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, string(contracts.VerdictDeny), decision.Status)
+}
+
+func TestGovernanceFirewall_AuthoritativeCatalogRejectsUnclassifiedTool(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func(*GovernanceFirewall) error
+	}{
+		{
+			name: "single execution",
+			run: func(fw *GovernanceFirewall) error {
+				return fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{ToolName: "unknown.tool"})
+			},
+		},
+		{
+			name: "plan execution",
+			run: func(fw *GovernanceFirewall) error {
+				_, err := fw.InterceptPlan(context.Background(), ToolExecutionPlan{
+					PlanID: "plan-unclassified",
+					Steps:  []ToolExecutionRequest{{ToolName: "unknown.tool"}},
+				})
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evaluated := false
+			fw := NewGovernanceFirewall(&capturingEvaluator{
+				verdict: string(contracts.VerdictAllow),
+				capture: func(guardian.DecisionRequest) { evaluated = true },
+			}, NewToolCatalog())
+			err := tc.run(fw)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), `tool "unknown.tool" is not classified`)
+			assert.False(t, evaluated, "unclassified tool reached evaluator")
+		})
+	}
+}
+
+func TestGovernanceFirewall_InterceptPlanRejectsCallerSecurityContext(t *testing.T) {
+	for _, key := range []string{guardian.ContextDestination, guardian.ContextEgressDestinationRequired} {
+		t.Run(key, func(t *testing.T) {
+			evaluated := false
+			fw := NewGovernanceFirewall(&capturingEvaluator{
+				verdict: string(contracts.VerdictAllow),
+				capture: func(guardian.DecisionRequest) { evaluated = true },
+			}, nil)
+			_, err := fw.InterceptPlan(context.Background(), ToolExecutionPlan{
+				PlanID: "plan-reserved-context",
+				Steps: []ToolExecutionRequest{{
+					ToolName:  "local.tool",
+					Arguments: map[string]any{key: true},
+					SessionID: "session-fallback",
+				}},
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "reserved security context argument")
+			assert.False(t, evaluated, "reserved context reached the evaluator")
+		})
+	}
+}
+
+func TestGovernanceFirewall_InterceptPlanBindsTrustedIdentityAndClassification(t *testing.T) {
+	catalog := NewToolCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:        "company.artifact.update",
+		EffectClass: "E2",
+		RiskTier:    contracts.RiskTierMedium,
+	}))
+
+	var captured guardian.DecisionRequest
+	fw := NewGovernanceFirewall(&capturingEvaluator{
+		verdict: string(contracts.VerdictAllow),
+		capture: func(req guardian.DecisionRequest) { captured = req },
+	}, catalog)
+	decision, err := fw.InterceptPlan(context.Background(), ToolExecutionPlan{
+		PlanID: "plan-trusted-bindings",
+		Steps: []ToolExecutionRequest{{
+			ToolName:       "company.artifact.update",
+			Arguments:      map[string]any{"artifact_id": "artifact-1"},
+			SessionID:      "session-fallback",
+			PrincipalID:    "authenticated-principal",
+			CredentialHash: "sha256:credential",
+		}},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	assert.Equal(t, string(contracts.VerdictAllow), decision.Status)
+	assert.Equal(t, "authenticated-principal", captured.Principal)
+	assert.Equal(t, "company.artifact.update", captured.Resource)
+	assert.Equal(t, "sha256:credential", captured.Context[guardian.ContextCredentialHash])
+	assert.Equal(t, "E2", captured.Context[guardian.ContextEffectClass])
+	assert.Equal(t, true, captured.Context[guardian.ContextSecurityTrusted])
+	assert.Equal(t, "session-fallback", captured.Context[guardian.ContextSessionID])
+	assert.Equal(t, "artifact-1", captured.Context["artifact_id"])
+	_, hasDestination := captured.Context[guardian.ContextDestination]
+	assert.False(t, hasDestination, "local E2 tool acquired an egress destination")
+	_, requiresDestination := captured.Context[guardian.ContextEgressDestinationRequired]
+	assert.False(t, requiresDestination, "local E2 tool acquired an egress requirement")
+}
+
+func TestGovernanceFirewall_BindsCatalogOwnedEgressContextForE0Tool(t *testing.T) {
+	catalog := NewToolCatalog()
+	require.NoError(t, catalog.Register(context.Background(), ToolRef{
+		Name:                      "github.read_pr",
+		EffectClass:               "E0",
+		RiskTier:                  contracts.RiskTierLow,
+		EgressDestinationRequired: true,
+		EgressDestination:         "api.github.com",
+	}))
+
+	var captured guardian.DecisionRequest
+	fw := NewGovernanceFirewall(&capturingEvaluator{
+		verdict: string(contracts.VerdictAllow),
+		capture: func(req guardian.DecisionRequest) { captured = req },
+	}, catalog)
+	require.NoError(t, fw.InterceptToolExecution(context.Background(), ToolExecutionRequest{
+		ToolName:  "github.read_pr",
+		SessionID: "session-github-read",
+	}))
+	assert.Equal(t, "E0", captured.Context[guardian.ContextEffectClass])
+	assert.Equal(t, true, captured.Context[guardian.ContextEgressDestinationRequired])
+	assert.Equal(t, "api.github.com", captured.Context[guardian.ContextDestination])
+}

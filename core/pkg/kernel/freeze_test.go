@@ -1,6 +1,7 @@
 package kernel
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -155,5 +156,34 @@ func TestFreezeController_ConcurrentAccess(t *testing.T) {
 	// Should not panic or race — verify freeze took effect
 	if !fc.IsFrozen() {
 		t.Error("freeze should have taken effect")
+	}
+}
+
+func TestFreezeControllerRefreshesExternalStateAndFailsClosed(t *testing.T) {
+	state := FreezeStateSnapshot{
+		Frozen:   true,
+		FrozenBy: "operator",
+		FrozenAt: time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC),
+	}
+	var sourceErr error
+	controller := NewFreezeController().WithStateSource(func() (FreezeStateSnapshot, error) {
+		return state, sourceErr
+	})
+	if !controller.IsFrozen() {
+		t.Fatal("persisted frozen state was not loaded")
+	}
+	frozen, by, at := controller.FreezeState()
+	if !frozen || by != state.FrozenBy || at != state.FrozenAt {
+		t.Fatalf("freeze state = (%t, %q, %s)", frozen, by, at)
+	}
+
+	state = FreezeStateSnapshot{}
+	if controller.IsFrozen() {
+		t.Fatal("controller did not observe persisted unfreeze")
+	}
+
+	sourceErr = errors.New("state unreadable")
+	if !controller.IsFrozen() {
+		t.Fatal("state-source failure must force freeze")
 	}
 }

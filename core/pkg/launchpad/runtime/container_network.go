@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/modelproviders"
 )
 
@@ -52,6 +53,9 @@ func (p StaticEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle, err
 	if err := ValidateModelProviderAllowlist(req.Allowlist); err != nil {
 		return EgressProxyHandle{}, err
 	}
+	if err := validateProductionEgressInspection(); err != nil {
+		return EgressProxyHandle{}, err
+	}
 	return EgressProxyHandle{
 		ProxyURL:           p.ProxyURL,
 		ReceiptRef:         p.ReceiptRef,
@@ -60,6 +64,13 @@ func (p StaticEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle, err
 		NetworkProof:       networkProof(req.NetworkProof),
 		TokenBrokerEnabled: req.TokenBrokerEnabled,
 	}, nil
+}
+
+func validateProductionEgressInspection() error {
+	if helmcrypto.ProductionMode() {
+		return errors.New("production model egress is disabled: the current proxy contract cannot verify application-layer personal-data inspection")
+	}
+	return nil
 }
 
 func NetworkAllowed(destination string, allowlist []string) bool {

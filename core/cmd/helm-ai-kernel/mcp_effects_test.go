@@ -229,6 +229,28 @@ func TestGitHubEffectsRuntimeHasHotPathOTelInstrumentation(t *testing.T) {
 	}
 }
 
+func TestGitHubEffectsToolRefsBindTrustedEgressDestination(t *testing.T) {
+	rt, err := newGitHubEffectsRuntime("ghp-test", "https://github.example.test/api/v3", testSigningSeed())
+	if err != nil {
+		t.Fatalf("construct runtime: %v", err)
+	}
+	refs := rt.toolRefs()
+	if len(refs) != 4 {
+		t.Fatalf("tool ref count = %d, want 4", len(refs))
+	}
+	for _, ref := range refs {
+		if !ref.EgressDestinationRequired {
+			t.Fatalf("%s did not require a trusted egress destination", ref.Name)
+		}
+		if ref.EgressDestination != "github.example.test" {
+			t.Fatalf("%s destination = %q", ref.Name, ref.EgressDestination)
+		}
+	}
+	if refs[0].EffectClass != "E0" {
+		t.Fatalf("read tool effect class = %q, want E0", refs[0].EffectClass)
+	}
+}
+
 // TestGitHubEffectsRuntimeRefusesWithoutSigningSeed is the vacuous-pass guard.
 // The dispatch gate is a no-op when the bridge has no permit signer, so the
 // wiring must refuse to construct without a valid seed rather than arm dispatch

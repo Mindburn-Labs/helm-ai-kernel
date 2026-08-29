@@ -75,6 +75,15 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
 		}
+		if err := bindAuthenticatedGuardianContext(r.Context(), req.Context, guardianTransportBinding{
+			EffectClass:   req.EffectLevel,
+			SessionID:     req.SessionID,
+			SourceChannel: contracts.SourceChannelAPIRequest,
+			TrustLevel:    contracts.InputTrustExternalUntrusted,
+		}); err != nil {
+			api.WriteInternalR(w, r, fmt.Errorf("bind evaluate transport evidence: %w", err))
+			return
+		}
 		// Authentication is the only authority for identity and scope. Remove
 		// every authority-bearing spelling recognized by this boundary or
 		// Guardian before publishing canonical authenticated values to policy.
@@ -91,7 +100,6 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		// The external session ID remains a signed field. Durable storage may
 		// derive a private tenant-qualified ordering key from this authenticated
 		// context, but that key is not part of the public API contract.
-		req.Context["session_id"] = req.SessionID
 		if req.Args != nil {
 			req.Context["args"] = req.Args
 		}
@@ -171,9 +179,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
-		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		tenantID, err := authenticatedReceiptTenantScope(r, svc)
 		if err != nil {
-			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant and workspace context")
 			return
 		}
 		sessionID, err := requestedReceiptSessionID(r)
@@ -246,9 +254,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
-		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		tenantID, err := authenticatedReceiptTenantScope(r, svc)
 		if err != nil {
-			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant and workspace context")
 			return
 		}
 		limit := parseLimit(r.URL.Query().Get("limit"), 100, 1000)
@@ -299,9 +307,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
-		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		tenantID, err := authenticatedReceiptTenantScope(r, svc)
 		if err != nil {
-			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant and workspace context")
 			return
 		}
 		id := strings.TrimPrefix(r.URL.Path, "/api/v1/receipts/")
@@ -327,6 +335,22 @@ func authenticatedReceiptTenantID(ctx context.Context) (string, error) {
 	tenantID := strings.TrimSpace(principal.GetTenantID())
 	if tenantID == "" {
 		return "", fmt.Errorf("authenticated tenant id is required")
+	}
+	return tenantID, nil
+}
+
+func authenticatedReceiptTenantScope(r *http.Request, svc *Services) (string, error) {
+	tenantID, err := authenticatedReceiptTenantID(r.Context())
+	if err != nil {
+		return "", err
+	}
+	if svc.EmergencyStops == nil {
+		return tenantID, nil
+	}
+	workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+	configuredWorkspaceID := configuredRuntimeWorkspaceID()
+	if workspaceID == "" || configuredWorkspaceID == "" || workspaceID != configuredWorkspaceID {
+		return "", fmt.Errorf("authenticated workspace binding is required")
 	}
 	return tenantID, nil
 }

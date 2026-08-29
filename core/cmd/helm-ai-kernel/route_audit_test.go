@@ -24,10 +24,9 @@ import (
 // publicRoutes are endpoints that are unauthenticated by design. Adding to this
 // list is the deliberate, reviewable act of publishing an endpoint.
 var publicRoutes = map[string]string{
-	"/v1/chat/completions": "OpenAI-compatible governed inference surface; gated by the PDP, not by an API key",
-	"/api/v1/version":      "build identity, no tenant data",
-	"/version":             "build identity, no tenant data",
-	"/healthz":             "liveness probe",
+	"/api/v1/version": "build identity, no tenant data",
+	"/version":        "build identity, no tenant data",
+	"/healthz":        "liveness probe",
 }
 
 var handleFuncRe = regexp.MustCompile(`mux\.HandleFunc\("([^"]+)"\s*,\s*(.*)`)

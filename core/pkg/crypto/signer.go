@@ -142,6 +142,11 @@ func productionMode() bool {
 	}
 }
 
+// ProductionMode reports whether HELM's fail-closed production semantics are enabled.
+func ProductionMode() bool {
+	return productionMode()
+}
+
 func (s *Ed25519Signer) Sign(data []byte) (string, error) {
 	sig := ed25519.Sign(s.privKey, data)
 	return hex.EncodeToString(sig), nil

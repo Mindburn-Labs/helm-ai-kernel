@@ -256,11 +256,33 @@ paths:
         Drop-in replacement for OpenAI /v1/chat/completions.
         Tool calls are intercepted, schema-validated, and receipted.
         Response includes X-Helm-Receipt-ID, X-Helm-Output-Hash, X-Helm-Lamport-Clock headers.
-        When the opt-in scoped emergency-stop fence is enabled, this
-        unauthenticated route returns 503 until an authenticated adapter can
-        bind tenant and workspace scope.
+        Authenticate the HELM tenant boundary with X-HELM-API-Key; the standard
+        Authorization header remains reserved for the upstream model provider.
+      security:
+        - AdminHeaderAuth: []
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: X-Helm-Tenant-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: Optional assertion that must match HELM_RUNTIME_TENANT_ID when supplied.
+        - name: X-Helm-Principal-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: Optional assertion that must match the server-configured runtime principal when supplied.
+        - name: X-Helm-Workspace-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: Optional assertion that must match HELM_RUNTIME_WORKSPACE_ID when scoped fencing is enabled.
       requestBody:
         required: true
         content:
@@ -302,6 +324,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ChatCompletionResponse'
         '400':
+          $ref: '#/components/responses/HelmError'
+        '401':
           $ref: '#/components/responses/HelmError'
         '403':
           $ref: '#/components/responses/HelmError'
@@ -4009,6 +4033,14 @@ paths:
 
 components:
   securitySchemes:
+    AdminHeaderAuth:
+      type: apiKey
+      in: header
+      name: X-HELM-API-Key
+      description: |
+        Self-hosted OSS admin key used by compatibility proxy routes whose
+        Authorization header is forwarded to the upstream model provider.
+
     AdminBearerAuth:
       type: http
       scheme: bearer

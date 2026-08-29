@@ -38,6 +38,16 @@ func chdirTempDir(t *testing.T) string {
 	return dir
 }
 
+func TestServerDataDirHonorsEnvironmentFallback(t *testing.T) {
+	t.Setenv("HELM_DATA_DIR", "/runtime/kernel-data")
+	if got := translogDataDir(""); got != "/runtime/kernel-data" {
+		t.Fatalf("server data directory = %q, want environment path", got)
+	}
+	if got := translogDataDir("/explicit/kernel-data"); got != "/explicit/kernel-data" {
+		t.Fatalf("server data directory = %q, want explicit path", got)
+	}
+}
+
 // TestRun_Help verifies that the help command prints usage and exits 0.
 func TestRun_Help(t *testing.T) {
 	args := []string{"helm", "--help"}

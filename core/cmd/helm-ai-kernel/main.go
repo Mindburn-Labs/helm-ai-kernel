@@ -390,10 +390,7 @@ func runServerWithOptions(opts serverOptions) error {
 		"HELM AI Kernel starting")
 	ctx, runtimeCancel := context.WithCancel(context.Background())
 	defer runtimeCancel()
-	dataDir := opts.DataDir
-	if dataDir == "" {
-		dataDir = "data"
-	}
+	dataDir := translogDataDir(opts.DataDir)
 
 	var (
 		db                    *sql.DB
@@ -562,7 +559,7 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 
 	// Guardian
-	guardianOpts := []guardian.GuardianOption{guardian.WithClock(runtimeClock)}
+	guardianOpts := []guardian.GuardianOption{}
 	if semanticEscalationBP > 0 {
 		guardianOpts = append(guardianOpts, guardian.WithSemanticThreatEscalation(semanticEscalationBP))
 	}
@@ -603,7 +600,10 @@ func runServerWithOptions(opts serverOptions) error {
 		guardianOpts = append(guardianOpts, guardian.WithWarmLeaseManager(warmMgr))
 	}
 
-	guard := guardian.NewGuardian(signer, ruleGraph, artRegistry, guardianOpts...)
+	guard, err := newProductionGuardian(signer, ruleGraph, artRegistry, runtimeClock, guardianOpts...)
+	if err != nil {
+		return fmt.Errorf("initialize production Guardian: %w", err)
+	}
 
 	// Executor and MCP catalog are managed via the Services layer
 	// (see services.go and subsystems.go for route wiring)

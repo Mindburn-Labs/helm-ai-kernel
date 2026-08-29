@@ -164,7 +164,7 @@ func (m *deepMockEval) EvaluateDecision(_ context.Context, _ guardian.DecisionRe
 }
 
 func TestDeep_GovernanceFirewallAllow(t *testing.T) {
-	gf := NewGovernanceFirewall(&deepMockEval{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	gf := NewGovernanceFirewall(&deepMockEval{verdict: string(contracts.VerdictAllow)}, nil)
 	err := gf.InterceptToolExecution(context.Background(), ToolExecutionRequest{
 		ToolName: "read", SessionID: "s1",
 	})
@@ -174,7 +174,7 @@ func TestDeep_GovernanceFirewallAllow(t *testing.T) {
 }
 
 func TestDeep_DelegationScopeBlock(t *testing.T) {
-	gf := NewGovernanceFirewall(&deepMockEval{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	gf := NewGovernanceFirewall(&deepMockEval{verdict: string(contracts.VerdictAllow)}, nil)
 	err := gf.InterceptToolExecution(context.Background(), ToolExecutionRequest{
 		ToolName:               "admin_delete",
 		DelegationAllowedTools: []string{"read", "write"},
@@ -185,7 +185,7 @@ func TestDeep_DelegationScopeBlock(t *testing.T) {
 }
 
 func TestDeep_DelegationScopeAllow(t *testing.T) {
-	gf := NewGovernanceFirewall(&deepMockEval{verdict: string(contracts.VerdictAllow)}, NewToolCatalog())
+	gf := NewGovernanceFirewall(&deepMockEval{verdict: string(contracts.VerdictAllow)}, nil)
 	err := gf.InterceptToolExecution(context.Background(), ToolExecutionRequest{
 		ToolName:               "read",
 		DelegationAllowedTools: []string{"read", "write"},

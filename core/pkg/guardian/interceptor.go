@@ -25,8 +25,14 @@ const (
 	ContextSessionID       = "session_id"
 	ContextSourceChannel   = "source_channel"
 	ContextTrustLevel      = "trust_level"
+	ContextEffectClass     = "effect_class"
 	ContextDestination     = "destination"
-	ContextThreatScan      = "threat_scan"
+	// ContextEgressDestinationRequired is set only by a trusted adapter or
+	// catalog boundary when the operation can transmit data over the network.
+	// Risk class is deliberately not used as an egress proxy: local mutations
+	// can be E1-E4, while external reads can be E0.
+	ContextEgressDestinationRequired = "egress_destination_required"
+	ContextThreatScan                = "threat_scan"
 	// ContextAllowTaintedEgress requests a tainted-egress override. It is a
 	// security decision and is honored only with an out-of-band trusted marker;
 	// it must never be passed as a caller argument.
@@ -38,7 +44,7 @@ const (
 // bound by a trusted transport or adapter boundary, never by caller arguments.
 func IsReservedSecurityContextKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextDestination, ContextThreatScan, ContextAllowTaintedEgress:
+	case ContextSecurityTrusted, ContextCredentialHash, ContextSessionID, ContextSourceChannel, ContextTrustLevel, ContextEffectClass, ContextDestination, ContextEgressDestinationRequired, ContextThreatScan, ContextAllowTaintedEgress:
 		return true
 	default:
 		return false
@@ -844,6 +850,14 @@ func trustedContextString(ctx map[string]interface{}, key string) (string, bool)
 	return value, value != ""
 }
 
+func trustedContextBool(ctx map[string]interface{}, key string) (bool, bool) {
+	if !trustedSecurityContext(ctx) {
+		return false, false
+	}
+	value, ok := ctx[key].(bool)
+	return value, ok
+}
+
 func trustedInputProvenance(ctx map[string]interface{}) (contracts.SourceChannel, contracts.InputTrustLevel) {
 	channel := contracts.SourceChannelUnknown
 	trustLevel := contracts.InputTrustExternalUntrusted
@@ -877,7 +891,24 @@ func NewTaintEgressInterceptor(g *Guardian) *TaintEgressInterceptor {
 func (t *TaintEgressInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContext, next Handler) (*contracts.DecisionRecord, error) {
 	// Gate 3: Egress control — deny if destination is blocked
 	if t.g.egressChecker != nil {
-		if dest, ok := trustedContextString(evalCtx.Request.Context, ContextDestination); ok && dest != "" {
+		dest, destinationTrusted := trustedContextString(evalCtx.Request.Context, ContextDestination)
+		destinationRequired, _ := trustedContextBool(evalCtx.Request.Context, ContextEgressDestinationRequired)
+		if destinationRequired && !destinationTrusted {
+			now := t.g.clock.Now()
+			decision := &contracts.DecisionRecord{
+				ID:         newDecisionID(),
+				Timestamp:  now,
+				Verdict:    string(contracts.VerdictDeny),
+				Reason:     "DATA_EGRESS_BLOCKED: MISSING_TRUSTED_DESTINATION",
+				ReasonCode: string(contracts.ReasonDataEgressBlocked),
+			}
+			if err := t.g.signDecisionWithContext(decision, evalCtx); err != nil {
+				return nil, fmt.Errorf("failed to sign missing-destination decision: %w", err)
+			}
+			t.g.recordBehavioralEvent(evalCtx.Request.Principal, trust.EventEgressBlocked, "egress blocked: missing trusted destination")
+			return decision, nil
+		}
+		if destinationTrusted {
 			var payloadSize int64
 			if ps, ok := evalCtx.Request.Context["payload_size"].(float64); ok {
 				payloadSize = int64(ps)

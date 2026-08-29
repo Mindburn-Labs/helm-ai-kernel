@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -157,6 +158,64 @@ func TestTaintInterceptorEgressBlock(t *testing.T) {
 		assert.Equal(t, string(contracts.VerdictDeny), dec.Verdict)
 		assert.Equal(t, string(contracts.ReasonTaintedEgressDeny), dec.ReasonCode)
 	})
+}
+
+func TestEgressGateUsesTrustedDestinationRequirementInsteadOfRiskClass(t *testing.T) {
+	signer := &testSigner{}
+	g := NewGuardian(signer, nil, nil,
+		WithEgressChecker(firewall.NewEgressChecker(&firewall.EgressPolicy{AllowedDomains: []string{"allowed.example.com"}})),
+	)
+
+	for _, tc := range []struct {
+		name                string
+		effectClass         string
+		destinationRequired bool
+		wantDeny            bool
+	}{
+		{name: "egress E2 missing destination denies", effectClass: "E2", destinationRequired: true, wantDeny: true},
+		{name: "local E2 missing destination reaches next", effectClass: "E2"},
+		{name: "local E4 missing destination reaches next", effectClass: "E4"},
+		{name: "egress E0 missing destination denies", effectClass: "E0", destinationRequired: true, wantDeny: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			nextCalled := false
+			pass := func(context.Context, *EvaluationContext) (*contracts.DecisionRecord, error) {
+				nextCalled = true
+				return &contracts.DecisionRecord{Verdict: string(contracts.VerdictAllow)}, nil
+			}
+			decisionContext := map[string]any{
+				ContextSecurityTrusted: true,
+				ContextEffectClass:     tc.effectClass,
+			}
+			if tc.destinationRequired {
+				decisionContext[ContextEgressDestinationRequired] = true
+			}
+			decision, err := NewTaintEgressInterceptor(g).Evaluate(context.Background(), &EvaluationContext{Request: DecisionRequest{
+				Principal: "agent",
+				Action:    "EXECUTE_TOOL",
+				Resource:  "tool",
+				Context:   decisionContext,
+			}}, pass)
+			assert.NoError(t, err)
+			if tc.wantDeny {
+				assert.False(t, nextCalled)
+				assert.Equal(t, string(contracts.ReasonDataEgressBlocked), decision.ReasonCode)
+				assert.Contains(t, decision.Reason, "MISSING_TRUSTED_DESTINATION")
+				return
+			}
+			assert.True(t, nextCalled)
+			assert.Equal(t, string(contracts.VerdictAllow), decision.Verdict)
+		})
+	}
+}
+
+func TestEffectClassIsReservedSecurityContextKey(t *testing.T) {
+	if !IsReservedSecurityContextKey(ContextEffectClass) {
+		t.Fatal("effect_class must be transport-bound")
+	}
+	if !IsReservedSecurityContextKey(ContextEgressDestinationRequired) {
+		t.Fatal("egress_destination_required must be adapter-bound")
+	}
 }
 
 // Tainted-egress enforcement defaults to ON.

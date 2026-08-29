@@ -104,6 +104,104 @@ func TestTenantScopedRuntimeAuthBindsConfiguredTenantAndPrincipal(t *testing.T) 
 	}
 }
 
+func TestConfiguredTenantRuntimeAuthUsesSeparateControlCredential(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	handler := protectRuntimeHandler(RouteAuthConfiguredTenant, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer provider-secret" {
+			t.Fatalf("provider Authorization = %q", got)
+		}
+		gotHash, ok := helmauth.AuthenticatedCredentialHash(r.Context())
+		if !ok {
+			t.Fatal("authenticated credential evidence is missing")
+		}
+		wantHash, _ := helmauth.AuthenticatedCredentialHash(helmauth.WithAuthenticatedCredential(context.Background(), testAdminAPIKey))
+		if gotHash != wantHash {
+			t.Fatalf("credential hash = %q, want %q", gotHash, wantHash)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req.Header.Set(runtimeAPIKeyHeader, testAdminAPIKey)
+	req.Header.Set("Authorization", "Bearer provider-secret")
+	req.Header.Set(tenantHeader, "tenant-a")
+	req.Header.Set(principalHeader, "principal-a")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("tenant-scoped proxy auth status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestConfiguredTenantRuntimeAuthExplicitControlCredentialDoesNotFallback(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	handler := protectRuntimeHandler(RouteAuthConfiguredTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not run with an invalid explicit HELM control credential")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req.Header.Set(runtimeAPIKeyHeader, "wrong-control-key")
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid explicit control credential status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestConfiguredTenantRuntimeAuthUsesServerBindingWhenHeadersAreMissing(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	handler := protectRuntimeHandler(RouteAuthConfiguredTenant, func(w http.ResponseWriter, r *http.Request) {
+		principal, err := helmauth.GetPrincipal(r.Context())
+		if err != nil {
+			t.Fatalf("configured principal missing: %v", err)
+		}
+		if principal.GetTenantID() != "tenant-a" || principal.GetID() != "principal-a" {
+			t.Fatalf("configured identity = %s/%s", principal.GetTenantID(), principal.GetID())
+		}
+		if _, ok := helmauth.AuthenticatedCredentialHash(r.Context()); !ok {
+			t.Fatal("authenticated credential evidence is missing")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req.Header.Set(runtimeAPIKeyHeader, testAdminAPIKey)
+	req.Header.Set("Authorization", "Bearer provider-secret")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("configured tenant route status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestConfiguredTenantRuntimeAuthRejectsCallerIdentityOverride(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimePrincipalIDEnv, "principal-a")
+	handler := protectRuntimeHandler(RouteAuthConfiguredTenant, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("configured tenant handler should not run for a caller-selected identity")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	req.Header.Set(runtimeAPIKeyHeader, testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-b")
+	req.Header.Set(principalHeader, "principal-b")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("configured tenant identity override status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTenantScopedRuntimeAuthRejectsExpiredQuickstartSession(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", "quickstart-session")
 	t.Setenv(runtimeTenantIDEnv, "tenant-a")

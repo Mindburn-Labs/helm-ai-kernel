@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,7 @@ const (
 	githubEffectsTokenEnv   = "HELM_GITHUB_TOKEN"
 	githubEffectsBaseURLEnv = "HELM_GITHUB_API_URL"
 	githubEffectsServerID   = "helm-github-effects"
+	githubEffectsDefaultURL = "https://api.github.com"
 )
 
 // githubEffectsRuntime is the shipped wiring of the governed effects stack:
@@ -45,8 +47,9 @@ const (
 // fail-closed behind the approval ceremony (no ApprovalStore is configured
 // here, so bounded writes always escalate and never dispatch).
 type githubEffectsRuntime struct {
-	bridge *rtmcp.GovernedBridge
-	otel   *effects.EffectsOTelInstrumentation
+	bridge      *rtmcp.GovernedBridge
+	otel        *effects.EffectsOTelInstrumentation
+	destination string
 }
 
 // newGitHubEffectsRuntimeFromEnv builds the governed GitHub dispatch runtime,
@@ -87,7 +90,22 @@ func newGitHubEffectsRuntime(token, baseURL string, seed []byte) (*githubEffects
 		return nil, fmt.Errorf("github effects: permit signer unavailable; a valid Ed25519 signing seed is required")
 	}
 	instrumentation, _ := effects.NewEffectsOTelInstrumentation()
-	return &githubEffectsRuntime{bridge: bridge, otel: instrumentation}, nil
+	return &githubEffectsRuntime{
+		bridge:      bridge,
+		otel:        instrumentation,
+		destination: githubEffectsDestination(baseURL),
+	}, nil
+}
+
+func githubEffectsDestination(baseURL string) string {
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = githubEffectsDefaultURL
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }
 
 // localPermitSigningSeed reads the Ed25519 seed the local runtime already uses
@@ -146,8 +164,10 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 				"required":             []string{"repo"},
 				"additionalProperties": false,
 			},
-			EffectClass: "E0",
-			RiskTier:    contracts.RiskTierLow,
+			EffectClass:               "E0",
+			RiskTier:                  contracts.RiskTierLow,
+			EgressDestinationRequired: true,
+			EgressDestination:         r.destination,
 		},
 		{
 			Name:        "github.read_pr",
@@ -163,8 +183,10 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 				"required":             []string{"repo", "number"},
 				"additionalProperties": false,
 			},
-			EffectClass: "E0",
-			RiskTier:    contracts.RiskTierLow,
+			EffectClass:               "E0",
+			RiskTier:                  contracts.RiskTierLow,
+			EgressDestinationRequired: true,
+			EgressDestination:         r.destination,
 		},
 		{
 			Name:        "github.create_issue",
@@ -183,8 +205,10 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 				"required":             []string{"repo", "title"},
 				"additionalProperties": false,
 			},
-			EffectClass: "E4",
-			RiskTier:    contracts.RiskTierHigh,
+			EffectClass:               "E4",
+			RiskTier:                  contracts.RiskTierHigh,
+			EgressDestinationRequired: true,
+			EgressDestination:         r.destination,
 		},
 		{
 			Name:        "github.add_comment",
@@ -201,8 +225,10 @@ func (r *githubEffectsRuntime) toolRefs() []mcppkg.ToolRef {
 				"required":             []string{"repo", "issue_number", "body"},
 				"additionalProperties": false,
 			},
-			EffectClass: "E3",
-			RiskTier:    contracts.RiskTierHigh,
+			EffectClass:               "E3",
+			RiskTier:                  contracts.RiskTierHigh,
+			EgressDestinationRequired: true,
+			EgressDestination:         r.destination,
 		},
 	}
 }

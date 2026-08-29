@@ -16,6 +16,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalverify"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
@@ -30,7 +31,10 @@ const (
 	effectDispositionPath                = "/internal/v1/effect-dispositions"
 	effectDispositionRecoverPath         = "/internal/v1/effect-dispositions/recover"
 	effectReconciliationCandidatesPath   = "/internal/effect-dispositions/reconciliation-candidates"
+	approvalCeremoniesPath               = "/internal/v1/approval-ceremonies"
 	approvalGrantConsumptionMaxBody      = 32 << 10
+	approvalCeremonyControlMaxBody       = 256 << 10
+	approvalCeremonyControlStatus        = "approval_ceremony_control.internal.v1"
 	approvalConsumptionReasonHeader      = "X-Helm-Reason-Code"
 	approvalConsumptionFencedReason      = "EMERGENCY_STOP_FENCED"
 	approvalConsumptionUnverifiedReason  = "EMERGENCY_STOP_UNVERIFIED"
@@ -41,6 +45,26 @@ var errApprovalConsumptionStopUnverified = errors.New("approval consumption emer
 type approvalGrantConsumer interface {
 	ConsumeGrant(context.Context, string, string, string, string) (approvalceremony.Record, error)
 	RecoverGrantConsumption(context.Context, string, string, string, string) (approvalceremony.Record, error)
+}
+
+type approvalCeremonyController interface {
+	BeginOrResume(context.Context, string) (approvalceremony.Record, error)
+	Get(context.Context, string) (approvalceremony.Record, error)
+	IssueChallenge(context.Context, string) (approvalceremony.Record, error)
+	VerifyQuorum(context.Context, string, []contracts.ApprovalAssertion) (approvalceremony.Record, error)
+	IssueGrant(context.Context, string) (approvalceremony.Record, error)
+}
+
+type approvalControlIdentityProvider struct{}
+
+func (approvalControlIdentityProvider) LoadControlIdentity(ctx context.Context) (approvalceremony.ControlIdentity, error) {
+	identity, err := (approvalceremony.ContextConsumerIdentityProvider{}).LoadConsumerIdentity(ctx)
+	if err != nil {
+		return approvalceremony.ControlIdentity{}, approvalceremony.ErrControlUnavailable
+	}
+	return approvalceremony.ControlIdentity{
+		Subject: identity.Subject, TenantID: identity.TenantID, WorkspaceID: identity.WorkspaceID,
+	}, nil
 }
 
 type approvalDispatchAdmitter interface {
@@ -64,8 +88,10 @@ type approvalConsumerTokenValidator interface {
 type approvalConsumptionRuntime struct {
 	consumer                 approvalGrantConsumer
 	admitter                 approvalDispatchAdmitter
+	controller               approvalCeremonyController
 	validator                approvalConsumerTokenValidator
 	dispatchValidator        approvalConsumerTokenValidator
+	controlValidator         approvalConsumerTokenValidator
 	disposition              effectDispositionRecorder
 	dispositionValidator     approvalConsumerTokenValidator
 	reconciliationCandidates effectReconciliationCandidateProvider
@@ -80,6 +106,31 @@ type approvalGrantConsumptionRequest struct {
 	GrantID    string `json:"grant_id"`
 	GrantHash  string `json:"grant_hash"`
 	Nonce      string `json:"nonce"`
+}
+
+type approvalCeremonyBeginRequest struct {
+	BindingRef string `json:"binding_ref"`
+}
+
+type approvalCeremonyAssertionsRequest struct {
+	Assertions []contracts.ApprovalAssertion `json:"assertions"`
+}
+
+type approvalCeremonyControlResponse struct {
+	State                   approvalceremony.State       `json:"state"`
+	ApprovalID              string                       `json:"approval_id"`
+	TenantID                string                       `json:"tenant_id"`
+	WorkspaceID             string                       `json:"workspace_id"`
+	BindingRef              string                       `json:"binding_ref"`
+	Challenge               *contracts.ApprovalChallenge `json:"challenge,omitempty"`
+	Grant                   *contracts.ApprovalGrant     `json:"grant,omitempty"`
+	GrantSignatureAlgorithm string                       `json:"grant_signature_algorithm,omitempty"`
+	GrantSignature          string                       `json:"grant_signature,omitempty"`
+	HoldStartedAt           time.Time                    `json:"hold_started_at"`
+	ExpiresAt               *time.Time                   `json:"expires_at,omitempty"`
+	ConsumedAt              *time.Time                   `json:"consumed_at,omitempty"`
+	ConsumedBy              string                       `json:"consumed_by,omitempty"`
+	Version                 int64                        `json:"version"`
 }
 
 type approvalGrantConsumptionResponse struct {
@@ -111,12 +162,248 @@ func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approva
 	mux.HandleFunc(approvalGrantConsumptionRecoverPath, runtime.protect(runtime.handle(true)))
 	mux.HandleFunc(approvalDispatchAdmissionPath, runtime.protectDispatch(runtime.handleDispatch(false)))
 	mux.HandleFunc(approvalDispatchAdmissionRecoverPath, runtime.protectDispatch(runtime.handleDispatch(true)))
+	if runtime.controller != nil {
+		mux.HandleFunc(approvalCeremoniesPath, runtime.protectControl(runtime.handleApprovalCeremonyCollection))
+		mux.HandleFunc(approvalCeremoniesPath+"/", runtime.protectControl(runtime.handleApprovalCeremonyItem))
+	}
 	if runtime.disposition != nil {
 		mux.HandleFunc(effectDispositionPath, runtime.protectDisposition(runtime.handleEffectDispositionRecord))
 		mux.HandleFunc(effectDispositionRecoverPath, runtime.protectDisposition(runtime.handleEffectDispositionRecover))
 	}
 	if runtime.reconciliationCandidates != nil {
 		mux.HandleFunc(effectReconciliationCandidatesPath, runtime.protectReconciliationCandidates(runtime.handleEffectReconciliationCandidates))
+	}
+}
+
+func (runtime *approvalConsumptionRuntime) protectControl(next http.HandlerFunc) http.HandlerFunc {
+	protected := runtime.protectWorkload(
+		runtime.controlValidator, runtime != nil && runtime.controller != nil && runtime.stops != nil,
+		"helm-approval-control", "approval-controller", "approval control", next,
+	)
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Helm-Contract-Status", approvalCeremonyControlStatus)
+		protected(w, r)
+	}
+}
+
+func (runtime *approvalConsumptionRuntime) handleApprovalCeremonyCollection(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		api.WriteMethodNotAllowed(w)
+		return
+	}
+	if !approvalCeremonyRequestHasNoQuery(w, r) || !requireApprovalCeremonyJSON(w, r) {
+		return
+	}
+	var request approvalCeremonyBeginRequest
+	if decodeApprovalCeremonyRequest(w, r, &request) != nil || !validWorkloadClaim(request.BindingRef) {
+		api.WriteBadRequest(w, "Invalid approval ceremony binding reference")
+		return
+	}
+	if err := runtime.requireUnfencedConsumerScope(r.Context()); err != nil {
+		writeApprovalCeremonyError(w, err)
+		return
+	}
+	record, err := runtime.controller.BeginOrResume(r.Context(), request.BindingRef)
+	writeApprovalCeremonyResult(w, record, err)
+}
+
+func (runtime *approvalConsumptionRuntime) handleApprovalCeremonyItem(w http.ResponseWriter, r *http.Request) {
+	if !approvalCeremonyRequestHasNoQuery(w, r) {
+		return
+	}
+	approvalID, action, ok := approvalCeremonyPath(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	switch {
+	case action == "" && r.Method == http.MethodGet:
+		if !requireEmptyApprovalCeremonyBody(w, r) {
+			return
+		}
+		record, err := runtime.controller.Get(r.Context(), approvalID)
+		writeApprovalCeremonyResult(w, record, err)
+	case action == "challenge" && r.Method == http.MethodPost:
+		if !requireEmptyApprovalCeremonyBody(w, r) {
+			return
+		}
+		if err := runtime.requireUnfencedConsumerScope(r.Context()); err != nil {
+			writeApprovalCeremonyError(w, err)
+			return
+		}
+		record, err := runtime.issueApprovalChallenge(r.Context(), approvalID)
+		writeApprovalCeremonyResult(w, record, err)
+	case action == "assertions" && r.Method == http.MethodPost:
+		if !requireApprovalCeremonyJSON(w, r) {
+			return
+		}
+		var request approvalCeremonyAssertionsRequest
+		if decodeApprovalCeremonyRequest(w, r, &request) != nil || len(request.Assertions) == 0 {
+			api.WriteBadRequest(w, "Invalid approval ceremony assertions")
+			return
+		}
+		if err := runtime.requireUnfencedConsumerScope(r.Context()); err != nil {
+			writeApprovalCeremonyError(w, err)
+			return
+		}
+		record, err := runtime.submitApprovalAssertions(r.Context(), approvalID, request.Assertions)
+		writeApprovalCeremonyResult(w, record, err)
+	default:
+		api.WriteMethodNotAllowed(w)
+	}
+}
+
+func (runtime *approvalConsumptionRuntime) issueApprovalChallenge(ctx context.Context, approvalID string) (approvalceremony.Record, error) {
+	for range 3 {
+		record, err := runtime.controller.Get(ctx, approvalID)
+		if err != nil {
+			return approvalceremony.Record{}, err
+		}
+		switch record.State {
+		case approvalceremony.StateHoldPending:
+			record, err = runtime.controller.IssueChallenge(ctx, approvalID)
+			if errors.Is(err, approvalceremony.ErrTransitionConflict) {
+				continue
+			}
+			return record, err
+		case approvalceremony.StateChallengeIssued, approvalceremony.StateQuorumVerified,
+			approvalceremony.StateGrantIssued, approvalceremony.StateConsumed:
+			return record, nil
+		default:
+			return approvalceremony.Record{}, approvalceremony.ErrTransitionConflict
+		}
+	}
+	return approvalceremony.Record{}, approvalceremony.ErrTransitionConflict
+}
+
+func (runtime *approvalConsumptionRuntime) submitApprovalAssertions(ctx context.Context, approvalID string, assertions []contracts.ApprovalAssertion) (approvalceremony.Record, error) {
+	for range 5 {
+		record, err := runtime.controller.Get(ctx, approvalID)
+		if err != nil {
+			return approvalceremony.Record{}, err
+		}
+		switch record.State {
+		case approvalceremony.StateChallengeIssued:
+			_, err = runtime.controller.VerifyQuorum(ctx, approvalID, assertions)
+			if errors.Is(err, approvalceremony.ErrTransitionConflict) {
+				continue
+			}
+			if err != nil {
+				return approvalceremony.Record{}, err
+			}
+		case approvalceremony.StateQuorumVerified:
+			_, err = runtime.controller.IssueGrant(ctx, approvalID)
+			if errors.Is(err, approvalceremony.ErrTransitionConflict) {
+				continue
+			}
+			if err != nil {
+				return approvalceremony.Record{}, err
+			}
+		case approvalceremony.StateGrantIssued, approvalceremony.StateConsumed:
+			return record, nil
+		default:
+			return approvalceremony.Record{}, approvalceremony.ErrTransitionConflict
+		}
+	}
+	return approvalceremony.Record{}, approvalceremony.ErrTransitionConflict
+}
+
+func approvalCeremonyRequestHasNoQuery(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.RawQuery == "" && !r.URL.ForceQuery {
+		return true
+	}
+	api.WriteBadRequest(w, "Approval ceremony routes do not accept caller-selected scope")
+	return false
+}
+
+func approvalCeremonyPath(r *http.Request) (string, string, bool) {
+	if r.URL.RawPath != "" || !strings.HasPrefix(r.URL.Path, approvalCeremoniesPath+"/") {
+		return "", "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, approvalCeremoniesPath+"/"), "/")
+	if len(parts) == 1 && validWorkloadClaim(parts[0]) {
+		return parts[0], "", true
+	}
+	if len(parts) == 2 && validWorkloadClaim(parts[0]) && (parts[1] == "challenge" || parts[1] == "assertions") {
+		return parts[0], parts[1], true
+	}
+	return "", "", false
+}
+
+func requireApprovalCeremonyJSON(w http.ResponseWriter, r *http.Request) bool {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		api.WriteError(w, http.StatusUnsupportedMediaType, "Unsupported media type", "Content-Type must be application/json")
+		return false
+	}
+	return true
+}
+
+func decodeApprovalCeremonyRequest(w http.ResponseWriter, r *http.Request, target any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, approvalCeremonyControlMaxBody)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("request must contain exactly one JSON object")
+	}
+	return nil
+}
+
+func requireEmptyApprovalCeremonyBody(w http.ResponseWriter, r *http.Request) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 1)
+	body, err := io.ReadAll(r.Body)
+	if err != nil || len(body) != 0 {
+		api.WriteBadRequest(w, "Approval ceremony route does not accept a request body")
+		return false
+	}
+	return true
+}
+
+func writeApprovalCeremonyResult(w http.ResponseWriter, record approvalceremony.Record, err error) {
+	if err != nil {
+		writeApprovalCeremonyError(w, err)
+		return
+	}
+	response := approvalCeremonyControlResponse{
+		State: record.State, ApprovalID: record.ApprovalID, TenantID: record.TenantID,
+		WorkspaceID: record.WorkspaceID, BindingRef: record.Spec.BindingRef,
+		Challenge: record.Challenge, Grant: record.Grant,
+		GrantSignatureAlgorithm: record.GrantSignatureAlgorithm, GrantSignature: record.GrantSignature,
+		HoldStartedAt: record.HoldStartedAt, ExpiresAt: record.ExpiresAt,
+		ConsumedAt: record.ConsumedAt, ConsumedBy: record.ConsumedBy, Version: record.Version,
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Helm-Contract-Status", approvalCeremonyControlStatus)
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func writeApprovalCeremonyError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, approvalceremony.ErrInvalidRecord):
+		api.WriteBadRequest(w, "Invalid approval ceremony request")
+	case errors.Is(err, approvalceremony.ErrNotFound):
+		api.WriteError(w, http.StatusNotFound, "Approval ceremony not found", "no matching ceremony exists in this workload scope")
+	case errors.Is(err, approvalceremony.ErrHoldPending), errors.Is(err, approvalceremony.ErrTransitionConflict),
+		errors.Is(err, approvalverify.ErrDuplicateSigner), errors.Is(err, approvalverify.ErrQuorumNotMet):
+		api.WriteConflict(w, "Approval ceremony conflicts with current authority state")
+	case errors.Is(err, approvalverify.ErrVerificationFailed):
+		api.WriteBadRequest(w, "Approval assertion verification failed")
+	case errors.Is(err, approvalceremony.ErrControlUnavailable), errors.Is(err, approvalverify.ErrAuthorityRejected),
+		errors.Is(err, approvalverify.ErrSignatureRejected):
+		api.WriteForbidden(w, "Approval ceremony authority rejected the request")
+	case errors.Is(err, approvalceremony.ErrEmergencyStopFenced):
+		w.Header().Set(approvalConsumptionReasonHeader, approvalConsumptionFencedReason)
+		api.WriteConflict(w, "Approval ceremony is emergency-stop fenced")
+	case errors.Is(err, errApprovalConsumptionStopUnverified):
+		w.Header().Set(approvalConsumptionReasonHeader, approvalConsumptionUnverifiedReason)
+		api.WriteError(w, http.StatusServiceUnavailable, "Approval ceremony unavailable", approvalConsumptionUnverifiedReason)
+	default:
+		api.WriteError(w, http.StatusServiceUnavailable, "Approval ceremony unavailable", "durable approval authority rejected the operation")
 	}
 }
 

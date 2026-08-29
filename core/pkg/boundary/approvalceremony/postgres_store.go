@@ -211,6 +211,7 @@ func (s *PostgresStore) createHold(ctx context.Context, record Record) (Record, 
                 tenant_id, approval_id, workspace_id, state, hold_started_at,
                 challenge_spec_json, created_at, updated_at, version
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (tenant_id, approval_id) DO NOTHING
             RETURNING `+recordColumns,
 			record.TenantID, record.ApprovalID, record.WorkspaceID, record.State,
 			record.HoldStartedAt, specJSON, record.CreatedAt, record.UpdatedAt, record.Version,

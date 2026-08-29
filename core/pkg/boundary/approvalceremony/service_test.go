@@ -9,6 +9,8 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"io"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +18,76 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 )
+
+func TestServiceBeginOrResumeIsRestartAndConcurrencyIdempotent(t *testing.T) {
+	hold, _, _, grant := ceremonyFixtures(t)
+	store := &serviceTestStore{}
+	service := newServiceForTest(t, store, hold.Spec, grant)
+
+	first, err := service.BeginOrResume(context.Background(), hold.Spec.BindingRef)
+	if err != nil {
+		t.Fatalf("first BeginOrResume() error = %v", err)
+	}
+	restarted := newServiceForTest(t, store, hold.Spec, grant)
+	second, err := restarted.BeginOrResume(context.Background(), hold.Spec.BindingRef)
+	if err != nil {
+		t.Fatalf("restarted BeginOrResume() error = %v", err)
+	}
+	if first != second || store.createdCount() != 1 {
+		t.Fatalf("restart did not resume exact hold: first=%+v second=%+v creates=%d", first, second, store.createdCount())
+	}
+
+	const callers = 12
+	results := make(chan Record, callers)
+	errorsCh := make(chan error, callers)
+	var wait sync.WaitGroup
+	for range callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			record, beginErr := restarted.BeginOrResume(context.Background(), hold.Spec.BindingRef)
+			results <- record
+			errorsCh <- beginErr
+		}()
+	}
+	wait.Wait()
+	close(results)
+	close(errorsCh)
+	for beginErr := range errorsCh {
+		if beginErr != nil {
+			t.Fatalf("concurrent BeginOrResume() error = %v", beginErr)
+		}
+	}
+	for record := range results {
+		if record != first {
+			t.Fatalf("concurrent BeginOrResume() record = %+v, want %+v", record, first)
+		}
+	}
+	if store.createdCount() != 1 {
+		t.Fatalf("concurrent starts persisted %d holds, want 1", store.createdCount())
+	}
+}
+
+func TestServiceBeginOrResumeRejectsBindingRefReuseAfterSourceDrift(t *testing.T) {
+	hold, _, _, grant := ceremonyFixtures(t)
+	store := &serviceTestStore{}
+	service := newServiceForTest(t, store, hold.Spec, grant)
+	if _, err := service.BeginOrResume(context.Background(), hold.Spec.BindingRef); err != nil {
+		t.Fatalf("first BeginOrResume() error = %v", err)
+	}
+	drifted := hold.Spec
+	drifted.PolicyVersion = "policy-v2"
+	drifted.PolicyHash = shaRef("changed-policy")
+	drifted.ConnectorAuthority.PolicyHash = drifted.PolicyHash
+	drifted.ConnectorAuthority, _ = drifted.ConnectorAuthority.Seal()
+	driftedService := newServiceForTest(t, store, drifted, grant)
+	if _, err := driftedService.BeginOrResume(context.Background(), drifted.BindingRef); !errors.Is(err, ErrBindingUnavailable) {
+		t.Fatalf("drifted BeginOrResume() error = %v, want ErrBindingUnavailable", err)
+	}
+	if store.createdCount() != 1 {
+		t.Fatalf("source drift persisted %d holds, want 1", store.createdCount())
+	}
+}
 
 func TestServiceFailsClosedBeforePersistingUntrustedOrUnrandomizedHold(t *testing.T) {
 	hold, _, _, grant := ceremonyFixtures(t)
@@ -42,8 +114,8 @@ func TestServiceFailsClosedBeforePersistingUntrustedOrUnrandomizedHold(t *testin
 		if _, err := service.BeginHold(context.Background(), hold.Spec.BindingRef); !errors.Is(err, ErrBindingUnavailable) {
 			t.Fatalf("BeginHold() error = %v, want ErrBindingUnavailable", err)
 		}
-		if authority.calls != 0 || store.createCalls != 0 {
-			t.Fatalf("substituted binding reached authority=%d or persistence=%d", authority.calls, store.createCalls)
+		if authority.calls.Load() != 0 || store.createCalls != 0 {
+			t.Fatalf("substituted binding reached authority=%d or persistence=%d", authority.calls.Load(), store.createCalls)
 		}
 	})
 
@@ -113,8 +185,8 @@ func TestServiceRejectsExpiredHoldBeforeAuthorityOrRandomness(t *testing.T) {
 	if _, err := service.IssueChallenge(context.Background(), hold.ApprovalID); !errors.Is(err, ErrTransitionConflict) {
 		t.Fatalf("IssueChallenge() error = %v, want ErrTransitionConflict", err)
 	}
-	if authority.calls != 0 || store.issueChallengeCalls != 0 {
-		t.Fatalf("expired hold reached authority=%d or persistence=%d", authority.calls, store.issueChallengeCalls)
+	if authority.calls.Load() != 0 || store.issueChallengeCalls != 0 {
+		t.Fatalf("expired hold reached authority=%d or persistence=%d", authority.calls.Load(), store.issueChallengeCalls)
 	}
 }
 
@@ -275,13 +347,13 @@ func TestPostgresStoreRejectsCallerFabricatedTransitionTimes(t *testing.T) {
 
 type serviceTestAuthority struct {
 	store approvalverify.TrustStore
-	calls int
+	calls atomic.Int64
 }
 
 type serviceTestBinding struct {
 	spec  ChallengeSpec
 	err   error
-	calls int
+	calls atomic.Int64
 }
 
 type serviceTestConsumer struct {
@@ -303,34 +375,50 @@ func (p *serviceTestConsumer) LoadConsumerIdentity(context.Context) (ConsumerIde
 }
 
 func (p *serviceTestBinding) LoadApprovalBinding(_ context.Context, _, _, _ string) (ChallengeSpec, error) {
-	p.calls++
+	p.calls.Add(1)
 	return p.spec, p.err
 }
 
 func (p *serviceTestAuthority) LoadApprovalAuthority(_ context.Context, _, _, _, _, _ string) (approvalverify.TrustStore, error) {
-	p.calls++
+	p.calls.Add(1)
 	return p.store, nil
 }
 
 type serviceTestStore struct {
+	mu                  sync.Mutex
 	record              Record
 	createCalls         int
+	successfulCreates   int
 	issueChallengeCalls int
 	consumeCalls        int
 	consumption         contracts.ApprovalGrantConsumption
 }
 
 func (s *serviceTestStore) createHold(_ context.Context, record Record) (Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.createCalls++
+	if s.record.ApprovalID != "" {
+		return Record{}, ErrTransitionConflict
+	}
 	s.record = record
+	s.successfulCreates++
 	return record, nil
 }
 
-func (s *serviceTestStore) get(context.Context, string, string, string) (Record, error) {
-	if s.record.ApprovalID == "" {
+func (s *serviceTestStore) get(_ context.Context, tenantID, workspaceID, approvalID string) (Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.record.ApprovalID != approvalID || s.record.TenantID != tenantID || s.record.WorkspaceID != workspaceID {
 		return Record{}, ErrNotFound
 	}
 	return s.record, nil
+}
+
+func (s *serviceTestStore) createdCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.successfulCreates
 }
 
 func (s *serviceTestStore) issueChallenge(context.Context, string, string, string, contracts.ApprovalChallenge, time.Time) (Record, error) {
@@ -406,4 +494,22 @@ func controlForSpec(spec ChallengeSpec) ControlIdentity {
 	return ControlIdentity{
 		Subject: "spiffe://helm/control-plane-a", TenantID: spec.TenantID, WorkspaceID: spec.WorkspaceID,
 	}
+}
+
+func newServiceForTest(t *testing.T, store ceremonyStore, spec ChallengeSpec, grant contracts.ApprovalGrant) *Service {
+	t.Helper()
+	service, err := newService(
+		store, &serviceTestBinding{spec: spec}, &serviceTestAuthority{store: authorityMetadata(spec)},
+		&serviceTestControl{identity: controlForSpec(spec)},
+		&serviceTestConsumer{identity: consumerForSpec(spec)},
+		crypto.NewEd25519SignerFromKey(
+			ed25519.NewKeyFromSeed(bytes.Repeat([]byte{9}, ed25519.SeedSize)),
+			"approval-test",
+		),
+		time.Now, bytes.NewReader(make([]byte, 64)), serviceTestConfig(spec, grant),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
 }

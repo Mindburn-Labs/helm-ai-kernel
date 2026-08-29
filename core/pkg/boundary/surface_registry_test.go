@@ -419,10 +419,21 @@ func TestSQLSurfaceRegistryPersistsRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var snapshotUpdatedAt string
+	if err := db.QueryRow(`SELECT updated_at FROM boundary_surface_snapshots WHERE id = 'default'`).Scan(&snapshotUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
 
-	reloaded, err := NewSQLSurfaceRegistry(context.Background(), db, "sqlite", func() time.Time { return now })
+	reloaded, err := NewSQLSurfaceRegistry(context.Background(), db, "sqlite", func() time.Time { return now.Add(time.Hour) })
 	if err != nil {
 		t.Fatal(err)
+	}
+	var reloadedSnapshotUpdatedAt string
+	if err := db.QueryRow(`SELECT updated_at FROM boundary_surface_snapshots WHERE id = 'default'`).Scan(&reloadedSnapshotUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if reloadedSnapshotUpdatedAt != snapshotUpdatedAt {
+		t.Fatalf("SQL registry reload rewrote snapshot updated_at: %s != %s", reloadedSnapshotUpdatedAt, snapshotUpdatedAt)
 	}
 	got, ok := reloaded.GetRecord(record.RecordID)
 	if !ok {

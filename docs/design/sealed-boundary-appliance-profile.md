@@ -136,8 +136,9 @@ integrity, not authenticity).
 3. Signed-input wording corrected: no canonical **signed policy-bundle record
    contract usable as compiler input** exists; existing bundles are
    content-hash-verified, and `policy/reconcile.Ed25519PolicyVerifier`
-   verifies reconciler bundle signatures — the future signed-input slot binds
-   to that pattern. The Slice A input is hash-bound (`policy_input_hash`).
+   verifies versioned complete policy-head signatures whose `policy_hash`
+   commits exact bundle bytes — the future signed-input slot binds to that
+   pattern. The Slice A input is hash-bound (`policy_input_hash`).
 4. No repo-wide mode-ladder enum exists; tiers (`observe|enforce`) validate
    locally to the package.
 5. Compile-time DNS resolution dropped: domains stay L7 gateway scope, with a

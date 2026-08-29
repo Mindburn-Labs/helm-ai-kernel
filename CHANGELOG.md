@@ -93,6 +93,14 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Changed — policy-head signature source contract
+
+The unreleased `policy/reconcile.SignatureVerifier` source contract now verifies
+the complete versioned unsigned policy head through `VerifyPolicyHead`. Existing
+bundle-only signatures and `VerifyPolicyBundle` implementations must migrate
+before adopting this source revision. This entry does not claim a tagged release
+or production deployment.
+
 ## [0.8.5] - 2026-08-23
 
 Source-prepared v0.8.5 notes for the current Kernel tree. These entries do not

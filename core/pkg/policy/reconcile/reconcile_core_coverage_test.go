@@ -149,8 +149,8 @@ func TestControlPlaneSourceErrorAndHeaderBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("controlplane head: %v", err)
 	}
-	if gotHead.Scope.Key() != scope.Key() || !sawBearer {
-		t.Fatalf("head scope/header not normalized: %+v bearer=%v", gotHead, sawBearer)
+	if gotHead.Scope != DefaultScope || !sawBearer {
+		t.Fatalf("head scope was rewritten or authorization missing: %+v bearer=%v", gotHead, sawBearer)
 	}
 	loaded, err := source.Load(context.Background(), scope, 9)
 	if err != nil || string(loaded) != string(bundle) {

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
+	helmconfig "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/config"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 )
 
@@ -75,6 +77,64 @@ func (g *G9Jurisdiction) Run(ctx *conform.RunContext) *conform.GateResult {
 		}
 	}
 
+	enforceRegionalPrivacyPrerequisites(ctx, result)
 	result.EvidencePaths = append(result.EvidencePaths, "04_EXPORTS/jurisdictions/")
 	return result
+}
+
+// enforceRegionalPrivacyPrerequisites checks declared source configuration
+// only. Passing it does not prove provider terms, processing location, or a
+// deployed GDPR control; those require separate external and runtime evidence.
+func enforceRegionalPrivacyPrerequisites(ctx *conform.RunContext, result *conform.GateResult) {
+	definition := conform.Profiles()[ctx.Profile]
+	if definition == nil {
+		return
+	}
+	strictErasure, _ := definition.Overrides["privacy_erasure_strict"].(bool)
+	requireRetention, _ := definition.Overrides["retention_policy_required"].(bool)
+	requireResidency, _ := definition.Overrides["tape_residency_enforced"].(bool)
+	if !strictErasure && !requireRetention && !requireResidency {
+		return
+	}
+
+	deny := func(reason string) {
+		result.Pass = false
+		result.Reasons = append(result.Reasons, reason)
+	}
+	jurisdiction := strings.ToLower(strings.TrimSpace(ctx.Jurisdiction))
+	if jurisdiction == "" || strings.ContainsAny(jurisdiction, `/\\`) {
+		if strictErasure {
+			deny(conform.ReasonPrivacyErasureRequired)
+		}
+		if requireRetention {
+			deny(conform.ReasonRetentionPolicyMissing)
+		}
+		if requireResidency {
+			deny(conform.ReasonTapeResidencyViolation)
+		}
+		return
+	}
+
+	profile, err := helmconfig.LoadProfile(filepath.Join(ctx.ProjectRoot, "core", "pkg", "config", "profiles"), jurisdiction)
+	if err != nil {
+		if strictErasure {
+			deny(conform.ReasonPrivacyErasureRequired)
+		}
+		if requireRetention {
+			deny(conform.ReasonRetentionPolicyMissing)
+		}
+		if requireResidency {
+			deny(conform.ReasonTapeResidencyViolation)
+		}
+		return
+	}
+	if strictErasure && (!profile.RightToErasure || !profile.Retention.RightToErasure) {
+		deny(conform.ReasonPrivacyErasureRequired)
+	}
+	if requireRetention && (profile.Retention.MaxDays <= 0 || profile.Retention.PIIRetentionDays <= 0) {
+		deny(conform.ReasonRetentionPolicyMissing)
+	}
+	if requireResidency && strings.TrimSpace(profile.DataResidency) == "" {
+		deny(conform.ReasonTapeResidencyViolation)
+	}
 }

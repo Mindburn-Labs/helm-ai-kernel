@@ -1206,6 +1206,12 @@
           "maximum": 65535,
           "description": "TCP port the workload's gateway binds inside the container. With `--bind loopback` this is reachable only via `kubectl exec`, never via a Service."
         },
+        "model": {
+          "type": "string",
+          "pattern": "^openrouter/.+",
+          "default": "openrouter/openai/gpt-4o-mini",
+          "description": "OpenClaw provider/model reference. The provider must remain openrouter because the chart projects only an OpenRouter credential and allows only the OpenRouter egress origin."
+        },
         "tmpfsSize": {
           "type": "string",
           "description": "Size limit for the tmpfs-backed emptyDir mounted at /tmp."

@@ -1,0 +1,83 @@
+{{- if .Values.helm.production -}}
+{{- if not .Values.networkPolicy.enabled -}}
+{{- fail "helm.production=true requires networkPolicy.enabled=true" -}}
+{{- end -}}
+{{- range $direction := list "ingress" "egress" -}}
+{{- $rules := index $.Values.networkPolicy $direction -}}
+{{- if empty $rules -}}
+{{- fail (printf "helm.production=true requires at least one networkPolicy.%s allow rule" $direction) -}}
+{{- end -}}
+{{- $peerKey := ternary "from" "to" (eq $direction "ingress") -}}
+{{- range $rule := $rules -}}
+{{- $peers := index $rule $peerKey -}}
+{{- $ports := index $rule "ports" -}}
+{{- if empty $peers -}}
+{{- fail (printf "production networkPolicy.%s rules require non-empty %s peers" $direction $peerKey) -}}
+{{- end -}}
+{{- if empty $ports -}}
+{{- fail (printf "production networkPolicy.%s rules require explicit ports" $direction) -}}
+{{- end -}}
+{{- range $port := $ports -}}
+{{- if or (not (hasKey $port "port")) (not (hasKey $port "protocol")) -}}
+{{- fail (printf "production networkPolicy.%s ports require explicit port and protocol" $direction) -}}
+{{- end -}}
+{{- end -}}
+{{- range $peer := $peers -}}
+{{- $hasIPBlock := hasKey $peer "ipBlock" -}}
+{{- $hasPodSelector := hasKey $peer "podSelector" -}}
+{{- $hasNamespaceSelector := hasKey $peer "namespaceSelector" -}}
+{{- if not (or $hasIPBlock $hasPodSelector $hasNamespaceSelector) -}}
+{{- fail (printf "production networkPolicy.%s peers require ipBlock, podSelector, or namespaceSelector" $direction) -}}
+{{- end -}}
+{{- if and $hasIPBlock (or $hasPodSelector $hasNamespaceSelector) -}}
+{{- fail (printf "production networkPolicy.%s peers cannot combine ipBlock with selectors" $direction) -}}
+{{- end -}}
+{{- if and $hasPodSelector (empty (index $peer "podSelector")) -}}
+{{- fail (printf "production networkPolicy.%s podSelector cannot match every pod" $direction) -}}
+{{- end -}}
+{{- if and $hasNamespaceSelector (empty (index $peer "namespaceSelector")) -}}
+{{- fail (printf "production networkPolicy.%s namespaceSelector cannot match every namespace" $direction) -}}
+{{- end -}}
+{{- if $hasIPBlock -}}
+{{- $ipBlock := index $peer "ipBlock" -}}
+{{- $cidr := index $ipBlock "cidr" -}}
+{{- if not (or (regexMatch "^[0-9.]+/32$" ($cidr | default "")) (regexMatch "^[0-9A-Fa-f:]+/128$" ($cidr | default ""))) -}}
+{{- fail (printf "production networkPolicy.%s ipBlock peers require exact /32 or /128 host CIDRs" $direction) -}}
+{{- end -}}
+{{- if not (empty (index $ipBlock "except")) -}}
+{{- fail (printf "production networkPolicy.%s exact-host ipBlock peers cannot use except" $direction) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "helm-ai-kernel.fullname" . }}-kernel
+  labels:
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
+  annotations:
+    helm.ai/policy-intent: "kernel ingress and egress are allowlist-only"
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "helm-ai-kernel.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- if .Values.networkPolicy.ingress }}
+    {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
+    {{- else }}
+    []
+    {{- end }}
+  egress:
+    {{- if .Values.networkPolicy.egress }}
+    {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
+    {{- else }}
+    []
+    {{- end }}
+{{- end }}

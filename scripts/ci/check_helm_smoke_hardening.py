@@ -83,6 +83,21 @@ def check_launchpad_smoke(path: Path) -> None:
         require(text, token, path)
 
 
+def check_launchpad_test_network_policy(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    require(
+        text,
+        """        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: helm-ai-kernel
+              app.kubernetes.io/component: test
+      ports:
+        - protocol: TCP
+          port: 8081""",
+        path,
+    )
+
+
 def check_authority_state_chart(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     required = [
@@ -124,6 +139,7 @@ def main() -> None:
     check_kind_smoke(ROOT / "scripts/ci/kind_smoke.sh")
     check_chart_smoke(ROOT / "scripts/ci/helm_chart_smoke.sh")
     check_launchpad_smoke(ROOT / "scripts/ci/launchpad_k8s_smoke.sh")
+    check_launchpad_test_network_policy(ROOT / "scripts/ci/helm_production_network_policy_values.yaml")
     check_authority_state_chart(ROOT / "deploy/helm-chart/templates/deployment.yaml")
     print("Helm smoke hardening checks passed.")
 

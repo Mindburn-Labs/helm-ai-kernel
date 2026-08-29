@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +15,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/events"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -57,14 +60,15 @@ type ToolExecutionResponse struct {
 	ReceiptID         string            `json:"receipt_id,omitempty"`
 
 	// These fields are runtime-only anchors for the lifecycle wrapper. They are
-	// intentionally excluded from every MCP response serialization: the signed
-	// receipt is projected into lifecycle events, while the public response
-	// continues to carry only the established tool result contract.
+	// excluded from automatic JSON serialization; the gateway explicitly projects
+	// only ProtectedArgsHash as the safe proof anchor alongside the audit receipt.
 	ExecutionReceipt        *contracts.Receipt `json:"-"`
 	DispatchState           string             `json:"-"`
 	ApprovalHash            string             `json:"-"`
 	ApproverID              string             `json:"-"`
 	DispatchAdmissionExpiry time.Time          `json:"-"`
+	ProtectedArgsHash       string             `json:"-"`
+	runtimeReasonCode       contracts.ReasonCode
 }
 
 // PolicyEvaluator abstracts the governance decision evaluation.
@@ -79,9 +83,31 @@ type GovernanceFirewall struct {
 	catalog      *ToolCatalog
 	publisher    events.Publisher
 	lifecycleEnv string
+	privacy      *privacy.StandardPrivacyManager
 }
 
-const lifecycleSourceRef = "MCP"
+const (
+	lifecycleSourceRef  = "MCP"
+	maxMCPResponseItems = 10000
+	// MaxResponseBytes bounds every serialized MCP response, including its
+	// transport envelope and trailing newline.
+	MaxResponseBytes = 4 << 20
+)
+
+var (
+	errGovernanceCheckFailed      = errors.New("governance check failed")
+	errGovernanceDecisionEmpty    = errors.New("governance returned empty decision")
+	errGovernanceNonCanonical     = errors.New("governance returned non-canonical verdict")
+	errGovernanceBlocked          = errors.New("governance blocked execution: policy violation")
+	errGovernanceApprovalRequired = errors.New("governance requires approval")
+	errDelegationScopeViolation   = errors.New("delegation scope violation")
+	errReservedSecurityArgument   = errors.New("reserved security context argument rejected")
+	errClassificationFailed       = errors.New("tool classification failed")
+	errPlanEvaluationFailed       = errors.New("failed to evaluate plan step")
+	errPlanDecisionEgressBlocked  = fmt.Errorf("%w: plan decision rejected", privacy.ErrDataEgressBlocked)
+	errToolHandlerFailed          = errors.New("TOOL_HANDLER_FAILED")
+	errAuditDenied                = errors.New("audit denied")
+)
 
 // GovernanceFirewallOption configures optional runtime seams.
 type GovernanceFirewallOption func(*GovernanceFirewall)
@@ -118,6 +144,7 @@ func NewGovernanceFirewall(evaluator PolicyEvaluator, catalog *ToolCatalog, opts
 		evaluator:    evaluator,
 		catalog:      catalog,
 		lifecycleEnv: lifecycleEnv,
+		privacy:      privacy.NewPrivacyManager(),
 	}
 	for _, opt := range opts {
 		opt(f)
@@ -131,31 +158,58 @@ func NewGovernanceFirewall(evaluator PolicyEvaluator, catalog *ToolCatalog, opts
 // When DelegationAllowedTools is set, tool scope is checked BEFORE the
 // Guardian evaluation (defense-in-depth — see ARCHITECTURE.md §2.1).
 func (f *GovernanceFirewall) InterceptToolExecution(ctx context.Context, req ToolExecutionRequest) error {
-	decision, err := f.evaluateToolExecution(ctx, req)
+	protectedReq, decisionCtx, findings, err := f.prepareToolExecutionRequest(ctx, req)
 	if err != nil {
 		return err
 	}
-	return decisionError(decision)
-}
-
-func (f *GovernanceFirewall) evaluateToolExecution(ctx context.Context, req ToolExecutionRequest) (*contracts.DecisionRecord, error) {
-	decisionCtx, err := f.prepareToolExecution(req)
-	if err != nil {
-		return nil, err
+	// This API returns only a verdict, not the protected request. Allowing a
+	// redaction here would let a caller execute the original value after Guardian
+	// evaluated a different payload, so direct interception must fail closed.
+	if len(findings) > 0 {
+		return privacy.ErrDataEgressBlocked
 	}
 	if f.catalog != nil {
-		_, _, err := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx)
-		if err != nil {
-			return nil, err
+		if _, err := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx); err != nil {
+			return err
 		}
 	}
-	return f.evaluatePreparedToolExecution(ctx, req, decisionCtx)
+	decision, err := f.evaluatePreparedToolExecution(ctx, protectedReq, decisionCtx)
+	if err != nil {
+		return err
+	}
+	return f.decisionError(decision)
 }
 
-func (f *GovernanceFirewall) prepareToolExecution(req ToolExecutionRequest) (map[string]interface{}, error) {
+// prepareToolExecutionRequest creates the protected request and the trusted
+// Guardian context from the same sanitized argument map. This is the single
+// admission boundary used by direct interception, wrapped handlers, and plans.
+func (f *GovernanceFirewall) prepareToolExecutionRequest(ctx context.Context, req ToolExecutionRequest) (ToolExecutionRequest, map[string]interface{}, []string, error) {
 	if f.evaluator == nil {
-		return nil, fmt.Errorf("governance evaluator is required")
+		return ToolExecutionRequest{}, nil, nil, fmt.Errorf("governance evaluator is required")
 	}
+	// Preserve the transport-boundary contract for security context keys. This
+	// check precedes value inspection so a caller cannot turn a reserved-key
+	// violation into a different privacy verdict.
+	for key := range req.Arguments {
+		if guardian.IsReservedSecurityContextKey(key) {
+			return ToolExecutionRequest{}, nil, nil, errReservedSecurityArgument
+		}
+	}
+
+	manager := f.privacy
+	if manager == nil {
+		manager = privacy.NewPrivacyManager()
+	}
+	protected, findings, err := manager.Protect(ctx, req.Arguments)
+	if err != nil {
+		return ToolExecutionRequest{}, nil, nil, privacy.ErrDataEgressBlocked
+	}
+	protectedArguments, ok := protected.(map[string]interface{})
+	if !ok && protected != nil {
+		return ToolExecutionRequest{}, nil, nil, privacy.ErrDataEgressBlocked
+	}
+	protectedReq := req
+	protectedReq.Arguments = protectedArguments
 
 	// Pre-Guardian delegation scope check.
 	// This runs before the full policy evaluation so that a delegated agent
@@ -169,15 +223,15 @@ func (f *GovernanceFirewall) prepareToolExecution(req ToolExecutionRequest) (map
 			}
 		}
 		if !allowed {
-			return nil, fmt.Errorf("delegation scope violation: tool %q not in session scope", req.ToolName)
+			return ToolExecutionRequest{}, nil, nil, errDelegationScopeViolation
 		}
 	}
 
 	// Build Guardian decision context, forwarding delegation metadata.
 	decisionCtx := make(map[string]interface{})
-	for k, v := range req.Arguments {
+	for k, v := range protectedReq.Arguments {
 		if guardian.IsReservedSecurityContextKey(k) {
-			return nil, fmt.Errorf("reserved security context argument %q must be supplied by the transport boundary", k)
+			return ToolExecutionRequest{}, nil, nil, errReservedSecurityArgument
 		}
 		decisionCtx[k] = v
 	}
@@ -201,7 +255,7 @@ func (f *GovernanceFirewall) prepareToolExecution(req ToolExecutionRequest) (map
 	if len(req.OAuthResources) > 0 {
 		decisionCtx["oauth_resources"] = append([]string(nil), req.OAuthResources...)
 	}
-	return decisionCtx, nil
+	return protectedReq, decisionCtx, findings, nil
 }
 
 func (f *GovernanceFirewall) evaluatePreparedToolExecution(ctx context.Context, req ToolExecutionRequest, decisionCtx map[string]interface{}) (*contracts.DecisionRecord, error) {
@@ -216,18 +270,18 @@ func (f *GovernanceFirewall) evaluatePreparedToolExecution(ctx context.Context, 
 		Context:   decisionCtx,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("governance check failed: %w", err)
+		return nil, errGovernanceCheckFailed
 	}
 	if decision == nil {
-		return nil, fmt.Errorf("governance returned empty decision")
+		return nil, errGovernanceDecisionEmpty
 	}
 
 	return decision, nil
 }
 
-func decisionError(decision *contracts.DecisionRecord) error {
+func (f *GovernanceFirewall) decisionError(decision *contracts.DecisionRecord) error {
 	if decision == nil {
-		return fmt.Errorf("governance returned empty decision")
+		return errGovernanceDecisionEmpty
 	}
 
 	// Enforce Decision — use canonical verdict constants
@@ -235,11 +289,11 @@ func decisionError(decision *contracts.DecisionRecord) error {
 	case string(contracts.VerdictAllow):
 		return nil
 	case string(contracts.VerdictDeny):
-		return fmt.Errorf("governance blocked execution: %s", decision.Reason)
+		return errGovernanceBlocked
 	case string(contracts.VerdictEscalate), "PENDING":
-		return fmt.Errorf("governance requires approval: %s", decision.Reason)
+		return errGovernanceApprovalRequired
 	default:
-		return fmt.Errorf("governance returned non-canonical verdict %q", decision.Verdict)
+		return errGovernanceNonCanonical
 	}
 }
 
@@ -268,6 +322,11 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 	return func(ctx context.Context, req ToolExecutionRequest) (ToolExecutionResponse, error) {
 		startedAt := time.Now()
 		ctx, baseMeta := lifecycleContext(ctx, req, f.lifecycleEnv)
+		protectedArgsHash := ""
+		anchorResponse := func(response ToolExecutionResponse) ToolExecutionResponse {
+			response.ProtectedArgsHash = protectedArgsHash
+			return response
+		}
 		sequence := make([]events.LifecycleEvent, 0, len(events.LifecycleEventTypes()))
 		emit := func(event events.LifecycleEvent) {
 			sequence = append(sequence, event)
@@ -295,59 +354,90 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			))
 			finish()
 		}
+		emitDispatch := func(response ToolExecutionResponse) {
+			if response.ExecutionReceipt == nil {
+				return
+			}
+			receipt := f.protectDispatchReceipt(ctx, *response.ExecutionReceipt)
+			// Only the authoritative receipt returned by the governed runtime can
+			// claim that a dispatch completed. ToolCatalog's audit receipt is an
+			// unpersisted observation and remains a response-only audit field.
+			emit(events.NewDispatchCompleted(
+				meta(), receipt, "",
+				events.LifecycleEnrichment{
+					EffectContext:    f.protectDispatchString(ctx, response.DispatchState),
+					ApprovalRef:      events.StableRef(response.ApprovalHash),
+					ApproverRef:      events.StableRef(response.ApproverID),
+					ApprovalExpiryMs: lifecycleExpiryMs(response.DispatchAdmissionExpiry),
+				},
+			))
+		}
+		publicToolName := f.publicLifecycleToolName(ctx, req.ToolName)
 		actorRef := events.StableRef(req.SessionID)
 		emit(events.NewRequestReceived(
-			meta(), "EXECUTE_TOOL", req.ToolName,
+			meta(), "EXECUTE_TOOL", publicToolName,
 			events.LifecycleEnrichment{
 				ActorRef: actorRef,
 				Surface:  string(contracts.SourceChannelMCPClient),
-				Tool:     req.ToolName,
+				Tool:     publicToolName,
 			},
 		))
 		if req.ingressFailureReasonCode != "" {
 			emitFailure(req.ingressFailureReasonCode, "ingress")
 			return deniedResponse(fmt.Errorf("MCP ingress rejected: %s", req.ingressFailureReasonCode)), nil
 		}
-		decisionCtx, preflightErr := f.prepareToolExecution(req)
+		protectedReq, decisionCtx, _, preflightErr := f.prepareToolExecutionRequest(ctx, req)
 		if preflightErr != nil {
-			emitFailure(string(preflightReasonCode(f, req)), "preflight")
+			reasonCode := preflightReasonCode(f, req)
+			if errors.Is(preflightErr, privacy.ErrDataEgressBlocked) || errors.Is(preflightErr, privacy.ErrDataEgressInvalid) {
+				reasonCode = contracts.ReasonDataEgressBlocked
+			}
+			emitFailure(string(reasonCode), "preflight")
 			return deniedResponse(preflightErr), nil
 		}
-
-		effectClass, riskTier, classificationErr := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx)
+		tool, classificationErr := bindCatalogSecurityContext(f.catalog, req.ToolName, decisionCtx)
 		if classificationErr != nil {
 			emitFailure(string(contracts.ReasonSchemaViolation), "classification")
-			return deniedResponse(classificationErr), nil
+			return anchorResponse(deniedResponse(errClassificationFailed)), nil
 		}
+		var hashErr error
+		protectedArgsHash, hashErr = ValidateToolArguments(tool, protectedReq.Arguments)
+		if hashErr != nil {
+			emitFailure(string(contracts.ReasonDataEgressBlocked), "preflight")
+			return anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked)), nil
+		}
+
+		effectClass, riskTier := tool.EffectClass, tool.RiskTier
 		emit(events.NewRequestClassified(
 			meta(), effectClass, string(riskTier),
 			events.LifecycleEnrichment{
 				Action:               "EXECUTE_TOOL",
-				Resource:             req.ToolName,
+				Resource:             publicToolName,
 				EffectContext:        "pep_catalog",
 				ClassificationSource: "pep_catalog",
 			},
 		))
 
 		decisionStarted := time.Now()
-		decision, evalErr := f.evaluatePreparedToolExecution(ctx, req, decisionCtx)
+		decision, evalErr := f.evaluatePreparedToolExecution(ctx, protectedReq, decisionCtx)
 		decisionLatency := time.Since(decisionStarted).Milliseconds()
 		if evalErr != nil {
 			emitFailure(string(contracts.ReasonPDPError), "evaluator")
-			return deniedResponse(evalErr), nil
+			return anchorResponse(deniedResponse(evalErr)), nil
 		}
 
-		emit(events.NewPolicyApplied(meta(), *decision, nil))
-		emit(events.NewDecisionMade(meta(), *decision, events.LifecycleEnrichment{
+		publicDecision := f.publicDecisionProjection(ctx, *decision)
+		emit(events.NewPolicyApplied(meta(), publicDecision, nil))
+		emit(events.NewDecisionMade(meta(), publicDecision, events.LifecycleEnrichment{
 			DecisionLatencyMs: decisionLatency,
 		}))
 
 		switch decision.Verdict {
 		case string(contracts.VerdictDeny):
 			emitFailure(decisionReasonCode(decision, contracts.ReasonPDPDeny), "policy")
-			return deniedResponse(decisionError(decision)), nil
+			return anchorResponse(deniedResponse(f.decisionError(decision))), nil
 		case string(contracts.VerdictEscalate), "PENDING":
-			escalationDecision := *decision
+			escalationDecision := f.publicDecisionProjection(ctx, *decision)
 			if escalationDecision.Verdict == "PENDING" {
 				escalationDecision.Verdict = string(contracts.VerdictEscalate)
 			}
@@ -357,12 +447,12 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 				slog.Error("governance_firewall: escalation projection failed")
 			}
 			emitFailure(decisionReasonCode(decision, contracts.ReasonApprovalRequired), "escalation")
-			return deniedResponse(decisionError(decision)), nil
+			return anchorResponse(deniedResponse(f.decisionError(decision))), nil
 		case string(contracts.VerdictAllow):
 			// Continue to the handler and the catalog audit below.
 		default:
 			emitFailure(string(contracts.ReasonPDPError), "evaluator")
-			return deniedResponse(decisionError(decision)), nil
+			return anchorResponse(deniedResponse(f.decisionError(decision))), nil
 		}
 
 		var resp ToolExecutionResponse
@@ -370,13 +460,46 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 		if handler == nil {
 			handlerErr = fmt.Errorf("tool handler is required")
 		} else {
-			resp, handlerErr = handler(ctx, req)
+			resp, handlerErr = handler(ctx, protectedReq)
+		}
+		if resp.ExecutionReceipt != nil && resp.ExecutionReceipt.ArgsHash != protectedArgsHash {
+			emitFailure(string(contracts.ReasonVerification), "receipt")
+			return anchorResponse(deniedResponse(errToolHandlerFailed)), errToolHandlerFailed
+		}
+		resp.runtimeReasonCode = ""
+		resp.ProtectedArgsHash = protectedArgsHash
+
+		protectedResp, protectErr := f.protectToolExecutionResponse(ctx, resp)
+		if protectErr != nil {
+			emitDispatch(resp)
+			emitFailure(string(contracts.ReasonDataEgressBlocked), "egress")
+			denied := anchorResponse(deniedResponse(privacy.ErrDataEgressBlocked))
+			if resp.ExecutionReceipt != nil {
+				receipt := f.protectDispatchReceipt(ctx, *resp.ExecutionReceipt)
+				denied.ReceiptID = receipt.ReceiptID
+				if denied.ReceiptID == "" {
+					denied.ReceiptID = receipt.ID
+				}
+			}
+			return denied, nil
+		}
+		resp = protectedResp
+		resp.Evaluated = true
+		if handlerErr != nil {
+			resp.IsError = true
+		}
+		if resp.IsError {
+			resp.runtimeReasonCode = contracts.ReasonVerification
 		}
 
 		var receipt ToolCallReceipt
 		var auditErr error
 		if f.catalog != nil {
-			receipt, auditErr = f.catalog.AuditToolCall(req.ToolName, req.Arguments, resp.Content)
+			// ToolExecutionResponse's runtime-only receipt anchor and dispatch
+			// metadata are json:"-". Auditing the full response therefore covers
+			// every public MCP representation without copying signed metadata into
+			// the audit payload.
+			receipt, auditErr = f.catalog.AuditToolCall(protectedReq.ToolName, protectedReq.Arguments, resp)
 			if auditErr != nil {
 				slog.Error("governance_firewall: audit logging failed")
 			} else {
@@ -385,30 +508,21 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 			}
 		}
 
-		resp.Evaluated = true
 		if handlerErr != nil || resp.IsError {
+			emitDispatch(resp)
 			emitFailure(string(contracts.ReasonVerification), "handler")
-			return resp, handlerErr
-		}
-		if auditErr != nil {
-			emitFailure(string(contracts.ReasonVerification), "audit")
+			if handlerErr != nil {
+				return resp, errToolHandlerFailed
+			}
 			return resp, nil
 		}
-
-		if resp.ExecutionReceipt != nil {
-			// Only the authoritative receipt returned by the governed runtime can
-			// claim that a dispatch completed. ToolCatalog's audit receipt is an
-			// unpersisted observation and remains a response-only audit field.
-			emit(events.NewDispatchCompleted(
-				meta(), *resp.ExecutionReceipt, "",
-				events.LifecycleEnrichment{
-					EffectContext:    resp.DispatchState,
-					ApprovalRef:      events.StableRef(resp.ApprovalHash),
-					ApproverRef:      events.StableRef(resp.ApproverID),
-					ApprovalExpiryMs: lifecycleExpiryMs(resp.DispatchAdmissionExpiry),
-				},
-			))
+		if auditErr != nil {
+			emitDispatch(resp)
+			emitFailure(string(contracts.ReasonVerification), "audit")
+			return anchorResponse(deniedResponse(errAuditDenied)), nil
 		}
+
+		emitDispatch(resp)
 		emit(events.NewMCPRequestCompleted(
 			meta(), events.MCPHandlerCompletion{
 				ExecutionID: events.StableRef(string(baseMeta.CorrelationID) + ":mcp-handler"),
@@ -422,11 +536,225 @@ func (f *GovernanceFirewall) WrapToolHandler(handler ToolHandler) ToolHandler {
 	}
 }
 
+// protectDispatchReceipt sanitizes only the telemetry projection. The
+// authoritative receipt returned by the governed runtime is never mutated;
+// lifecycle fields are a public export and must not become an egress channel
+// for a malicious handler/provider.
+func (f *GovernanceFirewall) protectDispatchReceipt(ctx context.Context, receipt contracts.Receipt) contracts.Receipt {
+	receipt.ReceiptID = f.protectDispatchString(ctx, receipt.ReceiptID)
+	receipt.ID = f.protectDispatchString(ctx, receipt.ID)
+	receipt.Status = f.protectDispatchString(ctx, receipt.Status)
+	receipt.ArgsHash = f.protectDispatchString(ctx, receipt.ArgsHash)
+	receipt.EffectID = f.protectDispatchString(ctx, receipt.EffectID)
+	receipt.EffectType = f.protectDispatchString(ctx, receipt.EffectType)
+	return receipt
+}
+
+func (f *GovernanceFirewall) protectDispatchString(ctx context.Context, value string) string {
+	if value == "" {
+		return ""
+	}
+	manager := f.privacy
+	if manager == nil {
+		manager = privacy.NewPrivacyManager()
+	}
+	protected, _, err := manager.Protect(ctx, value)
+	if err == nil {
+		if protectedString, ok := protected.(string); ok {
+			if protectedString == value {
+				return value
+			}
+			return events.StableRef(value)
+		}
+	}
+	// A restricted or unsupported projection cannot be emitted verbatim. A
+	// deterministic one-way reference retains correlation without exporting the
+	// receipt/provider value or the cause of a privacy failure.
+	return events.StableRef(value)
+}
+
+func (f *GovernanceFirewall) publicLifecycleToolName(ctx context.Context, name string) string {
+	if name == "" {
+		return ""
+	}
+	if f.catalog != nil {
+		if _, known := f.catalog.Lookup(name); known {
+			return f.protectDispatchString(ctx, name)
+		}
+	}
+	// Unknown names are untrusted request data. Keep lifecycle correlation
+	// possible without exporting a caller-controlled name.
+	return events.StableRef(name)
+}
+
+func (f *GovernanceFirewall) publicDecisionProjection(ctx context.Context, decision contracts.DecisionRecord) contracts.DecisionRecord {
+	decision.ID = f.protectDispatchString(ctx, decision.ID)
+	decision.Verdict = f.protectDispatchString(ctx, decision.Verdict)
+	decision.PolicyBackend = f.protectDispatchString(ctx, decision.PolicyBackend)
+	decision.PolicyVersion = f.protectDispatchString(ctx, decision.PolicyVersion)
+	decision.PolicyContentHash = f.protectDispatchString(ctx, decision.PolicyContentHash)
+	decision.PolicyEpoch = f.protectDispatchString(ctx, decision.PolicyEpoch)
+	decision.PolicyDecisionHash = f.protectDispatchString(ctx, decision.PolicyDecisionHash)
+	decision.ReasonCode = f.protectDispatchString(ctx, decision.ReasonCode)
+	decision.Action = f.protectDispatchString(ctx, decision.Action)
+	decision.Resource = f.protectDispatchString(ctx, decision.Resource)
+	return decision
+}
+
+// protectToolExecutionResponse copies every public response representation
+// before audit, lifecycle completion, or returning it through the gateway.
+// ExecutionReceipt and the other runtime-only anchors are deliberately not
+// traversed or mutated.
+func (f *GovernanceFirewall) protectToolExecutionResponse(ctx context.Context, resp ToolExecutionResponse) (ToolExecutionResponse, error) {
+	if !responseWithinPrivacyBudget(resp, false) {
+		return ToolExecutionResponse{}, privacy.ErrDataEgressInvalid
+	}
+	manager := f.privacy
+	if manager == nil {
+		manager = privacy.NewPrivacyManager()
+	}
+	content, _, err := manager.Protect(ctx, resp.Content)
+	if err != nil {
+		return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+	}
+	protectedContent, ok := content.(string)
+	if !ok {
+		return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+	}
+
+	var protectedItems []ToolContentItem
+	if resp.ContentItems != nil {
+		protectedItems = make([]ToolContentItem, len(resp.ContentItems))
+	}
+	for index, item := range resp.ContentItems {
+		protectedItems[index] = item
+		var protectErr error
+		protectedItems[index].Type, protectErr = protectResponseString(ctx, manager, item.Type)
+		if protectErr != nil {
+			return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+		}
+		protectedItems[index].Text, protectErr = protectResponseString(ctx, manager, item.Text)
+		if protectErr != nil {
+			return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+		}
+		protectedItems[index].URI, protectErr = protectResponseString(ctx, manager, item.URI)
+		if protectErr != nil {
+			return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+		}
+		protectedItems[index].MimeType, protectErr = protectResponseString(ctx, manager, item.MimeType)
+		if protectErr != nil {
+			return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+		}
+		protectedItems[index].Name, protectErr = protectResponseString(ctx, manager, item.Name)
+		if protectErr != nil {
+			return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+		}
+	}
+
+	structured, _, err := manager.Protect(ctx, resp.StructuredContent)
+	if err != nil {
+		return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+	}
+	var protectedStructured map[string]any
+	if structured != nil {
+		var mapOK bool
+		protectedStructured, mapOK = structured.(map[string]any)
+		if !mapOK {
+			return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+		}
+	}
+	receiptID, protectErr := protectResponseString(ctx, manager, resp.ReceiptID)
+	if protectErr != nil {
+		return ToolExecutionResponse{}, privacy.ErrDataEgressBlocked
+	}
+
+	resp.Content = protectedContent
+	resp.ContentItems = protectedItems
+	resp.StructuredContent = protectedStructured
+	resp.ReceiptID = receiptID
+	if !responseWithinPrivacyBudget(resp, true) {
+		return ToolExecutionResponse{}, privacy.ErrDataEgressInvalid
+	}
+	return resp, nil
+}
+
+func responseWithinPrivacyBudget(resp ToolExecutionResponse, includeStructured bool) bool {
+	if len(resp.ContentItems) > maxMCPResponseItems {
+		return false
+	}
+	if includeStructured {
+		encodedResponse, responseErr := json.Marshal(resp)
+		encodedToolResult, resultErr := json.Marshal(ToolResultPayload(resp))
+		return responseErr == nil && resultErr == nil &&
+			len(encodedResponse)+1 <= MaxResponseBytes && len(encodedToolResult)+1 <= MaxResponseBytes
+	}
+	total := 0
+	add := func(size int) bool {
+		if size < 0 || size > MaxResponseBytes-total {
+			return false
+		}
+		total += size
+		return true
+	}
+	if !add(len(resp.Content)) || !add(len(resp.ReceiptID)) {
+		return false
+	}
+	for _, item := range resp.ContentItems {
+		if !add(len(item.Type)) || !add(len(item.Text)) || !add(len(item.URI)) ||
+			!add(len(item.MimeType)) || !add(len(item.Name)) {
+			return false
+		}
+	}
+	return true
+}
+
+func protectResponseString(ctx context.Context, manager *privacy.StandardPrivacyManager, value string) (string, error) {
+	protected, _, err := manager.Protect(ctx, value)
+	if err != nil {
+		return "", err
+	}
+	protectedString, ok := protected.(string)
+	if !ok {
+		return "", privacy.ErrDataEgressBlocked
+	}
+	return protectedString, nil
+}
+
 func deniedResponse(err error) ToolExecutionResponse {
+	message := "GOVERNANCE_DENIED"
+	reasonCode := contracts.ReasonPolicyViolation
+	switch {
+	case errors.Is(err, privacy.ErrDataEgressBlocked), errors.Is(err, privacy.ErrDataEgressInvalid):
+		message = string(contracts.ReasonDataEgressBlocked)
+		reasonCode = contracts.ReasonDataEgressBlocked
+	case errors.Is(err, errDelegationScopeViolation):
+		message = errDelegationScopeViolation.Error()
+		reasonCode = contracts.ReasonDelegationScopeViolation
+	case errors.Is(err, errReservedSecurityArgument):
+		message = errReservedSecurityArgument.Error()
+		reasonCode = contracts.ReasonSchemaViolation
+	case errors.Is(err, errGovernanceCheckFailed):
+		message = errGovernanceCheckFailed.Error()
+		reasonCode = contracts.ReasonPDPError
+	case errors.Is(err, errGovernanceBlocked):
+		message = errGovernanceBlocked.Error()
+		reasonCode = contracts.ReasonPDPDeny
+	case errors.Is(err, errGovernanceApprovalRequired):
+		message = errGovernanceApprovalRequired.Error()
+		reasonCode = contracts.ReasonApprovalRequired
+	case errors.Is(err, errGovernanceNonCanonical):
+		message = errGovernanceNonCanonical.Error()
+		reasonCode = contracts.ReasonPDPError
+	case errors.Is(err, errClassificationFailed):
+		reasonCode = contracts.ReasonSchemaViolation
+	case errors.Is(err, errAuditDenied), errors.Is(err, errToolHandlerFailed):
+		reasonCode = contracts.ReasonVerification
+	}
 	return ToolExecutionResponse{
-		Content:   fmt.Sprintf("Access Denied: %v", err),
-		IsError:   true,
-		Evaluated: true,
+		Content:           "Access Denied: " + message,
+		IsError:           true,
+		Evaluated:         true,
+		runtimeReasonCode: reasonCode,
 	}
 }
 
@@ -551,10 +879,10 @@ func classifyTool(catalog *ToolCatalog, name string) (ToolRef, error) {
 	return ref, nil
 }
 
-func bindCatalogSecurityContext(catalog *ToolCatalog, name string, decisionCtx map[string]interface{}) (string, contracts.RiskTier, error) {
+func bindCatalogSecurityContext(catalog *ToolCatalog, name string, decisionCtx map[string]interface{}) (ToolRef, error) {
 	ref, err := classifyTool(catalog, name)
 	if err != nil {
-		return "", "", err
+		return ToolRef{}, err
 	}
 	decisionCtx[guardian.ContextEffectClass] = ref.EffectClass
 	if ref.EgressDestinationRequired {
@@ -563,7 +891,7 @@ func bindCatalogSecurityContext(catalog *ToolCatalog, name string, decisionCtx m
 	if destination := strings.TrimSpace(ref.EgressDestination); destination != "" {
 		decisionCtx[guardian.ContextDestination] = destination
 	}
-	return ref.EffectClass, ref.RiskTier, nil
+	return ref, nil
 }
 
 func validEffectClass(effectClass string) bool {
@@ -613,36 +941,106 @@ type PlanDecision struct {
 // InterceptPlan evaluates a proposed plan against governance policies.
 // It returns a PlanDecision indicating which steps are allowed, blocked, or pending approval.
 func (f *GovernanceFirewall) InterceptPlan(ctx context.Context, plan ToolExecutionPlan) (*PlanDecision, error) {
+	if err := f.validatePlanPublicValue(ctx, plan.PlanID); err != nil {
+		return nil, err
+	}
+	if len(plan.Steps) > maxMCPResponseItems {
+		return nil, errPlanDecisionEgressBlocked
+	}
 	decisions := make([]*contracts.DecisionRecord, 0, len(plan.Steps))
 	overallStatus := string(contracts.VerdictAllow)
+	totalDecisionBytes := 0
 
 	for _, step := range plan.Steps {
-		decision, err := f.evaluateToolExecution(ctx, step)
+		// Plans use the same protected admission boundary as direct tool
+		// execution. This prevents a plan from becoming a raw-arguments side
+		// channel around the firewall.
+		protectedStep, decisionCtx, _, err := f.prepareToolExecutionRequest(ctx, step)
 		if err != nil {
-			return nil, fmt.Errorf("failed to evaluate step %s: %w", step.ToolName, err)
+			return nil, err
+		}
+		if f.catalog != nil {
+			if _, err := bindCatalogSecurityContext(f.catalog, step.ToolName, decisionCtx); err != nil {
+				return nil, err
+			}
+		}
+		decision, err := f.evaluatePreparedToolExecution(ctx, protectedStep, decisionCtx)
+		if err != nil {
+			return nil, errPlanEvaluationFailed
 		}
 		if decision == nil {
-			return nil, fmt.Errorf("failed to evaluate step %s: empty governance decision", step.ToolName)
+			return nil, errPlanEvaluationFailed
 		}
 		if !isCanonicalToolVerdict(decision.Verdict) && decision.Verdict != "PENDING" {
-			return nil, fmt.Errorf("failed to evaluate step %s: non-canonical governance verdict %q", step.ToolName, decision.Verdict)
+			return nil, errPlanEvaluationFailed
 		}
+		decisionBytes, err := f.validatePlanDecision(ctx, decision)
+		if err != nil {
+			return nil, err
+		}
+		if decisionBytes > MaxResponseBytes-totalDecisionBytes {
+			return nil, errPlanDecisionEgressBlocked
+		}
+		totalDecisionBytes += decisionBytes
 
-		// Aggregate Status
-		if decision.Verdict == string(contracts.VerdictDeny) {
+		// Aggregate Status. PENDING is a legacy spelling of an escalation;
+		// normalize only the plan aggregate and never mutate the signed record.
+		switch decision.Verdict {
+		case string(contracts.VerdictDeny):
 			overallStatus = string(contracts.VerdictDeny)
-		} else if (decision.Verdict == string(contracts.VerdictEscalate) || decision.Verdict == "PENDING") && overallStatus != string(contracts.VerdictDeny) {
-			overallStatus = string(contracts.VerdictEscalate)
+		case string(contracts.VerdictEscalate), "PENDING":
+			if overallStatus != string(contracts.VerdictDeny) {
+				overallStatus = string(contracts.VerdictEscalate)
+			}
 		}
 
 		decisions = append(decisions, decision)
 	}
 
-	return &PlanDecision{
+	result := &PlanDecision{
 		PlanID:    plan.PlanID,
 		Decisions: decisions,
 		Status:    overallStatus,
-	}, nil
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil || len(encoded) > MaxResponseBytes {
+		return nil, errPlanDecisionEgressBlocked
+	}
+	return result, nil
+}
+
+func (f *GovernanceFirewall) validatePlanPublicValue(ctx context.Context, value string) error {
+	manager := f.privacy
+	if manager == nil {
+		manager = privacy.NewPrivacyManager()
+	}
+	protected, findings, err := manager.Protect(ctx, value)
+	if err != nil || len(findings) > 0 {
+		return errPlanDecisionEgressBlocked
+	}
+	if protectedString, ok := protected.(string); !ok || protectedString != value {
+		return errPlanDecisionEgressBlocked
+	}
+	return nil
+}
+
+func (f *GovernanceFirewall) validatePlanDecision(ctx context.Context, decision *contracts.DecisionRecord) (int, error) {
+	if decision == nil {
+		return 0, errPlanEvaluationFailed
+	}
+	encoded, err := json.Marshal(decision)
+	if err != nil || len(encoded) > MaxResponseBytes {
+		return 0, errPlanDecisionEgressBlocked
+	}
+	manager := f.privacy
+	if manager == nil {
+		manager = privacy.NewPrivacyManager()
+	}
+	_, findings, err := manager.Protect(ctx, json.RawMessage(encoded))
+	if err != nil || len(findings) > 0 {
+		return 0, errPlanDecisionEgressBlocked
+	}
+	return len(encoded), nil
 }
 
 func isCanonicalToolVerdict(verdict string) bool {

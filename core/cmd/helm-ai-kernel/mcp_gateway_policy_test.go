@@ -180,7 +180,7 @@ func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
-	sessionID := initializeLocalMCPHTTPTestSession(t, mux)
+	sessionID := initializeLocalMCPTestSession(t, mux)
 
 	callTool := func(t *testing.T, name string, args map[string]any) string {
 		t.Helper()
@@ -193,10 +193,10 @@ func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(payload))
 		request.Header.Set("MCP-Protocol-Version", mcppkg.LatestProtocolVersion)
 		request.Header.Set("MCP-Session-Id", sessionID)
+		recorder := httptest.NewRecorder()
 		mux.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("tools/call %s returned status %d: %s", name, recorder.Code, recorder.Body.String())
@@ -272,7 +272,7 @@ func TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope(t *testing.T
 	}
 	mux := http.NewServeMux()
 	gateway.RegisterRoutes(mux)
-	sessionID := initializeLocalMCPHTTPTestSession(t, mux)
+	sessionID := initializeLocalMCPTestSession(t, mux)
 
 	callTool := func(t *testing.T, name string, args map[string]any) string {
 		t.Helper()
@@ -285,10 +285,10 @@ func TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
-		recorder := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(payload))
 		request.Header.Set("MCP-Protocol-Version", mcppkg.LatestProtocolVersion)
 		request.Header.Set("MCP-Session-Id", sessionID)
+		recorder := httptest.NewRecorder()
 		mux.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("tools/call %s returned status %d: %s", name, recorder.Code, recorder.Body.String())

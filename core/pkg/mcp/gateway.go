@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,8 +15,10 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/google/uuid"
 )
 
 // GatewayConfig configures the MCP gateway server.
@@ -170,7 +174,9 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 		Method  string          `json:"method"`
 		Params  json.RawMessage `json:"params,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
 		http.Error(w, "invalid JSON-RPC request body", http.StatusBadRequest)
 		return
 	}
@@ -198,10 +204,13 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
+		resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID, r.Header)
 		if !respond {
 			w.WriteHeader(status)
 			return
+		}
+		if !serializedMCPResponseWithinBudget(resp) {
+			setBoundedDataEgressBlockedError(resp)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -225,7 +234,13 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 	// Require valid MCP-Session-Id for non-notification methods.
 	sessionID := r.Header.Get("MCP-Session-Id")
 	isNotification := strings.HasPrefix(req.Method, "notifications/")
-	if sessionID != "" {
+	if g.governed && req.Method == "tools/call" {
+		var ok bool
+		sessionID, ok = g.validatedGovernedSession(w, r)
+		if !ok {
+			return
+		}
+	} else if sessionID != "" {
 		if session := g.sessions.Get(sessionID); session == nil {
 			http.Error(w, "invalid or expired MCP session", http.StatusUnauthorized)
 			return
@@ -235,13 +250,20 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if !isNotification {
 		// Session ID is recommended for non-notification requests after initialize.
-		// For backward compatibility, we allow requests without session ID but log a warning.
+		// For backward compatibility, we allow requests without session ID, but
+		// still bind non-governed requests to a fresh opaque identity.
+	}
+	if sessionID == "" {
+		sessionID = newOpaqueMCPRequestID()
 	}
 
-	resp, respond, status := g.handleJSONRPCRequest(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID)
+	resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), req.ID, req.Method, req.Params, protocolVersion, sessionID, r.Header)
 	if !respond {
 		w.WriteHeader(status)
 		return
+	}
+	if !serializedMCPResponseWithinBudget(resp) {
+		setBoundedDataEgressBlockedError(resp)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -254,29 +276,17 @@ func (g *Gateway) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	tools, err := g.catalog.Search(ctx, "")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{Error: err.Error()})
+		writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
+			Error:      err.Error(),
+			ReasonCode: string(contracts.ReasonPDPError),
+		})
 		return
 	}
 
 	// Delegation-aware tool filtering: if a delegation session specifies
 	// allowed tools, only expose those tools in the capabilities response.
 	// This prevents delegated agents from even discovering out-of-scope tools.
-	if allowedCSV := r.Header.Get("X-HELM-Delegation-Allowed-Tools"); allowedCSV != "" {
-		allowedSet := make(map[string]bool)
-		for _, t := range strings.Split(allowedCSV, ",") {
-			if trimmed := strings.TrimSpace(t); trimmed != "" {
-				allowedSet[trimmed] = true
-			}
-		}
-		var filtered []ToolRef
-		for _, tool := range tools {
-			if allowedSet[tool.Name] {
-				filtered = append(filtered, tool)
-			}
-		}
-		tools = filtered
-	}
+	tools = filterToolsByDelegation(tools, r.Header.Get("X-HELM-Delegation-Allowed-Tools"))
 
 	m := MCPCapabilityManifest{
 		ServerName:       "helm-mcp-gateway",
@@ -288,6 +298,13 @@ func (g *Gateway) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		AuthMode:         g.authMode(),
 	}
 
+	if !serializedMCPResponseWithinBudget(m) {
+		writeMCPToolCallResponse(w, http.StatusForbidden, MCPToolCallResponse{
+			Error:      string(contracts.ReasonDataEgressBlocked),
+			ReasonCode: string(contracts.ReasonDataEgressBlocked),
+		})
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(m)
 }
@@ -299,20 +316,26 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req MCPToolCallRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{Error: "invalid request body"})
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
+		writeMCPToolCallResponse(w, http.StatusBadRequest, MCPToolCallResponse{Error: "invalid request body"})
 		return
 	}
 	execReq := toolExecutionRequestFromHTTP(r, req.Method, req.Params)
+	if g.governed {
+		sessionID, ok := g.validatedGovernedSession(w, r)
+		if !ok {
+			return
+		}
+		execReq.SessionID = sessionID
+	}
 
 	tool, ok := findToolRef(g.catalog, req.Method)
 	if !ok {
 		g.recordGovernedIngressFailure(r.Context(), execReq, string(contracts.ReasonNoPolicy))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
-			Error:      fmt.Sprintf("tool %q not found", req.Method),
+		writeMCPToolCallResponse(w, http.StatusNotFound, MCPToolCallResponse{
+			Error:      "tool not found",
 			ReasonCode: string(contracts.ReasonNoPolicy),
 		})
 		return
@@ -320,53 +343,74 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 	execReq.RequiredScopes = append([]string(nil), tool.RequiredScopes...)
 	if !g.hasRequiredScopes(r.Context(), tool) {
 		g.recordGovernedIngressFailure(r.Context(), execReq, "MCP.OAUTH.INSUFFICIENT_SCOPE")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
-			Error:      fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Method, strings.Join(tool.RequiredScopes, ", ")),
+		writeMCPToolCallResponse(w, http.StatusForbidden, MCPToolCallResponse{
+			Error:      "tool requires OAuth scopes: " + strings.Join(tool.RequiredScopes, ", "),
 			ReasonCode: "MCP.OAUTH.INSUFFICIENT_SCOPE",
 		})
 		return
 	}
 
 	// 1. Validate and canonicalize args via PEP boundary
-	argsHash, err := ValidateToolArguments(tool, req.Params)
+	validatedArgsHash, err := ValidateToolArguments(tool, req.Params)
 	if err != nil {
-		g.recordGovernedIngressFailure(r.Context(), execReq, string(contracts.ReasonSchemaViolation))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
-			Error:      fmt.Sprintf("PEP validation failed: %v", err),
-			ReasonCode: string(contracts.ReasonSchemaViolation),
+		reasonCode := contracts.ReasonSchemaViolation
+		status := http.StatusBadRequest
+		if errors.Is(err, canonicalize.ErrNonInteroperableNumber) {
+			reasonCode = contracts.ReasonDataEgressBlocked
+			status = http.StatusForbidden
+		}
+		g.recordGovernedIngressFailure(r.Context(), execReq, string(reasonCode))
+		writeMCPToolCallResponse(w, status, MCPToolCallResponse{
+			Error:      "PEP validation failed",
+			ReasonCode: string(reasonCode),
 		})
 		return
 	}
 
 	// 2. Governance via KernelBridge (if configured)
-	resp := MCPToolCallResponse{ArgsHash: argsHash}
+	resp := MCPToolCallResponse{}
 
 	if g.exec != nil {
 		execResp, execErr := g.exec(r.Context(), execReq)
 		if execErr != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+			if g.governed && errors.Is(execErr, errToolHandlerFailed) && execResp.IsError && execResp.ProtectedArgsHash != "" {
+				resp.ArgsHash = execResp.ProtectedArgsHash
+				resp.ReceiptID = execResp.ReceiptID
+				resp.Error = execResp.Content
+				resp.ReasonCode = string(contracts.ReasonVerification)
+				resp.Content = execResp.ContentItems
+				resp.StructuredContent = execResp.StructuredContent
+				writeMCPToolCallResponse(w, http.StatusOK, resp)
+				return
+			}
+			writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
 				Error:      execErr.Error(),
 				ReasonCode: string(contracts.ReasonPDPError),
-				ArgsHash:   argsHash,
+			})
+			return
+		}
+		if g.governed && !execResp.IsError && execResp.ProtectedArgsHash == "" {
+			writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
+				Error:      "governed execution did not attest protected arguments",
+				ReasonCode: string(contracts.ReasonVerification),
 			})
 			return
 		}
 
+		resp.ArgsHash = validatedArgsHash
+		if g.governed {
+			resp.ArgsHash = execResp.ProtectedArgsHash
+		}
 		resp.ReceiptID = execResp.ReceiptID
 		if execResp.IsError {
 			resp.Error = execResp.Content
 			resp.ReasonCode = string(contracts.ReasonPolicyViolation)
+			if g.governed && contracts.IsCanonicalReasonCode(string(execResp.runtimeReasonCode)) {
+				resp.ReasonCode = string(execResp.runtimeReasonCode)
+			}
 			resp.Content = execResp.ContentItems
 			resp.StructuredContent = execResp.StructuredContent
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(w).Encode(resp)
+			writeMCPToolCallResponse(w, http.StatusForbidden, resp)
 			return
 		}
 
@@ -374,14 +418,13 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		resp.Content = execResp.ContentItems
 		resp.StructuredContent = execResp.StructuredContent
 	} else if g.bridge != nil {
+		resp.ArgsHash = validatedArgsHash
 		// No per-call monetary cost signal is available at MCP method dispatch.
 		// When a budget enforcer is configured, the bridge therefore fails closed
 		// with BUDGET_ERROR rather than inventing cents from a nil breakdown.
-		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, argsHash, nil)
+		govResult, govErr := g.bridge.Govern(context.Background(), req.Method, validatedArgsHash, nil)
 		if govErr != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(MCPToolCallResponse{
+			writeMCPToolCallResponse(w, http.StatusInternalServerError, MCPToolCallResponse{
 				Error:      fmt.Sprintf("governance error: %v", govErr),
 				ReasonCode: string(contracts.ReasonPDPError),
 			})
@@ -398,10 +441,8 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			if resp.ReasonCode == "" {
 				resp.ReasonCode = string(contracts.ReasonPolicyViolation)
 			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
 			resp.Error = fmt.Sprintf("tool %q denied by governance: %s", req.Method, govResult.ReasonCode)
-			_ = json.NewEncoder(w).Encode(resp)
+			writeMCPToolCallResponse(w, http.StatusForbidden, resp)
 			return
 		}
 
@@ -411,6 +452,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 			"message": fmt.Sprintf("tool %q approved by Guardian governance", req.Method),
 		}
 	} else {
+		resp.ArgsHash = validatedArgsHash
 		// No bridge is configured; return a governed local response.
 		resp.Result = map[string]any{
 			"status":  "local-no-bridge",
@@ -419,8 +461,7 @@ func (g *Gateway) handleExecute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	writeMCPToolCallResponse(w, http.StatusOK, resp)
 }
 
 func (g *Gateway) handleProtectedResourceMetadata(w http.ResponseWriter, _ *http.Request) {
@@ -457,7 +498,11 @@ func (g *Gateway) handleProtectedResourceMetadata(w http.ResponseWriter, _ *http
 	})
 }
 
-func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion, sessionID string) (map[string]any, bool, int) {
+func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion string) (map[string]any, bool, int) {
+	return g.handleJSONRPCRequestWithSession(ctx, id, method, params, protocolVersion, newOpaqueMCPRequestID(), nil)
+}
+
+func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, method string, params json.RawMessage, protocolVersion, sessionID string, headers http.Header) (map[string]any, bool, int) {
 	response := map[string]any{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -498,6 +543,7 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 		if err != nil {
 			return writeError(-32603, err.Error())
 		}
+		tools = filterToolsByDelegation(tools, headers.Get("X-HELM-Delegation-Allowed-Tools"))
 		payload := make([]map[string]any, 0, len(tools))
 		for _, tool := range tools {
 			payload = append(payload, ToolDescriptorPayload(tool))
@@ -517,23 +563,32 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments"`
 		}
-		if err := json.Unmarshal(params, &req); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(params))
+		decoder.UseNumber()
+		if err := decoder.Decode(&req); err != nil {
 			return writeError(-32602, "invalid tools/call params")
 		}
-		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, sessionID)
+		execReq := newToolExecutionRequest(ctx, req.Name, req.Arguments, sessionID, headers)
 		tool, ok := findToolRef(g.catalog, req.Name)
 		if !ok {
 			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonNoPolicy))
-			return writeError(-32602, fmt.Sprintf("tool %q not found", req.Name))
+			return writeError(-32602, "tool not found")
 		}
 		execReq.RequiredScopes = append([]string(nil), tool.RequiredScopes...)
 		if !g.hasRequiredScopes(ctx, tool) {
 			g.recordGovernedIngressFailure(ctx, execReq, "MCP.OAUTH.INSUFFICIENT_SCOPE")
-			return writeError(-32001, fmt.Sprintf("tool %q requires OAuth scopes: %s", req.Name, strings.Join(tool.RequiredScopes, ", ")))
+			return writeError(-32001, "tool requires OAuth scopes: "+strings.Join(tool.RequiredScopes, ", "))
 		}
 		if _, err := ValidateToolArguments(tool, req.Arguments); err != nil {
-			g.recordGovernedIngressFailure(ctx, execReq, string(contracts.ReasonSchemaViolation))
-			return writeError(-32602, fmt.Sprintf("PEP validation failed: %v", err))
+			reasonCode := contracts.ReasonSchemaViolation
+			if errors.Is(err, canonicalize.ErrNonInteroperableNumber) {
+				reasonCode = contracts.ReasonDataEgressBlocked
+			}
+			g.recordGovernedIngressFailure(ctx, execReq, string(reasonCode))
+			if reasonCode == contracts.ReasonDataEgressBlocked {
+				return writeError(-32000, string(reasonCode))
+			}
+			return writeError(-32602, "PEP validation failed")
 		}
 		if g.exec == nil {
 			return writeError(-32603, "tool executor is not configured")
@@ -541,16 +596,47 @@ func (g *Gateway) handleJSONRPCRequest(ctx context.Context, id any, method strin
 
 		execResp, err := g.exec(ctx, execReq)
 		if err != nil {
+			if g.governed && errors.Is(err, errToolHandlerFailed) && execResp.IsError && execResp.ProtectedArgsHash != "" {
+				response["result"] = ToolResultPayload(execResp)
+				if serializedMCPResponseWithinBudget(response) {
+					return response, true, http.StatusOK
+				}
+				setBoundedDataEgressBlockedResult(response, execResp)
+				return response, true, http.StatusOK
+			}
 			return writeError(-32603, err.Error())
 		}
+		if g.governed && !execResp.IsError && execResp.ProtectedArgsHash == "" {
+			return writeError(-32603, "governed execution did not attest protected arguments")
+		}
 		response["result"] = ToolResultPayload(execResp)
+		if !serializedMCPResponseWithinBudget(response) {
+			setBoundedDataEgressBlockedResult(response, execResp)
+		}
 		return response, true, http.StatusOK
 	default:
-		return writeError(-32601, fmt.Sprintf("method %q not found", method))
+		return writeError(-32601, "method not found")
 	}
 }
 
-func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string) ToolExecutionRequest {
+func newOpaqueMCPRequestID() string {
+	return "mcp-http-" + uuid.NewString()
+}
+
+func (g *Gateway) validatedGovernedSession(w http.ResponseWriter, r *http.Request) (string, bool) {
+	sessionID := r.Header.Get("MCP-Session-Id")
+	if sessionID == "" {
+		http.Error(w, "valid MCP session is required for governed tool execution", http.StatusUnauthorized)
+		return "", false
+	}
+	if session := g.sessions.Get(sessionID); session == nil {
+		http.Error(w, "invalid or expired MCP session", http.StatusUnauthorized)
+		return "", false
+	}
+	return sessionID, true
+}
+
+func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string, headers http.Header) ToolExecutionRequest {
 	req := ToolExecutionRequest{ToolName: toolName, Arguments: arguments, SessionID: sessionID}
 	if principal, err := auth.GetPrincipal(ctx); err == nil && principal != nil {
 		req.PrincipalID = strings.TrimSpace(principal.GetID())
@@ -562,21 +648,43 @@ func newToolExecutionRequest(ctx context.Context, toolName string, arguments map
 		req.OAuthScopes = append([]string(nil), auth.Scopes...)
 		req.OAuthResources = append([]string(nil), auth.Resources...)
 	}
-	return req
-}
-
-func toolExecutionRequestFromHTTP(r *http.Request, toolName string, arguments map[string]any) ToolExecutionRequest {
-	req := newToolExecutionRequest(r.Context(), toolName, arguments, fmt.Sprintf("mcp-http-%s-%p", r.RemoteAddr, r))
-	if delegationID := r.Header.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
+	if delegationID := headers.Get("X-HELM-Delegation-Session-ID"); delegationID != "" {
 		req.DelegationSessionID = delegationID
-		req.DelegationVerifier = r.Header.Get("X-HELM-Delegation-Verifier")
-		for _, tool := range strings.Split(r.Header.Get("X-HELM-Delegation-Allowed-Tools"), ",") {
+		req.DelegationVerifier = headers.Get("X-HELM-Delegation-Verifier")
+		for _, tool := range strings.Split(headers.Get("X-HELM-Delegation-Allowed-Tools"), ",") {
 			if tool = strings.TrimSpace(tool); tool != "" {
 				req.DelegationAllowedTools = append(req.DelegationAllowedTools, tool)
 			}
 		}
 	}
 	return req
+}
+
+func toolExecutionRequestFromHTTP(r *http.Request, toolName string, arguments map[string]any) ToolExecutionRequest {
+	// RemoteAddr is client-controlled personal data. It must never become a
+	// session identity that reaches governance, handlers, receipts, or
+	// lifecycle telemetry. Each HTTP request receives an opaque identifier so
+	// correlation remains unique without retaining network identity.
+	return newToolExecutionRequest(r.Context(), toolName, arguments, newOpaqueMCPRequestID(), r.Header)
+}
+
+func filterToolsByDelegation(tools []ToolRef, allowedCSV string) []ToolRef {
+	if allowedCSV == "" {
+		return tools
+	}
+	allowed := make(map[string]struct{})
+	for _, tool := range strings.Split(allowedCSV, ",") {
+		if tool = strings.TrimSpace(tool); tool != "" {
+			allowed[tool] = struct{}{}
+		}
+	}
+	filtered := make([]ToolRef, 0, len(allowed))
+	for _, tool := range tools {
+		if _, ok := allowed[tool.Name]; ok {
+			filtered = append(filtered, tool)
+		}
+	}
+	return filtered
 }
 
 func (g *Gateway) recordGovernedIngressFailure(ctx context.Context, req ToolExecutionRequest, reasonCode string) {
@@ -631,11 +739,84 @@ func ValidateToolArguments(tool ToolRef, args map[string]any) (string, error) {
 	if args == nil {
 		args = map[string]any{}
 	}
+	if err := canonicalize.CheckInteroperableNumbers(args); err != nil {
+		return "", err
+	}
 	result, err := manifest.ValidateAndCanonicalizeToolArgs(catalogSchemaToArgSchema(tool.Schema), args)
 	if err != nil {
 		return "", err
 	}
 	return result.ArgsHash, nil
+}
+
+func writeMCPToolCallResponse(w http.ResponseWriter, status int, resp MCPToolCallResponse) {
+	if !serializedMCPResponseWithinBudget(resp) {
+		status = http.StatusForbidden
+		resp = MCPToolCallResponse{
+			Error:      string(contracts.ReasonDataEgressBlocked),
+			ReasonCode: string(contracts.ReasonDataEgressBlocked),
+			ArgsHash:   resp.ArgsHash,
+			ReceiptID:  resp.ReceiptID,
+		}
+		if !serializedMCPResponseWithinBudget(resp) {
+			resp.ReceiptID = ""
+		}
+		if !serializedMCPResponseWithinBudget(resp) {
+			resp.ArgsHash = ""
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func serializedMCPResponseWithinBudget(value any) bool {
+	encoded, err := json.Marshal(value)
+	return err == nil && len(encoded)+1 <= MaxResponseBytes
+}
+
+func setBoundedDataEgressBlockedError(response map[string]any) {
+	id := response["id"]
+	clear(response)
+	response["jsonrpc"] = "2.0"
+	response["id"] = id
+	response["error"] = map[string]any{
+		"code":    -32000,
+		"message": string(contracts.ReasonDataEgressBlocked),
+	}
+	if !serializedMCPResponseWithinBudget(response) {
+		response["id"] = nil
+	}
+}
+
+func dataEgressBlockedExecutionResponse(resp ToolExecutionResponse) ToolExecutionResponse {
+	return ToolExecutionResponse{
+		Content:           string(contracts.ReasonDataEgressBlocked),
+		IsError:           true,
+		Evaluated:         true,
+		ReceiptID:         resp.ReceiptID,
+		ProtectedArgsHash: resp.ProtectedArgsHash,
+		runtimeReasonCode: contracts.ReasonDataEgressBlocked,
+	}
+}
+
+func setBoundedDataEgressBlockedResult(response map[string]any, resp ToolExecutionResponse) {
+	denied := dataEgressBlockedExecutionResponse(resp)
+	response["result"] = ToolResultPayload(denied)
+	if serializedMCPResponseWithinBudget(response) {
+		return
+	}
+	denied.ReceiptID = ""
+	response["result"] = ToolResultPayload(denied)
+	if serializedMCPResponseWithinBudget(response) {
+		return
+	}
+	response["id"] = nil
+	if serializedMCPResponseWithinBudget(response) {
+		return
+	}
+	denied.ProtectedArgsHash = ""
+	response["result"] = ToolResultPayload(denied)
 }
 
 func catalogSchemaToArgSchema(raw any) *manifest.ToolArgSchema {

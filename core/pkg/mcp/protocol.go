@@ -77,6 +77,9 @@ func ToolResultPayload(resp ToolExecutionResponse) map[string]any {
 	if resp.ReceiptID != "" {
 		payload["receipt_id"] = resp.ReceiptID
 	}
+	if resp.ProtectedArgsHash != "" {
+		payload["args_hash"] = resp.ProtectedArgsHash
+	}
 	return payload
 }
 

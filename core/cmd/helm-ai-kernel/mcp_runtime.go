@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -512,6 +514,21 @@ func writeMCPResponse(stdout io.Writer, resp *mcpRPCResponse) error {
 	if err != nil {
 		return fmt.Errorf("encode MCP response: %w", err)
 	}
+	if len(data)+1 > mcppkg.MaxResponseBytes {
+		bounded := &mcpRPCResponse{
+			JSONRPC: "2.0",
+			ID:      resp.ID,
+			Error:   &mcpRPCError{Code: -32000, Message: string(contracts.ReasonDataEgressBlocked)},
+		}
+		data, err = json.Marshal(bounded)
+		if err == nil && len(data)+1 > mcppkg.MaxResponseBytes {
+			bounded.ID = nil
+			data, err = json.Marshal(bounded)
+		}
+		if err != nil || len(data)+1 > mcppkg.MaxResponseBytes {
+			return fmt.Errorf("encode bounded MCP response")
+		}
+	}
 
 	// MCP stdio transport: newline-delimited JSON (one JSON object per line).
 	if _, err := stdout.Write(data); err != nil {
@@ -582,18 +599,24 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments"`
 		}
-		if err := json.Unmarshal(req.Params, &params); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(req.Params))
+		decoder.UseNumber()
+		if err := decoder.Decode(&params); err != nil {
 			response.Error = &mcpRPCError{Code: -32602, Message: "invalid tools/call params"}
 			return response, nil
 		}
 
 		tool, ok := catalog.Lookup(params.Name)
 		if !ok {
-			response.Error = &mcpRPCError{Code: -32602, Message: fmt.Sprintf("tool %q not found", params.Name)}
+			response.Error = &mcpRPCError{Code: -32602, Message: "tool not found"}
 			return response, nil
 		}
 		if _, err := mcppkg.ValidateToolArguments(tool, params.Arguments); err != nil {
-			response.Error = &mcpRPCError{Code: -32602, Message: fmt.Sprintf("PEP validation failed: %v", err)}
+			if errors.Is(err, canonicalize.ErrNonInteroperableNumber) {
+				response.Error = &mcpRPCError{Code: -32000, Message: string(contracts.ReasonDataEgressBlocked)}
+				return response, nil
+			}
+			response.Error = &mcpRPCError{Code: -32602, Message: "PEP validation failed"}
 			return response, nil
 		}
 
@@ -610,7 +633,15 @@ func handleMCPRPCRequest(req *mcpRPCRequest, catalog *mcppkg.ToolCatalog, execut
 
 		execResp, err := executor(context.Background(), execReq)
 		if err != nil {
-			response.Error = &mcpRPCError{Code: -32603, Message: err.Error()}
+			if execResp.IsError && execResp.ProtectedArgsHash != "" {
+				response.Result = mcppkg.ToolResultPayload(execResp)
+				return response, nil
+			}
+			response.Error = &mcpRPCError{Code: -32603, Message: "tool execution failed"}
+			return response, nil
+		}
+		if !execResp.IsError && execResp.ProtectedArgsHash == "" {
+			response.Error = &mcpRPCError{Code: -32603, Message: "governed execution did not attest protected arguments"}
 			return response, nil
 		}
 

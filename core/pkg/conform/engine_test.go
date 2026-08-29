@@ -61,6 +61,29 @@ func TestEngine_RegisterAndRun(t *testing.T) {
 	require.Equal(t, 2, found)
 }
 
+func TestEngine_RegisterGateForProfiles(t *testing.T) {
+	withEngineEvidenceDataDir(t)
+	e := NewEngine()
+	e.RegisterGate(&fakeGate{id: "G0", name: "Build Identity", pass: true})
+	extension := &fakeGate{id: "EXT_TENANT", name: "Extended Tenant Gate", pass: true}
+	e.RegisterGateForProfiles(extension, ProfileCore)
+	e.RegisterGateForProfiles(extension, ProfileCore)
+
+	dir := t.TempDir()
+	report, err := e.Run(&RunOptions{
+		Profile:     ProfileCore,
+		ProjectRoot: dir,
+		OutputDir:   filepath.Join(dir, "evidence"),
+	})
+	require.NoError(t, err)
+
+	gateIDs := make([]string, 0, len(report.GateResults))
+	for _, result := range report.GateResults {
+		gateIDs = append(gateIDs, result.GateID)
+	}
+	require.Equal(t, []string{"G0", "EXT_TENANT"}, gateIDs)
+}
+
 func TestEngine_FailingGate(t *testing.T) {
 	withEngineEvidenceDataDir(t)
 	e := NewEngine()

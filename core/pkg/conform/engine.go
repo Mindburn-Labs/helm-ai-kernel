@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,17 +22,19 @@ import (
 // It enumerates gates, runs them deterministically, emits an EvidencePack,
 // and signs the final report.
 type Engine struct {
-	gates   map[string]Gate
-	ordered []string // gate execution order
-	clock   func() time.Time
+	gates             map[string]Gate
+	ordered           []string // gate execution order
+	profileExtensions map[ProfileID][]string
+	clock             func() time.Time
 }
 
 // NewEngine creates a new conformance engine.
 func NewEngine() *Engine {
 	return &Engine{
-		gates:   make(map[string]Gate),
-		ordered: make([]string, 0),
-		clock:   time.Now,
+		gates:             make(map[string]Gate),
+		ordered:           make([]string, 0),
+		profileExtensions: make(map[ProfileID][]string),
+		clock:             time.Now,
 	}
 }
 
@@ -49,6 +52,19 @@ func (e *Engine) RegisterGate(g Gate) {
 		e.ordered = append(e.ordered, id)
 	}
 	e.gates[id] = g
+}
+
+// RegisterGateForProfiles registers a gate and appends it to each built-in
+// profile without requiring the Kernel profile registry to know downstream
+// gate implementations.
+func (e *Engine) RegisterGateForProfiles(g Gate, profiles ...ProfileID) {
+	e.RegisterGate(g)
+	id := g.ID()
+	for _, profile := range profiles {
+		if !slices.Contains(e.profileExtensions[profile], id) {
+			e.profileExtensions[profile] = append(e.profileExtensions[profile], id)
+		}
+	}
 }
 
 // ConformanceReport is the top-level result of a conformance run.
@@ -204,8 +220,11 @@ func (e *Engine) resolveGates(opts *RunOptions) []string {
 	}
 
 	// Intersect profile gates with registered gates, preserving registration order
-	required := make(map[string]bool, len(profileGates))
+	required := make(map[string]bool, len(profileGates)+len(e.profileExtensions[opts.Profile]))
 	for _, g := range profileGates {
+		required[g] = true
+	}
+	for _, g := range e.profileExtensions[opts.Profile] {
 		required[g] = true
 	}
 

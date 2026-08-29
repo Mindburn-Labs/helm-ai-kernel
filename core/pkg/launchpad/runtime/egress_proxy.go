@@ -38,6 +38,9 @@ func (p LaunchOwnedEgressProxy) Start(req EgressProxyRequest) (EgressProxyHandle
 	if err := ValidateModelProviderAllowlist(req.Allowlist); err != nil {
 		return EgressProxyHandle{}, err
 	}
+	if err := validateProductionEgressInspection(); err != nil {
+		return EgressProxyHandle{}, err
+	}
 	listenAddr := strings.TrimSpace(p.ListenAddr)
 	if listenAddr == "" {
 		listenAddr = "127.0.0.1:0"

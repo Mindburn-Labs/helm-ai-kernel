@@ -455,6 +455,25 @@ func TestCoverageEgressProxyAndNetworkBranches(t *testing.T) {
 	}
 }
 
+func TestProductionRejectsEveryUnverifiableEgressProxy(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	req := EgressProxyRequest{
+		LaunchID:          "launch",
+		Allowlist:         []string{"openrouter.ai:443"},
+		PayloadInspection: "caller-claims-full-inspection",
+	}
+	proxies := []EgressProxy{
+		StaticEgressProxy{ProxyURL: "http://proxy", ReceiptRef: "receipt"},
+		NewLaunchOwnedEgressProxy(),
+		DockerSidecarEgressProxy{Image: "image@sha256:abc"},
+	}
+	for _, proxy := range proxies {
+		if _, err := proxy.Start(req); err == nil || !strings.Contains(err.Error(), "cannot verify") {
+			t.Fatalf("%T did not fail closed on unverifiable production inspection: %v", proxy, err)
+		}
+	}
+}
+
 func TestDockerRunContainerIDUsesLastNonEmptyLine(t *testing.T) {
 	out := []byte("Unable to find image 'proxy' locally\nDigest: sha256:abc\nStatus: Downloaded newer image\n\n6b40ca4b1b2114e8637b46835166f0350099a0c0f5f28e1f54c7cd69224362d8\n")
 	if got := dockerRunContainerID(out); got != "6b40ca4b1b2114e8637b46835166f0350099a0c0f5f28e1f54c7cd69224362d8" {

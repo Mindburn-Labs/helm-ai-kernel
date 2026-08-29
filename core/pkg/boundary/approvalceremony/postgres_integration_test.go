@@ -126,9 +126,37 @@ func TestPostgresLifecycleSingleIssueAndConsume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newService(): %v", err)
 	}
-	hold, err := service.BeginHold(ctx, fixtureHold.Spec.BindingRef)
-	if err != nil {
-		t.Fatalf("BeginHold(): %v", err)
+	started := make(chan Record, 8)
+	startErrors := make(chan error, 8)
+	var startWG sync.WaitGroup
+	for range 8 {
+		startWG.Add(1)
+		go func() {
+			defer startWG.Done()
+			record, startErr := service.BeginOrResume(ctx, fixtureHold.Spec.BindingRef)
+			if startErr != nil {
+				startErrors <- startErr
+				return
+			}
+			started <- record
+		}()
+	}
+	startWG.Wait()
+	close(started)
+	close(startErrors)
+	if beginErrors := collectErrors(startErrors); len(beginErrors) != 0 {
+		t.Fatalf("concurrent BeginOrResume() errors = %v", beginErrors)
+	}
+	startedRecords := collectRecords(started)
+	if len(startedRecords) != 8 {
+		t.Fatalf("concurrent BeginOrResume() returned %d records, want 8", len(startedRecords))
+	}
+	hold := startedRecords[0]
+	for _, record := range startedRecords[1:] {
+		if record.ApprovalID != hold.ApprovalID || record.Spec != hold.Spec || record.Version != hold.Version ||
+			!record.HoldStartedAt.Equal(hold.HoldStartedAt) {
+			t.Fatalf("concurrent BeginOrResume() did not converge: first=%+v got=%+v", hold, record)
+		}
 	}
 	if _, err := service.IssueChallenge(ctx, hold.ApprovalID); !errors.Is(err, ErrHoldPending) {
 		t.Fatalf("early IssueChallenge() error = %v, want ErrHoldPending", err)

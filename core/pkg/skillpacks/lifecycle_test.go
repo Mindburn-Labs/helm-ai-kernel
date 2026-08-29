@@ -335,6 +335,68 @@ func TestProjectionLifecycleConcurrentReplayIsSingleMutation(t *testing.T) {
 	}
 }
 
+func TestProjectionLifecycleCrossInstanceLockFailsClosed(t *testing.T) {
+	now := time.Date(2026, 8, 30, 16, 0, 0, 0, time.UTC)
+	root := t.TempDir()
+	first := newProjectionLifecycleForTest(t, root, now)
+	second := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "single writer prompt", 1, now)
+
+	release, err := first.acquireRootLock()
+	if errors.Is(err, ErrProjectionLockUnsupported) {
+		t.Skip("platform has no supported cross-process projection lock")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			_ = release()
+		}
+	})
+
+	if _, err := second.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionLockContended) {
+		t.Fatalf("contended lifecycle error = %v", err)
+	}
+	lockPath := filepath.Join(root, filepath.FromSlash(projectionLifecycleLockRel))
+	info, err := os.Lstat(lockPath)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
+		t.Fatalf("root-bounded lock = %+v err=%v", info, err)
+	}
+	if err := release(); err != nil {
+		t.Fatal(err)
+	}
+	if err := release(); err != nil {
+		t.Fatalf("idempotent release: %v", err)
+	}
+	released = true
+	if _, err := second.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatalf("apply after lock release: %v", err)
+	}
+}
+
+func TestProjectionDurabilityHelpers(t *testing.T) {
+	root := t.TempDir()
+	managed, err := ensureManagedDir(root, filepath.Join("tenant", "workspace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syncProjectionDirectory(managed); err != nil {
+		t.Fatalf("sync managed directory: %v", err)
+	}
+	if err := atomicReplaceManaged(root, filepath.Join("tenant", "workspace", "state.json"), []byte("durable")); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(managed, "state.json"))
+	if err != nil || string(data) != "durable" {
+		t.Fatalf("durable publish = %q err=%v", data, err)
+	}
+	if err := syncProjectionDirectory(filepath.Join(managed, "state.json")); !errors.Is(err, ErrProjectionPathUnsafe) {
+		t.Fatalf("non-directory sync error = %v", err)
+	}
+}
+
 type projectionFixture struct {
 	effect   contracts.SkillProjectionEffect
 	artifact SkillProjectionArtifact

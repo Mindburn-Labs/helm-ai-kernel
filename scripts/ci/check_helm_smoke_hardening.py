@@ -32,9 +32,23 @@ def require_digest_default(path: Path, text: str) -> None:
         fail(f"{path}: missing runtime digest-pin guard")
 
 
+def require_policy_fixture_digest_default(path: Path, text: str) -> None:
+    match = re.search(
+        r'POLICY_FIXTURE_IMAGE="\$\{HELM_SMOKE_POLICY_FIXTURE_IMAGE:-([^}]+)\}"',
+        text,
+    )
+    if not match:
+        fail(f"{path}: missing POLICY_FIXTURE_IMAGE default")
+    if not SHA256_REF.search(match.group(1)):
+        fail(f"{path}: POLICY_FIXTURE_IMAGE default must be digest pinned")
+    if "require_pinned_policy_fixture_image" not in text:
+        fail(f"{path}: missing policy fixture runtime digest-pin guard")
+
+
 def check_kind_smoke(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     require_digest_default(path, text)
+    require_policy_fixture_digest_default(path, text)
     forbidden = [
         "--network host",
         '${HOME}/.kube:/root/.kube',
@@ -54,6 +68,11 @@ def check_kind_smoke(path: Path) -> None:
         "ctr --namespace k8s.io images inspect",
         "ctr --namespace k8s.io images tag --force",
         "--set image.digest=",
+        "go run ./scripts/ci/generate_policy_controlplane_fixture.go",
+        "--set helm.production=true",
+        "--set helm.policy.source.kind=controlplane",
+        "--set helm.policy.signature.required=true",
+        "policy-controlplane-fixture",
     ]
     for token in required:
         if token not in text:

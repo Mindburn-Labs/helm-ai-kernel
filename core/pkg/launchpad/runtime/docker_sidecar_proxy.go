@@ -26,6 +26,9 @@ func (p DockerSidecarEgressProxy) Start(req EgressProxyRequest) (EgressProxyHand
 	if err := ValidateModelProviderAllowlist(req.Allowlist); err != nil {
 		return EgressProxyHandle{}, err
 	}
+	if err := validateProductionEgressInspection(); err != nil {
+		return EgressProxyHandle{}, err
+	}
 	image := strings.TrimSpace(p.Image)
 	if image == "" {
 		return EgressProxyHandle{}, errors.New("docker egress proxy image is required")

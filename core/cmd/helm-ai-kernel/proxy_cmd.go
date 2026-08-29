@@ -443,6 +443,10 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "Error: invalid upstream URL: %v\n", err)
 		return 2
 	}
+	if helmcrypto.ProductionMode() {
+		_, _ = fmt.Fprintln(stderr, "Error: helm proxy is disabled under HELM_PRODUCTION: request, response, and SSE payloads do not have verified inline personal-data inspection")
+		return 2
+	}
 
 	// Initialize receipt store
 	receiptPath := filepath.Join(receiptsDir, fmt.Sprintf("receipts-%s.jsonl", time.Now().Format("2006-01-02")))

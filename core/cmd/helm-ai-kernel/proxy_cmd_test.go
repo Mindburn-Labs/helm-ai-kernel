@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,17 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestProxyFailsClosedInProductionWithoutInlinePrivacyInspection(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	var stdout, stderr bytes.Buffer
+	if code := runProxyCmd([]string{"--upstream", "https://api.openai.com/v1"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("runProxyCmd exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "personal-data inspection") {
+		t.Fatalf("production refusal did not explain the privacy boundary: %s", stderr.String())
+	}
+}
 
 func TestExtractGenAIUsagePreservesUsagePresence(t *testing.T) {
 	input, output, present, finish := extractGenAIUsage([]byte(`{"choices":[{"finish_reason":"tool_calls"}]}`))

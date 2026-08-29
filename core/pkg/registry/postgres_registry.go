@@ -24,6 +24,15 @@ func NewPostgresRegistry(db *sql.DB) *PostgresRegistry {
 	return &PostgresRegistry{db: db}
 }
 
+// MigratePostgres applies the registry schema as an explicit owner operation.
+// Serving code should construct NewPostgresRegistry after migration.
+func MigratePostgres(ctx context.Context, db *sql.DB) error {
+	if db == nil {
+		return errors.New("postgres registry migration requires database")
+	}
+	return NewPostgresRegistry(db).Init(ctx)
+}
+
 const pgRegistrySchema = `
 CREATE TABLE IF NOT EXISTS registry_bundles (
 	name TEXT NOT NULL,

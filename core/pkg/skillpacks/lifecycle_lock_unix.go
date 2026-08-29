@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"syscall"
 )
@@ -15,19 +14,11 @@ import (
 // persistent sidecar is never deleted, avoiding unlink/recreate split-brain and
 // stale marker ownership races. Closing the descriptor releases the lock on
 // process exit as well as the normal return path.
-func lockProjectionFile(path string) (func() error, error) {
-	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0o600) // #nosec G304 -- path is derived from the validated projection root
-	if err != nil {
-		if errors.Is(err, syscall.ELOOP) {
-			return nil, ErrProjectionPathUnsafe
-		}
-		return nil, fmt.Errorf("skillpacks: open projection root lock: %w", err)
-	}
-	file := os.NewFile(uintptr(fd), path)
+func lockProjectionFile(file *os.File) (func() error, error) {
 	if file == nil {
-		_ = syscall.Close(fd)
-		return nil, fmt.Errorf("skillpacks: open projection root lock descriptor")
+		return nil, fmt.Errorf("skillpacks: projection root lock descriptor is required")
 	}
+	fd := int(file.Fd())
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
 		_ = file.Close()
@@ -43,12 +34,6 @@ func lockProjectionFile(path string) (func() error, error) {
 		}
 		return nil, fmt.Errorf("skillpacks: lock projection root: %w", err)
 	}
-	if err := syncProjectionDirectory(filepath.Dir(path)); err != nil {
-		_ = syscall.Flock(fd, syscall.LOCK_UN)
-		_ = file.Close()
-		return nil, fmt.Errorf("skillpacks: sync projection root lock parent: %w", err)
-	}
-
 	var once sync.Once
 	var releaseErr error
 	return func() error {

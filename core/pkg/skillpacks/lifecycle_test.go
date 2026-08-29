@@ -533,6 +533,43 @@ func TestProjectionDurabilityHelpers(t *testing.T) {
 	}
 }
 
+func TestManagedRootRejectsAncestorSwap(t *testing.T) {
+	rootPath := t.TempDir()
+	outside := t.TempDir()
+	managed, err := openManagedRoot(rootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = managed.Close() })
+
+	ancestorRel := filepath.Join("tenant", "workspace")
+	if err := ensureManagedDirAt(managed, ancestorRel); err != nil {
+		t.Fatal(err)
+	}
+	ancestorPath := filepath.Join(rootPath, ancestorRel)
+	movedPath := filepath.Join(rootPath, "tenant", "workspace-moved")
+	if err := os.Rename(ancestorPath, movedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, ancestorPath); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+
+	managedRel := filepath.Join(ancestorRel, "projection.md")
+	if err := atomicReplaceManagedAt(managed, managedRel, []byte("must not escape")); !errors.Is(err, ErrProjectionPathUnsafe) {
+		t.Fatalf("ancestor-swap write error = %v", err)
+	}
+	if _, err := readManagedFileAt(managed, managedRel, maxProjectionArtifactBytes); !errors.Is(err, ErrProjectionPathUnsafe) {
+		t.Fatalf("ancestor-swap read error = %v", err)
+	}
+	if entries, err := os.ReadDir(outside); err != nil || len(entries) != 0 {
+		t.Fatalf("ancestor swap mutated outside path: entries=%v err=%v", entries, err)
+	}
+	if entries, err := os.ReadDir(movedPath); err != nil || len(entries) != 0 {
+		t.Fatalf("ancestor swap mutated original directory: entries=%v err=%v", entries, err)
+	}
+}
+
 type projectionFixture struct {
 	effect   contracts.SkillProjectionEffect
 	artifact SkillProjectionArtifact

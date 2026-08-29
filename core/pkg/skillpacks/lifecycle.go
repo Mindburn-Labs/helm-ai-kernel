@@ -1,12 +1,14 @@
 package skillpacks
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -531,17 +533,20 @@ func (l *ProjectionLifecycle) persistGeneration(
 	if err := validateProjectionGeneration(record); err != nil {
 		return err
 	}
-	parentRel := l.generationParentRel(effect)
-	parent, err := ensureManagedDir(l.root, parentRel)
+	root, err := openManagedRoot(l.root)
 	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	parentRel := l.generationParentRel(effect)
+	if err := ensureManagedDirAt(root, parentRel); err != nil {
 		return err
 	}
 	finalRel := filepath.Join(parentRel, projectionGenerationDirName(record))
-	final, err := managedPath(l.root, finalRel, false)
-	if err != nil {
+	if err := validateManagedPathAt(root, finalRel, true); err != nil {
 		return err
 	}
-	if info, statErr := os.Lstat(final); statErr == nil {
+	if info, statErr := root.Lstat(finalRel); statErr == nil {
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 			return ErrProjectionPathUnsafe
 		}
@@ -554,22 +559,26 @@ func (l *ProjectionLifecycle) persistGeneration(
 		return statErr
 	}
 
-	stage, err := os.MkdirTemp(parent, ".projection-stage-")
+	stageName, err := projectionRandomName(".projection-stage-")
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(stage) }()
-	if err := writeExclusiveFile(filepath.Join(stage, "skillpack.json"), manifestBytes); err != nil {
+	stageRel := filepath.Join(parentRel, stageName)
+	if err := root.Mkdir(stageRel, 0o755); err != nil {
 		return err
 	}
-	if err := writeExclusiveFile(filepath.Join(stage, "SKILL.md"), contentBytes); err != nil {
+	defer cleanupManagedStage(root, stageRel)
+	if err := writeExclusiveManagedFileAt(root, filepath.Join(stageRel, "skillpack.json"), manifestBytes); err != nil {
 		return err
 	}
-	if err := syncProjectionDirectory(stage); err != nil {
+	if err := writeExclusiveManagedFileAt(root, filepath.Join(stageRel, "SKILL.md"), contentBytes); err != nil {
+		return err
+	}
+	if err := syncManagedDirectoryAt(root, stageRel); err != nil {
 		return fmt.Errorf("skillpacks: sync staged immutable generation: %w", err)
 	}
-	if err := os.Rename(stage, final); err != nil {
-		if _, statErr := os.Stat(final); statErr == nil {
+	if err := root.Rename(stageRel, finalRel); err != nil {
+		if _, statErr := root.Stat(finalRel); statErr == nil {
 			storedManifest, storedContent, readErr := l.readGeneration(effect, record)
 			if readErr == nil && constantBytesEqual(storedManifest, manifestBytes) && constantBytesEqual(storedContent, contentBytes) {
 				return nil
@@ -577,7 +586,7 @@ func (l *ProjectionLifecycle) persistGeneration(
 		}
 		return fmt.Errorf("skillpacks: commit immutable generation: %w", err)
 	}
-	if err := syncProjectionDirectory(parent); err != nil {
+	if err := syncManagedDirectoryAt(root, parentRel); err != nil {
 		return fmt.Errorf("skillpacks: sync immutable generation parent: %w", err)
 	}
 	storedManifest, storedContent, err := l.readGeneration(effect, record)
@@ -595,11 +604,15 @@ func (l *ProjectionLifecycle) readGeneration(
 		return nil, nil, err
 	}
 	dirRel := filepath.Join(l.generationParentRel(effect), projectionGenerationDirName(record))
-	dir, err := managedPath(l.root, dirRel, false)
+	root, err := openManagedRoot(l.root)
 	if err != nil {
 		return nil, nil, err
 	}
-	entries, err := os.ReadDir(dir)
+	defer func() { _ = root.Close() }()
+	if err := validateManagedPathAt(root, dirRel, false); err != nil {
+		return nil, nil, err
+	}
+	entries, err := fs.ReadDir(root.FS(), filepath.ToSlash(dirRel))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: read immutable generation: %v", ErrProjectionDrift, err)
 	}
@@ -684,41 +697,15 @@ func (l *ProjectionLifecycle) replaceProjection(effect contracts.SkillProjection
 
 func (l *ProjectionLifecycle) removeProjection(effect contracts.SkillProjectionEffect, relativePath string) error {
 	fullRel := filepath.Join(l.workspaceRel(effect), filepath.FromSlash(relativePath))
-	path, err := managedPath(l.root, fullRel, false)
-	if err != nil {
-		return err
-	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return ErrProjectionPathUnsafe
-	}
-	if err := os.Remove(path); err != nil {
-		return fmt.Errorf("skillpacks: revoke projection: %w", err)
-	}
-	if err := syncProjectionDirectory(filepath.Dir(path)); err != nil {
-		return fmt.Errorf("skillpacks: sync projection parent after revoke: %w", err)
-	}
-	return nil
+	return removeManagedFile(l.root, fullRel)
 }
 
 func (l *ProjectionLifecycle) restoreProjection(effect contracts.SkillProjectionEffect, relativePath string, state *projectionLifecycleState) error {
 	if state == nil || state.Status == projectionStatusRevoked {
 		fullRel := filepath.Join(l.workspaceRel(effect), filepath.FromSlash(relativePath))
-		path, err := managedPath(l.root, fullRel, false)
-		if err != nil {
-			return err
-		}
-		removeErr := os.Remove(path)
+		removeErr := removeManagedFile(l.root, fullRel)
 		if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 			return removeErr
-		}
-		if removeErr == nil {
-			if err := syncProjectionDirectory(filepath.Dir(path)); err != nil {
-				return err
-			}
 		}
 		return nil
 	}
@@ -787,11 +774,35 @@ func (l *ProjectionLifecycle) generationParentRel(effect contracts.SkillProjecti
 }
 
 func (l *ProjectionLifecycle) acquireRootLock() (func() error, error) {
-	lockPath, err := managedPath(l.root, filepath.FromSlash(projectionLifecycleLockRel), true)
+	root, err := openManagedRoot(l.root)
 	if err != nil {
 		return nil, err
 	}
-	return lockProjectionFile(lockPath)
+	lockRel := filepath.FromSlash(projectionLifecycleLockRel)
+	if err := ensureManagedDirAt(root, filepath.Dir(lockRel)); err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	lockFile, created, err := openManagedLockFileAt(root, lockRel)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	if created {
+		if err := syncManagedDirectoryAt(root, filepath.Dir(lockRel)); err != nil {
+			_ = lockFile.Close()
+			_ = root.Close()
+			return nil, err
+		}
+	}
+	releaseLock, err := lockProjectionFile(lockFile)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	return func() error {
+		return errors.Join(releaseLock(), root.Close())
+	}, nil
 }
 
 func projectionGenerationDirName(record projectionGeneration) string {
@@ -970,35 +981,15 @@ func decodeStrictProjectionJSON(data []byte, target any) error {
 }
 
 func ensureManagedDir(root, rel string) (string, error) {
-	if err := validateManagedRelative(rel); err != nil {
+	managed, err := openManagedRoot(root)
+	if err != nil {
 		return "", err
 	}
-	current := root
-	for _, part := range strings.Split(filepath.Clean(rel), string(os.PathSeparator)) {
-		current = filepath.Join(current, part)
-		info, err := os.Lstat(current)
-		created := false
-		if errors.Is(err, os.ErrNotExist) {
-			mkdirErr := os.Mkdir(current, 0o755)
-			if mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {
-				return "", mkdirErr
-			}
-			created = mkdirErr == nil
-			info, err = os.Lstat(current)
-		}
-		if err != nil {
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return "", ErrProjectionPathUnsafe
-		}
-		if created {
-			if err := syncProjectionDirectory(filepath.Dir(current)); err != nil {
-				return "", fmt.Errorf("skillpacks: sync managed directory parent: %w", err)
-			}
-		}
+	defer func() { _ = managed.Close() }()
+	if err := ensureManagedDirAt(managed, rel); err != nil {
+		return "", err
 	}
-	return current, nil
+	return filepath.Join(root, filepath.Clean(rel)), nil
 }
 
 func managedPath(root, rel string, createParent bool) (string, error) {
@@ -1044,21 +1035,29 @@ func validateManagedRelative(rel string) error {
 }
 
 func readManagedFile(root, rel string, maxBytes int64) ([]byte, error) {
-	if maxBytes <= 0 {
-		return nil, ErrProjectionPathUnsafe
-	}
-	path, err := managedPath(root, rel, false)
+	managed, err := openManagedRoot(root)
 	if err != nil {
 		return nil, err
 	}
-	lstat, err := os.Lstat(path)
+	defer func() { _ = managed.Close() }()
+	return readManagedFileAt(managed, rel, maxBytes)
+}
+
+func readManagedFileAt(root *os.Root, rel string, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		return nil, ErrProjectionPathUnsafe
+	}
+	if err := validateManagedPathAt(root, rel, false); err != nil {
+		return nil, err
+	}
+	lstat, err := root.Lstat(rel)
 	if err != nil {
 		return nil, err
 	}
 	if lstat.Mode()&os.ModeSymlink != 0 || !lstat.Mode().IsRegular() {
 		return nil, ErrProjectionPathUnsafe
 	}
-	file, err := os.Open(path)
+	file, err := root.Open(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -1081,22 +1080,37 @@ func readManagedFile(root, rel string, maxBytes int64) ([]byte, error) {
 }
 
 func atomicReplaceManaged(root, rel string, data []byte) error {
-	path, err := managedPath(root, rel, true)
+	managed, err := openManagedRoot(root)
 	if err != nil {
 		return err
 	}
-	if info, statErr := os.Lstat(path); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+	defer func() { _ = managed.Close() }()
+	return atomicReplaceManagedAt(managed, rel, data)
+}
+
+func atomicReplaceManagedAt(root *os.Root, rel string, data []byte) error {
+	if err := validateManagedRelative(rel); err != nil {
+		return err
+	}
+	dirRel := filepath.Dir(rel)
+	if err := ensureManagedDirAt(root, dirRel); err != nil {
+		return err
+	}
+	if info, statErr := root.Lstat(rel); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
 		return ErrProjectionPathUnsafe
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
 		return statErr
 	}
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".projection-write-")
+	tmpName, err := projectionRandomName(".projection-write-")
 	if err != nil {
 		return err
 	}
-	tmpPath := tmp.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
+	tmpRel := filepath.Join(dirRel, tmpName)
+	tmp, err := root.OpenFile(tmpRel, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Remove(tmpRel) }()
 	if err := tmp.Chmod(0o644); err != nil {
 		_ = tmp.Close()
 		return err
@@ -1112,13 +1126,191 @@ func atomicReplaceManaged(root, rel string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := root.Rename(tmpRel, rel); err != nil {
 		return fmt.Errorf("skillpacks: atomic projection replace: %w", err)
 	}
-	if err := syncProjectionDirectory(dir); err != nil {
+	if err := syncManagedDirectoryAt(root, dirRel); err != nil {
 		return fmt.Errorf("skillpacks: sync projection parent after replace: %w", err)
 	}
+	if err := validateManagedPathAt(root, rel, false); err != nil {
+		return err
+	}
 	return nil
+}
+
+func openManagedRoot(path string) (*os.Root, error) {
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		return nil, fmt.Errorf("skillpacks: open managed projection root: %w", err)
+	}
+	info, err := root.Stat(".")
+	if err != nil || !info.IsDir() {
+		_ = root.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrProjectionPathUnsafe
+	}
+	return root, nil
+}
+
+func validateManagedPathAt(root *os.Root, rel string, allowMissing bool) error {
+	if root == nil {
+		return ErrProjectionPathUnsafe
+	}
+	if err := validateManagedRelative(rel); err != nil {
+		return err
+	}
+	current := ""
+	for _, part := range strings.Split(filepath.Clean(rel), string(os.PathSeparator)) {
+		current = filepath.Join(current, part)
+		info, err := root.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) && allowMissing {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrProjectionPathUnsafe
+		}
+	}
+	return nil
+}
+
+func ensureManagedDirAt(root *os.Root, rel string) error {
+	if rel == "." {
+		return nil
+	}
+	if err := validateManagedRelative(rel); err != nil {
+		return err
+	}
+	current := ""
+	for _, part := range strings.Split(filepath.Clean(rel), string(os.PathSeparator)) {
+		parent := current
+		if parent == "" {
+			parent = "."
+		}
+		current = filepath.Join(current, part)
+		info, err := root.Lstat(current)
+		created := false
+		if errors.Is(err, os.ErrNotExist) {
+			mkdirErr := root.Mkdir(current, 0o755)
+			if mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {
+				return mkdirErr
+			}
+			created = mkdirErr == nil
+			info, err = root.Lstat(current)
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return ErrProjectionPathUnsafe
+		}
+		if created {
+			if err := syncManagedDirectoryAt(root, parent); err != nil {
+				return fmt.Errorf("skillpacks: sync managed directory parent: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func syncManagedDirectoryAt(root *os.Root, rel string) error {
+	dir, err := root.Open(rel)
+	if err != nil {
+		return err
+	}
+	info, statErr := dir.Stat()
+	if statErr != nil || !info.IsDir() {
+		_ = dir.Close()
+		if statErr != nil {
+			return statErr
+		}
+		return ErrProjectionPathUnsafe
+	}
+	if err := dir.Sync(); err != nil {
+		_ = dir.Close()
+		return err
+	}
+	return dir.Close()
+}
+
+func removeManagedFile(rootPath, rel string) error {
+	root, err := openManagedRoot(rootPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	if err := validateManagedPathAt(root, rel, false); err != nil {
+		return err
+	}
+	info, err := root.Lstat(rel)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return ErrProjectionPathUnsafe
+	}
+	if err := root.Remove(rel); err != nil {
+		return fmt.Errorf("skillpacks: remove managed projection file: %w", err)
+	}
+	return syncManagedDirectoryAt(root, filepath.Dir(rel))
+}
+
+func openManagedLockFileAt(root *os.Root, rel string) (*os.File, bool, error) {
+	file, err := root.OpenFile(rel, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	if err == nil {
+		return file, true, nil
+	}
+	if !errors.Is(err, os.ErrExist) {
+		return nil, false, err
+	}
+	lstat, err := root.Lstat(rel)
+	if err != nil || lstat.Mode()&os.ModeSymlink != 0 || !lstat.Mode().IsRegular() {
+		return nil, false, ErrProjectionPathUnsafe
+	}
+	file, err = root.OpenFile(rel, os.O_RDWR, 0)
+	if err != nil {
+		return nil, false, err
+	}
+	fstat, err := file.Stat()
+	if err != nil || !os.SameFile(lstat, fstat) || fstat.Mode().Perm() != 0o600 {
+		_ = file.Close()
+		return nil, false, ErrProjectionPathUnsafe
+	}
+	return file, false, nil
+}
+
+func projectionRandomName(prefix string) (string, error) {
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", err
+	}
+	return prefix + hex.EncodeToString(random[:]), nil
+}
+
+func writeExclusiveManagedFileAt(root *os.Root, rel string, data []byte) error {
+	file, err := root.OpenFile(rel, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+func cleanupManagedStage(root *os.Root, rel string) {
+	_ = root.Remove(filepath.Join(rel, "skillpack.json"))
+	_ = root.Remove(filepath.Join(rel, "SKILL.md"))
+	_ = root.Remove(rel)
 }
 
 func syncProjectionDirectory(path string) error {

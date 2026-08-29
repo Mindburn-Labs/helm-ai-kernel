@@ -1,3 +1,6 @@
+// quantum_posture: this smoke fixture uses ephemeral classical Ed25519 only
+// for the current Kernel policy-head compatibility contract; it makes no
+// post-quantum assurance claim.
 package main
 
 import (

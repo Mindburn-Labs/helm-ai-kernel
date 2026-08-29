@@ -1,3 +1,5 @@
+// quantum_posture: this test exercises the fixture's classical Ed25519
+// compatibility path only; it makes no post-quantum assurance claim.
 package main
 
 import (

@@ -4,7 +4,14 @@ kind: Pod
 metadata:
   name: {{ include "helm-ai-kernel.fullname" . }}-launchpad-test
   labels:
-    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
+    helm.sh/chart: {{ include "helm-ai-kernel.chart" . }}
+    app.kubernetes.io/name: {{ printf "%s-launchpad-test" (include "helm-ai-kernel.name" .) | trunc 63 | trimSuffix "-" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- if .Chart.AppVersion }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    {{- end }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: helm-ai-kernel
     app.kubernetes.io/component: test
   annotations:
     helm.sh/hook: test

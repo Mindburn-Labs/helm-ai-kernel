@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise classical X.509/TLS and JWK trust
+// wiring only; no post-quantum cryptographic control or assurance is added.
 package main
 
 import (

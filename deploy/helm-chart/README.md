@@ -120,7 +120,7 @@ flowchart TD
 | `helm.policy.failClosed.onInvalidUpdate` | `keepLastKnownGood` | Retain only a snapshot with a fresh successful source verification after a fault, or `deny` to invalidate immediately. |
 | `helm.policy.failClosed.lastKnownGoodMaxAge` | `10m` | Positive maximum age since the last successful source verification after a source fault. |
 | `helm.policy.signature.required` | `false` | Rejects unsigned policy heads during reconciliation when enabled. |
-| `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for canonical policy bundle signatures. |
+| `helm.policy.signature.publicKey` | empty | 64-char hex Ed25519 public key for versioned complete policy-head signatures. |
 | `helm.policy.signature.existingSecret` | empty | Existing secret containing `HELM_POLICY_TRUST_PUBLIC_KEY`. |
 | `helm.policy.runtimeActions` | `[]` | Explicit mounted-file rules compiled into the chart-managed reference pack; empty remains fail-closed. Prefer signed control-plane/CRD policy in production. |
 | `helm.policy.reloadHints.httpWakeEndpoint` | `/internal/policy/reconcile` | Wake-only internal endpoint for sidecars/operators. |
@@ -169,8 +169,10 @@ flowchart TD
   the optional `HelmPolicyBundle` CRD and RBAC only in CRD mode.
 - `mountedFile` mode is retained for OSS/local/bootstrap/demo use. ConfigMap
   or Secret bytes are delivery backends only and the sidecar, when enabled,
-  only calls `/internal/policy/reconcile`. Signed mounted-file bundles can
-  provide a companion `serve-policy.toml.sig` file in the same volume.
+  only calls `/internal/policy/reconcile`. Signed mounted-file policies can
+  provide a companion `serve-policy.toml.sig`; it must sign the versioned
+  unsigned-head envelope returned by `PolicyHeadSignatureMaterial`, whose
+  `policy_hash` commits the exact policy bytes.
 - Keep connector credentials in Kubernetes Secrets or an external secret
   manager. Policy bundles should reference credentials, not embed raw secrets.
 - Set `helm.githubEffects.existingSecret` only when the release should register

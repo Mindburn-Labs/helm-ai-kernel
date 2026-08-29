@@ -61,7 +61,7 @@ func (s *mutableSource) Load(context.Context, PolicyScope, uint64) ([]byte, erro
 
 type rejectingVerifier struct{}
 
-func (rejectingVerifier) VerifyPolicyBundle(context.Context, PolicyHead, []byte) error {
+func (rejectingVerifier) VerifyPolicyHead(context.Context, PolicyHead) error {
 	return errors.New("bad signature")
 }
 
@@ -95,6 +95,19 @@ func testCompiler(_ context.Context, head PolicyHead, _ []byte) (*EffectivePolic
 		Validation:  ValidationStatus{Status: StatusActive},
 		Graph:       prg.NewGraph(),
 	}, nil
+}
+
+func signPolicyHead(t *testing.T, signer helmcrypto.Signer, head PolicyHead) PolicyHead {
+	t.Helper()
+	material, err := PolicyHeadSignatureMaterial(head)
+	if err != nil {
+		t.Fatalf("policy head material: %v", err)
+	}
+	head.Signature, err = signer.Sign(material)
+	if err != nil {
+		t.Fatalf("sign policy head: %v", err)
+	}
+	return head
 }
 
 func assertInvalidSnapshot(t *testing.T, snapshot *EffectivePolicySnapshot) {
@@ -260,6 +273,73 @@ func TestReconcilerRejectsHashMismatch(t *testing.T) {
 	}
 }
 
+func TestReconcilerRejectsCrossScopeHead(t *testing.T) {
+	requested := PolicyScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+	bundle := []byte("policy")
+	source := &mutableSource{
+		head: PolicyHead{
+			Scope:       PolicyScope{TenantID: "tenant-b", WorkspaceID: "workspace-b"},
+			PolicyEpoch: 1,
+			PolicyHash:  HashBytes(bundle),
+		},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{Source: source, Store: store, Compiler: testCompiler})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := reconciler.Reconcile(context.Background(), requested)
+	if !errors.Is(err, ErrPolicyScopeMismatch) {
+		t.Fatalf("expected scope mismatch, got status=%+v err=%v", status, err)
+	}
+	if _, ok := store.Get(requested); ok {
+		t.Fatal("cross-scope head installed a snapshot")
+	}
+}
+
+func TestReconcilerRejectsEpochRollbackAndEquivocation(t *testing.T) {
+	scope := DefaultScope
+	bundle := []byte("policy-v2")
+	source := &mutableSource{
+		head:   PolicyHead{Scope: scope, PolicyEpoch: 2, PolicyHash: HashBytes(bundle), SourceRefs: []string{"publication:2"}},
+		bundle: bundle,
+	}
+	store := NewAtomicSnapshotStore()
+	reconciler, err := NewReconciler(ReconcilerConfig{Source: source, Store: store, Compiler: testCompiler, KeepLastKnownGood: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reconciler.Reconcile(context.Background(), scope); err != nil {
+		t.Fatalf("install epoch 2: %v", err)
+	}
+
+	source.head = PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle), SourceRefs: []string{"publication:1"}}
+	status, err := reconciler.Reconcile(context.Background(), scope)
+	if !errors.Is(err, ErrPolicyEpochRollback) {
+		t.Fatalf("expected epoch rollback, got status=%+v err=%v", status, err)
+	}
+
+	equivocatedBundle := []byte("policy-v2-equivocated")
+	source.head = PolicyHead{Scope: scope, PolicyEpoch: 2, PolicyHash: HashBytes(equivocatedBundle), SourceRefs: []string{"publication:2"}}
+	source.bundle = equivocatedBundle
+	status, err = reconciler.Reconcile(context.Background(), scope)
+	if !errors.Is(err, ErrPolicyEpochEquivocation) {
+		t.Fatalf("expected epoch equivocation, got status=%+v err=%v", status, err)
+	}
+
+	source.head = PolicyHead{Scope: scope, PolicyEpoch: 2, PolicyHash: HashBytes(bundle), SourceRefs: []string{"publication:2-mutated"}}
+	source.bundle = bundle
+	status, err = reconciler.Reconcile(context.Background(), scope)
+	if !errors.Is(err, ErrPolicyEpochEquivocation) {
+		t.Fatalf("expected signed-head equivocation, got status=%+v err=%v", status, err)
+	}
+	current, ok := store.Get(scope)
+	if !ok || current.PolicyEpoch != 2 || current.PolicyHash != HashBytes(bundle) || current.Validation.Status != StatusActive {
+		t.Fatalf("replay attempts replaced the installed snapshot: %+v", current)
+	}
+}
+
 func TestReconcilerRejectsInvalidSignature(t *testing.T) {
 	scope := DefaultScope
 	bundle := []byte("signed-policy")
@@ -311,12 +391,9 @@ func TestReconcilerInstallsValidEd25519Signature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new signer: %v", err)
 	}
-	signature, err := signer.Sign(bundle)
-	if err != nil {
-		t.Fatalf("sign bundle: %v", err)
-	}
+	head := signPolicyHead(t, signer, PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle)})
 	source := &mutableSource{
-		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(bundle), Signature: signature},
+		head:   head,
 		bundle: bundle,
 	}
 	store := NewAtomicSnapshotStore()
@@ -340,7 +417,7 @@ func TestReconcilerInstallsValidEd25519Signature(t *testing.T) {
 	}
 }
 
-func TestReconcilerRequiresCompositeSignatureForDigestBoundPolicy(t *testing.T) {
+func TestReconcilerRequiresHeadBoundSignatureForDigestBoundPolicy(t *testing.T) {
 	scope := DefaultScope
 	bundle := []byte("signed-policy-with-reference")
 	sourceRefs := []string{"policy.toml", "reference_pack:/policy/reference.json@sha256:" + strings.Repeat("a", 64)}
@@ -372,14 +449,10 @@ func TestReconcilerRequiresCompositeSignatureForDigestBoundPolicy(t *testing.T) 
 		t.Fatalf("bundle-only signature installed digest-bound policy: %+v", status)
 	}
 
-	compositeSignature, err := signer.Sign(PolicyHashMaterial(bundle, sourceRefs))
-	if err != nil {
-		t.Fatalf("sign composite material: %v", err)
-	}
-	source.head.Signature = compositeSignature
+	source.head = signPolicyHead(t, signer, source.head)
 	status, err := reconciler.Reconcile(context.Background(), scope)
 	if err != nil {
-		t.Fatalf("composite signature rejected: status=%+v err=%v", status, err)
+		t.Fatalf("head-bound signature rejected: status=%+v err=%v", status, err)
 	}
 	if !status.Updated || status.InstalledPolicyHash != policyHash {
 		t.Fatalf("digest-bound policy not installed: %+v", status)
@@ -394,12 +467,10 @@ func TestReconcilerRejectsTamperedEd25519Signature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new signer: %v", err)
 	}
-	signature, err := signer.Sign(signedBundle)
-	if err != nil {
-		t.Fatalf("sign bundle: %v", err)
-	}
+	head := signPolicyHead(t, signer, PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(signedBundle)})
+	head.PolicyHash = HashBytes(loadedBundle)
 	source := &mutableSource{
-		head:   PolicyHead{Scope: scope, PolicyEpoch: 1, PolicyHash: HashBytes(loadedBundle), Signature: signature},
+		head:   head,
 		bundle: loadedBundle,
 	}
 	store := NewAtomicSnapshotStore()

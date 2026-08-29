@@ -55,6 +55,9 @@ var (
 	ErrPolicyNotReady          = errors.New("policy not ready")
 	ErrPolicyHashMismatch      = errors.New("policy hash mismatch")
 	ErrPolicySignatureInvalid  = errors.New("policy signature invalid")
+	ErrPolicyScopeMismatch     = errors.New("policy scope mismatch")
+	ErrPolicyEpochRollback     = errors.New("policy epoch rollback")
+	ErrPolicyEpochEquivocation = errors.New("policy epoch equivocation")
 	ErrEmergencyCapsuleInvalid = errors.New("emergency capsule invalid")
 )
 
@@ -118,6 +121,7 @@ type EffectivePolicySnapshot struct {
 	WorkspaceID          string           `json:"workspace_id"`
 	PolicyEpoch          uint64           `json:"policy_epoch"`
 	PolicyHash           string           `json:"policy_hash"`
+	PolicyHeadHash       string           `json:"policy_head_hash,omitempty"`
 	P0CeilingsHash       string           `json:"p0_ceilings_hash,omitempty"`
 	P1BundleHash         string           `json:"p1_bundle_hash,omitempty"`
 	P2OverlayHashes      []string         `json:"p2_overlay_hashes,omitempty"`
@@ -151,9 +155,9 @@ type PolicySnapshotStore interface {
 // SnapshotCompiler turns verified policy bytes into an effective snapshot.
 type SnapshotCompiler func(ctx context.Context, head PolicyHead, bundle []byte) (*EffectivePolicySnapshot, error)
 
-// SignatureVerifier verifies optional policy signatures/provenance.
+// SignatureVerifier verifies the complete unsigned policy head.
 type SignatureVerifier interface {
-	VerifyPolicyBundle(ctx context.Context, head PolicyHead, bundle []byte) error
+	VerifyPolicyHead(ctx context.Context, head PolicyHead) error
 }
 
 // EmergencyCapsuleVerifier verifies hardware-quorum emergency capsules before
@@ -162,8 +166,8 @@ type EmergencyCapsuleVerifier interface {
 	VerifyEmergencyCapsule(ctx context.Context, head PolicyHead, capsule contracts.EmergencyCapsule) error
 }
 
-// Ed25519PolicyVerifier verifies policy bundles against an operator-provided
-// Ed25519 public key. Signatures are computed over exact canonical bundle bytes.
+// Ed25519PolicyVerifier verifies complete policy heads against an
+// operator-provided Ed25519 public key. PolicyHash binds the exact bundle bytes.
 type Ed25519PolicyVerifier struct {
 	PublicKeyHex string
 }
@@ -172,7 +176,7 @@ func NewEd25519PolicyVerifier(publicKeyHex string) *Ed25519PolicyVerifier {
 	return &Ed25519PolicyVerifier{PublicKeyHex: strings.TrimSpace(publicKeyHex)}
 }
 
-func (v *Ed25519PolicyVerifier) VerifyPolicyBundle(ctx context.Context, head PolicyHead, bundle []byte) error {
+func (v *Ed25519PolicyVerifier) VerifyPolicyHead(ctx context.Context, head PolicyHead) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -184,7 +188,10 @@ func (v *Ed25519PolicyVerifier) VerifyPolicyBundle(ctx context.Context, head Pol
 	if signature == "" {
 		return fmt.Errorf("%w: policy head has empty signature", ErrPolicySignatureInvalid)
 	}
-	material := PolicySignatureMaterial(head, bundle)
+	material, err := PolicyHeadSignatureMaterial(head)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrPolicySignatureInvalid, err)
+	}
 	ok, err := helmcrypto.Verify(publicKey, signature, material)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPolicySignatureInvalid, err)
@@ -309,15 +316,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		status.Reason = err.Error()
 		return r.invalid(status, err)
 	}
-	head.Scope = head.Scope.Normalize()
-	if head.Scope.Key() != scope.Key() {
-		head.Scope = scope
-	}
 	status.DesiredPolicyHash = head.PolicyHash
 	status.DesiredPolicyEpoch = head.PolicyEpoch
 	status.BundleRef = head.BundleRef
 	status.SourceRefs = append([]string(nil), head.SourceRefs...)
 	status.AuditEvent = "policy_reconcile"
+	if head.Scope != scope {
+		err := fmt.Errorf("%w: requested %s got %s", ErrPolicyScopeMismatch, scope.Key(), head.Scope.Key())
+		status.Reason = err.Error()
+		return r.invalid(status, err)
+	}
+	headMaterial, err := PolicyHeadSignatureMaterial(head)
+	if err != nil {
+		status.Reason = err.Error()
+		return r.invalid(status, err)
+	}
+	desiredHeadHash := HashBytes(headMaterial)
+	if err := r.verifyPolicyHeadSignature(ctx, head); err != nil {
+		status.Reason = err.Error()
+		return r.invalid(status, err)
+	}
 
 	if installed, ok := r.store.Get(scope); ok {
 		status.PolicyHash = installed.PolicyHash
@@ -325,7 +343,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		status.InstalledPolicyHash = installed.PolicyHash
 		status.InstalledPolicyEpoch = installed.PolicyEpoch
 		status.SnapshotStatus = installed.Validation.Status
-		if installed.Validation.Status == StatusActive && installed.PolicyHash == head.PolicyHash && installed.PolicyEpoch == head.PolicyEpoch {
+		if head.PolicyEpoch < installed.PolicyEpoch {
+			err := fmt.Errorf("%w: installed epoch %d, desired epoch %d", ErrPolicyEpochRollback, installed.PolicyEpoch, head.PolicyEpoch)
+			status.Reason = err.Error()
+			return r.invalid(status, err)
+		}
+		if head.PolicyEpoch == installed.PolicyEpoch && installed.PolicyHash != head.PolicyHash {
+			err := fmt.Errorf("%w: epoch %d changed policy hash", ErrPolicyEpochEquivocation, head.PolicyEpoch)
+			status.Reason = err.Error()
+			return r.invalid(status, err)
+		}
+		if head.PolicyEpoch == installed.PolicyEpoch && installed.PolicyHeadHash != "" && installed.PolicyHeadHash != desiredHeadHash {
+			err := fmt.Errorf("%w: epoch %d changed signed head", ErrPolicyEpochEquivocation, head.PolicyEpoch)
+			status.Reason = err.Error()
+			return r.invalid(status, err)
+		}
+		if installed.Validation.Status == StatusActive && installed.PolicyHash == head.PolicyHash &&
+			installed.PolicyEpoch == head.PolicyEpoch && installed.PolicyHeadHash == desiredHeadHash {
 			refreshed := *installed
 			refreshed.LastVerifiedAt = r.now().UTC()
 			if err := r.store.Swap(scope, &refreshed); err != nil {
@@ -346,24 +380,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 	if err := verifyExpectedPolicyHash(head, bundle); err != nil {
 		status.Reason = err.Error()
 		return r.invalid(status, err)
-	}
-	signature := strings.TrimSpace(head.Signature)
-	if signature == "" && r.requireSignature {
-		err := fmt.Errorf("%w: source head has empty signature", ErrPolicySignatureInvalid)
-		status.Reason = err.Error()
-		return r.invalid(status, err)
-	}
-	if signature != "" {
-		if r.verifier == nil {
-			err := fmt.Errorf("%w: no verifier configured for signed policy %s", ErrPolicySignatureInvalid, head.PolicyHash)
-			status.Reason = err.Error()
-			return r.invalid(status, err)
-		}
-		if err := r.verifier.VerifyPolicyBundle(ctx, head, bundle); err != nil {
-			err = fmt.Errorf("%w: %v", ErrPolicySignatureInvalid, err)
-			status.Reason = err.Error()
-			return r.invalid(status, err)
-		}
 	}
 	if head.EmergencyCapsule != nil {
 		if r.emergencyVerifier == nil {
@@ -391,6 +407,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 		return r.invalid(status, err)
 	}
 	normalizeSnapshot(snapshot, head)
+	snapshot.PolicyHeadHash = desiredHeadHash
 	if err := validateSnapshot(snapshot); err != nil {
 		status.ReconcileStatus = StatusValidateError
 		status.Reason = err.Error()
@@ -411,6 +428,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, scope PolicyScope) (Reconcil
 	status.Updated = true
 	r.remember(status)
 	return status, nil
+}
+
+func (r *Reconciler) verifyPolicyHeadSignature(ctx context.Context, head PolicyHead) error {
+	signature := strings.TrimSpace(head.Signature)
+	if signature == "" && r.requireSignature {
+		return fmt.Errorf("%w: source head has empty signature", ErrPolicySignatureInvalid)
+	}
+	if signature == "" {
+		return nil
+	}
+	if r.verifier == nil {
+		return fmt.Errorf("%w: no verifier configured for signed policy %s", ErrPolicySignatureInvalid, head.PolicyHash)
+	}
+	if err := r.verifier.VerifyPolicyHead(ctx, head); err != nil {
+		return fmt.Errorf("%w: %v", ErrPolicySignatureInvalid, err)
+	}
+	return nil
 }
 
 func (r *Reconciler) Start(ctx context.Context, interval time.Duration) {
@@ -585,12 +619,26 @@ func PolicyHashWithSourceRefs(bundle []byte, sourceRefs []string) string {
 	return HashBytes(PolicyHashMaterial(bundle, sourceRefs))
 }
 
-func PolicySignatureMaterial(head PolicyHead, bundle []byte) []byte {
-	if strings.EqualFold(strings.TrimSpace(head.PolicyHash), PolicyHashWithSourceRefs(bundle, head.SourceRefs)) &&
-		!strings.EqualFold(strings.TrimSpace(head.PolicyHash), HashBytes(bundle)) {
-		return PolicyHashMaterial(bundle, head.SourceRefs)
+// PolicyHeadSignatureMaterial binds every policy-head field except Signature.
+// PolicyHash separately commits the exact bundle bytes.
+func PolicyHeadSignatureMaterial(head PolicyHead) ([]byte, error) {
+	unsigned := head
+	unsigned.Signature = ""
+	if unsigned.PolicyEpoch == 0 || strings.TrimSpace(unsigned.Scope.TenantID) == "" ||
+		strings.TrimSpace(unsigned.Scope.WorkspaceID) == "" || strings.TrimSpace(unsigned.PolicyHash) == "" {
+		return nil, fmt.Errorf("%w: policy head signature fields are incomplete", ErrPolicyNotReady)
 	}
-	return bundle
+	return json.Marshal(struct {
+		Version string     `json:"version"`
+		Head    PolicyHead `json:"head"`
+	}{Version: "helm-policy-publication-signature.v1", Head: unsigned})
+}
+
+// PolicySignatureMaterial is retained for source compatibility. Bundle is
+// ignored because PolicyHash already binds its exact bytes.
+func PolicySignatureMaterial(head PolicyHead, _ []byte) []byte {
+	material, _ := PolicyHeadSignatureMaterial(head)
+	return material
 }
 
 func PolicyHashMaterial(bundle []byte, sourceRefs []string) []byte {
@@ -704,10 +752,13 @@ func (s *MountedFileSource) Head(ctx context.Context, scope PolicyScope) (Policy
 		return PolicyHead{}, err
 	}
 	sourceRefs := []string{s.Path}
-	if ref, err := mountedReferencePackSourceRef(s.Path, data); err != nil {
+	if ref, refEpoch, err := mountedReferencePackSourceRef(s.Path, data); err != nil {
 		return PolicyHead{}, err
 	} else if ref != "" {
 		sourceRefs = append(sourceRefs, ref)
+		if refEpoch > epoch {
+			epoch = refEpoch
+		}
 	}
 	policyHash := HashBytes(data)
 	if len(digestSourceRefs(sourceRefs)) > 0 {
@@ -778,26 +829,34 @@ type mountedPolicyRef struct {
 	ReferencePack string `toml:"reference_pack"`
 }
 
-func mountedReferencePackSourceRef(policyPath string, policyBytes []byte) (string, error) {
+func mountedReferencePackSourceRef(policyPath string, policyBytes []byte) (string, uint64, error) {
 	if strings.ToLower(filepath.Ext(policyPath)) != ".toml" {
-		return "", nil
+		return "", 0, nil
 	}
 	var ref mountedPolicyRef
 	if _, err := toml.Decode(string(policyBytes), &ref); err != nil {
-		return "", fmt.Errorf("decode mounted policy reference_pack: %w", err)
+		return "", 0, fmt.Errorf("decode mounted policy reference_pack: %w", err)
 	}
 	if strings.TrimSpace(ref.ReferencePack) == "" {
-		return "", nil
+		return "", 0, nil
 	}
 	refPath, err := ResolveReferencePackPath(policyPath, ref.ReferencePack)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	refData, err := os.ReadFile(refPath)
 	if err != nil {
-		return "", fmt.Errorf("read reference_pack %s: %w", ref.ReferencePack, err)
+		return "", 0, fmt.Errorf("read reference_pack %s: %w", ref.ReferencePack, err)
 	}
-	return fmt.Sprintf("reference_pack:%s@%s", refPath, HashBytes(refData)), nil
+	info, err := os.Stat(refPath)
+	if err != nil {
+		return "", 0, fmt.Errorf("stat reference_pack %s: %w", ref.ReferencePack, err)
+	}
+	epoch := uint64(info.ModTime().UnixNano())
+	if epoch == 0 {
+		epoch = 1
+	}
+	return fmt.Sprintf("reference_pack:%s@%s", refPath, HashBytes(refData)), epoch, nil
 }
 
 func ResolveReferencePackPath(policyPath, referencePack string) (string, error) {
@@ -886,9 +945,6 @@ func (s *ControlPlaneSource) Head(ctx context.Context, scope PolicyScope) (Polic
 	var head PolicyHead
 	if err := s.getJSON(ctx, endpoint, &head); err != nil {
 		return PolicyHead{}, err
-	}
-	if head.Scope.Key() == DefaultScope.Key() {
-		head.Scope = scope.Normalize()
 	}
 	return head, nil
 }

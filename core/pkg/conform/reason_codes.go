@@ -22,6 +22,8 @@ const (
 
 	// --- Tape ---
 	ReasonTapeResidencyViolation = "TAPE_RESIDENCY_VIOLATION" // taped payload violates jurisdiction/data handling
+	ReasonPrivacyErasureRequired = "PRIVACY_ERASURE_REQUIRED" // strict profile requires right-to-erasure support
+	ReasonRetentionPolicyMissing = "RETENTION_POLICY_MISSING" // strict profile requires an explicit retention policy
 
 	// --- Policy ---
 	ReasonPolicyDecisionMissing  = "POLICY_DECISION_MISSING"
@@ -108,6 +110,8 @@ func AllReasonCodes() []string {
 		ReasonReplayHashDivergence,
 		ReasonReplayTapeMiss,
 		ReasonTapeResidencyViolation,
+		ReasonPrivacyErasureRequired,
+		ReasonRetentionPolicyMissing,
 		ReasonPolicyDecisionMissing,
 		ReasonSchemaValidationFailed,
 		ReasonBudgetExhausted,

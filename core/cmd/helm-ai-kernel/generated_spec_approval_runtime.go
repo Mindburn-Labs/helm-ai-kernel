@@ -169,7 +169,7 @@ func validateGeneratedSpecApprovalRuntimeConfig(cfg generatedSpecApprovalRuntime
 	return nil
 }
 
-func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMode string, signer helmcrypto.Signer, stops *kernel.ScopedStopStore) (*generatedSpecApprovalRuntime, error) {
+func newGeneratedSpecApprovalRuntime(ctx context.Context, db *sql.DB, databaseMode string, signer helmcrypto.Signer, stops kernel.ScopedStopReader) (*generatedSpecApprovalRuntime, error) {
 	cfg, enabled, err := generatedSpecApprovalRuntimeConfigFromEnv()
 	if err != nil || !enabled {
 		return nil, err

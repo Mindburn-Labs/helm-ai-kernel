@@ -89,10 +89,11 @@ func TestGateRosterCoversEveryGuardianGateField(t *testing.T) {
 	}
 }
 
-// Pins the audit baseline: constructed with no options, every gate is skipped.
-// Production call sites pass at most three options, so this is close to what
-// actually ships. If a gate becomes injected by default, this test should be
-// updated deliberately rather than by accident.
+// Pins the partial-constructor baseline: constructed with no options, every
+// gate is skipped. Production entrypoints use NewProductionGuardian and cannot
+// accept this roster; focused tests and development commands may still compose
+// only the gate they exercise. If NewGuardian gains an injected default, this
+// test must be updated deliberately rather than by accident.
 func TestGateRosterReportsEveryGateInactiveWithoutOptions(t *testing.T) {
 	g := NewGuardian(nil, nil, nil)
 

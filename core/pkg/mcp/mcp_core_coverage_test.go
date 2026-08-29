@@ -337,7 +337,7 @@ func TestCoverageGatewayJSONRPCBranches(t *testing.T) {
 	execGateway := NewGateway(catalog, GatewayConfig{}, WithExecutor(func(_ context.Context, _ ToolExecutionRequest) (ToolExecutionResponse, error) {
 		return ToolExecutionResponse{}, errors.New("exec failed")
 	}))
-	resp, respond, status := execGateway.handleJSONRPCRequest(context.Background(), 1, "tools/call", json.RawMessage(`{"name":"echo","arguments":{"text":"hi"}}`), LatestProtocolVersion)
+	resp, respond, status := execGateway.handleJSONRPCRequestWithSession(context.Background(), 1, "tools/call", json.RawMessage(`{"name":"echo","arguments":{"text":"hi"}}`), LatestProtocolVersion, "direct-test-session", nil)
 	if !respond || status != http.StatusOK || !strings.Contains(marshalMCPTestValue(t, resp), "exec failed") {
 		t.Fatalf("exec error JSON-RPC response=%+v respond=%v status=%d", resp, respond, status)
 	}

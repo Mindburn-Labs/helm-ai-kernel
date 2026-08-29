@@ -115,7 +115,7 @@ func TestCoverageModelGatewayHelperEdges(t *testing.T) {
 	t.Setenv("SIMPLE_SECRET", "set")
 	simpleSecret := verifiedAppSpec()
 	simpleSecret.RequiredSecrets = []string{"SIMPLE_SECRET"}
-	if missing := missingRequiredSecretEnv(simpleSecret, nil); missing != "" {
+	if missing := missingRequiredSecretEnv(simpleSecret, nil, nil); missing != "" {
 		t.Fatalf("complete simple secret reported missing: %q", missing)
 	}
 }

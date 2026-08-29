@@ -16,9 +16,9 @@ import (
 //
 // proofs/GuardianPipeline.tla asserts AllowRequiresUnanimity over every gate
 // and has no state for an absent one, so a nil gate is a refinement gap
-// against a spec TLC checks on each PR. Reporting the roster is the first step
-// toward closing it; binding the roster hash into the decision record and
-// refusing to construct with an unset gate follow.
+// against a spec TLC checks on each PR. The roster hash binds composition into
+// each decision, and NewProductionGuardian refuses a production profile whose
+// required enforcement roster is incomplete.
 type GateID string
 
 const (

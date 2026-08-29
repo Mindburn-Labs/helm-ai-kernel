@@ -1,11 +1,17 @@
 package launchkit
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/plan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
+	lpsecrets "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/secrets"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/session"
 )
 
@@ -59,6 +65,133 @@ func TestUpDemoUsesScopedDemoSecretsAndDoesNotRequireDocker(t *testing.T) {
 	}
 }
 
+func TestConcurrentLaunchesKeepSameNameCredentialsLaunchScoped(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "")
+	t.Setenv("HELM_TEST_LAUNCH_SECRET_A", "launch-a-only-secret")
+	t.Setenv("HELM_TEST_LAUNCH_SECRET_B", "launch-b-only-secret")
+	catalog := loadTestCatalog(t)
+
+	var ready sync.WaitGroup
+	ready.Add(2)
+	release := make(chan struct{})
+	seen := make(chan string, 2)
+	type launchResult struct {
+		result Result
+		err    error
+	}
+	results := make(chan launchResult, 2)
+	roots := []string{t.TempDir(), t.TempDir()}
+	sourceEnvs := []string{"HELM_TEST_LAUNCH_SECRET_A", "HELM_TEST_LAUNCH_SECRET_B"}
+	for i := range roots {
+		store := session.NewStore(roots[i])
+		if _, err := lpsecrets.NewStore(roots[i]).Set("model_gateway", "openrouter", sourceEnvs[i]); err != nil {
+			t.Fatalf("bind launch %d secret: %v", i, err)
+		}
+		orch := New(catalog, store)
+		orch.Providers[TargetLocal] = fakeProvider{available: true}
+		orch.Executor.RuntimeStarter = launchScopedSecretStarter{ready: &ready, release: release, seen: seen}
+		orch.Executor.HealthcheckRunner = launchScopedHealthcheck{}
+		go func() {
+			result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeLive, Target: TargetLocal})
+			results <- launchResult{result: result, err: err}
+		}()
+	}
+
+	startersReady := make(chan struct{})
+	go func() {
+		ready.Wait()
+		close(startersReady)
+	}()
+	select {
+	case <-startersReady:
+	case <-time.After(10 * time.Second):
+		close(release)
+		t.Fatal("concurrent launches did not both reach the child runtime boundary")
+	}
+	close(release)
+
+	var runs []session.LaunchRun
+	for range roots {
+		got := <-results
+		if got.err != nil || got.result.Run == nil || got.result.Run.State != session.StateRunning {
+			t.Fatalf("concurrent launch failed: result=%#v err=%v", got.result, got.err)
+		}
+		if len(got.result.Run.SecretAccessRefs) == 0 {
+			t.Fatalf("launch omitted redacted secret access receipt: %#v", got.result.Run)
+		}
+		runs = append(runs, *got.result.Run)
+	}
+	gotSecrets := map[string]bool{<-seen: true, <-seen: true}
+	if !gotSecrets["launch-a-only-secret"] || !gotSecrets["launch-b-only-secret"] || len(gotSecrets) != 2 {
+		t.Fatalf("launch credential overlays crossed: %#v", gotSecrets)
+	}
+	if got := os.Getenv("OPENROUTER_API_KEY"); got != "" {
+		t.Fatalf("launches contaminated process env: %q", got)
+	}
+	for _, run := range runs {
+		receiptPath := filepath.Join(run.EvidencePackRefs[0], "02_PROOFGRAPH", "receipts", "launchpad-secret-binding-access.json")
+		data, err := os.ReadFile(receiptPath)
+		if err != nil {
+			t.Fatalf("read redacted access receipt: %v", err)
+		}
+		var receipt map[string]any
+		if err := json.Unmarshal(data, &receipt); err != nil {
+			t.Fatalf("decode redacted access receipt: %v", err)
+		}
+		encoded := string(data)
+		for _, want := range []string{"local.operator", "openclaw", run.LaunchID, "model_gateway:openrouter", "OPENROUTER_API_KEY", "ALLOW"} {
+			if !strings.Contains(encoded, want) {
+				t.Fatalf("redacted access receipt missing %q: %#v", want, receipt)
+			}
+		}
+		if strings.Contains(encoded, "launch-a-only-secret") || strings.Contains(encoded, "launch-b-only-secret") {
+			t.Fatalf("redacted access receipt exposed secret value: %s", data)
+		}
+	}
+	for _, root := range roots {
+		if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if strings.Contains(string(data), "launch-a-only-secret") || strings.Contains(string(data), "launch-b-only-secret") {
+				t.Fatalf("persisted launch artifact exposed secret value: %s", path)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+type launchScopedSecretStarter struct {
+	ready   *sync.WaitGroup
+	release <-chan struct{}
+	seen    chan<- string
+}
+
+func (s launchScopedSecretStarter) Start(_ plan.LaunchPlan, opts session.ExecuteOptions) (session.RuntimeStartResult, error) {
+	s.ready.Done()
+	<-s.release
+	s.seen <- opts.RuntimeSecretEnv["OPENROUTER_API_KEY"]
+	return session.RuntimeStartResult{
+		ContainerID:       "launch-scoped-container",
+		SandboxGrantRef:   "receipt:launch-scoped:sandbox",
+		EgressReceiptRef:  "receipt:launch-scoped:egress",
+		EgressNetworkName: "launch-scoped-network",
+		Runtime:           "local-container",
+	}, nil
+}
+
+type launchScopedHealthcheck struct{}
+
+func (launchScopedHealthcheck) Run(plan.LaunchPlan, session.RuntimeStartResult, session.ExecuteOptions) (session.HealthcheckResult, error) {
+	return session.HealthcheckResult{Type: "command", Status: "passed"}, nil
+}
+
 func TestUpLiveEscalatesWhenLocalRuntimeUnavailable(t *testing.T) {
 	catalog := loadTestCatalog(t)
 	store := session.NewStore(t.TempDir())
@@ -75,6 +208,25 @@ func TestUpLiveEscalatesWhenLocalRuntimeUnavailable(t *testing.T) {
 	}
 	if result.StartedRuntime {
 		t.Fatal("runtime should not start after local runtime preflight escalation")
+	}
+}
+
+func TestUpLiveFailsClosedWhenSecretBindingIsMissing(t *testing.T) {
+	catalog := loadTestCatalog(t)
+	store := session.NewStore(t.TempDir())
+	t.Setenv("OPENROUTER_API_KEY", "")
+
+	orch := New(catalog, store)
+	orch.Providers[TargetLocal] = fakeProvider{available: true}
+	result, err := orch.Up(Options{AppID: "openclaw", Mode: ModeLive, Target: TargetLocal})
+	if err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if result.Run == nil || result.Run.KernelVerdict != "ESCALATE" || result.Run.ReasonCode != "ERR_LAUNCHPAD_REQUIRED_SECRET_MISSING" {
+		t.Fatalf("missing binding did not fail closed before runtime: %#v", result.Run)
+	}
+	if len(result.Run.SecretAccessRefs) == 0 || result.StartedRuntime {
+		t.Fatalf("missing binding lacked redacted access proof or started runtime: %#v", result)
 	}
 }
 

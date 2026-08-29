@@ -27,12 +27,25 @@ type Executor struct {
 }
 
 type ExecuteOptions struct {
-	Reason            string
-	RuntimeStarter    RuntimeStarter
-	HealthcheckRunner HealthcheckRunner
-	WorkspaceMount    string
-	RuntimeDryRun     bool
-	RuntimeSecretEnv  map[string]string
+	Reason                string
+	RuntimeStarter        RuntimeStarter
+	HealthcheckRunner     HealthcheckRunner
+	WorkspaceMount        string
+	RuntimeDryRun         bool
+	RuntimeSecretEnv      map[string]string
+	RuntimeSecretAccesses []RuntimeSecretAccess
+}
+
+// RuntimeSecretAccess is the redacted audit description of one launch-scoped
+// secret lookup. It deliberately contains names and verdicts only; resolved
+// values stay in ExecuteOptions.RuntimeSecretEnv and are never persisted.
+type RuntimeSecretAccess struct {
+	SecretRef      string `json:"secret_ref"`
+	Provider       string `json:"provider,omitempty"`
+	Source         string `json:"source"`
+	SourceEnvName  string `json:"source_env_name,omitempty"`
+	RuntimeEnvName string `json:"runtime_env_name"`
+	Verdict        string `json:"verdict"`
 }
 
 type RuntimeStartResult struct {
@@ -163,6 +176,19 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	addJSON(artifacts, "receipts/launchpad-launch.json", launchReceipt)
 	addJSON(artifacts, "receipts/launchpad-sandbox-preflight.json", sandboxReceipt)
 	addJSON(artifacts, "receipts/launchpad-mcp-quarantine.json", mcpReceipt)
+	if len(compiled.RequiredSecretRefs) > 0 || len(compiled.ModelGatewayEnv) > 0 || len(opts.RuntimeSecretAccesses) > 0 {
+		secretAccessReceipt := chain.Next("launchpad.secret_binding_access", compiled.LaunchID, compiled.KernelVerdict, map[string]any{
+			"principal":            compiled.Principal,
+			"app_id":               compiled.AppID,
+			"launch_id":            compiled.LaunchID,
+			"required_secret_refs": compiled.RequiredSecretRefs,
+			"runtime_env_names":    compiled.ModelGatewayEnv,
+			"accesses":             opts.RuntimeSecretAccesses,
+			"redacted":             true,
+		})
+		run.SecretAccessRefs = append(run.SecretAccessRefs, secretAccessReceipt.ReceiptID)
+		addJSON(artifacts, "receipts/launchpad-secret-binding-access.json", secretAccessReceipt)
+	}
 
 	if compiled.KernelVerdict != "ALLOW" {
 		escalationReceipt := chain.Next("launchpad.escalation", compiled.LaunchID, compiled.KernelVerdict, map[string]any{

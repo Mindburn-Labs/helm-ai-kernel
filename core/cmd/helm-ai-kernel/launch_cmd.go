@@ -246,7 +246,7 @@ func runLaunchStart(args []string, catalog *lpregistry.Catalog, stdout, stderr i
 	if err := fs.Parse(args[2:]); err != nil {
 		return 2
 	}
-	compiled, code := compileLaunchPlan(catalog, args[0], args[1], "local.operator", stderr)
+	compiled, secretResolution, code := resolveLaunchPlan(catalog, args[0], args[1], "local.operator", stderr)
 	if code != 0 {
 		if *output == "json" {
 			_ = writeLaunchJSON(stdout, compiled)
@@ -257,7 +257,10 @@ func runLaunchStart(args []string, catalog *lpregistry.Catalog, stdout, stderr i
 	if substrate.Kind == "cloud" {
 		return runLaunchCloudGate(compiled, substrate, *liveCloudBeta, *approvalID, *costCeiling, stdout, stderr)
 	}
-	run, err := session.NewExecutor(session.NewStore("")).ExecuteLaunch(compiled, session.ExecuteOptions{Reason: "launch requested through CLI"})
+	run, err := session.NewExecutor(session.NewStore("")).ExecuteLaunch(compiled, session.ExecuteOptions{
+		Reason: "launch requested through CLI", RuntimeSecretEnv: secretResolution.RuntimeEnv,
+		RuntimeSecretAccesses: secretResolution.Accesses,
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "launch session error: %v\n", err)
 		return 1
@@ -626,25 +629,31 @@ func firstEnvValue(key, fallback string) string {
 }
 
 func compileLaunchPlan(catalog *lpregistry.Catalog, appID, substrateID, principal string, stderr io.Writer) (plan.LaunchPlan, int) {
+	compiled, _, code := resolveLaunchPlan(catalog, appID, substrateID, principal, stderr)
+	return compiled, code
+}
+
+func resolveLaunchPlan(catalog *lpregistry.Catalog, appID, substrateID, principal string, stderr io.Writer) (plan.LaunchPlan, lpsecrets.Resolution, int) {
 	app, ok := catalog.App(appID)
 	if !ok {
 		fmt.Fprintf(stderr, "unknown app: %s\n", appID)
-		return plan.FailurePlan(appID, substrateID, principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_APP"), 1
+		return plan.FailurePlan(appID, substrateID, principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_APP"), lpsecrets.Resolution{}, 1
 	}
 	substrate, ok := catalog.Substrate(substrateID)
 	if !ok {
 		fmt.Fprintf(stderr, "unknown substrate: %s\n", substrateID)
-		return plan.FailurePlan(appID, substrateID, principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_SUBSTRATE"), 1
+		return plan.FailurePlan(appID, substrateID, principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_SUBSTRATE"), lpsecrets.Resolution{}, 1
 	}
-	if _, err := lpsecrets.NewStore("").ApplyAppEnv(app); err != nil {
+	secretResolution, err := lpsecrets.NewStore("").ResolveAppEnv(app)
+	if err != nil {
 		fmt.Fprintf(stderr, "launch secrets error: %v\n", err)
-		return plan.FailurePlan(appID, substrateID, principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_SECRET_BINDING_INVALID"), 1
+		return plan.FailurePlan(appID, substrateID, principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_SECRET_BINDING_INVALID"), lpsecrets.Resolution{}, 1
 	}
-	compiled, err := plan.CompileWithRoot(app, substrate, principal, catalog.Root)
+	compiled, err := plan.CompileWithRootAndEnv(app, substrate, principal, catalog.Root, secretResolution.RuntimeEnv)
 	if err != nil {
 		fmt.Fprintf(stderr, "launch plan escalated: %v\n", err)
 	}
-	return compiled, 0
+	return compiled, secretResolution, 0
 }
 
 func runLaunchStatus(args []string, stdout, stderr io.Writer) int {

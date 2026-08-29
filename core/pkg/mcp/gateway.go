@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -244,6 +245,9 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid or expired MCP session", http.StatusUnauthorized)
 			return
 		}
+	} else if g.governed && req.Method == "tools/call" {
+		http.Error(w, "valid MCP session is required for governed tools/call", http.StatusUnauthorized)
+		return
 	} else if !isNotification {
 		// Session ID is recommended for non-notification requests after initialize.
 		// For backward compatibility, we allow requests without session ID, but
@@ -547,6 +551,14 @@ func (g *Gateway) handleJSONRPCRequestWithSession(ctx context.Context, id any, m
 		response["result"] = map[string]any{"tools": payload}
 		return response, true, http.StatusOK
 	case "tools/call":
+		if sessionID == "" {
+			if g.governed {
+				return writeError(-32002, "valid MCP session is required for governed tools/call")
+			}
+			// Preserve the pre-session identity only for explicitly raw/local
+			// executors. Governed HTTP calls must carry a transport-minted ID.
+			sessionID = "mcp-http-jsonrpc"
+		}
 		var req struct {
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments"`
@@ -614,7 +626,7 @@ func newOpaqueMCPRequestID() string {
 func (g *Gateway) validatedGovernedSession(w http.ResponseWriter, r *http.Request) (string, bool) {
 	sessionID := r.Header.Get("MCP-Session-Id")
 	if sessionID == "" {
-		http.Error(w, "MCP-Session-Id is required for governed tool execution", http.StatusUnauthorized)
+		http.Error(w, "valid MCP session is required for governed tool execution", http.StatusUnauthorized)
 		return "", false
 	}
 	if session := g.sessions.Get(sessionID); session == nil {
@@ -626,6 +638,12 @@ func (g *Gateway) validatedGovernedSession(w http.ResponseWriter, r *http.Reques
 
 func newToolExecutionRequest(ctx context.Context, toolName string, arguments map[string]any, sessionID string, headers http.Header) ToolExecutionRequest {
 	req := ToolExecutionRequest{ToolName: toolName, Arguments: arguments, SessionID: sessionID}
+	if principal, err := auth.GetPrincipal(ctx); err == nil && principal != nil {
+		req.PrincipalID = strings.TrimSpace(principal.GetID())
+	}
+	if credentialHash, ok := auth.AuthenticatedCredentialHash(ctx); ok {
+		req.CredentialHash = credentialHash
+	}
 	if auth, ok := OAuthAuthorizationFromContext(ctx); ok {
 		req.OAuthScopes = append([]string(nil), auth.Scopes...)
 		req.OAuthResources = append([]string(nil), auth.Resources...)

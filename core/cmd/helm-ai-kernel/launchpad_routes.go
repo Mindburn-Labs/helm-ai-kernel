@@ -129,11 +129,14 @@ func handleLaunchpadLaunch(w http.ResponseWriter, r *http.Request, catalog *regi
 	if ok := requireLaunchpadEntitlement(w, r, "launch", req.AppID, req.SubstrateID, "", store); !ok {
 		return
 	}
-	compiled, err := compileLaunchpadPlan(catalog, req, store)
+	compiled, secretResolution, err := resolveLaunchpadPlan(catalog, req, store)
 	if err != nil {
 		compiled.ReasonCode = firstNonEmpty(compiled.ReasonCode, err.Error())
 	}
-	run, saveErr := launchsession.NewExecutor(store).ExecuteLaunch(compiled, launchsession.ExecuteOptions{Reason: "launch requested through OSS Console API"})
+	run, saveErr := launchsession.NewExecutor(store).ExecuteLaunch(compiled, launchsession.ExecuteOptions{
+		Reason: "launch requested through OSS Console API", RuntimeSecretEnv: secretResolution.RuntimeEnv,
+		RuntimeSecretAccesses: secretResolution.Accesses,
+	})
 	if saveErr != nil {
 		api.WriteInternalR(w, r, saveErr)
 		return
@@ -276,11 +279,14 @@ func handleLaunchpadRunCreate(w http.ResponseWriter, r *http.Request, catalog *r
 	}
 	app, appOK := catalog.App(req.AppID)
 	substrate, substrateOK := catalog.Substrate(req.SubstrateID)
-	compiled, err := compileLaunchpadPlan(catalog, req, store)
+	compiled, secretResolution, err := resolveLaunchpadPlan(catalog, req, store)
 	if err != nil {
 		compiled.ReasonCode = firstNonEmpty(compiled.ReasonCode, err.Error())
 	}
-	run, saveErr := launchsession.NewExecutor(store).ExecuteLaunch(compiled, launchsession.ExecuteOptions{Reason: "run requested through OSS Console API"})
+	run, saveErr := launchsession.NewExecutor(store).ExecuteLaunch(compiled, launchsession.ExecuteOptions{
+		Reason: "run requested through OSS Console API", RuntimeSecretEnv: secretResolution.RuntimeEnv,
+		RuntimeSecretAccesses: secretResolution.Accesses,
+	})
 	if saveErr != nil {
 		api.WriteInternalR(w, r, saveErr)
 		return
@@ -546,22 +552,29 @@ func decodeLaunchpadPlanRequest(w http.ResponseWriter, r *http.Request) (launchp
 }
 
 func compileLaunchpadPlan(catalog *registry.Catalog, req launchpadPlanRequest, store *launchsession.Store) (plan.LaunchPlan, error) {
+	compiled, _, err := resolveLaunchpadPlan(catalog, req, store)
+	return compiled, err
+}
+
+func resolveLaunchpadPlan(catalog *registry.Catalog, req launchpadPlanRequest, store *launchsession.Store) (plan.LaunchPlan, lpsecrets.Resolution, error) {
 	app, ok := catalog.App(req.AppID)
 	if !ok {
-		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_APP"), fmt.Errorf("unknown app: %s", req.AppID)
+		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_APP"), lpsecrets.Resolution{}, fmt.Errorf("unknown app: %s", req.AppID)
 	}
 	substrate, ok := catalog.Substrate(req.SubstrateID)
 	if !ok {
-		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_SUBSTRATE"), fmt.Errorf("unknown substrate: %s", req.SubstrateID)
+		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "DENY", "DENIED", "ERR_LAUNCHPAD_UNKNOWN_SUBSTRATE"), lpsecrets.Resolution{}, fmt.Errorf("unknown substrate: %s", req.SubstrateID)
 	}
 	secretRoot := ""
 	if store != nil {
 		secretRoot = store.Root()
 	}
-	if _, err := lpsecrets.NewStore(secretRoot).ApplyAppEnv(app); err != nil {
-		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_SECRET_BINDING_INVALID"), err
+	secretResolution, err := lpsecrets.NewStore(secretRoot).ResolveAppEnv(app)
+	if err != nil {
+		return plan.FailurePlan(req.AppID, req.SubstrateID, req.Principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_SECRET_BINDING_INVALID"), lpsecrets.Resolution{}, err
 	}
-	return plan.CompileWithRoot(app, substrate, req.Principal, catalog.Root)
+	compiled, err := plan.CompileWithRootAndEnv(app, substrate, req.Principal, catalog.Root, secretResolution.RuntimeEnv)
+	return compiled, secretResolution, err
 }
 
 func detailForStoredRun(catalog *registry.Catalog, run launchsession.LaunchRun) any {

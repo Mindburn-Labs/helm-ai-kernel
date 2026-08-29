@@ -923,7 +923,7 @@ func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
 func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 	operations := readOpenAPIOperationSecurity(t)
 	for _, spec := range PublicRuntimeRouteSpecs() {
-		if spec.Auth != RouteAuthAdmin && spec.Auth != RouteAuthAuthenticated && spec.Auth != RouteAuthTenant && spec.Auth != RouteAuthService && spec.Auth != RouteAuthWorkload {
+		if spec.Auth != RouteAuthAdmin && spec.Auth != RouteAuthAuthenticated && spec.Auth != RouteAuthTenant && spec.Auth != RouteAuthConfiguredTenant && spec.Auth != RouteAuthService && spec.Auth != RouteAuthWorkload {
 			continue
 		}
 		key := spec.Method + " " + spec.Path
@@ -934,7 +934,7 @@ func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {
 		if len(operation.Security) == 0 {
 			t.Fatalf("protected public route %s is missing OpenAPI security", key)
 		}
-		assertOpenAPISecurityScheme(t, key, operation, expectedOpenAPISecurityScheme(spec.Auth))
+		assertOpenAPISecurityScheme(t, key, operation, expectedOpenAPISecurityScheme(spec))
 		if _, ok := operation.Responses["401"]; !ok {
 			t.Fatalf("protected public route %s is missing OpenAPI 401 response", key)
 		}
@@ -964,8 +964,11 @@ type openAPIParameter struct {
 	Required bool   `yaml:"required"`
 }
 
-func expectedOpenAPISecurityScheme(auth RouteAuth) string {
-	if auth == RouteAuthService {
+func expectedOpenAPISecurityScheme(spec RuntimeRouteSpec) string {
+	if spec.Path == "/v1/chat/completions" {
+		return "AdminHeaderAuth"
+	}
+	if spec.Auth == RouteAuthService {
 		return "ServiceBearerAuth"
 	}
 	return "AdminBearerAuth"

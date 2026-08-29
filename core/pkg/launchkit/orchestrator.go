@@ -98,7 +98,7 @@ func (o Orchestrator) Up(opts Options) (Result, error) {
 		return o.persistBlocked(result, compiled, "local container runtime is not ready")
 	}
 
-	compiled, mode, runtimeSecrets, err := o.compile(app, opts, result.Provider.Available)
+	compiled, mode, secretResolution, err := o.compile(app, opts, result.Provider.Available)
 	result.Mode = mode
 	applyCompiledResult(&result, compiled)
 	if err != nil {
@@ -126,10 +126,11 @@ func (o Orchestrator) Up(opts Options) (Result, error) {
 	}
 
 	run, err := o.Executor.ExecuteLaunch(compiled, session.ExecuteOptions{
-		Reason:           "helm up requested through LaunchKit",
-		RuntimeDryRun:    mode == ModeDemo,
-		RuntimeSecretEnv: runtimeSecrets,
-		RuntimeStarter:   runtimeStarterForMode(mode),
+		Reason:                "helm up requested through LaunchKit",
+		RuntimeDryRun:         mode == ModeDemo,
+		RuntimeSecretEnv:      secretResolution.RuntimeEnv,
+		RuntimeSecretAccesses: secretResolution.Accesses,
+		RuntimeStarter:        runtimeStarterForMode(mode),
 	})
 	if err != nil {
 		return result, err
@@ -174,28 +175,34 @@ func (o Orchestrator) provider(target Target) EnvironmentProvider {
 	return CloudProvider{Target: target, Region: "unknown"}
 }
 
-func (o Orchestrator) compile(app registry.AppSpec, opts Options, localRuntimeReady bool) (lpplan.LaunchPlan, Mode, map[string]string, error) {
+func (o Orchestrator) compile(app registry.AppSpec, opts Options, localRuntimeReady bool) (lpplan.LaunchPlan, Mode, lpsecrets.Resolution, error) {
 	mode := opts.Mode
+	autoMode := mode == ModeAuto
 	if mode == ModeAuto {
 		mode = ModeLive
-		if !localRuntimeReady || missingLiveSecrets(app) {
+		if !localRuntimeReady {
 			mode = ModeDemo
 		}
 	}
 	if app.SupportLevel == registry.SupportLevelVerifyOnly {
 		mode = ModeVerifyOnly
 	}
-	runtimeSecrets := map[string]string{}
-	restore := func() {}
+	secretResolution := lpsecrets.Resolution{RuntimeEnv: map[string]string{}}
 	if mode == ModeDemo {
-		runtimeSecrets, restore = applyScopedDemoSecrets(app)
-		defer restore()
+		secretResolution = demoSecretResolution(app)
+	} else {
+		resolved, err := lpsecrets.NewStore(o.Store.Root()).ResolveAppEnv(app)
+		if err != nil {
+			return lpplan.FailurePlan(app.ID, "local-container", opts.Principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHKIT_SECRET_BINDING_INVALID"), mode, secretResolution, err
+		}
+		secretResolution = resolved
+		if autoMode && mode == ModeLive && missingLiveSecrets(app, secretResolution.RuntimeEnv) {
+			mode = ModeDemo
+			secretResolution = demoSecretResolution(app)
+		}
 	}
-	if _, err := lpsecrets.NewStore(o.Store.Root()).ApplyAppEnv(app); err != nil {
-		return lpplan.FailurePlan(app.ID, "local-container", opts.Principal, "ESCALATE", "ESCALATED", "ERR_LAUNCHKIT_SECRET_BINDING_INVALID"), mode, runtimeSecrets, err
-	}
-	compiled, err := lpplan.CompileWithRoot(app, mustSubstrate(o.Catalog, "local-container"), opts.Principal, o.Catalog.Root)
-	return compiled, mode, runtimeSecrets, err
+	compiled, err := lpplan.CompileWithRootAndEnv(app, mustSubstrate(o.Catalog, "local-container"), opts.Principal, o.Catalog.Root, secretResolution.RuntimeEnv)
+	return compiled, mode, secretResolution, err
 }
 
 func (o Orchestrator) persistBlocked(result Result, compiled lpplan.LaunchPlan, reason string) (Result, error) {
@@ -248,7 +255,7 @@ func isCloudTarget(target Target) bool {
 	return strings.HasPrefix(string(target), "cloud:")
 }
 
-func missingLiveSecrets(app registry.AppSpec) bool {
+func missingLiveSecrets(app registry.AppSpec, runtimeSecretEnv map[string]string) bool {
 	groups := launchkitModelGatewayEnvGroups(app)
 	if len(groups) == 0 {
 		return false
@@ -256,7 +263,11 @@ func missingLiveSecrets(app registry.AppSpec) bool {
 	for _, group := range groups {
 		complete := true
 		for _, envName := range group {
-			if value, ok := os.LookupEnv(envName); !ok || value == "" {
+			value := runtimeSecretEnv[envName]
+			if value == "" {
+				value, _ = os.LookupEnv(envName)
+			}
+			if value == "" {
 				complete = false
 				break
 			}
@@ -268,35 +279,23 @@ func missingLiveSecrets(app registry.AppSpec) bool {
 	return true
 }
 
-func applyScopedDemoSecrets(app registry.AppSpec) (map[string]string, func()) {
-	values := map[string]string{}
-	previous := map[string]*string{}
+func demoSecretResolution(app registry.AppSpec) lpsecrets.Resolution {
+	resolved := lpsecrets.Resolution{RuntimeEnv: map[string]string{}}
 	groups := launchkitModelGatewayEnvGroups(app)
 	if len(groups) == 0 {
-		return values, func() {}
+		return resolved
 	}
 	for _, envName := range groups[0] {
 		if envName == "" {
 			continue
 		}
-		if value, ok := os.LookupEnv(envName); ok {
-			v := value
-			previous[envName] = &v
-		} else {
-			previous[envName] = nil
-		}
-		values[envName] = "helm-demo-secret-redacted"
-		_ = os.Setenv(envName, values[envName])
+		resolved.RuntimeEnv[envName] = "helm-demo-secret-redacted"
+		resolved.Accesses = append(resolved.Accesses, session.RuntimeSecretAccess{
+			SecretRef: "launchkit.demo", Source: "generated_demo",
+			RuntimeEnvName: envName, Verdict: "ALLOW",
+		})
 	}
-	return values, func() {
-		for key, value := range previous {
-			if value == nil {
-				_ = os.Unsetenv(key)
-			} else {
-				_ = os.Setenv(key, *value)
-			}
-		}
-	}
+	return resolved
 }
 
 func launchkitModelGatewayEnvGroups(app registry.AppSpec) [][]string {

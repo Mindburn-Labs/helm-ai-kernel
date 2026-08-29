@@ -68,7 +68,7 @@ func TestSurfaceRegistryStorageBackendsAndConstructors(t *testing.T) {
 		t.Fatal("directory path should fail as unreadable registry snapshot")
 	}
 
-	if registry, err := NewSQLSurfaceRegistry(context.Background(), nil, func() time.Time { return now }); err != nil || registry.StorageBackend() != "memory" {
+	if registry, err := NewSQLSurfaceRegistry(context.Background(), nil, "sqlite", func() time.Time { return now }); err != nil || registry.StorageBackend() != "memory" {
 		t.Fatalf("nil SQL registry = (%v,%v), want memory,nil", registry, err)
 	}
 	db, err := sql.Open("sqlite", filepath.Join(dir, "boundary.db"))
@@ -76,7 +76,10 @@ func TestSurfaceRegistryStorageBackendsAndConstructors(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	sqlRegistry, err := NewSQLSurfaceRegistry(nil, db, func() time.Time { return now })
+	if _, err := NewSQLSurfaceRegistry(nil, db, "mysql", func() time.Time { return now }); err == nil {
+		t.Fatal("unsupported SQL database mode should fail registry init")
+	}
+	sqlRegistry, err := NewSQLSurfaceRegistry(nil, db, "sqlite", func() time.Time { return now })
 	if err != nil {
 		t.Fatalf("NewSQLSurfaceRegistry() error = %v", err)
 	}
@@ -606,7 +609,7 @@ func TestSurfaceRegistryPersistenceFailureBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	registry, err := NewSQLSurfaceRegistry(context.Background(), db, func() time.Time { return now })
+	registry, err := NewSQLSurfaceRegistry(context.Background(), db, "sqlite", func() time.Time { return now })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -630,7 +633,7 @@ func TestSurfaceRegistryPersistenceFailureBranches(t *testing.T) {
 	if err := closedDB.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewSQLSurfaceRegistry(context.Background(), closedDB, func() time.Time { return now }); err == nil {
+	if _, err := NewSQLSurfaceRegistry(context.Background(), closedDB, "sqlite", func() time.Time { return now }); err == nil {
 		t.Fatal("closed SQL db should fail registry init")
 	}
 	canceled, cancel := context.WithCancel(context.Background())
@@ -640,7 +643,7 @@ func TestSurfaceRegistryPersistenceFailureBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer canceledDB.Close()
-	if _, err := NewSQLSurfaceRegistry(canceled, canceledDB, func() time.Time { return now }); err == nil {
+	if _, err := NewSQLSurfaceRegistry(canceled, canceledDB, "sqlite", func() time.Time { return now }); err == nil {
 		t.Fatal("canceled context should fail registry init")
 	}
 
@@ -655,7 +658,7 @@ func TestSurfaceRegistryPersistenceFailureBranches(t *testing.T) {
 	if _, err := invalidDB.Exec(`INSERT INTO boundary_surface_snapshots (id, snapshot_json, updated_at) VALUES ('default', '{bad-json', 'now')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewSQLSurfaceRegistry(context.Background(), invalidDB, func() time.Time { return now }); err == nil {
+	if _, err := NewSQLSurfaceRegistry(context.Background(), invalidDB, "sqlite", func() time.Time { return now }); err == nil {
 		t.Fatal("invalid SQL snapshot should fail registry load")
 	}
 
@@ -685,7 +688,7 @@ func TestSurfaceRegistryPersistenceFailureBranches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eventRegistry, err := NewSQLSurfaceRegistry(context.Background(), eventDB, func() time.Time { return now })
+	eventRegistry, err := NewSQLSurfaceRegistry(context.Background(), eventDB, "sqlite", func() time.Time { return now })
 	if err != nil {
 		t.Fatal(err)
 	}

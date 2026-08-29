@@ -128,12 +128,33 @@ func NewFileBackedSurfaceRegistry(path string, now func() time.Time) (*SurfaceRe
 // Postgres database as the OSS runtime. It stores a versioned snapshot in one
 // row so API, Console, and SDK surfaces share durable state without becoming a
 // second policy authority.
-func NewSQLSurfaceRegistry(ctx context.Context, db *sql.DB, now func() time.Time) (*SurfaceRegistry, error) {
+func NewSQLSurfaceRegistry(ctx context.Context, db *sql.DB, databaseMode string, now func() time.Time) (*SurfaceRegistry, error) {
 	if db == nil {
 		return NewSurfaceRegistry(now), nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	var eventTableDDL string
+	switch strings.ToLower(strings.TrimSpace(databaseMode)) {
+	case "sqlite", "sqlite3":
+		eventTableDDL = `CREATE TABLE IF NOT EXISTS boundary_surface_events (
+			sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+			event_kind TEXT NOT NULL,
+			object_id TEXT NOT NULL,
+			object_json TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`
+	case "postgres", "postgresql":
+		eventTableDDL = `CREATE TABLE IF NOT EXISTS boundary_surface_events (
+			sequence BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			event_kind TEXT NOT NULL,
+			object_id TEXT NOT NULL,
+			object_json TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`
+	default:
+		return nil, fmt.Errorf("init boundary surface registry: unsupported database mode %q", databaseMode)
 	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS boundary_surface_snapshots (
 		id TEXT PRIMARY KEY,
@@ -142,13 +163,7 @@ func NewSQLSurfaceRegistry(ctx context.Context, db *sql.DB, now func() time.Time
 	)`); err != nil {
 		return nil, fmt.Errorf("init boundary surface table: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS boundary_surface_events (
-		sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-		event_kind TEXT NOT NULL,
-		object_id TEXT NOT NULL,
-		object_json TEXT NOT NULL,
-		created_at TEXT NOT NULL
-	)`); err != nil {
+	if _, err := db.ExecContext(ctx, eventTableDDL); err != nil {
 		return nil, fmt.Errorf("init boundary surface event table: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS boundary_records_index (

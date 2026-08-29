@@ -262,14 +262,9 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 			}
 		})
 	}
-	surfaces, surfaceErr := boundary.NewSQLSurfaceRegistry(ctx, db, time.Now)
+	surfaces, surfaceErr := boundary.NewSQLSurfaceRegistry(ctx, db, databaseMode, time.Now)
 	if surfaceErr != nil {
-		logger.Warn("Boundary surface registry persistence disabled", "error", surfaceErr)
-		surfaces, surfaceErr = boundary.NewFileBackedSurfaceRegistry(defaultBoundaryRegistryPath(), time.Now)
-		if surfaceErr != nil {
-			logger.Warn("Boundary surface file fallback disabled", "error", surfaceErr)
-			surfaces = boundary.NewSurfaceRegistry(time.Now)
-		}
+		return nil, fmt.Errorf("boundary surface registry persistence: %w", surfaceErr)
 	}
 	s.BoundarySurfaces = surfaces
 	logger.Info("subsystem ready", "component", " Boundary Perimeter Enforcer initialized")

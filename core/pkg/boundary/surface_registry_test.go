@@ -5,12 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
@@ -401,7 +404,7 @@ func TestSQLSurfaceRegistryPersistsRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	registry, err := NewSQLSurfaceRegistry(context.Background(), db, func() time.Time { return now })
+	registry, err := NewSQLSurfaceRegistry(context.Background(), db, "sqlite", func() time.Time { return now })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +420,7 @@ func TestSQLSurfaceRegistryPersistsRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reloaded, err := NewSQLSurfaceRegistry(context.Background(), db, func() time.Time { return now })
+	reloaded, err := NewSQLSurfaceRegistry(context.Background(), db, "sqlite", func() time.Time { return now })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -445,5 +448,72 @@ func TestSQLSurfaceRegistryPersistsRecords(t *testing.T) {
 	verify := reloaded.VerifyCheckpoint(reloaded.ListCheckpoints()[0].CheckpointID)
 	if verify["verified"] != true {
 		t.Fatalf("checkpoint verification failed: %+v", verify)
+	}
+}
+
+func TestSQLSurfaceRegistryPersistsRecordsOnPostgres(t *testing.T) {
+	postgresURL := strings.TrimSpace(os.Getenv("HELM_TEST_POSTGRES_URL"))
+	if postgresURL == "" {
+		t.Skip("set HELM_TEST_POSTGRES_URL to run the Postgres boundary registry proof")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	schema := fmt.Sprintf("helm_boundary_%d", time.Now().UnixNano())
+	adminDB, err := sql.Open("postgres", postgresURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer adminDB.Close()
+	if _, err := adminDB.ExecContext(ctx, `CREATE SCHEMA `+pq.QuoteIdentifier(schema)); err != nil {
+		t.Fatalf("create boundary test schema: %v", err)
+	}
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		_, _ = adminDB.ExecContext(cleanupCtx, `DROP SCHEMA IF EXISTS `+pq.QuoteIdentifier(schema)+` CASCADE`)
+	}()
+
+	parsed, err := url.Parse(postgresURL)
+	if err != nil || parsed.Scheme == "" {
+		t.Fatalf("HELM_TEST_POSTGRES_URL must be a URL-style Postgres DSN: %v", err)
+	}
+	query := parsed.Query()
+	query.Set("search_path", schema)
+	parsed.RawQuery = query.Encode()
+	db, err := sql.Open("postgres", parsed.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	registry, err := NewSQLSurfaceRegistry(ctx, db, "postgres", func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := registry.PutRecord(contracts.ExecutionBoundaryRecord{
+		RecordID:    "rec-postgres",
+		Verdict:     contracts.VerdictDeny,
+		ReasonCode:  contracts.ReasonPDPError,
+		PolicyEpoch: "epoch-1",
+		ToolName:    "tool.exec",
+		CreatedAt:   now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sequence int64
+	if err := db.QueryRowContext(ctx, `SELECT sequence FROM boundary_surface_events WHERE object_id = $1`, record.RecordID).Scan(&sequence); err != nil {
+		t.Fatal(err)
+	}
+	if sequence <= 0 {
+		t.Fatalf("Postgres identity sequence = %d, want positive", sequence)
+	}
+	reloaded, err := NewSQLSurfaceRegistry(ctx, db, "postgres", func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := reloaded.GetRecord(record.RecordID); !ok || got.RecordHash != record.RecordHash {
+		t.Fatalf("Postgres reload = (%+v, %v), want record hash %s", got, ok, record.RecordHash)
 	}
 }

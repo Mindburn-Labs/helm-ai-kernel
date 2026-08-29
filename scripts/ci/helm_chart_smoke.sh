@@ -557,6 +557,8 @@ production_helm_runner template "$RELEASE" "$CHART" \
     --set image.pullPolicy=IfNotPresent >"$rendered"
 
 assert_contains "$rendered" "kind: Deployment"
+assert_contains "$rendered" "strategy:"
+assert_contains "$rendered" "type: Recreate"
 assert_contains "$rendered" "image: \"ghcr.io/mindburn-labs/helm-ai-kernel@${PRODUCTION_IMAGE_DIGEST}\""
 assert_contains "$rendered" "serve"
 assert_contains "$rendered" "--policy"

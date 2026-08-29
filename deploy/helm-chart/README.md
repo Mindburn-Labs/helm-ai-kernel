@@ -142,7 +142,8 @@ flowchart TD
   `helm.signing.existingSecret`.
 - Keep `persistence.enabled=true` and `replicaCount=1`. Production writes a
   private, atomic policy replay watermark under `helm.dataDir` before activating
-  a snapshot; multi-writer deployment requires a distributed transactional
+  a snapshot and uses a `Recreate` rollout so old and new writers cannot overlap;
+  zero-downtime or multi-writer deployment requires a distributed transactional
   watermark store first.
 - Enable `networkPolicy` and supply explicit ingress/egress allowlists. This is
   a rendered contract only until the target cluster proves a CNI that enforces

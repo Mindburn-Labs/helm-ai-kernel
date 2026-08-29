@@ -107,7 +107,8 @@ Production policy reconciliation now persists private, atomic per-scope epoch
 and policy-head commitments before activating a snapshot, so restart does not
 erase rollback and equivocation detection. The chart requires a persistent data
 volume and one Kernel writer in production until this watermark uses a
-distributed transactional store. This entry does not claim a tagged release or
+distributed transactional store. Production rollouts use `Recreate` to avoid
+overlapping old and new writers. This entry does not claim a tagged release or
 production deployment.
 
 ## [0.8.5] - 2026-08-23

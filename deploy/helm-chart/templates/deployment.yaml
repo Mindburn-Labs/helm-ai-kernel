@@ -88,6 +88,10 @@ metadata:
   labels:
     {{- include "helm-ai-kernel.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.helm.production }}
+  strategy:
+    type: Recreate
+  {{- end }}
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:

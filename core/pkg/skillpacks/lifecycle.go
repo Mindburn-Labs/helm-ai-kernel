@@ -26,6 +26,11 @@ const (
 	projectionStatusRevoked = "revoked"
 
 	maxProjectionArtifactBytes = 1 << 20
+	// Lifecycle state contains append-only generation, replay, and attempt
+	// metadata. Each V1 mutation can retain 16 bounded certification refs plus
+	// an exact replay result and attempt binding; 16 MiB gives that metadata a
+	// distinct operational envelope while keeping reads and writes bounded.
+	maxProjectionLifecycleStateBytes = 16 << 20
 )
 
 var (
@@ -35,6 +40,7 @@ var (
 	ErrProjectionPathUnsafe      = errors.New("skillpacks: unsafe managed path")
 	ErrProjectionLockContended   = errors.New("skillpacks: projection root lock contended")
 	ErrProjectionLockUnsupported = errors.New("skillpacks: projection root lock unsupported")
+	ErrProjectionFileTooLarge    = errors.New("skillpacks: managed projection file exceeds size limit")
 )
 
 // SkillProjectionArtifact is the exact artifact submitted to the lifecycle.
@@ -600,11 +606,11 @@ func (l *ProjectionLifecycle) readGeneration(
 	if len(entries) != 2 || entries[0].Name() != "SKILL.md" || entries[1].Name() != "skillpack.json" {
 		return nil, nil, fmt.Errorf("%w: immutable generation has unexpected files", ErrProjectionDrift)
 	}
-	manifestBytes, err := readManagedFile(l.root, filepath.Join(dirRel, "skillpack.json"))
+	manifestBytes, err := readManagedFile(l.root, filepath.Join(dirRel, "skillpack.json"), maxProjectionArtifactBytes)
 	if err != nil {
 		return nil, nil, err
 	}
-	contentBytes, err := readManagedFile(l.root, filepath.Join(dirRel, "SKILL.md"))
+	contentBytes, err := readManagedFile(l.root, filepath.Join(dirRel, "SKILL.md"), maxProjectionArtifactBytes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -628,7 +634,7 @@ func (l *ProjectionLifecycle) verifyManagedState(state projectionLifecycleState)
 		}
 	}
 	fullRel := filepath.Join(l.workspaceRel(effect), filepath.FromSlash(state.RelativePath))
-	data, err := readManagedFile(l.root, fullRel)
+	data, err := readManagedFile(l.root, fullRel, maxProjectionArtifactBytes)
 	if state.Status == projectionStatusRevoked {
 		if err == nil {
 			return fmt.Errorf("%w: revoked projection reappeared", ErrProjectionDrift)
@@ -639,7 +645,7 @@ func (l *ProjectionLifecycle) verifyManagedState(state projectionLifecycleState)
 		return err
 	}
 	if err != nil {
-		return fmt.Errorf("%w: live projection missing: %v", ErrProjectionDrift, err)
+		return fmt.Errorf("%w: live projection read failed: %w", ErrProjectionDrift, err)
 	}
 	if HashBytes(data) != record.ContentHash {
 		return fmt.Errorf("%w: live content hash mismatch", ErrProjectionDrift)
@@ -649,7 +655,7 @@ func (l *ProjectionLifecycle) verifyManagedState(state projectionLifecycleState)
 
 func (l *ProjectionLifecycle) verifyProjectionAbsent(effect contracts.SkillProjectionEffect, relativePath string) error {
 	fullRel := filepath.Join(l.workspaceRel(effect), filepath.FromSlash(relativePath))
-	_, err := readManagedFile(l.root, fullRel)
+	_, err := readManagedFile(l.root, fullRel, maxProjectionArtifactBytes)
 	if err == nil {
 		return ErrUnmanagedProjection
 	}
@@ -661,8 +667,11 @@ func (l *ProjectionLifecycle) verifyProjectionAbsent(effect contracts.SkillProje
 
 func (l *ProjectionLifecycle) verifyLiveContent(effect contracts.SkillProjectionEffect, relativePath, expectedHash string) error {
 	fullRel := filepath.Join(l.workspaceRel(effect), filepath.FromSlash(relativePath))
-	data, err := readManagedFile(l.root, fullRel)
-	if err != nil || HashBytes(data) != expectedHash {
+	data, err := readManagedFile(l.root, fullRel, maxProjectionArtifactBytes)
+	if err != nil {
+		return fmt.Errorf("%w: projection readback failed: %w", ErrProjectionDrift, err)
+	}
+	if HashBytes(data) != expectedHash {
 		return fmt.Errorf("%w: projection readback mismatch", ErrProjectionDrift)
 	}
 	return nil
@@ -725,7 +734,7 @@ func (l *ProjectionLifecycle) restoreProjection(effect contracts.SkillProjection
 }
 
 func (l *ProjectionLifecycle) readState(effect contracts.SkillProjectionEffect, relativePath string) (*projectionLifecycleState, error) {
-	data, err := readManagedFile(l.root, l.stateRel(effect))
+	data, err := readManagedFile(l.root, l.stateRel(effect), maxProjectionLifecycleStateBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -753,6 +762,9 @@ func (l *ProjectionLifecycle) writeState(effect contracts.SkillProjectionEffect,
 	data, err := json.MarshalIndent(sealed, "", "  ")
 	if err != nil {
 		return err
+	}
+	if len(data) > maxProjectionLifecycleStateBytes {
+		return ErrProjectionFileTooLarge
 	}
 	return atomicReplaceManaged(l.root, l.stateRel(effect), data)
 }
@@ -1031,7 +1043,10 @@ func validateManagedRelative(rel string) error {
 	return nil
 }
 
-func readManagedFile(root, rel string) ([]byte, error) {
+func readManagedFile(root, rel string, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		return nil, ErrProjectionPathUnsafe
+	}
 	path, err := managedPath(root, rel, false)
 	if err != nil {
 		return nil, err
@@ -1052,9 +1067,15 @@ func readManagedFile(root, rel string) ([]byte, error) {
 	if err != nil || !os.SameFile(lstat, fstat) || !fstat.Mode().IsRegular() {
 		return nil, ErrProjectionPathUnsafe
 	}
-	data, err := io.ReadAll(file)
+	if fstat.Size() < 0 || fstat.Size() > maxBytes {
+		return nil, ErrProjectionFileTooLarge
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, ErrProjectionFileTooLarge
 	}
 	return data, nil
 }

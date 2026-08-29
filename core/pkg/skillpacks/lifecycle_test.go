@@ -300,6 +300,83 @@ func TestProjectionLifecycleFailsClosedOnPathsArtifactsAndDrift(t *testing.T) {
 	})
 }
 
+func TestProjectionLifecycleRejectsOversizedManagedReadsWithoutMutation(t *testing.T) {
+	now := time.Date(2026, 8, 30, 14, 30, 0, 0, time.UTC)
+
+	t.Run("state", func(t *testing.T) {
+		root := t.TempDir()
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		v1 := newProjectionFixture(t, "1.0.0", "bounded state v1", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "bounded state v2", 2, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		livePath := projectionLivePath(root, v1.effect)
+		liveBefore, err := os.ReadFile(livePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		statePath := filepath.Join(root, lifecycle.stateRel(v1.effect))
+		if err := os.Truncate(statePath, maxProjectionLifecycleStateBytes+1); err != nil {
+			t.Fatal(err)
+		}
+		stateBefore, err := os.Stat(statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionFileTooLarge) {
+			t.Fatalf("oversized state error = %v", err)
+		}
+		liveAfter, err := os.ReadFile(livePath)
+		if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+			t.Fatalf("oversized state changed live projection: %q err=%v", liveAfter, err)
+		}
+		stateAfter, err := os.Stat(statePath)
+		if err != nil || stateAfter.Size() != stateBefore.Size() || !stateAfter.ModTime().Equal(stateBefore.ModTime()) {
+			t.Fatalf("oversized state was mutated: before=%+v after=%+v err=%v", stateBefore, stateAfter, err)
+		}
+	})
+
+	t.Run("live artifact", func(t *testing.T) {
+		root := t.TempDir()
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		v1 := newProjectionFixture(t, "1.0.0", "bounded live v1", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "bounded live v2", 2, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		statePath := filepath.Join(root, lifecycle.stateRel(v1.effect))
+		stateBefore, err := os.ReadFile(statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		livePath := projectionLivePath(root, v1.effect)
+		if err := os.Truncate(livePath, maxProjectionArtifactBytes+1); err != nil {
+			t.Fatal(err)
+		}
+		liveBefore, err := os.Stat(livePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil)
+		if !errors.Is(err, ErrProjectionDrift) || !errors.Is(err, ErrProjectionFileTooLarge) {
+			t.Fatalf("oversized live artifact error = %v", err)
+		}
+		stateAfter, err := os.ReadFile(statePath)
+		if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+			t.Fatalf("oversized live artifact changed state: %q err=%v", stateAfter, err)
+		}
+		liveAfter, err := os.Stat(livePath)
+		if err != nil || liveAfter.Size() != liveBefore.Size() || !liveAfter.ModTime().Equal(liveBefore.ModTime()) {
+			t.Fatalf("oversized live artifact was mutated: before=%+v after=%+v err=%v", liveBefore, liveAfter, err)
+		}
+	})
+}
+
 func TestProjectionLifecycleConcurrentReplayIsSingleMutation(t *testing.T) {
 	now := time.Date(2026, 8, 30, 15, 0, 0, 0, time.UTC)
 	root := t.TempDir()

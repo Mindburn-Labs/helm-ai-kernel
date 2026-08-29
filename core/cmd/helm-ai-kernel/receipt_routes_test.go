@@ -844,6 +844,55 @@ func TestReceiptRoutesRejectInvalidSessionQuery(t *testing.T) {
 	}
 }
 
+func TestReceiptRoutesRequireConfiguredWorkspaceWhenScopedFenceEnabled(t *testing.T) {
+	t.Setenv(runtimeTenantIDEnv, defaultRuntimeTenantID)
+	t.Setenv(runtimePrincipalIDEnv, "system-admin")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-trusted")
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	_, stopStore, _ := newEmergencyStopFenceRouteForTest(t)
+	svc.EmergencyStops = stopStore
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+
+	for _, target := range []string{
+		"/api/v1/receipts",
+		"/api/v1/receipts/rcpt-test",
+		"/api/v1/receipts/tail",
+	} {
+		for _, workspaceID := range []string{"", "workspace-foreign"} {
+			t.Run(target+"/workspace="+workspaceID, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodGet, target, nil)
+				authorizeTestRequest(req)
+				if workspaceID != "" {
+					req.Header.Set(workspaceHeader, workspaceID)
+				}
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+				if rec.Code != http.StatusForbidden {
+					t.Fatalf("receipt workspace status = %d body=%s", rec.Code, rec.Body.String())
+				}
+				if strings.Contains(rec.Body.String(), "rcpt-test") {
+					t.Fatalf("rejected workspace leaked receipt: %s", rec.Body.String())
+				}
+			})
+		}
+	}
+
+	for _, target := range []string{"/api/v1/receipts", "/api/v1/receipts/rcpt-test"} {
+		t.Run(target+"/workspace=workspace-trusted", func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			authorizeTestRequest(req)
+			req.Header.Set(workspaceHeader, "workspace-trusted")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("configured receipt workspace status = %d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func receiptListIDs(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	raw, ok := result["receipts"].([]any)

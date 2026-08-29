@@ -179,9 +179,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
-		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		tenantID, err := authenticatedReceiptTenantScope(r, svc)
 		if err != nil {
-			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant and workspace context")
 			return
 		}
 		sessionID, err := requestedReceiptSessionID(r)
@@ -254,9 +254,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
-		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		tenantID, err := authenticatedReceiptTenantScope(r, svc)
 		if err != nil {
-			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant and workspace context")
 			return
 		}
 		limit := parseLimit(r.URL.Query().Get("limit"), 100, 1000)
@@ -307,9 +307,9 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteError(w, http.StatusServiceUnavailable, "Receipt store unavailable", "receipt store not initialized")
 			return
 		}
-		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		tenantID, err := authenticatedReceiptTenantScope(r, svc)
 		if err != nil {
-			api.WriteForbidden(w, "Receipt route requires authenticated tenant principal context")
+			api.WriteForbidden(w, "Receipt route requires authenticated tenant and workspace context")
 			return
 		}
 		id := strings.TrimPrefix(r.URL.Path, "/api/v1/receipts/")
@@ -335,6 +335,22 @@ func authenticatedReceiptTenantID(ctx context.Context) (string, error) {
 	tenantID := strings.TrimSpace(principal.GetTenantID())
 	if tenantID == "" {
 		return "", fmt.Errorf("authenticated tenant id is required")
+	}
+	return tenantID, nil
+}
+
+func authenticatedReceiptTenantScope(r *http.Request, svc *Services) (string, error) {
+	tenantID, err := authenticatedReceiptTenantID(r.Context())
+	if err != nil {
+		return "", err
+	}
+	if svc.EmergencyStops == nil {
+		return tenantID, nil
+	}
+	workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+	configuredWorkspaceID := configuredRuntimeWorkspaceID()
+	if workspaceID == "" || configuredWorkspaceID == "" || workspaceID != configuredWorkspaceID {
+		return "", fmt.Errorf("authenticated workspace binding is required")
 	}
 	return tenantID, nil
 }

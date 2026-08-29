@@ -1,0 +1,14 @@
+[app]
+id = "external-workstation"
+availability = "external_proprietary_adapter"
+redistribution = "helm_does_not_redistribute_byo_tool"
+permission_bypass_forbidden = true
+recursive_launch_forbidden = true
+network_default = "deny"
+mcp_unknown_server_policy = "quarantine"
+mcp_unknown_tool_policy = "ESCALATE"
+require_schema_pin = true
+receipt_required = true
+evidencepack_required = true
+workstation_policy_profile = "workstation.observe_draft.v1"
+workstation_adapter_mode = "selected_effect_enforceable"

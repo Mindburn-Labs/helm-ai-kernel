@@ -74,21 +74,30 @@ func Install(pack SkillPack, req InstallRequest) (InstallResult, error) {
 }
 
 func ProjectionPaths(root, skillID, agent string) ([]Projection, error) {
-	safeParts := strings.Split(filepath.ToSlash(skillID), "/")
-	if len(safeParts) != 2 || safeParts[0] == "" || safeParts[1] == "" {
-		return nil, fmt.Errorf("skill id must be namespaced publisher/name: %s", skillID)
+	projection, err := projectionRelativePath(skillID, agent)
+	if err != nil {
+		return nil, err
 	}
-	switch strings.ToLower(agent) {
+	projection.Path = filepath.Join(root, projection.Path)
+	return []Projection{projection}, nil
+}
+
+func projectionRelativePath(skillID, agent string) (Projection, error) {
+	if !skillIDPattern.MatchString(skillID) {
+		return Projection{}, fmt.Errorf("skill id must be namespaced publisher/name: %s", skillID)
+	}
+	safeParts := strings.Split(skillID, "/")
+	switch strings.ToLower(strings.TrimSpace(agent)) {
 	case "codex", "generic":
-		return []Projection{{Agent: agent, Path: filepath.Join(root, ".agents", "skills", safeParts[0], safeParts[1], "SKILL.md")}}, nil
+		return Projection{Agent: strings.ToLower(strings.TrimSpace(agent)), Path: filepath.Join(".agents", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
 	case "claude", "claude-code":
-		return []Projection{{Agent: "claude-code", Path: filepath.Join(root, ".claude", "skills", safeParts[0], safeParts[1], "SKILL.md")}}, nil
+		return Projection{Agent: "claude-code", Path: filepath.Join(".claude", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
 	case "cursor":
-		return []Projection{{Agent: "cursor", Path: filepath.Join(root, ".cursor", "rules", safeParts[0]+"-"+safeParts[1]+".md")}}, nil
+		return Projection{Agent: "cursor", Path: filepath.Join(".cursor", "rules", safeParts[0]+"-"+safeParts[1]+".md")}, nil
 	case "opencode":
-		return []Projection{{Agent: "opencode", Path: filepath.Join(root, ".opencode", "skills", safeParts[0], safeParts[1], "SKILL.md")}}, nil
+		return Projection{Agent: "opencode", Path: filepath.Join(".opencode", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
 	default:
-		return nil, fmt.Errorf("unsupported agent projection: %s", agent)
+		return Projection{}, fmt.Errorf("unsupported agent projection: %s", agent)
 	}
 }
 

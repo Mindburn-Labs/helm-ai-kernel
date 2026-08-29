@@ -5,6 +5,7 @@ on:
     paths:
       - "deploy/helm-chart/**"
       - "scripts/ci/launchpad_k8s_smoke.sh"
+      - "scripts/ci/helm_production_network_policy_values.yaml"
       - ".github/workflows/helm-integration.yml"
       - "registry/launchpad/apps/openclaw.yaml"
       - "registry/launchpad/apps/hermes.yaml"
@@ -13,6 +14,7 @@ on:
     paths:
       - "deploy/helm-chart/**"
       - "scripts/ci/launchpad_k8s_smoke.sh"
+      - "scripts/ci/helm_production_network_policy_values.yaml"
       - ".github/workflows/helm-integration.yml"
   workflow_dispatch:
     inputs:

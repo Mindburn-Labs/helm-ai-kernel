@@ -10,6 +10,15 @@ networkPolicy:
           port: 8080
         - protocol: TCP
           port: 8081
+    # The Helm connectivity hook is namespace-local and carries both labels.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: helm-ai-kernel
+              app.kubernetes.io/component: test
+      ports:
+        - protocol: TCP
+          port: 8081
   egress:
     - to:
         - namespaceSelector:

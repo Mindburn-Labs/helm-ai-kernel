@@ -1,6 +1,7 @@
 package skillpacks
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -16,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -51,6 +53,10 @@ const (
 	// previous/next bounded prompts as base64 plus fixed identity/hash metadata.
 	// 48 MiB is the deterministic V1 envelope for 2*16 MiB + 2*1 MiB raw bytes.
 	maxProjectionRecoveryJournalBytes = 48 << 20
+	// Verification runs while the projection root is single-writer locked. A
+	// deterministic wall-clock bound prevents a verifier from retaining that
+	// lock indefinitely; context-aware verifiers receive the same deadline.
+	projectionTrustVerifierTimeout = 30 * time.Second
 
 	projectionMutationAfterJournal = "after_journal"
 	projectionMutationAfterLive    = "after_live"
@@ -146,10 +152,20 @@ type ProjectionTrustVerifierKeyring struct {
 }
 
 // ProjectionTrustVerifier is mandatory for every lifecycle instance. A
-// concrete verifier may live in the runner, but the lifecycle cannot project,
-// read back, revoke, roll back, or replay without a current exact-hash decision.
+// concrete verifier may live in the runner. Install, readback, and rollback
+// require a current exact-hash decision; revoke authenticates removal from the
+// consumed revoke authority and the stored admission receipt instead.
 type ProjectionTrustVerifier interface {
 	VerifyProjectionTrust(ProjectionTrustRequest) (ProjectionTrustDecision, error)
+}
+
+// ProjectionTrustContextVerifier is an optional cancellation contract for
+// verifiers that can stop their work when the lifecycle deadline elapses.
+// Implementations must also satisfy ProjectionTrustVerifier for constructor
+// compatibility; legacy verifiers are isolated behind the same hard deadline.
+type ProjectionTrustContextVerifier interface {
+	ProjectionTrustVerifier
+	VerifyProjectionTrustContext(context.Context, ProjectionTrustRequest) (ProjectionTrustDecision, error)
 }
 
 // ProjectionLifecycleResult is the unsigned canonical result returned to the
@@ -172,6 +188,8 @@ type ProjectionLifecycleResult struct {
 	RollbackPermitRef      string `json:"rollback_permit_ref,omitempty"`
 	TrustVerificationRef   string `json:"trust_verification_ref"`
 	TrustDecisionHash      string `json:"trust_decision_hash"`
+	TrustDecisionAction    string `json:"trust_decision_action"`
+	TrustDecisionCanonical string `json:"trust_decision_canonical_request_hash"`
 	TrustVerifierID        string `json:"trust_verifier_id"`
 	TrustKeyID             string `json:"trust_key_id"`
 	TrustBindingHash       string `json:"trust_binding_hash"`
@@ -210,8 +228,13 @@ type ProjectionLifecycle struct {
 	verifierKey      ProjectionTrustVerifierKey
 	verificationKeys map[projectionTrustKeyIdentity]ProjectionTrustVerifierKey
 	clock            func() time.Time
+	verifierTimeout  time.Duration
+	verifierInFlight chan struct{}
+	verifierContext  context.Context
+	cancelVerifier   context.CancelFunc
 	mutationHook     func(string) error
 	mu               sync.Mutex
+	closing          atomic.Bool
 }
 
 type projectionLifecycleState struct {
@@ -237,6 +260,11 @@ type projectionLifecycleState struct {
 type projectionTrustKeyIdentity struct {
 	VerifierID string
 	KeyID      string
+}
+
+type projectionTrustVerificationResult struct {
+	decision ProjectionTrustDecision
+	err      error
 }
 
 type projectionGeneration struct {
@@ -288,6 +316,8 @@ type projectionRecoveryJournal struct {
 	ResultHash             string `json:"result_hash"`
 	TrustVerificationRef   string `json:"trust_verification_ref"`
 	TrustDecisionHash      string `json:"trust_decision_hash"`
+	TrustDecisionAction    string `json:"trust_decision_action"`
+	TrustDecisionCanonical string `json:"trust_decision_canonical_request_hash"`
 	TrustVerifierID        string `json:"trust_verifier_id"`
 	TrustKeyID             string `json:"trust_key_id"`
 	TrustBindingHash       string `json:"trust_binding_hash"`
@@ -375,9 +405,12 @@ func NewProjectionLifecycleWithVerifierKeyring(
 	for _, key := range append([]ProjectionTrustVerifierKey{keyring.Current}, keyring.Historical...) {
 		verificationKeys[projectionTrustKeyIdentity{VerifierID: key.VerifierID, KeyID: key.KeyID}] = cloneProjectionTrustVerifierKey(key)
 	}
+	verifierContext, cancelVerifier := context.WithCancel(context.Background())
 	return &ProjectionLifecycle{
 		managed: managed, verifier: verifier, verifierKey: verifierKey, verificationKeys: verificationKeys,
-		clock: func() time.Time { return time.Now().UTC() },
+		clock:           func() time.Time { return time.Now().UTC() },
+		verifierTimeout: projectionTrustVerifierTimeout, verifierInFlight: make(chan struct{}, 1),
+		verifierContext: verifierContext, cancelVerifier: cancelVerifier,
 	}, nil
 }
 
@@ -386,6 +419,10 @@ func NewProjectionLifecycleWithVerifierKeyring(
 func (l *ProjectionLifecycle) Close() error {
 	if l == nil {
 		return nil
+	}
+	l.closing.Store(true)
+	if l.cancelVerifier != nil {
+		l.cancelVerifier()
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -424,7 +461,7 @@ func (l *ProjectionLifecycle) Apply(
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.managed == nil {
+	if l.closing.Load() || l.managed == nil {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: projection lifecycle is closed")
 	}
 	releaseRootLock, err := l.acquireRootLock()
@@ -612,7 +649,7 @@ func (l *ProjectionLifecycle) applyInstall(
 	generation.TrustCanonicalHash = effect.CanonicalRequestHash
 	generation.TrustBindingHash = trust.BindingHash
 	generation.TrustDecisionSignature = trust.Signature
-	if err := l.validateProjectionPublicationAuthority(effect, nil, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, nil, trust, nil); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	if err := l.persistGeneration(effect, generation, manifestBytes, contentBytes); err != nil {
@@ -700,25 +737,20 @@ func (l *ProjectionLifecycle) applyRevoke(
 	if !ok || !projectionEffectMatchesGeneration(effect, record) {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: revoke binding mismatch")
 	}
-	manifestBytes, contentBytes, err := l.readGeneration(effect, record)
-	if err != nil {
-		return ProjectionLifecycleResult{}, err
-	}
-	trust, err := l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, nil)
-	if err != nil {
+	if _, err := l.validateStoredRevocationArchive(effect, *current); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	next := cloneProjectionState(*current)
 	next.Status = projectionStatusRevoked
 	next.Generation = effect.Generation
 	result := newProjectionResult(effect, relativePath, projectionStatusRevoked, current.Generation, record, projectionGeneration{})
-	bindProjectionResultTrust(&result, trust, effect)
+	bindProjectionResultStoredGenerationTrust(&result, record)
 	sealed, err := sealProjectionLifecycleResult(result)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	appendProjectionReplay(&next, effect, sealed)
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, false, nil, sealed, nil, trust); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, false, nil, sealed, nil, ProjectionTrustDecision{}); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -755,7 +787,7 @@ func (l *ProjectionLifecycle) applyRollback(
 	restored.TrustCanonicalHash = effect.CanonicalRequestHash
 	restored.TrustBindingHash = trust.BindingHash
 	restored.TrustDecisionSignature = trust.Signature
-	if err := l.validateProjectionPublicationAuthority(effect, &permit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, &permit, trust, nil); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	if err := l.persistGeneration(effect, restored, manifestBytes, contentBytes); err != nil {
@@ -902,9 +934,9 @@ func (l *ProjectionLifecycle) verifyProjectionTrust(
 		ContentBytes:   append([]byte(nil), contentBytes...),
 		EvaluationTime: evaluationTime,
 	}
-	decision, err := l.verifier.VerifyProjectionTrust(request)
+	decision, err := l.callProjectionTrustVerifier(request, effect, rollbackPermit)
 	if err != nil {
-		return ProjectionTrustDecision{}, fmt.Errorf("%w: %v", ErrProjectionTrustRejected, err)
+		return ProjectionTrustDecision{}, errors.Join(ErrProjectionTrustRejected, err)
 	}
 	validationTime := l.clock().UTC()
 	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, validationTime); err != nil {
@@ -916,13 +948,75 @@ func (l *ProjectionLifecycle) verifyProjectionTrust(
 	return decision, nil
 }
 
+func (l *ProjectionLifecycle) callProjectionTrustVerifier(
+	request ProjectionTrustRequest,
+	effect contracts.SkillProjectionEffect,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+) (ProjectionTrustDecision, error) {
+	if l.verifier == nil || l.verifierContext == nil || l.verifierInFlight == nil || l.verifierTimeout <= 0 {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: configured verifier is unavailable", ErrProjectionTrustRejected)
+	}
+	timeout := l.verifierTimeout
+	if remaining := effect.ExpiresAt.Sub(request.EvaluationTime); remaining < timeout {
+		timeout = remaining
+	}
+	if rollbackPermit != nil {
+		if remaining := rollbackPermit.ExpiresAt.Sub(request.EvaluationTime); remaining < timeout {
+			timeout = remaining
+		}
+	}
+	if timeout <= 0 {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: verifier authority deadline elapsed", ErrProjectionTrustRejected)
+	}
+	ctx, cancel := context.WithTimeout(l.verifierContext, timeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return ProjectionTrustDecision{}, errors.Join(ErrProjectionTrustRejected, err)
+	}
+	select {
+	case l.verifierInFlight <- struct{}{}:
+	default:
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: verifier call is already in flight", ErrProjectionTrustRejected)
+	}
+
+	verifier := l.verifier
+	gate := l.verifierInFlight
+	results := make(chan projectionTrustVerificationResult, 1)
+	go func() {
+		var decision ProjectionTrustDecision
+		var err error
+		if contextual, ok := verifier.(ProjectionTrustContextVerifier); ok {
+			decision, err = contextual.VerifyProjectionTrustContext(ctx, request)
+		} else {
+			decision, err = verifier.VerifyProjectionTrust(request)
+		}
+		<-gate
+		results <- projectionTrustVerificationResult{decision: decision, err: err}
+	}()
+
+	select {
+	case result := <-results:
+		return result.decision, result.err
+	case <-ctx.Done():
+		return ProjectionTrustDecision{}, errors.Join(ErrProjectionTrustRejected, ctx.Err())
+	}
+}
+
 func (l *ProjectionLifecycle) validateProjectionPublicationAuthority(
 	effect contracts.SkillProjectionEffect,
 	rollbackPermit *contracts.SkillProjectionRollbackPermit,
 	decision ProjectionTrustDecision,
+	revocationState *projectionLifecycleState,
 ) error {
 	now := l.clock().UTC()
 	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, now); err != nil {
+		return err
+	}
+	if effect.Action == contracts.SkillProjectionActionRevoke {
+		if revocationState == nil {
+			return fmt.Errorf("%w: authenticated revocation state is required", ErrProjectionTrustRejected)
+		}
+		_, err := l.validateStoredRevocationArchive(effect, *revocationState)
 		return err
 	}
 	if err := verifyProjectionTrustDecisionIntegrity(decision); err != nil {
@@ -1071,10 +1165,10 @@ func projectionTrustBindingFromGeneration(
 
 func projectionTrustBindingFromResult(result ProjectionLifecycleResult) projectionTrustBinding {
 	return projectionTrustBinding{
-		SchemaVersion: projectionTrustBindingSchemaV1, Action: result.Action,
+		SchemaVersion: projectionTrustBindingSchemaV1, Action: result.TrustDecisionAction,
 		TenantID: result.TenantID, WorkspaceID: result.WorkspaceID,
 		SkillID: result.SkillID, SkillVersion: result.SkillVersion, AgentTarget: result.AgentTarget,
-		CanonicalRequestHash:  result.CanonicalRequestHash,
+		CanonicalRequestHash:  result.TrustDecisionCanonical,
 		ArtifactHash:          result.TrustArtifactHash,
 		ContentHash:           result.TrustContentHash,
 		ManifestHash:          result.TrustManifestHash,
@@ -1286,6 +1380,9 @@ func projectionResultMatchesTrustEffect(result ProjectionLifecycleResult) bool {
 	}
 	switch result.Action {
 	case contracts.SkillProjectionActionInstall, contracts.SkillProjectionActionRollback:
+		if result.TrustDecisionAction != result.Action || result.TrustDecisionCanonical != result.CanonicalRequestHash {
+			return false
+		}
 		validStatus := result.Status == "installed" || result.Status == "upgraded"
 		if result.Action == contracts.SkillProjectionActionRollback {
 			validStatus = result.Status == "rolled_back"
@@ -1294,6 +1391,9 @@ func projectionResultMatchesTrustEffect(result ProjectionLifecycleResult) bool {
 			result.NewManifestHash == result.TrustManifestHash && result.ObservedArtifactHash == result.TrustArtifactHash &&
 			result.ObservedContentHash == result.TrustContentHash && result.ObservedManifestHash == result.TrustManifestHash
 	case contracts.SkillProjectionActionReadback:
+		if result.TrustDecisionAction != result.Action || result.TrustDecisionCanonical != result.CanonicalRequestHash {
+			return false
+		}
 		if result.PreviousArtifactHash != result.TrustArtifactHash || result.PreviousContentHash != result.TrustContentHash ||
 			result.PreviousManifestHash != result.TrustManifestHash {
 			return false
@@ -1307,6 +1407,10 @@ func projectionResultMatchesTrustEffect(result ProjectionLifecycleResult) bool {
 			result.ObservedArtifactHash == result.TrustArtifactHash && result.ObservedContentHash == result.TrustContentHash &&
 			result.ObservedManifestHash == result.TrustManifestHash
 	case contracts.SkillProjectionActionRevoke:
+		if result.TrustDecisionAction != contracts.SkillProjectionActionInstall &&
+			result.TrustDecisionAction != contracts.SkillProjectionActionRollback {
+			return false
+		}
 		return result.Status == projectionStatusRevoked && result.PreviousArtifactHash == result.TrustArtifactHash &&
 			result.PreviousContentHash == result.TrustContentHash && result.PreviousManifestHash == result.TrustManifestHash &&
 			result.NewArtifactHash == "" && result.NewContentHash == "" && result.NewManifestHash == "" &&
@@ -1321,6 +1425,16 @@ func (l *ProjectionLifecycle) verifyReplayTrust(
 	state projectionLifecycleState,
 	rollbackPermit *contracts.SkillProjectionRollbackPermit,
 ) (ProjectionTrustDecision, error) {
+	if effect.Action == contracts.SkillProjectionActionRevoke {
+		replay, ok := findProjectionReplay(state.Replays, effect.IdempotencyKey)
+		if !ok {
+			return ProjectionTrustDecision{}, fmt.Errorf("%w: revoke replay trust receipt mismatch", ErrProjectionDrift)
+		}
+		if _, err := l.validateStoredRevocationReplay(effect, state, replay.Result); err != nil {
+			return ProjectionTrustDecision{}, err
+		}
+		return ProjectionTrustDecision{}, nil
+	}
 	for _, record := range state.Generations {
 		if !projectionEffectMatchesGeneration(effect, record) {
 			continue
@@ -1334,6 +1448,51 @@ func (l *ProjectionLifecycle) verifyReplayTrust(
 	return ProjectionTrustDecision{}, fmt.Errorf("%w: replay has no retained trust material", ErrProjectionDrift)
 }
 
+func (l *ProjectionLifecycle) validateStoredRevocationState(
+	effect contracts.SkillProjectionEffect,
+	state projectionLifecycleState,
+) error {
+	if effect.Action != contracts.SkillProjectionActionRevoke ||
+		state.TenantID != effect.TenantID || state.WorkspaceID != effect.WorkspaceID ||
+		state.SkillID != effect.SkillID || state.AgentTarget != effect.AgentTarget {
+		return fmt.Errorf("%w: revocation state identity mismatch", ErrProjectionDrift)
+	}
+	if err := l.verifyProjectionLifecycleState(state); err != nil {
+		return err
+	}
+	return l.verifyProjectionStateTrustReceipts(state)
+}
+
+func (l *ProjectionLifecycle) validateStoredRevocationArchive(
+	effect contracts.SkillProjectionEffect,
+	state projectionLifecycleState,
+) (projectionGeneration, error) {
+	if err := l.validateStoredRevocationState(effect, state); err != nil {
+		return projectionGeneration{}, err
+	}
+	record, ok := findProjectionGeneration(state.Generations, state.ArchiveGeneration)
+	if !ok || !projectionEffectMatchesGeneration(effect, record) {
+		return projectionGeneration{}, fmt.Errorf("%w: archived revocation trust receipt mismatch", ErrProjectionDrift)
+	}
+	return record, nil
+}
+
+func (l *ProjectionLifecycle) validateStoredRevocationReplay(
+	effect contracts.SkillProjectionEffect,
+	state projectionLifecycleState,
+	result ProjectionLifecycleResult,
+) (projectionGeneration, error) {
+	if err := l.validateStoredRevocationState(effect, state); err != nil {
+		return projectionGeneration{}, err
+	}
+	for _, record := range state.Generations {
+		if projectionEffectMatchesGeneration(effect, record) && projectionResultMatchesGenerationTrust(result, record) {
+			return record, nil
+		}
+	}
+	return projectionGeneration{}, fmt.Errorf("%w: revoke replay has no retained trust receipt", ErrProjectionDrift)
+}
+
 func bindProjectionResultTrust(
 	result *ProjectionLifecycleResult,
 	decision ProjectionTrustDecision,
@@ -1341,6 +1500,8 @@ func bindProjectionResultTrust(
 ) {
 	result.TrustVerificationRef = decision.VerificationRef
 	result.TrustDecisionHash = decision.DecisionHash
+	result.TrustDecisionAction = decision.Action
+	result.TrustDecisionCanonical = decision.CanonicalRequestHash
 	result.TrustVerifierID = decision.VerifierID
 	result.TrustKeyID = decision.KeyID
 	result.TrustBindingHash = decision.BindingHash
@@ -1354,6 +1515,42 @@ func bindProjectionResultTrust(
 	result.TrustSandboxProfile = effect.SandboxProfile
 }
 
+func bindProjectionResultStoredGenerationTrust(
+	result *ProjectionLifecycleResult,
+	record projectionGeneration,
+) {
+	result.TrustVerificationRef = record.TrustVerificationRef
+	result.TrustDecisionHash = record.TrustDecisionHash
+	result.TrustDecisionAction = record.TrustAction
+	result.TrustDecisionCanonical = record.TrustCanonicalHash
+	result.TrustVerifierID = record.TrustVerifierID
+	result.TrustKeyID = record.TrustKeyID
+	result.TrustBindingHash = record.TrustBindingHash
+	result.TrustDecisionSignature = record.TrustDecisionSignature
+	result.TrustArtifactHash = record.ArtifactHash
+	result.TrustContentHash = record.ContentHash
+	result.TrustManifestHash = record.ManifestHash
+	result.TrustPolicyHash = record.PolicyHash
+	result.TrustSchemaHash = record.SchemaHash
+	result.TrustCertificationHash = projectionCertificationRefsHash(record.CertificationRefs)
+	result.TrustSandboxProfile = record.SandboxProfile
+}
+
+func projectionResultMatchesGenerationTrust(
+	result ProjectionLifecycleResult,
+	record projectionGeneration,
+) bool {
+	return result.TrustVerificationRef == record.TrustVerificationRef &&
+		result.TrustDecisionHash == record.TrustDecisionHash && result.TrustDecisionAction == record.TrustAction &&
+		result.TrustDecisionCanonical == record.TrustCanonicalHash && result.TrustVerifierID == record.TrustVerifierID &&
+		result.TrustKeyID == record.TrustKeyID && result.TrustBindingHash == record.TrustBindingHash &&
+		result.TrustDecisionSignature == record.TrustDecisionSignature && result.TrustArtifactHash == record.ArtifactHash &&
+		result.TrustContentHash == record.ContentHash && result.TrustManifestHash == record.ManifestHash &&
+		result.TrustPolicyHash == record.PolicyHash && result.TrustSchemaHash == record.SchemaHash &&
+		result.TrustCertificationHash == projectionCertificationRefsHash(record.CertificationRefs) &&
+		result.TrustSandboxProfile == record.SandboxProfile
+}
+
 func (l *ProjectionLifecycle) commitProjectionMutation(
 	effect contracts.SkillProjectionEffect,
 	current *projectionLifecycleState,
@@ -1365,7 +1562,7 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	rollbackPermit *contracts.SkillProjectionRollbackPermit,
 	trust ProjectionTrustDecision,
 ) error {
-	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, current); err != nil {
 		return err
 	}
 	journal, err := l.buildProjectionRecoveryJournal(effect, current, next, relativePath, nextLivePresent, nextLiveBytes, result)
@@ -1378,7 +1575,7 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	if err := l.runProjectionMutationHook(projectionMutationAfterJournal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
-	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, current); err != nil {
 		return l.abortProjectionMutation(effect, relativePath, journal, err)
 	}
 	if err := l.publishRecoveryLive(effect, journal); err != nil {
@@ -1387,7 +1584,7 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	if err := l.runProjectionMutationHook(projectionMutationAfterLive); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
-	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, current); err != nil {
 		return l.abortProjectionMutation(effect, relativePath, journal, err)
 	}
 	if err := l.publishRecoveryState(effect, journal); err != nil {
@@ -1396,7 +1593,7 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	if err := l.runProjectionMutationHook(projectionMutationAfterState); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
-	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, current); err != nil {
 		return l.abortProjectionMutation(effect, relativePath, journal, err)
 	}
 	if err := l.verifyRecoveryTarget(effect, relativePath, journal); err != nil {
@@ -1475,6 +1672,8 @@ func (l *ProjectionLifecycle) buildProjectionRecoveryJournal(
 		ResultHash:             result.ResultHash,
 		TrustVerificationRef:   result.TrustVerificationRef,
 		TrustDecisionHash:      result.TrustDecisionHash,
+		TrustDecisionAction:    result.TrustDecisionAction,
+		TrustDecisionCanonical: result.TrustDecisionCanonical,
 		TrustVerifierID:        result.TrustVerifierID,
 		TrustKeyID:             result.TrustKeyID,
 		TrustBindingHash:       result.TrustBindingHash,
@@ -1531,7 +1730,8 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 		journal.RelativePath != relativePath || journal.SkillVersion == "" ||
 		!validProjectionSHA256(journal.CanonicalRequestHash) || journal.IdempotencyKey == "" || journal.AttemptID == "" ||
 		!validProjectionSHA256(journal.ResultHash) || !validProjectionSHA256(journal.TrustVerificationRef) ||
-		!validProjectionSHA256(journal.TrustDecisionHash) || !validProjectionSHA256(journal.TrustBindingHash) ||
+		!validProjectionSHA256(journal.TrustDecisionHash) || !validProjectionAction(journal.TrustDecisionAction) ||
+		!validProjectionSHA256(journal.TrustDecisionCanonical) || !validProjectionSHA256(journal.TrustBindingHash) ||
 		!validProjectionTrustIdentity(journal.TrustVerifierID) ||
 		!validProjectionTrustIdentity(journal.TrustKeyID) || !validProjectionTrustSignature(journal.TrustDecisionSignature) {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal identity is invalid", ErrProjectionDrift)
@@ -1542,10 +1742,16 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 	); err != nil {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal trust receipt: %v", ErrProjectionDrift, err)
 	}
-	expectedBindingHash, err := projectionTrustBindingHash(projectionTrustBindingFromEffect(effect))
-	if err != nil || !constantStringEqual(expectedBindingHash, journal.TrustBindingHash) ||
-		!projectionJournalMatchesTrustEffect(journal, effect) {
+	if !projectionJournalMatchesTrustEffect(journal, effect) {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal trust effect mismatch", ErrProjectionDrift)
+	}
+	if journal.Action != contracts.SkillProjectionActionRevoke {
+		expectedBindingHash, err := projectionTrustBindingHash(projectionTrustBindingFromEffect(effect))
+		if err != nil || !constantStringEqual(expectedBindingHash, journal.TrustBindingHash) ||
+			journal.TrustDecisionAction != effect.Action ||
+			journal.TrustDecisionCanonical != effect.CanonicalRequestHash {
+			return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal trust effect mismatch", ErrProjectionDrift)
+		}
 	}
 	switch journal.Action {
 	case contracts.SkillProjectionActionInstall, contracts.SkillProjectionActionReadback,
@@ -1611,7 +1817,10 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 	if !ok || replay.RequestHash != journal.CanonicalRequestHash || replay.Result.ResultHash != journal.ResultHash ||
 		replay.Result.Action != journal.Action || replay.Result.SkillVersion != journal.SkillVersion ||
 		replay.Result.AttemptID != journal.AttemptID || replay.Result.TrustVerificationRef != journal.TrustVerificationRef ||
-		replay.Result.TrustDecisionHash != journal.TrustDecisionHash || replay.Result.TrustVerifierID != journal.TrustVerifierID ||
+		replay.Result.TrustDecisionHash != journal.TrustDecisionHash ||
+		replay.Result.TrustDecisionAction != journal.TrustDecisionAction ||
+		replay.Result.TrustDecisionCanonical != journal.TrustDecisionCanonical ||
+		replay.Result.TrustVerifierID != journal.TrustVerifierID ||
 		replay.Result.TrustKeyID != journal.TrustKeyID || replay.Result.TrustBindingHash != journal.TrustBindingHash ||
 		replay.Result.TrustDecisionSignature != journal.TrustDecisionSignature {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal replay binding is invalid", ErrProjectionDrift)
@@ -1702,19 +1911,19 @@ func (l *ProjectionLifecycle) recoverProjectionJournal(
 	if trustErr != nil {
 		return l.abortProjectionMutation(effect, relativePath, *journal, trustErr)
 	}
-	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, next); err != nil {
 		return l.abortProjectionMutation(effect, relativePath, *journal, err)
 	}
 	if err := l.publishRecoveryLive(effect, *journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
-	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, next); err != nil {
 		return l.abortProjectionMutation(effect, relativePath, *journal, err)
 	}
 	if err := l.publishRecoveryState(effect, *journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
-	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, next); err != nil {
 		return l.abortProjectionMutation(effect, relativePath, *journal, err)
 	}
 	if err := l.verifyRecoveryTarget(effect, relativePath, *journal); err != nil {
@@ -2442,6 +2651,16 @@ func validProjectionSHA256(value string) bool {
 	return err == nil && len(decoded) == 32
 }
 
+func validProjectionAction(action string) bool {
+	switch action {
+	case contracts.SkillProjectionActionInstall, contracts.SkillProjectionActionReadback,
+		contracts.SkillProjectionActionRevoke, contracts.SkillProjectionActionRollback:
+		return true
+	default:
+		return false
+	}
+}
+
 func projectionEffectMatchesGeneration(effect contracts.SkillProjectionEffect, record projectionGeneration) bool {
 	return effect.SkillVersion == record.SkillVersion && effect.ArtifactHash == record.ArtifactHash &&
 		effect.ContentHash == record.ContentHash && effect.ManifestHash == record.ManifestHash &&
@@ -2543,7 +2762,8 @@ func validateProjectionStateTransition(
 			return fmt.Errorf("%w: revoke recovery generation transition is invalid", ErrProjectionDrift)
 		}
 		record, ok := findProjectionGeneration(previous.Generations, previous.ArchiveGeneration)
-		if !ok || !projectionEffectMatchesGeneration(effect, record) {
+		if !ok || !projectionEffectMatchesGeneration(effect, record) ||
+			!projectionResultMatchesGenerationTrust(result, record) {
 			return fmt.Errorf("%w: revoke recovery artifact transition is invalid", ErrProjectionDrift)
 		}
 		expected.Status = projectionStatusRevoked

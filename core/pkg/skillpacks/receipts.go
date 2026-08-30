@@ -76,7 +76,8 @@ func sealProjectionLifecycleResult(result ProjectionLifecycleResult) (Projection
 
 func verifyProjectionLifecycleResult(result ProjectionLifecycleResult) error {
 	if result.ResultHash == "" || !validProjectionSHA256(result.TrustVerificationRef) ||
-		!validProjectionSHA256(result.TrustDecisionHash) || !validProjectionTrustIdentity(result.TrustVerifierID) ||
+		!validProjectionSHA256(result.TrustDecisionHash) || !validProjectionAction(result.TrustDecisionAction) ||
+		!validProjectionSHA256(result.TrustDecisionCanonical) || !validProjectionTrustIdentity(result.TrustVerifierID) ||
 		!validProjectionSHA256(result.TrustBindingHash) || !validProjectionTrustIdentity(result.TrustKeyID) ||
 		!validProjectionTrustSignature(result.TrustDecisionSignature) || !validProjectionSHA256(result.TrustArtifactHash) ||
 		!validProjectionSHA256(result.TrustContentHash) || !validProjectionSHA256(result.TrustManifestHash) ||

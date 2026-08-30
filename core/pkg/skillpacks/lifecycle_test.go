@@ -2,6 +2,7 @@ package skillpacks
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -164,8 +165,110 @@ func TestProjectionLifecycleUpgradeRollbackAndRevoke(t *testing.T) {
 	if revoked.Status != projectionStatusRevoked || revoked.PreviousArtifactHash != v1.effect.ArtifactHash || revoked.NewArtifactHash != "" {
 		t.Fatalf("revoke result = %+v", revoked)
 	}
+	if revoked.TrustDecisionAction != contracts.SkillProjectionActionRollback ||
+		revoked.TrustDecisionCanonical != rollback.CanonicalRequestHash ||
+		revoked.TrustDecisionHash != rolledBack.TrustDecisionHash {
+		t.Fatalf("revoke did not cite current rollback receipt: revoked=%+v rollback=%+v", revoked, rolledBack)
+	}
+	replayedRevoke, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil)
+	if err != nil || !reflect.DeepEqual(replayedRevoke, revoked) {
+		t.Fatalf("rollback-backed revoke replay=%+v err=%v", replayedRevoke, err)
+	}
 	if _, err := os.Stat(live); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("revoked projection still exists: %v", err)
+	}
+}
+
+func TestProjectionLifecycleRevokeUsesAuthenticatedStoredTrustAfterWithdrawal(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 20, 0, 0, time.UTC)
+	root := t.TempDir()
+	verifierCalls := 0
+	lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		verifierCalls++
+		if verifierCalls > 1 {
+			return ProjectionTrustDecision{}, errors.New("publisher trust withdrawn")
+		}
+		return allowProjectionTrust(request)
+	}), testProjectionTrustVerifierKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lifecycle.Close() })
+	lifecycle.clock = func() time.Time { return now }
+	fixture := newProjectionFixture(t, "1.0.0", "withdrawn prompt", 1, now)
+	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoke := actionEffect(t, fixture.effect, contracts.SkillProjectionActionRevoke, 2, "withdrawn-revoke", "attempt-withdrawn-revoke", testHash("9"))
+	revoked, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verifierCalls != 1 || revoked.Action != contracts.SkillProjectionActionRevoke ||
+		revoked.TrustDecisionAction != contracts.SkillProjectionActionInstall ||
+		revoked.TrustDecisionCanonical != fixture.effect.CanonicalRequestHash ||
+		revoked.TrustDecisionHash != installed.TrustDecisionHash ||
+		revoked.TrustDecisionSignature != installed.TrustDecisionSignature {
+		t.Fatalf("stored revoke trust result=%+v verifier_calls=%d installed=%+v", revoked, verifierCalls, installed)
+	}
+	replay, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil)
+	if err != nil || !reflect.DeepEqual(replay, revoked) || verifierCalls != 1 {
+		t.Fatalf("stored revoke replay=%+v err=%v verifier_calls=%d", replay, err, verifierCalls)
+	}
+	if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("withdrawn revoke retained live projection: %v", err)
+	}
+	readback := actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, 2, "withdrawn-readback", "attempt-withdrawn-readback", testHash("8"))
+	if result, err := lifecycle.Apply(readback, nil, readback.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) || result != (ProjectionLifecycleResult{}) || verifierCalls != 2 {
+		t.Fatalf("withdrawn readback result=%+v err=%v verifier_calls=%d", result, err, verifierCalls)
+	}
+}
+
+func TestProjectionLifecycleExpiredRevocationAuthorityRestoresLiveState(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 25, 0, 0, time.UTC)
+	currentTime := now
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	lifecycle.clock = func() time.Time { return currentTime }
+	fixture := newProjectionFixture(t, "1.0.0", "expiry revoke prompt", 1, now)
+	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(root, lifecycle.stateRel(fixture.effect))
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveBefore, err := os.ReadFile(projectionLivePath(root, fixture.effect))
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoke := actionEffect(t, fixture.effect, contracts.SkillProjectionActionRevoke, 2, "expiry-revoke", "attempt-expiry-revoke", testHash("9"))
+	lifecycle.mutationHook = func(stage string) error {
+		if stage == projectionMutationAfterLive {
+			currentTime = revoke.ExpiresAt
+		}
+		return nil
+	}
+	if result, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil); err == nil || result != (ProjectionLifecycleResult{}) {
+		t.Fatalf("expired revoke result=%+v err=%v", result, err)
+	}
+	stateAfter, err := os.ReadFile(statePath)
+	if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+		t.Fatalf("expired revoke changed state: err=%v", err)
+	}
+	liveAfter, err := os.ReadFile(projectionLivePath(root, fixture.effect))
+	if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+		t.Fatalf("expired revoke did not restore live bytes: %q err=%v", liveAfter, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, lifecycle.journalRel(revoke))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expired revoke retained journal: %v", err)
+	}
+	state, err := lifecycle.readState(fixture.effect, installed.RelativePath)
+	if err != nil || state.Status != projectionStatusActive || state.Generation != installed.NewGeneration {
+		t.Fatalf("expired revoke restored state=%+v err=%v", state, err)
 	}
 }
 
@@ -544,6 +647,145 @@ func TestProjectionLifecycleReplayRequiresCurrentTrustWithoutMutation(t *testing
 	stateAfter, err := os.ReadFile(statePath)
 	if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
 		t.Fatalf("untrusted replay mutated state: %q err=%v", stateAfter, err)
+	}
+}
+
+func TestProjectionLifecycleBoundsVerifierAndKeepsEmergencyRevokeAvailable(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 55, 15, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "bounded verifier prompt", 1, now)
+	if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.verifierTimeout = 20 * time.Millisecond
+	started := make(chan struct{})
+	release := make(chan struct{})
+	callbackDone := make(chan struct{})
+	verifierCalls := 0
+	lifecycle.verifier = projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		verifierCalls++
+		close(started)
+		defer close(callbackDone)
+		<-release
+		return allowProjectionTrust(request)
+	})
+	readback := actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, 1, "bounded-readback", "attempt-bounded-readback", testHash("7"))
+	type applyOutcome struct {
+		result ProjectionLifecycleResult
+		err    error
+	}
+	firstDone := make(chan applyOutcome, 1)
+	go func() {
+		result, err := lifecycle.Apply(readback, nil, readback.ConsumedPermitRef, nil)
+		firstDone <- applyOutcome{result: result, err: err}
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("legacy verifier did not start")
+	}
+	select {
+	case outcome := <-firstDone:
+		if !errors.Is(outcome.err, ErrProjectionTrustRejected) || !errors.Is(outcome.err, context.DeadlineExceeded) ||
+			outcome.result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("bounded verifier outcome=%+v", outcome)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("legacy verifier retained lifecycle lock past deadline")
+	}
+	secondReadback := actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, 1, "busy-readback", "attempt-busy-readback", testHash("6"))
+	if result, err := lifecycle.Apply(secondReadback, nil, secondReadback.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) || result != (ProjectionLifecycleResult{}) || verifierCalls != 1 {
+		t.Fatalf("busy verifier result=%+v err=%v calls=%d", result, err, verifierCalls)
+	}
+	revoke := actionEffect(t, fixture.effect, contracts.SkillProjectionActionRevoke, 2, "bounded-revoke", "attempt-bounded-revoke", testHash("5"))
+	if result, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil); err != nil || result.Status != projectionStatusRevoked || verifierCalls != 1 {
+		t.Fatalf("emergency revoke result=%+v err=%v calls=%d", result, err, verifierCalls)
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- lifecycle.Close() }()
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close waited for abandoned legacy verifier")
+	}
+	close(release)
+	select {
+	case <-callbackDone:
+	case <-time.After(time.Second):
+		t.Fatal("released legacy verifier did not exit")
+	}
+	if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("emergency revoke retained live projection: %v", err)
+	}
+}
+
+func TestProjectionLifecycleCloseCancelsContextVerifier(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 55, 30, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "cancel verifier prompt", 1, now)
+	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(root, lifecycle.stateRel(fixture.effect))
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.verifierTimeout = time.Minute
+	started := make(chan struct{})
+	observedCancellation := make(chan error, 1)
+	lifecycle.verifier = projectionTrustContextVerifierFunc(func(ctx context.Context, _ ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		close(started)
+		<-ctx.Done()
+		observedCancellation <- ctx.Err()
+		return ProjectionTrustDecision{}, ctx.Err()
+	})
+	readback := actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, installed.NewGeneration, "cancel-readback", "attempt-cancel-readback", testHash("4"))
+	applyDone := make(chan error, 1)
+	go func() {
+		_, err := lifecycle.Apply(readback, nil, readback.ConsumedPermitRef, nil)
+		applyDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("context verifier did not start")
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- lifecycle.Close() }()
+	select {
+	case err := <-applyDone:
+		if !errors.Is(err, ErrProjectionTrustRejected) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled verifier apply error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("context verifier Apply did not observe Close cancellation")
+	}
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close did not return after context cancellation")
+	}
+	select {
+	case err := <-observedCancellation:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("context verifier cancellation=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("context verifier did not report cancellation")
+	}
+	stateAfter, err := os.ReadFile(statePath)
+	if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+		t.Fatalf("canceled verifier mutated state: err=%v", err)
 	}
 }
 
@@ -1252,7 +1494,19 @@ func TestProjectionLifecycleRejectsCapturedJournalStateSplice(t *testing.T) {
 func TestProjectionLifecycleRecoversRevocationJournal(t *testing.T) {
 	now := time.Date(2026, 8, 30, 13, 58, 0, 0, time.UTC)
 	root := t.TempDir()
-	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	verifierCalls := 0
+	lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		verifierCalls++
+		if verifierCalls > 1 {
+			return ProjectionTrustDecision{}, errors.New("revocation evidence withdrawn")
+		}
+		return allowProjectionTrust(request)
+	}), testProjectionTrustVerifierKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lifecycle.Close() })
+	lifecycle.clock = func() time.Time { return now }
 	fixture := newProjectionFixture(t, "1.0.0", "revoke recovery prompt", 1, now)
 	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
 	if err != nil {
@@ -1269,6 +1523,9 @@ func TestProjectionLifecycleRecoversRevocationJournal(t *testing.T) {
 	if _, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) || !errors.Is(err, simulatedCrash) {
 		t.Fatalf("revoke crash error = %v", err)
 	}
+	if verifierCalls != 1 {
+		t.Fatalf("revoke crash rechecked withdrawn trust %d times", verifierCalls)
+	}
 	if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("revoke crash did not publish live absence: %v", err)
 	}
@@ -1284,6 +1541,10 @@ func TestProjectionLifecycleRecoversRevocationJournal(t *testing.T) {
 	}
 	if recovered.Status != projectionStatusRevoked {
 		t.Fatalf("recovered revoke = %+v", recovered)
+	}
+	if verifierCalls != 1 || recovered.TrustDecisionAction != contracts.SkillProjectionActionInstall ||
+		recovered.TrustDecisionCanonical != fixture.effect.CanonicalRequestHash {
+		t.Fatalf("recovered revoke trust=%+v verifier_calls=%d", recovered, verifierCalls)
 	}
 	state, err := lifecycle.readState(revoke, recovered.RelativePath)
 	if err != nil || state.Status != projectionStatusRevoked || state.Generation != 2 {
@@ -2425,6 +2686,19 @@ type projectionTrustVerifierFunc func(ProjectionTrustRequest) (ProjectionTrustDe
 
 func (verify projectionTrustVerifierFunc) VerifyProjectionTrust(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
 	return verify(request)
+}
+
+type projectionTrustContextVerifierFunc func(context.Context, ProjectionTrustRequest) (ProjectionTrustDecision, error)
+
+func (verify projectionTrustContextVerifierFunc) VerifyProjectionTrust(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+	return verify(context.Background(), request)
+}
+
+func (verify projectionTrustContextVerifierFunc) VerifyProjectionTrustContext(
+	ctx context.Context,
+	request ProjectionTrustRequest,
+) (ProjectionTrustDecision, error) {
+	return verify(ctx, request)
 }
 
 func allowProjectionTrust(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {

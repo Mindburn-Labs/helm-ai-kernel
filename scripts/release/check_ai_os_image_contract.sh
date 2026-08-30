@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
+# quantum_posture: this text-level guard checks classical Cosign evidence
+# plumbing; it does not implement cryptographic controls.
 # Workflow contract strings intentionally include literal GitHub expressions.
 # shellcheck disable=SC2016
 set -eu

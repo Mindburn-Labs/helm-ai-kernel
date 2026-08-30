@@ -1,5 +1,7 @@
 name: AI OS Kernel image
 
+# quantum_posture: this workflow orchestrates classical SHA-256 and
+# Sigstore/Cosign evidence; it does not implement cryptographic controls.
 # Manual-only publication of one exact, green main-branch commit. The build
 # remains on a run-unique staging tag until every supply-chain check succeeds.
 on:

@@ -21,6 +21,8 @@ import (
 
 const (
 	ProjectionLifecycleResultSchemaV1 = "helm.skill-projection-result.v1"
+	ProjectionTrustRequestSchemaV1    = "helm.skill-projection-trust-request.v1"
+	ProjectionTrustDecisionSchemaV1   = "helm.skill-projection-trust-decision.v1"
 	projectionLifecycleStateSchemaV1  = "helm.skill-projection-state.v1"
 	projectionLifecycleLockRel        = ".helm/skillpacks/projection-lifecycle.lock"
 
@@ -44,12 +46,65 @@ var (
 	ErrProjectionLockUnsupported  = errors.New("skillpacks: projection root lock unsupported")
 	ErrProjectionFileTooLarge     = errors.New("skillpacks: managed projection file exceeds size limit")
 	ErrProjectionRollbackRequired = errors.New("skillpacks: retained artifact requires rollback authority")
+	ErrProjectionTrustRejected    = errors.New("skillpacks: projection trust verification rejected")
 )
 
 // SkillProjectionArtifact is the exact artifact submitted to the lifecycle.
 // V1 accepts exactly skillpack.json and SKILL.md.
 type SkillProjectionArtifact struct {
 	Files map[string][]byte
+}
+
+// ProjectionTrustRequest is the exact, immutable material a configured
+// verifier must authenticate. The verifier is responsible for resolving the
+// policy and certification references against current trusted evidence and
+// validating their signatures before returning an allow decision.
+type ProjectionTrustRequest struct {
+	SchemaVersion  string                          `json:"schema_version"`
+	Effect         contracts.SkillProjectionEffect `json:"effect"`
+	Manifest       Manifest                        `json:"manifest"`
+	ManifestBytes  []byte                          `json:"manifest_bytes"`
+	ContentBytes   []byte                          `json:"content_bytes"`
+	EvaluationTime time.Time                       `json:"evaluation_time"`
+}
+
+// ProjectionTrustDecision is the schema-pinned, canonical verifier output.
+// VerificationRef names the verifier's immutable signed evidence record;
+// DecisionHash protects the exact decision returned across the interface.
+type ProjectionTrustDecision struct {
+	SchemaVersion string `json:"schema_version"`
+	Verdict       string `json:"verdict"`
+
+	Action       string `json:"action"`
+	TenantID     string `json:"tenant_id"`
+	WorkspaceID  string `json:"workspace_id"`
+	SkillID      string `json:"skill_id"`
+	SkillVersion string `json:"skill_version"`
+	AgentTarget  string `json:"agent_target"`
+
+	CanonicalRequestHash string `json:"canonical_request_hash"`
+	ArtifactHash         string `json:"artifact_hash"`
+	ContentHash          string `json:"content_hash"`
+	ManifestHash         string `json:"manifest_hash"`
+	PolicyHash           string `json:"policy_hash"`
+	SchemaHash           string `json:"schema_hash"`
+
+	Publisher         string   `json:"publisher"`
+	ManifestStatus    string   `json:"manifest_status"`
+	PolicyRef         string   `json:"policy_ref"`
+	CertificationRefs []string `json:"certification_refs"`
+
+	VerifiedAt      time.Time `json:"verified_at"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	VerificationRef string    `json:"verification_ref"`
+	DecisionHash    string    `json:"decision_hash,omitempty"`
+}
+
+// ProjectionTrustVerifier is mandatory for every lifecycle instance. A
+// concrete verifier may live in the runner, but the lifecycle cannot project,
+// read back, revoke, roll back, or replay without a current exact-hash decision.
+type ProjectionTrustVerifier interface {
+	VerifyProjectionTrust(ProjectionTrustRequest) (ProjectionTrustDecision, error)
 }
 
 // ProjectionLifecycleResult is the unsigned canonical result returned to the
@@ -70,6 +125,8 @@ type ProjectionLifecycleResult struct {
 	AttemptID            string `json:"attempt_id"`
 	ConsumedPermitRef    string `json:"consumed_permit_ref"`
 	RollbackPermitRef    string `json:"rollback_permit_ref,omitempty"`
+	TrustVerificationRef string `json:"trust_verification_ref"`
+	TrustDecisionHash    string `json:"trust_decision_hash"`
 
 	PreviousGeneration     uint64 `json:"previous_generation"`
 	NewGeneration          uint64 `json:"new_generation"`
@@ -92,9 +149,10 @@ type ProjectionLifecycleResult struct {
 // ProjectionLifecycle owns one server-configured filesystem root. Request
 // payloads never supply paths.
 type ProjectionLifecycle struct {
-	root  string
-	clock func() time.Time
-	mu    sync.Mutex
+	root     string
+	verifier ProjectionTrustVerifier
+	clock    func() time.Time
+	mu       sync.Mutex
 }
 
 type projectionLifecycleState struct {
@@ -115,15 +173,17 @@ type projectionLifecycleState struct {
 }
 
 type projectionGeneration struct {
-	Generation        uint64   `json:"generation"`
-	SkillVersion      string   `json:"skill_version"`
-	ArtifactHash      string   `json:"artifact_hash"`
-	ContentHash       string   `json:"content_hash"`
-	ManifestHash      string   `json:"manifest_hash"`
-	PolicyHash        string   `json:"policy_hash"`
-	SchemaHash        string   `json:"schema_hash"`
-	CertificationRefs []string `json:"certification_refs"`
-	SandboxProfile    string   `json:"sandbox_profile"`
+	Generation           uint64   `json:"generation"`
+	SkillVersion         string   `json:"skill_version"`
+	ArtifactHash         string   `json:"artifact_hash"`
+	ContentHash          string   `json:"content_hash"`
+	ManifestHash         string   `json:"manifest_hash"`
+	PolicyHash           string   `json:"policy_hash"`
+	SchemaHash           string   `json:"schema_hash"`
+	CertificationRefs    []string `json:"certification_refs"`
+	SandboxProfile       string   `json:"sandbox_profile"`
+	TrustVerificationRef string   `json:"trust_verification_ref"`
+	TrustDecisionHash    string   `json:"trust_decision_hash"`
 }
 
 type projectionReplay struct {
@@ -138,7 +198,10 @@ type projectionAttempt struct {
 	RequestHash    string `json:"request_hash"`
 }
 
-func NewProjectionLifecycle(root string) (*ProjectionLifecycle, error) {
+func NewProjectionLifecycle(root string, verifier ProjectionTrustVerifier) (*ProjectionLifecycle, error) {
+	if verifier == nil {
+		return nil, fmt.Errorf("%w: configured verifier is required", ErrProjectionTrustRejected)
+	}
 	if strings.TrimSpace(root) == "" {
 		return nil, fmt.Errorf("skillpacks: projection root is required")
 	}
@@ -157,7 +220,7 @@ func NewProjectionLifecycle(root string) (*ProjectionLifecycle, error) {
 	if err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("skillpacks: projection root is not a directory")
 	}
-	return &ProjectionLifecycle{root: resolved, clock: func() time.Time { return time.Now().UTC() }}, nil
+	return &ProjectionLifecycle{root: resolved, verifier: verifier, clock: func() time.Time { return time.Now().UTC() }}, nil
 }
 
 // Apply validates authority and filesystem truth, then executes one lifecycle
@@ -231,6 +294,9 @@ func (l *ProjectionLifecycle) Apply(
 			if err := l.verifyManagedState(*state); err != nil {
 				return ProjectionLifecycleResult{}, err
 			}
+			if err := l.verifyReplayTrust(effect, *state, now); err != nil {
+				return ProjectionLifecycleResult{}, err
+			}
 			return replay.Result, nil
 		}
 		if attempt, ok := findProjectionAttempt(state.Attempts, effect.AttemptID); ok &&
@@ -269,13 +335,13 @@ func (l *ProjectionLifecycle) Apply(
 
 	switch effect.Action {
 	case contracts.SkillProjectionActionInstall:
-		return l.applyInstall(effect, state, relativePath, installGeneration, manifestBytes, contentBytes)
+		return l.applyInstall(effect, state, relativePath, installGeneration, manifestBytes, contentBytes, now)
 	case contracts.SkillProjectionActionReadback:
-		return l.applyReadback(effect, state, relativePath)
+		return l.applyReadback(effect, state, relativePath, now)
 	case contracts.SkillProjectionActionRevoke:
-		return l.applyRevoke(effect, state, relativePath)
+		return l.applyRevoke(effect, state, relativePath, now)
 	case contracts.SkillProjectionActionRollback:
-		return l.applyRollback(effect, state, relativePath, *rollbackPermit)
+		return l.applyRollback(effect, state, relativePath, *rollbackPermit, now)
 	default:
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: unsupported projection action")
 	}
@@ -311,6 +377,7 @@ func (l *ProjectionLifecycle) applyInstall(
 	relativePath string,
 	generation projectionGeneration,
 	manifestBytes, contentBytes []byte,
+	now time.Time,
 ) (ProjectionLifecycleResult, error) {
 	if current != nil {
 		for _, retained := range current.Generations {
@@ -319,6 +386,12 @@ func (l *ProjectionLifecycle) applyInstall(
 			}
 		}
 	}
+	trust, err := l.verifyProjectionTrust(effect, generation, manifestBytes, contentBytes, now)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	generation.TrustVerificationRef = trust.VerificationRef
+	generation.TrustDecisionHash = trust.DecisionHash
 	if err := l.persistGeneration(effect, generation, manifestBytes, contentBytes); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -344,6 +417,7 @@ func (l *ProjectionLifecycle) applyInstall(
 	result.ObservedArtifactHash = generation.ArtifactHash
 	result.ObservedContentHash = generation.ContentHash
 	result.ObservedManifestHash = generation.ManifestHash
+	bindProjectionResultTrust(&result, trust)
 	sealed, err := sealProjectionLifecycleResult(result)
 	if err != nil {
 		_ = l.restoreProjection(effect, relativePath, current)
@@ -363,10 +437,19 @@ func (l *ProjectionLifecycle) applyReadback(
 	effect contracts.SkillProjectionEffect,
 	current *projectionLifecycleState,
 	relativePath string,
+	now time.Time,
 ) (ProjectionLifecycleResult, error) {
 	record, ok := findProjectionGeneration(current.Generations, current.ArchiveGeneration)
 	if !ok || !projectionEffectMatchesGeneration(effect, record) {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: readback binding mismatch")
+	}
+	manifestBytes, contentBytes, err := l.readGeneration(effect, record)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	trust, err := l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, now)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
 	}
 	result := newProjectionResult(effect, relativePath, current.Status, current.Generation, record, record)
 	if current.Status == projectionStatusActive {
@@ -378,6 +461,7 @@ func (l *ProjectionLifecycle) applyReadback(
 		result.NewContentHash = ""
 		result.NewManifestHash = ""
 	}
+	bindProjectionResultTrust(&result, trust)
 	sealed, err := sealProjectionLifecycleResult(result)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
@@ -394,6 +478,7 @@ func (l *ProjectionLifecycle) applyRevoke(
 	effect contracts.SkillProjectionEffect,
 	current *projectionLifecycleState,
 	relativePath string,
+	now time.Time,
 ) (ProjectionLifecycleResult, error) {
 	if current == nil || current.Status != projectionStatusActive {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: only an active projection can be revoked")
@@ -402,7 +487,11 @@ func (l *ProjectionLifecycle) applyRevoke(
 	if !ok || !projectionEffectMatchesGeneration(effect, record) {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: revoke binding mismatch")
 	}
-	_, contentBytes, err := l.readGeneration(effect, record)
+	manifestBytes, contentBytes, err := l.readGeneration(effect, record)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	trust, err := l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, now)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -413,6 +502,7 @@ func (l *ProjectionLifecycle) applyRevoke(
 	next.Status = projectionStatusRevoked
 	next.Generation = effect.Generation
 	result := newProjectionResult(effect, relativePath, projectionStatusRevoked, current.Generation, record, projectionGeneration{})
+	bindProjectionResultTrust(&result, trust)
 	sealed, err := sealProjectionLifecycleResult(result)
 	if err != nil {
 		_ = l.replaceProjection(effect, relativePath, contentBytes)
@@ -433,6 +523,7 @@ func (l *ProjectionLifecycle) applyRollback(
 	current *projectionLifecycleState,
 	relativePath string,
 	permit contracts.SkillProjectionRollbackPermit,
+	now time.Time,
 ) (ProjectionLifecycleResult, error) {
 	if current == nil || permit.FromGeneration != current.Generation {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: rollback source generation mismatch")
@@ -445,8 +536,14 @@ func (l *ProjectionLifecycle) applyRollback(
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
+	trust, err := l.verifyProjectionTrust(effect, target, manifestBytes, contentBytes, now)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
 	restored := target
 	restored.Generation = effect.Generation
+	restored.TrustVerificationRef = trust.VerificationRef
+	restored.TrustDecisionHash = trust.DecisionHash
 	if err := l.persistGeneration(effect, restored, manifestBytes, contentBytes); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -469,6 +566,7 @@ func (l *ProjectionLifecycle) applyRollback(
 	result.ObservedArtifactHash = restored.ArtifactHash
 	result.ObservedContentHash = restored.ContentHash
 	result.ObservedManifestHash = restored.ManifestHash
+	bindProjectionResultTrust(&result, trust)
 	sealed, err := sealProjectionLifecycleResult(result)
 	if err != nil {
 		_ = l.restoreProjection(effect, relativePath, current)
@@ -515,6 +613,9 @@ func validateProjectionArtifact(
 	if err := ValidateManifest(manifest, contentBytes); err != nil {
 		return projectionGeneration{}, nil, nil, err
 	}
+	if manifest.Status == StatusBlocked {
+		return projectionGeneration{}, nil, nil, fmt.Errorf("%w: blocked SkillPack cannot be projected", ErrProjectionTrustRejected)
+	}
 	if manifest.ID != effect.SkillID || manifest.Version != effect.SkillVersion || manifest.ContentHash != effect.ContentHash {
 		return projectionGeneration{}, nil, nil, fmt.Errorf("skillpacks: manifest identity/hash does not match effect")
 	}
@@ -548,6 +649,130 @@ func validateProjectionArtifact(
 		CertificationRefs: append([]string(nil), effect.CertificationRefs...),
 		SandboxProfile:    effect.SandboxProfile,
 	}, append([]byte(nil), manifestBytes...), append([]byte(nil), contentBytes...), nil
+}
+
+func (l *ProjectionLifecycle) verifyProjectionTrust(
+	effect contracts.SkillProjectionEffect,
+	record projectionGeneration,
+	manifestBytes, contentBytes []byte,
+	now time.Time,
+) (ProjectionTrustDecision, error) {
+	if l == nil || l.verifier == nil {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: configured verifier is required", ErrProjectionTrustRejected)
+	}
+	if !projectionEffectMatchesGeneration(effect, record) ||
+		HashBytes(manifestBytes) != effect.ManifestHash || HashBytes(contentBytes) != effect.ContentHash {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: verifier input does not match effect", ErrProjectionTrustRejected)
+	}
+	artifactHash, err := contracts.ComputeSkillProjectionArtifactHash(HashBytes(manifestBytes), HashBytes(contentBytes))
+	if err != nil || !constantStringEqual(artifactHash, effect.ArtifactHash) {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: verifier artifact binding mismatch", ErrProjectionTrustRejected)
+	}
+	var manifest Manifest
+	if err := decodeStrictProjectionJSON(manifestBytes, &manifest); err != nil {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: decode verifier manifest: %v", ErrProjectionTrustRejected, err)
+	}
+	if err := ValidateManifest(manifest, contentBytes); err != nil {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: verifier manifest validation: %v", ErrProjectionTrustRejected, err)
+	}
+	if manifest.Status == StatusBlocked {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: blocked SkillPack cannot be projected", ErrProjectionTrustRejected)
+	}
+	if manifest.ID != effect.SkillID || manifest.Version != effect.SkillVersion ||
+		manifest.ContentHash != effect.ContentHash || strings.TrimSpace(manifest.PolicyRef) == "" ||
+		!containsString(manifest.AgentTargets, effect.AgentTarget) ||
+		manifest.SignatureRef == "" || manifest.ProvenanceRef == "" ||
+		!containsString(effect.CertificationRefs, manifest.SignatureRef) ||
+		!containsString(effect.CertificationRefs, manifest.ProvenanceRef) {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: manifest trust binding mismatch", ErrProjectionTrustRejected)
+	}
+
+	request := ProjectionTrustRequest{
+		SchemaVersion:  ProjectionTrustRequestSchemaV1,
+		Effect:         cloneProjectionEffect(effect),
+		Manifest:       cloneProjectionManifest(manifest),
+		ManifestBytes:  append([]byte(nil), manifestBytes...),
+		ContentBytes:   append([]byte(nil), contentBytes...),
+		EvaluationTime: now,
+	}
+	decision, err := l.verifier.VerifyProjectionTrust(request)
+	if err != nil {
+		return ProjectionTrustDecision{}, fmt.Errorf("%w: %v", ErrProjectionTrustRejected, err)
+	}
+	if err := validateProjectionTrustDecision(decision, effect, manifest, now); err != nil {
+		return ProjectionTrustDecision{}, err
+	}
+	return decision, nil
+}
+
+func validateProjectionTrustDecision(
+	decision ProjectionTrustDecision,
+	effect contracts.SkillProjectionEffect,
+	manifest Manifest,
+	now time.Time,
+) error {
+	if err := verifyProjectionTrustDecisionIntegrity(decision); err != nil {
+		return err
+	}
+	if decision.SchemaVersion != ProjectionTrustDecisionSchemaV1 || decision.Verdict != VerdictAllow ||
+		decision.Action != effect.Action || decision.TenantID != effect.TenantID ||
+		decision.WorkspaceID != effect.WorkspaceID || decision.SkillID != effect.SkillID ||
+		decision.SkillVersion != effect.SkillVersion || decision.AgentTarget != effect.AgentTarget ||
+		decision.CanonicalRequestHash != effect.CanonicalRequestHash ||
+		decision.ArtifactHash != effect.ArtifactHash || decision.ContentHash != effect.ContentHash ||
+		decision.ManifestHash != effect.ManifestHash || decision.PolicyHash != effect.PolicyHash ||
+		decision.SchemaHash != effect.SchemaHash || decision.Publisher != manifest.Publisher ||
+		decision.ManifestStatus != manifest.Status || decision.PolicyRef != manifest.PolicyRef ||
+		!equalStrings(decision.CertificationRefs, effect.CertificationRefs) {
+		return fmt.Errorf("%w: trust decision does not exactly bind the request", ErrProjectionTrustRejected)
+	}
+	if !validProjectionSHA256(decision.VerificationRef) || decision.VerifiedAt.IsZero() ||
+		decision.ExpiresAt.IsZero() || decision.VerifiedAt.Location() != time.UTC ||
+		decision.ExpiresAt.Location() != time.UTC || decision.VerifiedAt.After(now) ||
+		!now.Before(decision.ExpiresAt) || !decision.ExpiresAt.After(decision.VerifiedAt) {
+		return fmt.Errorf("%w: trust decision is not current", ErrProjectionTrustRejected)
+	}
+	return nil
+}
+
+func cloneProjectionEffect(effect contracts.SkillProjectionEffect) contracts.SkillProjectionEffect {
+	clone := effect
+	clone.CertificationRefs = append([]string(nil), effect.CertificationRefs...)
+	return clone
+}
+
+func cloneProjectionManifest(manifest Manifest) Manifest {
+	clone := manifest
+	clone.AgentTargets = append([]string(nil), manifest.AgentTargets...)
+	clone.RequestedMCPServers = append([]string(nil), manifest.RequestedMCPServers...)
+	clone.RequestedMCPTools = append([]string(nil), manifest.RequestedMCPTools...)
+	clone.Hooks = append([]string(nil), manifest.Hooks...)
+	clone.Scripts = append([]string(nil), manifest.Scripts...)
+	return clone
+}
+
+func (l *ProjectionLifecycle) verifyReplayTrust(
+	effect contracts.SkillProjectionEffect,
+	state projectionLifecycleState,
+	now time.Time,
+) error {
+	for _, record := range state.Generations {
+		if !projectionEffectMatchesGeneration(effect, record) {
+			continue
+		}
+		manifestBytes, contentBytes, err := l.readGeneration(effect, record)
+		if err != nil {
+			return err
+		}
+		_, err = l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, now)
+		return err
+	}
+	return fmt.Errorf("%w: replay has no retained trust material", ErrProjectionDrift)
+}
+
+func bindProjectionResultTrust(result *ProjectionLifecycleResult, decision ProjectionTrustDecision) {
+	result.TrustVerificationRef = decision.VerificationRef
+	result.TrustDecisionHash = decision.DecisionHash
 }
 
 func (l *ProjectionLifecycle) persistGeneration(
@@ -892,7 +1117,8 @@ func validateProjectionGeneration(record projectionGeneration) error {
 		!validProjectionSHA256(record.ArtifactHash) || !validProjectionSHA256(record.ContentHash) ||
 		!validProjectionSHA256(record.ManifestHash) || !validProjectionSHA256(record.PolicyHash) ||
 		record.SchemaHash != contracts.SkillProjectionArtifactSchemaHashV1 ||
-		record.SandboxProfile != contracts.SkillProjectionSandboxProfileV1 || len(record.CertificationRefs) == 0 {
+		record.SandboxProfile != contracts.SkillProjectionSandboxProfileV1 || len(record.CertificationRefs) == 0 ||
+		!validProjectionSHA256(record.TrustVerificationRef) || !validProjectionSHA256(record.TrustDecisionHash) {
 		return fmt.Errorf("%w: projection generation binding is invalid", ErrProjectionDrift)
 	}
 	for i, ref := range record.CertificationRefs {

@@ -213,6 +213,181 @@ func TestProjectionLifecycleRejectsRetainedArtifactInstallWithoutRollbackPermit(
 	}
 }
 
+func TestProjectionLifecycleRequiresConfiguredTrustVerifier(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "projection-root")
+	if _, err := NewProjectionLifecycle(root, nil); !errors.Is(err, ErrProjectionTrustRejected) {
+		t.Fatalf("missing verifier error = %v", err)
+	}
+	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing verifier created projection root: %v", err)
+	}
+}
+
+func TestProjectionLifecycleRejectsInvalidTrustWithoutMutation(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 45, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		verify projectionTrustVerifierFunc
+	}{
+		{
+			name: "policy binding mismatch",
+			verify: func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+				decision, err := allowProjectionTrust(request)
+				if err != nil {
+					return ProjectionTrustDecision{}, err
+				}
+				decision.PolicyHash = testHash("c")
+				return SealProjectionTrustDecision(decision)
+			},
+		},
+		{
+			name: "certification binding mismatch",
+			verify: func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+				decision, err := allowProjectionTrust(request)
+				if err != nil {
+					return ProjectionTrustDecision{}, err
+				}
+				decision.CertificationRefs = []string{"certification://different"}
+				return SealProjectionTrustDecision(decision)
+			},
+		},
+		{
+			name: "expired trusted evidence",
+			verify: func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+				decision, err := allowProjectionTrust(request)
+				if err != nil {
+					return ProjectionTrustDecision{}, err
+				}
+				decision.ExpiresAt = request.EvaluationTime
+				return SealProjectionTrustDecision(decision)
+			},
+		},
+		{
+			name: "verifier rejects current evidence",
+			verify: func(ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+				return ProjectionTrustDecision{}, errors.New("signature or policy proof rejected")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			lifecycle, err := NewProjectionLifecycle(root, tt.verify)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lifecycle.clock = func() time.Time { return now }
+			fixture := newProjectionFixture(t, "1.0.0", "untrusted prompt", 1, now)
+
+			if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) {
+				t.Fatalf("invalid trust error = %v", err)
+			}
+			if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("invalid trust mutated live projection: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, lifecycle.stateRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("invalid trust mutated state: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, lifecycle.generationParentRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("invalid trust retained a generation: %v", err)
+			}
+		})
+	}
+}
+
+func TestProjectionLifecycleRejectsBlockedManifestBeforeVerifier(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 50, 0, 0, time.UTC)
+	root := t.TempDir()
+	verifierCalls := 0
+	lifecycle, err := NewProjectionLifecycle(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		verifierCalls++
+		return allowProjectionTrust(request)
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.clock = func() time.Time { return now }
+	fixture := newProjectionFixture(t, "1.0.0", "blocked prompt", 1, now)
+	var manifest Manifest
+	if err := json.Unmarshal(fixture.artifact.Files["skillpack.json"], &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest.Status = StatusBlocked
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.artifact.Files["skillpack.json"] = manifestBytes
+	fixture.effect.ManifestHash = HashBytes(manifestBytes)
+	fixture.effect.ArtifactHash, err = contracts.ComputeSkillProjectionArtifactHash(fixture.effect.ManifestHash, fixture.effect.ContentHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.effect.CanonicalRequestHash = ""
+	fixture.effect, err = fixture.effect.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) {
+		t.Fatalf("blocked manifest error = %v", err)
+	}
+	if verifierCalls != 0 {
+		t.Fatalf("blocked manifest reached verifier %d times", verifierCalls)
+	}
+	if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("blocked manifest mutated live projection: %v", err)
+	}
+}
+
+func TestProjectionLifecycleReplayRequiresCurrentTrustWithoutMutation(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 55, 0, 0, time.UTC)
+	root := t.TempDir()
+	verifierCalls := 0
+	lifecycle, err := NewProjectionLifecycle(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		verifierCalls++
+		if verifierCalls > 1 {
+			return ProjectionTrustDecision{}, errors.New("certification was revoked")
+		}
+		return allowProjectionTrust(request)
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.clock = func() time.Time { return now }
+	fixture := newProjectionFixture(t, "1.0.0", "trust-sensitive replay", 1, now)
+	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	livePath := projectionLivePath(root, fixture.effect)
+	statePath := filepath.Join(root, lifecycle.stateRel(fixture.effect))
+	liveBefore, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if replay, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) || replay != (ProjectionLifecycleResult{}) {
+		t.Fatalf("untrusted replay result=%+v err=%v", replay, err)
+	}
+	if installed.TrustVerificationRef == "" || installed.TrustDecisionHash == "" || verifierCalls != 2 {
+		t.Fatalf("trust evidence/calls = %+v calls=%d", installed, verifierCalls)
+	}
+	liveAfter, err := os.ReadFile(livePath)
+	if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+		t.Fatalf("untrusted replay mutated live projection: %q err=%v", liveAfter, err)
+	}
+	stateAfter, err := os.ReadFile(statePath)
+	if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+		t.Fatalf("untrusted replay mutated state: %q err=%v", stateAfter, err)
+	}
+}
+
 func TestProjectionLifecycleFailsClosedOnPathsArtifactsAndDrift(t *testing.T) {
 	now := time.Date(2026, 8, 30, 14, 0, 0, 0, time.UTC)
 
@@ -795,7 +970,7 @@ func actionEffect(
 
 func newProjectionLifecycleForTest(t *testing.T, root string, now time.Time) *ProjectionLifecycle {
 	t.Helper()
-	lifecycle, err := NewProjectionLifecycle(root)
+	lifecycle, err := NewProjectionLifecycle(root, projectionTrustVerifierFunc(allowProjectionTrust))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -810,4 +985,47 @@ func projectionLivePath(root string, effect contracts.SkillProjectionEffect) str
 
 func testHash(character string) string {
 	return "sha256:" + strings.Repeat(character, 64)
+}
+
+type projectionTrustVerifierFunc func(ProjectionTrustRequest) (ProjectionTrustDecision, error)
+
+func (verify projectionTrustVerifierFunc) VerifyProjectionTrust(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+	return verify(request)
+}
+
+func allowProjectionTrust(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+	if request.SchemaVersion != ProjectionTrustRequestSchemaV1 ||
+		HashBytes(request.ManifestBytes) != request.Effect.ManifestHash ||
+		HashBytes(request.ContentBytes) != request.Effect.ContentHash ||
+		request.Manifest.ID != request.Effect.SkillID || request.Manifest.Version != request.Effect.SkillVersion ||
+		request.Manifest.PolicyRef == "" {
+		return ProjectionTrustDecision{}, errors.New("test verifier input mismatch")
+	}
+	decision := ProjectionTrustDecision{
+		SchemaVersion: ProjectionTrustDecisionSchemaV1,
+		Verdict:       VerdictAllow,
+		Action:        request.Effect.Action,
+		TenantID:      request.Effect.TenantID,
+		WorkspaceID:   request.Effect.WorkspaceID,
+		SkillID:       request.Effect.SkillID,
+		SkillVersion:  request.Effect.SkillVersion,
+		AgentTarget:   request.Effect.AgentTarget,
+
+		CanonicalRequestHash: request.Effect.CanonicalRequestHash,
+		ArtifactHash:         request.Effect.ArtifactHash,
+		ContentHash:          request.Effect.ContentHash,
+		ManifestHash:         request.Effect.ManifestHash,
+		PolicyHash:           request.Effect.PolicyHash,
+		SchemaHash:           request.Effect.SchemaHash,
+
+		Publisher:         request.Manifest.Publisher,
+		ManifestStatus:    request.Manifest.Status,
+		PolicyRef:         request.Manifest.PolicyRef,
+		CertificationRefs: append([]string(nil), request.Effect.CertificationRefs...),
+
+		VerifiedAt:      request.EvaluationTime,
+		ExpiresAt:       request.EvaluationTime.Add(time.Minute),
+		VerificationRef: testHash("e"),
+	}
+	return SealProjectionTrustDecision(decision)
 }

@@ -39,6 +39,29 @@ func WriteReceipt(repoRoot string, receipt Receipt) (string, error) {
 	return path, atomicWrite(path, data)
 }
 
+// SealProjectionTrustDecision returns the canonical decision hash a configured
+// verifier must supply to the projection lifecycle.
+func SealProjectionTrustDecision(decision ProjectionTrustDecision) (ProjectionTrustDecision, error) {
+	decision.DecisionHash = ""
+	hash, err := canonicalize.CanonicalHash(decision)
+	if err != nil {
+		return ProjectionTrustDecision{}, fmt.Errorf("skillpacks: seal projection trust decision: %w", err)
+	}
+	decision.DecisionHash = "sha256:" + hash
+	return decision, nil
+}
+
+func verifyProjectionTrustDecisionIntegrity(decision ProjectionTrustDecision) error {
+	if !validProjectionSHA256(decision.DecisionHash) {
+		return fmt.Errorf("%w: trust decision hash is required", ErrProjectionTrustRejected)
+	}
+	sealed, err := SealProjectionTrustDecision(decision)
+	if err != nil || !constantStringEqual(sealed.DecisionHash, decision.DecisionHash) {
+		return fmt.Errorf("%w: trust decision integrity mismatch", ErrProjectionTrustRejected)
+	}
+	return nil
+}
+
 func sealProjectionLifecycleResult(result ProjectionLifecycleResult) (ProjectionLifecycleResult, error) {
 	result.ResultHash = ""
 	hash, err := canonicalize.CanonicalHash(result)
@@ -50,7 +73,7 @@ func sealProjectionLifecycleResult(result ProjectionLifecycleResult) (Projection
 }
 
 func verifyProjectionLifecycleResult(result ProjectionLifecycleResult) error {
-	if result.ResultHash == "" {
+	if result.ResultHash == "" || !validProjectionSHA256(result.TrustVerificationRef) || !validProjectionSHA256(result.TrustDecisionHash) {
 		return fmt.Errorf("skillpacks: projection result hash is required")
 	}
 	sealed, err := sealProjectionLifecycleResult(result)

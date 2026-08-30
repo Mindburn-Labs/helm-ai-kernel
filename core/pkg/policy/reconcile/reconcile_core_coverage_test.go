@@ -207,7 +207,7 @@ func TestControlPlaneHTTPClientUsesExclusiveRotatingCA(t *testing.T) {
 		t.Fatalf("new controlplane client: %v", err)
 	}
 	transport := client.Transport.(*http.Transport)
-	if transport.Proxy != nil || !transport.DisableKeepAlives || transport.TLSClientConfig.MinVersion != tls.VersionTLS13 || !transport.TLSClientConfig.InsecureSkipVerify || transport.TLSClientConfig.VerifyConnection == nil {
+	if transport.Proxy != nil || !transport.DisableKeepAlives || transport.TLSClientConfig.MinVersion != tls.VersionTLS13 || transport.TLSClientConfig.InsecureSkipVerify || transport.DialTLSContext == nil {
 		t.Fatalf("unexpected private-CA transport: %+v", transport)
 	}
 

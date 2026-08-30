@@ -933,12 +933,23 @@ func NewControlPlaneHTTPClient(baseURL, caFile string) (*http.Client, error) {
 	transport.ForceAttemptHTTP2 = true
 	transport.DisableKeepAlives = true
 	transport.TLSClientConfig = &tls.Config{
-		MinVersion:         tls.VersionTLS13,
-		ServerName:         serverName,
-		InsecureSkipVerify: true, // Verification is exclusive to the rotating CA below.
-		VerifyConnection: func(state tls.ConnectionState) error {
-			return verifyControlPlaneConnection(caFile, serverName, state)
-		},
+		MinVersion: tls.VersionTLS13,
+		ServerName: serverName,
+	}
+	transport.DialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		roots, err := loadControlPlaneRoots(caFile)
+		if err != nil {
+			return nil, err
+		}
+		return (&tls.Dialer{
+			NetDialer: &net.Dialer{Timeout: controlPlaneRequestTimeout},
+			Config: &tls.Config{
+				MinVersion: tls.VersionTLS13,
+				ServerName: serverName,
+				RootCAs:    roots,
+				NextProtos: []string{"h2", "http/1.1"},
+			},
+		}).DialContext(ctx, network, address)
 	}
 	return &http.Client{
 		Transport: transport,
@@ -959,28 +970,6 @@ func loadControlPlaneRoots(caFile string) (*x509.CertPool, error) {
 		return nil, fmt.Errorf("controlplane policy CA contains no certificates")
 	}
 	return roots, nil
-}
-
-func verifyControlPlaneConnection(caFile, serverName string, state tls.ConnectionState) error {
-	if len(state.PeerCertificates) == 0 {
-		return fmt.Errorf("controlplane TLS peer certificate is missing")
-	}
-	roots, err := loadControlPlaneRoots(caFile)
-	if err != nil {
-		return err
-	}
-	intermediates := x509.NewCertPool()
-	for _, certificate := range state.PeerCertificates[1:] {
-		intermediates.AddCert(certificate)
-	}
-	_, err = state.PeerCertificates[0].Verify(x509.VerifyOptions{
-		DNSName: serverName, Roots: roots, Intermediates: intermediates,
-		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	})
-	if err != nil {
-		return fmt.Errorf("verify controlplane policy TLS: %w", err)
-	}
-	return nil
 }
 
 func ValidateControlPlaneURL(raw string) error {

@@ -49,19 +49,21 @@ const (
 	// an exact replay result and attempt binding; 16 MiB gives that metadata a
 	// distinct operational envelope while keeping reads and writes bounded.
 	maxProjectionLifecycleStateBytes = 16 << 20
-	// A recovery journal stores exact previous/next bounded state payloads and
-	// previous/next bounded prompts as base64 plus fixed identity/hash metadata.
-	// 48 MiB is the deterministic V1 envelope for 2*16 MiB + 2*1 MiB raw bytes.
+	// A recovery journal stores exact previous/next bounded state payloads,
+	// previous/next bounded prompts, and one bounded generation manifest as
+	// base64 plus fixed identity/hash metadata. 48 MiB is the deterministic V1
+	// envelope for 2*16 MiB + 3*1 MiB raw bytes.
 	maxProjectionRecoveryJournalBytes = 48 << 20
 	// Verification runs while the projection root is single-writer locked. A
 	// deterministic wall-clock bound prevents a verifier from retaining that
 	// lock indefinitely; context-aware verifiers receive the same deadline.
 	projectionTrustVerifierTimeout = 30 * time.Second
 
-	projectionMutationAfterJournal = "after_journal"
-	projectionMutationAfterLive    = "after_live"
-	projectionMutationAfterState   = "after_state"
-	projectionTrustSignaturePrefix = "hmac-sha256:"
+	projectionMutationAfterJournal    = "after_journal"
+	projectionMutationAfterGeneration = "after_generation"
+	projectionMutationAfterLive       = "after_live"
+	projectionMutationAfterState      = "after_state"
+	projectionTrustSignaturePrefix    = "hmac-sha256:"
 )
 
 var (
@@ -329,12 +331,13 @@ type projectionRecoveryJournal struct {
 	NextStateBytes       []byte `json:"next_state_bytes"`
 	NextStateHash        string `json:"next_state_hash"`
 
-	PreviousLivePresent bool   `json:"previous_live_present"`
-	PreviousLiveBytes   []byte `json:"previous_live_bytes,omitempty"`
-	PreviousLiveHash    string `json:"previous_live_hash,omitempty"`
-	NextLivePresent     bool   `json:"next_live_present"`
-	NextLiveBytes       []byte `json:"next_live_bytes,omitempty"`
-	NextLiveHash        string `json:"next_live_hash,omitempty"`
+	PreviousLivePresent     bool   `json:"previous_live_present"`
+	PreviousLiveBytes       []byte `json:"previous_live_bytes,omitempty"`
+	PreviousLiveHash        string `json:"previous_live_hash,omitempty"`
+	NextLivePresent         bool   `json:"next_live_present"`
+	NextLiveBytes           []byte `json:"next_live_bytes,omitempty"`
+	NextLiveHash            string `json:"next_live_hash,omitempty"`
+	GenerationManifestBytes []byte `json:"generation_manifest_bytes,omitempty"`
 
 	JournalVerifierID string `json:"journal_verifier_id"`
 	JournalKeyID      string `json:"journal_key_id"`
@@ -652,9 +655,6 @@ func (l *ProjectionLifecycle) applyInstall(
 	if err := l.validateProjectionPublicationAuthority(effect, nil, trust, nil); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
-	if err := l.persistGeneration(effect, generation, manifestBytes, contentBytes); err != nil {
-		return ProjectionLifecycleResult{}, err
-	}
 	next := newProjectionState(effect, relativePath, current)
 	previousGeneration, previous := currentProjectionGeneration(current)
 	next.Status = projectionStatusActive
@@ -675,7 +675,7 @@ func (l *ProjectionLifecycle) applyInstall(
 		return ProjectionLifecycleResult{}, err
 	}
 	appendProjectionReplay(&next, effect, sealed)
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, true, contentBytes, sealed, nil, trust); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, manifestBytes, true, contentBytes, sealed, nil, trust); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -719,7 +719,7 @@ func (l *ProjectionLifecycle) applyReadback(
 	if current.Status == projectionStatusRevoked {
 		nextLiveBytes = nil
 	}
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, current.Status == projectionStatusActive, nextLiveBytes, sealed, nil, trust); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, nil, current.Status == projectionStatusActive, nextLiveBytes, sealed, nil, trust); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -750,7 +750,7 @@ func (l *ProjectionLifecycle) applyRevoke(
 		return ProjectionLifecycleResult{}, err
 	}
 	appendProjectionReplay(&next, effect, sealed)
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, false, nil, sealed, nil, ProjectionTrustDecision{}); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, nil, false, nil, sealed, nil, ProjectionTrustDecision{}); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -790,9 +790,6 @@ func (l *ProjectionLifecycle) applyRollback(
 	if err := l.validateProjectionPublicationAuthority(effect, &permit, trust, nil); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
-	if err := l.persistGeneration(effect, restored, manifestBytes, contentBytes); err != nil {
-		return ProjectionLifecycleResult{}, err
-	}
 	previousGeneration, previous := currentProjectionGeneration(current)
 	next := cloneProjectionState(*current)
 	next.Status = projectionStatusActive
@@ -811,7 +808,7 @@ func (l *ProjectionLifecycle) applyRollback(
 		return ProjectionLifecycleResult{}, err
 	}
 	appendProjectionReplay(&next, effect, sealed)
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, true, contentBytes, sealed, &permit, trust); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, manifestBytes, true, contentBytes, sealed, &permit, trust); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -1556,6 +1553,7 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	current *projectionLifecycleState,
 	next projectionLifecycleState,
 	relativePath string,
+	generationManifestBytes []byte,
 	nextLivePresent bool,
 	nextLiveBytes []byte,
 	result ProjectionLifecycleResult,
@@ -1565,7 +1563,7 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, current); err != nil {
 		return err
 	}
-	journal, err := l.buildProjectionRecoveryJournal(effect, current, next, relativePath, nextLivePresent, nextLiveBytes, result)
+	journal, err := l.buildProjectionRecoveryJournal(effect, current, next, relativePath, generationManifestBytes, nextLivePresent, nextLiveBytes, result)
 	if err != nil {
 		return err
 	}
@@ -1573,6 +1571,15 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
 	if err := l.runProjectionMutationHook(projectionMutationAfterJournal); err != nil {
+		return errors.Join(ErrProjectionRecoveryPending, err)
+	}
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, current); err != nil {
+		return l.abortProjectionMutation(effect, relativePath, journal, err)
+	}
+	if err := l.persistRecoveryGeneration(effect, journal, next); err != nil {
+		return errors.Join(ErrProjectionRecoveryPending, err)
+	}
+	if err := l.runProjectionMutationHook(projectionMutationAfterGeneration); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
 	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust, current); err != nil {
@@ -1610,6 +1617,7 @@ func (l *ProjectionLifecycle) buildProjectionRecoveryJournal(
 	current *projectionLifecycleState,
 	next projectionLifecycleState,
 	relativePath string,
+	generationManifestBytes []byte,
 	nextLivePresent bool,
 	nextLiveBytes []byte,
 	result ProjectionLifecycleResult,
@@ -1685,12 +1693,13 @@ func (l *ProjectionLifecycle) buildProjectionRecoveryJournal(
 		NextStateBytes:       append([]byte(nil), nextStateBytes...),
 		NextStateHash:        HashBytes(nextStateBytes),
 
-		PreviousLivePresent: previousLivePresent,
-		PreviousLiveBytes:   append([]byte(nil), previousLiveBytes...),
-		PreviousLiveHash:    previousLiveHash,
-		NextLivePresent:     nextLivePresent,
-		NextLiveBytes:       append([]byte(nil), nextLiveBytes...),
-		NextLiveHash:        nextExpectedHash,
+		PreviousLivePresent:     previousLivePresent,
+		PreviousLiveBytes:       append([]byte(nil), previousLiveBytes...),
+		PreviousLiveHash:        previousLiveHash,
+		NextLivePresent:         nextLivePresent,
+		NextLiveBytes:           append([]byte(nil), nextLiveBytes...),
+		NextLiveHash:            nextExpectedHash,
+		GenerationManifestBytes: append([]byte(nil), generationManifestBytes...),
 	}
 	sealed, err := sealProjectionRecoveryJournal(journal, l.verifierKey)
 	if err != nil {
@@ -1832,6 +1841,17 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 	if err := validateProjectionStateTransition(previous, next, effect, relativePath, replay.Result); err != nil {
 		return projectionLifecycleState{}, err
 	}
+	if effect.Action == contracts.SkillProjectionActionInstall || effect.Action == contracts.SkillProjectionActionRollback {
+		record, ok := findProjectionGeneration(next.Generations, effect.Generation)
+		if !ok || len(journal.GenerationManifestBytes) == 0 ||
+			len(journal.GenerationManifestBytes) > maxProjectionArtifactBytes ||
+			HashBytes(journal.GenerationManifestBytes) != record.ManifestHash ||
+			!journal.NextLivePresent || HashBytes(journal.NextLiveBytes) != record.ContentHash {
+			return projectionLifecycleState{}, fmt.Errorf("%w: recovery generation bytes are invalid", ErrProjectionDrift)
+		}
+	} else if len(journal.GenerationManifestBytes) != 0 {
+		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal has unexpected generation bytes", ErrProjectionDrift)
+	}
 	return next, nil
 }
 
@@ -1907,6 +1927,9 @@ func (l *ProjectionLifecycle) recoverProjectionJournal(
 	if authorityErr != nil {
 		return l.abortProjectionMutation(effect, relativePath, *journal, authorityErr)
 	}
+	if err := l.persistRecoveryGeneration(effect, *journal, *next); err != nil {
+		return errors.Join(ErrProjectionRecoveryPending, err)
+	}
 	trust, trustErr := l.verifyReplayTrust(effect, *next, rollbackPermit)
 	if trustErr != nil {
 		return l.abortProjectionMutation(effect, relativePath, *journal, trustErr)
@@ -1933,6 +1956,26 @@ func (l *ProjectionLifecycle) recoverProjectionJournal(
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
 	return nil
+}
+
+func (l *ProjectionLifecycle) persistRecoveryGeneration(
+	effect contracts.SkillProjectionEffect,
+	journal projectionRecoveryJournal,
+	next projectionLifecycleState,
+) error {
+	switch effect.Action {
+	case contracts.SkillProjectionActionInstall, contracts.SkillProjectionActionRollback:
+		record, ok := findProjectionGeneration(next.Generations, effect.Generation)
+		if !ok {
+			return fmt.Errorf("%w: recovery generation is missing", ErrProjectionDrift)
+		}
+		return l.persistGeneration(effect, record, journal.GenerationManifestBytes, journal.NextLiveBytes)
+	default:
+		if len(journal.GenerationManifestBytes) != 0 {
+			return fmt.Errorf("%w: recovery journal has unexpected generation bytes", ErrProjectionDrift)
+		}
+		return nil
+	}
 }
 
 func (l *ProjectionLifecycle) abortProjectionMutation(
@@ -2239,6 +2282,9 @@ func (l *ProjectionLifecycle) persistGeneration(
 		if readErr != nil || !constantBytesEqual(storedManifest, manifestBytes) || !constantBytesEqual(storedContent, contentBytes) {
 			return fmt.Errorf("%w: immutable generation differs", ErrProjectionDrift)
 		}
+		if err := syncManagedDirectoryAt(root, parentRel); err != nil {
+			return fmt.Errorf("skillpacks: sync existing immutable generation parent: %w", err)
+		}
 		return nil
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return statErr
@@ -2266,6 +2312,9 @@ func (l *ProjectionLifecycle) persistGeneration(
 		if _, statErr := root.Stat(finalRel); statErr == nil {
 			storedManifest, storedContent, readErr := l.readGeneration(effect, record)
 			if readErr == nil && constantBytesEqual(storedManifest, manifestBytes) && constantBytesEqual(storedContent, contentBytes) {
+				if syncErr := syncManagedDirectoryAt(root, parentRel); syncErr != nil {
+					return fmt.Errorf("skillpacks: sync raced immutable generation parent: %w", syncErr)
+				}
 				return nil
 			}
 		}

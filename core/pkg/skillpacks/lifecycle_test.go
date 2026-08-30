@@ -179,6 +179,71 @@ func TestProjectionLifecycleUpgradeRollbackAndRevoke(t *testing.T) {
 	}
 }
 
+func TestProjectionLifecycleCursorUpgradeRollbackAndRevokeNeverPublishesLegacyPath(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 10, 0, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	v1 := newProjectionFixtureForAgent(t, "1.0.0", "Cursor governed prompt v1", 1, "cursor", now)
+	v2 := newProjectionFixtureForAgent(t, "2.0.0", "Cursor governed prompt v2", 2, "cursor", now)
+	legacyRel, err := legacyCursorRelativePath(v1.effect.SkillID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(root, lifecycle.workspaceRel(v1.effect), legacyRel)
+	assertLegacyAbsent := func(stage string) {
+		t.Helper()
+		if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s published legacy Cursor path: %v", stage, err)
+		}
+	}
+
+	if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	assertLegacyAbsent("install")
+	if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	assertLegacyAbsent("upgrade")
+
+	rollback := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, "cursor-rollback", "attempt-cursor-rollback", testHash("7"))
+	permit := contracts.SkillProjectionRollbackPermit{
+		SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+		PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+		TenantID: rollback.TenantID, WorkspaceID: rollback.WorkspaceID, SkillID: rollback.SkillID, AgentTarget: rollback.AgentTarget,
+		FromGeneration: 2, TargetGeneration: 1, TargetSkillVersion: rollback.SkillVersion,
+		TargetArtifactHash: rollback.ArtifactHash, TargetPolicyHash: rollback.PolicyHash,
+		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+	}
+	permit, err = permit.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollback.RollbackPermitHash = permit.PermitHash
+	rollback.CanonicalRequestHash = ""
+	rollback, err = rollback.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); err != nil {
+		t.Fatal(err)
+	}
+	assertLegacyAbsent("rollback")
+	canonicalBytes, err := os.ReadFile(projectionLivePath(root, rollback))
+	if err != nil || !reflect.DeepEqual(canonicalBytes, v1.artifact.Files["SKILL.md"]) {
+		t.Fatalf("Cursor rollback bytes = %q err=%v", canonicalBytes, err)
+	}
+
+	revoke := actionEffect(t, v1.effect, contracts.SkillProjectionActionRevoke, 4, "cursor-revoke", "attempt-cursor-revoke", testHash("9"))
+	if _, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	assertLegacyAbsent("revoke")
+	if _, err := os.Stat(projectionLivePath(root, revoke)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Cursor canonical path survived revoke: %v", err)
+	}
+}
+
 func TestProjectionLifecycleRevokeUsesAuthenticatedStoredTrustAfterWithdrawal(t *testing.T) {
 	now := time.Date(2026, 8, 30, 13, 20, 0, 0, time.UTC)
 	root := t.TempDir()
@@ -1128,6 +1193,7 @@ func TestProjectionLifecycleRecoversFsyncedJournalAtEveryPublishBoundary(t *test
 	now := time.Date(2026, 8, 30, 13, 57, 0, 0, time.UTC)
 	for _, crashStage := range []string{
 		projectionMutationAfterJournal,
+		projectionMutationAfterGeneration,
 		projectionMutationAfterLive,
 		projectionMutationAfterState,
 	} {
@@ -1163,7 +1229,10 @@ func TestProjectionLifecycleRecoversFsyncedJournalAtEveryPublishBoundary(t *test
 				t.Fatalf("persisted journal is not valid: %v", err)
 			}
 
-			lifecycle.mutationHook = nil
+			if err := lifecycle.Close(); err != nil {
+				t.Fatal(err)
+			}
+			lifecycle = newProjectionLifecycleForTest(t, root, now)
 			recovered, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
 			if err != nil {
 				t.Fatal(err)
@@ -1185,6 +1254,138 @@ func TestProjectionLifecycleRecoversFsyncedJournalAtEveryPublishBoundary(t *test
 			}
 			if len(state.Generations) != 1 || len(state.Replays) != 1 || len(state.Attempts) != 1 {
 				t.Fatalf("recovery duplicated state: %+v", state)
+			}
+		})
+	}
+}
+
+func TestProjectionLifecycleRejectsUnjournaledGenerationOrphans(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 57, 15, 0, time.UTC)
+	for _, tt := range []struct {
+		name          string
+		tamperContent bool
+	}{
+		{name: "exact foreign orphan"},
+		{name: "tampered foreign orphan", tamperContent: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			lifecycle := newProjectionLifecycleForTest(t, root, now)
+			fixture := newProjectionFixture(t, "1.0.0", "foreign orphan prompt", 1, now)
+			record, manifestBytes, contentBytes, err := validateProjectionArtifact(fixture.effect, &fixture.artifact)
+			if err != nil {
+				t.Fatal(err)
+			}
+			generationDir := filepath.Join(root, lifecycle.generationParentRel(fixture.effect), projectionGenerationDirName(record))
+			if err := os.MkdirAll(generationDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if tt.tamperContent {
+				contentBytes = []byte("tampered orphan prompt")
+			}
+			if err := os.WriteFile(filepath.Join(generationDir, "skillpack.json"), manifestBytes, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(generationDir, "SKILL.md"), contentBytes, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			if result, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRollbackRequired) || result != (ProjectionLifecycleResult{}) {
+				t.Fatalf("orphan install result=%+v err=%v", result, err)
+			}
+			if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("orphan install published live projection: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, lifecycle.stateRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("orphan install published state: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, lifecycle.journalRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("orphan install published journal: %v", err)
+			}
+		})
+	}
+}
+
+func TestProjectionLifecycleRecoversJournaledRollbackGenerationAfterRestart(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 57, 25, 0, time.UTC)
+	for _, crashStage := range []string{projectionMutationAfterJournal, projectionMutationAfterGeneration} {
+		t.Run(crashStage, func(t *testing.T) {
+			root := t.TempDir()
+			lifecycle := newProjectionLifecycleForTest(t, root, now)
+			v1 := newProjectionFixture(t, "1.0.0", "rollback recovery prompt v1", 1, now)
+			v2 := newProjectionFixture(t, "2.0.0", "rollback recovery prompt v2", 2, now)
+			if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+				t.Fatal(err)
+			}
+
+			rollback := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, "restart-rollback", "attempt-restart-rollback", testHash("7"))
+			permit := contracts.SkillProjectionRollbackPermit{
+				SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+				PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+				TenantID: rollback.TenantID, WorkspaceID: rollback.WorkspaceID, SkillID: rollback.SkillID, AgentTarget: rollback.AgentTarget,
+				FromGeneration: 2, TargetGeneration: 1, TargetSkillVersion: rollback.SkillVersion,
+				TargetArtifactHash: rollback.ArtifactHash, TargetPolicyHash: rollback.PolicyHash,
+				IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+			}
+			var err error
+			permit, err = permit.Seal()
+			if err != nil {
+				t.Fatal(err)
+			}
+			rollback.RollbackPermitHash = permit.PermitHash
+			rollback.CanonicalRequestHash = ""
+			rollback, err = rollback.Seal()
+			if err != nil {
+				t.Fatal(err)
+			}
+			simulatedCrash := errors.New("simulated rollback process crash")
+			lifecycle.mutationHook = func(stage string) error {
+				if stage == crashStage {
+					return simulatedCrash
+				}
+				return nil
+			}
+			if _, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); !errors.Is(err, ErrProjectionRecoveryPending) || !errors.Is(err, simulatedCrash) {
+				t.Fatalf("rollback crash error = %v", err)
+			}
+			journalPath := filepath.Join(root, lifecycle.journalRel(rollback))
+			journalBytes, err := os.ReadFile(journalPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var journal projectionRecoveryJournal
+			if err := json.Unmarshal(journalBytes, &journal); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(journal.GenerationManifestBytes, v1.artifact.Files["skillpack.json"]) ||
+				!reflect.DeepEqual(journal.NextLiveBytes, v1.artifact.Files["SKILL.md"]) {
+				t.Fatalf("rollback journal omitted restored bytes: %+v", journal)
+			}
+			projection, err := projectionRelativePath(rollback.SkillID, rollback.AgentTarget)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stateBefore, err := lifecycle.readState(rollback, filepath.ToSlash(projection.Path))
+			if err != nil || stateBefore.Generation != 2 {
+				t.Fatalf("rollback crash published state = %+v err=%v", stateBefore, err)
+			}
+			if err := lifecycle.Close(); err != nil {
+				t.Fatal(err)
+			}
+			lifecycle = newProjectionLifecycleForTest(t, root, now)
+			recovered, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit)
+			if err != nil || recovered.Status != "rolled_back" || recovered.RestoredFromGeneration != 1 {
+				t.Fatalf("recovered rollback = %+v err=%v", recovered, err)
+			}
+			live, err := os.ReadFile(projectionLivePath(root, rollback))
+			if err != nil || !reflect.DeepEqual(live, v1.artifact.Files["SKILL.md"]) {
+				t.Fatalf("recovered rollback live = %q err=%v", live, err)
+			}
+			if _, err := os.Stat(journalPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("recovered rollback retained journal: %v", err)
 			}
 		})
 	}
@@ -2587,6 +2788,10 @@ type projectionFixture struct {
 }
 
 func newProjectionFixture(t *testing.T, version, content string, generation uint64, now time.Time) projectionFixture {
+	return newProjectionFixtureForAgent(t, version, content, generation, "codex", now)
+}
+
+func newProjectionFixtureForAgent(t *testing.T, version, content string, generation uint64, agent string, now time.Time) projectionFixture {
 	t.Helper()
 	contentBytes := []byte(content)
 	manifest := Manifest{
@@ -2596,7 +2801,7 @@ func newProjectionFixture(t *testing.T, version, content string, generation uint
 		SignatureRef:  "signature://repo-auditor/" + version,
 		ProvenanceRef: "provenance://repo-auditor/" + version,
 		PolicyRef:     "policy://safe/" + version,
-		AgentTargets:  []string{"codex"}, PermissionsDoNotGrantTools: true,
+		AgentTargets:  []string{agent}, PermissionsDoNotGrantTools: true,
 		ContentHash: HashBytes(contentBytes),
 	}
 	manifestBytes, err := json.Marshal(manifest)
@@ -2612,7 +2817,7 @@ func newProjectionFixture(t *testing.T, version, content string, generation uint
 		SchemaVersion: contracts.SkillProjectionEffectSchemaV1, ContractVersion: contracts.SkillProjectionEffectContractV1,
 		Action:   contracts.SkillProjectionActionInstall,
 		TenantID: "tenant-1", WorkspaceID: "workspace-1", SkillID: manifest.ID,
-		SkillVersion: version, AgentTarget: "codex",
+		SkillVersion: version, AgentTarget: agent,
 		ArtifactHash: artifactHash, ContentHash: manifest.ContentHash, ManifestHash: manifestHash,
 		PolicyHash: HashBytes([]byte(manifest.PolicyRef)), SchemaHash: contracts.SkillProjectionArtifactSchemaHashV1,
 		CertificationRefs: []string{manifest.ProvenanceRef, manifest.SignatureRef},
@@ -2674,8 +2879,9 @@ func newProjectionLifecycleForTest(t *testing.T, root string, now time.Time) *Pr
 }
 
 func projectionLivePath(root string, effect contracts.SkillProjectionEffect) string {
+	projection, _ := projectionRelativePath(effect.SkillID, effect.AgentTarget)
 	return filepath.Join(root, "tenants", effect.TenantID, "workspaces", effect.WorkspaceID,
-		".agents", "skills", "helm", "repo-auditor", "SKILL.md")
+		projection.Path)
 }
 
 func testHash(character string) string {

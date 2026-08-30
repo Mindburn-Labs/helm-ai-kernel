@@ -35,7 +35,7 @@ const (
 	MaxPayloadBytes       = 4 << 20
 	maxProtectDepth       = 32
 	maxProtectNodes       = 10000
-	maxJSONProtectNodes   = MaxPayloadBytes
+	maxJSONProtectNodes   = 1 << 18
 	maxProtectStringBytes = 1 << 20
 	maxProtectTotalBytes  = MaxPayloadBytes
 	maxUnicodeEscapeDepth = 4
@@ -561,12 +561,16 @@ func (p *protector) protectJSON(raw json.RawMessage, depth int, modelResponse bo
 	if len(raw) == 0 || len(raw) > MaxPayloadBytes {
 		return nil, ErrDataEgressInvalid
 	}
+	if err := validateJSONShape(raw); err != nil {
+		return nil, err
+	}
 	decoded, err := decodeJSONValue(raw)
 	if err != nil {
 		return nil, err
 	}
+	var originalLogprobTokens []string
 	if modelResponse {
-		if err := rewriteModelResponseLogprobTokenKeys(decoded, false); err != nil {
+		if err := rewriteModelResponseLogprobTokenKeys(decoded, false, &originalLogprobTokens); err != nil {
 			return nil, err
 		}
 	}
@@ -575,8 +579,11 @@ func (p *protector) protectJSON(raw json.RawMessage, depth int, modelResponse bo
 		return nil, err
 	}
 	if modelResponse {
-		if err := rewriteModelResponseLogprobTokenKeys(protected, true); err != nil {
+		if err := rewriteModelResponseLogprobTokenKeys(protected, true, &originalLogprobTokens); err != nil {
 			return nil, err
+		}
+		if len(originalLogprobTokens) != 0 {
+			return nil, ErrDataEgressInvalid
 		}
 	}
 	canonical, err := json.Marshal(protected)
@@ -589,6 +596,48 @@ func (p *protector) protectJSON(raw json.RawMessage, depth int, modelResponse bo
 		}
 	}
 	return json.RawMessage(canonical), nil
+}
+
+func validateJSONShape(raw json.RawMessage) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	depth, nodes, roots := 0, 0, 0
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return ErrDataEgressInvalid
+		}
+		nodes++
+		if nodes > maxJSONProtectNodes {
+			return ErrDataEgressInvalid
+		}
+		if delimiter, ok := token.(json.Delim); ok {
+			switch delimiter {
+			case '{', '[':
+				if depth == 0 {
+					roots++
+				}
+				depth++
+				if depth > maxProtectDepth {
+					return ErrDataEgressInvalid
+				}
+			case '}', ']':
+				depth--
+				if depth < 0 {
+					return ErrDataEgressInvalid
+				}
+			}
+		} else if depth == 0 {
+			roots++
+		}
+	}
+	if roots != 1 || depth != 0 {
+		return ErrDataEgressInvalid
+	}
+	return nil
 }
 
 func decodeJSONValue(raw json.RawMessage) (any, error) {
@@ -605,31 +654,44 @@ func decodeJSONValue(raw json.RawMessage) (any, error) {
 	return decoded, nil
 }
 
-func rewriteModelResponseLogprobTokenKeys(value any, restore bool) error {
+func rewriteModelResponseLogprobTokenKeys(value any, restore bool, originalTokens *[]string) error {
 	root, ok := value.(map[string]any)
 	if !ok {
 		return nil
 	}
-	choices, ok := root["choices"].([]any)
-	if !ok {
-		return nil
-	}
-	for _, choiceValue := range choices {
-		choice, ok := choiceValue.(map[string]any)
-		if !ok {
-			continue
-		}
-		logprobs, ok := choice["logprobs"].(map[string]any)
-		if !ok {
-			continue
-		}
-		for _, field := range []string{"content", "refusal"} {
-			entries, ok := logprobs[field].([]any)
+	if choices, ok := root["choices"].([]any); ok {
+		for _, choiceValue := range choices {
+			choice, ok := choiceValue.(map[string]any)
 			if !ok {
 				continue
 			}
-			for _, entry := range entries {
-				if err := rewriteLogprobTokenEntry(entry, restore); err != nil {
+			logprobs, ok := choice["logprobs"].(map[string]any)
+			if !ok {
+				continue
+			}
+			for _, field := range []string{"content", "refusal"} {
+				if err := rewriteLogprobEntries(logprobs[field], restore, originalTokens); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if outputs, ok := root["output"].([]any); ok {
+		for _, outputValue := range outputs {
+			output, ok := outputValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			contents, ok := output["content"].([]any)
+			if !ok {
+				continue
+			}
+			for _, contentValue := range contents {
+				content, ok := contentValue.(map[string]any)
+				if !ok {
+					continue
+				}
+				if err := rewriteLogprobEntries(content["logprobs"], restore, originalTokens); err != nil {
 					return err
 				}
 			}
@@ -638,7 +700,20 @@ func rewriteModelResponseLogprobTokenKeys(value any, restore bool) error {
 	return nil
 }
 
-func rewriteLogprobTokenEntry(value any, restore bool) error {
+func rewriteLogprobEntries(value any, restore bool, originalTokens *[]string) error {
+	entries, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	for _, entry := range entries {
+		if err := rewriteLogprobTokenEntry(entry, restore, originalTokens); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewriteLogprobTokenEntry(value any, restore bool, originalTokens *[]string) error {
 	entry, ok := value.(map[string]any)
 	if !ok {
 		return nil
@@ -656,6 +731,13 @@ func rewriteLogprobTokenEntry(value any, restore bool) error {
 		}
 	}
 	if exists {
+		if !restore {
+			token, ok := tokenValue.(string)
+			if !ok {
+				return ErrDataEgressInvalid
+			}
+			*originalTokens = append(*originalTokens, token)
+		}
 		if _, collision := entry[to]; collision {
 			return ErrDataEgressInvalid
 		}
@@ -663,10 +745,12 @@ func rewriteLogprobTokenEntry(value any, restore bool) error {
 		delete(entry, from)
 		if restore {
 			token, ok := tokenValue.(string)
-			if !ok {
+			if !ok || len(*originalTokens) == 0 {
 				return ErrDataEgressInvalid
 			}
-			if rawBytes, present := entry["bytes"]; present && rawBytes != nil {
+			originalToken := (*originalTokens)[0]
+			*originalTokens = (*originalTokens)[1:]
+			if rawBytes, present := entry["bytes"]; present && rawBytes != nil && token != originalToken {
 				encoded := []byte(token)
 				byteValues := make([]int, len(encoded))
 				for index, item := range encoded {
@@ -678,7 +762,7 @@ func rewriteLogprobTokenEntry(value any, restore bool) error {
 	}
 	if top, ok := entry["top_logprobs"].([]any); ok {
 		for _, candidate := range top {
-			if err := rewriteLogprobTokenEntry(candidate, restore); err != nil {
+			if err := rewriteLogprobTokenEntry(candidate, restore, originalTokens); err != nil {
 				return err
 			}
 		}

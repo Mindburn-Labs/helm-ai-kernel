@@ -152,6 +152,23 @@ func TestProtectJSONSupportsModelResponseProtocolsWithoutWeakeningGenericProtect
 		}
 	}
 
+	responsesLogprobs := json.RawMessage(`{"output":[{"content":[{"type":"output_text","text":"hello","logprobs":[{"token":"person@example.com","logprob":-0.1,"bytes":[112,101,114,115,111,110,64,101,120,97,109,112,108,101,46,99,111,109]},{"token":"�","logprob":-0.2,"bytes":[226,130]}]}]}]}`)
+	protected, findings, err = ProtectModelResponseJSON(context.Background(), responsesLogprobs)
+	if err != nil || !reflect.DeepEqual(findings, []string{"email"}) {
+		t.Fatalf("Responses logprobs error=%v findings=%v", err, findings)
+	}
+	if err := json.Unmarshal(protected, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	responseEntries := decoded["output"].([]any)[0].(map[string]any)["content"].([]any)[0].(map[string]any)["logprobs"].([]any)
+	if responseEntries[0].(map[string]any)["token"] != "[REDACTED_EMAIL]" {
+		t.Fatalf("protected Responses token = %#v", responseEntries[0])
+	}
+	preservedBytes := responseEntries[1].(map[string]any)["bytes"].([]any)
+	if !reflect.DeepEqual(preservedBytes, []any{float64(226), float64(130)}) {
+		t.Fatalf("clean provider bytes changed: %#v", preservedBytes)
+	}
+
 	for _, raw := range []json.RawMessage{
 		json.RawMessage(`{"token":"ordinary"}`),
 		json.RawMessage(`{"choices":[{"token":"ordinary","logprob":-0.1}]}`),
@@ -172,6 +189,13 @@ func TestProtectJSONSupportsModelResponseProtocolsWithoutWeakeningGenericProtect
 	oversizedGeneric := make([]any, maxProtectNodes+1)
 	if _, _, err := NewPrivacyManager().Protect(context.Background(), oversizedGeneric); !errors.Is(err, ErrDataEgressInvalid) {
 		t.Fatalf("generic node limit error = %v, want ErrDataEgressInvalid", err)
+	}
+	compactNodes := json.RawMessage("[" + strings.Repeat("0,", maxJSONProtectNodes) + "0]")
+	if len(compactNodes) >= MaxPayloadBytes {
+		t.Fatalf("compact node payload = %d bytes, want below byte limit", len(compactNodes))
+	}
+	if _, _, err := ProtectJSON(context.Background(), compactNodes); !errors.Is(err, ErrDataEgressInvalid) {
+		t.Fatalf("compact node limit error = %v, want ErrDataEgressInvalid", err)
 	}
 }
 

@@ -123,6 +123,10 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
 		return
 	}
+	if err := json.Unmarshal(protectedRequest, &req); err != nil {
+		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
+		return
+	}
 
 	// Create upstream request
 	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost,

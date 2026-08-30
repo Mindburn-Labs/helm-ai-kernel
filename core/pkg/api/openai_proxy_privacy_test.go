@@ -20,7 +20,7 @@ func TestOpenAIProxyProtectsRequestAndResponse(t *testing.T) {
 	t.Setenv("HELM_UPSTREAM_URL", upstream.URL)
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-test","messages":[{"role":"user","content":"contact person@example.com"}]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"model-person@example.com","messages":[{"role":"user","content":"contact person@example.com"}]}`))
 	HandleOpenAIProxy(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -31,6 +31,9 @@ func TestOpenAIProxyProtectsRequestAndResponse(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), "person@example.com") || !strings.Contains(rec.Body.String(), "[REDACTED_EMAIL]") {
 		t.Fatalf("response body was not protected: %s", rec.Body.String())
+	}
+	if got := rec.Header().Get("X-HELM-Model"); strings.Contains(got, "person@example.com") || got != "[REDACTED_EMAIL]" {
+		t.Fatalf("model header was not protected: %q", got)
 	}
 }
 

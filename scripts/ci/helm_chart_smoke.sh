@@ -702,7 +702,13 @@ fi
 assert_contains "$controlplane_ca_log" "helm.policy.source.controlplane.tls.existingSecret"
 
 controlplane_loopback_rendered="$RENDER_DIR/rendered-controlplane-loopback.yaml"
-for controlplane_loopback_url in "http://127.42.0.9:18080" "http://[::1]:18080"; do
+for controlplane_loopback_url in \
+    "http://127.42.0.9:18080" \
+    "HTTP://LOCALHOST:18080" \
+    "http://[::1]:18080" \
+    "http://[0:0:0:0:0:0:0:1]:18080" \
+    "http://[::ffff:127.0.0.1]:18080" \
+    "http://[0:0:0:0:0:ffff:7f00:1]:18080"; do
     production_helm_runner template "$RELEASE" "$CHART" \
         --namespace "$NAMESPACE" \
         --set helm.production=true \

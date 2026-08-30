@@ -33,6 +33,7 @@ const (
 	projectionRecoveryJournalSchemaV1 = "helm.skill-projection-recovery-journal.v1"
 	projectionLifecycleStateMACV1     = "helm.skill-projection-state-mac.v1"
 	projectionRecoveryJournalMACV1    = "helm.skill-projection-recovery-journal-mac.v1"
+	projectionRollbackPermitMACV1     = "helm.skill-projection-rollback-permit-mac.v1"
 
 	projectionStatusActive  = "active"
 	projectionStatusRevoked = "revoked"
@@ -458,7 +459,11 @@ func (l *ProjectionLifecycle) Apply(
 	if l == nil {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: projection lifecycle is nil")
 	}
-	if err := validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
+	if rollbackPermit != nil {
+		permitCopy := *rollbackPermit
+		rollbackPermit = &permitCopy
+	}
+	if err := l.validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 
@@ -480,7 +485,7 @@ func (l *ProjectionLifecycle) Apply(
 	// Authority can expire while waiting for either lock. Revalidate at the
 	// single-writer boundary before reading or mutating any projection state.
 	now := l.clock().UTC()
-	authorityErr := validateProjectionAuthority(effect, consumedPermitRef, rollbackPermit, now)
+	authorityErr := l.validateProjectionAuthority(effect, consumedPermitRef, rollbackPermit, now)
 
 	projection, err := projectionRelativePath(effect.SkillID, effect.AgentTarget)
 	if err != nil {
@@ -575,13 +580,13 @@ func (l *ProjectionLifecycle) Apply(
 	}
 }
 
-func validateProjectionAuthority(
+func (l *ProjectionLifecycle) validateProjectionAuthority(
 	effect contracts.SkillProjectionEffect,
 	consumedPermitRef string,
 	rollbackPermit *contracts.SkillProjectionRollbackPermit,
 	now time.Time,
 ) error {
-	if err := validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
+	if err := l.validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
 		return err
 	}
 	if err := effect.ValidateAt(now); err != nil {
@@ -593,7 +598,7 @@ func validateProjectionAuthority(
 	return nil
 }
 
-func validateProjectionAuthorityBinding(
+func (l *ProjectionLifecycle) validateProjectionAuthorityBinding(
 	effect contracts.SkillProjectionEffect,
 	consumedPermitRef string,
 	rollbackPermit *contracts.SkillProjectionRollbackPermit,
@@ -618,7 +623,10 @@ func validateProjectionAuthorityBinding(
 		// IssuedAt is the one time guaranteed active by a structurally valid
 		// permit. This checks its seal and exact effect binding without allowing
 		// an expired permit to bypass recovery of its own pending journal.
-		return effect.ValidateRollbackPermit(*rollbackPermit, rollbackPermit.IssuedAt)
+		if err := effect.ValidateRollbackPermit(*rollbackPermit, rollbackPermit.IssuedAt); err != nil {
+			return err
+		}
+		return l.verifyProjectionRollbackPermitAuthentication(*rollbackPermit)
 	}
 	if rollbackPermit != nil {
 		return fmt.Errorf("skillpacks: rollback permit is only valid for rollback")
@@ -919,7 +927,7 @@ func (l *ProjectionLifecycle) verifyProjectionTrust(
 		return ProjectionTrustDecision{}, fmt.Errorf("%w: manifest trust binding mismatch", ErrProjectionTrustRejected)
 	}
 	evaluationTime := l.clock().UTC()
-	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, evaluationTime); err != nil {
+	if err := l.validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, evaluationTime); err != nil {
 		return ProjectionTrustDecision{}, err
 	}
 
@@ -936,7 +944,7 @@ func (l *ProjectionLifecycle) verifyProjectionTrust(
 		return ProjectionTrustDecision{}, errors.Join(ErrProjectionTrustRejected, err)
 	}
 	validationTime := l.clock().UTC()
-	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, validationTime); err != nil {
+	if err := l.validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, validationTime); err != nil {
 		return ProjectionTrustDecision{}, err
 	}
 	if err := l.validateProjectionTrustDecision(decision, effect, manifest, validationTime); err != nil {
@@ -1006,7 +1014,7 @@ func (l *ProjectionLifecycle) validateProjectionPublicationAuthority(
 	revocationState *projectionLifecycleState,
 ) error {
 	now := l.clock().UTC()
-	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, now); err != nil {
+	if err := l.validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, now); err != nil {
 		return err
 	}
 	if effect.Action == contracts.SkillProjectionActionRevoke {
@@ -1204,6 +1212,27 @@ func SignProjectionTrustDecision(
 	return sealed, nil
 }
 
+// SignProjectionRollbackPermit authenticates a separately action-bound
+// rollback permit with an explicitly configured authority key. Permit.Seal
+// remains an integrity operation and cannot mint this authority signature.
+func SignProjectionRollbackPermit(
+	permit contracts.SkillProjectionRollbackPermit,
+	key ProjectionTrustVerifierKey,
+) (contracts.SkillProjectionRollbackPermit, error) {
+	if err := validateProjectionTrustVerifierKey(key); err != nil {
+		return contracts.SkillProjectionRollbackPermit{}, err
+	}
+	permit.IssuerID = key.VerifierID
+	permit.KeyID = key.KeyID
+	permit.Signature = ""
+	sealed, err := permit.Seal()
+	if err != nil {
+		return contracts.SkillProjectionRollbackPermit{}, err
+	}
+	sealed.Signature = projectionRollbackPermitSignature(sealed.PermitHash, key)
+	return sealed, nil
+}
+
 func validateProjectionTrustVerifierKey(key ProjectionTrustVerifierKey) error {
 	if !validProjectionTrustIdentity(key.VerifierID) || !validProjectionTrustIdentity(key.KeyID) ||
 		len(key.HMACKey) < 32 || len(key.HMACKey) > 4096 {
@@ -1292,6 +1321,40 @@ func projectionRecoveryJournalSignature(journalHash string, key ProjectionTrustV
 	_, _ = mac.Write([]byte{0})
 	_, _ = mac.Write([]byte(journalHash))
 	return projectionTrustSignaturePrefix + hex.EncodeToString(mac.Sum(nil))
+}
+
+func projectionRollbackPermitSignature(permitHash string, key ProjectionTrustVerifierKey) string {
+	mac := hmac.New(sha256.New, key.HMACKey)
+	_, _ = mac.Write([]byte(projectionRollbackPermitMACV1))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(contracts.SkillProjectionRollbackPermitSchemaV1))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(contracts.SkillProjectionRollbackPermitContractV1))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(key.VerifierID))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(key.KeyID))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(permitHash))
+	return projectionTrustSignaturePrefix + hex.EncodeToString(mac.Sum(nil))
+}
+
+func (l *ProjectionLifecycle) verifyProjectionRollbackPermitAuthentication(
+	permit contracts.SkillProjectionRollbackPermit,
+) error {
+	if !validProjectionTrustIdentity(permit.IssuerID) || !validProjectionTrustIdentity(permit.KeyID) ||
+		!validProjectionTrustSignature(permit.Signature) {
+		return fmt.Errorf("%w: authenticated rollback permit is required", contracts.ErrSkillProjectionEffectIntegrity)
+	}
+	key, ok := l.verificationKeys[projectionTrustKeyIdentity{VerifierID: permit.IssuerID, KeyID: permit.KeyID}]
+	if !ok {
+		return fmt.Errorf("%w: rollback permit issuer/key is not accepted", contracts.ErrSkillProjectionEffectIntegrity)
+	}
+	expected := projectionRollbackPermitSignature(permit.PermitHash, key)
+	if !constantStringEqual(permit.Signature, expected) {
+		return fmt.Errorf("%w: rollback permit signature mismatch", contracts.ErrSkillProjectionEffectIntegrity)
+	}
+	return nil
 }
 
 func verifyProjectionTrustDecisionSignature(decision ProjectionTrustDecision, key ProjectionTrustVerifierKey) error {

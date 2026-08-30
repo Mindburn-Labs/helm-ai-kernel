@@ -35,6 +35,7 @@ var (
 
 	skillProjectionScopeIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
 	skillProjectionSkillIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}/[a-z0-9][a-z0-9-]{0,63}$`)
+	skillProjectionHMACPattern    = regexp.MustCompile(`^hmac-sha256:[0-9a-f]{64}$`)
 )
 
 // SkillProjectionEffect is the immutable request passed to the repo-scoped
@@ -72,9 +73,11 @@ type SkillProjectionEffect struct {
 	CanonicalRequestHash string `json:"canonical_request_hash,omitempty"`
 }
 
-// SkillProjectionRollbackPermit is a separately sealed, rollback-only
-// authority binding. A general consumed permit cannot be reused as rollback
-// authority, and the target generation/artifact are immutable.
+// SkillProjectionRollbackPermit is a separately signed, rollback-only
+// authority binding. Seal provides canonical integrity only; the lifecycle
+// must authenticate IssuerID, KeyID, and Signature against its pinned keys.
+// A general consumed permit cannot be reused as rollback authority, and the
+// target generation/artifact are immutable.
 type SkillProjectionRollbackPermit struct {
 	SchemaVersion   string `json:"schema_version"`
 	ContractVersion string `json:"contract_version"`
@@ -96,6 +99,9 @@ type SkillProjectionRollbackPermit struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Nonce     string    `json:"nonce"`
 
+	IssuerID   string `json:"issuer_id,omitempty"`
+	KeyID      string `json:"key_id,omitempty"`
+	Signature  string `json:"signature,omitempty"`
 	PermitHash string `json:"permit_hash,omitempty"`
 }
 
@@ -278,6 +284,15 @@ func (p SkillProjectionRollbackPermit) Validate() error {
 	if !isApprovalGrantNonce(p.Nonce) {
 		return skillProjectionEffectInvalid("rollback permit nonce must be 32 lowercase hexadecimal bytes")
 	}
+	if (p.IssuerID == "") != (p.KeyID == "") {
+		return skillProjectionEffectInvalid("rollback permit issuer_id and key_id must be supplied together")
+	}
+	if p.IssuerID != "" && (!skillProjectionBoundedToken(p.IssuerID, 128) || !skillProjectionBoundedToken(p.KeyID, 128)) {
+		return skillProjectionEffectInvalid("rollback permit issuer/key identity is invalid")
+	}
+	if p.Signature != "" && (p.IssuerID == "" || !skillProjectionHMACPattern.MatchString(p.Signature)) {
+		return skillProjectionEffectInvalid("rollback permit signature is invalid")
+	}
 	if p.PermitHash != "" && !isApprovalGrantSHA256(p.PermitHash) {
 		return skillProjectionEffectInvalid("rollback permit_hash must be a lowercase sha256 reference")
 	}
@@ -289,6 +304,7 @@ func (p SkillProjectionRollbackPermit) Seal() (SkillProjectionRollbackPermit, er
 		return SkillProjectionRollbackPermit{}, err
 	}
 	p.PermitHash = ""
+	p.Signature = ""
 	hash, err := hashJCS(p)
 	if err != nil {
 		return SkillProjectionRollbackPermit{}, fmt.Errorf("%w: rollback permit seal: %v", ErrSkillProjectionEffectInvalid, err)
@@ -314,9 +330,10 @@ func (p SkillProjectionRollbackPermit) ValidateAt(now time.Time) error {
 	return nil
 }
 
-// ValidateRollbackPermit proves that the separately sealed rollback authority
-// names this exact effect. Current-generation and archive existence checks are
-// owned by the filesystem lifecycle.
+// ValidateRollbackPermit proves that the canonical rollback permit names this
+// exact effect. It does not authenticate the permit issuer; the filesystem
+// lifecycle owns signature verification plus current-generation and archive
+// existence checks.
 func (e SkillProjectionEffect) ValidateRollbackPermit(p SkillProjectionRollbackPermit, now time.Time) error {
 	if e.Action != SkillProjectionActionRollback {
 		return skillProjectionEffectInvalid("effect action is not rollback")

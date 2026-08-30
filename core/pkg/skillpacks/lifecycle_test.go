@@ -115,10 +115,7 @@ func TestProjectionLifecycleUpgradeRollbackAndRevoke(t *testing.T) {
 		ExpiresAt:          now.Add(time.Minute),
 		Nonce:              strings.Repeat("8", 64),
 	}
-	permit, err = permit.Seal()
-	if err != nil {
-		t.Fatal(err)
-	}
+	permit = signRollbackPermitForTest(t, permit, testProjectionTrustVerifierKey())
 	rollback.RollbackPermitHash = permit.PermitHash
 	rollback.CanonicalRequestHash = ""
 	rollback, err = rollback.Seal()
@@ -179,6 +176,198 @@ func TestProjectionLifecycleUpgradeRollbackAndRevoke(t *testing.T) {
 	}
 }
 
+func TestProjectionLifecycleRequiresAuthenticatedRollbackAuthority(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 5, 0, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	v1 := newProjectionFixture(t, "1.0.0", "authenticated rollback v1", 1, now)
+	v2 := newProjectionFixture(t, "2.0.0", "authenticated rollback v2", 2, now)
+	if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	basePermit := contracts.SkillProjectionRollbackPermit{
+		SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+		PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+		TenantID: v1.effect.TenantID, WorkspaceID: v1.effect.WorkspaceID,
+		SkillID: v1.effect.SkillID, AgentTarget: v1.effect.AgentTarget,
+		FromGeneration: 2, TargetGeneration: 1,
+		TargetSkillVersion: v1.effect.SkillVersion, TargetArtifactHash: v1.effect.ArtifactHash, TargetPolicyHash: v1.effect.PolicyHash,
+		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+	}
+	rollbackFor := func(name string, permit contracts.SkillProjectionRollbackPermit) contracts.SkillProjectionEffect {
+		t.Helper()
+		effect := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, name, "attempt-"+name, testHash("7"))
+		effect.RollbackPermitHash = permit.PermitHash
+		sealed, err := effect.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sealed
+	}
+	sealIntegrityOnly := func(permit contracts.SkillProjectionRollbackPermit) contracts.SkillProjectionRollbackPermit {
+		t.Helper()
+		sealed, err := permit.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sealed
+	}
+
+	unsigned := sealIntegrityOnly(basePermit)
+	selfMinted := basePermit
+	selfMinted.IssuerID = testProjectionTrustVerifierKey().VerifierID
+	selfMinted.KeyID = testProjectionTrustVerifierKey().KeyID
+	selfMinted = sealIntegrityOnly(selfMinted)
+	wrongKey := testProjectionTrustVerifierKey()
+	wrongKey.HMACKey = []byte(strings.Repeat("w", 32))
+	wrongKeyPermit := signRollbackPermitForTest(t, basePermit, wrongKey)
+	authenticated := signRollbackPermitForTest(t, basePermit, testProjectionTrustVerifierKey())
+	tampered := authenticated
+	tamperedSignature := tampered.Signature
+	tampered.Nonce = strings.Repeat("9", 64)
+	tampered.PermitHash = ""
+	tampered = sealIntegrityOnly(tampered)
+	tampered.Signature = tamperedSignature
+
+	statePath := filepath.Join(root, lifecycle.stateRel(v2.effect))
+	livePath := projectionLivePath(root, v2.effect)
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveBefore, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, permit := range map[string]contracts.SkillProjectionRollbackPermit{
+		"unsigned": unsigned, "self-minted": selfMinted, "wrong-key": wrongKeyPermit, "tampered-and-resealed": tampered,
+	} {
+		t.Run(name, func(t *testing.T) {
+			effect := rollbackFor("rollback-"+name, permit)
+			if result, err := lifecycle.Apply(effect, nil, effect.ConsumedPermitRef, &permit); !errors.Is(err, contracts.ErrSkillProjectionEffectIntegrity) || result != (ProjectionLifecycleResult{}) {
+				t.Fatalf("unauthenticated rollback result=%+v err=%v", result, err)
+			}
+			stateAfter, err := os.ReadFile(statePath)
+			if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+				t.Fatalf("unauthenticated rollback changed state: %q err=%v", stateAfter, err)
+			}
+			liveAfter, err := os.ReadFile(livePath)
+			if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+				t.Fatalf("unauthenticated rollback changed live bytes: %q err=%v", liveAfter, err)
+			}
+		})
+	}
+
+	authorizedEffect := rollbackFor("rollback-authenticated", authenticated)
+	result, err := lifecycle.Apply(authorizedEffect, nil, authorizedEffect.ConsumedPermitRef, &authenticated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := lifecycle.Apply(authorizedEffect, nil, authorizedEffect.ConsumedPermitRef, &authenticated)
+	if err != nil || !reflect.DeepEqual(replay, result) {
+		t.Fatalf("authenticated rollback replay=%+v err=%v", replay, err)
+	}
+	stateBytes, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for label, payload := range map[string][]byte{"state": stateBytes, "result": resultBytes} {
+		if bytes.Contains(payload, testProjectionTrustVerifierKey().HMACKey) || bytes.Contains(payload, []byte(authenticated.Signature)) {
+			t.Fatalf("%s serialized rollback authority secret/signature", label)
+		}
+	}
+}
+
+func TestProjectionLifecycleRollbackAuthorityHistoricalKeyReplay(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 7, 0, 0, time.UTC)
+	root := t.TempDir()
+	oldLifecycle := newProjectionLifecycleForTest(t, root, now)
+	v1 := newProjectionFixture(t, "1.0.0", "rollback rotation v1", 1, now)
+	v2 := newProjectionFixture(t, "2.0.0", "rollback rotation v2", 2, now)
+	if _, err := oldLifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oldLifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	permit := signRollbackPermitForTest(t, contracts.SkillProjectionRollbackPermit{
+		SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+		PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+		TenantID: v1.effect.TenantID, WorkspaceID: v1.effect.WorkspaceID,
+		SkillID: v1.effect.SkillID, AgentTarget: v1.effect.AgentTarget,
+		FromGeneration: 2, TargetGeneration: 1,
+		TargetSkillVersion: v1.effect.SkillVersion, TargetArtifactHash: v1.effect.ArtifactHash, TargetPolicyHash: v1.effect.PolicyHash,
+		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+	}, testProjectionTrustVerifierKey())
+	rollback := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, "rollback-before-rotation", "attempt-rollback-before-rotation", testHash("7"))
+	rollback.RollbackPermitHash = permit.PermitHash
+	rollback.CanonicalRequestHash = ""
+	var err error
+	rollback, err = rollback.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := oldLifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := oldLifecycle.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	currentKey := rotatedProjectionTrustVerifierKey()
+	currentVerifier := projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		return allowProjectionTrustWithKey(request, currentKey)
+	})
+	rotated, err := NewProjectionLifecycleWithVerifierKeyring(root, currentVerifier, ProjectionTrustVerifierKeyring{
+		Current: currentKey, Historical: []ProjectionTrustVerifierKey{testProjectionTrustVerifierKey()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated.clock = func() time.Time { return now }
+	replayed, err := rotated.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit)
+	if err != nil || !reflect.DeepEqual(replayed, want) {
+		t.Fatalf("historical-key rollback replay=%+v err=%v", replayed, err)
+	}
+	if err := rotated.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	withoutHistory, err := NewProjectionLifecycleWithVerifierKey(root, currentVerifier, currentKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = withoutHistory.Close() })
+	withoutHistory.clock = func() time.Time { return now }
+	statePath := filepath.Join(root, withoutHistory.stateRel(rollback))
+	livePath := projectionLivePath(root, rollback)
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveBefore, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := withoutHistory.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); !errors.Is(err, contracts.ErrSkillProjectionEffectIntegrity) || result != (ProjectionLifecycleResult{}) {
+		t.Fatalf("revoked rollback authority result=%+v err=%v", result, err)
+	}
+	stateAfter, _ := os.ReadFile(statePath)
+	liveAfter, _ := os.ReadFile(livePath)
+	if !reflect.DeepEqual(stateAfter, stateBefore) || !reflect.DeepEqual(liveAfter, liveBefore) {
+		t.Fatal("revoked historical rollback authority mutated state")
+	}
+}
+
 func TestProjectionLifecycleCursorUpgradeRollbackAndRevokeNeverPublishesLegacyPath(t *testing.T) {
 	now := time.Date(2026, 8, 30, 13, 10, 0, 0, time.UTC)
 	root := t.TempDir()
@@ -215,10 +404,7 @@ func TestProjectionLifecycleCursorUpgradeRollbackAndRevokeNeverPublishesLegacyPa
 		TargetArtifactHash: rollback.ArtifactHash, TargetPolicyHash: rollback.PolicyHash,
 		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
 	}
-	permit, err = permit.Seal()
-	if err != nil {
-		t.Fatal(err)
-	}
+	permit = signRollbackPermitForTest(t, permit, testProjectionTrustVerifierKey())
 	rollback.RollbackPermitHash = permit.PermitHash
 	rollback.CanonicalRequestHash = ""
 	rollback, err = rollback.Seal()
@@ -1331,10 +1517,7 @@ func TestProjectionLifecycleRecoversJournaledRollbackGenerationAfterRestart(t *t
 				IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
 			}
 			var err error
-			permit, err = permit.Seal()
-			if err != nil {
-				t.Fatal(err)
-			}
+			permit = signRollbackPermitForTest(t, permit, testProjectionTrustVerifierKey())
 			rollback.RollbackPermitHash = permit.PermitHash
 			rollback.CanonicalRequestHash = ""
 			rollback, err = rollback.Seal()
@@ -1558,10 +1741,7 @@ func TestProjectionLifecycleExpiredAuthorityRestoresPendingJournal(t *testing.T)
 			IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
 		}
 		var err error
-		permit, err = permit.Seal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		permit = signRollbackPermitForTest(t, permit, testProjectionTrustVerifierKey())
 		rollback.RollbackPermitHash = permit.PermitHash
 		rollback.CanonicalRequestHash = ""
 		rollback, err = rollback.Seal()
@@ -2509,10 +2689,7 @@ func TestProjectionLifecycleRevalidatesAuthorityAfterLock(t *testing.T) {
 			IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
 		}
 		var err error
-		permit, err = permit.Seal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		permit = signRollbackPermitForTest(t, permit, testProjectionTrustVerifierKey())
 		rollback.RollbackPermitHash = permit.PermitHash
 		rollback.CanonicalRequestHash = ""
 		rollback, err = rollback.Seal()
@@ -2646,10 +2823,7 @@ func TestProjectionLifecycleRefreshesAuthorityAndDecisionAfterVerifier(t *testin
 			TargetSkillVersion: rollback.SkillVersion, TargetArtifactHash: rollback.ArtifactHash, TargetPolicyHash: rollback.PolicyHash,
 			IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
 		}
-		permit, err = permit.Seal()
-		if err != nil {
-			t.Fatal(err)
-		}
+		permit = signRollbackPermitForTest(t, permit, testProjectionTrustVerifierKey())
 		rollback.RollbackPermitHash = permit.PermitHash
 		rollback.CanonicalRequestHash = ""
 		rollback, err = rollback.Seal()
@@ -2955,6 +3129,19 @@ func testProjectionTrustVerifierKey() ProjectionTrustVerifierKey {
 		KeyID:      "test-key-v1",
 		HMACKey:    []byte(strings.Repeat("k", 32)),
 	}
+}
+
+func signRollbackPermitForTest(
+	t *testing.T,
+	permit contracts.SkillProjectionRollbackPermit,
+	key ProjectionTrustVerifierKey,
+) contracts.SkillProjectionRollbackPermit {
+	t.Helper()
+	signed, err := SignProjectionRollbackPermit(permit, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signed
 }
 
 func rotatedProjectionTrustVerifierKey() ProjectionTrustVerifierKey {

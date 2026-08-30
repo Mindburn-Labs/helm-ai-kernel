@@ -181,6 +181,39 @@ func TestControlPlaneSourceErrorAndHeaderBranches(t *testing.T) {
 	}
 }
 
+func TestControlPlaneSourceRejectsOversizedOrAmbiguousResponses(t *testing.T) {
+	scope := PolicyScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+	payload := "{}"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	source := NewControlPlaneSource(server.URL, scope)
+	source.BearerToken = "token-1"
+	for _, test := range []struct {
+		name    string
+		payload string
+		needle  string
+	}{
+		{name: "unknown head field", payload: `{"unknown":true}`, needle: "unknown field"},
+		{name: "multiple head values", payload: `{} {}`, needle: "exactly one JSON value"},
+		{name: "oversized head", payload: strings.Repeat(" ", int(maxControlPlaneHeadBytes)) + `{}`, needle: "exceeds"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			payload = test.payload
+			if _, err := source.Head(context.Background(), scope); err == nil || !strings.Contains(err.Error(), test.needle) {
+				t.Fatalf("Head error = %v, want %q", err, test.needle)
+			}
+		})
+	}
+
+	payload = strings.Repeat("x", int(maxControlPlaneBundleBytes)+1)
+	if _, err := source.Load(context.Background(), scope, 1); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("Load error = %v, want oversized response rejection", err)
+	}
+}
+
 func TestControlPlaneSourceReloadsProjectedBearerToken(t *testing.T) {
 	tokenPath := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(tokenPath, []byte("token-1"), 0o600); err != nil {

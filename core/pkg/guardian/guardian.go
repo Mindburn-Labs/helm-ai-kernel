@@ -425,10 +425,10 @@ func (g *Guardian) SetSafeDepController(controller *safedep.Controller) {
 
 // SignDecision checks requirements and signs only if met
 func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata) error {
-	return g.signDecisionWithGraph(ctx, decision, effect, evidenceHashes, intervention, g.prg)
+	return g.signDecisionWithGraph(ctx, decision, effect, evidenceHashes, intervention, g.prg, false)
 }
 
-func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, ruleGraph *prg.Graph) error {
+func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, ruleGraph *prg.Graph, pdpAuthoritativeAllow bool) error {
 	if decision == nil {
 		return fmt.Errorf("decision is required")
 	}
@@ -526,50 +526,55 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 		return g.signer.SignDecision(decision)
 	}
 
-	// 4. Validate against PRG
-	if ruleGraph == nil {
-		ruleGraph = prg.NewGraph()
-	}
-	rule, exists := ruleGraph.Rules[actionID]
-	if !exists {
-		decision.Verdict = string(contracts.VerdictDeny)
-		decision.ReasonCode = string(contracts.ReasonNoPolicy)
-		decision.Reason = fmt.Sprintf("%s: no policy defined for action %s", contracts.ReasonNoPolicy, actionID)
-		return g.signer.SignDecision(decision)
-	}
+	var requirementSetHash string
+	if !pdpAuthoritativeAllow {
+		// 4. Validate against PRG. An explicitly authoritative managed PDP ALLOW
+		// replaces only this local policy lookup; all surrounding gates still run.
+		if ruleGraph == nil {
+			ruleGraph = prg.NewGraph()
+		}
+		rule, exists := ruleGraph.Rules[actionID]
+		if !exists {
+			decision.Verdict = string(contracts.VerdictDeny)
+			decision.ReasonCode = string(contracts.ReasonNoPolicy)
+			decision.Reason = fmt.Sprintf("%s: no policy defined for action %s", contracts.ReasonNoPolicy, actionID)
+			return g.signer.SignDecision(decision)
+		}
 
-	// Prepare CEL input
-	effectMap, err := toMap(effect)
-	if err != nil {
-		return fmt.Errorf("serialize effect policy input: %w", err)
-	}
-	input := map[string]interface{}{
-		"action":    actionID,
-		"effect":    effectMap,
-		"artifacts": artifacts,
-		"timestamp": g.clock.Now().Unix(),
-		"taint":     contracts.NormalizeTaintLabels(effect.Taint),
-	}
-	if decision.ThreatScan != nil {
-		// Expose only Guardian-owned typed evidence at the stable CEL path
-		// input.threat_scan; never project caller context into this field.
-		input[ContextThreatScan] = decision.ThreatScan.PolicyContext()
-	}
+		// Prepare CEL input
+		effectMap, err := toMap(effect)
+		if err != nil {
+			return fmt.Errorf("serialize effect policy input: %w", err)
+		}
+		input := map[string]interface{}{
+			"action":    actionID,
+			"effect":    effectMap,
+			"artifacts": artifacts,
+			"timestamp": g.clock.Now().Unix(),
+			"taint":     contracts.NormalizeTaintLabels(effect.Taint),
+		}
+		if decision.ThreatScan != nil {
+			// Expose only Guardian-owned typed evidence at the stable CEL path
+			// input.threat_scan; never project caller context into this field.
+			input[ContextThreatScan] = decision.ThreatScan.PolicyContext()
+		}
 
-	valid, failures, err := g.pe.EvaluateRequirementSetDetail(rule, input)
-	if err != nil {
-		decision.Verdict = string(contracts.VerdictDeny)
-		decision.ReasonCode = string(contracts.ReasonPRGEvalError)
-		decision.Reason = "PRG Evaluation Error: policy requirement evaluation failed"
-		return g.signer.SignDecision(decision)
-	}
+		valid, failures, err := g.pe.EvaluateRequirementSetDetail(rule, input)
+		if err != nil {
+			decision.Verdict = string(contracts.VerdictDeny)
+			decision.ReasonCode = string(contracts.ReasonPRGEvalError)
+			decision.Reason = "PRG Evaluation Error: policy requirement evaluation failed"
+			return g.signer.SignDecision(decision)
+		}
 
-	if !valid {
-		decision.Verdict = string(contracts.VerdictDeny)
-		decision.ReasonCode = string(contracts.ReasonMissingRequirement)
-		decision.Reason = missingRequirementReason(failures, input)
-		g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
-		return g.signer.SignDecision(decision)
+		if !valid {
+			decision.Verdict = string(contracts.VerdictDeny)
+			decision.ReasonCode = string(contracts.ReasonMissingRequirement)
+			decision.Reason = missingRequirementReason(failures, input)
+			g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
+			return g.signer.SignDecision(decision)
+		}
+		requirementSetHash = rule.Hash()
 	}
 
 	// 4.5 Budget draw-down. The action has passed policy, so consume budget
@@ -591,10 +596,10 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 	// 5. Pass -> Sign
 	decision.Verdict = string(contracts.VerdictAllow)
 	decision.ReasonCode = ""
-	decision.RequirementSetHash = rule.Hash()
+	decision.RequirementSetHash = requirementSetHash
 	decision.Timestamp = g.clock.Now() // Authority time (KERNEL_TCB §3)
 	// Optionally link evidence hashes in the decision record (needs schema update)
-	g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyComply, "PRG evaluation passed")
+	g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyComply, "policy evaluation passed")
 
 	return g.signer.SignDecision(decision)
 }
@@ -1206,7 +1211,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 		if err := bindDecisionRequest(decision, req); err != nil {
 			return nil, fmt.Errorf("bind evaluated decision request: %w", err)
 		}
-		err = g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph)
+		err = g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph, eCtx.PDPAuthoritativeAllow)
 		if err != nil {
 			return nil, err
 		}

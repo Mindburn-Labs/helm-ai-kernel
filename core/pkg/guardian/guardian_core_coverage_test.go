@@ -20,8 +20,9 @@ import (
 )
 
 type guardianCoveragePDP struct {
-	response *pdp.DecisionResponse
-	err      error
+	response           *pdp.DecisionResponse
+	err                error
+	authoritativeAllow bool
 }
 
 func (p guardianCoveragePDP) Evaluate(context.Context, *pdp.DecisionRequest) (*pdp.DecisionResponse, error) {
@@ -40,6 +41,10 @@ func (guardianCoveragePDP) Backend() pdp.Backend {
 
 func (guardianCoveragePDP) PolicyHash() string {
 	return "hash"
+}
+
+func (p guardianCoveragePDP) AuthoritativeAllow() bool {
+	return p.authoritativeAllow
 }
 
 type guardianCoverageSnapshotStore struct {
@@ -413,14 +418,43 @@ func TestCoveragePDPInterceptorBranches(t *testing.T) {
 		t.Fatalf("expected PDP default deny, got %+v err=%v", decision, err)
 	}
 
-	allowPDP := guardianCoveragePDP{response: &pdp.DecisionResponse{Allow: true, PolicyRef: "policy-ref", DecisionHash: "decision-hash"}}
+	escalatePDP := guardianCoveragePDP{response: &pdp.DecisionResponse{Allow: false, ReasonCode: string(contracts.ReasonApprovalRequired), PolicyRef: "policy-ref", DecisionHash: "decision-hash"}}
+	pdpEscalateCtx := &EvaluationContext{
+		Request:   DecisionRequest{Principal: "agent", Action: "WRITE", Resource: "resource", Context: map[string]interface{}{}},
+		ActivePDP: escalatePDP,
+	}
+	decision, err = interceptor.Evaluate(ctx, pdpEscalateCtx, next)
+	if err != nil || decision.Verdict != string(contracts.VerdictEscalate) || decision.ReasonCode != string(contracts.ReasonApprovalRequired) {
+		t.Fatalf("expected PDP escalation, got %+v err=%v", decision, err)
+	}
+
+	allowPDP := guardianCoveragePDP{response: &pdp.DecisionResponse{Allow: true, PolicyRef: "policy-ref", DecisionHash: "decision-hash"}, authoritativeAllow: true}
 	pdpAllowCtx := &EvaluationContext{
 		Request:   DecisionRequest{Principal: "agent", Action: "READ", Resource: "resource", Context: map[string]interface{}{}},
 		ActivePDP: allowPDP,
 	}
 	decision, err = interceptor.Evaluate(ctx, pdpAllowCtx, next)
-	if err != nil || decision.Verdict != string(contracts.VerdictAllow) || pdpAllowCtx.PDPBackend != string(pdp.BackendHELM) || pdpAllowCtx.PDPHash != "hash" || pdpAllowCtx.PDPDecisionHash != "decision-hash" {
+	if err != nil || decision.Verdict != string(contracts.VerdictAllow) || pdpAllowCtx.PDPBackend != string(pdp.BackendHELM) || pdpAllowCtx.PDPHash != "hash" || pdpAllowCtx.PDPDecisionHash != "decision-hash" || !pdpAllowCtx.PDPAuthoritativeAllow {
 		t.Fatalf("expected PDP allow pass-through, got decision=%+v ctx=%+v err=%v", decision, pdpAllowCtx, err)
+	}
+}
+
+func TestAuthoritativePDPAllowReplacesOnlyLocalPRG(t *testing.T) {
+	ctx := context.Background()
+	clock := newFixedClock()
+	response := &pdp.DecisionResponse{Allow: true, PolicyRef: "policy-ref", DecisionHash: "decision-hash"}
+	request := DecisionRequest{Principal: "agent", Action: "READ", Resource: "resource", Context: map[string]interface{}{}}
+
+	ordinary := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithPDP(guardianCoveragePDP{response: response}))
+	decision, err := ordinary.EvaluateDecision(ctx, request)
+	if err != nil || decision.ReasonCode != string(contracts.ReasonNoPolicy) {
+		t.Fatalf("ordinary PDP must retain local PRG deny, decision=%+v err=%v", decision, err)
+	}
+
+	authoritative := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithPDP(guardianCoveragePDP{response: response, authoritativeAllow: true}))
+	decision, err = authoritative.EvaluateDecision(ctx, request)
+	if err != nil || decision.Verdict != string(contracts.VerdictAllow) || decision.PolicyDecisionHash != response.DecisionHash || decision.RequirementSetHash != "" {
+		t.Fatalf("authoritative PDP allow did not replace only PRG, decision=%+v err=%v", decision, err)
 	}
 }
 
@@ -1037,7 +1071,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 
 	budgetErrorGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithBudgetTracker(guardianCoverageBudgetGate{checkErr: errors.New("ledger offline")}))
 	budgetDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-budget", SubjectID: "agent"})
-	if err := budgetErrorGuardian.signDecisionWithGraph(ctx, budgetDecision, &contracts.Effect{EffectID: "effect-budget", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, allowGraphFor("EXECUTE_TOOL")); err != nil {
+	if err := budgetErrorGuardian.signDecisionWithGraph(ctx, budgetDecision, &contracts.Effect{EffectID: "effect-budget", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, allowGraphFor("EXECUTE_TOOL"), false); err != nil {
 		t.Fatalf("budget error decision should sign: %v", err)
 	}
 	if budgetDecision.ReasonCode != string(contracts.ReasonBudgetError) {
@@ -1046,7 +1080,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 
 	consumeErrorGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithBudgetTracker(guardianCoverageBudgetGate{allowed: true, consumeErr: errors.New("consume failed")}))
 	consumeDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-consume", SubjectID: "agent"})
-	if err := consumeErrorGuardian.signDecisionWithGraph(ctx, consumeDecision, &contracts.Effect{EffectID: "effect-consume", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, allowGraphFor("EXECUTE_TOOL")); err != nil {
+	if err := consumeErrorGuardian.signDecisionWithGraph(ctx, consumeDecision, &contracts.Effect{EffectID: "effect-consume", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, allowGraphFor("EXECUTE_TOOL"), false); err != nil {
 		t.Fatalf("consume error path should still sign: %v", err)
 	}
 	// A budget consume failure must fail closed: the effect is denied rather
@@ -1056,7 +1090,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 	}
 
 	nilGraphDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-nil-graph", SubjectID: "agent"})
-	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithGraph(ctx, nilGraphDecision, &contracts.Effect{EffectID: "effect-no-policy", EffectType: "UNDECLARED_ACTION", Params: map[string]any{}}, nil, nil, nil); err != nil {
+	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithGraph(ctx, nilGraphDecision, &contracts.Effect{EffectID: "effect-no-policy", EffectType: "UNDECLARED_ACTION", Params: map[string]any{}}, nil, nil, nil, false); err != nil {
 		t.Fatalf("nil graph no-policy decision should sign: %v", err)
 	}
 	if nilGraphDecision.ReasonCode != string(contracts.ReasonNoPolicy) {
@@ -1068,7 +1102,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	badCELDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-bad-cel", SubjectID: "agent"})
-	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithGraph(ctx, badCELDecision, &contracts.Effect{EffectID: "effect-bad-cel", EffectType: "EXECUTE_TOOL", Params: map[string]any{}}, nil, nil, badGraph); err != nil {
+	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithGraph(ctx, badCELDecision, &contracts.Effect{EffectID: "effect-bad-cel", EffectType: "EXECUTE_TOOL", Params: map[string]any{}}, nil, nil, badGraph, false); err != nil {
 		t.Fatalf("bad CEL decision should sign deny: %v", err)
 	}
 	if badCELDecision.ReasonCode != string(contracts.ReasonPRGEvalError) {

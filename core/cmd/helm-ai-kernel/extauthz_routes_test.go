@@ -18,6 +18,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	otelapi "go.opentelemetry.io/otel"
@@ -162,6 +163,78 @@ func TestExtAuthzAuthorizeRouteAllowsMatchingPolicySnapshot(t *testing.T) {
 		MaxPermitTTL:              time.Minute,
 	}, time.Now().UTC()); err != nil {
 		t.Fatalf("verify response: %v\nresponse=%+v", err, resp)
+	}
+}
+
+func TestExtAuthzAuthorizeRouteExecutesManagedPolicyVerdicts(t *testing.T) {
+	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	t.Setenv("HELM_EXTAUTHZ_TRUST_ROOT_ID", "kernel-test-root")
+
+	signer, err := helmcrypto.NewEd25519Signer("extauthz-managed-policy-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceHash := "sha256:" + strings.Repeat("b", 64)
+	bundle := managedPolicyBundleForTest(t, sourceHash)
+	policyHash := policyreconcile.HashBytes(bundle)
+	scope := policyreconcile.PolicyScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}
+	snapshot, err := compileServePolicySnapshot(context.Background(), policyreconcile.PolicyHead{
+		Scope:       scope,
+		PolicyEpoch: 42,
+		PolicyHash:  policyHash,
+		BundleRef:   "cp-policy-publication:42",
+		SourceRefs:  []string{sourceHash},
+	}, bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if authoritative, ok := snapshot.PDP.(pdp.AuthoritativeAllowPolicyDecisionPoint); !ok || !authoritative.AuthoritativeAllow() {
+		t.Fatal("managed policy authority marker was lost through telemetry")
+	}
+	store := policyreconcile.NewAtomicSnapshotStore()
+	if err := store.Swap(scope, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	svc := &Services{
+		Guardian:      guardian.NewGuardian(signer, prg.NewGraph(), artifacts.NewRegistry(nil, nil), guardian.WithPolicySnapshots(store, scope)),
+		ReceiptSigner: signer,
+	}
+	mux := http.NewServeMux()
+	registerExtAuthzRoutes(mux, svc)
+
+	for _, tc := range []struct {
+		name           string
+		effectClass    string
+		verdict        string
+		reasonCode     string
+		wantPermit     bool
+		wantEscalation bool
+	}{
+		{name: "E0 allow", effectClass: "E0", verdict: extauthz.VerdictAllow, wantPermit: true},
+		{name: "E3 escalate", effectClass: "E3", verdict: extauthz.VerdictEscalate, reasonCode: string(contracts.ReasonApprovalRequired), wantEscalation: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := extAuthzRouteFixture("req-managed-"+strings.ToLower(strings.ReplaceAll(tc.effectClass, " ", "-")), scope.TenantID, "42")
+			fixture.PolicyHash = policyHash
+			fixture.EffectClass = tc.effectClass
+			req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, bytes.NewReader(mustJSONExtAuthzRoute(t, fixture)))
+			req.Header.Set("Authorization", "Bearer route-secret")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var resp extauthz.AuthorizationResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatal(err)
+			}
+			if resp.Verdict != tc.verdict || (tc.reasonCode != "" && resp.ReasonCode != tc.reasonCode) {
+				t.Fatalf("managed verdict=%s reason=%s body=%s", resp.Verdict, resp.ReasonCode, rec.Body.String())
+			}
+			if (resp.EffectPermitRef != "") != tc.wantPermit || (resp.EscalationRef != "" && resp.EscalationReceiptRef != "") != tc.wantEscalation {
+				t.Fatalf("managed response refs do not match verdict: %+v", resp)
+			}
+		})
 	}
 }
 

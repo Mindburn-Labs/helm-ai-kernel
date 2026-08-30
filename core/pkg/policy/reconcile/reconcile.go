@@ -9,6 +9,7 @@
 package reconcile
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -43,6 +44,9 @@ const (
 	StatusCompileError  = "compile_error"
 	StatusValidateError = "validate_error"
 	DefaultLKGMaxAge    = 10 * time.Minute
+
+	maxControlPlaneHeadBytes   int64 = 64 << 10
+	maxControlPlaneBundleBytes int64 = 1 << 20
 )
 
 const (
@@ -969,7 +973,7 @@ func (s *ControlPlaneSource) Load(ctx context.Context, scope PolicyScope, epoch 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("controlplane load failed: %s", resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	return readControlPlaneResponse(resp.Body, maxControlPlaneBundleBytes, "bundle")
 }
 
 func (s *ControlPlaneSource) url(path string, scope PolicyScope, epoch uint64) (string, error) {
@@ -1009,7 +1013,31 @@ func (s *ControlPlaneSource) getJSON(ctx context.Context, endpoint string, out a
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("controlplane head failed: %s", resp.Status)
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	body, err := readControlPlaneResponse(resp.Body, maxControlPlaneHeadBytes, "head")
+	if err != nil {
+		return err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return fmt.Errorf("controlplane head decode: %w", err)
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return fmt.Errorf("controlplane head must contain exactly one JSON value")
+	}
+	return nil
+}
+
+func readControlPlaneResponse(body io.Reader, maxBytes int64, kind string) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, maxBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("controlplane %s read: %w", kind, err)
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("controlplane %s exceeds %d bytes", kind, maxBytes)
+	}
+	return data, nil
 }
 
 func (s *ControlPlaneSource) client() *http.Client {

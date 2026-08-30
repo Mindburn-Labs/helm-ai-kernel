@@ -220,6 +220,9 @@ func TestProtectModelRequestPreservesSchemaNamesOnlyInDeclarations(t *testing.T)
 	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-4o","tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string","default":"abc123"}}}}}]}`)); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("password schema default error = %v, want ErrDataEgressBlocked", err)
 	}
+	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-4o","tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"allOf":[{"type":"string","default":"abc123"}]}}}}}]}`)); !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("nested password schema default error = %v, want ErrDataEgressBlocked", err)
+	}
 }
 
 func TestProtectModelRequestKeepsEmbeddedJSONValid(t *testing.T) {
@@ -228,6 +231,7 @@ func TestProtectModelRequestKeepsEmbeddedJSONValid(t *testing.T) {
 		"model": "gpt-4o",
 		"messages": []any{
 			map[string]any{"role": "user", "content": embedded},
+			map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": embedded}}},
 			map[string]any{
 				"role": "assistant",
 				"tool_calls": []any{
@@ -248,8 +252,9 @@ func TestProtectModelRequestKeepsEmbeddedJSONValid(t *testing.T) {
 		t.Fatal(err)
 	}
 	messages := outer["messages"].([]any)
-	arguments := messages[1].(map[string]any)["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)["arguments"].(string)
-	for _, value := range []string{messages[0].(map[string]any)["content"].(string), arguments} {
+	multimodal := messages[1].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	arguments := messages[2].(map[string]any)["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)["arguments"].(string)
+	for _, value := range []string{messages[0].(map[string]any)["content"].(string), multimodal, arguments} {
 		if !json.Valid([]byte(value)) || strings.Contains(value, "4155552671") || strings.Contains(value, "person@example.com") {
 			t.Fatalf("protected embedded request JSON = %q", value)
 		}
@@ -268,6 +273,7 @@ func TestProtectModelResponseKeepsEmbeddedJSONValid(t *testing.T) {
 					},
 				},
 			},
+			map[string]any{"message": map[string]any{"content": []any{map[string]any{"type": "output_text", "text": embedded}}}},
 		},
 	})
 	if err != nil {
@@ -286,7 +292,8 @@ func TestProtectModelResponseKeepsEmbeddedJSONValid(t *testing.T) {
 	}
 	message := outer["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)
 	arguments := message["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)["arguments"].(string)
-	for _, value := range []string{message["content"].(string), arguments} {
+	multimodal := outer["choices"].([]any)[1].(map[string]any)["message"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	for _, value := range []string{message["content"].(string), multimodal, arguments} {
 		if !json.Valid([]byte(value)) || strings.Contains(value, "4155552671") || strings.Contains(value, "person@example.com") {
 			t.Fatalf("protected embedded JSON = %q", value)
 		}
@@ -332,6 +339,11 @@ func TestProtectModelResponseValidatesUnchangedLogprobBytes(t *testing.T) {
 	}
 	if _, _, err := ProtectModelResponseJSON(context.Background(), raw); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("mismatched restricted bytes error = %v, want ErrDataEgressBlocked", err)
+	}
+
+	splitSecret := json.RawMessage(`{"choices":[{"logprobs":{"content":[{"token":"sk_","bytes":[115,107,95]},{"token":"live_","bytes":[108,105,118,101,95]},{"token":"example1234","bytes":[101,120,97,109,112,108,101,49,50,51,52]}]}}]}`)
+	if _, _, err := ProtectModelResponseJSON(context.Background(), splitSecret); !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("concatenated restricted logprob stream error = %v, want ErrDataEgressBlocked", err)
 	}
 }
 

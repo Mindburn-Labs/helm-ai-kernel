@@ -173,11 +173,12 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	}
 
 	gw, err := api.NewGovernedGateway(api.GovernedGatewayConfig{
-		Engine:   engine,
-		Resolver: s.resolveEnvelope,
-		Dispatch: s.governedDispatch,
-		TenantID: func(*http.Request) string { return cfg.TenantID },
-		Models:   s.modelList(),
+		Engine:       engine,
+		Resolver:     s.resolveEnvelope,
+		Dispatch:     s.governedDispatch,
+		TenantID:     func(*http.Request) string { return cfg.TenantID },
+		Models:       s.modelList(),
+		OnSettlement: s.persistOutcome,
 	})
 	if err != nil {
 		store.Close()
@@ -343,7 +344,6 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 			HELM     api.GatewayMetadata `json:"helm"`
 		}
 		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil && envl.Response != nil {
-			s.persistOutcome(&envl.HELM)
 			copyHeaders(w.Header(), rec.header)
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Del("Content-Length")
@@ -360,9 +360,7 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 			HELM api.GatewayMetadata `json:"helm"`
 		}
 		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil {
-			if envl.HELM.SettlementReceipt != nil {
-				s.persistOutcome(&envl.HELM)
-			} else if envl.HELM.Quote != nil {
+			if envl.HELM.SettlementReceipt == nil && envl.HELM.Quote != nil {
 				s.appendOrLog(&ReceiptRecord{
 					Kind:          RecordRouteQuote,
 					TenantID:      envl.HELM.Quote.TenantID,

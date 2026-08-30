@@ -221,7 +221,7 @@ func TestGatewaySuccessfulRoute(t *testing.T) {
 	if meta.Verdict != economic.BudgetVerdictAllow {
 		t.Fatalf("verdict = %s, want ALLOW", meta.Verdict)
 	}
-	if meta.UsageReceipt == nil || meta.SettlementReceipt == nil || meta.RouteReceipt == nil || meta.Quote == nil {
+	if meta.UsageReceiptView == nil || meta.SettlementReceipt == nil || meta.RouteReceipt == nil || meta.Quote == nil {
 		t.Fatal("successful response must carry quote + all three receipts")
 	}
 	if !meta.SettlementReceipt.Balanced() {
@@ -284,11 +284,15 @@ func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 			t.Fatalf("settlement entries = %d, want 1", len(f.ledger.Entries()))
 		}
 		meta := decodeHELM(t, rec)
-		if meta.Quote == nil || meta.RouteReceipt == nil || meta.UsageReceipt == nil || meta.SettlementReceipt == nil {
+		if meta.Quote == nil || meta.RouteReceipt == nil || meta.UsageReceiptView == nil || meta.SettlementReceipt == nil {
 			t.Fatal("blocked provider response must retain the complete settlement metadata")
 		}
-		if !strings.HasPrefix(meta.UsageReceipt.ProviderRequestID, "provider-request-redacted-rq-") {
-			t.Fatalf("provider request id was not sanitized: %q", meta.UsageReceipt.ProviderRequestID)
+		if meta.UsageReceiptView.ProviderRequestID != "" || !strings.Contains(strings.Join(meta.UsageReceiptView.RedactedFields, ","), "provider_request_id") {
+			t.Fatalf("public provider request id was not redacted: %+v", meta.UsageReceiptView)
+		}
+		internal := f.ledger.InternalUsageRecords()
+		if len(internal) != 1 || internal[0].ProviderRequestID != f.dispatch.requestID {
+			t.Fatalf("internal provider request id = %+v, want %q", internal, f.dispatch.requestID)
 		}
 	})
 }
@@ -441,7 +445,7 @@ func TestGatewayFallbackReceipt(t *testing.T) {
 	if meta.Quote == nil || len(meta.Quote.FallbackChain) == 0 {
 		t.Fatal("fallback receipt must include the fallback chain")
 	}
-	if meta.UsageReceipt == nil || meta.UsageReceipt.ModelID == "gpt-4o-mini" {
+	if meta.UsageReceiptView == nil || meta.UsageReceiptView.ModelID == "gpt-4o-mini" {
 		t.Fatal("usage receipt must record the substituted model, not the requested one")
 	}
 }

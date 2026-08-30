@@ -850,6 +850,33 @@ func schemaContainsExampleValue(schema map[string]any) bool {
 			return true
 		}
 	}
+	for _, keyword := range []string{"properties", "$defs", "definitions", "patternProperties", "dependentSchemas"} {
+		declarations, ok := schema[keyword].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, nested := range declarations {
+			if child, ok := nested.(map[string]any); ok && schemaContainsExampleValue(child) {
+				return true
+			}
+		}
+	}
+	for _, keyword := range []string{"items", "additionalProperties", "unevaluatedProperties", "unevaluatedItems", "not", "if", "then", "else", "contains", "propertyNames"} {
+		if child, ok := schema[keyword].(map[string]any); ok && schemaContainsExampleValue(child) {
+			return true
+		}
+	}
+	for _, keyword := range []string{"allOf", "anyOf", "oneOf", "prefixItems"} {
+		items, ok := schema[keyword].([]any)
+		if !ok {
+			continue
+		}
+		for _, nested := range items {
+			if child, ok := nested.(map[string]any); ok && schemaContainsExampleValue(child) {
+				return true
+			}
+		}
+	}
 	return false
 }
 
@@ -857,6 +884,9 @@ func rewriteModelResponseEmbeddedJSON(value any, restore bool) error {
 	root, ok := value.(map[string]any)
 	if !ok {
 		return nil
+	}
+	if err := rewriteModelMessageEmbeddedJSON(root, restore); err != nil {
+		return err
 	}
 	if choices, ok := root["choices"].([]any); ok {
 		for _, choiceValue := range choices {
@@ -873,6 +903,20 @@ func rewriteModelResponseEmbeddedJSON(value any, restore bool) error {
 			}
 		}
 	}
+	if candidates, ok := root["candidates"].([]any); ok {
+		for _, candidateValue := range candidates {
+			candidate, ok := candidateValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			content, ok := candidate["content"].(map[string]any)
+			if ok {
+				if err := rewriteModelMessageEmbeddedJSON(content, restore); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if outputs, ok := root["output"].([]any); ok {
 		for _, outputValue := range outputs {
 			output, ok := outputValue.(map[string]any)
@@ -882,15 +926,8 @@ func rewriteModelResponseEmbeddedJSON(value any, restore bool) error {
 			if err := rewriteEmbeddedJSONField(output, "arguments", restore, true); err != nil {
 				return err
 			}
-			if contents, ok := output["content"].([]any); ok {
-				for _, contentValue := range contents {
-					content, ok := contentValue.(map[string]any)
-					if ok {
-						if err := rewriteEmbeddedJSONField(content, "text", restore, false); err != nil {
-							return err
-						}
-					}
-				}
+			if err := rewriteModelMessageEmbeddedJSON(output, restore); err != nil {
+				return err
 			}
 		}
 	}
@@ -905,7 +942,7 @@ func rewriteModelRequestEmbeddedJSON(value any, restore bool) error {
 	if err := rewriteEmbeddedJSONField(root, "input", restore, false); err != nil {
 		return err
 	}
-	for _, field := range []string{"messages", "input"} {
+	for _, field := range []string{"messages", "input", "contents"} {
 		messages, ok := root[field].([]any)
 		if !ok {
 			continue
@@ -925,6 +962,20 @@ func rewriteModelRequestEmbeddedJSON(value any, restore bool) error {
 func rewriteModelMessageEmbeddedJSON(message map[string]any, restore bool) error {
 	if err := rewriteEmbeddedJSONField(message, "content", restore, false); err != nil {
 		return err
+	}
+	for _, field := range []string{"content", "parts"} {
+		parts, ok := message[field].([]any)
+		if !ok {
+			continue
+		}
+		for _, partValue := range parts {
+			part, ok := partValue.(map[string]any)
+			if ok {
+				if err := rewriteEmbeddedJSONField(part, "text", restore, false); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	if functionCall, ok := message["function_call"].(map[string]any); ok {
 		if err := rewriteEmbeddedJSONField(functionCall, "arguments", restore, true); err != nil {
@@ -1045,12 +1096,168 @@ func rewriteLogprobEntries(p *protector, value any, restore bool, originalTokens
 	if !ok {
 		return nil
 	}
+	if !restore {
+		if err := p.validateLogprobEntryStreams(entries); err != nil {
+			return err
+		}
+	}
 	for _, entry := range entries {
 		if err := rewriteLogprobTokenEntry(p, entry, restore, originalTokens); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (p *protector) validateLogprobEntryStreams(entries []any) error {
+	var tokenStream strings.Builder
+	var byteStream []byte
+	tokenEntries := 0
+	byteEntries := 0
+	flushTokens := func() error {
+		var err error
+		if tokenEntries > 1 {
+			err = p.validateLogprobStreamText(tokenStream.String())
+		}
+		tokenStream.Reset()
+		tokenEntries = 0
+		return err
+	}
+	flushBytes := func() error {
+		var err error
+		if byteEntries > 1 {
+			err = p.validateLogprobByteStream(byteStream)
+		}
+		byteStream = byteStream[:0]
+		byteEntries = 0
+		return err
+	}
+	for _, value := range entries {
+		entry, ok := value.(map[string]any)
+		if !ok {
+			if err := flushTokens(); err != nil {
+				return err
+			}
+			if err := flushBytes(); err != nil {
+				return err
+			}
+			continue
+		}
+		token, ok := entry["token"].(string)
+		if !ok {
+			if err := flushTokens(); err != nil {
+				return err
+			}
+			if err := flushBytes(); err != nil {
+				return err
+			}
+			continue
+		}
+		clean, err := p.logprobTextClean(token)
+		if err != nil {
+			return err
+		}
+		if !clean {
+			if err := flushTokens(); err != nil {
+				return err
+			}
+			if err := flushBytes(); err != nil {
+				return err
+			}
+			continue
+		}
+		if tokenStream.Len() > maxProtectStringBytes-len(token) {
+			return ErrDataEgressInvalid
+		}
+		tokenStream.WriteString(token)
+		tokenEntries++
+		rawValue, present := entry["bytes"]
+		if !present || rawValue == nil {
+			if err := flushBytes(); err != nil {
+				return err
+			}
+			continue
+		}
+		raw, err := decodeLogprobBytes(rawValue)
+		if err != nil {
+			return err
+		}
+		if len(byteStream) > maxProtectStringBytes-len(raw) {
+			return ErrDataEgressInvalid
+		}
+		byteStream = append(byteStream, raw...)
+		byteEntries++
+	}
+	if err := flushTokens(); err != nil {
+		return err
+	}
+	return flushBytes()
+}
+
+func (p *protector) validateLogprobStreamText(value string) error {
+	clean, err := p.logprobTextClean(value)
+	if err != nil {
+		return err
+	}
+	if !clean {
+		return ErrDataEgressBlocked
+	}
+	return nil
+}
+
+func (p *protector) logprobTextClean(value string) (bool, error) {
+	if value == "" {
+		return true, nil
+	}
+	if err := p.ctx.Err(); err != nil {
+		return false, ErrDataEgressBlocked
+	}
+	if !utf8.ValidString(value) || len(value) > maxProtectStringBytes {
+		return false, ErrDataEgressInvalid
+	}
+	protected, _, err := sanitizeText(value, p.manager)
+	if err != nil {
+		return false, err
+	}
+	return protected == value, nil
+}
+
+func (p *protector) validateLogprobByteStream(raw []byte) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	if utf8.Valid(raw) {
+		return p.validateLogprobStreamText(string(raw))
+	}
+	validPrefix := 0
+	for validPrefix < len(raw) {
+		r, size := utf8.DecodeRune(raw[validPrefix:])
+		if r == utf8.RuneError && size == 1 {
+			break
+		}
+		validPrefix += size
+	}
+	if validPrefix > 0 {
+		if err := p.validateLogprobStreamText(string(raw[:validPrefix])); err != nil {
+			return err
+		}
+	}
+	fragment := raw[validPrefix:]
+	if len(fragment) == 0 || len(fragment) >= utf8.UTFMax {
+		return ErrDataEgressInvalid
+	}
+	if utf8.RuneStart(fragment[0]) && !utf8.FullRune(fragment) {
+		return nil
+	}
+	if validPrefix == 0 {
+		for _, item := range fragment {
+			if item&0xc0 != 0x80 {
+				return ErrDataEgressInvalid
+			}
+		}
+		return nil
+	}
+	return ErrDataEgressInvalid
 }
 
 func rewriteLogprobTokenEntry(p *protector, value any, restore bool, originalTokens *[]string) error {
@@ -1116,66 +1323,34 @@ func rewriteLogprobTokenEntry(p *protector, value any, restore bool, originalTok
 }
 
 func (p *protector) validateLogprobBytes(value any, token string) error {
+	raw, err := decodeLogprobBytes(value)
+	if err != nil {
+		return err
+	}
+	if utf8.Valid(raw) {
+		if string(raw) == token {
+			return nil
+		}
+		return p.validateLogprobStreamText(string(raw))
+	}
+	return p.validateLogprobByteStream(raw)
+}
+
+func decodeLogprobBytes(value any) ([]byte, error) {
 	items, ok := value.([]any)
 	if !ok {
-		return ErrDataEgressInvalid
+		return nil, ErrDataEgressInvalid
 	}
 	raw := make([]byte, len(items))
 	for index, item := range items {
 		digits := exactNumericDigits(item)
 		parsed, err := strconv.ParseUint(digits, 10, 8)
 		if digits == "" || err != nil {
-			return ErrDataEgressInvalid
+			return nil, ErrDataEgressInvalid
 		}
 		raw[index] = byte(parsed)
 	}
-	if utf8.Valid(raw) {
-		if string(raw) == token {
-			return nil
-		}
-		protected, err := p.text(string(raw))
-		if err != nil {
-			return err
-		}
-		if protected != string(raw) {
-			return ErrDataEgressBlocked
-		}
-		return nil
-	}
-
-	validPrefix := 0
-	for validPrefix < len(raw) {
-		r, size := utf8.DecodeRune(raw[validPrefix:])
-		if r == utf8.RuneError && size == 1 {
-			break
-		}
-		validPrefix += size
-	}
-	if validPrefix > 0 {
-		protected, err := p.text(string(raw[:validPrefix]))
-		if err != nil {
-			return err
-		}
-		if protected != string(raw[:validPrefix]) {
-			return ErrDataEgressBlocked
-		}
-	}
-	fragment := raw[validPrefix:]
-	if len(fragment) == 0 || len(fragment) >= utf8.UTFMax {
-		return ErrDataEgressInvalid
-	}
-	if utf8.RuneStart(fragment[0]) && !utf8.FullRune(fragment) {
-		return nil
-	}
-	if validPrefix == 0 {
-		for _, item := range fragment {
-			if item&0xc0 != 0x80 {
-				return ErrDataEgressInvalid
-			}
-		}
-		return nil
-	}
-	return ErrDataEgressInvalid
+	return raw, nil
 }
 
 func (p *protector) accountBytes(size int) error {

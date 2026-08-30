@@ -76,6 +76,82 @@ func TestSkillProjectionEffectCanonicalHashVector(t *testing.T) {
 	}
 }
 
+func TestSkillProjectionConsumedPermitRefIsCanonicalAndPreEffect(t *testing.T) {
+	ref, err := ComputeSkillProjectionConsumedPermitRef("tenant-1", "workspace-1", "binding-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref != "sha256:d247be2ea66c8004dbb77686c26e26e824ffa4c8d7ba8edd783b9bd70d48da58" {
+		t.Fatalf("consumed permit reference = %s", ref)
+	}
+
+	now := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
+	effect := validSkillProjectionEffect(t, now)
+	effect.ConsumedPermitRef = ref
+	effect, err = effect.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant := validApprovalGrant()
+	grant.GrantID = "grant-1"
+	grant.TenantID = effect.TenantID
+	grant.WorkspaceID = effect.WorkspaceID
+	grant.PackID = effect.SkillID
+	grant.PackVersion = effect.SkillVersion
+	grant.PackManifestHash = effect.ManifestHash
+	grant.EffectHash = effect.CanonicalRequestHash
+	grant.PolicyHash = effect.PolicyHash
+	grant.ConnectorAuthority = approvalConnectorAuthorityFor(
+		grant.TenantID, grant.WorkspaceID, grant.PackID, grant.PackVersion,
+		grant.PackManifestHash, grant.Action, grant.EffectHash, grant.PolicyHash,
+	)
+	grant, err = grant.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref == grant.GrantHash {
+		t.Fatal("pre-effect permit reference must not alias the sealed grant hash")
+	}
+	recomputed, err := ComputeSkillProjectionConsumedPermitRef(
+		grant.TenantID, grant.WorkspaceID, grant.ConnectorAuthority.BindingRef,
+	)
+	if err != nil || recomputed != ref {
+		t.Fatalf("recomputed reference = %s, err = %v", recomputed, err)
+	}
+
+	for name, values := range map[string][3]string{
+		"tenant":    {"tenant-2", "workspace-1", "binding-a"},
+		"workspace": {"tenant-1", "workspace-2", "binding-a"},
+		"binding":   {"tenant-1", "workspace-1", "binding-b"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed, err := ComputeSkillProjectionConsumedPermitRef(values[0], values[1], values[2])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if changed == ref {
+				t.Fatal("authority field mutation did not change the permit reference")
+			}
+		})
+	}
+}
+
+func TestSkillProjectionConsumedPermitRefRejectsUnsafeScope(t *testing.T) {
+	for name, values := range map[string][3]string{
+		"tenant":             {"Tenant-1", "workspace-1", "binding-a"},
+		"workspace":          {"tenant-1", "../workspace", "binding-a"},
+		"binding":            {"tenant-1", "workspace-1", "binding ref"},
+		"unicode whitespace": {"tenant-1", "workspace-1", "binding\u00a0ref"},
+		"long binding":       {"tenant-1", "workspace-1", strings.Repeat("b", 513)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := ComputeSkillProjectionConsumedPermitRef(values[0], values[1], values[2]); err == nil {
+				t.Fatal("expected unsafe consumed permit scope to fail")
+			}
+		})
+	}
+}
+
 func TestSkillProjectionRollbackPermitIsSeparateAndActionBound(t *testing.T) {
 	now := time.Date(2026, 8, 30, 10, 0, 0, 0, time.UTC)
 	effect := validSkillProjectionEffect(t, now)

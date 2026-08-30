@@ -147,7 +147,7 @@ func ComputeSkillProjectionConsumedPermitRef(tenantID, workspaceID, grantID stri
 	if !skillProjectionScopeIDPattern.MatchString(workspaceID) {
 		return "", skillProjectionEffectInvalid("consumed permit workspace_id is not a safe scope identifier")
 	}
-	if !skillProjectionBoundedToken(grantID, 512) {
+	if !skillProjectionBoundedToken(grantID, 512) || !isApprovalGrantToken(grantID) {
 		return "", skillProjectionEffectInvalid("consumed permit grant_id must be a bounded token")
 	}
 	ref, err := hashJCS(struct {

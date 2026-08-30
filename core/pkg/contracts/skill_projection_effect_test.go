@@ -136,10 +136,11 @@ func TestSkillProjectionConsumedPermitRefIsCanonicalAndPreEffect(t *testing.T) {
 
 func TestSkillProjectionConsumedPermitRefRejectsUnsafeScope(t *testing.T) {
 	for name, values := range map[string][3]string{
-		"tenant":     {"Tenant-1", "workspace-1", "grant-1"},
-		"workspace":  {"tenant-1", "../workspace", "grant-1"},
-		"grant":      {"tenant-1", "workspace-1", "grant id"},
-		"long grant": {"tenant-1", "workspace-1", strings.Repeat("g", 513)},
+		"tenant":             {"Tenant-1", "workspace-1", "grant-1"},
+		"workspace":          {"tenant-1", "../workspace", "grant-1"},
+		"grant":              {"tenant-1", "workspace-1", "grant id"},
+		"unicode whitespace": {"tenant-1", "workspace-1", "grant\u00a0id"},
+		"long grant":         {"tenant-1", "workspace-1", strings.Repeat("g", 513)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := ComputeSkillProjectionConsumedPermitRef(values[0], values[1], values[2]); err == nil {

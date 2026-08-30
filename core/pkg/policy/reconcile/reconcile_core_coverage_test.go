@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise classical Ed25519 signatures and
+// X.509/TLS trust rotation only; they make no post-quantum assurance claim.
 package reconcile
 
 import (

@@ -22,6 +22,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // maxRequestBody mirrors the governed gateway's request-size ceiling (10 MiB).
@@ -285,12 +286,7 @@ func (s *Server) handleInference(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(body, &probe)
 
 	if probe.Stream {
-		if r.URL.Path != "/v1/chat/completions" {
-			writeJSONError(w, http.StatusBadRequest,
-				"streaming is only supported on /v1/chat/completions in spend-proxy v1", "invalid_request_error", "")
-			return
-		}
-		s.handleStream(w, r, body)
+		writeJSONError(w, http.StatusForbidden, privacy.ErrDataEgressBlocked.Error(), "helm_data_egress_blocked", "")
 		return
 	}
 	s.handleBuffered(w, r, body)

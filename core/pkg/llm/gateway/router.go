@@ -16,6 +16,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // GatewayRouter normalizes capability requests across providers.
@@ -557,10 +558,17 @@ func (r *GatewayRouter) getJSON(ctx context.Context, endpoint string, out any) e
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("lig: GET %s failed: HTTP %d %s", endpoint, resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("lig: provider GET failed: HTTP %d", resp.StatusCode)
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20+1))
+	if err != nil {
+		return errors.New("lig: provider response read failed")
+	}
+	protected, _, err := privacy.ProtectJSON(ctx, json.RawMessage(data))
+	if err != nil {
+		return privacy.ErrDataEgressBlocked
+	}
+	return json.Unmarshal(protected, out)
 }
 
 func (r *GatewayRouter) postJSON(ctx context.Context, endpoint string, payload any, out any) error {
@@ -568,7 +576,11 @@ func (r *GatewayRouter) postJSON(ctx context.Context, endpoint string, payload a
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+	protectedRequest, _, err := privacy.ProtectJSON(ctx, json.RawMessage(data))
+	if err != nil {
+		return privacy.ErrDataEgressBlocked
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(protectedRequest))
 	if err != nil {
 		return err
 	}
@@ -579,8 +591,15 @@ func (r *GatewayRouter) postJSON(ctx context.Context, endpoint string, payload a
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("lig: POST %s failed: HTTP %d %s", endpoint, resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("lig: provider POST failed: HTTP %d", resp.StatusCode)
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	response, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20+1))
+	if err != nil {
+		return errors.New("lig: provider response read failed")
+	}
+	protectedResponse, _, err := privacy.ProtectJSON(ctx, json.RawMessage(response))
+	if err != nil {
+		return privacy.ErrDataEgressBlocked
+	}
+	return json.Unmarshal(protectedResponse, out)
 }

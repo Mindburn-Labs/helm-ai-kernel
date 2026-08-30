@@ -23,8 +23,10 @@ type gatewayFixture struct {
 }
 
 type spyDispatch struct {
-	called int
-	cost   int64
+	called       int
+	cost         int64
+	body         []byte
+	responseBody json.RawMessage
 }
 
 func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, costCap inferencegateway.CostCapPolicy, providerCost int64) *gatewayFixture {
@@ -70,8 +72,13 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 	spy := &spyDispatch{cost: providerCost}
 	dispatch := func(r *http.Request, quote *economic.RouteQuote, body []byte) (DispatchOutcome, error) {
 		spy.called++
+		spy.body = append([]byte(nil), body...)
+		responseBody := spy.responseBody
+		if responseBody == nil {
+			responseBody = json.RawMessage(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+		}
 		return DispatchOutcome{
-			ResponseBody:      json.RawMessage(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}`),
+			ResponseBody:      responseBody,
 			ProviderRequestID: "prov-req-" + quote.ID,
 			ProviderCostCents: spy.cost,
 			InputTokens:       1000,
@@ -200,6 +207,56 @@ func TestGatewaySuccessfulRoute(t *testing.T) {
 	if f.dispatch.called != 1 {
 		t.Fatalf("dispatch called %d times, want 1", f.dispatch.called)
 	}
+}
+
+func TestGatewayProtectsProviderRequestAndResponse(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	f.dispatch.responseBody = json.RawMessage(`{"id":"chatcmpl-privacy","choices":[{"message":{"role":"assistant","content":"reply to person@example.com"}}]}`)
+	body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"contact person@example.com"}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	for key, value := range helmHeaders("idem-privacy", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if bytes.Contains(f.dispatch.body, []byte("person@example.com")) || !bytes.Contains(f.dispatch.body, []byte("[REDACTED_EMAIL]")) {
+		t.Fatalf("dispatch body was not protected: %s", f.dispatch.body)
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("person@example.com")) || !bytes.Contains(rec.Body.Bytes(), []byte("[REDACTED_EMAIL]")) {
+		t.Fatalf("response body was not protected: %s", rec.Body.String())
+	}
+}
+
+func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
+	t.Run("request", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"api_key=sk_live_example1234"}]}`)
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+		for key, value := range helmHeaders("idem-privacy-request", "gpt-4o") {
+			req.Header.Set(key, value)
+		}
+		rec := httptest.NewRecorder()
+		f.mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden || f.dispatch.called != 0 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) {
+			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
+		}
+	})
+
+	t.Run("response", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"content":"api_key=sk_live_example1234"}}]}`)
+		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-privacy-response", "gpt-4o"))
+		if rec.Code != http.StatusBadGateway || f.dispatch.called != 1 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) {
+			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
+		}
+		if len(f.ledger.Entries()) != 1 {
+			t.Fatalf("settlement entries = %d, want 1", len(f.ledger.Entries()))
+		}
+	})
 }
 
 // --- Runtime smoke: 1 denied route --------------------------------------------

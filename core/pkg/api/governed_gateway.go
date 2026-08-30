@@ -29,6 +29,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // EnvelopeResolver loads the AgentSpendEnvelope referenced by the request
@@ -167,6 +168,12 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteBadRequest(w, "failed to read request body")
 		return
 	}
+	protectedBody, _, err := privacy.ProtectJSON(r.Context(), json.RawMessage(body))
+	if err != nil {
+		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
+		return
+	}
+	body = protectedBody
 	var parsed inferenceBody
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		WriteBadRequest(w, "invalid request body")
@@ -203,8 +210,14 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 
 	outcome, derr := g.dispatch(r, quoteRes.Quote, body)
 	if derr != nil {
-		WriteError(w, http.StatusBadGateway, "provider dispatch failed", derr.Error())
+		WriteError(w, http.StatusBadGateway, "provider dispatch failed", "provider request failed")
 		return
+	}
+	protectedResponse, _, responsePrivacyErr := privacy.ProtectJSON(r.Context(), outcome.ResponseBody)
+	if responsePrivacyErr == nil {
+		outcome.ResponseBody = protectedResponse
+	} else {
+		outcome.ResponseBody = nil
 	}
 
 	settleRes, serr := g.engine.Settle(
@@ -239,6 +252,10 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		EvidencePackRef:   settleRes.EvidencePackRef,
 	}
 	writeGatewayMetadataHeaders(w, meta)
+	if responsePrivacyErr != nil {
+		WriteError(w, http.StatusBadGateway, "provider response blocked", privacy.ErrDataEgressBlocked.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, governedResponse{Response: outcome.ResponseBody, HELM: meta})
 }
 

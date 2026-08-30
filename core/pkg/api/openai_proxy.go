@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // OpenAIProxyConfig configures the OpenAI-compatible proxy.
@@ -88,6 +90,10 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	if req.Model == "" {
 		req.Model = "gpt-4"
 	}
+	if req.Stream {
+		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
+		return
+	}
 
 	upstreamURL := os.Getenv("HELM_UPSTREAM_URL")
 	if upstreamURL == "" {
@@ -112,10 +118,15 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, fmt.Sprintf("Failed to marshal request: %v", err))
 		return
 	}
+	protectedRequest, _, err := privacy.ProtectJSON(r.Context(), json.RawMessage(upstreamReq))
+	if err != nil {
+		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
+		return
+	}
 
 	// Create upstream request
 	proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
-		upstreamURL+"/v1/chat/completions", bytes.NewReader(upstreamReq))
+		upstreamURL+"/v1/chat/completions", bytes.NewReader(protectedRequest))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -154,6 +165,11 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
+	protectedResponse, _, err := privacy.ProtectJSON(r.Context(), json.RawMessage(respBody))
+	if err != nil {
+		WriteError(w, http.StatusBadGateway, "Upstream response blocked", privacy.ErrDataEgressBlocked.Error())
+		return
+	}
 
 	// Add HELM governance headers
 	w.Header().Set("Content-Type", "application/json")
@@ -162,5 +178,5 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Forward upstream status code and body
 	w.WriteHeader(upstreamResp.StatusCode)
-	_, _ = w.Write(respBody)
+	_, _ = w.Write(protectedResponse)
 }

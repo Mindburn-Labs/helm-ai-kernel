@@ -181,6 +181,20 @@ func (pm *StandardPrivacyManager) Protect(ctx context.Context, value any) (prote
 	return protected, findings, nil
 }
 
+// ProtectJSON applies the canonical privacy boundary to one complete JSON
+// payload and returns a bounded, canonical copy safe for egress.
+func ProtectJSON(ctx context.Context, raw json.RawMessage) (json.RawMessage, []string, error) {
+	protected, findings, err := NewPrivacyManager().Protect(ctx, raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	protectedJSON, ok := protected.(json.RawMessage)
+	if !ok {
+		return nil, nil, ErrDataEgressInvalid
+	}
+	return protectedJSON, findings, nil
+}
+
 type protector struct {
 	ctx      context.Context
 	manager  *StandardPrivacyManager

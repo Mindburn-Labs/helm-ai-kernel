@@ -67,6 +67,22 @@ func TestProtectDeepValuesRedactsOnlyOrdinaryPII(t *testing.T) {
 	}
 }
 
+func TestProtectJSONUsesCanonicalBoundary(t *testing.T) {
+	protected, findings, err := ProtectJSON(context.Background(), json.RawMessage(`{"message":"contact person@example.com"}`))
+	if err != nil {
+		t.Fatalf("ProtectJSON() error = %v", err)
+	}
+	if strings.Contains(string(protected), "person@example.com") || !strings.Contains(string(protected), "[REDACTED_EMAIL]") {
+		t.Fatalf("ProtectJSON() = %s", protected)
+	}
+	if !reflect.DeepEqual(findings, []string{"email"}) {
+		t.Fatalf("findings = %v, want [email]", findings)
+	}
+	if _, _, err := ProtectJSON(context.Background(), json.RawMessage(`{"message":"api_key=sk_live_example1234"}`)); !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("restricted ProtectJSON() error = %v, want ErrDataEgressBlocked", err)
+	}
+}
+
 func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 	manager := NewPrivacyManager()
 	cases := []struct {

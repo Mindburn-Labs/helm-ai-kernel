@@ -13,27 +13,7 @@ import (
 
 func TestCompileManagedPolicySnapshot(t *testing.T) {
 	sourceHash := "sha256:" + strings.Repeat("a", 64)
-	bundle, err := json.Marshal(pdp.ManagedPolicyBundle{
-		P0Ceilings:           json.RawMessage(`{"version":"1.0.0"}`),
-		P1Bundle:             json.RawMessage(`{"version":"1.0.0"}`),
-		P2Overlay:            json.RawMessage(`{"version":"1.0.0"}`),
-		ApprovalRoutes:       json.RawMessage(`{"E3_default":{"level":"SINGLE_HUMAN"}}`),
-		SourceLanguage:       "cel-dp",
-		SourceHash:           sourceHash,
-		CompiledArtifactKind: pdp.ManagedPolicyArtifactKind,
-		KernelRuntime: pdp.ManagedPolicyRuntime{
-			SchemaVersion:  pdp.ManagedPolicySchemaV1,
-			DefaultVerdict: contracts.VerdictDeny,
-			Rules: []pdp.ManagedPolicyRule{
-				{ID: "p0-e4", Layer: pdp.ManagedPolicyLayerP0, EffectClass: "E4", Verdict: contracts.VerdictDeny, Reason: "deny irreversible effects"},
-				{ID: "p1-e0", Layer: pdp.ManagedPolicyLayerP1, EffectClass: "E0", Verdict: contracts.VerdictAllow, Reason: "allow reads"},
-				{ID: "p1-e3", Layer: pdp.ManagedPolicyLayerP1, EffectClass: "E3", Verdict: contracts.VerdictEscalate, Reason: "require approval"},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	bundle := managedPolicyBundleForTest(t, sourceHash)
 	head := policyreconcile.PolicyHead{
 		Scope:       policyreconcile.PolicyScope{TenantID: "tenant", WorkspaceID: "workspace"},
 		PolicyEpoch: 7,
@@ -61,4 +41,30 @@ func TestCompileManagedPolicySnapshot(t *testing.T) {
 	if _, err := compileServePolicySnapshot(context.Background(), head, bundle); err == nil || !strings.Contains(err.Error(), "epoch") {
 		t.Fatalf("expected bundle_ref epoch rejection, got %v", err)
 	}
+}
+
+func managedPolicyBundleForTest(t *testing.T, sourceHash string) []byte {
+	t.Helper()
+	bundle, err := json.Marshal(pdp.ManagedPolicyBundle{
+		P0Ceilings:           json.RawMessage(`{"version":"1.0.0"}`),
+		P1Bundle:             json.RawMessage(`{"version":"1.0.0"}`),
+		P2Overlay:            json.RawMessage(`{"version":"1.0.0"}`),
+		ApprovalRoutes:       json.RawMessage(`{"E3_default":{"level":"SINGLE_HUMAN"}}`),
+		SourceLanguage:       "cel-dp",
+		SourceHash:           sourceHash,
+		CompiledArtifactKind: pdp.ManagedPolicyArtifactKind,
+		KernelRuntime: pdp.ManagedPolicyRuntime{
+			SchemaVersion:  pdp.ManagedPolicySchemaV1,
+			DefaultVerdict: contracts.VerdictDeny,
+			Rules: []pdp.ManagedPolicyRule{
+				{ID: "p0-e4", Layer: pdp.ManagedPolicyLayerP0, EffectClass: "E4", Verdict: contracts.VerdictDeny, Reason: "deny irreversible effects"},
+				{ID: "p1-e0", Layer: pdp.ManagedPolicyLayerP1, EffectClass: "E0", Verdict: contracts.VerdictAllow, Reason: "allow reads"},
+				{ID: "p1-e3", Layer: pdp.ManagedPolicyLayerP1, EffectClass: "E3", Verdict: contracts.VerdictEscalate, Reason: "require approval"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bundle
 }

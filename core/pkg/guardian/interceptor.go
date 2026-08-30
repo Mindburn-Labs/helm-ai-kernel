@@ -71,6 +71,9 @@ type EvaluationContext struct {
 	PDPBackend      string
 	PDPHash         string
 	PDPDecisionHash string
+	// PDPAuthoritativeAllow skips only local PRG evaluation after an explicit
+	// authoritative PDP ALLOW; every other Guardian gate remains active.
+	PDPAuthoritativeAllow bool
 }
 
 // Handler represents the next callback in the chain execution sequence.
@@ -723,10 +726,18 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 			if reasonCode == "" {
 				reasonCode = string(contracts.ReasonPDPDeny)
 			}
+			verdict := contracts.VerdictDeny
+			auditEvent := "PDP_DENY"
+			decisionKind := "deny"
+			if reasonCode == string(contracts.ReasonApprovalRequired) {
+				verdict = contracts.VerdictEscalate
+				auditEvent = "PDP_ESCALATE"
+				decisionKind = "escalation"
+			}
 			decision := &contracts.DecisionRecord{
 				ID:                 newDecisionID(),
 				Timestamp:          p.g.clock.Now(),
-				Verdict:            string(contracts.VerdictDeny),
+				Verdict:            string(verdict),
 				ReasonCode:         reasonCode,
 				Reason:             fmt.Sprintf("%s (ref=%s)", reasonCode, pdpResp.PolicyRef),
 				PolicyBackend:      evalCtx.PDPBackend,
@@ -736,13 +747,17 @@ func (p *PDPInterceptor) Evaluate(ctx context.Context, evalCtx *EvaluationContex
 				PolicyDecisionHash: evalCtx.PDPDecisionHash,
 			}
 			if err := p.g.signDecisionWithContext(decision, evalCtx); err != nil {
-				return nil, fmt.Errorf("failed to sign PDP-deny decision: %w", err)
+				return nil, fmt.Errorf("failed to sign PDP-%s decision: %w", decisionKind, err)
 			}
 			if p.g.auditLog != nil {
 				decisionBytes, _ := canonicalize.JCS(decision)
-				_, _ = p.g.auditLog.Append("guardian", "PDP_DENY", decision.ID, string(decisionBytes))
+				_, _ = p.g.auditLog.Append("guardian", auditEvent, decision.ID, string(decisionBytes))
 			}
 			return decision, nil
+		}
+
+		if authoritative, ok := evalCtx.ActivePDP.(pdp.AuthoritativeAllowPolicyDecisionPoint); ok {
+			evalCtx.PDPAuthoritativeAllow = authoritative.AuthoritativeAllow()
 		}
 	}
 

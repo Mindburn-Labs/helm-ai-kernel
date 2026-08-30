@@ -66,6 +66,13 @@ type PolicyDecisionPoint interface {
 	PolicyHash() string
 }
 
+// AuthoritativeAllowPolicyDecisionPoint marks a PDP whose ALLOW verdict may
+// replace local PRG evaluation. Guardian still applies every non-PRG gate.
+type AuthoritativeAllowPolicyDecisionPoint interface {
+	PolicyDecisionPoint
+	AuthoritativeAllow() bool
+}
+
 // ComputeDecisionHash produces a deterministic SHA-256 hash of the decision
 // using JCS canonicalization. This hash is bound into receipts.
 func ComputeDecisionHash(resp *DecisionResponse) (string, error) {

@@ -287,6 +287,10 @@ func (r compiledManagedPolicyRule) matches(req *DecisionRequest, candidate []byt
 func (p *ManagedPolicyPDP) Backend() Backend   { return BackendHELM }
 func (p *ManagedPolicyPDP) PolicyHash() string { return p.policyHash }
 
+// AuthoritativeAllow reports that this strictly validated, source-bound
+// managed bundle replaces local PRG evaluation for matching ALLOW decisions.
+func (p *ManagedPolicyPDP) AuthoritativeAllow() bool { return true }
+
 func (p *ManagedPolicyPDP) LayerHashes() (string, string, []string) {
 	return p.p0CeilingsHash, p.p1BundleHash, []string{p.p2OverlayHash}
 }

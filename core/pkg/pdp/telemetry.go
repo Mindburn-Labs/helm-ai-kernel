@@ -84,6 +84,12 @@ func (t *TelemetryPDP) PolicyHash() string {
 	return t.inner.PolicyHash()
 }
 
+// AuthoritativeAllow preserves the wrapped PDP's explicit authority marker.
+func (t *TelemetryPDP) AuthoritativeAllow() bool {
+	inner, ok := t.inner.(AuthoritativeAllowPolicyDecisionPoint)
+	return ok && inner.AuthoritativeAllow()
+}
+
 // SetShadowMode toggles shadow mode at runtime.
 func (t *TelemetryPDP) SetShadowMode(enabled bool) {
 	t.shadowMode = enabled

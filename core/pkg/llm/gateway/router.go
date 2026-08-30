@@ -1,3 +1,5 @@
+// quantum_posture: LIG spend-receipt verification uses classical Ed25519;
+// privacy filtering adds no post-quantum cryptographic control or assurance.
 // Package gateway provides the Local Inference Gateway (LIG).
 package gateway
 

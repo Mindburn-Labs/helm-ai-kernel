@@ -1,3 +1,5 @@
+// quantum_posture: these tests exercise existing classical Ed25519 receipt
+// verification; privacy-boundary coverage adds no post-quantum assurance.
 package gateway
 
 import (

@@ -235,6 +235,10 @@ helm:
       initialReconcileTimeout: "30s"
       controlplane:
         url: ""
+        tls:
+          # Production requires an exclusive CA Secret instead of system roots.
+          existingSecret: ""
+          existingSecretKey: "ca.crt"
         auth:
           mode: "serviceAccountJWT" # serviceAccountJWT | bearerToken
           serviceAccountJWT:

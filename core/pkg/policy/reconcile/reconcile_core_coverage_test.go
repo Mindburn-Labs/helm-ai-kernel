@@ -1,9 +1,18 @@
+// quantum_posture: these tests exercise classical Ed25519 signatures and
+// X.509/TLS trust rotation only; they make no post-quantum assurance claim.
 package reconcile
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
+	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -178,6 +187,109 @@ func TestControlPlaneSourceErrorAndHeaderBranches(t *testing.T) {
 	source.BearerToken = "token-1"
 	if _, err := source.Head(context.Background(), scope); err == nil {
 		t.Fatal("expected controlplane decode error")
+	}
+}
+
+func TestControlPlaneHTTPClientUsesExclusiveRotatingCA(t *testing.T) {
+	serverOne := newControlPlaneTLSServer(t, 1, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"scope":{"tenant_id":"default","workspace_id":"default"},"policy_epoch":1,"policy_hash":"hash"}`))
+	}))
+	defer serverOne.Close()
+	serverTwo := newControlPlaneTLSServer(t, 2, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"scope":{"tenant_id":"default","workspace_id":"default"},"policy_epoch":2,"policy_hash":"hash"}`))
+	}))
+	defer serverTwo.Close()
+
+	caFile := filepath.Join(t.TempDir(), "controlplane-ca.pem")
+	writeControlPlaneTestCA(t, caFile, serverOne)
+	client, err := NewControlPlaneHTTPClient(serverOne.URL, caFile)
+	if err != nil {
+		t.Fatalf("new controlplane client: %v", err)
+	}
+	transport := client.Transport.(*http.Transport)
+	if transport.Proxy != nil || !transport.DisableKeepAlives || transport.TLSClientConfig.MinVersion != tls.VersionTLS13 || transport.TLSClientConfig.InsecureSkipVerify || transport.DialTLSContext == nil {
+		t.Fatalf("unexpected private-CA transport: %+v", transport)
+	}
+
+	source := NewControlPlaneSource(serverOne.URL, DefaultScope)
+	source.HTTPClient = client
+	source.BearerToken = "token"
+	if _, err := source.Head(context.Background(), DefaultScope); err != nil {
+		t.Fatalf("initial private CA rejected: %v", err)
+	}
+
+	writeControlPlaneTestCA(t, caFile, serverTwo)
+	source.BaseURL = serverTwo.URL
+	if _, err := source.Head(context.Background(), DefaultScope); err != nil {
+		t.Fatalf("rotated private CA rejected: %v", err)
+	}
+	source.BaseURL = serverOne.URL
+	if _, err := source.Head(context.Background(), DefaultScope); err == nil {
+		t.Fatal("retired private CA remained trusted")
+	}
+}
+
+func TestControlPlaneHTTPClientRejectsRedirects(t *testing.T) {
+	leakedAuthorization := make(chan string, 1)
+	plaintextTarget := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		leakedAuthorization <- request.Header.Get("Authorization")
+	}))
+	defer plaintextTarget.Close()
+
+	redirector := newControlPlaneTLSServer(t, 3, http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		http.Redirect(response, request, plaintextTarget.URL, http.StatusFound)
+	}))
+	defer redirector.Close()
+
+	caFile := filepath.Join(t.TempDir(), "controlplane-ca.pem")
+	writeControlPlaneTestCA(t, caFile, redirector)
+	client, err := NewControlPlaneHTTPClient(redirector.URL, caFile)
+	if err != nil {
+		t.Fatalf("new controlplane client: %v", err)
+	}
+	source := NewControlPlaneSource(redirector.URL, DefaultScope)
+	source.HTTPClient = client
+	source.BearerToken = "secret-policy-token"
+	if _, err := source.Head(context.Background(), DefaultScope); err == nil || !strings.Contains(err.Error(), "302") {
+		t.Fatalf("expected redirect rejection, got %v", err)
+	}
+	select {
+	case authorization := <-leakedAuthorization:
+		t.Fatalf("redirect reached plaintext target with authorization %q", authorization)
+	default:
+	}
+}
+
+func newControlPlaneTLSServer(t *testing.T, serial int64, handler http.Handler) *httptest.Server {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate controlplane test key: %v", err)
+	}
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(serial),
+		NotBefore:    now.Add(-time.Minute), NotAfter: now.Add(time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+		IsCA:        true, BasicConstraintsValid: true,
+	}
+	certificate, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
+	if err != nil {
+		t.Fatalf("create controlplane test certificate: %v", err)
+	}
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{certificate}, PrivateKey: privateKey}}}
+	server.StartTLS()
+	return server
+}
+
+func writeControlPlaneTestCA(t *testing.T, path string, server *httptest.Server) {
+	t.Helper()
+	certificate := server.TLS.Certificates[0].Certificate[0]
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate}), 0o600); err != nil {
+		t.Fatalf("write controlplane CA: %v", err)
 	}
 }
 

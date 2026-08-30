@@ -1,5 +1,7 @@
 {{/* quantum_posture: chart wiring supplies a raw Ed25519 command-key keyring;
       it does not claim hybrid or post-quantum command signing. */}}
+{{- $ipv4Octet := "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])" -}}
+{{- $controlPlaneLoopback := regexMatch (printf "(?i)^http://(localhost|127\\.%s\\.%s\\.%s|\\[[0:]*1\\]|\\[[0:]*ffff:(127\\.%s\\.%s\\.%s|7f[0-9a-f]{2}:[0-9a-f]{1,4})\\])(:[0-9]+)?(/|$)" $ipv4Octet $ipv4Octet $ipv4Octet $ipv4Octet $ipv4Octet $ipv4Octet) .Values.helm.policy.source.controlplane.url -}}
 {{- if not (or (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.kind "crd") (eq .Values.helm.policy.source.kind "mountedFile")) -}}
 {{- fail "helm.policy.source.kind must be one of controlplane, crd, mountedFile" -}}
 {{- end -}}
@@ -14,6 +16,15 @@
 {{- end -}}
 {{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not .Values.helm.policy.source.controlplane.url) -}}
 {{- fail "helm.production=true with helm.policy.source.kind=controlplane requires helm.policy.source.controlplane.url" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not $controlPlaneLoopback) (not (regexMatch "^https://" .Values.helm.policy.source.controlplane.url)) -}}
+{{- fail "helm.production=true requires an https helm.policy.source.controlplane.url except for an in-Pod loopback fixture" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not $controlPlaneLoopback) (not .Values.helm.policy.source.controlplane.tls.existingSecret) -}}
+{{- fail "helm.production=true with a controlplane policy source requires helm.policy.source.controlplane.tls.existingSecret for exclusive CA trust" -}}
+{{- end -}}
+{{- if and .Values.helm.policy.source.controlplane.tls.existingSecret (not .Values.helm.policy.source.controlplane.tls.existingSecretKey) -}}
+{{- fail "helm.policy.source.controlplane.tls.existingSecretKey is required when a TLS CA Secret is configured" -}}
 {{- end -}}
 {{- if and (eq .Values.helm.policy.source.kind "controlplane") (not (or (eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT") (eq .Values.helm.policy.source.controlplane.auth.mode "bearerToken"))) -}}
 {{- fail "controlplane auth mode must be serviceAccountJWT or bearerToken" -}}
@@ -336,6 +347,10 @@ spec:
             {{- if eq .Values.helm.policy.source.kind "controlplane" }}
             - name: HELM_POLICY_CONTROLPLANE_URL
               value: {{ .Values.helm.policy.source.controlplane.url | quote }}
+            {{- if .Values.helm.policy.source.controlplane.tls.existingSecret }}
+            - name: HELM_POLICY_CONTROLPLANE_CA_FILE
+              value: "/var/run/secrets/helm-policy-controlplane-tls/ca.pem"
+            {{- end }}
             - name: HELM_POLICY_CONTROLPLANE_AUTH_MODE
               value: {{ .Values.helm.policy.source.controlplane.auth.mode | quote }}
             {{- if eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT" }}
@@ -485,6 +500,11 @@ spec:
               mountPath: /var/run/secrets/helm-policy
               readOnly: true
             {{- end }}
+            {{- if and (eq .Values.helm.policy.source.kind "controlplane") .Values.helm.policy.source.controlplane.tls.existingSecret }}
+            - name: policy-controlplane-tls
+              mountPath: /var/run/secrets/helm-policy-controlplane-tls
+              readOnly: true
+            {{- end }}
         {{- if and .Values.helm.policy.reloadHints.enabled .Values.helm.policy.reloadHints.configReloaderSidecar.enabled }}
         - name: config-reloader
           image: {{ .Values.helm.policy.reloadHints.configReloaderSidecar.image | quote }}
@@ -533,6 +553,15 @@ spec:
                   audience: {{ required "helm.policy.source.controlplane.auth.serviceAccountJWT.audience is required" .Values.helm.policy.source.controlplane.auth.serviceAccountJWT.audience | quote }}
                   expirationSeconds: {{ .Values.helm.policy.source.controlplane.auth.serviceAccountJWT.expirationSeconds }}
                   path: token
+        {{- end }}
+        {{- if and (eq .Values.helm.policy.source.kind "controlplane") .Values.helm.policy.source.controlplane.tls.existingSecret }}
+        - name: policy-controlplane-tls
+          secret:
+            secretName: {{ .Values.helm.policy.source.controlplane.tls.existingSecret }}
+            defaultMode: 256
+            items:
+              - key: {{ .Values.helm.policy.source.controlplane.tls.existingSecretKey }}
+                path: ca.pem
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

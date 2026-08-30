@@ -686,6 +686,22 @@
                       "type": "string",
                       "description": "Control-plane URL serving the policy bundle (HTTPS only in production)."
                     },
+                    "tls": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "description": "Exclusive CA trust for managed policy transport. Required for non-loopback production endpoints.",
+                      "properties": {
+                        "existingSecret": {
+                          "type": "string",
+                          "description": "Existing Secret containing the private CA certificate trusted for the control plane."
+                        },
+                        "existingSecretKey": {
+                          "type": "string",
+                          "default": "ca.crt",
+                          "description": "Key inside existingSecret holding the PEM-encoded CA certificate."
+                        }
+                      }
+                    },
                     "auth": {
                       "type": "object",
                       "additionalProperties": false,

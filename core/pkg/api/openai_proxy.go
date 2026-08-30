@@ -118,7 +118,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, fmt.Sprintf("Failed to marshal request: %v", err))
 		return
 	}
-	protectedRequest, _, err := privacy.ProtectJSON(r.Context(), json.RawMessage(upstreamReq))
+	protectedRequest, _, err := privacy.ProtectModelRequestJSON(r.Context(), json.RawMessage(upstreamReq))
 	if err != nil {
 		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
 		return

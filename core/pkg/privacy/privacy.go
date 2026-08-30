@@ -42,6 +42,16 @@ const (
 	maxExactFloat32Int    = 1<<24 - 1
 	maxExactFloat64Int    = 1<<53 - 1
 	modelLogprobTokenKey  = "helm_logprob_lexeme"
+	modelEmbeddedJSONKey  = "helm_model_embedded_json"
+	modelSchemaKeyPrefix  = "helm_model_schema_name_"
+)
+
+type modelPayloadKind uint8
+
+const (
+	modelPayloadGeneric modelPayloadKind = iota
+	modelPayloadRequest
+	modelPayloadResponse
 )
 
 var (
@@ -191,17 +201,23 @@ func (pm *StandardPrivacyManager) Protect(ctx context.Context, value any) (prote
 // ProtectJSON applies the canonical privacy boundary to one complete JSON
 // payload and returns a bounded, canonical copy safe for egress.
 func ProtectJSON(ctx context.Context, raw json.RawMessage) (json.RawMessage, []string, error) {
-	return protectJSON(ctx, raw, false)
+	return protectJSON(ctx, raw, modelPayloadGeneric)
+}
+
+// ProtectModelRequestJSON protects a model request while preserving restricted-
+// looking identifiers only where the protocol declares JSON Schema names.
+func ProtectModelRequestJSON(ctx context.Context, raw json.RawMessage) (json.RawMessage, []string, error) {
+	return protectJSON(ctx, raw, modelPayloadRequest)
 }
 
 // ProtectModelResponseJSON protects a provider response while preserving the
 // protocol-owned token fields in OpenAI log-probability entries. The exception
 // is path-scoped; ordinary token keys remain restricted.
 func ProtectModelResponseJSON(ctx context.Context, raw json.RawMessage) (json.RawMessage, []string, error) {
-	return protectJSON(ctx, raw, true)
+	return protectJSON(ctx, raw, modelPayloadResponse)
 }
 
-func protectJSON(ctx context.Context, raw json.RawMessage, modelResponse bool) (json.RawMessage, []string, error) {
+func protectJSON(ctx context.Context, raw json.RawMessage, kind modelPayloadKind) (json.RawMessage, []string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -211,7 +227,7 @@ func protectJSON(ctx context.Context, raw json.RawMessage, modelResponse bool) (
 		findings: make(map[string]struct{}),
 		maxNodes: maxJSONProtectNodes,
 	}
-	protected, err := p.protectJSON(raw, 0, modelResponse)
+	protected, err := p.protectJSON(raw, 0, kind)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -554,10 +570,10 @@ func (p *protector) sliceMapAny(value []map[string]any, depth int) ([]map[string
 }
 
 func (p *protector) rawJSON(raw json.RawMessage, depth int) (json.RawMessage, error) {
-	return p.protectJSON(raw, depth, false)
+	return p.protectJSON(raw, depth, modelPayloadGeneric)
 }
 
-func (p *protector) protectJSON(raw json.RawMessage, depth int, modelResponse bool) (json.RawMessage, error) {
+func (p *protector) protectJSON(raw json.RawMessage, depth int, kind modelPayloadKind) (json.RawMessage, error) {
 	if len(raw) == 0 || len(raw) > MaxPayloadBytes {
 		return nil, ErrDataEgressInvalid
 	}
@@ -568,9 +584,21 @@ func (p *protector) protectJSON(raw json.RawMessage, depth int, modelResponse bo
 	if err != nil {
 		return nil, err
 	}
+	schemaNames := make(map[string]string)
+	if kind == modelPayloadRequest {
+		if err := rewriteModelRequestEmbeddedJSON(decoded, false); err != nil {
+			return nil, err
+		}
+		if err := rewriteModelRequestSchemaKeys(decoded, false, schemaNames); err != nil {
+			return nil, err
+		}
+	}
 	var originalLogprobTokens []string
-	if modelResponse {
-		if err := rewriteModelResponseLogprobTokenKeys(decoded, false, &originalLogprobTokens); err != nil {
+	if kind == modelPayloadResponse {
+		if err := rewriteModelResponseEmbeddedJSON(decoded, false); err != nil {
+			return nil, err
+		}
+		if err := rewriteModelResponseLogprobTokenKeys(p, decoded, false, &originalLogprobTokens); err != nil {
 			return nil, err
 		}
 	}
@@ -578,12 +606,26 @@ func (p *protector) protectJSON(raw json.RawMessage, depth int, modelResponse bo
 	if err != nil {
 		return nil, err
 	}
-	if modelResponse {
-		if err := rewriteModelResponseLogprobTokenKeys(protected, true, &originalLogprobTokens); err != nil {
+	if kind == modelPayloadResponse {
+		if err := rewriteModelResponseLogprobTokenKeys(p, protected, true, &originalLogprobTokens); err != nil {
 			return nil, err
 		}
 		if len(originalLogprobTokens) != 0 {
 			return nil, ErrDataEgressInvalid
+		}
+		if err := rewriteModelResponseEmbeddedJSON(protected, true); err != nil {
+			return nil, err
+		}
+	}
+	if kind == modelPayloadRequest {
+		if err := rewriteModelRequestSchemaKeys(protected, true, schemaNames); err != nil {
+			return nil, err
+		}
+		if len(schemaNames) != 0 {
+			return nil, ErrDataEgressInvalid
+		}
+		if err := rewriteModelRequestEmbeddedJSON(protected, true); err != nil {
+			return nil, err
 		}
 	}
 	canonical, err := json.Marshal(protected)
@@ -654,7 +696,305 @@ func decodeJSONValue(raw json.RawMessage) (any, error) {
 	return decoded, nil
 }
 
-func rewriteModelResponseLogprobTokenKeys(value any, restore bool, originalTokens *[]string) error {
+func rewriteModelRequestSchemaKeys(value any, restore bool, names map[string]string) error {
+	root, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	visit := func(schema any) error {
+		return rewriteModelSchema(schema, restore, names)
+	}
+	if tools, ok := root["tools"].([]any); ok {
+		for _, toolValue := range tools {
+			tool, ok := toolValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			if function, ok := tool["function"].(map[string]any); ok {
+				if err := visit(function["parameters"]); err != nil {
+					return err
+				}
+			}
+			for _, field := range []string{"parameters", "input_schema"} {
+				if err := visit(tool[field]); err != nil {
+					return err
+				}
+			}
+			if declarations, ok := tool["functionDeclarations"].([]any); ok {
+				for _, declarationValue := range declarations {
+					declaration, ok := declarationValue.(map[string]any)
+					if ok {
+						if err := visit(declaration["parameters"]); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+	if functions, ok := root["functions"].([]any); ok {
+		for _, functionValue := range functions {
+			function, ok := functionValue.(map[string]any)
+			if ok {
+				if err := visit(function["parameters"]); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if responseFormat, ok := root["response_format"].(map[string]any); ok {
+		if jsonSchema, ok := responseFormat["json_schema"].(map[string]any); ok {
+			if err := visit(jsonSchema["schema"]); err != nil {
+				return err
+			}
+		}
+	}
+	if text, ok := root["text"].(map[string]any); ok {
+		if format, ok := text["format"].(map[string]any); ok {
+			if err := visit(format["schema"]); err != nil {
+				return err
+			}
+		}
+	}
+	if generation, ok := root["generationConfig"].(map[string]any); ok {
+		for _, field := range []string{"responseSchema", "response_schema"} {
+			if err := visit(generation[field]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteModelSchema(value any, restore bool, names map[string]string) error {
+	schema, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, keyword := range []string{"properties", "$defs", "definitions", "patternProperties", "dependentSchemas", "dependentRequired"} {
+		declarations, ok := schema[keyword].(map[string]any)
+		if !ok {
+			continue
+		}
+		if err := rewriteModelSchemaNames(declarations, restore, names); err != nil {
+			return err
+		}
+		if keyword != "dependentRequired" {
+			for _, name := range sortedKeysAny(declarations) {
+				if err := rewriteModelSchema(declarations[name], restore, names); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	for _, keyword := range []string{"items", "additionalProperties", "not", "if", "then", "else", "contains", "propertyNames"} {
+		if err := rewriteModelSchema(schema[keyword], restore, names); err != nil {
+			return err
+		}
+	}
+	for _, keyword := range []string{"allOf", "anyOf", "oneOf", "prefixItems"} {
+		items, ok := schema[keyword].([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range items {
+			if err := rewriteModelSchema(item, restore, names); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteModelSchemaNames(declarations map[string]any, restore bool, names map[string]string) error {
+	for _, name := range sortedKeysAny(declarations) {
+		if restore {
+			original, exists := names[name]
+			if !exists {
+				if strings.HasPrefix(name, modelSchemaKeyPrefix) {
+					return ErrDataEgressInvalid
+				}
+				continue
+			}
+			if _, collision := declarations[original]; collision {
+				return ErrDataEgressInvalid
+			}
+			declarations[original] = declarations[name]
+			delete(declarations, name)
+			delete(names, name)
+			continue
+		}
+		if strings.HasPrefix(name, modelSchemaKeyPrefix) {
+			return ErrDataEgressInvalid
+		}
+		if !isRestrictedKey(name) {
+			continue
+		}
+		if schema, ok := declarations[name].(map[string]any); ok && schemaContainsExampleValue(schema) {
+			return ErrDataEgressBlocked
+		}
+		marker := modelSchemaKeyPrefix + strconv.Itoa(len(names))
+		if _, collision := declarations[marker]; collision {
+			return ErrDataEgressInvalid
+		}
+		names[marker] = name
+		declarations[marker] = declarations[name]
+		delete(declarations, name)
+	}
+	return nil
+}
+
+func schemaContainsExampleValue(schema map[string]any) bool {
+	for _, field := range []string{"default", "const", "enum", "example", "examples"} {
+		if value, exists := schema[field]; exists && value != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func rewriteModelResponseEmbeddedJSON(value any, restore bool) error {
+	root, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if choices, ok := root["choices"].([]any); ok {
+		for _, choiceValue := range choices {
+			choice, ok := choiceValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			message, ok := choice["message"].(map[string]any)
+			if !ok {
+				continue
+			}
+			if err := rewriteModelMessageEmbeddedJSON(message, restore); err != nil {
+				return err
+			}
+		}
+	}
+	if outputs, ok := root["output"].([]any); ok {
+		for _, outputValue := range outputs {
+			output, ok := outputValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			if err := rewriteEmbeddedJSONField(output, "arguments", restore, true); err != nil {
+				return err
+			}
+			if contents, ok := output["content"].([]any); ok {
+				for _, contentValue := range contents {
+					content, ok := contentValue.(map[string]any)
+					if ok {
+						if err := rewriteEmbeddedJSONField(content, "text", restore, false); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteModelRequestEmbeddedJSON(value any, restore bool) error {
+	root, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if err := rewriteEmbeddedJSONField(root, "input", restore, false); err != nil {
+		return err
+	}
+	for _, field := range []string{"messages", "input"} {
+		messages, ok := root[field].([]any)
+		if !ok {
+			continue
+		}
+		for _, messageValue := range messages {
+			message, ok := messageValue.(map[string]any)
+			if ok {
+				if err := rewriteModelMessageEmbeddedJSON(message, restore); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteModelMessageEmbeddedJSON(message map[string]any, restore bool) error {
+	if err := rewriteEmbeddedJSONField(message, "content", restore, false); err != nil {
+		return err
+	}
+	if functionCall, ok := message["function_call"].(map[string]any); ok {
+		if err := rewriteEmbeddedJSONField(functionCall, "arguments", restore, true); err != nil {
+			return err
+		}
+	}
+	if toolCalls, ok := message["tool_calls"].([]any); ok {
+		for _, toolCallValue := range toolCalls {
+			toolCall, ok := toolCallValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			if function, ok := toolCall["function"].(map[string]any); ok {
+				if err := rewriteEmbeddedJSONField(function, "arguments", restore, true); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteEmbeddedJSONField(container map[string]any, field string, restore, required bool) error {
+	value, exists := container[field]
+	if !exists {
+		return nil
+	}
+	if restore {
+		wrapper, ok := value.(map[string]any)
+		if !ok {
+			return nil
+		}
+		rawValue, marked := wrapper[modelEmbeddedJSONKey]
+		if !marked {
+			return nil
+		}
+		raw, ok := rawValue.(json.RawMessage)
+		if !ok || len(wrapper) != 1 {
+			return ErrDataEgressInvalid
+		}
+		container[field] = string(raw)
+		return nil
+	}
+	text, ok := value.(string)
+	if !ok || text == "" {
+		return nil
+	}
+	if len(text) > maxProtectStringBytes {
+		return ErrDataEgressInvalid
+	}
+	raw := json.RawMessage(strings.TrimSpace(text))
+	decoded, err := decodeJSONValue(raw)
+	if err != nil {
+		if required {
+			return ErrDataEgressInvalid
+		}
+		return nil
+	}
+	switch decoded.(type) {
+	case map[string]any, []any:
+		container[field] = map[string]any{modelEmbeddedJSONKey: raw}
+	default:
+		if required {
+			return ErrDataEgressInvalid
+		}
+	}
+	return nil
+}
+
+func rewriteModelResponseLogprobTokenKeys(p *protector, value any, restore bool, originalTokens *[]string) error {
 	root, ok := value.(map[string]any)
 	if !ok {
 		return nil
@@ -670,7 +1010,7 @@ func rewriteModelResponseLogprobTokenKeys(value any, restore bool, originalToken
 				continue
 			}
 			for _, field := range []string{"content", "refusal"} {
-				if err := rewriteLogprobEntries(logprobs[field], restore, originalTokens); err != nil {
+				if err := rewriteLogprobEntries(p, logprobs[field], restore, originalTokens); err != nil {
 					return err
 				}
 			}
@@ -691,7 +1031,7 @@ func rewriteModelResponseLogprobTokenKeys(value any, restore bool, originalToken
 				if !ok {
 					continue
 				}
-				if err := rewriteLogprobEntries(content["logprobs"], restore, originalTokens); err != nil {
+				if err := rewriteLogprobEntries(p, content["logprobs"], restore, originalTokens); err != nil {
 					return err
 				}
 			}
@@ -700,20 +1040,20 @@ func rewriteModelResponseLogprobTokenKeys(value any, restore bool, originalToken
 	return nil
 }
 
-func rewriteLogprobEntries(value any, restore bool, originalTokens *[]string) error {
+func rewriteLogprobEntries(p *protector, value any, restore bool, originalTokens *[]string) error {
 	entries, ok := value.([]any)
 	if !ok {
 		return nil
 	}
 	for _, entry := range entries {
-		if err := rewriteLogprobTokenEntry(entry, restore, originalTokens); err != nil {
+		if err := rewriteLogprobTokenEntry(p, entry, restore, originalTokens); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func rewriteLogprobTokenEntry(value any, restore bool, originalTokens *[]string) error {
+func rewriteLogprobTokenEntry(p *protector, value any, restore bool, originalTokens *[]string) error {
 	entry, ok := value.(map[string]any)
 	if !ok {
 		return nil
@@ -725,7 +1065,7 @@ func rewriteLogprobTokenEntry(value any, restore bool, originalTokens *[]string)
 		return ErrDataEgressInvalid
 	}
 	tokenValue, exists := entry[from]
-	if restore && !exists {
+	if !exists {
 		if rawBytes, present := entry["bytes"]; present && rawBytes != nil {
 			return ErrDataEgressInvalid
 		}
@@ -735,6 +1075,11 @@ func rewriteLogprobTokenEntry(value any, restore bool, originalTokens *[]string)
 			token, ok := tokenValue.(string)
 			if !ok {
 				return ErrDataEgressInvalid
+			}
+			if rawBytes, present := entry["bytes"]; present && rawBytes != nil {
+				if err := p.validateLogprobBytes(rawBytes, token); err != nil {
+					return err
+				}
 			}
 			*originalTokens = append(*originalTokens, token)
 		}
@@ -762,12 +1107,75 @@ func rewriteLogprobTokenEntry(value any, restore bool, originalTokens *[]string)
 	}
 	if top, ok := entry["top_logprobs"].([]any); ok {
 		for _, candidate := range top {
-			if err := rewriteLogprobTokenEntry(candidate, restore, originalTokens); err != nil {
+			if err := rewriteLogprobTokenEntry(p, candidate, restore, originalTokens); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (p *protector) validateLogprobBytes(value any, token string) error {
+	items, ok := value.([]any)
+	if !ok {
+		return ErrDataEgressInvalid
+	}
+	raw := make([]byte, len(items))
+	for index, item := range items {
+		digits := exactNumericDigits(item)
+		parsed, err := strconv.ParseUint(digits, 10, 8)
+		if digits == "" || err != nil {
+			return ErrDataEgressInvalid
+		}
+		raw[index] = byte(parsed)
+	}
+	if utf8.Valid(raw) {
+		if string(raw) == token {
+			return nil
+		}
+		protected, err := p.text(string(raw))
+		if err != nil {
+			return err
+		}
+		if protected != string(raw) {
+			return ErrDataEgressBlocked
+		}
+		return nil
+	}
+
+	validPrefix := 0
+	for validPrefix < len(raw) {
+		r, size := utf8.DecodeRune(raw[validPrefix:])
+		if r == utf8.RuneError && size == 1 {
+			break
+		}
+		validPrefix += size
+	}
+	if validPrefix > 0 {
+		protected, err := p.text(string(raw[:validPrefix]))
+		if err != nil {
+			return err
+		}
+		if protected != string(raw[:validPrefix]) {
+			return ErrDataEgressBlocked
+		}
+	}
+	fragment := raw[validPrefix:]
+	if len(fragment) == 0 || len(fragment) >= utf8.UTFMax {
+		return ErrDataEgressInvalid
+	}
+	if utf8.RuneStart(fragment[0]) && !utf8.FullRune(fragment) {
+		return nil
+	}
+	if validPrefix == 0 {
+		for _, item := range fragment {
+			if item&0xc0 != 0x80 {
+				return ErrDataEgressInvalid
+			}
+		}
+		return nil
+	}
+	return ErrDataEgressInvalid
 }
 
 func (p *protector) accountBytes(size int) error {

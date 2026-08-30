@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -25,11 +26,26 @@ type gatewayFixture struct {
 }
 
 type spyDispatch struct {
-	called       int
-	cost         int64
-	body         []byte
-	responseBody json.RawMessage
-	requestID    string
+	called        int
+	cost          int64
+	body          []byte
+	responseBody  json.RawMessage
+	requestID     string
+	afterDispatch func()
+}
+
+type advancingPrivacyContext struct {
+	context.Context
+	armed   *bool
+	advance func()
+}
+
+func (c advancingPrivacyContext) Err() error {
+	if *c.armed {
+		*c.armed = false
+		c.advance()
+	}
+	return c.Context.Err()
 }
 
 func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, costCap inferencegateway.CostCapPolicy, providerCost int64) *gatewayFixture {
@@ -76,6 +92,9 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 	dispatch := func(r *http.Request, quote *economic.RouteQuote, body []byte) (DispatchOutcome, error) {
 		spy.called++
 		spy.body = append([]byte(nil), body...)
+		if spy.afterDispatch != nil {
+			spy.afterDispatch()
+		}
 		responseBody := spy.responseBody
 		if responseBody == nil {
 			responseBody = json.RawMessage(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
@@ -272,6 +291,41 @@ func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 			t.Fatalf("provider request id was not sanitized: %q", meta.UsageReceipt.ProviderRequestID)
 		}
 	})
+}
+
+func TestGatewayAllowsRestrictedNamesOnlyInModelSchemas(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"use the tool"}],"tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string"},"api_key":{"type":"string"}},"required":["password"]}}}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	for key, value := range helmHeaders("idem-schema", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || f.dispatch.called != 1 || !bytes.Contains(f.dispatch.body, []byte(`"password"`)) || !bytes.Contains(f.dispatch.body, []byte(`"api_key"`)) {
+		t.Fatalf("status=%d dispatch=%d provider_body=%s response=%s", rec.Code, f.dispatch.called, f.dispatch.body, rec.Body.String())
+	}
+}
+
+func TestGatewaySettlesBeforeProviderResponsePrivacyScan(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	armed := false
+	f.dispatch.afterDispatch = func() { armed = true }
+	ctx := advancingPrivacyContext{
+		Context: context.Background(),
+		armed:   &armed,
+		advance: func() { *f.clk = f.now.Add(2 * time.Hour) },
+	}
+	body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
+	for key, value := range helmHeaders("idem-settle-before-privacy", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || f.dispatch.called != 1 || len(f.ledger.Entries()) != 1 {
+		t.Fatalf("status=%d dispatch=%d entries=%d body=%s", rec.Code, f.dispatch.called, len(f.ledger.Entries()), rec.Body.String())
+	}
 }
 
 func TestGatewayReturnsBadRequestForMalformedJSON(t *testing.T) {

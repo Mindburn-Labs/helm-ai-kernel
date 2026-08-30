@@ -168,7 +168,7 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteBadRequest(w, "failed to read request body")
 		return
 	}
-	protectedBody, _, err := privacy.ProtectJSON(r.Context(), json.RawMessage(body))
+	protectedBody, _, err := privacy.ProtectModelRequestJSON(r.Context(), json.RawMessage(body))
 	if err != nil {
 		if errors.Is(err, privacy.ErrDataEgressInvalid) {
 			WriteBadRequest(w, "invalid request body")
@@ -217,12 +217,6 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteError(w, http.StatusBadGateway, "provider dispatch failed", "provider request failed")
 		return
 	}
-	protectedResponse, _, responsePrivacyErr := privacy.ProtectModelResponseJSON(r.Context(), outcome.ResponseBody)
-	if responsePrivacyErr == nil {
-		outcome.ResponseBody = protectedResponse
-	} else {
-		outcome.ResponseBody = nil
-	}
 
 	settleRes, serr := g.engine.Settle(
 		quoteRes.Quote, outcome.ProviderRequestID, outcome.ProviderCostCents,
@@ -254,6 +248,12 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		Capped:            settleRes.Capped,
 		Replayed:          settleRes.Replayed,
 		EvidencePackRef:   settleRes.EvidencePackRef,
+	}
+	protectedResponse, _, responsePrivacyErr := privacy.ProtectModelResponseJSON(r.Context(), outcome.ResponseBody)
+	if responsePrivacyErr == nil {
+		outcome.ResponseBody = protectedResponse
+	} else {
+		outcome.ResponseBody = nil
 	}
 	writeGatewayMetadataHeaders(w, meta)
 	if responsePrivacyErr != nil {

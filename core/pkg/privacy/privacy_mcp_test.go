@@ -199,6 +199,142 @@ func TestProtectJSONSupportsModelResponseProtocolsWithoutWeakeningGenericProtect
 	}
 }
 
+func TestProtectModelRequestPreservesSchemaNamesOnlyInDeclarations(t *testing.T) {
+	raw := json.RawMessage(`{
+		"model":"gpt-4o",
+		"tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string"},"profile":{"type":"object","properties":{"api_key":{"type":"string"}}}},"required":["password"]}}}],
+		"response_format":{"type":"json_schema","json_schema":{"name":"result","schema":{"type":"object","properties":{"access_token":{"type":"string"}}}}}
+	}`)
+	protected, _, err := ProtectModelRequestJSON(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("schema request was rejected: %v", err)
+	}
+	for _, name := range []string{`"password"`, `"api_key"`, `"access_token"`} {
+		if !strings.Contains(string(protected), name) {
+			t.Fatalf("schema name %s was not preserved: %s", name, protected)
+		}
+	}
+	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-4o","password":"abc123"}`)); !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("actual password payload error = %v, want ErrDataEgressBlocked", err)
+	}
+	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-4o","tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string","default":"abc123"}}}}}]}`)); !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("password schema default error = %v, want ErrDataEgressBlocked", err)
+	}
+}
+
+func TestProtectModelRequestKeepsEmbeddedJSONValid(t *testing.T) {
+	embedded := `{"phone":4155552671,"email":"person@example.com"}`
+	raw, err := json.Marshal(map[string]any{
+		"model": "gpt-4o",
+		"messages": []any{
+			map[string]any{"role": "user", "content": embedded},
+			map[string]any{
+				"role": "assistant",
+				"tool_calls": []any{
+					map[string]any{"function": map[string]any{"arguments": embedded}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	protected, findings, err := ProtectModelRequestJSON(context.Background(), raw)
+	if err != nil || !reflect.DeepEqual(findings, []string{"email", "phone"}) {
+		t.Fatalf("request protection error=%v findings=%v", err, findings)
+	}
+	var outer map[string]any
+	if err := json.Unmarshal(protected, &outer); err != nil {
+		t.Fatal(err)
+	}
+	messages := outer["messages"].([]any)
+	arguments := messages[1].(map[string]any)["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)["arguments"].(string)
+	for _, value := range []string{messages[0].(map[string]any)["content"].(string), arguments} {
+		if !json.Valid([]byte(value)) || strings.Contains(value, "4155552671") || strings.Contains(value, "person@example.com") {
+			t.Fatalf("protected embedded request JSON = %q", value)
+		}
+	}
+}
+
+func TestProtectModelResponseKeepsEmbeddedJSONValid(t *testing.T) {
+	embedded := `{"phone":4155552671,"email":"person@example.com"}`
+	raw, err := json.Marshal(map[string]any{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
+					"content": embedded,
+					"tool_calls": []any{
+						map[string]any{"function": map[string]any{"arguments": embedded}},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	protected, findings, err := ProtectModelResponseJSON(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("embedded JSON response was rejected: %v", err)
+	}
+	if !reflect.DeepEqual(findings, []string{"email", "phone"}) {
+		t.Fatalf("findings = %v", findings)
+	}
+	var outer map[string]any
+	if err := json.Unmarshal(protected, &outer); err != nil {
+		t.Fatal(err)
+	}
+	message := outer["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)
+	arguments := message["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)["arguments"].(string)
+	for _, value := range []string{message["content"].(string), arguments} {
+		if !json.Valid([]byte(value)) || strings.Contains(value, "4155552671") || strings.Contains(value, "person@example.com") {
+			t.Fatalf("protected embedded JSON = %q", value)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(value), &decoded); err != nil || decoded["phone"] != "[REDACTED_PHONE]" || decoded["email"] != "[REDACTED_EMAIL]" {
+			t.Fatalf("decoded embedded JSON = %#v, error = %v", decoded, err)
+		}
+	}
+
+	restricted, _ := json.Marshal(map[string]any{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
+					"tool_calls": []any{
+						map[string]any{"function": map[string]any{"arguments": `{"api_key":"sk_live_example1234"}`}},
+					},
+				},
+			},
+		},
+	})
+	if _, _, err := ProtectModelResponseJSON(context.Background(), restricted); !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("restricted embedded JSON error = %v, want ErrDataEgressBlocked", err)
+	}
+}
+
+func TestProtectModelResponseValidatesUnchangedLogprobBytes(t *testing.T) {
+	secretBytes := []byte("sk_live_example1234")
+	values := make([]int, len(secretBytes))
+	for index, value := range secretBytes {
+		values[index] = int(value)
+	}
+	raw, err := json.Marshal(map[string]any{
+		"choices": []any{
+			map[string]any{
+				"logprobs": map[string]any{
+					"content": []any{map[string]any{"token": "hello", "bytes": values}},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ProtectModelResponseJSON(context.Background(), raw); !errors.Is(err, ErrDataEgressBlocked) {
+		t.Fatalf("mismatched restricted bytes error = %v, want ErrDataEgressBlocked", err)
+	}
+}
+
 func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 	manager := NewPrivacyManager()
 	cases := []struct {

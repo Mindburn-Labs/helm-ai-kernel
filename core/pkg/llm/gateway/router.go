@@ -578,7 +578,7 @@ func (r *GatewayRouter) postJSON(ctx context.Context, endpoint string, payload a
 	if err != nil {
 		return err
 	}
-	protectedRequest, _, err := privacy.ProtectJSON(ctx, json.RawMessage(data))
+	protectedRequest, _, err := privacy.ProtectModelRequestJSON(ctx, json.RawMessage(data))
 	if err != nil {
 		return privacy.ErrDataEgressBlocked
 	}

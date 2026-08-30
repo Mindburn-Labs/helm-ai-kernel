@@ -26,6 +26,8 @@ const (
 
 	SkillProjectionRollbackPermitSchemaV1   = "helm.skill-projection-rollback-permit.v1"
 	SkillProjectionRollbackPermitContractV1 = "2026-08-30"
+
+	SkillProjectionConsumedPermitRefSchemaV1 = "helm.skill-projection-consumed-permit-ref.v1"
 )
 
 var (
@@ -133,6 +135,36 @@ func ComputeSkillProjectionArtifactHash(manifestHash, contentHash string) (strin
 		return "", fmt.Errorf("%w: artifact hash: %v", ErrSkillProjectionEffectInvalid, err)
 	}
 	return hash, nil
+}
+
+// ComputeSkillProjectionConsumedPermitRef derives the permit reference before
+// either the effect or approval grant is sealed. Keeping this reference
+// independent of EffectHash and GrantHash avoids a circular hash dependency.
+func ComputeSkillProjectionConsumedPermitRef(tenantID, workspaceID, grantID string) (string, error) {
+	if !skillProjectionScopeIDPattern.MatchString(tenantID) {
+		return "", skillProjectionEffectInvalid("consumed permit tenant_id is not a safe scope identifier")
+	}
+	if !skillProjectionScopeIDPattern.MatchString(workspaceID) {
+		return "", skillProjectionEffectInvalid("consumed permit workspace_id is not a safe scope identifier")
+	}
+	if !skillProjectionBoundedToken(grantID, 512) {
+		return "", skillProjectionEffectInvalid("consumed permit grant_id must be a bounded token")
+	}
+	ref, err := hashJCS(struct {
+		SchemaVersion string `json:"schema_version"`
+		TenantID      string `json:"tenant_id"`
+		WorkspaceID   string `json:"workspace_id"`
+		GrantID       string `json:"grant_id"`
+	}{
+		SchemaVersion: SkillProjectionConsumedPermitRefSchemaV1,
+		TenantID:      tenantID,
+		WorkspaceID:   workspaceID,
+		GrantID:       grantID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("%w: consumed permit reference: %v", ErrSkillProjectionEffectInvalid, err)
+	}
+	return ref, nil
 }
 
 func (e SkillProjectionEffect) Validate() error {

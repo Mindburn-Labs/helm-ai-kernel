@@ -3,6 +3,15 @@
 {{- if not (or (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.kind "crd") (eq .Values.helm.policy.source.kind "mountedFile")) -}}
 {{- fail "helm.policy.source.kind must be one of controlplane, crd, mountedFile" -}}
 {{- end -}}
+{{- if and .Values.helm.production (not .Values.persistence.enabled) -}}
+{{- fail "helm.production=true requires persistence.enabled=true for durable policy replay protection" -}}
+{{- end -}}
+{{- if and .Values.helm.production (ne (int .Values.replicaCount) 1) -}}
+{{- fail "helm.production=true requires replicaCount=1 until policy replay state has a distributed store" -}}
+{{- end -}}
+{{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "mountedFile") -}}
+{{- fail "helm.production=true rejects helm.policy.source.kind=mountedFile because filesystem timestamps are not source-owned monotonic publication epochs; use controlplane" -}}
+{{- end -}}
 {{- if and .Values.helm.production (eq .Values.helm.policy.source.kind "controlplane") (not .Values.helm.policy.source.controlplane.url) -}}
 {{- fail "helm.production=true with helm.policy.source.kind=controlplane requires helm.policy.source.controlplane.url" -}}
 {{- end -}}
@@ -82,6 +91,10 @@ metadata:
   labels:
     {{- include "helm-ai-kernel.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.helm.production }}
+  strategy:
+    type: Recreate
+  {{- end }}
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
@@ -131,6 +144,7 @@ spec:
               umask 077
               data_dir="$HELM_AUTHORITY_DATA_DIR"
               root_key="$data_dir/root.key"
+              watermark="$data_dir/policy-replay-watermarks.json"
               source_key="/var/run/helm-signing-key/root.key"
 
               if [ ! -r "$source_key" ]; then
@@ -140,6 +154,19 @@ spec:
 
               if [ ! -d "$data_dir" ] || [ ! -w "$data_dir" ] || [ ! -x "$data_dir" ]; then
                 echo "authority data volume is not writable by the restricted runtime identity" >&2
+                exit 1
+              fi
+
+              if [ -L "$watermark" ]; then
+                echo "refusing symlinked policy replay watermark" >&2
+                exit 1
+              fi
+              if [ -e "$watermark" ] && [ ! -f "$watermark" ]; then
+                echo "policy replay watermark is not a regular file" >&2
+                exit 1
+              fi
+              if [ -f "$watermark" ] && ! chmod 0600 "$watermark"; then
+                echo "could not restore private policy replay watermark mode after fsGroup processing" >&2
                 exit 1
               fi
 

@@ -84,6 +84,7 @@ flowchart TD
 | `launchpadApps.hermes.model` | `openai/gpt-4o-mini` | Model passed to the default Hermes Job command. |
 | `launchpadApps.hermes.query` | `ping` | Single query passed to the default Hermes Job command. |
 | `launchpadApps.hermes.commandOverride` | `[]` | Full command array replacement for operator-specific Hermes runtime evidence. |
+| `replicaCount` | `1` | Kernel pod count. Production is single-writer until policy replay watermarks move to a distributed transactional store. |
 | `helm.*` | retained | Legacy values root retained for one compatibility window. |
 | `helm.bindAddr` | `0.0.0.0` | Required inside Kubernetes pods. |
 | `helm.production` | `false` | Refuses generated signing/auth material when set to `true`. |
@@ -112,7 +113,7 @@ flowchart TD
 | `helm.limits.concurrency.max` | `0` | Process in-flight request cap; `0` disables. |
 | `helm.limits.loadShed.enabled` | `false` | Enable low-priority load shedding. |
 | `helm.guardian.semanticThreatEscalationBP` | `0` | Semantic ESCALATE threshold in basis points; `0` is advisory-only, while a positive value fails closed when assessment is unavailable or truncated. |
-| `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or `mountedFile`; Kubernetes delivery is not policy truth. |
+| `helm.policy.source.kind` | `mountedFile` | `controlplane`, `crd`, or non-production `mountedFile`; Kubernetes delivery is not policy truth. |
 | `helm.policy.source.controlplane.auth.mode` | `serviceAccountJWT` | `serviceAccountJWT` uses a rotating projected token; `bearerToken` requires explicit static Secret material. |
 | `helm.policy.source.controlplane.auth.serviceAccountJWT.audience` | `helm-control-plane` | Audience required from the policy authority's Kubernetes TokenReview verifier. |
 | `helm.policy.source.controlplane.auth.serviceAccountJWT.expirationSeconds` | `600` | Projected token TTL, constrained to 600–3600 seconds. |
@@ -125,7 +126,7 @@ flowchart TD
 | `helm.policy.runtimeActions` | `[]` | Explicit mounted-file rules compiled into the chart-managed reference pack; empty remains fail-closed. Prefer signed control-plane/CRD policy in production. |
 | `helm.policy.reloadHints.httpWakeEndpoint` | `/internal/policy/reconcile` | Wake-only internal endpoint for sidecars/operators. |
 | `helm.policy.reloadHints.configReloaderSidecar.enabled` | `false` | Optional mounted-file wake hint; disabled by default. |
-| `persistence.enabled` | `true` | Creates or uses a PVC for `/data`. |
+| `persistence.enabled` | `true` | Creates or uses a PVC for `/data`; required in production so policy replay watermarks survive restarts. |
 | `ingress.enabled` | `false` | Enables Kubernetes ingress. |
 | `helm.metrics.enabled` | `false` | Enables `/metrics` on `service.metricsPort`. |
 | `helm.metrics.serviceMonitor.enabled` | `false` | Emits a Prometheus Operator `ServiceMonitor`. |
@@ -139,6 +140,11 @@ flowchart TD
 
 - Set `helm.production=true` and provide `helm.signing.key` or
   `helm.signing.existingSecret`.
+- Keep `persistence.enabled=true` and `replicaCount=1`. Production writes a
+  private, atomic policy replay watermark under `helm.dataDir` before activating
+  a snapshot and uses a `Recreate` rollout so old and new writers cannot overlap;
+  zero-downtime or multi-writer deployment requires a distributed transactional
+  watermark store first.
 - Enable `networkPolicy` and supply explicit ingress/egress allowlists. This is
   a rendered contract only until the target cluster proves a CNI that enforces
   `networking.k8s.io/v1` NetworkPolicy and records prohibited-egress denial.
@@ -158,7 +164,9 @@ flowchart TD
   rotation. Prefer `helm.emergencyStop.existingSecret` plus
   `commandReplayKeyringSecretKey` for deployment configuration; the chart
   rejects a direct value and secret key together.
-- Prefer `helm.policy.source.kind=controlplane` for production deployments.
+- Production rejects `helm.policy.source.kind=mountedFile` because filesystem
+  timestamps are not source-owned monotonic publication epochs. Use
+  `helm.policy.source.kind=controlplane` for the shipped runtime.
   The chart configures where policy truth is published; the runtime still
   polls, verifies hash/signature/provenance, compiles, and atomically swaps
   immutable snapshots. Production control-plane renders require
@@ -167,7 +175,7 @@ flowchart TD
 - Use `helm.policy.source.kind=crd` for Kubernetes-native self-hosted control
   in runtime builds that include a CRD `PolicySource`. The OSS chart renders
   the optional `HelmPolicyBundle` CRD and RBAC only in CRD mode.
-- `mountedFile` mode is retained for OSS/local/bootstrap/demo use. ConfigMap
+- `mountedFile` mode is retained only for OSS/local/bootstrap/demo use. ConfigMap
   or Secret bytes are delivery backends only and the sidecar, when enabled,
   only calls `/internal/policy/reconcile`. Signed mounted-file policies can
   provide a companion `serve-policy.toml.sig`; it must sign the versioned

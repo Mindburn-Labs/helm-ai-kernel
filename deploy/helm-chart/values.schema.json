@@ -665,7 +665,7 @@
                   "type": "string",
                   "enum": ["controlplane", "crd", "mountedFile"],
                   "default": "mountedFile",
-                  "description": "Policy source backend. controlplane is recommended for production; crd suits Kubernetes-native self-hosting; mountedFile is for OSS/local/bootstrap/demo use."
+                  "description": "Policy source backend. controlplane is required by the shipped production runtime; crd suits Kubernetes-native self-hosting with a compatible runtime; mountedFile is rejected in production and remains for OSS/local/bootstrap/demo use."
                 },
                 "pollInterval": {
                   "type": "string",

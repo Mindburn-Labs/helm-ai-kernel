@@ -25,6 +25,15 @@ func TestPolicySourceFromEnvDefaultsToMountedFile(t *testing.T) {
 	}
 }
 
+func TestPolicySourceFromEnvRejectsMountedFileInProduction(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	t.Setenv("HELM_POLICY_SOURCE_KIND", "mountedFile")
+	_, kind, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
+	if kind != "mountedFile" || err == nil || !strings.Contains(err.Error(), "source-owned monotonic publication epochs") {
+		t.Fatalf("expected production mountedFile rejection, got kind=%s err=%v", kind, err)
+	}
+}
+
 func TestPolicySourceFromEnvControlPlaneRequiresURL(t *testing.T) {
 	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
 	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "")

@@ -22,6 +22,12 @@ and `launchpadApps.hermes` enabled, see the openclaw Pod reach Ready and
 the hermes Job reach Complete, run `helm test` to confirm kernel health,
 and uninstall with no residual resources.
 
+This is deliberately a non-production policy-bootstrap smoke: it uses the
+chart-managed mounted policy while testing launchpad co-deployment and network
+behavior. It is not evidence for the managed policy-authority boundary. The
+Kernel's production `controlplane` transport, signed native policy fixture, and
+restart path are exercised separately by `scripts/ci/kind_smoke.sh`.
+
 ## Topology
 
 This is a **co-deployment** path. openclaw and hermes are pinned chart-

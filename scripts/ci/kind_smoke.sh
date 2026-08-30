@@ -14,10 +14,15 @@ ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
+POLICY_FIXTURE_IMAGE="${HELM_SMOKE_POLICY_FIXTURE_IMAGE:-docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662}"
+POLICY_FIXTURE_CONFIGMAP="helm-policy-controlplane-fixture"
+POLICY_AUTH_SECRET="helm-policy-reader"
+POLICY_FIXTURE_PORT=18081
 CREATED_CLUSTER=0
 PF_PID=""
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/helm-ai-kernel-kind-smoke.XXXXXX")"
 HELM_KUBECONFIG="$TMP_DIR/kubeconfig.helm"
+POLICY_FIXTURE_DIR="$TMP_DIR/policy-controlplane"
 
 require() {
     command -v "$1" >/dev/null 2>&1 || {
@@ -31,6 +36,7 @@ require kind
 require kubectl
 require curl
 require python3
+require go
 
 require_pinned_helm_image() {
     if [[ ! "$KUBE_HELM_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
@@ -38,6 +44,15 @@ require_pinned_helm_image() {
         exit 1
     fi
 }
+
+require_pinned_policy_fixture_image() {
+    if [[ ! "$POLICY_FIXTURE_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+        echo "::error::POLICY_FIXTURE_IMAGE must be pinned by immutable sha256 digest, got: ${POLICY_FIXTURE_IMAGE}"
+        exit 1
+    fi
+}
+
+require_pinned_policy_fixture_image
 
 prepare_helm_kubeconfig() {
     if [ -s "$HELM_KUBECONFIG" ]; then
@@ -150,6 +165,27 @@ kubectl label namespace "$NAMESPACE" \
     pod-security.kubernetes.io/enforce-version=latest \
     --overwrite >/dev/null
 
+(
+    cd "$ROOT/core"
+    go run ./scripts/ci/generate_policy_controlplane_fixture.go \
+        --out "$POLICY_FIXTURE_DIR" \
+        --tenant "$TENANT_ID" \
+        --workspace default \
+        --reference-pack "$ROOT/reference_packs/eu_ai_act_high_risk.v2.json"
+)
+POLICY_PUBLIC_KEY="$(tr -d '\r\n' <"$POLICY_FIXTURE_DIR/public-key.hex")"
+if [[ ! "$POLICY_PUBLIC_KEY" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "::error::generated policy fixture public key is invalid"
+    exit 1
+fi
+kubectl -n "$NAMESPACE" create configmap "$POLICY_FIXTURE_CONFIGMAP" \
+    --from-file=head="$POLICY_FIXTURE_DIR/head.json" \
+    --from-file=bundle="$POLICY_FIXTURE_DIR/bundle.toml" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n "$NAMESPACE" create secret generic "$POLICY_AUTH_SECRET" \
+    --from-literal=HELM_POLICY_BEARER_TOKEN=kind-smoke-policy-reader \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
 helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --namespace "$NAMESPACE" \
     --values scripts/ci/helm_production_network_policy_values.yaml \
@@ -159,11 +195,62 @@ helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --set helm.auth.serviceAPIKey="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}" \
     --set helm.auth.tenantID="$TENANT_ID" \
     --set helm.auth.principalID="$AGENT_ID" \
+    --set helm.policy.source.kind=controlplane \
+    --set-string helm.policy.source.controlplane.url="http://127.0.0.1:${POLICY_FIXTURE_PORT}" \
+    --set helm.policy.source.controlplane.auth.mode=bearerToken \
+    --set helm.policy.source.controlplane.auth.existingSecret="$POLICY_AUTH_SECRET" \
+    --set helm.policy.signature.required=true \
+    --set-string helm.policy.signature.publicKey="$POLICY_PUBLIC_KEY" \
     --set image.repository="$IMAGE_REPOSITORY" \
     --set image.digest="$IMAGE_DIGEST" \
     --set image.pullPolicy=IfNotPresent \
-    --set persistence.enabled=true \
-    --wait --timeout 180s
+    --set persistence.enabled=true
+
+cat >"$TMP_DIR/policy-controlplane-patch.yaml" <<EOF
+spec:
+  template:
+    spec:
+      containers:
+        - name: policy-controlplane-fixture
+          image: ${POLICY_FIXTURE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/httpd", "-f", "-p", "${POLICY_FIXTURE_PORT}", "-h", "/www"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          readinessProbe:
+            httpGet:
+              path: /api/v1/policy/head
+              port: ${POLICY_FIXTURE_PORT}
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          volumeMounts:
+            - name: policy-controlplane-fixture
+              mountPath: /www
+              readOnly: true
+      volumes:
+        - name: policy-controlplane-fixture
+          configMap:
+            name: ${POLICY_FIXTURE_CONFIGMAP}
+            items:
+              - key: head
+                path: api/v1/policy/head
+              - key: bundle
+                path: api/v1/policy/bundle
+EOF
+kubectl -n "$NAMESPACE" patch "deployment/${FULLNAME}" \
+    --type=strategic \
+    --patch-file "$TMP_DIR/policy-controlplane-patch.yaml" >/dev/null
 
 kubectl -n "$NAMESPACE" rollout status "deployment/${FULLNAME}" --timeout=180s
 kubectl -n "$NAMESPACE" port-forward "svc/${FULLNAME}" "${API_PORT}:8080" >"$TMP_DIR/port-forward.log" 2>&1 &

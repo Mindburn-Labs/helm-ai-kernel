@@ -85,6 +85,14 @@ production_helm_runner() {
         --set image.digest="$PRODUCTION_IMAGE_DIGEST"
 }
 
+production_controlplane_helm_runner() {
+    production_helm_runner "$@" \
+        --set helm.policy.source.kind=controlplane \
+        --set helm.policy.source.controlplane.url=https://helm-controlplane.example.internal \
+        --set helm.policy.signature.required=true \
+        --set helm.policy.signature.publicKey="$TRUST_PUBLIC_KEY"
+}
+
 default_rendered="$RENDER_DIR/rendered-default.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
@@ -153,6 +161,9 @@ assert_not_contains "$default_rendered" "mountPath: /data/root.key"
 # installs (CI) passed. An unreadable existing key must still fail closed.
 assert_contains "$default_rendered" 'chmod 0600 "$root_key" 2>/dev/null || true'
 assert_contains "$default_rendered" "durable authority root key exists but is not readable"
+assert_contains "$default_rendered" 'watermark="$data_dir/policy-replay-watermarks.json"'
+assert_contains "$default_rendered" 'chmod 0600 "$watermark"'
+assert_contains "$default_rendered" "could not restore private policy replay watermark mode after fsGroup processing"
 authority_init_script="$RENDER_DIR/rendered-authority-init-script.txt"
 awk '/prepare-authority-state/{capture=1} capture{print} capture && /volumeMounts:/{exit}' "$default_rendered" >"$authority_init_script"
 if [ "$(/usr/bin/grep -c 'chmod 0600 "$root_key"' "$authority_init_script" 2>/dev/null || grep -c 'chmod 0600 "$root_key"' "$authority_init_script")" != "1" ]; then
@@ -386,7 +397,7 @@ fi
 assert_contains "$hermes_mode_fail_log" "launchpadApps.hermes.mode"
 
 fail_log="$RENDER_DIR/production-missing-key.log"
-if production_helm_runner template "$RELEASE" "$CHART" \
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true >"$RENDER_DIR/production-missing-key.yaml" 2>"$fail_log"; then
     echo "::error::production render without signing key unexpectedly succeeded"
@@ -403,7 +414,11 @@ if helm_runner template "$RELEASE" "$CHART" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
     --set helm.auth.tenantID="$TENANT_ID" \
-    --set helm.auth.principalID="$AGENT_ID" >"$RENDER_DIR/production-missing-image-digest.yaml" 2>"$image_digest_fail_log"; then
+    --set helm.auth.principalID="$AGENT_ID" \
+    --set helm.policy.source.kind=controlplane \
+    --set helm.policy.source.controlplane.url=https://helm-controlplane.example.internal \
+    --set helm.policy.signature.required=true \
+    --set helm.policy.signature.publicKey="$TRUST_PUBLIC_KEY" >"$RENDER_DIR/production-missing-image-digest.yaml" 2>"$image_digest_fail_log"; then
     echo "::error::production render without an immutable Kernel image digest unexpectedly succeeded"
     exit 1
 fi
@@ -427,6 +442,10 @@ if helm_runner template "$RELEASE" "$CHART" \
     --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
     --set helm.auth.tenantID="$TENANT_ID" \
     --set helm.auth.principalID="$AGENT_ID" \
+    --set helm.policy.source.kind=controlplane \
+    --set helm.policy.source.controlplane.url=https://helm-controlplane.example.internal \
+    --set helm.policy.signature.required=true \
+    --set helm.policy.signature.publicKey="$TRUST_PUBLIC_KEY" \
     --set image.digest="$PRODUCTION_IMAGE_DIGEST" >"$RENDER_DIR/production-network-policy-disabled.yaml" 2>"$network_policy_disabled_log"; then
     echo "::error::production render without a kernel NetworkPolicy unexpectedly succeeded"
     exit 1
@@ -434,7 +453,7 @@ fi
 assert_contains "$network_policy_disabled_log" "networkPolicy.enabled=true"
 
 network_policy_wildcard_log="$RENDER_DIR/production-network-policy-wildcard.log"
-if production_helm_runner template "$RELEASE" "$CHART" \
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -447,7 +466,7 @@ fi
 assert_contains "$network_policy_wildcard_log" "exact /32 or /128 host CIDRs"
 
 tenant_fail_log="$RENDER_DIR/production-missing-runtime-tenant.log"
-if production_helm_runner template "$RELEASE" "$CHART" \
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -460,7 +479,7 @@ fi
 assert_contains "$tenant_fail_log" "helm.auth.tenantID"
 
 principal_fail_log="$RENDER_DIR/production-missing-runtime-principal.log"
-if production_helm_runner template "$RELEASE" "$CHART" \
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -473,7 +492,7 @@ fi
 assert_contains "$principal_fail_log" "helm.auth.principalID"
 
 postgres_inline_fail_log="$RENDER_DIR/postgres-inline-production.log"
-if production_helm_runner template "$RELEASE" "$CHART" \
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -488,7 +507,7 @@ fi
 assert_contains "$postgres_inline_fail_log" "requires helm.storage.postgres.existingSecret"
 
 postgres_tls_fail_log="$RENDER_DIR/postgres-weak-tls-production.log"
-if production_helm_runner template "$RELEASE" "$CHART" \
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -503,7 +522,7 @@ fi
 assert_contains "$postgres_tls_fail_log" "requires helm.storage.postgres.sslMode"
 
 postgres_subchart_fail_log="$RENDER_DIR/postgres-subchart-production.log"
-if production_helm_runner template "$RELEASE" "$CHART" \
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -518,7 +537,7 @@ fi
 assert_contains "$postgres_subchart_fail_log" "does not support the bundled postgresql subchart"
 
 postgres_rendered="$RENDER_DIR/rendered-postgres-secret.yaml"
-production_helm_runner template "$RELEASE" "$CHART" \
+production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -534,7 +553,7 @@ assert_not_contains "$postgres_rendered" "postgres://"
 assert_not_contains "$postgres_rendered" "POSTGRES_PASSWORD"
 assert_not_contains "$postgres_rendered" "sslmode=disable"
 
-production_helm_runner lint "$CHART" \
+production_controlplane_helm_runner lint "$CHART" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
@@ -545,7 +564,7 @@ production_helm_runner lint "$CHART" \
     --set image.pullPolicy=IfNotPresent >/dev/null
 
 rendered="$RENDER_DIR/rendered.yaml"
-production_helm_runner template "$RELEASE" "$CHART" \
+production_controlplane_helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
@@ -557,6 +576,8 @@ production_helm_runner template "$RELEASE" "$CHART" \
     --set image.pullPolicy=IfNotPresent >"$rendered"
 
 assert_contains "$rendered" "kind: Deployment"
+assert_contains "$rendered" "strategy:"
+assert_contains "$rendered" "type: Recreate"
 assert_contains "$rendered" "image: \"ghcr.io/mindburn-labs/helm-ai-kernel@${PRODUCTION_IMAGE_DIGEST}\""
 assert_contains "$rendered" "serve"
 assert_contains "$rendered" "--policy"
@@ -565,7 +586,9 @@ assert_contains "$rendered" "--data-dir"
 assert_contains "$rendered" "/data"
 assert_contains "$rendered" "HELM_PRODUCTION"
 assert_contains "$rendered" "HELM_POLICY_SOURCE_KIND"
-assert_contains "$rendered" "mountedFile"
+assert_contains "$rendered" "controlplane"
+assert_contains "$rendered" "https://helm-controlplane.example.internal"
+assert_contains "$rendered" "HELM_POLICY_TRUST_PUBLIC_KEY"
 assert_contains "$rendered" "HELM_POLICY_POLL_INTERVAL"
 assert_contains "$rendered" "HELM_POLICY_SIGNATURE_REQUIRED"
 assert_contains "$rendered" "/internal/policy/reconcile"
@@ -591,6 +614,45 @@ assert_contains "$rendered" "kernel ingress and egress are allowlist-only"
 assert_contains "$rendered" "app.kubernetes.io/name: svc-helm-control-plane"
 assert_contains "$rendered" "cidr: 10.116.0.8/32"
 assert_contains "$rendered" "port: 5432"
+
+ephemeral_production_log="$RENDER_DIR/production-ephemeral-policy-state.log"
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set persistence.enabled=false >"$RENDER_DIR/production-ephemeral-policy-state.yaml" 2>"$ephemeral_production_log"; then
+    echo "::error::production render without durable policy state unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$ephemeral_production_log" "persistence.enabled=true"
+
+multi_replica_production_log="$RENDER_DIR/production-multi-replica-policy-state.log"
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set replicaCount=2 >"$RENDER_DIR/production-multi-replica-policy-state.yaml" 2>"$multi_replica_production_log"; then
+    echo "::error::production multi-writer policy state unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$multi_replica_production_log" "replicaCount=1"
+
+mounted_file_production_log="$RENDER_DIR/production-mounted-file-policy.log"
+if production_helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.production=true \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.policy.source.kind=mountedFile >"$RENDER_DIR/production-mounted-file-policy.yaml" 2>"$mounted_file_production_log"; then
+    echo "::error::production mounted-file policy source unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$mounted_file_production_log" "source-owned monotonic publication epochs"
 
 controlplane_fail_log="$RENDER_DIR/controlplane-missing-url.log"
 if production_helm_runner template "$RELEASE" "$CHART" \

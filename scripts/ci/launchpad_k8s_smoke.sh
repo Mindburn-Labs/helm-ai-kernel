@@ -66,7 +66,7 @@ Environment overrides:
   LAUNCHPAD_SMOKE_GHCR_SECRET_NAME Secret name for private GHCR pulls (default ghcr-read)
   LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_IMAGES set to 1 for debug-only host pull + minikube image load verification
   LAUNCHPAD_SMOKE_PRE_LOAD_LAUNCHPAD_PLATFORM platform for debug-only launchpad image preload (default linux/amd64)
-  KUBE_HELM_CMD                  Kubernetes Helm binary to use when `helm` is occupied by HELM verifier
+  KUBE_HELM_CMD                  Kubernetes Helm binary to use when helm is occupied by HELM verifier
   GHCR_USERNAME                  GitHub/GHCR username for positive/negative launchpad app image pulls
   GHCR_TOKEN                     GitHub token with read:packages for private GHCR launchpad app image pulls
   OPENROUTER_API_KEY            real key for the positive scenario; ignored on negative
@@ -361,7 +361,9 @@ helm_args=(
     "$RELEASE" "${ROOT}/deploy/helm-chart"
     --namespace "$NAMESPACE"
     --values "${ROOT}/scripts/ci/helm_production_network_policy_values.yaml"
-    --set "helm.production=true"
+    # This smoke owns launchpad co-deployment, not the managed policy authority.
+    # The production controlplane path is exercised by kind_smoke.sh.
+    --set "helm.production=false"
     --set "helm.signing.key=${SIGNING_KEY}"
     --set "helm.auth.adminAPIKey=${ADMIN_KEY}"
     --set "helm.auth.serviceAPIKey=${SERVICE_KEY}"

@@ -521,7 +521,14 @@ func runServerWithOptions(opts serverOptions) error {
 		if lkgConfigErr != nil {
 			return fmt.Errorf("configure last-known-good policy retention: %w", lkgConfigErr)
 		}
-		policyStore = policyreconcile.NewAtomicSnapshotStore()
+		if envBool("HELM_PRODUCTION") {
+			policyStore, err = policyreconcile.NewPersistentSnapshotStore(filepath.Join(dataDir, "policy-replay-watermarks.json"))
+			if err != nil {
+				return fmt.Errorf("open policy replay watermark store: %w", err)
+			}
+		} else {
+			policyStore = policyreconcile.NewAtomicSnapshotStore()
+		}
 		policyReconciler, err = policyreconcile.NewReconciler(policyreconcile.ReconcilerConfig{
 			Source:              policySource,
 			Store:               policyStore,
@@ -1069,6 +1076,9 @@ func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (
 	}
 	switch strings.ToLower(kind) {
 	case "mountedfile", "mounted-file", "mounted_file":
+		if envBool("HELM_PRODUCTION") {
+			return nil, "mountedFile", fmt.Errorf("HELM_PRODUCTION=1 rejects mountedFile policy sources because filesystem timestamps are not source-owned monotonic publication epochs; use controlplane")
+		}
 		return policyreconcile.NewMountedFileSource(policyPath, scope), "mountedFile", nil
 	case "controlplane", "control-plane", "control_plane":
 		baseURL := strings.TrimSpace(os.Getenv("HELM_POLICY_CONTROLPLANE_URL"))

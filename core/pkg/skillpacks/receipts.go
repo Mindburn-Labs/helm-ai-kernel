@@ -130,22 +130,45 @@ func verifyProjectionLifecycleStateAuthentication(state projectionLifecycleState
 	return nil
 }
 
-func sealProjectionRecoveryJournal(journal projectionRecoveryJournal) (projectionRecoveryJournal, error) {
-	journal.JournalHash = ""
-	hash, err := canonicalize.CanonicalHash(journal)
-	if err != nil {
-		return projectionRecoveryJournal{}, fmt.Errorf("skillpacks: seal projection recovery journal: %w", err)
+func sealProjectionRecoveryJournal(
+	journal projectionRecoveryJournal,
+	key ProjectionTrustVerifierKey,
+) (projectionRecoveryJournal, error) {
+	if err := validateProjectionTrustVerifierKey(key); err != nil {
+		return projectionRecoveryJournal{}, err
 	}
-	journal.JournalHash = "sha256:" + hash
+	journal.JournalVerifierID = key.VerifierID
+	journal.JournalKeyID = key.KeyID
+	journalHash, err := hashProjectionRecoveryJournal(journal)
+	if err != nil {
+		return projectionRecoveryJournal{}, err
+	}
+	journal.JournalHash = journalHash
+	journal.JournalSignature = projectionRecoveryJournalSignature(journal.JournalHash, key)
 	return journal, nil
 }
 
-func verifyProjectionRecoveryJournalIntegrity(journal projectionRecoveryJournal) error {
-	if !validProjectionSHA256(journal.JournalHash) {
-		return fmt.Errorf("%w: recovery journal hash is required", ErrProjectionDrift)
+func hashProjectionRecoveryJournal(journal projectionRecoveryJournal) (string, error) {
+	journal.JournalHash = ""
+	journal.JournalSignature = ""
+	hash, err := canonicalize.CanonicalHash(journal)
+	if err != nil {
+		return "", fmt.Errorf("skillpacks: hash projection recovery journal: %w", err)
 	}
-	sealed, err := sealProjectionRecoveryJournal(journal)
-	if err != nil || !constantStringEqual(sealed.JournalHash, journal.JournalHash) {
+	return "sha256:" + hash, nil
+}
+
+func verifyProjectionRecoveryJournalAuthentication(
+	journal projectionRecoveryJournal,
+	key ProjectionTrustVerifierKey,
+) error {
+	if !validProjectionSHA256(journal.JournalHash) || journal.JournalVerifierID != key.VerifierID ||
+		journal.JournalKeyID != key.KeyID || !validProjectionTrustSignature(journal.JournalSignature) {
+		return fmt.Errorf("%w: authenticated recovery journal is required", ErrProjectionDrift)
+	}
+	sealed, err := sealProjectionRecoveryJournal(journal, key)
+	if err != nil || !constantStringEqual(sealed.JournalHash, journal.JournalHash) ||
+		!constantStringEqual(sealed.JournalSignature, journal.JournalSignature) {
 		return fmt.Errorf("%w: recovery journal integrity mismatch", ErrProjectionDrift)
 	}
 	return nil

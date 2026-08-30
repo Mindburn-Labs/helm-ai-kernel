@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,16 +30,20 @@ const (
 	projectionLifecycleStateSchemaV1  = "helm.skill-projection-state.v1"
 	projectionRecoveryJournalSchemaV1 = "helm.skill-projection-recovery-journal.v1"
 	projectionLifecycleStateMACV1     = "helm.skill-projection-state-mac.v1"
+	projectionRecoveryJournalMACV1    = "helm.skill-projection-recovery-journal-mac.v1"
 
 	projectionStatusActive  = "active"
 	projectionStatusRevoked = "revoked"
 
 	maxProjectionArtifactBytes = 1 << 20
+	// V1 retains the newest immutable generation metadata as the supported
+	// rollback window. Artifact bytes remain immutable on disk by generation.
+	maxProjectionGenerationEntries = 256
 	// V1 retains exact result/attempt bindings for the most recent operations.
 	// Oldest-first compaction prevents readbacks from exhausting state forever.
 	maxProjectionReplayEntries = 256
-	// Lifecycle state contains append-only generation, replay, and attempt
-	// metadata. Each V1 mutation can retain 16 bounded certification refs plus
+	// Lifecycle state contains bounded generation, replay, and attempt metadata.
+	// Each V1 mutation can retain 16 bounded certification refs plus
 	// an exact replay result and attempt binding; 16 MiB gives that metadata a
 	// distinct operational envelope while keeping reads and writes bounded.
 	maxProjectionLifecycleStateBytes = 16 << 20
@@ -301,7 +306,10 @@ type projectionRecoveryJournal struct {
 	NextLiveBytes       []byte `json:"next_live_bytes,omitempty"`
 	NextLiveHash        string `json:"next_live_hash,omitempty"`
 
-	JournalHash string `json:"journal_hash,omitempty"`
+	JournalVerifierID string `json:"journal_verifier_id"`
+	JournalKeyID      string `json:"journal_key_id"`
+	JournalSignature  string `json:"journal_signature,omitempty"`
+	JournalHash       string `json:"journal_hash,omitempty"`
 }
 
 // NewProjectionLifecycle preserves the original constructor surface but fails
@@ -410,21 +418,8 @@ func (l *ProjectionLifecycle) Apply(
 	if l == nil {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: projection lifecycle is nil")
 	}
-	now := l.clock().UTC()
-	if err := validateProjectionAuthority(effect, consumedPermitRef, rollbackPermit, now); err != nil {
+	if err := validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
 		return ProjectionLifecycleResult{}, err
-	}
-
-	var installGeneration projectionGeneration
-	var manifestBytes, contentBytes []byte
-	var err error
-	if effect.Action == contracts.SkillProjectionActionInstall {
-		installGeneration, manifestBytes, contentBytes, err = validateProjectionArtifact(effect, artifact)
-		if err != nil {
-			return ProjectionLifecycleResult{}, err
-		}
-	} else if artifact != nil {
-		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: artifact is only valid for install")
 	}
 
 	l.mu.Lock()
@@ -444,18 +439,30 @@ func (l *ProjectionLifecycle) Apply(
 	}()
 	// Authority can expire while waiting for either lock. Revalidate at the
 	// single-writer boundary before reading or mutating any projection state.
-	now = l.clock().UTC()
-	if err := validateProjectionAuthority(effect, consumedPermitRef, rollbackPermit, now); err != nil {
-		return ProjectionLifecycleResult{}, err
-	}
+	now := l.clock().UTC()
+	authorityErr := validateProjectionAuthority(effect, consumedPermitRef, rollbackPermit, now)
 
 	projection, err := projectionRelativePath(effect.SkillID, effect.AgentTarget)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	relativePath := filepath.ToSlash(projection.Path)
-	if err := l.recoverProjectionJournal(effect, relativePath, now); err != nil {
+	if err := l.recoverProjectionJournal(effect, relativePath, rollbackPermit, authorityErr); err != nil {
 		return ProjectionLifecycleResult{}, err
+	}
+	if authorityErr != nil {
+		return ProjectionLifecycleResult{}, authorityErr
+	}
+
+	var installGeneration projectionGeneration
+	var manifestBytes, contentBytes []byte
+	if effect.Action == contracts.SkillProjectionActionInstall {
+		installGeneration, manifestBytes, contentBytes, err = validateProjectionArtifact(effect, artifact)
+		if err != nil {
+			return ProjectionLifecycleResult{}, err
+		}
+	} else if artifact != nil {
+		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: artifact is only valid for install")
 	}
 	state, err := l.readState(effect, relativePath)
 	if err != nil {
@@ -475,7 +482,7 @@ func (l *ProjectionLifecycle) Apply(
 			if err := l.verifyManagedState(*state); err != nil {
 				return ProjectionLifecycleResult{}, err
 			}
-			if err := l.verifyReplayTrust(effect, *state, now); err != nil {
+			if _, err := l.verifyReplayTrust(effect, *state, rollbackPermit); err != nil {
 				return ProjectionLifecycleResult{}, err
 			}
 			return replay.Result, nil
@@ -516,13 +523,13 @@ func (l *ProjectionLifecycle) Apply(
 
 	switch effect.Action {
 	case contracts.SkillProjectionActionInstall:
-		return l.applyInstall(effect, state, relativePath, installGeneration, manifestBytes, contentBytes, now)
+		return l.applyInstall(effect, state, relativePath, installGeneration, manifestBytes, contentBytes)
 	case contracts.SkillProjectionActionReadback:
-		return l.applyReadback(effect, state, relativePath, now)
+		return l.applyReadback(effect, state, relativePath)
 	case contracts.SkillProjectionActionRevoke:
-		return l.applyRevoke(effect, state, relativePath, now)
+		return l.applyRevoke(effect, state, relativePath)
 	case contracts.SkillProjectionActionRollback:
-		return l.applyRollback(effect, state, relativePath, *rollbackPermit, now)
+		return l.applyRollback(effect, state, relativePath, *rollbackPermit)
 	default:
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: unsupported projection action")
 	}
@@ -534,8 +541,32 @@ func validateProjectionAuthority(
 	rollbackPermit *contracts.SkillProjectionRollbackPermit,
 	now time.Time,
 ) error {
+	if err := validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
+		return err
+	}
 	if err := effect.ValidateAt(now); err != nil {
 		return err
+	}
+	if effect.Action == contracts.SkillProjectionActionRollback {
+		return effect.ValidateRollbackPermit(*rollbackPermit, now)
+	}
+	return nil
+}
+
+func validateProjectionAuthorityBinding(
+	effect contracts.SkillProjectionEffect,
+	consumedPermitRef string,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+) error {
+	if err := effect.Validate(); err != nil {
+		return err
+	}
+	if effect.CanonicalRequestHash == "" {
+		return fmt.Errorf("%w: canonical_request_hash is required", contracts.ErrSkillProjectionEffectIntegrity)
+	}
+	sealed, err := effect.Seal()
+	if err != nil || !constantStringEqual(sealed.CanonicalRequestHash, effect.CanonicalRequestHash) {
+		return fmt.Errorf("%w: canonical_request_hash mismatch", contracts.ErrSkillProjectionEffectIntegrity)
 	}
 	if !constantStringEqual(effect.ConsumedPermitRef, consumedPermitRef) {
 		return fmt.Errorf("skillpacks: consumed permit reference mismatch")
@@ -544,7 +575,10 @@ func validateProjectionAuthority(
 		if rollbackPermit == nil {
 			return fmt.Errorf("skillpacks: rollback permit is required")
 		}
-		return effect.ValidateRollbackPermit(*rollbackPermit, now)
+		// IssuedAt is the one time guaranteed active by a structurally valid
+		// permit. This checks its seal and exact effect binding without allowing
+		// an expired permit to bypass recovery of its own pending journal.
+		return effect.ValidateRollbackPermit(*rollbackPermit, rollbackPermit.IssuedAt)
 	}
 	if rollbackPermit != nil {
 		return fmt.Errorf("skillpacks: rollback permit is only valid for rollback")
@@ -558,16 +592,15 @@ func (l *ProjectionLifecycle) applyInstall(
 	relativePath string,
 	generation projectionGeneration,
 	manifestBytes, contentBytes []byte,
-	now time.Time,
 ) (ProjectionLifecycleResult, error) {
-	if current != nil {
-		for _, retained := range current.Generations {
-			if constantStringEqual(retained.ArtifactHash, generation.ArtifactHash) {
-				return ProjectionLifecycleResult{}, ErrProjectionRollbackRequired
-			}
-		}
+	retained, err := l.immutableProjectionArtifactExists(effect, generation.ArtifactHash)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
 	}
-	trust, err := l.verifyProjectionTrust(effect, generation, manifestBytes, contentBytes, now)
+	if retained {
+		return ProjectionLifecycleResult{}, ErrProjectionRollbackRequired
+	}
+	trust, err := l.verifyProjectionTrust(effect, generation, manifestBytes, contentBytes, nil)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -579,6 +612,9 @@ func (l *ProjectionLifecycle) applyInstall(
 	generation.TrustCanonicalHash = effect.CanonicalRequestHash
 	generation.TrustBindingHash = trust.BindingHash
 	generation.TrustDecisionSignature = trust.Signature
+	if err := l.validateProjectionPublicationAuthority(effect, nil, trust); err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
 	if err := l.persistGeneration(effect, generation, manifestBytes, contentBytes); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -587,7 +623,7 @@ func (l *ProjectionLifecycle) applyInstall(
 	next.Status = projectionStatusActive
 	next.Generation = effect.Generation
 	next.ArchiveGeneration = effect.Generation
-	next.Generations = append(next.Generations, generation)
+	appendProjectionGeneration(&next, generation)
 	status := "installed"
 	if current != nil && current.Status == projectionStatusActive {
 		status = "upgraded"
@@ -602,7 +638,7 @@ func (l *ProjectionLifecycle) applyInstall(
 		return ProjectionLifecycleResult{}, err
 	}
 	appendProjectionReplay(&next, effect, sealed)
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, true, contentBytes, sealed); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, true, contentBytes, sealed, nil, trust); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -612,7 +648,6 @@ func (l *ProjectionLifecycle) applyReadback(
 	effect contracts.SkillProjectionEffect,
 	current *projectionLifecycleState,
 	relativePath string,
-	now time.Time,
 ) (ProjectionLifecycleResult, error) {
 	record, ok := findProjectionGeneration(current.Generations, current.ArchiveGeneration)
 	if !ok || !projectionEffectMatchesGeneration(effect, record) {
@@ -622,7 +657,7 @@ func (l *ProjectionLifecycle) applyReadback(
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
-	trust, err := l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, now)
+	trust, err := l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, nil)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -647,7 +682,7 @@ func (l *ProjectionLifecycle) applyReadback(
 	if current.Status == projectionStatusRevoked {
 		nextLiveBytes = nil
 	}
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, current.Status == projectionStatusActive, nextLiveBytes, sealed); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, current.Status == projectionStatusActive, nextLiveBytes, sealed, nil, trust); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -657,7 +692,6 @@ func (l *ProjectionLifecycle) applyRevoke(
 	effect contracts.SkillProjectionEffect,
 	current *projectionLifecycleState,
 	relativePath string,
-	now time.Time,
 ) (ProjectionLifecycleResult, error) {
 	if current == nil || current.Status != projectionStatusActive {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: only an active projection can be revoked")
@@ -670,7 +704,7 @@ func (l *ProjectionLifecycle) applyRevoke(
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
-	trust, err := l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, now)
+	trust, err := l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, nil)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -684,7 +718,7 @@ func (l *ProjectionLifecycle) applyRevoke(
 		return ProjectionLifecycleResult{}, err
 	}
 	appendProjectionReplay(&next, effect, sealed)
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, false, nil, sealed); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, false, nil, sealed, nil, trust); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -695,7 +729,6 @@ func (l *ProjectionLifecycle) applyRollback(
 	current *projectionLifecycleState,
 	relativePath string,
 	permit contracts.SkillProjectionRollbackPermit,
-	now time.Time,
 ) (ProjectionLifecycleResult, error) {
 	if current == nil || permit.FromGeneration != current.Generation {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: rollback source generation mismatch")
@@ -708,7 +741,7 @@ func (l *ProjectionLifecycle) applyRollback(
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
-	trust, err := l.verifyProjectionTrust(effect, target, manifestBytes, contentBytes, now)
+	trust, err := l.verifyProjectionTrust(effect, target, manifestBytes, contentBytes, &permit)
 	if err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -722,6 +755,9 @@ func (l *ProjectionLifecycle) applyRollback(
 	restored.TrustCanonicalHash = effect.CanonicalRequestHash
 	restored.TrustBindingHash = trust.BindingHash
 	restored.TrustDecisionSignature = trust.Signature
+	if err := l.validateProjectionPublicationAuthority(effect, &permit, trust); err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
 	if err := l.persistGeneration(effect, restored, manifestBytes, contentBytes); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
@@ -730,7 +766,7 @@ func (l *ProjectionLifecycle) applyRollback(
 	next.Status = projectionStatusActive
 	next.Generation = effect.Generation
 	next.ArchiveGeneration = effect.Generation
-	next.Generations = append(next.Generations, restored)
+	appendProjectionGeneration(&next, restored)
 	result := newProjectionResult(effect, relativePath, "rolled_back", previousGeneration, previous, restored)
 	result.RestoredFromGeneration = permit.TargetGeneration
 	result.RollbackPermitRef = permit.PermitRef
@@ -743,7 +779,7 @@ func (l *ProjectionLifecycle) applyRollback(
 		return ProjectionLifecycleResult{}, err
 	}
 	appendProjectionReplay(&next, effect, sealed)
-	if err := l.commitProjectionMutation(effect, current, next, relativePath, true, contentBytes, sealed); err != nil {
+	if err := l.commitProjectionMutation(effect, current, next, relativePath, true, contentBytes, sealed, &permit, trust); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	return sealed, nil
@@ -822,7 +858,7 @@ func (l *ProjectionLifecycle) verifyProjectionTrust(
 	effect contracts.SkillProjectionEffect,
 	record projectionGeneration,
 	manifestBytes, contentBytes []byte,
-	now time.Time,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
 ) (ProjectionTrustDecision, error) {
 	if l == nil || l.verifier == nil {
 		return ProjectionTrustDecision{}, fmt.Errorf("%w: configured verifier is required", ErrProjectionTrustRejected)
@@ -853,6 +889,10 @@ func (l *ProjectionLifecycle) verifyProjectionTrust(
 		!containsString(effect.CertificationRefs, manifest.ProvenanceRef) {
 		return ProjectionTrustDecision{}, fmt.Errorf("%w: manifest trust binding mismatch", ErrProjectionTrustRejected)
 	}
+	evaluationTime := l.clock().UTC()
+	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, evaluationTime); err != nil {
+		return ProjectionTrustDecision{}, err
+	}
 
 	request := ProjectionTrustRequest{
 		SchemaVersion:  ProjectionTrustRequestSchemaV1,
@@ -860,16 +900,43 @@ func (l *ProjectionLifecycle) verifyProjectionTrust(
 		Manifest:       cloneProjectionManifest(manifest),
 		ManifestBytes:  append([]byte(nil), manifestBytes...),
 		ContentBytes:   append([]byte(nil), contentBytes...),
-		EvaluationTime: now,
+		EvaluationTime: evaluationTime,
 	}
 	decision, err := l.verifier.VerifyProjectionTrust(request)
 	if err != nil {
 		return ProjectionTrustDecision{}, fmt.Errorf("%w: %v", ErrProjectionTrustRejected, err)
 	}
-	if err := l.validateProjectionTrustDecision(decision, effect, manifest, now); err != nil {
+	validationTime := l.clock().UTC()
+	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, validationTime); err != nil {
+		return ProjectionTrustDecision{}, err
+	}
+	if err := l.validateProjectionTrustDecision(decision, effect, manifest, validationTime); err != nil {
 		return ProjectionTrustDecision{}, err
 	}
 	return decision, nil
+}
+
+func (l *ProjectionLifecycle) validateProjectionPublicationAuthority(
+	effect contracts.SkillProjectionEffect,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+	decision ProjectionTrustDecision,
+) error {
+	now := l.clock().UTC()
+	if err := validateProjectionAuthority(effect, effect.ConsumedPermitRef, rollbackPermit, now); err != nil {
+		return err
+	}
+	if err := verifyProjectionTrustDecisionIntegrity(decision); err != nil {
+		return err
+	}
+	if err := verifyProjectionTrustDecisionSignature(decision, l.verifierKey); err != nil {
+		return err
+	}
+	expectedBindingHash, err := projectionTrustBindingHash(projectionTrustBindingFromEffect(effect))
+	if err != nil || !constantStringEqual(expectedBindingHash, decision.BindingHash) ||
+		decision.VerifiedAt.After(now) || !now.Before(decision.ExpiresAt) {
+		return fmt.Errorf("%w: trust decision is not current for publication", ErrProjectionTrustRejected)
+	}
+	return nil
 }
 
 func (l *ProjectionLifecycle) validateProjectionTrustDecision(
@@ -1124,6 +1191,18 @@ func projectionLifecycleStateSignature(stateHash string, key ProjectionTrustVeri
 	return projectionTrustSignaturePrefix + hex.EncodeToString(mac.Sum(nil))
 }
 
+func projectionRecoveryJournalSignature(journalHash string, key ProjectionTrustVerifierKey) string {
+	mac := hmac.New(sha256.New, key.HMACKey)
+	_, _ = mac.Write([]byte(projectionRecoveryJournalMACV1))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(key.VerifierID))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(key.KeyID))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(journalHash))
+	return projectionTrustSignaturePrefix + hex.EncodeToString(mac.Sum(nil))
+}
+
 func verifyProjectionTrustDecisionSignature(decision ProjectionTrustDecision, key ProjectionTrustVerifierKey) error {
 	if err := validateProjectionTrustVerifierKey(key); err != nil {
 		return err
@@ -1165,6 +1244,17 @@ func (l *ProjectionLifecycle) verifyProjectionLifecycleState(state projectionLif
 		return fmt.Errorf("%w: %v", ErrProjectionDrift, err)
 	}
 	return nil
+}
+
+func (l *ProjectionLifecycle) verifyProjectionRecoveryJournal(journal projectionRecoveryJournal) error {
+	key, ok := l.verificationKeys[projectionTrustKeyIdentity{
+		VerifierID: journal.JournalVerifierID,
+		KeyID:      journal.JournalKeyID,
+	}]
+	if !ok {
+		return fmt.Errorf("%w: recovery journal verifier identity/key is not accepted", ErrProjectionDrift)
+	}
+	return verifyProjectionRecoveryJournalAuthentication(journal, key)
 }
 
 func projectionJournalMatchesTrustEffect(
@@ -1229,20 +1319,19 @@ func projectionResultMatchesTrustEffect(result ProjectionLifecycleResult) bool {
 func (l *ProjectionLifecycle) verifyReplayTrust(
 	effect contracts.SkillProjectionEffect,
 	state projectionLifecycleState,
-	now time.Time,
-) error {
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+) (ProjectionTrustDecision, error) {
 	for _, record := range state.Generations {
 		if !projectionEffectMatchesGeneration(effect, record) {
 			continue
 		}
 		manifestBytes, contentBytes, err := l.readGeneration(effect, record)
 		if err != nil {
-			return err
+			return ProjectionTrustDecision{}, err
 		}
-		_, err = l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, now)
-		return err
+		return l.verifyProjectionTrust(effect, record, manifestBytes, contentBytes, rollbackPermit)
 	}
-	return fmt.Errorf("%w: replay has no retained trust material", ErrProjectionDrift)
+	return ProjectionTrustDecision{}, fmt.Errorf("%w: replay has no retained trust material", ErrProjectionDrift)
 }
 
 func bindProjectionResultTrust(
@@ -1273,7 +1362,12 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	nextLivePresent bool,
 	nextLiveBytes []byte,
 	result ProjectionLifecycleResult,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+	trust ProjectionTrustDecision,
 ) error {
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+		return err
+	}
 	journal, err := l.buildProjectionRecoveryJournal(effect, current, next, relativePath, nextLivePresent, nextLiveBytes, result)
 	if err != nil {
 		return err
@@ -1284,17 +1378,26 @@ func (l *ProjectionLifecycle) commitProjectionMutation(
 	if err := l.runProjectionMutationHook(projectionMutationAfterJournal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+		return l.abortProjectionMutation(effect, relativePath, journal, err)
+	}
 	if err := l.publishRecoveryLive(effect, journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
 	if err := l.runProjectionMutationHook(projectionMutationAfterLive); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+		return l.abortProjectionMutation(effect, relativePath, journal, err)
+	}
 	if err := l.publishRecoveryState(effect, journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
 	if err := l.runProjectionMutationHook(projectionMutationAfterState); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
+	}
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+		return l.abortProjectionMutation(effect, relativePath, journal, err)
 	}
 	if err := l.verifyRecoveryTarget(effect, relativePath, journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
@@ -1390,7 +1493,7 @@ func (l *ProjectionLifecycle) buildProjectionRecoveryJournal(
 		NextLiveBytes:       append([]byte(nil), nextLiveBytes...),
 		NextLiveHash:        nextExpectedHash,
 	}
-	sealed, err := sealProjectionRecoveryJournal(journal)
+	sealed, err := sealProjectionRecoveryJournal(journal, l.verifierKey)
 	if err != nil {
 		return projectionRecoveryJournal{}, err
 	}
@@ -1419,7 +1522,7 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 	effect contracts.SkillProjectionEffect,
 	relativePath string,
 ) (projectionLifecycleState, error) {
-	if err := verifyProjectionRecoveryJournalIntegrity(journal); err != nil {
+	if err := l.verifyProjectionRecoveryJournal(journal); err != nil {
 		return projectionLifecycleState{}, err
 	}
 	if journal.SchemaVersion != projectionRecoveryJournalSchemaV1 ||
@@ -1468,24 +1571,26 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 		(!journal.NextLivePresent && len(journal.NextLiveBytes) != 0) {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal disk bindings are invalid", ErrProjectionDrift)
 	}
+	var previous *projectionLifecycleState
 	if journal.PreviousStatePresent {
-		var previous projectionLifecycleState
-		if err := decodeStrictProjectionJSON(journal.PreviousStateBytes, &previous); err != nil {
+		var decodedPrevious projectionLifecycleState
+		if err := decodeStrictProjectionJSON(journal.PreviousStateBytes, &decodedPrevious); err != nil {
 			return projectionLifecycleState{}, fmt.Errorf("%w: decode previous recovery state: %v", ErrProjectionDrift, err)
 		}
-		if err := l.verifyProjectionLifecycleState(previous); err != nil {
+		if err := l.verifyProjectionLifecycleState(decodedPrevious); err != nil {
 			return projectionLifecycleState{}, fmt.Errorf("%w: previous recovery state integrity: %v", ErrProjectionDrift, err)
 		}
-		if err := validateProjectionStateIdentity(previous, effect, relativePath); err != nil {
+		if err := validateProjectionStateIdentity(decodedPrevious, effect, relativePath); err != nil {
 			return projectionLifecycleState{}, err
 		}
-		if err := l.verifyProjectionStateTrustReceipts(previous); err != nil {
+		if err := l.verifyProjectionStateTrustReceipts(decodedPrevious); err != nil {
 			return projectionLifecycleState{}, err
 		}
-		previousLivePresent, previousLiveHash, err := expectedProjectionLive(&previous)
+		previousLivePresent, previousLiveHash, err := expectedProjectionLive(&decodedPrevious)
 		if err != nil || previousLivePresent != journal.PreviousLivePresent || previousLiveHash != journal.PreviousLiveHash {
 			return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal previous live state is invalid", ErrProjectionDrift)
 		}
+		previous = &decodedPrevious
 	} else if journal.PreviousLivePresent {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal has live bytes without previous state", ErrProjectionDrift)
 	}
@@ -1514,6 +1619,9 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 	nextLivePresent, nextLiveHash, err := expectedProjectionLive(&next)
 	if err != nil || nextLivePresent != journal.NextLivePresent || nextLiveHash != journal.NextLiveHash {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal next live state is invalid", ErrProjectionDrift)
+	}
+	if err := validateProjectionStateTransition(previous, next, effect, relativePath, replay.Result); err != nil {
+		return projectionLifecycleState{}, err
 	}
 	return next, nil
 }
@@ -1580,26 +1688,34 @@ func (l *ProjectionLifecycle) readProjectionRecoveryJournal(
 func (l *ProjectionLifecycle) recoverProjectionJournal(
 	effect contracts.SkillProjectionEffect,
 	relativePath string,
-	now time.Time,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+	authorityErr error,
 ) error {
 	journal, next, err := l.readProjectionRecoveryJournal(effect, relativePath)
 	if err != nil || journal == nil {
 		return err
 	}
-	if trustErr := l.verifyReplayTrust(effect, *next, now); trustErr != nil {
-		if restoreErr := l.restoreRecoveryPrevious(effect, relativePath, *journal); restoreErr != nil {
-			return errors.Join(ErrProjectionRecoveryPending, trustErr, restoreErr)
-		}
-		if clearErr := l.clearProjectionRecoveryJournal(effect, relativePath, journal.JournalHash); clearErr != nil {
-			return errors.Join(ErrProjectionRecoveryPending, trustErr, clearErr)
-		}
-		return trustErr
+	if authorityErr != nil {
+		return l.abortProjectionMutation(effect, relativePath, *journal, authorityErr)
+	}
+	trust, trustErr := l.verifyReplayTrust(effect, *next, rollbackPermit)
+	if trustErr != nil {
+		return l.abortProjectionMutation(effect, relativePath, *journal, trustErr)
+	}
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+		return l.abortProjectionMutation(effect, relativePath, *journal, err)
 	}
 	if err := l.publishRecoveryLive(effect, *journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+		return l.abortProjectionMutation(effect, relativePath, *journal, err)
+	}
 	if err := l.publishRecoveryState(effect, *journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
+	}
+	if err := l.validateProjectionPublicationAuthority(effect, rollbackPermit, trust); err != nil {
+		return l.abortProjectionMutation(effect, relativePath, *journal, err)
 	}
 	if err := l.verifyRecoveryTarget(effect, relativePath, *journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
@@ -1608,6 +1724,104 @@ func (l *ProjectionLifecycle) recoverProjectionJournal(
 		return errors.Join(ErrProjectionRecoveryPending, err)
 	}
 	return nil
+}
+
+func (l *ProjectionLifecycle) abortProjectionMutation(
+	effect contracts.SkillProjectionEffect,
+	relativePath string,
+	journal projectionRecoveryJournal,
+	reason error,
+) error {
+	if restoreErr := l.restoreRecoveryPrevious(effect, relativePath, journal); restoreErr != nil {
+		return errors.Join(ErrProjectionRecoveryPending, reason, restoreErr)
+	}
+	if cleanupErr := l.removeRecoveryForwardOnlyGenerations(effect, journal); cleanupErr != nil {
+		return errors.Join(ErrProjectionRecoveryPending, reason, cleanupErr)
+	}
+	if clearErr := l.clearProjectionRecoveryJournal(effect, relativePath, journal.JournalHash); clearErr != nil {
+		return errors.Join(ErrProjectionRecoveryPending, reason, clearErr)
+	}
+	return reason
+}
+
+func (l *ProjectionLifecycle) removeRecoveryForwardOnlyGenerations(
+	effect contracts.SkillProjectionEffect,
+	journal projectionRecoveryJournal,
+) error {
+	var next projectionLifecycleState
+	if err := decodeStrictProjectionJSON(journal.NextStateBytes, &next); err != nil {
+		return fmt.Errorf("%w: decode forward recovery state for cleanup: %v", ErrProjectionDrift, err)
+	}
+	previousGenerations := map[uint64]struct{}{}
+	if journal.PreviousStatePresent {
+		var previous projectionLifecycleState
+		if err := decodeStrictProjectionJSON(journal.PreviousStateBytes, &previous); err != nil {
+			return fmt.Errorf("%w: decode previous recovery state for cleanup: %v", ErrProjectionDrift, err)
+		}
+		for _, record := range previous.Generations {
+			previousGenerations[record.Generation] = struct{}{}
+		}
+	}
+	for _, record := range next.Generations {
+		if _, retained := previousGenerations[record.Generation]; retained {
+			continue
+		}
+		if err := l.removeManagedGeneration(effect, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *ProjectionLifecycle) removeManagedGeneration(
+	effect contracts.SkillProjectionEffect,
+	record projectionGeneration,
+) error {
+	dirRel := filepath.Join(l.generationParentRel(effect), projectionGenerationDirName(record))
+	info, err := l.managed.Lstat(dirRel)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return ErrProjectionPathUnsafe
+	}
+	dir, err := l.managed.Open(dirRel)
+	if err != nil {
+		return err
+	}
+	opened, err := dir.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		_ = dir.Close()
+		return ErrProjectionPathUnsafe
+	}
+	entries, readErr := dir.ReadDir(3)
+	closeErr := dir.Close()
+	if len(entries) > 2 || (readErr != nil && !errors.Is(readErr, io.EOF)) || closeErr != nil {
+		return ErrProjectionPathUnsafe
+	}
+	expected := map[string]string{
+		"skillpack.json": record.ManifestHash,
+		"SKILL.md":       record.ContentHash,
+	}
+	for _, entry := range entries {
+		expectedHash, ok := expected[entry.Name()]
+		if !ok || entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
+			return ErrProjectionPathUnsafe
+		}
+		data, err := readManagedFileAt(l.managed, filepath.Join(dirRel, entry.Name()), maxProjectionArtifactBytes)
+		if err != nil || !constantStringEqual(HashBytes(data), expectedHash) {
+			return fmt.Errorf("%w: aborted immutable generation differs", ErrProjectionDrift)
+		}
+	}
+	for _, entry := range entries {
+		if err := removeManagedFileAt(l.managed, filepath.Join(dirRel, entry.Name())); err != nil {
+			return err
+		}
+	}
+	if err := l.managed.Remove(dirRel); err != nil {
+		return fmt.Errorf("skillpacks: remove aborted immutable generation: %w", err)
+	}
+	return syncManagedDirectoryAt(l.managed, filepath.Dir(dirRel))
 }
 
 func (l *ProjectionLifecycle) restoreRecoveryPrevious(
@@ -1896,6 +2110,49 @@ func (l *ProjectionLifecycle) readGeneration(
 	return manifestBytes, contentBytes, nil
 }
 
+func (l *ProjectionLifecycle) immutableProjectionArtifactExists(
+	effect contracts.SkillProjectionEffect,
+	artifactHash string,
+) (bool, error) {
+	parentRel := l.generationParentRel(effect)
+	info, err := l.managed.Lstat(parentRel)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return false, ErrProjectionPathUnsafe
+	}
+	dir, err := l.managed.Open(parentRel)
+	if err != nil {
+		return false, err
+	}
+	defer dir.Close()
+	opened, err := dir.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return false, ErrProjectionPathUnsafe
+	}
+	wantDigest := strings.TrimPrefix(artifactHash, "sha256:")
+	for {
+		entries, readErr := dir.ReadDir(128)
+		for _, entry := range entries {
+			name := entry.Name()
+			if len(name) != 20+1+64 || name[20] != '-' || name[21:] != wantDigest {
+				continue
+			}
+			if _, err := strconv.ParseUint(name[:20], 10, 64); err != nil || !entry.IsDir() {
+				return false, ErrProjectionPathUnsafe
+			}
+			return true, nil
+		}
+		if errors.Is(readErr, io.EOF) {
+			return false, nil
+		}
+		if readErr != nil {
+			return false, readErr
+		}
+	}
+}
+
 func (l *ProjectionLifecycle) verifyManagedState(state projectionLifecycleState) error {
 	record, ok := findProjectionGeneration(state.Generations, state.ArchiveGeneration)
 	if !ok {
@@ -2103,6 +2360,9 @@ func validateProjectionStateIdentity(state projectionLifecycleState, effect cont
 		(state.Status != projectionStatusActive && state.Status != projectionStatusRevoked) {
 		return fmt.Errorf("%w: projection state identity mismatch", ErrProjectionDrift)
 	}
+	if len(state.Generations) == 0 || len(state.Generations) > maxProjectionGenerationEntries {
+		return fmt.Errorf("%w: projection generation window is invalid", ErrProjectionDrift)
+	}
 	for i := range state.Generations {
 		if err := validateProjectionGeneration(state.Generations[i]); err != nil ||
 			(i > 0 && state.Generations[i-1].Generation >= state.Generations[i].Generation) {
@@ -2235,6 +2495,86 @@ func appendProjectionReplay(state *projectionLifecycleState, effect contracts.Sk
 	}
 	state.Replays = append(state.Replays, projectionReplay{IdempotencyKey: effect.IdempotencyKey, RequestHash: effect.CanonicalRequestHash, Result: result})
 	state.Attempts = append(state.Attempts, projectionAttempt{AttemptID: effect.AttemptID, IdempotencyKey: effect.IdempotencyKey, RequestHash: effect.CanonicalRequestHash})
+}
+
+func appendProjectionGeneration(state *projectionLifecycleState, record projectionGeneration) {
+	if len(state.Generations) >= maxProjectionGenerationEntries {
+		start := len(state.Generations) - maxProjectionGenerationEntries + 1
+		state.Generations = append([]projectionGeneration(nil), state.Generations[start:]...)
+	}
+	state.Generations = append(state.Generations, record)
+}
+
+func validateProjectionStateTransition(
+	previous *projectionLifecycleState,
+	next projectionLifecycleState,
+	effect contracts.SkillProjectionEffect,
+	relativePath string,
+	result ProjectionLifecycleResult,
+) error {
+	expected := newProjectionState(effect, relativePath, previous)
+	switch effect.Action {
+	case contracts.SkillProjectionActionInstall:
+		expectedGeneration := uint64(1)
+		if previous != nil {
+			expectedGeneration = previous.Generation + 1
+		}
+		if effect.Generation != expectedGeneration {
+			return fmt.Errorf("%w: install recovery generation transition is invalid", ErrProjectionDrift)
+		}
+		record, ok := findProjectionGeneration(next.Generations, effect.Generation)
+		if !ok || !projectionEffectMatchesGeneration(effect, record) || record.TrustAction != effect.Action {
+			return fmt.Errorf("%w: install recovery generation is invalid", ErrProjectionDrift)
+		}
+		expected.Status = projectionStatusActive
+		expected.Generation = effect.Generation
+		expected.ArchiveGeneration = effect.Generation
+		appendProjectionGeneration(&expected, record)
+	case contracts.SkillProjectionActionReadback:
+		if previous == nil || effect.Generation != previous.Generation {
+			return fmt.Errorf("%w: readback recovery generation transition is invalid", ErrProjectionDrift)
+		}
+		record, ok := findProjectionGeneration(previous.Generations, previous.ArchiveGeneration)
+		if !ok || !projectionEffectMatchesGeneration(effect, record) {
+			return fmt.Errorf("%w: readback recovery artifact transition is invalid", ErrProjectionDrift)
+		}
+	case contracts.SkillProjectionActionRevoke:
+		if previous == nil || previous.Status != projectionStatusActive || effect.Generation != previous.Generation+1 {
+			return fmt.Errorf("%w: revoke recovery generation transition is invalid", ErrProjectionDrift)
+		}
+		record, ok := findProjectionGeneration(previous.Generations, previous.ArchiveGeneration)
+		if !ok || !projectionEffectMatchesGeneration(effect, record) {
+			return fmt.Errorf("%w: revoke recovery artifact transition is invalid", ErrProjectionDrift)
+		}
+		expected.Status = projectionStatusRevoked
+		expected.Generation = effect.Generation
+	case contracts.SkillProjectionActionRollback:
+		if previous == nil || effect.Generation != previous.Generation+1 {
+			return fmt.Errorf("%w: rollback recovery generation transition is invalid", ErrProjectionDrift)
+		}
+		target, ok := findProjectionGeneration(previous.Generations, result.RestoredFromGeneration)
+		if !ok || !projectionEffectMatchesGeneration(effect, target) {
+			return fmt.Errorf("%w: rollback recovery target transition is invalid", ErrProjectionDrift)
+		}
+		restored, ok := findProjectionGeneration(next.Generations, effect.Generation)
+		if !ok || !projectionEffectMatchesGeneration(effect, restored) || restored.TrustAction != effect.Action {
+			return fmt.Errorf("%w: rollback recovery generation is invalid", ErrProjectionDrift)
+		}
+		expected.Status = projectionStatusActive
+		expected.Generation = effect.Generation
+		expected.ArchiveGeneration = effect.Generation
+		appendProjectionGeneration(&expected, restored)
+	default:
+		return fmt.Errorf("%w: recovery action transition is invalid", ErrProjectionDrift)
+	}
+	appendProjectionReplay(&expected, effect, result)
+	expected.StateVerifierID = next.StateVerifierID
+	expected.StateKeyID = next.StateKeyID
+	expectedHash, err := hashProjectionLifecycleState(expected)
+	if err != nil || !constantStringEqual(expectedHash, next.StateHash) {
+		return fmt.Errorf("%w: recovery journal is not a legal one-step state transition", ErrProjectionDrift)
+	}
+	return nil
 }
 
 func newProjectionResult(

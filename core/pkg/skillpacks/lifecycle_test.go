@@ -311,6 +311,53 @@ func TestProjectionLifecycleVerifierKeyRotationIsExplicit(t *testing.T) {
 	}
 }
 
+func TestProjectionLifecycleRecoveryJournalSurvivesExplicitKeyRotation(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 44, 30, 0, time.UTC)
+	root := t.TempDir()
+	oldLifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "key-rotated recovery journal", 1, now)
+	oldLifecycle.mutationHook = func(stage string) error {
+		if stage == projectionMutationAfterJournal {
+			return errors.New("retain old-key journal")
+		}
+		return nil
+	}
+	if _, err := oldLifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) {
+		t.Fatalf("prepare old-key journal: %v", err)
+	}
+	if err := oldLifecycle.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	currentKey := rotatedProjectionTrustVerifierKey()
+	verifierCalls := 0
+	rotated, err := NewProjectionLifecycleWithVerifierKeyring(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		verifierCalls++
+		return allowProjectionTrustWithKey(request, currentKey)
+	}), ProjectionTrustVerifierKeyring{
+		Current: currentKey, Historical: []ProjectionTrustVerifierKey{testProjectionTrustVerifierKey()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rotated.Close() })
+	rotated.clock = func() time.Time { return now }
+	result, err := rotated.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "installed" || result.TrustKeyID != testProjectionTrustVerifierKey().KeyID || verifierCalls == 0 {
+		t.Fatalf("rotated recovery exact result=%+v verifier_calls=%d", result, verifierCalls)
+	}
+	if _, err := os.Stat(filepath.Join(root, rotated.journalRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rotated recovery retained journal: %v", err)
+	}
+	state, err := rotated.readState(fixture.effect, result.RelativePath)
+	if err != nil || state.StateKeyID != testProjectionTrustVerifierKey().KeyID {
+		t.Fatalf("rotated recovery state=%+v err=%v", state, err)
+	}
+}
+
 func TestProjectionLifecycleRejectsInvalidTrustWithoutMutation(t *testing.T) {
 	now := time.Date(2026, 8, 30, 13, 45, 0, 0, time.UTC)
 	tests := []struct {
@@ -1002,6 +1049,206 @@ func TestProjectionLifecycleRecoveryRevalidatesTrustBeforePublication(t *testing
 	})
 }
 
+func TestProjectionLifecycleExpiredAuthorityRestoresPendingJournal(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 57, 45, 0, time.UTC)
+	t.Run("expired install effect", func(t *testing.T) {
+		root := t.TempDir()
+		currentTime := now
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		lifecycle.clock = func() time.Time { return currentTime }
+		fixture := newProjectionFixture(t, "1.0.0", "expired pending install", 1, now)
+		lifecycle.mutationHook = func(stage string) error {
+			if stage == projectionMutationAfterLive {
+				return errors.New("stop pending install after live")
+			}
+			return nil
+		}
+		if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) {
+			t.Fatalf("prepare expired install journal: %v", err)
+		}
+		abortedRecord := projectionGeneration{Generation: 1, ArtifactHash: fixture.effect.ArtifactHash}
+		partialGeneration := filepath.Join(root, lifecycle.generationParentRel(fixture.effect), projectionGenerationDirName(abortedRecord))
+		if err := os.Remove(filepath.Join(partialGeneration, "skillpack.json")); err != nil {
+			t.Fatalf("prepare partial generation cleanup: %v", err)
+		}
+		currentTime = fixture.effect.ExpiresAt
+		lifecycle.mutationHook = nil
+		if result, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, contracts.ErrSkillProjectionEffectInactive) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("expired pending install result=%+v err=%v", result, err)
+		}
+		for name, path := range map[string]string{
+			"live":    projectionLivePath(root, fixture.effect),
+			"state":   filepath.Join(root, lifecycle.stateRel(fixture.effect)),
+			"journal": filepath.Join(root, lifecycle.journalRel(fixture.effect)),
+		} {
+			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("expired pending install retained %s: %v", name, err)
+			}
+		}
+		generationParent := filepath.Join(root, lifecycle.generationParentRel(fixture.effect))
+		if entries, err := os.ReadDir(generationParent); err != nil || len(entries) != 0 {
+			t.Fatalf("expired pending install retained generation entries=%v err=%v", entries, err)
+		}
+	})
+
+	t.Run("expired rollback permit", func(t *testing.T) {
+		root := t.TempDir()
+		currentTime := now
+		lifecycle := newProjectionLifecycleForTest(t, root, now)
+		lifecycle.clock = func() time.Time { return currentTime }
+		v1 := newProjectionFixture(t, "1.0.0", "rollback restore v1", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "rollback restore v2", 2, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		rollback := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, "rollback-expired-journal", "attempt-rollback-expired-journal", testHash("7"))
+		permit := contracts.SkillProjectionRollbackPermit{
+			SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+			PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+			TenantID: rollback.TenantID, WorkspaceID: rollback.WorkspaceID,
+			SkillID: rollback.SkillID, AgentTarget: rollback.AgentTarget,
+			FromGeneration: 2, TargetGeneration: 1,
+			TargetSkillVersion: rollback.SkillVersion, TargetArtifactHash: rollback.ArtifactHash, TargetPolicyHash: rollback.PolicyHash,
+			IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+		}
+		var err error
+		permit, err = permit.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rollback.RollbackPermitHash = permit.PermitHash
+		rollback.CanonicalRequestHash = ""
+		rollback, err = rollback.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		statePath := filepath.Join(root, lifecycle.stateRel(v2.effect))
+		stateBefore, err := os.ReadFile(statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		liveBefore, err := os.ReadFile(projectionLivePath(root, v2.effect))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lifecycle.mutationHook = func(stage string) error {
+			if stage == projectionMutationAfterState {
+				return errors.New("stop pending rollback after state")
+			}
+			return nil
+		}
+		if _, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); !errors.Is(err, ErrProjectionRecoveryPending) {
+			t.Fatalf("prepare expired rollback journal: %v", err)
+		}
+		currentTime = permit.ExpiresAt
+		lifecycle.mutationHook = nil
+		if result, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); !errors.Is(err, contracts.ErrSkillProjectionEffectInactive) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("expired pending rollback result=%+v err=%v", result, err)
+		}
+		stateAfter, err := os.ReadFile(statePath)
+		if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+			t.Fatalf("expired rollback state=%q err=%v", stateAfter, err)
+		}
+		liveAfter, err := os.ReadFile(projectionLivePath(root, v2.effect))
+		if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+			t.Fatalf("expired rollback live=%q err=%v", liveAfter, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.journalRel(rollback))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expired rollback retained journal: %v", err)
+		}
+		abortedRecord := projectionGeneration{Generation: 3, ArtifactHash: v1.effect.ArtifactHash}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.generationParentRel(rollback), projectionGenerationDirName(abortedRecord))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expired rollback retained forward generation: %v", err)
+		}
+	})
+}
+
+func TestProjectionLifecycleRejectsCapturedJournalStateSplice(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 57, 55, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	v1 := newProjectionFixture(t, "1.0.0", "journal splice v1", 1, now)
+	v2 := newProjectionFixture(t, "2.0.0", "journal splice v2", 2, now)
+	if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	readback := actionEffect(t, v1.effect, contracts.SkillProjectionActionReadback, 1, "captured-readback", "attempt-captured-readback", testHash("6"))
+	lifecycle.mutationHook = func(stage string) error {
+		if stage == projectionMutationAfterJournal {
+			return errors.New("capture authentic journal")
+		}
+		return nil
+	}
+	if _, err := lifecycle.Apply(readback, nil, readback.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) {
+		t.Fatalf("capture journal: %v", err)
+	}
+	journalPath := filepath.Join(root, lifecycle.journalRel(readback))
+	capturedBytes, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured projectionRecoveryJournal
+	if err := decodeStrictProjectionJSON(capturedBytes, &captured); err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.mutationHook = nil
+	if _, err := lifecycle.Apply(readback, nil, readback.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	currentStateBytes, err := os.ReadFile(filepath.Join(root, lifecycle.stateRel(v2.effect)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentLiveBytes, err := os.ReadFile(projectionLivePath(root, v2.effect))
+	if err != nil {
+		t.Fatal(err)
+	}
+	splice := captured
+	splice.PreviousStateBytes = append([]byte(nil), currentStateBytes...)
+	splice.PreviousStateHash = HashBytes(currentStateBytes)
+	splice.PreviousLiveBytes = append([]byte(nil), currentLiveBytes...)
+	splice.PreviousLiveHash = HashBytes(currentLiveBytes)
+	splice.JournalHash, err = hashProjectionRecoveryJournal(splice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicSpliceBytes, err := json.MarshalIndent(splice, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(journalPath, publicSpliceBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := lifecycle.Apply(readback, nil, readback.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) || result != (ProjectionLifecycleResult{}) {
+		t.Fatalf("public journal splice result=%+v err=%v", result, err)
+	}
+	stateAfter, err := os.ReadFile(filepath.Join(root, lifecycle.stateRel(v2.effect)))
+	if err != nil || !reflect.DeepEqual(stateAfter, currentStateBytes) {
+		t.Fatalf("journal splice changed current state: %q err=%v", stateAfter, err)
+	}
+	liveAfter, err := os.ReadFile(projectionLivePath(root, v2.effect))
+	if err != nil || !reflect.DeepEqual(liveAfter, currentLiveBytes) {
+		t.Fatalf("journal splice changed current live: %q err=%v", liveAfter, err)
+	}
+	authenticatedSplice, err := sealProjectionRecoveryJournal(splice, testProjectionTrustVerifierKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	projection, err := projectionRelativePath(readback.SkillID, readback.AgentTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.validateProjectionRecoveryJournal(authenticatedSplice, readback, filepath.ToSlash(projection.Path)); !errors.Is(err, ErrProjectionDrift) {
+		t.Fatalf("authenticated illegal transition error=%v", err)
+	}
+}
+
 func TestProjectionLifecycleRecoversRevocationJournal(t *testing.T) {
 	now := time.Date(2026, 8, 30, 13, 58, 0, 0, time.UTC)
 	root := t.TempDir()
@@ -1135,7 +1382,7 @@ func TestProjectionLifecycleRejectsTamperedRecoveryJournalWithoutMutation(t *tes
 					t.Fatal(err)
 				}
 				journal.TrustDecisionSignature = tamperProjectionTrustSignature(journal.TrustDecisionSignature)
-				journal, err = sealProjectionRecoveryJournal(journal)
+				journal, err = sealProjectionRecoveryJournal(journal, testProjectionTrustVerifierKey())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1571,7 +1818,7 @@ func TestProjectionLifecycleCompactsReplayWindowBeforeStateLimit(t *testing.T) {
 		key := fmt.Sprintf("bounded-readback-%03d", i)
 		attempt := fmt.Sprintf("bounded-attempt-%03d", i)
 		lastEffect = actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, 1, key, attempt, testHash("6"))
-		decision, err := lifecycle.verifyProjectionTrust(lastEffect, record, fixture.artifact.Files["skillpack.json"], fixture.artifact.Files["SKILL.md"], now)
+		decision, err := lifecycle.verifyProjectionTrust(lastEffect, record, fixture.artifact.Files["skillpack.json"], fixture.artifact.Files["SKILL.md"], nil)
 		if err != nil {
 			t.Fatalf("trust readback %d: %v", i, err)
 		}
@@ -1604,6 +1851,95 @@ func TestProjectionLifecycleCompactsReplayWindowBeforeStateLimit(t *testing.T) {
 	}
 	if _, data, err := lifecycle.marshalProjectionLifecycleState(*state); err != nil || len(data) >= maxProjectionLifecycleStateBytes {
 		t.Fatalf("compacted state size = %d err=%v", len(data), err)
+	}
+}
+
+func TestProjectionLifecycleCompactsGenerationRollbackWindowBeforeStateLimit(t *testing.T) {
+	now := time.Date(2026, 8, 30, 15, 45, 0, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "bounded generation window", 1, now)
+	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := lifecycle.readState(fixture.effect, installed.RelativePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseRecord := state.Generations[0]
+	generationParent := filepath.Join(root, lifecycle.generationParentRel(fixture.effect))
+	for generation := uint64(2); generation <= maxProjectionGenerationEntries; generation++ {
+		record := baseRecord
+		record.Generation = generation
+		state.Generations = append(state.Generations, record)
+		dir := filepath.Join(generationParent, projectionGenerationDirName(record))
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "skillpack.json"), fixture.artifact.Files["skillpack.json"], 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), fixture.artifact.Files["SKILL.md"], 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state.Generation = maxProjectionGenerationEntries
+	state.ArchiveGeneration = maxProjectionGenerationEntries
+	sealedState, stateBytes, err := lifecycle.marshalProjectionLifecycleState(*state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sealedState.Generations) != maxProjectionGenerationEntries || len(stateBytes) >= maxProjectionLifecycleStateBytes {
+		t.Fatalf("seeded generation state count=%d size=%d", len(sealedState.Generations), len(stateBytes))
+	}
+	if err := lifecycle.writeStateBytes(fixture.effect, stateBytes); err != nil {
+		t.Fatal(err)
+	}
+
+	upgrade := newProjectionFixture(t, "257.0.0", "generation window upgrade", 2, now)
+	upgrade.effect.Generation = maxProjectionGenerationEntries + 1
+	upgrade.effect.IdempotencyKey = "install-generation-257"
+	upgrade.effect.AttemptID = "attempt-install-generation-257"
+	upgrade.effect.ConsumedPermitRef = testHash("f")
+	upgrade.effect.Nonce = strings.Repeat("f", 64)
+	upgrade.effect.CanonicalRequestHash = ""
+	upgrade.effect, err = upgrade.effect.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := lifecycle.Apply(upgrade.effect, &upgrade.artifact, upgrade.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "upgraded" || result.NewGeneration != maxProjectionGenerationEntries+1 {
+		t.Fatalf("generation-window upgrade result=%+v", result)
+	}
+	compacted, err := lifecycle.readState(upgrade.effect, result.RelativePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compacted.Generations) != maxProjectionGenerationEntries || compacted.Generations[0].Generation != 2 ||
+		compacted.Generations[len(compacted.Generations)-1].Generation != maxProjectionGenerationEntries+1 {
+		t.Fatalf("compacted generation window first=%d last=%d count=%d", compacted.Generations[0].Generation, compacted.Generations[len(compacted.Generations)-1].Generation, len(compacted.Generations))
+	}
+	if _, data, err := lifecycle.marshalProjectionLifecycleState(*compacted); err != nil || len(data) >= maxProjectionLifecycleStateBytes {
+		t.Fatalf("compacted generation state size=%d err=%v", len(data), err)
+	}
+	if _, err := os.Stat(filepath.Join(generationParent, projectionGenerationDirName(baseRecord))); err != nil {
+		t.Fatalf("old immutable generation bytes were not retained: %v", err)
+	}
+	stateBeforeReinstall, err := os.ReadFile(filepath.Join(root, lifecycle.stateRel(upgrade.effect)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reinstall := actionEffect(t, fixture.effect, contracts.SkillProjectionActionInstall, maxProjectionGenerationEntries+2, "reinstall-evicted-generation", "attempt-reinstall-evicted-generation", testHash("d"))
+	if _, err := lifecycle.Apply(reinstall, &fixture.artifact, reinstall.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRollbackRequired) {
+		t.Fatalf("evicted-generation artifact reinstall error=%v", err)
+	}
+	stateAfterReinstall, err := os.ReadFile(filepath.Join(root, lifecycle.stateRel(upgrade.effect)))
+	if err != nil || !reflect.DeepEqual(stateAfterReinstall, stateBeforeReinstall) {
+		t.Fatalf("evicted-generation reinstall changed state: %q err=%v", stateAfterReinstall, err)
 	}
 }
 
@@ -1750,6 +2086,139 @@ func TestProjectionLifecycleRevalidatesAuthorityAfterLock(t *testing.T) {
 		stateAfter, err := os.ReadFile(statePath)
 		if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
 			t.Fatalf("expired rollback mutated state: %q err=%v", stateAfter, err)
+		}
+	})
+}
+
+func TestProjectionLifecycleRefreshesAuthorityAndDecisionAfterVerifier(t *testing.T) {
+	now := time.Date(2026, 8, 30, 16, 45, 0, 0, time.UTC)
+	t.Run("effect expires during verifier", func(t *testing.T) {
+		root := t.TempDir()
+		currentTime := now
+		lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			decision, err := allowProjectionTrust(request)
+			currentTime = request.Effect.ExpiresAt
+			return decision, err
+		}), testProjectionTrustVerifierKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return currentTime }
+		fixture := newProjectionFixture(t, "1.0.0", "verifier-expired effect", 1, now)
+
+		if result, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, contracts.ErrSkillProjectionEffectInactive) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("verifier-expired effect result=%+v err=%v", result, err)
+		}
+		if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("verifier-expired effect mutated live: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.stateRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("verifier-expired effect mutated state: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.generationParentRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("verifier-expired effect retained generation: %v", err)
+		}
+	})
+
+	t.Run("decision expires during verifier", func(t *testing.T) {
+		root := t.TempDir()
+		currentTime := now
+		lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			decision, err := allowProjectionTrust(request)
+			if err != nil {
+				return ProjectionTrustDecision{}, err
+			}
+			decision.ExpiresAt = request.EvaluationTime.Add(time.Second)
+			decision, err = SignProjectionTrustDecision(decision, testProjectionTrustVerifierKey())
+			currentTime = decision.ExpiresAt
+			return decision, err
+		}), testProjectionTrustVerifierKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return currentTime }
+		fixture := newProjectionFixture(t, "1.0.0", "verifier-expired decision", 1, now)
+
+		if result, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("expired trust decision result=%+v err=%v", result, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.generationParentRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expired trust decision retained generation: %v", err)
+		}
+	})
+
+	t.Run("rollback permit expires during verifier", func(t *testing.T) {
+		root := t.TempDir()
+		currentTime := now
+		expireRollback := false
+		var permit contracts.SkillProjectionRollbackPermit
+		lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			decision, err := allowProjectionTrust(request)
+			if expireRollback {
+				currentTime = permit.ExpiresAt
+			}
+			return decision, err
+		}), testProjectionTrustVerifierKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return currentTime }
+		v1 := newProjectionFixture(t, "1.0.0", "verifier rollback v1", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "verifier rollback v2", 2, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		rollback := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, "rollback-verifier-expiry", "attempt-rollback-verifier-expiry", testHash("7"))
+		permit = contracts.SkillProjectionRollbackPermit{
+			SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+			PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+			TenantID: rollback.TenantID, WorkspaceID: rollback.WorkspaceID,
+			SkillID: rollback.SkillID, AgentTarget: rollback.AgentTarget,
+			FromGeneration: 2, TargetGeneration: 1,
+			TargetSkillVersion: rollback.SkillVersion, TargetArtifactHash: rollback.ArtifactHash, TargetPolicyHash: rollback.PolicyHash,
+			IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+		}
+		permit, err = permit.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rollback.RollbackPermitHash = permit.PermitHash
+		rollback.CanonicalRequestHash = ""
+		rollback, err = rollback.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		statePath := filepath.Join(root, lifecycle.stateRel(v2.effect))
+		stateBefore, err := os.ReadFile(statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		liveBefore, err := os.ReadFile(projectionLivePath(root, v2.effect))
+		if err != nil {
+			t.Fatal(err)
+		}
+		expireRollback = true
+
+		if result, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); !errors.Is(err, contracts.ErrSkillProjectionEffectInactive) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("verifier-expired rollback result=%+v err=%v", result, err)
+		}
+		stateAfter, err := os.ReadFile(statePath)
+		if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+			t.Fatalf("verifier-expired rollback changed state: %q err=%v", stateAfter, err)
+		}
+		liveAfter, err := os.ReadFile(projectionLivePath(root, v2.effect))
+		if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+			t.Fatalf("verifier-expired rollback changed live: %q err=%v", liveAfter, err)
+		}
+		abortedRecord := projectionGeneration{Generation: 3, ArtifactHash: v1.effect.ArtifactHash}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.generationParentRel(rollback), projectionGenerationDirName(abortedRecord))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("verifier-expired rollback retained generation: %v", err)
 		}
 	})
 }

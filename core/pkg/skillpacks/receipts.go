@@ -103,3 +103,24 @@ func verifyProjectionLifecycleState(state projectionLifecycleState) error {
 	}
 	return nil
 }
+
+func sealProjectionRecoveryJournal(journal projectionRecoveryJournal) (projectionRecoveryJournal, error) {
+	journal.JournalHash = ""
+	hash, err := canonicalize.CanonicalHash(journal)
+	if err != nil {
+		return projectionRecoveryJournal{}, fmt.Errorf("skillpacks: seal projection recovery journal: %w", err)
+	}
+	journal.JournalHash = "sha256:" + hash
+	return journal, nil
+}
+
+func verifyProjectionRecoveryJournalIntegrity(journal projectionRecoveryJournal) error {
+	if !validProjectionSHA256(journal.JournalHash) {
+		return fmt.Errorf("%w: recovery journal hash is required", ErrProjectionDrift)
+	}
+	sealed, err := sealProjectionRecoveryJournal(journal)
+	if err != nil || !constantStringEqual(sealed.JournalHash, journal.JournalHash) {
+		return fmt.Errorf("%w: recovery journal integrity mismatch", ErrProjectionDrift)
+	}
+	return nil
+}

@@ -388,6 +388,240 @@ func TestProjectionLifecycleReplayRequiresCurrentTrustWithoutMutation(t *testing
 	}
 }
 
+func TestProjectionLifecycleRecoversFsyncedJournalAtEveryPublishBoundary(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 57, 0, 0, time.UTC)
+	for _, crashStage := range []string{
+		projectionMutationAfterJournal,
+		projectionMutationAfterLive,
+		projectionMutationAfterState,
+	} {
+		t.Run(crashStage, func(t *testing.T) {
+			root := t.TempDir()
+			lifecycle := newProjectionLifecycleForTest(t, root, now)
+			fixture := newProjectionFixture(t, "1.0.0", "journal recovery prompt", 1, now)
+			simulatedCrash := errors.New("simulated process crash")
+			lifecycle.mutationHook = func(stage string) error {
+				if stage == crashStage {
+					return simulatedCrash
+				}
+				return nil
+			}
+
+			if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) || !errors.Is(err, simulatedCrash) {
+				t.Fatalf("crash-stage apply error = %v", err)
+			}
+			journalPath := filepath.Join(root, lifecycle.journalRel(fixture.effect))
+			journalBytes, err := os.ReadFile(journalPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var journal projectionRecoveryJournal
+			if err := json.Unmarshal(journalBytes, &journal); err != nil {
+				t.Fatal(err)
+			}
+			projection, err := projectionRelativePath(fixture.effect.SkillID, fixture.effect.AgentTarget)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := validateProjectionRecoveryJournal(journal, fixture.effect, filepath.ToSlash(projection.Path)); err != nil {
+				t.Fatalf("persisted journal is not valid: %v", err)
+			}
+
+			lifecycle.mutationHook = nil
+			recovered, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if recovered.Status != "installed" || recovered.ResultHash != journal.ResultHash ||
+				recovered.TrustDecisionHash != journal.TrustDecisionHash {
+				t.Fatalf("recovered result = %+v journal=%+v", recovered, journal)
+			}
+			if _, err := os.Stat(journalPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("recovered journal still exists: %v", err)
+			}
+			live, err := os.ReadFile(projectionLivePath(root, fixture.effect))
+			if err != nil || !reflect.DeepEqual(live, fixture.artifact.Files["SKILL.md"]) {
+				t.Fatalf("recovered live projection = %q err=%v", live, err)
+			}
+			state, err := lifecycle.readState(fixture.effect, recovered.RelativePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(state.Generations) != 1 || len(state.Replays) != 1 || len(state.Attempts) != 1 {
+				t.Fatalf("recovery duplicated state: %+v", state)
+			}
+		})
+	}
+}
+
+func TestProjectionLifecycleRecoversRevocationJournal(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 58, 0, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "revoke recovery prompt", 1, now)
+	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoke := actionEffect(t, fixture.effect, contracts.SkillProjectionActionRevoke, 2, "revoke-recovery", "attempt-revoke-recovery", testHash("9"))
+	simulatedCrash := errors.New("simulated revoke crash")
+	lifecycle.mutationHook = func(stage string) error {
+		if stage == projectionMutationAfterLive {
+			return simulatedCrash
+		}
+		return nil
+	}
+	if _, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) || !errors.Is(err, simulatedCrash) {
+		t.Fatalf("revoke crash error = %v", err)
+	}
+	if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("revoke crash did not publish live absence: %v", err)
+	}
+	stateBeforeRecovery, err := lifecycle.readState(fixture.effect, installed.RelativePath)
+	if err != nil || stateBeforeRecovery.Status != projectionStatusActive {
+		t.Fatalf("revoke crash unexpectedly published state: %+v err=%v", stateBeforeRecovery, err)
+	}
+
+	lifecycle.mutationHook = nil
+	recovered, err := lifecycle.Apply(revoke, nil, revoke.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Status != projectionStatusRevoked {
+		t.Fatalf("recovered revoke = %+v", recovered)
+	}
+	state, err := lifecycle.readState(revoke, recovered.RelativePath)
+	if err != nil || state.Status != projectionStatusRevoked || state.Generation != 2 {
+		t.Fatalf("recovered revoke state = %+v err=%v", state, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, lifecycle.journalRel(revoke))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("revoke recovery journal still exists: %v", err)
+	}
+}
+
+func TestProjectionLifecycleRejectsTamperedRecoveryJournalWithoutMutation(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 59, 0, 0, time.UTC)
+	tests := []struct {
+		name         string
+		tamper       func(t *testing.T, path string)
+		wantTooLarge bool
+	}{
+		{
+			name: "hash mismatch",
+			tamper: func(t *testing.T, path string) {
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var journal projectionRecoveryJournal
+				if err := json.Unmarshal(data, &journal); err != nil {
+					t.Fatal(err)
+				}
+				journal.NextLiveBytes[0] ^= 0xff
+				mutated, err := json.MarshalIndent(journal, "", "  ")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, mutated, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "oversized",
+			tamper: func(t *testing.T, path string) {
+				if err := os.Truncate(path, maxProjectionRecoveryJournalBytes+1); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantTooLarge: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			lifecycle := newProjectionLifecycleForTest(t, root, now)
+			fixture := newProjectionFixture(t, "1.0.0", "tamper-resistant recovery", 1, now)
+			lifecycle.mutationHook = func(stage string) error {
+				if stage == projectionMutationAfterJournal {
+					return errors.New("stop after journal")
+				}
+				return nil
+			}
+			if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) {
+				t.Fatalf("prepare recovery journal: %v", err)
+			}
+			journalPath := filepath.Join(root, lifecycle.journalRel(fixture.effect))
+			tt.tamper(t, journalPath)
+			journalBefore, err := os.Stat(journalPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lifecycle.mutationHook = nil
+			_, err = lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+			if !errors.Is(err, ErrProjectionDrift) || (tt.wantTooLarge && !errors.Is(err, ErrProjectionFileTooLarge)) {
+				t.Fatalf("tampered recovery error = %v", err)
+			}
+			if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("tampered recovery mutated live projection: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, lifecycle.stateRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("tampered recovery mutated state: %v", err)
+			}
+			journalAfter, err := os.Stat(journalPath)
+			if err != nil || journalAfter.Size() != journalBefore.Size() || !journalAfter.ModTime().Equal(journalBefore.ModTime()) {
+				t.Fatalf("tampered journal was changed: before=%+v after=%+v err=%v", journalBefore, journalAfter, err)
+			}
+		})
+	}
+}
+
+func TestProjectionLifecycleRecoveryRefusesUnjournaledLiveDrift(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 59, 30, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "journal-authorized live bytes", 1, now)
+	lifecycle.mutationHook = func(stage string) error {
+		if stage == projectionMutationAfterJournal {
+			return errors.New("stop after journal")
+		}
+		return nil
+	}
+	if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) {
+		t.Fatalf("prepare recovery journal: %v", err)
+	}
+	livePath := projectionLivePath(root, fixture.effect)
+	if err := os.MkdirAll(filepath.Dir(livePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	intruder := []byte("operator-owned unjournaled bytes")
+	if err := os.WriteFile(livePath, intruder, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	journalPath := filepath.Join(root, lifecycle.journalRel(fixture.effect))
+	journalBefore, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lifecycle.mutationHook = nil
+	if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) {
+		t.Fatalf("unjournaled live drift error = %v", err)
+	}
+	liveAfter, err := os.ReadFile(livePath)
+	if err != nil || !reflect.DeepEqual(liveAfter, intruder) {
+		t.Fatalf("recovery overwrote live drift: %q err=%v", liveAfter, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, lifecycle.stateRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("recovery published state over live drift: %v", err)
+	}
+	journalAfter, err := os.ReadFile(journalPath)
+	if err != nil || !reflect.DeepEqual(journalAfter, journalBefore) {
+		t.Fatalf("recovery changed valid journal after drift: err=%v", err)
+	}
+}
+
 func TestProjectionLifecycleFailsClosedOnPathsArtifactsAndDrift(t *testing.T) {
 	now := time.Date(2026, 8, 30, 14, 0, 0, 0, time.UTC)
 

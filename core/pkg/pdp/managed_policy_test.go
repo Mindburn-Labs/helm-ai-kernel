@@ -107,6 +107,12 @@ func TestNewManagedPolicyPDPRejectsInvalidContracts(t *testing.T) {
 		{name: "missing e3 escalation", refs: []string{managedTestSourceHash}, data: func(t *testing.T) []byte {
 			return managedTestBundle(t, func(b *ManagedPolicyBundle) { b.KernelRuntime.Rules[3].EffectClass = "E2" })
 		}, needle: "escalate E3"},
+		{name: "narrowed e4 denial", refs: []string{managedTestSourceHash}, data: func(t *testing.T) []byte {
+			return managedTestBundle(t, func(b *ManagedPolicyBundle) { b.KernelRuntime.Rules[0].Action = "DELETE" })
+		}, needle: "deny E4"},
+		{name: "narrowed e3 escalation", refs: []string{managedTestSourceHash}, data: func(t *testing.T) []byte {
+			return managedTestBundle(t, func(b *ManagedPolicyBundle) { b.KernelRuntime.Rules[3].Resource = "production" })
+		}, needle: "escalate E3"},
 		{name: "unknown top-level field", refs: []string{managedTestSourceHash}, data: func(t *testing.T) []byte {
 			data := managedTestBundle(t, nil)
 			return []byte(strings.TrimSuffix(string(data), "}") + `,"unknown":true}`)

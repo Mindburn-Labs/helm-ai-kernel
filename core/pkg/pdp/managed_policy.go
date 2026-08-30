@@ -208,10 +208,10 @@ func compileManagedPolicyRules(input []ManagedPolicyRule) ([]compiledManagedPoli
 		if selectors == 0 {
 			return nil, fmt.Errorf("pdp/managed: rule %q requires at least one selector", rule.ID)
 		}
-		if rule.Layer == ManagedPolicyLayerP0 && rule.EffectClass == "E4" && rule.Verdict == contracts.VerdictDeny {
+		if rule.Layer == ManagedPolicyLayerP0 && rule.EffectClass == "E4" && rule.Action == "" && rule.Resource == "" && rule.Pattern == "" && rule.Verdict == contracts.VerdictDeny {
 			hasP0E4Deny = true
 		}
-		if rule.Layer == ManagedPolicyLayerP1 && rule.EffectClass == "E3" && rule.Verdict == contracts.VerdictEscalate {
+		if rule.Layer == ManagedPolicyLayerP1 && rule.EffectClass == "E3" && rule.Action == "" && rule.Resource == "" && rule.Pattern == "" && rule.Verdict == contracts.VerdictEscalate {
 			hasP1E3Escalate = true
 		}
 		rules = append(rules, compiled)

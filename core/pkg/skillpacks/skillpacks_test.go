@@ -3,11 +3,13 @@ package skillpacks
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSkillScanDeniesBypassAndSecretExfiltration(t *testing.T) {
@@ -692,6 +694,91 @@ func TestCursorCollapsedStoreRecoversLegacyPathFromReceipt(t *testing.T) {
 	})
 }
 
+func TestCursorCollapsedStoreScansLargeReceiptHistory(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 4097; i++ {
+		receipt := Receipt{
+			Type: "HISTORICAL_SKILL_RECEIPT", SkillID: "history/filler",
+			ReasonCode: fmt.Sprintf("filler-%d", i), CreatedAt: time.Unix(0, int64(i)+1).UTC(),
+		}
+		writeHistoricalSkillPackReceipt(t, root, receipt, "")
+	}
+	oldPack := newCursorInstallTestPack(t, "1.0.0", "large-history legacy prompt")
+	currentPack := newCursorInstallTestPack(t, "2.0.0", "large-history canonical prompt")
+	legacyPath, canonicalPath := seedCollapsedCursorStore(t, root, oldPack, currentPack, true)
+
+	entries, err := os.ReadDir(filepath.Join(root, ".helm", "skillpacks", "receipts"))
+	if err != nil || len(entries) <= 4096 {
+		t.Fatalf("large receipt fixture entries=%d err=%v", len(entries), err)
+	}
+	if _, err := Revoke(root, currentPack.Manifest.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{legacyPath, canonicalPath} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("large-history revoke retained %s: %v", path, err)
+		}
+	}
+}
+
+func TestCursorCollapsedStoreRejectsMalformedReceiptHistoryWithoutMutation(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		seed func(*testing.T, string)
+	}{
+		{
+			name: "malformed JSON",
+			seed: func(t *testing.T, root string) {
+				t.Helper()
+				path := filepath.Join(root, ".helm", "skillpacks", "receipts", "malformed.json")
+				if err := os.WriteFile(path, []byte("{"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "canonical filename mismatch",
+			seed: func(t *testing.T, root string) {
+				t.Helper()
+				receipt := NewReceipt("HISTORICAL_SKILL_RECEIPT", "history/filler", VerdictAllow, "", "", "", nil)
+				writeHistoricalSkillPackReceipt(t, root, receipt, "wrong-name.json")
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			oldPack := newCursorInstallTestPack(t, "1.0.0", "malformed-history legacy prompt")
+			currentPack := newCursorInstallTestPack(t, "2.0.0", "malformed-history canonical prompt")
+			legacyPath, canonicalPath := seedCollapsedCursorStore(t, root, oldPack, currentPack, true)
+			test.seed(t, root)
+			storePath := filepath.Join(root, ".helm", "skillpacks", "installed.json")
+			storeBefore, err := os.ReadFile(storePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			legacyBefore, err := os.ReadFile(legacyPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			canonicalBefore, err := os.ReadFile(canonicalPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result, err := Revoke(root, currentPack.Manifest.ID); !errors.Is(err, ErrProjectionDrift) || !reflect.DeepEqual(result, Receipt{}) {
+				t.Fatalf("malformed receipt history result=%+v err=%v", result, err)
+			}
+			storeAfter, _ := os.ReadFile(storePath)
+			legacyAfter, _ := os.ReadFile(legacyPath)
+			canonicalAfter, _ := os.ReadFile(canonicalPath)
+			if !reflect.DeepEqual(storeAfter, storeBefore) || !reflect.DeepEqual(legacyAfter, legacyBefore) ||
+				!reflect.DeepEqual(canonicalAfter, canonicalBefore) {
+				t.Fatal("malformed receipt history mutated managed state")
+			}
+		})
+	}
+}
+
 func TestGitHubSkillRefRequiresPinnedDigestAndImmutableRef(t *testing.T) {
 	if _, err := ParseGitHubSkillRef("github:owner/repo/skills/example@v1.0.0"); err == nil {
 		t.Fatal("expected missing digest to fail")
@@ -885,4 +972,25 @@ func seedCollapsedCursorStore(t *testing.T, root string, oldPack, currentPack Sk
 		t.Fatal(err)
 	}
 	return legacyPath, canonicalPath
+}
+
+func writeHistoricalSkillPackReceipt(t *testing.T, root string, receipt Receipt, filename string) {
+	t.Helper()
+	if receipt.ID == "" {
+		receipt.ID = "receipt:" + hashCanonical(receipt)
+	}
+	if filename == "" {
+		filename = sanitizePathSegment(receipt.ID) + ".json"
+	}
+	dir := filepath.Join(root, ".helm", "skillpacks", "receipts")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.MarshalIndent(receipt, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, filename), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

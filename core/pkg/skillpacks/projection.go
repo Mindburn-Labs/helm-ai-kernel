@@ -397,7 +397,7 @@ func cursorReceiptOwnsLegacyProjection(
 	managed *os.Root,
 	root, skillID, legacyRel, observedHash string,
 ) (bool, error) {
-	const maxReceiptEntries = 4096
+	const receiptReadBatch = 128
 	receiptsRel := filepath.Join(".helm", "skillpacks", "receipts")
 	if err := validateManagedPathAt(managed, receiptsRel, false); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -424,12 +424,14 @@ func cursorReceiptOwnsLegacyProjection(
 
 	ownerMatch := false
 	foreignClaim := false
-	count := 0
 	for {
-		entries, readErr := dir.ReadDir(128)
+		// This is a one-time compatibility scan for stores that predate explicit
+		// LegacyCursorProjection ownership. Stream fixed-size directory batches
+		// and bounded receipt payloads regardless of total history; a global
+		// receipt count must not disable migration in a long-lived repository.
+		entries, readErr := dir.ReadDir(receiptReadBatch)
 		for _, entry := range entries {
-			count++
-			if count > maxReceiptEntries || entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
+			if entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() {
 				return false, ErrProjectionPathUnsafe
 			}
 			data, err := readManagedFileAt(managed, filepath.Join(receiptsRel, entry.Name()), maxProjectionArtifactBytes)

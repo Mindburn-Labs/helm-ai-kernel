@@ -1,0 +1,469 @@
+name: AI OS Kernel image
+
+# Manual-only publication of one exact, green main-branch commit. The build
+# remains on a run-unique staging tag until every supply-chain check succeeds.
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current main commit SHA to publish after green CI
+        required: true
+        type: string
+
+concurrency:
+  # Match release.yml/container-sha so both workflows serialize access to the
+  # same immutable sha-<SOURCE_SHA> tag namespace.
+  group: container-sha-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/mindburn-labs/helm-ai-kernel
+  RELEASE_EVIDENCE_TYPE: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-release-evidence-v1.md
+  SLSA_BUILD_TYPE: https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-build-v1.md
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  STAGING_TAG: staging-${{ inputs.source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+  WORKFLOW_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/release-ai-os-image.yml@refs/heads/main
+  WORKFLOW_SHA: ${{ github.sha }}
+
+jobs:
+  publish:
+    name: Build, attest, sign, and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: release-production
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - name: Validate publication authority
+        env:
+          RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
+          RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
+          REQUEST_ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
+            echo "::error::release-production is not explicitly armed"
+            exit 1
+          fi
+          if ! jq -e '
+            type == "array" and
+            length > 0 and
+            all(.[]; type == "string" and test("^[A-Za-z0-9-]{1,39}$")) and
+            (unique | length) == length
+          ' <<<"${RELEASE_ACTORS_JSON:-}" >/dev/null; then
+            echo "::error::HELM_AI_OS_IMAGE_RELEASE_ACTORS must be a non-empty JSON array of unique GitHub logins"
+            exit 1
+          fi
+          for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do
+            if ! jq -e --arg actor "${candidate}" 'index($actor) != null' \
+              <<<"${RELEASE_ACTORS_JSON}" >/dev/null; then
+              echo "::error::GitHub actor ${candidate} is not authorized for AI OS image publication"
+              exit 1
+            fi
+          done
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "::error::Run this workflow from refs/heads/main"
+            exit 1
+          fi
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::source_sha must be an exact 40-character lowercase commit SHA"
+            exit 1
+          fi
+          if [[ "${SOURCE_SHA}" != "${WORKFLOW_SHA}" ]]; then
+            echo "::error::source_sha must equal the main commit recorded at dispatch (${WORKFLOW_SHA})"
+            exit 1
+          fi
+
+      - name: Checkout exact source
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify source is the current main tip
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          main_tip="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then
+            echo "::error::source_sha must equal the current origin/main tip (${main_tip})"
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+
+      - name: Require newest completed CI run to be green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&status=completed&per_page=100" \
+            > ci-runs.json
+          ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < ci-runs.json
+
+      - name: Verify source publication contract
+        run: ./scripts/release/test_ai_os_image_release_contract.sh
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - id: metadata
+        name: Compute source-bound build metadata
+        run: |
+          set -euo pipefail
+          short_sha="${SOURCE_SHA:0:12}"
+          {
+            echo "version=0.0.0-sha.${short_sha}"
+            echo "commit=${SOURCE_SHA}"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push staging image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            BUILD_VERSION=${{ steps.metadata.outputs.version }}
+            BUILD_COMMIT=${{ steps.metadata.outputs.commit }}
+            BUILD_TIME=${{ steps.metadata.outputs.created }}
+          tags: ${{ env.IMAGE_NAME }}:${{ env.STAGING_TAG }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
+            org.opencontainers.image.created=${{ steps.metadata.outputs.created }}
+
+      - name: Resolve and verify platform manifests and labels
+        id: platforms
+        run: |
+          set -euo pipefail
+          image_ref="${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
+          staging_tag="${IMAGE_NAME}:${STAGING_TAG}"
+          staging_digest="$(docker buildx imagetools inspect "${staging_tag}" --format '{{.Manifest.Digest}}')"
+          test "${staging_digest}" = "${{ steps.build.outputs.digest }}"
+          docker buildx imagetools inspect --raw "${image_ref}" > image-index.json
+          jq -e '.manifests | length == 2' image-index.json >/dev/null
+          amd64_digest="$(jq -er '
+            [.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest] |
+            if length == 1 then .[0] else error("expected exactly one linux/amd64 manifest") end
+          ' image-index.json)"
+          arm64_digest="$(jq -er '
+            [.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest] |
+            if length == 1 then .[0] else error("expected exactly one linux/arm64 manifest") end
+          ' image-index.json)"
+          [[ "${amd64_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "${arm64_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "${amd64_digest}" != "${arm64_digest}" ]]
+          for platform_digest in "${amd64_digest}" "${arm64_digest}"; do
+            docker buildx imagetools inspect \
+              "${IMAGE_NAME}@${platform_digest}" \
+              --format '{{json .Image.Config.Labels}}' > platform-labels.json
+            jq -e \
+              --arg source "https://github.com/${GITHUB_REPOSITORY}" \
+              --arg revision "${SOURCE_SHA}" '
+                .["org.opencontainers.image.source"] == $source and
+                .["org.opencontainers.image.revision"] == $revision
+              ' platform-labels.json >/dev/null
+          done
+          echo "amd64_digest=${amd64_digest}" >> "${GITHUB_OUTPUT}"
+          echo "arm64_digest=${arm64_digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate linux-amd64 SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}
+          format: spdx-json
+          output-file: sbom-linux-amd64.spdx.json
+          upload-artifact: false
+
+      - name: Generate linux-arm64 SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.arm64_digest }}
+          format: spdx-json
+          output-file: sbom-linux-arm64.spdx.json
+          upload-artifact: false
+
+      - name: Generate source-owned SLSA provenance predicate
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg image "${IMAGE_NAME}" \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg workflow_sha "${WORKFLOW_SHA}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg build_type "${SLSA_BUILD_TYPE}" \
+            --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg workflow "${WORKFLOW_IDENTITY}" '
+              {
+                buildDefinition: {
+                  buildType: $build_type,
+                  externalParameters: {
+                    source_sha: $source_sha
+                  },
+                  internalParameters: {
+                    image: $image,
+                    workflow: $workflow,
+                    workflow_sha: $workflow_sha,
+                    dockerfile: "Dockerfile",
+                    platforms: ["linux/amd64", "linux/arm64"]
+                  },
+                  resolvedDependencies: [{
+                    uri: ("git+https://github.com/" + $repository + "@refs/heads/main"),
+                    digest: { gitCommit: $source_sha }
+                  }]
+                },
+                runDetails: {
+                  builder: { id: $workflow },
+                  metadata: { invocationId: $run_url }
+                }
+              }
+            ' > slsa-provenance.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign, attest, and exactly verify the staging digest
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          set -euo pipefail
+          image_ref="${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
+          amd64_ref="${IMAGE_NAME}@${{ steps.platforms.outputs.amd64_digest }}"
+          arm64_ref="${IMAGE_NAME}@${{ steps.platforms.outputs.arm64_digest }}"
+
+          cosign sign --yes "${image_ref}"
+          cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance.json "${image_ref}"
+          cosign attest --yes --type spdxjson --predicate sbom-linux-amd64.spdx.json "${amd64_ref}"
+          cosign attest --yes --type spdxjson --predicate sbom-linux-arm64.spdx.json "${arm64_ref}"
+
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${image_ref}" > signature-verification.json
+          cosign verify-attestation \
+            --type slsaprovenance1 \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${image_ref}" > slsa-provenance.attestation.json
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${amd64_ref}" > sbom-linux-amd64.attestation.json
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${arm64_ref}" > sbom-linux-arm64.attestation.json
+
+          verify_attestation() {
+            attestation_file=$1
+            predicate_file=$2
+            expected_digest=${3#sha256:}
+            jq -s -e \
+              --slurpfile expected "${predicate_file}" \
+              --arg expected_digest "${expected_digest}" '
+                [.[] | if type == "array" then .[] else . end | (.payload | @base64d | fromjson)] |
+                any(.[];
+                  .predicate == $expected[0] and
+                  (.subject | length) == 1 and
+                  .subject[0].digest.sha256 == $expected_digest
+                )
+              ' "${attestation_file}" >/dev/null
+          }
+          verify_attestation slsa-provenance.attestation.json slsa-provenance.json "${{ steps.build.outputs.digest }}"
+          verify_attestation sbom-linux-amd64.attestation.json sbom-linux-amd64.spdx.json "${{ steps.platforms.outputs.amd64_digest }}"
+          verify_attestation sbom-linux-arm64.attestation.json sbom-linux-arm64.spdx.json "${{ steps.platforms.outputs.arm64_digest }}"
+
+      - name: Generate verified release evidence
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg schema "${RELEASE_EVIDENCE_TYPE}" \
+            --arg component "helm-ai-kernel" \
+            --arg source_repository "${GITHUB_REPOSITORY}" \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg workflow_sha "${WORKFLOW_SHA}" \
+            --arg workflow_identity "${WORKFLOW_IDENTITY}" \
+            --arg workflow_run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --arg image "${IMAGE_NAME}" \
+            --arg digest "${{ steps.build.outputs.digest }}" \
+            --arg staging_tag "${STAGING_TAG}" \
+            --arg final_tag "sha-${SOURCE_SHA}" \
+            --arg amd64_digest "${{ steps.platforms.outputs.amd64_digest }}" \
+            --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" \
+            --arg build_type "${SLSA_BUILD_TYPE}" '
+              {
+                schema: $schema,
+                component: $component,
+                source_repository: $source_repository,
+                source_ref: "refs/heads/main",
+                source_sha: $source_sha,
+                workflow_name: "AI OS Kernel image",
+                workflow_file: ".github/workflows/release-ai-os-image.yml",
+                workflow_ref: "refs/heads/main",
+                workflow_sha: $workflow_sha,
+                workflow_identity: $workflow_identity,
+                workflow_run: $workflow_run,
+                image: $image,
+                staging_tag: $staging_tag,
+                final_tag: $final_tag,
+                digest: $digest,
+                platforms: [
+                  {platform: "linux/amd64", digest: $amd64_digest, sbom: "sbom-linux-amd64.spdx.json"},
+                  {platform: "linux/arm64", digest: $arm64_digest, sbom: "sbom-linux-arm64.spdx.json"}
+                ],
+                oci_labels: {
+                  "org.opencontainers.image.source": ("https://github.com/" + $source_repository),
+                  "org.opencontainers.image.revision": $source_sha
+                },
+                entrypoint: "/usr/local/bin/helm-ai-kernel",
+                default_command: "serve --policy /etc/helm-ai-kernel/release.high_risk.v3.toml --addr 0.0.0.0 --port 8080 --data-dir /var/lib/helm-ai-kernel",
+                healthcheck: "GET /healthz on port 8080",
+                persistence: "/var/lib/helm-ai-kernel",
+                slsa: ("slsa-provenance.json using " + $build_type),
+                cosign: "keyless-signature-and-platform-attestations-exactly-verified",
+                promotion_status: "staging-digest-verified"
+              }
+            ' > release-evidence.json
+          jq -e \
+            --arg schema "${RELEASE_EVIDENCE_TYPE}" \
+            --arg source_sha "${SOURCE_SHA}" \
+            --arg digest "${{ steps.build.outputs.digest }}" \
+            --arg amd64_digest "${{ steps.platforms.outputs.amd64_digest }}" \
+            --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" '
+              .schema == $schema and
+              .source_repository == "Mindburn-Labs/helm-ai-kernel" and
+              .source_ref == "refs/heads/main" and
+              .source_sha == $source_sha and
+              .digest == $digest and
+              .promotion_status == "staging-digest-verified" and
+              .platforms == [
+                {platform: "linux/amd64", digest: $amd64_digest, sbom: "sbom-linux-amd64.spdx.json"},
+                {platform: "linux/arm64", digest: $arm64_digest, sbom: "sbom-linux-arm64.spdx.json"}
+              ]
+            ' release-evidence.json >/dev/null
+
+      - name: Attest and exactly verify durable release evidence
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          set -euo pipefail
+          image_ref="${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
+          expected_digest="${{ steps.build.outputs.digest }}"
+          cosign attest --yes \
+            --type "${RELEASE_EVIDENCE_TYPE}" \
+            --predicate release-evidence.json \
+            "${image_ref}"
+          cosign verify-attestation \
+            --type "${RELEASE_EVIDENCE_TYPE}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${image_ref}" > release-evidence.attestation.json
+          jq -s -e \
+            --slurpfile expected release-evidence.json \
+            --arg expected_digest "${expected_digest#sha256:}" '
+              [.[] | if type == "array" then .[] else . end | (.payload | @base64d | fromjson)] |
+              any(.[];
+                .predicate == $expected[0] and
+                (.subject | length) == 1 and
+                .subject[0].digest.sha256 == $expected_digest
+              )
+            ' release-evidence.attestation.json >/dev/null
+
+      - name: Reauthorize and promote the verified digest
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          promotion_main_tip="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then
+            echo "::error::origin/main moved before promotion (${promotion_main_tip})"
+            exit 1
+          fi
+          gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&status=completed&per_page=100" \
+            > promotion-ci-runs.json
+          ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json
+
+          expected_digest="${{ steps.build.outputs.digest }}"
+          staging_ref="${IMAGE_NAME}@${expected_digest}"
+          final_tag="${IMAGE_NAME}:sha-${SOURCE_SHA}"
+          final_digest="$(./scripts/release/promote_immutable_image_tag.sh "${staging_ref}" "${final_tag}" "${expected_digest}")"
+          test "${final_digest}" = "${expected_digest}"
+          docker buildx imagetools inspect --raw "${final_tag}" > final-image-index.json
+          jq -e \
+            --arg amd64 "${{ steps.platforms.outputs.amd64_digest }}" \
+            --arg arm64 "${{ steps.platforms.outputs.arm64_digest }}" '
+              (.manifests | length) == 2 and
+              ([.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest] == [$amd64]) and
+              ([.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest] == [$arm64])
+            ' final-image-index.json >/dev/null
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${final_tag}" >/dev/null
+          cosign verify-attestation \
+            --type "${RELEASE_EVIDENCE_TYPE}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${final_tag}" > release-evidence.final-attestation.json
+          jq -s -e \
+            --slurpfile expected release-evidence.json \
+            --arg expected_digest "${expected_digest#sha256:}" '
+              [.[] | if type == "array" then .[] else . end | (.payload | @base64d | fromjson)] |
+              any(.[];
+                .predicate == $expected[0] and
+                (.subject | length) == 1 and
+                .subject[0].digest.sha256 == $expected_digest
+              )
+            ' release-evidence.final-attestation.json >/dev/null
+          jq --arg final_digest "${final_digest}" '
+            .promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified" |
+            .final_tag_digest = $final_digest
+          ' release-evidence.json > release-evidence.final.json
+          mv release-evidence.final.json release-evidence.json
+
+      - name: Upload release evidence convenience copy
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: helm-ai-kernel-release-evidence-${{ env.SOURCE_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            signature-verification.json
+            sbom-linux-amd64.spdx.json
+            sbom-linux-amd64.attestation.json
+            sbom-linux-arm64.spdx.json
+            sbom-linux-arm64.attestation.json
+            slsa-provenance.json
+            slsa-provenance.attestation.json
+            release-evidence.json
+            release-evidence.attestation.json
+            release-evidence.final-attestation.json

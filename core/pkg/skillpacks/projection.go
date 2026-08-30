@@ -89,7 +89,7 @@ func projectionRelativePath(skillID, agent string) (Projection, error) {
 	safeParts := strings.Split(skillID, "/")
 	switch strings.ToLower(strings.TrimSpace(agent)) {
 	case "codex", "generic":
-		return Projection{Agent: strings.ToLower(strings.TrimSpace(agent)), Path: filepath.Join(".agents", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
+		return Projection{Agent: "codex", Path: filepath.Join(".agents", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
 	case "claude", "claude-code":
 		return Projection{Agent: "claude-code", Path: filepath.Join(".claude", "skills", safeParts[0], safeParts[1], "SKILL.md")}, nil
 	case "cursor":

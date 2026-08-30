@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -224,6 +225,17 @@ func TestProjectionPathsCoverSupportedAgents(t *testing.T) {
 		if len(paths) == 0 || paths[0].Path == "" {
 			t.Fatalf("ProjectionPaths(%s) empty", agent)
 		}
+	}
+	codex, err := ProjectionPaths(root, "helm/repo-auditor", "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	generic, err := ProjectionPaths(root, "helm/repo-auditor", "generic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(generic, codex) || generic[0].Agent != "codex" {
+		t.Fatalf("generic alias is not canonical Codex projection: generic=%+v codex=%+v", generic, codex)
 	}
 }
 

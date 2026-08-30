@@ -960,22 +960,8 @@ func rewriteModelRequestEmbeddedJSON(value any, restore bool) error {
 }
 
 func rewriteModelMessageEmbeddedJSON(message map[string]any, restore bool) error {
-	if err := rewriteEmbeddedJSONField(message, "content", restore, false); err != nil {
+	if err := rewriteModelContentBlockEmbeddedJSON(message, restore, 0); err != nil {
 		return err
-	}
-	for _, field := range []string{"content", "parts"} {
-		parts, ok := message[field].([]any)
-		if !ok {
-			continue
-		}
-		for _, partValue := range parts {
-			part, ok := partValue.(map[string]any)
-			if ok {
-				if err := rewriteEmbeddedJSONField(part, "text", restore, false); err != nil {
-					return err
-				}
-			}
-		}
 	}
 	if functionCall, ok := message["function_call"].(map[string]any); ok {
 		if err := rewriteEmbeddedJSONField(functionCall, "arguments", restore, true); err != nil {
@@ -992,6 +978,33 @@ func rewriteModelMessageEmbeddedJSON(message map[string]any, restore bool) error
 				if err := rewriteEmbeddedJSONField(function, "arguments", restore, true); err != nil {
 					return err
 				}
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteModelContentBlockEmbeddedJSON(block map[string]any, restore bool, depth int) error {
+	if depth > maxProtectDepth {
+		return ErrDataEgressInvalid
+	}
+	for _, field := range []string{"text", "content"} {
+		if err := rewriteEmbeddedJSONField(block, field, restore, false); err != nil {
+			return err
+		}
+	}
+	for _, field := range []string{"content", "parts"} {
+		parts, ok := block[field].([]any)
+		if !ok {
+			continue
+		}
+		for _, partValue := range parts {
+			part, ok := partValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			if err := rewriteModelContentBlockEmbeddedJSON(part, restore, depth+1); err != nil {
+				return err
 			}
 		}
 	}

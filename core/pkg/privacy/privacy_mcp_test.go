@@ -232,6 +232,10 @@ func TestProtectModelRequestKeepsEmbeddedJSONValid(t *testing.T) {
 		"messages": []any{
 			map[string]any{"role": "user", "content": embedded},
 			map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": embedded}}},
+			map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "tool_result", "content": embedded},
+				map[string]any{"type": "tool_result", "content": []any{map[string]any{"type": "text", "text": embedded}}},
+			}},
 			map[string]any{
 				"role": "assistant",
 				"tool_calls": []any{
@@ -253,8 +257,11 @@ func TestProtectModelRequestKeepsEmbeddedJSONValid(t *testing.T) {
 	}
 	messages := outer["messages"].([]any)
 	multimodal := messages[1].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
-	arguments := messages[2].(map[string]any)["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)["arguments"].(string)
-	for _, value := range []string{messages[0].(map[string]any)["content"].(string), multimodal, arguments} {
+	toolResults := messages[2].(map[string]any)["content"].([]any)
+	toolResult := toolResults[0].(map[string]any)["content"].(string)
+	nestedToolResult := toolResults[1].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	arguments := messages[3].(map[string]any)["tool_calls"].([]any)[0].(map[string]any)["function"].(map[string]any)["arguments"].(string)
+	for _, value := range []string{messages[0].(map[string]any)["content"].(string), multimodal, toolResult, nestedToolResult, arguments} {
 		if !json.Valid([]byte(value)) || strings.Contains(value, "4155552671") || strings.Contains(value, "person@example.com") {
 			t.Fatalf("protected embedded request JSON = %q", value)
 		}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 func NewReceipt(kind, skillID, verdict, reasonCode, contentHash, policyHash string, paths []Projection) Receipt {
@@ -43,6 +44,7 @@ func WriteReceipt(repoRoot string, receipt Receipt) (string, error) {
 // verifier must supply to the projection lifecycle.
 func SealProjectionTrustDecision(decision ProjectionTrustDecision) (ProjectionTrustDecision, error) {
 	decision.DecisionHash = ""
+	decision.Signature = ""
 	hash, err := canonicalize.CanonicalHash(decision)
 	if err != nil {
 		return ProjectionTrustDecision{}, fmt.Errorf("skillpacks: seal projection trust decision: %w", err)
@@ -52,7 +54,7 @@ func SealProjectionTrustDecision(decision ProjectionTrustDecision) (ProjectionTr
 }
 
 func verifyProjectionTrustDecisionIntegrity(decision ProjectionTrustDecision) error {
-	if !validProjectionSHA256(decision.DecisionHash) {
+	if !validProjectionSHA256(decision.DecisionHash) || !validProjectionTrustSignature(decision.Signature) {
 		return fmt.Errorf("%w: trust decision hash is required", ErrProjectionTrustRejected)
 	}
 	sealed, err := SealProjectionTrustDecision(decision)
@@ -73,7 +75,14 @@ func sealProjectionLifecycleResult(result ProjectionLifecycleResult) (Projection
 }
 
 func verifyProjectionLifecycleResult(result ProjectionLifecycleResult) error {
-	if result.ResultHash == "" || !validProjectionSHA256(result.TrustVerificationRef) || !validProjectionSHA256(result.TrustDecisionHash) {
+	if result.ResultHash == "" || !validProjectionSHA256(result.TrustVerificationRef) ||
+		!validProjectionSHA256(result.TrustDecisionHash) || !validProjectionTrustIdentity(result.TrustVerifierID) ||
+		!validProjectionSHA256(result.TrustBindingHash) || !validProjectionTrustIdentity(result.TrustKeyID) ||
+		!validProjectionTrustSignature(result.TrustDecisionSignature) || !validProjectionSHA256(result.TrustArtifactHash) ||
+		!validProjectionSHA256(result.TrustContentHash) || !validProjectionSHA256(result.TrustManifestHash) ||
+		!validProjectionSHA256(result.TrustPolicyHash) || result.TrustSchemaHash != contracts.SkillProjectionArtifactSchemaHashV1 ||
+		!validProjectionSHA256(result.TrustCertificationHash) ||
+		result.TrustSandboxProfile != contracts.SkillProjectionSandboxProfileV1 || !projectionResultMatchesTrustEffect(result) {
 		return fmt.Errorf("skillpacks: projection result hash is required")
 	}
 	sealed, err := sealProjectionLifecycleResult(result)

@@ -145,8 +145,23 @@ mutate_and_reject() {
 sed 's/cancel-in-progress: false/cancel-in-progress: true/' "$workflow" > "$test_dir/cancelling.yml"
 mutate_and_reject "$test_dir/cancelling.yml"
 
-sed 's/group: container-sha-/group: unrelated-ai-os-image-/' "$workflow" > "$test_dir/cross-workflow-race.yml"
-mutate_and_reject "$test_dir/cross-workflow-race.yml"
+sed 's/group: ai-os-kernel-image-/group: container-sha-/' "$workflow" > "$test_dir/wrong-tag-owner-concurrency.yml"
+mutate_and_reject "$test_dir/wrong-tag-owner-concurrency.yml"
+
+sed 's/source_date_epoch="$(git show -s --format=%ct "${SOURCE_SHA}")"/source_date_epoch="$(date +%s)"/' \
+  "$workflow" > "$test_dir/wall-clock-metadata.yml"
+mutate_and_reject "$test_dir/wall-clock-metadata.yml"
+
+sed 's/SOURCE_DATE_EPOCH=${{ steps.metadata.outputs.source_date_epoch }}/SOURCE_DATE_EPOCH=0/' \
+  "$workflow" > "$test_dir/unbound-source-date-epoch.yml"
+mutate_and_reject "$test_dir/unbound-source-date-epoch.yml"
+
+sed 's/:dev-sha-${{ inputs.source_sha }}/:sha-${{ inputs.source_sha }}/' \
+  .github/workflows/release.yml > "$test_dir/legacy-final-tag-collision.yml"
+if "$checker" "$workflow" "$test_dir/legacy-final-tag-collision.yml" >/dev/null 2>&1; then
+  echo 'legacy dev publisher was allowed to collide with the governed immutable tag namespace' >&2
+  exit 1
+fi
 
 sed 's/TRIGGERING_ACTOR: \${{ github.triggering_actor }}/TRIGGERING_ACTOR: \${{ github.actor }}/' \
   "$workflow" > "$test_dir/unbound-triggering-actor.yml"

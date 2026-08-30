@@ -13,6 +13,7 @@ require() {
 }
 
 workflow=${1:-.github/workflows/release-ai-os-image.yml}
+legacy_workflow=${2:-.github/workflows/release.yml}
 dockerfile=Dockerfile
 build_doc=docs/supply-chain/kernel-image-build-v1.md
 evidence_doc=docs/supply-chain/kernel-image-release-evidence-v1.md
@@ -52,7 +53,7 @@ done
 require 'name: AI OS Kernel image' "$workflow"
 require 'workflow_dispatch:' "$workflow"
 require 'source_sha:' "$workflow"
-require 'group: container-sha-${{ inputs.source_sha }}' "$workflow"
+require 'group: ai-os-kernel-image-${{ inputs.source_sha }}' "$workflow"
 require 'cancel-in-progress: false' "$workflow"
 require 'IMAGE_NAME: ghcr.io/mindburn-labs/helm-ai-kernel' "$workflow"
 require "SLSA_BUILD_TYPE: $build_uri" "$workflow"
@@ -70,6 +71,9 @@ require 'if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then' "$workflow"
 require 'if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then' "$workflow"
 require 'head_sha=${SOURCE_SHA}&branch=main&status=completed' "$workflow"
 require './scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"' "$workflow"
+require 'source_date_epoch="$(git show -s --format=%ct "${SOURCE_SHA}")"' "$workflow"
+require 'created="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)"' "$workflow"
+require 'SOURCE_DATE_EPOCH=${{ steps.metadata.outputs.source_date_epoch }}' "$workflow"
 require 'platforms: linux/amd64,linux/arm64' "$workflow"
 require 'tags: ${{ env.IMAGE_NAME }}:${{ env.STAGING_TAG }}' "$workflow"
 require 'org.opencontainers.image.source=https://github.com/${{ github.repository }}' "$workflow"
@@ -89,6 +93,7 @@ require '--type "${RELEASE_EVIDENCE_TYPE}"' "$workflow"
 require 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh "${staging_ref}" "${final_tag}" "${expected_digest}")"' "$workflow"
 require 'docker buildx imagetools inspect --raw "${final_tag}" > final-image-index.json' "$workflow"
 require 'final-tag-digest-platforms-signature-and-evidence-verified' "$workflow"
+require '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}' "$legacy_workflow"
 
 trigger_count="$(awk '
   /^on:$/ { in_on = 1; next }
@@ -128,6 +133,10 @@ if grep -Fq 'git merge-base --is-ancestor' "$workflow"; then
 fi
 if grep -Fq 'docker buildx imagetools create --tag "${final_tag}"' "$workflow"; then
   echo 'immutable final-tag changes must use the tested fail-closed helper' >&2
+  exit 1
+fi
+if grep -Eq 'date[[:space:]]+-u[[:space:]]+\+%Y' "$workflow"; then
+  echo 'governed image metadata must derive from the source commit, not wall-clock time' >&2
   exit 1
 fi
 if grep -E '^[[:space:]]*uses:' "$workflow" | grep -Ev '@[0-9a-f]{40}([[:space:]]+#.*)?$' >/dev/null; then

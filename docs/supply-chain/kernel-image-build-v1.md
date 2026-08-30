@@ -8,6 +8,9 @@ This document defines the source-owned SLSA v1 `buildType` emitted by
 Actions Workflow build type. The workflow checks out one exact commit, builds
 the root `Dockerfile` for `linux/amd64` and `linux/arm64`, and pushes one OCI
 index to `ghcr.io/mindburn-labs/helm-ai-kernel` under a run-unique staging tag.
+Its build timestamp and BuildKit `SOURCE_DATE_EPOCH` both derive from that
+commit's Git committer timestamp, so a retry does not inject wall-clock time
+into the image digest.
 
 ## Parameters
 
@@ -52,6 +55,10 @@ Those settings are an owner blocker outside this source-only change. Until
 they are confirmed in GitHub, the workflow is intentionally not dispatchable.
 The workflow requires no release secret: GHCR and keyless Cosign operations use
 the job-scoped GitHub token and OIDC identity.
+
+This workflow exclusively owns the governed immutable `sha-<SOURCE_SHA>` tag
+namespace. The legacy `release.yml` QA publisher uses the disjoint
+`dev-sha-<SOURCE_SHA>` namespace and cannot create or overwrite a governed tag.
 
 The immutable producer identity consumed by HELM AI OS assembly is:
 

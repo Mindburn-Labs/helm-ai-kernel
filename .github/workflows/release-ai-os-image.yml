@@ -13,9 +13,9 @@ on:
         type: string
 
 concurrency:
-  # Match release.yml/container-sha so both workflows serialize access to the
-  # same immutable sha-<SOURCE_SHA> tag namespace.
-  group: container-sha-${{ inputs.source_sha }}
+  # The governed immutable sha-<SOURCE_SHA> namespace is owned only by this
+  # workflow. release.yml/container-sha publishes dev-sha-<SOURCE_SHA>.
+  group: ai-os-kernel-image-${{ inputs.source_sha }}
   cancel-in-progress: false
 
 permissions:
@@ -132,10 +132,13 @@ jobs:
         run: |
           set -euo pipefail
           short_sha="${SOURCE_SHA:0:12}"
+          source_date_epoch="$(git show -s --format=%ct "${SOURCE_SHA}")"
+          created="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)"
           {
             echo "version=0.0.0-sha.${short_sha}"
             echo "commit=${SOURCE_SHA}"
-            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "source_date_epoch=${source_date_epoch}"
+            echo "created=${created}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Build and push staging image
@@ -149,6 +152,7 @@ jobs:
           provenance: false
           sbom: false
           build-args: |
+            SOURCE_DATE_EPOCH=${{ steps.metadata.outputs.source_date_epoch }}
             BUILD_VERSION=${{ steps.metadata.outputs.version }}
             BUILD_COMMIT=${{ steps.metadata.outputs.commit }}
             BUILD_TIME=${{ steps.metadata.outputs.created }}

@@ -5,6 +5,8 @@ Predicate type URI:
 
 This custom in-toto predicate records the checks completed against a staged
 Kernel OCI digest before the immutable `sha-<SOURCE_SHA>` tag may be created.
+That governed tag namespace is exclusive to `release-ai-os-image.yml`; the
+legacy dispatch publisher uses `dev-sha-<SOURCE_SHA>`.
 Cosign attaches it to the multi-platform image-index digest and the workflow
 decodes the verified payload to require exact predicate and subject-digest
 equality. The GitHub Actions artifact is only a convenience copy; the OCI

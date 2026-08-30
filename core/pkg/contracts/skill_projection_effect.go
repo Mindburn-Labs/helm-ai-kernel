@@ -137,29 +137,30 @@ func ComputeSkillProjectionArtifactHash(manifestHash, contentHash string) (strin
 	return hash, nil
 }
 
-// ComputeSkillProjectionConsumedPermitRef derives the permit reference before
-// either the effect or approval grant is sealed. Keeping this reference
-// independent of EffectHash and GrantHash avoids a circular hash dependency.
-func ComputeSkillProjectionConsumedPermitRef(tenantID, workspaceID, grantID string) (string, error) {
+// ComputeSkillProjectionConsumedPermitRef derives the permit reference from
+// the connector binding committed before the effect is sealed and later
+// carried by the signed grant consumption. Keeping this reference independent
+// of EffectHash and GrantHash avoids a circular hash dependency.
+func ComputeSkillProjectionConsumedPermitRef(tenantID, workspaceID, bindingRef string) (string, error) {
 	if !skillProjectionScopeIDPattern.MatchString(tenantID) {
 		return "", skillProjectionEffectInvalid("consumed permit tenant_id is not a safe scope identifier")
 	}
 	if !skillProjectionScopeIDPattern.MatchString(workspaceID) {
 		return "", skillProjectionEffectInvalid("consumed permit workspace_id is not a safe scope identifier")
 	}
-	if !skillProjectionBoundedToken(grantID, 512) || !isApprovalGrantToken(grantID) {
-		return "", skillProjectionEffectInvalid("consumed permit grant_id must be a bounded token")
+	if !skillProjectionBoundedToken(bindingRef, 512) || !isApprovalGrantToken(bindingRef) {
+		return "", skillProjectionEffectInvalid("consumed permit binding_ref must be a bounded token")
 	}
 	ref, err := hashJCS(struct {
 		SchemaVersion string `json:"schema_version"`
 		TenantID      string `json:"tenant_id"`
 		WorkspaceID   string `json:"workspace_id"`
-		GrantID       string `json:"grant_id"`
+		BindingRef    string `json:"binding_ref"`
 	}{
 		SchemaVersion: SkillProjectionConsumedPermitRefSchemaV1,
 		TenantID:      tenantID,
 		WorkspaceID:   workspaceID,
-		GrantID:       grantID,
+		BindingRef:    bindingRef,
 	})
 	if err != nil {
 		return "", fmt.Errorf("%w: consumed permit reference: %v", ErrSkillProjectionEffectInvalid, err)

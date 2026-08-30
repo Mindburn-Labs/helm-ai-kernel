@@ -77,11 +77,11 @@ func TestSkillProjectionEffectCanonicalHashVector(t *testing.T) {
 }
 
 func TestSkillProjectionConsumedPermitRefIsCanonicalAndPreEffect(t *testing.T) {
-	ref, err := ComputeSkillProjectionConsumedPermitRef("tenant-1", "workspace-1", "grant-1")
+	ref, err := ComputeSkillProjectionConsumedPermitRef("tenant-1", "workspace-1", "binding-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ref != "sha256:ac184e586819d187798f0149018e1329ec0eb68b982539d5a76211b670956259" {
+	if ref != "sha256:d247be2ea66c8004dbb77686c26e26e824ffa4c8d7ba8edd783b9bd70d48da58" {
 		t.Fatalf("consumed permit reference = %s", ref)
 	}
 
@@ -112,15 +112,17 @@ func TestSkillProjectionConsumedPermitRefIsCanonicalAndPreEffect(t *testing.T) {
 	if ref == grant.GrantHash {
 		t.Fatal("pre-effect permit reference must not alias the sealed grant hash")
 	}
-	recomputed, err := ComputeSkillProjectionConsumedPermitRef(grant.TenantID, grant.WorkspaceID, grant.GrantID)
+	recomputed, err := ComputeSkillProjectionConsumedPermitRef(
+		grant.TenantID, grant.WorkspaceID, grant.ConnectorAuthority.BindingRef,
+	)
 	if err != nil || recomputed != ref {
 		t.Fatalf("recomputed reference = %s, err = %v", recomputed, err)
 	}
 
 	for name, values := range map[string][3]string{
-		"tenant":    {"tenant-2", "workspace-1", "grant-1"},
-		"workspace": {"tenant-1", "workspace-2", "grant-1"},
-		"grant":     {"tenant-1", "workspace-1", "grant-2"},
+		"tenant":    {"tenant-2", "workspace-1", "binding-a"},
+		"workspace": {"tenant-1", "workspace-2", "binding-a"},
+		"binding":   {"tenant-1", "workspace-1", "binding-b"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			changed, err := ComputeSkillProjectionConsumedPermitRef(values[0], values[1], values[2])
@@ -136,11 +138,11 @@ func TestSkillProjectionConsumedPermitRefIsCanonicalAndPreEffect(t *testing.T) {
 
 func TestSkillProjectionConsumedPermitRefRejectsUnsafeScope(t *testing.T) {
 	for name, values := range map[string][3]string{
-		"tenant":             {"Tenant-1", "workspace-1", "grant-1"},
-		"workspace":          {"tenant-1", "../workspace", "grant-1"},
-		"grant":              {"tenant-1", "workspace-1", "grant id"},
-		"unicode whitespace": {"tenant-1", "workspace-1", "grant\u00a0id"},
-		"long grant":         {"tenant-1", "workspace-1", strings.Repeat("g", 513)},
+		"tenant":             {"Tenant-1", "workspace-1", "binding-a"},
+		"workspace":          {"tenant-1", "../workspace", "binding-a"},
+		"binding":            {"tenant-1", "workspace-1", "binding ref"},
+		"unicode whitespace": {"tenant-1", "workspace-1", "binding\u00a0ref"},
+		"long binding":       {"tenant-1", "workspace-1", strings.Repeat("b", 513)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := ComputeSkillProjectionConsumedPermitRef(values[0], values[1], values[2]); err == nil {

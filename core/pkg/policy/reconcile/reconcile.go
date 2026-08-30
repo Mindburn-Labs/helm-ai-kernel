@@ -12,6 +12,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -47,6 +49,7 @@ const (
 
 	maxControlPlaneHeadBytes   int64 = 64 << 10
 	maxControlPlaneBundleBytes int64 = 1 << 20
+	controlPlaneRequestTimeout       = 30 * time.Second
 )
 
 const (
@@ -907,6 +910,73 @@ func NewControlPlaneSource(baseURL string, scope PolicyScope) *ControlPlaneSourc
 	return &ControlPlaneSource{BaseURL: strings.TrimRight(baseURL, "/"), HTTPClient: http.DefaultClient, Scope: scope.Normalize()}
 }
 
+// NewControlPlaneHTTPClient returns a private-CA client for managed policy
+// publication. The CA file is re-read for every new TLS connection so a
+// projected Kubernetes Secret can rotate without widening trust to system
+// roots or requiring a Kernel restart.
+func NewControlPlaneHTTPClient(baseURL, caFile string) (*http.Client, error) {
+	parsedURL, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || !strings.EqualFold(parsedURL.Scheme, "https") || parsedURL.Hostname() == "" {
+		return nil, fmt.Errorf("private-CA controlplane policy URL must be absolute HTTPS")
+	}
+	serverName := parsedURL.Hostname()
+	caFile = strings.TrimSpace(caFile)
+	if !filepath.IsAbs(caFile) {
+		return nil, fmt.Errorf("controlplane policy CA file must be an absolute path")
+	}
+	if _, err := loadControlPlaneRoots(caFile); err != nil {
+		return nil, err
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.ForceAttemptHTTP2 = true
+	transport.DisableKeepAlives = true
+	transport.TLSClientConfig = &tls.Config{
+		MinVersion:         tls.VersionTLS13,
+		ServerName:         serverName,
+		InsecureSkipVerify: true, // Verification is exclusive to the rotating CA below.
+		VerifyConnection: func(state tls.ConnectionState) error {
+			return verifyControlPlaneConnection(caFile, serverName, state)
+		},
+	}
+	return &http.Client{Transport: transport, Timeout: controlPlaneRequestTimeout}, nil
+}
+
+func loadControlPlaneRoots(caFile string) (*x509.CertPool, error) {
+	pemBytes, err := os.ReadFile(filepath.Clean(caFile))
+	if err != nil {
+		return nil, fmt.Errorf("read controlplane policy CA: %w", err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(pemBytes) {
+		return nil, fmt.Errorf("controlplane policy CA contains no certificates")
+	}
+	return roots, nil
+}
+
+func verifyControlPlaneConnection(caFile, serverName string, state tls.ConnectionState) error {
+	if len(state.PeerCertificates) == 0 {
+		return fmt.Errorf("controlplane TLS peer certificate is missing")
+	}
+	roots, err := loadControlPlaneRoots(caFile)
+	if err != nil {
+		return err
+	}
+	intermediates := x509.NewCertPool()
+	for _, certificate := range state.PeerCertificates[1:] {
+		intermediates.AddCert(certificate)
+	}
+	_, err = state.PeerCertificates[0].Verify(x509.VerifyOptions{
+		DNSName: serverName, Roots: roots, Intermediates: intermediates,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	})
+	if err != nil {
+		return fmt.Errorf("verify controlplane policy TLS: %w", err)
+	}
+	return nil
+}
+
 func ValidateControlPlaneURL(raw string) error {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -926,6 +996,11 @@ func ValidateControlPlaneURL(raw string) error {
 	default:
 		return fmt.Errorf("controlplane URL must use https")
 	}
+}
+
+func IsLoopbackControlPlaneURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && strings.EqualFold(parsed.Scheme, "http") && isLoopbackControlPlaneHost(parsed.Hostname())
 }
 
 func isLoopbackControlPlaneHost(host string) bool {

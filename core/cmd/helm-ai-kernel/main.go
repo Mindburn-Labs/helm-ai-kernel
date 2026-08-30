@@ -1093,6 +1093,17 @@ func policySourceFromEnv(policyPath string, scope policyreconcile.PolicyScope) (
 			return nil, "controlplane", err
 		}
 		source := policyreconcile.NewControlPlaneSource(baseURL, scope)
+		caFile := strings.TrimSpace(os.Getenv("HELM_POLICY_CONTROLPLANE_CA_FILE"))
+		if envBool("HELM_PRODUCTION") && caFile == "" && !policyreconcile.IsLoopbackControlPlaneURL(baseURL) {
+			return nil, "controlplane", fmt.Errorf("HELM_POLICY_CONTROLPLANE_CA_FILE is required in production so managed policy TLS uses an exclusive trust root")
+		}
+		if caFile != "" {
+			client, err := policyreconcile.NewControlPlaneHTTPClient(baseURL, caFile)
+			if err != nil {
+				return nil, "controlplane", err
+			}
+			source.HTTPClient = client
+		}
 		source.BearerToken = bearerToken
 		source.BearerTokenFile = bearerTokenFile
 		return source, "controlplane", nil

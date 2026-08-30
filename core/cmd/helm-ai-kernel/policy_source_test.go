@@ -65,6 +65,7 @@ func TestPolicySourceFromEnvControlPlaneUsesBearerToken(t *testing.T) {
 }
 
 func TestPolicySourceFromEnvControlPlaneAllowsLoopbackHTTP(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
 	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
 	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "http://127.0.0.1:18080")
 	t.Setenv("HELM_POLICY_CONTROLPLANE_AUTH_MODE", "bearerToken")
@@ -136,6 +137,18 @@ func TestPolicySourceFromEnvControlPlaneRejectsPlainHTTP(t *testing.T) {
 	_, _, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
 	if err == nil || !strings.Contains(err.Error(), "must use https") {
 		t.Fatalf("expected non-HTTPS controlplane URL error, got %v", err)
+	}
+}
+
+func TestPolicySourceFromEnvProductionControlPlaneRequiresPrivateCA(t *testing.T) {
+	t.Setenv("HELM_PRODUCTION", "true")
+	t.Setenv("HELM_POLICY_SOURCE_KIND", "controlplane")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_URL", "https://controlplane.example")
+	t.Setenv("HELM_POLICY_CONTROLPLANE_AUTH_MODE", "bearerToken")
+	t.Setenv("HELM_POLICY_BEARER_TOKEN", "token-1")
+	_, _, err := policySourceFromEnv("/tmp/policy.toml", policyreconcile.DefaultScope)
+	if err == nil || !strings.Contains(err.Error(), "HELM_POLICY_CONTROLPLANE_CA_FILE") {
+		t.Fatalf("expected production private CA requirement, got %v", err)
 	}
 }
 

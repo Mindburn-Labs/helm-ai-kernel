@@ -77,6 +77,371 @@ func TestProjectionLifecycleInstallReadbackReplayAndPermitMismatch(t *testing.T)
 	}
 }
 
+func TestProjectionLifecycleLookupReplayReadOnlyOutcomes(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 30, 0, 0, time.UTC)
+
+	t.Run("absent and closed", func(t *testing.T) {
+		root := t.TempDir()
+		verifierCalls := 0
+		lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			verifierCalls++
+			return allowProjectionTrust(request)
+		}), testProjectionTrustVerifierKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixture := newProjectionFixture(t, "1.0.0", "lookup absent prompt", 1, now)
+
+		before := snapshotProjectionTree(t, root)
+		if result, err := lifecycle.LookupReplay(fixture.effect, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionReplayNotFound) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("absent lookup result=%+v err=%v", result, err)
+		}
+		if verifierCalls != 0 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("absent lookup mutated state or called verifier: calls=%d", verifierCalls)
+		}
+
+		if err := lifecycle.Close(); err != nil {
+			t.Fatal(err)
+		}
+		before = snapshotProjectionTree(t, root)
+		if result, err := lifecycle.LookupReplay(fixture.effect, fixture.effect.ConsumedPermitRef, nil); err == nil || !strings.Contains(err.Error(), "lifecycle is closed") || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("closed lookup result=%+v err=%v", result, err)
+		}
+		if verifierCalls != 0 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("closed lookup mutated state or called verifier: calls=%d", verifierCalls)
+		}
+	})
+
+	t.Run("completed after expiry with historical key", func(t *testing.T) {
+		root := t.TempDir()
+		oldKey := testProjectionTrustVerifierKey()
+		applyVerifierCalls := 0
+		oldLifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			applyVerifierCalls++
+			return allowProjectionTrustWithKey(request, oldKey)
+		}), oldKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		oldLifecycle.clock = func() time.Time { return now }
+		fixture := newProjectionFixture(t, "1.0.0", "historical replay prompt", 1, now)
+		want, err := oldLifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+		if err != nil {
+			t.Fatalf("prepare replay result=%+v err=%v verifier_calls=%d", want, err, applyVerifierCalls)
+		}
+		v2 := newProjectionFixture(t, "2.0.0", "historical replay prompt v2", 2, now)
+		if _, err := oldLifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		rollback := actionEffect(t, fixture.effect, contracts.SkillProjectionActionRollback, 3, "lookup-rollback", "attempt-lookup-rollback", testHash("7"))
+		permit := contracts.SkillProjectionRollbackPermit{
+			SchemaVersion:      contracts.SkillProjectionRollbackPermitSchemaV1,
+			ContractVersion:    contracts.SkillProjectionRollbackPermitContractV1,
+			PermitRef:          testHash("8"),
+			Action:             contracts.SkillProjectionActionRollback,
+			TenantID:           rollback.TenantID,
+			WorkspaceID:        rollback.WorkspaceID,
+			SkillID:            rollback.SkillID,
+			AgentTarget:        rollback.AgentTarget,
+			FromGeneration:     2,
+			TargetGeneration:   1,
+			TargetSkillVersion: rollback.SkillVersion,
+			TargetArtifactHash: rollback.ArtifactHash,
+			TargetPolicyHash:   rollback.PolicyHash,
+			IssuedAt:           now.Add(-time.Minute),
+			ExpiresAt:          now.Add(time.Minute),
+			Nonce:              strings.Repeat("8", 64),
+		}
+		permit = signRollbackPermitForTest(t, permit, oldKey)
+		rollback.RollbackPermitHash = permit.PermitHash
+		rollback.CanonicalRequestHash = ""
+		rollback, err = rollback.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rollbackWant, err := oldLifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit)
+		if err != nil || applyVerifierCalls != 3 {
+			t.Fatalf("prepare rollback replay result=%+v err=%v verifier_calls=%d", rollbackWant, err, applyVerifierCalls)
+		}
+		if err := oldLifecycle.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		currentKey := rotatedProjectionTrustVerifierKey()
+		lookupVerifierCalls := 0
+		lifecycle, err := NewProjectionLifecycleWithVerifierKeyring(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			lookupVerifierCalls++
+			return allowProjectionTrustWithKey(request, currentKey)
+		}), ProjectionTrustVerifierKeyring{Current: currentKey, Historical: []ProjectionTrustVerifierKey{oldKey}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return fixture.effect.ExpiresAt.Add(time.Hour) }
+
+		before := snapshotProjectionTree(t, root)
+		got, err := lifecycle.LookupReplay(fixture.effect, fixture.effect.ConsumedPermitRef, nil)
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("completed lookup result=%+v err=%v want=%+v", got, err, want)
+		}
+		if lookupVerifierCalls != 0 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("completed lookup mutated state or called verifier: calls=%d", lookupVerifierCalls)
+		}
+		before = snapshotProjectionTree(t, root)
+		got, err = lifecycle.LookupReplay(rollback, rollback.ConsumedPermitRef, &permit)
+		if err != nil || !reflect.DeepEqual(got, rollbackWant) {
+			t.Fatalf("expired rollback lookup result=%+v err=%v want=%+v", got, err, rollbackWant)
+		}
+		if lookupVerifierCalls != 0 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("rollback lookup mutated state or called verifier: calls=%d", lookupVerifierCalls)
+		}
+
+		conflict := fixture.effect
+		conflict.AttemptID = "conflicting-attempt"
+		conflict.CanonicalRequestHash = ""
+		conflict, err = conflict.Seal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		before = snapshotProjectionTree(t, root)
+		if result, err := lifecycle.LookupReplay(conflict, conflict.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionReplayConflict) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("conflicting lookup result=%+v err=%v", result, err)
+		}
+		if lookupVerifierCalls != 0 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("conflicting lookup mutated state or called verifier: calls=%d", lookupVerifierCalls)
+		}
+	})
+
+	t.Run("newer pending journal shadows completed replay", func(t *testing.T) {
+		root := t.TempDir()
+		verifierCalls := 0
+		lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			verifierCalls++
+			return allowProjectionTrust(request)
+		}), testProjectionTrustVerifierKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return now }
+		completed := newProjectionFixture(t, "1.0.0", "completed lookup prompt", 1, now)
+		if _, err := lifecycle.Apply(completed.effect, &completed.artifact, completed.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		newer := newProjectionFixture(t, "2.0.0", "newer pending prompt", 2, now)
+		simulatedCrash := errors.New("stop newer operation after journal")
+		lifecycle.mutationHook = func(stage string) error {
+			if stage == projectionMutationAfterJournal {
+				return simulatedCrash
+			}
+			return nil
+		}
+		if _, err := lifecycle.Apply(newer.effect, &newer.artifact, newer.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) || !errors.Is(err, simulatedCrash) {
+			t.Fatalf("prepare newer pending journal: %v", err)
+		}
+		lifecycle.mutationHook = nil
+		lifecycle.clock = func() time.Time { return completed.effect.ExpiresAt.Add(time.Hour) }
+
+		before := snapshotProjectionTree(t, root)
+		if result, err := lifecycle.LookupReplay(completed.effect, completed.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("older lookup with newer pending journal result=%+v err=%v", result, err)
+		}
+		if verifierCalls != 2 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("newer pending lookup mutated state or called verifier: calls=%d", verifierCalls)
+		}
+
+		journalPath := filepath.Join(root, lifecycle.journalRel(newer.effect))
+		journalBytes, err := os.ReadFile(journalPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var journal projectionRecoveryJournal
+		if err := json.Unmarshal(journalBytes, &journal); err != nil {
+			t.Fatal(err)
+		}
+		journal.JournalSignature = tamperProjectionTrustSignature(journal.JournalSignature)
+		journalBytes, err = json.MarshalIndent(journal, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(journalPath, journalBytes, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		before = snapshotProjectionTree(t, root)
+		if result, err := lifecycle.LookupReplay(completed.effect, completed.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("older lookup with tampered newer journal result=%+v err=%v", result, err)
+		}
+		if verifierCalls != 2 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("tampered newer journal lookup mutated state or called verifier: calls=%d", verifierCalls)
+		}
+	})
+
+	t.Run("pending journal stays pending and authentic", func(t *testing.T) {
+		root := t.TempDir()
+		oldKey := testProjectionTrustVerifierKey()
+		oldLifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			return allowProjectionTrustWithKey(request, oldKey)
+		}), oldKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		oldLifecycle.clock = func() time.Time { return now }
+		fixture := newProjectionFixture(t, "1.0.0", "pending lookup prompt", 1, now)
+		simulatedCrash := errors.New("stop after journal")
+		oldLifecycle.mutationHook = func(stage string) error {
+			if stage == projectionMutationAfterJournal {
+				return simulatedCrash
+			}
+			return nil
+		}
+		if _, err := oldLifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) || !errors.Is(err, simulatedCrash) {
+			t.Fatalf("prepare pending journal: %v", err)
+		}
+		oldLifecycle.mutationHook = nil
+		if err := oldLifecycle.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		currentKey := rotatedProjectionTrustVerifierKey()
+		lookupVerifierCalls := 0
+		lifecycle, err := NewProjectionLifecycleWithVerifierKeyring(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			lookupVerifierCalls++
+			return allowProjectionTrustWithKey(request, currentKey)
+		}), ProjectionTrustVerifierKeyring{Current: currentKey, Historical: []ProjectionTrustVerifierKey{oldKey}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return fixture.effect.ExpiresAt.Add(time.Hour) }
+
+		before := snapshotProjectionTree(t, root)
+		if result, err := lifecycle.LookupReplay(fixture.effect, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("pending lookup result=%+v err=%v", result, err)
+		}
+		if lookupVerifierCalls != 0 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("pending lookup mutated state or called verifier: calls=%d", lookupVerifierCalls)
+		}
+
+		journalPath := filepath.Join(root, lifecycle.journalRel(fixture.effect))
+		journalBytes, err := os.ReadFile(journalPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var journal projectionRecoveryJournal
+		if err := json.Unmarshal(journalBytes, &journal); err != nil {
+			t.Fatal(err)
+		}
+		journal.JournalSignature = tamperProjectionTrustSignature(journal.JournalSignature)
+		journalBytes, err = json.MarshalIndent(journal, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(journalPath, journalBytes, 0o600); err != nil {
+			t.Fatalf("tamper journal: %v", err)
+		}
+		before = snapshotProjectionTree(t, root)
+		if result, err := lifecycle.LookupReplay(fixture.effect, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("tampered journal lookup result=%+v err=%v", result, err)
+		}
+		if lookupVerifierCalls != 0 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+			t.Fatalf("tampered journal lookup mutated state or called verifier: calls=%d", lookupVerifierCalls)
+		}
+	})
+}
+
+func TestProjectionLifecycleLookupReplayRejectsStoredAuthorityMismatch(t *testing.T) {
+	now := time.Date(2026, 8, 30, 12, 45, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		mutate func(*projectionLifecycleState) error
+	}{
+		{
+			name: "result hash",
+			mutate: func(state *projectionLifecycleState) error {
+				state.Replays[0].Result.ResultHash = testHash("0")
+				return nil
+			},
+		},
+		{
+			name: "consumed permit ref",
+			mutate: func(state *projectionLifecycleState) error {
+				result := state.Replays[0].Result
+				result.ConsumedPermitRef = testHash("0")
+				sealed, err := sealProjectionLifecycleResult(result)
+				state.Replays[0].Result = sealed
+				return err
+			},
+		},
+		{
+			name: "rollback permit ref",
+			mutate: func(state *projectionLifecycleState) error {
+				result := state.Replays[0].Result
+				result.RollbackPermitRef = testHash("1")
+				sealed, err := sealProjectionLifecycleResult(result)
+				state.Replays[0].Result = sealed
+				return err
+			},
+		},
+		{
+			name: "attempt id",
+			mutate: func(state *projectionLifecycleState) error {
+				result := state.Replays[0].Result
+				result.AttemptID = "different-attempt"
+				sealed, err := sealProjectionLifecycleResult(result)
+				state.Replays[0].Result = sealed
+				state.Attempts[0].AttemptID = result.AttemptID
+				return err
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			verifierCalls := 0
+			lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+				verifierCalls++
+				return allowProjectionTrust(request)
+			}), testProjectionTrustVerifierKey())
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = lifecycle.Close() })
+			lifecycle.clock = func() time.Time { return now }
+			fixture := newProjectionFixture(t, "1.0.0", "stored authority mismatch prompt", 1, now)
+			if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); err != nil {
+				t.Fatal(err)
+			}
+			projection, err := projectionRelativePath(fixture.effect.SkillID, fixture.effect.AgentTarget)
+			if err != nil {
+				t.Fatal(err)
+			}
+			state, err := lifecycle.readState(fixture.effect, filepath.ToSlash(projection.Path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tt.mutate(state); err != nil {
+				t.Fatal(err)
+			}
+			_, stateBytes, err := lifecycle.marshalProjectionLifecycleState(*state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, lifecycle.stateRel(fixture.effect)), stateBytes, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			before := snapshotProjectionTree(t, root)
+			if result, err := lifecycle.LookupReplay(fixture.effect, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) || result != (ProjectionLifecycleResult{}) {
+				t.Fatalf("mismatched stored authority result=%+v err=%v", result, err)
+			}
+			if verifierCalls != 1 || !reflect.DeepEqual(before, snapshotProjectionTree(t, root)) {
+				t.Fatalf("mismatched lookup mutated state or called verifier: calls=%d", verifierCalls)
+			}
+		})
+	}
+}
+
 func TestProjectionLifecycleUpgradeRollbackAndRevoke(t *testing.T) {
 	now := time.Date(2026, 8, 30, 13, 0, 0, 0, time.UTC)
 	root := t.TempDir()
@@ -3292,4 +3657,37 @@ func tamperProjectionTrustSignature(signature string) string {
 		replacement = "1"
 	}
 	return signature[:len(signature)-1] + replacement
+}
+
+type projectionTreeSnapshotEntry struct {
+	Mode     os.FileMode
+	ModTime  int64
+	Contents string
+}
+
+func snapshotProjectionTree(t *testing.T, root string) map[string]projectionTreeSnapshotEntry {
+	t.Helper()
+	snapshot := make(map[string]projectionTreeSnapshotEntry)
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		entry := projectionTreeSnapshotEntry{Mode: info.Mode(), ModTime: info.ModTime().UnixNano()}
+		if info.Mode().IsRegular() {
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			entry.Contents = string(contents)
+		}
+		snapshot[relative] = entry
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return snapshot
 }

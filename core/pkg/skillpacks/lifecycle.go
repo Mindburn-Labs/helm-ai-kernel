@@ -70,6 +70,7 @@ const (
 var (
 	ErrProjectionDrift            = errors.New("skillpacks: managed projection drift")
 	ErrUnmanagedProjection        = errors.New("skillpacks: unmanaged projection exists")
+	ErrProjectionReplayNotFound   = errors.New("skillpacks: projection replay not found")
 	ErrProjectionReplayConflict   = errors.New("skillpacks: projection replay conflict")
 	ErrProjectionPathUnsafe       = errors.New("skillpacks: unsafe managed path")
 	ErrProjectionLockContended    = errors.New("skillpacks: projection root lock contended")
@@ -588,6 +589,114 @@ func (l *ProjectionLifecycle) Apply(
 	default:
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: unsupported projection action")
 	}
+}
+
+// LookupReplay returns one authenticated durable result without dispatching,
+// recovering, or otherwise mutating a projection. An authenticated recovery
+// journal remains owned by Apply, which revalidates live authority and trust
+// before completing or aborting the pending mutation.
+func (l *ProjectionLifecycle) LookupReplay(
+	effect contracts.SkillProjectionEffect,
+	consumedPermitRef string,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+) (result ProjectionLifecycleResult, returnErr error) {
+	if l == nil {
+		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: projection lifecycle is nil")
+	}
+	if rollbackPermit != nil {
+		permitCopy := *rollbackPermit
+		rollbackPermit = &permitCopy
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closing.Load() || l.managed == nil {
+		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: projection lifecycle is closed")
+	}
+	if err := l.validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	releaseRootLock, err := l.acquireRootLock()
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	defer func() {
+		if err := releaseRootLock(); err != nil {
+			result = ProjectionLifecycleResult{}
+			returnErr = errors.Join(returnErr, fmt.Errorf("skillpacks: release projection root lock: %w", err))
+		}
+	}()
+
+	projection, err := projectionRelativePath(effect.SkillID, effect.AgentTarget)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	relativePath := filepath.ToSlash(projection.Path)
+	pending, err := l.hasPendingProjectionRecoveryJournal(effect, relativePath)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	if pending {
+		return ProjectionLifecycleResult{}, ErrProjectionRecoveryPending
+	}
+
+	state, err := l.readState(effect, relativePath)
+	if err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	if state == nil {
+		if err := l.verifyProjectionAbsent(effect, relativePath); err != nil {
+			return ProjectionLifecycleResult{}, err
+		}
+		return ProjectionLifecycleResult{}, ErrProjectionReplayNotFound
+	}
+	replay, ok := findProjectionReplay(state.Replays, effect.IdempotencyKey)
+	if !ok {
+		if attempt, found := findProjectionAttempt(state.Attempts, effect.AttemptID); found &&
+			(attempt.IdempotencyKey != effect.IdempotencyKey || attempt.RequestHash != effect.CanonicalRequestHash) {
+			return ProjectionLifecycleResult{}, ErrProjectionReplayConflict
+		}
+		if err := l.verifyManagedState(*state); err != nil {
+			return ProjectionLifecycleResult{}, err
+		}
+		return ProjectionLifecycleResult{}, ErrProjectionReplayNotFound
+	}
+	if err := validateProjectionReplayLookupBinding(effect, relativePath, consumedPermitRef, rollbackPermit, replay); err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	if err := l.verifyManagedState(*state); err != nil {
+		return ProjectionLifecycleResult{}, err
+	}
+	return replay.Result, nil
+}
+
+func validateProjectionReplayLookupBinding(
+	effect contracts.SkillProjectionEffect,
+	relativePath, consumedPermitRef string,
+	rollbackPermit *contracts.SkillProjectionRollbackPermit,
+	replay projectionReplay,
+) error {
+	if replay.RequestHash != effect.CanonicalRequestHash {
+		return ErrProjectionReplayConflict
+	}
+	if err := verifyProjectionLifecycleResult(replay.Result); err != nil {
+		return fmt.Errorf("%w: stored replay result: %v", ErrProjectionDrift, err)
+	}
+	expectedRollbackPermitRef := ""
+	if rollbackPermit != nil {
+		expectedRollbackPermitRef = rollbackPermit.PermitRef
+	}
+	if replay.Result.Action != effect.Action || replay.Result.TenantID != effect.TenantID ||
+		replay.Result.WorkspaceID != effect.WorkspaceID || replay.Result.SkillID != effect.SkillID ||
+		replay.Result.SkillVersion != effect.SkillVersion || replay.Result.AgentTarget != effect.AgentTarget ||
+		replay.Result.CanonicalRequestHash != effect.CanonicalRequestHash ||
+		replay.Result.IdempotencyKey != effect.IdempotencyKey || replay.Result.AttemptID != effect.AttemptID ||
+		replay.Result.ConsumedPermitRef != consumedPermitRef ||
+		replay.Result.RollbackPermitRef != expectedRollbackPermitRef ||
+		replay.Result.NewGeneration != effect.Generation || replay.Result.RelativePath != relativePath {
+		return fmt.Errorf("%w: stored replay does not match lookup authority", ErrProjectionDrift)
+	}
+	return nil
 }
 
 func (l *ProjectionLifecycle) validateProjectionAuthority(
@@ -1982,22 +2091,121 @@ func (l *ProjectionLifecycle) readProjectionRecoveryJournal(
 	effect contracts.SkillProjectionEffect,
 	relativePath string,
 ) (*projectionRecoveryJournal, *projectionLifecycleState, error) {
-	data, err := readManagedFileAt(l.managed, l.journalRel(effect), maxProjectionRecoveryJournalBytes)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil, nil
+	journal, err := l.readProjectionRecoveryJournalRecord(effect)
+	if err != nil || journal == nil {
+		return nil, nil, err
 	}
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: read recovery journal: %w", ErrProjectionDrift, err)
-	}
-	var journal projectionRecoveryJournal
-	if err := decodeStrictProjectionJSON(data, &journal); err != nil {
-		return nil, nil, fmt.Errorf("%w: decode recovery journal: %v", ErrProjectionDrift, err)
-	}
-	next, err := l.validateProjectionRecoveryJournal(journal, effect, relativePath)
+	next, err := l.validateProjectionRecoveryJournal(*journal, effect, relativePath)
 	if err != nil {
 		return nil, nil, err
 	}
-	return &journal, &next, nil
+	return journal, &next, nil
+}
+
+func (l *ProjectionLifecycle) readProjectionRecoveryJournalRecord(
+	effect contracts.SkillProjectionEffect,
+) (*projectionRecoveryJournal, error) {
+	data, err := readManagedFileAt(l.managed, l.journalRel(effect), maxProjectionRecoveryJournalBytes)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: read recovery journal: %w", ErrProjectionDrift, err)
+	}
+	var journal projectionRecoveryJournal
+	if err := decodeStrictProjectionJSON(data, &journal); err != nil {
+		return nil, fmt.Errorf("%w: decode recovery journal: %v", ErrProjectionDrift, err)
+	}
+	return &journal, nil
+}
+
+func (l *ProjectionLifecycle) hasPendingProjectionRecoveryJournal(
+	lookup contracts.SkillProjectionEffect,
+	relativePath string,
+) (bool, error) {
+	journal, err := l.readProjectionRecoveryJournalRecord(lookup)
+	if err != nil || journal == nil {
+		return false, err
+	}
+	if err := l.verifyProjectionRecoveryJournal(*journal); err != nil {
+		return false, err
+	}
+	if journal.SchemaVersion != projectionRecoveryJournalSchemaV1 ||
+		journal.TenantID != lookup.TenantID || journal.WorkspaceID != lookup.WorkspaceID ||
+		journal.SkillID != lookup.SkillID || journal.AgentTarget != lookup.AgentTarget ||
+		journal.RelativePath != relativePath || len(journal.NextStateBytes) == 0 ||
+		len(journal.NextStateBytes) > maxProjectionLifecycleStateBytes ||
+		!validProjectionSHA256(journal.NextStateHash) || HashBytes(journal.NextStateBytes) != journal.NextStateHash {
+		return false, fmt.Errorf("%w: recovery journal projection binding is invalid", ErrProjectionDrift)
+	}
+
+	var next projectionLifecycleState
+	if err := decodeStrictProjectionJSON(journal.NextStateBytes, &next); err != nil {
+		return false, fmt.Errorf("%w: decode recovery state: %v", ErrProjectionDrift, err)
+	}
+	if err := l.verifyProjectionLifecycleState(next); err != nil {
+		return false, fmt.Errorf("%w: recovery state integrity: %v", ErrProjectionDrift, err)
+	}
+	if err := validateProjectionStateIdentity(next, lookup, relativePath); err != nil {
+		return false, err
+	}
+	replay, ok := findProjectionReplay(next.Replays, journal.IdempotencyKey)
+	if !ok || replay.RequestHash != journal.CanonicalRequestHash ||
+		replay.Result.ResultHash != journal.ResultHash || !validProjectionSHA256(replay.Result.ConsumedPermitRef) {
+		return false, fmt.Errorf("%w: recovery journal replay binding is invalid", ErrProjectionDrift)
+	}
+	if (journal.Action == contracts.SkillProjectionActionRollback && !validProjectionSHA256(replay.Result.RollbackPermitRef)) ||
+		(journal.Action != contracts.SkillProjectionActionRollback && replay.Result.RollbackPermitRef != "") {
+		return false, fmt.Errorf("%w: recovery journal replay binding is invalid", ErrProjectionDrift)
+	}
+
+	var record projectionGeneration
+	found := false
+	for i := range next.Generations {
+		candidate := next.Generations[i]
+		if candidate.SkillVersion == journal.SkillVersion &&
+			candidate.ArtifactHash == replay.Result.TrustArtifactHash &&
+			candidate.ContentHash == replay.Result.TrustContentHash &&
+			candidate.ManifestHash == replay.Result.TrustManifestHash &&
+			candidate.PolicyHash == replay.Result.TrustPolicyHash &&
+			candidate.SchemaHash == replay.Result.TrustSchemaHash &&
+			projectionCertificationRefsHash(candidate.CertificationRefs) == replay.Result.TrustCertificationHash &&
+			candidate.SandboxProfile == replay.Result.TrustSandboxProfile {
+			record = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false, fmt.Errorf("%w: recovery journal generation binding is invalid", ErrProjectionDrift)
+	}
+
+	pendingEffect := contracts.SkillProjectionEffect{
+		SchemaVersion:        contracts.SkillProjectionEffectSchemaV1,
+		ContractVersion:      contracts.SkillProjectionEffectContractV1,
+		Action:               journal.Action,
+		TenantID:             journal.TenantID,
+		WorkspaceID:          journal.WorkspaceID,
+		SkillID:              journal.SkillID,
+		SkillVersion:         journal.SkillVersion,
+		AgentTarget:          journal.AgentTarget,
+		ArtifactHash:         record.ArtifactHash,
+		ContentHash:          record.ContentHash,
+		ManifestHash:         record.ManifestHash,
+		PolicyHash:           record.PolicyHash,
+		SchemaHash:           record.SchemaHash,
+		CertificationRefs:    append([]string(nil), record.CertificationRefs...),
+		ConsumedPermitRef:    replay.Result.ConsumedPermitRef,
+		IdempotencyKey:       journal.IdempotencyKey,
+		AttemptID:            journal.AttemptID,
+		Generation:           replay.Result.NewGeneration,
+		SandboxProfile:       record.SandboxProfile,
+		CanonicalRequestHash: journal.CanonicalRequestHash,
+	}
+	if _, err := l.validateProjectionRecoveryJournal(*journal, pendingEffect, relativePath); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (l *ProjectionLifecycle) recoverProjectionJournal(

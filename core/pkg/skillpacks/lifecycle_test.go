@@ -334,6 +334,40 @@ func TestProjectionLifecycleRollbackAuthorityHistoricalKeyReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	rotated.clock = func() time.Time { return now }
+	freshHistoricalPermit := signRollbackPermitForTest(t, contracts.SkillProjectionRollbackPermit{
+		SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+		PermitRef: testHash("6"), Action: contracts.SkillProjectionActionRollback,
+		TenantID: v2.effect.TenantID, WorkspaceID: v2.effect.WorkspaceID,
+		SkillID: v2.effect.SkillID, AgentTarget: v2.effect.AgentTarget,
+		FromGeneration: 3, TargetGeneration: 2,
+		TargetSkillVersion: v2.effect.SkillVersion, TargetArtifactHash: v2.effect.ArtifactHash, TargetPolicyHash: v2.effect.PolicyHash,
+		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("6", 64),
+	}, testProjectionTrustVerifierKey())
+	freshHistoricalRollback := actionEffect(t, v2.effect, contracts.SkillProjectionActionRollback, 4, "fresh-historical-rollback", "attempt-fresh-historical-rollback", testHash("5"))
+	freshHistoricalRollback.RollbackPermitHash = freshHistoricalPermit.PermitHash
+	freshHistoricalRollback.CanonicalRequestHash = ""
+	freshHistoricalRollback, err = freshHistoricalRollback.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(root, rotated.stateRel(rollback))
+	livePath := projectionLivePath(root, rollback)
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveBefore, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := rotated.Apply(freshHistoricalRollback, nil, freshHistoricalRollback.ConsumedPermitRef, &freshHistoricalPermit); !errors.Is(err, contracts.ErrSkillProjectionEffectIntegrity) || result != (ProjectionLifecycleResult{}) {
+		t.Fatalf("fresh historical-key rollback result=%+v err=%v", result, err)
+	}
+	stateAfter, stateErr := os.ReadFile(statePath)
+	liveAfter, liveErr := os.ReadFile(livePath)
+	if stateErr != nil || liveErr != nil || !reflect.DeepEqual(stateAfter, stateBefore) || !reflect.DeepEqual(liveAfter, liveBefore) {
+		t.Fatalf("fresh historical-key rollback mutated state: state_err=%v live_err=%v", stateErr, liveErr)
+	}
 	replayed, err := rotated.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit)
 	if err != nil || !reflect.DeepEqual(replayed, want) {
 		t.Fatalf("historical-key rollback replay=%+v err=%v", replayed, err)
@@ -348,23 +382,115 @@ func TestProjectionLifecycleRollbackAuthorityHistoricalKeyReplay(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = withoutHistory.Close() })
 	withoutHistory.clock = func() time.Time { return now }
-	statePath := filepath.Join(root, withoutHistory.stateRel(rollback))
-	livePath := projectionLivePath(root, rollback)
-	stateBefore, err := os.ReadFile(statePath)
+	statePath = filepath.Join(root, withoutHistory.stateRel(rollback))
+	livePath = projectionLivePath(root, rollback)
+	stateBefore, err = os.ReadFile(statePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	liveBefore, err := os.ReadFile(livePath)
+	liveBefore, err = os.ReadFile(livePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result, err := withoutHistory.Apply(rollback, nil, rollback.ConsumedPermitRef, &permit); !errors.Is(err, contracts.ErrSkillProjectionEffectIntegrity) || result != (ProjectionLifecycleResult{}) {
 		t.Fatalf("revoked rollback authority result=%+v err=%v", result, err)
 	}
-	stateAfter, _ := os.ReadFile(statePath)
-	liveAfter, _ := os.ReadFile(livePath)
+	stateAfter, _ = os.ReadFile(statePath)
+	liveAfter, _ = os.ReadFile(livePath)
 	if !reflect.DeepEqual(stateAfter, stateBefore) || !reflect.DeepEqual(liveAfter, liveBefore) {
 		t.Fatal("revoked historical rollback authority mutated state")
+	}
+}
+
+func TestProjectionLifecycleCloseSerializesRollbackAuthentication(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 8, 0, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	v1 := newProjectionFixture(t, "1.0.0", "close rollback v1", 1, now)
+	v2 := newProjectionFixture(t, "2.0.0", "close rollback v2", 2, now)
+	if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	unknownPermit := signRollbackPermitForTest(t, contracts.SkillProjectionRollbackPermit{
+		SchemaVersion: contracts.SkillProjectionRollbackPermitSchemaV1, ContractVersion: contracts.SkillProjectionRollbackPermitContractV1,
+		PermitRef: testHash("8"), Action: contracts.SkillProjectionActionRollback,
+		TenantID: v1.effect.TenantID, WorkspaceID: v1.effect.WorkspaceID,
+		SkillID: v1.effect.SkillID, AgentTarget: v1.effect.AgentTarget,
+		FromGeneration: 2, TargetGeneration: 1,
+		TargetSkillVersion: v1.effect.SkillVersion, TargetArtifactHash: v1.effect.ArtifactHash, TargetPolicyHash: v1.effect.PolicyHash,
+		IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute), Nonce: strings.Repeat("8", 64),
+	}, otherProjectionTrustVerifierKey())
+	rollback := actionEffect(t, v1.effect, contracts.SkillProjectionActionRollback, 3, "close-rollback", "attempt-close-rollback", testHash("7"))
+	rollback.RollbackPermitHash = unknownPermit.PermitHash
+	rollback.CanonicalRequestHash = ""
+	var err error
+	rollback, err = rollback.Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type applyOutcome struct {
+		result ProjectionLifecycleResult
+		err    error
+	}
+	lifecycle.mu.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			lifecycle.mu.Unlock()
+		}
+	}()
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- lifecycle.Close() }()
+	deadline := time.After(time.Second)
+	for !lifecycle.closing.Load() {
+		select {
+		case <-deadline:
+			lifecycle.mu.Unlock()
+			locked = false
+			t.Fatal("Close did not enter closing state")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	applyDone := make(chan applyOutcome, 1)
+	applyStarted := make(chan struct{})
+	go func() {
+		close(applyStarted)
+		result, err := lifecycle.Apply(rollback, nil, rollback.ConsumedPermitRef, &unknownPermit)
+		applyDone <- applyOutcome{result: result, err: err}
+	}()
+	<-applyStarted
+	var early *applyOutcome
+	select {
+	case outcome := <-applyDone:
+		early = &outcome
+	case <-time.After(50 * time.Millisecond):
+	}
+	lifecycle.mu.Unlock()
+	locked = false
+	if early != nil {
+		<-closeDone
+		t.Fatalf("rollback authentication escaped lifecycle mutex: result=%+v err=%v", early.result, early.err)
+	}
+	select {
+	case outcome := <-applyDone:
+		if outcome.result != (ProjectionLifecycleResult{}) || outcome.err == nil || !strings.Contains(outcome.err.Error(), "lifecycle is closed") {
+			t.Fatalf("rollback Apply during Close result=%+v err=%v", outcome.result, outcome.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("rollback Apply deadlocked with Close")
+	}
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close deadlocked with rollback Apply")
 	}
 }
 

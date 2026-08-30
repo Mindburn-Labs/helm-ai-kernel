@@ -463,14 +463,16 @@ func (l *ProjectionLifecycle) Apply(
 		permitCopy := *rollbackPermit
 		rollbackPermit = &permitCopy
 	}
-	if err := l.validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
-		return ProjectionLifecycleResult{}, err
-	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.closing.Load() || l.managed == nil {
 		return ProjectionLifecycleResult{}, fmt.Errorf("skillpacks: projection lifecycle is closed")
+	}
+	// Rollback authentication reads lifecycle-owned key material. Keep that
+	// read inside the same mutex Close uses to zero and discard the keyring.
+	if err := l.validateProjectionAuthorityBinding(effect, consumedPermitRef, rollbackPermit); err != nil {
+		return ProjectionLifecycleResult{}, err
 	}
 	releaseRootLock, err := l.acquireRootLock()
 	if err != nil {
@@ -535,6 +537,14 @@ func (l *ProjectionLifecycle) Apply(
 		if attempt, ok := findProjectionAttempt(state.Attempts, effect.AttemptID); ok &&
 			(attempt.IdempotencyKey != effect.IdempotencyKey || attempt.RequestHash != effect.CanonicalRequestHash) {
 			return ProjectionLifecycleResult{}, ErrProjectionReplayConflict
+		}
+	}
+	// Historical keys authenticate only durable state, recovery journals, and
+	// exact replays. Any rollback that reaches this point is a fresh mutation
+	// and therefore requires authority under the lifecycle's current key.
+	if effect.Action == contracts.SkillProjectionActionRollback {
+		if err := l.verifyProjectionRollbackPermitCurrentAuthority(*rollbackPermit); err != nil {
+			return ProjectionLifecycleResult{}, err
 		}
 	}
 
@@ -1353,6 +1363,19 @@ func (l *ProjectionLifecycle) verifyProjectionRollbackPermitAuthentication(
 	expected := projectionRollbackPermitSignature(permit.PermitHash, key)
 	if !constantStringEqual(permit.Signature, expected) {
 		return fmt.Errorf("%w: rollback permit signature mismatch", contracts.ErrSkillProjectionEffectIntegrity)
+	}
+	return nil
+}
+
+func (l *ProjectionLifecycle) verifyProjectionRollbackPermitCurrentAuthority(
+	permit contracts.SkillProjectionRollbackPermit,
+) error {
+	if permit.IssuerID != l.verifierKey.VerifierID || permit.KeyID != l.verifierKey.KeyID {
+		return fmt.Errorf("%w: fresh rollback permit must use current issuer/key", contracts.ErrSkillProjectionEffectIntegrity)
+	}
+	expected := projectionRollbackPermitSignature(permit.PermitHash, l.verifierKey)
+	if !constantStringEqual(permit.Signature, expected) {
+		return fmt.Errorf("%w: fresh rollback permit signature mismatch", contracts.ErrSkillProjectionEffectIntegrity)
 	}
 	return nil
 }

@@ -83,6 +83,34 @@ func TestProtectJSONUsesCanonicalBoundary(t *testing.T) {
 	}
 }
 
+func TestProtectJSONUsesCompletePayloadBudget(t *testing.T) {
+	chunk := strings.Repeat("x", 600<<10)
+	raw, err := json.Marshal(map[string]any{"first": chunk, "second": chunk})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) <= maxProtectStringBytes {
+		t.Fatalf("test payload = %d bytes, want more than per-string limit", len(raw))
+	}
+	if _, _, err := ProtectJSON(context.Background(), raw); err != nil {
+		t.Fatalf("aggregate payload within %d-byte limit was rejected: %v", MaxPayloadBytes, err)
+	}
+
+	tooLarge, err := json.Marshal(map[string]any{
+		"a": strings.Repeat("a", 900<<10),
+		"b": strings.Repeat("b", 900<<10),
+		"c": strings.Repeat("c", 900<<10),
+		"d": strings.Repeat("d", 900<<10),
+		"e": strings.Repeat("e", 900<<10),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ProtectJSON(context.Background(), tooLarge); !errors.Is(err, ErrDataEgressInvalid) {
+		t.Fatalf("oversized payload error = %v, want ErrDataEgressInvalid", err)
+	}
+}
+
 func TestProtectRestrictedValuesFailClosedWithoutValueInError(t *testing.T) {
 	manager := NewPrivacyManager()
 	cases := []struct {

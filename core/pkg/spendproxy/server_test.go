@@ -76,10 +76,11 @@ const testConfigJSON = `{
 
 // mockUpstream is an OpenAI-compatible fake provider that records requests.
 type mockUpstream struct {
-	server   *httptest.Server
-	calls    atomic.Int64
-	lastBody atomic.Value // []byte
-	lastAuth atomic.Value // string
+	server          *httptest.Server
+	calls           atomic.Int64
+	lastBody        atomic.Value // []byte
+	lastAuth        atomic.Value // string
+	responseContent atomic.Value // string
 }
 
 func newMockUpstream(t *testing.T) *mockUpstream {
@@ -116,10 +117,14 @@ func newMockUpstream(t *testing.T) *mockUpstream {
 			return
 		}
 
+		content := "ok"
+		if configured, _ := m.responseContent.Load().(string); configured != "" {
+			content = configured
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{"id":"cmpl-mock-1","object":"chat.completion","model":%q,`+
-			`"choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],`+
-			`"usage":{"prompt_tokens":100,"completion_tokens":20}}`, req.Model)
+			`"choices":[{"index":0,"message":{"role":"assistant","content":%q},"finish_reason":"stop"}],`+
+			`"usage":{"prompt_tokens":100,"completion_tokens":20}}`, req.Model, content)
 	})
 	m.server = httptest.NewServer(mux)
 	t.Cleanup(m.server.Close)
@@ -434,6 +439,33 @@ func TestRestartRestoresBalanceAndIdempotency(t *testing.T) {
 	if len(byKind[RecordUsage]) != 1 || len(byKind[RecordSettlement]) != 1 {
 		t.Fatalf("replay duplicated receipts: %d usage / %d settlement",
 			len(byKind[RecordUsage]), len(byKind[RecordSettlement]))
+	}
+}
+
+func TestBlockedProviderResponsePersistsSettlementAcrossRestart(t *testing.T) {
+	f := newProxyFixture(t)
+	f.upstream.responseContent.Store("api_key=sk_live_example1234")
+	resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "idem-privacy-response", nil)
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusBadGateway || bytes.Contains(body, []byte("sk_live")) {
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, body)
+	}
+	byKind := recordsByKind(f.records(t))
+	for _, kind := range []RecordKind{RecordRouteQuote, RecordBudgetVerdict, RecordUsage, RecordSettlement} {
+		if len(byKind[kind]) != 1 {
+			t.Fatalf("%s records = %d, want 1", kind, len(byKind[kind]))
+		}
+	}
+	if got := f.server.BalanceCents(); got != 1999 {
+		t.Fatalf("balance after blocked response = %d, want 1999", got)
+	}
+
+	f.restart(t)
+	if got := f.server.BalanceCents(); got != 1999 {
+		t.Fatalf("balance after restart = %d, want durable debit 1999", got)
+	}
+	if sum := f.server.ReplaySummary(); sum.RestoredSettlements != 1 || sum.DebitedCents != 1 {
+		t.Fatalf("replay summary = %+v, want 1 settlement / 1 cent", sum)
 	}
 }
 

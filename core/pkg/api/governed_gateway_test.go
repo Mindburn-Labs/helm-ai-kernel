@@ -256,6 +256,10 @@ func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 		if len(f.ledger.Entries()) != 1 {
 			t.Fatalf("settlement entries = %d, want 1", len(f.ledger.Entries()))
 		}
+		meta := decodeHELM(t, rec)
+		if meta.Quote == nil || meta.RouteReceipt == nil || meta.UsageReceipt == nil || meta.SettlementReceipt == nil {
+			t.Fatal("blocked provider response must retain the complete settlement metadata")
+		}
 	})
 }
 

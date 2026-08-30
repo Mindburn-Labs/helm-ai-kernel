@@ -562,7 +562,7 @@ func (r *GatewayRouter) getJSON(ctx context.Context, endpoint string, out any) e
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("lig: provider GET failed: HTTP %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, privacy.MaxPayloadBytes+1))
 	if err != nil {
 		return errors.New("lig: provider response read failed")
 	}
@@ -595,7 +595,7 @@ func (r *GatewayRouter) postJSON(ctx context.Context, endpoint string, payload a
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("lig: provider POST failed: HTTP %d", resp.StatusCode)
 	}
-	response, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20+1))
+	response, err := io.ReadAll(io.LimitReader(resp.Body, privacy.MaxPayloadBytes+1))
 	if err != nil {
 		return errors.New("lig: provider response read failed")
 	}

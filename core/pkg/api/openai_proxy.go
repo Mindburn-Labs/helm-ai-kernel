@@ -71,8 +71,8 @@ type OpenAIChatResponse struct {
 //
 //	helm-ai-kernel proxy --upstream <url>
 //
-// maxOpenAIRequestSize is the maximum allowed request body size (10 MiB).
-const maxOpenAIRequestSize = 10 << 20
+// maxOpenAIRequestSize matches the canonical privacy payload ceiling.
+const maxOpenAIRequestSize = privacy.MaxPayloadBytes
 
 func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -160,7 +160,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	defer upstreamResp.Body.Close()
 
 	// Read upstream response
-	respBody, err := io.ReadAll(upstreamResp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(upstreamResp.Body, privacy.MaxPayloadBytes+1))
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		return

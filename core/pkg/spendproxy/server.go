@@ -25,8 +25,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
-// maxRequestBody mirrors the governed gateway's request-size ceiling (10 MiB).
-const maxRequestBody = 10 << 20
+// maxRequestBody mirrors the governed gateway's privacy payload ceiling.
+const maxRequestBody = privacy.MaxPayloadBytes
 
 // ServerOptions wires a Server.
 type ServerOptions struct {
@@ -359,14 +359,18 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 		var envl struct {
 			HELM api.GatewayMetadata `json:"helm"`
 		}
-		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil && envl.HELM.Quote != nil {
-			s.appendOrLog(&ReceiptRecord{
-				Kind:          RecordRouteQuote,
-				TenantID:      envl.HELM.Quote.TenantID,
-				SpendIntentID: envl.HELM.Quote.SpendIntentID,
-				Note:          fmt.Sprintf("rejected: %s/%s", envl.HELM.Verdict, envl.HELM.ReasonCode),
-				RouteQuote:    envl.HELM.Quote,
-			})
+		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil {
+			if envl.HELM.SettlementReceipt != nil {
+				s.persistOutcome(&envl.HELM)
+			} else if envl.HELM.Quote != nil {
+				s.appendOrLog(&ReceiptRecord{
+					Kind:          RecordRouteQuote,
+					TenantID:      envl.HELM.Quote.TenantID,
+					SpendIntentID: envl.HELM.Quote.SpendIntentID,
+					Note:          fmt.Sprintf("rejected: %s/%s", envl.HELM.Verdict, envl.HELM.ReasonCode),
+					RouteQuote:    envl.HELM.Quote,
+				})
+			}
 		}
 	}
 	copyHeaders(w.Header(), rec.header)

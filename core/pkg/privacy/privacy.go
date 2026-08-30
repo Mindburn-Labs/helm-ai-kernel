@@ -29,10 +29,14 @@ import (
 const DetectorVersion = "helm-privacy-v5"
 
 const (
+	// MaxPayloadBytes is the largest complete JSON document accepted by the
+	// canonical privacy boundary. Individual text values remain more tightly
+	// bounded so one field cannot monopolize the full payload budget.
+	MaxPayloadBytes       = 4 << 20
 	maxProtectDepth       = 32
 	maxProtectNodes       = 10000
 	maxProtectStringBytes = 1 << 20
-	maxProtectTotalBytes  = 4 << 20
+	maxProtectTotalBytes  = MaxPayloadBytes
 	maxUnicodeEscapeDepth = 4
 	maxExactFloat32Int    = 1<<24 - 1
 	maxExactFloat64Int    = 1<<53 - 1
@@ -525,11 +529,8 @@ func (p *protector) sliceMapAny(value []map[string]any, depth int) ([]map[string
 }
 
 func (p *protector) rawJSON(raw json.RawMessage, depth int) (json.RawMessage, error) {
-	if len(raw) == 0 || len(raw) > maxProtectStringBytes {
+	if len(raw) == 0 || len(raw) > MaxPayloadBytes {
 		return nil, ErrDataEgressInvalid
-	}
-	if err := p.accountBytes(len(raw)); err != nil {
-		return nil, err
 	}
 	decoded, err := decodeJSONValue(raw)
 	if err != nil {
@@ -540,7 +541,7 @@ func (p *protector) rawJSON(raw json.RawMessage, depth int) (json.RawMessage, er
 		return nil, err
 	}
 	canonical, err := json.Marshal(protected)
-	if err != nil || len(canonical) > maxProtectStringBytes {
+	if err != nil || len(canonical) > MaxPayloadBytes {
 		return nil, ErrDataEgressInvalid
 	}
 	if len(canonical) > len(raw) {

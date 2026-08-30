@@ -35,11 +35,13 @@ const (
 	MaxPayloadBytes       = 4 << 20
 	maxProtectDepth       = 32
 	maxProtectNodes       = 10000
+	maxJSONProtectNodes   = MaxPayloadBytes
 	maxProtectStringBytes = 1 << 20
 	maxProtectTotalBytes  = MaxPayloadBytes
 	maxUnicodeEscapeDepth = 4
 	maxExactFloat32Int    = 1<<24 - 1
 	maxExactFloat64Int    = 1<<53 - 1
+	modelLogprobTokenKey  = "helm_logprob_lexeme"
 )
 
 var (
@@ -172,6 +174,7 @@ func (pm *StandardPrivacyManager) Protect(ctx context.Context, value any) (prote
 		ctx:      ctx,
 		manager:  pm,
 		findings: make(map[string]struct{}),
+		maxNodes: maxProtectNodes,
 	}
 	protected, err = p.value(value, 0)
 	if err != nil {
@@ -188,15 +191,36 @@ func (pm *StandardPrivacyManager) Protect(ctx context.Context, value any) (prote
 // ProtectJSON applies the canonical privacy boundary to one complete JSON
 // payload and returns a bounded, canonical copy safe for egress.
 func ProtectJSON(ctx context.Context, raw json.RawMessage) (json.RawMessage, []string, error) {
-	protected, findings, err := NewPrivacyManager().Protect(ctx, raw)
+	return protectJSON(ctx, raw, false)
+}
+
+// ProtectModelResponseJSON protects a provider response while preserving the
+// protocol-owned token fields in OpenAI log-probability entries. The exception
+// is path-scoped; ordinary token keys remain restricted.
+func ProtectModelResponseJSON(ctx context.Context, raw json.RawMessage) (json.RawMessage, []string, error) {
+	return protectJSON(ctx, raw, true)
+}
+
+func protectJSON(ctx context.Context, raw json.RawMessage, modelResponse bool) (json.RawMessage, []string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	p := protector{
+		ctx:      ctx,
+		manager:  NewPrivacyManager(),
+		findings: make(map[string]struct{}),
+		maxNodes: maxJSONProtectNodes,
+	}
+	protected, err := p.protectJSON(raw, 0, modelResponse)
 	if err != nil {
 		return nil, nil, err
 	}
-	protectedJSON, ok := protected.(json.RawMessage)
-	if !ok {
-		return nil, nil, ErrDataEgressInvalid
+	findings := make([]string, 0, len(p.findings))
+	for finding := range p.findings {
+		findings = append(findings, finding)
 	}
-	return protectedJSON, findings, nil
+	sort.Strings(findings)
+	return protected, findings, nil
 }
 
 type protector struct {
@@ -205,6 +229,7 @@ type protector struct {
 	findings map[string]struct{}
 	nodes    int
 	bytes    int
+	maxNodes int
 }
 
 func (p *protector) value(value any, depth int) (any, error) {
@@ -215,7 +240,7 @@ func (p *protector) value(value any, depth int) (any, error) {
 		return nil, ErrDataEgressInvalid
 	}
 	p.nodes++
-	if p.nodes > maxProtectNodes {
+	if p.nodes > p.maxNodes {
 		return nil, ErrDataEgressInvalid
 	}
 
@@ -402,7 +427,7 @@ func (p *protector) mapAny(value map[string]any, depth int) (map[string]any, err
 	if value == nil {
 		return nil, nil
 	}
-	if len(value) > maxProtectNodes-p.nodes {
+	if len(value) > p.maxNodes-p.nodes {
 		return nil, ErrDataEgressInvalid
 	}
 	keys := sortedKeysAny(value)
@@ -432,7 +457,7 @@ func (p *protector) mapString(value map[string]string) (map[string]string, error
 	if value == nil {
 		return nil, nil
 	}
-	if len(value) > maxProtectNodes-p.nodes {
+	if len(value) > p.maxNodes-p.nodes {
 		return nil, ErrDataEgressInvalid
 	}
 	p.nodes += len(value)
@@ -477,7 +502,7 @@ func (p *protector) sliceAny(value []any, depth int) ([]any, error) {
 	if value == nil {
 		return nil, nil
 	}
-	if len(value) > maxProtectNodes-p.nodes {
+	if len(value) > p.maxNodes-p.nodes {
 		return nil, ErrDataEgressInvalid
 	}
 	protected := make([]any, len(value))
@@ -495,7 +520,7 @@ func (p *protector) sliceString(value []string) ([]string, error) {
 	if value == nil {
 		return nil, nil
 	}
-	if len(value) > maxProtectNodes-p.nodes {
+	if len(value) > p.maxNodes-p.nodes {
 		return nil, ErrDataEgressInvalid
 	}
 	p.nodes += len(value)
@@ -514,7 +539,7 @@ func (p *protector) sliceMapAny(value []map[string]any, depth int) ([]map[string
 	if value == nil {
 		return nil, nil
 	}
-	if len(value) > maxProtectNodes-p.nodes {
+	if len(value) > p.maxNodes-p.nodes {
 		return nil, ErrDataEgressInvalid
 	}
 	protected := make([]map[string]any, len(value))
@@ -529,6 +554,10 @@ func (p *protector) sliceMapAny(value []map[string]any, depth int) ([]map[string
 }
 
 func (p *protector) rawJSON(raw json.RawMessage, depth int) (json.RawMessage, error) {
+	return p.protectJSON(raw, depth, false)
+}
+
+func (p *protector) protectJSON(raw json.RawMessage, depth int, modelResponse bool) (json.RawMessage, error) {
 	if len(raw) == 0 || len(raw) > MaxPayloadBytes {
 		return nil, ErrDataEgressInvalid
 	}
@@ -536,9 +565,19 @@ func (p *protector) rawJSON(raw json.RawMessage, depth int) (json.RawMessage, er
 	if err != nil {
 		return nil, err
 	}
+	if modelResponse {
+		if err := rewriteModelResponseLogprobTokenKeys(decoded, false); err != nil {
+			return nil, err
+		}
+	}
 	protected, err := p.value(decoded, depth+1)
 	if err != nil {
 		return nil, err
+	}
+	if modelResponse {
+		if err := rewriteModelResponseLogprobTokenKeys(protected, true); err != nil {
+			return nil, err
+		}
 	}
 	canonical, err := json.Marshal(protected)
 	if err != nil || len(canonical) > MaxPayloadBytes {
@@ -566,6 +605,87 @@ func decodeJSONValue(raw json.RawMessage) (any, error) {
 	return decoded, nil
 }
 
+func rewriteModelResponseLogprobTokenKeys(value any, restore bool) error {
+	root, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	choices, ok := root["choices"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, choiceValue := range choices {
+		choice, ok := choiceValue.(map[string]any)
+		if !ok {
+			continue
+		}
+		logprobs, ok := choice["logprobs"].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, field := range []string{"content", "refusal"} {
+			entries, ok := logprobs[field].([]any)
+			if !ok {
+				continue
+			}
+			for _, entry := range entries {
+				if err := rewriteLogprobTokenEntry(entry, restore); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func rewriteLogprobTokenEntry(value any, restore bool) error {
+	entry, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	from, to := "token", modelLogprobTokenKey
+	if restore {
+		from, to = to, from
+	} else if _, reserved := entry[to]; reserved {
+		return ErrDataEgressInvalid
+	}
+	tokenValue, exists := entry[from]
+	if restore && !exists {
+		if rawBytes, present := entry["bytes"]; present && rawBytes != nil {
+			return ErrDataEgressInvalid
+		}
+	}
+	if exists {
+		if _, collision := entry[to]; collision {
+			return ErrDataEgressInvalid
+		}
+		entry[to] = tokenValue
+		delete(entry, from)
+		if restore {
+			token, ok := tokenValue.(string)
+			if !ok {
+				return ErrDataEgressInvalid
+			}
+			if rawBytes, present := entry["bytes"]; present && rawBytes != nil {
+				encoded := []byte(token)
+				byteValues := make([]int, len(encoded))
+				for index, item := range encoded {
+					byteValues[index] = int(item)
+				}
+				entry["bytes"] = byteValues
+			}
+		}
+	}
+	if top, ok := entry["top_logprobs"].([]any); ok {
+		for _, candidate := range top {
+			if err := rewriteLogprobTokenEntry(candidate, restore); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (p *protector) accountBytes(size int) error {
 	if size < 0 || size > maxProtectTotalBytes-p.bytes {
 		return ErrDataEgressInvalid
@@ -591,7 +711,7 @@ func (p *protector) reflectValue(value reflect.Value, depth int) (any, error) {
 			}
 			return nil, ErrDataEgressInvalid
 		}
-		if value.Len() > maxProtectNodes-p.nodes {
+		if value.Len() > p.maxNodes-p.nodes {
 			return nil, ErrDataEgressInvalid
 		}
 		keys := value.MapKeys()
@@ -624,7 +744,7 @@ func (p *protector) reflectValue(value reflect.Value, depth int) (any, error) {
 		if value.Type().Elem().Kind() == reflect.Uint8 {
 			return nil, ErrDataEgressInvalid
 		}
-		if value.Len() > maxProtectNodes-p.nodes {
+		if value.Len() > p.maxNodes-p.nodes {
 			return nil, ErrDataEgressInvalid
 		}
 		protected := make([]any, value.Len())

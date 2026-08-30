@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // gatewayFixture builds a fully-wired governed gateway over an in-memory engine.
@@ -27,6 +29,7 @@ type spyDispatch struct {
 	cost         int64
 	body         []byte
 	responseBody json.RawMessage
+	requestID    string
 }
 
 func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, costCap inferencegateway.CostCapPolicy, providerCost int64) *gatewayFixture {
@@ -77,9 +80,13 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 		if responseBody == nil {
 			responseBody = json.RawMessage(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
 		}
+		requestID := spy.requestID
+		if requestID == "" {
+			requestID = "prov-req-" + quote.ID
+		}
 		return DispatchOutcome{
 			ResponseBody:      responseBody,
-			ProviderRequestID: "prov-req-" + quote.ID,
+			ProviderRequestID: requestID,
 			ProviderCostCents: spy.cost,
 			InputTokens:       1000,
 			OutputTokens:      480,
@@ -249,8 +256,9 @@ func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 	t.Run("response", func(t *testing.T) {
 		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"content":"api_key=sk_live_example1234"}}]}`)
+		f.dispatch.requestID = "ghp_12345678901234567890"
 		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-privacy-response", "gpt-4o"))
-		if rec.Code != http.StatusBadGateway || f.dispatch.called != 1 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) {
+		if rec.Code != http.StatusBadGateway || f.dispatch.called != 1 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) || bytes.Contains(rec.Body.Bytes(), []byte("ghp_")) {
 			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
 		}
 		if len(f.ledger.Entries()) != 1 {
@@ -259,6 +267,47 @@ func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 		meta := decodeHELM(t, rec)
 		if meta.Quote == nil || meta.RouteReceipt == nil || meta.UsageReceipt == nil || meta.SettlementReceipt == nil {
 			t.Fatal("blocked provider response must retain the complete settlement metadata")
+		}
+		if !strings.HasPrefix(meta.UsageReceipt.ProviderRequestID, "provider-request-redacted-rq-") {
+			t.Fatalf("provider request id was not sanitized: %q", meta.UsageReceipt.ProviderRequestID)
+		}
+	})
+}
+
+func TestGatewayReturnsBadRequestForMalformedJSON(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{`))
+	for key, value := range helmHeaders("idem-malformed", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || f.dispatch.called != 0 || strings.Contains(rec.Body.String(), privacy.ErrDataEgressBlocked.Error()) {
+		t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
+	}
+}
+
+func TestGatewaySupportsBatchedEmbeddingsAndLogprobs(t *testing.T) {
+	t.Run("embeddings", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		vector := make([]float64, 1536)
+		data := make([]any, 7)
+		for index := range data {
+			data[index] = map[string]any{"object": "embedding", "index": index, "embedding": vector}
+		}
+		f.dispatch.responseBody, _ = json.Marshal(map[string]any{"object": "list", "data": data})
+		rec := f.do(t, http.MethodPost, "/v1/embeddings", "gpt-4o", helmHeaders("idem-embeddings", "gpt-4o"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("logprobs", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"role":"assistant","content":"hello"},"logprobs":{"content":[{"token":"hello","logprob":-0.1,"bytes":[104,101,108,108,111],"top_logprobs":[]}]}}]}`)
+		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-logprobs", "gpt-4o"))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"token":"hello"`) {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
 	})
 }

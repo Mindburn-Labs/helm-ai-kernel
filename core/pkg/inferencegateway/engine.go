@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // StalePricePolicy decides what the engine does when the selected provider's
@@ -321,6 +322,7 @@ func (e *Engine) Settle(
 	if providerRequestID == "" {
 		return nil, errors.New("inferencegateway: provider_request_id is required to settle")
 	}
+	providerRequestID = privacySafeProviderRequestID(quote.ID, providerRequestID)
 	if providerCostCents < 0 {
 		return nil, errors.New("inferencegateway: provider cost cannot be negative")
 	}
@@ -387,6 +389,16 @@ func (e *Engine) Settle(
 		BalanceAfterCents: rec.BalanceAfterCents,
 		EvidencePackRef:   rec.UsageReceipt.EvidencePackRef,
 	}, nil
+}
+
+func privacySafeProviderRequestID(quoteID, providerRequestID string) string {
+	protected, findings, err := privacy.NewPrivacyManager().Protect(nil, providerRequestID)
+	if err == nil && len(findings) == 0 {
+		if safe, ok := protected.(string); ok && safe == providerRequestID {
+			return safe
+		}
+	}
+	return "provider-request-redacted-" + quoteID
 }
 
 func replayResult(rec *SettlementRecord) *SettleResult {

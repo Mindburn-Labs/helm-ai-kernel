@@ -165,7 +165,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
-	protectedResponse, _, err := privacy.ProtectJSON(r.Context(), json.RawMessage(respBody))
+	protectedResponse, _, err := privacy.ProtectModelResponseJSON(r.Context(), json.RawMessage(respBody))
 	if err != nil {
 		WriteError(w, http.StatusBadGateway, "Upstream response blocked", privacy.ErrDataEgressBlocked.Error())
 		return

@@ -170,6 +170,10 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 	}
 	protectedBody, _, err := privacy.ProtectJSON(r.Context(), json.RawMessage(body))
 	if err != nil {
+		if errors.Is(err, privacy.ErrDataEgressInvalid) {
+			WriteBadRequest(w, "invalid request body")
+			return
+		}
 		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
 		return
 	}
@@ -213,7 +217,7 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteError(w, http.StatusBadGateway, "provider dispatch failed", "provider request failed")
 		return
 	}
-	protectedResponse, _, responsePrivacyErr := privacy.ProtectJSON(r.Context(), outcome.ResponseBody)
+	protectedResponse, _, responsePrivacyErr := privacy.ProtectModelResponseJSON(r.Context(), outcome.ResponseBody)
 	if responsePrivacyErr == nil {
 		outcome.ResponseBody = protectedResponse
 	} else {

@@ -23,10 +23,11 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 	trustregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
-const governedOpenAIRequestMaxBytes = 10 << 20
+const governedOpenAIRequestMaxBytes = privacy.MaxPayloadBytes
 
 // RegisterSubsystemRoutes registers all subsystem API routes on the given mux.
 // This wires kernel-critical packages into the HTTP API surface.
@@ -468,7 +469,7 @@ func readGovernedOpenAIRequest(w http.ResponseWriter, r *http.Request) ([]byte, 
 	if err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			api.WriteError(w, http.StatusRequestEntityTooLarge, "Request Too Large", "request body exceeds 10 MiB")
+			api.WriteError(w, http.StatusRequestEntityTooLarge, "Request Too Large", fmt.Sprintf("request body exceeds %d MiB", governedOpenAIRequestMaxBytes>>20))
 		} else {
 			api.WriteBadRequest(w, "Failed to read request body")
 		}

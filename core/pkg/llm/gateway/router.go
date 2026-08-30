@@ -566,7 +566,7 @@ func (r *GatewayRouter) getJSON(ctx context.Context, endpoint string, out any) e
 	if err != nil {
 		return errors.New("lig: provider response read failed")
 	}
-	protected, _, err := privacy.ProtectJSON(ctx, json.RawMessage(data))
+	protected, _, err := privacy.ProtectModelResponseJSON(ctx, json.RawMessage(data))
 	if err != nil {
 		return privacy.ErrDataEgressBlocked
 	}
@@ -599,7 +599,7 @@ func (r *GatewayRouter) postJSON(ctx context.Context, endpoint string, payload a
 	if err != nil {
 		return errors.New("lig: provider response read failed")
 	}
-	protectedResponse, _, err := privacy.ProtectJSON(ctx, json.RawMessage(response))
+	protectedResponse, _, err := privacy.ProtectModelResponseJSON(ctx, json.RawMessage(response))
 	if err != nil {
 		return privacy.ErrDataEgressBlocked
 	}

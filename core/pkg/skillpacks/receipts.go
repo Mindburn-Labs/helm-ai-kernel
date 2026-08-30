@@ -92,22 +92,39 @@ func verifyProjectionLifecycleResult(result ProjectionLifecycleResult) error {
 	return nil
 }
 
-func sealProjectionLifecycleState(state projectionLifecycleState) (projectionLifecycleState, error) {
-	state.StateHash = ""
-	hash, err := canonicalize.CanonicalHash(state)
-	if err != nil {
-		return projectionLifecycleState{}, fmt.Errorf("skillpacks: seal projection state: %w", err)
+func sealProjectionLifecycleState(state projectionLifecycleState, key ProjectionTrustVerifierKey) (projectionLifecycleState, error) {
+	if err := validateProjectionTrustVerifierKey(key); err != nil {
+		return projectionLifecycleState{}, err
 	}
-	state.StateHash = "sha256:" + hash
+	state.StateVerifierID = key.VerifierID
+	state.StateKeyID = key.KeyID
+	stateHash, err := hashProjectionLifecycleState(state)
+	if err != nil {
+		return projectionLifecycleState{}, err
+	}
+	state.StateHash = stateHash
+	state.StateSignature = projectionLifecycleStateSignature(state.StateHash, key)
 	return state, nil
 }
 
-func verifyProjectionLifecycleState(state projectionLifecycleState) error {
-	if state.StateHash == "" {
-		return fmt.Errorf("skillpacks: projection state hash is required")
+func hashProjectionLifecycleState(state projectionLifecycleState) (string, error) {
+	state.StateHash = ""
+	state.StateSignature = ""
+	hash, err := canonicalize.CanonicalHash(state)
+	if err != nil {
+		return "", fmt.Errorf("skillpacks: hash projection state: %w", err)
 	}
-	sealed, err := sealProjectionLifecycleState(state)
-	if err != nil || sealed.StateHash != state.StateHash {
+	return "sha256:" + hash, nil
+}
+
+func verifyProjectionLifecycleStateAuthentication(state projectionLifecycleState, key ProjectionTrustVerifierKey) error {
+	if state.StateHash == "" || state.StateVerifierID != key.VerifierID || state.StateKeyID != key.KeyID ||
+		!validProjectionTrustSignature(state.StateSignature) {
+		return fmt.Errorf("skillpacks: authenticated projection state is required")
+	}
+	sealed, err := sealProjectionLifecycleState(state, key)
+	if err != nil || !constantStringEqual(sealed.StateHash, state.StateHash) ||
+		!constantStringEqual(sealed.StateSignature, state.StateSignature) {
 		return fmt.Errorf("skillpacks: projection state integrity mismatch")
 	}
 	return nil

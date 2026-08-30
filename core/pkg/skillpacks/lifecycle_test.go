@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -253,6 +254,60 @@ func TestProjectionLifecycleRequiresPinnedTrustVerifierKey(t *testing.T) {
 				t.Fatalf("invalid pinned verifier key created projection root: %v", err)
 			}
 		})
+	}
+}
+
+func TestProjectionLifecycleVerifierKeyRotationIsExplicit(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 44, 0, 0, time.UTC)
+	root := t.TempDir()
+	oldLifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "key-rotation prompt", 1, now)
+	if _, err := oldLifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := oldLifecycle.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	currentKey := rotatedProjectionTrustVerifierKey()
+	currentVerifier := projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+		return allowProjectionTrustWithKey(request, currentKey)
+	})
+	rotated, err := NewProjectionLifecycleWithVerifierKeyring(root, currentVerifier, ProjectionTrustVerifierKeyring{
+		Current: currentKey, Historical: []ProjectionTrustVerifierKey{testProjectionTrustVerifierKey()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated.clock = func() time.Time { return now }
+	readback := actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, 1, "read-after-key-rotation", "attempt-read-after-key-rotation", testHash("7"))
+	result, err := rotated.Apply(readback, nil, readback.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.TrustKeyID != currentKey.KeyID {
+		t.Fatalf("rotated result key = %q", result.TrustKeyID)
+	}
+	state, err := rotated.readState(readback, result.RelativePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.StateKeyID != currentKey.KeyID || state.Generations[0].TrustKeyID != testProjectionTrustVerifierKey().KeyID {
+		t.Fatalf("rotated state keys = state:%q generation:%q", state.StateKeyID, state.Generations[0].TrustKeyID)
+	}
+	if err := rotated.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	revokedHistory, err := NewProjectionLifecycleWithVerifierKey(root, currentVerifier, currentKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = revokedHistory.Close() })
+	revokedHistory.clock = func() time.Time { return now }
+	secondReadback := actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, 1, "read-with-revoked-history", "attempt-read-with-revoked-history", testHash("8"))
+	if result, err := revokedHistory.Apply(secondReadback, nil, secondReadback.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) || result != (ProjectionLifecycleResult{}) {
+		t.Fatalf("revoked historical key result=%+v err=%v", result, err)
 	}
 }
 
@@ -549,7 +604,7 @@ func TestProjectionLifecycleRejectsResealedStateWithTamperedTrustReceipt(t *test
 		t.Fatal(err)
 	}
 	state.Generations[0].TrustDecisionSignature = tamperProjectionTrustSignature(state.Generations[0].TrustDecisionSignature)
-	state, err = sealProjectionLifecycleState(state)
+	state, err = sealProjectionLifecycleState(state, testProjectionTrustVerifierKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,6 +636,71 @@ func TestProjectionLifecycleRejectsResealedStateWithTamperedTrustReceipt(t *test
 	}
 	if installed.TrustDecisionSignature == state.Generations[0].TrustDecisionSignature {
 		t.Fatal("test did not tamper the stored trust receipt")
+	}
+}
+
+func TestProjectionLifecycleRejectsPubliclyRehashedGenerationSelection(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 56, 40, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	v1 := newProjectionFixture(t, "1.0.0", "authenticated selection v1", 1, now)
+	v2 := newProjectionFixture(t, "2.0.0", "authenticated selection v2", 2, now)
+	if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+		t.Fatal(err)
+	}
+	installed, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statePath := filepath.Join(root, lifecycle.stateRel(v2.effect))
+	stateBytes, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state projectionLifecycleState
+	if err := decodeStrictProjectionJSON(stateBytes, &state); err != nil {
+		t.Fatal(err)
+	}
+	state.ArchiveGeneration = 1
+	state.StateHash, err = hashProjectionLifecycleState(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forgedState, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, forgedState, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	livePath := projectionLivePath(root, v2.effect)
+	if err := os.WriteFile(livePath, v1.artifact.Files["SKILL.md"], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	liveBefore, err := os.ReadFile(livePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readback := actionEffect(t, v1.effect, contracts.SkillProjectionActionReadback, 2, "read-forged-selection", "attempt-read-forged-selection", testHash("9"))
+
+	if result, err := lifecycle.Apply(readback, nil, readback.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionDrift) || result != (ProjectionLifecycleResult{}) {
+		t.Fatalf("forged generation selection result=%+v err=%v", result, err)
+	}
+	stateAfter, err := os.ReadFile(statePath)
+	if err != nil || !reflect.DeepEqual(stateAfter, stateBefore) {
+		t.Fatalf("forged selection changed state: %q err=%v", stateAfter, err)
+	}
+	liveAfter, err := os.ReadFile(livePath)
+	if err != nil || !reflect.DeepEqual(liveAfter, liveBefore) {
+		t.Fatalf("forged selection changed live: %q err=%v", liveAfter, err)
+	}
+	if installed.NewArtifactHash == state.Generations[0].ArtifactHash {
+		t.Fatal("test did not select an older retained generation")
 	}
 }
 
@@ -624,7 +744,7 @@ func TestProjectionLifecycleRejectsCrossWorkspaceTrustReceiptTransplant(t *testi
 	victimState.Generations[0].TrustCanonicalHash = transplanted.TrustCanonicalHash
 	victimState.Generations[0].TrustBindingHash = transplanted.TrustBindingHash
 	victimState.Generations[0].TrustDecisionSignature = transplanted.TrustDecisionSignature
-	sealedVictimState, err := sealProjectionLifecycleState(*victimState)
+	sealedVictimState, err := sealProjectionLifecycleState(*victimState, testProjectionTrustVerifierKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -677,7 +797,7 @@ func TestProjectionLifecycleRejectsResealedCertificationRefBoundaryCollision(t *
 	}
 	originalRefs := append([]string(nil), state.Generations[0].CertificationRefs...)
 	state.Generations[0].CertificationRefs = []string{strings.Join(originalRefs, "\x00")}
-	state, err = sealProjectionLifecycleState(state)
+	state, err = sealProjectionLifecycleState(state, testProjectionTrustVerifierKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -779,6 +899,107 @@ func TestProjectionLifecycleRecoversFsyncedJournalAtEveryPublishBoundary(t *test
 			}
 		})
 	}
+}
+
+func TestProjectionLifecycleRecoveryRevalidatesTrustBeforePublication(t *testing.T) {
+	now := time.Date(2026, 8, 30, 13, 57, 30, 0, time.UTC)
+	t.Run("revoked initial install after live publish", func(t *testing.T) {
+		root := t.TempDir()
+		trustRevoked := errors.New("certification revoked")
+		revoked := false
+		lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			if revoked {
+				return ProjectionTrustDecision{}, trustRevoked
+			}
+			return allowProjectionTrust(request)
+		}), testProjectionTrustVerifierKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return now }
+		fixture := newProjectionFixture(t, "1.0.0", "revoked recovery prompt", 1, now)
+		lifecycle.mutationHook = func(stage string) error {
+			if stage == projectionMutationAfterLive {
+				return errors.New("stop after live publish")
+			}
+			return nil
+		}
+		if _, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) {
+			t.Fatalf("prepare recovery journal: %v", err)
+		}
+		revoked = true
+		lifecycle.mutationHook = nil
+		if result, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) || !strings.Contains(err.Error(), trustRevoked.Error()) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("revoked recovery result=%+v err=%v", result, err)
+		}
+		if _, err := os.Stat(projectionLivePath(root, fixture.effect)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("revoked recovery retained live projection: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.stateRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("revoked recovery retained state: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.journalRel(fixture.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("revoked recovery retained journal: %v", err)
+		}
+	})
+
+	t.Run("expired upgrade after state publish", func(t *testing.T) {
+		root := t.TempDir()
+		expired := false
+		lifecycle, err := NewProjectionLifecycleWithVerifierKey(root, projectionTrustVerifierFunc(func(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+			decision, err := allowProjectionTrust(request)
+			if err != nil || !expired {
+				return decision, err
+			}
+			decision.ExpiresAt = request.EvaluationTime
+			return SignProjectionTrustDecision(decision, testProjectionTrustVerifierKey())
+		}), testProjectionTrustVerifierKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = lifecycle.Close() })
+		lifecycle.clock = func() time.Time { return now }
+		v1 := newProjectionFixture(t, "1.0.0", "previous authenticated prompt", 1, now)
+		v2 := newProjectionFixture(t, "2.0.0", "expired recovery prompt", 2, now)
+		if _, err := lifecycle.Apply(v1.effect, &v1.artifact, v1.effect.ConsumedPermitRef, nil); err != nil {
+			t.Fatal(err)
+		}
+		statePath := filepath.Join(root, lifecycle.stateRel(v1.effect))
+		previousState, err := os.ReadFile(statePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previousLive, err := os.ReadFile(projectionLivePath(root, v1.effect))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lifecycle.mutationHook = func(stage string) error {
+			if stage == projectionMutationAfterState {
+				return errors.New("stop after state publish")
+			}
+			return nil
+		}
+		if _, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionRecoveryPending) {
+			t.Fatalf("prepare upgrade recovery journal: %v", err)
+		}
+		expired = true
+		lifecycle.mutationHook = nil
+		if result, err := lifecycle.Apply(v2.effect, &v2.artifact, v2.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionTrustRejected) || result != (ProjectionLifecycleResult{}) {
+			t.Fatalf("expired recovery result=%+v err=%v", result, err)
+		}
+		stateAfter, err := os.ReadFile(statePath)
+		if err != nil || !reflect.DeepEqual(stateAfter, previousState) {
+			t.Fatalf("expired recovery state = %q err=%v", stateAfter, err)
+		}
+		liveAfter, err := os.ReadFile(projectionLivePath(root, v1.effect))
+		if err != nil || !reflect.DeepEqual(liveAfter, previousLive) {
+			t.Fatalf("expired recovery live = %q err=%v", liveAfter, err)
+		}
+		if _, err := os.Stat(filepath.Join(root, lifecycle.journalRel(v2.effect))); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expired recovery retained journal: %v", err)
+		}
+	})
 }
 
 func TestProjectionLifecycleRecoversRevocationJournal(t *testing.T) {
@@ -1327,6 +1548,65 @@ func TestProjectionLifecycleConcurrentReplayIsSingleMutation(t *testing.T) {
 	}
 }
 
+func TestProjectionLifecycleCompactsReplayWindowBeforeStateLimit(t *testing.T) {
+	now := time.Date(2026, 8, 30, 15, 30, 0, 0, time.UTC)
+	root := t.TempDir()
+	lifecycle := newProjectionLifecycleForTest(t, root, now)
+	fixture := newProjectionFixture(t, "1.0.0", "bounded replay window", 1, now)
+	installed, err := lifecycle.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := lifecycle.readState(fixture.effect, installed.RelativePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := state.Generations[0]
+	state.Replays = nil
+	state.Attempts = nil
+
+	var lastEffect contracts.SkillProjectionEffect
+	var lastResult ProjectionLifecycleResult
+	for i := 0; i < maxProjectionReplayEntries+8; i++ {
+		key := fmt.Sprintf("bounded-readback-%03d", i)
+		attempt := fmt.Sprintf("bounded-attempt-%03d", i)
+		lastEffect = actionEffect(t, fixture.effect, contracts.SkillProjectionActionReadback, 1, key, attempt, testHash("6"))
+		decision, err := lifecycle.verifyProjectionTrust(lastEffect, record, fixture.artifact.Files["skillpack.json"], fixture.artifact.Files["SKILL.md"], now)
+		if err != nil {
+			t.Fatalf("trust readback %d: %v", i, err)
+		}
+		lastResult = newProjectionResult(lastEffect, installed.RelativePath, projectionStatusActive, 1, record, record)
+		lastResult.ObservedArtifactHash = record.ArtifactHash
+		lastResult.ObservedContentHash = record.ContentHash
+		lastResult.ObservedManifestHash = record.ManifestHash
+		bindProjectionResultTrust(&lastResult, decision, lastEffect)
+		lastResult, err = sealProjectionLifecycleResult(lastResult)
+		if err != nil {
+			t.Fatal(err)
+		}
+		appendProjectionReplay(state, lastEffect, lastResult)
+	}
+	if len(state.Replays) != maxProjectionReplayEntries || len(state.Attempts) != maxProjectionReplayEntries {
+		t.Fatalf("compacted replay window = replays:%d attempts:%d", len(state.Replays), len(state.Attempts))
+	}
+	wantFirst := fmt.Sprintf("bounded-readback-%03d", 8)
+	if state.Replays[0].IdempotencyKey != wantFirst || state.Attempts[0].IdempotencyKey != wantFirst {
+		t.Fatalf("oldest retained replay = %+v attempt=%+v", state.Replays[0], state.Attempts[0])
+	}
+	if replay, ok := findProjectionReplay(state.Replays, lastEffect.IdempotencyKey); !ok || !reflect.DeepEqual(replay.Result, lastResult) {
+		t.Fatalf("newest exact replay = %+v found=%v", replay, ok)
+	}
+	if err := validateProjectionStateIdentity(*state, lastEffect, installed.RelativePath); err != nil {
+		t.Fatalf("compacted state identity: %v", err)
+	}
+	if err := lifecycle.verifyProjectionStateTrustReceipts(*state); err != nil {
+		t.Fatalf("compacted state trust: %v", err)
+	}
+	if _, data, err := lifecycle.marshalProjectionLifecycleState(*state); err != nil || len(data) >= maxProjectionLifecycleStateBytes {
+		t.Fatalf("compacted state size = %d err=%v", len(data), err)
+	}
+}
+
 func TestProjectionLifecycleCrossInstanceLockFailsClosed(t *testing.T) {
 	now := time.Date(2026, 8, 30, 16, 0, 0, 0, time.UTC)
 	root := t.TempDir()
@@ -1341,6 +1621,21 @@ func TestProjectionLifecycleCrossInstanceLockFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Replacing the former sidecar path cannot split the lock because the
+	// authoritative lock is the already-opened physical root directory.
+	legacyLockPath := filepath.Join(root, ".helm", "skillpacks", "projection-lifecycle.lock")
+	if err := os.MkdirAll(filepath.Dir(legacyLockPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyLockPath, []byte("first inode"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(legacyLockPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyLockPath, []byte("replacement inode"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	released := false
 	t.Cleanup(func() {
 		if !released {
@@ -1350,11 +1645,6 @@ func TestProjectionLifecycleCrossInstanceLockFailsClosed(t *testing.T) {
 
 	if _, err := second.Apply(fixture.effect, &fixture.artifact, fixture.effect.ConsumedPermitRef, nil); !errors.Is(err, ErrProjectionLockContended) {
 		t.Fatalf("contended lifecycle error = %v", err)
-	}
-	lockPath := filepath.Join(root, filepath.FromSlash(projectionLifecycleLockRel))
-	info, err := os.Lstat(lockPath)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
-		t.Fatalf("root-bounded lock = %+v err=%v", info, err)
 	}
 	if err := release(); err != nil {
 		t.Fatal(err)
@@ -1669,6 +1959,10 @@ func (verify projectionTrustVerifierFunc) VerifyProjectionTrust(request Projecti
 }
 
 func allowProjectionTrust(request ProjectionTrustRequest) (ProjectionTrustDecision, error) {
+	return allowProjectionTrustWithKey(request, testProjectionTrustVerifierKey())
+}
+
+func allowProjectionTrustWithKey(request ProjectionTrustRequest, key ProjectionTrustVerifierKey) (ProjectionTrustDecision, error) {
 	if request.SchemaVersion != ProjectionTrustRequestSchemaV1 ||
 		HashBytes(request.ManifestBytes) != request.Effect.ManifestHash ||
 		HashBytes(request.ContentBytes) != request.Effect.ContentHash ||
@@ -1703,7 +1997,7 @@ func allowProjectionTrust(request ProjectionTrustRequest) (ProjectionTrustDecisi
 		ExpiresAt:       request.EvaluationTime.Add(time.Minute),
 		VerificationRef: testHash("e"),
 	}
-	return SignProjectionTrustDecision(decision, testProjectionTrustVerifierKey())
+	return SignProjectionTrustDecision(decision, key)
 }
 
 func testProjectionTrustVerifierKey() ProjectionTrustVerifierKey {
@@ -1711,6 +2005,14 @@ func testProjectionTrustVerifierKey() ProjectionTrustVerifierKey {
 		VerifierID: "test-verifier",
 		KeyID:      "test-key-v1",
 		HMACKey:    []byte(strings.Repeat("k", 32)),
+	}
+}
+
+func rotatedProjectionTrustVerifierKey() ProjectionTrustVerifierKey {
+	return ProjectionTrustVerifierKey{
+		VerifierID: "test-verifier",
+		KeyID:      "test-key-v2",
+		HMACKey:    []byte(strings.Repeat("r", 32)),
 	}
 }
 

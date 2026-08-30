@@ -10,17 +10,17 @@ import (
 	"syscall"
 )
 
-// lockProjectionFile takes a non-blocking exclusive advisory lock. The
-// persistent sidecar is never deleted, avoiding unlink/recreate split-brain and
-// stale marker ownership races. Closing the descriptor releases the lock on
-// process exit as well as the normal return path.
+// lockProjectionFile takes a non-blocking exclusive advisory lock on the
+// anchored projection-root directory. A workspace writer cannot split the
+// lock by unlinking and recreating a sidecar inode. Closing the descriptor
+// releases the lock on process exit as well as the normal return path.
 func lockProjectionFile(file *os.File) (func() error, error) {
 	if file == nil {
 		return nil, fmt.Errorf("skillpacks: projection root lock descriptor is required")
 	}
 	fd := int(file.Fd())
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
+	if err != nil || !info.IsDir() {
 		_ = file.Close()
 		if err != nil {
 			return nil, fmt.Errorf("skillpacks: stat projection root lock: %w", err)

@@ -28,20 +28,24 @@ const (
 	projectionTrustBindingSchemaV1    = "helm.skill-projection-trust-binding.v1"
 	projectionLifecycleStateSchemaV1  = "helm.skill-projection-state.v1"
 	projectionRecoveryJournalSchemaV1 = "helm.skill-projection-recovery-journal.v1"
-	projectionLifecycleLockRel        = ".helm/skillpacks/projection-lifecycle.lock"
+	projectionLifecycleStateMACV1     = "helm.skill-projection-state-mac.v1"
 
 	projectionStatusActive  = "active"
 	projectionStatusRevoked = "revoked"
 
 	maxProjectionArtifactBytes = 1 << 20
+	// V1 retains exact result/attempt bindings for the most recent operations.
+	// Oldest-first compaction prevents readbacks from exhausting state forever.
+	maxProjectionReplayEntries = 256
 	// Lifecycle state contains append-only generation, replay, and attempt
 	// metadata. Each V1 mutation can retain 16 bounded certification refs plus
 	// an exact replay result and attempt binding; 16 MiB gives that metadata a
 	// distinct operational envelope while keeping reads and writes bounded.
 	maxProjectionLifecycleStateBytes = 16 << 20
-	// A journal stores one bounded state payload and one bounded prompt as base64
-	// plus fixed identity/hash metadata. 24 MiB is the deterministic V1 envelope.
-	maxProjectionRecoveryJournalBytes = 24 << 20
+	// A recovery journal stores exact previous/next bounded state payloads and
+	// previous/next bounded prompts as base64 plus fixed identity/hash metadata.
+	// 48 MiB is the deterministic V1 envelope for 2*16 MiB + 2*1 MiB raw bytes.
+	maxProjectionRecoveryJournalBytes = 48 << 20
 
 	projectionMutationAfterJournal = "after_journal"
 	projectionMutationAfterLive    = "after_live"
@@ -127,6 +131,15 @@ type ProjectionTrustVerifierKey struct {
 	HMACKey    []byte
 }
 
+// ProjectionTrustVerifierKeyring pins the current signing key plus the exact
+// historical keys that may continue verifying durable receipts after a key
+// rotation. Omitting a historical key revokes it; historical keys never sign
+// new decisions or lifecycle state.
+type ProjectionTrustVerifierKeyring struct {
+	Current    ProjectionTrustVerifierKey
+	Historical []ProjectionTrustVerifierKey
+}
+
 // ProjectionTrustVerifier is mandatory for every lifecycle instance. A
 // concrete verifier may live in the runner, but the lifecycle cannot project,
 // read back, revoke, roll back, or replay without a current exact-hash decision.
@@ -187,12 +200,13 @@ type ProjectionLifecycleResult struct {
 // ProjectionLifecycle owns one server-configured filesystem root. Request
 // payloads never supply paths.
 type ProjectionLifecycle struct {
-	managed      *os.Root
-	verifier     ProjectionTrustVerifier
-	verifierKey  ProjectionTrustVerifierKey
-	clock        func() time.Time
-	mutationHook func(string) error
-	mu           sync.Mutex
+	managed          *os.Root
+	verifier         ProjectionTrustVerifier
+	verifierKey      ProjectionTrustVerifierKey
+	verificationKeys map[projectionTrustKeyIdentity]ProjectionTrustVerifierKey
+	clock            func() time.Time
+	mutationHook     func(string) error
+	mu               sync.Mutex
 }
 
 type projectionLifecycleState struct {
@@ -206,10 +220,18 @@ type projectionLifecycleState struct {
 	Generation        uint64 `json:"generation"`
 	ArchiveGeneration uint64 `json:"archive_generation"`
 
-	Generations []projectionGeneration `json:"generations"`
-	Replays     []projectionReplay     `json:"replays"`
-	Attempts    []projectionAttempt    `json:"attempts"`
-	StateHash   string                 `json:"state_hash,omitempty"`
+	Generations     []projectionGeneration `json:"generations"`
+	Replays         []projectionReplay     `json:"replays"`
+	Attempts        []projectionAttempt    `json:"attempts"`
+	StateVerifierID string                 `json:"state_verifier_id"`
+	StateKeyID      string                 `json:"state_key_id"`
+	StateSignature  string                 `json:"state_signature,omitempty"`
+	StateHash       string                 `json:"state_hash,omitempty"`
+}
+
+type projectionTrustKeyIdentity struct {
+	VerifierID string
+	KeyID      string
 }
 
 type projectionGeneration struct {
@@ -267,11 +289,13 @@ type projectionRecoveryJournal struct {
 	TrustDecisionSignature string `json:"trust_decision_signature"`
 
 	PreviousStatePresent bool   `json:"previous_state_present"`
+	PreviousStateBytes   []byte `json:"previous_state_bytes,omitempty"`
 	PreviousStateHash    string `json:"previous_state_hash,omitempty"`
 	NextStateBytes       []byte `json:"next_state_bytes"`
 	NextStateHash        string `json:"next_state_hash"`
 
 	PreviousLivePresent bool   `json:"previous_live_present"`
+	PreviousLiveBytes   []byte `json:"previous_live_bytes,omitempty"`
 	PreviousLiveHash    string `json:"previous_live_hash,omitempty"`
 	NextLivePresent     bool   `json:"next_live_present"`
 	NextLiveBytes       []byte `json:"next_live_bytes,omitempty"`
@@ -294,10 +318,21 @@ func NewProjectionLifecycleWithVerifierKey(
 	verifier ProjectionTrustVerifier,
 	verifierKey ProjectionTrustVerifierKey,
 ) (*ProjectionLifecycle, error) {
+	return NewProjectionLifecycleWithVerifierKeyring(root, verifier, ProjectionTrustVerifierKeyring{Current: verifierKey})
+}
+
+// NewProjectionLifecycleWithVerifierKeyring constructs a lifecycle that signs
+// new trust/state records with Current and verifies older durable records only
+// with the explicitly accepted Historical keys.
+func NewProjectionLifecycleWithVerifierKeyring(
+	root string,
+	verifier ProjectionTrustVerifier,
+	keyring ProjectionTrustVerifierKeyring,
+) (*ProjectionLifecycle, error) {
 	if verifier == nil {
 		return nil, fmt.Errorf("%w: configured verifier is required", ErrProjectionTrustRejected)
 	}
-	if err := validateProjectionTrustVerifierKey(verifierKey); err != nil {
+	if err := validateProjectionTrustVerifierKeyring(keyring); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(root) == "" {
@@ -327,9 +362,13 @@ func NewProjectionLifecycleWithVerifierKey(
 		_ = managed.Close()
 		return nil, fmt.Errorf("%w: projection root changed during construction", ErrProjectionPathUnsafe)
 	}
-	verifierKey.HMACKey = append([]byte(nil), verifierKey.HMACKey...)
+	verifierKey := cloneProjectionTrustVerifierKey(keyring.Current)
+	verificationKeys := make(map[projectionTrustKeyIdentity]ProjectionTrustVerifierKey, 1+len(keyring.Historical))
+	for _, key := range append([]ProjectionTrustVerifierKey{keyring.Current}, keyring.Historical...) {
+		verificationKeys[projectionTrustKeyIdentity{VerifierID: key.VerifierID, KeyID: key.KeyID}] = cloneProjectionTrustVerifierKey(key)
+	}
 	return &ProjectionLifecycle{
-		managed: managed, verifier: verifier, verifierKey: verifierKey,
+		managed: managed, verifier: verifier, verifierKey: verifierKey, verificationKeys: verificationKeys,
 		clock: func() time.Time { return time.Now().UTC() },
 	}, nil
 }
@@ -349,6 +388,12 @@ func (l *ProjectionLifecycle) Close() error {
 	l.managed = nil
 	for i := range l.verifierKey.HMACKey {
 		l.verifierKey.HMACKey[i] = 0
+	}
+	for identity, key := range l.verificationKeys {
+		for i := range key.HMACKey {
+			key.HMACKey[i] = 0
+		}
+		delete(l.verificationKeys, identity)
 	}
 	return err
 }
@@ -409,7 +454,7 @@ func (l *ProjectionLifecycle) Apply(
 		return ProjectionLifecycleResult{}, err
 	}
 	relativePath := filepath.ToSlash(projection.Path)
-	if err := l.recoverProjectionJournal(effect, relativePath); err != nil {
+	if err := l.recoverProjectionJournal(effect, relativePath, now); err != nil {
 		return ProjectionLifecycleResult{}, err
 	}
 	state, err := l.readState(effect, relativePath)
@@ -1009,6 +1054,27 @@ func validateProjectionTrustVerifierKey(key ProjectionTrustVerifierKey) error {
 	return nil
 }
 
+func validateProjectionTrustVerifierKeyring(keyring ProjectionTrustVerifierKeyring) error {
+	keys := append([]ProjectionTrustVerifierKey{keyring.Current}, keyring.Historical...)
+	seen := make(map[projectionTrustKeyIdentity]struct{}, len(keys))
+	for _, key := range keys {
+		if err := validateProjectionTrustVerifierKey(key); err != nil {
+			return err
+		}
+		identity := projectionTrustKeyIdentity{VerifierID: key.VerifierID, KeyID: key.KeyID}
+		if _, ok := seen[identity]; ok {
+			return fmt.Errorf("%w: duplicate verifier identity/key", ErrProjectionTrustRejected)
+		}
+		seen[identity] = struct{}{}
+	}
+	return nil
+}
+
+func cloneProjectionTrustVerifierKey(key ProjectionTrustVerifierKey) ProjectionTrustVerifierKey {
+	key.HMACKey = append([]byte(nil), key.HMACKey...)
+	return key
+}
+
 func validProjectionTrustIdentity(value string) bool {
 	return validProjectionTrustToken(value, 128)
 }
@@ -1046,6 +1112,18 @@ func projectionTrustSignature(decisionHash, bindingHash string, key ProjectionTr
 	return projectionTrustSignaturePrefix + hex.EncodeToString(mac.Sum(nil))
 }
 
+func projectionLifecycleStateSignature(stateHash string, key ProjectionTrustVerifierKey) string {
+	mac := hmac.New(sha256.New, key.HMACKey)
+	_, _ = mac.Write([]byte(projectionLifecycleStateMACV1))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(key.VerifierID))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(key.KeyID))
+	_, _ = mac.Write([]byte{0})
+	_, _ = mac.Write([]byte(stateHash))
+	return projectionTrustSignaturePrefix + hex.EncodeToString(mac.Sum(nil))
+}
+
 func verifyProjectionTrustDecisionSignature(decision ProjectionTrustDecision, key ProjectionTrustVerifierKey) error {
 	if err := validateProjectionTrustVerifierKey(key); err != nil {
 		return err
@@ -1061,10 +1139,13 @@ func verifyProjectionTrustDecisionSignature(decision ProjectionTrustDecision, ke
 	return nil
 }
 
-func verifyStoredProjectionTrustSignature(
+func (l *ProjectionLifecycle) verifyStoredProjectionTrustSignature(
 	decisionHash, bindingHash, verifierID, keyID, signature string,
-	key ProjectionTrustVerifierKey,
 ) error {
+	key, ok := l.verificationKeys[projectionTrustKeyIdentity{VerifierID: verifierID, KeyID: keyID}]
+	if !ok {
+		return fmt.Errorf("%w: stored trust verifier identity/key is not accepted", ErrProjectionTrustRejected)
+	}
 	decision := ProjectionTrustDecision{
 		BindingHash:  bindingHash,
 		DecisionHash: decisionHash,
@@ -1073,6 +1154,17 @@ func verifyStoredProjectionTrustSignature(
 		Signature:    signature,
 	}
 	return verifyProjectionTrustDecisionSignature(decision, key)
+}
+
+func (l *ProjectionLifecycle) verifyProjectionLifecycleState(state projectionLifecycleState) error {
+	key, ok := l.verificationKeys[projectionTrustKeyIdentity{VerifierID: state.StateVerifierID, KeyID: state.StateKeyID}]
+	if !ok {
+		return fmt.Errorf("%w: projection state verifier identity/key is not accepted", ErrProjectionDrift)
+	}
+	if err := verifyProjectionLifecycleStateAuthentication(state, key); err != nil {
+		return fmt.Errorf("%w: %v", ErrProjectionDrift, err)
+	}
+	return nil
 }
 
 func projectionJournalMatchesTrustEffect(
@@ -1225,14 +1317,15 @@ func (l *ProjectionLifecycle) buildProjectionRecoveryJournal(
 	if err := verifyProjectionLifecycleResult(result); err != nil {
 		return projectionRecoveryJournal{}, err
 	}
-	sealedNext, nextStateBytes, err := marshalProjectionLifecycleState(next)
+	sealedNext, nextStateBytes, err := l.marshalProjectionLifecycleState(next)
 	if err != nil {
 		return projectionRecoveryJournal{}, err
 	}
 	previousStatePresent := current != nil
+	var previousStateBytes []byte
 	previousStateHash := ""
 	if previousStatePresent {
-		previousStateBytes, err := readManagedFileAt(l.managed, l.stateRel(effect), maxProjectionLifecycleStateBytes)
+		previousStateBytes, err = readManagedFileAt(l.managed, l.stateRel(effect), maxProjectionLifecycleStateBytes)
 		if err != nil {
 			return projectionRecoveryJournal{}, fmt.Errorf("%w: read previous state for recovery: %w", ErrProjectionDrift, err)
 		}
@@ -1241,6 +1334,17 @@ func (l *ProjectionLifecycle) buildProjectionRecoveryJournal(
 	previousLivePresent, previousLiveHash, err := expectedProjectionLive(current)
 	if err != nil {
 		return projectionRecoveryJournal{}, err
+	}
+	var previousLiveBytes []byte
+	if previousLivePresent {
+		previousLiveBytes, err = readManagedFileAt(
+			l.managed,
+			filepath.Join(l.workspaceRel(effect), filepath.FromSlash(relativePath)),
+			maxProjectionArtifactBytes,
+		)
+		if err != nil || HashBytes(previousLiveBytes) != previousLiveHash {
+			return projectionRecoveryJournal{}, fmt.Errorf("%w: read previous live projection: %v", ErrProjectionDrift, err)
+		}
 	}
 	nextExpectedPresent, nextExpectedHash, err := expectedProjectionLive(&sealedNext)
 	if err != nil {
@@ -1274,11 +1378,13 @@ func (l *ProjectionLifecycle) buildProjectionRecoveryJournal(
 		TrustDecisionSignature: result.TrustDecisionSignature,
 
 		PreviousStatePresent: previousStatePresent,
+		PreviousStateBytes:   append([]byte(nil), previousStateBytes...),
 		PreviousStateHash:    previousStateHash,
 		NextStateBytes:       append([]byte(nil), nextStateBytes...),
 		NextStateHash:        HashBytes(nextStateBytes),
 
 		PreviousLivePresent: previousLivePresent,
+		PreviousLiveBytes:   append([]byte(nil), previousLiveBytes...),
 		PreviousLiveHash:    previousLiveHash,
 		NextLivePresent:     nextLivePresent,
 		NextLiveBytes:       append([]byte(nil), nextLiveBytes...),
@@ -1327,9 +1433,9 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 		!validProjectionTrustIdentity(journal.TrustKeyID) || !validProjectionTrustSignature(journal.TrustDecisionSignature) {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal identity is invalid", ErrProjectionDrift)
 	}
-	if err := verifyStoredProjectionTrustSignature(
+	if err := l.verifyStoredProjectionTrustSignature(
 		journal.TrustDecisionHash, journal.TrustBindingHash, journal.TrustVerifierID,
-		journal.TrustKeyID, journal.TrustDecisionSignature, l.verifierKey,
+		journal.TrustKeyID, journal.TrustDecisionSignature,
 	); err != nil {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal trust receipt: %v", ErrProjectionDrift, err)
 	}
@@ -1345,22 +1451,49 @@ func (l *ProjectionLifecycle) validateProjectionRecoveryJournal(
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal action is invalid", ErrProjectionDrift)
 	}
 	if journal.PreviousStatePresent != (journal.PreviousStateHash != "") ||
-		(journal.PreviousStatePresent && !validProjectionSHA256(journal.PreviousStateHash)) ||
+		journal.PreviousStatePresent != (len(journal.PreviousStateBytes) != 0) ||
+		(journal.PreviousStatePresent && (!validProjectionSHA256(journal.PreviousStateHash) ||
+			len(journal.PreviousStateBytes) > maxProjectionLifecycleStateBytes ||
+			HashBytes(journal.PreviousStateBytes) != journal.PreviousStateHash)) ||
 		len(journal.NextStateBytes) == 0 || len(journal.NextStateBytes) > maxProjectionLifecycleStateBytes ||
 		!validProjectionSHA256(journal.NextStateHash) || HashBytes(journal.NextStateBytes) != journal.NextStateHash ||
 		journal.PreviousLivePresent != (journal.PreviousLiveHash != "") ||
-		(journal.PreviousLivePresent && !validProjectionSHA256(journal.PreviousLiveHash)) ||
+		journal.PreviousLivePresent != (len(journal.PreviousLiveBytes) != 0) ||
+		(journal.PreviousLivePresent && (!validProjectionSHA256(journal.PreviousLiveHash) ||
+			len(journal.PreviousLiveBytes) > maxProjectionArtifactBytes ||
+			HashBytes(journal.PreviousLiveBytes) != journal.PreviousLiveHash)) ||
 		journal.NextLivePresent != (journal.NextLiveHash != "") ||
 		(journal.NextLivePresent && (!validProjectionSHA256(journal.NextLiveHash) || len(journal.NextLiveBytes) == 0 ||
 			len(journal.NextLiveBytes) > maxProjectionArtifactBytes || HashBytes(journal.NextLiveBytes) != journal.NextLiveHash)) ||
 		(!journal.NextLivePresent && len(journal.NextLiveBytes) != 0) {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal disk bindings are invalid", ErrProjectionDrift)
 	}
+	if journal.PreviousStatePresent {
+		var previous projectionLifecycleState
+		if err := decodeStrictProjectionJSON(journal.PreviousStateBytes, &previous); err != nil {
+			return projectionLifecycleState{}, fmt.Errorf("%w: decode previous recovery state: %v", ErrProjectionDrift, err)
+		}
+		if err := l.verifyProjectionLifecycleState(previous); err != nil {
+			return projectionLifecycleState{}, fmt.Errorf("%w: previous recovery state integrity: %v", ErrProjectionDrift, err)
+		}
+		if err := validateProjectionStateIdentity(previous, effect, relativePath); err != nil {
+			return projectionLifecycleState{}, err
+		}
+		if err := l.verifyProjectionStateTrustReceipts(previous); err != nil {
+			return projectionLifecycleState{}, err
+		}
+		previousLivePresent, previousLiveHash, err := expectedProjectionLive(&previous)
+		if err != nil || previousLivePresent != journal.PreviousLivePresent || previousLiveHash != journal.PreviousLiveHash {
+			return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal previous live state is invalid", ErrProjectionDrift)
+		}
+	} else if journal.PreviousLivePresent {
+		return projectionLifecycleState{}, fmt.Errorf("%w: recovery journal has live bytes without previous state", ErrProjectionDrift)
+	}
 	var next projectionLifecycleState
 	if err := decodeStrictProjectionJSON(journal.NextStateBytes, &next); err != nil {
 		return projectionLifecycleState{}, fmt.Errorf("%w: decode recovery state: %v", ErrProjectionDrift, err)
 	}
-	if err := verifyProjectionLifecycleState(next); err != nil {
+	if err := l.verifyProjectionLifecycleState(next); err != nil {
 		return projectionLifecycleState{}, fmt.Errorf("%w: recovery state integrity: %v", ErrProjectionDrift, err)
 	}
 	if err := validateProjectionStateIdentity(next, effect, relativePath); err != nil {
@@ -1447,10 +1580,20 @@ func (l *ProjectionLifecycle) readProjectionRecoveryJournal(
 func (l *ProjectionLifecycle) recoverProjectionJournal(
 	effect contracts.SkillProjectionEffect,
 	relativePath string,
+	now time.Time,
 ) error {
-	journal, _, err := l.readProjectionRecoveryJournal(effect, relativePath)
+	journal, next, err := l.readProjectionRecoveryJournal(effect, relativePath)
 	if err != nil || journal == nil {
 		return err
+	}
+	if trustErr := l.verifyReplayTrust(effect, *next, now); trustErr != nil {
+		if restoreErr := l.restoreRecoveryPrevious(effect, relativePath, *journal); restoreErr != nil {
+			return errors.Join(ErrProjectionRecoveryPending, trustErr, restoreErr)
+		}
+		if clearErr := l.clearProjectionRecoveryJournal(effect, relativePath, journal.JournalHash); clearErr != nil {
+			return errors.Join(ErrProjectionRecoveryPending, trustErr, clearErr)
+		}
+		return trustErr
 	}
 	if err := l.publishRecoveryLive(effect, *journal); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
@@ -1463,6 +1606,77 @@ func (l *ProjectionLifecycle) recoverProjectionJournal(
 	}
 	if err := l.clearProjectionRecoveryJournal(effect, relativePath, journal.JournalHash); err != nil {
 		return errors.Join(ErrProjectionRecoveryPending, err)
+	}
+	return nil
+}
+
+func (l *ProjectionLifecycle) restoreRecoveryPrevious(
+	effect contracts.SkillProjectionEffect,
+	relativePath string,
+	journal projectionRecoveryJournal,
+) error {
+	if err := l.restoreRecoveryPreviousLive(effect, relativePath, journal); err != nil {
+		return err
+	}
+	return l.restoreRecoveryPreviousState(effect, journal)
+}
+
+func (l *ProjectionLifecycle) restoreRecoveryPreviousLive(
+	effect contracts.SkillProjectionEffect,
+	relativePath string,
+	journal projectionRecoveryJournal,
+) error {
+	rel := filepath.Join(l.workspaceRel(effect), filepath.FromSlash(relativePath))
+	present, hash, err := observeManagedFile(l.managed, rel, maxProjectionArtifactBytes)
+	if err != nil {
+		return fmt.Errorf("%w: observe live projection during recovery restore: %w", ErrProjectionDrift, err)
+	}
+	if !observationMatches(present, hash, journal.PreviousLivePresent, journal.PreviousLiveHash) &&
+		!observationMatches(present, hash, journal.NextLivePresent, journal.NextLiveHash) {
+		return fmt.Errorf("%w: live projection does not match recovery restore journal", ErrProjectionDrift)
+	}
+	if observationMatches(present, hash, journal.PreviousLivePresent, journal.PreviousLiveHash) {
+		return nil
+	}
+	if journal.PreviousLivePresent {
+		if err := atomicReplaceManagedAt(l.managed, rel, journal.PreviousLiveBytes); err != nil {
+			return err
+		}
+	} else if err := removeManagedFileAt(l.managed, rel); err != nil {
+		return err
+	}
+	present, hash, err = observeManagedFile(l.managed, rel, maxProjectionArtifactBytes)
+	if err != nil || !observationMatches(present, hash, journal.PreviousLivePresent, journal.PreviousLiveHash) {
+		return fmt.Errorf("%w: recovery live restore readback mismatch: %v", ErrProjectionDrift, err)
+	}
+	return nil
+}
+
+func (l *ProjectionLifecycle) restoreRecoveryPreviousState(
+	effect contracts.SkillProjectionEffect,
+	journal projectionRecoveryJournal,
+) error {
+	present, hash, err := observeManagedFile(l.managed, l.stateRel(effect), maxProjectionLifecycleStateBytes)
+	if err != nil {
+		return fmt.Errorf("%w: observe projection state during recovery restore: %w", ErrProjectionDrift, err)
+	}
+	if !observationMatches(present, hash, journal.PreviousStatePresent, journal.PreviousStateHash) &&
+		!observationMatches(present, hash, true, journal.NextStateHash) {
+		return fmt.Errorf("%w: projection state does not match recovery restore journal", ErrProjectionDrift)
+	}
+	if observationMatches(present, hash, journal.PreviousStatePresent, journal.PreviousStateHash) {
+		return nil
+	}
+	if journal.PreviousStatePresent {
+		if err := l.writeStateBytes(effect, journal.PreviousStateBytes); err != nil {
+			return err
+		}
+	} else if err := removeManagedFileAt(l.managed, l.stateRel(effect)); err != nil {
+		return err
+	}
+	present, hash, err = observeManagedFile(l.managed, l.stateRel(effect), maxProjectionLifecycleStateBytes)
+	if err != nil || !observationMatches(present, hash, journal.PreviousStatePresent, journal.PreviousStateHash) {
+		return fmt.Errorf("%w: recovery state restore readback mismatch: %v", ErrProjectionDrift, err)
 	}
 	return nil
 }
@@ -1721,17 +1935,17 @@ func (l *ProjectionLifecycle) verifyProjectionStateTrustReceipts(state projectio
 		if !projectionGenerationMatchesTrustEffect(state, retained) {
 			return fmt.Errorf("%w: retained generation trust effect mismatch", ErrProjectionDrift)
 		}
-		if err := verifyStoredProjectionTrustSignature(
+		if err := l.verifyStoredProjectionTrustSignature(
 			retained.TrustDecisionHash, retained.TrustBindingHash, retained.TrustVerifierID,
-			retained.TrustKeyID, retained.TrustDecisionSignature, l.verifierKey,
+			retained.TrustKeyID, retained.TrustDecisionSignature,
 		); err != nil {
 			return fmt.Errorf("%w: retained generation trust receipt: %v", ErrProjectionDrift, err)
 		}
 	}
 	for _, replay := range state.Replays {
-		if err := verifyStoredProjectionTrustSignature(
+		if err := l.verifyStoredProjectionTrustSignature(
 			replay.Result.TrustDecisionHash, replay.Result.TrustBindingHash, replay.Result.TrustVerifierID,
-			replay.Result.TrustKeyID, replay.Result.TrustDecisionSignature, l.verifierKey,
+			replay.Result.TrustKeyID, replay.Result.TrustDecisionSignature,
 		); err != nil {
 			return fmt.Errorf("%w: replay trust receipt: %v", ErrProjectionDrift, err)
 		}
@@ -1763,7 +1977,7 @@ func (l *ProjectionLifecycle) readState(effect contracts.SkillProjectionEffect, 
 	if err := decodeStrictProjectionJSON(data, &state); err != nil {
 		return nil, fmt.Errorf("skillpacks: decode projection state: %w", err)
 	}
-	if err := verifyProjectionLifecycleState(state); err != nil {
+	if err := l.verifyProjectionLifecycleState(state); err != nil {
 		return nil, err
 	}
 	if err := validateProjectionStateIdentity(state, effect, relativePath); err != nil {
@@ -1772,8 +1986,8 @@ func (l *ProjectionLifecycle) readState(effect contracts.SkillProjectionEffect, 
 	return &state, nil
 }
 
-func marshalProjectionLifecycleState(state projectionLifecycleState) (projectionLifecycleState, []byte, error) {
-	sealed, err := sealProjectionLifecycleState(state)
+func (l *ProjectionLifecycle) marshalProjectionLifecycleState(state projectionLifecycleState) (projectionLifecycleState, []byte, error) {
+	sealed, err := sealProjectionLifecycleState(state, l.verifierKey)
 	if err != nil {
 		return projectionLifecycleState{}, nil, err
 	}
@@ -1827,23 +2041,27 @@ func (l *ProjectionLifecycle) acquireRootLock() (func() error, error) {
 	if root == nil {
 		return nil, fmt.Errorf("skillpacks: projection lifecycle is closed")
 	}
-	lockRel := filepath.FromSlash(projectionLifecycleLockRel)
-	if err := ensureManagedDirAt(root, filepath.Dir(lockRel)); err != nil {
-		return nil, err
-	}
-	lockFile, created, err := openManagedLockFileAt(root, lockRel)
+	rootInfo, err := root.Stat(".")
 	if err != nil {
 		return nil, err
 	}
-	if created {
-		if err := syncManagedDirectoryAt(root, filepath.Dir(lockRel)); err != nil {
-			_ = lockFile.Close()
-			return nil, err
-		}
+	lockFile, err := root.Open(".")
+	if err != nil {
+		return nil, err
+	}
+	lockInfo, err := lockFile.Stat()
+	if err != nil || !rootInfo.IsDir() || !lockInfo.IsDir() || !os.SameFile(rootInfo, lockInfo) {
+		_ = lockFile.Close()
+		return nil, ErrProjectionPathUnsafe
 	}
 	releaseLock, err := lockProjectionFile(lockFile)
 	if err != nil {
 		return nil, err
+	}
+	observed, err := root.Stat(".")
+	if err != nil || !os.SameFile(lockInfo, observed) {
+		_ = releaseLock()
+		return nil, ErrProjectionPathUnsafe
 	}
 	return releaseLock, nil
 }
@@ -1891,7 +2109,12 @@ func validateProjectionStateIdentity(state projectionLifecycleState, effect cont
 			return fmt.Errorf("%w: projection generation history is invalid", ErrProjectionDrift)
 		}
 	}
-	for _, replay := range state.Replays {
+	if len(state.Replays) > maxProjectionReplayEntries || len(state.Attempts) != len(state.Replays) {
+		return fmt.Errorf("%w: projection replay window is invalid", ErrProjectionDrift)
+	}
+	seenReplayKeys := make(map[string]struct{}, len(state.Replays))
+	seenAttemptIDs := make(map[string]struct{}, len(state.Attempts))
+	for i, replay := range state.Replays {
 		if err := verifyProjectionLifecycleResult(replay.Result); err != nil ||
 			replay.IdempotencyKey == "" || replay.IdempotencyKey != replay.Result.IdempotencyKey ||
 			replay.RequestHash != replay.Result.CanonicalRequestHash ||
@@ -1901,6 +2124,20 @@ func validateProjectionStateIdentity(state projectionLifecycleState, effect cont
 			replay.Result.RelativePath != state.RelativePath {
 			return fmt.Errorf("%w: replay result is invalid", ErrProjectionDrift)
 		}
+		if _, ok := seenReplayKeys[replay.IdempotencyKey]; ok {
+			return fmt.Errorf("%w: duplicate replay idempotency key", ErrProjectionDrift)
+		}
+		seenReplayKeys[replay.IdempotencyKey] = struct{}{}
+		attempt := state.Attempts[i]
+		if !validProjectionTrustToken(attempt.AttemptID, 512) || !validProjectionTrustToken(attempt.IdempotencyKey, 512) ||
+			!validProjectionSHA256(attempt.RequestHash) || attempt.AttemptID != replay.Result.AttemptID ||
+			attempt.IdempotencyKey != replay.IdempotencyKey || attempt.RequestHash != replay.RequestHash {
+			return fmt.Errorf("%w: replay attempt binding is invalid", ErrProjectionDrift)
+		}
+		if _, ok := seenAttemptIDs[attempt.AttemptID]; ok {
+			return fmt.Errorf("%w: duplicate replay attempt", ErrProjectionDrift)
+		}
+		seenAttemptIDs[attempt.AttemptID] = struct{}{}
 	}
 	return nil
 }
@@ -1988,8 +2225,14 @@ func findProjectionAttempt(attempts []projectionAttempt, id string) (projectionA
 }
 
 func appendProjectionReplay(state *projectionLifecycleState, effect contracts.SkillProjectionEffect, result ProjectionLifecycleResult) {
-	// ponytail: linear replay history is sufficient for repo-local skill counts;
-	// add indexed compaction only when measured histories make lookup material.
+	if len(state.Replays) >= maxProjectionReplayEntries {
+		start := len(state.Replays) - maxProjectionReplayEntries + 1
+		state.Replays = append([]projectionReplay(nil), state.Replays[start:]...)
+	}
+	if len(state.Attempts) >= maxProjectionReplayEntries {
+		start := len(state.Attempts) - maxProjectionReplayEntries + 1
+		state.Attempts = append([]projectionAttempt(nil), state.Attempts[start:]...)
+	}
 	state.Replays = append(state.Replays, projectionReplay{IdempotencyKey: effect.IdempotencyKey, RequestHash: effect.CanonicalRequestHash, Result: result})
 	state.Attempts = append(state.Attempts, projectionAttempt{AttemptID: effect.AttemptID, IdempotencyKey: effect.IdempotencyKey, RequestHash: effect.CanonicalRequestHash})
 }
@@ -2245,30 +2488,6 @@ func removeManagedFileAt(root *os.Root, rel string) error {
 		return fmt.Errorf("skillpacks: remove managed projection file: %w", err)
 	}
 	return syncManagedDirectoryAt(root, filepath.Dir(rel))
-}
-
-func openManagedLockFileAt(root *os.Root, rel string) (*os.File, bool, error) {
-	file, err := root.OpenFile(rel, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
-	if err == nil {
-		return file, true, nil
-	}
-	if !errors.Is(err, os.ErrExist) {
-		return nil, false, err
-	}
-	lstat, err := root.Lstat(rel)
-	if err != nil || lstat.Mode()&os.ModeSymlink != 0 || !lstat.Mode().IsRegular() {
-		return nil, false, ErrProjectionPathUnsafe
-	}
-	file, err = root.OpenFile(rel, os.O_RDWR, 0)
-	if err != nil {
-		return nil, false, err
-	}
-	fstat, err := file.Stat()
-	if err != nil || !os.SameFile(lstat, fstat) || fstat.Mode().Perm() != 0o600 {
-		_ = file.Close()
-		return nil, false, ErrProjectionPathUnsafe
-	}
-	return file, false, nil
 }
 
 func projectionRandomName(prefix string) (string, error) {

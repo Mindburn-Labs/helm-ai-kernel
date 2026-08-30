@@ -1,6 +1,7 @@
 {{/* quantum_posture: chart wiring supplies a raw Ed25519 command-key keyring;
       it does not claim hybrid or post-quantum command signing. */}}
-{{- $controlPlaneLoopback := regexMatch "^http://(localhost|127\\.0\\.0\\.1)(:[0-9]+)?(/|$)" .Values.helm.policy.source.controlplane.url -}}
+{{- $ipv4Octet := "(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])" -}}
+{{- $controlPlaneLoopback := regexMatch (printf "^http://(localhost|127\\.%s\\.%s\\.%s|\\[::1\\])(:[0-9]+)?(/|$)" $ipv4Octet $ipv4Octet $ipv4Octet) .Values.helm.policy.source.controlplane.url -}}
 {{- if not (or (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.kind "crd") (eq .Values.helm.policy.source.kind "mountedFile")) -}}
 {{- fail "helm.policy.source.kind must be one of controlplane, crd, mountedFile" -}}
 {{- end -}}

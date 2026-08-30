@@ -702,18 +702,20 @@ fi
 assert_contains "$controlplane_ca_log" "helm.policy.source.controlplane.tls.existingSecret"
 
 controlplane_loopback_rendered="$RENDER_DIR/rendered-controlplane-loopback.yaml"
-production_helm_runner template "$RELEASE" "$CHART" \
-    --namespace "$NAMESPACE" \
-    --set helm.production=true \
-    --set helm.signing.key="$SIGNING_KEY" \
-    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
-    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
-    --set helm.policy.source.kind=controlplane \
-    --set-string helm.policy.source.controlplane.url=http://127.0.0.1:18080 \
-    --set helm.policy.signature.required=true \
-    --set helm.policy.signature.publicKey="$TRUST_PUBLIC_KEY" >"$controlplane_loopback_rendered"
-assert_contains "$controlplane_loopback_rendered" "http://127.0.0.1:18080"
-assert_not_contains "$controlplane_loopback_rendered" "HELM_POLICY_CONTROLPLANE_CA_FILE"
+for controlplane_loopback_url in "http://127.42.0.9:18080" "http://[::1]:18080"; do
+    production_helm_runner template "$RELEASE" "$CHART" \
+        --namespace "$NAMESPACE" \
+        --set helm.production=true \
+        --set helm.signing.key="$SIGNING_KEY" \
+        --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+        --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+        --set helm.policy.source.kind=controlplane \
+        --set-string "helm.policy.source.controlplane.url=$controlplane_loopback_url" \
+        --set helm.policy.signature.required=true \
+        --set helm.policy.signature.publicKey="$TRUST_PUBLIC_KEY" >"$controlplane_loopback_rendered"
+    assert_contains "$controlplane_loopback_rendered" "$controlplane_loopback_url"
+    assert_not_contains "$controlplane_loopback_rendered" "HELM_POLICY_CONTROLPLANE_CA_FILE"
+done
 
 controlplane_rendered="$RENDER_DIR/rendered-controlplane.yaml"
 production_helm_runner template "$RELEASE" "$CHART" \

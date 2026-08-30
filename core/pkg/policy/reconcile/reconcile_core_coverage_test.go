@@ -229,6 +229,37 @@ func TestControlPlaneHTTPClientUsesExclusiveRotatingCA(t *testing.T) {
 	}
 }
 
+func TestControlPlaneHTTPClientRejectsRedirects(t *testing.T) {
+	leakedAuthorization := make(chan string, 1)
+	plaintextTarget := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		leakedAuthorization <- request.Header.Get("Authorization")
+	}))
+	defer plaintextTarget.Close()
+
+	redirector := newControlPlaneTLSServer(t, 3, http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		http.Redirect(response, request, plaintextTarget.URL, http.StatusFound)
+	}))
+	defer redirector.Close()
+
+	caFile := filepath.Join(t.TempDir(), "controlplane-ca.pem")
+	writeControlPlaneTestCA(t, caFile, redirector)
+	client, err := NewControlPlaneHTTPClient(redirector.URL, caFile)
+	if err != nil {
+		t.Fatalf("new controlplane client: %v", err)
+	}
+	source := NewControlPlaneSource(redirector.URL, DefaultScope)
+	source.HTTPClient = client
+	source.BearerToken = "secret-policy-token"
+	if _, err := source.Head(context.Background(), DefaultScope); err == nil || !strings.Contains(err.Error(), "302") {
+		t.Fatalf("expected redirect rejection, got %v", err)
+	}
+	select {
+	case authorization := <-leakedAuthorization:
+		t.Fatalf("redirect reached plaintext target with authorization %q", authorization)
+	default:
+	}
+}
+
 func newControlPlaneTLSServer(t *testing.T, serial int64, handler http.Handler) *httptest.Server {
 	t.Helper()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)

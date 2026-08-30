@@ -940,7 +940,13 @@ func NewControlPlaneHTTPClient(baseURL, caFile string) (*http.Client, error) {
 			return verifyControlPlaneConnection(caFile, serverName, state)
 		},
 	}
-	return &http.Client{Transport: transport, Timeout: controlPlaneRequestTimeout}, nil
+	return &http.Client{
+		Transport: transport,
+		Timeout:   controlPlaneRequestTimeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}, nil
 }
 
 func loadControlPlaneRoots(caFile string) (*x509.CertPool, error) {

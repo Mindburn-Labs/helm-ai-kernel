@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const cursorInstallStatusPending = "pending_install"
+
 func Install(pack SkillPack, req InstallRequest) (InstallResult, error) {
 	if req.Scope == "" {
 		req.Scope = ScopeRepo
@@ -42,6 +44,13 @@ func Install(pack SkillPack, req InstallRequest) (InstallResult, error) {
 		if err != nil {
 			return InstallResult{}, err
 		}
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return InstallResult{}, err
+	}
+	root, err = canonicalRepositoryRoot(root)
+	if err != nil {
+		return InstallResult{}, err
 	}
 	projections, err := ProjectionPaths(root, pack.Manifest.ID, req.Agent)
 	if err != nil {
@@ -161,95 +170,122 @@ func installCursorProjection(
 		return err
 	}
 
-	previousHash := ""
-	legacyExpectedHash := ""
-	removeLegacy := false
 	if index < 0 {
 		if legacyPresent || canonicalPresent {
 			return ErrUnmanagedProjection
 		}
-	} else {
-		record := store.Installs[index]
-		if err := validateCursorInstallRecordPaths(root, record, legacyRel, canonicalRel); err != nil {
+		store.Installs = append(store.Installs, installedSkill{
+			SkillID: manifest.ID, Agent: "cursor", Scope: req.Scope, Status: cursorInstallStatusPending,
+			ContentHash: nextContentHash, PendingContentHash: nextContentHash,
+			ProjectionPaths: []Projection{projection}, UpdatedAt: time.Now().UTC().Format(time.RFC3339), Manifest: manifest,
+		})
+		index = len(store.Installs) - 1
+		if err := writeInstallStore(root, store); err != nil {
 			return err
 		}
-		if err := ensureCursorPathOwnership(store, index, root, legacyRel, canonicalRel); err != nil {
+	}
+
+	record := store.Installs[index]
+	if err := validateCursorInstallRecordPaths(root, record, legacyRel, canonicalRel); err != nil {
+		return err
+	}
+	if err := ensureCursorPathOwnership(store, index, root, legacyRel, canonicalRel); err != nil {
+		return err
+	}
+	previousHash := record.ContentHash
+	legacyExpectedHash := ""
+	removeLegacy := false
+	if record.Status != "revoked" && record.PendingContentHash != "" && record.PendingContentHash != nextContentHash {
+		return ErrProjectionReplayConflict
+	}
+	switch record.Status {
+	case cursorInstallStatusPending:
+		if cursorInstallPathState(root, record, legacyRel, canonicalRel) != "canonical" ||
+			record.ContentHash != nextContentHash || record.PendingContentHash != nextContentHash ||
+			record.InstallReceiptID != "" || record.ProjectionReceiptID != "" ||
+			hashCanonical(record.Manifest) != hashCanonical(manifest) || legacyPresent ||
+			(canonicalPresent && canonicalHash != nextContentHash) {
+			return fmt.Errorf("%w: pending Cursor install intent does not match disk", ErrProjectionDrift)
+		}
+	case "revoked":
+		if legacyPresent || canonicalPresent {
+			return fmt.Errorf("%w: revoked Cursor projection is still present", ErrProjectionDrift)
+		}
+		record.Status = cursorInstallStatusPending
+		record.ContentHash = nextContentHash
+		record.PendingContentHash = nextContentHash
+		record.InstallReceiptID = ""
+		record.ProjectionReceiptID = ""
+		record.ProjectionPaths = []Projection{projection}
+		record.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		record.Manifest = manifest
+		store.Installs[index] = record
+		if err := writeInstallStore(root, store); err != nil {
 			return err
 		}
-		if record.Status == "revoked" {
-			if legacyPresent || canonicalPresent {
-				return fmt.Errorf("%w: revoked Cursor projection is still present", ErrProjectionDrift)
+	case "active", "disabled":
+		switch cursorInstallPathState(root, record, legacyRel, canonicalRel) {
+		case "legacy":
+			if !legacyPresent || legacyHash != previousHash || canonicalPresent {
+				return fmt.Errorf("%w: legacy Cursor projection does not match its store record", ErrProjectionDrift)
 			}
-		} else {
-			if record.Status != "active" && record.Status != "disabled" {
-				return fmt.Errorf("%w: Cursor install status is invalid", ErrProjectionDrift)
+			removeLegacy = true
+			legacyExpectedHash = previousHash
+			record.ProjectionPaths = cursorTransitionPaths(root, legacyRel, canonicalRel)
+			record.PendingContentHash = nextContentHash
+			setCursorLegacyOwnership(&record, root, legacyRel, previousHash)
+			store.Installs[index] = record
+			if err := writeInstallStore(root, store); err != nil {
+				return err
 			}
-			if !validProjectionSHA256(record.ContentHash) {
-				return fmt.Errorf("%w: Cursor install content hash is invalid", ErrProjectionDrift)
+		case "transition":
+			if record.PendingContentHash != nextContentHash || record.LegacyCursorProjection == nil ||
+				record.LegacyCursorContentHash != previousHash ||
+				(legacyPresent && legacyHash != previousHash) ||
+				(canonicalPresent && canonicalHash != nextContentHash) ||
+				(!legacyPresent && !canonicalPresent) {
+				return fmt.Errorf("%w: Cursor migration transition does not match disk", ErrProjectionDrift)
 			}
-			previousHash = record.ContentHash
-			if record.PendingContentHash != "" && record.PendingContentHash != nextContentHash {
-				return ErrProjectionReplayConflict
-			}
-			switch cursorInstallPathState(root, record, legacyRel, canonicalRel) {
-			case "legacy":
-				if !legacyPresent || legacyHash != previousHash || canonicalPresent {
-					return fmt.Errorf("%w: legacy Cursor projection does not match its store record", ErrProjectionDrift)
+			removeLegacy = legacyPresent
+			legacyExpectedHash = record.LegacyCursorContentHash
+		case "canonical":
+			storeChanged := false
+			if legacyPresent {
+				ownedHash, err := authorizeCursorLegacyProjection(managed, root, store, index, record, legacyRel, legacyHash)
+				if err != nil {
+					return err
 				}
+				setCursorLegacyOwnership(&record, root, legacyRel, ownedHash)
 				removeLegacy = true
-				legacyExpectedHash = previousHash
-				record.ProjectionPaths = cursorTransitionPaths(root, legacyRel, canonicalRel)
+				legacyExpectedHash = ownedHash
+				storeChanged = true
+			}
+			if record.PendingContentHash == "" {
+				if !canonicalPresent || canonicalHash != previousHash {
+					return fmt.Errorf("%w: canonical Cursor projection does not match its store record", ErrProjectionDrift)
+				}
 				record.PendingContentHash = nextContentHash
-				setCursorLegacyOwnership(&record, root, legacyRel, previousHash)
+				storeChanged = true
+			} else if !canonicalPresent || (canonicalHash != previousHash && canonicalHash != nextContentHash) {
+				return fmt.Errorf("%w: canonical Cursor transition does not match disk", ErrProjectionDrift)
+			}
+			if storeChanged {
 				store.Installs[index] = record
 				if err := writeInstallStore(root, store); err != nil {
 					return err
 				}
-			case "transition":
-				if record.PendingContentHash != nextContentHash || record.LegacyCursorProjection == nil ||
-					record.LegacyCursorContentHash != previousHash ||
-					(legacyPresent && legacyHash != previousHash) ||
-					(canonicalPresent && canonicalHash != nextContentHash) ||
-					(!legacyPresent && !canonicalPresent) {
-					return fmt.Errorf("%w: Cursor migration transition does not match disk", ErrProjectionDrift)
-				}
-				removeLegacy = legacyPresent
-				legacyExpectedHash = record.LegacyCursorContentHash
-			case "canonical":
-				storeChanged := false
-				if legacyPresent {
-					ownedHash, err := authorizeCursorLegacyProjection(managed, root, store, index, record, legacyRel, legacyHash)
-					if err != nil {
-						return err
-					}
-					setCursorLegacyOwnership(&record, root, legacyRel, ownedHash)
-					removeLegacy = true
-					legacyExpectedHash = ownedHash
-					storeChanged = true
-				}
-				if record.PendingContentHash == "" {
-					if !canonicalPresent || canonicalHash != previousHash {
-						return fmt.Errorf("%w: canonical Cursor projection does not match its store record", ErrProjectionDrift)
-					}
-					record.PendingContentHash = nextContentHash
-					storeChanged = true
-				} else if !canonicalPresent || (canonicalHash != previousHash && canonicalHash != nextContentHash) {
-					return fmt.Errorf("%w: canonical Cursor transition does not match disk", ErrProjectionDrift)
-				}
-				if storeChanged {
-					store.Installs[index] = record
-					if err := writeInstallStore(root, store); err != nil {
-						return err
-					}
-				}
-			default:
-				return fmt.Errorf("%w: Cursor install paths are invalid", ErrProjectionDrift)
 			}
+		default:
+			return fmt.Errorf("%w: Cursor install paths are invalid", ErrProjectionDrift)
 		}
+	default:
+		return fmt.Errorf("%w: Cursor install status is invalid", ErrProjectionDrift)
 	}
 
-	if err := atomicReplaceManagedAt(managed, canonicalRel, content); err != nil {
-		return err
+	if !canonicalPresent || canonicalHash != nextContentHash {
+		if err := atomicReplaceManagedAt(managed, canonicalRel, content); err != nil {
+			return err
+		}
 	}
 	observed, err := readManagedFileAt(managed, canonicalRel, maxProjectionArtifactBytes)
 	if err != nil || HashBytes(observed) != nextContentHash || !constantBytesEqual(observed, content) {
@@ -481,9 +517,59 @@ func cursorTransitionPaths(root, legacyRel, canonicalRel string) []Projection {
 }
 
 func sameProjectionPath(root, candidate, relative string) bool {
-	expected, expectedErr := filepath.Abs(filepath.Join(root, relative))
-	observed, observedErr := filepath.Abs(candidate)
-	return expectedErr == nil && observedErr == nil && filepath.Clean(expected) == filepath.Clean(observed)
+	if !filepath.IsAbs(candidate) {
+		return false
+	}
+	relative = filepath.Clean(relative)
+	if relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+		return false
+	}
+	candidateRoot := filepath.Clean(candidate)
+	parts := strings.Split(relative, string(os.PathSeparator))
+	for i := len(parts) - 1; i >= 0; i-- {
+		if filepath.Base(candidateRoot) != parts[i] {
+			return false
+		}
+		parent := filepath.Dir(candidateRoot)
+		if parent == candidateRoot {
+			return false
+		}
+		candidateRoot = parent
+	}
+	expectedRoot, expectedErr := canonicalRepositoryRoot(root)
+	observedRoot, observedErr := canonicalRepositoryRoot(candidateRoot)
+	return expectedErr == nil && observedErr == nil && expectedRoot == observedRoot
+}
+
+func canonicalRepositoryRoot(root string) (string, error) {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("skillpacks: resolve repository root: %w", err)
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", fmt.Errorf("skillpacks: resolve repository root symlinks: %w", err)
+	}
+	info, err := os.Lstat(resolved)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		if err != nil {
+			return "", err
+		}
+		return "", ErrProjectionPathUnsafe
+	}
+	managed, err := openManagedRoot(resolved)
+	if err != nil {
+		return "", err
+	}
+	defer managed.Close()
+	opened, err := managed.Stat(".")
+	if err != nil || !os.SameFile(info, opened) {
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("%w: repository root changed during resolution", ErrProjectionPathUnsafe)
+	}
+	return filepath.Clean(resolved), nil
 }
 
 func Disable(repoRoot, skillID string) (Receipt, error) {
@@ -509,6 +595,10 @@ func Revoke(repoRoot, skillID string) (Receipt, error) {
 		if err != nil {
 			return Receipt{}, err
 		}
+	}
+	repoRoot, err := canonicalRepositoryRoot(repoRoot)
+	if err != nil {
+		return Receipt{}, err
 	}
 	store, err := readInstallStore(repoRoot)
 	if err != nil {

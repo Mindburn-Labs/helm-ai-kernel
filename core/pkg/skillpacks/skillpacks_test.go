@@ -255,6 +255,196 @@ func TestCursorProjectionPathsPreserveSkillNamespace(t *testing.T) {
 	}
 }
 
+func TestCursorFirstInstallIntentRecoversAfterReceiptFailure(t *testing.T) {
+	root := t.TempDir()
+	pack := newCursorInstallTestPack(t, "1.0.0", "first Cursor prompt")
+	canonicalPath, receiptBlocker := interruptCursorFirstInstallAfterPublish(t, root, pack)
+
+	projected, err := os.ReadFile(canonicalPath)
+	if err != nil || string(projected) != pack.SkillMD {
+		t.Fatalf("interrupted canonical projection = %q err=%v", projected, err)
+	}
+	store, err := readInstallStore(root)
+	if err != nil || len(store.Installs) != 1 {
+		t.Fatalf("interrupted install store = %+v err=%v", store, err)
+	}
+	intent := store.Installs[0]
+	if intent.Status != cursorInstallStatusPending || intent.ContentHash != pack.Manifest.ContentHash ||
+		intent.PendingContentHash != pack.Manifest.ContentHash || intent.InstallReceiptID != "" ||
+		intent.ProjectionReceiptID != "" || hashCanonical(intent.Manifest) != hashCanonical(pack.Manifest) {
+		t.Fatalf("interrupted install intent = %+v", intent)
+	}
+
+	if err := os.Remove(receiptBlocker); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Install(pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "active" || len(result.ProjectionPaths) != 1 || result.ProjectionPaths[0].Path != canonicalPath {
+		t.Fatalf("recovered install result = %+v", result)
+	}
+	projected, err = os.ReadFile(canonicalPath)
+	if err != nil || string(projected) != pack.SkillMD {
+		t.Fatalf("recovered canonical projection = %q err=%v", projected, err)
+	}
+	store, err = readInstallStore(root)
+	if err != nil || len(store.Installs) != 1 || store.Installs[0].Status != "active" ||
+		store.Installs[0].PendingContentHash != "" || store.Installs[0].InstallReceiptID == "" ||
+		store.Installs[0].ProjectionReceiptID == "" {
+		t.Fatalf("recovered install store = %+v err=%v", store, err)
+	}
+}
+
+func TestCursorFirstInstallIntentRejectsNonExactRetry(t *testing.T) {
+	tests := []struct {
+		name      string
+		retryPack func(*testing.T) SkillPack
+		tamper    string
+		wantErr   error
+	}{
+		{
+			name:    "canonical content drift",
+			tamper:  "tampered Cursor prompt",
+			wantErr: ErrProjectionDrift,
+		},
+		{
+			name: "different pending content",
+			retryPack: func(t *testing.T) SkillPack {
+				return newCursorInstallTestPack(t, "2.0.0", "foreign Cursor prompt")
+			},
+			wantErr: ErrProjectionReplayConflict,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			original := newCursorInstallTestPack(t, "1.0.0", "first Cursor prompt")
+			canonicalPath, receiptBlocker := interruptCursorFirstInstallAfterPublish(t, root, original)
+			if err := os.Remove(receiptBlocker); err != nil {
+				t.Fatal(err)
+			}
+			if tt.tamper != "" {
+				if err := os.WriteFile(canonicalPath, []byte(tt.tamper), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			retry := original
+			if tt.retryPack != nil {
+				retry = tt.retryPack(t)
+			}
+			storePath := filepath.Join(root, ".helm", "skillpacks", "installed.json")
+			storeBefore, err := os.ReadFile(storePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			projectionBefore, err := os.ReadFile(canonicalPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := Install(retry, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("non-exact retry error = %v, want %v", err, tt.wantErr)
+			}
+			storeAfter, err := os.ReadFile(storePath)
+			if err != nil || !reflect.DeepEqual(storeAfter, storeBefore) {
+				t.Fatalf("non-exact retry changed store: err=%v", err)
+			}
+			projectionAfter, err := os.ReadFile(canonicalPath)
+			if err != nil || !reflect.DeepEqual(projectionAfter, projectionBefore) {
+				t.Fatalf("non-exact retry changed projection: err=%v", err)
+			}
+		})
+	}
+}
+
+func TestCursorRepositoryRootSymlinkAliases(t *testing.T) {
+	t.Run("new install persists canonical root", func(t *testing.T) {
+		realRoot, aliasRoot := cursorRepoRootAlias(t)
+		first := newCursorInstallTestPack(t, "1.0.0", "first alias prompt")
+		second := newCursorInstallTestPack(t, "2.0.0", "upgraded alias prompt")
+
+		result, err := Install(first, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: aliasRoot})
+		if err != nil {
+			t.Fatal(err)
+		}
+		canonical, err := projectionRelativePath(first.Manifest.ID, "cursor")
+		if err != nil {
+			t.Fatal(err)
+		}
+		canonicalPath := filepath.Join(realRoot, canonical.Path)
+		if len(result.ProjectionPaths) != 1 || result.ProjectionPaths[0].Path != canonicalPath {
+			t.Fatalf("alias install paths = %+v, want %s", result.ProjectionPaths, canonicalPath)
+		}
+		store, err := readInstallStore(realRoot)
+		if err != nil || len(store.Installs) != 1 || store.Installs[0].ProjectionPaths[0].Path != canonicalPath {
+			t.Fatalf("alias install store = %+v err=%v", store, err)
+		}
+
+		if _, err := Install(second, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: realRoot}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Revoke(aliasRoot, second.Manifest.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(canonicalPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("alias-revoked canonical path survived: %v", err)
+		}
+	})
+
+	t.Run("recorded alias upgrades through canonical root", func(t *testing.T) {
+		realRoot, aliasRoot := cursorRepoRootAlias(t)
+		first := newCursorInstallTestPack(t, "1.0.0", "legacy alias prompt")
+		second := newCursorInstallTestPack(t, "2.0.0", "canonical upgrade prompt")
+		canonical, err := projectionRelativePath(first.Manifest.ID, "cursor")
+		if err != nil {
+			t.Fatal(err)
+		}
+		canonicalPath := filepath.Join(realRoot, canonical.Path)
+		if err := os.MkdirAll(filepath.Dir(canonicalPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(canonicalPath, []byte(first.SkillMD), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		store := installStore{SchemaVersion: "helm.skillpack.installs.v1", Installs: []installedSkill{{
+			SkillID: first.Manifest.ID, Agent: "cursor", Scope: ScopeRepo, Status: "active",
+			ContentHash:     first.Manifest.ContentHash,
+			ProjectionPaths: []Projection{{Agent: "cursor", Path: filepath.Join(aliasRoot, canonical.Path)}}, Manifest: first.Manifest,
+		}}}
+		if err := writeInstallStore(realRoot, store); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := Install(second, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: realRoot}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Revoke(realRoot, second.Manifest.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(canonicalPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("canonical revoke retained alias-recorded path: %v", err)
+		}
+	})
+
+	t.Run("managed path symlink remains refused", func(t *testing.T) {
+		realRoot, aliasRoot := cursorRepoRootAlias(t)
+		outside := t.TempDir()
+		if err := os.Symlink(outside, filepath.Join(realRoot, ".cursor")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		pack := newCursorInstallTestPack(t, "1.0.0", "must remain inside root")
+		if _, err := Install(pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: aliasRoot}); !errors.Is(err, ErrProjectionPathUnsafe) {
+			t.Fatalf("managed path symlink error = %v", err)
+		}
+		outsideRule := filepath.Join(outside, "rules", "test", "good.md")
+		if _, err := os.Stat(outsideRule); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("managed path symlink wrote outside repository: %v", err)
+		}
+	})
+}
+
 func TestCursorLegacyInstallMigrationResumesAndRevokes(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -554,6 +744,47 @@ func newCursorInstallTestPackWithID(t *testing.T, skillID, version, content stri
 	return pack
 }
 
+func interruptCursorFirstInstallAfterPublish(t *testing.T, root string, pack SkillPack) (string, string) {
+	t.Helper()
+	canonicalRoot, err := canonicalRepositoryRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiptBlocker := filepath.Join(root, ".helm", "skillpacks", "receipts")
+	if err := os.MkdirAll(filepath.Dir(receiptBlocker), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(receiptBlocker, []byte("block receipt directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(pack, InstallRequest{Agent: "cursor", Scope: ScopeRepo, RepoRoot: root}); err == nil {
+		t.Fatal("expected receipt failure after Cursor projection publish")
+	}
+	canonical, err := projectionRelativePath(pack.Manifest.ID, "cursor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(canonicalRoot, canonical.Path), receiptBlocker
+}
+
+func cursorRepoRootAlias(t *testing.T) (string, string) {
+	t.Helper()
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "repository")
+	if err := os.MkdirAll(realRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	aliasRoot := filepath.Join(parent, "repository-alias")
+	if err := os.Symlink(realRoot, aliasRoot); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	canonicalRoot, err := canonicalRepositoryRoot(realRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return canonicalRoot, aliasRoot
+}
+
 func seedCursorInstallTransition(
 	t *testing.T,
 	root string,
@@ -561,6 +792,11 @@ func seedCursorInstallTransition(
 	transitionStore, writeCanonical, removeLegacy bool,
 ) (string, string) {
 	t.Helper()
+	canonicalRoot, err := canonicalRepositoryRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = canonicalRoot
 	legacyRel, err := legacyCursorRelativePath(oldPack.Manifest.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -610,6 +846,11 @@ func seedCursorInstallTransition(
 
 func seedCollapsedCursorStore(t *testing.T, root string, oldPack, currentPack SkillPack, writeLegacyReceipt bool) (string, string) {
 	t.Helper()
+	canonicalRoot, err := canonicalRepositoryRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = canonicalRoot
 	legacyRel, err := legacyCursorRelativePath(currentPack.Manifest.ID)
 	if err != nil {
 		t.Fatal(err)

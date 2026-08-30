@@ -76,10 +76,11 @@ const testConfigJSON = `{
 
 // mockUpstream is an OpenAI-compatible fake provider that records requests.
 type mockUpstream struct {
-	server   *httptest.Server
-	calls    atomic.Int64
-	lastBody atomic.Value // []byte
-	lastAuth atomic.Value // string
+	server          *httptest.Server
+	calls           atomic.Int64
+	lastBody        atomic.Value // []byte
+	lastAuth        atomic.Value // string
+	responseContent atomic.Value // string
 }
 
 func newMockUpstream(t *testing.T) *mockUpstream {
@@ -116,10 +117,14 @@ func newMockUpstream(t *testing.T) *mockUpstream {
 			return
 		}
 
+		content := "ok"
+		if configured, _ := m.responseContent.Load().(string); configured != "" {
+			content = configured
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{"id":"cmpl-mock-1","object":"chat.completion","model":%q,`+
-			`"choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],`+
-			`"usage":{"prompt_tokens":100,"completion_tokens":20}}`, req.Model)
+			`"choices":[{"index":0,"message":{"role":"assistant","content":%q},"finish_reason":"stop"}],`+
+			`"usage":{"prompt_tokens":100,"completion_tokens":20}}`, req.Model, content)
 	})
 	m.server = httptest.NewServer(mux)
 	t.Cleanup(m.server.Close)
@@ -366,48 +371,20 @@ func TestModelSubstitutionRoutesTruthfully(t *testing.T) {
 	}
 }
 
-func TestStreamingRouteSettlesAndPersists(t *testing.T) {
+func TestStreamingRouteFailsClosedBeforeDispatch(t *testing.T) {
 	f := newProxyFixture(t)
 	resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "idem-stream",
 		map[string]any{"stream": true})
-	if resp.StatusCode != http.StatusOK {
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, body=%s", resp.StatusCode, body)
+		t.Fatalf("status = %d, want 403; body=%s", resp.StatusCode, body)
 	}
-	if resp.Header.Get("X-HELM-Route-Quote-Hash") == "" {
-		t.Fatal("streaming response must carry the route quote hash header")
+	if f.upstream.calls.Load() != 0 {
+		t.Fatalf("upstream calls = %d, want 0", f.upstream.calls.Load())
 	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read stream: %v", err)
-	}
-	streamText := string(raw)
-	if !strings.Contains(streamText, `"content":"Hel"`) || !strings.Contains(streamText, "data: [DONE]") {
-		t.Fatalf("SSE stream did not pass through verbatim: %s", streamText)
-	}
-
-	// The proxy must have asked the upstream for the usage chunk.
-	upstreamBody, _ := f.upstream.lastBody.Load().([]byte)
-	if !strings.Contains(string(upstreamBody), `"include_usage":true`) {
-		t.Fatalf("upstream request missing stream_options.include_usage: %s", upstreamBody)
-	}
-
-	byKind := recordsByKind(f.records(t))
-	for _, kind := range []RecordKind{RecordRouteQuote, RecordBudgetVerdict, RecordUsage, RecordSettlement} {
-		if len(byKind[kind]) != 1 {
-			t.Fatalf("%s records = %d, want 1", kind, len(byKind[kind]))
-		}
-	}
-	usage := byKind[RecordUsage][0].Usage
-	if usage.InputTokens != 120 || usage.OutputTokens != 30 {
-		t.Fatalf("usage tokens = %d/%d, want 120/30 from the usage chunk", usage.InputTokens, usage.OutputTokens)
-	}
-	// 120*5000 + 30*10000 = 900000 micro-cents -> 1 cent.
-	if usage.BalanceDebitCents != 1 {
-		t.Fatalf("stream debit = %d, want 1", usage.BalanceDebitCents)
-	}
-	if got := f.server.BalanceCents(); got != 1999 {
-		t.Fatalf("balance = %d, want 1999", got)
+	if len(f.records(t)) != 0 {
+		t.Fatal("blocked stream must not create spend receipts")
 	}
 }
 
@@ -462,6 +439,33 @@ func TestRestartRestoresBalanceAndIdempotency(t *testing.T) {
 	if len(byKind[RecordUsage]) != 1 || len(byKind[RecordSettlement]) != 1 {
 		t.Fatalf("replay duplicated receipts: %d usage / %d settlement",
 			len(byKind[RecordUsage]), len(byKind[RecordSettlement]))
+	}
+}
+
+func TestBlockedProviderResponsePersistsSettlementAcrossRestart(t *testing.T) {
+	f := newProxyFixture(t)
+	f.upstream.responseContent.Store("api_key=sk_live_example1234")
+	resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "idem-privacy-response", nil)
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusBadGateway || bytes.Contains(body, []byte("sk_live")) {
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, body)
+	}
+	byKind := recordsByKind(f.records(t))
+	for _, kind := range []RecordKind{RecordRouteQuote, RecordBudgetVerdict, RecordUsage, RecordSettlement} {
+		if len(byKind[kind]) != 1 {
+			t.Fatalf("%s records = %d, want 1", kind, len(byKind[kind]))
+		}
+	}
+	if got := f.server.BalanceCents(); got != 1999 {
+		t.Fatalf("balance after blocked response = %d, want 1999", got)
+	}
+
+	f.restart(t)
+	if got := f.server.BalanceCents(); got != 1999 {
+		t.Fatalf("balance after restart = %d, want durable debit 1999", got)
+	}
+	if sum := f.server.ReplaySummary(); sum.RestoredSettlements != 1 || sum.DebitedCents != 1 {
+		t.Fatalf("replay summary = %+v, want 1 settlement / 1 cent", sum)
 	}
 }
 

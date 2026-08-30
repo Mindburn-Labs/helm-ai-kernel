@@ -321,10 +321,10 @@ func TestGatewayHTTPHelpersReportErrors(t *testing.T) {
 		http.Error(w, "provider failed", http.StatusInternalServerError)
 	}))
 	defer fail.Close()
-	if err := router.getJSON(context.Background(), fail.URL, &out); err == nil || !strings.Contains(err.Error(), "provider failed") {
-		t.Fatalf("expected GET HTTP error with body, got %v", err)
+	if err := router.getJSON(context.Background(), fail.URL, &out); err == nil || !strings.Contains(err.Error(), "HTTP 500") || strings.Contains(err.Error(), "provider failed") {
+		t.Fatalf("expected value-free GET HTTP error, got %v", err)
 	}
-	if err := router.postJSON(context.Background(), fail.URL, map[string]string{"ok": "ok"}, &out); err == nil || !strings.Contains(err.Error(), "provider failed") {
-		t.Fatalf("expected POST HTTP error with body, got %v", err)
+	if err := router.postJSON(context.Background(), fail.URL, map[string]string{"ok": "ok"}, &out); err == nil || !strings.Contains(err.Error(), "HTTP 500") || strings.Contains(err.Error(), "provider failed") {
+		t.Fatalf("expected value-free POST HTTP error, got %v", err)
 	}
 }

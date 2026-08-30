@@ -25,10 +25,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sort"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // EnvelopeResolver loads the AgentSpendEnvelope referenced by the request
@@ -53,12 +55,13 @@ type DispatchOutcome struct {
 
 // GovernedGateway wires the RouteQuote engine to OpenAI-compatible HTTP routes.
 type GovernedGateway struct {
-	engine   *inferencegateway.Engine
-	resolver EnvelopeResolver
-	dispatch ProviderDispatch
-	tenantID func(*http.Request) string
-	models   []GatewayModel
-	maxBody  int64
+	engine       *inferencegateway.Engine
+	resolver     EnvelopeResolver
+	dispatch     ProviderDispatch
+	tenantID     func(*http.Request) string
+	models       []GatewayModel
+	maxBody      int64
+	onSettlement func(*GatewayMetadata)
 }
 
 // GatewayModel is one entry in the /v1/models listing.
@@ -77,6 +80,9 @@ type GovernedGatewayConfig struct {
 	// TenantID resolves the caller tenant. When nil the gateway cannot be built.
 	TenantID func(*http.Request) string
 	Models   []GatewayModel
+	// OnSettlement receives the canonical in-process receipts before the public
+	// response is projected and redacted.
+	OnSettlement func(*GatewayMetadata)
 }
 
 // NewGovernedGateway validates configuration and returns the gateway.
@@ -94,12 +100,13 @@ func NewGovernedGateway(cfg GovernedGatewayConfig) (*GovernedGateway, error) {
 		return nil, errors.New("api: governed gateway requires a tenant resolver")
 	}
 	return &GovernedGateway{
-		engine:   cfg.Engine,
-		resolver: cfg.Resolver,
-		dispatch: cfg.Dispatch,
-		tenantID: cfg.TenantID,
-		models:   cfg.Models,
-		maxBody:  maxOpenAIRequestSize,
+		engine:       cfg.Engine,
+		resolver:     cfg.Resolver,
+		dispatch:     cfg.Dispatch,
+		tenantID:     cfg.TenantID,
+		models:       cfg.Models,
+		maxBody:      maxOpenAIRequestSize,
+		onSettlement: cfg.OnSettlement,
 	}, nil
 }
 
@@ -125,7 +132,8 @@ type GatewayMetadata struct {
 	ReasonCode        economic.SpendReasonCode       `json:"reason_code"`
 	Quote             *economic.RouteQuote           `json:"route_quote,omitempty"`
 	RouteReceipt      *economic.BudgetVerdictReceipt `json:"route_receipt,omitempty"`
-	UsageReceipt      *economic.UsageReceipt         `json:"usage_receipt,omitempty"`
+	UsageReceipt      *economic.UsageReceipt         `json:"-"`
+	UsageReceiptView  *economic.UsageReceiptView     `json:"usage_receipt,omitempty"`
 	SettlementReceipt *economic.SettlementReceipt    `json:"settlement_receipt,omitempty"`
 	QuotedAmountCents int64                          `json:"quoted_amount_cents,omitempty"`
 	ActualAmountCents int64                          `json:"actual_amount_cents,omitempty"`
@@ -167,6 +175,16 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		WriteBadRequest(w, "failed to read request body")
 		return
 	}
+	protectedBody, _, err := privacy.ProtectModelRequestJSON(r.Context(), json.RawMessage(body))
+	if err != nil {
+		if errors.Is(err, privacy.ErrDataEgressInvalid) {
+			WriteBadRequest(w, "invalid request body")
+			return
+		}
+		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
+		return
+	}
+	body = protectedBody
 	var parsed inferenceBody
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		WriteBadRequest(w, "invalid request body")
@@ -203,7 +221,7 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 
 	outcome, derr := g.dispatch(r, quoteRes.Quote, body)
 	if derr != nil {
-		WriteError(w, http.StatusBadGateway, "provider dispatch failed", derr.Error())
+		WriteError(w, http.StatusBadGateway, "provider dispatch failed", "provider request failed")
 		return
 	}
 
@@ -228,6 +246,7 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		Quote:             quoteRes.Quote,
 		RouteReceipt:      quoteRes.Receipt,
 		UsageReceipt:      settleRes.UsageReceipt,
+		UsageReceiptView:  publicUsageReceiptView(settleRes.UsageReceipt),
 		SettlementReceipt: settleRes.SettlementReceipt,
 		QuotedAmountCents: settleRes.QuotedAmountCents,
 		ActualAmountCents: settleRes.ActualAmountCents,
@@ -238,8 +257,49 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 		Replayed:          settleRes.Replayed,
 		EvidencePackRef:   settleRes.EvidencePackRef,
 	}
+	if g.onSettlement != nil {
+		g.onSettlement(&meta)
+	}
+	protectedResponse, _, responsePrivacyErr := privacy.ProtectModelResponseJSON(r.Context(), outcome.ResponseBody)
+	if responsePrivacyErr == nil {
+		outcome.ResponseBody = protectedResponse
+	} else {
+		outcome.ResponseBody = nil
+	}
 	writeGatewayMetadataHeaders(w, meta)
+	if responsePrivacyErr != nil {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(struct {
+			httperr.ProblemDetail
+			HELM GatewayMetadata `json:"helm"`
+		}{
+			ProblemDetail: httperr.ProblemDetail{
+				Type:   "https://helm.mindburn.run/errors/502",
+				Title:  "provider response blocked",
+				Status: http.StatusBadGateway,
+				Detail: privacy.ErrDataEgressBlocked.Error(),
+			},
+			HELM: meta,
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, governedResponse{Response: outcome.ResponseBody, HELM: meta})
+}
+
+func publicUsageReceiptView(receipt *economic.UsageReceipt) *economic.UsageReceiptView {
+	if receipt == nil {
+		return nil
+	}
+	view := economic.NewUsageReceiptView(receipt, economic.DefaultRedactionProfile())
+	protected, _, err := privacy.NewPrivacyManager().Protect(nil, receipt.ProviderRequestID)
+	safe, ok := protected.(string)
+	if err != nil || !ok || safe != receipt.ProviderRequestID {
+		view.ProviderRequestID = ""
+		view.RedactedFields = append(view.RedactedFields, "provider_request_id")
+		sort.Strings(view.RedactedFields)
+	}
+	return &view
 }
 
 func (g *GovernedGateway) handleModels(w http.ResponseWriter, r *http.Request) {

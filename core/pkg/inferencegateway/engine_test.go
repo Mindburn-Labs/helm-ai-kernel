@@ -193,6 +193,22 @@ func TestQuoteAndSettleHappyPath(t *testing.T) {
 	}
 }
 
+func TestSettlePreservesCanonicalProviderRequestID(t *testing.T) {
+	h := newHarness(t)
+	res, err := h.engine.Quote(h.env, h.req("idem-provider-id", "gpt-4o", 1000, 500))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const providerRequestID = "ghp_12345678901234567890"
+	settle, err := h.engine.Settle(res.Quote, providerRequestID, 2, 1000, 480)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settle.UsageReceipt.ProviderRequestID != providerRequestID {
+		t.Fatalf("provider request id = %q, want %q", settle.UsageReceipt.ProviderRequestID, providerRequestID)
+	}
+}
+
 // --- Quote expiry (financial invariant) ---------------------------------------
 
 func TestSettleFailsOnExpiredQuote(t *testing.T) {

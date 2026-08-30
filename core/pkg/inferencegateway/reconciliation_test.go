@@ -57,6 +57,23 @@ func TestReconcileProviderInvoice_MatchesSettledUsage(t *testing.T) {
 	}
 }
 
+func TestReconcileProviderInvoice_MatchesSecretLookingProviderID(t *testing.T) {
+	h := newHarness(t)
+	const providerRequestID = "ghp_12345678901234567890"
+	usage := settleOne(t, h, "idem-secret-looking-id", providerRequestID, 100)
+	inv := economic.NewProviderInvoice("inv-secret-looking-id", "openai", "USD", "evidence://inv-secret-looking-id", h.now.Add(-time.Hour), h.now.Add(time.Hour), []economic.ProviderInvoiceLine{
+		{LineID: "l1", ProviderRequestID: providerRequestID, BilledCostCents: 100, Currency: "USD"},
+	})
+
+	run, err := h.ledger.ReconcileProviderInvoice("run-secret-looking-id", inv, "evidence://run-secret-looking-id", h.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != economic.ReconStatusMatched || inv.Lines[0].MatchedReceiptHash != usage.ContentHash {
+		t.Fatalf("status=%s matched_hash=%q want=%q exceptions=%+v", run.Status, inv.Lines[0].MatchedReceiptHash, usage.ContentHash, run.Exceptions)
+	}
+}
+
 // TestReconcileMismatch_FreezesAndRefusesSpend is the freeze-path done-gate: an
 // over-billed line produces an exception, the run freezes the account per policy,
 // and a frozen account refuses any new reservation/debit — without exposing keys.

@@ -22,10 +22,11 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
-// maxRequestBody mirrors the governed gateway's request-size ceiling (10 MiB).
-const maxRequestBody = 10 << 20
+// maxRequestBody mirrors the governed gateway's privacy payload ceiling.
+const maxRequestBody = privacy.MaxPayloadBytes
 
 // ServerOptions wires a Server.
 type ServerOptions struct {
@@ -172,11 +173,12 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	}
 
 	gw, err := api.NewGovernedGateway(api.GovernedGatewayConfig{
-		Engine:   engine,
-		Resolver: s.resolveEnvelope,
-		Dispatch: s.governedDispatch,
-		TenantID: func(*http.Request) string { return cfg.TenantID },
-		Models:   s.modelList(),
+		Engine:       engine,
+		Resolver:     s.resolveEnvelope,
+		Dispatch:     s.governedDispatch,
+		TenantID:     func(*http.Request) string { return cfg.TenantID },
+		Models:       s.modelList(),
+		OnSettlement: s.persistOutcome,
 	})
 	if err != nil {
 		store.Close()
@@ -285,12 +287,7 @@ func (s *Server) handleInference(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(body, &probe)
 
 	if probe.Stream {
-		if r.URL.Path != "/v1/chat/completions" {
-			writeJSONError(w, http.StatusBadRequest,
-				"streaming is only supported on /v1/chat/completions in spend-proxy v1", "invalid_request_error", "")
-			return
-		}
-		s.handleStream(w, r, body)
+		writeJSONError(w, http.StatusForbidden, privacy.ErrDataEgressBlocked.Error(), "helm_data_egress_blocked", "")
 		return
 	}
 	s.handleBuffered(w, r, body)
@@ -347,7 +344,6 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 			HELM     api.GatewayMetadata `json:"helm"`
 		}
 		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil && envl.Response != nil {
-			s.persistOutcome(&envl.HELM)
 			copyHeaders(w.Header(), rec.header)
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Del("Content-Length")
@@ -363,14 +359,16 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 		var envl struct {
 			HELM api.GatewayMetadata `json:"helm"`
 		}
-		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil && envl.HELM.Quote != nil {
-			s.appendOrLog(&ReceiptRecord{
-				Kind:          RecordRouteQuote,
-				TenantID:      envl.HELM.Quote.TenantID,
-				SpendIntentID: envl.HELM.Quote.SpendIntentID,
-				Note:          fmt.Sprintf("rejected: %s/%s", envl.HELM.Verdict, envl.HELM.ReasonCode),
-				RouteQuote:    envl.HELM.Quote,
-			})
+		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil {
+			if envl.HELM.SettlementReceipt == nil && envl.HELM.Quote != nil {
+				s.appendOrLog(&ReceiptRecord{
+					Kind:          RecordRouteQuote,
+					TenantID:      envl.HELM.Quote.TenantID,
+					SpendIntentID: envl.HELM.Quote.SpendIntentID,
+					Note:          fmt.Sprintf("rejected: %s/%s", envl.HELM.Verdict, envl.HELM.ReasonCode),
+					RouteQuote:    envl.HELM.Quote,
+				})
+			}
 		}
 	}
 	copyHeaders(w.Header(), rec.header)

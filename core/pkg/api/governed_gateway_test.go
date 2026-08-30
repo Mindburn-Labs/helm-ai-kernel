@@ -2,14 +2,17 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
 // gatewayFixture builds a fully-wired governed gateway over an in-memory engine.
@@ -23,8 +26,26 @@ type gatewayFixture struct {
 }
 
 type spyDispatch struct {
-	called int
-	cost   int64
+	called        int
+	cost          int64
+	body          []byte
+	responseBody  json.RawMessage
+	requestID     string
+	afterDispatch func()
+}
+
+type advancingPrivacyContext struct {
+	context.Context
+	armed   *bool
+	advance func()
+}
+
+func (c advancingPrivacyContext) Err() error {
+	if *c.armed {
+		*c.armed = false
+		c.advance()
+	}
+	return c.Context.Err()
 }
 
 func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, costCap inferencegateway.CostCapPolicy, providerCost int64) *gatewayFixture {
@@ -70,9 +91,21 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 	spy := &spyDispatch{cost: providerCost}
 	dispatch := func(r *http.Request, quote *economic.RouteQuote, body []byte) (DispatchOutcome, error) {
 		spy.called++
+		spy.body = append([]byte(nil), body...)
+		if spy.afterDispatch != nil {
+			spy.afterDispatch()
+		}
+		responseBody := spy.responseBody
+		if responseBody == nil {
+			responseBody = json.RawMessage(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+		}
+		requestID := spy.requestID
+		if requestID == "" {
+			requestID = "prov-req-" + quote.ID
+		}
 		return DispatchOutcome{
-			ResponseBody:      json.RawMessage(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"message":{"role":"assistant","content":"ok"}}]}`),
-			ProviderRequestID: "prov-req-" + quote.ID,
+			ResponseBody:      responseBody,
+			ProviderRequestID: requestID,
 			ProviderCostCents: spy.cost,
 			InputTokens:       1000,
 			OutputTokens:      480,
@@ -188,7 +221,7 @@ func TestGatewaySuccessfulRoute(t *testing.T) {
 	if meta.Verdict != economic.BudgetVerdictAllow {
 		t.Fatalf("verdict = %s, want ALLOW", meta.Verdict)
 	}
-	if meta.UsageReceipt == nil || meta.SettlementReceipt == nil || meta.RouteReceipt == nil || meta.Quote == nil {
+	if meta.UsageReceiptView == nil || meta.SettlementReceipt == nil || meta.RouteReceipt == nil || meta.Quote == nil {
 		t.Fatal("successful response must carry quote + all three receipts")
 	}
 	if !meta.SettlementReceipt.Balanced() {
@@ -200,6 +233,141 @@ func TestGatewaySuccessfulRoute(t *testing.T) {
 	if f.dispatch.called != 1 {
 		t.Fatalf("dispatch called %d times, want 1", f.dispatch.called)
 	}
+}
+
+func TestGatewayProtectsProviderRequestAndResponse(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	f.dispatch.responseBody = json.RawMessage(`{"id":"chatcmpl-privacy","choices":[{"message":{"role":"assistant","content":"reply to person@example.com"}}]}`)
+	body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"contact person@example.com"}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	for key, value := range helmHeaders("idem-privacy", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if bytes.Contains(f.dispatch.body, []byte("person@example.com")) || !bytes.Contains(f.dispatch.body, []byte("[REDACTED_EMAIL]")) {
+		t.Fatalf("dispatch body was not protected: %s", f.dispatch.body)
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte("person@example.com")) || !bytes.Contains(rec.Body.Bytes(), []byte("[REDACTED_EMAIL]")) {
+		t.Fatalf("response body was not protected: %s", rec.Body.String())
+	}
+}
+
+func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
+	t.Run("request", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"api_key=sk_live_example1234"}]}`)
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+		for key, value := range helmHeaders("idem-privacy-request", "gpt-4o") {
+			req.Header.Set(key, value)
+		}
+		rec := httptest.NewRecorder()
+		f.mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden || f.dispatch.called != 0 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) {
+			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
+		}
+	})
+
+	t.Run("response", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"content":"api_key=sk_live_example1234"}}]}`)
+		f.dispatch.requestID = "ghp_12345678901234567890"
+		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-privacy-response", "gpt-4o"))
+		if rec.Code != http.StatusBadGateway || f.dispatch.called != 1 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) || bytes.Contains(rec.Body.Bytes(), []byte("ghp_")) {
+			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
+		}
+		if len(f.ledger.Entries()) != 1 {
+			t.Fatalf("settlement entries = %d, want 1", len(f.ledger.Entries()))
+		}
+		meta := decodeHELM(t, rec)
+		if meta.Quote == nil || meta.RouteReceipt == nil || meta.UsageReceiptView == nil || meta.SettlementReceipt == nil {
+			t.Fatal("blocked provider response must retain the complete settlement metadata")
+		}
+		if meta.UsageReceiptView.ProviderRequestID != "" || !strings.Contains(strings.Join(meta.UsageReceiptView.RedactedFields, ","), "provider_request_id") {
+			t.Fatalf("public provider request id was not redacted: %+v", meta.UsageReceiptView)
+		}
+		internal := f.ledger.InternalUsageRecords()
+		if len(internal) != 1 || internal[0].ProviderRequestID != f.dispatch.requestID {
+			t.Fatalf("internal provider request id = %+v, want %q", internal, f.dispatch.requestID)
+		}
+	})
+}
+
+func TestGatewayAllowsRestrictedNamesOnlyInModelSchemas(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"use the tool"}],"tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string"},"api_key":{"type":"string"}},"required":["password"]}}}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	for key, value := range helmHeaders("idem-schema", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || f.dispatch.called != 1 || !bytes.Contains(f.dispatch.body, []byte(`"password"`)) || !bytes.Contains(f.dispatch.body, []byte(`"api_key"`)) {
+		t.Fatalf("status=%d dispatch=%d provider_body=%s response=%s", rec.Code, f.dispatch.called, f.dispatch.body, rec.Body.String())
+	}
+}
+
+func TestGatewaySettlesBeforeProviderResponsePrivacyScan(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	armed := false
+	f.dispatch.afterDispatch = func() { armed = true }
+	ctx := advancingPrivacyContext{
+		Context: context.Background(),
+		armed:   &armed,
+		advance: func() { *f.clk = f.now.Add(2 * time.Hour) },
+	}
+	body := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"hello"}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
+	for key, value := range helmHeaders("idem-settle-before-privacy", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || f.dispatch.called != 1 || len(f.ledger.Entries()) != 1 {
+		t.Fatalf("status=%d dispatch=%d entries=%d body=%s", rec.Code, f.dispatch.called, len(f.ledger.Entries()), rec.Body.String())
+	}
+}
+
+func TestGatewayReturnsBadRequestForMalformedJSON(t *testing.T) {
+	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{`))
+	for key, value := range helmHeaders("idem-malformed", "gpt-4o") {
+		req.Header.Set(key, value)
+	}
+	rec := httptest.NewRecorder()
+	f.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || f.dispatch.called != 0 || strings.Contains(rec.Body.String(), privacy.ErrDataEgressBlocked.Error()) {
+		t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
+	}
+}
+
+func TestGatewaySupportsBatchedEmbeddingsAndLogprobs(t *testing.T) {
+	t.Run("embeddings", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		vector := make([]float64, 1536)
+		data := make([]any, 7)
+		for index := range data {
+			data[index] = map[string]any{"object": "embedding", "index": index, "embedding": vector}
+		}
+		f.dispatch.responseBody, _ = json.Marshal(map[string]any{"object": "list", "data": data})
+		rec := f.do(t, http.MethodPost, "/v1/embeddings", "gpt-4o", helmHeaders("idem-embeddings", "gpt-4o"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("logprobs", func(t *testing.T) {
+		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
+		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"role":"assistant","content":"hello"},"logprobs":{"content":[{"token":"hello","logprob":-0.1,"bytes":[104,101,108,108,111],"top_logprobs":[]}]}}]}`)
+		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-logprobs", "gpt-4o"))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"token":"hello"`) {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
 }
 
 // --- Runtime smoke: 1 denied route --------------------------------------------
@@ -277,7 +445,7 @@ func TestGatewayFallbackReceipt(t *testing.T) {
 	if meta.Quote == nil || len(meta.Quote.FallbackChain) == 0 {
 		t.Fatal("fallback receipt must include the fallback chain")
 	}
-	if meta.UsageReceipt == nil || meta.UsageReceipt.ModelID == "gpt-4o-mini" {
+	if meta.UsageReceiptView == nil || meta.UsageReceiptView.ModelID == "gpt-4o-mini" {
 		t.Fatal("usage receipt must record the substituted model, not the requested one")
 	}
 }

@@ -1,16 +1,62 @@
+// quantum_posture: these tests exercise existing classical Ed25519 receipt
+// verification; privacy-boundary coverage adds no post-quantum assurance.
 package gateway
 
 import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
+
+func TestPostJSONProtectsProviderBoundary(t *testing.T) {
+	var requestBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requestBody = string(body)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"content": "reply to person@example.com"}})
+	}))
+	defer server.Close()
+
+	router := NewGatewayRouter()
+	var out struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	if err := router.postJSON(context.Background(), server.URL, map[string]any{"prompt": "contact person@example.com"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(requestBody, "person@example.com") || !strings.Contains(requestBody, "[REDACTED_EMAIL]") {
+		t.Fatalf("request body was not protected: %s", requestBody)
+	}
+	if strings.Contains(out.Message.Content, "person@example.com") || !strings.Contains(out.Message.Content, "[REDACTED_EMAIL]") {
+		t.Fatalf("response was not protected: %q", out.Message.Content)
+	}
+}
+
+func TestPostJSONBlocksRestrictedPayloadBeforeDispatch(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+	defer server.Close()
+
+	router := NewGatewayRouter()
+	err := router.postJSON(context.Background(), server.URL, map[string]any{"prompt": "api_key=sk_live_example1234"}, &struct{}{})
+	if !errors.Is(err, privacy.ErrDataEgressBlocked) {
+		t.Fatalf("error = %v, want DATA_EGRESS_BLOCKED", err)
+	}
+	if called {
+		t.Fatal("provider was called with restricted payload")
+	}
+}
 
 func TestExecuteOllamaDiscoversDigestAndCallsAPI(t *testing.T) {
 	mux := http.NewServeMux()

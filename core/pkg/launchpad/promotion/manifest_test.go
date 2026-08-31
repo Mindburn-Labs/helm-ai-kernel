@@ -1,3 +1,5 @@
+// quantum_posture: these tests cover classical SHA-256 and Cosign evidence
+// references only; they make no post-quantum assurance claim.
 package promotion
 
 import (

@@ -1,3 +1,5 @@
+// quantum_posture: Launchpad promotion binds artifact evidence with classical
+// SHA-256 digests and Cosign references only; it makes no post-quantum claim.
 package promotion
 
 import (

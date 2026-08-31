@@ -72,6 +72,9 @@ func TestLaunchpadClaimsReflectContractFirstSupportLevels(t *testing.T) {
 	requireContains(t, artifactWorkflow, `"app_id": "kilocode"`)
 	requireContains(t, artifactWorkflow, "artifact_only_no_live_conformance")
 	requireContains(t, artifactWorkflow, ".app_id as $appID")
+	requireContains(t, artifactWorkflow, `schema_version: "helm.launchpad.artifacts.v2"`)
+	requireContains(t, artifactWorkflow, `--arg sbom_digest`)
+	requireContains(t, artifactWorkflow, `--arg vulnerability_scan_digest`)
 	requireContains(t, artifactWorkflow, "if: ${{ always() }}")
 }
 

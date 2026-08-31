@@ -13,7 +13,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const ManifestSchemaVersion = "helm.launchpad.artifacts.v1"
+const (
+	ManifestSchemaVersion       = "helm.launchpad.artifacts.v2"
+	legacyManifestSchemaVersion = "helm.launchpad.artifacts.v1"
+)
 
 var promotableApps = map[string]struct{}{
 	"openclaw": {},
@@ -50,8 +53,10 @@ type EgressProxy struct {
 	SignatureRef            string `json:"signature_ref"`
 	SBOMTool                string `json:"sbom_tool"`
 	SBOMRef                 string `json:"sbom_ref"`
+	SBOMDigest              string `json:"sbom_digest"`
 	VulnerabilityScanTool   string `json:"vulnerability_scan_tool"`
 	VulnerabilityScanRef    string `json:"vulnerability_scan_ref"`
+	VulnerabilityScanDigest string `json:"vulnerability_scan_digest"`
 	VulnerabilityScanStatus string `json:"vulnerability_scan_status"`
 	ProvenanceRef           string `json:"provenance_ref"`
 }
@@ -76,8 +81,10 @@ type ArtifactEntry struct {
 	SignatureRef            string       `json:"signature_ref"`
 	SBOMTool                string       `json:"sbom_tool"`
 	SBOMRef                 string       `json:"sbom_ref"`
+	SBOMDigest              string       `json:"sbom_digest"`
 	VulnerabilityScanTool   string       `json:"vulnerability_scan_tool"`
 	VulnerabilityScanRef    string       `json:"vulnerability_scan_ref"`
+	VulnerabilityScanDigest string       `json:"vulnerability_scan_digest"`
 	VulnerabilityScanStatus string       `json:"vulnerability_scan_status"`
 	ProvenanceRef           string       `json:"provenance_ref"`
 	ArtifactVerificationRef string       `json:"artifact_verification_ref,omitempty"`
@@ -103,7 +110,7 @@ func LoadManifest(path string) (Manifest, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return Manifest{}, err
 	}
-	if manifest.SchemaVersion != ManifestSchemaVersion {
+	if manifest.SchemaVersion != ManifestSchemaVersion && manifest.SchemaVersion != legacyManifestSchemaVersion {
 		return Manifest{}, fmt.Errorf("unsupported launchpad artifact manifest schema %q", manifest.SchemaVersion)
 	}
 	if len(manifest.Artifacts) == 0 {
@@ -164,6 +171,9 @@ func ValidateArtifact(entry ArtifactEntry) error {
 	if strings.ToLower(entry.SBOMTool) != "syft" || entry.SBOMRef == "" {
 		return fmt.Errorf("app %s artifact manifest requires syft SBOM evidence", entry.AppID)
 	}
+	if !registryDigest(entry.SBOMDigest) {
+		return fmt.Errorf("app %s SBOM digest must be sha256:<64 lowercase hex>", entry.AppID)
+	}
 	switch strings.ToLower(entry.VulnerabilityScanTool) {
 	case "grype", "trivy":
 		if entry.VulnerabilityScanRef == "" {
@@ -171,6 +181,9 @@ func ValidateArtifact(entry ArtifactEntry) error {
 		}
 	default:
 		return fmt.Errorf("app %s artifact manifest requires grype or trivy vulnerability scan evidence", entry.AppID)
+	}
+	if !registryDigest(entry.VulnerabilityScanDigest) {
+		return fmt.Errorf("app %s vulnerability scan digest must be sha256:<64 lowercase hex>", entry.AppID)
 	}
 	if strings.EqualFold(entry.VulnerabilityScanStatus, "failed") {
 		return fmt.Errorf("app %s vulnerability scan failed and cannot be promoted", entry.AppID)
@@ -203,10 +216,16 @@ func ValidateEgressProxyArtifact(proxy EgressProxy) error {
 	if strings.ToLower(proxy.SBOMTool) != "syft" {
 		return fmt.Errorf("egress proxy artifact requires syft SBOM evidence")
 	}
+	if !registryDigest(proxy.SBOMDigest) {
+		return fmt.Errorf("egress proxy SBOM digest must be sha256:<64 lowercase hex>")
+	}
 	switch strings.ToLower(proxy.VulnerabilityScanTool) {
 	case "grype", "trivy":
 	default:
 		return fmt.Errorf("egress proxy artifact requires grype or trivy vulnerability scan evidence")
+	}
+	if !registryDigest(proxy.VulnerabilityScanDigest) {
+		return fmt.Errorf("egress proxy vulnerability scan digest must be sha256:<64 lowercase hex>")
 	}
 	if strings.EqualFold(proxy.VulnerabilityScanStatus, "failed") {
 		return fmt.Errorf("egress proxy vulnerability scan failed and cannot be promoted")
@@ -276,13 +295,15 @@ func Promote(app registry.AppSpec, entry ArtifactEntry, refs EvidenceRefs) (regi
 	out.License.SPDX = entry.LicenseSPDX
 	out.License.URL = entry.LicenseRef
 	out.SupplyChainEvidence = registry.SupplyChainEvidenceSpec{
-		ArtifactDigest:        entry.Digest,
-		SignatureTool:         entry.SignatureTool,
-		SignatureRef:          entry.SignatureRef,
-		SBOMTool:              entry.SBOMTool,
-		SBOMRef:               entry.SBOMRef,
-		VulnerabilityScanTool: entry.VulnerabilityScanTool,
-		VulnerabilityScanRef:  entry.VulnerabilityScanRef,
+		ArtifactDigest:          entry.Digest,
+		SignatureTool:           entry.SignatureTool,
+		SignatureRef:            entry.SignatureRef,
+		SBOMTool:                entry.SBOMTool,
+		SBOMRef:                 entry.SBOMRef,
+		SBOMDigest:              entry.SBOMDigest,
+		VulnerabilityScanTool:   entry.VulnerabilityScanTool,
+		VulnerabilityScanRef:    entry.VulnerabilityScanRef,
+		VulnerabilityScanDigest: entry.VulnerabilityScanDigest,
 	}
 	if out.FrameworkContract.EgressProxy.Required {
 		if entry.EgressProxy == nil {
@@ -296,13 +317,15 @@ func Promote(app registry.AppSpec, entry ArtifactEntry, refs EvidenceRefs) (regi
 			receiptRef = "receipts/launchpad-egress-proxy.json"
 		}
 		out.FrameworkContract.EgressProxy = registry.EgressProxyContractSpec{
-			Required:             true,
-			Image:                entry.EgressProxy.Image,
-			Digest:               entry.EgressProxy.Digest,
-			SignatureRef:         entry.EgressProxy.SignatureRef,
-			SBOMRef:              entry.EgressProxy.SBOMRef,
-			VulnerabilityScanRef: entry.EgressProxy.VulnerabilityScanRef,
-			ReceiptRef:           receiptRef,
+			Required:                true,
+			Image:                   entry.EgressProxy.Image,
+			Digest:                  entry.EgressProxy.Digest,
+			SignatureRef:            entry.EgressProxy.SignatureRef,
+			SBOMRef:                 entry.EgressProxy.SBOMRef,
+			SBOMDigest:              entry.EgressProxy.SBOMDigest,
+			VulnerabilityScanRef:    entry.EgressProxy.VulnerabilityScanRef,
+			VulnerabilityScanDigest: entry.EgressProxy.VulnerabilityScanDigest,
+			ReceiptRef:              receiptRef,
 		}
 	}
 	out.FrameworkContract.Images = syncFrameworkContractImages(out.FrameworkContract.Images, entry)

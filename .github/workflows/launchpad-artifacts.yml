@@ -505,6 +505,8 @@ jobs:
           LICENSE_SPDX="$(jq -r '.license_spdx' "${metadata}")"
           SUBJECT_NAME="$(jq -r '.image' "${metadata}")"
           IMAGE_REF="${SUBJECT_NAME}@${DIGEST}"
+          SBOM_DIGEST="sha256:$(sha256sum "sbom-${APP_ID}.spdx.json" | cut -d' ' -f1)"
+          VULNERABILITY_SCAN_DIGEST="sha256:$(sha256sum "grype-${APP_ID}.json" | cut -d' ' -f1)"
           mkdir -p launchpad-artifacts
           jq -n \
             --arg app_id "${APP_ID}" \
@@ -526,8 +528,10 @@ jobs:
             --arg signature_ref "cosign://${IMAGE_REF}" \
             --arg sbom_tool "syft" \
             --arg sbom_ref "artifact://sbom-${APP_ID}.spdx.json" \
+            --arg sbom_digest "${SBOM_DIGEST}" \
             --arg vulnerability_scan_tool "grype" \
             --arg vulnerability_scan_ref "artifact://grype-${APP_ID}.json" \
+            --arg vulnerability_scan_digest "${VULNERABILITY_SCAN_DIGEST}" \
             --arg vulnerability_scan_status "${GRYPE_STATUS}" \
             --arg provenance_ref "github-actions://${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
             '{
@@ -550,8 +554,10 @@ jobs:
               signature_ref: $signature_ref,
               sbom_tool: $sbom_tool,
               sbom_ref: $sbom_ref,
+              sbom_digest: $sbom_digest,
               vulnerability_scan_tool: $vulnerability_scan_tool,
               vulnerability_scan_ref: $vulnerability_scan_ref,
+              vulnerability_scan_digest: $vulnerability_scan_digest,
               vulnerability_scan_status: $vulnerability_scan_status,
               provenance_ref: $provenance_ref
             }' > "launchpad-artifacts/${APP_ID}.json"
@@ -708,6 +714,8 @@ jobs:
           if ! timeout 20m grype "${IMAGE_REF}" -o json --file grype-egress-proxy.json; then
             status=failed
           fi
+          SBOM_DIGEST="sha256:$(sha256sum sbom-egress-proxy.spdx.json | cut -d' ' -f1)"
+          VULNERABILITY_SCAN_DIGEST="sha256:$(sha256sum grype-egress-proxy.json | cut -d' ' -f1)"
           jq -n \
             --arg source_sha "${GITHUB_SHA}" \
             --arg source_tree_sha256 "${{ steps.source-tree.outputs.sha256 }}" \
@@ -718,7 +726,9 @@ jobs:
             --arg digest "${{ steps.build.outputs.digest }}" \
             --arg signature_ref "cosign://${IMAGE_REF}" \
             --arg sbom_ref "artifact://sbom-egress-proxy.spdx.json" \
+            --arg sbom_digest "${SBOM_DIGEST}" \
             --arg vulnerability_scan_ref "artifact://grype-egress-proxy.json" \
+            --arg vulnerability_scan_digest "${VULNERABILITY_SCAN_DIGEST}" \
             --arg vulnerability_scan_status "${status}" \
             --arg provenance_ref "github-actions://${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}" \
             '{
@@ -734,8 +744,10 @@ jobs:
               signature_ref: $signature_ref,
               sbom_tool: "syft",
               sbom_ref: $sbom_ref,
+              sbom_digest: $sbom_digest,
               vulnerability_scan_tool: "grype",
               vulnerability_scan_ref: $vulnerability_scan_ref,
+              vulnerability_scan_digest: $vulnerability_scan_digest,
               vulnerability_scan_status: $vulnerability_scan_status,
               provenance_ref: $provenance_ref
             }' > launchpad-egress-proxy.json
@@ -781,6 +793,10 @@ jobs:
               manifests+=("${manifest}")
             fi
           done
+          jq -e '(.sbom_digest | test("^sha256:[0-9a-f]{64}$")) and (.vulnerability_scan_digest | test("^sha256:[0-9a-f]{64}$"))' "${egress_manifest}" >/dev/null
+          for manifest in "${manifests[@]}"; do
+            jq -e '(.sbom_digest | test("^sha256:[0-9a-f]{64}$")) and (.vulnerability_scan_digest | test("^sha256:[0-9a-f]{64}$"))' "${manifest}" >/dev/null
+          done
           source_tree_sha256="$(
             find launchpad-artifacts -type f -name '*.json' -print0 |
               sort -z |
@@ -797,7 +813,7 @@ jobs:
             --arg workflow_ref "${GITHUB_REPOSITORY}/.github/workflows/launchpad-artifacts.yml@${GITHUB_REF}" \
             --slurpfile egress_proxy "${egress_manifest}" \
             '{
-              schema_version: "helm.launchpad.artifacts.v1",
+              schema_version: "helm.launchpad.artifacts.v2",
               generated_at: $generated_at,
               github_run_id: $github_run_id,
               github_run_attempt: $github_run_attempt,

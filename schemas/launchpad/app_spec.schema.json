@@ -45,8 +45,10 @@
         "signature_ref": { "type": "string" },
         "sbom_tool": { "const": "syft" },
         "sbom_ref": { "type": "string" },
+        "sbom_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "vulnerability_scan_tool": { "enum": ["grype", "trivy"] },
-        "vulnerability_scan_ref": { "type": "string" }
+        "vulnerability_scan_ref": { "type": "string" },
+        "vulnerability_scan_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "conformance": { "type": "object" }
@@ -89,7 +91,9 @@
             "digest": { "type": "string", "pattern": "^sha256:" },
             "signature_ref": { "type": "string" },
             "sbom_ref": { "type": "string" },
+            "sbom_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
             "vulnerability_scan_ref": { "type": "string" },
+            "vulnerability_scan_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
             "receipt_ref": { "type": "string" }
           }
         },

@@ -31,6 +31,9 @@ func TestPromoteRequiresCompleteSignedArtifactEvidence(t *testing.T) {
 	if promoted.PromotionEvidence.LiveE2ERunID != refs.LiveE2ERunID {
 		t.Fatalf("promotion evidence not recorded: %#v", promoted.PromotionEvidence)
 	}
+	if promoted.SupplyChainEvidence.SBOMDigest != entry.SBOMDigest || promoted.SupplyChainEvidence.VulnerabilityScanDigest != entry.VulnerabilityScanDigest {
+		t.Fatalf("artifact digests were not preserved: %#v", promoted.SupplyChainEvidence)
+	}
 }
 
 func TestManifestEntryCarriesTopLevelEgressProxyArtifact(t *testing.T) {
@@ -47,6 +50,19 @@ func TestManifestEntryCarriesTopLevelEgressProxyArtifact(t *testing.T) {
 	}
 	if entry.EgressProxy == nil || entry.EgressProxy.Digest != manifest.EgressProxy.Digest {
 		t.Fatalf("entry did not inherit top-level egress proxy artifact: %#v", entry.EgressProxy)
+	}
+}
+
+func TestValidateEgressProxyRequiresArtifactDigests(t *testing.T) {
+	proxy := validEgressProxyArtifact()
+	proxy.SBOMDigest = ""
+	if err := ValidateEgressProxyArtifact(proxy); err == nil || !strings.Contains(err.Error(), "SBOM digest") {
+		t.Fatalf("ValidateEgressProxyArtifact() error = %v, want SBOM digest rejection", err)
+	}
+	proxy = validEgressProxyArtifact()
+	proxy.VulnerabilityScanDigest = ""
+	if err := ValidateEgressProxyArtifact(proxy); err == nil || !strings.Contains(err.Error(), "vulnerability scan digest") {
+		t.Fatalf("ValidateEgressProxyArtifact() error = %v, want vulnerability scan digest rejection", err)
 	}
 }
 
@@ -264,6 +280,20 @@ func TestValidateArtifactRejectsUnsupportedOrIncompleteManifest(t *testing.T) {
 			wantErr: "syft SBOM",
 		},
 		{
+			name: "missing sbom digest",
+			mutate: func(entry *ArtifactEntry) {
+				entry.SBOMDigest = ""
+			},
+			wantErr: "SBOM digest",
+		},
+		{
+			name: "missing vulnerability scan digest",
+			mutate: func(entry *ArtifactEntry) {
+				entry.VulnerabilityScanDigest = ""
+			},
+			wantErr: "vulnerability scan digest",
+		},
+		{
 			name: "failed scan",
 			mutate: func(entry *ArtifactEntry) {
 				entry.VulnerabilityScanStatus = "failed"
@@ -331,8 +361,10 @@ func validArtifact(appID string) ArtifactEntry {
 		SignatureRef:            "cosign://ghcr.io/mindburn-labs/helm-launchpad/" + appID + "@" + digest,
 		SBOMTool:                "syft",
 		SBOMRef:                 "artifact://sbom-" + appID + ".spdx.json",
+		SBOMDigest:              "sha256:" + strings.Repeat("e", 64),
 		VulnerabilityScanTool:   "grype",
 		VulnerabilityScanRef:    "artifact://grype-" + appID + ".json",
+		VulnerabilityScanDigest: "sha256:" + strings.Repeat("f", 64),
 		VulnerabilityScanStatus: "completed",
 		ProvenanceRef:           "github-actions://123/1",
 	}
@@ -353,8 +385,10 @@ func validEgressProxyArtifact() EgressProxy {
 		SignatureRef:            "cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@" + digest,
 		SBOMTool:                "syft",
 		SBOMRef:                 "artifact://sbom-egress-proxy.spdx.json",
+		SBOMDigest:              "sha256:" + strings.Repeat("1", 64),
 		VulnerabilityScanTool:   "grype",
 		VulnerabilityScanRef:    "artifact://grype-egress-proxy.json",
+		VulnerabilityScanDigest: "sha256:" + strings.Repeat("2", 64),
 		VulnerabilityScanStatus: "completed",
 		ProvenanceRef:           "github-actions://123/1",
 	}

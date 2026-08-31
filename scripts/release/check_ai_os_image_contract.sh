@@ -24,6 +24,32 @@ last_instruction() {
     }'
 }
 
+logical_run_instructions() {
+  awk '
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (continued) {
+        sub(/^[[:space:]]*/, "", line)
+        instruction = instruction " " line
+      } else {
+        sub(/^[[:space:]]*/, "", line)
+        if (line !~ /^[Rr][Uu][Nn][[:space:]]/) next
+        instruction = line
+      }
+      if (instruction ~ /\\[[:space:]]*$/) {
+        sub(/\\[[:space:]]*$/, "", instruction)
+        continued = 1
+      } else {
+        print instruction
+        instruction = ""
+        continued = 0
+      }
+    }
+    END { if (instruction != "") print instruction }
+  ' "$dockerfile"
+}
+
 workflow=${1:-.github/workflows/release-ai-os-image.yml}
 legacy_workflow=${2:-.github/workflows/release.yml}
 dockerfile=${3:-Dockerfile}
@@ -57,7 +83,7 @@ if grep -Eqi '^[[:space:]]*(ARG|ENV)[[:space:]].*(TOKEN|PRIVATE_KEY|PASSWORD|DAT
   echo 'Dockerfile must not declare credential inputs or values' >&2
   exit 1
 fi
-if grep -Eqi '^[[:space:]]*RUN[[:space:]]+apk[[:space:]]+add' "$dockerfile"; then
+if logical_run_instructions | grep -Eqi '(^|[[:space:];|&])apk[[:space:]]+([^[:space:];|&]+[[:space:]]+)*add([[:space:];|&]|$)'; then
   echo 'the governed build must not resolve mutable Alpine packages at build time' >&2
   exit 1
 fi
@@ -86,6 +112,10 @@ require 'name: release-production' "$workflow"
 require 'RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}' "$workflow"
 require 'RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}' "$workflow"
 require 'OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}' "$workflow"
+require '/environments/${RELEASE_ENVIRONMENT}/variables/HELM_RELEASE_AUTHORITY_ARMED' "$workflow"
+require '/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS' "$workflow"
+require 'if [[ "${live_release_authority}" != "release-production" ]]; then' "$workflow"
+require 'if [[ "${live_release_authority}" != "${RELEASE_AUTHORITY_ARMED}" ]]; then' "$workflow"
 require 'REQUEST_ACTOR: ${{ github.actor }}' "$workflow"
 require 'TRIGGERING_ACTOR: ${{ github.triggering_actor }}' "$workflow"
 require 'if [[ "${GITHUB_RUN_ATTEMPT}" != "1" ]]; then' "$workflow"
@@ -157,6 +187,15 @@ if [ "$(grep -Fc 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origi
   echo 'current main and newest completed CI must be checked initially and immediately before promotion' >&2
   exit 1
 fi
+if [ "$(grep -Fc 'if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'RELEASE_ENVIRONMENT: release-production' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'jq -e --arg actor "${candidate}"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'for owner in mindburnlabs peycheff-com; do' "$workflow")" -ne 2 ]; then
+  echo 'owner authority, actor allowlist, and run approval must be read back initially and immediately before promotion' >&2
+  exit 1
+fi
 if [ "$(grep -Fc 'upload-artifact: false' "$workflow")" -ne 2 ]; then
   echo 'both platform SBOM actions must disable duplicate intermediate artifacts' >&2
   exit 1
@@ -216,6 +255,17 @@ signature_line="$(first_line 'cosign sign --yes "${image_ref}"')"
 evidence_line="$(first_line '> release-evidence.json')"
 evidence_attest_line="$(first_line '--predicate release-evidence.json')"
 promotion_ci_line="$(last_line './scripts/release/require_latest_main_ci_success.sh')"
+promotion_live_authority_read_line="$(first_line 'live_release_authority="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api')"
+promotion_live_actors_read_line="$(first_line 'live_release_actors="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api')"
+promotion_authority_line="$(first_line 'if [[ "${live_release_authority}" != "release-production" ]]; then')"
+promotion_authority_binding_line="$(first_line 'if [[ "${live_release_authority}" != "${RELEASE_AUTHORITY_ARMED}" ]]; then')"
+promotion_live_actor_validation_line="$(first_line '<<<"${live_release_actors}" >/dev/null; then')"
+promotion_actor_loop_line="$(last_line 'for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do')"
+promotion_actor_check_line="$(last_line 'jq -e --arg actor "${candidate}"')"
+promotion_approval_read_line="$(last_line 'approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"')"
+promotion_approval_check_line="$(last_line '<<<"${approval_history}" >/dev/null; then')"
+promotion_owner_loop_line="$(last_line 'for owner in mindburnlabs peycheff-com; do')"
+promotion_owner_read_line="$(last_line '/orgs/Mindburn-Labs/memberships/${owner}')"
 promotion_line="$(first_line 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh')"
 final_platform_line="$(first_line 'final-image-index.json')"
 finalize_evidence_line="$(first_line '.promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified"')"
@@ -230,7 +280,18 @@ if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$signature_line" -lt "$evidence_line" ] ||
   ! [ "$evidence_line" -lt "$evidence_attest_line" ] ||
   ! [ "$evidence_attest_line" -lt "$promotion_ci_line" ] ||
-  ! [ "$promotion_ci_line" -lt "$promotion_line" ] ||
+  ! [ "$promotion_ci_line" -lt "$promotion_live_authority_read_line" ] ||
+  ! [ "$promotion_live_authority_read_line" -lt "$promotion_live_actors_read_line" ] ||
+  ! [ "$promotion_live_actors_read_line" -lt "$promotion_authority_line" ] ||
+  ! [ "$promotion_authority_line" -lt "$promotion_authority_binding_line" ] ||
+  ! [ "$promotion_authority_binding_line" -lt "$promotion_live_actor_validation_line" ] ||
+  ! [ "$promotion_live_actor_validation_line" -lt "$promotion_actor_loop_line" ] ||
+  ! [ "$promotion_actor_loop_line" -lt "$promotion_actor_check_line" ] ||
+  ! [ "$promotion_actor_check_line" -lt "$promotion_approval_read_line" ] ||
+  ! [ "$promotion_approval_read_line" -lt "$promotion_approval_check_line" ] ||
+  ! [ "$promotion_approval_check_line" -lt "$promotion_owner_loop_line" ] ||
+  ! [ "$promotion_owner_loop_line" -lt "$promotion_owner_read_line" ] ||
+  ! [ "$promotion_owner_read_line" -lt "$promotion_line" ] ||
   ! [ "$promotion_line" -lt "$final_platform_line" ] ||
   ! [ "$final_platform_line" -lt "$finalize_evidence_line" ] ||
   ! [ "$finalize_evidence_line" -lt "$final_attest_line" ]; then

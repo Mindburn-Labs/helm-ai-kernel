@@ -168,6 +168,12 @@ if "$checker" "$workflow" .github/workflows/release.yml "$test_dir/indented-unpi
   exit 1
 fi
 
+awk '{ print } END { print "  run set -e; apk add --no-cache curl" }' Dockerfile > "$test_dir/compound-package-install.Dockerfile"
+if "$checker" "$workflow" .github/workflows/release.yml "$test_dir/compound-package-install.Dockerfile" >/dev/null 2>&1; then
+  echo 'compound mutable package installation was not rejected' >&2
+  exit 1
+fi
+
 sed 's/cancel-in-progress: false/cancel-in-progress: true/' "$workflow" > "$test_dir/cancelling.yml"
 mutate_and_reject "$test_dir/cancelling.yml"
 
@@ -254,9 +260,92 @@ sed 's/if \[\[ "${GITHUB_RUN_ATTEMPT}" != "1" \]\]; then/if false; then/' \
   "$workflow" > "$test_dir/replayed-owner-approval.yml"
 mutate_and_reject "$test_dir/replayed-owner-approval.yml"
 
-sed 's/for owner in mindburnlabs peycheff-com; do/for owner in mindburnlabs; do/' \
-  "$workflow" > "$test_dir/missing-second-owner-readback.yml"
-mutate_and_reject "$test_dir/missing-second-owner-readback.yml"
+awk '
+  /if \[\[ "\${RELEASE_AUTHORITY_ARMED:-}" != "release-production" \]\]; then/ {
+    seen++
+    if (seen == 2) {
+      print "          if false; then # mutation: skip final authority recheck"
+      next
+    }
+  }
+  { print }
+' "$workflow" > "$test_dir/stale-final-authority.yml"
+mutate_and_reject "$test_dir/stale-final-authority.yml"
+
+sed 's/if \[\[ "${live_release_authority}" != "release-production" \]\]; then/if false; then/' \
+  "$workflow" > "$test_dir/stale-live-authority-readback.yml"
+mutate_and_reject "$test_dir/stale-live-authority-readback.yml"
+
+sed 's/if \[\[ "${live_release_authority}" != "${RELEASE_AUTHORITY_ARMED}" \]\]; then/if false; then/' \
+  "$workflow" > "$test_dir/unbound-live-authority-snapshot.yml"
+mutate_and_reject "$test_dir/unbound-live-authority-snapshot.yml"
+
+sed 's#/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS#/environments/${RELEASE_ENVIRONMENT}/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS#' \
+  "$workflow" > "$test_dir/wrong-live-actor-variable-scope.yml"
+mutate_and_reject "$test_dir/wrong-live-actor-variable-scope.yml"
+
+awk '
+  /for candidate in "\$\{REQUEST_ACTOR\}" "\$\{TRIGGERING_ACTOR\}"; do/ {
+    seen++
+    if (seen == 2) {
+      print "          for candidate in; do # mutation: skip final actor allowlist recheck"
+      next
+    }
+  }
+  { print }
+' "$workflow" > "$test_dir/missing-final-actor-readback.yml"
+mutate_and_reject "$test_dir/missing-final-actor-readback.yml"
+
+awk '
+  /approval_history="\$\(gh api .*\/approvals/ {
+    seen++
+    if (seen == 2) {
+      print "          approval_history=\"[]\" # mutation: skip final approval readback"
+      next
+    }
+  }
+  { print }
+' "$workflow" > "$test_dir/missing-final-approval-readback.yml"
+mutate_and_reject "$test_dir/missing-final-approval-readback.yml"
+
+awk '
+  /for owner in mindburnlabs peycheff-com; do/ {
+    seen++
+    if (seen == 2) {
+      print "          for owner in mindburnlabs; do # mutation: skip final second-owner readback"
+      next
+    }
+  }
+  { print }
+' "$workflow" > "$test_dir/missing-final-owner-readback.yml"
+mutate_and_reject "$test_dir/missing-final-owner-readback.yml"
+
+awk '
+  /RELEASE_ENVIRONMENT: release-production/ {
+    seen++
+    if (seen == 2) next
+  }
+  { print }
+' "$workflow" > "$test_dir/missing-final-release-environment.yml"
+mutate_and_reject "$test_dir/missing-final-release-environment.yml"
+
+awk '
+  /approval_history="\$\(gh api .*\/approvals/ {
+    seen++
+    if (seen == 2) {
+      held = $0
+      next
+    }
+  }
+  /for owner in mindburnlabs peycheff-com; do/ && held != "" {
+    print
+    print held " # mutation: approval readback moved after owner loop"
+    held = ""
+    next
+  }
+  { print }
+' "$workflow" > "$test_dir/reordered-final-authority.yml"
+mutate_and_reject "$test_dir/reordered-final-authority.yml"
 
 sed 's/name: release-production/name: unprotected-release/' "$workflow" > "$test_dir/wrong-environment.yml"
 mutate_and_reject "$test_dir/wrong-environment.yml"

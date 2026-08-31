@@ -49,6 +49,7 @@ jobs:
           OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
           RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
           RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
+          RELEASE_ENVIRONMENT: release-production
           REQUEST_ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
@@ -489,6 +490,12 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "true"
           GH_TOKEN: ${{ github.token }}
+          OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
+          RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
+          RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
+          RELEASE_ENVIRONMENT: release-production
+          REQUEST_ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
@@ -501,6 +508,66 @@ jobs:
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
             > promotion-ci-runs.json
           ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json
+
+          if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
+            echo "::error::release-production is no longer explicitly armed"
+            exit 1
+          fi
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for final owner readback"
+            exit 1
+          fi
+          live_release_authority="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/variables/HELM_RELEASE_AUTHORITY_ARMED" \
+            --jq '.value')"
+          live_release_actors="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS" \
+            --jq '.value')"
+          if [[ "${live_release_authority}" != "release-production" ]]; then
+            echo "::error::release-production was disarmed during the build"
+            exit 1
+          fi
+          if [[ "${live_release_authority}" != "${RELEASE_AUTHORITY_ARMED}" ]]; then
+            echo "::error::release-production changed from the job-start authority snapshot"
+            exit 1
+          fi
+          if ! jq -e '
+            type == "array" and
+            length > 0 and
+            all(.[]; type == "string" and test("^[A-Za-z0-9-]{1,39}$")) and
+            (unique | length) == length
+          ' <<<"${live_release_actors}" >/dev/null; then
+            echo "::error::the live HELM_AI_OS_IMAGE_RELEASE_ACTORS value is invalid"
+            exit 1
+          fi
+          for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do
+            if ! jq -e --arg actor "${candidate}" 'index($actor) != null' \
+              <<<"${live_release_actors}" >/dev/null; then
+              echo "::error::GitHub actor ${candidate} is no longer authorized for AI OS image publication"
+              exit 1
+            fi
+          done
+          approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
+          if ! jq -e '
+            [
+              .[] |
+              select(
+                .state == "approved" and
+                (.user.login == "mindburnlabs" or .user.login == "peycheff-com")
+              )
+            ] | length > 0
+          ' <<<"${approval_history}" >/dev/null; then
+            echo "::error::release-production no longer has this run's authorized human-owner approval"
+            exit 1
+          fi
+          for owner in mindburnlabs peycheff-com; do
+            if ! GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+              "/orgs/Mindburn-Labs/memberships/${owner}" \
+              --jq 'select(.state == "active" and .role == "admin") | true' | grep -Fxq true; then
+              echo "::error::final Mindburn-Labs owner/admin readback failed for ${owner}"
+              exit 1
+            fi
+          done
 
           expected_digest="${{ steps.build.outputs.digest }}"
           staging_ref="${IMAGE_NAME}@${expected_digest}"

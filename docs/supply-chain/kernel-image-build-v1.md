@@ -57,8 +57,9 @@ these external owner-managed settings pass:
    exact allowed GitHub logins, for example `["mindburnlabs","peycheff-com"]`.
    Both `github.actor` and `github.triggering_actor` must be present.
 4. The environment supplies `HELM_GITHUB_OWNER_READ_TOKEN`, a read-only token
-   able to read Mindburn-Labs organization memberships. The workflow fails
-   unless both `mindburnlabs` and `peycheff-com` read back as active admins.
+   able to read the repository release-actor variable and Mindburn-Labs
+   organization memberships. The workflow fails unless both `mindburnlabs` and
+   `peycheff-com` read back as active admins.
 5. The current workflow run's environment review history contains an approval
    from one of those two human owners. This binds approval to one run rather
    than treating a repository variable or older approval as reusable authority.

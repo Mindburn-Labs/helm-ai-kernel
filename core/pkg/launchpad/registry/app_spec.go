@@ -75,13 +75,15 @@ type WritablePathContractSpec struct {
 }
 
 type EgressProxyContractSpec struct {
-	Required             bool   `json:"required" yaml:"required"`
-	Image                string `json:"image,omitempty" yaml:"image,omitempty"`
-	Digest               string `json:"digest,omitempty" yaml:"digest,omitempty"`
-	SignatureRef         string `json:"signature_ref,omitempty" yaml:"signature_ref,omitempty"`
-	SBOMRef              string `json:"sbom_ref,omitempty" yaml:"sbom_ref,omitempty"`
-	VulnerabilityScanRef string `json:"vulnerability_scan_ref,omitempty" yaml:"vulnerability_scan_ref,omitempty"`
-	ReceiptRef           string `json:"receipt_ref,omitempty" yaml:"receipt_ref,omitempty"`
+	Required                bool   `json:"required" yaml:"required"`
+	Image                   string `json:"image,omitempty" yaml:"image,omitempty"`
+	Digest                  string `json:"digest,omitempty" yaml:"digest,omitempty"`
+	SignatureRef            string `json:"signature_ref,omitempty" yaml:"signature_ref,omitempty"`
+	SBOMRef                 string `json:"sbom_ref,omitempty" yaml:"sbom_ref,omitempty"`
+	SBOMDigest              string `json:"sbom_digest,omitempty" yaml:"sbom_digest,omitempty"`
+	VulnerabilityScanRef    string `json:"vulnerability_scan_ref,omitempty" yaml:"vulnerability_scan_ref,omitempty"`
+	VulnerabilityScanDigest string `json:"vulnerability_scan_digest,omitempty" yaml:"vulnerability_scan_digest,omitempty"`
+	ReceiptRef              string `json:"receipt_ref,omitempty" yaml:"receipt_ref,omitempty"`
 }
 
 type FrameworkImageContractSpec struct {
@@ -194,13 +196,15 @@ type BudgetCeiling struct {
 }
 
 type SupplyChainEvidenceSpec struct {
-	ArtifactDigest        string `json:"artifact_digest" yaml:"artifact_digest"`
-	SignatureTool         string `json:"signature_tool" yaml:"signature_tool"`
-	SignatureRef          string `json:"signature_ref" yaml:"signature_ref"`
-	SBOMTool              string `json:"sbom_tool" yaml:"sbom_tool"`
-	SBOMRef               string `json:"sbom_ref" yaml:"sbom_ref"`
-	VulnerabilityScanTool string `json:"vulnerability_scan_tool" yaml:"vulnerability_scan_tool"`
-	VulnerabilityScanRef  string `json:"vulnerability_scan_ref" yaml:"vulnerability_scan_ref"`
+	ArtifactDigest          string `json:"artifact_digest" yaml:"artifact_digest"`
+	SignatureTool           string `json:"signature_tool" yaml:"signature_tool"`
+	SignatureRef            string `json:"signature_ref" yaml:"signature_ref"`
+	SBOMTool                string `json:"sbom_tool" yaml:"sbom_tool"`
+	SBOMRef                 string `json:"sbom_ref" yaml:"sbom_ref"`
+	SBOMDigest              string `json:"sbom_digest,omitempty" yaml:"sbom_digest,omitempty"`
+	VulnerabilityScanTool   string `json:"vulnerability_scan_tool" yaml:"vulnerability_scan_tool"`
+	VulnerabilityScanRef    string `json:"vulnerability_scan_ref" yaml:"vulnerability_scan_ref"`
+	VulnerabilityScanDigest string `json:"vulnerability_scan_digest,omitempty" yaml:"vulnerability_scan_digest,omitempty"`
 }
 
 type PromotionEvidenceSpec struct {

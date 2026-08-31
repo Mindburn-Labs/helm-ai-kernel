@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.mindburn.dev/helm/launchpad/app_spec.schema.json",
+  "$comment": "quantum_posture: this schema describes classical SHA-256 and Cosign evidence references only; it makes no post-quantum assurance claim.",
   "title": "HELM Launchpad AppSpec",
   "type": "object",
   "required": ["id", "name", "version", "license", "redistribution", "availability", "support_level", "install", "runtime", "filesystem_policy", "network_policy", "mcp_policy", "risk_class", "budget_ceiling", "framework_contract", "evidence_requirements", "conformance"],
@@ -45,8 +46,10 @@
         "signature_ref": { "type": "string" },
         "sbom_tool": { "const": "syft" },
         "sbom_ref": { "type": "string" },
+        "sbom_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "vulnerability_scan_tool": { "enum": ["grype", "trivy"] },
-        "vulnerability_scan_ref": { "type": "string" }
+        "vulnerability_scan_ref": { "type": "string" },
+        "vulnerability_scan_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "conformance": { "type": "object" }
@@ -89,7 +92,9 @@
             "digest": { "type": "string", "pattern": "^sha256:" },
             "signature_ref": { "type": "string" },
             "sbom_ref": { "type": "string" },
+            "sbom_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
             "vulnerability_scan_ref": { "type": "string" },
+            "vulnerability_scan_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
             "receipt_ref": { "type": "string" }
           }
         },

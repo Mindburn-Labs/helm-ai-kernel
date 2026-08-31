@@ -405,3 +405,124 @@ func TestReviewSymlinkedSiblingHomePassesValidation(t *testing.T) {
 		t.Fatalf("validateRunSpec error = %v, want ErrHomeDirNotSibling", err)
 	}
 }
+
+func TestPrimeAgentArgsGolden(t *testing.T) {
+	const socket = "/tmp/helm-prime-agent-1/d.sock"
+	home := filepath.Join("/run", "home")
+	tree := filepath.Join("/run", "tree")
+
+	base := func() []string {
+		return []string{
+			"--mode", "json",
+			"--cwd", tree,
+			"--daemon-socket", socket,
+			"--session-dir", filepath.Join(home, ".prime", "agent", "sessions"),
+			"--offline",
+			"--no-extensions",
+			"--no-skills",
+			"--no-prompt-templates",
+			"--no-themes",
+		}
+	}
+
+	tests := []struct {
+		name string
+		spec RunSpec
+		want []string
+	}{
+		{
+			name: "workspace write",
+			spec: RunSpec{Tree: tree, HomeDir: home, Prompt: "fix the test", Access: AccessWorkspaceWrite},
+			want: append(base(), "--", "fix the test"),
+		},
+		{
+			// The vendor has no access vocabulary, so both admitted profiles
+			// produce the same argv. The tree and the scoped HOME are the whole
+			// boundary either one gets, and the identical argv is the honest
+			// record of that.
+			name: "full access is the same run",
+			spec: RunSpec{Tree: tree, HomeDir: home, Prompt: "fix the test", Access: AccessFull},
+			want: append(base(), "--", "fix the test"),
+		},
+		{
+			name: "model and resume",
+			spec: RunSpec{
+				Tree: tree, HomeDir: home, Prompt: "continue", Access: AccessWorkspaceWrite,
+				Model: "helm/gpt-5.1-codex", ResumeSessionID: "sess-1",
+			},
+			want: append(base(), "--model", "helm/gpt-5.1-codex", "--resume", "sess-1", "--", "continue"),
+		},
+		{
+			name: "images ride as file arguments",
+			spec: RunSpec{
+				Tree: tree, HomeDir: home, Prompt: "look", Access: AccessWorkspaceWrite,
+				Images: []string{"/img/a.png", "  ", "-b.png"},
+			},
+			want: append(base(), "@/img/a.png", "@-b.png", "--", "look"),
+		},
+		{
+			name: "instructions fold into the prompt",
+			spec: RunSpec{
+				Tree: tree, HomeDir: home, Instructions: "be terse", Prompt: "fix it",
+				Access: AccessWorkspaceWrite,
+			},
+			want: append(base(), "--", "be terse\n\nfix it"),
+		},
+		{
+			// A bare resume flag is the interactive browse selector, which the
+			// vendor refuses non-interactively. An empty id must not emit it.
+			name: "blank resume id is not emitted",
+			spec: RunSpec{
+				Tree: tree, HomeDir: home, Prompt: "go", Access: AccessWorkspaceWrite,
+				ResumeSessionID: "   ",
+			},
+			want: append(base(), "--", "go"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := primeAgentArgs(tt.spec, socket)
+			if err != nil {
+				t.Fatalf("primeAgentArgs: %v", err)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("argv =\n%q\nwant\n%q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPrimeAgentPromptIsTheOnlyPositional pins two parser hazards at once. The
+// vendor dispatches its first argument as a subcommand, so a prompt must never
+// lead; and it treats every argument after the terminator as a message, sending
+// the first as the prompt and each remaining one as an additional turn.
+func TestPrimeAgentPromptIsTheOnlyPositional(t *testing.T) {
+	spec := RunSpec{
+		Tree: "/run/tree", HomeDir: "/run/home", Access: AccessWorkspaceWrite,
+		Prompt: "--version",
+	}
+	args, err := primeAgentArgs(spec, "/tmp/d.sock")
+	if err != nil {
+		t.Fatalf("primeAgentArgs: %v", err)
+	}
+
+	if args[0] != "--mode" {
+		t.Errorf("argv[0] = %q; a leading positional would be read as a subcommand", args[0])
+	}
+
+	terminators := 0
+	last := -1
+	for i, arg := range args {
+		if arg == "--" {
+			terminators++
+			last = i
+		}
+	}
+	if terminators != 1 {
+		t.Fatalf("argv carries %d terminators, want exactly 1", terminators)
+	}
+	if got := args[last+1:]; len(got) != 1 || got[0] != "--version" {
+		t.Errorf("positionals after the terminator = %q, want exactly one prompt", got)
+	}
+}

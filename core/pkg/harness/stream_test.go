@@ -3,6 +3,7 @@ package harness
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -132,6 +133,7 @@ func TestObservedModelStaysEmptyWhenUndisclosed(t *testing.T) {
 	}{
 		{"claude", "claude_no_model.ndjson", parseClaudeLine},
 		{"codex", "codex_no_model.ndjson", parseCodexLine},
+		{"primeagent", "primeagent_no_model.ndjson", parsePrimeAgentLine},
 	}
 
 	for _, tt := range tests {
@@ -154,7 +156,11 @@ func TestObservedModelStaysEmptyWhenUndisclosed(t *testing.T) {
 }
 
 func TestParseRejectsMalformedLines(t *testing.T) {
-	for name, parse := range map[string]lineParser{"claude": parseClaudeLine, "codex": parseCodexLine} {
+	for name, parse := range map[string]lineParser{
+		"claude":     parseClaudeLine,
+		"codex":      parseCodexLine,
+		"primeagent": parsePrimeAgentLine,
+	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := parse([]byte("this is not json")); err == nil {
 				t.Error("malformed line parsed without error; it would be silently discarded")
@@ -314,6 +320,10 @@ func TestRunRefusesUnresolvableBinary(t *testing.T) {
 	if _, err := codex.Run(context.Background(), spec); !errors.Is(err, ErrAdapterNotFound) {
 		t.Errorf("codex err = %v, want ErrAdapterNotFound", err)
 	}
+	prime := &PrimeAgentAdapter{Binary: missing}
+	if _, err := prime.Run(context.Background(), spec); !errors.Is(err, ErrAdapterNotFound) {
+		t.Errorf("prime-agent err = %v, want ErrAdapterNotFound", err)
+	}
 }
 
 func TestAdaptersRefuseInvalidScopedHomeBeforeBinaryResolution(t *testing.T) {
@@ -323,6 +333,7 @@ func TestAdaptersRefuseInvalidScopedHomeBeforeBinaryResolution(t *testing.T) {
 	adapters := []Adapter{
 		&ClaudeAdapter{Binary: missing},
 		&CodexAdapter{Binary: missing},
+		&PrimeAgentAdapter{Binary: missing},
 	}
 	for _, tc := range []struct {
 		name string
@@ -350,22 +361,47 @@ func TestAdaptersRefuseInvalidScopedHomeBeforeBinaryResolution(t *testing.T) {
 	}
 }
 
+// TestCapabilityProfileSupports pins each adapter's admitted access profiles
+// individually rather than asserting every adapter admits all three. A vendor
+// that cannot enforce a posture must be visibly unable to, not averaged in with
+// the ones that can.
 func TestCapabilityProfileSupports(t *testing.T) {
-	for _, caps := range []CapabilityProfile{claudeCapabilities(), codexCapabilities()} {
-		for _, access := range []AccessProfile{AccessReadonly, AccessWorkspaceWrite, AccessFull} {
-			if !caps.Supports(access) {
-				t.Errorf("%v does not support %s", caps.SupportedAccessProfiles, access)
+	all := []AccessProfile{AccessReadonly, AccessWorkspaceWrite, AccessFull}
+	for _, tt := range []struct {
+		name string
+		caps CapabilityProfile
+		want []AccessProfile
+	}{
+		{"claude", claudeCapabilities(), all},
+		{"codex", codexCapabilities(), all},
+		// Prime Agent has one model-facing tool and it executes arbitrary
+		// Python. There is no readonly posture to admit.
+		{"primeagent", primeAgentCapabilities(), []AccessProfile{AccessWorkspaceWrite, AccessFull}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			supported := map[AccessProfile]bool{}
+			for _, access := range tt.want {
+				supported[access] = true
+				if !tt.caps.Supports(access) {
+					t.Errorf("%v does not support %s", tt.caps.SupportedAccessProfiles, access)
+				}
 			}
-		}
-		if caps.Supports(AccessProfile("wide-open")) {
-			t.Error("capability profile admits an unknown access profile")
-		}
+			for _, access := range all {
+				if !supported[access] && tt.caps.Supports(access) {
+					t.Errorf("%v admits %s, which it cannot enforce", tt.caps.SupportedAccessProfiles, access)
+				}
+			}
+			if tt.caps.Supports(AccessProfile("wide-open")) {
+				t.Error("capability profile admits an unknown access profile")
+			}
+		})
 	}
 }
 
 func TestAdaptersImplementTheInterface(t *testing.T) {
 	var _ Adapter = (*ClaudeAdapter)(nil)
 	var _ Adapter = (*CodexAdapter)(nil)
+	var _ Adapter = (*PrimeAgentAdapter)(nil)
 
 	if id := (&ClaudeAdapter{}).ID(); id != claudeAdapterID {
 		t.Errorf("claude adapter id = %q", id)
@@ -373,4 +409,326 @@ func TestAdaptersImplementTheInterface(t *testing.T) {
 	if id := (&CodexAdapter{}).ID(); id != codexAdapterID {
 		t.Errorf("codex adapter id = %q", id)
 	}
+	if id := (&PrimeAgentAdapter{}).ID(); id != primeAgentAdapterID {
+		t.Errorf("prime-agent adapter id = %q", id)
+	}
+}
+
+func TestParsePrimeAgentStream(t *testing.T) {
+	events, dropped := parseFixture(t, "primeagent_stream.ndjson", parsePrimeAgentLine)
+	if dropped != 0 {
+		t.Fatalf("dropped %d lines from a well-formed stream", dropped)
+	}
+
+	kinds := map[EventKind]int{}
+	for _, event := range events {
+		kinds[event.Kind]++
+	}
+	for kind, want := range map[EventKind]int{
+		EventStarted:    1,
+		EventMessage:    3, // two assistant text blocks, one final agent_end
+		EventToolCall:   1,
+		EventToolResult: 1,
+		EventUsage:      2, // one per completed assistant message
+	} {
+		if kinds[kind] != want {
+			t.Errorf("%s events = %d, want %d", kind, kinds[kind], want)
+		}
+	}
+
+	if events[0].Kind != EventStarted {
+		t.Fatalf("first event kind = %s, want %s", events[0].Kind, EventStarted)
+	}
+	if events[0].NativeSessionID != "sess-prime-1" {
+		t.Errorf("session id = %q, want sess-prime-1", events[0].NativeSessionID)
+	}
+	// The vendor's session header names no model, so unlike claude and codex the
+	// started event cannot disclose one. Backfilling it from RunSpec.Model is
+	// exactly what ObservedModel exists to prevent.
+	if events[0].ObservedModel != "" {
+		t.Errorf("started event ObservedModel = %q, want empty: the header discloses no model",
+			events[0].ObservedModel)
+	}
+
+	var firstMessage *Event
+	for i := range events {
+		if events[i].Kind == EventMessage {
+			firstMessage = &events[i]
+			break
+		}
+	}
+	if firstMessage == nil {
+		t.Fatal("no message event")
+	}
+	if firstMessage.ObservedModel != "gpt-5.1-codex" {
+		t.Errorf("first message ObservedModel = %q, want gpt-5.1-codex", firstMessage.ObservedModel)
+	}
+
+	for _, event := range events {
+		if event.Kind == EventToolResult && event.ExitCode != 1 {
+			t.Errorf("tool result exit code = %d, want 1 for an errored cell", event.ExitCode)
+		}
+	}
+}
+
+// TestPrimeAgentPrefersTheAnsweringModel pins the route proof: when the provider
+// answers with a different model than the one requested, the answering model is
+// what the run recorded.
+func TestPrimeAgentPrefersTheAnsweringModel(t *testing.T) {
+	events, _ := parseFixture(t, "primeagent_stream.ndjson", parsePrimeAgentLine)
+	found := false
+	for _, event := range events {
+		if event.ObservedModel == "gpt-5.1-codex-2026-08" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("no event reported the responseModel; a silent model substitution would go unrecorded")
+	}
+}
+
+// TestPrimeAgentToolInputIsAlwaysPythonSource records what this adapter's tool
+// evidence actually is. The vendor exposes one model-facing tool, so a tool call
+// says the agent ran this Python and nothing about which files it touched. The
+// compensating evidence is the worktree diff, not this stream.
+func TestPrimeAgentToolInputIsAlwaysPythonSource(t *testing.T) {
+	events, _ := parseFixture(t, "primeagent_stream.ndjson", parsePrimeAgentLine)
+	calls := 0
+	for _, event := range events {
+		if event.Kind != EventToolCall {
+			continue
+		}
+		calls++
+		if event.ToolName != "ipython" {
+			t.Errorf("tool name = %q, want ipython", event.ToolName)
+		}
+		var input map[string]any
+		if err := json.Unmarshal(event.ToolInput, &input); err != nil {
+			t.Fatalf("tool input is not an object: %v", err)
+		}
+		if _, ok := input["code"]; !ok {
+			t.Errorf("tool input keys = %v, want a code key", input)
+		}
+	}
+	if calls == 0 {
+		t.Fatal("fixture produced no tool calls")
+	}
+}
+
+// TestPrimeAgentTurnEndDoesNotDuplicateMessageEnd pins the de-duplication
+// choice: three frame types carry the same assistant message, and mapping more
+// than one would double-count both its text and its token usage.
+func TestPrimeAgentTurnEndDoesNotDuplicateMessageEnd(t *testing.T) {
+	message := `{"role":"assistant","model":"m","content":[{"type":"text","text":"hi"}],"usage":{"input":1,"output":2},"stopReason":"stop"}`
+
+	for _, frame := range []string{"turn_start", "message_start", "message_update", "turn_end"} {
+		line := []byte(`{"type":"` + frame + `","message":` + message + `}`)
+		events, err := parsePrimeAgentLine(line)
+		if err != nil {
+			t.Fatalf("%s: %v", frame, err)
+		}
+		if len(events) != 0 {
+			t.Errorf("%s produced %d events, want 0: message_end already reports this message", frame, len(events))
+		}
+	}
+
+	events, err := parsePrimeAgentLine([]byte(`{"type":"message_end","message":` + message + `}`))
+	if err != nil {
+		t.Fatalf("message_end: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("message_end produced %d events, want 2 (message, usage)", len(events))
+	}
+}
+
+// TestPrimeAgentRefusesReadonly is the INV-023 case for this adapter. The vendor
+// has one model-facing tool and it executes arbitrary Python, so there is no
+// readonly posture to enforce and none is claimed. Unlike a help probe, this
+// refusal is a constant comparison and has no failure mode that admits the run.
+func TestPrimeAgentRefusesReadonly(t *testing.T) {
+	if primeAgentCapabilities().Supports(AccessReadonly) {
+		t.Error("capability profile admits readonly, which the vendor cannot enforce")
+	}
+	if primeAgentCapabilities().ReadonlyMechanism != ReadonlyNone {
+		t.Errorf("readonly mechanism = %q, want %q",
+			primeAgentCapabilities().ReadonlyMechanism, ReadonlyNone)
+	}
+
+	runtime := t.TempDir()
+	spec := RunSpec{
+		Tree:    filepath.Join(runtime, "tree"),
+		HomeDir: filepath.Join(runtime, "home"),
+		Prompt:  "hi",
+		Access:  AccessReadonly,
+	}
+	adapter := &PrimeAgentAdapter{Binary: filepath.Join(runtime, "no-such-cli")}
+	if _, err := adapter.Run(context.Background(), spec); !errors.Is(err, ErrReadonlyUnsupported) {
+		t.Errorf("err = %v, want ErrReadonlyUnsupported", err)
+	}
+	if _, err := primeAgentArgs(spec, "/tmp/d.sock"); !errors.Is(err, ErrReadonlyUnsupported) {
+		t.Errorf("args err = %v, want ErrReadonlyUnsupported", err)
+	}
+}
+
+// TestPrimeAgentRefusesConfigOverrides pins that vendor config assignments are
+// refused rather than dropped. The vendor has no per-invocation assignment flag,
+// and silently ignoring them leaves a run that reads as configured and is not.
+func TestPrimeAgentRefusesConfigOverrides(t *testing.T) {
+	runtime := t.TempDir()
+	spec := RunSpec{
+		Tree:            filepath.Join(runtime, "tree"),
+		HomeDir:         filepath.Join(runtime, "home"),
+		Prompt:          "hi",
+		Access:          AccessWorkspaceWrite,
+		ConfigOverrides: []string{"sandbox_mode=\"read-only\""},
+	}
+	adapter := &PrimeAgentAdapter{Binary: filepath.Join(runtime, "no-such-cli")}
+	if _, err := adapter.Run(context.Background(), spec); !errors.Is(err, ErrConfigOverridesUnsupported) {
+		t.Errorf("err = %v, want ErrConfigOverridesUnsupported", err)
+	}
+}
+
+// TestPrimeAgentVersionProbeReadsStderr pins why this adapter cannot use
+// probeVersion: the vendor rebinds stdout to stderr for every non-interactive
+// mode before printing its version, and HELM always spawns non-interactively.
+func TestPrimeAgentVersionProbeReadsStderr(t *testing.T) {
+	ctx := context.Background()
+
+	stderrOnly := func(context.Context, string) ([]byte, error) {
+		return []byte("\n0.8.1\n"), nil
+	}
+	if got := primeAgentVersion(ctx, stderrOnly, "prime-agent"); got != "0.8.1" {
+		t.Errorf("version = %q, want 0.8.1", got)
+	}
+
+	failing := func(context.Context, string) ([]byte, error) {
+		return nil, errors.New("exec: no such file")
+	}
+	if got := primeAgentVersion(ctx, failing, "prime-agent"); got != "" {
+		t.Errorf("version = %q, want empty: a CLI that will not answer is not assumed to have a version", got)
+	}
+
+	adapter := &PrimeAgentAdapter{Binary: filepath.Join(t.TempDir(), "no-such-cli"), versionCommand: failing}
+	if _, err := adapter.Discover(ctx); !errors.Is(err, ErrAdapterNotFound) {
+		t.Errorf("discover err = %v, want ErrAdapterNotFound", err)
+	}
+}
+
+// TestPrimeAgentDaemonSocketIsRunScoped pins the thing the whole adapter turns
+// on. Left to itself the vendor resolves its supervisor socket under the system
+// temporary directory keyed by uid, so a governed run would attach to whatever
+// supervisor the operator's own session left running and inherit its
+// environment, including provider credentials HELM scrubbed but never set.
+func TestPrimeAgentDaemonSocketIsRunScoped(t *testing.T) {
+	first, cleanupFirst, err := primeAgentDaemonSocket()
+	if err != nil {
+		t.Fatalf("socket: %v", err)
+	}
+	defer cleanupFirst()
+
+	second, cleanupSecond, err := primeAgentDaemonSocket()
+	if err != nil {
+		t.Fatalf("socket: %v", err)
+	}
+	defer cleanupSecond()
+
+	if first == second {
+		t.Error("two runs resolved the same socket path; they would share one supervisor")
+	}
+	if len(first) > maxUnixSocketPath {
+		t.Errorf("socket path %q is %d bytes, over the %d-byte sun_path limit",
+			first, len(first), maxUnixSocketPath)
+	}
+	if _, err := os.Stat(filepath.Dir(first)); err != nil {
+		t.Errorf("socket directory was not created: %v", err)
+	}
+
+	cleanupFirst()
+	if _, err := os.Stat(filepath.Dir(first)); !os.IsNotExist(err) {
+		t.Errorf("cleanup left the socket directory behind: %v", err)
+	}
+
+	runtime := t.TempDir()
+	spec := RunSpec{
+		Tree:    filepath.Join(runtime, "tree"),
+		HomeDir: filepath.Join(runtime, "home"),
+		Prompt:  "hi",
+		Access:  AccessWorkspaceWrite,
+	}
+	args, err := primeAgentArgs(spec, second)
+	if err != nil {
+		t.Fatalf("args: %v", err)
+	}
+	if !argvHasFlagValue(args, "--daemon-socket", second) {
+		t.Errorf("argv %v does not pin --daemon-socket to %q", args, second)
+	}
+}
+
+// TestPrimeAgentSocketPathFitsRealisticEnvelopes pins the reason the socket does
+// not live in the scoped HOME. A worktree envelope carries a run id and an
+// attempt id, and the vendor neither shortens nor hashes a socket path it was
+// given, so the obvious placement would put ordinary runs over sun_path.
+func TestPrimeAgentSocketPathFitsRealisticEnvelopes(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "workspaces", "run-01HXQ8Z3", "attempt-02", "home")
+	inHome := filepath.Join(home, ".prime", "agent", "daemon.sock")
+	if len(inHome) <= maxUnixSocketPath {
+		t.Skipf("this host's temp root is short enough (%d bytes) to hide the constraint", len(inHome))
+	}
+
+	socket, cleanup, err := primeAgentDaemonSocket()
+	if err != nil {
+		t.Fatalf("socket: %v", err)
+	}
+	defer cleanup()
+	if len(socket) > maxUnixSocketPath {
+		t.Errorf("socket path %q is %d bytes; the adapter must fit where the scoped HOME cannot",
+			socket, len(socket))
+	}
+}
+
+// TestPrimeAgentCleanupPreservesTheTerminalEvent pins that interposing cleanup
+// on the event stream adds and drops nothing: exactly one EventCompleted still
+// precedes exactly one close.
+func TestPrimeAgentCleanupPreservesTheTerminalEvent(t *testing.T) {
+	src := make(chan Event, 3)
+	src <- Event{Kind: EventStarted}
+	src <- Event{Kind: EventMessage, Text: "hi"}
+	src <- Event{Kind: EventCompleted, ExitCode: 0}
+	close(src)
+
+	cleaned := false
+	var got []Event
+	for event := range withCleanup(src, func() { cleaned = true }) {
+		got = append(got, event)
+	}
+
+	if !cleaned {
+		t.Error("cleanup did not run after the source closed")
+	}
+	if len(got) != 3 {
+		t.Fatalf("forwarded %d events, want 3", len(got))
+	}
+	completed := 0
+	for _, event := range got {
+		if event.Kind == EventCompleted {
+			completed++
+		}
+	}
+	if completed != 1 {
+		t.Errorf("EventCompleted count = %d, want exactly 1", completed)
+	}
+	if got[len(got)-1].Kind != EventCompleted {
+		t.Errorf("last event = %s, want %s", got[len(got)-1].Kind, EventCompleted)
+	}
+}
+
+// argvHasFlagValue reports whether argv carries flag immediately followed by
+// value.
+func argvHasFlagValue(args []string, flag, value string) bool {
+	for i, arg := range args {
+		if arg == flag && i+1 < len(args) && args[i+1] == value {
+			return true
+		}
+	}
+	return false
 }

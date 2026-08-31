@@ -611,7 +611,7 @@ jobs:
   container-sha:
     # HELM-129: dispatch-only publisher for an arbitrary commit sha. Guards on
     # a green CI (ci.yml) run for the sha, then builds, pushes, and
-    # cosign-signs ghcr.io/mindburn-labs/helm-ai-kernel:sha-<sha>. The v* tag
+    # cosign-signs ghcr.io/mindburn-labs/helm-ai-kernel:dev-sha-<sha>. The v* tag
     # pipeline above is untouched; it skips on dispatch (version-contract
     # gate) and this job skips on tag pushes. This deliberately does not depend
     # on release-authority: it is a SHA-addressed, dev-grade QA dispatch lane,
@@ -691,7 +691,7 @@ jobs:
             BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}
             BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ inputs.source_sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}
           # The cosign identity of a dispatch build is the same release.yml as
           # a v* release, so the image itself must state that it is dev-grade:
           # never a released version, only a preview of one commit.

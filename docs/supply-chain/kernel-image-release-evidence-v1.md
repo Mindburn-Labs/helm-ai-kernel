@@ -17,11 +17,14 @@ repository/ref/SHA, explicit producer workflow name/file/ref/SHA/identity/run,
 image repository, staging and final tags, index digest, both platform digests
 and SPDX files, exact OCI source/revision labels, entrypoint/default command,
 health and persistence contracts, SLSA build type, Cosign verification state,
-and pre-promotion status.
+and promotion status.
 
-The durable predicate's `promotion_status` is
-`staging-digest-verified`, because the predicate is attached before promotion.
-After the immutable tag is created or found already pointing at the same
-digest, the downloadable copy additionally records `final_tag_digest` and
-`final-tag-digest-platforms-signature-and-evidence-verified`. That convenience
-copy does not retroactively change the already-attested predicate.
+The workflow first attaches an interim predicate with
+`promotion_status=staging-digest-verified`. After the immutable tag is created
+or found already pointing at the same digest, it finalizes the predicate with
+`final_tag_digest` and
+`promotion_status=final-tag-digest-platforms-signature-and-evidence-verified`,
+attaches that finalized predicate to the same image digest, and decodes the
+registry-hosted attestation to require exact finalized-predicate equality.
+The downloadable copy therefore matches a durable OCI attestation rather than
+claiming a stronger state than the registry record.

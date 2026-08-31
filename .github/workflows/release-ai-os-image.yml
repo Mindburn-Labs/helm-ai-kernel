@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Validate publication authority
         env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
           RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
           RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
           REQUEST_ACTOR: ${{ github.actor }}
@@ -68,6 +70,31 @@ jobs:
             if ! jq -e --arg actor "${candidate}" 'index($actor) != null' \
               <<<"${RELEASE_ACTORS_JSON}" >/dev/null; then
               echo "::error::GitHub actor ${candidate} is not authorized for AI OS image publication"
+              exit 1
+            fi
+          done
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for authoritative organization-role readback"
+            exit 1
+          fi
+          approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
+          if ! jq -e '
+            [
+              .[] |
+              select(
+                .state == "approved" and
+                (.user.login == "mindburnlabs" or .user.login == "peycheff-com")
+              )
+            ] | length > 0
+          ' <<<"${approval_history}" >/dev/null; then
+            echo "::error::release-production requires a single-run approval from an authorized human owner"
+            exit 1
+          fi
+          for owner in mindburnlabs peycheff-com; do
+            if ! GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+              "/orgs/Mindburn-Labs/memberships/${owner}" \
+              --jq 'select(.state == "active" and .role == "admin") | true' | grep -Fxq true; then
+              echo "::error::Mindburn-Labs owner/admin readback failed for ${owner}"
               exit 1
             fi
           done
@@ -101,13 +128,13 @@ jobs:
           fi
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
 
-      - name: Require newest completed CI run to be green
+      - name: Require newest CI run to be completed and green
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&status=completed&per_page=100" \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
             > ci-runs.json
           ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < ci-runs.json
 
@@ -415,7 +442,7 @@ jobs:
             exit 1
           fi
           gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&status=completed&per_page=100" \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
             > promotion-ci-runs.json
           ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json
 
@@ -436,6 +463,15 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --certificate-identity "${WORKFLOW_IDENTITY}" \
             "${final_tag}" >/dev/null
+          jq --arg final_digest "${final_digest}" '
+            .promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified" |
+            .final_tag_digest = $final_digest
+          ' release-evidence.json > release-evidence.final.json
+          mv release-evidence.final.json release-evidence.json
+          cosign attest --yes \
+            --type "${RELEASE_EVIDENCE_TYPE}" \
+            --predicate release-evidence.json \
+            "${staging_ref}"
           cosign verify-attestation \
             --type "${RELEASE_EVIDENCE_TYPE}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -451,11 +487,6 @@ jobs:
                 .subject[0].digest.sha256 == $expected_digest
               )
             ' release-evidence.final-attestation.json >/dev/null
-          jq --arg final_digest "${final_digest}" '
-            .promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified" |
-            .final_tag_digest = $final_digest
-          ' release-evidence.json > release-evidence.final.json
-          mv release-evidence.final.json release-evidence.json
 
       - name: Upload release evidence convenience copy
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

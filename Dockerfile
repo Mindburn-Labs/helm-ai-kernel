@@ -10,7 +10,6 @@ ARG BUILD_VERSION=unknown
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME=unknown
 
-RUN apk add --no-cache git ca-certificates
 RUN mkdir -p /runtime-data
 
 WORKDIR /src

@@ -30,9 +30,12 @@ case "$*" in
       identical) printf '%s\n' "$MOCK_EXPECTED_DIGEST" ;;
       conflict) printf '%s\n' "$MOCK_OTHER_DIGEST" ;;
       missing) echo 'manifest unknown' >&2; exit 1 ;;
+      missing_not_found) echo 'ghcr.io/mindburn-labs/helm-ai-kernel:sha-500deadbeef: not found' >&2; exit 1 ;;
+      missing_404) echo '404 Not Found' >&2; exit 1 ;;
       auth) echo 'unauthorized: authentication required' >&2; exit 1 ;;
       transport) echo 'TLS handshake timeout' >&2; exit 1 ;;
-      ambiguous) echo '404 Not Found' >&2; exit 1 ;;
+      server) echo '500 Internal Server Error: manifest unknown' >&2; exit 1 ;;
+      ambiguous) echo 'unexpected registry response' >&2; exit 1 ;;
       *) echo 'unknown mock mode' >&2; exit 2 ;;
     esac
     ;;
@@ -76,13 +79,15 @@ if grep -Fq 'buildx imagetools create' "$mock_log"; then
   exit 1
 fi
 
-run_promotion missing >/dev/null
-if [ "$(grep -Fc 'buildx imagetools create' "$mock_log")" -ne 1 ]; then
-  echo 'missing immutable tag was not created exactly once' >&2
-  exit 1
-fi
+for mode in missing missing_not_found missing_404; do
+  run_promotion "$mode" >/dev/null
+  if [ "$(grep -Fc 'buildx imagetools create' "$mock_log")" -ne 1 ]; then
+    echo "$mode immutable tag was not created exactly once" >&2
+    exit 1
+  fi
+done
 
-for mode in auth transport ambiguous; do
+for mode in auth transport server ambiguous; do
   if run_promotion "$mode" >/dev/null 2>"$mock_error"; then
     echo "$mode registry failure was incorrectly treated as a missing tag" >&2
     exit 1
@@ -118,6 +123,17 @@ fi
   {"id":201,"run_number":51,"run_attempt":1,"head_repository":{"full_name":"Mindburn-Labs/helm-ai-kernel"},"head_branch":"main","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"completed","conclusion":"success"}
 ]}
 JSON
+
+if "$selector" "$repository" "$source_sha" >/dev/null 2>&1 <<'JSON'
+{"workflow_runs":[
+  {"id":400,"run_number":70,"run_attempt":1,"head_repository":{"full_name":"Mindburn-Labs/helm-ai-kernel"},"head_branch":"main","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"completed","conclusion":"success"},
+  {"id":400,"run_number":70,"run_attempt":2,"head_repository":{"full_name":"Mindburn-Labs/helm-ai-kernel"},"head_branch":"main","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"in_progress","conclusion":null}
+]}
+JSON
+then
+  echo 'older successful CI attempt incorrectly authorized while the newest attempt was running' >&2
+  exit 1
+fi
 
 if "$selector" "$repository" "$source_sha" >/dev/null 2>&1 <<'JSON'
 {"workflow_runs":[
@@ -167,6 +183,18 @@ sed 's/TRIGGERING_ACTOR: \${{ github.triggering_actor }}/TRIGGERING_ACTOR: \${{ 
   "$workflow" > "$test_dir/unbound-triggering-actor.yml"
 mutate_and_reject "$test_dir/unbound-triggering-actor.yml"
 
+sed '/OWNER_READBACK_TOKEN: \${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}/d' \
+  "$workflow" > "$test_dir/missing-owner-readback-token.yml"
+mutate_and_reject "$test_dir/missing-owner-readback-token.yml"
+
+sed 's#actions/runs/${GITHUB_RUN_ID}/approvals#actions/runs/${GITHUB_RUN_ID}#' \
+  "$workflow" > "$test_dir/missing-run-approval-readback.yml"
+mutate_and_reject "$test_dir/missing-run-approval-readback.yml"
+
+sed 's/for owner in mindburnlabs peycheff-com; do/for owner in mindburnlabs; do/' \
+  "$workflow" > "$test_dir/missing-second-owner-readback.yml"
+mutate_and_reject "$test_dir/missing-second-owner-readback.yml"
+
 sed 's/name: release-production/name: unprotected-release/' "$workflow" > "$test_dir/wrong-environment.yml"
 mutate_and_reject "$test_dir/wrong-environment.yml"
 
@@ -189,6 +217,10 @@ awk '
   { print }
 ' "$workflow" > "$test_dir/stale-promotion-ci.yml"
 mutate_and_reject "$test_dir/stale-promotion-ci.yml"
+
+sed 's/branch=main&per_page=100/branch=main\&status=completed\&per_page=100/g' \
+  "$workflow" > "$test_dir/completed-only-ci-readback.yml"
+mutate_and_reject "$test_dir/completed-only-ci-readback.yml"
 
 sed 's/tags: \${{ env.IMAGE_NAME }}:\${{ env.STAGING_TAG }}/tags: \${{ env.IMAGE_NAME }}:sha-\${{ env.SOURCE_SHA }}/' \
   "$workflow" > "$test_dir/premature-final-tag.yml"

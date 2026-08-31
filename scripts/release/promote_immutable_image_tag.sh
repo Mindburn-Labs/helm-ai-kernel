@@ -34,9 +34,11 @@ if existing_digest="$($docker_bin buildx imagetools inspect "$final_tag" --forma
   fi
   echo 'immutable tag already resolves to expected digest; leaving it unchanged' >&2
 else
-  if grep -Eiq '(manifest unknown|manifest_unknown)' "$inspect_error"; then
-    echo 'immutable tag is absent; creating it once' >&2
-  elif grep -Eiq '(unauthorized|authentication required|access denied|forbidden|(^|[^0-9])(401|403)([^0-9]|$))' "$inspect_error"; then
+  if grep -Eiq '(^|[[:space:]:])5[0-9][0-9][[:space:]]+(internal|bad|service|gateway|server|error)' "$inspect_error"; then
+    cat "$inspect_error" >&2
+    echo "registry server failure while inspecting immutable tag: $final_tag" >&2
+    exit 1
+  elif grep -Eiq '(unauthorized|authentication required|access denied|forbidden|(^|[[:space:]])(401[[:space:]]+unauthorized|403[[:space:]]+forbidden))' "$inspect_error"; then
     cat "$inspect_error" >&2
     echo "registry authorization failure while inspecting immutable tag: $final_tag" >&2
     exit 1
@@ -44,6 +46,8 @@ else
     cat "$inspect_error" >&2
     echo "registry transport failure while inspecting immutable tag: $final_tag" >&2
     exit 1
+  elif grep -Eiq '(manifest unknown|manifest_unknown|404[[:space:]]+not[[:space:]]+found|:[[:space:]]+not[[:space:]]+found([[:space:]]|$))' "$inspect_error"; then
+    echo 'immutable tag is absent; creating it once' >&2
   else
     cat "$inspect_error" >&2
     echo "ambiguous registry failure; unable to prove whether immutable tag exists: $final_tag" >&2

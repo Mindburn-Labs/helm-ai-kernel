@@ -39,6 +39,10 @@ if grep -Eq '^(ARG|ENV)[[:space:]].*(TOKEN|PRIVATE_KEY|PASSWORD|DATABASE_URL)' "
   echo 'Dockerfile must not declare credential inputs or values' >&2
   exit 1
 fi
+if grep -Eq '^[[:space:]]*RUN[[:space:]]+apk[[:space:]]+add' "$dockerfile"; then
+  echo 'the governed build must not resolve mutable Alpine packages at build time' >&2
+  exit 1
+fi
 
 for helper in \
   scripts/release/promote_immutable_image_tag.sh \
@@ -63,13 +67,17 @@ require 'WORKFLOW_IDENTITY: https://github.com/${{ github.repository }}/.github/
 require 'name: release-production' "$workflow"
 require 'RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}' "$workflow"
 require 'RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}' "$workflow"
+require 'OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}' "$workflow"
 require 'REQUEST_ACTOR: ${{ github.actor }}' "$workflow"
 require 'TRIGGERING_ACTOR: ${{ github.triggering_actor }}' "$workflow"
 require 'jq -e --arg actor "${candidate}"' "$workflow"
+require '/actions/runs/${GITHUB_RUN_ID}/approvals' "$workflow"
+require '/orgs/Mindburn-Labs/memberships/${owner}' "$workflow"
+require 'for owner in mindburnlabs peycheff-com; do' "$workflow"
 require 'if [[ "${SOURCE_SHA}" != "${WORKFLOW_SHA}" ]]; then' "$workflow"
 require 'if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then' "$workflow"
 require 'if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then' "$workflow"
-require 'head_sha=${SOURCE_SHA}&branch=main&status=completed' "$workflow"
+require 'head_sha=${SOURCE_SHA}&branch=main&per_page=100' "$workflow"
 require './scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"' "$workflow"
 require 'source_date_epoch="$(git show -s --format=%ct "${SOURCE_SHA}")"' "$workflow"
 require 'created="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)"' "$workflow"
@@ -119,6 +127,14 @@ if [ "$(grep -Fc -- '--type spdxjson' "$workflow")" -ne 4 ]; then
   echo 'both platform SPDX predicates must be attested and verified' >&2
   exit 1
 fi
+if [ "$(grep -Fc -- '--predicate release-evidence.json' "$workflow")" -ne 2 ]; then
+  echo 'both pre-promotion and finalized release evidence must be durably attested' >&2
+  exit 1
+fi
+if grep -Fq 'status=completed&per_page=100' "$workflow"; then
+  echo 'CI readback must include queued and in-progress newest attempts' >&2
+  exit 1
+fi
 if [ "$(grep -Ec '^[[:space:]]+tags:' "$workflow")" -ne 1 ]; then
   echo 'the build may publish exactly one staging tag before promotion' >&2
   exit 1
@@ -162,6 +178,8 @@ evidence_attest_line="$(first_line '--predicate release-evidence.json')"
 promotion_ci_line="$(last_line './scripts/release/require_latest_main_ci_success.sh')"
 promotion_line="$(first_line 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh')"
 final_platform_line="$(first_line 'final-image-index.json')"
+finalize_evidence_line="$(first_line '.promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified"')"
+final_attest_line="$(last_line '--predicate release-evidence.json')"
 
 if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$checkout_line" -lt "$staging_line" ] ||
@@ -171,7 +189,9 @@ if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$evidence_line" -lt "$evidence_attest_line" ] ||
   ! [ "$evidence_attest_line" -lt "$promotion_ci_line" ] ||
   ! [ "$promotion_ci_line" -lt "$promotion_line" ] ||
-  ! [ "$promotion_line" -lt "$final_platform_line" ]; then
+  ! [ "$promotion_line" -lt "$final_platform_line" ] ||
+  ! [ "$final_platform_line" -lt "$finalize_evidence_line" ] ||
+  ! [ "$finalize_evidence_line" -lt "$final_attest_line" ]; then
   echo 'release authority, staging evidence, and immutable promotion ordering is invalid' >&2
   exit 1
 fi

@@ -10,7 +10,10 @@ the root `Dockerfile` for `linux/amd64` and `linux/arm64`, and pushes one OCI
 index to `ghcr.io/mindburn-labs/helm-ai-kernel` under a run-unique staging tag.
 Its build timestamp and BuildKit `SOURCE_DATE_EPOCH` both derive from that
 commit's Git committer timestamp, so a retry does not inject wall-clock time
-into the image digest.
+into the image digest. The pinned builder image already supplies the CA bundle;
+the Dockerfile performs no live `apk add`, and Go module content remains bound
+by `core/go.sum`, so a same-source retry does not resolve mutable Alpine
+packages.
 
 ## Parameters
 
@@ -50,11 +53,17 @@ these external owner-managed settings pass:
 3. Repository variable `HELM_AI_OS_IMAGE_RELEASE_ACTORS` is a JSON array of
    exact allowed GitHub logins, for example `["mindburnlabs","peycheff-com"]`.
    Both `github.actor` and `github.triggering_actor` must be present.
+4. The environment supplies `HELM_GITHUB_OWNER_READ_TOKEN`, a read-only token
+   able to read Mindburn-Labs organization memberships. The workflow fails
+   unless both `mindburnlabs` and `peycheff-com` read back as active admins.
+5. The current workflow run's environment review history contains an approval
+   from one of those two human owners. This binds approval to one run rather
+   than treating a repository variable or older approval as reusable authority.
 
 Those settings are an owner blocker outside this source-only change. Until
 they are confirmed in GitHub, the workflow is intentionally not dispatchable.
-The workflow requires no release secret: GHCR and keyless Cosign operations use
-the job-scoped GitHub token and OIDC identity.
+The owner-readback token is never used for mutation. GHCR and keyless Cosign
+operations still use only the job-scoped GitHub token and OIDC identity.
 
 This workflow exclusively owns the governed immutable `sha-<SOURCE_SHA>` tag
 namespace. The legacy `release.yml` QA publisher uses the disjoint

@@ -17,28 +17,32 @@ latest="$(jq -s -r \
       select(
         .head_repository.full_name == $repository and
         .head_branch == "main" and
-        .head_sha == $source_sha and
-        .status == "completed"
+        .head_sha == $source_sha
       )
     ] |
     if length == 0 then
       empty
     else
       max_by([.run_number, .run_attempt, .id]) |
-      [.id, .conclusion] | @tsv
+      [.id, .status, (.conclusion // "")] | @tsv
     end
   ')"
 
 if [ -z "$latest" ]; then
-  echo "no completed same-repository main CI run found for $source_sha" >&2
+  echo "no same-repository main CI run found for $source_sha" >&2
   exit 1
 fi
 
 run_id="$(printf '%s\n' "$latest" | cut -f 1)"
-conclusion="$(printf '%s\n' "$latest" | cut -f 2)"
+status="$(printf '%s\n' "$latest" | cut -f 2)"
+conclusion="$(printf '%s\n' "$latest" | cut -f 3)"
+if [ "$status" != completed ]; then
+  echo "newest CI run $run_id is $status; refusing publication" >&2
+  exit 1
+fi
 if [ "$conclusion" != success ]; then
-  echo "newest completed CI run $run_id concluded $conclusion; refusing publication" >&2
+  echo "newest CI run $run_id concluded $conclusion; refusing publication" >&2
   exit 1
 fi
 
-echo "newest completed CI run $run_id concluded success"
+echo "newest CI run $run_id completed successfully"

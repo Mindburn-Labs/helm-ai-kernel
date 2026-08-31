@@ -61,6 +61,20 @@ var (
 
 	// ErrPromptRequired reports a RunSpec with neither prompt nor instructions.
 	ErrPromptRequired = errors.New("harness: run spec requires a prompt")
+
+	// ErrConfigOverridesUnsupported reports a RunSpec carrying vendor config
+	// assignments the adapter has no channel for. Dropping them silently would
+	// leave a run that reads as configured and is not.
+	ErrConfigOverridesUnsupported = errors.New("harness: vendor config overrides are unsupported by this adapter")
+
+	// ErrKernelUnprovisioned reports a scoped HOME with no vendor language
+	// runtime already installed, for an adapter whose CLI would otherwise fetch
+	// and execute a toolchain from the network on first use.
+	ErrKernelUnprovisioned = errors.New("harness: vendor language runtime is not provisioned for this run")
+
+	// ErrModelGatewayIncomplete reports a ModelGateway that names an endpoint
+	// without the credential route or model needed to reach it.
+	ErrModelGatewayIncomplete = errors.New("harness: model gateway is incompletely specified")
 )
 
 // AccessProfile is the write authority a run is granted over its tree.
@@ -208,7 +222,42 @@ type RunSpec struct {
 
 	// Credential is the one route the child receives.
 	Credential CredentialRoute
+
+	// ModelGateway pins the run's inference at a HELM-owned endpoint.
+	//
+	// It is a typed field rather than an ExtraEnv entry because ExtraEnv is a
+	// caller-convenience channel that IsProviderVar deliberately fences: a base
+	// URL smuggled through it is a credential-class redirect, and the fence
+	// exists to stop a caller in a hurry from opening one. This field is HELM's
+	// own routing decision, and no adapter turns it into an environment
+	// variable. An adapter that honors it hands the endpoint to the child
+	// through vendor configuration it wrote into the scoped HOME, so the
+	// credential fence is unchanged and untested by this path.
+	ModelGateway ModelGateway
 }
+
+// ModelGateway is a HELM-owned inference endpoint a governed run is pinned to.
+//
+// The zero value means unpinned: the child resolves providers itself, and the
+// run proves nothing about where its inference went.
+type ModelGateway struct {
+	// BaseURL is the OpenAI-compatible endpoint, including its /v1 suffix.
+	BaseURL string
+
+	// Headers are governance headers sent with every inference request. HELM's
+	// spend proxy fails closed without X-HELM-Agent, X-HELM-Spend-Envelope and
+	// X-HELM-Idempotency-Key; it mints the idempotency key per request, so only
+	// the stable identifiers belong here.
+	Headers map[string]string
+
+	// Models are the model ids the gateway serves. An adapter that writes a
+	// vendor model catalog needs at least one, and RunSpec.Model must name one
+	// of them.
+	Models []string
+}
+
+// pinned reports whether the gateway names an endpoint.
+func (g ModelGateway) pinned() bool { return strings.TrimSpace(g.BaseURL) != "" }
 
 // EventKind is the closed classification of a harness event.
 type EventKind string

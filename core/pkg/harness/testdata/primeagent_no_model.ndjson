@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"sess-prime-2","timestamp":"2026-09-01T10:00:00.000Z","cwd":"/tree"}
+{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Done."}],"usage":{"input":10,"output":2},"stopReason":"stop"}}
+{"type":"agent_end","messages":[{"role":"assistant","content":[{"type":"text","text":"Done."}]}]}

@@ -274,7 +274,12 @@ the run is refused rather than started on the assumption that it will behave. A
 probe that cannot answer fails closed. Scoped HOME lives outside the work tree so
 vendor state cannot leak into the diff.
 
-verify: `core/pkg/harness/claude.go` · tests `TestClaudeReadonlyProbeRefusesUnenforceableBuild`, `TestClaudeReadonlyProbeFailsClosedWhenHelpFails`, `TestScopedHomeIsOutsideTree`
+A vendor that has no read-only posture to probe is refused at the capability
+declaration instead: it does not advertise `AccessReadonly`, and its `Run`
+refuses the profile unconditionally. That is the stronger form of the same rule,
+because a constant comparison has no failure mode that admits the run.
+
+verify: `core/pkg/harness/claude.go` · tests `TestClaudeReadonlyProbeRefusesUnenforceableBuild`, `TestClaudeReadonlyProbeFailsClosedWhenHelpFails`, `TestScopedHomeIsOutsideTree`, `TestPrimeAgentRefusesReadonly`
 
 ### INV-024 — An adapter governs only the calls actually routed through it
 

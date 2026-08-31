@@ -1,7 +1,10 @@
 package harness
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -319,4 +322,240 @@ func TestCredentialRouteStringHidesSecret(t *testing.T) {
 	if formatted := route.String(); strings.Contains(formatted, "sk-should-never-print") {
 		t.Errorf("CredentialRoute.String leaked the secret: %q", formatted)
 	}
+}
+
+// TestPrimeAgentEnvPinsTheAgentDirAndKillsTelemetry pins the overrides that keep
+// a run's vendor state inside the envelope. The vendor ships telemetry on and
+// posts to a third party, and it resolves its agent directory through a home
+// lookup that falls back to the passwd entry when HOME is unset.
+func TestPrimeAgentEnvPinsTheAgentDirAndKillsTelemetry(t *testing.T) {
+	home := "/run/home"
+	agentDir := home + "/.prime/agent"
+	spec := RunSpec{
+		Tree:    "/run/tree",
+		HomeDir: home,
+		Prompt:  "hi",
+		Access:  AccessWorkspaceWrite,
+		// A caller trying to re-enable telemetry or move the agent directory
+		// must not win: HELM's overrides are applied after ExtraEnv.
+		ExtraEnv: map[string]string{
+			"PRIME_AGENT_CODING_AGENT_DIR": "/home/operator/.prime/agent",
+			"PRIME_AGENT_TELEMETRY":        "1",
+			"DO_NOT_TRACK":                 "0",
+			"PI_OFFLINE":                   "0",
+		},
+	}
+
+	env, err := primeAgentEnv(spec)
+	if err != nil {
+		t.Fatalf("primeAgentEnv: %v", err)
+	}
+
+	for name, want := range map[string]string{
+		"PRIME_AGENT_CODING_AGENT_DIR": agentDir,
+		"PRIME_AGENT_SESSION_DIR":      agentDir + "/sessions",
+		"PI_OFFLINE":                   "1",
+		"PI_SKIP_VERSION_CHECK":        "1",
+		"DO_NOT_TRACK":                 "1",
+		"PRIME_AGENT_TELEMETRY":        "0",
+	} {
+		if got := envValue(env, name); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+
+	// Every one of these must survive the scrub, or the override silently does
+	// nothing and the run reads as pinned while it is not.
+	for name := range map[string]struct{}{
+		"PRIME_AGENT_CODING_AGENT_DIR": {},
+		"PRIME_AGENT_SESSION_DIR":      {},
+		"PI_OFFLINE":                   {},
+		"PI_SKIP_VERSION_CHECK":        {},
+		"DO_NOT_TRACK":                 {},
+		"PRIME_AGENT_TELEMETRY":        {},
+	} {
+		if IsProviderVar(name) {
+			t.Errorf("%s is provider-shaped and would be scrubbed", name)
+		}
+	}
+}
+
+// TestPrimeAgentRedirectVariablesAreScrubbed pins that the vendor's own endpoint
+// overrides stay fenced. A trace endpoint is a content-redirect channel, and a
+// download endpoint chooses the bytes the run executes.
+func TestPrimeAgentRedirectVariablesAreScrubbed(t *testing.T) {
+	spec := RunSpec{
+		Tree:    "/run/tree",
+		HomeDir: "/run/home",
+		Prompt:  "hi",
+		Access:  AccessWorkspaceWrite,
+		ExtraEnv: map[string]string{
+			"PRIME_AGENT_TRACES_BASE_URL":   "https://exfil.example/v1",
+			"PRIME_AGENT_DOWNLOAD_BASE_URL": "https://exfil.example/dl",
+			"PRIME_API_KEY":                 "sk-smuggled",
+			// Not provider-shaped: names an operator-owned interpreter, and
+			// passing it is how a caller avoids a network kernel bootstrap.
+			"PRIME_AGENT_KERNEL_PYTHON": "/opt/prime/bin/python",
+		},
+		Credential: CredentialRoute{ID: "route-1", EnvVar: "HELM_GATEWAY_KEY", Secret: "sk-routed"},
+	}
+
+	env, err := primeAgentEnv(spec)
+	if err != nil {
+		t.Fatalf("primeAgentEnv: %v", err)
+	}
+
+	for _, name := range []string{
+		"PRIME_AGENT_TRACES_BASE_URL",
+		"PRIME_AGENT_DOWNLOAD_BASE_URL",
+		"PRIME_API_KEY",
+	} {
+		if got := envValue(env, name); got != "" {
+			t.Errorf("%s survived the fence with %q", name, got)
+		}
+	}
+	if got := envValue(env, "PRIME_AGENT_KERNEL_PYTHON"); got != "/opt/prime/bin/python" {
+		t.Errorf("PRIME_AGENT_KERNEL_PYTHON = %q, want the caller's interpreter", got)
+	}
+	if got := envValue(env, "HELM_GATEWAY_KEY"); got != "sk-routed" {
+		t.Errorf("credential route = %q, want the one sanctioned secret", got)
+	}
+}
+
+// TestPrimeAgentGatewayIsConfigurationNotEnvironment pins the design choice that
+// keeps INV-021 intact. The gateway endpoint reaches the child as a vendor
+// config file inside the scoped HOME; nothing on this path sets a
+// provider-shaped variable, so the credential fence is neither widened nor
+// bypassed.
+func TestPrimeAgentGatewayIsConfigurationNotEnvironment(t *testing.T) {
+	runtime := t.TempDir()
+	home := filepath.Join(runtime, "home")
+	tree := filepath.Join(runtime, "tree")
+	spec := RunSpec{
+		Tree:    tree,
+		HomeDir: home,
+		Prompt:  "hi",
+		Access:  AccessWorkspaceWrite,
+		Model:   "helm/gpt-5.1-codex:high",
+		ModelGateway: ModelGateway{
+			BaseURL: "http://127.0.0.1:9095/v1",
+			Headers: map[string]string{
+				"X-HELM-Workspace":      "ws-1",
+				"X-HELM-Agent":          "agent-1",
+				"X-HELM-Spend-Envelope": "env-1",
+			},
+		},
+		Credential: CredentialRoute{ID: "route-1", EnvVar: "HELM_GATEWAY_KEY", Secret: "sk-routed"},
+	}
+
+	if err := writePrimeAgentGateway(spec); err != nil {
+		t.Fatalf("writePrimeAgentGateway: %v", err)
+	}
+
+	path := filepath.Join(home, ".prime", "agent", "models.json")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("catalog not written: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("catalog mode = %v, want 0600", perm)
+	}
+	if strings.HasPrefix(path, tree+string(filepath.Separator)) {
+		t.Errorf("catalog %q is inside the tree and would land in the captured diff", path)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read catalog: %v", err)
+	}
+	var catalog primeAgentCatalog
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatalf("catalog is not valid json: %v", err)
+	}
+	provider, ok := catalog.Providers[primeAgentGatewayProvider]
+	if !ok {
+		t.Fatalf("catalog has no %q provider", primeAgentGatewayProvider)
+	}
+	if provider.BaseURL != "http://127.0.0.1:9095/v1" {
+		t.Errorf("baseUrl = %q", provider.BaseURL)
+	}
+	// The vendor resolves apiKey as an environment-variable name, so the secret
+	// itself never enters the file.
+	if provider.APIKey != "HELM_GATEWAY_KEY" {
+		t.Errorf("apiKey = %q, want the credential variable name", provider.APIKey)
+	}
+	if strings.Contains(string(raw), "sk-routed") {
+		t.Error("catalog contains the credential secret in plaintext")
+	}
+	if provider.Headers["X-HELM-Spend-Envelope"] != "env-1" {
+		t.Errorf("governance headers = %v", provider.Headers)
+	}
+	// RunSpec.Model is a selector; the catalog must carry the bare id.
+	if len(provider.Models) != 1 || provider.Models[0].ID != "gpt-5.1-codex" {
+		t.Errorf("models = %v, want the bare id from the selector", provider.Models)
+	}
+
+	env, err := primeAgentEnv(spec)
+	if err != nil {
+		t.Fatalf("primeAgentEnv: %v", err)
+	}
+	for _, entry := range env {
+		name, value, _ := strings.Cut(entry, "=")
+		if strings.Contains(value, "127.0.0.1:9095") {
+			t.Errorf("%s carries the gateway endpoint; the base URL must not become an environment variable", name)
+		}
+	}
+}
+
+// TestPrimeAgentGatewayRefusesIncompleteSpecs pins that a half-specified gateway
+// is refused rather than written. A catalog naming an endpoint the child cannot
+// authenticate to, or serving no model, produces a run that fails at the first
+// inference call with nothing recorded about why.
+func TestPrimeAgentGatewayRefusesIncompleteSpecs(t *testing.T) {
+	base := func() RunSpec {
+		return RunSpec{
+			Tree:         "/run/tree",
+			HomeDir:      t.TempDir(),
+			Prompt:       "hi",
+			Access:       AccessWorkspaceWrite,
+			Model:        "helm/gpt-5.1-codex",
+			ModelGateway: ModelGateway{BaseURL: "http://127.0.0.1:9095/v1"},
+			Credential:   CredentialRoute{ID: "r", EnvVar: "HELM_GATEWAY_KEY", Secret: "s"},
+		}
+	}
+
+	noCredential := base()
+	noCredential.Credential = CredentialRoute{}
+	if err := writePrimeAgentGateway(noCredential); !errors.Is(err, ErrModelGatewayIncomplete) {
+		t.Errorf("err = %v, want ErrModelGatewayIncomplete for a gateway with no credential route", err)
+	}
+
+	noModel := base()
+	noModel.Model = ""
+	if err := writePrimeAgentGateway(noModel); !errors.Is(err, ErrModelGatewayIncomplete) {
+		t.Errorf("err = %v, want ErrModelGatewayIncomplete for a gateway serving no model", err)
+	}
+
+	// An unpinned gateway is not an error: the run simply proves nothing about
+	// where its inference went, and writes no catalog.
+	unpinned := base()
+	unpinned.ModelGateway = ModelGateway{}
+	if err := writePrimeAgentGateway(unpinned); err != nil {
+		t.Errorf("unpinned gateway returned %v, want no error", err)
+	}
+	if _, err := os.Stat(filepath.Join(unpinned.HomeDir, ".prime", "agent", "models.json")); !os.IsNotExist(err) {
+		t.Error("unpinned gateway wrote a catalog")
+	}
+}
+
+// envValue returns the value of name in a composed environment, or "" when it is
+// absent. The fence removes a variable by omitting it, so absent and empty are
+// the same answer here.
+func envValue(env []string, name string) string {
+	for _, entry := range env {
+		if key, value, ok := strings.Cut(entry, "="); ok && key == name {
+			return value
+		}
+	}
+	return ""
 }

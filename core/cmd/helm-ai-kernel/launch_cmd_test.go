@@ -26,7 +26,7 @@ func TestLaunchPromoteDryRunRequiresCompleteManifestAndRefs(t *testing.T) {
 	manifestPath := filepath.Join(root, "manifest.json")
 	digest := "sha256:" + strings.Repeat("a", 64)
 	manifest := map[string]any{
-		"schema_version":     "helm.launchpad.artifacts.v1",
+		"schema_version":     "helm.launchpad.artifacts.v2",
 		"generated_at":       "2026-05-18T00:00:00Z",
 		"github_run_id":      "123",
 		"github_run_attempt": "1",
@@ -45,8 +45,10 @@ func TestLaunchPromoteDryRunRequiresCompleteManifestAndRefs(t *testing.T) {
 			"signature_ref":             "cosign://ghcr.io/mindburn-labs/helm-launchpad/openclaw@" + digest,
 			"sbom_tool":                 "syft",
 			"sbom_ref":                  "artifact://sbom-openclaw.spdx.json",
+			"sbom_digest":               "sha256:" + strings.Repeat("e", 64),
 			"vulnerability_scan_tool":   "grype",
 			"vulnerability_scan_ref":    "artifact://grype-openclaw.json",
+			"vulnerability_scan_digest": "sha256:" + strings.Repeat("f", 64),
 			"vulnerability_scan_status": "completed",
 			"provenance_ref":            "github-actions://123/1",
 			"artifact_verification_ref": "github-actions://123/1/artifact-verification/openclaw",
@@ -222,8 +224,10 @@ func launchPromotionManifestFixture(appIDs ...string) map[string]any {
 			"signature_ref":             "cosign://ghcr.io/mindburn-labs/helm-launchpad/" + appID + "@" + digest,
 			"sbom_tool":                 "syft",
 			"sbom_ref":                  "artifact://sbom-" + appID + ".spdx.json",
+			"sbom_digest":               "sha256:" + strings.Repeat("e", 64),
 			"vulnerability_scan_tool":   "grype",
 			"vulnerability_scan_ref":    "artifact://grype-" + appID + ".json",
+			"vulnerability_scan_digest": "sha256:" + strings.Repeat("f", 64),
 			"vulnerability_scan_status": "completed",
 			"provenance_ref":            "github-actions://123/1",
 			"artifact_verification_ref": "github-actions://123/1/artifact-verification/" + appID,
@@ -233,7 +237,7 @@ func launchPromotionManifestFixture(appIDs ...string) map[string]any {
 		})
 	}
 	return map[string]any{
-		"schema_version":     "helm.launchpad.artifacts.v1",
+		"schema_version":     "helm.launchpad.artifacts.v2",
 		"generated_at":       "2026-06-12T00:00:00Z",
 		"github_run_id":      "123",
 		"github_run_attempt": "1",
@@ -256,8 +260,10 @@ func launchPromotionManifestFixture(appIDs ...string) map[string]any {
 			"signature_ref":             "cosign://ghcr.io/mindburn-labs/helm-launchpad/egress-proxy@" + proxyDigest,
 			"sbom_tool":                 "syft",
 			"sbom_ref":                  "artifact://sbom-egress-proxy.spdx.json",
+			"sbom_digest":               "sha256:" + strings.Repeat("1", 64),
 			"vulnerability_scan_tool":   "grype",
 			"vulnerability_scan_ref":    "artifact://grype-egress-proxy.json",
+			"vulnerability_scan_digest": "sha256:" + strings.Repeat("2", 64),
 			"vulnerability_scan_status": "completed",
 			"provenance_ref":            "github-actions://123/1",
 		},

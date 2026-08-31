@@ -10,10 +10,13 @@ the root `Dockerfile` for `linux/amd64` and `linux/arm64`, and pushes one OCI
 index to `ghcr.io/mindburn-labs/helm-ai-kernel` under a run-unique staging tag.
 Its build timestamp and BuildKit `SOURCE_DATE_EPOCH` both derive from that
 commit's Git committer timestamp, so a retry does not inject wall-clock time
-into the image digest. The pinned builder image already supplies the CA bundle;
-the Dockerfile performs no live `apk add`, and Go module content remains bound
-by `core/go.sum`, so a same-source retry does not resolve mutable Alpine
-packages.
+into the image digest. The workflow installs the Docker Buildx `v0.36.1`
+linux/amd64 release artifact only after matching its source-pinned SHA-256, and
+it creates the BuildKit `v0.32.2` worker from a digest-pinned image. A
+same-source dispatch therefore cannot silently change either builder. The
+pinned builder image already supplies the CA bundle; the Dockerfile performs no
+live `apk add`, and Go module content remains bound by `core/go.sum`, so a
+same-source retry does not resolve mutable Alpine packages.
 
 ## Parameters
 

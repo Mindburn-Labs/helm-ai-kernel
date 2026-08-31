@@ -12,9 +12,21 @@ require() {
   }
 }
 
+last_instruction() {
+  keyword=$1
+  grep -Ei "^[[:space:]]*${keyword}[[:space:]]" "$dockerfile" |
+    tail -n 1 |
+    awk -v keyword="$keyword" '{
+      sub(/^[[:space:]]*/, "")
+      sub(/^[^[:space:]]+[[:space:]]+/, "")
+      sub(/[[:space:]]+$/, "")
+      print keyword " " $0
+    }'
+}
+
 workflow=${1:-.github/workflows/release-ai-os-image.yml}
 legacy_workflow=${2:-.github/workflows/release.yml}
-dockerfile=Dockerfile
+dockerfile=${3:-Dockerfile}
 build_doc=docs/supply-chain/kernel-image-build-v1.md
 evidence_doc=docs/supply-chain/kernel-image-release-evidence-v1.md
 build_uri=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-build-v1.md
@@ -22,24 +34,30 @@ evidence_uri=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supp
 
 require 'golang:1.25.13-alpine@sha256:' "$dockerfile"
 require 'gcr.io/distroless/static-debian12:nonroot@sha256:' "$dockerfile"
-require 'ENTRYPOINT ["helm-ai-kernel"]' "$dockerfile"
-require 'CMD ["serve", "--policy", "/etc/helm-ai-kernel/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm-ai-kernel"]' "$dockerfile"
 require "$build_uri" "$build_doc"
 require "$evidence_uri" "$evidence_doc"
 
-if grep -E '^FROM ' "$dockerfile" | grep -Ev '@sha256:[0-9a-f]{64}([[:space:]]|$)' >/dev/null; then
+if grep -Ei '^[[:space:]]*FROM[[:space:]]' "$dockerfile" | grep -Ev '@sha256:[0-9a-f]{64}([[:space:]]|$)' >/dev/null; then
   echo 'every Docker base must be pinned to a full SHA-256 digest' >&2
   exit 1
 fi
-if [ "$(grep -E '^USER ' "$dockerfile" | tail -n 1)" != 'USER nonroot:nonroot' ]; then
+if [ "$(last_instruction USER)" != 'USER nonroot:nonroot' ]; then
   echo 'the final Docker user must remain nonroot:nonroot' >&2
   exit 1
 fi
-if grep -Eq '^(ARG|ENV)[[:space:]].*(TOKEN|PRIVATE_KEY|PASSWORD|DATABASE_URL)' "$dockerfile"; then
+if [ "$(last_instruction ENTRYPOINT)" != 'ENTRYPOINT ["helm-ai-kernel"]' ]; then
+  echo 'the final Docker entrypoint must remain the governed Kernel binary' >&2
+  exit 1
+fi
+if [ "$(last_instruction CMD)" != 'CMD ["serve", "--policy", "/etc/helm-ai-kernel/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm-ai-kernel"]' ]; then
+  echo 'the final Docker command must remain the governed Kernel serve contract' >&2
+  exit 1
+fi
+if grep -Eqi '^[[:space:]]*(ARG|ENV)[[:space:]].*(TOKEN|PRIVATE_KEY|PASSWORD|DATABASE_URL)' "$dockerfile"; then
   echo 'Dockerfile must not declare credential inputs or values' >&2
   exit 1
 fi
-if grep -Eq '^[[:space:]]*RUN[[:space:]]+apk[[:space:]]+add' "$dockerfile"; then
+if grep -Eqi '^[[:space:]]*RUN[[:space:]]+apk[[:space:]]+add' "$dockerfile"; then
   echo 'the governed build must not resolve mutable Alpine packages at build time' >&2
   exit 1
 fi
@@ -84,9 +102,27 @@ require 'source_date_epoch="$(git show -s --format=%ct "${SOURCE_SHA}")"' "$work
 require 'created="$(date -u -d "@${source_date_epoch}" +%Y-%m-%dT%H:%M:%SZ)"' "$workflow"
 require 'SOURCE_DATE_EPOCH=${{ steps.metadata.outputs.source_date_epoch }}' "$workflow"
 require 'platforms: linux/amd64,linux/arm64' "$workflow"
+require 'BUILDX_VERSION: v0.36.1' "$workflow"
+require 'BUILDX_SHA256: 48af8a397ebd60178778bf63611dbcebe5f5e7a9be90eb9147b24b9587455778' "$workflow"
+require 'BUILDKIT_IMAGE: moby/buildkit:v0.32.2@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8' "$workflow"
+require 'test "$(uname -m)" = "x86_64"' "$workflow"
+require 'printf '\''%s  %s\n'\'' "${BUILDX_SHA256}" "${buildx_binary}" | sha256sum --check --strict' "$workflow"
+require 'docker buildx version | grep -Fq "github.com/docker/buildx ${BUILDX_VERSION} "' "$workflow"
+require '--driver-opt "image=${BUILDKIT_IMAGE}"' "$workflow"
+require "grep -Eq '^BuildKit version:[[:space:]]+v0\\.32\\.2$' buildx-inspect.txt" "$workflow"
 require 'tags: ${{ env.IMAGE_NAME }}:${{ env.STAGING_TAG }}' "$workflow"
 require 'org.opencontainers.image.source=https://github.com/${{ github.repository }}' "$workflow"
 require 'org.opencontainers.image.revision=${{ env.SOURCE_SHA }}' "$workflow"
+require "--format '{{json .Image.Config}}'" "$workflow"
+require '.Entrypoint == ["helm-ai-kernel"] and' "$workflow"
+require '.Cmd == ["serve", "--policy", "/etc/helm-ai-kernel/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm-ai-kernel"] and' "$workflow"
+require '.User == "nonroot:nonroot" and' "$workflow"
+require 'any(.Env[]?; . == "HELM_DATA_DIR=/var/lib/helm-ai-kernel") and' "$workflow"
+require '(.ExposedPorts | keys | sort) == ["8080/tcp", "8081/tcp"]' "$workflow"
+require 'name: Exercise digest-pinned native runtime and restart persistence' "$workflow"
+require 'HELM_SMOKE_IMAGE: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}' "$workflow"
+require 'docker pull --platform linux/amd64 "${HELM_SMOKE_IMAGE}"' "$workflow"
+require 'bash scripts/ci/docker_smoke.sh' "$workflow"
 require "git+https://github.com/" "$workflow"
 require '@refs/heads/main' "$workflow"
 require 'output-file: sbom-linux-amd64.spdx.json' "$workflow"
@@ -99,6 +135,7 @@ require '.predicate == $expected[0] and' "$workflow"
 require '.subject[0].digest.sha256 == $expected_digest' "$workflow"
 require '--predicate release-evidence.json' "$workflow"
 require '--type "${RELEASE_EVIDENCE_TYPE}"' "$workflow"
+require 'smoke: "health-denial-receipt-stop-restart-exact-readback-passed"' "$workflow"
 require 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh "${staging_ref}" "${final_tag}" "${expected_digest}")"' "$workflow"
 require 'docker buildx imagetools inspect --raw "${final_tag}" > final-image-index.json' "$workflow"
 require 'final-tag-digest-platforms-signature-and-evidence-verified' "$workflow"
@@ -172,6 +209,8 @@ last_line() {
 authority_line="$(first_line '- name: Validate publication authority')"
 checkout_line="$(first_line 'uses: actions/checkout@')"
 staging_line="$(first_line 'tags: ${{ env.IMAGE_NAME }}:${{ env.STAGING_TAG }}')"
+config_line="$(first_line "--format '{{json .Image.Config}}'")"
+runtime_line="$(first_line '- name: Exercise digest-pinned native runtime and restart persistence')"
 sbom_line="$(first_line 'output-file: sbom-linux-amd64.spdx.json')"
 signature_line="$(first_line 'cosign sign --yes "${image_ref}"')"
 evidence_line="$(first_line '> release-evidence.json')"
@@ -184,7 +223,9 @@ final_attest_line="$(last_line '--predicate release-evidence.json')"
 
 if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$checkout_line" -lt "$staging_line" ] ||
-  ! [ "$staging_line" -lt "$sbom_line" ] ||
+  ! [ "$staging_line" -lt "$config_line" ] ||
+  ! [ "$config_line" -lt "$runtime_line" ] ||
+  ! [ "$runtime_line" -lt "$sbom_line" ] ||
   ! [ "$sbom_line" -lt "$signature_line" ] ||
   ! [ "$signature_line" -lt "$evidence_line" ] ||
   ! [ "$evidence_line" -lt "$evidence_attest_line" ] ||

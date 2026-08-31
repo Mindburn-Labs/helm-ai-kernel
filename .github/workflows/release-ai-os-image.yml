@@ -145,11 +145,30 @@ jobs:
       - name: Verify source publication contract
         run: ./scripts/release/test_ai_os_image_release_contract.sh
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Install checksum-pinned Buildx and create digest-pinned BuildKit builder
+        env:
+          BUILDX_VERSION: v0.36.1
+          BUILDX_SHA256: 48af8a397ebd60178778bf63611dbcebe5f5e7a9be90eb9147b24b9587455778
+          BUILDKIT_IMAGE: moby/buildkit:v0.32.2@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "x86_64"
+          buildx_binary="${RUNNER_TEMP}/docker-buildx"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64" \
+            --output "${buildx_binary}"
+          printf '%s  %s\n' "${BUILDX_SHA256}" "${buildx_binary}" | sha256sum --check --strict
+          mkdir -p "${HOME}/.docker/cli-plugins"
+          install -m 0755 "${buildx_binary}" "${HOME}/.docker/cli-plugins/docker-buildx"
+          docker buildx version | grep -Fq "github.com/docker/buildx ${BUILDX_VERSION} "
+          builder_name="helm-ai-kernel-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker buildx create \
+            --name "${builder_name}" \
+            --driver docker-container \
+            --driver-opt "image=${BUILDKIT_IMAGE}" \
+            --use
+          docker buildx inspect --bootstrap | tee buildx-inspect.txt
+          grep -Eq '^BuildKit version:[[:space:]]+v0\.32\.2$' buildx-inspect.txt
 
       - name: Login to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -215,19 +234,42 @@ jobs:
           [[ "${amd64_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "${arm64_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "${amd64_digest}" != "${arm64_digest}" ]]
-          for platform_digest in "${amd64_digest}" "${arm64_digest}"; do
+          for platform_spec in "linux-amd64:${amd64_digest}" "linux-arm64:${arm64_digest}"; do
+            platform_name="${platform_spec%%:*}"
+            platform_digest="${platform_spec#*:}"
             docker buildx imagetools inspect \
               "${IMAGE_NAME}@${platform_digest}" \
-              --format '{{json .Image.Config.Labels}}' > platform-labels.json
+              --format '{{json .Image.Config.Labels}}' > "platform-labels-${platform_name}.json"
             jq -e \
               --arg source "https://github.com/${GITHUB_REPOSITORY}" \
               --arg revision "${SOURCE_SHA}" '
                 .["org.opencontainers.image.source"] == $source and
                 .["org.opencontainers.image.revision"] == $revision
-              ' platform-labels.json >/dev/null
+              ' "platform-labels-${platform_name}.json" >/dev/null
+            docker buildx imagetools inspect \
+              "${IMAGE_NAME}@${platform_digest}" \
+              --format '{{json .Image.Config}}' > "platform-config-${platform_name}.json"
+            jq -e '
+              .Entrypoint == ["helm-ai-kernel"] and
+              .Cmd == ["serve", "--policy", "/etc/helm-ai-kernel/release.high_risk.v3.toml", "--addr", "0.0.0.0", "--port", "8080", "--data-dir", "/var/lib/helm-ai-kernel"] and
+              .User == "nonroot:nonroot" and
+              any(.Env[]?; . == "HELM_DATA_DIR=/var/lib/helm-ai-kernel") and
+              (.ExposedPorts | keys | sort) == ["8080/tcp", "8081/tcp"]
+            ' "platform-config-${platform_name}.json" >/dev/null
           done
           echo "amd64_digest=${amd64_digest}" >> "${GITHUB_OUTPUT}"
           echo "arm64_digest=${arm64_digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Exercise digest-pinned native runtime and restart persistence
+        env:
+          HELM_SMOKE_IMAGE: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}
+          HELM_SMOKE_CONTAINER_NAME: helm-ai-kernel-release-smoke-${{ github.run_id }}
+          HELM_SMOKE_API_PORT: "18080"
+          HELM_SMOKE_HEALTH_PORT: "18081"
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "${HELM_SMOKE_IMAGE}"
+          bash scripts/ci/docker_smoke.sh
 
       - name: Generate linux-amd64 SPDX SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
@@ -383,6 +425,11 @@ jobs:
                 default_command: "serve --policy /etc/helm-ai-kernel/release.high_risk.v3.toml --addr 0.0.0.0 --port 8080 --data-dir /var/lib/helm-ai-kernel",
                 healthcheck: "GET /healthz on port 8080",
                 persistence: "/var/lib/helm-ai-kernel",
+                runtime_verification: {
+                  oci_config: "linux/amd64-and-linux/arm64-config-exactly-verified",
+                  exercised_platform: "linux/amd64",
+                  smoke: "health-denial-receipt-stop-restart-exact-readback-passed"
+                },
                 slsa: ("slsa-provenance.json using " + $build_type),
                 cosign: "keyless-signature-and-platform-attestations-exactly-verified",
                 promotion_status: "staging-digest-verified"
@@ -399,6 +446,11 @@ jobs:
               .source_ref == "refs/heads/main" and
               .source_sha == $source_sha and
               .digest == $digest and
+              .runtime_verification == {
+                oci_config: "linux/amd64-and-linux/arm64-config-exactly-verified",
+                exercised_platform: "linux/amd64",
+                smoke: "health-denial-receipt-stop-restart-exact-readback-passed"
+              } and
               .promotion_status == "staging-digest-verified" and
               .platforms == [
                 {platform: "linux/amd64", digest: $amd64_digest, sbom: "sbom-linux-amd64.spdx.json"},
@@ -499,6 +551,10 @@ jobs:
           if-no-files-found: error
           path: |
             signature-verification.json
+            platform-config-linux-amd64.json
+            platform-config-linux-arm64.json
+            platform-labels-linux-amd64.json
+            platform-labels-linux-arm64.json
             sbom-linux-amd64.spdx.json
             sbom-linux-amd64.attestation.json
             sbom-linux-arm64.spdx.json

@@ -158,6 +158,16 @@ mutate_and_reject() {
   fi
 }
 
+sed -e 's/^USER /  user /' -e 's/^ENTRYPOINT /  entrypoint /' -e 's/^CMD /  cmd /' \
+  Dockerfile > "$test_dir/lowercase-governed.Dockerfile"
+"$checker" "$workflow" .github/workflows/release.yml "$test_dir/lowercase-governed.Dockerfile" >/dev/null
+
+awk '{ print } END { print "  from alpine:latest" }' Dockerfile > "$test_dir/indented-unpinned.Dockerfile"
+if "$checker" "$workflow" .github/workflows/release.yml "$test_dir/indented-unpinned.Dockerfile" >/dev/null 2>&1; then
+  echo 'indented lowercase unpinned Docker base was not rejected' >&2
+  exit 1
+fi
+
 sed 's/cancel-in-progress: false/cancel-in-progress: true/' "$workflow" > "$test_dir/cancelling.yml"
 mutate_and_reject "$test_dir/cancelling.yml"
 
@@ -171,6 +181,55 @@ mutate_and_reject "$test_dir/wall-clock-metadata.yml"
 sed 's/SOURCE_DATE_EPOCH=${{ steps.metadata.outputs.source_date_epoch }}/SOURCE_DATE_EPOCH=0/' \
   "$workflow" > "$test_dir/unbound-source-date-epoch.yml"
 mutate_and_reject "$test_dir/unbound-source-date-epoch.yml"
+
+sed 's/BUILDX_VERSION: v0.36.1/BUILDX_VERSION: latest/' \
+  "$workflow" > "$test_dir/floating-buildx.yml"
+mutate_and_reject "$test_dir/floating-buildx.yml"
+
+sed 's/BUILDX_SHA256: 48af8a397ebd60178778bf63611dbcebe5f5e7a9be90eb9147b24b9587455778/BUILDX_SHA256: 0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$workflow" > "$test_dir/unbound-buildx-artifact.yml"
+mutate_and_reject "$test_dir/unbound-buildx-artifact.yml"
+
+sed 's#BUILDKIT_IMAGE: moby/buildkit:v0.32.2@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8#BUILDKIT_IMAGE: moby/buildkit:latest#' \
+  "$workflow" > "$test_dir/floating-buildkit.yml"
+mutate_and_reject "$test_dir/floating-buildkit.yml"
+
+sed "s/--format '{{json \.Image\.Config}}'/--format '{{json .Image.Config.Labels}}'/" \
+  "$workflow" > "$test_dir/missing-platform-config-inspection.yml"
+mutate_and_reject "$test_dir/missing-platform-config-inspection.yml"
+
+awk '
+  /\.Cmd == \["serve"/ { print "              true and"; next }
+  { print }
+' "$workflow" > "$test_dir/unbound-platform-command.yml"
+mutate_and_reject "$test_dir/unbound-platform-command.yml"
+
+awk '
+  /any\(\.Env\[\]\?; \. == "HELM_DATA_DIR=/ { print "              true and"; next }
+  { print }
+' "$workflow" > "$test_dir/unbound-platform-data-dir.yml"
+mutate_and_reject "$test_dir/unbound-platform-data-dir.yml"
+
+sed 's|          bash scripts/ci/docker_smoke.sh|          true # mutation: skip runtime persistence smoke|' \
+  "$workflow" > "$test_dir/missing-runtime-smoke.yml"
+mutate_and_reject "$test_dir/missing-runtime-smoke.yml"
+
+sed 's/^assert_decision_receipt_binding$/true # mutation: skip decision receipt binding/' \
+  scripts/ci/docker_smoke.sh > "$test_dir/missing-decision-receipt-binding.sh"
+if python3 - "$test_dir/missing-decision-receipt-binding.sh" >/dev/null 2>&1 <<'PY'
+import importlib.util
+import pathlib
+import sys
+
+spec = importlib.util.spec_from_file_location("smoke_hardening", "scripts/ci/check_docker_smoke_hardening.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.check_docker_smoke(pathlib.Path(sys.argv[1]))
+PY
+then
+  echo 'missing decision-to-receipt binding call was not rejected' >&2
+  exit 1
+fi
 
 sed 's/:dev-sha-${{ inputs.source_sha }}/:sha-${{ inputs.source_sha }}/' \
   .github/workflows/release.yml > "$test_dir/legacy-final-tag-collision.yml"

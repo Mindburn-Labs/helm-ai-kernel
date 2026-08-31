@@ -19,6 +19,15 @@ and SPDX files, exact OCI source/revision labels, entrypoint/default command,
 health and persistence contracts, SLSA build type, Cosign verification state,
 and promotion status.
 
+Before any release-evidence predicate is generated, the workflow reads both
+platform manifests' final OCI configs and requires the governed entrypoint,
+command, non-root user, data-directory environment, and exposed ports. It then
+runs the exact linux/amd64 digest through the source-owned container smoke:
+health checks, a fail-closed governed denial, stop, restart against the same
+bind mount, root-key continuity, and exact denial-receipt read-back must all
+pass. The predicate's `runtime_verification` field records those completed
+checks; it is not inferred from the Dockerfile.
+
 The workflow first attaches an interim predicate with
 `promotion_status=staging-digest-verified`. After the immutable tag is created
 or found already pointing at the same digest, it finalizes the predicate with

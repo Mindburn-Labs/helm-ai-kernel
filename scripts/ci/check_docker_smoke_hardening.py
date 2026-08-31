@@ -45,6 +45,19 @@ def check_docker_smoke(path: Path) -> None:
         "ARTIFACT_DIR=",
         "diagnose_runtime_failure()",
         'docker logs --tail 200 "$CONTAINER_NAME"',
+        'receipt_id="$(evaluate_unknown_tool)"',
+        'if not decision.get("receipt_id") or not decision.get("decision_id"):',
+        'list_receipts "$receipt_id"',
+        'if payload.get("receipt_id") != sys.argv[2]:',
+        'fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.before-restart.json"',
+        'metadata.get("action") != decision.get("action")',
+        'fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.after-restart.json"',
+        'diff "$ARTIFACT_DIR/receipt.before-restart.json" "$ARTIFACT_DIR/receipt.after-restart.json"',
+        'receipt_id="$(evaluate_unknown_tool)"\n'
+        'list_receipts "$receipt_id"\n'
+        'fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.before-restart.json"\n'
+        "assert_decision_receipt_binding\n"
+        "assert_authz_negative",
     ]:
         require(text, token, path)
 

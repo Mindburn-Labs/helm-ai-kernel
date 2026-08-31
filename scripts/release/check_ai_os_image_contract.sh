@@ -70,6 +70,7 @@ require 'RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}' "$wo
 require 'OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}' "$workflow"
 require 'REQUEST_ACTOR: ${{ github.actor }}' "$workflow"
 require 'TRIGGERING_ACTOR: ${{ github.triggering_actor }}' "$workflow"
+require 'if [[ "${GITHUB_RUN_ATTEMPT}" != "1" ]]; then' "$workflow"
 require 'jq -e --arg actor "${candidate}"' "$workflow"
 require '/actions/runs/${GITHUB_RUN_ID}/approvals' "$workflow"
 require '/orgs/Mindburn-Labs/memberships/${owner}' "$workflow"

@@ -191,6 +191,10 @@ sed 's#actions/runs/${GITHUB_RUN_ID}/approvals#actions/runs/${GITHUB_RUN_ID}#' \
   "$workflow" > "$test_dir/missing-run-approval-readback.yml"
 mutate_and_reject "$test_dir/missing-run-approval-readback.yml"
 
+sed 's/if \[\[ "${GITHUB_RUN_ATTEMPT}" != "1" \]\]; then/if false; then/' \
+  "$workflow" > "$test_dir/replayed-owner-approval.yml"
+mutate_and_reject "$test_dir/replayed-owner-approval.yml"
+
 sed 's/for owner in mindburnlabs peycheff-com; do/for owner in mindburnlabs; do/' \
   "$workflow" > "$test_dir/missing-second-owner-readback.yml"
 mutate_and_reject "$test_dir/missing-second-owner-readback.yml"

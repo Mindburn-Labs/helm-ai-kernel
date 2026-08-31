@@ -27,6 +27,15 @@ def forbid(text: str, token: str, path: Path) -> None:
 
 def check_docker_smoke(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+    decision_receipt_sequence = "\n".join(
+        [
+            'receipt_id="$(evaluate_unknown_tool)"',
+            'list_receipts "$receipt_id"',
+            'fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.before-restart.json"',
+            "assert_decision_receipt_binding",
+            "assert_authz_negative",
+        ]
+    )
     for token in [
         "random_key()",
         'ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-$(random_key)}"',
@@ -45,6 +54,15 @@ def check_docker_smoke(path: Path) -> None:
         "ARTIFACT_DIR=",
         "diagnose_runtime_failure()",
         'docker logs --tail 200 "$CONTAINER_NAME"',
+        'receipt_id="$(evaluate_unknown_tool)"',
+        'if not decision.get("receipt_id") or not decision.get("decision_id"):',
+        'list_receipts "$receipt_id"',
+        'if payload.get("receipt_id") != sys.argv[2]:',
+        'fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.before-restart.json"',
+        'metadata.get("action") != decision.get("action")',
+        'fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.after-restart.json"',
+        'diff "$ARTIFACT_DIR/receipt.before-restart.json" "$ARTIFACT_DIR/receipt.after-restart.json"',
+        decision_receipt_sequence,
     ]:
         require(text, token, path)
 

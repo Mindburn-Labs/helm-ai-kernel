@@ -38,9 +38,10 @@ TAG_RELEASE_MUTATION_JOBS = frozenset(
     }
 )
 
-# container-sha publishes a dev-grade image for one exact, green-CI commit via
-# workflow_dispatch. It is intentionally not a v-tag release job and therefore
-# must not be coupled to the annotated-tag release authority boundary.
+# container-sha publishes a dev-grade dev-sha image for one exact, green-CI
+# commit via workflow_dispatch. It is intentionally not a v-tag release job
+# and therefore must not be coupled to the annotated-tag release authority
+# boundary or the governed sha tag namespace.
 NON_RELEASE_MUTATION_JOB_EXEMPTIONS = frozenset({"container-sha"})
 
 # These source markers classify every current externally mutating job. Keeping
@@ -225,6 +226,14 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("release-authority", self.job_needs("container-sha"))
         self.assertIn("if: github.event_name == 'workflow_dispatch'", container_sha)
         self.assertIn("No successful CI (ci.yml) run for ${SOURCE_SHA}", container_sha)
+        self.assertIn(
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}",
+            container_sha,
+        )
+        self.assertNotIn(
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ inputs.source_sha }}",
+            container_sha,
+        )
         self.assertIn("dev.mindburn.build-grade=dev", container_sha)
 
     def test_tag_release_is_main_only_and_catalog_is_presynced(self) -> None:

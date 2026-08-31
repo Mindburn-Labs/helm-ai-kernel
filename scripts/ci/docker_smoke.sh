@@ -269,29 +269,60 @@ decision = json.load(open(sys.argv[1]))
 verdict = str(decision.get("verdict", "")).upper()
 if verdict != "DENY":
     raise SystemExit(f"expected unknown tool DENY, got {verdict}: {decision}")
-if not decision.get("id"):
-    raise SystemExit(f"decision id missing: {decision}")
+if decision.get("action") != "EXECUTE_TOOL" or decision.get("resource") != "unknown.tool.smoke":
+    raise SystemExit(f"decision authority tuple mismatch: {decision}")
+if not decision.get("receipt_id") or not decision.get("decision_id"):
+    raise SystemExit(f"decision receipt binding missing: {decision}")
+if decision.get("id") != decision.get("decision_id"):
+    raise SystemExit(f"legacy and canonical decision ids differ: {decision}")
+print(decision["receipt_id"])
 PY
 }
 
 list_receipts() {
+    expected_receipt_id="$1"
     curl -fsS "$(base_url)/api/v1/receipts?limit=10" "${auth_headers[@]}" >"$ARTIFACT_DIR/receipts.json"
-    python3 - "$ARTIFACT_DIR/receipts.json" <<'PY'
+    python3 - "$ARTIFACT_DIR/receipts.json" "$expected_receipt_id" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
 receipts = payload.get("receipts") or []
-if not receipts:
-    raise SystemExit(f"expected at least one receipt: {payload}")
-receipt = receipts[0]
-if not receipt.get("receipt_id"):
-    raise SystemExit(f"receipt id missing: {receipt}")
-print(receipt["receipt_id"])
+matches = [receipt for receipt in receipts if receipt.get("receipt_id") == sys.argv[2]]
+if len(matches) != 1:
+    raise SystemExit(f"expected exactly one listed receipt {sys.argv[2]!r}: {payload}")
 PY
 }
 
 fetch_receipt() {
     receipt_id="$1"
-    curl -fsS "$(base_url)/api/v1/receipts/${receipt_id}" "${auth_headers[@]}" >"$ARTIFACT_DIR/receipt.json"
+    output_path="${2:-$ARTIFACT_DIR/receipt.json}"
+    curl -fsS "$(base_url)/api/v1/receipts/${receipt_id}" "${auth_headers[@]}" >"$output_path"
+    python3 - "$output_path" "$receipt_id" <<'PY'
+import json, sys
+payload = json.load(open(sys.argv[1]))
+if payload.get("receipt_id") != sys.argv[2]:
+    raise SystemExit(f"receipt lookup returned the wrong id: {payload}")
+PY
+}
+
+assert_decision_receipt_binding() {
+    python3 - "$ARTIFACT_DIR/decision.json" "$ARTIFACT_DIR/receipt.before-restart.json" <<'PY'
+import json, sys
+decision = json.load(open(sys.argv[1]))
+receipt = json.load(open(sys.argv[2]))
+metadata = receipt.get("metadata") or {}
+if decision.get("verdict") != "DENY" or receipt.get("verdict") != "DENY" or receipt.get("status") != "DENY":
+    raise SystemExit(f"decision and receipt must remain fail-closed DENY: decision={decision} receipt={receipt}")
+if decision.get("receipt_id") != receipt.get("receipt_id"):
+    raise SystemExit(f"decision and receipt ids differ: decision={decision} receipt={receipt}")
+if decision.get("decision_id") != receipt.get("decision_id"):
+    raise SystemExit(f"decision lineage differs: decision={decision} receipt={receipt}")
+if decision.get("action") != "EXECUTE_TOOL" or receipt.get("effect_id") != "EXECUTE_TOOL":
+    raise SystemExit(f"receipt action binding differs: decision={decision} receipt={receipt}")
+if decision.get("resource") != "unknown.tool.smoke":
+    raise SystemExit(f"decision resource binding differs: {decision}")
+if metadata.get("action") != decision.get("action") or metadata.get("resource") != decision.get("resource"):
+    raise SystemExit(f"receipt metadata authority tuple differs: decision={decision} receipt={receipt}")
+PY
 }
 
 assert_authz_negative() {
@@ -343,24 +374,30 @@ assert_persistence_files() {
 }
 
 assert_persistence_after_restart() {
+    receipt_id="$1"
     root_key_hash >"$ARTIFACT_DIR/root-key.after"
     diff "$ARTIFACT_DIR/root-key.before" "$ARTIFACT_DIR/root-key.after" >/dev/null || {
         echo "::error::root key changed across restart"
         exit 1
     }
-    list_receipts >/dev/null
+    fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.after-restart.json"
+    diff "$ARTIFACT_DIR/receipt.before-restart.json" "$ARTIFACT_DIR/receipt.after-restart.json" >/dev/null || {
+        echo "::error::governed denial receipt changed across restart"
+        exit 1
+    }
 }
 
 echo "docker smoke mode=$MODE image=$IMAGE api_port=$API_PORT health_port=$HEALTH_PORT runtime_data_dir=$RUNTIME_DATA_DIR artifact_dir=$ARTIFACT_DIR"
 start_runtime
 assert_compose_build_metadata
-evaluate_unknown_tool
-receipt_id="$(list_receipts)"
-fetch_receipt "$receipt_id"
+receipt_id="$(evaluate_unknown_tool)"
+list_receipts "$receipt_id"
+fetch_receipt "$receipt_id" "$ARTIFACT_DIR/receipt.before-restart.json"
+assert_decision_receipt_binding
 assert_authz_negative
 export_and_verify_evidence
 assert_persistence_files
 stop_runtime
 start_runtime
-assert_persistence_after_restart
+assert_persistence_after_restart "$receipt_id"
 echo "docker smoke passed"

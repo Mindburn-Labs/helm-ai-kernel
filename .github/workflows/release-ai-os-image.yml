@@ -58,41 +58,105 @@ jobs:
             echo "::error::publication reruns are prohibited; dispatch a new run so release-production requires a fresh owner approval"
             exit 1
           fi
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for authoritative owner readback"
+            exit 1
+          fi
           if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
             echo "::error::release-production is not explicitly armed"
             exit 1
           fi
+          if ! jq -e '. == ["mindburnlabs","peycheff-com"]' <<<"${RELEASE_ACTORS_JSON:-}" >/dev/null; then
+            echo "::error::HELM_AI_OS_IMAGE_RELEASE_ACTORS must equal [\"mindburnlabs\",\"peycheff-com\"]"
+            exit 1
+          fi
+          release_environment_payload="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}")"
+          deployment_branch_policies="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/deployment-branch-policies")"
+          live_release_authority="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/variables/HELM_RELEASE_AUTHORITY_ARMED" \
+            --jq '.value')"
+          live_release_actors="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS" \
+            --jq '.value')"
+          if ! jq -e --arg environment "${RELEASE_ENVIRONMENT}" '
+            .name == $environment and
+            .can_admins_bypass == false and
+            .deployment_branch_policy == {
+              protected_branches: false,
+              custom_branch_policies: true
+            } and
+            (.protection_rules | type == "array" and length == 2) and
+            (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
+            ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
+            (first(.protection_rules[] | select(.type == "required_reviewers")) |
+              .prevent_self_review == true and
+              (.reviewers | type == "array" and length == 1) and
+              .reviewers[0].type == "User" and
+              (.reviewers[0].id | type == "number" and (try (floor == . and . > 0) catch false)))
+          ' <<<"${release_environment_payload}" >/dev/null; then
+            echo "::error::release-production environment protection readback is not exact"
+            exit 1
+          fi
           if ! jq -e '
-            type == "array" and
-            length > 0 and
-            all(.[]; type == "string" and test("^[A-Za-z0-9-]{1,39}$")) and
-            (unique | length) == length
-          ' <<<"${RELEASE_ACTORS_JSON:-}" >/dev/null; then
-            echo "::error::HELM_AI_OS_IMAGE_RELEASE_ACTORS must be a non-empty JSON array of unique GitHub logins"
+            .total_count == 1 and
+            (.branch_policies | type == "array" and length == 1) and
+            .branch_policies[0].name == "main" and
+            .branch_policies[0].type == "branch"
+          ' <<<"${deployment_branch_policies}" >/dev/null; then
+            echo "::error::release-production deployment branch policy must contain only main"
+            exit 1
+          fi
+          if [[ "${live_release_authority}" != "release-production" ]]; then
+            echo "::error::release-production is not armed in the authoritative environment variable readback"
+            exit 1
+          fi
+          if [[ "${live_release_authority}" != "${RELEASE_AUTHORITY_ARMED}" ]]; then
+            echo "::error::release-production changed from the job-start authority snapshot"
+            exit 1
+          fi
+          if ! jq -e '. == ["mindburnlabs","peycheff-com"]' <<<"${live_release_actors}" >/dev/null; then
+            echo "::error::the authoritative HELM_AI_OS_IMAGE_RELEASE_ACTORS value is not exact"
+            exit 1
+          fi
+          if ! jq -e --argjson configured "${RELEASE_ACTORS_JSON}" '. == $configured' <<<"${live_release_actors}" >/dev/null; then
+            echo "::error::the release actor allowlist changed from the job-start snapshot"
             exit 1
           fi
           for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do
             if ! jq -e --arg actor "${candidate}" 'index($actor) != null' \
-              <<<"${RELEASE_ACTORS_JSON}" >/dev/null; then
+              <<<"${live_release_actors}" >/dev/null; then
               echo "::error::GitHub actor ${candidate} is not authorized for AI OS image publication"
               exit 1
             fi
           done
-          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
-            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for authoritative organization-role readback"
+          run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --jq '.run_started_at')"
+          if [[ -z "${run_started_at}" ]]; then
+            echo "::error::the current workflow run has no authoritative start timestamp"
             exit 1
           fi
-          approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
-          if ! jq -e '
+          approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
+          if ! jq -e \
+            --arg run_started_at "${run_started_at}" \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
+            --arg request_actor "${REQUEST_ACTOR}" \
+            --arg triggering_actor "${TRIGGERING_ACTOR}" '
             [
               .[] |
               select(
                 .state == "approved" and
-                (.user.login == "mindburnlabs" or .user.login == "peycheff-com")
+                (.created_at > $run_started_at) and
+                (.environments | type == "array" and any(.[]; .name == $release_environment)) and
+                (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
+                .user.login != $request_actor and
+                .user.login != $triggering_actor
               )
             ] | length > 0
           ' <<<"${approval_history}" >/dev/null; then
-            echo "::error::release-production requires a single-run approval from an authorized human owner"
+            echo "::error::release-production requires a fresh approval from a distinct authorized human owner"
             exit 1
           fi
           for owner in mindburnlabs peycheff-com; do
@@ -121,11 +185,17 @@ jobs:
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify source is the current main tip
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.extraheader \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GH_TOKEN}" \
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_tip="$(git rev-parse refs/remotes/origin/main)"
           if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then
             echo "::error::source_sha must equal the current origin/main tip (${main_tip})"
@@ -498,31 +568,56 @@ jobs:
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          promotion_main_tip="$(git rev-parse refs/remotes/origin/main)"
-          if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then
-            echo "::error::origin/main moved before promotion (${promotion_main_tip})"
-            exit 1
-          fi
-          gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
-            > promotion-ci-runs.json
-          ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json
-
-          if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
-            echo "::error::release-production is no longer explicitly armed"
-            exit 1
-          fi
           if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
             echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for final owner readback"
             exit 1
           fi
+          if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
+            echo "::error::release-production is no longer explicitly armed"
+            exit 1
+          fi
+          if ! jq -e '. == ["mindburnlabs","peycheff-com"]' <<<"${RELEASE_ACTORS_JSON:-}" >/dev/null; then
+            echo "::error::HELM_AI_OS_IMAGE_RELEASE_ACTORS changed from its exact job-start value"
+            exit 1
+          fi
+          live_release_environment_payload="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}")"
+          live_deployment_branch_policies="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/deployment-branch-policies")"
           live_release_authority="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
             "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/variables/HELM_RELEASE_AUTHORITY_ARMED" \
             --jq '.value')"
           live_release_actors="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
             "/repos/${GITHUB_REPOSITORY}/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS" \
             --jq '.value')"
+          if ! jq -e --arg environment "${RELEASE_ENVIRONMENT}" '
+            .name == $environment and
+            .can_admins_bypass == false and
+            .deployment_branch_policy == {
+              protected_branches: false,
+              custom_branch_policies: true
+            } and
+            (.protection_rules | type == "array" and length == 2) and
+            (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
+            ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
+            (first(.protection_rules[] | select(.type == "required_reviewers")) |
+              .prevent_self_review == true and
+              (.reviewers | type == "array" and length == 1) and
+              .reviewers[0].type == "User" and
+              (.reviewers[0].id | type == "number" and (try (floor == . and . > 0) catch false)))
+          ' <<<"${live_release_environment_payload}" >/dev/null; then
+            echo "::error::release-production environment protection changed during the build"
+            exit 1
+          fi
+          if ! jq -e '
+            .total_count == 1 and
+            (.branch_policies | type == "array" and length == 1) and
+            .branch_policies[0].name == "main" and
+            .branch_policies[0].type == "branch"
+          ' <<<"${live_deployment_branch_policies}" >/dev/null; then
+            echo "::error::release-production deployment branch policy changed during the build"
+            exit 1
+          fi
           if [[ "${live_release_authority}" != "release-production" ]]; then
             echo "::error::release-production was disarmed during the build"
             exit 1
@@ -532,12 +627,13 @@ jobs:
             exit 1
           fi
           if ! jq -e '
-            type == "array" and
-            length > 0 and
-            all(.[]; type == "string" and test("^[A-Za-z0-9-]{1,39}$")) and
-            (unique | length) == length
+            . == ["mindburnlabs","peycheff-com"]
           ' <<<"${live_release_actors}" >/dev/null; then
-            echo "::error::the live HELM_AI_OS_IMAGE_RELEASE_ACTORS value is invalid"
+            echo "::error::the live HELM_AI_OS_IMAGE_RELEASE_ACTORS value is not exact"
+            exit 1
+          fi
+          if ! jq -e --argjson configured "${RELEASE_ACTORS_JSON}" '. == $configured' <<<"${live_release_actors}" >/dev/null; then
+            echo "::error::the release actor allowlist changed from the job-start snapshot"
             exit 1
           fi
           for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do
@@ -547,17 +643,32 @@ jobs:
               exit 1
             fi
           done
-          approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
-          if ! jq -e '
+          run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --jq '.run_started_at')"
+          if [[ -z "${run_started_at}" ]]; then
+            echo "::error::the current workflow run has no authoritative start timestamp"
+            exit 1
+          fi
+          approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
+          if ! jq -e \
+            --arg run_started_at "${run_started_at}" \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
+            --arg request_actor "${REQUEST_ACTOR}" \
+            --arg triggering_actor "${TRIGGERING_ACTOR}" '
             [
               .[] |
               select(
                 .state == "approved" and
-                (.user.login == "mindburnlabs" or .user.login == "peycheff-com")
+                (.created_at > $run_started_at) and
+                (.environments | type == "array" and any(.[]; .name == $release_environment)) and
+                (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
+                .user.login != $request_actor and
+                .user.login != $triggering_actor
               )
             ] | length > 0
           ' <<<"${approval_history}" >/dev/null; then
-            echo "::error::release-production no longer has this run's authorized human-owner approval"
+            echo "::error::release-production no longer has this run's fresh distinct human-owner approval"
             exit 1
           fi
           for owner in mindburnlabs peycheff-com; do
@@ -568,6 +679,20 @@ jobs:
               exit 1
             fi
           done
+
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.extraheader \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GH_TOKEN}" \
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          promotion_main_tip="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then
+            echo "::error::origin/main moved before promotion (${promotion_main_tip})"
+            exit 1
+          fi
+          gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
+            > promotion-ci-runs.json
+          ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json
 
           expected_digest="${{ steps.build.outputs.digest }}"
           staging_ref="${IMAGE_NAME}@${expected_digest}"

@@ -46,6 +46,10 @@ else
     cat "$inspect_error" >&2
     echo "registry transport failure while inspecting immutable tag: $final_tag" >&2
     exit 1
+  elif grep -Eiq '(429|rate[-_ ]?limit|too many requests)' "$inspect_error"; then
+    cat "$inspect_error" >&2
+    echo "registry rate-limit response is ambiguous; unable to prove whether immutable tag exists: $final_tag" >&2
+    exit 1
   elif grep -Eiq '(manifest unknown|manifest_unknown|404[[:space:]]+not[[:space:]]+found|:[[:space:]]+not[[:space:]]+found([[:space:]]|$))' "$inspect_error"; then
     echo 'immutable tag is absent; creating it once' >&2
   else

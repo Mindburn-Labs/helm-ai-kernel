@@ -31,11 +31,13 @@ case "$*" in
       conflict) printf '%s\n' "$MOCK_OTHER_DIGEST" ;;
       missing) echo 'manifest unknown' >&2; exit 1 ;;
       missing_not_found) echo 'ghcr.io/mindburn-labs/helm-ai-kernel:sha-500deadbeef: not found' >&2; exit 1 ;;
+      missing_ghcr) echo 'ERROR: ghcr.io/mindburn-labs/helm-ai-kernel:sha-500deadbeef: not found' >&2; exit 1 ;;
       missing_404) echo '404 Not Found' >&2; exit 1 ;;
       auth) echo 'unauthorized: authentication required' >&2; exit 1 ;;
       transport) echo 'TLS handshake timeout' >&2; exit 1 ;;
       server) echo '500 Internal Server Error: manifest unknown' >&2; exit 1 ;;
       ambiguous) echo 'unexpected registry response' >&2; exit 1 ;;
+      rate_limit) echo 'ERROR: 429 Too Many Requests (rate limit exceeded)' >&2; exit 1 ;;
       *) echo 'unknown mock mode' >&2; exit 2 ;;
     esac
     ;;
@@ -79,7 +81,7 @@ if grep -Fq 'buildx imagetools create' "$mock_log"; then
   exit 1
 fi
 
-for mode in missing missing_not_found missing_404; do
+for mode in missing missing_not_found missing_ghcr missing_404; do
   run_promotion "$mode" >/dev/null
   if [ "$(grep -Fc 'buildx imagetools create' "$mock_log")" -ne 1 ]; then
     echo "$mode immutable tag was not created exactly once" >&2
@@ -87,12 +89,18 @@ for mode in missing missing_not_found missing_404; do
   fi
 done
 
-for mode in auth transport server ambiguous; do
+for mode in auth transport server ambiguous rate_limit; do
   if run_promotion "$mode" >/dev/null 2>"$mock_error"; then
     echo "$mode registry failure was incorrectly treated as a missing tag" >&2
     exit 1
   fi
-  grep -Fq "${mode%iguous}" "$mock_error" || {
+  case "$mode" in
+    auth) grep -Fq 'authorization failure' "$mock_error" ;;
+    transport) grep -Fq 'transport failure' "$mock_error" ;;
+    server) grep -Fq 'server failure' "$mock_error" ;;
+    ambiguous) grep -Fq 'ambiguous registry failure' "$mock_error" ;;
+    rate_limit) grep -Fq 'rate-limit response is ambiguous' "$mock_error" ;;
+  esac || {
     echo "$mode registry failure was not classified explicitly" >&2
     exit 1
   }
@@ -150,6 +158,128 @@ fi
 workflow=.github/workflows/release-ai-os-image.yml
 checker=./scripts/release/check_ai_os_image_contract.sh
 
+# These fixtures mirror the GitHub REST provider shape, including both
+# environment protection rules and the deployment-branch policy response.
+provider_environment='{"name":"release-production","can_admins_bypass":false,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"id":101,"node_id":"PR_required","type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"User","id":123456,"login":"mindburnlabs"}]},{"id":102,"node_id":"PR_branch","type":"branch_policy"}]}'
+provider_branch_policies='{"total_count":1,"branch_policies":[{"id":201,"node_id":"BP_main","name":"main","type":"branch"}]}'
+provider_approval='[{"environments":[{"name":"release-production","id":301}],"state":"approved","user":{"login":"peycheff-com"},"created_at":"2026-09-01T10:00:01Z"}]'
+run_started_at=2026-09-01T10:00:00Z
+
+assert_provider_authority() {
+  environment_json=$1
+  branch_policy_json=$2
+  printf '%s\n' "$environment_json" | jq -e --arg environment release-production '
+    .name == $environment and
+    .can_admins_bypass == false and
+    .deployment_branch_policy == {
+      protected_branches: false,
+      custom_branch_policies: true
+    } and
+    (.protection_rules | type == "array" and length == 2) and
+    (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
+    ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
+    (first(.protection_rules[] | select(.type == "required_reviewers")) |
+      .prevent_self_review == true and
+      (.reviewers | type == "array" and length == 1) and
+      .reviewers[0].type == "User" and
+      (.reviewers[0].id | type == "number" and (try (floor == . and . > 0) catch false)))
+  ' >/dev/null 2>&1 || return 1
+  printf '%s\n' "$branch_policy_json" | jq -e '
+    .total_count == 1 and
+    (.branch_policies | type == "array" and length == 1) and
+    .branch_policies[0].name == "main" and
+    .branch_policies[0].type == "branch"
+  ' >/dev/null 2>&1
+}
+
+assert_provider_actors() {
+  printf '%s\n' "$1" | jq -e '. == ["mindburnlabs","peycheff-com"]' >/dev/null
+}
+
+assert_provider_approval() {
+  approval_json=$1
+  approval_run_started_at=$2
+  approval_request_actor=$3
+  approval_triggering_actor=$4
+  printf '%s\n' "$approval_json" | jq -e \
+    --arg run_started_at "$approval_run_started_at" \
+    --arg release_environment release-production \
+    --arg request_actor "$approval_request_actor" \
+    --arg triggering_actor "$approval_triggering_actor" '
+    [
+      .[] |
+      select(
+        .state == "approved" and
+        (.created_at > $run_started_at) and
+        (.environments | type == "array" and any(.[]; .name == $release_environment)) and
+        (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
+        .user.login != $request_actor and
+        .user.login != $triggering_actor
+      )
+    ] | length > 0
+  ' >/dev/null 2>&1
+}
+
+if ! assert_provider_authority "$provider_environment" "$provider_branch_policies" ||
+  ! assert_provider_actors '["mindburnlabs","peycheff-com"]' ||
+  ! assert_provider_approval "$provider_approval" "$run_started_at" mindburnlabs mindburnlabs; then
+  echo 'provider-shaped release authority fixtures were not accepted' >&2
+  exit 1
+fi
+
+reject_provider_authority() {
+  mutation=$1
+  environment_json=$2
+  branch_policy_json=${3:-$provider_branch_policies}
+  if assert_provider_authority "$environment_json" "$branch_policy_json"; then
+    echo "provider authority mutation was accepted: $mutation" >&2
+    exit 1
+  fi
+}
+
+reject_provider_authority 'missing required reviewer rule' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules = [.protection_rules[0]]')"
+reject_provider_authority 'extra unknown rule' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules += [{"type":"unknown"}]')"
+reject_provider_authority 'unknown rule type' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].type = "unknown"')"
+reject_provider_authority 'Team reviewer' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].type = "Team"')"
+reject_provider_authority 'multiple reviewers' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers += [{"type":"User","id":654321}]')"
+reject_provider_authority 'administrator bypass' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.can_admins_bypass = true')"
+reject_provider_authority 'self review enabled' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].prevent_self_review = false')"
+reject_provider_authority 'protected branch policy' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.deployment_branch_policy.protected_branches = true')"
+reject_provider_authority 'custom branch policy disabled' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.deployment_branch_policy.custom_branch_policies = false')"
+reject_provider_authority 'extra deployment branch' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.total_count = 2 | .branch_policies += [{"id":202,"name":"release","type":"branch"}]')"
+reject_provider_authority 'wrong deployment branch name' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].name = "release"')"
+reject_provider_authority 'wrong deployment branch type' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].type = "tag"')"
+
+for actor_fixture in '["mindburnlabs"]' '["peycheff-com","mindburnlabs"]' '["mindburnlabs","peycheff-com","other"]'; do
+  if assert_provider_actors "$actor_fixture"; then
+    echo "non-exact release actor fixture was accepted: $actor_fixture" >&2
+    exit 1
+  fi
+done
+
+if assert_provider_approval "$(printf '%s\n' "$provider_approval" | jq -c '.[0].created_at = "2026-08-31T23:59:59Z"')" "$run_started_at" mindburnlabs mindburnlabs ||
+  assert_provider_approval "$provider_approval" "$run_started_at" peycheff-com mindburnlabs ||
+  assert_provider_approval "$provider_approval" "$run_started_at" mindburnlabs peycheff-com ||
+  assert_provider_approval "$(printf '%s\n' "$provider_approval" | jq -c '.[0].environments[0].name = "other"')" "$run_started_at" mindburnlabs mindburnlabs; then
+  echo 'stale, self, or wrong-environment approval fixture was accepted' >&2
+  exit 1
+fi
+
 mutate_and_reject() {
   fixture=$1
   if "$checker" "$fixture" >/dev/null 2>&1; then
@@ -157,6 +287,83 @@ mutate_and_reject() {
     exit 1
   fi
 }
+
+sed 's/persist-credentials: false/persist-credentials: true/' \
+  "$workflow" > "$test_dir/persisted-checkout-credentials.yml"
+mutate_and_reject "$test_dir/persisted-checkout-credentials.yml"
+
+sed 's/\["mindburnlabs","peycheff-com"\]/["mindburnlabs"]/' \
+  "$workflow" > "$test_dir/non-exact-actor-allowlist.yml"
+mutate_and_reject "$test_dir/non-exact-actor-allowlist.yml"
+
+sed 's/\["branch_policy", "required_reviewers"\]/["branch_policy", "unknown"]/' \
+  "$workflow" > "$test_dir/unknown-protection-rule.yml"
+mutate_and_reject "$test_dir/unknown-protection-rule.yml"
+
+sed 's/(\.protection_rules | type == "array" and length == 2)/(\.protection_rules | type == "array" and length == 3)/g' \
+  "$workflow" > "$test_dir/extra-protection-rule.yml"
+mutate_and_reject "$test_dir/extra-protection-rule.yml"
+
+sed 's/\.reviewers\[0\]\.type == "User"/.reviewers[0].type == "Team"/g' \
+  "$workflow" > "$test_dir/team-reviewer.yml"
+mutate_and_reject "$test_dir/team-reviewer.yml"
+
+sed 's/(\.reviewers | type == "array" and length == 1)/(\.reviewers | type == "array" and length == 2)/g' \
+  "$workflow" > "$test_dir/multiple-reviewers.yml"
+mutate_and_reject "$test_dir/multiple-reviewers.yml"
+
+sed 's/\.can_admins_bypass == false/.can_admins_bypass == true/g' \
+  "$workflow" > "$test_dir/admin-bypass.yml"
+mutate_and_reject "$test_dir/admin-bypass.yml"
+
+sed 's/protected_branches: false/protected_branches: true/g' \
+  "$workflow" > "$test_dir/protected-branches.yml"
+mutate_and_reject "$test_dir/protected-branches.yml"
+
+sed 's/custom_branch_policies: true/custom_branch_policies: false/g' \
+  "$workflow" > "$test_dir/custom-branches-disabled.yml"
+mutate_and_reject "$test_dir/custom-branches-disabled.yml"
+
+sed 's/\.prevent_self_review == true/.prevent_self_review == false/g' \
+  "$workflow" > "$test_dir/self-review.yml"
+mutate_and_reject "$test_dir/self-review.yml"
+
+sed 's/\.created_at > \$run_started_at/.created_at >= \$run_started_at/g' \
+  "$workflow" > "$test_dir/stale-approval-timestamp.yml"
+mutate_and_reject "$test_dir/stale-approval-timestamp.yml"
+
+sed 's/\.user.login != \$request_actor/.user.login == \$request_actor/g; s/\.user.login != \$triggering_actor/.user.login == \$triggering_actor/g' \
+  "$workflow" > "$test_dir/self-approval.yml"
+mutate_and_reject "$test_dir/self-approval.yml"
+
+sed 's/any(\.\[\]; \.name == \$release_environment)/any(.[ ]; .name == \$release_environment)/g' \
+  "$workflow" > "$test_dir/wrong-approval-environment.yml"
+mutate_and_reject "$test_dir/wrong-approval-environment.yml"
+
+sed 's/--jq '\''\.run_started_at'\''/--jq '\''\.missing'\''/g' \
+  "$workflow" > "$test_dir/missing-run-start-time.yml"
+mutate_and_reject "$test_dir/missing-run-start-time.yml"
+
+sed 's/GH_TOKEN="\${OWNER_READBACK_TOKEN}" gh api/gh api/g' \
+  "$workflow" > "$test_dir/unbound-owner-readback.yml"
+mutate_and_reject "$test_dir/unbound-owner-readback.yml"
+
+reject_dockerignore_mutation() {
+  entry=$1
+  fixture="$test_dir/missing-context.dockerignore"
+  awk -v entry="$entry" '$0 != entry' .dockerignore > "$fixture"
+  if "$checker" "$workflow" .github/workflows/release.yml Dockerfile "$fixture" >/dev/null 2>&1; then
+    echo "Docker context mutation was not rejected: $entry" >&2
+    exit 1
+  fi
+}
+
+while IFS= read -r dockerignore_entry; do
+  case "$dockerignore_entry" in
+    ''|'#'*) continue ;;
+  esac
+  reject_dockerignore_mutation "$dockerignore_entry"
+done < .dockerignore
 
 sed -e 's/^USER /  user /' -e 's/^ENTRYPOINT /  entrypoint /' -e 's/^CMD /  cmd /' \
   Dockerfile > "$test_dir/lowercase-governed.Dockerfile"
@@ -297,7 +504,7 @@ awk '
 mutate_and_reject "$test_dir/missing-final-actor-readback.yml"
 
 awk '
-  /approval_history="\$\(gh api .*\/approvals/ {
+  /approval_history="\$\(GH_TOKEN="\$\{OWNER_READBACK_TOKEN\}" gh api .*\/approvals/ {
     seen++
     if (seen == 2) {
       print "          approval_history=\"[]\" # mutation: skip final approval readback"
@@ -330,7 +537,7 @@ awk '
 mutate_and_reject "$test_dir/missing-final-release-environment.yml"
 
 awk '
-  /approval_history="\$\(gh api .*\/approvals/ {
+  /approval_history="\$\(GH_TOKEN="\$\{OWNER_READBACK_TOKEN\}" gh api .*\/approvals/ {
     seen++
     if (seen == 2) {
       held = $0

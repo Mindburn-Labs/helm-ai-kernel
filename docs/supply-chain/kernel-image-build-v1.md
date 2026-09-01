@@ -29,8 +29,9 @@ source-owned SHA-256
 `0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458`. It
 explicitly bootstraps the vulnerability database once
 into the run's dedicated cache, records `grype db status --output json`, and
-requires a valid machine-readable status object. Both platform scans then use
-that same cache with application and database auto-updates disabled; if the
+requires the exact provider-shaped machine-readable status object, including a
+dotted numeric `schemaVersion` without a leading `v`. Both platform scans
+then use that same cache with application and database auto-updates disabled; if the
 binary, database bootstrap, or status readback is unavailable, the job stops.
 Grype scans each exact `linux/amd64` and `linux/arm64` manifest digest with
 `--scope all-layers --fail-on high --output json`. A scan is accepted only when
@@ -119,7 +120,11 @@ and be from one of those owners while differing from both the request and
 triggering actors. The
 full environment, branch-policy, actor, owner, approval, source-tip, and newest
 CI readbacks are repeated immediately before the immutable `sha-<SOURCE_SHA>`
-promotion. Reruns are rejected.
+promotion. The initial live authority and SHA-256 of its exact actor JSON are
+persisted through `GITHUB_ENV` and both are compared again at that final
+checkpoint. Current-main fetches and CI-run queries at both checkpoints are
+bound explicitly to the owner readback token; the job token is reserved for
+publication operations. Reruns are rejected.
 
 This workflow exclusively owns the governed immutable `sha-<SOURCE_SHA>` tag
 namespace. The legacy `release.yml` QA publisher uses the disjoint

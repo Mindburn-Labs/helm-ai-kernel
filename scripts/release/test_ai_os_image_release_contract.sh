@@ -209,13 +209,13 @@ assert_provider_authority() {
   ' >/dev/null 2>&1
 }
 
-provider_grype_db_status='{"schemaVersion":"v6.1.9","from":"https://grype.anchore.io/databases/v6/vulnerability-db_v6.1.9_2026-08-31T00:36:25Z_1788158251.tar.zst?checksum=sha256%3A70e70f6232f41281063bd2a0a20600758ae12d6e60ba571b16070f950e2f99d3","built":"2026-08-31T06:37:31Z","path":"/runner/_temp/grype-db/6/vulnerability.db","valid":true}'
+provider_grype_db_status='{"schemaVersion":"6.1.9","from":"https://grype.anchore.io/databases/v6/vulnerability-db_v6.1.9_2026-08-31T00:36:25Z_1788158251.tar.zst?checksum=sha256%3A70e70f6232f41281063bd2a0a20600758ae12d6e60ba571b16070f950e2f99d3","built":"2026-08-31T06:37:31Z","path":"/runner/_temp/grype-db/6/vulnerability.db","valid":true}'
 
 assert_provider_grype_db_status() {
   printf '%s\n' "$1" | jq -e '
     type == "object" and
     (keys | sort) == ["built", "from", "path", "schemaVersion", "valid"] and
-    (.schemaVersion | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+    (.schemaVersion | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
     (.from | type == "string" and startswith("https://grype.anchore.io/databases/")) and
     (.built | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
     (.path | type == "string" and length > 0) and
@@ -349,7 +349,7 @@ fi
 for db_status_mutation in \
   "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.extra = true')" \
   "$(printf '%s\n' "$provider_grype_db_status" | jq -c 'del(.schemaVersion)')" \
-  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.schemaVersion = "6.1.9"')" \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.schemaVersion = "v6.1.9"')" \
   "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.from = "https://example.test/db"')" \
   "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.built = "not-a-timestamp"')" \
   "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.path = ""')" \
@@ -477,6 +477,8 @@ reject_provider_authority 'required reviewer outer rule zero id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].id = 0')"
 reject_provider_authority 'required reviewer outer rule string id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].id = "101"')"
+reject_provider_authority 'required reviewer outer rule fractional id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].id = 101.5')"
 reject_provider_authority 'required reviewer outer rule empty node id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].node_id = ""')"
 reject_provider_authority 'required reviewer outer rule missing prevent-self-review' \
@@ -505,6 +507,8 @@ reject_provider_authority 'reviewer User zero id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.id = 0')"
 reject_provider_authority 'reviewer User string id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.id = "123456"')"
+reject_provider_authority 'reviewer User fractional id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.id = 123456.5')"
 reject_provider_authority 'reviewer User missing id' \
   "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].reviewer.id)')"
 reject_provider_authority 'reviewer User empty node id' \
@@ -545,6 +549,8 @@ reject_provider_authority 'environment branch rule zero id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].id = 0')"
 reject_provider_authority 'environment branch rule string id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].id = "102"')"
+reject_provider_authority 'environment branch rule fractional id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].id = 102.5')"
 reject_provider_authority 'environment branch rule empty node id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].node_id = ""')"
 reject_provider_authority 'environment branch rule missing node id' \
@@ -563,6 +569,9 @@ reject_provider_authority 'deployment branch zero id' \
 reject_provider_authority 'deployment branch string id' \
   "$provider_environment" \
   "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].id = "201"')"
+reject_provider_authority 'deployment branch fractional id' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].id = 201.5')"
 reject_provider_authority 'deployment branch empty node id' \
   "$provider_environment" \
   "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].node_id = ""')"
@@ -893,6 +902,26 @@ mutate_and_reject "$test_dir/unbound-triggering-actor.yml"
 sed '/OWNER_READBACK_TOKEN: \${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}/d' \
   "$workflow" > "$test_dir/missing-owner-readback-token.yml"
 mutate_and_reject "$test_dir/missing-owner-readback-token.yml"
+
+sed '/INITIAL_LIVE_RELEASE_AUTHORITY=%s/d; /INITIAL_LIVE_RELEASE_ACTORS_SHA256=%s/d' \
+  "$workflow" > "$test_dir/missing-initial-live-authority-persistence.yml"
+mutate_and_reject "$test_dir/missing-initial-live-authority-persistence.yml"
+
+sed '/INITIAL_LIVE_RELEASE_AUTHORITY}/d' \
+  "$workflow" > "$test_dir/missing-final-live-authority-comparison.yml"
+mutate_and_reject "$test_dir/missing-final-live-authority-comparison.yml"
+
+sed '/INITIAL_LIVE_RELEASE_ACTORS_SHA256}/d' \
+  "$workflow" > "$test_dir/missing-final-live-actor-digest-comparison.yml"
+mutate_and_reject "$test_dir/missing-final-live-actor-digest-comparison.yml"
+
+sed 's/GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer \${OWNER_READBACK_TOKEN}"/GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer \${GH_TOKEN}"/g' \
+  "$workflow" > "$test_dir/unbound-current-main-readback.yml"
+mutate_and_reject "$test_dir/unbound-current-main-readback.yml"
+
+sed 's/GH_TOKEN="\${OWNER_READBACK_TOKEN}" gh api --paginate/gh api --paginate/g' \
+  "$workflow" > "$test_dir/unbound-ci-readback.yml"
+mutate_and_reject "$test_dir/unbound-ci-readback.yml"
 
 sed 's#actions/runs/${GITHUB_RUN_ID}/approvals#actions/runs/${GITHUB_RUN_ID}#' \
   "$workflow" > "$test_dir/missing-run-approval-readback.yml"

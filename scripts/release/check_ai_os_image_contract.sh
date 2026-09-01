@@ -149,6 +149,13 @@ require 'name: release-production' "$workflow"
 require 'RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}' "$workflow"
 require 'RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}' "$workflow"
 require 'OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}' "$workflow"
+require 'INITIAL_LIVE_RELEASE_AUTHORITY=%s' "$workflow"
+require 'INITIAL_LIVE_RELEASE_ACTORS_SHA256=%s' "$workflow"
+require '} >> "${GITHUB_ENV}"' "$workflow"
+require 'if [[ "${live_release_authority}" != "${INITIAL_LIVE_RELEASE_AUTHORITY}" ]]; then' "$workflow"
+require 'if [[ ! "${live_release_actors_sha256}" =~ ^[0-9a-f]{64}$ || "${live_release_actors_sha256}" != "${INITIAL_LIVE_RELEASE_ACTORS_SHA256}" ]]; then' "$workflow"
+require 'GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}"' "$workflow"
+require 'GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate' "$workflow"
 require 'run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow"
 require '.run_started_at' "$workflow"
 require 'persist-credentials: false' "$workflow"
@@ -240,7 +247,7 @@ require 'grype db update' "$workflow"
 require 'grype db status --output json > grype-db-status.json' "$workflow"
 require 'GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db' "$workflow"
 require '(keys | sort) == ["built", "from", "path", "schemaVersion", "valid"]' "$workflow"
-require '(.schemaVersion | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' "$workflow"
+require '(.schemaVersion | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' "$workflow"
 require '(.from | type == "string" and startswith("https://grype.anchore.io/databases/"))' "$workflow"
 require '(.built | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' "$workflow"
 require '(.path | type == "string" and length > 0)' "$workflow"
@@ -330,7 +337,10 @@ if [ "$trigger_count" -ne 1 ]; then
 fi
 
 if [ "$(grep -Fc 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc './scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"' "$workflow")" -ne 2 ]; then
+  [ "$(grep -Fc './scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}' "$workflow")" -ne 4 ]; then
   echo 'current main and newest completed CI must be checked initially and immediately before promotion' >&2
   exit 1
 fi
@@ -359,11 +369,19 @@ if [ "$(grep -Fc 'if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]
   [ "$(grep -Fc 'approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'for owner in mindburnlabs peycheff-com; do' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '. == ["mindburnlabs","peycheff-com"]' "$workflow")" -ne 4 ] ||
-  [ "$(grep -Fc 'GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow")" -ne 14 ] ||
+  [ "$(grep -Fc 'GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow")" -ne 16 ] ||
   [ "$(grep -Fc "$run_start_read_pattern" "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}")' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/deployment-branch-policies")' "$workflow")" -ne 2 ]; then
   echo 'owner authority, actor allowlist, and run approval must be read back initially and immediately before promotion' >&2
+  exit 1
+fi
+if [ "$(grep -Fc 'INITIAL_LIVE_RELEASE_AUTHORITY=%s' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'INITIAL_LIVE_RELEASE_ACTORS_SHA256=%s' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '} >> "${GITHUB_ENV}"' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'if [[ "${live_release_authority}" != "${INITIAL_LIVE_RELEASE_AUTHORITY}" ]]; then' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'if [[ ! "${live_release_actors_sha256}" =~ ^[0-9a-f]{64}$ || "${live_release_actors_sha256}" != "${INITIAL_LIVE_RELEASE_ACTORS_SHA256}" ]]; then' "$workflow")" -ne 1 ]; then
+  echo 'initial live authority and actor JSON digest must be persisted and compared before promotion' >&2
   exit 1
 fi
 if [ "$(grep -Fc '.can_admins_bypass == false' "$workflow")" -ne 2 ] ||
@@ -464,6 +482,10 @@ if grep -Fq 'https://actions.github.io/buildtypes/workflow/v1' "$workflow"; then
 fi
 if grep -Fq 'anchore/scan-action/download-grype@' "$workflow"; then
   echo 'Grype must be installed from the checksum-verified immutable release artifact' >&2
+  exit 1
+fi
+if grep -Fq 'GH_TOKEN: ${{ github.token }}' "$workflow"; then
+  echo 'source, CI, and authority readbacks must not use the job token' >&2
   exit 1
 fi
 if grep -Fq 'git merge-base --is-ancestor' "$workflow"; then

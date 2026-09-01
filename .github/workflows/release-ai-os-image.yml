@@ -45,7 +45,6 @@ jobs:
     steps:
       - name: Validate publication authority
         env:
-          GH_TOKEN: ${{ github.token }}
           OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
           RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
           RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
@@ -196,6 +195,15 @@ jobs:
             echo "::error::source_sha must equal the main commit recorded at dispatch (${WORKFLOW_SHA})"
             exit 1
           fi
+          initial_live_release_actors_sha256="$(printf '%s' "${live_release_actors}" | sha256sum | cut -d' ' -f1)"
+          if [[ ! "${initial_live_release_actors_sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::the initial live release actor JSON digest is invalid"
+            exit 1
+          fi
+          {
+            printf 'INITIAL_LIVE_RELEASE_AUTHORITY=%s\n' "${live_release_authority}"
+            printf 'INITIAL_LIVE_RELEASE_ACTORS_SHA256=%s\n' "${initial_live_release_actors_sha256}"
+          } >> "${GITHUB_ENV}"
 
       - name: Checkout exact source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -206,12 +214,16 @@ jobs:
 
       - name: Verify source is the current main tip
         env:
-          GH_TOKEN: ${{ github.token }}
+          OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
         run: |
           set -euo pipefail
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for the current-main readback"
+            exit 1
+          fi
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.extraheader \
-          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GH_TOKEN}" \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}" \
             git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_tip="$(git rev-parse refs/remotes/origin/main)"
           if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then
@@ -222,10 +234,14 @@ jobs:
 
       - name: Require newest CI run to be completed and green
         env:
-          GH_TOKEN: ${{ github.token }}
+          OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
         run: |
           set -euo pipefail
-          gh api --paginate \
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for the CI readback"
+            exit 1
+          fi
+          GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate \
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
             > ci-runs.json
           ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < ci-runs.json
@@ -410,7 +426,7 @@ jobs:
           jq -e '
             type == "object" and
             (keys | sort) == ["built", "from", "path", "schemaVersion", "valid"] and
-            (.schemaVersion | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+            (.schemaVersion | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
             (.from | type == "string" and startswith("https://grype.anchore.io/databases/")) and
             (.built | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
             (.path | type == "string" and length > 0) and
@@ -793,7 +809,6 @@ jobs:
       - name: Reauthorize and promote the verified digest
         env:
           COSIGN_EXPERIMENTAL: "true"
-          GH_TOKEN: ${{ github.token }}
           OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
           RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
           RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
@@ -877,6 +892,14 @@ jobs:
             echo "::error::release-production changed from the job-start authority snapshot"
             exit 1
           fi
+          if [[ -z "${INITIAL_LIVE_RELEASE_AUTHORITY:-}" || -z "${INITIAL_LIVE_RELEASE_ACTORS_SHA256:-}" ]]; then
+            echo "::error::initial live release authority binding is missing"
+            exit 1
+          fi
+          if [[ "${live_release_authority}" != "${INITIAL_LIVE_RELEASE_AUTHORITY}" ]]; then
+            echo "::error::release-production changed from the initial live authority readback"
+            exit 1
+          fi
           if ! jq -e '
             . == ["mindburnlabs","peycheff-com"]
           ' <<<"${live_release_actors}" >/dev/null; then
@@ -885,6 +908,11 @@ jobs:
           fi
           if ! jq -e --argjson configured "${RELEASE_ACTORS_JSON}" '. == $configured' <<<"${live_release_actors}" >/dev/null; then
             echo "::error::the release actor allowlist changed from the job-start snapshot"
+            exit 1
+          fi
+          live_release_actors_sha256="$(printf '%s' "${live_release_actors}" | sha256sum | cut -d' ' -f1)"
+          if [[ ! "${live_release_actors_sha256}" =~ ^[0-9a-f]{64}$ || "${live_release_actors_sha256}" != "${INITIAL_LIVE_RELEASE_ACTORS_SHA256}" ]]; then
+            echo "::error::the live release actor JSON changed from the initial owner readback"
             exit 1
           fi
           for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do
@@ -937,14 +965,14 @@ jobs:
           fi
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0=http.extraheader \
-          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GH_TOKEN}" \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}" \
             git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           promotion_main_tip="$(git rev-parse refs/remotes/origin/main)"
           if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then
             echo "::error::origin/main moved before promotion (${promotion_main_tip})"
             exit 1
           fi
-          gh api --paginate \
+          GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate \
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
             > promotion-ci-runs.json
           ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json

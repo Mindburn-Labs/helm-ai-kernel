@@ -34,7 +34,8 @@ checks; it is not inferred from the Dockerfile.
 
 The `cve_gate` object is also closed and records `tool=grype`,
 `scope=os-and-library`, `fail_on=high`, `status=passed`, the machine-readable
-`grype-db-status.json` name and its SHA-256 digest, and one report name,
+`grype-db-status.json` name and its SHA-256 digest (whose provider
+`schemaVersion` is a dotted numeric version without a leading `v`), and one report name,
 platform digest, and report SHA-256 digest for each exact platform. The status
 file is emitted once after the explicit database bootstrap and before either
 scan; both scans use that same run-local cache with auto-update disabled. Both

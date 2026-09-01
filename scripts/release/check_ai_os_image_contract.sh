@@ -162,14 +162,18 @@ require '[.protection_rules[].type] | sort' "$workflow"
 require '== ["branch_policy", "required_reviewers"]' "$workflow"
 require 'required_reviewers' "$workflow"
 require 'branch_policy' "$workflow"
+require '(first(.protection_rules[] | select(.type == "branch_policy")) |' "$workflow"
+require '(keys | sort) == ["id", "node_id", "type"]' "$workflow"
 require '.prevent_self_review == true' "$workflow"
 require '.reviewers[0].type == "User"' "$workflow"
 require '.reviewers[0].reviewer.id' "$workflow"
 require '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow"
 require 'type == "number"' "$workflow"
 require '.total_count == 1' "$workflow"
-require '.branch_policies[0].name == "main"' "$workflow"
-require '.branch_policies[0].type == "branch"' "$workflow"
+require '(.branch_policies[0] |' "$workflow"
+require '(keys | sort) == ["id", "name", "node_id", "type"]' "$workflow"
+require '.name == "main"' "$workflow"
+require '.type == "branch"' "$workflow"
 require '/environments/${RELEASE_ENVIRONMENT}/variables/HELM_RELEASE_AUTHORITY_ARMED' "$workflow"
 require '/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS' "$workflow"
 require 'if [[ "${live_release_authority}" != "release-production" ]]; then' "$workflow"
@@ -347,15 +351,21 @@ if [ "$(grep -Fc '.can_admins_bypass == false' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '[.protection_rules[].type] | sort' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '== ["branch_policy", "required_reviewers"]' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.protection_rules | type == "array" and length == 2)' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(first(.protection_rules[] | select(.type == "branch_policy")) |' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(keys | sort) == ["id", "node_id", "type"]' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.prevent_self_review == true' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.reviewers | type == "array" and length == 1)' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.reviewers[0].type == "User"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.reviewers[0].reviewer.id' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc 'type == "number"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.total_count == 1' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.branch_policies[0].name == "main"' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.branch_policies[0].type == "branch"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.branch_policies[0] |' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(keys | sort) == ["id", "name", "node_id", "type"]' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.name == "main"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.type == "branch"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 4 ] ||
+  [ "$(grep -Fc '(.node_id | type == "string" and length > 0)' "$workflow")" -ne 4 ] ||
   [ "$(grep -Fc '.created_at > $run_started_at' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.environments | type == "array"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'any(.[]; .name == $release_environment)' "$workflow")" -ne 2 ] ||
@@ -396,7 +406,8 @@ if [ "$(grep -Fc 'cosign attest --yes --type slsaprovenance1 --predicate slsa-pr
   echo 'each exact platform SLSA predicate must be attested and exactly verified' >&2
   exit 1
 fi
-if [ "$(grep -Fc '(keys | sort) == [' "$workflow")" -ne 2 ] ||
+if [ "$(grep -Fc '(keys | sort) == [' "$workflow")" -ne 6 ] ||
+  [ "$(grep -Fc '"actor", "component", "cosign", "cve_gate", "default_command",' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.actor == $actor' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc '.triggering_actor == $triggering_actor' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc '.release_environment == $release_environment' "$workflow")" -ne 1 ] ||

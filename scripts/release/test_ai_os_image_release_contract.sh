@@ -183,13 +183,22 @@ assert_provider_authority() {
       (.reviewers | type == "array" and length == 1) and
       .reviewers[0].type == "User" and
       (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
-      (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com"))
+      (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
+    (first(.protection_rules[] | select(.type == "branch_policy")) |
+      (keys | sort) == ["id", "node_id", "type"] and
+      (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+      (.node_id | type == "string" and length > 0) and
+      .type == "branch_policy")
   ' >/dev/null 2>&1 || return 1
   printf '%s\n' "$branch_policy_json" | jq -e '
     .total_count == 1 and
     (.branch_policies | type == "array" and length == 1) and
-    .branch_policies[0].name == "main" and
-    .branch_policies[0].type == "branch"
+    (.branch_policies[0] |
+      (keys | sort) == ["id", "name", "node_id", "type"] and
+      (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+      (.node_id | type == "string" and length > 0) and
+      .name == "main" and
+      .type == "branch")
   ' >/dev/null 2>&1
 }
 
@@ -442,6 +451,45 @@ reject_provider_authority 'wrong deployment branch type' \
   "$provider_environment" \
   "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].type = "tag"')"
 
+reject_provider_authority 'environment branch rule extra field' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].extra = true')"
+reject_provider_authority 'environment branch rule missing id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[1].id)')"
+reject_provider_authority 'environment branch rule zero id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].id = 0')"
+reject_provider_authority 'environment branch rule string id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].id = "102"')"
+reject_provider_authority 'environment branch rule empty node id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].node_id = ""')"
+reject_provider_authority 'environment branch rule missing node id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[1].node_id)')"
+reject_provider_authority 'environment branch rule missing type' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[1].type)')"
+reject_provider_authority 'deployment branch extra field' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].extra = true')"
+reject_provider_authority 'deployment branch missing id' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c 'del(.branch_policies[0].id)')"
+reject_provider_authority 'deployment branch zero id' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].id = 0')"
+reject_provider_authority 'deployment branch string id' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].id = "201"')"
+reject_provider_authority 'deployment branch empty node id' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c '.branch_policies[0].node_id = ""')"
+reject_provider_authority 'deployment branch missing node id' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c 'del(.branch_policies[0].node_id)')"
+reject_provider_authority 'deployment branch missing name' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c 'del(.branch_policies[0].name)')"
+reject_provider_authority 'deployment branch missing type' \
+  "$provider_environment" \
+  "$(printf '%s\n' "$provider_branch_policies" | jq -c 'del(.branch_policies[0].type)')"
+
 for actor_fixture in '["mindburnlabs"]' '["peycheff-com","mindburnlabs"]' '["mindburnlabs","peycheff-com","other"]'; do
   if assert_provider_actors "$actor_fixture"; then
     echo "non-exact release actor fixture was accepted: $actor_fixture" >&2
@@ -464,6 +512,30 @@ mutate_and_reject() {
     exit 1
   fi
 }
+
+sed 's/\["id", "node_id", "type"\]/["id", "node_id", "type", "extra"]/g' \
+  "$workflow" > "$test_dir/loose-environment-branch-rule.yml"
+mutate_and_reject "$test_dir/loose-environment-branch-rule.yml"
+
+sed 's/\["id", "name", "node_id", "type"\]/["id", "name", "type"]/g' \
+  "$workflow" > "$test_dir/missing-deployment-branch-node-id.yml"
+mutate_and_reject "$test_dir/missing-deployment-branch-node-id.yml"
+
+sed 's/\.id | type == "number" and (try (floor == \. and \. > 0) catch false)/.id | type == "number" and (try (floor == \. and \. >= 0) catch false)/g' \
+  "$workflow" > "$test_dir/non-positive-branch-rule-id.yml"
+mutate_and_reject "$test_dir/non-positive-branch-rule-id.yml"
+
+sed 's/\.node_id | type == "string" and length > 0/.node_id | type == "string" and length >= 0/g' \
+  "$workflow" > "$test_dir/empty-branch-rule-node-id.yml"
+mutate_and_reject "$test_dir/empty-branch-rule-node-id.yml"
+
+sed 's/\.name == "main"/.name == "release"/g' \
+  "$workflow" > "$test_dir/loose-deployment-branch-name.yml"
+mutate_and_reject "$test_dir/loose-deployment-branch-name.yml"
+
+sed 's/\.type == "branch"/.type == "tag"/g' \
+  "$workflow" > "$test_dir/loose-deployment-branch-type.yml"
+mutate_and_reject "$test_dir/loose-deployment-branch-type.yml"
 
 sed 's/--scope all-layers/--scope squashed/g' \
   "$workflow" > "$test_dir/incomplete-layer-scan.yml"

@@ -95,7 +95,12 @@ jobs:
               (.reviewers | type == "array" and length == 1) and
               .reviewers[0].type == "User" and
               (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
-              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com"))
+              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
+            (first(.protection_rules[] | select(.type == "branch_policy")) |
+              (keys | sort) == ["id", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .type == "branch_policy")
           ' <<<"${release_environment_payload}" >/dev/null; then
             echo "::error::release-production environment protection readback is not exact"
             exit 1
@@ -103,8 +108,12 @@ jobs:
           if ! jq -e '
             .total_count == 1 and
             (.branch_policies | type == "array" and length == 1) and
-            .branch_policies[0].name == "main" and
-            .branch_policies[0].type == "branch"
+            (.branch_policies[0] |
+              (keys | sort) == ["id", "name", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .name == "main" and
+              .type == "branch")
           ' <<<"${deployment_branch_policies}" >/dev/null; then
             echo "::error::release-production deployment branch policy must contain only main"
             exit 1
@@ -788,7 +797,12 @@ jobs:
               (.reviewers | type == "array" and length == 1) and
               .reviewers[0].type == "User" and
               (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
-              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com"))
+              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
+            (first(.protection_rules[] | select(.type == "branch_policy")) |
+              (keys | sort) == ["id", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .type == "branch_policy")
           ' <<<"${live_release_environment_payload}" >/dev/null; then
             echo "::error::release-production environment protection changed during the build"
             exit 1
@@ -796,8 +810,12 @@ jobs:
           if ! jq -e '
             .total_count == 1 and
             (.branch_policies | type == "array" and length == 1) and
-            .branch_policies[0].name == "main" and
-            .branch_policies[0].type == "branch"
+            (.branch_policies[0] |
+              (keys | sort) == ["id", "name", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .name == "main" and
+              .type == "branch")
           ' <<<"${live_deployment_branch_policies}" >/dev/null; then
             echo "::error::release-production deployment branch policy changed during the build"
             exit 1

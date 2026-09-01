@@ -95,8 +95,11 @@ requires `can_admins_bypass=false`,
 and exactly two protection rules: one `required_reviewers` rule with
 `prevent_self_review=true` and exactly one nested provider `User` reviewer whose
 numeric identity and login resolve to a current Mindburn-Labs owner, plus one
-`branch_policy` rule. The deployment-branch-policies endpoint must report one
-branch policy whose name/type are exactly `main`/`branch`.
+`branch_policy` rule. That branch rule has exactly the provider keys
+`[id,node_id,type]`, with a positive integer `id` and nonempty `node_id`. The
+deployment-branch-policies endpoint must report one record with exactly the
+provider keys `[id,name,node_id,type]`, a positive integer `id`, nonempty
+`node_id`, and name/type exactly `main`/`branch`.
 
 The dispatch snapshot and the owner-token live readback both require the exact
 actor JSON `["mindburnlabs","peycheff-com"]`. Every policy, variable, and

@@ -77,7 +77,8 @@ The environment readback is authoritative, not a name-only check. The workflow
 requires `can_admins_bypass=false`,
 `deployment_branch_policy={protected_branches:false,custom_branch_policies:true}`,
 and exactly two protection rules: one `required_reviewers` rule with
-`prevent_self_review=true` and exactly one numeric `User` reviewer, plus one
+`prevent_self_review=true` and exactly one nested provider `User` reviewer whose
+numeric identity and login resolve to a current Mindburn-Labs owner, plus one
 `branch_policy` rule. The deployment-branch-policies endpoint must report one
 branch policy whose name/type are exactly `main`/`branch`.
 

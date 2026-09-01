@@ -160,7 +160,7 @@ checker=./scripts/release/check_ai_os_image_contract.sh
 
 # These fixtures mirror the GitHub REST provider shape, including both
 # environment protection rules and the deployment-branch policy response.
-provider_environment='{"name":"release-production","can_admins_bypass":false,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"id":101,"node_id":"PR_required","type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"User","id":123456,"login":"mindburnlabs"}]},{"id":102,"node_id":"PR_branch","type":"branch_policy"}]}'
+provider_environment='{"name":"release-production","can_admins_bypass":false,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"id":101,"node_id":"PR_required","type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"User","reviewer":{"login":"mindburnlabs","id":123456,"node_id":"U_owner","type":"User"}}]},{"id":102,"node_id":"PR_branch","type":"branch_policy"}]}'
 provider_branch_policies='{"total_count":1,"branch_policies":[{"id":201,"node_id":"BP_main","name":"main","type":"branch"}]}'
 provider_approval='[{"environments":[{"name":"release-production","id":301}],"state":"approved","user":{"login":"peycheff-com"},"created_at":"2026-09-01T10:00:01Z"}]'
 run_started_at=2026-09-01T10:00:00Z
@@ -182,7 +182,8 @@ assert_provider_authority() {
       .prevent_self_review == true and
       (.reviewers | type == "array" and length == 1) and
       .reviewers[0].type == "User" and
-      (.reviewers[0].id | type == "number" and (try (floor == . and . > 0) catch false)))
+      (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+      (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com"))
   ' >/dev/null 2>&1 || return 1
   printf '%s\n' "$branch_policy_json" | jq -e '
     .total_count == 1 and
@@ -246,7 +247,9 @@ reject_provider_authority 'unknown rule type' \
 reject_provider_authority 'Team reviewer' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].type = "Team"')"
 reject_provider_authority 'multiple reviewers' \
-  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers += [{"type":"User","id":654321}]')"
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers += [{"type":"User","reviewer":{"login":"peycheff-com","id":654321}}]')"
+reject_provider_authority 'reviewer outside owner set' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.login = "other"')"
 reject_provider_authority 'administrator bypass' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.can_admins_bypass = true')"
 reject_provider_authority 'self review enabled' \

@@ -163,6 +163,8 @@ require 'required_reviewers' "$workflow"
 require 'branch_policy' "$workflow"
 require '.prevent_self_review == true' "$workflow"
 require '.reviewers[0].type == "User"' "$workflow"
+require '.reviewers[0].reviewer.id' "$workflow"
+require '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow"
 require 'type == "number"' "$workflow"
 require '.total_count == 1' "$workflow"
 require '.branch_policies[0].name == "main"' "$workflow"
@@ -273,6 +275,8 @@ if [ "$(grep -Fc '.can_admins_bypass == false' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.prevent_self_review == true' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.reviewers | type == "array" and length == 1)' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.reviewers[0].type == "User"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.reviewers[0].reviewer.id' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'type == "number"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.total_count == 1' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.branch_policies[0].name == "main"' "$workflow")" -ne 2 ] ||

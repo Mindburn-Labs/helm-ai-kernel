@@ -94,7 +94,8 @@ jobs:
               .prevent_self_review == true and
               (.reviewers | type == "array" and length == 1) and
               .reviewers[0].type == "User" and
-              (.reviewers[0].id | type == "number" and (try (floor == . and . > 0) catch false)))
+              (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com"))
           ' <<<"${release_environment_payload}" >/dev/null; then
             echo "::error::release-production environment protection readback is not exact"
             exit 1
@@ -604,7 +605,8 @@ jobs:
               .prevent_self_review == true and
               (.reviewers | type == "array" and length == 1) and
               .reviewers[0].type == "User" and
-              (.reviewers[0].id | type == "number" and (try (floor == . and . > 0) catch false)))
+              (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com"))
           ' <<<"${live_release_environment_payload}" >/dev/null; then
             echo "::error::release-production environment protection changed during the build"
             exit 1

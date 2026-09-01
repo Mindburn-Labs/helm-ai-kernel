@@ -20,7 +20,19 @@ same-source retry does not resolve mutable Alpine packages.
 The root `.dockerignore` starts with a deny-all rule and re-includes only the
 Dockerfile's `core/`, policy, and reference-pack inputs. It explicitly excludes
 the checkout's `.git` directory and generated Buildx, runtime, platform, SBOM,
-SLSA, and release-evidence files from the build context.
+SLSA, Grype, and release-evidence files from the build context.
+
+After the platform manifests are inspected and before any Cosign signature is
+created, the workflow downloads Grype through the pinned
+`anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e`
+action. Automatic application and vulnerability-database updates are disabled;
+if the pinned binary or its database is unavailable, the job stops. Grype scans
+each exact `linux/amd64` and `linux/arm64` manifest digest with
+`--scope all-layers --fail-on high --output json`. A scan is accepted only when
+its report is an object with an array `matches` field containing no `high` or
+`critical` severity. Each report is retained with a SHA-256 digest in the
+release evidence, so the CVE gate cannot silently change from one platform to
+the other or from one retry to the next.
 
 ## Parameters
 
@@ -41,11 +53,15 @@ single resolved dependency is:
 }
 ```
 
-The Cosign in-toto statement, rather than the predicate object, owns the
-`subject` field. The workflow decodes the verified statement and requires its
-only subject SHA-256 digest to equal the built multi-platform index digest. It
-also requires the decoded predicate to equal the generated predicate byte
-structure before promotion.
+The workflow emits one source-owned SLSA v1 predicate for the multi-platform
+index and one for each exact platform manifest. Each platform predicate records
+its `linux/amd64` or `linux/arm64` value and the corresponding manifest digest
+in `internalParameters`. Cosign attests all three predicates before signing is
+accepted. The Cosign in-toto statement, rather than the predicate object, owns
+the `subject` field. The workflow decodes every verified statement and requires
+its only subject SHA-256 digest to equal the corresponding index or platform
+digest. It also requires each decoded predicate to equal its generated
+predicate byte structure before promotion.
 
 ## Invocation and authority
 

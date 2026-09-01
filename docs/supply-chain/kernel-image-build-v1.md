@@ -17,6 +17,10 @@ same-source dispatch therefore cannot silently change either builder. The
 pinned builder image already supplies the CA bundle; the Dockerfile performs no
 live `apk add`, and Go module content remains bound by `core/go.sum`, so a
 same-source retry does not resolve mutable Alpine packages.
+The root `.dockerignore` starts with a deny-all rule and re-includes only the
+Dockerfile's `core/`, policy, and reference-pack inputs. It explicitly excludes
+the checkout's `.git` directory and generated Buildx, runtime, platform, SBOM,
+SLSA, and release-evidence files from the build context.
 
 ## Parameters
 
@@ -68,6 +72,25 @@ Those settings are an owner blocker outside this source-only change. Until
 they are confirmed in GitHub, the workflow is intentionally not dispatchable.
 The owner-readback token is never used for mutation. GHCR and keyless Cosign
 operations still use only the job-scoped GitHub token and OIDC identity.
+
+The environment readback is authoritative, not a name-only check. The workflow
+requires `can_admins_bypass=false`,
+`deployment_branch_policy={protected_branches:false,custom_branch_policies:true}`,
+and exactly two protection rules: one `required_reviewers` rule with
+`prevent_self_review=true` and exactly one numeric `User` reviewer, plus one
+`branch_policy` rule. The deployment-branch-policies endpoint must report one
+branch policy whose name/type are exactly `main`/`branch`.
+
+The dispatch snapshot and the owner-token live readback both require the exact
+actor JSON `["mindburnlabs","peycheff-com"]`. Every policy, variable, and
+membership read uses `GH_TOKEN="${OWNER_READBACK_TOKEN}"` explicitly. The
+run approval must be `approved`, target `release-production`, have a
+`created_at` after the current run's authoritative `run_started_at` readback,
+and be from one of those owners while differing from both the request and
+triggering actors. The
+full environment, branch-policy, actor, owner, approval, source-tip, and newest
+CI readbacks are repeated immediately before the immutable `sha-<SOURCE_SHA>`
+promotion. Reruns are rejected.
 
 This workflow exclusively owns the governed immutable `sha-<SOURCE_SHA>` tag
 namespace. The legacy `release.yml` QA publisher uses the disjoint

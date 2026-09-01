@@ -221,10 +221,184 @@ assert_provider_approval() {
   ' >/dev/null 2>&1
 }
 
+evidence_amd64_digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+evidence_arm64_digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+evidence_amd64_scan_digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+evidence_arm64_scan_digest=sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+evidence_build_type=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-build-v1.md
+
+assert_release_evidence_shape() {
+  evidence_json=$1
+  evidence_status=$2
+  evidence_final_digest=$3
+  printf '%s\n' "$evidence_json" | jq -e \
+    --arg expected_status "$evidence_status" \
+    --arg expected_final_digest "$evidence_final_digest" \
+    --arg index_digest "$expected_digest" \
+    --arg amd64_digest "$evidence_amd64_digest" \
+    --arg arm64_digest "$evidence_arm64_digest" \
+    --arg amd64_scan_digest "$evidence_amd64_scan_digest" \
+    --arg arm64_scan_digest "$evidence_arm64_scan_digest" \
+    --arg build_type "$evidence_build_type" '
+      (if $expected_status == "staging-digest-verified"
+       then (keys | sort) == [
+         "actor", "component", "cosign", "cve_gate", "default_command",
+         "digest", "entrypoint", "final_tag", "healthcheck", "image",
+         "oci_labels", "persistence", "platforms", "promotion_status",
+         "release_environment", "runtime_verification", "schema", "slsa",
+         "source_ref", "source_repository", "source_sha", "staging_tag",
+         "triggering_actor", "workflow_file", "workflow_identity", "workflow_name",
+         "workflow_ref", "workflow_run", "workflow_sha"
+       ]
+       else (keys | sort) == [
+         "actor", "component", "cosign", "cve_gate", "default_command",
+         "digest", "entrypoint", "final_tag", "final_tag_digest", "healthcheck",
+         "image", "oci_labels", "persistence", "platforms", "promotion_status",
+         "release_environment", "runtime_verification", "schema", "slsa",
+         "source_ref", "source_repository", "source_sha", "staging_tag",
+         "triggering_actor", "workflow_file", "workflow_identity", "workflow_name",
+         "workflow_ref", "workflow_run", "workflow_sha"
+       ]
+       end) and
+      .schema == "https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-release-evidence-v1.md" and
+      .component == "helm-ai-kernel" and
+      .actor == "mindburnlabs" and
+      .triggering_actor == "peycheff-com" and
+      .release_environment == "release-production" and
+      .source_repository == "Mindburn-Labs/helm-ai-kernel" and
+      .source_ref == "refs/heads/main" and
+      (.source_sha | type == "string" and test("^[0-9a-f]{40}$")) and
+      .workflow_name == "AI OS Kernel image" and
+      .workflow_file == ".github/workflows/release-ai-os-image.yml" and
+      .workflow_ref == "refs/heads/main" and
+      (.workflow_sha | type == "string" and test("^[0-9a-f]{40}$")) and
+      .image == "ghcr.io/mindburn-labs/helm-ai-kernel" and
+      .digest == $index_digest and
+      .platforms == [
+        {platform: "linux/amd64", digest: $amd64_digest, sbom: "sbom-linux-amd64.spdx.json"},
+        {platform: "linux/arm64", digest: $arm64_digest, sbom: "sbom-linux-arm64.spdx.json"}
+      ] and
+      .cve_gate == {
+        tool: "grype",
+        scope: "os-and-library",
+        fail_on: "high",
+        status: "passed",
+        platforms: [
+          {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
+          {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
+        ]
+      } and
+      .slsa == {
+        build_type: $build_type,
+        index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"},
+        platforms: [
+          {platform: "linux/amd64", digest: $amd64_digest, predicate: "slsa-provenance-linux-amd64.json", attestation: "slsa-provenance-linux-amd64.attestation.json"},
+          {platform: "linux/arm64", digest: $arm64_digest, predicate: "slsa-provenance-linux-arm64.json", attestation: "slsa-provenance-linux-arm64.attestation.json"}
+        ]
+      } and
+      .promotion_status == $expected_status and
+      (if $expected_status == "staging-digest-verified"
+       then (has("final_tag_digest") | not)
+       else .final_tag_digest == $expected_final_digest
+       end)
+    ' >/dev/null 2>&1
+}
+
 if ! assert_provider_authority "$provider_environment" "$provider_branch_policies" ||
   ! assert_provider_actors '["mindburnlabs","peycheff-com"]' ||
   ! assert_provider_approval "$provider_approval" "$run_started_at" mindburnlabs mindburnlabs; then
   echo 'provider-shaped release authority fixtures were not accepted' >&2
+  exit 1
+fi
+
+evidence_fixture="$(jq -cn \
+  --arg schema 'https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-release-evidence-v1.md' \
+  --arg build_type "$evidence_build_type" \
+  --arg source_sha "$source_sha" \
+  --arg index_digest "$expected_digest" \
+  --arg amd64_digest "$evidence_amd64_digest" \
+  --arg arm64_digest "$evidence_arm64_digest" \
+  --arg amd64_scan_digest "$evidence_amd64_scan_digest" \
+  --arg arm64_scan_digest "$evidence_arm64_scan_digest" '
+  {
+    schema: $schema,
+    component: "helm-ai-kernel",
+    actor: "mindburnlabs",
+    triggering_actor: "peycheff-com",
+    release_environment: "release-production",
+    source_repository: "Mindburn-Labs/helm-ai-kernel",
+    source_ref: "refs/heads/main",
+    source_sha: $source_sha,
+    workflow_name: "AI OS Kernel image",
+    workflow_file: ".github/workflows/release-ai-os-image.yml",
+    workflow_ref: "refs/heads/main",
+    workflow_sha: $source_sha,
+    workflow_identity: "https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release-ai-os-image.yml@refs/heads/main",
+    workflow_run: "https://github.com/Mindburn-Labs/helm-ai-kernel/actions/runs/123",
+    image: "ghcr.io/mindburn-labs/helm-ai-kernel",
+    staging_tag: "staging-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-123-1",
+    final_tag: "sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    digest: $index_digest,
+    platforms: [
+      {platform: "linux/amd64", digest: $amd64_digest, sbom: "sbom-linux-amd64.spdx.json"},
+      {platform: "linux/arm64", digest: $arm64_digest, sbom: "sbom-linux-arm64.spdx.json"}
+    ],
+    oci_labels: {
+      "org.opencontainers.image.source": "https://github.com/Mindburn-Labs/helm-ai-kernel",
+      "org.opencontainers.image.revision": $source_sha
+    },
+    entrypoint: "/usr/local/bin/helm-ai-kernel",
+    default_command: "serve --policy /etc/helm-ai-kernel/release.high_risk.v3.toml --addr 0.0.0.0 --port 8080 --data-dir /var/lib/helm-ai-kernel",
+    healthcheck: "GET /healthz on port 8080",
+    persistence: "/var/lib/helm-ai-kernel",
+    runtime_verification: {
+      oci_config: "linux/amd64-and-linux/arm64-config-exactly-verified",
+      exercised_platform: "linux/amd64",
+      smoke: "health-denial-receipt-stop-restart-exact-readback-passed"
+    },
+    cve_gate: {
+      tool: "grype",
+      scope: "os-and-library",
+      fail_on: "high",
+      status: "passed",
+      platforms: [
+        {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
+        {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
+      ]
+    },
+    slsa: {
+      build_type: $build_type,
+      index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"},
+      platforms: [
+        {platform: "linux/amd64", digest: $amd64_digest, predicate: "slsa-provenance-linux-amd64.json", attestation: "slsa-provenance-linux-amd64.attestation.json"},
+        {platform: "linux/arm64", digest: $arm64_digest, predicate: "slsa-provenance-linux-arm64.json", attestation: "slsa-provenance-linux-arm64.attestation.json"}
+      ]
+    },
+    cosign: "keyless-signature-and-platform-attestations-exactly-verified",
+    promotion_status: "staging-digest-verified"
+  }
+')"
+if ! assert_release_evidence_shape "$evidence_fixture" staging-digest-verified ''; then
+  echo 'provider-shaped release evidence fixture was not accepted' >&2
+  exit 1
+fi
+final_evidence_fixture="$(printf '%s\n' "$evidence_fixture" | jq -c --arg final_digest "$expected_digest" '
+  .promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified" |
+  .final_tag_digest = $final_digest
+')"
+if ! assert_release_evidence_shape "$final_evidence_fixture" final-tag-digest-platforms-signature-and-evidence-verified "$expected_digest"; then
+  echo 'final provider-shaped release evidence fixture was not accepted' >&2
+  exit 1
+fi
+if assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.actor = "other"')" staging-digest-verified '' ||
+  assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.cve_gate.fail_on = "medium"')" staging-digest-verified '' ||
+  assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.slsa.platforms[0].predicate = "slsa-provenance.json"')" staging-digest-verified '' ||
+  assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.extra = true')" staging-digest-verified ''; then
+  echo 'release evidence mutation was accepted' >&2
+  exit 1
+fi
+if assert_release_evidence_shape "$(printf '%s\n' "$final_evidence_fixture" | jq -c 'del(.final_tag_digest)')" final-tag-digest-platforms-signature-and-evidence-verified "$expected_digest"; then
+  echo 'final release evidence without final_tag_digest was accepted' >&2
   exit 1
 fi
 
@@ -290,6 +464,74 @@ mutate_and_reject() {
     exit 1
   fi
 }
+
+sed 's/--scope all-layers/--scope squashed/g' \
+  "$workflow" > "$test_dir/incomplete-layer-scan.yml"
+mutate_and_reject "$test_dir/incomplete-layer-scan.yml"
+
+sed 's/--fail-on high/--fail-on medium/g' \
+  "$workflow" > "$test_dir/weakened-cve-threshold.yml"
+mutate_and_reject "$test_dir/weakened-cve-threshold.yml"
+
+sed 's/GRYPE_DB_AUTO_UPDATE: "false"/GRYPE_DB_AUTO_UPDATE: "true"/g' \
+  "$workflow" > "$test_dir/mutable-grype-db.yml"
+mutate_and_reject "$test_dir/mutable-grype-db.yml"
+
+sed 's/GRYPE_CHECK_FOR_APP_UPDATE: "false"/GRYPE_CHECK_FOR_APP_UPDATE: "true"/g' \
+  "$workflow" > "$test_dir/mutable-grype-update-check.yml"
+mutate_and_reject "$test_dir/mutable-grype-update-check.yml"
+
+sed 's#IMAGE_REF: \${{ env.IMAGE_NAME }}@\${{ steps.platforms.outputs.amd64_digest }}#IMAGE_REF: \${{ env.IMAGE_NAME }}:\${{ env.STAGING_TAG }}#' \
+  "$workflow" > "$test_dir/unbound-amd64-cve-digest.yml"
+mutate_and_reject "$test_dir/unbound-amd64-cve-digest.yml"
+
+sed 's#IMAGE_REF: \${{ env.IMAGE_NAME }}@\${{ steps.platforms.outputs.arm64_digest }}#IMAGE_REF: \${{ env.IMAGE_NAME }}:\${{ env.STAGING_TAG }}#' \
+  "$workflow" > "$test_dir/unbound-arm64-cve-digest.yml"
+mutate_and_reject "$test_dir/unbound-arm64-cve-digest.yml"
+
+sed 's#write_slsa_predicate slsa-provenance-linux-amd64.json linux/amd64 "\${{ steps.platforms.outputs.amd64_digest }}"#write_slsa_predicate slsa-provenance-linux-amd64.json linux/amd64 "\${{ steps.build.outputs.digest }}"#' \
+  "$workflow" > "$test_dir/unbound-amd64-slsa-digest.yml"
+mutate_and_reject "$test_dir/unbound-amd64-slsa-digest.yml"
+
+sed 's#write_slsa_predicate slsa-provenance-linux-arm64.json linux/arm64 "\${{ steps.platforms.outputs.arm64_digest }}"#write_slsa_predicate slsa-provenance-linux-arm64.json linux/arm64 "\${{ steps.build.outputs.digest }}"#' \
+  "$workflow" > "$test_dir/unbound-arm64-slsa-digest.yml"
+mutate_and_reject "$test_dir/unbound-arm64-slsa-digest.yml"
+
+sed 's/\.actor == \$actor/.actor == "other"/' \
+  "$workflow" > "$test_dir/unbound-evidence-actor.yml"
+mutate_and_reject "$test_dir/unbound-evidence-actor.yml"
+
+sed 's/\.cve_gate == {/true and/' \
+  "$workflow" > "$test_dir/unbound-evidence-cve-gate.yml"
+mutate_and_reject "$test_dir/unbound-evidence-cve-gate.yml"
+
+sed 's/\.slsa == {/true and/' \
+  "$workflow" > "$test_dir/unbound-evidence-slsa.yml"
+mutate_and_reject "$test_dir/unbound-evidence-slsa.yml"
+
+sed 's/\.final_tag_digest == \$final_digest/.final_tag_digest != \$final_digest/' \
+  "$workflow" > "$test_dir/unbound-final-evidence-digest.yml"
+mutate_and_reject "$test_dir/unbound-final-evidence-digest.yml"
+
+sed '/cp release-evidence\.json release-evidence\.staging\.json/d' \
+  "$workflow" > "$test_dir/unbound-final-evidence-fields.yml"
+mutate_and_reject "$test_dir/unbound-final-evidence-fields.yml"
+
+sed 's/(keys | sort) == \[/(keys | sort) != [/g' \
+  "$workflow" > "$test_dir/open-evidence-shape.yml"
+mutate_and_reject "$test_dir/open-evidence-shape.yml"
+
+sed '/^            grype-linux-amd64\.json$/d' \
+  "$workflow" > "$test_dir/missing-amd64-grype-upload.yml"
+mutate_and_reject "$test_dir/missing-amd64-grype-upload.yml"
+
+sed '/^            slsa-provenance-linux-arm64\.attestation\.json$/d' \
+  "$workflow" > "$test_dir/missing-arm64-slsa-upload.yml"
+mutate_and_reject "$test_dir/missing-arm64-slsa-upload.yml"
+
+sed '/cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-amd64\.json/d' \
+  "$workflow" > "$test_dir/missing-amd64-slsa-attestation.yml"
+mutate_and_reject "$test_dir/missing-amd64-slsa-attestation.yml"
 
 sed 's/persist-credentials: false/persist-credentials: true/' \
   "$workflow" > "$test_dir/persisted-checkout-credentials.yml"
@@ -531,10 +773,9 @@ awk '
 mutate_and_reject "$test_dir/missing-final-owner-readback.yml"
 
 awk '
-  /RELEASE_ENVIRONMENT: release-production/ {
-    seen++
-    if (seen == 2) next
-  }
+  /^      - name: Reauthorize and promote the verified digest$/ { in_final = 1 }
+  in_final && /^          RELEASE_ENVIRONMENT: release-production$/ { next }
+  in_final && /^      - name:/ && $0 !~ /Reauthorize and promote the verified digest/ { in_final = 0 }
   { print }
 ' "$workflow" > "$test_dir/missing-final-release-environment.yml"
 mutate_and_reject "$test_dir/missing-final-release-environment.yml"

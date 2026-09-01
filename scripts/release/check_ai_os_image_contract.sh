@@ -93,6 +93,7 @@ for dockerignore_entry in \
   'platform-labels-*.json' \
   'sbom-*.spdx.json' \
   'slsa-provenance*.json' \
+  'grype-*.json' \
   'release-evidence*.json' \
   'signature-verification.json' \
   'tmp/'; do
@@ -221,12 +222,59 @@ require "git+https://github.com/" "$workflow"
 require '@refs/heads/main' "$workflow"
 require 'output-file: sbom-linux-amd64.spdx.json' "$workflow"
 require 'output-file: sbom-linux-arm64.spdx.json' "$workflow"
+require 'anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e' "$workflow"
+require 'GRYPE_CHECK_FOR_APP_UPDATE: "false"' "$workflow"
+require 'GRYPE_DB_AUTO_UPDATE: "false"' "$workflow"
+require 'IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}' "$workflow"
+require 'IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.arm64_digest }}' "$workflow"
+require '--scope all-layers' "$workflow"
+require '--fail-on high' "$workflow"
+require '--output json' "$workflow"
+require '--file grype-linux-amd64.json' "$workflow"
+require '--file grype-linux-arm64.json' "$workflow"
+require '.matches | type == "array"' "$workflow"
+require 'report_digest=sha256:$(sha256sum grype-linux-amd64.json' "$workflow"
+require 'report_digest=sha256:$(sha256sum grype-linux-arm64.json' "$workflow"
+require 'slsa-provenance-linux-amd64.json' "$workflow"
+require 'slsa-provenance-linux-arm64.json' "$workflow"
+require 'platform_digest: $platform_digest' "$workflow"
+require 'write_slsa_predicate slsa-provenance-linux-amd64.json linux/amd64 "${{ steps.platforms.outputs.amd64_digest }}"' "$workflow"
+require 'write_slsa_predicate slsa-provenance-linux-arm64.json linux/arm64 "${{ steps.platforms.outputs.arm64_digest }}"' "$workflow"
+require 'cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-amd64.json "${amd64_ref}"' "$workflow"
+require 'cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-arm64.json "${arm64_ref}"' "$workflow"
+require 'slsa-provenance-linux-amd64.attestation.json' "$workflow"
+require 'slsa-provenance-linux-arm64.attestation.json' "$workflow"
+require 'Scan exact linux-amd64 digest for CRITICAL/HIGH OS and library CVEs' "$workflow"
+require 'Scan exact linux-arm64 digest for CRITICAL/HIGH OS and library CVEs' "$workflow"
 require 'cosign sign --yes "${image_ref}"' "$workflow"
 require 'cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance.json "${image_ref}"' "$workflow"
 require 'cosign attest --yes --type spdxjson --predicate sbom-linux-amd64.spdx.json "${amd64_ref}"' "$workflow"
 require 'cosign attest --yes --type spdxjson --predicate sbom-linux-arm64.spdx.json "${arm64_ref}"' "$workflow"
 require '.predicate == $expected[0] and' "$workflow"
 require '.subject[0].digest.sha256 == $expected_digest' "$workflow"
+require 'verify_attestation slsa-provenance-linux-amd64.attestation.json slsa-provenance-linux-amd64.json' "$workflow"
+require 'verify_attestation slsa-provenance-linux-arm64.attestation.json slsa-provenance-linux-arm64.json' "$workflow"
+require 'actor: $actor' "$workflow"
+require 'triggering_actor: $triggering_actor' "$workflow"
+require 'release_environment: $release_environment' "$workflow"
+require 'cve_gate: {' "$workflow"
+require 'scope: "os-and-library"' "$workflow"
+require 'fail_on: "high"' "$workflow"
+require 'status: "passed"' "$workflow"
+require 'report: "grype-linux-amd64.json"' "$workflow"
+require 'report: "grype-linux-arm64.json"' "$workflow"
+require 'slsa: {' "$workflow"
+require 'index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"}' "$workflow"
+require 'predicate: "slsa-provenance-linux-amd64.json"' "$workflow"
+require 'attestation: "slsa-provenance-linux-amd64.attestation.json"' "$workflow"
+require 'predicate: "slsa-provenance-linux-arm64.json"' "$workflow"
+require 'attestation: "slsa-provenance-linux-arm64.attestation.json"' "$workflow"
+require '(keys | sort)' "$workflow"
+require '.final_tag_digest == $final_digest' "$workflow"
+require 'cp release-evidence.json release-evidence.staging.json' "$workflow"
+require '--slurpfile staging release-evidence.staging.json' "$workflow"
+require '((. | del(.promotion_status, .final_tag_digest)) ==' "$workflow"
+require '.predicate == $expected[0] and' "$workflow"
 require '--predicate release-evidence.json' "$workflow"
 require '--type "${RELEASE_EVIDENCE_TYPE}"' "$workflow"
 require 'smoke: "health-denial-receipt-stop-restart-exact-readback-passed"' "$workflow"
@@ -234,6 +282,16 @@ require 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh "${sta
 require 'docker buildx imagetools inspect --raw "${final_tag}" > final-image-index.json' "$workflow"
 require 'final-tag-digest-platforms-signature-and-evidence-verified' "$workflow"
 require '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}' "$legacy_workflow"
+
+for upload_entry in \
+  '            grype-linux-amd64.json' \
+  '            grype-linux-arm64.json' \
+  '            slsa-provenance-linux-amd64.json' \
+  '            slsa-provenance-linux-amd64.attestation.json' \
+  '            slsa-provenance-linux-arm64.json' \
+  '            slsa-provenance-linux-arm64.attestation.json'; do
+  require_line "$upload_entry" "$workflow"
+done
 
 trigger_count="$(awk '
   /^on:$/ { in_on = 1; next }
@@ -252,8 +310,21 @@ if [ "$(grep -Fc 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origi
   exit 1
 fi
 run_start_read_pattern='run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api'
+authority_environment_count="$(awk '
+  /^      - name: Validate publication authority$/ { in_step = 1; next }
+  in_step && /^      - name:/ { in_step = 0 }
+  in_step && /^          RELEASE_ENVIRONMENT: release-production$/ { count++ }
+  END { print count + 0 }
+' "$workflow")"
+promotion_environment_count="$(awk '
+  /^      - name: Reauthorize and promote the verified digest$/ { in_step = 1; next }
+  in_step && /^      - name:/ { in_step = 0 }
+  in_step && /^          RELEASE_ENVIRONMENT: release-production$/ { count++ }
+  END { print count + 0 }
+' "$workflow")"
 if [ "$(grep -Fc 'if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc 'RELEASE_ENVIRONMENT: release-production' "$workflow")" -ne 2 ] ||
+  [ "$authority_environment_count" -ne 1 ] ||
+  [ "$promotion_environment_count" -ne 1 ] ||
   [ "$(grep -Fc 'for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'jq -e --arg actor "${candidate}"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"' "$workflow")" -ne 2 ] ||
@@ -295,6 +366,40 @@ if [ "$(grep -Fc 'upload-artifact: false' "$workflow")" -ne 2 ]; then
 fi
 if [ "$(grep -Fc -- '--type spdxjson' "$workflow")" -ne 4 ]; then
   echo 'both platform SPDX predicates must be attested and verified' >&2
+  exit 1
+fi
+if [ "$(grep -Fc -- '--scope all-layers' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc -- '--fail-on high' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc -- '--output json' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.arm64_digest }}' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc -- '--file grype-linux-amd64.json' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc -- '--file grype-linux-arm64.json' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'GRYPE_DB_AUTO_UPDATE: "false"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'GRYPE_CHECK_FOR_APP_UPDATE: "false"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'type == "object" and' "$workflow")" -lt 2 ] ||
+  [ "$(grep -Fc 'report_digest=sha256:$(sha256sum grype-linux-amd64.json' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'report_digest=sha256:$(sha256sum grype-linux-arm64.json' "$workflow")" -ne 1 ]; then
+  echo 'each exact platform digest must pass the pinned fail-closed CRITICAL/HIGH OS and library scan' >&2
+  exit 1
+fi
+if [ "$(grep -Fc 'cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-amd64.json "${amd64_ref}"' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-arm64.json "${arm64_ref}"' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '"${amd64_ref}" > slsa-provenance-linux-amd64.attestation.json' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '"${arm64_ref}" > slsa-provenance-linux-arm64.attestation.json' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'verify_attestation slsa-provenance-linux-amd64.attestation.json slsa-provenance-linux-amd64.json' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'verify_attestation slsa-provenance-linux-arm64.attestation.json slsa-provenance-linux-arm64.json' "$workflow")" -ne 1 ]; then
+  echo 'each exact platform SLSA predicate must be attested and exactly verified' >&2
+  exit 1
+fi
+if [ "$(grep -Fc '(keys | sort) == [' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.actor == $actor' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '.triggering_actor == $triggering_actor' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '.release_environment == $release_environment' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '.cve_gate == {' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '.slsa == {' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '.final_tag_digest == $final_digest' "$workflow")" -ne 1 ]; then
+  echo 'release evidence must use the closed authority, CVE, and SLSA shape' >&2
   exit 1
 fi
 if [ "$(grep -Fc -- '--predicate release-evidence.json' "$workflow")" -ne 2 ]; then
@@ -344,6 +449,9 @@ staging_line="$(first_line 'tags: ${{ env.IMAGE_NAME }}:${{ env.STAGING_TAG }}')
 config_line="$(first_line "--format '{{json .Image.Config}}'")"
 runtime_line="$(first_line '- name: Exercise digest-pinned native runtime and restart persistence')"
 sbom_line="$(first_line 'output-file: sbom-linux-amd64.spdx.json')"
+scan_amd64_line="$(first_line '- name: Scan exact linux-amd64 digest for CRITICAL/HIGH OS and library CVEs')"
+scan_arm64_line="$(first_line '- name: Scan exact linux-arm64 digest for CRITICAL/HIGH OS and library CVEs')"
+slsa_predicates_line="$(first_line '- name: Generate source-owned SLSA provenance predicates')"
 signature_line="$(first_line 'cosign sign --yes "${image_ref}"')"
 evidence_line="$(first_line '> release-evidence.json')"
 evidence_attest_line="$(first_line '--predicate release-evidence.json')"
@@ -366,6 +474,7 @@ promotion_owner_read_line="$(last_line '/orgs/Mindburn-Labs/memberships/${owner}
 promotion_line="$(first_line 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh')"
 final_platform_line="$(first_line 'final-image-index.json')"
 finalize_evidence_line="$(first_line '.promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified"')"
+final_evidence_shape_line="$(last_line '.final_tag_digest == $final_digest')"
 final_attest_line="$(last_line '--predicate release-evidence.json')"
 
 if ! [ "$authority_line" -lt "$checkout_line" ] ||
@@ -373,7 +482,10 @@ if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$staging_line" -lt "$config_line" ] ||
   ! [ "$config_line" -lt "$runtime_line" ] ||
   ! [ "$runtime_line" -lt "$sbom_line" ] ||
-  ! [ "$sbom_line" -lt "$signature_line" ] ||
+  ! [ "$sbom_line" -lt "$scan_amd64_line" ] ||
+  ! [ "$scan_amd64_line" -lt "$scan_arm64_line" ] ||
+  ! [ "$scan_arm64_line" -lt "$slsa_predicates_line" ] ||
+  ! [ "$slsa_predicates_line" -lt "$signature_line" ] ||
   ! [ "$signature_line" -lt "$evidence_line" ] ||
   ! [ "$evidence_line" -lt "$evidence_attest_line" ] ||
   ! [ "$evidence_attest_line" -lt "$promotion_live_environment_read_line" ] ||
@@ -395,6 +507,8 @@ if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$promotion_ci_line" -lt "$promotion_line" ] ||
   ! [ "$promotion_line" -lt "$final_platform_line" ] ||
   ! [ "$final_platform_line" -lt "$finalize_evidence_line" ] ||
+  ! [ "$finalize_evidence_line" -lt "$final_evidence_shape_line" ] ||
+  ! [ "$final_evidence_shape_line" -lt "$final_attest_line" ] ||
   ! [ "$finalize_evidence_line" -lt "$final_attest_line" ]; then
   echo 'release authority, staging evidence, and immutable promotion ordering is invalid' >&2
   exit 1

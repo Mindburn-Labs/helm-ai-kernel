@@ -359,9 +359,112 @@ jobs:
           output-file: sbom-linux-arm64.spdx.json
           upload-artifact: false
 
-      - name: Generate source-owned SLSA provenance predicate
+      - name: Install Grype vulnerability scanner
+        uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+
+      - name: Expose pinned Grype binary
         run: |
           set -euo pipefail
+          grype_binary="$(find /opt/hostedtoolcache/grype -type f -name grype -perm -111 | sort | tail -n 1)"
+          if [[ -z "${grype_binary}" ]]; then
+            echo "::error::grype binary not found after pinned download"
+            exit 1
+          fi
+          dirname "${grype_binary}" >> "${GITHUB_PATH}"
+          "${grype_binary}" version
+
+      - name: Scan exact linux-amd64 digest for CRITICAL/HIGH OS and library CVEs
+        id: scan-amd64
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_AUTO_UPDATE: "false"
+        run: |
+          set -euo pipefail
+          grype "${IMAGE_REF}" \
+            --scope all-layers \
+            --fail-on high \
+            --output json \
+            --file grype-linux-amd64.json
+          jq -e '
+            type == "object" and
+            (.matches | type == "array") and
+            all(.matches[]?;
+              (.vulnerability.severity | ascii_downcase) != "critical" and
+              (.vulnerability.severity | ascii_downcase) != "high"
+            )
+          ' grype-linux-amd64.json >/dev/null
+          echo "report_digest=sha256:$(sha256sum grype-linux-amd64.json | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
+
+      - name: Scan exact linux-arm64 digest for CRITICAL/HIGH OS and library CVEs
+        id: scan-arm64
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.arm64_digest }}
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_AUTO_UPDATE: "false"
+        run: |
+          set -euo pipefail
+          grype "${IMAGE_REF}" \
+            --scope all-layers \
+            --fail-on high \
+            --output json \
+            --file grype-linux-arm64.json
+          jq -e '
+            type == "object" and
+            (.matches | type == "array") and
+            all(.matches[]?;
+              (.vulnerability.severity | ascii_downcase) != "critical" and
+              (.vulnerability.severity | ascii_downcase) != "high"
+            )
+          ' grype-linux-arm64.json >/dev/null
+          echo "report_digest=sha256:$(sha256sum grype-linux-arm64.json | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate source-owned SLSA provenance predicates
+        run: |
+          set -euo pipefail
+          write_slsa_predicate() {
+            output=$1
+            platform=$2
+            platform_digest=$3
+            jq -n \
+              --arg image "${IMAGE_NAME}" \
+              --arg source_sha "${SOURCE_SHA}" \
+              --arg workflow_sha "${WORKFLOW_SHA}" \
+              --arg repository "${GITHUB_REPOSITORY}" \
+              --arg build_type "${SLSA_BUILD_TYPE}" \
+              --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --arg workflow "${WORKFLOW_IDENTITY}" \
+              --arg platform "${platform}" \
+              --arg platform_digest "${platform_digest}" \
+              '
+                {
+                  buildDefinition: {
+                    buildType: $build_type,
+                    externalParameters: {
+                      source_sha: $source_sha
+                    },
+                    internalParameters: {
+                      image: $image,
+                      workflow: $workflow,
+                      workflow_sha: $workflow_sha,
+                      dockerfile: "Dockerfile",
+                      platform: $platform,
+                      platform_digest: $platform_digest
+                    },
+                    resolvedDependencies: [{
+                      uri: ("git+https://github.com/" + $repository + "@refs/heads/main"),
+                      digest: { gitCommit: $source_sha }
+                    }]
+                  },
+                  runDetails: {
+                    builder: { id: $workflow },
+                    metadata: { invocationId: $run_url }
+                  }
+                }
+              ' > "${output}"
+          }
+          write_slsa_predicate slsa-provenance-linux-amd64.json linux/amd64 "${{ steps.platforms.outputs.amd64_digest }}"
+          write_slsa_predicate slsa-provenance-linux-arm64.json linux/arm64 "${{ steps.platforms.outputs.arm64_digest }}"
           jq -n \
             --arg image "${IMAGE_NAME}" \
             --arg source_sha "${SOURCE_SHA}" \
@@ -409,6 +512,8 @@ jobs:
 
           cosign sign --yes "${image_ref}"
           cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance.json "${image_ref}"
+          cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-amd64.json "${amd64_ref}"
+          cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-arm64.json "${arm64_ref}"
           cosign attest --yes --type spdxjson --predicate sbom-linux-amd64.spdx.json "${amd64_ref}"
           cosign attest --yes --type spdxjson --predicate sbom-linux-arm64.spdx.json "${arm64_ref}"
 
@@ -421,6 +526,16 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --certificate-identity "${WORKFLOW_IDENTITY}" \
             "${image_ref}" > slsa-provenance.attestation.json
+          cosign verify-attestation \
+            --type slsaprovenance1 \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${amd64_ref}" > slsa-provenance-linux-amd64.attestation.json
+          cosign verify-attestation \
+            --type slsaprovenance1 \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${arm64_ref}" > slsa-provenance-linux-arm64.attestation.json
           cosign verify-attestation \
             --type spdxjson \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -448,15 +563,24 @@ jobs:
               ' "${attestation_file}" >/dev/null
           }
           verify_attestation slsa-provenance.attestation.json slsa-provenance.json "${{ steps.build.outputs.digest }}"
+          verify_attestation slsa-provenance-linux-amd64.attestation.json slsa-provenance-linux-amd64.json "${{ steps.platforms.outputs.amd64_digest }}"
+          verify_attestation slsa-provenance-linux-arm64.attestation.json slsa-provenance-linux-arm64.json "${{ steps.platforms.outputs.arm64_digest }}"
           verify_attestation sbom-linux-amd64.attestation.json sbom-linux-amd64.spdx.json "${{ steps.platforms.outputs.amd64_digest }}"
           verify_attestation sbom-linux-arm64.attestation.json sbom-linux-arm64.spdx.json "${{ steps.platforms.outputs.arm64_digest }}"
 
       - name: Generate verified release evidence
+        env:
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          RELEASE_ENVIRONMENT: release-production
         run: |
           set -euo pipefail
           jq -n \
             --arg schema "${RELEASE_EVIDENCE_TYPE}" \
             --arg component "helm-ai-kernel" \
+            --arg actor "${RELEASE_ACTOR}" \
+            --arg triggering_actor "${RELEASE_TRIGGERING_ACTOR}" \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
             --arg source_repository "${GITHUB_REPOSITORY}" \
             --arg source_sha "${SOURCE_SHA}" \
             --arg workflow_sha "${WORKFLOW_SHA}" \
@@ -468,10 +592,15 @@ jobs:
             --arg final_tag "sha-${SOURCE_SHA}" \
             --arg amd64_digest "${{ steps.platforms.outputs.amd64_digest }}" \
             --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" \
+            --arg amd64_scan_digest "${{ steps.scan-amd64.outputs.report_digest }}" \
+            --arg arm64_scan_digest "${{ steps.scan-arm64.outputs.report_digest }}" \
             --arg build_type "${SLSA_BUILD_TYPE}" '
               {
                 schema: $schema,
                 component: $component,
+                actor: $actor,
+                triggering_actor: $triggering_actor,
+                release_environment: $release_environment,
                 source_repository: $source_repository,
                 source_ref: "refs/heads/main",
                 source_sha: $source_sha,
@@ -502,18 +631,52 @@ jobs:
                   exercised_platform: "linux/amd64",
                   smoke: "health-denial-receipt-stop-restart-exact-readback-passed"
                 },
-                slsa: ("slsa-provenance.json using " + $build_type),
+                cve_gate: {
+                  tool: "grype",
+                  scope: "os-and-library",
+                  fail_on: "high",
+                  status: "passed",
+                  platforms: [
+                    {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
+                    {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
+                  ]
+                },
+                slsa: {
+                  build_type: $build_type,
+                  index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"},
+                  platforms: [
+                    {platform: "linux/amd64", digest: $amd64_digest, predicate: "slsa-provenance-linux-amd64.json", attestation: "slsa-provenance-linux-amd64.attestation.json"},
+                    {platform: "linux/arm64", digest: $arm64_digest, predicate: "slsa-provenance-linux-arm64.json", attestation: "slsa-provenance-linux-arm64.attestation.json"}
+                  ]
+                },
                 cosign: "keyless-signature-and-platform-attestations-exactly-verified",
                 promotion_status: "staging-digest-verified"
               }
             ' > release-evidence.json
           jq -e \
             --arg schema "${RELEASE_EVIDENCE_TYPE}" \
+            --arg actor "${RELEASE_ACTOR}" \
+            --arg triggering_actor "${RELEASE_TRIGGERING_ACTOR}" \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
             --arg source_sha "${SOURCE_SHA}" \
             --arg digest "${{ steps.build.outputs.digest }}" \
             --arg amd64_digest "${{ steps.platforms.outputs.amd64_digest }}" \
-            --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" '
+            --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" \
+            --arg amd64_scan_digest "${{ steps.scan-amd64.outputs.report_digest }}" \
+            --arg arm64_scan_digest "${{ steps.scan-arm64.outputs.report_digest }}" '
+              (keys | sort) == [
+                "actor", "component", "cosign", "cve_gate", "default_command",
+                "digest", "entrypoint", "final_tag", "healthcheck", "image",
+                "oci_labels", "persistence", "platforms", "promotion_status",
+                "release_environment", "runtime_verification", "schema", "slsa",
+                "source_ref", "source_repository", "source_sha", "staging_tag",
+                "triggering_actor", "workflow_file", "workflow_identity", "workflow_name",
+                "workflow_ref", "workflow_run", "workflow_sha"
+              ] and
               .schema == $schema and
+              .actor == $actor and
+              .triggering_actor == $triggering_actor and
+              .release_environment == $release_environment and
               .source_repository == "Mindburn-Labs/helm-ai-kernel" and
               .source_ref == "refs/heads/main" and
               .source_sha == $source_sha and
@@ -523,12 +686,31 @@ jobs:
                 exercised_platform: "linux/amd64",
                 smoke: "health-denial-receipt-stop-restart-exact-readback-passed"
               } and
+              .cve_gate == {
+                tool: "grype",
+                scope: "os-and-library",
+                fail_on: "high",
+                status: "passed",
+                platforms: [
+                  {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
+                  {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
+                ]
+              } and
+              .slsa == {
+                build_type: "https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-build-v1.md",
+                index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"},
+                platforms: [
+                  {platform: "linux/amd64", digest: $amd64_digest, predicate: "slsa-provenance-linux-amd64.json", attestation: "slsa-provenance-linux-amd64.attestation.json"},
+                  {platform: "linux/arm64", digest: $arm64_digest, predicate: "slsa-provenance-linux-arm64.json", attestation: "slsa-provenance-linux-arm64.attestation.json"}
+                ]
+              } and
               .promotion_status == "staging-digest-verified" and
               .platforms == [
                 {platform: "linux/amd64", digest: $amd64_digest, sbom: "sbom-linux-amd64.spdx.json"},
                 {platform: "linux/arm64", digest: $arm64_digest, sbom: "sbom-linux-arm64.spdx.json"}
               ]
             ' release-evidence.json >/dev/null
+          cp release-evidence.json release-evidence.staging.json
 
       - name: Attest and exactly verify durable release evidence
         env:
@@ -718,6 +900,23 @@ jobs:
             .final_tag_digest = $final_digest
           ' release-evidence.json > release-evidence.final.json
           mv release-evidence.final.json release-evidence.json
+          jq -e \
+            --slurpfile staging release-evidence.staging.json \
+            --arg final_digest "${final_digest}" '
+            (keys | sort) == [
+              "actor", "component", "cosign", "cve_gate", "default_command",
+              "digest", "entrypoint", "final_tag", "final_tag_digest", "healthcheck",
+              "image", "oci_labels", "persistence", "platforms", "promotion_status",
+              "release_environment", "runtime_verification", "schema", "slsa",
+              "source_ref", "source_repository", "source_sha", "staging_tag",
+              "triggering_actor", "workflow_file", "workflow_identity", "workflow_name",
+              "workflow_ref", "workflow_run", "workflow_sha"
+            ] and
+            .final_tag_digest == $final_digest and
+            .promotion_status == "final-tag-digest-platforms-signature-and-evidence-verified" and
+            ((. | del(.promotion_status, .final_tag_digest)) ==
+              ($staging[0] | del(.promotion_status, .final_tag_digest)))
+          ' release-evidence.json >/dev/null
           cosign attest --yes \
             --type "${RELEASE_EVIDENCE_TYPE}" \
             --predicate release-evidence.json \
@@ -753,8 +952,14 @@ jobs:
             sbom-linux-amd64.attestation.json
             sbom-linux-arm64.spdx.json
             sbom-linux-arm64.attestation.json
+            grype-linux-amd64.json
+            grype-linux-arm64.json
             slsa-provenance.json
             slsa-provenance.attestation.json
+            slsa-provenance-linux-amd64.json
+            slsa-provenance-linux-amd64.attestation.json
+            slsa-provenance-linux-arm64.json
+            slsa-provenance-linux-arm64.attestation.json
             release-evidence.json
             release-evidence.attestation.json
             release-evidence.final-attestation.json

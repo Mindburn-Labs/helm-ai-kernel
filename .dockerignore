@@ -19,6 +19,7 @@ platform-config-*.json
 platform-labels-*.json
 sbom-*.spdx.json
 slsa-provenance*.json
+grype-*.json
 release-evidence*.json
 signature-verification.json
 tmp/

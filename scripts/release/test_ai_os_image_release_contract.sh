@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
+# quantum_posture: this mutation suite checks classical SHA-256 and Cosign
+# release-evidence contracts; it adds no post-quantum cryptographic control.
 # Mutation fixtures intentionally match literal GitHub and shell expressions.
 # shellcheck disable=SC2016
 set -eu

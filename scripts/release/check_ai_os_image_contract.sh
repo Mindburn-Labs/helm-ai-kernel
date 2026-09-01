@@ -309,6 +309,10 @@ if [ "$(grep -Fc 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origi
   echo 'current main and newest completed CI must be checked initially and immediately before promotion' >&2
   exit 1
 fi
+if [ "$(grep -Fc 'if [[ "${SOURCE_SHA}" != "${WORKFLOW_SHA}" ]]; then' "$workflow")" -ne 2 ]; then
+  echo 'source_sha must remain bound to the workflow commit at both authority checkpoints' >&2
+  exit 1
+fi
 run_start_read_pattern='run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api'
 authority_environment_count="$(awk '
   /^      - name: Validate publication authority$/ { in_step = 1; next }

@@ -162,11 +162,15 @@ require '[.protection_rules[].type] | sort' "$workflow"
 require '== ["branch_policy", "required_reviewers"]' "$workflow"
 require 'required_reviewers' "$workflow"
 require 'branch_policy' "$workflow"
+require '(keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"]' "$workflow"
+require '(.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User")' "$workflow"
 require '(first(.protection_rules[] | select(.type == "branch_policy")) |' "$workflow"
 require '(keys | sort) == ["id", "node_id", "type"]' "$workflow"
 require '.prevent_self_review == true' "$workflow"
-require '.reviewers[0].type == "User"' "$workflow"
 require '.reviewers[0].reviewer.id' "$workflow"
+require '.reviewers[0].reviewer.node_id | type == "string" and length > 0' "$workflow"
+require '.reviewers[0].reviewer.type == "User"' "$workflow"
+require '.reviewers[0].reviewer.site_admin == false' "$workflow"
 require '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow"
 require 'type == "number"' "$workflow"
 require '.total_count == 1' "$workflow"
@@ -226,7 +230,22 @@ require "git+https://github.com/" "$workflow"
 require '@refs/heads/main' "$workflow"
 require 'output-file: sbom-linux-amd64.spdx.json' "$workflow"
 require 'output-file: sbom-linux-arm64.spdx.json' "$workflow"
-require 'anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e' "$workflow"
+require 'GRYPE_VERSION: v0.116.1' "$workflow"
+require 'GRYPE_SHA256: 0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458' "$workflow"
+require 'https://github.com/anchore/grype/releases/download/${GRYPE_VERSION}/grype_${GRYPE_VERSION#v}_linux_amd64.tar.gz' "$workflow"
+require 'printf '\''%s  %s\n'\'' "${GRYPE_SHA256}" "${grype_archive}" | sha256sum --check --strict' "$workflow"
+require 'tar -xzf "${grype_archive}" -C "${grype_extract_dir}"' "$workflow"
+require 'install -m 0755 "${grype_extract_dir}/grype" "${grype_binary}"' "$workflow"
+require 'grype db update' "$workflow"
+require 'grype db status --output json > grype-db-status.json' "$workflow"
+require 'GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db' "$workflow"
+require '(keys | sort) == ["built", "from", "path", "schemaVersion", "valid"]' "$workflow"
+require '(.schemaVersion | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' "$workflow"
+require '(.from | type == "string" and startswith("https://grype.anchore.io/databases/"))' "$workflow"
+require '(.built | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))' "$workflow"
+require '(.path | type == "string" and length > 0)' "$workflow"
+require '.valid == true' "$workflow"
+require 'status_digest=sha256:$(sha256sum grype-db-status.json' "$workflow"
 require 'GRYPE_CHECK_FOR_APP_UPDATE: "false"' "$workflow"
 require 'GRYPE_DB_AUTO_UPDATE: "false"' "$workflow"
 require 'IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}' "$workflow"
@@ -265,6 +284,7 @@ require 'cve_gate: {' "$workflow"
 require 'scope: "os-and-library"' "$workflow"
 require 'fail_on: "high"' "$workflow"
 require 'status: "passed"' "$workflow"
+require 'database: {status: "grype-db-status.json", status_digest: $db_status_digest}' "$workflow"
 require 'report: "grype-linux-amd64.json"' "$workflow"
 require 'report: "grype-linux-arm64.json"' "$workflow"
 require 'slsa: {' "$workflow"
@@ -288,6 +308,7 @@ require 'final-tag-digest-platforms-signature-and-evidence-verified' "$workflow"
 require '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}' "$legacy_workflow"
 
 for upload_entry in \
+  '            grype-db-status.json' \
   '            grype-linux-amd64.json' \
   '            grype-linux-arm64.json' \
   '            slsa-provenance-linux-amd64.json' \
@@ -351,21 +372,25 @@ if [ "$(grep -Fc '.can_admins_bypass == false' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '[.protection_rules[].type] | sort' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '== ["branch_policy", "required_reviewers"]' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.protection_rules | type == "array" and length == 2)' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"]' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User")' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(first(.protection_rules[] | select(.type == "branch_policy")) |' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(keys | sort) == ["id", "node_id", "type"]' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.prevent_self_review == true' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.reviewers | type == "array" and length == 1)' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.reviewers[0].type == "User"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.reviewers[0].reviewer.id' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.reviewers[0].reviewer.node_id | type == "string" and length > 0)' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.reviewers[0].reviewer.type == "User"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.reviewers[0].reviewer.site_admin == false' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.total_count == 1' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.branch_policies[0] |' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(keys | sort) == ["id", "name", "node_id", "type"]' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.name == "main"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.type == "branch"' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '(.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 4 ] ||
-  [ "$(grep -Fc '(.node_id | type == "string" and length > 0)' "$workflow")" -ne 4 ] ||
+  [ "$(grep -Fc '(.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 6 ] ||
+  [ "$(grep -Fc '(.node_id | type == "string" and length > 0)' "$workflow")" -ne 6 ] ||
   [ "$(grep -Fc '.created_at > $run_started_at' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.environments | type == "array"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'any(.[]; .name == $release_environment)' "$workflow")" -ne 2 ] ||
@@ -384,13 +409,16 @@ if [ "$(grep -Fc -- '--type spdxjson' "$workflow")" -ne 4 ]; then
 fi
 if [ "$(grep -Fc -- '--scope all-layers' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc -- '--fail-on high' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc -- '--output json' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc -- '--output json' "$workflow")" -ne 3 ] ||
   [ "$(grep -Fc 'IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc 'IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.arm64_digest }}' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc -- '--file grype-linux-amd64.json' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc -- '--file grype-linux-arm64.json' "$workflow")" -ne 1 ] ||
-  [ "$(grep -Fc 'GRYPE_DB_AUTO_UPDATE: "false"' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc 'GRYPE_CHECK_FOR_APP_UPDATE: "false"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc 'GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db' "$workflow")" -ne 3 ] ||
+  [ "$(grep -Fc 'GRYPE_DB_AUTO_UPDATE: "false"' "$workflow")" -ne 3 ] ||
+  [ "$(grep -Fc 'GRYPE_CHECK_FOR_APP_UPDATE: "false"' "$workflow")" -ne 3 ] ||
+  [ "$(grep -Fc 'grype db update' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'grype db status --output json > grype-db-status.json' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc 'type == "object" and' "$workflow")" -lt 2 ] ||
   [ "$(grep -Fc 'report_digest=sha256:$(sha256sum grype-linux-amd64.json' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc 'report_digest=sha256:$(sha256sum grype-linux-arm64.json' "$workflow")" -ne 1 ]; then
@@ -406,12 +434,13 @@ if [ "$(grep -Fc 'cosign attest --yes --type slsaprovenance1 --predicate slsa-pr
   echo 'each exact platform SLSA predicate must be attested and exactly verified' >&2
   exit 1
 fi
-if [ "$(grep -Fc '(keys | sort) == [' "$workflow")" -ne 6 ] ||
+if [ "$(grep -Fc '(keys | sort) == [' "$workflow")" -ne 11 ] ||
   [ "$(grep -Fc '"actor", "component", "cosign", "cve_gate", "default_command",' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.actor == $actor' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc '.triggering_actor == $triggering_actor' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc '.release_environment == $release_environment' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc '.cve_gate == {' "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc 'database: {status: "grype-db-status.json", status_digest: $db_status_digest}' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.slsa == {' "$workflow")" -ne 1 ] ||
   [ "$(grep -Fc '.final_tag_digest == $final_digest' "$workflow")" -ne 1 ]; then
   echo 'release evidence must use the closed authority, CVE, and SLSA shape' >&2
@@ -431,6 +460,10 @@ if [ "$(grep -Ec '^[[:space:]]+tags:' "$workflow")" -ne 1 ]; then
 fi
 if grep -Fq 'https://actions.github.io/buildtypes/workflow/v1' "$workflow"; then
   echo 'custom provenance must not claim the GitHub-hosted build type' >&2
+  exit 1
+fi
+if grep -Fq 'anchore/scan-action/download-grype@' "$workflow"; then
+  echo 'Grype must be installed from the checksum-verified immutable release artifact' >&2
   exit 1
 fi
 if grep -Fq 'git merge-base --is-ancestor' "$workflow"; then
@@ -464,6 +497,8 @@ staging_line="$(first_line 'tags: ${{ env.IMAGE_NAME }}:${{ env.STAGING_TAG }}')
 config_line="$(first_line "--format '{{json .Image.Config}}'")"
 runtime_line="$(first_line '- name: Exercise digest-pinned native runtime and restart persistence')"
 sbom_line="$(first_line 'output-file: sbom-linux-amd64.spdx.json')"
+grype_install_line="$(first_line '- name: Install checksum-pinned Grype vulnerability scanner')"
+grype_db_line="$(first_line '- name: Bootstrap and audit the Grype vulnerability database')"
 scan_amd64_line="$(first_line '- name: Scan exact linux-amd64 digest for CRITICAL/HIGH OS and library CVEs')"
 scan_arm64_line="$(first_line '- name: Scan exact linux-arm64 digest for CRITICAL/HIGH OS and library CVEs')"
 slsa_predicates_line="$(first_line '- name: Generate source-owned SLSA provenance predicates')"
@@ -497,6 +532,9 @@ if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$staging_line" -lt "$config_line" ] ||
   ! [ "$config_line" -lt "$runtime_line" ] ||
   ! [ "$runtime_line" -lt "$sbom_line" ] ||
+  ! [ "$sbom_line" -lt "$grype_install_line" ] ||
+  ! [ "$grype_install_line" -lt "$grype_db_line" ] ||
+  ! [ "$grype_db_line" -lt "$scan_amd64_line" ] ||
   ! [ "$sbom_line" -lt "$scan_amd64_line" ] ||
   ! [ "$scan_amd64_line" -lt "$scan_arm64_line" ] ||
   ! [ "$scan_arm64_line" -lt "$slsa_predicates_line" ] ||

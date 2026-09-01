@@ -33,10 +33,13 @@ pass. The predicate's `runtime_verification` field records those completed
 checks; it is not inferred from the Dockerfile.
 
 The `cve_gate` object is also closed and records `tool=grype`,
-`scope=os-and-library`, `fail_on=high`, `status=passed`, and one report name,
-platform digest, and report SHA-256 digest for each exact platform. Both
-platform digests must have passed the scan before signing, and the reports are
-uploaded with the durable evidence convenience copy.
+`scope=os-and-library`, `fail_on=high`, `status=passed`, the machine-readable
+`grype-db-status.json` name and its SHA-256 digest, and one report name,
+platform digest, and report SHA-256 digest for each exact platform. The status
+file is emitted once after the explicit database bootstrap and before either
+scan; both scans use that same run-local cache with auto-update disabled. Both
+platform digests must have passed the scan before signing, and the status file
+and reports are uploaded with the durable evidence convenience copy.
 
 The `slsa` object records the source-owned build type, the index predicate and
 attestation names, and one predicate/attestation name pair plus exact platform

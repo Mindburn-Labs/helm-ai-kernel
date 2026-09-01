@@ -23,16 +23,21 @@ the checkout's `.git` directory and generated Buildx, runtime, platform, SBOM,
 SLSA, Grype, and release-evidence files from the build context.
 
 After the platform manifests are inspected and before any Cosign signature is
-created, the workflow downloads Grype through the pinned
-`anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e`
-action. Automatic application and vulnerability-database updates are disabled;
-if the pinned binary or its database is unavailable, the job stops. Grype scans
-each exact `linux/amd64` and `linux/arm64` manifest digest with
+created, the workflow downloads the Grype `v0.116.1` Linux amd64 release
+archive from its immutable versioned URL and accepts it only after matching the
+source-owned SHA-256
+`0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458`. It
+explicitly bootstraps the vulnerability database once
+into the run's dedicated cache, records `grype db status --output json`, and
+requires a valid machine-readable status object. Both platform scans then use
+that same cache with application and database auto-updates disabled; if the
+binary, database bootstrap, or status readback is unavailable, the job stops.
+Grype scans each exact `linux/amd64` and `linux/arm64` manifest digest with
 `--scope all-layers --fail-on high --output json`. A scan is accepted only when
 its report is an object with an array `matches` field containing no `high` or
-`critical` severity. Each report is retained with a SHA-256 digest in the
-release evidence, so the CVE gate cannot silently change from one platform to
-the other or from one retry to the next.
+`critical` severity. Each report and the database-status file are retained with
+SHA-256 digests in the release evidence, so the CVE gate cannot silently change
+from one platform to the other or from one retry to the next.
 
 ## Parameters
 
@@ -93,12 +98,16 @@ The environment readback is authoritative, not a name-only check. The workflow
 requires `can_admins_bypass=false`,
 `deployment_branch_policy={protected_branches:false,custom_branch_policies:true}`,
 and exactly two protection rules: one `required_reviewers` rule with
-`prevent_self_review=true` and exactly one nested provider `User` reviewer whose
-numeric identity and login resolve to a current Mindburn-Labs owner, plus one
-`branch_policy` rule. That branch rule has exactly the provider keys
-`[id,node_id,type]`, with a positive integer `id` and nonempty `node_id`. The
+`prevent_self_review=true`, exact outer provider keys
+`[id,node_id,prevent_self_review,reviewers,type]`, and exactly one outer
+reviewer entry with keys `[reviewer,type]`. Its nested provider `User` trust
+projection requires a positive integral identity, nonempty `node_id`,
+`type=User`, `site_admin=false`, and a login that resolves to a current
+Mindburn-Labs owner; unrelated documented User metadata is tolerated. The
+second rule is one `branch_policy` rule with exactly the provider keys
+`[id,node_id,type]`, with a positive integral `id` and nonempty `node_id`. The
 deployment-branch-policies endpoint must report one record with exactly the
-provider keys `[id,name,node_id,type]`, a positive integer `id`, nonempty
+provider keys `[id,name,node_id,type]`, a positive integral `id`, nonempty
 `node_id`, and name/type exactly `main`/`branch`.
 
 The dispatch snapshot and the owner-token live readback both require the exact

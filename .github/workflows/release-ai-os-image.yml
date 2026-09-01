@@ -91,10 +91,17 @@ jobs:
             (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
             ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
             (first(.protection_rules[] | select(.type == "required_reviewers")) |
+              (keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
               .prevent_self_review == true and
               (.reviewers | type == "array" and length == 1) and
-              .reviewers[0].type == "User" and
+              (.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User") and
+              (.reviewers[0].reviewer | type == "object") and
               (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.reviewers[0].reviewer.node_id | type == "string" and length > 0) and
+              .reviewers[0].reviewer.type == "User" and
+              .reviewers[0].reviewer.site_admin == false and
               (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
             (first(.protection_rules[] | select(.type == "branch_policy")) |
               (keys | sort) == ["id", "node_id", "type"] and
@@ -368,24 +375,54 @@ jobs:
           output-file: sbom-linux-arm64.spdx.json
           upload-artifact: false
 
-      - name: Install Grype vulnerability scanner
-        uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
-
-      - name: Expose pinned Grype binary
+      - name: Install checksum-pinned Grype vulnerability scanner
+        env:
+          GRYPE_VERSION: v0.116.1
+          GRYPE_SHA256: 0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458
         run: |
           set -euo pipefail
-          grype_binary="$(find /opt/hostedtoolcache/grype -type f -name grype -perm -111 | sort | tail -n 1)"
-          if [[ -z "${grype_binary}" ]]; then
-            echo "::error::grype binary not found after pinned download"
-            exit 1
-          fi
-          dirname "${grype_binary}" >> "${GITHUB_PATH}"
-          "${grype_binary}" version
+          test "$(uname -m)" = "x86_64"
+          grype_archive="${RUNNER_TEMP}/grype_${GRYPE_VERSION#v}_linux_amd64.tar.gz"
+          grype_extract_dir="${RUNNER_TEMP}/grype-extract"
+          grype_bin_dir="${RUNNER_TEMP}/grype-bin"
+          mkdir -p "${grype_extract_dir}" "${grype_bin_dir}"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            "https://github.com/anchore/grype/releases/download/${GRYPE_VERSION}/grype_${GRYPE_VERSION#v}_linux_amd64.tar.gz" \
+            --output "${grype_archive}"
+          printf '%s  %s\n' "${GRYPE_SHA256}" "${grype_archive}" | sha256sum --check --strict
+          tar -xzf "${grype_archive}" -C "${grype_extract_dir}"
+          grype_binary="${grype_bin_dir}/grype"
+          install -m 0755 "${grype_extract_dir}/grype" "${grype_binary}"
+          echo "${grype_bin_dir}" >> "${GITHUB_PATH}"
+          "${grype_binary}" version | grep -Fq "Version:             ${GRYPE_VERSION#v}"
+
+      - name: Bootstrap and audit the Grype vulnerability database
+        id: grype-db
+        env:
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_AUTO_UPDATE: "false"
+        run: |
+          set -euo pipefail
+          mkdir -p "${GRYPE_DB_CACHE_DIR}"
+          grype db update
+          grype db status --output json > grype-db-status.json
+          jq -e '
+            type == "object" and
+            (keys | sort) == ["built", "from", "path", "schemaVersion", "valid"] and
+            (.schemaVersion | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+            (.from | type == "string" and startswith("https://grype.anchore.io/databases/")) and
+            (.built | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+            (.path | type == "string" and length > 0) and
+            .valid == true
+          ' grype-db-status.json >/dev/null
+          echo "status_digest=sha256:$(sha256sum grype-db-status.json | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
 
       - name: Scan exact linux-amd64 digest for CRITICAL/HIGH OS and library CVEs
         id: scan-amd64
         env:
           IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
           GRYPE_CHECK_FOR_APP_UPDATE: "false"
           GRYPE_DB_AUTO_UPDATE: "false"
         run: |
@@ -409,6 +446,7 @@ jobs:
         id: scan-arm64
         env:
           IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.arm64_digest }}
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
           GRYPE_CHECK_FOR_APP_UPDATE: "false"
           GRYPE_DB_AUTO_UPDATE: "false"
         run: |
@@ -603,6 +641,7 @@ jobs:
             --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" \
             --arg amd64_scan_digest "${{ steps.scan-amd64.outputs.report_digest }}" \
             --arg arm64_scan_digest "${{ steps.scan-arm64.outputs.report_digest }}" \
+            --arg db_status_digest "${{ steps.grype-db.outputs.status_digest }}" \
             --arg build_type "${SLSA_BUILD_TYPE}" '
               {
                 schema: $schema,
@@ -645,6 +684,7 @@ jobs:
                   scope: "os-and-library",
                   fail_on: "high",
                   status: "passed",
+                  database: {status: "grype-db-status.json", status_digest: $db_status_digest},
                   platforms: [
                     {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
                     {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
@@ -672,7 +712,8 @@ jobs:
             --arg amd64_digest "${{ steps.platforms.outputs.amd64_digest }}" \
             --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" \
             --arg amd64_scan_digest "${{ steps.scan-amd64.outputs.report_digest }}" \
-            --arg arm64_scan_digest "${{ steps.scan-arm64.outputs.report_digest }}" '
+            --arg arm64_scan_digest "${{ steps.scan-arm64.outputs.report_digest }}" \
+            --arg db_status_digest "${{ steps.grype-db.outputs.status_digest }}" '
               (keys | sort) == [
                 "actor", "component", "cosign", "cve_gate", "default_command",
                 "digest", "entrypoint", "final_tag", "healthcheck", "image",
@@ -700,6 +741,7 @@ jobs:
                 scope: "os-and-library",
                 fail_on: "high",
                 status: "passed",
+                database: {status: "grype-db-status.json", status_digest: $db_status_digest},
                 platforms: [
                   {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
                   {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
@@ -793,10 +835,17 @@ jobs:
             (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
             ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
             (first(.protection_rules[] | select(.type == "required_reviewers")) |
+              (keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
               .prevent_self_review == true and
               (.reviewers | type == "array" and length == 1) and
-              .reviewers[0].type == "User" and
+              (.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User") and
+              (.reviewers[0].reviewer | type == "object") and
               (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.reviewers[0].reviewer.node_id | type == "string" and length > 0) and
+              .reviewers[0].reviewer.type == "User" and
+              .reviewers[0].reviewer.site_admin == false and
               (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
             (first(.protection_rules[] | select(.type == "branch_policy")) |
               (keys | sort) == ["id", "node_id", "type"] and
@@ -974,6 +1023,7 @@ jobs:
             sbom-linux-amd64.attestation.json
             sbom-linux-arm64.spdx.json
             sbom-linux-arm64.attestation.json
+            grype-db-status.json
             grype-linux-amd64.json
             grype-linux-arm64.json
             slsa-provenance.json

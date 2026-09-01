@@ -160,7 +160,7 @@ checker=./scripts/release/check_ai_os_image_contract.sh
 
 # These fixtures mirror the GitHub REST provider shape, including both
 # environment protection rules and the deployment-branch policy response.
-provider_environment='{"name":"release-production","can_admins_bypass":false,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"id":101,"node_id":"PR_required","type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"User","reviewer":{"login":"mindburnlabs","id":123456,"node_id":"U_owner","type":"User"}}]},{"id":102,"node_id":"PR_branch","type":"branch_policy"}]}'
+provider_environment='{"name":"release-production","can_admins_bypass":false,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"id":101,"node_id":"PR_required","type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"User","reviewer":{"login":"mindburnlabs","id":123456,"node_id":"U_owner","type":"User","site_admin":false,"avatar_url":"https://avatars.githubusercontent.com/u/123456?v=4","events_url":"https://api.github.com/users/mindburnlabs/events{/privacy}","followers_url":"https://api.github.com/users/mindburnlabs/followers","following_url":"https://api.github.com/users/mindburnlabs/following{/other_user}","gists_url":"https://api.github.com/users/mindburnlabs/gists{/gist_id}","gravatar_id":"","html_url":"https://github.com/mindburnlabs","organizations_url":"https://api.github.com/users/mindburnlabs/orgs","received_events_url":"https://api.github.com/users/mindburnlabs/received_events","repos_url":"https://api.github.com/users/mindburnlabs/repos","starred_url":"https://api.github.com/users/mindburnlabs/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/mindburnlabs/subscriptions","url":"https://api.github.com/users/mindburnlabs","user_view_type":"public"}}]},{"id":102,"node_id":"PR_branch","type":"branch_policy"}]}'
 provider_branch_policies='{"total_count":1,"branch_policies":[{"id":201,"node_id":"BP_main","name":"main","type":"branch"}]}'
 provider_approval='[{"environments":[{"name":"release-production","id":301}],"state":"approved","user":{"login":"peycheff-com"},"created_at":"2026-09-01T10:00:01Z"}]'
 run_started_at=2026-09-01T10:00:00Z
@@ -179,10 +179,17 @@ assert_provider_authority() {
     (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
     ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
     (first(.protection_rules[] | select(.type == "required_reviewers")) |
+      (keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"] and
+      (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+      (.node_id | type == "string" and length > 0) and
       .prevent_self_review == true and
       (.reviewers | type == "array" and length == 1) and
-      .reviewers[0].type == "User" and
+      (.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User") and
+      (.reviewers[0].reviewer | type == "object") and
       (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+      (.reviewers[0].reviewer.node_id | type == "string" and length > 0) and
+      .reviewers[0].reviewer.type == "User" and
+      .reviewers[0].reviewer.site_admin == false and
       (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
     (first(.protection_rules[] | select(.type == "branch_policy")) |
       (keys | sort) == ["id", "node_id", "type"] and
@@ -199,6 +206,20 @@ assert_provider_authority() {
       (.node_id | type == "string" and length > 0) and
       .name == "main" and
       .type == "branch")
+  ' >/dev/null 2>&1
+}
+
+provider_grype_db_status='{"schemaVersion":"v6.1.9","from":"https://grype.anchore.io/databases/v6/vulnerability-db_v6.1.9_2026-08-31T00:36:25Z_1788158251.tar.zst?checksum=sha256%3A70e70f6232f41281063bd2a0a20600758ae12d6e60ba571b16070f950e2f99d3","built":"2026-08-31T06:37:31Z","path":"/runner/_temp/grype-db/6/vulnerability.db","valid":true}'
+
+assert_provider_grype_db_status() {
+  printf '%s\n' "$1" | jq -e '
+    type == "object" and
+    (keys | sort) == ["built", "from", "path", "schemaVersion", "valid"] and
+    (.schemaVersion | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+    (.from | type == "string" and startswith("https://grype.anchore.io/databases/")) and
+    (.built | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+    (.path | type == "string" and length > 0) and
+    .valid == true
   ' >/dev/null 2>&1
 }
 
@@ -234,6 +255,7 @@ evidence_amd64_digest=sha256:ccccccccccccccccccccccccccccccccccccccccccccccccccc
 evidence_arm64_digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 evidence_amd64_scan_digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 evidence_arm64_scan_digest=sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+evidence_db_status_digest=sha256:1111111111111111111111111111111111111111111111111111111111111111
 evidence_build_type=https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-build-v1.md
 
 assert_release_evidence_shape() {
@@ -248,6 +270,7 @@ assert_release_evidence_shape() {
     --arg arm64_digest "$evidence_arm64_digest" \
     --arg amd64_scan_digest "$evidence_amd64_scan_digest" \
     --arg arm64_scan_digest "$evidence_arm64_scan_digest" \
+    --arg db_status_digest "$evidence_db_status_digest" \
     --arg build_type "$evidence_build_type" '
       (if $expected_status == "staging-digest-verified"
        then (keys | sort) == [
@@ -292,11 +315,13 @@ assert_release_evidence_shape() {
         scope: "os-and-library",
         fail_on: "high",
         status: "passed",
+        database: {status: "grype-db-status.json", status_digest: $db_status_digest},
         platforms: [
           {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
           {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
         ]
       } and
+      (.cve_gate.database.status_digest | type == "string" and test("^sha256:[0-9a-f]{64}$")) and
       .slsa == {
         build_type: $build_type,
         index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"},
@@ -315,10 +340,25 @@ assert_release_evidence_shape() {
 
 if ! assert_provider_authority "$provider_environment" "$provider_branch_policies" ||
   ! assert_provider_actors '["mindburnlabs","peycheff-com"]' ||
-  ! assert_provider_approval "$provider_approval" "$run_started_at" mindburnlabs mindburnlabs; then
+  ! assert_provider_approval "$provider_approval" "$run_started_at" mindburnlabs mindburnlabs ||
+  ! assert_provider_grype_db_status "$provider_grype_db_status"; then
   echo 'provider-shaped release authority fixtures were not accepted' >&2
   exit 1
 fi
+
+for db_status_mutation in \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.extra = true')" \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c 'del(.schemaVersion)')" \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.schemaVersion = "6.1.9"')" \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.from = "https://example.test/db"')" \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.built = "not-a-timestamp"')" \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.path = ""')" \
+  "$(printf '%s\n' "$provider_grype_db_status" | jq -c '.valid = false')"; do
+  if assert_provider_grype_db_status "$db_status_mutation"; then
+    echo "invalid Grype database status fixture was accepted: $db_status_mutation" >&2
+    exit 1
+  fi
+done
 
 evidence_fixture="$(jq -cn \
   --arg schema 'https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-release-evidence-v1.md' \
@@ -328,7 +368,8 @@ evidence_fixture="$(jq -cn \
   --arg amd64_digest "$evidence_amd64_digest" \
   --arg arm64_digest "$evidence_arm64_digest" \
   --arg amd64_scan_digest "$evidence_amd64_scan_digest" \
-  --arg arm64_scan_digest "$evidence_arm64_scan_digest" '
+  --arg arm64_scan_digest "$evidence_arm64_scan_digest" \
+  --arg db_status_digest "$evidence_db_status_digest" '
   {
     schema: $schema,
     component: "helm-ai-kernel",
@@ -370,6 +411,7 @@ evidence_fixture="$(jq -cn \
       scope: "os-and-library",
       fail_on: "high",
       status: "passed",
+      database: {status: "grype-db-status.json", status_digest: $db_status_digest},
       platforms: [
         {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
         {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
@@ -401,6 +443,8 @@ if ! assert_release_evidence_shape "$final_evidence_fixture" final-tag-digest-pl
 fi
 if assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.actor = "other"')" staging-digest-verified '' ||
   assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.cve_gate.fail_on = "medium"')" staging-digest-verified '' ||
+  assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c 'del(.cve_gate.database)')" staging-digest-verified '' ||
+  assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.cve_gate.database.status_digest = "sha256:not-a-digest"')" staging-digest-verified '' ||
   assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.slsa.platforms[0].predicate = "slsa-provenance.json"')" staging-digest-verified '' ||
   assert_release_evidence_shape "$(printf '%s\n' "$evidence_fixture" | jq -c '.extra = true')" staging-digest-verified ''; then
   echo 'release evidence mutation was accepted' >&2
@@ -423,16 +467,58 @@ reject_provider_authority() {
 
 reject_provider_authority 'missing required reviewer rule' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules = [.protection_rules[0]]')"
+reject_provider_authority 'required reviewer outer rule extra field' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].extra = true')"
+reject_provider_authority 'required reviewer outer rule missing id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].id)')"
+reject_provider_authority 'required reviewer outer rule missing node id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].node_id)')"
+reject_provider_authority 'required reviewer outer rule zero id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].id = 0')"
+reject_provider_authority 'required reviewer outer rule string id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].id = "101"')"
+reject_provider_authority 'required reviewer outer rule empty node id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].node_id = ""')"
+reject_provider_authority 'required reviewer outer rule missing prevent-self-review' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].prevent_self_review)')"
+reject_provider_authority 'required reviewer outer rule missing reviewers' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers)')"
+reject_provider_authority 'required reviewer outer rule missing type' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].type)')"
 reject_provider_authority 'extra unknown rule' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules += [{"type":"unknown"}]')"
 reject_provider_authority 'unknown rule type' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[1].type = "unknown"')"
 reject_provider_authority 'Team reviewer' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].type = "Team"')"
+reject_provider_authority 'reviewer entry extra field' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].extra = true')"
+reject_provider_authority 'reviewer entry missing reviewer' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].reviewer)')"
+reject_provider_authority 'reviewer entry missing type' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].type)')"
 reject_provider_authority 'multiple reviewers' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers += [{"type":"User","reviewer":{"login":"peycheff-com","id":654321}}]')"
 reject_provider_authority 'reviewer outside owner set' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.login = "other"')"
+reject_provider_authority 'reviewer User zero id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.id = 0')"
+reject_provider_authority 'reviewer User string id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.id = "123456"')"
+reject_provider_authority 'reviewer User missing id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].reviewer.id)')"
+reject_provider_authority 'reviewer User empty node id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.node_id = ""')"
+reject_provider_authority 'reviewer User missing node id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].reviewer.node_id)')"
+reject_provider_authority 'reviewer User wrong type' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.type = "Bot"')"
+reject_provider_authority 'reviewer User missing type' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].reviewer.type)')"
+reject_provider_authority 'reviewer User site admin' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.site_admin = true')"
+reject_provider_authority 'reviewer User missing site admin' \
+  "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].reviewer.site_admin)')"
 reject_provider_authority 'administrator bypass' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.can_admins_bypass = true')"
 reject_provider_authority 'self review enabled' \
@@ -529,6 +615,38 @@ sed 's/\.node_id | type == "string" and length > 0/.node_id | type == "string" a
   "$workflow" > "$test_dir/empty-branch-rule-node-id.yml"
 mutate_and_reject "$test_dir/empty-branch-rule-node-id.yml"
 
+sed 's/\["id", "node_id", "prevent_self_review", "reviewers", "type"\]/["id", "node_id", "prevent_self_review", "reviewers", "type", "extra"]/g' \
+  "$workflow" > "$test_dir/loose-required-reviewer-rule.yml"
+mutate_and_reject "$test_dir/loose-required-reviewer-rule.yml"
+
+sed 's/\["reviewer", "type"\]/["reviewer"]/g' \
+  "$workflow" > "$test_dir/missing-reviewer-entry-type.yml"
+mutate_and_reject "$test_dir/missing-reviewer-entry-type.yml"
+
+sed 's/\.reviewers\[0\]\.reviewer\.site_admin == false/.reviewers[0].reviewer.site_admin == true/g' \
+  "$workflow" > "$test_dir/allowlisted-site-admin-reviewer.yml"
+mutate_and_reject "$test_dir/allowlisted-site-admin-reviewer.yml"
+
+sed '/grype db update/d' \
+  "$workflow" > "$test_dir/missing-grype-db-bootstrap.yml"
+mutate_and_reject "$test_dir/missing-grype-db-bootstrap.yml"
+
+sed '/grype db status --output json > grype-db-status.json/d' \
+  "$workflow" > "$test_dir/missing-grype-db-status.yml"
+mutate_and_reject "$test_dir/missing-grype-db-status.yml"
+
+sed 's/(keys | sort) == \["built", "from", "path", "schemaVersion", "valid"\]/(keys | sort) != ["built", "from", "path", "schemaVersion", "valid"]/g' \
+  "$workflow" > "$test_dir/open-grype-db-status.yml"
+mutate_and_reject "$test_dir/open-grype-db-status.yml"
+
+sed 's/\.valid == true/.valid == false/g' \
+  "$workflow" > "$test_dir/invalid-grype-db-status.yml"
+mutate_and_reject "$test_dir/invalid-grype-db-status.yml"
+
+sed 's/status_digest=sha256:$(sha256sum grype-db-status.json/status_digest=sha256:$(sha256sum missing-grype-db-status.json/g' \
+  "$workflow" > "$test_dir/unbound-grype-db-status-digest.yml"
+mutate_and_reject "$test_dir/unbound-grype-db-status-digest.yml"
+
 sed 's/\.name == "main"/.name == "release"/g' \
   "$workflow" > "$test_dir/loose-deployment-branch-name.yml"
 mutate_and_reject "$test_dir/loose-deployment-branch-name.yml"
@@ -621,7 +739,7 @@ sed 's/(\.protection_rules | type == "array" and length == 2)/(\.protection_rule
   "$workflow" > "$test_dir/extra-protection-rule.yml"
 mutate_and_reject "$test_dir/extra-protection-rule.yml"
 
-sed 's/\.reviewers\[0\]\.type == "User"/.reviewers[0].type == "Team"/g' \
+sed 's/\.type == "User"/.type == "Team"/g' \
   "$workflow" > "$test_dir/team-reviewer.yml"
 mutate_and_reject "$test_dir/team-reviewer.yml"
 

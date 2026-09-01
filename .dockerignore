@@ -1,0 +1,25 @@
+# The Dockerfile has an explicit source set; every other checkout file is noise.
+*
+!Dockerfile
+!core/
+!core/**
+!release.high_risk.v3.toml
+!reference_packs/
+!reference_packs/**
+
+# Keep generated release evidence and repository metadata excluded explicitly.
+.git
+.git/**
+buildx-inspect.txt
+ci-runs.json
+promotion-ci-runs.json
+image-index.json
+final-image-index.json
+platform-config-*.json
+platform-labels-*.json
+sbom-*.spdx.json
+slsa-provenance*.json
+grype-*.json
+release-evidence*.json
+signature-verification.json
+tmp/

@@ -45,7 +45,6 @@ jobs:
     steps:
       - name: Validate publication authority
         env:
-          GH_TOKEN: ${{ github.token }}
           OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
           RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
           RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
@@ -55,44 +54,122 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_RUN_ATTEMPT}" != "1" ]]; then
-            echo "::error::publication reruns are prohibited; dispatch a new run so release-production requires a fresh owner approval"
+            echo "::error::publication reruns are prohibited; dispatch a new run for an exact-run owner approval"
+            exit 1
+          fi
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for authoritative owner readback"
             exit 1
           fi
           if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
             echo "::error::release-production is not explicitly armed"
             exit 1
           fi
+          if ! jq -e '. == ["mindburnlabs","peycheff-com"]' <<<"${RELEASE_ACTORS_JSON:-}" >/dev/null; then
+            echo "::error::HELM_AI_OS_IMAGE_RELEASE_ACTORS must equal [\"mindburnlabs\",\"peycheff-com\"]"
+            exit 1
+          fi
+          release_environment_payload="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}")"
+          deployment_branch_policies="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/deployment-branch-policies")"
+          live_release_authority="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/variables/HELM_RELEASE_AUTHORITY_ARMED" \
+            --jq '.value')"
+          live_release_actors="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS" \
+            --jq '.value')"
+          if ! jq -e --arg environment "${RELEASE_ENVIRONMENT}" '
+            .name == $environment and
+            .can_admins_bypass == false and
+            .deployment_branch_policy == {
+              protected_branches: false,
+              custom_branch_policies: true
+            } and
+            (.protection_rules | type == "array" and length == 2) and
+            (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
+            ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
+            (first(.protection_rules[] | select(.type == "required_reviewers")) |
+              (keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .prevent_self_review == true and
+              (.reviewers | type == "array" and length == 2) and
+              (all(.reviewers[];
+                (keys | sort) == ["reviewer", "type"] and
+                .type == "User" and
+                (.reviewer | type == "object") and
+                (.reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+                (.reviewer.node_id | type == "string" and length > 0) and
+                .reviewer.type == "User" and
+                .reviewer.site_admin == false and
+                (.reviewer.login == "mindburnlabs" or .reviewer.login == "peycheff-com")
+              )) and
+              (([.reviewers[].reviewer.login] | sort) == ["mindburnlabs", "peycheff-com"]) and
+              ([.reviewers[].reviewer.id] | unique | length == 2) and
+              ([.reviewers[].reviewer.node_id] | unique | length == 2)) and
+            (first(.protection_rules[] | select(.type == "branch_policy")) |
+              (keys | sort) == ["id", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .type == "branch_policy")
+          ' <<<"${release_environment_payload}" >/dev/null; then
+            echo "::error::release-production environment protection readback is not exact"
+            exit 1
+          fi
           if ! jq -e '
-            type == "array" and
-            length > 0 and
-            all(.[]; type == "string" and test("^[A-Za-z0-9-]{1,39}$")) and
-            (unique | length) == length
-          ' <<<"${RELEASE_ACTORS_JSON:-}" >/dev/null; then
-            echo "::error::HELM_AI_OS_IMAGE_RELEASE_ACTORS must be a non-empty JSON array of unique GitHub logins"
+            .total_count == 1 and
+            (.branch_policies | type == "array" and length == 1) and
+            (.branch_policies[0] |
+              (keys | sort) == ["id", "name", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .name == "main" and
+              .type == "branch")
+          ' <<<"${deployment_branch_policies}" >/dev/null; then
+            echo "::error::release-production deployment branch policy must contain only main"
+            exit 1
+          fi
+          if [[ "${live_release_authority}" != "release-production" ]]; then
+            echo "::error::release-production is not armed in the authoritative environment variable readback"
+            exit 1
+          fi
+          if [[ "${live_release_authority}" != "${RELEASE_AUTHORITY_ARMED}" ]]; then
+            echo "::error::release-production changed from the job-start authority snapshot"
+            exit 1
+          fi
+          if ! jq -e '. == ["mindburnlabs","peycheff-com"]' <<<"${live_release_actors}" >/dev/null; then
+            echo "::error::the authoritative HELM_AI_OS_IMAGE_RELEASE_ACTORS value is not exact"
+            exit 1
+          fi
+          if ! jq -e --argjson configured "${RELEASE_ACTORS_JSON}" '. == $configured' <<<"${live_release_actors}" >/dev/null; then
+            echo "::error::the release actor allowlist changed from the job-start snapshot"
             exit 1
           fi
           for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do
             if ! jq -e --arg actor "${candidate}" 'index($actor) != null' \
-              <<<"${RELEASE_ACTORS_JSON}" >/dev/null; then
+              <<<"${live_release_actors}" >/dev/null; then
               echo "::error::GitHub actor ${candidate} is not authorized for AI OS image publication"
               exit 1
             fi
           done
-          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
-            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for authoritative organization-role readback"
-            exit 1
-          fi
-          approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
-          if ! jq -e '
+          approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
+          if ! jq -e \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
+            --arg request_actor "${REQUEST_ACTOR}" \
+            --arg triggering_actor "${TRIGGERING_ACTOR}" '
             [
               .[] |
               select(
                 .state == "approved" and
-                (.user.login == "mindburnlabs" or .user.login == "peycheff-com")
+                (.environments | type == "array" and any(.[]; .name == $release_environment)) and
+                (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
+                .user.login != $request_actor and
+                .user.login != $triggering_actor
               )
             ] | length > 0
           ' <<<"${approval_history}" >/dev/null; then
-            echo "::error::release-production requires a single-run approval from an authorized human owner"
+            echo "::error::release-production requires an approved exact-run review from a distinct authorized human owner"
             exit 1
           fi
           for owner in mindburnlabs peycheff-com; do
@@ -115,30 +192,55 @@ jobs:
             echo "::error::source_sha must equal the main commit recorded at dispatch (${WORKFLOW_SHA})"
             exit 1
           fi
+          initial_live_release_actors_sha256="$(printf '%s' "${live_release_actors}" | sha256sum | cut -d' ' -f1)"
+          if [[ ! "${initial_live_release_actors_sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::the initial live release actor JSON digest is invalid"
+            exit 1
+          fi
+          {
+            printf 'INITIAL_LIVE_RELEASE_AUTHORITY=%s\n' "${live_release_authority}"
+            printf 'INITIAL_LIVE_RELEASE_ACTORS_SHA256=%s\n' "${initial_live_release_actors_sha256}"
+          } >> "${GITHUB_ENV}"
 
       - name: Checkout exact source
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify source is the current main tip
+        env:
+          OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          main_tip="$(git rev-parse refs/remotes/origin/main)"
-          if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then
-            echo "::error::source_sha must equal the current origin/main tip (${main_tip})"
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for the current-main readback"
+            exit 1
+          fi
+          current_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
+          if [[ ! "${current_main_ref}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::current main ref readback is not an exact commit SHA"
+            exit 1
+          fi
+          if [[ "${SOURCE_SHA}" != "${current_main_ref}" ]]; then
+            echo "::error::source_sha must equal the current main ref (${current_main_ref})"
             exit 1
           fi
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
 
       - name: Require newest CI run to be completed and green
         env:
-          GH_TOKEN: ${{ github.token }}
+          OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
         run: |
           set -euo pipefail
-          gh api --paginate \
+          if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
+            echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for the CI readback"
+            exit 1
+          fi
+          GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate \
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
             > ci-runs.json
           ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < ci-runs.json
@@ -288,9 +390,143 @@ jobs:
           output-file: sbom-linux-arm64.spdx.json
           upload-artifact: false
 
-      - name: Generate source-owned SLSA provenance predicate
+      - name: Install checksum-pinned Grype vulnerability scanner
+        env:
+          GRYPE_VERSION: v0.116.1
+          GRYPE_SHA256: 0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458
         run: |
           set -euo pipefail
+          test "$(uname -m)" = "x86_64"
+          grype_archive="${RUNNER_TEMP}/grype_${GRYPE_VERSION#v}_linux_amd64.tar.gz"
+          grype_extract_dir="${RUNNER_TEMP}/grype-extract"
+          grype_bin_dir="${RUNNER_TEMP}/grype-bin"
+          mkdir -p "${grype_extract_dir}" "${grype_bin_dir}"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            "https://github.com/anchore/grype/releases/download/${GRYPE_VERSION}/grype_${GRYPE_VERSION#v}_linux_amd64.tar.gz" \
+            --output "${grype_archive}"
+          printf '%s  %s\n' "${GRYPE_SHA256}" "${grype_archive}" | sha256sum --check --strict
+          tar -xzf "${grype_archive}" -C "${grype_extract_dir}"
+          grype_binary="${grype_bin_dir}/grype"
+          install -m 0755 "${grype_extract_dir}/grype" "${grype_binary}"
+          echo "${grype_bin_dir}" >> "${GITHUB_PATH}"
+          "${grype_binary}" version | grep -Fq "Version:             ${GRYPE_VERSION#v}"
+
+      - name: Bootstrap and audit the Grype vulnerability database
+        id: grype-db
+        env:
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_AUTO_UPDATE: "false"
+        run: |
+          set -euo pipefail
+          mkdir -p "${GRYPE_DB_CACHE_DIR}"
+          grype db update
+          grype db status --output json > grype-db-status.json
+          jq -e '
+            type == "object" and
+            (keys | sort) == ["built", "from", "path", "schemaVersion", "valid"] and
+            (.schemaVersion | type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+            (.from | type == "string" and startswith("https://grype.anchore.io/databases/")) and
+            (.built | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+            (.path | type == "string" and length > 0) and
+            .valid == true
+          ' grype-db-status.json >/dev/null
+          echo "status_digest=sha256:$(sha256sum grype-db-status.json | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
+
+      - name: Scan exact linux-amd64 digest for CRITICAL/HIGH OS and library CVEs
+        id: scan-amd64
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.amd64_digest }}
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_AUTO_UPDATE: "false"
+        run: |
+          set -euo pipefail
+          grype "${IMAGE_REF}" \
+            --scope all-layers \
+            --fail-on high \
+            --output json \
+            --file grype-linux-amd64.json
+          jq -e '
+            type == "object" and
+            (.matches | type == "array") and
+            all(.matches[]?;
+              (.vulnerability.severity | ascii_downcase) != "critical" and
+              (.vulnerability.severity | ascii_downcase) != "high"
+            )
+          ' grype-linux-amd64.json >/dev/null
+          echo "report_digest=sha256:$(sha256sum grype-linux-amd64.json | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
+
+      - name: Scan exact linux-arm64 digest for CRITICAL/HIGH OS and library CVEs
+        id: scan-arm64
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platforms.outputs.arm64_digest }}
+          GRYPE_DB_CACHE_DIR: ${{ runner.temp }}/grype-db
+          GRYPE_CHECK_FOR_APP_UPDATE: "false"
+          GRYPE_DB_AUTO_UPDATE: "false"
+        run: |
+          set -euo pipefail
+          grype "${IMAGE_REF}" \
+            --scope all-layers \
+            --fail-on high \
+            --output json \
+            --file grype-linux-arm64.json
+          jq -e '
+            type == "object" and
+            (.matches | type == "array") and
+            all(.matches[]?;
+              (.vulnerability.severity | ascii_downcase) != "critical" and
+              (.vulnerability.severity | ascii_downcase) != "high"
+            )
+          ' grype-linux-arm64.json >/dev/null
+          echo "report_digest=sha256:$(sha256sum grype-linux-arm64.json | cut -d' ' -f1)" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate source-owned SLSA provenance predicates
+        run: |
+          set -euo pipefail
+          write_slsa_predicate() {
+            output=$1
+            platform=$2
+            platform_digest=$3
+            jq -n \
+              --arg image "${IMAGE_NAME}" \
+              --arg source_sha "${SOURCE_SHA}" \
+              --arg workflow_sha "${WORKFLOW_SHA}" \
+              --arg repository "${GITHUB_REPOSITORY}" \
+              --arg build_type "${SLSA_BUILD_TYPE}" \
+              --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --arg workflow "${WORKFLOW_IDENTITY}" \
+              --arg platform "${platform}" \
+              --arg platform_digest "${platform_digest}" \
+              '
+                {
+                  buildDefinition: {
+                    buildType: $build_type,
+                    externalParameters: {
+                      source_sha: $source_sha
+                    },
+                    internalParameters: {
+                      image: $image,
+                      workflow: $workflow,
+                      workflow_sha: $workflow_sha,
+                      dockerfile: "Dockerfile",
+                      platform: $platform,
+                      platform_digest: $platform_digest
+                    },
+                    resolvedDependencies: [{
+                      uri: ("git+https://github.com/" + $repository + "@refs/heads/main"),
+                      digest: { gitCommit: $source_sha }
+                    }]
+                  },
+                  runDetails: {
+                    builder: { id: $workflow },
+                    metadata: { invocationId: $run_url }
+                  }
+                }
+              ' > "${output}"
+          }
+          write_slsa_predicate slsa-provenance-linux-amd64.json linux/amd64 "${{ steps.platforms.outputs.amd64_digest }}"
+          write_slsa_predicate slsa-provenance-linux-arm64.json linux/arm64 "${{ steps.platforms.outputs.arm64_digest }}"
           jq -n \
             --arg image "${IMAGE_NAME}" \
             --arg source_sha "${SOURCE_SHA}" \
@@ -338,6 +574,8 @@ jobs:
 
           cosign sign --yes "${image_ref}"
           cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance.json "${image_ref}"
+          cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-amd64.json "${amd64_ref}"
+          cosign attest --yes --type slsaprovenance1 --predicate slsa-provenance-linux-arm64.json "${arm64_ref}"
           cosign attest --yes --type spdxjson --predicate sbom-linux-amd64.spdx.json "${amd64_ref}"
           cosign attest --yes --type spdxjson --predicate sbom-linux-arm64.spdx.json "${arm64_ref}"
 
@@ -350,6 +588,16 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --certificate-identity "${WORKFLOW_IDENTITY}" \
             "${image_ref}" > slsa-provenance.attestation.json
+          cosign verify-attestation \
+            --type slsaprovenance1 \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${amd64_ref}" > slsa-provenance-linux-amd64.attestation.json
+          cosign verify-attestation \
+            --type slsaprovenance1 \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${WORKFLOW_IDENTITY}" \
+            "${arm64_ref}" > slsa-provenance-linux-arm64.attestation.json
           cosign verify-attestation \
             --type spdxjson \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -377,15 +625,24 @@ jobs:
               ' "${attestation_file}" >/dev/null
           }
           verify_attestation slsa-provenance.attestation.json slsa-provenance.json "${{ steps.build.outputs.digest }}"
+          verify_attestation slsa-provenance-linux-amd64.attestation.json slsa-provenance-linux-amd64.json "${{ steps.platforms.outputs.amd64_digest }}"
+          verify_attestation slsa-provenance-linux-arm64.attestation.json slsa-provenance-linux-arm64.json "${{ steps.platforms.outputs.arm64_digest }}"
           verify_attestation sbom-linux-amd64.attestation.json sbom-linux-amd64.spdx.json "${{ steps.platforms.outputs.amd64_digest }}"
           verify_attestation sbom-linux-arm64.attestation.json sbom-linux-arm64.spdx.json "${{ steps.platforms.outputs.arm64_digest }}"
 
       - name: Generate verified release evidence
+        env:
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          RELEASE_ENVIRONMENT: release-production
         run: |
           set -euo pipefail
           jq -n \
             --arg schema "${RELEASE_EVIDENCE_TYPE}" \
             --arg component "helm-ai-kernel" \
+            --arg actor "${RELEASE_ACTOR}" \
+            --arg triggering_actor "${RELEASE_TRIGGERING_ACTOR}" \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
             --arg source_repository "${GITHUB_REPOSITORY}" \
             --arg source_sha "${SOURCE_SHA}" \
             --arg workflow_sha "${WORKFLOW_SHA}" \
@@ -397,10 +654,16 @@ jobs:
             --arg final_tag "sha-${SOURCE_SHA}" \
             --arg amd64_digest "${{ steps.platforms.outputs.amd64_digest }}" \
             --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" \
+            --arg amd64_scan_digest "${{ steps.scan-amd64.outputs.report_digest }}" \
+            --arg arm64_scan_digest "${{ steps.scan-arm64.outputs.report_digest }}" \
+            --arg db_status_digest "${{ steps.grype-db.outputs.status_digest }}" \
             --arg build_type "${SLSA_BUILD_TYPE}" '
               {
                 schema: $schema,
                 component: $component,
+                actor: $actor,
+                triggering_actor: $triggering_actor,
+                release_environment: $release_environment,
                 source_repository: $source_repository,
                 source_ref: "refs/heads/main",
                 source_sha: $source_sha,
@@ -431,18 +694,54 @@ jobs:
                   exercised_platform: "linux/amd64",
                   smoke: "health-denial-receipt-stop-restart-exact-readback-passed"
                 },
-                slsa: ("slsa-provenance.json using " + $build_type),
+                cve_gate: {
+                  tool: "grype",
+                  scope: "os-and-library",
+                  fail_on: "high",
+                  status: "passed",
+                  database: {status: "grype-db-status.json", status_digest: $db_status_digest},
+                  platforms: [
+                    {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
+                    {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
+                  ]
+                },
+                slsa: {
+                  build_type: $build_type,
+                  index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"},
+                  platforms: [
+                    {platform: "linux/amd64", digest: $amd64_digest, predicate: "slsa-provenance-linux-amd64.json", attestation: "slsa-provenance-linux-amd64.attestation.json"},
+                    {platform: "linux/arm64", digest: $arm64_digest, predicate: "slsa-provenance-linux-arm64.json", attestation: "slsa-provenance-linux-arm64.attestation.json"}
+                  ]
+                },
                 cosign: "keyless-signature-and-platform-attestations-exactly-verified",
                 promotion_status: "staging-digest-verified"
               }
             ' > release-evidence.json
           jq -e \
             --arg schema "${RELEASE_EVIDENCE_TYPE}" \
+            --arg actor "${RELEASE_ACTOR}" \
+            --arg triggering_actor "${RELEASE_TRIGGERING_ACTOR}" \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
             --arg source_sha "${SOURCE_SHA}" \
             --arg digest "${{ steps.build.outputs.digest }}" \
             --arg amd64_digest "${{ steps.platforms.outputs.amd64_digest }}" \
-            --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" '
+            --arg arm64_digest "${{ steps.platforms.outputs.arm64_digest }}" \
+            --arg amd64_scan_digest "${{ steps.scan-amd64.outputs.report_digest }}" \
+            --arg arm64_scan_digest "${{ steps.scan-arm64.outputs.report_digest }}" \
+            --arg db_status_digest "${{ steps.grype-db.outputs.status_digest }}" '
+              (keys | sort) == [
+                "actor", "component", "cosign", "cve_gate", "default_command",
+                "digest", "entrypoint", "final_tag", "healthcheck", "image",
+                "oci_labels", "persistence", "platforms", "promotion_status",
+                "release_environment", "runtime_verification", "schema", "slsa",
+                "source_ref", "source_repository", "source_sha", "staging_tag",
+                "triggering_actor", "workflow_file", "workflow_identity", "workflow_name",
+                "workflow_ref", "workflow_run", "workflow_sha"
+              ] and
               .schema == $schema and
+              .actor == $actor and
+              .triggering_actor == $triggering_actor and
+              .release_environment == $release_environment and
               .source_repository == "Mindburn-Labs/helm-ai-kernel" and
               .source_ref == "refs/heads/main" and
               .source_sha == $source_sha and
@@ -452,12 +751,32 @@ jobs:
                 exercised_platform: "linux/amd64",
                 smoke: "health-denial-receipt-stop-restart-exact-readback-passed"
               } and
+              .cve_gate == {
+                tool: "grype",
+                scope: "os-and-library",
+                fail_on: "high",
+                status: "passed",
+                database: {status: "grype-db-status.json", status_digest: $db_status_digest},
+                platforms: [
+                  {platform: "linux/amd64", digest: $amd64_digest, report: "grype-linux-amd64.json", report_digest: $amd64_scan_digest},
+                  {platform: "linux/arm64", digest: $arm64_digest, report: "grype-linux-arm64.json", report_digest: $arm64_scan_digest}
+                ]
+              } and
+              .slsa == {
+                build_type: "https://github.com/Mindburn-Labs/helm-ai-kernel/blob/main/docs/supply-chain/kernel-image-build-v1.md",
+                index: {predicate: "slsa-provenance.json", attestation: "slsa-provenance.attestation.json"},
+                platforms: [
+                  {platform: "linux/amd64", digest: $amd64_digest, predicate: "slsa-provenance-linux-amd64.json", attestation: "slsa-provenance-linux-amd64.attestation.json"},
+                  {platform: "linux/arm64", digest: $arm64_digest, predicate: "slsa-provenance-linux-arm64.json", attestation: "slsa-provenance-linux-arm64.attestation.json"}
+                ]
+              } and
               .promotion_status == "staging-digest-verified" and
               .platforms == [
                 {platform: "linux/amd64", digest: $amd64_digest, sbom: "sbom-linux-amd64.spdx.json"},
                 {platform: "linux/arm64", digest: $arm64_digest, sbom: "sbom-linux-arm64.spdx.json"}
               ]
             ' release-evidence.json >/dev/null
+          cp release-evidence.json release-evidence.staging.json
 
       - name: Attest and exactly verify durable release evidence
         env:
@@ -489,7 +808,6 @@ jobs:
       - name: Reauthorize and promote the verified digest
         env:
           COSIGN_EXPERIMENTAL: "true"
-          GH_TOKEN: ${{ github.token }}
           OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}
           RELEASE_ACTORS_JSON: ${{ vars.HELM_AI_OS_IMAGE_RELEASE_ACTORS }}
           RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
@@ -498,31 +816,79 @@ jobs:
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          promotion_main_tip="$(git rev-parse refs/remotes/origin/main)"
-          if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then
-            echo "::error::origin/main moved before promotion (${promotion_main_tip})"
-            exit 1
-          fi
-          gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
-            > promotion-ci-runs.json
-          ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json
-
-          if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
-            echo "::error::release-production is no longer explicitly armed"
-            exit 1
-          fi
           if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
             echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for final owner readback"
             exit 1
           fi
+          if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]]; then
+            echo "::error::release-production is no longer explicitly armed"
+            exit 1
+          fi
+          if ! jq -e '. == ["mindburnlabs","peycheff-com"]' <<<"${RELEASE_ACTORS_JSON:-}" >/dev/null; then
+            echo "::error::HELM_AI_OS_IMAGE_RELEASE_ACTORS changed from its exact job-start value"
+            exit 1
+          fi
+          live_release_environment_payload="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}")"
+          live_deployment_branch_policies="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/deployment-branch-policies")"
           live_release_authority="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
             "/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/variables/HELM_RELEASE_AUTHORITY_ARMED" \
             --jq '.value')"
           live_release_actors="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
             "/repos/${GITHUB_REPOSITORY}/actions/variables/HELM_AI_OS_IMAGE_RELEASE_ACTORS" \
             --jq '.value')"
+          if ! jq -e --arg environment "${RELEASE_ENVIRONMENT}" '
+            .name == $environment and
+            .can_admins_bypass == false and
+            .deployment_branch_policy == {
+              protected_branches: false,
+              custom_branch_policies: true
+            } and
+            (.protection_rules | type == "array" and length == 2) and
+            (([.protection_rules[].type] | sort) == ["branch_policy", "required_reviewers"]) and
+            ([.protection_rules[] | select(.type == "required_reviewers")] | length == 1) and
+            (first(.protection_rules[] | select(.type == "required_reviewers")) |
+              (keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .prevent_self_review == true and
+              (.reviewers | type == "array" and length == 2) and
+              (all(.reviewers[];
+                (keys | sort) == ["reviewer", "type"] and
+                .type == "User" and
+                (.reviewer | type == "object") and
+                (.reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+                (.reviewer.node_id | type == "string" and length > 0) and
+                .reviewer.type == "User" and
+                .reviewer.site_admin == false and
+                (.reviewer.login == "mindburnlabs" or .reviewer.login == "peycheff-com")
+              )) and
+              (([.reviewers[].reviewer.login] | sort) == ["mindburnlabs", "peycheff-com"]) and
+              ([.reviewers[].reviewer.id] | unique | length == 2) and
+              ([.reviewers[].reviewer.node_id] | unique | length == 2)) and
+            (first(.protection_rules[] | select(.type == "branch_policy")) |
+              (keys | sort) == ["id", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .type == "branch_policy")
+          ' <<<"${live_release_environment_payload}" >/dev/null; then
+            echo "::error::release-production environment protection changed during the build"
+            exit 1
+          fi
+          if ! jq -e '
+            .total_count == 1 and
+            (.branch_policies | type == "array" and length == 1) and
+            (.branch_policies[0] |
+              (keys | sort) == ["id", "name", "node_id", "type"] and
+              (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+              (.node_id | type == "string" and length > 0) and
+              .name == "main" and
+              .type == "branch")
+          ' <<<"${live_deployment_branch_policies}" >/dev/null; then
+            echo "::error::release-production deployment branch policy changed during the build"
+            exit 1
+          fi
           if [[ "${live_release_authority}" != "release-production" ]]; then
             echo "::error::release-production was disarmed during the build"
             exit 1
@@ -531,13 +897,27 @@ jobs:
             echo "::error::release-production changed from the job-start authority snapshot"
             exit 1
           fi
+          if [[ -z "${INITIAL_LIVE_RELEASE_AUTHORITY:-}" || -z "${INITIAL_LIVE_RELEASE_ACTORS_SHA256:-}" ]]; then
+            echo "::error::initial live release authority binding is missing"
+            exit 1
+          fi
+          if [[ "${live_release_authority}" != "${INITIAL_LIVE_RELEASE_AUTHORITY}" ]]; then
+            echo "::error::release-production changed from the initial live authority readback"
+            exit 1
+          fi
           if ! jq -e '
-            type == "array" and
-            length > 0 and
-            all(.[]; type == "string" and test("^[A-Za-z0-9-]{1,39}$")) and
-            (unique | length) == length
+            . == ["mindburnlabs","peycheff-com"]
           ' <<<"${live_release_actors}" >/dev/null; then
-            echo "::error::the live HELM_AI_OS_IMAGE_RELEASE_ACTORS value is invalid"
+            echo "::error::the live HELM_AI_OS_IMAGE_RELEASE_ACTORS value is not exact"
+            exit 1
+          fi
+          if ! jq -e --argjson configured "${RELEASE_ACTORS_JSON}" '. == $configured' <<<"${live_release_actors}" >/dev/null; then
+            echo "::error::the release actor allowlist changed from the job-start snapshot"
+            exit 1
+          fi
+          live_release_actors_sha256="$(printf '%s' "${live_release_actors}" | sha256sum | cut -d' ' -f1)"
+          if [[ ! "${live_release_actors_sha256}" =~ ^[0-9a-f]{64}$ || "${live_release_actors_sha256}" != "${INITIAL_LIVE_RELEASE_ACTORS_SHA256}" ]]; then
+            echo "::error::the live release actor JSON changed from the initial owner readback"
             exit 1
           fi
           for candidate in "${REQUEST_ACTOR}" "${TRIGGERING_ACTOR}"; do
@@ -547,17 +927,23 @@ jobs:
               exit 1
             fi
           done
-          approval_history="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
-          if ! jq -e '
+          approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
+          if ! jq -e \
+            --arg release_environment "${RELEASE_ENVIRONMENT}" \
+            --arg request_actor "${REQUEST_ACTOR}" \
+            --arg triggering_actor "${TRIGGERING_ACTOR}" '
             [
               .[] |
               select(
                 .state == "approved" and
-                (.user.login == "mindburnlabs" or .user.login == "peycheff-com")
+                (.environments | type == "array" and any(.[]; .name == $release_environment)) and
+                (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
+                .user.login != $request_actor and
+                .user.login != $triggering_actor
               )
             ] | length > 0
           ' <<<"${approval_history}" >/dev/null; then
-            echo "::error::release-production no longer has this run's authorized human-owner approval"
+            echo "::error::release-production no longer has this exact-run distinct human-owner approval"
             exit 1
           fi
           for owner in mindburnlabs peycheff-com; do
@@ -568,6 +954,27 @@ jobs:
               exit 1
             fi
           done
+
+          if [[ "${SOURCE_SHA}" != "${WORKFLOW_SHA}" ]]; then
+            echo "::error::source_sha no longer matches the workflow commit before promotion"
+            exit 1
+          fi
+          promotion_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
+          if [[ ! "${promotion_main_ref}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::current main ref readback is not an exact commit SHA"
+            exit 1
+          fi
+          if [[ "${SOURCE_SHA}" != "${promotion_main_ref}" ]]; then
+            echo "::error::main moved before promotion (${promotion_main_ref})"
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
+            > promotion-ci-runs.json
+          ./scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}" < promotion-ci-runs.json
 
           expected_digest="${{ steps.build.outputs.digest }}"
           staging_ref="${IMAGE_NAME}@${expected_digest}"
@@ -591,6 +998,23 @@ jobs:
             .final_tag_digest = $final_digest
           ' release-evidence.json > release-evidence.final.json
           mv release-evidence.final.json release-evidence.json
+          jq -e \
+            --slurpfile staging release-evidence.staging.json \
+            --arg final_digest "${final_digest}" '
+            (keys | sort) == [
+              "actor", "component", "cosign", "cve_gate", "default_command",
+              "digest", "entrypoint", "final_tag", "final_tag_digest", "healthcheck",
+              "image", "oci_labels", "persistence", "platforms", "promotion_status",
+              "release_environment", "runtime_verification", "schema", "slsa",
+              "source_ref", "source_repository", "source_sha", "staging_tag",
+              "triggering_actor", "workflow_file", "workflow_identity", "workflow_name",
+              "workflow_ref", "workflow_run", "workflow_sha"
+            ] and
+            .final_tag_digest == $final_digest and
+            .promotion_status == "final-tag-digest-platforms-signature-and-evidence-verified" and
+            ((. | del(.promotion_status, .final_tag_digest)) ==
+              ($staging[0] | del(.promotion_status, .final_tag_digest)))
+          ' release-evidence.json >/dev/null
           cosign attest --yes \
             --type "${RELEASE_EVIDENCE_TYPE}" \
             --predicate release-evidence.json \
@@ -626,8 +1050,15 @@ jobs:
             sbom-linux-amd64.attestation.json
             sbom-linux-arm64.spdx.json
             sbom-linux-arm64.attestation.json
+            grype-db-status.json
+            grype-linux-amd64.json
+            grype-linux-arm64.json
             slsa-provenance.json
             slsa-provenance.attestation.json
+            slsa-provenance-linux-amd64.json
+            slsa-provenance-linux-amd64.attestation.json
+            slsa-provenance-linux-arm64.json
+            slsa-provenance-linux-arm64.attestation.json
             release-evidence.json
             release-evidence.attestation.json
             release-evidence.final-attestation.json

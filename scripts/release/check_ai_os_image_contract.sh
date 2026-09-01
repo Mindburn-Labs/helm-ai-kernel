@@ -154,10 +154,7 @@ require 'INITIAL_LIVE_RELEASE_ACTORS_SHA256=%s' "$workflow"
 require '} >> "${GITHUB_ENV}"' "$workflow"
 require 'if [[ "${live_release_authority}" != "${INITIAL_LIVE_RELEASE_AUTHORITY}" ]]; then' "$workflow"
 require 'if [[ ! "${live_release_actors_sha256}" =~ ^[0-9a-f]{64}$ || "${live_release_actors_sha256}" != "${INITIAL_LIVE_RELEASE_ACTORS_SHA256}" ]]; then' "$workflow"
-require 'GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}"' "$workflow"
 require 'GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate' "$workflow"
-require 'run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow"
-require '.run_started_at' "$workflow"
 require 'persist-credentials: false' "$workflow"
 require 'release_environment_payload="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow"
 require 'live_release_environment_payload="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow"
@@ -170,15 +167,20 @@ require '== ["branch_policy", "required_reviewers"]' "$workflow"
 require 'required_reviewers' "$workflow"
 require 'branch_policy' "$workflow"
 require '(keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"]' "$workflow"
-require '(.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User")' "$workflow"
+require '(.reviewers | type == "array" and length == 2)' "$workflow"
+require '(all(.reviewers[];' "$workflow"
+require '(keys | sort) == ["reviewer", "type"]' "$workflow"
 require '(first(.protection_rules[] | select(.type == "branch_policy")) |' "$workflow"
 require '(keys | sort) == ["id", "node_id", "type"]' "$workflow"
 require '.prevent_self_review == true' "$workflow"
-require '.reviewers[0].reviewer.id' "$workflow"
-require '.reviewers[0].reviewer.node_id | type == "string" and length > 0' "$workflow"
-require '.reviewers[0].reviewer.type == "User"' "$workflow"
-require '.reviewers[0].reviewer.site_admin == false' "$workflow"
-require '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow"
+require '.reviewer.id | type == "number"' "$workflow"
+require '.reviewer.node_id | type == "string" and length > 0' "$workflow"
+require '.reviewer.type == "User"' "$workflow"
+require '.reviewer.site_admin == false' "$workflow"
+require '.reviewer.login == "mindburnlabs"' "$workflow"
+require '(([.reviewers[].reviewer.login] | sort) == ["mindburnlabs", "peycheff-com"])' "$workflow"
+require '([.reviewers[].reviewer.id] | unique | length == 2)' "$workflow"
+require '([.reviewers[].reviewer.node_id] | unique | length == 2)' "$workflow"
 require 'type == "number"' "$workflow"
 require '.total_count == 1' "$workflow"
 require '(.branch_policies[0] |' "$workflow"
@@ -196,7 +198,6 @@ require 'TRIGGERING_ACTOR: ${{ github.triggering_actor }}' "$workflow"
 require 'if [[ "${GITHUB_RUN_ATTEMPT}" != "1" ]]; then' "$workflow"
 require 'jq -e --arg actor "${candidate}"' "$workflow"
 require '/actions/runs/${GITHUB_RUN_ID}/approvals' "$workflow"
-require '.created_at > $run_started_at' "$workflow"
 require '.environments | type == "array"' "$workflow"
 require 'any(.[]; .name == $release_environment)' "$workflow"
 require '.user.login != $request_actor' "$workflow"
@@ -204,8 +205,13 @@ require '.user.login != $triggering_actor' "$workflow"
 require '/orgs/Mindburn-Labs/memberships/${owner}' "$workflow"
 require 'for owner in mindburnlabs peycheff-com; do' "$workflow"
 require 'if [[ "${SOURCE_SHA}" != "${WORKFLOW_SHA}" ]]; then' "$workflow"
-require 'if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then' "$workflow"
-require 'if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then' "$workflow"
+require 'current_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow"
+require 'promotion_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow"
+require '"/repos/${GITHUB_REPOSITORY}/git/ref/heads/main"' "$workflow"
+require '--jq '\''.object.sha'\''' "$workflow"
+require 'if [[ "${SOURCE_SHA}" != "${current_main_ref}" ]]; then' "$workflow"
+require 'if [[ "${SOURCE_SHA}" != "${promotion_main_ref}" ]]; then' "$workflow"
+require 'test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"' "$workflow"
 require 'head_sha=${SOURCE_SHA}&branch=main&per_page=100' "$workflow"
 require './scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"' "$workflow"
 require 'source_date_epoch="$(git show -s --format=%ct "${SOURCE_SHA}")"' "$workflow"
@@ -336,11 +342,20 @@ if [ "$trigger_count" -ne 1 ]; then
   exit 1
 fi
 
-if [ "$(grep -Fc 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main' "$workflow")" -ne 2 ] ||
+current_main_ref_pattern='current_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api'
+promotion_main_ref_pattern='promotion_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api'
+head_equality_pattern='test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"'
+if [ "$(grep -Fc "$current_main_ref_pattern" "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc "$promotion_main_ref_pattern" "$workflow")" -ne 1 ] ||
+  [ "$(grep -Fc '"/repos/${GITHUB_REPOSITORY}/git/ref/heads/main"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc -- "--jq '.object.sha'" "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc "$head_equality_pattern" "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc './scripts/release/require_latest_main_ci_success.sh "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc 'GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc 'OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}' "$workflow")" -ne 4 ]; then
+  [ "$(grep -Fc 'OWNER_READBACK_TOKEN: ${{ secrets.HELM_GITHUB_OWNER_READ_TOKEN }}' "$workflow")" -ne 4 ] ||
+  grep -Fq 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main' "$workflow" ||
+  grep -Fq 'http.extraheader' "$workflow" ||
+  grep -Fq 'AUTHORIZATION: bearer' "$workflow"; then
   echo 'current main and newest completed CI must be checked initially and immediately before promotion' >&2
   exit 1
 fi
@@ -348,7 +363,6 @@ if [ "$(grep -Fc 'if [[ "${SOURCE_SHA}" != "${WORKFLOW_SHA}" ]]; then' "$workflo
   echo 'source_sha must remain bound to the workflow commit at both authority checkpoints' >&2
   exit 1
 fi
-run_start_read_pattern='run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api'
 authority_environment_count="$(awk '
   /^      - name: Validate publication authority$/ { in_step = 1; next }
   in_step && /^      - name:/ { in_step = 0 }
@@ -370,7 +384,6 @@ if [ "$(grep -Fc 'if [[ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]
   [ "$(grep -Fc 'for owner in mindburnlabs peycheff-com; do' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '. == ["mindburnlabs","peycheff-com"]' "$workflow")" -ne 4 ] ||
   [ "$(grep -Fc 'GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api' "$workflow")" -ne 16 ] ||
-  [ "$(grep -Fc "$run_start_read_pattern" "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}")' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '/repos/${GITHUB_REPOSITORY}/environments/${RELEASE_ENVIRONMENT}/deployment-branch-policies")' "$workflow")" -ne 2 ]; then
   echo 'owner authority, actor allowlist, and run approval must be read back initially and immediately before promotion' >&2
@@ -391,17 +404,19 @@ if [ "$(grep -Fc '.can_admins_bypass == false' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '== ["branch_policy", "required_reviewers"]' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.protection_rules | type == "array" and length == 2)' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(keys | sort) == ["id", "node_id", "prevent_self_review", "reviewers", "type"]' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '(.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User")' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.reviewers | type == "array" and length == 2)' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(all(.reviewers[];' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(([.reviewers[].reviewer.login] | sort) == ["mindburnlabs", "peycheff-com"])' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '([.reviewers[].reviewer.id] | unique | length == 2)' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '([.reviewers[].reviewer.node_id] | unique | length == 2)' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(first(.protection_rules[] | select(.type == "branch_policy")) |' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(keys | sort) == ["id", "node_id", "type"]' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.prevent_self_review == true' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '(.reviewers | type == "array" and length == 1)' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.reviewers[0].reviewer.id' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '(.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '(.reviewers[0].reviewer.node_id | type == "string" and length > 0)' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.reviewers[0].reviewer.type == "User"' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.reviewers[0].reviewer.site_admin == false' "$workflow")" -ne 2 ] ||
-  [ "$(grep -Fc '.reviewers[0].reviewer.login == "mindburnlabs"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.reviewer.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.reviewer.node_id | type == "string" and length > 0)' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.reviewer.type == "User"' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '.reviewer.site_admin == false' "$workflow")" -ne 2 ] ||
+  [ "$(grep -Fc '(.reviewer.login == "mindburnlabs" or .reviewer.login == "peycheff-com")' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.total_count == 1' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.branch_policies[0] |' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(keys | sort) == ["id", "name", "node_id", "type"]' "$workflow")" -ne 2 ] ||
@@ -409,12 +424,11 @@ if [ "$(grep -Fc '.can_admins_bypass == false' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.type == "branch"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '(.id | type == "number" and (try (floor == . and . > 0) catch false))' "$workflow")" -ne 6 ] ||
   [ "$(grep -Fc '(.node_id | type == "string" and length > 0)' "$workflow")" -ne 6 ] ||
-  [ "$(grep -Fc '.created_at > $run_started_at' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.environments | type == "array"' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc 'any(.[]; .name == $release_environment)' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.user.login != $request_actor' "$workflow")" -ne 2 ] ||
   [ "$(grep -Fc '.user.login != $triggering_actor' "$workflow")" -ne 2 ]; then
-  echo 'environment protection and fresh distinct approval predicates must be exact in both checkpoints' >&2
+  echo 'environment protection and exact-run distinct approval predicates must be exact in both checkpoints' >&2
   exit 1
 fi
 if [ "$(grep -Fc 'upload-artifact: false' "$workflow")" -ne 2 ]; then
@@ -472,6 +486,10 @@ if grep -Fq 'status=completed&per_page=100' "$workflow"; then
   echo 'CI readback must include queued and in-progress newest attempts' >&2
   exit 1
 fi
+if grep -Fq 'run_started_at' "$workflow" || grep -Fq '.created_at' "$workflow"; then
+  echo 'exact-run approvals must not infer freshness from unsupported timestamp fields' >&2
+  exit 1
+fi
 if [ "$(grep -Ec '^[[:space:]]+tags:' "$workflow")" -ne 1 ]; then
   echo 'the build may publish exactly one staging tag before promotion' >&2
   exit 1
@@ -515,6 +533,7 @@ last_line() {
 
 authority_line="$(first_line '- name: Validate publication authority')"
 checkout_line="$(first_line 'uses: actions/checkout@')"
+source_main_ref_line="$(first_line "$current_main_ref_pattern")"
 staging_line="$(first_line 'tags: ${{ env.IMAGE_NAME }}:${{ env.STAGING_TAG }}')"
 config_line="$(first_line "--format '{{json .Image.Config}}'")"
 runtime_line="$(first_line '- name: Exercise digest-pinned native runtime and restart persistence')"
@@ -543,6 +562,7 @@ promotion_approval_read_line="$(last_line 'approval_history="$(GH_TOKEN="${OWNER
 promotion_approval_check_line="$(last_line '<<<"${approval_history}" >/dev/null; then')"
 promotion_owner_loop_line="$(last_line 'for owner in mindburnlabs peycheff-com; do')"
 promotion_owner_read_line="$(last_line '/orgs/Mindburn-Labs/memberships/${owner}')"
+promotion_main_ref_line="$(last_line "$promotion_main_ref_pattern")"
 promotion_line="$(first_line 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh')"
 final_platform_line="$(first_line 'final-image-index.json')"
 finalize_evidence_line="$(first_line '.promotion_status = "final-tag-digest-platforms-signature-and-evidence-verified"')"
@@ -550,7 +570,8 @@ final_evidence_shape_line="$(last_line '.final_tag_digest == $final_digest')"
 final_attest_line="$(last_line '--predicate release-evidence.json')"
 
 if ! [ "$authority_line" -lt "$checkout_line" ] ||
-  ! [ "$checkout_line" -lt "$staging_line" ] ||
+  ! [ "$checkout_line" -lt "$source_main_ref_line" ] ||
+  ! [ "$source_main_ref_line" -lt "$staging_line" ] ||
   ! [ "$staging_line" -lt "$config_line" ] ||
   ! [ "$config_line" -lt "$runtime_line" ] ||
   ! [ "$runtime_line" -lt "$sbom_line" ] ||
@@ -578,6 +599,8 @@ if ! [ "$authority_line" -lt "$checkout_line" ] ||
   ! [ "$promotion_approval_read_line" -lt "$promotion_approval_check_line" ] ||
   ! [ "$promotion_approval_check_line" -lt "$promotion_owner_loop_line" ] ||
   ! [ "$promotion_owner_loop_line" -lt "$promotion_owner_read_line" ] ||
+  ! [ "$promotion_owner_read_line" -lt "$promotion_main_ref_line" ] ||
+  ! [ "$promotion_main_ref_line" -lt "$promotion_ci_line" ] ||
   ! [ "$promotion_owner_read_line" -lt "$promotion_ci_line" ] ||
   ! [ "$promotion_ci_line" -lt "$promotion_line" ] ||
   ! [ "$promotion_line" -lt "$final_platform_line" ] ||

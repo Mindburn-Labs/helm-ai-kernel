@@ -164,8 +164,20 @@ checker=./scripts/release/check_ai_os_image_contract.sh
 # environment protection rules and the deployment-branch policy response.
 provider_environment='{"name":"release-production","can_admins_bypass":false,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"protection_rules":[{"id":101,"node_id":"PR_required","type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"User","reviewer":{"login":"mindburnlabs","id":123456,"node_id":"U_owner","type":"User","site_admin":false,"avatar_url":"https://avatars.githubusercontent.com/u/123456?v=4","events_url":"https://api.github.com/users/mindburnlabs/events{/privacy}","followers_url":"https://api.github.com/users/mindburnlabs/followers","following_url":"https://api.github.com/users/mindburnlabs/following{/other_user}","gists_url":"https://api.github.com/users/mindburnlabs/gists{/gist_id}","gravatar_id":"","html_url":"https://github.com/mindburnlabs","organizations_url":"https://api.github.com/users/mindburnlabs/orgs","received_events_url":"https://api.github.com/users/mindburnlabs/received_events","repos_url":"https://api.github.com/users/mindburnlabs/repos","starred_url":"https://api.github.com/users/mindburnlabs/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/mindburnlabs/subscriptions","url":"https://api.github.com/users/mindburnlabs","user_view_type":"public"}}]},{"id":102,"node_id":"PR_branch","type":"branch_policy"}]}'
 provider_branch_policies='{"total_count":1,"branch_policies":[{"id":201,"node_id":"BP_main","name":"main","type":"branch"}]}'
-provider_approval='[{"environments":[{"name":"release-production","id":301}],"state":"approved","user":{"login":"peycheff-com"},"created_at":"2026-09-01T10:00:01Z"}]'
-run_started_at=2026-09-01T10:00:00Z
+provider_environment="$(printf '%s\n' "$provider_environment" | jq -c '
+  .protection_rules[0].reviewers += [
+    (.protection_rules[0].reviewers[0] |
+      .reviewer |= with_entries(
+        .value |= if type == "string"
+          then sub("mindburnlabs"; "peycheff-com") | sub("123456"; "654321")
+          else .
+          end
+      ) |
+      .reviewer.id = 654321 |
+      .reviewer.node_id = "U_owner_2")
+  ]
+')"
+provider_approval='[{"environments":[{"name":"release-production","id":301,"created_at":"2026-09-01T10:00:01Z"}],"state":"approved","comment":"approved exact run","user":{"login":"peycheff-com"}}]'
 
 assert_provider_authority() {
   environment_json=$1
@@ -185,14 +197,20 @@ assert_provider_authority() {
       (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
       (.node_id | type == "string" and length > 0) and
       .prevent_self_review == true and
-      (.reviewers | type == "array" and length == 1) and
-      (.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User") and
-      (.reviewers[0].reviewer | type == "object") and
-      (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
-      (.reviewers[0].reviewer.node_id | type == "string" and length > 0) and
-      .reviewers[0].reviewer.type == "User" and
-      .reviewers[0].reviewer.site_admin == false and
-      (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
+      (.reviewers | type == "array" and length == 2) and
+      (all(.reviewers[];
+        (keys | sort) == ["reviewer", "type"] and
+        .type == "User" and
+        (.reviewer | type == "object") and
+        (.reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+        (.reviewer.node_id | type == "string" and length > 0) and
+        .reviewer.type == "User" and
+        .reviewer.site_admin == false and
+        (.reviewer.login == "mindburnlabs" or .reviewer.login == "peycheff-com")
+      )) and
+      (([.reviewers[].reviewer.login] | sort) == ["mindburnlabs", "peycheff-com"]) and
+      ([.reviewers[].reviewer.id] | unique | length == 2) and
+      ([.reviewers[].reviewer.node_id] | unique | length == 2)) and
     (first(.protection_rules[] | select(.type == "branch_policy")) |
       (keys | sort) == ["id", "node_id", "type"] and
       (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
@@ -231,11 +249,9 @@ assert_provider_actors() {
 
 assert_provider_approval() {
   approval_json=$1
-  approval_run_started_at=$2
-  approval_request_actor=$3
-  approval_triggering_actor=$4
+  approval_request_actor=$2
+  approval_triggering_actor=$3
   printf '%s\n' "$approval_json" | jq -e \
-    --arg run_started_at "$approval_run_started_at" \
     --arg release_environment release-production \
     --arg request_actor "$approval_request_actor" \
     --arg triggering_actor "$approval_triggering_actor" '
@@ -243,7 +259,6 @@ assert_provider_approval() {
       .[] |
       select(
         .state == "approved" and
-        (.created_at > $run_started_at) and
         (.environments | type == "array" and any(.[]; .name == $release_environment)) and
         (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
         .user.login != $request_actor and
@@ -342,7 +357,7 @@ assert_release_evidence_shape() {
 
 if ! assert_provider_authority "$provider_environment" "$provider_branch_policies" ||
   ! assert_provider_actors '["mindburnlabs","peycheff-com"]' ||
-  ! assert_provider_approval "$provider_approval" "$run_started_at" mindburnlabs mindburnlabs ||
+  ! assert_provider_approval "$provider_approval" mindburnlabs mindburnlabs ||
   ! assert_provider_grype_db_status "$provider_grype_db_status"; then
   echo 'provider-shaped release authority fixtures were not accepted' >&2
   exit 1
@@ -502,9 +517,17 @@ reject_provider_authority 'reviewer entry missing reviewer' \
 reject_provider_authority 'reviewer entry missing type' \
   "$(printf '%s\n' "$provider_environment" | jq -c 'del(.protection_rules[0].reviewers[0].type)')"
 reject_provider_authority 'multiple reviewers' \
-  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers += [{"type":"User","reviewer":{"login":"peycheff-com","id":654321}}]')"
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers += [.protection_rules[0].reviewers[0]]')"
+reject_provider_authority 'missing second owner reviewer' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers = [.protection_rules[0].reviewers[0]]')"
 reject_provider_authority 'reviewer outside owner set' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.login = "other"')"
+reject_provider_authority 'duplicate reviewer login' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[1].reviewer.login = "mindburnlabs"')"
+reject_provider_authority 'duplicate reviewer id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[1].reviewer.id = 123456')"
+reject_provider_authority 'duplicate reviewer node id' \
+  "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[1].reviewer.node_id = "U_owner"')"
 reject_provider_authority 'reviewer User zero id' \
   "$(printf '%s\n' "$provider_environment" | jq -c '.protection_rules[0].reviewers[0].reviewer.id = 0')"
 reject_provider_authority 'reviewer User string id' \
@@ -594,11 +617,14 @@ for actor_fixture in '["mindburnlabs"]' '["peycheff-com","mindburnlabs"]' '["min
   fi
 done
 
-if assert_provider_approval "$(printf '%s\n' "$provider_approval" | jq -c '.[0].created_at = "2026-08-31T23:59:59Z"')" "$run_started_at" mindburnlabs mindburnlabs ||
-  assert_provider_approval "$provider_approval" "$run_started_at" peycheff-com mindburnlabs ||
-  assert_provider_approval "$provider_approval" "$run_started_at" mindburnlabs peycheff-com ||
-  assert_provider_approval "$(printf '%s\n' "$provider_approval" | jq -c '.[0].environments[0].name = "other"')" "$run_started_at" mindburnlabs mindburnlabs; then
-  echo 'stale, self, or wrong-environment approval fixture was accepted' >&2
+if ! assert_provider_approval "$(printf '%s\n' "$provider_approval" | jq -c '.[0].environments[0].created_at = "1970-01-01T00:00:00Z"')" mindburnlabs mindburnlabs; then
+  echo 'nested environment metadata timestamp was incorrectly required as approval time' >&2
+  exit 1
+fi
+if assert_provider_approval "$provider_approval" peycheff-com mindburnlabs ||
+  assert_provider_approval "$provider_approval" mindburnlabs peycheff-com ||
+  assert_provider_approval "$(printf '%s\n' "$provider_approval" | jq -c '.[0].environments[0].name = "other"')" mindburnlabs mindburnlabs; then
+  echo 'self or wrong-environment exact-run approval fixture was accepted' >&2
   exit 1
 fi
 
@@ -634,7 +660,7 @@ sed 's/\["reviewer", "type"\]/["reviewer"]/g' \
   "$workflow" > "$test_dir/missing-reviewer-entry-type.yml"
 mutate_and_reject "$test_dir/missing-reviewer-entry-type.yml"
 
-sed 's/\.reviewers\[0\]\.reviewer\.site_admin == false/.reviewers[0].reviewer.site_admin == true/g' \
+sed 's/\.reviewer\.site_admin == false/.reviewer.site_admin == true/g' \
   "$workflow" > "$test_dir/allowlisted-site-admin-reviewer.yml"
 mutate_and_reject "$test_dir/allowlisted-site-admin-reviewer.yml"
 
@@ -754,9 +780,13 @@ sed 's/\.type == "User"/.type == "Team"/g' \
   "$workflow" > "$test_dir/team-reviewer.yml"
 mutate_and_reject "$test_dir/team-reviewer.yml"
 
-sed 's/(\.reviewers | type == "array" and length == 1)/(\.reviewers | type == "array" and length == 2)/g' \
+sed 's/(\.reviewers | type == "array" and length == 2)/(\.reviewers | type == "array" and length == 3)/g' \
   "$workflow" > "$test_dir/multiple-reviewers.yml"
 mutate_and_reject "$test_dir/multiple-reviewers.yml"
+
+sed 's/(\.reviewers | type == "array" and length == 2)/(\.reviewers | type == "array" and length == 1)/g' \
+  "$workflow" > "$test_dir/missing-second-reviewer.yml"
+mutate_and_reject "$test_dir/missing-second-reviewer.yml"
 
 sed 's/\.can_admins_bypass == false/.can_admins_bypass == true/g' \
   "$workflow" > "$test_dir/admin-bypass.yml"
@@ -774,7 +804,7 @@ sed 's/\.prevent_self_review == true/.prevent_self_review == false/g' \
   "$workflow" > "$test_dir/self-review.yml"
 mutate_and_reject "$test_dir/self-review.yml"
 
-sed 's/\.created_at > \$run_started_at/.created_at >= \$run_started_at/g' \
+awk '{ print } /\.state == "approved" and/ { print "                (.created_at > $run_started_at) and" }' \
   "$workflow" > "$test_dir/stale-approval-timestamp.yml"
 mutate_and_reject "$test_dir/stale-approval-timestamp.yml"
 
@@ -785,10 +815,6 @@ mutate_and_reject "$test_dir/self-approval.yml"
 sed 's/any(\.\[\]; \.name == \$release_environment)/any(.[ ]; .name == \$release_environment)/g' \
   "$workflow" > "$test_dir/wrong-approval-environment.yml"
 mutate_and_reject "$test_dir/wrong-approval-environment.yml"
-
-sed 's/--jq '\''\.run_started_at'\''/--jq '\''\.missing'\''/g' \
-  "$workflow" > "$test_dir/missing-run-start-time.yml"
-mutate_and_reject "$test_dir/missing-run-start-time.yml"
 
 sed 's/GH_TOKEN="\${OWNER_READBACK_TOKEN}" gh api/gh api/g' \
   "$workflow" > "$test_dir/unbound-owner-readback.yml"
@@ -917,7 +943,7 @@ sed '/INITIAL_LIVE_RELEASE_ACTORS_SHA256}/d' \
   "$workflow" > "$test_dir/missing-final-live-actor-digest-comparison.yml"
 mutate_and_reject "$test_dir/missing-final-live-actor-digest-comparison.yml"
 
-sed 's/GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer \${OWNER_READBACK_TOKEN}"/GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer \${GH_TOKEN}"/g' \
+sed 's/GH_TOKEN="\${OWNER_READBACK_TOKEN}" gh api/GH_TOKEN="\${GH_TOKEN}" gh api/g' \
   "$workflow" > "$test_dir/unbound-current-main-readback.yml"
 mutate_and_reject "$test_dir/unbound-current-main-readback.yml"
 
@@ -925,9 +951,17 @@ sed 's/GH_TOKEN="\${OWNER_READBACK_TOKEN}" gh api --paginate/gh api --paginate/g
   "$workflow" > "$test_dir/unbound-ci-readback.yml"
 mutate_and_reject "$test_dir/unbound-ci-readback.yml"
 
+sed '/test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"/d' \
+  "$workflow" > "$test_dir/missing-current-main-head-equality.yml"
+mutate_and_reject "$test_dir/missing-current-main-head-equality.yml"
+
 sed 's#actions/runs/${GITHUB_RUN_ID}/approvals#actions/runs/${GITHUB_RUN_ID}#' \
   "$workflow" > "$test_dir/missing-run-approval-readback.yml"
 mutate_and_reject "$test_dir/missing-run-approval-readback.yml"
+
+sed 's#actions/runs/${GITHUB_RUN_ID}/approvals#actions/runs/${GITHUB_RUN_NUMBER}/approvals#g' \
+  "$workflow" > "$test_dir/wrong-run-approval-readback.yml"
+mutate_and_reject "$test_dir/wrong-run-approval-readback.yml"
 
 sed 's/if \[\[ "${GITHUB_RUN_ATTEMPT}" != "1" \]\]; then/if false; then/' \
   "$workflow" > "$test_dir/replayed-owner-approval.yml"
@@ -1026,9 +1060,17 @@ sed 's/if \[\[ "\${SOURCE_SHA}" != "\${WORKFLOW_SHA}" \]\]; then/if false; then/
   "$workflow" > "$test_dir/detached-dispatch-source.yml"
 mutate_and_reject "$test_dir/detached-dispatch-source.yml"
 
-sed 's/if \[\[ "\${SOURCE_SHA}" != "\${main_tip}" \]\]; then/if false; then/' \
+sed 's/if \[\[ "\${SOURCE_SHA}" != "\${current_main_ref}" \]\]; then/if false; then/' \
   "$workflow" > "$test_dir/stale-current-main.yml"
 mutate_and_reject "$test_dir/stale-current-main.yml"
+
+sed 's/if \[\[ "\${SOURCE_SHA}" != "\${promotion_main_ref}" \]\]; then/if false; then/' \
+  "$workflow" > "$test_dir/stale-promotion-main-ref.yml"
+mutate_and_reject "$test_dir/stale-promotion-main-ref.yml"
+
+sed 's#/repos/\${GITHUB_REPOSITORY}/git/ref/heads/main#/repos/\${GITHUB_REPOSITORY}/git/ref/heads/\${GITHUB_REF_NAME}#g' \
+  "$workflow" > "$test_dir/loose-current-main-ref.yml"
+mutate_and_reject "$test_dir/loose-current-main-ref.yml"
 
 awk '
   index($0, "./scripts/release/require_latest_main_ci_success.sh") {

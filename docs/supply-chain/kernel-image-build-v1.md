@@ -86,9 +86,10 @@ these external owner-managed settings pass:
    able to read the repository release-actor variable and Mindburn-Labs
    organization memberships. The workflow fails unless both `mindburnlabs` and
    `peycheff-com` read back as active admins.
-5. The current workflow run's environment review history contains an approval
-   from one of those two human owners. This binds approval to one run rather
-   than treating a repository variable or older approval as reusable authority.
+5. The exact current workflow run's environment review history contains an
+   approval from one of those two human owners. Reruns are rejected, so the
+   approval endpoint remains bound to this immutable run rather than treating
+   a repository variable or another run's approval as reusable authority.
 
 Those settings are an owner blocker outside this source-only change. Until
 they are confirmed in GitHub, the workflow is intentionally not dispatchable.
@@ -100,11 +101,12 @@ requires `can_admins_bypass=false`,
 `deployment_branch_policy={protected_branches:false,custom_branch_policies:true}`,
 and exactly two protection rules: one `required_reviewers` rule with
 `prevent_self_review=true`, exact outer provider keys
-`[id,node_id,prevent_self_review,reviewers,type]`, and exactly one outer
-reviewer entry with keys `[reviewer,type]`. Its nested provider `User` trust
-projection requires a positive integral identity, nonempty `node_id`,
-`type=User`, `site_admin=false`, and a login that resolves to a current
-Mindburn-Labs owner; unrelated documented User metadata is tolerated. The
+`[id,node_id,prevent_self_review,reviewers,type]`, and exactly two outer
+reviewer entries with keys `[reviewer,type]`. Their nested provider `User`
+trust projections require positive integral identities, nonempty `node_id`
+values, `type=User`, `site_admin=false`, and the exact login set
+`[mindburnlabs,peycheff-com]`; reviewer IDs and node IDs must also be
+distinct, while unrelated documented User metadata is tolerated. The
 second rule is one `branch_policy` rule with exactly the provider keys
 `[id,node_id,type]`, with a positive integral `id` and nonempty `node_id`. The
 deployment-branch-policies endpoint must report one record with exactly the
@@ -112,19 +114,20 @@ provider keys `[id,name,node_id,type]`, a positive integral `id`, nonempty
 `node_id`, and name/type exactly `main`/`branch`.
 
 The dispatch snapshot and the owner-token live readback both require the exact
-actor JSON `["mindburnlabs","peycheff-com"]`. Every policy, variable, and
-membership read uses `GH_TOKEN="${OWNER_READBACK_TOKEN}"` explicitly. The
-run approval must be `approved`, target `release-production`, have a
-`created_at` after the current run's authoritative `run_started_at` readback,
-and be from one of those owners while differing from both the request and
-triggering actors. The
+actor JSON `["mindburnlabs","peycheff-com"]`. Every policy, variable,
+membership, and current-main ref read uses `GH_TOKEN="${OWNER_READBACK_TOKEN}"`
+explicitly. The exact-run approvals response must contain an `approved` review
+targeting `release-production` from one of those owners while differing from
+both the request and triggering actors. Approval timestamps are not inferred
+from unsupported top-level fields; any nested environment metadata timestamp
+is informational only. The
 full environment, branch-policy, actor, owner, approval, source-tip, and newest
 CI readbacks are repeated immediately before the immutable `sha-<SOURCE_SHA>`
 promotion. The initial live authority and SHA-256 of its exact actor JSON are
 persisted through `GITHUB_ENV` and both are compared again at that final
-checkpoint. Current-main fetches and CI-run queries at both checkpoints are
-bound explicitly to the owner readback token; the job token is reserved for
-publication operations. Reruns are rejected.
+checkpoint. Current-main REST ref readbacks and CI-run queries at both
+checkpoints are bound explicitly to the owner readback token; the job token is
+reserved for publication operations. Reruns are rejected.
 
 This workflow exclusively owns the governed immutable `sha-<SOURCE_SHA>` tag
 namespace. The legacy `release.yml` QA publisher uses the disjoint

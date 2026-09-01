@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_RUN_ATTEMPT}" != "1" ]]; then
-            echo "::error::publication reruns are prohibited; dispatch a new run so release-production requires a fresh owner approval"
+            echo "::error::publication reruns are prohibited; dispatch a new run for an exact-run owner approval"
             exit 1
           fi
           if [[ -z "${OWNER_READBACK_TOKEN:-}" ]]; then
@@ -94,14 +94,20 @@ jobs:
               (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
               (.node_id | type == "string" and length > 0) and
               .prevent_self_review == true and
-              (.reviewers | type == "array" and length == 1) and
-              (.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User") and
-              (.reviewers[0].reviewer | type == "object") and
-              (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
-              (.reviewers[0].reviewer.node_id | type == "string" and length > 0) and
-              .reviewers[0].reviewer.type == "User" and
-              .reviewers[0].reviewer.site_admin == false and
-              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
+              (.reviewers | type == "array" and length == 2) and
+              (all(.reviewers[];
+                (keys | sort) == ["reviewer", "type"] and
+                .type == "User" and
+                (.reviewer | type == "object") and
+                (.reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+                (.reviewer.node_id | type == "string" and length > 0) and
+                .reviewer.type == "User" and
+                .reviewer.site_admin == false and
+                (.reviewer.login == "mindburnlabs" or .reviewer.login == "peycheff-com")
+              )) and
+              (([.reviewers[].reviewer.login] | sort) == ["mindburnlabs", "peycheff-com"]) and
+              ([.reviewers[].reviewer.id] | unique | length == 2) and
+              ([.reviewers[].reviewer.node_id] | unique | length == 2)) and
             (first(.protection_rules[] | select(.type == "branch_policy")) |
               (keys | sort) == ["id", "node_id", "type"] and
               (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
@@ -147,16 +153,8 @@ jobs:
               exit 1
             fi
           done
-          run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
-            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --jq '.run_started_at')"
-          if [[ -z "${run_started_at}" ]]; then
-            echo "::error::the current workflow run has no authoritative start timestamp"
-            exit 1
-          fi
           approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
           if ! jq -e \
-            --arg run_started_at "${run_started_at}" \
             --arg release_environment "${RELEASE_ENVIRONMENT}" \
             --arg request_actor "${REQUEST_ACTOR}" \
             --arg triggering_actor "${TRIGGERING_ACTOR}" '
@@ -164,7 +162,6 @@ jobs:
               .[] |
               select(
                 .state == "approved" and
-                (.created_at > $run_started_at) and
                 (.environments | type == "array" and any(.[]; .name == $release_environment)) and
                 (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
                 .user.login != $request_actor and
@@ -172,7 +169,7 @@ jobs:
               )
             ] | length > 0
           ' <<<"${approval_history}" >/dev/null; then
-            echo "::error::release-production requires a fresh approval from a distinct authorized human owner"
+            echo "::error::release-production requires an approved exact-run review from a distinct authorized human owner"
             exit 1
           fi
           for owner in mindburnlabs peycheff-com; do
@@ -221,13 +218,15 @@ jobs:
             echo "::error::HELM_GITHUB_OWNER_READ_TOKEN is required for the current-main readback"
             exit 1
           fi
-          GIT_CONFIG_COUNT=1 \
-          GIT_CONFIG_KEY_0=http.extraheader \
-          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}" \
-            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          main_tip="$(git rev-parse refs/remotes/origin/main)"
-          if [[ "${SOURCE_SHA}" != "${main_tip}" ]]; then
-            echo "::error::source_sha must equal the current origin/main tip (${main_tip})"
+          current_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
+          if [[ ! "${current_main_ref}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::current main ref readback is not an exact commit SHA"
+            exit 1
+          fi
+          if [[ "${SOURCE_SHA}" != "${current_main_ref}" ]]; then
+            echo "::error::source_sha must equal the current main ref (${current_main_ref})"
             exit 1
           fi
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
@@ -854,14 +853,20 @@ jobs:
               (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
               (.node_id | type == "string" and length > 0) and
               .prevent_self_review == true and
-              (.reviewers | type == "array" and length == 1) and
-              (.reviewers[0] | (keys | sort) == ["reviewer", "type"] and .type == "User") and
-              (.reviewers[0].reviewer | type == "object") and
-              (.reviewers[0].reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
-              (.reviewers[0].reviewer.node_id | type == "string" and length > 0) and
-              .reviewers[0].reviewer.type == "User" and
-              .reviewers[0].reviewer.site_admin == false and
-              (.reviewers[0].reviewer.login == "mindburnlabs" or .reviewers[0].reviewer.login == "peycheff-com")) and
+              (.reviewers | type == "array" and length == 2) and
+              (all(.reviewers[];
+                (keys | sort) == ["reviewer", "type"] and
+                .type == "User" and
+                (.reviewer | type == "object") and
+                (.reviewer.id | type == "number" and (try (floor == . and . > 0) catch false)) and
+                (.reviewer.node_id | type == "string" and length > 0) and
+                .reviewer.type == "User" and
+                .reviewer.site_admin == false and
+                (.reviewer.login == "mindburnlabs" or .reviewer.login == "peycheff-com")
+              )) and
+              (([.reviewers[].reviewer.login] | sort) == ["mindburnlabs", "peycheff-com"]) and
+              ([.reviewers[].reviewer.id] | unique | length == 2) and
+              ([.reviewers[].reviewer.node_id] | unique | length == 2)) and
             (first(.protection_rules[] | select(.type == "branch_policy")) |
               (keys | sort) == ["id", "node_id", "type"] and
               (.id | type == "number" and (try (floor == . and . > 0) catch false)) and
@@ -922,16 +927,8 @@ jobs:
               exit 1
             fi
           done
-          run_started_at="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
-            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --jq '.run_started_at')"
-          if [[ -z "${run_started_at}" ]]; then
-            echo "::error::the current workflow run has no authoritative start timestamp"
-            exit 1
-          fi
           approval_history="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/approvals")"
           if ! jq -e \
-            --arg run_started_at "${run_started_at}" \
             --arg release_environment "${RELEASE_ENVIRONMENT}" \
             --arg request_actor "${REQUEST_ACTOR}" \
             --arg triggering_actor "${TRIGGERING_ACTOR}" '
@@ -939,7 +936,6 @@ jobs:
               .[] |
               select(
                 .state == "approved" and
-                (.created_at > $run_started_at) and
                 (.environments | type == "array" and any(.[]; .name == $release_environment)) and
                 (.user.login == "mindburnlabs" or .user.login == "peycheff-com") and
                 .user.login != $request_actor and
@@ -947,7 +943,7 @@ jobs:
               )
             ] | length > 0
           ' <<<"${approval_history}" >/dev/null; then
-            echo "::error::release-production no longer has this run's fresh distinct human-owner approval"
+            echo "::error::release-production no longer has this exact-run distinct human-owner approval"
             exit 1
           fi
           for owner in mindburnlabs peycheff-com; do
@@ -963,15 +959,18 @@ jobs:
             echo "::error::source_sha no longer matches the workflow commit before promotion"
             exit 1
           fi
-          GIT_CONFIG_COUNT=1 \
-          GIT_CONFIG_KEY_0=http.extraheader \
-          GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${OWNER_READBACK_TOKEN}" \
-            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          promotion_main_tip="$(git rev-parse refs/remotes/origin/main)"
-          if [[ "${SOURCE_SHA}" != "${promotion_main_tip}" ]]; then
-            echo "::error::origin/main moved before promotion (${promotion_main_tip})"
+          promotion_main_ref="$(GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api \
+            "/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+            --jq '.object.sha')"
+          if [[ ! "${promotion_main_ref}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::current main ref readback is not an exact commit SHA"
             exit 1
           fi
+          if [[ "${SOURCE_SHA}" != "${promotion_main_ref}" ]]; then
+            echo "::error::main moved before promotion (${promotion_main_ref})"
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
           GH_TOKEN="${OWNER_READBACK_TOKEN}" gh api --paginate \
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&branch=main&per_page=100" \
             > promotion-ci-runs.json

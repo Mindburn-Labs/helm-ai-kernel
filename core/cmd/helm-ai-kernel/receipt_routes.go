@@ -23,8 +23,22 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
+type organizationRuntimeEvaluationContextKey struct{}
+
+func bindOrganizationRuntimeEvaluation(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), organizationRuntimeEvaluationContextKey{}, true)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+func isOrganizationRuntimeEvaluation(ctx context.Context) bool {
+	value, _ := ctx.Value(organizationRuntimeEvaluationContextKey{}).(bool)
+	return value
+}
+
 func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
-	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	evaluateHandler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -68,9 +82,26 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				return
 			}
 		}
-		if err := api.NormalizeEvaluateRequest(&req); err != nil {
-			api.WriteBadRequest(w, "Evaluate route "+err.Error())
+		organizationRuntime := isOrganizationRuntimeEvaluation(r.Context())
+		executionProfile := strings.TrimSpace(r.Header.Get(companyActivationExecutionProfileHeader))
+		if (organizationRuntime && executionProfile != companyActivationOrganizationRuntimeProfile) ||
+			(!organizationRuntime && executionProfile != "") {
+			api.WriteBadRequest(w, "Evaluate route execution profile does not match the selected route")
 			return
+		}
+		var normalizeErr error
+		if organizationRuntime {
+			normalizeErr = api.NormalizeOrganizationRuntimeEvaluateRequest(&req)
+		} else {
+			normalizeErr = api.NormalizeEvaluateRequest(&req)
+		}
+		if normalizeErr != nil {
+			api.WriteBadRequest(w, "Evaluate route "+normalizeErr.Error())
+			return
+		}
+		resource := req.EffectLevel
+		if organizationRuntime {
+			resource = req.Resource
 		}
 		if req.Context == nil {
 			req.Context = make(map[string]interface{})
@@ -116,20 +147,30 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid evaluate args")
 			return
 		}
-		decision, err := svc.Guardian.EvaluateDecision(r.Context(), guardian.DecisionRequest{
-			Principal: principalID,
-			Action:    req.Tool,
-			Resource:  req.EffectLevel,
-			Context:   req.Context,
-		})
-		if err != nil {
-			api.WriteInternalR(w, r, err)
-			return
+		var decision *contracts.DecisionRecord
+		evaluationTime := time.Now().UTC()
+		if reasonCode, reason := organizationRuntimeActivationDenial(svc, &req, organizationRuntime, tenantID, workspaceID, evaluationTime); reasonCode != "" {
+			decision, err = signedActivationDenyDecision(svc, &req, principalID, reasonCode, reason, evaluationTime)
+			if err != nil {
+				api.WriteInternalR(w, r, err)
+				return
+			}
+		} else {
+			decision, err = svc.Guardian.EvaluateDecision(r.Context(), guardian.DecisionRequest{
+				Principal: principalID,
+				Action:    req.Tool,
+				Resource:  resource,
+				Context:   req.Context,
+			})
+			if err != nil {
+				api.WriteInternalR(w, r, err)
+				return
+			}
 		}
 		if err := persistDecisionReceiptForTenant(r.Context(), svc, decision, principalID, tenantID, args, map[string]any{
 			"source":    "api.evaluate",
 			"action":    req.Tool,
-			"resource":  req.EffectLevel,
+			"resource":  resource,
 			"reason":    decision.Reason,
 			"args_hash": argsHash,
 		}); err != nil {
@@ -162,13 +203,15 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			LamportClock:       receipt.LamportClock,
 			ID:                 decision.ID,
 			Action:             req.Tool,
-			Resource:           req.EffectLevel,
+			Resource:           resource,
 			Reason:             decision.Reason,
 			PolicyVersion:      decision.PolicyVersion,
 			PolicyDecisionHash: decision.PolicyDecisionHash,
 			Signature:          decision.Signature,
 		})
-	}))
+	}
+	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, evaluateHandler))
+	mux.HandleFunc(companyActivationOrganizationRuntimePath, protectRuntimeHandler(RouteAuthOrganizationRuntime, bindOrganizationRuntimeEvaluation(evaluateHandler)))
 
 	mux.HandleFunc("/api/v1/receipts/tail", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

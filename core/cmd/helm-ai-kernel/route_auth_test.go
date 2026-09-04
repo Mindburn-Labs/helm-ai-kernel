@@ -531,3 +531,91 @@ func TestServiceInternalRuntimeAuthRequiresConfiguredToken(t *testing.T) {
 		t.Fatalf("service-internal route with configured token status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestOrganizationRuntimeAuthBindsExplicitIdentity(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv("HELM_SERVICE_API_KEY", "service-secret")
+	t.Setenv(organizationRuntimeAPIKeyEnv, testOrganizationRuntimeAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-1")
+	t.Setenv(runtimePrincipalIDEnv, "runtime-1")
+	handler := protectRuntimeHandler(RouteAuthOrganizationRuntime, func(w http.ResponseWriter, r *http.Request) {
+		principal, err := helmauth.GetPrincipal(r.Context())
+		if err != nil {
+			t.Fatalf("principal missing from organization runtime context: %v", err)
+		}
+		if principal.GetID() != "runtime-1" || principal.GetTenantID() != "tenant-1" {
+			t.Fatalf("principal = id:%q tenant:%q", principal.GetID(), principal.GetTenantID())
+		}
+		if roles := principal.GetRoles(); len(roles) != 1 || roles[0] != organizationRuntimeRole {
+			t.Fatalf("roles = %#v", roles)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, companyActivationOrganizationRuntimePath, nil)
+	req.Header.Set("Authorization", "Bearer "+testOrganizationRuntimeAPIKey)
+	req.Header.Set(tenantHeader, "tenant-1")
+	req.Header.Set(principalHeader, "runtime-1")
+	req.Header.Set(workspaceHeader, "workspace-1")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("organization runtime auth status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOrganizationRuntimeAuthRejectsUnregisteredPrincipal(t *testing.T) {
+	t.Setenv(organizationRuntimeAPIKeyEnv, testOrganizationRuntimeAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-1")
+	t.Setenv(runtimePrincipalIDEnv, "runtime-1")
+	SetPrincipalBindingStore(&recordingPrincipalBindingStore{})
+	t.Cleanup(func() { SetPrincipalBindingStore(nil) })
+	handler := protectRuntimeHandler(RouteAuthOrganizationRuntime, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("organization-runtime handler should not run for an unregistered principal")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, companyActivationOrganizationRuntimePath, nil)
+	req.Header.Set("Authorization", "Bearer "+testOrganizationRuntimeAPIKey)
+	req.Header.Set(tenantHeader, "tenant-1")
+	req.Header.Set(principalHeader, "attacker")
+	req.Header.Set(workspaceHeader, "workspace-1")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unregistered organization-runtime principal status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOrganizationRuntimeAuthRequiresDistinctConfiguredCredential(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		credential string
+		admin      string
+		service    string
+	}{
+		{name: "missing"},
+		{name: "surrounding whitespace", credential: " padded "},
+		{name: "control character", credential: "bad\nkey"},
+		{name: "same as admin", credential: "shared", admin: "shared"},
+		{name: "same as service", credential: "shared", service: "shared"},
+		{name: "too long", credential: strings.Repeat("x", 4097)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(organizationRuntimeAPIKeyEnv, test.credential)
+			t.Setenv("HELM_ADMIN_API_KEY", test.admin)
+			t.Setenv("HELM_SERVICE_API_KEY", test.service)
+			configured, err := configuredOrganizationRuntimeAPIKey()
+			if test.name == "missing" {
+				if err != nil || configured != "" {
+					t.Fatalf("missing credential = %q, err=%v", configured, err)
+				}
+				return
+			}
+			if err == nil || configured != "" {
+				t.Fatalf("invalid credential = %q, err=%v", configured, err)
+			}
+		})
+	}
+}

@@ -292,6 +292,34 @@
       "finality": "ungranted"
     },
     {
+      "code": "ACTIVATION_TRUST_UNAVAILABLE",
+      "applies_to": ["DENY"],
+      "domain": "company_activation",
+      "description": "No pinned control-plane activation verification key is configured",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ACTIVATION_RECORD_INVALID",
+      "applies_to": ["DENY"],
+      "domain": "company_activation",
+      "description": "The company activation record failed schema, integrity, signature, or lifetime validation",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ACTIVATION_BINDING_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "company_activation",
+      "description": "The company activation record does not match the authenticated tenant, company domain, workspace, or configured environment",
+      "since": "1.7.0"
+    },
+    {
+      "code": "ACTIVATION_CEILING_EXCEEDED",
+      "applies_to": ["DENY"],
+      "domain": "company_activation",
+      "description": "The signed or requested effect, autonomy, or exposure limit exceeds the current company activation ceiling",
+      "since": "1.7.0"
+    },
+    {
       "code": "DELEGATION_INVALID",
       "applies_to": ["DENY"],
       "domain": "delegation",

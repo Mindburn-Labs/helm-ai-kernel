@@ -207,6 +207,28 @@ func NormalizeEvaluateRequest(req *EvaluateRequest) error {
 	return nil
 }
 
+// NormalizeOrganizationRuntimeEvaluateRequest keeps the concrete resource
+// separate from its effect class while retaining the shared action and session
+// normalization used by the public evaluate envelope.
+func NormalizeOrganizationRuntimeEvaluateRequest(req *EvaluateRequest) error {
+	resource := strings.TrimSpace(req.Resource)
+	effectLevel := strings.TrimSpace(req.EffectLevel)
+	if resource == "" || effectLevel == "" {
+		return fmt.Errorf("resource and effect_level are required for organization-runtime evaluation")
+	}
+
+	// NormalizeEvaluateRequest treats resource as the legacy effect-level alias.
+	// Temporarily supply the explicit effect class, then restore the independently
+	// bound concrete resource.
+	req.Resource = effectLevel
+	if err := NormalizeEvaluateRequest(req); err != nil {
+		req.Resource = resource
+		return err
+	}
+	req.Resource = resource
+	return nil
+}
+
 // EvaluateResponse is the JSON response sent back to SDKs.
 type EvaluateResponse struct {
 	Allow        bool   `json:"allow"`

@@ -2,11 +2,13 @@ package main
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
@@ -14,9 +16,9 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
-// principalBindingStore is the package-level registry consulted by
-// requireRuntimeTenant to accept (tenant, principal) pairs beyond the single
-// env-configured pair. It is nil unless SetPrincipalBindingStore is called
+// principalBindingStore is the package-level registry consulted by tenant and
+// organization-runtime gates to accept (tenant, principal) pairs beyond the
+// single env-configured pair. It is nil unless SetPrincipalBindingStore is called
 // during server startup (see main.go registration), matching
 // requireRuntimeTenant's existing pattern of reading global os.Getenv state.
 // nil => env-pair-only behavior (current behavior, no panic).
@@ -31,17 +33,19 @@ func SetPrincipalBindingStore(s store.PrincipalBindingStore) {
 }
 
 const (
-	tenantHeader           = "X-Helm-Tenant-ID"
-	principalHeader        = "X-Helm-Principal-ID"
-	workspaceHeader        = "X-Helm-Workspace-ID"
-	runtimeAPIKeyHeader    = "X-HELM-API-Key"
-	runtimeTenantIDEnv     = "HELM_RUNTIME_TENANT_ID"
-	runtimePrincipalIDEnv  = "HELM_RUNTIME_PRINCIPAL_ID"
-	runtimeWorkspaceIDEnv  = "HELM_RUNTIME_WORKSPACE_ID"
-	quickstartExpiresAtEnv = "HELM_QUICKSTART_SESSION_EXPIRES_AT"
-	defaultRuntimeTenantID = "default"
-	serviceAPIKeyEnv       = "HELM_SERVICE_API_KEY"
-	servicePrincipalID     = "service-internal"
+	tenantHeader                 = "X-Helm-Tenant-ID"
+	principalHeader              = "X-Helm-Principal-ID"
+	workspaceHeader              = "X-Helm-Workspace-ID"
+	runtimeAPIKeyHeader          = "X-HELM-API-Key"
+	runtimeTenantIDEnv           = "HELM_RUNTIME_TENANT_ID"
+	runtimePrincipalIDEnv        = "HELM_RUNTIME_PRINCIPAL_ID"
+	runtimeWorkspaceIDEnv        = "HELM_RUNTIME_WORKSPACE_ID"
+	quickstartExpiresAtEnv       = "HELM_QUICKSTART_SESSION_EXPIRES_AT"
+	defaultRuntimeTenantID       = "default"
+	serviceAPIKeyEnv             = "HELM_SERVICE_API_KEY"
+	servicePrincipalID           = "service-internal"
+	organizationRuntimeAPIKeyEnv = "HELM_ORGANIZATION_RUNTIME_API_KEY"
+	organizationRuntimeRole      = "organization-runtime"
 )
 
 func protectRuntimeHandler(auth RouteAuth, handler http.HandlerFunc) http.HandlerFunc {
@@ -52,12 +56,82 @@ func protectRuntimeHandler(auth RouteAuth, handler http.HandlerFunc) http.Handle
 		return requireRuntimeAdmin(handler)
 	case RouteAuthTenant:
 		return requireRuntimeTenant(handler)
+	case RouteAuthOrganizationRuntime:
+		return requireRuntimeOrganizationRuntime(handler)
 	case RouteAuthConfiguredTenant:
 		return requireRuntimeConfiguredTenant(handler)
 	case RouteAuthService:
 		return requireRuntimeService(handler)
 	default:
 		return requireRuntimeAdmin(handler)
+	}
+}
+
+func configuredOrganizationRuntimeAPIKey() (string, error) {
+	raw := os.Getenv(organizationRuntimeAPIKeyEnv)
+	if raw == "" {
+		return "", nil
+	}
+	key := strings.TrimSpace(raw)
+	if key == "" || raw != key || len(key) > 4096 || strings.IndexFunc(key, unicode.IsControl) >= 0 {
+		return "", fmt.Errorf("%s must be a non-empty credential without surrounding whitespace or control characters", organizationRuntimeAPIKeyEnv)
+	}
+	if key == strings.TrimSpace(os.Getenv(helmauth.AdminAPIKeyEnv)) || key == strings.TrimSpace(os.Getenv(serviceAPIKeyEnv)) {
+		return "", fmt.Errorf("%s must be distinct from other runtime credentials", organizationRuntimeAPIKeyEnv)
+	}
+	return key, nil
+}
+
+func requireRuntimeOrganizationRuntime(handler http.HandlerFunc) http.HandlerFunc {
+	organizationRuntimeKey, configErr := configuredOrganizationRuntimeAPIKey()
+	return func(w http.ResponseWriter, r *http.Request) {
+		if configErr != nil || organizationRuntimeKey == "" {
+			httperr.WriteUnauthorized(w, "Organization runtime credential is unavailable")
+			return
+		}
+		token, detail, ok := helmauth.BearerToken(r)
+		if !ok {
+			httperr.WriteUnauthorized(w, detail)
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(token), []byte(organizationRuntimeKey)) != 1 {
+			httperr.WriteUnauthorized(w, "Invalid organization runtime credential")
+			return
+		}
+
+		tenantID := strings.TrimSpace(r.Header.Get(tenantHeader))
+		principalID := strings.TrimSpace(r.Header.Get(principalHeader))
+		workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+		if tenantID == "" || principalID == "" || workspaceID == "" {
+			api.WriteForbidden(w, "Organization runtime route requires explicit tenant, principal, and workspace bindings")
+			return
+		}
+		configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
+		configuredPrincipalID := strings.TrimSpace(os.Getenv(runtimePrincipalIDEnv))
+		envMatch := configuredTenantID != "" && configuredPrincipalID != "" && tenantID == configuredTenantID && principalID == configuredPrincipalID
+		registered := false
+		if !envMatch && principalBindingStore != nil {
+			var err error
+			registered, err = principalBindingStore.Exists(r.Context(), tenantID, principalID)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "principal binding lookup failed, denying organization runtime request", "error", err)
+				api.WriteForbidden(w, "Organization runtime principal binding could not be verified")
+				return
+			}
+		}
+		if !envMatch && !registered {
+			api.WriteForbidden(w, "Organization runtime principal is not registered for the tenant")
+			return
+		}
+
+		principal := &helmauth.BasePrincipal{
+			ID:       principalID,
+			TenantID: tenantID,
+			Roles:    []string{organizationRuntimeRole},
+		}
+		ctx := helmauth.WithPrincipal(r.Context(), principal)
+		ctx = helmauth.WithAuthenticatedCredential(ctx, token)
+		handler(w, r.WithContext(ctx))
 	}
 }
 

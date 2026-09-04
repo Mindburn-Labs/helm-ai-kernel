@@ -7,14 +7,15 @@ type RouteRateLimit string
 type RouteContractStatus string
 
 const (
-	RouteAuthPublic           RouteAuth = "public"
-	RouteAuthAuthenticated    RouteAuth = "authenticated"
-	RouteAuthAdmin            RouteAuth = "admin"
-	RouteAuthService          RouteAuth = "service_internal"
-	RouteAuthWorkload         RouteAuth = "workload_jwt"
-	RouteAuthTenant           RouteAuth = "tenant_scoped"
-	RouteAuthConfiguredTenant RouteAuth = "configured_tenant"
-	RouteAuthLoopback         RouteAuth = "loopback_peer_proof"
+	RouteAuthPublic              RouteAuth = "public"
+	RouteAuthAuthenticated       RouteAuth = "authenticated"
+	RouteAuthAdmin               RouteAuth = "admin"
+	RouteAuthService             RouteAuth = "service_internal"
+	RouteAuthWorkload            RouteAuth = "workload_jwt"
+	RouteAuthTenant              RouteAuth = "tenant_scoped"
+	RouteAuthOrganizationRuntime RouteAuth = "organization_runtime_service"
+	RouteAuthConfiguredTenant    RouteAuth = "configured_tenant"
+	RouteAuthLoopback            RouteAuth = "loopback_peer_proof"
 
 	RouteRatePublic   RouteRateLimit = "public"
 	RouteRateKernel   RouteRateLimit = "kernel"
@@ -77,6 +78,7 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodPost, Path: "/api/demo/verify", MuxPattern: "/api/demo/verify", Auth: RouteAuthPublic, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "verifyPublicDemoReceipt", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/demo/tamper", MuxPattern: "/api/demo/tamper", Auth: RouteAuthPublic, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "tamperPublicDemoReceipt", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/v1/evaluate", MuxPattern: "/api/v1/evaluate", Auth: RouteAuthTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "evaluateDecision", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: companyActivationOrganizationRuntimePath, MuxPattern: companyActivationOrganizationRuntimePath, Auth: RouteAuthOrganizationRuntime, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "evaluateOrganizationRuntimeDecision", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/receipts", MuxPattern: "/api/v1/receipts", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "listReceipts", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/receipts/tail", MuxPattern: "/api/v1/receipts/tail", Auth: RouteAuthTenant, RateLimit: RouteRateStream, ContractStatus: RouteContractPublic, OperationID: "tailReceipts", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/receipts/{receipt_id}", MuxPattern: "/api/v1/receipts/", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "getConsoleReceipt", Owner: "core/cmd/helm-ai-kernel"},

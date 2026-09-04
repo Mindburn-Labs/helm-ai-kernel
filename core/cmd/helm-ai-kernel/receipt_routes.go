@@ -137,6 +137,11 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 		if workspaceID != "" {
 			req.Context["workspace_id"] = workspaceID
 		}
+		originator, err := bindOrganizationRuntimeOriginator(&req, organizationRuntime, principalID)
+		if err != nil {
+			api.WriteBadRequest(w, "Evaluate route "+err.Error())
+			return
+		}
 		args, err := json.Marshal(req.Args)
 		if err != nil {
 			api.WriteBadRequest(w, "Invalid evaluate args")
@@ -148,8 +153,10 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			return
 		}
 		var decision *contracts.DecisionRecord
+		var activationEvidence *organizationRuntimeActivationEvidence
 		evaluationTime := time.Now().UTC()
-		if reasonCode, reason := organizationRuntimeActivationDenial(svc, &req, organizationRuntime, tenantID, workspaceID, evaluationTime); reasonCode != "" {
+		if reasonCode, reason, evidence := organizationRuntimeActivationDenial(svc, &req, organizationRuntime, tenantID, workspaceID, evaluationTime); reasonCode != "" {
+			activationEvidence = evidence
 			decision, err = signedActivationDenyDecision(svc, &req, principalID, reasonCode, reason, evaluationTime)
 			if err != nil {
 				api.WriteInternalR(w, r, err)
@@ -166,14 +173,31 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 				api.WriteInternalR(w, r, err)
 				return
 			}
+			activationEvidence = evidence
 		}
-		if err := persistDecisionReceiptForTenant(r.Context(), svc, decision, principalID, tenantID, args, map[string]any{
+		metadata := map[string]any{
 			"source":    "api.evaluate",
 			"action":    req.Tool,
 			"resource":  resource,
 			"reason":    decision.Reason,
 			"args_hash": argsHash,
-		}); err != nil {
+		}
+		if organizationRuntime {
+			if originator == nil || activationEvidence == nil {
+				api.WriteInternalR(w, r, fmt.Errorf("organization runtime receipt provenance is unavailable"))
+				return
+			}
+			err = persistOrganizationRuntimeDecisionReceiptForTenant(r.Context(), svc, decision, principalID, tenantID, args, metadata, organizationRuntimeReceiptProvenance{
+				Originator:  *originator,
+				Activation:  *activationEvidence,
+				TenantID:    tenantID,
+				WorkspaceID: workspaceID,
+				Reason:      decision.Reason,
+			})
+		} else {
+			err = persistDecisionReceiptForTenant(r.Context(), svc, decision, principalID, tenantID, args, metadata)
+		}
+		if err != nil {
 			api.WriteInternalR(w, r, err)
 			return
 		}
@@ -187,27 +211,34 @@ func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteInternalR(w, r, fmt.Errorf("persisted receipt %s is unavailable", receiptID))
 			return
 		}
+		if organizationRuntime {
+			if err := contracts.VerifyOrganizationRuntimeReceiptAttestation(receipt, svc.ReceiptSigner.PublicKeyBytes()); err != nil {
+				api.WriteInternalR(w, r, fmt.Errorf("verify organization runtime receipt %s: %w", receiptID, err))
+				return
+			}
+		}
 		policyRef := decision.PolicyVersion
 		if policyRef == "" {
 			policyRef = decision.PolicyContentHash
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(api.EvaluateResponse{
-			Allow:              contracts.Verdict(decision.Verdict) == contracts.VerdictAllow,
-			Verdict:            decision.Verdict,
-			ReceiptID:          receipt.ReceiptID,
-			DecisionID:         decision.ID,
-			DecisionHash:       receipt.DecisionHash,
-			ReasonCode:         decision.ReasonCode,
-			PolicyRef:          policyRef,
-			LamportClock:       receipt.LamportClock,
-			ID:                 decision.ID,
-			Action:             req.Tool,
-			Resource:           resource,
-			Reason:             decision.Reason,
-			PolicyVersion:      decision.PolicyVersion,
-			PolicyDecisionHash: decision.PolicyDecisionHash,
-			Signature:          decision.Signature,
+			Allow:                                  contracts.Verdict(decision.Verdict) == contracts.VerdictAllow,
+			Verdict:                                decision.Verdict,
+			ReceiptID:                              receipt.ReceiptID,
+			DecisionID:                             decision.ID,
+			DecisionHash:                           receipt.DecisionHash,
+			ReasonCode:                             decision.ReasonCode,
+			PolicyRef:                              policyRef,
+			LamportClock:                           receipt.LamportClock,
+			OrganizationRuntimeDecisionAttestation: receipt.OrganizationRuntimeDecisionAttestation,
+			ID:                                     decision.ID,
+			Action:                                 req.Tool,
+			Resource:                               resource,
+			Reason:                                 decision.Reason,
+			PolicyVersion:                          decision.PolicyVersion,
+			PolicyDecisionHash:                     decision.PolicyDecisionHash,
+			Signature:                              decision.Signature,
 		})
 	}
 	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, evaluateHandler))
@@ -672,6 +703,14 @@ func persistDecisionReceipt(ctx context.Context, svc *Services, decision *contra
 // tenant ID. Generic paths intentionally remain unscoped rather than deriving
 // a durable namespace from caller-controlled decision context.
 func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decision *contracts.DecisionRecord, agentID, authenticatedTenantID string, body []byte, metadata map[string]any) error {
+	return persistDecisionReceiptForTenantWithProvenance(ctx, svc, decision, agentID, authenticatedTenantID, body, metadata, nil)
+}
+
+func persistOrganizationRuntimeDecisionReceiptForTenant(ctx context.Context, svc *Services, decision *contracts.DecisionRecord, agentID, authenticatedTenantID string, body []byte, metadata map[string]any, provenance organizationRuntimeReceiptProvenance) error {
+	return persistDecisionReceiptForTenantWithProvenance(ctx, svc, decision, agentID, authenticatedTenantID, body, metadata, &provenance)
+}
+
+func persistDecisionReceiptForTenantWithProvenance(ctx context.Context, svc *Services, decision *contracts.DecisionRecord, agentID, authenticatedTenantID string, body []byte, metadata map[string]any, provenance *organizationRuntimeReceiptProvenance) error {
 	if svc == nil || svc.ReceiptStore == nil || decision == nil {
 		return fmt.Errorf("receipt persistence unavailable")
 	}
@@ -741,6 +780,13 @@ func persistDecisionReceiptForTenant(ctx context.Context, svc *Services, decisio
 			PrevHash:     prevHash,
 			LamportClock: lamport,
 			ArgsHash:     argsHash,
+		}
+		if provenance != nil {
+			attestation, err := signOrganizationRuntimeDecisionAttestation(ctx, svc, receipt, *provenance)
+			if err != nil {
+				return nil, err
+			}
+			receipt.OrganizationRuntimeDecisionAttestation = attestation
 		}
 		if err := svc.ReceiptSigner.SignReceipt(receipt); err != nil {
 			return nil, fmt.Errorf("sign receipt %s: %w", receiptID, err)

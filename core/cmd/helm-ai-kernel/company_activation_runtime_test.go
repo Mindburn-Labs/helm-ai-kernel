@@ -150,6 +150,9 @@ func TestEvaluateRouteRequiresValidCompanyActivationRecordForOrganizationRuntime
 			body, err := json.Marshal(api.EvaluateRequest{
 				Tool: "EXECUTE_TOOL", Resource: "connector://crm/contact-123", EffectLevel: effectClass,
 				SessionID: "activation-session-" + strings.ReplaceAll(test.name, " ", "-"),
+				Originator: &contracts.OrganizationRuntimeOriginatorAssertion{
+					PrincipalID: "human-originator-1", AssertionSource: contracts.OrganizationRuntimeOriginatorAssertionSourceControlPlane,
+				},
 				Context: map[string]any{
 					"organization_runtime":      "caller-controlled-marker",
 					"autonomy_level":            autonomyLevel,

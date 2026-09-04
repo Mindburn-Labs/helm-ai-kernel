@@ -113,6 +113,12 @@ type Receipt struct {
 	Transparency *TransparencyAnchor `json:"transparency,omitempty"`
 	LogID        string              `json:"log_id,omitempty"`
 	LeafIndex    uint64              `json:"leaf_index,omitempty"`
+
+	// OrganizationRuntimeDecisionAttestation is an independently signed,
+	// route-specific provenance companion. It is deliberately outside the
+	// generic Receipt V5 signing preimage; route-specific verification requires
+	// it while generic receipt bytes remain unchanged when it is absent.
+	OrganizationRuntimeDecisionAttestation *OrganizationRuntimeDecisionAttestationV1 `json:"organization_runtime_decision_attestation,omitempty"`
 }
 
 // receiptJSONAlias prevents Receipt.MarshalJSON from recursing. It also keeps

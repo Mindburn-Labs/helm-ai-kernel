@@ -82,6 +82,14 @@ func writePortableEvaluateEvidencePack(svc *Services, receipt *contracts.Receipt
 	if receipt == nil {
 		return fmt.Errorf("portable evaluate evidence pack write requires a receipt")
 	}
+	if receipt.OrganizationRuntimeDecisionAttestation != nil {
+		if svc.ReceiptSigner == nil {
+			return fmt.Errorf("organization runtime attestation verifier unavailable")
+		}
+		if err := contracts.VerifyOrganizationRuntimeReceiptAttestation(receipt, svc.ReceiptSigner.PublicKeyBytes()); err != nil {
+			return fmt.Errorf("verify organization runtime attestation before evidence export: %w", err)
+		}
+	}
 	packDir, err := os.MkdirTemp("", "helm-evaluate-evidence-*")
 	if err != nil {
 		return fmt.Errorf("create portable evaluate pack workspace: %w", err)
@@ -135,6 +143,20 @@ func writeEvaluateEvidencePackTree(packDir string, receipt *contracts.Receipt) e
 	receiptName := sanitizeReceiptFileName(receipt.ReceiptID) + ".json"
 	if err := os.WriteFile(filepath.Join(receiptsDir, receiptName), append(receiptData, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write evaluate receipt into pack: %w", err)
+	}
+	if receipt.OrganizationRuntimeDecisionAttestation != nil {
+		attestationsDir := filepath.Join(packDir, "02_PROOFGRAPH", "attestations")
+		if err := os.MkdirAll(attestationsDir, 0o750); err != nil {
+			return fmt.Errorf("create evaluate pack attestations dir: %w", err)
+		}
+		attestationData, err := json.MarshalIndent(receipt.OrganizationRuntimeDecisionAttestation, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode organization runtime attestation: %w", err)
+		}
+		attestationName := sanitizeReceiptFileName(receipt.ReceiptID) + ".organization-runtime.json"
+		if err := os.WriteFile(filepath.Join(attestationsDir, attestationName), append(attestationData, '\n'), 0o600); err != nil {
+			return fmt.Errorf("write organization runtime attestation into pack: %w", err)
+		}
 	}
 	score, err := json.MarshalIndent(evaluateEvidencePackScore(receipt), "", "  ")
 	if err != nil {

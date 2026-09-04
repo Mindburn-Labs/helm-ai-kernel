@@ -1,0 +1,22 @@
+{
+  "pack_id": "helm-memory-policy-v1",
+  "version": "1.0.0",
+  "status": "preview",
+  "scope": "Memory action policy decisions through the existing authenticated POST /api/v1/evaluate route and signed V5 receipt path",
+  "policy_input_schema": "../../../json-schemas/policy/memory_policy_input.v1.schema.json",
+  "managed_policy": "managed-policy.json",
+  "test_vectors": "test-vectors.json",
+  "source_refs": [
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ],
+  "invariants": [
+    "authenticated edge identity is authoritative",
+    "missing policy never dispatches",
+    "missing or denied budget outcome never allows",
+    "restricted memory never reaches an external provider",
+    "memory.egress is invalid under local_only",
+    "memory.promote requires approval",
+    "every policy decision that reaches Guardian produces a signed V5 receipt",
+    "tampered receipts fail offline verification"
+  ]
+}

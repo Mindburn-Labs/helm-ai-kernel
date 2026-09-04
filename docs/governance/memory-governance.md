@@ -1,7 +1,9 @@
 # Memory Governance (R5)
 
-**Status:** preview specification (doc-led; manifest hooks merged in
-`capability_manifest.v1.json → memory_access`).
+**Status:** preview specification. Manifest hooks live in
+`capability_manifest.v1.json → memory_access`; the executable policy input and
+conformance pack live in `memory_policy_input.v1.schema.json` and
+`protocols/conformance/memory/v1`.
 **Origin:** Step AOS dual-domain three-step memory (用户域/智能体域,
 记-理-忆). HELM does not build memory; HELM governs it.
 
@@ -44,6 +46,32 @@ manifest grant plus, for personal data categories, a capability token.
    `memory.user-deletable` certification mark only by demonstrating delete →
    receipt → post-delete read returns nothing, replayed from a conformance
    vector.
+
+## Evaluate contract
+
+Memory authorization reuses authenticated `POST /api/v1/evaluate`; there is no
+second memory policy endpoint. The canonical tools and risk classes are:
+
+| Tool | Effect level | Default result |
+| --- | --- | --- |
+| `memory.read` | `E1` | Deny unless scope, purpose, content/query hashes, workspace binding, and budget receipt match policy |
+| `memory.write` | `E2` | Deny unless provenance, retention, workspace binding, and budget receipt match policy |
+| `memory.promote` | `E3` | Escalate for human approval |
+| `memory.egress` | `E2` | Deny unless the provider/model is approved, the budget owner allowed it, and data class is `PUBLIC` or `INTERNAL` |
+
+Producers must validate request `args` against `MemoryPolicyInput.v1` before
+dispatch. Kernel authentication supplies principal, tenant, and workspace;
+caller-provided identity aliases are discarded at the edge. The evaluate
+envelope supplies `session_id`, which is bound into the signed receipt. A budget
+decision is not calculated again inside memory policy: the existing
+authenticated Control Plane/provider budget owner supplies `budget.decision`
+and its receipt hash. Missing or `DENY` budget evidence does not match an allow
+rule.
+
+Every request that reaches Guardian follows the existing signed V5 decision
+receipt path. Authentication and missing-runtime failures occur before receipt
+issuance. Receipt verification proves signed bytes and policy binding; it does
+not make the referenced memory content or budget receipt true by itself.
 
 ## Out of scope
 

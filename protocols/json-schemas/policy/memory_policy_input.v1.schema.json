@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.org/schemas/policy/memory_policy_input.v1.schema.json",
+  "title": "MemoryPolicyInput.v1",
+  "description": "Source-owned args contract for HELM memory decisions sent through POST /api/v1/evaluate. Authenticated principal, tenant, and workspace bindings are supplied by the Kernel edge, never by this object; session_id remains in the evaluate envelope and is bound into the signed receipt. Budget decision and receipt hash come from the existing authenticated Control Plane/provider budget owner; this contract does not duplicate numeric accounting.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "operation",
+    "memory_class",
+    "scope",
+    "data_class",
+    "data_boundary",
+    "purpose",
+    "content_hash",
+    "budget"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "memory-policy/v1"
+    },
+    "operation": {
+      "enum": [
+        "memory.read",
+        "memory.write",
+        "memory.promote",
+        "memory.egress"
+      ]
+    },
+    "memory_class": {
+      "enum": [
+        "M0_EPHEMERAL",
+        "M1_EPISODIC",
+        "M2_ENTITY",
+        "M3_SEMANTIC",
+        "M4_PROCEDURAL"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "PRIVATE",
+        "WORKSPACE",
+        "COMPANY"
+      ]
+    },
+    "target_scope": {
+      "enum": [
+        "WORKSPACE",
+        "COMPANY"
+      ]
+    },
+    "data_class": {
+      "enum": [
+        "PUBLIC",
+        "INTERNAL",
+        "CONFIDENTIAL",
+        "PII",
+        "REGULATED"
+      ]
+    },
+    "data_boundary": {
+      "enum": [
+        "local_only",
+        "org_boundary",
+        "external"
+      ]
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "query_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "record_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "entry_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "provenance_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "retention_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3650
+    },
+    "provider_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "model_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "receipt_hash"
+      ],
+      "properties": {
+        "decision": {
+          "enum": [
+            "ALLOW",
+            "DENY"
+          ]
+        },
+        "receipt_hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "memory.read"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "required": [
+          "query_hash"
+        ],
+        "properties": {
+          "data_boundary": {
+            "enum": [
+              "local_only",
+              "org_boundary"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "memory.write"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "required": [
+          "record_id",
+          "provenance_hash",
+          "retention_days"
+        ],
+        "properties": {
+          "data_boundary": {
+            "enum": [
+              "local_only",
+              "org_boundary"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "memory.promote"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "required": [
+          "entry_id",
+          "provenance_hash",
+          "target_scope"
+        ],
+        "properties": {
+          "scope": {
+            "const": "PRIVATE"
+          },
+          "data_boundary": {
+            "const": "org_boundary"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "memory.egress"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "required": [
+          "provider_id",
+          "model_id"
+        ],
+        "properties": {
+          "data_boundary": {
+            "const": "external"
+          }
+        }
+      }
+    }
+  ]
+}

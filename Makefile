@@ -139,6 +139,7 @@ sdk-examples-smoke:
 	bash scripts/sdk/examples_smoke.sh
 
 verify-fixtures:
+	cd core && go test ./cmd/helm-ai-kernel -run TestMemoryPolicyConformancePack -count=1
 	cd core && go test ./pkg/verifier -run TestVerifyBundle_GoldenFixtureRoots -count=1
 	cd core && go test ./pkg/boundary/extauthz -run TestContract -count=1
 	cd core && go test ./pkg/canonicalize -run TestExtauthzGoldenVectorsAreCanonical -count=1

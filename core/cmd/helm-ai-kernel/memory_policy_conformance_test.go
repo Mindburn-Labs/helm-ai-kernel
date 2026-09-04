@@ -1,3 +1,5 @@
+// quantum_posture: this conformance test verifies classical Ed25519 receipt.v5
+// signatures and SHA-256 bindings; it adds no post-quantum assurance.
 package main
 
 import (

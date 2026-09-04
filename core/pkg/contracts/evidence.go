@@ -58,6 +58,11 @@ type EvidencePack struct {
 	// Attestation
 	Attestation EvidencePackAttestation `json:"attestation"`
 
+	// Lineage freezes the company activation, outcome contract, measurement
+	// plan, and window before later evidence is observed. It is optional only
+	// so V1 packs produced before the successor contract remain decodable.
+	Lineage *EvidencePackLineage `json:"lineage,omitempty"`
+
 	// V2: Execution Plane — enriched evidence
 	NetworkLogs    []NetworkLogRef    `json:"network_logs,omitempty"`
 	SecretEvents   []SecretEventRef   `json:"secret_events,omitempty"`

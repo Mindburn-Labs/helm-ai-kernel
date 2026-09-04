@@ -24,6 +24,9 @@ Active surface for the `helm-ai-kernel` project.
 - `make verify-effect-disposition-vectors` verifies disposition command,
   detached signature, and Kernel receipt contracts in Go and independent
   Python.
+- `make verify-evidence-pack-successor-vectors` verifies immutable progress,
+  final, and censored EvidencePack addenda plus ProofGraph lineage in Go and
+  independent Python.
 
 ## Connector release authority
 
@@ -48,6 +51,15 @@ operator instruction to an exact current FENCE, active reservation head, and
 append-only predecessor. `effect_disposition_receipt.json` is the separately
 signed Kernel acknowledgement and fixes `execution_authority` to `NONE`.
 Neither artifact authorizes an external cancellation or compensation.
+
+## EvidencePack successors
+
+`evidence_pack_successor.json` defines the append-only operational-evaluation
+and measurement addenda attached to a sealed effect-time EvidencePack. The
+deterministic identity binds the exact predecessor, evidence kind, frozen
+outcome or measurement contract, and measurement window. `MEASUREMENT_PROGRESS`
+never closes a window; `MEASUREMENT_FINAL` and `MEASUREMENT_CENSORED` are
+mutually exclusive terminal records enforced by the ProofGraph append owner.
 
 ## Documentation Contract
 

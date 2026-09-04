@@ -25,6 +25,9 @@ Active surface for the `helm-ai-kernel` project.
   and Kernel close receipt in Go and independent Python.
 - `make verify-effect-disposition-vectors` verifies the Control Plane
   disposition command and Kernel receipt in Go and independent Python.
+- `make verify-evidence-pack-successor-vectors` verifies sealed-pack lineage,
+  operational evaluation, progress, and mutually exclusive final/censored
+  measurement addenda in Go and independent Python.
 - `make verify-receipt-v5-vectors` verifies the mainline Kernel receipt.v5
   signing preimage in source-owned Go and independent stdlib Python.
 - `make verify-effect-permit-vectors` verifies the byte-exact
@@ -82,6 +85,17 @@ preimage, UTC and empty-field normalization, Ed25519 test signatures, and
 executed negative mutations. It proves portable integrity verification only;
 admission, replay protection, liveness, connector scope, deployment, and
 production release authority remain separate checks.
+
+## EvidencePack successor pack
+
+`evidence-pack-successor-v1/` pins the frozen activation, outcome-contract,
+measurement-plan, and window identity carried from a sealed effect-time pack
+through operational evaluation and final or censored measurement. Its two
+ProofGraph chains and negative mutations cover deterministic duplicate
+identity, conflicting evidence, lineage substitution, progress/finality type
+confusion, terminal closure, and dangling parents. It proves portable contract
+and in-memory reference-graph behavior only; it does not prove durable service
+persistence, deployment, observed provider outcomes, or production acceptance.
 
 ## Documentation Contract
 

@@ -17,7 +17,9 @@ import (
 
 const (
 	connectorEffectAcknowledgementSignatureDomainV1 = "HELM/ConnectorEffectAcknowledgementSignature/v1"
+	connectorEffectAcknowledgementSignatureDomainV2 = "HELM/ConnectorEffectAcknowledgementSignature/v2"
 	effectCloseReceiptSignatureDomainV1             = "HELM/EffectCloseReceiptSignature/v1"
+	effectCloseReceiptSignatureDomainV2             = "HELM/EffectCloseReceiptSignature/v2"
 )
 
 var ErrEffectAcknowledgementRejected = errors.New("connector effect acknowledgement rejected")
@@ -111,6 +113,62 @@ func SignConnectorEffectAcknowledgement(
 	return envelope, nil
 }
 
+func ConnectorEffectAcknowledgementV2SigningPayload(acknowledgement contracts.ConnectorEffectAcknowledgementV2) ([]byte, error) {
+	if err := acknowledgement.ValidateIntegrity(); err != nil {
+		return nil, effectAcknowledgementRejected("acknowledgement integrity mismatch: " + err.Error())
+	}
+	payload, err := canonicalize.JCS(struct {
+		Domain                string `json:"domain"`
+		ContractVersion       string `json:"contract_version"`
+		AcknowledgementHash   string `json:"acknowledgement_hash"`
+		ActivationRecordHash  string `json:"activation_record_hash"`
+		AdapterCapabilityHash string `json:"adapter_capability_hash"`
+		IssuerID              string `json:"issuer_id"`
+		SigningKeyRef         string `json:"signing_key_ref"`
+		ConnectorID           string `json:"connector_id"`
+		ConnectorVersion      string `json:"connector_version"`
+		AdapterID             string `json:"adapter_id"`
+		AdapterVersion        string `json:"adapter_version"`
+		AdapterCapabilityRef  string `json:"adapter_capability_ref"`
+		Algorithm             string `json:"algorithm"`
+	}{
+		Domain: connectorEffectAcknowledgementSignatureDomainV2, ContractVersion: acknowledgement.ContractVersion,
+		AcknowledgementHash: acknowledgement.AcknowledgementHash, ActivationRecordHash: acknowledgement.ActivationRecordHash,
+		AdapterCapabilityHash: acknowledgement.AdapterCapabilityHash,
+		IssuerID:              acknowledgement.IssuerID, SigningKeyRef: acknowledgement.SigningKeyRef,
+		ConnectorID: acknowledgement.ConnectorID, ConnectorVersion: acknowledgement.ConnectorVersion,
+		AdapterID: acknowledgement.AdapterID, AdapterVersion: acknowledgement.AdapterVersion,
+		AdapterCapabilityRef: acknowledgement.AdapterCapabilityRef,
+		Algorithm:            acknowledgement.Algorithm,
+	})
+	if err != nil {
+		return nil, effectAcknowledgementRejected("canonicalize signing payload: " + err.Error())
+	}
+	return payload, nil
+}
+
+func SignConnectorEffectAcknowledgementV2(
+	acknowledgement contracts.ConnectorEffectAcknowledgementV2,
+	signer crypto.Signer,
+) (contracts.ConnectorEffectAcknowledgementEnvelopeV2, error) {
+	if signer == nil {
+		return contracts.ConnectorEffectAcknowledgementEnvelopeV2{}, effectAcknowledgementRejected("signer is not configured")
+	}
+	payload, err := ConnectorEffectAcknowledgementV2SigningPayload(acknowledgement)
+	if err != nil {
+		return contracts.ConnectorEffectAcknowledgementEnvelopeV2{}, err
+	}
+	signature, err := signer.Sign(payload)
+	if err != nil {
+		return contracts.ConnectorEffectAcknowledgementEnvelopeV2{}, effectAcknowledgementRejected("sign acknowledgement: " + err.Error())
+	}
+	envelope := contracts.ConnectorEffectAcknowledgementEnvelopeV2{Acknowledgement: acknowledgement, Signature: signature}
+	if err := envelope.Validate(); err != nil {
+		return contracts.ConnectorEffectAcknowledgementEnvelopeV2{}, effectAcknowledgementRejected("signer returned invalid signature encoding")
+	}
+	return envelope, nil
+}
+
 // VerifyEnvelope proves a connector effect acknowledgement is signed by a
 // currently trusted key; used when closing (submitting) a new acknowledgement,
 // so it rejects a disabled key.
@@ -126,6 +184,14 @@ func (v *Ed25519EffectAcknowledgementVerifier) VerifyEnvelope(envelope contracts
 // and the NotBefore/NotAfter window still enforce authenticity.
 func (v *Ed25519EffectAcknowledgementVerifier) VerifyStoredEnvelope(envelope contracts.ConnectorEffectAcknowledgementEnvelope) error {
 	return v.verifyEnvelope(envelope, false)
+}
+
+func (v *Ed25519EffectAcknowledgementVerifier) VerifyEnvelopeV2(envelope contracts.ConnectorEffectAcknowledgementEnvelopeV2) error {
+	return v.verifyEnvelopeV2(envelope, true)
+}
+
+func (v *Ed25519EffectAcknowledgementVerifier) VerifyStoredEnvelopeV2(envelope contracts.ConnectorEffectAcknowledgementEnvelopeV2) error {
+	return v.verifyEnvelopeV2(envelope, false)
 }
 
 func (v *Ed25519EffectAcknowledgementVerifier) verifyEnvelope(envelope contracts.ConnectorEffectAcknowledgementEnvelope, requireEnabled bool) error {
@@ -148,6 +214,36 @@ func (v *Ed25519EffectAcknowledgementVerifier) verifyEnvelope(envelope contracts
 		return effectAcknowledgementRejected("acknowledgement was observed outside the pinned key lifetime")
 	}
 	payload, err := ConnectorEffectAcknowledgementSigningPayload(a)
+	if err != nil {
+		return err
+	}
+	raw, err := hex.DecodeString(envelope.Signature)
+	if err != nil || len(raw) != ed25519.SignatureSize || !ed25519.Verify(key.PublicKey, payload, raw) {
+		return effectAcknowledgementRejected("bad Ed25519 signature")
+	}
+	return nil
+}
+
+func (v *Ed25519EffectAcknowledgementVerifier) verifyEnvelopeV2(envelope contracts.ConnectorEffectAcknowledgementEnvelopeV2, requireEnabled bool) error {
+	if v == nil || len(v.keys) == 0 {
+		return effectAcknowledgementRejected("verifier is not configured")
+	}
+	if err := envelope.Validate(); err != nil {
+		return effectAcknowledgementRejected(err.Error())
+	}
+	a := envelope.Acknowledgement
+	identity := effectAcknowledgementKeyIdentity(a.IssuerID, a.SigningKeyRef, a.ConnectorID, a.ConnectorVersion)
+	key, ok := v.keys[identity]
+	if !ok {
+		return effectAcknowledgementRejected("signing key is not currently trusted for this connector release")
+	}
+	if requireEnabled && !key.Enabled {
+		return effectAcknowledgementRejected("signing key is not currently trusted for this connector release")
+	}
+	if a.ObservedAt.Before(key.NotBefore) || !a.ObservedAt.Before(key.NotAfter) {
+		return effectAcknowledgementRejected("acknowledgement was observed outside the pinned key lifetime")
+	}
+	payload, err := ConnectorEffectAcknowledgementV2SigningPayload(a)
 	if err != nil {
 		return err
 	}
@@ -183,6 +279,34 @@ func EffectCloseReceiptSigningPayload(receipt contracts.EffectCloseReceipt, algo
 	return payload, nil
 }
 
+func EffectCloseReceiptV2SigningPayload(receipt contracts.EffectCloseReceiptV2, algorithm string) ([]byte, error) {
+	if algorithm != GrantSignatureEd25519 {
+		return nil, fmt.Errorf("%w: unsupported effect close receipt algorithm", ErrGrantSignatureRejected)
+	}
+	if err := receipt.ValidateIntegrity(); err != nil {
+		return nil, fmt.Errorf("%w: effect close receipt integrity mismatch: %v", ErrGrantSignatureRejected, err)
+	}
+	payload, err := canonicalize.JCS(struct {
+		Domain                string `json:"domain"`
+		ContractVersion       string `json:"contract_version"`
+		ReceiptHash           string `json:"receipt_hash"`
+		ActivationRecordHash  string `json:"activation_record_hash"`
+		AdapterCapabilityHash string `json:"adapter_capability_hash"`
+		KernelTrustRootID     string `json:"kernel_trust_root_id"`
+		SigningKeyRef         string `json:"signing_key_ref"`
+		Algorithm             string `json:"algorithm"`
+	}{
+		Domain: effectCloseReceiptSignatureDomainV2, ContractVersion: receipt.ContractVersion,
+		ReceiptHash: receipt.ReceiptHash, ActivationRecordHash: receipt.ActivationRecordHash,
+		AdapterCapabilityHash: receipt.AdapterCapabilityHash,
+		KernelTrustRootID:     receipt.KernelTrustRootID, SigningKeyRef: receipt.SigningKeyRef, Algorithm: algorithm,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: canonicalize effect close receipt signing payload: %v", ErrGrantSignatureRejected, err)
+	}
+	return payload, nil
+}
+
 func SignEffectCloseReceipt(receipt contracts.EffectCloseReceipt, signer crypto.Signer) (string, error) {
 	if signer == nil {
 		return "", fmt.Errorf("%w: signer is not configured", ErrGrantSignatureRejected)
@@ -199,6 +323,49 @@ func SignEffectCloseReceipt(receipt contracts.EffectCloseReceipt, signer crypto.
 		return "", fmt.Errorf("%w: signer returned invalid effect close receipt signature", ErrGrantSignatureRejected)
 	}
 	return signature, nil
+}
+
+func SignEffectCloseReceiptV2(receipt contracts.EffectCloseReceiptV2, signer crypto.Signer) (string, error) {
+	if signer == nil {
+		return "", fmt.Errorf("%w: signer is not configured", ErrGrantSignatureRejected)
+	}
+	payload, err := EffectCloseReceiptV2SigningPayload(receipt, GrantSignatureEd25519)
+	if err != nil {
+		return "", err
+	}
+	signature, err := signer.Sign(payload)
+	if err != nil {
+		return "", fmt.Errorf("%w: sign effect close receipt: %v", ErrGrantSignatureRejected, err)
+	}
+	if !validEd25519Signature(signature) {
+		return "", fmt.Errorf("%w: signer returned invalid effect close receipt signature", ErrGrantSignatureRejected)
+	}
+	return signature, nil
+}
+
+func (v *Ed25519GrantSignatureVerifier) VerifyEffectCloseReceiptV2Signature(
+	receipt contracts.EffectCloseReceiptV2,
+	algorithm, signature string,
+) error {
+	if v == nil || len(v.publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("%w: verifier is not configured", ErrGrantSignatureRejected)
+	}
+	if algorithm != GrantSignatureEd25519 || receipt.SigningKeyRef != v.signingKeyRef ||
+		receipt.KernelTrustRootID != v.kernelTrustRootID {
+		return fmt.Errorf("%w: effect close receipt trust-root metadata mismatch", ErrGrantSignatureRejected)
+	}
+	payload, err := EffectCloseReceiptV2SigningPayload(receipt, algorithm)
+	if err != nil {
+		return err
+	}
+	rawSignature, err := hex.DecodeString(signature)
+	if err != nil || len(rawSignature) != ed25519.SignatureSize || hex.EncodeToString(rawSignature) != signature {
+		return fmt.Errorf("%w: effect close receipt signature encoding is invalid", ErrGrantSignatureRejected)
+	}
+	if !ed25519.Verify(v.publicKey, payload, rawSignature) {
+		return fmt.Errorf("%w: bad effect close receipt ed25519 signature", ErrGrantSignatureRejected)
+	}
+	return nil
 }
 
 func effectAcknowledgementKeyIdentity(issuerID, signingKeyRef, connectorID, connectorVersion string) string {

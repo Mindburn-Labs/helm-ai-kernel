@@ -1,0 +1,110 @@
+{
+  "p0_ceilings": {
+    "version": "1.0.0",
+    "memory": {
+      "external_data_classes": [
+        "PUBLIC",
+        "INTERNAL"
+      ],
+      "required_budget_decision": "ALLOW"
+    }
+  },
+  "p1_bundle": {
+    "version": "1.0.0",
+    "memory_actions": [
+      "memory.read",
+      "memory.write",
+      "memory.promote",
+      "memory.egress"
+    ]
+  },
+  "p2_overlay": {
+    "version": "1.0.0",
+    "semantic_reranking": false
+  },
+  "approval_routes": {
+    "memory.promote": {
+      "level": "SINGLE_HUMAN"
+    }
+  },
+  "department": "kernel",
+  "policy_pack_id": "helm-memory-policy-v1",
+  "approval_profile": "memory-promotion-single-human-v1",
+  "source_language": "managed-policy",
+  "source_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "readable_summary": "Private reads and bounded writes stay inside the authenticated workspace. Promotion escalates. External egress allows only PUBLIC or INTERNAL data through an approved provider/model binding and an existing ALLOW budget receipt.",
+  "compiled_artifact_kind": "helm-policy-bundle-json",
+  "kernel_runtime": {
+    "schema_version": "helm.kernel.managed-policy.v1",
+    "default_verdict": "DENY",
+    "rules": [
+      {
+        "id": "memory-p0-e4-deny",
+        "layer": "P0",
+        "effect_class": "E4",
+        "verdict": "DENY",
+        "reason": "critical effects remain denied"
+      },
+      {
+        "id": "memory-p0-budget-deny",
+        "layer": "P0",
+        "pattern": "\"args\":\\{\"budget\":\\{\"decision\":\"DENY\"",
+        "verdict": "DENY",
+        "reason": "the authenticated budget owner denied the request"
+      },
+      {
+        "id": "memory-p0-restricted-egress-deny",
+        "layer": "P0",
+        "action": "memory.egress",
+        "pattern": "\"data_class\":\"(CONFIDENTIAL|PII|REGULATED)\"",
+        "verdict": "DENY",
+        "reason": "restricted memory cannot leave operator-controlled infrastructure"
+      },
+      {
+        "id": "memory-p0-local-only-egress-deny",
+        "layer": "P0",
+        "action": "memory.egress",
+        "pattern": "\"data_boundary\":\"local_only\"",
+        "verdict": "DENY",
+        "reason": "local-only mode forbids external memory egress"
+      },
+      {
+        "id": "memory-p1-read-allow",
+        "layer": "P1",
+        "effect_class": "E1",
+        "action": "memory.read",
+        "resource": "E1",
+        "pattern": "\"args\":\\{\"budget\":\\{\"decision\":\"ALLOW\",\"receipt_hash\":\"sha256:[a-f0-9]{64}\"\\}.*\"data_boundary\":\"(local_only|org_boundary)\".*\"operation\":\"memory.read\".*\\}.*\"principal_id\":\"[^\"]+\".*\"tenant_id\":\"[^\"]+\".*\"workspace_id\":\"[^\"]+\"",
+        "verdict": "ALLOW",
+        "reason": "authenticated bounded memory read"
+      },
+      {
+        "id": "memory-p1-write-allow",
+        "layer": "P1",
+        "effect_class": "E2",
+        "action": "memory.write",
+        "resource": "E2",
+        "pattern": "\"args\":\\{\"budget\":\\{\"decision\":\"ALLOW\",\"receipt_hash\":\"sha256:[a-f0-9]{64}\"\\}.*\"data_boundary\":\"(local_only|org_boundary)\".*\"operation\":\"memory.write\".*\\}.*\"principal_id\":\"[^\"]+\".*\"tenant_id\":\"[^\"]+\".*\"workspace_id\":\"[^\"]+\"",
+        "verdict": "ALLOW",
+        "reason": "authenticated bounded memory write"
+      },
+      {
+        "id": "memory-p1-approved-egress-allow",
+        "layer": "P1",
+        "effect_class": "E2",
+        "action": "memory.egress",
+        "resource": "E2",
+        "pattern": "\"budget\":\\{\"decision\":\"ALLOW\",\"receipt_hash\":\"sha256:[a-f0-9]{64}\"\\}.*\"data_boundary\":\"external\",\"data_class\":\"(PUBLIC|INTERNAL)\".*\"model_id\":\"approved-model\",\"operation\":\"memory.egress\",\"provider_id\":\"approved-provider\".*\"workspace_id\":\"[^\"]+\"",
+        "verdict": "ALLOW",
+        "reason": "approved provider and data class with budget receipt"
+      },
+      {
+        "id": "memory-p1-e3-escalate",
+        "layer": "P1",
+        "effect_class": "E3",
+        "verdict": "ESCALATE",
+        "reason": "hard memory effects require human approval"
+      }
+    ]
+  }
+}

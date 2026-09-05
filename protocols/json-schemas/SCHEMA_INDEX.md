@@ -66,6 +66,7 @@
 | `policy_bundle.schema.json`          | L1          | normative | Policy bundle definition    |
 | `policy_decision.schema.json`        | L1          | normative | Decision record format      |
 | `policy_input_bundle.v1.schema.json` | L1          | normative | Policy evaluation input     |
+| `memory_policy_input.v1.schema.json` | L2          | preview   | Memory evaluate args        |
 | `decision_log_event.schema.json`     | L2          | normative | Decision audit log event    |
 | `DLPPolicy.v1.json`                  | L2          | normative | Data loss prevention policy |
 | `ErrorBudgetPolicy.v1.json`          | L2          | normative | Error budget policy         |

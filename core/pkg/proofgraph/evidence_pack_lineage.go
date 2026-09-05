@@ -137,6 +137,13 @@ func (g *Graph) AppendEvidencePackSuccessor(successor contracts.EvidencePackSucc
 			}
 		}
 	}
+	for _, node := range g.nodes {
+		existing, decodeErr := DecodeEvidencePackSuccessorNode(node)
+		if decodeErr == nil && existing.SealedPackRef == sealed.SealedPackRef && existing.SealedPackHash == sealed.SealedPackHash &&
+			existing.Lineage == sealed.Lineage && existing.PredecessorRef == sealed.PredecessorRef && existing.PredecessorHash == sealed.PredecessorHash {
+			return nil, fmt.Errorf("%w: predecessor already advanced for %s", ErrEvidencePackLineageConflict, sealed.Lineage.WindowIdentity)
+		}
+	}
 
 	payload, err := canonicalize.JCS(sealed)
 	if err != nil {

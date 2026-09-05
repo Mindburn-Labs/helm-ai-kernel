@@ -96,6 +96,134 @@ func TestEvidencePackSuccessorProofGraphLineageIsImmutableAndIdempotent(t *testi
 	}
 }
 
+func TestEvidencePackSuccessorProofGraphRejectsStalePredecessorBranches(t *testing.T) {
+	for _, kind := range []contracts.EvidencePackSuccessorKind{
+		contracts.EvidencePackSuccessorMeasurementProgress,
+		contracts.EvidencePackSuccessorMeasurementFinal,
+		contracts.EvidencePackSuccessorMeasurementCensored,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			lineage := proofTestEvidencePackLineage()
+			sealedPack := proofTestSealedEvidencePack(t, lineage)
+			graph := NewGraph()
+			root, err := graph.AppendEvidencePackRoot("evidence-pack:effect-1", sealedPack, "kernel", 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			evaluationNode, err := graph.AppendEvidencePackSuccessor(
+				proofTestSuccessor(contracts.EvidencePackSuccessorOperationalEvaluation, "evidence-pack:effect-1", sealedPack.Attestation.PackHash, lineage, "evidence:evaluation"),
+				root.NodeHash,
+				"kernel",
+				2,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			evaluation, err := DecodeEvidencePackSuccessorNode(evaluationNode)
+			if err != nil {
+				t.Fatal(err)
+			}
+			progressNode, err := graph.AppendEvidencePackSuccessor(
+				proofTestSuccessor(contracts.EvidencePackSuccessorMeasurementProgress, evaluation.SuccessorID, evaluation.SuccessorHash, lineage, "evidence:progress"),
+				evaluationNode.NodeHash,
+				"kernel",
+				3,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			stale := proofTestSuccessor(kind, evaluation.SuccessorID, evaluation.SuccessorHash, lineage, "evidence:stale-"+string(kind))
+			if _, err := graph.AppendEvidencePackSuccessor(stale, evaluationNode.NodeHash, "kernel", 4); !errors.Is(err, ErrEvidencePackLineageConflict) {
+				t.Fatalf("stale %s error = %v", kind, err)
+			}
+			if graph.Len() != 3 {
+				t.Fatalf("stale %s mutated graph length: got %d want 3", kind, graph.Len())
+			}
+			heads := graph.Heads()
+			if len(heads) != 1 || heads[0] != progressNode.NodeHash {
+				t.Fatalf("stale %s mutated graph heads: got %v want [%s]", kind, heads, progressNode.NodeHash)
+			}
+		})
+	}
+}
+
+func TestEvidencePackSuccessorProofGraphIgnoresIndependentLineageHeads(t *testing.T) {
+	graph := NewGraph()
+	lineageA := proofTestEvidencePackLineage()
+	sealedPackA := proofTestSealedEvidencePack(t, lineageA)
+	rootA, err := graph.AppendEvidencePackRoot("evidence-pack:effect-1", sealedPackA, "kernel", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluationNodeA, err := graph.AppendEvidencePackSuccessor(
+		proofTestSuccessor(contracts.EvidencePackSuccessorOperationalEvaluation, "evidence-pack:effect-1", sealedPackA.Attestation.PackHash, lineageA, "evidence:evaluation-a"),
+		rootA.NodeHash,
+		"kernel",
+		2,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluationA, err := DecodeEvidencePackSuccessorNode(evaluationNodeA)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lineageB := lineageA
+	lineageB.TenantID = "tenant-b"
+	lineageB.CompanyID = "tenant-b"
+	lineageB.WorkspaceID = "workspace-b"
+	lineageB.EnvironmentID = "staging-b"
+	lineageB.ActivationRecordRef = "activation:company-b"
+	lineageB.ActivationRecordHash = proofTestSHA("activation-record-b")
+	lineageB.OutcomeContractRef = "outcome-contract:crm-hygiene-b"
+	lineageB.OutcomeContractHash = proofTestSHA("outcome-contract-b")
+	lineageB.MeasurementPlanRef = "measurement-plan:crm-hygiene-b"
+	lineageB.MeasurementPlanHash = proofTestSHA("measurement-plan-b")
+	lineageB.WindowIdentity = "window:crm-hygiene:2026-10"
+	sealedPackB := proofTestSealedEvidencePack(t, lineageB)
+	rootB, err := graph.AppendEvidencePackRoot("evidence-pack:effect-2", sealedPackB, "kernel", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluationB := proofTestSuccessor(contracts.EvidencePackSuccessorOperationalEvaluation, "evidence-pack:effect-2", sealedPackB.Attestation.PackHash, lineageB, "evidence:evaluation-b")
+	evaluationB.SealedPackRef = "evidence-pack:effect-2"
+	evaluationNodeB, err := graph.AppendEvidencePackSuccessor(
+		evaluationB,
+		rootB.NodeHash,
+		"kernel",
+		4,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	progress := proofTestSuccessor(contracts.EvidencePackSuccessorMeasurementProgress, evaluationA.SuccessorID, evaluationA.SuccessorHash, lineageA, "evidence:progress-a")
+	progressNode, err := graph.AppendEvidencePackSuccessor(progress, evaluationNodeA.NodeHash, "kernel", 5)
+	if err != nil {
+		t.Fatalf("independent lineage head blocked current predecessor: %v", err)
+	}
+	beforeDuplicate := graph.Len()
+	duplicate, err := graph.AppendEvidencePackSuccessor(progress, evaluationNodeA.NodeHash, "kernel", 99)
+	if err != nil {
+		t.Fatalf("duplicate append with independent lineage head: %v", err)
+	}
+	if duplicate.NodeHash != progressNode.NodeHash || graph.Len() != beforeDuplicate {
+		t.Fatalf("duplicate append created a new record: got %s/%d want %s/%d", duplicate.NodeHash, graph.Len(), progressNode.NodeHash, beforeDuplicate)
+	}
+	heads := graph.Heads()
+	wantHeads := map[string]bool{evaluationNodeB.NodeHash: true, progressNode.NodeHash: true}
+	if len(heads) != len(wantHeads) {
+		t.Fatalf("independent lineage heads = %v", heads)
+	}
+	for _, head := range heads {
+		if !wantHeads[head] {
+			t.Fatalf("unexpected independent lineage head %s in %v", head, heads)
+		}
+	}
+}
+
 func TestEvidencePackSuccessorProofGraphRejectsEquivocationAndInvalidTransitions(t *testing.T) {
 	lineage := proofTestEvidencePackLineage()
 	sealedPack := proofTestSealedEvidencePack(t, lineage)

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	"github.com/google/uuid"
@@ -85,11 +84,22 @@ type EvidencePackInput struct {
 
 	// EU AI Act evidence profile
 	EUAIActProfile *contracts.EUAIActEvidenceProfile
+
+	// Immutable successor identity, frozen before effect-time pack sealing.
+	Lineage *contracts.EvidencePackLineage
 }
 
 // Produce creates an EvidencePack from the input.
 func (p *EvidencePackProducer) Produce(ctx context.Context, input *EvidencePackInput) (*contracts.EvidencePack, error) {
 	_ = ctx
+	var lineage *contracts.EvidencePackLineage
+	if input.Lineage != nil {
+		copy := *input.Lineage
+		if err := copy.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid evidence pack lineage: %w", err)
+		}
+		lineage = &copy
+	}
 
 	rulesFired := input.RulesFired
 	if rulesFired == nil {
@@ -184,6 +194,7 @@ func (p *EvidencePackProducer) Produce(ctx context.Context, input *EvidencePackI
 		VerificationScopes: input.VerificationScopes,
 		HarnessTraceRefs:   input.HarnessTraceRefs,
 		EUAIActProfile:     input.EUAIActProfile,
+		Lineage:            lineage,
 
 		Attestation: contracts.EvidencePackAttestation{
 			KernelVersion: p.kernelVersion,
@@ -208,49 +219,7 @@ func (p *EvidencePackProducer) Produce(ctx context.Context, input *EvidencePackI
 // computeEvidencePackHash computes SHA-256 of the pack (excluding attestation)
 // using JCS (RFC 8785) for deterministic canonicalization.
 func computeEvidencePackHash(pack *contracts.EvidencePack) (string, error) {
-	// Create copy without attestation for hashing
-	hashable := struct {
-		PackID             string                               `json:"pack_id"`
-		FormatVersion      string                               `json:"format_version"`
-		CreatedAt          time.Time                            `json:"created_at"`
-		Identity           contracts.EvidencePackIdentity       `json:"identity"`
-		Policy             contracts.EvidencePackPolicy         `json:"policy"`
-		Effect             contracts.EvidencePackEffect         `json:"effect"`
-		Context            contracts.EvidencePackContext        `json:"context"`
-		Execution          contracts.EvidencePackExecution      `json:"execution"`
-		Receipts           contracts.EvidencePackReceipts       `json:"receipts"`
-		Reconciliation     contracts.EvidencePackReconciliation `json:"reconciliation"`
-		ReplayScript       *contracts.ReplayScriptRef           `json:"replay_script,omitempty"`
-		Provenance         *contracts.ReceiptProvenance         `json:"provenance,omitempty"`
-		BundledArtifacts   []contracts.ParsedArtifact           `json:"bundled_artifacts,omitempty"`
-		VerificationScopes []contracts.VerificationScope        `json:"verification_scopes,omitempty"`
-		HarnessTraceRefs   []contracts.HarnessTraceRef          `json:"harness_trace_refs,omitempty"`
-		EUAIActProfile     *contracts.EUAIActEvidenceProfile    `json:"eu_ai_act_profile,omitempty"`
-	}{
-		PackID:             pack.PackID,
-		FormatVersion:      pack.FormatVersion,
-		CreatedAt:          pack.CreatedAt,
-		Identity:           pack.Identity,
-		Policy:             pack.Policy,
-		Effect:             pack.Effect,
-		Context:            pack.Context,
-		Execution:          pack.Execution,
-		Receipts:           pack.Receipts,
-		Reconciliation:     pack.Reconciliation,
-		ReplayScript:       pack.ReplayScript,
-		Provenance:         pack.Provenance,
-		BundledArtifacts:   pack.BundledArtifacts,
-		VerificationScopes: pack.VerificationScopes,
-		HarnessTraceRefs:   pack.HarnessTraceRefs,
-		EUAIActProfile:     pack.EUAIActProfile,
-	}
-
-	data, err := canonicalize.JCS(hashable)
-	if err != nil {
-		return "", fmt.Errorf("failed to canonicalize evidence pack: %w", err)
-	}
-
-	return "sha256:" + canonicalize.HashBytes(data), nil
+	return contracts.ComputeEvidencePackHash(pack)
 }
 
 // ValidateEvidencePack validates an EvidencePack for completeness.
@@ -277,6 +246,11 @@ func ValidateEvidencePack(pack *contracts.EvidencePack) []string {
 		issues = append(issues, "execution.status is required")
 	}
 	issues = append(issues, contracts.ValidateEUAIActEvidenceProfile(pack.EUAIActProfile)...)
+	if pack.Lineage != nil {
+		if err := pack.Lineage.Validate(); err != nil {
+			issues = append(issues, "lineage is invalid: "+err.Error())
+		}
+	}
 
 	// Verify pack hash
 	if pack.Attestation.PackHash != "" {

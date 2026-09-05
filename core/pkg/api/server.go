@@ -157,6 +157,10 @@ type EvaluateRequest struct {
 	EffectLevel string         `json:"effect_level"`
 	SessionID   string         `json:"session_id"`
 	Context     map[string]any `json:"context"`
+	// Originator is accepted only by the dedicated OrganizationRuntime route.
+	// It is distinct from the authenticated service principal executing the
+	// request and replaces caller-controlled context aliases.
+	Originator *contracts.OrganizationRuntimeOriginatorAssertion `json:"originator,omitempty"`
 }
 
 // NormalizeEvaluateRequest resolves the public V5 and direct-daemon aliases
@@ -207,16 +211,39 @@ func NormalizeEvaluateRequest(req *EvaluateRequest) error {
 	return nil
 }
 
+// NormalizeOrganizationRuntimeEvaluateRequest keeps the concrete resource
+// separate from its effect class while retaining the shared action and session
+// normalization used by the public evaluate envelope.
+func NormalizeOrganizationRuntimeEvaluateRequest(req *EvaluateRequest) error {
+	resource := strings.TrimSpace(req.Resource)
+	effectLevel := strings.TrimSpace(req.EffectLevel)
+	if resource == "" || effectLevel == "" {
+		return fmt.Errorf("resource and effect_level are required for organization-runtime evaluation")
+	}
+
+	// NormalizeEvaluateRequest treats resource as the legacy effect-level alias.
+	// Temporarily supply the explicit effect class, then restore the independently
+	// bound concrete resource.
+	req.Resource = effectLevel
+	if err := NormalizeEvaluateRequest(req); err != nil {
+		req.Resource = resource
+		return err
+	}
+	req.Resource = resource
+	return nil
+}
+
 // EvaluateResponse is the JSON response sent back to SDKs.
 type EvaluateResponse struct {
-	Allow        bool   `json:"allow"`
-	Verdict      string `json:"verdict"`
-	ReceiptID    string `json:"receipt_id"`
-	DecisionID   string `json:"decision_id"`
-	DecisionHash string `json:"decision_hash"`
-	ReasonCode   string `json:"reason_code"`
-	PolicyRef    string `json:"policy_ref"`
-	LamportClock uint64 `json:"lamport_clock"`
+	Allow                                  bool                                                `json:"allow"`
+	Verdict                                string                                              `json:"verdict"`
+	ReceiptID                              string                                              `json:"receipt_id"`
+	DecisionID                             string                                              `json:"decision_id"`
+	DecisionHash                           string                                              `json:"decision_hash"`
+	ReasonCode                             string                                              `json:"reason_code"`
+	PolicyRef                              string                                              `json:"policy_ref"`
+	LamportClock                           uint64                                              `json:"lamport_clock"`
+	OrganizationRuntimeDecisionAttestation *contracts.OrganizationRuntimeDecisionAttestationV1 `json:"organization_runtime_decision_attestation,omitempty"`
 	// The legacy DecisionRecord-shaped fields remain additive v0.8 response
 	// compatibility for direct-daemon callers.
 	ID                 string `json:"id,omitempty"`

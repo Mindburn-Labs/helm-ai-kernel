@@ -1,7 +1,11 @@
 package main
 
+// quantum_posture: runtime wiring retains classical Ed25519 signing and trust;
+// it does not add post-quantum cryptographic controls.
+
 import (
 	"context"
+	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -89,7 +93,9 @@ type Services struct {
 	KernelRT *kernelruntime.Server
 
 	// --- Security ---
-	Guardian *guardian.Guardian
+	Guardian                       *guardian.Guardian
+	CompanyActivationPublicKey     ed25519.PublicKey
+	CompanyActivationEnvironmentID string
 
 	// --- Runtime Policy Authority ---
 	PolicyReconciler    *policyreconcile.Reconciler
@@ -132,6 +138,22 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 
 	// --- 1. Config ---
 	s.Config = config.Load()
+	activationPublicKey, err := configuredCompanyActivationPublicKey()
+	if err != nil {
+		return nil, err
+	}
+	organizationRuntimeKey, err := configuredOrganizationRuntimeAPIKey()
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCompanyActivationRuntimeConfiguration(activationPublicKey, organizationRuntimeKey); err != nil {
+		return nil, err
+	}
+	s.CompanyActivationPublicKey = activationPublicKey
+	s.CompanyActivationEnvironmentID, err = configuredCompanyActivationEnvironmentID()
+	if err != nil {
+		return nil, err
+	}
 	logger.Info("subsystem ready", "component", " Config loaded")
 
 	// --- 2. Observability ---

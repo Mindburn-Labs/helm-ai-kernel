@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.org/schemas/evidence_pack_successor.json",
+  "title": "EvidencePackSuccessor",
+  "description": "Immutable operational-evaluation or measurement addendum linked to a sealed EvidencePack and its ProofGraph predecessor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_version",
+    "successor_id",
+    "kind",
+    "predecessor_ref",
+    "predecessor_hash",
+    "sealed_pack_ref",
+    "sealed_pack_hash",
+    "lineage",
+    "evidence_ref",
+    "evidence_hash",
+    "recorded_at",
+    "successor_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "evidence-pack-successor.v1" },
+    "contract_version": { "const": "2026-09-04" },
+    "successor_id": { "$ref": "#/$defs/sha256" },
+    "kind": {
+      "enum": [
+        "OPERATIONAL_EVALUATION",
+        "MEASUREMENT_PROGRESS",
+        "MEASUREMENT_FINAL",
+        "MEASUREMENT_CENSORED"
+      ]
+    },
+    "predecessor_ref": { "$ref": "#/$defs/token" },
+    "predecessor_hash": { "$ref": "#/$defs/sha256" },
+    "sealed_pack_ref": { "$ref": "#/$defs/token" },
+    "sealed_pack_hash": { "$ref": "#/$defs/sha256" },
+    "lineage": { "$ref": "#/$defs/lineage" },
+    "evidence_ref": { "$ref": "#/$defs/token" },
+    "evidence_hash": { "$ref": "#/$defs/sha256" },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "successor_hash": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^\\S+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "tenant_id",
+        "company_id",
+        "workspace_id",
+        "environment_id",
+        "activation_record_ref",
+        "activation_record_hash",
+        "outcome_contract_ref",
+        "outcome_contract_hash",
+        "measurement_plan_ref",
+        "measurement_plan_hash",
+        "window_identity"
+      ],
+      "properties": {
+        "schema_version": { "const": "evidence-pack-lineage.v1" },
+        "tenant_id": { "$ref": "#/$defs/token" },
+        "company_id": { "$ref": "#/$defs/token" },
+        "workspace_id": { "$ref": "#/$defs/token" },
+        "environment_id": { "$ref": "#/$defs/token" },
+        "activation_record_ref": { "$ref": "#/$defs/token" },
+        "activation_record_hash": { "$ref": "#/$defs/sha256" },
+        "outcome_contract_ref": { "$ref": "#/$defs/token" },
+        "outcome_contract_hash": { "$ref": "#/$defs/sha256" },
+        "measurement_plan_ref": { "$ref": "#/$defs/token" },
+        "measurement_plan_hash": { "$ref": "#/$defs/sha256" },
+        "window_identity": { "$ref": "#/$defs/token" }
+      }
+    }
+  }
+}

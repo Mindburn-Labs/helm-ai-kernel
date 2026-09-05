@@ -1,0 +1,79 @@
+{
+  "$comment": "quantum_posture: classical Ed25519 effect acknowledgement and close receipt only; no hybrid or post-quantum claim.",
+  "schema_version": "effect-close-vectors.v2",
+  "contract_version": "2026-09-04",
+  "quantum_posture": "classical_ed25519_only",
+  "acknowledgement": {
+    "artifact": {
+      "canonical": "acknowledgement.c14n.json",
+      "sha256": "sha256:25775135121e1bfd6668fca652a750b6a308682964cd25a5f8b71254ea02e6b0"
+    },
+    "envelope": {
+      "canonical": "acknowledgement_envelope.c14n.json",
+      "sha256": "sha256:0cb2f80d894944bf758124f90c0f648790b088e49c730f80a6940d3da76aeeeb"
+    },
+    "signing_payload": {
+      "canonical": "acknowledgement_signing_payload.c14n.json",
+      "sha256": "sha256:c4d0047b097cb8e769716b928ba58eceb049f141e14da75da22d104646fdfed9"
+    },
+    "public_key": "ed25519:772c8a442b7db06e166cfbc1ccbcbcde6f3eba76a4e98ef3ffc519502237d6ef",
+    "signature": "ed25519:55a957886bd91921058685e428e6a99c98ab081eeb172acb75ffb334803c6e8dbcd4fa40276706d27625d824774888869119a62a92c79e16dcac22db73629803",
+    "key_not_before": "2026-09-04T11:00:00.123456Z",
+    "key_not_after": "2026-09-04T13:00:00.123456Z"
+  },
+  "receipt": {
+    "artifact": {
+      "canonical": "receipt.c14n.json",
+      "sha256": "sha256:6fb685294123974d9083f4220c3d6a1065889783961b07d6a45ef4f0d41331f3"
+    },
+    "envelope": {
+      "canonical": "",
+      "sha256": ""
+    },
+    "signing_payload": {
+      "canonical": "receipt_signing_payload.c14n.json",
+      "sha256": "sha256:dcf787e9b1fe34510330ea52730e6f308a9f3912f2badaaf9a84e64456c7ce1b"
+    },
+    "public_key": "ed25519:353c8a7feeca38b2c4536e0bd2586fdb18d070e50e059f1d43f8bfefb97a7ce1",
+    "signature": "ed25519:6f5405d94af8a2a65f2cfebdd17e8f746a9832eec2ee548ab101474439a0f1dac1c14602fb82a3c99e6ad59349eee083c6b2032d54483c7cb5cc5ac86414d709",
+    "key_not_before": "2026-09-04T11:00:00.123456Z",
+    "key_not_after": "2026-09-04T13:00:00.123456Z"
+  },
+  "negative_vectors": [
+    {
+      "id": "acknowledgement_activation_hash_tamper",
+      "mutation": "set_acknowledgement_activation_record_hash_to_tampered",
+      "expected_error": "acknowledgement_hash_mismatch"
+    },
+    {
+      "id": "acknowledgement_observed_fact_unsorted",
+      "mutation": "reverse_acknowledgement_observed_external_facts_and_reseal",
+      "expected_error": "acknowledgement_contract_rejected"
+    },
+    {
+      "id": "acknowledgement_compensation_removed",
+      "mutation": "remove_acknowledgement_conditional_compensation_ref_and_reseal",
+      "expected_error": "acknowledgement_contract_rejected"
+    },
+    {
+      "id": "receipt_activation_hash_substitution",
+      "mutation": "set_receipt_activation_record_hash_to_other_and_reseal",
+      "expected_error": "acknowledgement_binding_rejected"
+    },
+    {
+      "id": "receipt_signature_tamper",
+      "mutation": "flip_receipt_signature_last_bit",
+      "expected_error": "receipt_signature_rejected"
+    },
+    {
+      "id": "receipt_deadline_removal",
+      "mutation": "remove_receipt_finality_deadline_and_reseal",
+      "expected_error": "receipt_contract_rejected"
+    },
+    {
+      "id": "receipt_resolution_failure_without_outcome_flip",
+      "mutation": "set_receipt_resolution_state_to_finalized_failure_and_reseal",
+      "expected_error": "receipt_contract_rejected"
+    }
+  ]
+}

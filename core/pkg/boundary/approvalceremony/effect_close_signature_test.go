@@ -6,6 +6,7 @@ package approvalceremony
 import (
 	"bytes"
 	"crypto/ed25519"
+	"encoding/hex"
 	"errors"
 	"testing"
 	"time"
@@ -113,6 +114,53 @@ func TestEffectCloseSignaturesUseIndependentDomainsAndPinnedKeys(t *testing.T) {
 	); !errors.Is(err, ErrGrantSignatureRejected) {
 		t.Fatalf("cross-contract signature error = %v", err)
 	}
+
+	deadline := now.Add(2 * time.Hour)
+	acknowledgementV2 := effectCloseSignatureAcknowledgementV2(t, now, &deadline)
+	envelopeV2, err := SignConnectorEffectAcknowledgementV2(acknowledgementV2, connectorSigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifier.VerifyEnvelopeV2(envelopeV2); err != nil {
+		t.Fatalf("VerifyEnvelopeV2(): %v", err)
+	}
+	payloadV1, err := ConnectorEffectAcknowledgementSigningPayload(acknowledgement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ed25519.Verify(connectorSigner.PublicKeyBytes(), payloadV1, mustDecodeHex(t, envelopeV2.Signature)) {
+		t.Fatal("v2 acknowledgement signature verified against v1 payload")
+	}
+	payloadV2, err := ConnectorEffectAcknowledgementV2SigningPayload(acknowledgementV2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ed25519.Verify(connectorSigner.PublicKeyBytes(), payloadV2, mustDecodeHex(t, envelope.Signature)) {
+		t.Fatal("v1 acknowledgement signature verified against v2 payload")
+	}
+
+	receiptV2 := effectCloseSignatureReceiptV2(t, acknowledgementV2, now.Add(2*time.Second))
+	signatureV2, err := SignEffectCloseReceiptV2(receiptV2, kernelSigner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := kernelVerifier.VerifyEffectCloseReceiptV2Signature(receiptV2, GrantSignatureEd25519, signatureV2); err != nil {
+		t.Fatalf("VerifyEffectCloseReceiptV2Signature(): %v", err)
+	}
+	receiptPayloadV1, err := EffectCloseReceiptSigningPayload(receipt, GrantSignatureEd25519)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ed25519.Verify(kernelSigner.PublicKeyBytes(), receiptPayloadV1, mustDecodeHex(t, signatureV2)) {
+		t.Fatal("v2 close signature verified against v1 receipt payload")
+	}
+	receiptPayloadV2, err := EffectCloseReceiptV2SigningPayload(receiptV2, GrantSignatureEd25519)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ed25519.Verify(kernelSigner.PublicKeyBytes(), receiptPayloadV2, mustDecodeHex(t, signature)) {
+		t.Fatal("v1 close signature verified against v2 receipt payload")
+	}
 }
 
 func effectCloseSignatureAcknowledgement(t *testing.T, now time.Time) contracts.ConnectorEffectAcknowledgement {
@@ -163,4 +211,82 @@ func effectCloseSignatureReceipt(
 		t.Fatal(err)
 	}
 	return receipt
+}
+
+func effectCloseSignatureAcknowledgementV2(
+	t *testing.T,
+	now time.Time,
+	deadline *time.Time,
+) contracts.ConnectorEffectAcknowledgementV2 {
+	t.Helper()
+	acknowledgement, err := (contracts.ConnectorEffectAcknowledgementV2{
+		SchemaVersion:     contracts.ConnectorEffectAcknowledgementSchemaV2,
+		ContractVersion:   contracts.ConnectorEffectAcknowledgementContractV2,
+		AcknowledgementID: "ack-v2", AdmissionID: "admission-v2", AttemptID: "attempt-v2",
+		TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "packs.lifecycle",
+		ConnectorID: "github", ConnectorVersion: "1.0.0", ConnectorAction: "github.create_issue",
+		ConnectorExecutionRef: "github-request-v2", AdapterID: "adapter.github-app", AdapterVersion: "2026.09.04",
+		AdapterCapabilityRef: "capability:github.issue.create", AdapterCapabilityHash: shaRef("c"),
+		ProofSessionRef: "proof-v2", IntentRef: "intent-v2", ActivationRecordRef: "activation-record-v2",
+		ActivationRecordHash: shaRef("6"), IdempotencyKeyHash: shaRef("7"), EffectHash: shaRef("8"),
+		Outcome: contracts.ConnectorEffectOutcomeApplied, ResponseHash: shaRef("9"), EffectRef: "github-issue-77",
+		ReconciliationRef: "reconciliation-v2",
+		Finality: &contracts.EffectCloseFinalityV2{
+			ExpectedFinalityPredicateRef:  "predicate:github.issue.created",
+			ExpectedFinalityPredicateHash: shaRef("d"),
+			ObservedExternalFacts: []contracts.EffectCloseObservedExternalFactV2{
+				{Ref: "fact:delivery", Hash: shaRef("e")},
+				{Ref: "fact:webhook", Hash: shaRef("f")},
+			},
+			ReconciliationDeadline: *deadline, ResolutionRef: "resolution-v2",
+			ResolutionState:            contracts.EffectCloseResolutionStateCompensated,
+			ConditionalCompensationRef: "compensation-v2",
+		},
+		IssuerID: "publisher-a", SigningKeyRef: "kms://connector/ack-a",
+		Algorithm: contracts.ConnectorEffectAcknowledgementAlgorithm, ObservedAt: now,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return acknowledgement
+}
+
+func effectCloseSignatureReceiptV2(
+	t *testing.T,
+	acknowledgement contracts.ConnectorEffectAcknowledgementV2,
+	closedAt time.Time,
+) contracts.EffectCloseReceiptV2 {
+	t.Helper()
+	receipt, err := (contracts.EffectCloseReceiptV2{
+		SchemaVersion: contracts.EffectCloseReceiptSchemaV2, ContractVersion: contracts.EffectCloseReceiptContractV2,
+		CloseID: "effect-close-v2", State: contracts.EffectCloseReceiptStateClosed,
+		AdmissionID: acknowledgement.AdmissionID, AttemptID: acknowledgement.AttemptID,
+		TenantID: acknowledgement.TenantID, WorkspaceID: acknowledgement.WorkspaceID, Audience: acknowledgement.Audience,
+		ConnectorID: acknowledgement.ConnectorID, ConnectorVersion: acknowledgement.ConnectorVersion,
+		ConnectorAction: acknowledgement.ConnectorAction, AdapterID: acknowledgement.AdapterID, AdapterVersion: acknowledgement.AdapterVersion,
+		AdapterCapabilityRef: acknowledgement.AdapterCapabilityRef, AdapterCapabilityHash: acknowledgement.AdapterCapabilityHash,
+		PriorState: contracts.EffectClosePriorStateStarted, ReservationSequence: 2,
+		ReservationHeadHash: shaRef("a"), AcknowledgementHash: acknowledgement.AcknowledgementHash,
+		ActivationRecordRef: acknowledgement.ActivationRecordRef, ActivationRecordHash: acknowledgement.ActivationRecordHash,
+		IdempotencyKeyHash: acknowledgement.IdempotencyKeyHash, EffectHash: acknowledgement.EffectHash,
+		Outcome: acknowledgement.Outcome, ResponseHash: acknowledgement.ResponseHash,
+		ConnectorExecutionRef: acknowledgement.ConnectorExecutionRef, ProofSessionRef: acknowledgement.ProofSessionRef,
+		IntentRef: acknowledgement.IntentRef, EffectRef: acknowledgement.EffectRef, ReconciliationRef: acknowledgement.ReconciliationRef,
+		Finality: acknowledgement.Finality, EvidencePackRef: "evidence-pack-v2", EvidencePackHash: shaRef("b"),
+		KernelTrustRootID: "kernel-root-a", SigningKeyRef: "kms://helm/approval-a",
+		ClosedBy: "spiffe://helm/data-plane-a", ClosedAt: closedAt,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return receipt
+}
+
+func mustDecodeHex(t *testing.T, value string) []byte {
+	t.Helper()
+	decoded, err := hex.DecodeString(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decoded
 }

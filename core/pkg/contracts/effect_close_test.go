@@ -98,6 +98,122 @@ func TestConnectorEffectAcknowledgementEnvelopeRejectsNonCanonicalSignature(t *t
 	}
 }
 
+func TestConnectorEffectAcknowledgementV2AndCloseReceiptV2Integrity(t *testing.T) {
+	now := time.Date(2026, 9, 4, 10, 11, 12, 123456000, time.UTC)
+	deadline := now.Add(2 * time.Hour)
+	acknowledgement, err := (ConnectorEffectAcknowledgementV2{
+		SchemaVersion: ConnectorEffectAcknowledgementSchemaV2, ContractVersion: ConnectorEffectAcknowledgementContractV2,
+		AcknowledgementID: "ack-v2", AdmissionID: "admission-v2", AttemptID: "attempt-v2",
+		TenantID: "tenant-a", WorkspaceID: "workspace-a", Audience: "packs.lifecycle",
+		ConnectorID: "github", ConnectorVersion: "1.2.3", ConnectorAction: "github.create_issue",
+		ConnectorExecutionRef: "github-request-v2", AdapterID: "adapter.github-app", AdapterVersion: "2026.09.04",
+		AdapterCapabilityRef: "capability:github.issue.create", AdapterCapabilityHash: effectCloseTestSHA("adapter-capability"),
+		IntentRef: "intent-v2", ActivationRecordRef: "activation-record-v2", ActivationRecordHash: effectCloseTestSHA("activation"),
+		IdempotencyKeyHash: effectCloseTestSHA("idempotency-v2"), EffectHash: effectCloseTestSHA("effect-v2"),
+		Outcome: ConnectorEffectOutcomeApplied, ResponseHash: effectCloseTestSHA("response-v2"), EffectRef: "github-issue-77",
+		ReconciliationRef: "reconciliation-v2",
+		Finality: &EffectCloseFinalityV2{
+			ExpectedFinalityPredicateRef:  "predicate:github.issue.created",
+			ExpectedFinalityPredicateHash: effectCloseTestSHA("predicate-v2"),
+			ObservedExternalFacts: []EffectCloseObservedExternalFactV2{
+				{Ref: "fact:delivery", Hash: effectCloseTestSHA("fact-delivery")},
+				{Ref: "fact:webhook", Hash: effectCloseTestSHA("fact-webhook")},
+			},
+			ReconciliationDeadline:     deadline,
+			ResolutionRef:              "resolution-v2",
+			ResolutionState:            EffectCloseResolutionStateCompensated,
+			ConditionalCompensationRef: "compensation-v2",
+		},
+		IssuerID: "publisher-v2", SigningKeyRef: "kms://connector/ack-v2",
+		Algorithm: ConnectorEffectAcknowledgementAlgorithm, ObservedAt: now,
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := acknowledgement.ValidateIntegrity(); err != nil {
+		t.Fatalf("ValidateIntegrity(): %v", err)
+	}
+	receipt, err := (EffectCloseReceiptV2{
+		SchemaVersion: EffectCloseReceiptSchemaV2, ContractVersion: EffectCloseReceiptContractV2,
+		CloseID: "effect-close-v2", State: EffectCloseReceiptStateClosed,
+		AdmissionID: acknowledgement.AdmissionID, AttemptID: acknowledgement.AttemptID,
+		TenantID: acknowledgement.TenantID, WorkspaceID: acknowledgement.WorkspaceID, Audience: acknowledgement.Audience,
+		ConnectorID: acknowledgement.ConnectorID, ConnectorVersion: acknowledgement.ConnectorVersion,
+		ConnectorAction: acknowledgement.ConnectorAction, AdapterID: acknowledgement.AdapterID, AdapterVersion: acknowledgement.AdapterVersion,
+		AdapterCapabilityRef: acknowledgement.AdapterCapabilityRef, AdapterCapabilityHash: acknowledgement.AdapterCapabilityHash,
+		PriorState: EffectClosePriorStateUncertain, ReservationSequence: 7, ReservationHeadHash: effectCloseTestSHA("head-v2"),
+		AcknowledgementHash: acknowledgement.AcknowledgementHash, ActivationRecordRef: acknowledgement.ActivationRecordRef,
+		ActivationRecordHash: acknowledgement.ActivationRecordHash, IdempotencyKeyHash: acknowledgement.IdempotencyKeyHash,
+		EffectHash: acknowledgement.EffectHash, Outcome: acknowledgement.Outcome, ResponseHash: acknowledgement.ResponseHash,
+		ConnectorExecutionRef: acknowledgement.ConnectorExecutionRef, IntentRef: acknowledgement.IntentRef,
+		EffectRef: acknowledgement.EffectRef, ReconciliationRef: acknowledgement.ReconciliationRef, Finality: acknowledgement.Finality,
+		EvidencePackRef: "evidence-pack-v2", EvidencePackHash: effectCloseTestSHA("evidence-pack-v2"),
+		KernelTrustRootID: "kernel-root-v2", SigningKeyRef: "kms://helm/approval-v2",
+		ClosedBy: "spiffe://helm/data-plane-v2", ClosedAt: now.Add(time.Second),
+	}).Seal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := receipt.ValidateAcknowledgement(acknowledgement); err != nil {
+		t.Fatalf("ValidateAcknowledgement(): %v", err)
+	}
+
+	unsortedFacts := acknowledgement
+	unsortedFacts.AcknowledgementHash = ""
+	unsortedFacts.Finality = &EffectCloseFinalityV2{
+		ExpectedFinalityPredicateRef:  "predicate:github.issue.created",
+		ExpectedFinalityPredicateHash: effectCloseTestSHA("predicate-v2"),
+		ObservedExternalFacts: []EffectCloseObservedExternalFactV2{
+			{Ref: "fact:webhook", Hash: effectCloseTestSHA("fact-webhook")},
+			{Ref: "fact:delivery", Hash: effectCloseTestSHA("fact-delivery")},
+		},
+		ReconciliationDeadline: deadline,
+		ResolutionRef:          "resolution-v2",
+		ResolutionState:        EffectCloseResolutionStateSuccess,
+	}
+	if _, err := unsortedFacts.Seal(); !errors.Is(err, ErrConnectorEffectAcknowledgementInvalid) {
+		t.Fatalf("unsorted observed_external_facts error = %v", err)
+	}
+
+	missingDeadline := acknowledgement
+	missingDeadline.AcknowledgementHash = ""
+	missingDeadline.Finality = &EffectCloseFinalityV2{
+		ExpectedFinalityPredicateRef:  "predicate:github.issue.created",
+		ExpectedFinalityPredicateHash: effectCloseTestSHA("predicate-v2"),
+		ObservedExternalFacts: []EffectCloseObservedExternalFactV2{
+			{Ref: "fact:delivery", Hash: effectCloseTestSHA("fact-delivery")},
+		},
+		ResolutionRef:              "resolution-v2",
+		ResolutionState:            EffectCloseResolutionStateCompensated,
+		ConditionalCompensationRef: "compensation-v2",
+	}
+	if _, err := missingDeadline.Seal(); !errors.Is(err, ErrConnectorEffectAcknowledgementInvalid) {
+		t.Fatalf("missing reconciliation_deadline error = %v", err)
+	}
+
+	mismatchedOutcome := acknowledgement
+	mismatchedOutcome.AcknowledgementHash = ""
+	mismatchedOutcome.Outcome = ConnectorEffectOutcomeNotApplied
+	if _, err := mismatchedOutcome.Seal(); !errors.Is(err, ErrConnectorEffectAcknowledgementInvalid) {
+		t.Fatalf("resolution_state to outcome mismatch error = %v", err)
+	}
+
+	mutatedReceipt := receipt
+	mutatedReceipt.ActivationRecordHash = effectCloseTestSHA("other-activation")
+	if err := mutatedReceipt.ValidateIntegrity(); !errors.Is(err, ErrEffectCloseReceiptInvalid) {
+		t.Fatalf("tampered activation hash integrity error = %v", err)
+	}
+
+	legacy := ConnectorEffectAcknowledgement{
+		SchemaVersion:   acknowledgement.SchemaVersion,
+		ContractVersion: acknowledgement.ContractVersion,
+		Algorithm:       acknowledgement.Algorithm,
+	}
+	if err := legacy.Validate(); !errors.Is(err, ErrConnectorEffectAcknowledgementInvalid) {
+		t.Fatalf("v2 acknowledgement reached v1 validator: %v", err)
+	}
+}
+
 func effectCloseTestSHA(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return "sha256:" + hex.EncodeToString(sum[:])

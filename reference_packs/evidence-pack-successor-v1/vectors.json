@@ -1,0 +1,85 @@
+{
+  "$comment": "Immutable EvidencePack successor hashes and ProofGraph nodes; integrity only, no deployment or production-proof claim.",
+  "schema_version": "evidence-pack-successor-vectors.v1",
+  "contract_version": "2026-09-04",
+  "files": [
+    {
+      "role": "frozen_lineage",
+      "canonical": "lineage.c14n.json",
+      "sha256": "sha256:79af5bbcd7ca236ae2cff3ea6695d5da794cf04c7dd3825812863c79a668427d"
+    },
+    {
+      "role": "operational_evaluation",
+      "canonical": "operational_evaluation.c14n.json",
+      "sha256": "sha256:8f7376012951f01a16fd39292de7bbbe5b40f7f00bbe78453ae4c4627789109a"
+    },
+    {
+      "role": "measurement_progress",
+      "canonical": "measurement_progress.c14n.json",
+      "sha256": "sha256:9bc2450c688561c31e6997c938c4d3cfc952ca8320f63188d62c909bfd733ded"
+    },
+    {
+      "role": "measurement_final",
+      "canonical": "measurement_final.c14n.json",
+      "sha256": "sha256:b76c1f48c58a05ffe12692991310361343eae8ce372c12c2925e4da792996d37"
+    },
+    {
+      "role": "measurement_censored",
+      "canonical": "measurement_censored.c14n.json",
+      "sha256": "sha256:5ba7837c11b7cbff09749ade55f542114e7020221a0dc31723cb25bb78146ba7"
+    },
+    {
+      "role": "proofgraph_final_chain",
+      "canonical": "final_nodes.c14n.json",
+      "sha256": "sha256:33b7a6b4e20c5c6f2089ee992c3358a7bbe5c6505b7d03c18a6fe2dd80f1feee"
+    },
+    {
+      "role": "proofgraph_censored_chain",
+      "canonical": "censored_nodes.c14n.json",
+      "sha256": "sha256:5bf817a7428d77dae5ea37af8fe70e1b30596a6fdbd5e015127bbe176c80e4fd"
+    }
+  ],
+  "final_node_chain": [
+    "a2056eed2bdd7bdaaa9df5d3fe562416e9b855a6740e675030ab27df7ff985c7",
+    "1fc7eadf56ad484269fbbbfed677d17c5ca087372d4c121922822f88a6d256de",
+    "1413597b265e2f76bdbd112a74d7acbb3a71a930fb865a230b064431f61b8570",
+    "02c1454c33fea711ec3c31a47dcbd942f501586f5d1f062a043cb73b560c4c0e"
+  ],
+  "censored_node_chain": [
+    "a2056eed2bdd7bdaaa9df5d3fe562416e9b855a6740e675030ab27df7ff985c7",
+    "1fc7eadf56ad484269fbbbfed677d17c5ca087372d4c121922822f88a6d256de",
+    "f7e6120bf0bd24197b19b712ffa544cfa53fb9a04975ab44037337e16ee474a0"
+  ],
+  "negative_vectors": [
+    {
+      "id": "unknown_extension",
+      "mutation": "add_unknown_successor_field",
+      "expected_error": "contract_rejected"
+    },
+    {
+      "id": "frozen_outcome_substitution",
+      "mutation": "replace_outcome_contract_hash_and_reseal",
+      "expected_error": "lineage_conflict"
+    },
+    {
+      "id": "conflicting_duplicate",
+      "mutation": "replace_evidence_hash_without_changing_identity",
+      "expected_error": "successor_hash_mismatch"
+    },
+    {
+      "id": "progress_relabelled_final",
+      "mutation": "set_progress_kind_to_measurement_final_without_reseal",
+      "expected_error": "successor_id_mismatch"
+    },
+    {
+      "id": "final_then_censored",
+      "mutation": "append_censored_after_final",
+      "expected_error": "measurement_closed"
+    },
+    {
+      "id": "dangling_predecessor",
+      "mutation": "replace_proofgraph_parent_with_unknown_hash",
+      "expected_error": "dangling_predecessor"
+    }
+  ]
+}

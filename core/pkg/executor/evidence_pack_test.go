@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,6 +155,44 @@ func TestEvidencePackProducer_HashIntegrity(t *testing.T) {
 	}
 
 	_ = hashTampered // Use variable to avoid unused error
+}
+
+func TestEvidencePackSuccessorLineageIsSealedAtEffectTime(t *testing.T) {
+	producer := NewEvidencePackProducer("1.0.0")
+	lineage := executorTestEvidencePackLineage()
+	pack, err := producer.Produce(context.Background(), &EvidencePackInput{
+		ActorID: "actor-1", DecisionID: "decision-1", EffectID: "effect-1", Status: "success",
+		Lineage: &lineage,
+	})
+	if err != nil {
+		t.Fatalf("Produce(): %v", err)
+	}
+	if pack.Lineage == nil || *pack.Lineage != lineage {
+		t.Fatalf("pack lineage = %#v, want %#v", pack.Lineage, lineage)
+	}
+
+	originalHash := pack.Attestation.PackHash
+	lineage.OutcomeContractHash = executorTestEvidencePackHash("b")
+	if pack.Lineage.OutcomeContractHash == lineage.OutcomeContractHash {
+		t.Fatal("producer retained a mutable alias to the caller's lineage")
+	}
+	pack.Lineage.OutcomeContractHash = executorTestEvidencePackHash("c")
+	issues := ValidateEvidencePack(pack)
+	if !containsEvidencePackIssue(issues, "attestation.pack_hash does not match computed hash") {
+		t.Fatalf("lineage mutation did not invalidate %s: issues=%v", originalHash, issues)
+	}
+}
+
+func TestEvidencePackSuccessorLineageRejectsInvalidEffectTimeBinding(t *testing.T) {
+	lineage := executorTestEvidencePackLineage()
+	lineage.CompanyID = "another-tenant"
+	_, err := NewEvidencePackProducer("1.0.0").Produce(context.Background(), &EvidencePackInput{
+		ActorID: "actor-1", DecisionID: "decision-1", EffectID: "effect-1", Status: "success",
+		Lineage: &lineage,
+	})
+	if err == nil {
+		t.Fatal("Produce() accepted an invalid effect-time lineage")
+	}
 }
 
 func TestEvidencePackProducer_VerificationScopeHashDeterminism(t *testing.T) {
@@ -354,6 +393,36 @@ func TestEvidencePackHashIncludesEUAIActProfile(t *testing.T) {
 	if withProfile == withoutProfile {
 		t.Fatal("EU AI Act profile changes must affect evidence pack hash")
 	}
+}
+
+func executorTestEvidencePackLineage() contracts.EvidencePackLineage {
+	return contracts.EvidencePackLineage{
+		SchemaVersion:        contracts.EvidencePackLineageSchemaV1,
+		TenantID:             "tenant-a",
+		CompanyID:            "tenant-a",
+		WorkspaceID:          "workspace-a",
+		EnvironmentID:        "staging-a",
+		ActivationRecordRef:  "activation:company-a",
+		ActivationRecordHash: executorTestEvidencePackHash("a"),
+		OutcomeContractRef:   "outcome-contract:crm-hygiene",
+		OutcomeContractHash:  executorTestEvidencePackHash("d"),
+		MeasurementPlanRef:   "measurement-plan:crm-hygiene",
+		MeasurementPlanHash:  executorTestEvidencePackHash("e"),
+		WindowIdentity:       "window:crm-hygiene:2026-09",
+	}
+}
+
+func executorTestEvidencePackHash(character string) string {
+	return "sha256:" + strings.Repeat(character, 64)
+}
+
+func containsEvidencePackIssue(issues []string, want string) bool {
+	for _, issue := range issues {
+		if issue == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestEvidencePackProducer_CorrelationIDFromContext(t *testing.T) {

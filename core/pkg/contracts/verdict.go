@@ -79,6 +79,10 @@ const (
 	ReasonIdentityIsolationViolation ReasonCode = "IDENTITY_ISOLATION_VIOLATION"
 	ReasonApprovalRequired           ReasonCode = "APPROVAL_REQUIRED" // Maps to canonical ESCALATE workflow
 	ReasonApprovalTimeout            ReasonCode = "APPROVAL_TIMEOUT"
+	ReasonActivationTrustUnavailable ReasonCode = "ACTIVATION_TRUST_UNAVAILABLE"
+	ReasonActivationRecordInvalid    ReasonCode = "ACTIVATION_RECORD_INVALID"
+	ReasonActivationBindingMismatch  ReasonCode = "ACTIVATION_BINDING_MISMATCH"
+	ReasonActivationCeilingExceeded  ReasonCode = "ACTIVATION_CEILING_EXCEEDED"
 
 	// ── Delegation Reasons (v1.3) ───────────────────────────
 	ReasonDelegationInvalid           ReasonCode = "DELEGATION_INVALID"
@@ -213,6 +217,10 @@ func CoreReasonCodes() []ReasonCode {
 		ReasonIdentityIsolationViolation,
 		ReasonApprovalRequired,
 		ReasonApprovalTimeout,
+		ReasonActivationTrustUnavailable,
+		ReasonActivationRecordInvalid,
+		ReasonActivationBindingMismatch,
+		ReasonActivationCeilingExceeded,
 		ReasonDelegationInvalid,
 		ReasonDelegationScopeViolation,
 		ReasonDelegationPrincipalMismatch,

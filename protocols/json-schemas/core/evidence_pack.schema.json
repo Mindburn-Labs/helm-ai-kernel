@@ -31,9 +31,42 @@
     "reconciliation": { "$ref": "#/$defs/reconciliation" },
     "verification_scopes": { "type": "array", "items": { "$ref": "#/$defs/verification_scope" } },
     "harness_trace_refs": { "type": "array", "items": { "$ref": "#/$defs/harness_trace_ref" } },
+    "lineage": { "$ref": "#/$defs/lineage" },
     "attestation": { "$ref": "#/$defs/attestation" }
   },
   "$defs": {
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "tenant_id",
+        "company_id",
+        "workspace_id",
+        "environment_id",
+        "activation_record_ref",
+        "activation_record_hash",
+        "outcome_contract_ref",
+        "outcome_contract_hash",
+        "measurement_plan_ref",
+        "measurement_plan_hash",
+        "window_identity"
+      ],
+      "properties": {
+        "schema_version": { "const": "evidence-pack-lineage.v1" },
+        "tenant_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" },
+        "company_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" },
+        "workspace_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" },
+        "environment_id": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" },
+        "activation_record_ref": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" },
+        "activation_record_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "outcome_contract_ref": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" },
+        "outcome_contract_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "measurement_plan_ref": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" },
+        "measurement_plan_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "window_identity": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S+$" }
+      }
+    },
     "identity": {
       "type": "object",
       "additionalProperties": false,

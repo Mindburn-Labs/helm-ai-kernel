@@ -1,14 +1,14 @@
 ---
 title: Signed Connector Effect Close
 status: internal-foundation
-last_reviewed: 2026-07-18
+last_reviewed: 2026-09-05
 ---
 
 <!-- quantum_posture: documents classical Ed25519 connector effect-close acknowledgement and receipt signing plus offline verification; no post-quantum control is added or claimed. -->
 
 # Signed connector effect close
 
-The Kernel can atomically close a durable connector effect reservation from
+The v1 Kernel close implementation can atomically close a durable connector effect reservation from
 `STARTED` or `UNCERTAIN` when it receives a verified connector acknowledgement
 and a verified, sealed EvidencePack. The close appends `COMPLETED`, but the
 outcome remains explicit as `APPLIED` or `NOT_APPLIED`.
@@ -17,6 +17,10 @@ This is source-owned contract, persistence, and real-PostgreSQL evidence. It is
 internal and pre-production. There is no deployed Data Plane close endpoint,
 connector acknowledgement publisher, deployed cross-plane disposition
 controller, or controlled-live effect proof in this slice.
+
+Version 2 currently adds contracts and reference vectors only. The authority,
+transaction, persistence, and recovery sections below describe v1; they are not
+evidence of a v2 runtime or database implementation.
 
 ## Two independent authorities
 
@@ -163,6 +167,42 @@ of `COMPLETED` without a matching closure. It also rejects close under FENCE
 without a disposition, with a pre-rotation disposition, under `HOLD`, or from a
 structurally valid but cryptographically forged disposition row. These are
 local and CI proofs, not deployed or controlled-live evidence.
+
+## Version 2: contracts and reference vectors only
+
+`connector-effect-acknowledgement.v2` and `effect-close-receipt.v2` retain the
+separate connector-observation and Kernel-closure authorities. Their source
+types live in `core/pkg/contracts/effect_close.go`; detached signing and
+verification live in `core/pkg/boundary/approvalceremony/effect_close_signature.go`.
+They do not replace the v1 types consumed by `EffectCloser` and its PostgreSQL
+store.
+
+V2 additionally binds the activation record ref/hash, exact adapter ID/version,
+adapter capability ref/hash, expected finality predicate ref/hash, sorted unique
+observed external-fact refs/hashes, reconciliation deadline, and resolution
+ref/state. The acknowledgement and receipt must agree on those fields. A
+signature establishes integrity under a pinned key; it does not independently
+establish provider readback or evaluate the referenced finality predicate.
+
+Every v2 close receipt has `state: COMPLETED`. The permitted outcome relations
+are:
+
+| Resolution state | Outcome | Conditional compensation ref |
+|---|---|---|
+| `FINALIZED_SUCCESS` | `APPLIED` | Forbidden |
+| `FINALIZED_FAILURE` | `NOT_APPLIED` | Forbidden |
+| `COMPENSATED` | `APPLIED` | Required |
+
+An unresolved, provisional, or partial result cannot produce a v2 terminal
+receipt. A compensation ref records resolved compensation evidence; it grants
+no authority to execute compensation.
+
+`reference_packs/effect-close-v2` verifies canonical hashes, detached signatures,
+exact acknowledgement/receipt bindings, and seven negative mutations in Go and
+independent Python. `make verify-effect-close-vectors` runs both v1 and v2
+packs. These checks do not establish v2 persistence, an authenticated close
+route, connector publication, durable signed EvidencePack lineage, or live
+provider finality. Those runtime paths remain unimplemented.
 
 ## Remaining production gates
 

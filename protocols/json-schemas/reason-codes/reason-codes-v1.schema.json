@@ -51,6 +51,7 @@
             "agent_lifecycle",
             "approval",
             "capability",
+            "company_activation",
             "compute",
             "connector",
             "connector.ton.acton",

@@ -12,6 +12,8 @@ references:
 
 # EvidencePack Format Specification v1.0
 
+<!-- quantum_posture: the specified signatures use classical Ed25519; this format does not claim post-quantum security. -->
+
 ## Abstract
 
 This document specifies the canonical format for HELM EvidencePacks.
@@ -666,9 +668,48 @@ three failing vectors). They regenerate byte-identically from a fixed pack via
 `evidencepack.VerifyInclusionProof`; the CLI surfaces are
 `helm-ai-kernel evidence prove-entry` and `helm-ai-kernel verify --entry <path> --proof <file>`.
 
-## 15. References
+## 15. Immutable Successor and Addendum Lineage
 
-### 14.1 Normative References
+An effect-time EvidencePack MAY contain an `evidence-pack-lineage.v1` binding.
+Before any outcome evidence is observed, that binding freezes the authenticated
+tenant/company/workspace/environment, CompanyActivationRecord reference and
+hash, outcome-contract reference and hash, measurement-plan reference and
+hash, and measurement-window identity. A producer MUST include this binding in
+the material covered by the original pack seal before it emits a successor.
+
+Later evidence MUST be appended as `evidence-pack-successor.v1`; the sealed
+predecessor MUST NOT be rewritten. The supported evidence kinds are:
+
+- `OPERATIONAL_EVALUATION`;
+- `MEASUREMENT_PROGRESS`;
+- `MEASUREMENT_FINAL`; and
+- `MEASUREMENT_CENSORED`.
+
+`successor_id` is the SHA-256 reference of the RFC 8785 canonical object
+`{schema_version, contract_version, predecessor_hash, kind, contract_hash,
+window_identity}`. `contract_hash` is the frozen outcome-contract hash for an
+operational evaluation and the frozen measurement-plan hash for measurement
+records. `successor_hash` covers the complete successor with that field set to
+the empty string. Thus an exact retry resolves to the prior record, while a
+different payload under the same identity is an equivocation and MUST fail.
+
+The ProofGraph root ATTESTATION carries the sealed pack reference/hash and its
+frozen lineage. An operational evaluation MUST directly follow that root.
+Progress, final, or censored measurement MUST follow the operational evaluation
+or a progress record, with the exact predecessor reference/hash as its sole
+ProofGraph parent. Progress is never final evidence. Final and censored are
+mutually exclusive terminal closures for one sealed pack, frozen lineage, and
+window; no later progress or closure may be appended.
+
+The normative wire schema is `schemas/evidence_pack_successor.json`. Byte-exact
+positive chains and executed negative mutations are published under
+`reference_packs/evidence-pack-successor-v1/`. These artifacts demonstrate
+contract integrity and reference ProofGraph behavior; they are not evidence of
+durable deployment, provider finality, economic success, or production use.
+
+## 16. References
+
+### 16.1 Normative References
 
 - **RFC 2119**: Key words for use in RFCs to Indicate Requirement Levels
 - **RFC 8785**: JSON Canonicalization Scheme (JCS)
@@ -677,7 +718,7 @@ three failing vectors). They regenerate byte-identically from a fixed pack via
 - **FIPS 180-4**: Secure Hash Standard (SHA-256)
 - **FIPS 204**: Module-Lattice-Based Digital Signature Standard (ML-DSA-65)
 
-### 14.2 Informative References
+### 16.2 Informative References
 
 - **arXiv 2511.17118**: Constant-size evidence tuples for regulated AI workflows.
   Establishes the theoretical foundation for O(1) evidence summaries and

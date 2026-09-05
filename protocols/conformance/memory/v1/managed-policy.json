@@ -48,7 +48,7 @@
       {
         "id": "memory-p0-budget-deny",
         "layer": "P0",
-        "pattern": "\"args\":\\{\"budget\":\\{\"decision\":\"DENY\"",
+        "pattern": "\"args\":\\{(\"__helm_evaluate_authority_v1\":\\{.*\\},)?\"budget\":\\{\"decision\":\"DENY\"",
         "verdict": "DENY",
         "reason": "the authenticated budget owner denied the request"
       },
@@ -74,7 +74,7 @@
         "effect_class": "E1",
         "action": "memory.read",
         "resource": "E1",
-        "pattern": "\"args\":\\{\"budget\":\\{\"decision\":\"ALLOW\",\"receipt_hash\":\"sha256:[a-f0-9]{64}\"\\}.*\"data_boundary\":\"(local_only|org_boundary)\".*\"operation\":\"memory.read\".*\\}.*\"principal_id\":\"[^\"]+\".*\"tenant_id\":\"[^\"]+\".*\"workspace_id\":\"[^\"]+\"",
+        "pattern": "\"args\":\\{(\"__helm_evaluate_authority_v1\":\\{.*\\},)?\"budget\":\\{\"decision\":\"ALLOW\",\"receipt_hash\":\"sha256:[a-f0-9]{64}\"\\}.*\"data_boundary\":\"(local_only|org_boundary)\".*\"operation\":\"memory.read\".*\\}.*\"principal_id\":\".+\".*\"tenant_id\":\".+\".*\"workspace_id\":\".+",
         "verdict": "ALLOW",
         "reason": "authenticated bounded memory read"
       },
@@ -84,7 +84,7 @@
         "effect_class": "E2",
         "action": "memory.write",
         "resource": "E2",
-        "pattern": "\"args\":\\{\"budget\":\\{\"decision\":\"ALLOW\",\"receipt_hash\":\"sha256:[a-f0-9]{64}\"\\}.*\"data_boundary\":\"(local_only|org_boundary)\".*\"operation\":\"memory.write\".*\\}.*\"principal_id\":\"[^\"]+\".*\"tenant_id\":\"[^\"]+\".*\"workspace_id\":\"[^\"]+\"",
+        "pattern": "\"args\":\\{(\"__helm_evaluate_authority_v1\":\\{.*\\},)?\"budget\":\\{\"decision\":\"ALLOW\",\"receipt_hash\":\"sha256:[a-f0-9]{64}\"\\}.*\"data_boundary\":\"(local_only|org_boundary)\".*\"operation\":\"memory.write\".*\\}.*\"principal_id\":\".+\".*\"tenant_id\":\".+\".*\"workspace_id\":\".+",
         "verdict": "ALLOW",
         "reason": "authenticated bounded memory write"
       },

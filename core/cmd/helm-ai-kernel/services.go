@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: runtime wiring retains classical Ed25519 signing and trust;
+// it does not add post-quantum cryptographic controls.
+
 import (
 	"context"
 	"crypto/ed25519"

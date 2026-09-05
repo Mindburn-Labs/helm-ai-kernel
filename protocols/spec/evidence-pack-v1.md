@@ -12,6 +12,8 @@ references:
 
 # EvidencePack Format Specification v1.0
 
+<!-- quantum_posture: the specified signatures use classical Ed25519; this format does not claim post-quantum security. -->
+
 ## Abstract
 
 This document specifies the canonical format for HELM EvidencePacks.

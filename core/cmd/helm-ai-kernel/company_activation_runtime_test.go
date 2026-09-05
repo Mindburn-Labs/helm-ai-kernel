@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: these tests cover classical Ed25519 activation verification;
+// they do not establish post-quantum security.
+
 import (
 	"bytes"
 	"crypto/ed25519"

@@ -1,5 +1,8 @@
 package contracts
 
+// quantum_posture: these fixtures test classical Ed25519 activation signatures;
+// they do not establish post-quantum security.
+
 import (
 	"crypto/ed25519"
 	"crypto/sha256"

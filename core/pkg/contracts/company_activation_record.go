@@ -1,5 +1,8 @@
 package contracts
 
+// quantum_posture: company activation records use classical Ed25519 over SHA-256;
+// this contract does not provide a post-quantum signature profile.
+
 import (
 	"bytes"
 	"crypto/ed25519"

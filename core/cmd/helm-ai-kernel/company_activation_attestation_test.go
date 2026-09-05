@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: these tests cover classical Ed25519 decision attestation;
+// they do not establish post-quantum security.
+
 import (
 	"bytes"
 	"context"

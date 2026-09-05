@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: activation trust uses pinned classical Ed25519 keys;
+// no post-quantum signature verification is implemented here.
+
 import (
 	"context"
 	"crypto/ed25519"

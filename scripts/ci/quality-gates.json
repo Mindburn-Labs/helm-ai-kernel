@@ -127,7 +127,8 @@
         "flake-core",
         "benchmark-report",
         "invariant-constitution",
-        "concept-change-marker"
+        "concept-change-marker",
+        "dead-packages"
       ]
     },
     "typecheck": {
@@ -815,6 +816,24 @@
       "paths": [
         "HELM_INVARIANTS.md",
         "tools/invcheck/**"
+      ]
+    },
+    {
+      "id": "dead-packages",
+      "title": "Importer-less package census",
+      "description": "Lists core/pkg packages no other package imports. Advisory until docs/architecture/dead-package-decisions.md has zero open rows, then drop this flag.",
+      "command": "make dead-packages",
+      "timeout_seconds": 300,
+      "advisory": true,
+      "paths": [
+        "core/**",
+        "tools/**",
+        "tests/**",
+        "sdk/go/**",
+        "examples/**",
+        "scripts/ci/check_dead_packages.py",
+        "scripts/ci/dead-packages.sh",
+        "scripts/ci/dead-packages-allowlist.txt"
       ]
     }
   ]

@@ -294,6 +294,13 @@ quality-release:
 quality-nightly:
 	$(QUALITY) run nightly
 
+.PHONY: dead-packages
+# dead-packages lists core/pkg packages with no non-test importer across every
+# Go module in the checkout. Registered as an advisory nightly gate; see
+# docs/architecture/dead-package-decisions.md for the open rows.
+dead-packages:
+	bash scripts/ci/dead-packages.sh
+
 quality-list:
 	$(QUALITY) list
 

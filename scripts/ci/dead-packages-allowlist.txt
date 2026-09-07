@@ -1,0 +1,6 @@
+# Importer-less core/pkg packages that are deliberately public library surface.
+# One entry per line: <core/pkg/...> # <one-line reason>
+# Read by scripts/ci/dead-packages.sh. An entry whose package gains an importer
+# (or disappears) is reported as STALE and fails the gate, so prune on delete.
+# Ratified KEEP rows from docs/architecture/dead-package-decisions.md land here;
+# the gate flips from advisory to strict when that table has zero open rows.

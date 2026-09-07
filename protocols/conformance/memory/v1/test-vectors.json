@@ -69,6 +69,219 @@
       }
     },
     {
+      "id": "cp-authority-read-allowed",
+      "schema_valid": true,
+      "authenticated": true,
+      "workspace_bound": true,
+      "cp_authority": {
+        "tenant_id": "tenant-memory",
+        "workspace_id": "workspace-memory",
+        "principal_id": "principal-memory",
+        "session_id": "memory-cp-read-session",
+        "tool": "memory.read",
+        "effect_level": "E1"
+      },
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-cp-read-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "CONFIDENTIAL",
+          "data_boundary": "org_boundary",
+          "purpose": "resume an employee task through the Control Plane",
+          "content_hash": "sha256:4111111111111111111111111111111111111111111111111111111111111111",
+          "query_hash": "sha256:5111111111111111111111111111111111111111111111111111111111111111",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:6111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 200,
+        "verdict": "ALLOW",
+        "reason_code": "",
+        "signed_receipt": true,
+        "tampered_receipt_valid": false
+      }
+    },
+    {
+      "id": "cp-authority-write-allowed",
+      "schema_valid": true,
+      "authenticated": true,
+      "workspace_bound": true,
+      "cp_authority": {
+        "tenant_id": "tenant-memory",
+        "workspace_id": "workspace-memory",
+        "principal_id": "principal-memory",
+        "session_id": "memory-cp-write-session",
+        "tool": "memory.write",
+        "effect_level": "E2"
+      },
+      "request": {
+        "tool": "memory.write",
+        "effect_level": "E2",
+        "session_id": "memory-cp-write-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.write",
+          "memory_class": "M1_EPISODIC",
+          "scope": "PRIVATE",
+          "data_class": "INTERNAL",
+          "data_boundary": "org_boundary",
+          "purpose": "store a confirmed work outcome through the Control Plane",
+          "content_hash": "sha256:4222222222222222222222222222222222222222222222222222222222222222",
+          "record_id": "memory-cp-entry-1",
+          "provenance_hash": "sha256:5222222222222222222222222222222222222222222222222222222222222222",
+          "retention_days": 180,
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:6222222222222222222222222222222222222222222222222222222222222222"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 200,
+        "verdict": "ALLOW",
+        "reason_code": "",
+        "signed_receipt": true
+      }
+    },
+    {
+      "id": "cp-authority-budget-denied",
+      "schema_valid": true,
+      "authenticated": true,
+      "workspace_bound": true,
+      "cp_authority": {
+        "tenant_id": "tenant-memory",
+        "workspace_id": "workspace-memory",
+        "principal_id": "principal-memory",
+        "session_id": "memory-cp-budget-deny-session",
+        "tool": "memory.read",
+        "effect_level": "E1"
+      },
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-cp-budget-deny-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "INTERNAL",
+          "data_boundary": "org_boundary",
+          "purpose": "resume an employee task after budget denial",
+          "content_hash": "sha256:4777777777777777777777777777777777777777777777777777777777777777",
+          "query_hash": "sha256:5777777777777777777777777777777777777777777777777777777777777777",
+          "budget": {
+            "decision": "DENY",
+            "receipt_hash": "sha256:6777777777777777777777777777777777777777777777777777777777777777"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 200,
+        "verdict": "DENY",
+        "reason_code": "PDP_DENY",
+        "signed_receipt": true
+      }
+    },
+    {
+      "id": "cp-authority-mismatched-tenant-denied",
+      "schema_valid": true,
+      "authenticated": true,
+      "workspace_bound": true,
+      "cp_authority": {
+        "tenant_id": "tenant-attacker",
+        "workspace_id": "workspace-memory",
+        "principal_id": "principal-memory",
+        "session_id": "memory-cp-mismatched-tenant-session",
+        "tool": "memory.read",
+        "effect_level": "E1"
+      },
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-cp-mismatched-tenant-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "INTERNAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject a mismatched Control Plane authority",
+          "content_hash": "sha256:4888888888888888888888888888888888888888888888888888888888888888",
+          "query_hash": "sha256:5888888888888888888888888888888888888888888888888888888888888888",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:6888888888888888888888888888888888888888888888888888888888888888"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "cp-authority-nested-shadow-denied",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "cp_authority": {
+        "tenant_id": "tenant-memory",
+        "workspace_id": "workspace-memory",
+        "principal_id": "principal-memory",
+        "session_id": "memory-cp-nested-shadow-session",
+        "tool": "memory.read",
+        "effect_level": "E1"
+      },
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-cp-nested-shadow-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "INTERNAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject a nested authority shadow",
+          "content_hash": "sha256:4999999999999999999999999999999999999999999999999999999999999999",
+          "query_hash": "sha256:5999999999999999999999999999999999999999999999999999999999999999",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:6999999999999999999999999999999999999999999999999999999999999999"
+          },
+          "nested_shadow": {
+            "__helm_evaluate_authority_v1": {
+              "tenant_id": "tenant-attacker",
+              "workspace_id": "workspace-attacker",
+              "principal_id": "principal-attacker",
+              "session_id": "memory-cp-nested-shadow-session",
+              "tool": "memory.read",
+              "effect_level": "E1"
+            }
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
       "id": "promotion-requires-approval",
       "schema_valid": true,
       "authenticated": true,
@@ -169,6 +382,339 @@
       }
     },
     {
+      "id": "nested-budget-allow-cannot-overrule-deny",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.egress",
+        "effect_level": "E2",
+        "session_id": "memory-nested-budget-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.egress",
+          "memory_class": "M3_SEMANTIC",
+          "scope": "WORKSPACE",
+          "data_class": "INTERNAL",
+          "data_boundary": "external",
+          "purpose": "reject a nested budget decision shadow",
+          "content_hash": "sha256:1444444444444444444444444444444444444444444444444444444444444444",
+          "provider_id": "approved-provider",
+          "model_id": "approved-model",
+          "budget": {
+            "decision": "DENY",
+            "receipt_hash": "sha256:3444444444444444444444444444444444444444444444444444444444444444"
+          },
+          "a": {
+            "budget": {
+              "decision": "ALLOW",
+              "receipt_hash": "sha256:3444444444444444444444444444444444444444444444444444444444444444"
+            }
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "unknown-memory-arg-rejected-before-policy",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-unknown-arg-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "CONFIDENTIAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject an unknown memory argument",
+          "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "query_hash": "sha256:2111111111111111111111111111111111111111111111111111111111111111",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3111111111111111111111111111111111111111111111111111111111111111"
+          },
+          "zz_unexpected": true
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "memory-write-retention-type-rejected",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.write",
+        "effect_level": "E2",
+        "session_id": "memory-write-retention-type-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.write",
+          "memory_class": "M1_EPISODIC",
+          "scope": "PRIVATE",
+          "data_class": "INTERNAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject a non-integer retention bound",
+          "content_hash": "sha256:1222222222222222222222222222222222222222222222222222222222222222",
+          "record_id": "memory-entry-retention-type",
+          "provenance_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "retention_days": "180",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3222222222222222222222222222222222222222222222222222222222222222"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "memory-write-retention-range-rejected",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.write",
+        "effect_level": "E2",
+        "session_id": "memory-write-retention-range-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.write",
+          "memory_class": "M1_EPISODIC",
+          "scope": "PRIVATE",
+          "data_class": "INTERNAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject an out-of-range retention bound",
+          "content_hash": "sha256:1222222222222222222222222222222222222222222222222222222222222222",
+          "record_id": "memory-entry-retention-range",
+          "provenance_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "retention_days": 3651,
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3222222222222222222222222222222222222222222222222222222222222222"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "memory-write-retention-exponent-integer-accepted",
+      "schema_valid": true,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.write",
+        "effect_level": "E2",
+        "session_id": "memory-write-retention-exponent-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.write",
+          "memory_class": "M1_EPISODIC",
+          "scope": "PRIVATE",
+          "data_class": "INTERNAL",
+          "data_boundary": "org_boundary",
+          "purpose": "accept an integer retention exponent",
+          "content_hash": "sha256:1222222222222222222222222222222222222222222222222222222222222222",
+          "record_id": "memory-entry-retention-exponent",
+          "provenance_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "retention_days": 1e2,
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3222222222222222222222222222222222222222222222222222222222222222"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 200,
+        "verdict": "ALLOW",
+        "reason_code": "",
+        "signed_receipt": true
+      }
+    },
+    {
+      "id": "memory-read-content-hash-type-rejected",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-read-content-hash-type-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "CONFIDENTIAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject a non-string content hash",
+          "content_hash": null,
+          "query_hash": "sha256:2111111111111111111111111111111111111111111111111111111111111111",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "memory-read-data-class-enum-rejected",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-read-data-class-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "UNKNOWN",
+          "data_boundary": "org_boundary",
+          "purpose": "reject an unknown data class",
+          "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "query_hash": "sha256:2111111111111111111111111111111111111111111111111111111111111111",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "memory-read-schema-version-rejected",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-read-schema-version-session",
+        "args": {
+          "schema_version": 2,
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "CONFIDENTIAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject an unsupported memory schema version",
+          "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "query_hash": "sha256:2111111111111111111111111111111111111111111111111111111111111111",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "memory-read-query-hash-required",
+      "schema_valid": false,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.read",
+        "effect_level": "E1",
+        "session_id": "memory-read-query-hash-required-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "CONFIDENTIAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject a read without its query hash",
+          "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
+      "id": "memory-operation-tool-mismatch-rejected",
+      "schema_valid": true,
+      "authenticated": true,
+      "workspace_bound": true,
+      "request": {
+        "tool": "memory.write",
+        "effect_level": "E2",
+        "session_id": "memory-operation-tool-mismatch-session",
+        "args": {
+          "schema_version": "memory-policy/v1",
+          "operation": "memory.read",
+          "memory_class": "M2_ENTITY",
+          "scope": "PRIVATE",
+          "data_class": "CONFIDENTIAL",
+          "data_boundary": "org_boundary",
+          "purpose": "reject a tool and operation mismatch",
+          "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "query_hash": "sha256:2111111111111111111111111111111111111111111111111111111111111111",
+          "budget": {
+            "decision": "ALLOW",
+            "receipt_hash": "sha256:3111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expected": {
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
+      }
+    },
+    {
       "id": "local-only-egress-denied",
       "schema_valid": false,
       "authenticated": true,
@@ -195,10 +741,10 @@
         }
       },
       "expected": {
-        "http_status": 200,
-        "verdict": "DENY",
-        "reason_code": "PDP_DENY",
-        "signed_receipt": true
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
       }
     },
     {
@@ -255,10 +801,10 @@
         }
       },
       "expected": {
-        "http_status": 200,
-        "verdict": "DENY",
-        "reason_code": "PDP_DENY",
-        "signed_receipt": true
+        "http_status": 400,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
       }
     },
     {
@@ -287,10 +833,10 @@
         }
       },
       "expected": {
-        "http_status": 200,
-        "verdict": "DENY",
-        "reason_code": "PDP_DENY",
-        "signed_receipt": true
+        "http_status": 403,
+        "verdict": "",
+        "reason_code": "",
+        "signed_receipt": false
       }
     },
     {

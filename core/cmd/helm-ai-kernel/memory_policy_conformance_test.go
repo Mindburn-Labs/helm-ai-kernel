@@ -46,13 +46,14 @@ type memoryPolicyTestVectorSet struct {
 }
 
 type memoryPolicyTestVector struct {
-	ID                 string              `json:"id"`
-	SchemaValid        bool                `json:"schema_valid"`
-	Authenticated      bool                `json:"authenticated"`
-	WorkspaceBound     bool                `json:"workspace_bound"`
-	MissingPolicy      bool                `json:"missing_policy"`
-	ExpectedExecutorID string              `json:"expected_executor_id"`
-	Request            api.EvaluateRequest `json:"request"`
+	ID                 string                 `json:"id"`
+	SchemaValid        bool                   `json:"schema_valid"`
+	Authenticated      bool                   `json:"authenticated"`
+	WorkspaceBound     bool                   `json:"workspace_bound"`
+	MissingPolicy      bool                   `json:"missing_policy"`
+	ExpectedExecutorID string                 `json:"expected_executor_id"`
+	CPAuthority        *memoryPolicyAuthority `json:"cp_authority,omitempty"`
+	Request            api.EvaluateRequest    `json:"request"`
 	Expected           struct {
 		HTTPStatus           int    `json:"http_status"`
 		Verdict              string `json:"verdict"`
@@ -60,6 +61,19 @@ type memoryPolicyTestVector struct {
 		SignedReceipt        bool   `json:"signed_receipt"`
 		TamperedReceiptValid *bool  `json:"tampered_receipt_valid"`
 	} `json:"expected"`
+}
+
+// memoryPolicyAuthority mirrors the Control Plane EvaluateClient's
+// post-validation reserved args envelope. It is test metadata so the source
+// memory args remain schema-valid before the CP binding is added at the wire
+// boundary.
+type memoryPolicyAuthority struct {
+	TenantID    string `json:"tenant_id"`
+	WorkspaceID string `json:"workspace_id"`
+	PrincipalID string `json:"principal_id"`
+	SessionID   string `json:"session_id"`
+	Tool        string `json:"tool"`
+	EffectLevel string `json:"effect_level"`
 }
 
 // TestMemoryPolicyConformancePack exercises the source-owned memory contract
@@ -106,6 +120,11 @@ func TestMemoryPolicyConformancePack(t *testing.T) {
 				t.Fatalf("schema validity = %t, want %t: %v", got, vector.SchemaValid, schemaErr)
 			}
 
+			wireVector := vector
+			if vector.CPAuthority != nil {
+				wireVector.Request.Args = memoryPolicyArgsWithAuthority(vector.Request.Args, *vector.CPAuthority)
+			}
+
 			var (
 				svc      *Services
 				receipts *captureReceiptStore
@@ -118,7 +137,7 @@ func TestMemoryPolicyConformancePack(t *testing.T) {
 
 			mux := http.NewServeMux()
 			registerReceiptRoutes(mux, svc)
-			body, err := json.Marshal(vector.Request)
+			body, err := json.Marshal(wireVector.Request)
 			if err != nil {
 				t.Fatalf("marshal request: %v", err)
 			}
@@ -149,12 +168,28 @@ func TestMemoryPolicyConformancePack(t *testing.T) {
 			}
 
 			if vector.Expected.SignedReceipt {
-				assertMemoryPolicyReceipt(t, svc, receipts, managedPolicy, vector)
+				assertMemoryPolicyReceipt(t, svc, receipts, managedPolicy, wireVector)
 			} else if receipts != nil && receipts.stored != nil {
 				t.Fatalf("rejected request persisted a receipt: %+v", receipts.stored)
 			}
 		})
 	}
+}
+
+func memoryPolicyArgsWithAuthority(source map[string]any, authority memoryPolicyAuthority) map[string]any {
+	args := make(map[string]any, len(source)+1)
+	for key, value := range source {
+		args[key] = value
+	}
+	args[evaluateAuthorityArgsKey] = map[string]any{
+		"tenant_id":    authority.TenantID,
+		"workspace_id": authority.WorkspaceID,
+		"principal_id": authority.PrincipalID,
+		"session_id":   authority.SessionID,
+		"tool":         authority.Tool,
+		"effect_level": authority.EffectLevel,
+	}
+	return args
 }
 
 func assertMemoryPolicyReceipt(t *testing.T, svc *Services, receipts *captureReceiptStore, managedPolicy *pdp.ManagedPolicyPDP, vector memoryPolicyTestVector) {

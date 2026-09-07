@@ -739,6 +739,163 @@ func TestEvaluateRouteRebindsAuthorityContextBeforeGuardian(t *testing.T) {
 	}
 }
 
+func TestEvaluateRouteRejectsMemoryWithoutWorkspaceAndNestedContextSpoof(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+	t.Setenv(runtimeWorkspaceIDEnv, "")
+
+	for _, tc := range []struct {
+		name     string
+		envelope bool
+	}{
+		{name: "without reserved envelope"},
+		{name: "with empty reserved envelope", envelope: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			capturing := &evaluateRouteCapturingPDP{}
+			svc, receipts := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
+			mux := http.NewServeMux()
+			registerReceiptRoutes(mux, svc)
+
+			request := api.EvaluateRequest{
+				Tool:        "memory.read",
+				EffectLevel: "E1",
+				SessionID:   "memory-workspace-spoof-session",
+				Args: map[string]any{
+					"budget": map[string]any{"decision": "ALLOW"},
+				},
+				Context: map[string]any{
+					"zzz": map[string]any{"workspace_id": "workspace-spoofed"},
+				},
+			}
+			if tc.envelope {
+				request.Args[evaluateAuthorityArgsKey] = map[string]any{
+					"tenant_id":    "tenant-trusted",
+					"workspace_id": "",
+					"principal_id": "principal-trusted",
+					"session_id":   request.SessionID,
+					"tool":         request.Tool,
+					"effect_level": request.EffectLevel,
+				}
+			}
+			body, err := json.Marshal(request)
+			if err != nil {
+				t.Fatalf("marshal request: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+			req.Header.Set(tenantHeader, "tenant-trusted")
+			req.Header.Set(principalHeader, "principal-trusted")
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, req)
+
+			if recorder.Code != http.StatusForbidden {
+				t.Fatalf("evaluate status = %d, want 403: %s", recorder.Code, recorder.Body.String())
+			}
+			if capturing.request != nil {
+				t.Fatalf("rejected request reached Guardian: %+v", capturing.request)
+			}
+			if receipts.stored != nil {
+				t.Fatalf("rejected request persisted a receipt: %+v", receipts.stored)
+			}
+		})
+	}
+}
+
+func TestEvaluateRouteRejectsNestedMemoryAuthorityContextSpoofWithWorkspace(t *testing.T) {
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")
+	t.Setenv(runtimePrincipalIDEnv, "principal-trusted")
+
+	capturing := &evaluateRouteCapturingPDP{}
+	svc, receipts := newEvaluateRouteTestServices(t, guardian.WithPDP(capturing))
+	mux := http.NewServeMux()
+	registerReceiptRoutes(mux, svc)
+	request := api.EvaluateRequest{
+		Tool:        "memory.read",
+		EffectLevel: "E1",
+		SessionID:   "memory-nested-context-spoof-session",
+		Args:        map[string]any{"budget": map[string]any{"decision": "ALLOW"}},
+		Context: map[string]any{
+			"zzz": map[string]any{"workspace_id": "workspace-spoofed"},
+		},
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+	req.Header.Set(tenantHeader, "tenant-trusted")
+	req.Header.Set(principalHeader, "principal-trusted")
+	req.Header.Set(workspaceHeader, "workspace-trusted")
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("evaluate status = %d, want 400: %s", recorder.Code, recorder.Body.String())
+	}
+	if capturing.request != nil {
+		t.Fatalf("rejected request reached Guardian: %+v", capturing.request)
+	}
+	if receipts.stored != nil {
+		t.Fatalf("rejected request persisted a receipt: %+v", receipts.stored)
+	}
+}
+
+func TestEvaluateAuthorityBindingRequiresWorkspaceAndKeepsProfileCompatibility(t *testing.T) {
+	expected := evaluateAuthorityBinding{
+		TenantID:    "tenant-trusted",
+		PrincipalID: "principal-trusted",
+		WorkspaceID: "workspace-trusted",
+		SessionID:   "authority-session",
+		Tool:        "record",
+		EffectLevel: "E1",
+	}
+	base := map[string]any{
+		"tenant_id":    expected.TenantID,
+		"workspace_id": expected.WorkspaceID,
+		"principal_id": expected.PrincipalID,
+		"session_id":   expected.SessionID,
+		"tool":         expected.Tool,
+		"effect_level": expected.EffectLevel,
+	}
+	if err := validateEvaluateAuthorityBinding(base, expected); err != nil {
+		t.Fatalf("six-field authority binding rejected: %v", err)
+	}
+	withProfile := make(map[string]any, len(base)+1)
+	for key, value := range base {
+		withProfile[key] = value
+	}
+	withProfile["execution_profile"] = "organization-runtime"
+	if err := validateEvaluateAuthorityBinding(withProfile, expected); err != nil {
+		t.Fatalf("organization-runtime authority binding rejected: %v", err)
+	}
+
+	missingWorkspace := evaluateAuthorityBinding{
+		TenantID:    expected.TenantID,
+		PrincipalID: expected.PrincipalID,
+		SessionID:   expected.SessionID,
+		Tool:        expected.Tool,
+		EffectLevel: expected.EffectLevel,
+	}
+	if err := validateEvaluateAuthorityBinding(base, missingWorkspace); err == nil {
+		t.Fatal("authority binding with an unauthenticated workspace was accepted")
+	}
+	memoryProfile := make(map[string]any, len(base)+1)
+	for key, value := range base {
+		memoryProfile[key] = value
+	}
+	memoryProfile["tool"] = "memory.read"
+	memoryProfile["execution_profile"] = "organization-runtime"
+	memoryExpected := expected
+	memoryExpected.Tool = "memory.read"
+	if err := validateEvaluateAuthorityBinding(memoryProfile, memoryExpected); err == nil {
+		t.Fatal("organization-runtime profile was accepted for a memory authority binding")
+	}
+}
+
 func TestEvaluateRouteUsesCanonicalArgsHash(t *testing.T) {
 	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
 	t.Setenv(runtimeTenantIDEnv, "tenant-trusted")

@@ -1,5 +1,8 @@
 # Dead package decisions (core/pkg)
 
+quantum_posture: inventory only; this document names crypto packages but
+exercises, changes, or asserts no cryptographic behaviour.
+
 Status: proposed, 2026-09-07. No package is deleted by this document; every
 row is a proposal for the package owner. A row closes when the owner either
 adds the package to `scripts/ci/dead-packages-allowlist.txt` (KEEP), lands a

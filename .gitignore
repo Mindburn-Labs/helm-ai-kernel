@@ -124,3 +124,6 @@ version-status.json
 
 # Unlazy session ledger (not product source)
 /GATES.md
+
+# ─── Local tool output ───────────────────────────────────────────────────────
+.codegraph/

@@ -184,12 +184,18 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             'if [ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]; then',
             authority,
         )
-        # A push payload's `after` value is the commit at the tag ref, not the
-        # annotated tag object's SHA. The live tag object comes from the API.
+        # A push payload's `after` value is the annotated tag OBJECT's SHA
+        # (observed on v0.8.5 run 34246001234, 2026-09-08), while github.sha is
+        # the commit. The job binds the pushed object to the live ref, and the
+        # ref's target commit to the workflow commit.
         self.assertIn("PUSH_COMMIT: ${{ github.event.after }}", authority)
         self.assertIn("WORKFLOW_COMMIT: ${{ github.sha }}", authority)
-        self.assertIn(
+        self.assertNotIn(
             'if [ "${PUSH_COMMIT}" != "${WORKFLOW_COMMIT}" ]; then',
+            authority,
+        )
+        self.assertIn(
+            'if [ "${PUSH_COMMIT}" != "${live_tag_object}" ]; then',
             authority,
         )
         self.assertIn(
@@ -203,7 +209,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         )
         self.assertIn('if [ "${target_type}" != "commit" ]; then', authority)
         self.assertIn(
-            'if [ "${target_commit}" != "${PUSH_COMMIT}" ]; then',
+            'if [ "${target_commit}" != "${WORKFLOW_COMMIT}" ]; then',
             authority,
         )
 

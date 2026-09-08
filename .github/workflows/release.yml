@@ -129,16 +129,21 @@ jobs:
             echo "::error::Workflow commit is not a full commit SHA: ${WORKFLOW_COMMIT}"
             exit 1
           fi
-          if [ "${PUSH_COMMIT}" != "${WORKFLOW_COMMIT}" ]; then
-            echo "::error::Push commit ${PUSH_COMMIT} does not match workflow commit ${WORKFLOW_COMMIT}."
-            exit 1
-          fi
-
+          # For an annotated tag push, github.event.after is the SHA of the tag
+          # OBJECT, not of the commit it points to, while github.sha is the
+          # commit. Bind the pushed object to the live ref, then the ref's
+          # commit to the workflow commit. The old "after == sha" test could
+          # only pass for a lightweight tag, which the next check forbids
+          # (v0.8.5 run 34246001234 failed here on 2026-09-08).
           ref_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}")"
           ref_type="$(jq -er '.object.type' <<<"${ref_json}")"
           live_tag_object="$(jq -er '.object.sha' <<<"${ref_json}")"
           if [ "${ref_type}" != "tag" ]; then
             echo "::error::Release ref ${GITHUB_REF_NAME} is ${ref_type}, not an annotated tag object."
+            exit 1
+          fi
+          if [ "${PUSH_COMMIT}" != "${live_tag_object}" ]; then
+            echo "::error::Pushed tag object ${PUSH_COMMIT} does not match the live ref object ${live_tag_object}; the tag moved after the push."
             exit 1
           fi
           tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${live_tag_object}")"
@@ -148,8 +153,8 @@ jobs:
             echo "::error::Annotated release tag points to ${target_type}, not a commit."
             exit 1
           fi
-          if [ "${target_commit}" != "${PUSH_COMMIT}" ]; then
-            echo "::error::Annotated release tag resolves to ${target_commit}, not pushed commit ${PUSH_COMMIT}."
+          if [ "${target_commit}" != "${WORKFLOW_COMMIT}" ]; then
+            echo "::error::Annotated release tag resolves to ${target_commit}, not workflow commit ${WORKFLOW_COMMIT}."
             exit 1
           fi
 

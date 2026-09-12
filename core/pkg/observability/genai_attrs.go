@@ -7,7 +7,16 @@
 // rely on these names.
 //
 // Reference: OpenTelemetry Semantic Conventions for Generative AI
-// https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai
+// https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai
+// (moved out of the main semantic-conventions repository in its v1.42.0
+// release; status is still "Development", not Stable).
+//
+// Known drift from upstream as of 2026-09-12, kept deliberately until a major
+// version bump: upstream replaced gen_ai.system with gen_ai.provider.name and
+// its well-known value "azure.openai" with "azure.ai.openai"; upstream names
+// the tool operation "execute_tool" (span "execute_tool {gen_ai.tool.name}")
+// rather than "tool_call". The SIEM exporters and dashboards join on the keys
+// below, so the rename must ship as one coordinated change with them.
 package observability
 
 // ── OTel GenAI stable keys ───────────────────────────────────

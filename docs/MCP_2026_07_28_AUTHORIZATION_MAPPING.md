@@ -3,6 +3,11 @@ title: MCP 2026-07-28 RC Authorization Mapping
 last_reviewed: 2026-09-12
 ---
 
+<!-- quantum_posture: this page maps OAuth/JWT bearer validation performed by
+core/pkg/mcp/jwks.go (classical JWS via the configured JWKS) and references the
+ID-JAG exchange of the Enterprise-Managed Authorization extension, which happens
+outside HELM; it adds no cryptographic control of its own. -->
+
 # MCP 2026-07-28 Authorization Mapping
 
 ## Audience

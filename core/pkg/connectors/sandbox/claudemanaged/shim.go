@@ -135,7 +135,7 @@ func (s WorkerShim) HandleTool(ctx context.Context, req ToolRequest) (ToolRespon
 		}
 		return allowedToolResponse("ok", managedReceipt), nil
 	case ToolMemoryWrite:
-		return s.denyTool(req, contracts.ReasonSessionRiskDeny, "Managed Agents memory is unsupported for self-hosted sandboxes"), nil
+		return s.denyTool(req, contracts.ReasonSessionRiskDeny, "HELM has not qualified Managed Agents memory writes for this adapter"), nil
 	case ToolMCP:
 		if req.Metadata["route"] != "helm-mcp-gateway" {
 			return s.denyTool(req, contracts.ReasonSandboxViolation, "MCP tunnel target bypasses HELM MCP Gateway"), nil

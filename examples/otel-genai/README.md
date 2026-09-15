@@ -6,7 +6,9 @@ OpenTelemetry Generative AI semantic convention (semconv).
 ## What this proves
 
 1. helm-ai-kernel governance spans carry the stable OTel GenAI keys:
-   - `gen_ai.system`
+   - `gen_ai.system` (legacy) and `gen_ai.provider.name` (current upstream key;
+     both are emitted for one major version — see
+     `docs/architecture/otel-genai.md`)
    - `gen_ai.request.model`
    - `gen_ai.operation.name`
    - `gen_ai.tool.name`
@@ -53,7 +55,9 @@ go test ./...
 ```
 
 The test asserts every required OTel GenAI key and helm.* key appears on the
-emitted span, and that the span name is `gen_ai.tool_call`.
+emitted span, and that the span name follows upstream: `execute_tool search_web`,
+that is `{operation} {tool name}`. The example still passes the legacy
+`tool_call` operation, so the test also covers the mapping to `execute_tool`.
 
 ## See also
 

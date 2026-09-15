@@ -22,9 +22,12 @@ func TestSmoke(t *testing.T) {
 
 	out := buf.String()
 
-	// Required OTel GenAI semconv attribute keys.
+	// Required OTel GenAI semconv attribute keys. gen_ai.system is legacy and
+	// gen_ai.provider.name is its current upstream replacement; the kernel emits
+	// both for one major version, so both must appear.
 	required := []string{
 		"gen_ai.system",
+		"gen_ai.provider.name",
 		"gen_ai.request.model",
 		"gen_ai.response.model",
 		"gen_ai.response.id",
@@ -49,8 +52,10 @@ func TestSmoke(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(out, "Span: gen_ai.tool_call") {
-		t.Errorf("expected span name gen_ai.tool_call, got:\n%s", out)
+	// Upstream names a tool span "{operation} {tool name}". The example still
+	// passes the legacy tool_call operation, so this also covers the mapping.
+	if !strings.Contains(out, "Span: execute_tool search_web") {
+		t.Errorf("expected span name \"execute_tool search_web\", got:\n%s", out)
 	}
 	if !strings.Contains(out, "helm correlation_id == gen_ai.tool.call.id:") {
 		t.Errorf("missing cross-reference statement in output:\n%s", out)

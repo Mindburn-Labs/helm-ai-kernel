@@ -1,19 +1,22 @@
 ---
-title: MCP 2026-07-28 RC Authorization Mapping
-last_reviewed: 2026-06-10
+title: MCP 2026-07-28 Authorization Mapping
+last_reviewed: 2026-09-15
 ---
 
-# MCP 2026-07-28 RC Authorization Mapping
+# MCP 2026-07-28 Authorization Mapping
 
 ## Audience
 
 Security reviewers and integrators mapping the HELM policy engine to the six
-authorization SEPs in the MCP 2026-07-28 release candidate (published
-2026-06-09).
+authorization SEPs in MCP revision 2026-07-28, which `/specification/versioning`
+lists as the **current** protocol version. This document was first written against
+the release candidate published 2026-06-09; the revision has since shipped, so the
+citations below point at the specification rather than the announcement.
 
 ## Source Truth
 
-- Spec source: <https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/>
+- Spec source: <https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization>
+- Revision status: <https://modelcontextprotocol.io/specification/versioning>
 - Conformance vectors: `core/pkg/mcp/testdata/mcp_2026_07_28_authz_vectors.json`
 - Vector driver: `core/pkg/mcp/mcp_2026_07_28_authz_vectors_test.go`
 - Enforcement points: `core/pkg/mcp/jwks.go`, `core/pkg/mcp/firewall.go`,
@@ -22,7 +25,7 @@ authorization SEPs in the MCP 2026-07-28 release candidate (published
 
 ## Mapping
 
-The RC hardens MCP authorization toward deployed OAuth 2.0 / OpenID Connect
+The revision hardens MCP authorization toward deployed OAuth 2.0 / OpenID Connect
 practice through six SEPs. HELM's position is the protected resource and
 policy enforcement point (PEP): it validates inbound authorization, enforces
 scopes per tool call, and emits sealed structured decision records.
@@ -50,10 +53,16 @@ gateways, OTel context propagates per SEP-414 (W3C Trace Context in `_meta`).
 
 ## Out-of-scope notes
 
-- The RC also removes protocol-level sessions (SEP-2567) and the
+- The revision also removes protocol-level sessions (SEP-2567) and the
   `initialize` handshake (SEP-2575); HELM's session-scoped authorization is
   carried in validated token claims and per-call scope grants, so
   authorization does not depend on the removed `Mcp-Session-Id` header.
+  Governance binding is a separate question and is **not** resolved by that:
+  `core/pkg/mcp/gateway.go` still gates `tools/call` through
+  `validatedGovernedSession`, which requires a valid `MCP-Session-Id`, while the
+  specification says a request carrying modern per-request `_meta` is served
+  statelessly. What a governed call binds to without a session is open and is
+  tracked in HELM-710.
 - Gateway/proxy authorization propagation beyond trace context is not part
-  of this RC's six authorization SEPs; transitive delegation enforcement is
+  of this revision's six authorization SEPs; transitive delegation enforcement is
   tracked separately (PCAS gap analysis, MIN-494).

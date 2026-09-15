@@ -1,6 +1,6 @@
 ---
 title: MCP 2026-07-28 Authorization Mapping
-last_reviewed: 2026-09-15
+last_reviewed: 2026-09-16
 ---
 
 <!-- quantum_posture: this page maps OAuth/JWT bearer validation performed by
@@ -85,14 +85,17 @@ change the enforcement points above; they bound what this page claims.
   `initialize` handshake (SEP-2575); HELM's session-scoped authorization is
   carried in validated token claims and per-call scope grants, so
   authorization does not depend on the removed `Mcp-Session-Id` header.
-  Governance binding is a separate question and is **not** settled by that:
-  `core/pkg/mcp/gateway.go` still gates `tools/call` through
-  `validatedGovernedSession`, which requires a valid `MCP-Session-Id`, while
-  the specification serves a request carrying modern per-request `_meta`
-  statelessly. What a governed call binds to without a session is open and is
-  tracked in HELM-710, together with the `helm-ai-kernel mcp bridge` stdio
-  surface that `core/cmd/helm-ai-kernel/connect_cmd.go` writes into client
-  configs.
+  Governance binding is a separate question, and it is now answered: a modern
+  request binds to the authenticated principal rather than to a session. The
+  gateway serves both eras — `validatedGovernedSession` for handshake requests,
+  `validatedGovernedIdentity` for modern ones — and everything below the gate is
+  unchanged, because the firewall, the permit and the receipt already preferred
+  the principal and only fell back to the session id when none was present.
+  One consequence worth knowing: with no session, a modern call's run identity
+  comes from the correlation id, so a multi-call episode groups per correlation
+  rather than per session. The `helm-ai-kernel mcp bridge` stdio surface that
+  `core/cmd/helm-ai-kernel/connect_cmd.go` writes into client configs is still
+  handshake-only and is tracked separately in HELM-710.
 - Gateway/proxy authorization propagation beyond trace context is not part
   of the six authorization SEPs; transitive delegation enforcement is
   tracked separately (PCAS gap analysis, MIN-494).

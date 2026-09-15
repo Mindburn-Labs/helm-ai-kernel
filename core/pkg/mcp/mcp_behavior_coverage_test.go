@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,9 +26,32 @@ func TestLegacyProtocolVersionValue(t *testing.T) {
 	}
 }
 
-func TestSupportedProtocolVersionsLength(t *testing.T) {
-	if len(SupportedProtocolVersions) != 3 {
-		t.Fatalf("expected 3 supported versions, got %d", len(SupportedProtocolVersions))
+// TestSupportedProtocolVersionsSplitByEra replaces a bare length assertion. A
+// count says nothing about what the gateway actually serves, and it broke the
+// moment a version was added for a good reason. What matters is the era split:
+// which revisions are served statelessly from per-request metadata, and which
+// still expect an initialize handshake.
+func TestSupportedProtocolVersionsSplitByEra(t *testing.T) {
+	var modern, legacy []string
+	for _, version := range SupportedProtocolVersions {
+		if IsModernProtocolVersion(version) {
+			modern = append(modern, version)
+			continue
+		}
+		legacy = append(legacy, version)
+	}
+	if len(modern) != 1 || modern[0] != ModernProtocolVersion {
+		t.Errorf("modern revisions = %v, want exactly [%s]", modern, ModernProtocolVersion)
+	}
+	// The handshake-based revisions stay advertised: dropping one would strand
+	// clients pinned to it, which is the failure the dual-era work exists to avoid.
+	for _, want := range []string{LatestProtocolVersion, "2025-06-18", LegacyProtocolVersion} {
+		if !slices.Contains(legacy, want) {
+			t.Errorf("legacy revision %s is no longer advertised; legacy = %v", want, legacy)
+		}
+	}
+	if len(legacy) != 3 {
+		t.Errorf("legacy revisions = %v, want exactly the three handshake versions", legacy)
 	}
 }
 

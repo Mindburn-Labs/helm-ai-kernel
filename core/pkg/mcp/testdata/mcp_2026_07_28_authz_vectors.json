@@ -1,6 +1,6 @@
 {
-  "spec": "MCP 2026-07-28 release candidate (published 2026-06-09)",
-  "source": "https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/",
+  "spec": "MCP revision 2026-07-28 (current protocol version)",
+  "source": "https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization",
   "issuer": "https://as.example",
   "audience": "helm-mcp",
   "resource": "https://resource.example/mcp",

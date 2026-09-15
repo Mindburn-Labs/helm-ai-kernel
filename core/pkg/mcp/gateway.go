@@ -182,6 +182,34 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 	}
 
 	protocolVersion := r.Header.Get("MCP-Protocol-Version")
+
+	// Dual-era selection, per the specification's own rule: a request carrying
+	// modern per-request `_meta` is served statelessly under the modern revision;
+	// an initialize request selects legacy semantics. Only a modern client sends
+	// the `_meta` version declaration, so its presence is the era signal.
+	if declared, declaredInMeta, mismatch := requestEra(req.Params, protocolVersion); declaredInMeta {
+		if mismatch {
+			writeJSONRPCError(w, req.ID, map[string]any{
+				"code":    UnsupportedProtocolVersionCode,
+				"message": "Unsupported protocol version",
+				"data": map[string]any{
+					"supported": append([]string(nil), SupportedProtocolVersions...),
+					"requested": declared,
+					"detail":    "the MCP-Protocol-Version header disagrees with the version declared in _meta",
+				},
+			})
+			return
+		}
+		if !IsModernProtocolVersion(declared) {
+			// A version we know but cannot serve statelessly is still unsupported
+			// for this request shape, and the client is told what it can retry with.
+			writeJSONRPCError(w, req.ID, UnsupportedProtocolVersionError(declared))
+			return
+		}
+		g.handleModernPOST(w, r, req.ID, req.Method, req.Params, declared)
+		return
+	}
+
 	if req.Method == "initialize" {
 		var params struct {
 			ProtocolVersion string `json:"protocolVersion"`
@@ -266,6 +294,47 @@ func (g *Gateway) handleTransportPOST(w http.ResponseWriter, r *http.Request) {
 		setBoundedDataEgressBlockedError(resp)
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("MCP-Protocol-Version", protocolVersion)
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// handleModernPOST serves a request under the modern revision: no handshake, no
+// session, one request answered on its own terms.
+//
+// Governance is unchanged. A governed tools/call still goes through the same
+// ExecutionFirewall and receipt path as a legacy call; only the identity it binds
+// to differs, because the protocol supplies no session. See
+// validatedGovernedIdentity.
+func (g *Gateway) handleModernPOST(w http.ResponseWriter, r *http.Request, id any, method string, params json.RawMessage, protocolVersion string) {
+	if method == "server/discover" {
+		result := g.handleDiscover(r.Context())
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("MCP-Protocol-Version", protocolVersion)
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+		return
+	}
+
+	if g.governed && method == "tools/call" {
+		if _, ok := g.validatedGovernedIdentity(w, r); !ok {
+			return
+		}
+	}
+
+	// An empty session id is deliberate and is what makes this stateless: the run
+	// identity and the tenant fall back to the authenticated context and the
+	// correlation id, which is where they already came from whenever a legacy
+	// request arrived without a session.
+	resp, respond, status := g.handleJSONRPCRequestWithSession(r.Context(), id, method, params, protocolVersion, "", r.Header)
+	if !respond {
+		w.WriteHeader(status)
+		return
+	}
+	if !serializedMCPResponseWithinBudget(resp) {
+		setBoundedDataEgressBlockedError(resp)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("MCP-Protocol-Version", protocolVersion)
 	w.WriteHeader(status)

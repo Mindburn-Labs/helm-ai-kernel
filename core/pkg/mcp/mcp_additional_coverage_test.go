@@ -24,11 +24,22 @@ func TestNegotiate_WhitespaceVersionRejected(t *testing.T) {
 	}
 }
 
-func TestNegotiate_AllSupportedVersionsAccepted(t *testing.T) {
+// TestNegotiate_HandshakeVersionsAcceptedModernRefused states what negotiation is
+// for. It answers an initialize call, which is a legacy mechanism, so every
+// handshake revision must negotiate and the modern one must not: asking for
+// stateless semantics through a stateful handshake is a request we cannot honour,
+// and accepting it would serve the client under an era it did not choose.
+func TestNegotiate_HandshakeVersionsAcceptedModernRefused(t *testing.T) {
 	for _, v := range SupportedProtocolVersions {
 		got, ok := NegotiateProtocolVersion(v)
+		if IsModernProtocolVersion(v) {
+			if ok {
+				t.Errorf("modern revision %s must not negotiate through initialize, got %q", v, got)
+			}
+			continue
+		}
 		if !ok || got != v {
-			t.Errorf("supported version %s should be accepted", v)
+			t.Errorf("handshake version %s should be accepted", v)
 		}
 	}
 }

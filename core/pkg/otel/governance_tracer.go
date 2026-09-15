@@ -191,7 +191,7 @@ type DecisionEvent struct {
 	// GenAI semconv fields (optional). See core/pkg/observability/genai_attrs.go.
 	GenAISystem        string // e.g. "openai", "anthropic", "aws.bedrock"
 	GenAIRequestModel  string // e.g. "gpt-4o", "claude-3-5-sonnet"
-	GenAIOperationName string // e.g. "chat", "tool_call"
+	GenAIOperationName string // e.g. "chat", "execute_tool"; legacy "tool_call" is mapped on emission
 	GenAIToolCallID    string // upstream tool_call id; mirrors helm correlation_id
 	GenAIInputTokens   int64
 	GenAIOutputTokens  int64
@@ -252,15 +252,20 @@ func (gt *GovernanceTracer) TraceDecision(ctx context.Context, d DecisionEvent) 
 		attrs = append(attrs, attribute.String(observability.HelmTenantID, d.HelmTenantID))
 	}
 
-	// OTel GenAI semconv keys (only emitted when populated).
+	// OTel GenAI semconv keys (only emitted when populated). gen_ai.system is
+	// legacy and gen_ai.provider.name is its upstream replacement; both are emitted
+	// for one major version so existing SIEM joins keep working.
 	if d.GenAISystem != "" {
-		attrs = append(attrs, attribute.String(observability.GenAISystem, d.GenAISystem))
+		attrs = append(attrs,
+			attribute.String(observability.GenAISystem, d.GenAISystem),
+			attribute.String(observability.GenAIProviderName, observability.GenAIProviderNameFor(d.GenAISystem)),
+		)
 	}
 	if d.GenAIRequestModel != "" {
 		attrs = append(attrs, attribute.String(observability.GenAIRequestModel, d.GenAIRequestModel))
 	}
 	if d.GenAIOperationName != "" {
-		attrs = append(attrs, attribute.String(observability.GenAIOperationName, d.GenAIOperationName))
+		attrs = append(attrs, attribute.String(observability.GenAIOperationName, observability.GenAIOperationNameFor(d.GenAIOperationName)))
 	}
 	if d.ToolName != "" {
 		attrs = append(attrs, attribute.String(observability.GenAIToolName, d.ToolName))
@@ -324,12 +329,19 @@ type GenAIToolCallEvent struct {
 }
 
 // TraceGenAIToolCall records a single GenAI tool-call invocation as an OTel
-// span. The span name is "gen_ai.tool_call" so OTel collectors can filter
-// GenAI traffic distinctly from internal governance spans.
+// span. Upstream names such a span "{operation} {tool name}", so the name is
+// "execute_tool <tool>" rather than the legacy "gen_ai.tool_call".
+//
+// A span carries one name, so unlike the attribute keys this rename cannot be
+// emitted both ways. Collector rules and dashboards that match the old name must
+// be updated; docs/architecture/otel-genai.md records the change.
 func (gt *GovernanceTracer) TraceGenAIToolCall(ctx context.Context, e GenAIToolCallEvent) trace.SpanContext {
 	attrs := []attribute.KeyValue{}
 	if e.System != "" {
-		attrs = append(attrs, attribute.String(observability.GenAISystem, e.System))
+		attrs = append(attrs,
+			attribute.String(observability.GenAISystem, e.System),
+			attribute.String(observability.GenAIProviderName, observability.GenAIProviderNameFor(e.System)),
+		)
 	}
 	if e.RequestModel != "" {
 		attrs = append(attrs, attribute.String(observability.GenAIRequestModel, e.RequestModel))
@@ -340,8 +352,9 @@ func (gt *GovernanceTracer) TraceGenAIToolCall(ctx context.Context, e GenAIToolC
 	if e.ResponseID != "" {
 		attrs = append(attrs, attribute.String(observability.GenAIResponseID, e.ResponseID))
 	}
-	if e.OperationName != "" {
-		attrs = append(attrs, attribute.String(observability.GenAIOperationName, e.OperationName))
+	operation := observability.GenAIOperationNameFor(e.OperationName)
+	if operation != "" {
+		attrs = append(attrs, attribute.String(observability.GenAIOperationName, operation))
 	}
 	if e.ToolName != "" {
 		attrs = append(attrs, attribute.String(observability.GenAIToolName, e.ToolName))
@@ -383,10 +396,27 @@ func (gt *GovernanceTracer) TraceGenAIToolCall(ctx context.Context, e GenAIToolC
 		attrs = append(attrs, attribute.Float64(AttrDecisionLatencyMs, e.LatencyMs))
 	}
 
-	_, span := gt.tracer.Start(ctx, "gen_ai.tool_call", trace.WithAttributes(attrs...))
+	_, span := gt.tracer.Start(ctx, genAIToolSpanName(operation, e.ToolName), trace.WithAttributes(attrs...))
 	sc := span.SpanContext()
 	span.End()
 	return sc
+}
+
+// genAIToolSpanName builds the upstream span name for a tool invocation,
+// "{operation} {tool name}". Either half may be missing in practice — a caller
+// that supplies neither still gets a stable, filterable name rather than an
+// empty one.
+func genAIToolSpanName(operation, toolName string) string {
+	switch {
+	case operation != "" && toolName != "":
+		return operation + " " + toolName
+	case operation != "":
+		return operation
+	case toolName != "":
+		return observability.GenAIOperationExecuteTool + " " + toolName
+	default:
+		return observability.GenAIOperationExecuteTool
+	}
 }
 
 // DenialEvent represents a governance denial to trace.
@@ -443,13 +473,16 @@ func (gt *GovernanceTracer) TraceDenial(ctx context.Context, d DenialEvent) {
 		attrs = append(attrs, attribute.String(observability.HelmTenantID, d.HelmTenantID))
 	}
 	if d.GenAISystem != "" {
-		attrs = append(attrs, attribute.String(observability.GenAISystem, d.GenAISystem))
+		attrs = append(attrs,
+			attribute.String(observability.GenAISystem, d.GenAISystem),
+			attribute.String(observability.GenAIProviderName, observability.GenAIProviderNameFor(d.GenAISystem)),
+		)
 	}
 	if d.GenAIRequestModel != "" {
 		attrs = append(attrs, attribute.String(observability.GenAIRequestModel, d.GenAIRequestModel))
 	}
 	if d.GenAIOperationName != "" {
-		attrs = append(attrs, attribute.String(observability.GenAIOperationName, d.GenAIOperationName))
+		attrs = append(attrs, attribute.String(observability.GenAIOperationName, observability.GenAIOperationNameFor(d.GenAIOperationName)))
 	}
 	if d.ToolName != "" {
 		attrs = append(attrs, attribute.String(observability.GenAIToolName, d.ToolName))

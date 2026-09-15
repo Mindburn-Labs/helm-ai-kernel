@@ -182,8 +182,11 @@ func translate(s sdktrace.ReadOnlySpan) ([2]string, error) {
 }
 
 // streamLabels selects the Loki label set for a span. Labels MUST be low
-// cardinality per Loki guidance: we limit to service, verdict, policy_id,
-// and gen_ai_system (or empty when missing).
+// cardinality per Loki guidance: we limit to service, verdict, policy_id, and
+// the provider (or empty when missing). The provider appears twice, as the
+// legacy gen_ai_system and as gen_ai_provider_name, so a dashboard written
+// against either label keeps working through the compatibility window. Both
+// carry the same small set of values, so cardinality does not grow.
 func streamLabels(s sdktrace.ReadOnlySpan, cfg Config) map[string]string {
 	out := map[string]string{"service": cfg.ServiceLabel}
 	for _, kv := range s.Attributes() {
@@ -195,6 +198,8 @@ func streamLabels(s sdktrace.ReadOnlySpan, cfg Config) map[string]string {
 			out["policy_id"] = kv.Value.AsString()
 		case observability.GenAISystem:
 			out["gen_ai_system"] = kv.Value.AsString()
+		case observability.GenAIProviderName:
+			out["gen_ai_provider_name"] = kv.Value.AsString()
 		}
 	}
 	return out

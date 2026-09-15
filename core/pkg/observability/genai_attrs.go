@@ -28,7 +28,19 @@ package observability
 const (
 	// GenAISystem identifies the upstream model provider.
 	// Values: "openai", "anthropic", "aws.bedrock", "azure.openai", "google.gemini".
+	//
+	// Legacy. Upstream replaced this key with GenAIProviderName and gen_ai.system
+	// does not appear in the current conventions. helm-ai-kernel emits both for one
+	// major version so existing SIEM joins and dashboards keep working; see
+	// docs/architecture/otel-genai.md for the removal decision, which is still open.
+	// Never set this key alone: anything that sets it must also set
+	// GenAIProviderName via GenAIProviderNameFor.
 	GenAISystem = "gen_ai.system"
+
+	// GenAIProviderName identifies the upstream model provider using the current
+	// upstream key, which marks it Required on inference and execute_tool spans.
+	// Values: the GenAIProvider* constants below.
+	GenAIProviderName = "gen_ai.provider.name"
 
 	// GenAIRequestModel is the requested model identifier.
 	// Examples: "gpt-4o", "claude-3-5-sonnet", "anthropic.claude-3-5-sonnet-20241022".
@@ -106,7 +118,15 @@ const (
 	GenAIOperationChat       = "chat"
 	GenAIOperationCompletion = "completion"
 	GenAIOperationEmbedding  = "embedding"
-	GenAIOperationToolCall   = "tool_call"
+
+	// GenAIOperationToolCall is the legacy value helm-ai-kernel used for tool
+	// invocations. Upstream names this operation execute_tool. Callers may still
+	// pass it; the tracer maps it to GenAIOperationExecuteTool on emission.
+	GenAIOperationToolCall = "tool_call"
+
+	// GenAIOperationExecuteTool is the upstream operation name for a tool
+	// invocation. Upstream names such a span "{operation} {tool name}".
+	GenAIOperationExecuteTool = "execute_tool"
 )
 
 // ── GenAI system values ──────────────────────────────────────
@@ -118,3 +138,49 @@ const (
 	GenAISystemAzureOpenAI = "azure.openai"
 	GenAISystemGemini      = "google.gemini"
 )
+
+// ── GenAI provider names ─────────────────────────────────────
+//
+// The well-known values of gen_ai.provider.name. Two of the legacy gen_ai.system
+// values above are not upstream spellings and are mapped: "azure.openai" becomes
+// "azure.ai.openai", "google.gemini" becomes "gcp.gemini". The other three are
+// already spelled the upstream way.
+
+const (
+	GenAIProviderOpenAI      = "openai"
+	GenAIProviderAnthropic   = "anthropic"
+	GenAIProviderBedrock     = "aws.bedrock"
+	GenAIProviderAzureOpenAI = "azure.ai.openai"
+	GenAIProviderGemini      = "gcp.gemini"
+)
+
+// genAIProviderNameBySystem maps every legacy gen_ai.system value this kernel
+// can emit onto its upstream gen_ai.provider.name spelling.
+var genAIProviderNameBySystem = map[string]string{
+	GenAISystemOpenAI:      GenAIProviderOpenAI,
+	GenAISystemAnthropic:   GenAIProviderAnthropic,
+	GenAISystemBedrock:     GenAIProviderBedrock,
+	GenAISystemAzureOpenAI: GenAIProviderAzureOpenAI,
+	GenAISystemGemini:      GenAIProviderGemini,
+}
+
+// GenAIProviderNameFor returns the gen_ai.provider.name value for a legacy
+// gen_ai.system value. An unrecognised system is returned unchanged rather than
+// dropped: a provider this kernel does not know about is still a provider, and
+// the operator's own spelling is more useful than an absent Required attribute.
+func GenAIProviderNameFor(system string) string {
+	if mapped, ok := genAIProviderNameBySystem[system]; ok {
+		return mapped
+	}
+	return system
+}
+
+// GenAIOperationNameFor returns the upstream operation name for the value a
+// caller supplied, mapping the legacy tool_call onto execute_tool so callers do
+// not each have to be changed.
+func GenAIOperationNameFor(operation string) string {
+	if operation == GenAIOperationToolCall {
+		return GenAIOperationExecuteTool
+	}
+	return operation
+}

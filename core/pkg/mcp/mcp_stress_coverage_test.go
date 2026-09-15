@@ -328,8 +328,13 @@ func TestStress_NegotiateUnsupported(t *testing.T) {
 	}
 }
 
-func TestStress_AllSupportedVersionsNegotiate(t *testing.T) {
+func TestStress_AllHandshakeVersionsNegotiate(t *testing.T) {
 	for _, v := range SupportedProtocolVersions {
+		if IsModernProtocolVersion(v) {
+			// Modern revisions declare their version per request and never
+			// negotiate; see TestNegotiate_HandshakeVersionsAcceptedModernRefused.
+			continue
+		}
 		negotiated, ok := NegotiateProtocolVersion(v)
 		if !ok || negotiated != v {
 			t.Fatalf("version %s failed negotiation", v)

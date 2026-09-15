@@ -137,9 +137,12 @@ func TestTraceDecisionEmitsGenAIKeys(t *testing.T) {
 	got := attrMap(spans[0].Attributes)
 
 	expected := map[string]string{
-		observability.GenAISystem:               "openai",
-		observability.GenAIRequestModel:         "gpt-4o",
-		observability.GenAIOperationName:        "tool_call",
+		observability.GenAISystem:       "openai",
+		observability.GenAIProviderName: "openai",
+		observability.GenAIRequestModel: "gpt-4o",
+		// The caller passes the legacy tool_call; emission maps it to the
+		// upstream operation name.
+		observability.GenAIOperationName:        "execute_tool",
 		observability.GenAIToolName:             "search_web",
 		observability.GenAIToolCallID:           "call_abc123",
 		observability.GenAIResponseFinishReason: "tool_calls",
@@ -200,8 +203,9 @@ func TestTraceDenialEmitsGenAIKeys(t *testing.T) {
 
 	expected := map[string]string{
 		observability.GenAISystem:        "anthropic",
+		observability.GenAIProviderName:  "anthropic",
 		observability.GenAIRequestModel:  "claude-3-5-sonnet",
-		observability.GenAIOperationName: "tool_call",
+		observability.GenAIOperationName: "execute_tool",
 		observability.GenAIToolName:      "deploy_service",
 		observability.GenAIToolCallID:    "toolu_xyz",
 		observability.HelmVerdict:        "DENY",
@@ -250,18 +254,86 @@ func TestTraceGenAIToolCallSpanName(t *testing.T) {
 	if len(spans) != 1 {
 		t.Fatalf("expected 1 span, got %d", len(spans))
 	}
-	if spans[0].Name != "gen_ai.tool_call" {
-		t.Errorf("span name = %q, want %q", spans[0].Name, "gen_ai.tool_call")
+	// Upstream names a tool span "{operation} {tool name}". The caller still
+	// passes the legacy tool_call operation, so this also proves the mapping.
+	if spans[0].Name != "execute_tool list_buckets" {
+		t.Errorf("span name = %q, want %q", spans[0].Name, "execute_tool list_buckets")
 	}
 	got := attrMap(spans[0].Attributes)
+	if v, ok := got[observability.GenAIOperationName]; !ok || v.AsString() != observability.GenAIOperationExecuteTool {
+		t.Errorf("operation = %v, want execute_tool", v)
+	}
 	if v, ok := got[observability.GenAISystem]; !ok || v.AsString() != "aws.bedrock" {
 		t.Errorf("system = %v, want aws.bedrock", v)
+	}
+	if v, ok := got[observability.GenAIProviderName]; !ok || v.AsString() != "aws.bedrock" {
+		t.Errorf("provider name = %v, want aws.bedrock", v)
 	}
 	if v, ok := got[observability.GenAIToolCallID]; !ok || v.AsString() != "corr-9" {
 		t.Errorf("tool_call_id = %v, want corr-9", v)
 	}
 	if v, ok := got[observability.HelmCorrelationID]; !ok || v.AsString() != "corr-9" {
 		t.Errorf("correlation_id = %v, want corr-9 (must equal tool_call_id)", v)
+	}
+}
+
+// TestGenAIProviderNameAccompaniesEverySystem is the compatibility-window
+// guarantee: for every legacy gen_ai.system value this kernel can emit, both the
+// decision span and the tool span must also carry gen_ai.provider.name with the
+// upstream spelling. A SIEM join written against either key keeps working.
+func TestGenAIProviderNameAccompaniesEverySystem(t *testing.T) {
+	cases := []struct {
+		system, provider string
+	}{
+		{observability.GenAISystemOpenAI, "openai"},
+		{observability.GenAISystemAnthropic, "anthropic"},
+		{observability.GenAISystemBedrock, "aws.bedrock"},
+		{observability.GenAISystemAzureOpenAI, "azure.ai.openai"},
+		{observability.GenAISystemGemini, "gcp.gemini"},
+		// An operator-configured provider this kernel does not know about is
+		// passed through rather than dropped: the upstream key is Required.
+		{"my.private.gateway", "my.private.gateway"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.system, func(t *testing.T) {
+			tracer, exp := makeRecordingTracer(t)
+			ctx := context.Background()
+
+			tracer.TraceGenAIToolCall(ctx, GenAIToolCallEvent{
+				System:        tc.system,
+				OperationName: observability.GenAIOperationToolCall,
+				ToolName:      "probe",
+			})
+			spans := exp.GetSpans()
+			if len(spans) != 1 {
+				t.Fatalf("expected 1 span, got %d", len(spans))
+			}
+			got := attrMap(spans[0].Attributes)
+			if v, ok := got[observability.GenAISystem]; !ok || v.AsString() != tc.system {
+				t.Fatalf("tool span gen_ai.system = %v, want %q", v, tc.system)
+			}
+			if v, ok := got[observability.GenAIProviderName]; !ok || v.AsString() != tc.provider {
+				t.Fatalf("tool span gen_ai.provider.name = %v, want %q", v, tc.provider)
+			}
+		})
+	}
+}
+
+// TestGenAIToolSpanNameFallsBackWithoutATool keeps the span name stable and
+// filterable when a caller supplies no tool name, rather than emitting a name
+// with a dangling separator or an empty one.
+func TestGenAIToolSpanNameFallsBackWithoutATool(t *testing.T) {
+	tracer, exp := makeRecordingTracer(t)
+	tracer.TraceGenAIToolCall(context.Background(), GenAIToolCallEvent{
+		System:        observability.GenAISystemAnthropic,
+		OperationName: observability.GenAIOperationToolCall,
+	})
+	spans := exp.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(spans))
+	}
+	if spans[0].Name != observability.GenAIOperationExecuteTool {
+		t.Errorf("span name = %q, want %q", spans[0].Name, observability.GenAIOperationExecuteTool)
 	}
 }
 

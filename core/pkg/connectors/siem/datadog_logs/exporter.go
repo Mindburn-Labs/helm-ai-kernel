@@ -149,8 +149,13 @@ func translate(s sdktrace.ReadOnlySpan, cfg Config) ddLog {
 	if cfg.Env != "" {
 		tags = append(tags, "env:"+cfg.Env)
 	}
+	// Both provider keys are tagged through the compatibility window so a monitor
+	// written against either one keeps matching.
 	if v := asString(attrs[observability.GenAISystem]); v != "" {
 		tags = append(tags, "gen_ai.system:"+v)
+	}
+	if v := asString(attrs[observability.GenAIProviderName]); v != "" {
+		tags = append(tags, "gen_ai.provider.name:"+v)
 	}
 	if v := asString(attrs[observability.GenAIRequestModel]); v != "" {
 		tags = append(tags, "gen_ai.request.model:"+v)

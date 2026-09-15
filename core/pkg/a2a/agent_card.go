@@ -3,8 +3,18 @@
 //
 // An AgentCard is the public identity document of an A2A agent. It contains
 // the agent's capabilities, supported protocol versions, authentication
-// requirements, and endpoint information. Cards are served at a well-known
-// URL (/.well-known/agent.json) and must be verifiable via signature.
+// requirements, and endpoint information. Cards are served at
+// /.well-known/agent-card.json (see wellknown.go) and must be verifiable via
+// signature.
+//
+// This is the HELM trust-protocol card. It borrows field names from the Linux
+// Foundation / Agentic AI Foundation A2A specification (skills, capabilities,
+// defaultInputModes, pushNotifications) but is not wire-compatible with the
+// a2a-protocol.org AgentCard: HELM keys the card by agent_id, carries
+// supported_versions/auth_methods/features and a content hash + signature,
+// and does not emit the A2A url/version/protocolVersion/securitySchemes
+// fields. Interoperating with an A2A v1.0 peer requires a separate,
+// conformance-tested translation; do not present this card as one.
 //
 // Invariants:
 //   - Agent ID must be non-empty.
@@ -27,8 +37,9 @@ import (
 
 // ── Agent Card ───────────────────────────────────────────────────
 
-// AgentCard is the public identity and capability document for an A2A agent.
-// Aligned with Linux Foundation A2A v1.0 GA schema.
+// AgentCard is the public identity and capability document for a HELM
+// agent-to-agent trust peer. See the package comment above for how it differs
+// from the a2a-protocol.org AgentCard.
 type AgentCard struct {
 	AgentID            string            `json:"agent_id"`
 	Name               string            `json:"name"`

@@ -1,3 +1,8 @@
+// quantum_posture: these tests exercise the RFC 9421 wire format against the
+// RFC's own classical Ed25519 test vector. They assert interoperability with a
+// published signature, not cryptographic strength, and make no hybrid or
+// post-quantum claim.
+
 package httpsig
 
 import (

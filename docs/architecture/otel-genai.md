@@ -1,6 +1,6 @@
 ---
 title: OTel GenAI attribute contract
-last_reviewed: 2026-09-15
+last_reviewed: 2026-09-16
 ---
 
 <!-- quantum_posture: this page describes telemetry attribute names only. It
@@ -86,11 +86,22 @@ either keeps matching:
   Both carry the same small value set, so label cardinality does not grow.
 - **Datadog** adds the `gen_ai.provider.name:` tag beside `gen_ai.system:`.
 
-## Open decision: when the legacy key is removed
+## When the legacy key is removed
 
-`gen_ai.system` is emitted for **one major version**. The release that drops it
-is **not yet decided** — it is the owner's call, tracked in HELM-712. Until that
-decision is recorded here, treat `gen_ai.system` as present and do not build
-anything that assumes its removal date.
+**Both keys are emitted until the upstream GenAI conventions reach Stable.
+`gen_ai.system` is dropped in the first kernel major release after that.**
 
-The tool span name is not covered by that window; see above.
+The condition is deliberately upstream's status rather than a version number of
+ours. The `gen_ai.*` conventions are still marked **Development**, not Stable, so
+`gen_ai.provider.name` could itself be renamed or reshaped before it settles.
+Dropping our legacy key first would then cost every operator downstream two
+migrations instead of one — and the only thing waiting costs is one extra string
+per span.
+
+A date we picked could also quietly expire while nobody was watching; a condition
+anyone can check against the upstream repository cannot. Check
+<https://github.com/open-telemetry/semantic-conventions-genai> for the current
+status before assuming the window has closed.
+
+The tool span name is **not** covered by this window. A span carries one name, so
+that rename could not be emitted both ways and took effect immediately; see above.

@@ -3,8 +3,8 @@
 // authentication security.
 package mcp
 
-// Conformance vectors for the MCP 2026-07-28 release candidate
-// authorization SEPs (MIN-495). Vector data lives in
+// Conformance vectors for the authorization SEPs of MCP revision
+// 2026-07-28, the current protocol version (MIN-495). Vector data lives in
 // testdata/mcp_2026_07_28_authz_vectors.json; the mapping narrative lives
 // in docs/MCP_2026_07_28_AUTHORIZATION_MAPPING.md.
 

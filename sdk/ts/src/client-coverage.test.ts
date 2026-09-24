@@ -38,8 +38,9 @@ describe("HelmClient coverage matrix", () => {
   it("constructs fallback API errors for non-HELM bodies", () => {
     expect(new HelmApiError(418, {}).message).toBe("HELM API request failed with HTTP 418");
     expect(new HelmApiError(409, { error: null }).reasonCode).toBe("ERROR_INTERNAL");
-    expect(new HelmApiError(400, { error: { message: "bad" } }).message).toBe("HELM API request failed with HTTP 400");
-    expect(new HelmApiError(401, { error: { reason_code: "DENY" } }).reasonCode).toBe("ERROR_INTERNAL");
+    // A partial legacy `error` member is still read: its message beats a generic one.
+    expect(new HelmApiError(400, { error: { message: "bad" } }).message).toBe("bad");
+    expect(new HelmApiError(401, { error: { reason_code: "DENY" } }).reasonCode).toBe("DENY");
   });
 
   it("exercises every JSON endpoint wrapper", async () => {

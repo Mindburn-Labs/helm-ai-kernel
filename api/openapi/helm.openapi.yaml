@@ -4151,10 +4151,53 @@ components:
   schemas:
     HelmError:
       type: object
+      description: >-
+        The one HELM error model (target architecture §11.1), written by
+        core/pkg/httperr for every HTTP error. It is an RFC 7807 problem (type,
+        title, status, detail, instance, trace_id) whose extension members form a
+        Connect error (code, message, details;
+        https://connectrpc.com/docs/protocol/#error-end-stream). details holds one
+        helm.errors.v1.ErrorDetail with the registered reason code and whether a
+        retry can succeed. `error` repeats the message in the shape SDK releases up
+        to v0.8.5 parse; it is deprecated and goes at the next major version.
       required: [error]
       properties:
+        code:
+          type: string
+          description: >-
+            Connect error code: canceled, unknown, invalid_argument,
+            deadline_exceeded, not_found, already_exists, permission_denied,
+            resource_exhausted, failed_precondition, aborted, out_of_range,
+            unimplemented, internal, unavailable, data_loss or unauthenticated.
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelmErrorDetail'
+        type:
+          type: string
+          description: RFC 7807 problem type URI
+        title:
+          type: string
+          description: RFC 7807 short summary
+        status:
+          type: integer
+          description: RFC 7807 copy of the HTTP status code
+        detail:
+          type: string
+          description: RFC 7807 explanation; equal to message
+        instance:
+          type: string
+          description: RFC 7807 request path, when known
+        trace_id:
+          type: string
+          description: Request trace identifier, when known
         error:
           type: object
+          deprecated: true
+          description: Legacy error shape, kept for SDK releases up to v0.8.5.
           required: [message, type, code, reason_code]
           properties:
             message:
@@ -4162,32 +4205,47 @@ components:
               description: Human-readable error message
             type:
               type: string
-              enum: [invalid_request, authentication_error, permission_denied, not_found, internal_error]
+              description: invalid_request, authentication_error, permission_denied, not_found or internal_error
             code:
               type: string
-              description: Machine-readable error code
+              description: The Connect error code
             reason_code:
               type: string
-              description: HELM-specific reason code
-              enum:
-                - DENY_TOOL_NOT_FOUND
-                - DENY_SCHEMA_MISMATCH
-                - DENY_OUTPUT_DRIFT
-                - DENY_BUDGET_EXCEEDED
-                - DENY_APPROVAL_REQUIRED
-                - DENY_APPROVAL_TIMEOUT
-                - DENY_SANDBOX_TRAP
-                - DENY_GAS_EXHAUSTION
-                - DENY_TIME_LIMIT
-                - DENY_MEMORY_LIMIT
-                - DENY_POLICY_VIOLATION
-                - DENY_TRUST_KEY_REVOKED
-                - DENY_IDEMPOTENCY_DUPLICATE
-                - ERROR_INTERNAL
+              description: Same as the ErrorDetail reason_code; an open string, empty when there is none
             details:
               type: object
               description: Additional error context
               additionalProperties: true
+
+    HelmErrorDetail:
+      type: object
+      description: >-
+        A Connect error detail holding a helm.errors.v1.ErrorDetail
+        (protocols/proto/helm/errors/v1/errors.proto).
+      required: [type, value, debug]
+      properties:
+        type:
+          type: string
+          description: Fully qualified protobuf message name, helm.errors.v1.ErrorDetail
+        value:
+          type: string
+          description: The ErrorDetail protobuf binary, base64-encoded without padding
+        debug:
+          $ref: '#/components/schemas/HelmErrorDetailFields'
+
+    HelmErrorDetailFields:
+      type: object
+      description: The ErrorDetail fields as JSON
+      required: [reason_code, retryable]
+      properties:
+        reason_code:
+          type: string
+          description: >-
+            Registered code from reason-codes-v1.json as an open string, or empty
+            when the error carries none. Never a closed enum.
+        retryable:
+          type: boolean
+          description: Whether repeating the same request can succeed
 
     ChatCompletionRequest:
       type: object
@@ -6729,11 +6787,25 @@ components:
           schema:
             $ref: '#/components/schemas/HelmError'
           example:
+            code: "not_found"
+            message: "Tool not found: unknown_tool"
+            details:
+              - type: "helm.errors.v1.ErrorDetail"
+                value: ""
+                debug: { reason_code: "", retryable: false }
+            type: "https://helm.mindburn.run/errors/404"
+            title: "Not Found"
+            status: 404
+            detail: "Tool not found: unknown_tool"
             error:
               message: "Tool not found: unknown_tool"
-              type: "invalid_request"
-              code: "tool_not_found"
-              reason_code: "DENY_TOOL_NOT_FOUND"
+              type: "not_found"
+              code: "not_found"
+              reason_code: ""
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/HelmError'
+
     IdempotencyConflict:
       description: Idempotency key was reused with a different request fingerprint
       content:

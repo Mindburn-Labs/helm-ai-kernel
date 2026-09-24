@@ -81,7 +81,7 @@ Computes `skill_content_hash`, scans `SKILL.md`, metadata, scripts, symlinks, an
 
 `helm-ai-kernel skills install helm/repo-auditor --agent codex --scope repo`
 
-Runs scan, writes managed projection files atomically, and emits `SKILL_INSTALL_RECEIPT` plus `SKILL_PROJECTION_RECEIPT`.
+Runs scan, writes managed projection files atomically inside the repo root without following symlinks, and emits `SKILL_INSTALL_RECEIPT` plus `SKILL_PROJECTION_RECEIPT`.
 
 ### User Or Global Install
 
@@ -113,7 +113,7 @@ Marks a HELM-managed install disabled and emits `SKILL_DISABLE_RECEIPT`.
 
 `helm-ai-kernel skills revoke <skill_ref>`
 
-Removes managed projection files, updates install state, and emits `SKILL_REVOKE_RECEIPT`.
+Removes managed projection files, updates install state, and emits `SKILL_REVOKE_RECEIPT`. It removes only the canonical projection path under the repo root, and only while that file holds the content hash recorded at install; any other path listed in `installed.json` fails closed.
 
 ## Negative Flows
 
@@ -123,6 +123,9 @@ Removes managed projection files, updates install state, and emits `SKILL_REVOKE
 - MCP side-effect auto-enable -> `ESCALATE`.
 - Plugin hook auto-approval -> `DENY`.
 - Symlink escape -> `DENY`.
+- Pack not `verified` against the first-party publisher keyring (unsigned) -> `ESCALATE`.
+- Pack whose repository policy cannot be resolved, such as a `github:` fetch -> `ESCALATE`.
+- Symlink on a managed install or revoke path -> the command fails closed.
 - Opaque binary payload -> `DENY` until provenance is available.
 
 ## Completion Gaps

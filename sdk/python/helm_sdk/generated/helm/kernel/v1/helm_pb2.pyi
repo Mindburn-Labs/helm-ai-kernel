@@ -183,7 +183,7 @@ class AuthorizedExecutionIntent(_message.Message):
     def __init__(self, intent_id: _Optional[str] = ..., decision_id: _Optional[str] = ..., effect_id: _Optional[str] = ..., issued_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., principal: _Optional[str] = ...) -> None: ...
 
 class Receipt(_message.Message):
-    __slots__ = ("receipt_version", "receipt_id", "decision_id", "effect_id", "verdict", "principal", "tool", "action", "timestamp", "lamport", "proofgraph_node", "signature", "signer_key_id", "payload_hash", "reason_code", "metadata", "correlation_id", "signature_version", "status", "output_hash", "prev_hash", "args_hash", "policy_hash", "session_id")
+    __slots__ = ("receipt_version", "receipt_id", "decision_id", "effect_id", "verdict", "principal", "tool", "action", "timestamp", "lamport", "proofgraph_node", "signature", "signer_key_id", "payload_hash", "reason_code", "metadata", "correlation_id", "signature_version", "status", "output_hash", "prev_hash", "args_hash", "policy_hash", "session_id", "reason_code_text")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -215,6 +215,7 @@ class Receipt(_message.Message):
     ARGS_HASH_FIELD_NUMBER: _ClassVar[int]
     POLICY_HASH_FIELD_NUMBER: _ClassVar[int]
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    REASON_CODE_TEXT_FIELD_NUMBER: _ClassVar[int]
     receipt_version: str
     receipt_id: str
     decision_id: str
@@ -239,7 +240,8 @@ class Receipt(_message.Message):
     args_hash: str
     policy_hash: str
     session_id: str
-    def __init__(self, receipt_version: _Optional[str] = ..., receipt_id: _Optional[str] = ..., decision_id: _Optional[str] = ..., effect_id: _Optional[str] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., principal: _Optional[str] = ..., tool: _Optional[str] = ..., action: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lamport: _Optional[int] = ..., proofgraph_node: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., payload_hash: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., correlation_id: _Optional[str] = ..., signature_version: _Optional[str] = ..., status: _Optional[str] = ..., output_hash: _Optional[str] = ..., prev_hash: _Optional[str] = ..., args_hash: _Optional[str] = ..., policy_hash: _Optional[str] = ..., session_id: _Optional[str] = ...) -> None: ...
+    reason_code_text: str
+    def __init__(self, receipt_version: _Optional[str] = ..., receipt_id: _Optional[str] = ..., decision_id: _Optional[str] = ..., effect_id: _Optional[str] = ..., verdict: _Optional[_Union[Verdict, str]] = ..., principal: _Optional[str] = ..., tool: _Optional[str] = ..., action: _Optional[str] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., lamport: _Optional[int] = ..., proofgraph_node: _Optional[str] = ..., signature: _Optional[str] = ..., signer_key_id: _Optional[str] = ..., payload_hash: _Optional[str] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., correlation_id: _Optional[str] = ..., signature_version: _Optional[str] = ..., status: _Optional[str] = ..., output_hash: _Optional[str] = ..., prev_hash: _Optional[str] = ..., args_hash: _Optional[str] = ..., policy_hash: _Optional[str] = ..., session_id: _Optional[str] = ..., reason_code_text: _Optional[str] = ...) -> None: ...
 
 class PDPRequest(_message.Message):
     __slots__ = ("effect", "subject", "context")
@@ -274,18 +276,20 @@ class ContextDescriptor(_message.Message):
     def __init__(self, jurisdiction: _Optional[str] = ..., environment: _Optional[str] = ..., time_window_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., time_window_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class PDPResponse(_message.Message):
-    __slots__ = ("allow", "reason_code", "policy_ref", "decision_hash", "obligations")
+    __slots__ = ("allow", "reason_code", "policy_ref", "decision_hash", "obligations", "reason_code_text")
     ALLOW_FIELD_NUMBER: _ClassVar[int]
     REASON_CODE_FIELD_NUMBER: _ClassVar[int]
     POLICY_REF_FIELD_NUMBER: _ClassVar[int]
     DECISION_HASH_FIELD_NUMBER: _ClassVar[int]
     OBLIGATIONS_FIELD_NUMBER: _ClassVar[int]
+    REASON_CODE_TEXT_FIELD_NUMBER: _ClassVar[int]
     allow: bool
     reason_code: ReasonCode
     policy_ref: str
     decision_hash: str
     obligations: _containers.RepeatedCompositeFieldContainer[Obligation]
-    def __init__(self, allow: bool = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., policy_ref: _Optional[str] = ..., decision_hash: _Optional[str] = ..., obligations: _Optional[_Iterable[_Union[Obligation, _Mapping]]] = ...) -> None: ...
+    reason_code_text: str
+    def __init__(self, allow: bool = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., policy_ref: _Optional[str] = ..., decision_hash: _Optional[str] = ..., obligations: _Optional[_Iterable[_Union[Obligation, _Mapping]]] = ..., reason_code_text: _Optional[str] = ...) -> None: ...
 
 class Obligation(_message.Message):
     __slots__ = ("id", "type", "description", "deadline")
@@ -317,18 +321,20 @@ class EffectRequest(_message.Message):
     def __init__(self, effect: _Optional[_Union[Effect, _Mapping]] = ..., principal: _Optional[str] = ..., context: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class EffectResponse(_message.Message):
-    __slots__ = ("verdict", "reason_code", "reason", "receipt", "intent")
+    __slots__ = ("verdict", "reason_code", "reason", "receipt", "intent", "reason_code_text")
     VERDICT_FIELD_NUMBER: _ClassVar[int]
     REASON_CODE_FIELD_NUMBER: _ClassVar[int]
     REASON_FIELD_NUMBER: _ClassVar[int]
     RECEIPT_FIELD_NUMBER: _ClassVar[int]
     INTENT_FIELD_NUMBER: _ClassVar[int]
+    REASON_CODE_TEXT_FIELD_NUMBER: _ClassVar[int]
     verdict: Verdict
     reason_code: ReasonCode
     reason: str
     receipt: Receipt
     intent: AuthorizedExecutionIntent
-    def __init__(self, verdict: _Optional[_Union[Verdict, str]] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., reason: _Optional[str] = ..., receipt: _Optional[_Union[Receipt, _Mapping]] = ..., intent: _Optional[_Union[AuthorizedExecutionIntent, _Mapping]] = ...) -> None: ...
+    reason_code_text: str
+    def __init__(self, verdict: _Optional[_Union[Verdict, str]] = ..., reason_code: _Optional[_Union[ReasonCode, str]] = ..., reason: _Optional[str] = ..., receipt: _Optional[_Union[Receipt, _Mapping]] = ..., intent: _Optional[_Union[AuthorizedExecutionIntent, _Mapping]] = ..., reason_code_text: _Optional[str] = ...) -> None: ...
 
 class ExecutionResult(_message.Message):
     __slots__ = ("intent_id", "success", "output", "error_message", "completed_at")

@@ -27,9 +27,20 @@ A standardized reason code vocabulary enables:
 
 ## 3. Registry Format
 
-Each reason code is a `SCREAMING_SNAKE_CASE` string. The canonical Go type is
-`contracts.ReasonCode` (see `core/pkg/contracts/verdict.go`). The protobuf
-representation is the `ReasonCode` enum in `protocols/proto/helm/kernel/v1/helm.proto`.
+Each reason code is a `SCREAMING_SNAKE_CASE` string, and on the wire it is an
+open string: a consumer must accept a code it does not recognize.
+`protocols/json-schemas/reason-codes/reason-codes-v1.json` is the only list of
+codes. `scripts/ci/gen_reason_codes.py` generates string constants from it for
+the kernel (`CoreReasonCodes`, `core/pkg/contracts/reason_codes_gen.go`) and for
+the Go, TypeScript, Python, Rust and Java SDKs. `python3
+scripts/ci/check_reason_codes.py` fails when any of them is out of date. The
+canonical Go type is `contracts.ReasonCode`; `core/pkg/contracts/verdict.go`
+names each registry code, and a test keeps those names and the registry equal.
+
+In protobuf, `reason_code_text` (a `string`) carries the code in
+`protocols/proto/helm/kernel/v1/helm.proto`. The older closed `ReasonCode` enum
+holds only 18 codes and decodes every other one as `REASON_CODE_UNSPECIFIED`,
+so it is kept for compatibility only.
 
 ## 4. Normative Reason Code Registry
 

@@ -8,6 +8,7 @@ use std::time::Duration;
 
 pub mod canonical;
 pub mod client;
+pub mod reason_codes;
 pub mod types_gen;
 pub use types_gen::*;
 
@@ -1163,6 +1164,14 @@ mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+
+    #[test]
+    fn test_reason_codes_are_registry_strings() {
+        assert_eq!(reason_codes::ALL.len(), 106);
+        assert_eq!(reason_codes::EMERGENCY_STOP_FENCED, "EMERGENCY_STOP_FENCED");
+        assert!(reason_codes::is_registered(reason_codes::EMERGENCY_STOP_FENCED));
+        assert!(!reason_codes::is_registered("NOT_A_REGISTERED_CODE"));
+    }
 
     #[test]
     fn test_client_creation() {

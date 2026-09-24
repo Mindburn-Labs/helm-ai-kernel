@@ -161,6 +161,13 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 
 	// 3. Native EvidencePack seal.
 	report.addCheck(checkEvidencePackSeal(bundlePath, report, opts))
+	// Embedded receipts are judged under the profile the seal resolved (the
+	// flag, else the trust config's active_profile, else dev-local). Using the
+	// raw flag here let an empty --profile trust pack-carried receipt keys
+	// inside a team or customer pack.
+	if report.Seal != nil && report.Seal.TrustLevel != "" {
+		opts.Profile = report.Seal.TrustLevel
+	}
 
 	// 4. File hash integrity
 	report.addChecks(checkFileHashes(bundlePath))
@@ -200,23 +207,38 @@ func VerifyBundleWithOptions(bundlePath string, opts VerifyOptions) (*VerifyRepo
 	report.addCheck(checkEmbeddedSignatureTrust(bundlePath, opts))
 
 	enrichReportMetadata(bundlePath, report, opts)
+	report.Finalize()
+	return report, nil
+}
 
-	// Compute summary
+// Finalize counts failed checks and sets Verified, IssueCount and Summary.
+// A report whose only failures come from a missing trust root is
+// UNVERIFIABLE: the content is intact but nothing configured vouches for the
+// signer. It is never a pass.
+func (report *VerifyReport) Finalize() {
 	failed := 0
+	trustRootOnly := report.SealState == evidencepkg.EvidencePackSealStateUnverifiable
 	for _, c := range report.Checks {
-		if !c.Pass {
-			failed++
+		if c.Pass {
+			continue
+		}
+		failed++
+		if c.Name != "evidence_pack_seal" && c.Name != "embedded_signature_trust" {
+			trustRootOnly = false
 		}
 	}
 	report.IssueCount = failed
-	if failed > 0 {
+	switch {
+	case failed == 0:
+		report.Verified = true
+		report.Summary = fmt.Sprintf("PASS: %d/%d checks passed", len(report.Checks), len(report.Checks))
+	case trustRootOnly:
+		report.Verified = false
+		report.Summary = fmt.Sprintf("UNVERIFIABLE: no trust root for the seal signer; %d/%d checks could not be verified (pass --config, set HELM_EVIDENCE_TRUST_CONFIG or HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX)", failed, len(report.Checks))
+	default:
 		report.Verified = false
 		report.Summary = fmt.Sprintf("FAIL: %d/%d checks failed", failed, len(report.Checks))
-	} else {
-		report.Summary = fmt.Sprintf("PASS: %d/%d checks passed", len(report.Checks), len(report.Checks))
 	}
-
-	return report, nil
 }
 
 func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyOptions) CheckResult {
@@ -259,6 +281,9 @@ func checkEvidencePackSeal(bundlePath string, report *VerifyReport, opts VerifyO
 	reason := strings.Join(seal.Errors, "; ")
 	if reason == "" {
 		reason = "native EvidencePack seal is invalid"
+	}
+	if seal.State == evidencepkg.EvidencePackSealStateUnverifiable {
+		reason = "UNVERIFIABLE (no trust root): " + reason
 	}
 	return CheckResult{Name: "evidence_pack_seal", Pass: false, Reason: reason}
 }
@@ -339,15 +364,22 @@ func firstUint(document map[string]any, keys ...string) *uint64 {
 }
 
 func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckResult {
-	valid, total := countEmbeddedSignatures(bundlePath, opts)
+	valid, selfAttested, total := countEmbeddedSignatureTrust(bundlePath, opts)
 	if total == 0 {
 		return CheckResult{Name: "embedded_signature_trust", Pass: true, Detail: "no embedded receipt or witness signatures require verification"}
 	}
 	if valid == total {
+		detail := fmt.Sprintf("%d embedded receipt or witness signatures verified against configured trust roots", valid)
+		if selfAttested > 0 {
+			// Audit 23-07: dev-local MCP receipts are checked against the key
+			// they carry, which the seal covers. Say so instead of calling it
+			// a configured trust root.
+			detail = fmt.Sprintf("%d embedded receipt or witness signatures verified: %d against configured trust roots, %d self-attested against keys carried in the dev-local pack (integrity under the seal, not independent provenance)", valid, valid-selfAttested, selfAttested)
+		}
 		return CheckResult{
 			Name:   "embedded_signature_trust",
 			Pass:   true,
-			Detail: fmt.Sprintf("%d embedded receipt or witness signatures verified against configured trust roots", valid),
+			Detail: detail,
 		}
 	}
 	return CheckResult{
@@ -358,7 +390,16 @@ func checkEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) CheckRes
 }
 
 func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
+	valid, _, total := countEmbeddedSignatureTrust(bundlePath, opts)
+	return valid, total
+}
+
+// countEmbeddedSignatureTrust returns how many embedded signatures verified,
+// how many of those verified only against a key carried in the pack, and the
+// total that required verification.
+func countEmbeddedSignatureTrust(bundlePath string, opts VerifyOptions) (int, int, int) {
 	valid := 0
+	selfAttested := 0
 	total := 0
 	for _, dir := range []string{receiptPath(bundlePath), filepath.Join(bundlePath, "07_ATTESTATIONS")} {
 		if !dirExists(dir) {
@@ -388,8 +429,13 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 			if signatureDeclared || signatureVersionDeclared {
 				total++
 				sig, sigOK := signatureValue.(string)
-				if sigOK && sig != "" && verifyEmbeddedDocumentSignature(document, sig, opts) {
-					valid++
+				if sigOK && sig != "" {
+					if ok, packKey := verifyEmbeddedDocumentSignature(document, sig, opts); ok {
+						valid++
+						if packKey {
+							selfAttested++
+						}
+					}
 				}
 			}
 			if witnesses, ok := witnessValue.([]any); ok {
@@ -419,18 +465,20 @@ func countEmbeddedSignatures(bundlePath string, opts VerifyOptions) (int, int) {
 			return nil
 		})
 	}
-	return valid, total
+	return valid, selfAttested, total
 }
 
-func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts VerifyOptions) bool {
+// verifyEmbeddedDocumentSignature reports whether the signature verified and
+// whether it verified only against a key carried inside the pack.
+func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts VerifyOptions) (bool, bool) {
 	switch firstString(document, "receipt_version") {
 	case "managed_agent_live_scenario_receipt.v1":
 		if firstString(document, "signature_payload") != "decision_hash" {
-			return false
+			return false, false
 		}
-		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "decision_hash"))
+		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "decision_hash")), false
 	case "managed_agent_execution_receipt.v1":
-		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "receipt_hash"))
+		return verifyManagedAgentEd25519Signature(document, sig, opts.ManagedAgentReceiptPublicKeyHex, firstString(document, "receipt_hash")), false
 	default:
 		// MCP proof receipts bind their class to the signed EffectID prefix
 		// (covered by the receipt signature). The unsigned Type field survives
@@ -453,16 +501,18 @@ func verifyEmbeddedDocumentSignature(document map[string]any, sig string, opts V
 			if class == "" {
 				class = receiptType
 			} else if receiptType != class {
-				return false
+				return false, false
 			}
 		}
 		switch class {
 		case mcpPolicyDecisionClass:
-			return verifyMCPPolicyDecisionReceiptSignature(document, sig, opts)
+			ok := verifyMCPPolicyDecisionReceiptSignature(document, sig, opts)
+			return ok, ok
 		case mcpGovernedEffectClass:
-			return verifyMCPGovernedEffectReceiptSignature(document, sig, opts)
+			ok := verifyMCPGovernedEffectReceiptSignature(document, sig, opts)
+			return ok, ok
 		default:
-			return verifyEvaluateReceiptV5AgainstCallerKey(document, sig)
+			return verifyEvaluateReceiptV5AgainstCallerKey(document, sig), false
 		}
 	}
 }

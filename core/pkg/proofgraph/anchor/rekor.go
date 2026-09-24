@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -193,7 +194,11 @@ func (r *RekorBackend) Anchor(ctx context.Context, req AnchorRequest) (*AnchorRe
 	return receipt, nil
 }
 
-// Verify checks the Rekor receipt against the transparency log.
+// Verify fetches the entry at the receipt's log index from the configured
+// Rekor instance and binds it to the receipt: the log ID, the hashedrekord
+// digest (which must equal receipt.Request.MerkleRoot, as Anchor submitted
+// it), and the log's integrated time must all match. It trusts the Rekor
+// endpoint it queries and does not check the signed entry timestamp offline.
 func (r *RekorBackend) Verify(ctx context.Context, receipt *AnchorReceipt) error {
 	if receipt.Backend != rekorBackendName {
 		return fmt.Errorf("rekor: receipt backend mismatch: got %s", receipt.Backend)
@@ -229,9 +234,33 @@ func (r *RekorBackend) Verify(ctx context.Context, receipt *AnchorReceipt) error
 
 	for _, entry := range entries {
 		if entry.LogIndex == receipt.LogIndex && entry.LogID == receipt.LogID {
-			return nil // Entry exists and matches
+			return rekorEntryBindsReceipt(entry, receipt)
 		}
 	}
 
 	return fmt.Errorf("rekor: entry not found at log index %d", receipt.LogIndex)
+}
+
+// rekorEntryBindsReceipt checks that the log entry records the receipt's root
+// at the receipt's integrated time.
+func rekorEntryBindsReceipt(entry rekorResponse, receipt *AnchorReceipt) error {
+	body, err := base64.StdEncoding.DecodeString(entry.Body)
+	if err != nil {
+		return fmt.Errorf("rekor: decode entry body: %w", err)
+	}
+	var logged rekorEntry
+	if err := json.Unmarshal(body, &logged); err != nil {
+		return fmt.Errorf("rekor: parse entry body: %w", err)
+	}
+	var spec rekorHashedRekordSpec
+	if logged.Kind != "hashedrekord" || json.Unmarshal(logged.Spec, &spec) != nil {
+		return fmt.Errorf("rekor: entry at log index %d is not a hashedrekord", entry.LogIndex)
+	}
+	if spec.Data.Hash.Algorithm != "sha256" || !strings.EqualFold(spec.Data.Hash.Value, receipt.Request.MerkleRoot) {
+		return fmt.Errorf("rekor: entry at log index %d does not bind merkle root %s", entry.LogIndex, receipt.Request.MerkleRoot)
+	}
+	if entry.IntegratedTime == 0 || entry.IntegratedTime != receipt.IntegratedTime.Unix() {
+		return fmt.Errorf("rekor: entry integrated_time %d does not match receipt integrated_time %s", entry.IntegratedTime, receipt.IntegratedTime.UTC().Format(time.RFC3339))
+	}
+	return nil
 }

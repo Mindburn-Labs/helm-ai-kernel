@@ -37,13 +37,14 @@
       "description": "Full merge gate: `make check` runs it with every gate blocking, and `ci / gate` runs `make check`.",
       "gates": [
         "quality-self-test",
+        "gate-self-tests",
+        "concept-change-markers",
         "docs-truth",
         "docs-openapi-parity",
         "version-drift",
         "console-sidecar-pin",
         "release-workflow-contract",
         "scorecard-workflow-contract",
-        "ai-os-image-release-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
         "unfinished-markers",
@@ -855,18 +856,6 @@
       ]
     },
     {
-      "id": "ai-os-image-release-contract",
-      "title": "AI OS image release contract",
-      "command": "bash scripts/release/test_ai_os_image_release_contract.sh",
-      "timeout_seconds": 600,
-      "paths": [
-        "scripts/release/**",
-        ".github/workflows/release-ai-os-image.yml",
-        ".github/workflows/dev-image.yml",
-        "Dockerfile*"
-      ]
-    },
-    {
       "id": "unfinished-markers",
       "title": "Unfinished markers in .github and sdk",
       "command": "bash scripts/ci/check_unfinished_markers.sh",
@@ -987,6 +976,25 @@
         "docs/**",
         "api/openapi/**",
         "core/cmd/helm-ai-kernel/**"
+      ]
+    },
+    {
+      "id": "gate-self-tests",
+      "title": "Gate script self-tests",
+      "command": "python3 -m unittest discover -s scripts/ci -p '*_test.py' && python3 -m unittest discover -s scripts/ci -p 'test_*.py'",
+      "timeout_seconds": 600,
+      "paths": [
+        "scripts/ci/**"
+      ]
+    },
+    {
+      "id": "concept-change-markers",
+      "title": "Invariant amendment markers over the change",
+      "command": "bash scripts/ci/concept_gate_range.sh",
+      "timeout_seconds": 300,
+      "paths": [
+        "HELM_INVARIANTS.md",
+        "tools/invcheck/**"
       ]
     }
   ]

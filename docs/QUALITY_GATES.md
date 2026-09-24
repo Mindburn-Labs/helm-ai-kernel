@@ -67,9 +67,16 @@ from diff hunks, so a change lands on the invariant that owns it however the dif
 was framed. Editing the surrounding prose is not a concept change and needs no
 marker; pass `-strict-any-edit` to require one on any modification of the file.
 
-Both are registered as **advisory** gates in the `nightly` profile. They do not
-block PR or merge today. Promote them with `QUALITY_STRICT=1` locally, or move
-them into the `pr` profile once the constitution has settled.
+`concept-gate` exits 2 on an empty range: a range with no commits inspects
+nothing, so it is not a pass. It blocks in CI through the required
+`Quality PR profile` job, which runs it over the pull request's own commits
+(`base..head`) and, on a push to `main`, over the pushed commits
+(`before..after`). The nightly profile re-inspects the last 50 commits on
+`main` (`CONCEPT_RANGE=HEAD~50..HEAD`).
+
+`inv-check` is still an **advisory** gate in the `nightly` profile and does not
+block PR or merge today. Promote it with `QUALITY_STRICT=1` locally, or move it
+into the `pr` profile once the constitution has settled.
 
 ## Profiles
 

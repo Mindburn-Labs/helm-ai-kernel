@@ -1,19 +1,15 @@
 // Package credentials provides secure, encrypted storage for AI provider credentials.
-// AES-256-GCM encryption, vault pattern, automatic refresh.
+// AES-256-GCM through pkg/kms, each ciphertext bound to its operator, provider
+// and field; vault pattern, automatic refresh.
 package credentials
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -66,127 +62,26 @@ type CredentialStatus struct {
 
 // Store manages encrypted credential storage.
 type Store struct {
-	db          *sql.DB
-	encKey      []byte      // legacy raw key (used when kmsManager is nil)
-	kmsManager  kms.Manager // CRED-001: KMS-backed encryption
-	mu          sync.RWMutex
-	envFallback bool // Allow fallback to env vars
-}
-
-// StoreOption configures the credential store.
-type StoreOption func(*Store)
-
-// WithEnvFallback enables fallback to environment variables.
-func WithEnvFallback(enabled bool) StoreOption {
-	return func(s *Store) {
-		s.envFallback = enabled
-	}
-}
-
-// NewStore creates a new credential store with a raw encryption key (legacy).
-// encryptionKey must be exactly 32 bytes for AES-256.
-func NewStore(db *sql.DB, encryptionKey []byte, opts ...StoreOption) (*Store, error) {
-	if len(encryptionKey) != 32 {
-		return nil, errors.New("encryption key must be 32 bytes for AES-256")
-	}
-
-	s := &Store{
-		db:          db,
-		encKey:      encryptionKey,
-		envFallback: true, // Default: allow env fallback for CI/automation
-	}
-
-	for _, opt := range opts {
-		opt(s)
-	}
-
-	return s, nil
+	db  *sql.DB
+	kms kms.Manager // CRED-001: KMS-backed encryption
+	mu  sync.RWMutex
 }
 
 // NewStoreWithKMS creates a credential store backed by a KMS Manager (CRED-001).
-func NewStoreWithKMS(db *sql.DB, km kms.Manager, opts ...StoreOption) *Store {
-	s := &Store{
-		db:          db,
-		kmsManager:  km,
-		envFallback: true,
-	}
-
-	for _, opt := range opts {
-		opt(s)
-	}
-
-	return s
+func NewStoreWithKMS(db *sql.DB, km kms.Manager) *Store {
+	return &Store{db: db, kms: km}
 }
 
-// encrypt encrypts plaintext using KMS (preferred) or legacy AES-256-GCM.
-func (s *Store) encrypt(plaintext string) (string, error) {
-	if plaintext == "" {
-		return "", nil
-	}
+const (
+	fieldAccessToken  = "access_token"
+	fieldRefreshToken = "refresh_token"
+)
 
-	// CRED-001: Use KMS if available
-	if s.kmsManager != nil {
-		return s.kmsManager.Encrypt(plaintext)
-	}
-
-	// Legacy path: raw key
-	block, err := aes.NewCipher(s.encKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", fmt.Errorf("failed to generate nonce: %w", err)
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
-}
-
-// decrypt decrypts ciphertext using KMS (preferred) or legacy AES-256-GCM.
-func (s *Store) decrypt(ciphertext string) (string, error) {
-	if ciphertext == "" {
-		return "", nil
-	}
-
-	// CRED-001: Use KMS if available
-	if s.kmsManager != nil {
-		return s.kmsManager.Decrypt(ciphertext)
-	}
-
-	// Legacy path: raw key
-	data, err := base64.StdEncoding.DecodeString(ciphertext)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode base64: %w", err)
-	}
-
-	block, err := aes.NewCipher(s.encKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-
-	if len(data) < gcm.NonceSize() {
-		return "", errors.New("ciphertext too short")
-	}
-
-	nonce, cipherBytes := data[:gcm.NonceSize()], data[gcm.NonceSize():]
-	plaintext, err := gcm.Open(nil, nonce, cipherBytes, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt: %w", err)
-	}
-
-	return string(plaintext), nil
+// binding is the AAD for one stored secret. The credentials table is scoped
+// by operator_id, so the operator is the tenant; provider plus column is the
+// connection. A ciphertext therefore opens only in the field it was written to.
+func binding(operatorID string, provider ProviderType, field string) kms.Binding {
+	return kms.Binding{Tenant: operatorID, Connection: string(provider) + "/" + field}
 }
 
 // SaveCredential stores or updates a credential with encryption.
@@ -195,12 +90,12 @@ func (s *Store) SaveCredential(ctx context.Context, cred *Credential) error {
 	defer s.mu.Unlock()
 
 	// Encrypt sensitive fields
-	encAccess, err := s.encrypt(cred.AccessToken)
+	encAccess, err := s.kms.Encrypt(cred.AccessToken, binding(cred.OperatorID, cred.Provider, fieldAccessToken))
 	if err != nil {
 		return fmt.Errorf("failed to encrypt access token: %w", err)
 	}
 
-	encRefresh, err := s.encrypt(cred.RefreshToken)
+	encRefresh, err := s.kms.Encrypt(cred.RefreshToken, binding(cred.OperatorID, cred.Provider, fieldRefreshToken))
 	if err != nil {
 		return fmt.Errorf("failed to encrypt refresh token: %w", err)
 	}
@@ -270,11 +165,9 @@ func (s *Store) GetCredential(ctx context.Context, operatorID string, provider P
 		&lastUsedAt,
 	)
 
+	// 12-07: no row means no credential. The server's own provider keys are
+	// never handed to an operator who has not connected one.
 	if errors.Is(err, sql.ErrNoRows) {
-		// Fallback to environment variables if enabled
-		if s.envFallback {
-			return s.getFromEnv(provider)
-		}
 		return nil, nil
 	}
 	if err != nil {
@@ -283,17 +176,21 @@ func (s *Store) GetCredential(ctx context.Context, operatorID string, provider P
 
 	// Decrypt sensitive fields
 	if encAccess.Valid {
-		cred.AccessToken, err = s.decrypt(encAccess.String)
+		cred.AccessToken, err = s.kms.Decrypt(encAccess.String, binding(operatorID, provider, fieldAccessToken))
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt access token: %w", err)
 		}
 	}
 
 	if encRefresh.Valid {
-		cred.RefreshToken, err = s.decrypt(encRefresh.String)
+		cred.RefreshToken, err = s.kms.Decrypt(encRefresh.String, binding(operatorID, provider, fieldRefreshToken))
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt refresh token: %w", err)
 		}
+	}
+
+	if s.kms.NeedsRewrap(encAccess.String) || s.kms.NeedsRewrap(encRefresh.String) {
+		s.rewrap(ctx, &cred, encAccess, encRefresh)
 	}
 
 	if scopesJSON.Valid {
@@ -315,30 +212,27 @@ func (s *Store) GetCredential(ctx context.Context, operatorID string, provider P
 	return &cred, nil
 }
 
-// getFromEnv returns a credential from environment variables (fallback).
-func (s *Store) getFromEnv(provider ProviderType) (*Credential, error) {
-	var envVar string
-	switch provider {
-	case ProviderGoogle:
-		envVar = "GEMINI_API_KEY"
-	case ProviderOpenAI:
-		envVar = "OPENAI_API_KEY"
-	case ProviderAnthropic:
-		envVar = "ANTHROPIC_API_KEY"
-	default:
-		return nil, nil
+// rewrap re-seals a row that was read under a legacy unbound format or a
+// rotated-out key version, so rotation reaches stored rows and the old version
+// can later be revoked. The update is compare-and-swap on the ciphertexts that
+// were read: a concurrent save wins, and a failure leaves the readable row as
+// it was.
+func (s *Store) rewrap(ctx context.Context, cred *Credential, oldAccess, oldRefresh sql.NullString) {
+	newAccess, err := s.kms.Encrypt(cred.AccessToken, binding(cred.OperatorID, cred.Provider, fieldAccessToken))
+	newRefresh := oldRefresh
+	if err == nil && oldRefresh.Valid {
+		newRefresh.String, err = s.kms.Encrypt(cred.RefreshToken, binding(cred.OperatorID, cred.Provider, fieldRefreshToken))
 	}
-
-	value := os.Getenv(envVar)
-	if value == "" {
-		return nil, nil
+	if err == nil {
+		_, err = s.db.ExecContext(ctx, `
+			UPDATE credentials SET access_token = $1, refresh_token = $2
+			WHERE operator_id = $3 AND provider = $4
+			  AND access_token = $5 AND refresh_token IS NOT DISTINCT FROM $6`,
+			newAccess, newRefresh, cred.OperatorID, cred.Provider, oldAccess.String, oldRefresh)
 	}
-
-	return &Credential{
-		Provider:    provider,
-		TokenType:   TokenTypeApiKey,
-		AccessToken: value,
-	}, nil
+	if err != nil {
+		slog.WarnContext(ctx, "credentials: re-seal under the active key failed", "provider", cred.Provider, "error", err)
+	}
 }
 
 // GetStatus returns the public credential status for all providers.

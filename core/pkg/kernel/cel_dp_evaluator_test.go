@@ -4,19 +4,21 @@ import (
 	"testing"
 )
 
-// TestCELDPEvaluatorFake tests the evaluator with the current fake implementation
-func TestCELDPEvaluatorFake(t *testing.T) {
-	t.Run("Evaluate returns error for fake implementation", func(t *testing.T) {
+// TestCELDPEvaluator exercises the evaluator: a valid expression evaluates,
+// and forbidden constructs are rejected before evaluation.
+func TestCELDPEvaluator(t *testing.T) {
+	t.Run("Evaluate computes a valid expression", func(t *testing.T) {
 		eval := NewCELDPEvaluator()
 
 		result, err := eval.Evaluate("1 + 2", nil)
 		if err != nil {
 			t.Fatalf("Evaluate failed: %v", err)
 		}
-
-		// Current fake returns error - this is expected
-		if result.Error == nil {
-			t.Log("CEL evaluation is fully implemented - switch to integration tests")
+		if result.Error != nil {
+			t.Fatalf("valid expression returned an error: %+v", result.Error)
+		}
+		if result.Value != int64(3) {
+			t.Fatalf("1 + 2 = %v (%T), want int64(3)", result.Value, result.Value)
 		}
 	})
 

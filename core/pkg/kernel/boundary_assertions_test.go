@@ -51,10 +51,13 @@ func TestBoundaryAssertions(t *testing.T) {
 	t.Run("CheckImport with unknown import", func(t *testing.T) {
 		assertions := DefaultKernelBoundaryAssertions()
 
-		// Unknown external package - should produce warning
+		// An import on neither list is flagged as a warning, not allowed.
 		violation := assertions.CheckImport("github.com/unknown/package")
 		if violation == nil {
-			t.Log("Unknown package returned nil (might be in allowed patterns)")
+			t.Fatal("unknown import was not flagged")
+		}
+		if violation.Severity != "warning" {
+			t.Fatalf("unknown import severity = %q, want warning", violation.Severity)
 		}
 	})
 

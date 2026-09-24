@@ -786,9 +786,9 @@ func TestClosing_ContextGuard_WithFingerprint(t *testing.T) {
 func TestClosing_ContextGuard_EmptyFingerprint(t *testing.T) {
 	cg := NewContextGuardWithFingerprint("")
 	t.Run("passthrough_any", func(t *testing.T) {
-		err := cg.Validate("anything")
-		if err == nil {
-			t.Log("empty boot fingerprint is pass-through")
+		// Documented contract: no boot fingerprint means no guard.
+		if err := cg.Validate("anything"); err != nil {
+			t.Fatalf("empty boot fingerprint must be a pass-through, got %v", err)
 		}
 	})
 	t.Run("passthrough_empty", func(t *testing.T) {

@@ -1,4 +1,4 @@
-package jcs
+package legacyjson
 
 import (
 	"math"

@@ -33,7 +33,7 @@ run_step() {
 }
 
 # Scan every Go module, not only core: the satellite modules (sdk/go, examples,
-# tests, tools, gdpr17) pin their own dependency versions. GOWORK=off scans each
+# tests, tools) pin their own dependency versions. GOWORK=off scans each
 # module on its own go.mod; modules outside go.work cannot load in workspace mode.
 GO_MODULES="$(git -C "$ROOT" ls-files ':(glob)**/go.mod')"
 if [ -z "$GO_MODULES" ]; then

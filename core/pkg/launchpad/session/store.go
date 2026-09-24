@@ -27,6 +27,7 @@ const (
 	StateRepairRequired State = "REPAIR_REQUIRED"
 	StateRepairing      State = "REPAIRING"
 	StateTearingDown    State = "TEARING_DOWN"
+	StateCleanupFailed  State = "CLEANUP_FAILED" // provider cleanup failed; delete again to retry
 	StateDeleted        State = "DELETED"
 	StateFailed         State = "FAILED"
 )
@@ -211,7 +212,7 @@ func (s *Store) runPath(launchID string) string {
 
 func validateTerminalState(run LaunchRun) error {
 	switch run.State {
-	case StatePlanned, StateValidated, StateEscalated, StateDenied, StateProvisioning, StateInstalling, StateStarting, StateHealthchecking, StateRunning, StateRepairRequired, StateTearingDown, StateDeleted, StateFailed:
+	case StatePlanned, StateValidated, StateEscalated, StateDenied, StateProvisioning, StateInstalling, StateStarting, StateHealthchecking, StateRunning, StateRepairRequired, StateTearingDown, StateCleanupFailed, StateDeleted, StateFailed:
 	default:
 		return fmt.Errorf("unknown launch state %q", run.State)
 	}

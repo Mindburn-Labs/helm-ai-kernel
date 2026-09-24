@@ -17,7 +17,7 @@
     "result_class": { "$ref": "#/$defs/result_class" },
     "repair_class": { "type": "string" },
     "evidence_refs": { "type": "array", "items": { "type": "string" } },
-    "state": { "enum": ["PLANNED", "VALIDATED", "ESCALATED", "DENIED", "PROVISIONING", "INSTALLING", "STARTING", "HEALTHCHECKING", "RUNNING", "REPAIR_REQUIRED", "REPAIRING", "TEARING_DOWN", "DELETED", "FAILED"] },
+    "state": { "enum": ["PLANNED", "VALIDATED", "ESCALATED", "DENIED", "PROVISIONING", "INSTALLING", "STARTING", "HEALTHCHECKING", "RUNNING", "REPAIR_REQUIRED", "REPAIRING", "TEARING_DOWN", "CLEANUP_FAILED", "DELETED", "FAILED"] },
     "kernel_verdict": { "enum": ["ALLOW", "DENY", "ESCALATE"] },
     "reason": { "type": "string" },
     "plan_hash": { "type": "string", "pattern": "^sha256:" },

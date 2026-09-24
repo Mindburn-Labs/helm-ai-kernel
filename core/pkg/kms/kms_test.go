@@ -3,8 +3,29 @@ package kms
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+var testBinding = Binding{Tenant: "tenant-a", Connection: "anthropic/access_token"}
+
+func mustEncrypt(t *testing.T, k *LocalKMS, plaintext string, b Binding) string {
+	t.Helper()
+	ct, err := k.Encrypt(plaintext, b)
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	return ct
+}
+
+func mustDecrypt(t *testing.T, k *LocalKMS, ciphertext string, b Binding) string {
+	t.Helper()
+	pt, err := k.Decrypt(ciphertext, b)
+	if err != nil {
+		t.Fatalf("Decrypt: %v", err)
+	}
+	return pt
+}
 
 func tempKeystore(t *testing.T) string {
 	t.Helper()
@@ -41,7 +62,7 @@ func TestLocalKMS_EncryptDecrypt(t *testing.T) {
 
 	plaintext := "sk-secret-api-key-1234567890"
 
-	ct, err := k.Encrypt(plaintext)
+	ct, err := k.Encrypt(plaintext, testBinding)
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
@@ -50,12 +71,12 @@ func TestLocalKMS_EncryptDecrypt(t *testing.T) {
 		t.Error("ciphertext equals plaintext")
 	}
 
-	// Must start with version prefix
-	if ct[:2] != "v1" {
-		t.Errorf("ciphertext prefix = %q, want v1", ct[:2])
+	// Must start with the bound version prefix
+	if !strings.HasPrefix(ct, "aad1:v1:") {
+		t.Errorf("ciphertext = %q, want aad1:v1: prefix", ct)
 	}
 
-	pt, err := k.Decrypt(ct)
+	pt, err := k.Decrypt(ct, testBinding)
 	if err != nil {
 		t.Fatalf("Decrypt: %v", err)
 	}
@@ -71,7 +92,7 @@ func TestLocalKMS_EncryptEmpty(t *testing.T) {
 		t.Fatalf("NewLocalKMS: %v", err)
 	}
 
-	ct, err := k.Encrypt("")
+	ct, err := k.Encrypt("", testBinding)
 	if err != nil {
 		t.Fatalf("Encrypt empty: %v", err)
 	}
@@ -79,7 +100,7 @@ func TestLocalKMS_EncryptEmpty(t *testing.T) {
 		t.Errorf("expected empty ciphertext for empty plaintext, got %q", ct)
 	}
 
-	pt, err := k.Decrypt("")
+	pt, err := k.Decrypt("", testBinding)
 	if err != nil {
 		t.Fatalf("Decrypt empty: %v", err)
 	}
@@ -95,7 +116,7 @@ func TestLocalKMS_Rotate(t *testing.T) {
 	}
 
 	// Encrypt with v1
-	ct1, err := k.Encrypt("secret-v1")
+	ct1, err := k.Encrypt("secret-v1", testBinding)
 	if err != nil {
 		t.Fatalf("Encrypt v1: %v", err)
 	}
@@ -113,17 +134,17 @@ func TestLocalKMS_Rotate(t *testing.T) {
 	}
 
 	// Encrypt with v2
-	ct2, err := k.Encrypt("secret-v2")
+	ct2, err := k.Encrypt("secret-v2", testBinding)
 	if err != nil {
 		t.Fatalf("Encrypt v2: %v", err)
 	}
 
-	if ct2[:2] != "v2" {
-		t.Errorf("v2 ciphertext prefix = %q, want v2", ct2[:2])
+	if !strings.HasPrefix(ct2, "aad1:v2:") {
+		t.Errorf("v2 ciphertext = %q, want aad1:v2: prefix", ct2)
 	}
 
 	// Old v1 ciphertext still decryptable
-	pt1, err := k.Decrypt(ct1)
+	pt1, err := k.Decrypt(ct1, testBinding)
 	if err != nil {
 		t.Fatalf("Decrypt v1 after rotate: %v", err)
 	}
@@ -132,7 +153,7 @@ func TestLocalKMS_Rotate(t *testing.T) {
 	}
 
 	// v2 ciphertext decryptable
-	pt2, err := k.Decrypt(ct2)
+	pt2, err := k.Decrypt(ct2, testBinding)
 	if err != nil {
 		t.Fatalf("Decrypt v2: %v", err)
 	}
@@ -150,7 +171,7 @@ func TestLocalKMS_Persistence(t *testing.T) {
 		t.Fatalf("NewLocalKMS 1: %v", err)
 	}
 
-	ct, err := k1.Encrypt("persistent-secret")
+	ct, err := k1.Encrypt("persistent-secret", testBinding)
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
@@ -161,7 +182,7 @@ func TestLocalKMS_Persistence(t *testing.T) {
 		t.Fatalf("NewLocalKMS 2: %v", err)
 	}
 
-	pt, err := k2.Decrypt(ct)
+	pt, err := k2.Decrypt(ct, testBinding)
 	if err != nil {
 		t.Fatalf("Decrypt after reload: %v", err)
 	}
@@ -188,8 +209,9 @@ func TestLocalKMS_ImportKey(t *testing.T) {
 		t.Fatalf("ImportKey: %v", err)
 	}
 
-	if k.ActiveVersion() != 0 {
-		t.Errorf("active version = %d, want 0", k.ActiveVersion())
+	// Imported for decryption only: the generated v1 stays active (16-02).
+	if k.ActiveVersion() != 1 {
+		t.Errorf("active version = %d, want 1", k.ActiveVersion())
 	}
 
 	// Bad key size

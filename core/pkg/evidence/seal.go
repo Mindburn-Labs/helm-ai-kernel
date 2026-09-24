@@ -154,6 +154,22 @@ type VerifyEvidencePackSealOptions struct {
 	AllowSelfAttested bool
 }
 
+// EvidencePackSealStateUnverifiable marks a seal whose pack content is intact
+// but whose signer no configured trust root names, so provenance cannot be
+// decided either way. It is never a pass.
+const EvidencePackSealStateUnverifiable = "unverifiable"
+
+// ErrNoEvidenceTrustRoot is wrapped by errors that mean no trust root covers
+// the seal signer: no trusted key is configured, or only the key carried
+// inside the pack is available and self-attestation was not allowed.
+var ErrNoEvidenceTrustRoot = errors.New("no evidence trust root for seal signer")
+
+type noEvidenceTrustRootError struct{ msg string }
+
+func (e noEvidenceTrustRootError) Error() string { return e.msg }
+
+func (e noEvidenceTrustRootError) Unwrap() error { return ErrNoEvidenceTrustRoot }
+
 // EvidencePackSealVerification is the verifier-facing seal status.
 type EvidencePackSealVerification struct {
 	State          string               `json:"state"`
@@ -432,6 +448,7 @@ func VerifyEvidencePackSeal(packDir string, opts VerifyEvidencePackSealOptions) 
 			result.Errors = append(result.Errors, fmt.Sprintf("entry_count mismatch: seal=%d current=%d", seal.EntryCount, roots.EntryCount))
 		}
 	}
+	contentErrors := len(result.Errors)
 	publicKey, keyErr := trustedPublicKeyForSeal(seal, cfg, profile, opts.AllowSelfAttested)
 	if keyErr != nil {
 		result.Errors = append(result.Errors, keyErr.Error())
@@ -469,8 +486,14 @@ func VerifyEvidencePackSeal(packDir string, opts VerifyEvidencePackSealOptions) 
 	}
 	result.Errors = append(result.Errors, storageErrs...)
 	result.Errors = append(result.Errors, validateProfileSeal(seal, cfg, profile)...)
-	if len(result.Errors) == 0 && result.SignatureValid {
+	switch {
+	case len(result.Errors) == 0 && result.SignatureValid:
 		result.State = "valid"
+	case errors.Is(keyErr, ErrNoEvidenceTrustRoot) && contentErrors == 0 && sigErr == nil && len(signature) == ed25519.SignatureSize:
+		// The content matches the seal, but no trust root names the signer:
+		// neither tampered nor proven. Report that instead of a pass or a
+		// generic failure.
+		result.State = EvidencePackSealStateUnverifiable
 	}
 	return result
 }
@@ -847,6 +870,41 @@ func LoadEvidencePackTrustConfig(dataDir string) (*EvidencePackTrustConfig, erro
 	return LoadEvidencePackTrustConfigWithPath("", dataDir)
 }
 
+// LocalProducerTrustConfig returns the trust roots for packs sealed by this
+// installation under dataDir: the configured trust config, if any, plus the
+// file-dev key already stored in dataDir. It never creates a key and never
+// reads the working directory, so a pack signed by anyone else stays
+// unverifiable.
+func LocalProducerTrustConfig(dataDir string) (*EvidencePackTrustConfig, error) {
+	cfg, err := LoadEvidencePackTrustConfig(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	path := FileDevEvidenceKeyPath(dataDir)
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return cfg, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	signer, err := parseFileDevEvidenceSigner(path, data)
+	if err != nil {
+		return nil, err
+	}
+	out := EvidencePackTrustConfig{}
+	if cfg != nil {
+		out = *cfg
+	}
+	keys := make(map[string]string, len(out.TrustedKeys)+1)
+	for keyID, publicKey := range out.TrustedKeys {
+		keys[keyID] = publicKey
+	}
+	keys[signer.KeyID()] = signer.PublicKeyHex()
+	out.TrustedKeys = keys
+	return &out, nil
+}
+
 func LoadEvidencePackTrustConfigWithPath(configPath, dataDir string) (*EvidencePackTrustConfig, error) {
 	for _, path := range evidencePackTrustConfigCandidates(configPath, dataDir) {
 		data, err := os.ReadFile(path)
@@ -858,9 +916,6 @@ func LoadEvidencePackTrustConfigWithPath(configPath, dataDir string) (*EvidenceP
 		}
 		cfg, err := parseEvidencePackTrustConfig(data)
 		if err != nil {
-			if shouldSkipUnrelatedEvidencePackTrustConfig(configPath, path, data) {
-				continue
-			}
 			return nil, fmt.Errorf("parse evidence pack trust config %s: %w", path, err)
 		}
 		return cfg, nil
@@ -993,17 +1048,6 @@ func parseEvidencePackTrustConfig(data []byte) (*EvidencePackTrustConfig, error)
 	return &cfg, nil
 }
 
-func shouldSkipUnrelatedEvidencePackTrustConfig(configPath, path string, data []byte) bool {
-	if strings.TrimSpace(configPath) != "" || filepath.ToSlash(path) != "helm/helm.yaml" {
-		return false
-	}
-	var file evidencePackTrustYAMLFile
-	if err := yaml.Unmarshal(data, &file); err != nil {
-		return false
-	}
-	return !hasEvidencePackTrustYAML(file.Trust.EvidencePack)
-}
-
 func hasEvidencePackTrustYAML(cfg evidencePackTrustYAML) bool {
 	return cfg.Version != "" ||
 		cfg.Profile != "" ||
@@ -1037,6 +1081,12 @@ func marshalEvidencePackTrustYAML(cfg EvidencePackTrustConfig) ([]byte, error) {
 	return yaml.Marshal(file)
 }
 
+// evidencePackTrustConfigCandidates lists the trust sources in precedence
+// order: an explicit path, HELM_EVIDENCE_TRUST_CONFIG, then the operator's own
+// data-dir config. Nothing is resolved against the working directory: a
+// helm/helm.yaml shipped beside a pack would otherwise name its own trusted
+// keys and profile (audit 13-01). Project-local configs must be passed with
+// --config.
 func evidencePackTrustConfigCandidates(configPath, dataDir string) []string {
 	if strings.TrimSpace(configPath) != "" {
 		return []string{strings.TrimSpace(configPath)}
@@ -1045,7 +1095,6 @@ func evidencePackTrustConfigCandidates(configPath, dataDir string) []string {
 	if env := strings.TrimSpace(os.Getenv("HELM_EVIDENCE_TRUST_CONFIG")); env != "" {
 		candidates = append(candidates, env)
 	}
-	candidates = append(candidates, filepath.Join("helm", "helm.yaml"))
 	candidates = append(candidates, filepath.Join(ResolveEvidencePackDataDir(dataDir), "trust", "evidence-pack.json"))
 	return candidates
 }
@@ -1202,17 +1251,17 @@ func trustedPublicKeyForSeal(seal EvidencePackSeal, cfg *EvidencePackTrustConfig
 		// branch used to run silently on the common path and report PASS.
 		// It now requires explicit opt-in.
 		if !allowSelfAttested && !selfAttestedEvidenceAllowed() {
-			return nil, fmt.Errorf(
+			return nil, noEvidenceTrustRootError{msg: fmt.Sprintf(
 				"seal for signer %s is self-attested: its verification key is carried inside the pack, "+
 					"so the signature proves internal consistency only, not provenance. "+
-					"Supply a trusted key via HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX or a trust config for provenance, "+
+					"Supply a trusted key via --config, HELM_EVIDENCE_TRUST_CONFIG or HELM_EVIDENCE_TRUSTED_PUBLIC_KEY_HEX for provenance, "+
 					"or pass --allow-self-attested (or set HELM_ALLOW_SELF_ATTESTED_EVIDENCE=1) for local/demo "+
 					"verification that accepts internal consistency without provenance",
-				seal.Signer.KeyID)
+				seal.Signer.KeyID)}
 		}
 		return decodeEd25519PublicKey(seal.Signer.PublicKey)
 	}
-	return nil, fmt.Errorf("no trusted public key configured for signer %s under profile %s", seal.Signer.KeyID, profile)
+	return nil, noEvidenceTrustRootError{msg: fmt.Sprintf("no trusted public key configured for signer %s under profile %s", seal.Signer.KeyID, profile)}
 }
 
 // selfAttestedEvidenceAllowed reports whether the operator has explicitly

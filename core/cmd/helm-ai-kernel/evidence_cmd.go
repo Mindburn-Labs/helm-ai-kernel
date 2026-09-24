@@ -340,16 +340,25 @@ type evidenceInspectReport struct {
 }
 
 func runEvidenceInspect(args []string, stdout, stderr io.Writer) int {
-	jsonOutput, positionals, err := parseEvidenceJSONArgs(args)
+	allowSelfAttested := false
+	rest := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--allow-self-attested" || arg == "-allow-self-attested" {
+			allowSelfAttested = true
+			continue
+		}
+		rest = append(rest, arg)
+	}
+	jsonOutput, positionals, err := parseEvidenceJSONArgs(rest)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
 	if len(positionals) != 1 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel evidence inspect <bundle> [--json]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel evidence inspect <bundle> [--json] [--allow-self-attested]")
 		return 2
 	}
-	report, err := inspectEvidenceBundle(positionals[0])
+	report, err := inspectEvidenceBundle(positionals[0], allowSelfAttested)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -433,12 +442,13 @@ func parseEvidenceJSONArgs(args []string) (bool, []string, error) {
 	return jsonOutput, positionals, nil
 }
 
-func inspectEvidenceBundle(bundle string) (evidenceInspectReport, error) {
+func inspectEvidenceBundle(bundle string, allowSelfAttested bool) (evidenceInspectReport, error) {
 	var out evidenceInspectReport
 	err := withEvidenceBundleDir(bundle, func(dir string) error {
-		// Pack was sealed by this process, so its dev-local self-attested
-		// seal carries no provenance question (F-02).
-		report, err := verifier.VerifyLocallyProducedBundle(dir)
+		// The bundle is whatever path the caller named, so it gets the same
+		// trust-root check as `verify`. A self-attested dev-local seal passes
+		// only with the explicit opt-in (audit 02-08).
+		report, err := verifier.VerifyBundleWithOptions(dir, verifier.VerifyOptions{AllowSelfAttested: allowSelfAttested})
 		if err != nil {
 			return err
 		}

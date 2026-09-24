@@ -93,6 +93,19 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Changed — EvidencePack verification requires an explicit trust root
+
+`helm-ai-kernel verify` no longer reads `helm/helm.yaml` from the working
+directory. Its trust root comes from `--config`, `HELM_EVIDENCE_TRUST_CONFIG`,
+or the operator's own data-dir trust config. A pack whose signer no trust root
+names is reported `UNVERIFIABLE`, not verified. Embedded receipts are checked
+under the same profile as the seal. Anchor receipts must name the pack root: the
+Rekor entry hash and integrated time, or the RFC 3161 message imprint.
+`evidence inspect` needs `--allow-self-attested` for a self-attested pack.
+`verify decision-receipt` reports a bundle-disclosed key as `UNVERIFIABLE`.
+`spend-proxy savings-verify` needs `--issuer-key-id` and `--issuer-public-key`
+to report `ok=true`. This entry does not claim a tagged release.
+
 ### Changed — policy-head signature source contract
 
 The unreleased `policy/reconcile.SignatureVerifier` source contract now verifies

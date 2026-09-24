@@ -282,11 +282,15 @@ func runSpendProxySavingsVerify(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("spend-proxy savings-verify", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 	var (
-		packDir string
-		jsonOut bool
+		packDir         string
+		jsonOut         bool
+		issuerKeyID     string
+		issuerPublicKey string
 	)
 	cmd.StringVar(&packDir, "pack", "", "Savings pack directory to verify offline (required)")
 	cmd.BoolVar(&jsonOut, "json", false, "Print the verification result as JSON")
+	cmd.StringVar(&issuerKeyID, "issuer-key-id", "", "Expected issuer key id, pinned out of band")
+	cmd.StringVar(&issuerPublicKey, "issuer-public-key", "", "Expected issuer Ed25519 public key hex, pinned out of band. Without the pin the pack's own key registry is the only trust root and the result is UNVERIFIABLE (exit 1)")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
@@ -294,10 +298,24 @@ func runSpendProxySavingsVerify(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Error: --pack is required")
 		return 2
 	}
-	res, err := spendproxy.VerifySavingsPackDir(packDir)
+	if (issuerKeyID == "") != (issuerPublicKey == "") {
+		_, _ = fmt.Fprintln(stderr, "Error: --issuer-key-id and --issuer-public-key must be given together")
+		return 2
+	}
+	var issuerKeys map[string]string
+	if issuerKeyID != "" {
+		issuerKeys = map[string]string{issuerKeyID: issuerPublicKey}
+	}
+	res, err := spendproxy.VerifySavingsPackDirWithIssuer(packDir, issuerKeys)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "VERIFICATION FAILED: %v\n", err)
 		return 1
+	}
+	// Audit 13-04: without a pinned issuer key the signatures prove only that
+	// the pack is consistent with the key registry it carries itself.
+	exit := 0
+	if res.SelfAttested {
+		exit = 1
 	}
 	if jsonOut {
 		enc := json.NewEncoder(stdout)
@@ -306,9 +324,13 @@ func runSpendProxySavingsVerify(args []string, stdout, stderr io.Writer) int {
 			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 1
 		}
-		return 0
+		return exit
 	}
-	_, _ = fmt.Fprintf(stdout, "pack %s: offline-verified ok=%v (%d receipts)\n", res.PackID, res.OK, res.ReceiptsVerified)
+	if res.SelfAttested {
+		_, _ = fmt.Fprintf(stdout, "pack %s: UNVERIFIABLE (self-attested): internally consistent under the pack's own key registry (%d receipts), but no issuer key was pinned; pass --issuer-key-id and --issuer-public-key\n", res.PackID, res.ReceiptsVerified)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "pack %s: offline-verified ok=%v issuer=%s (%d receipts)\n", res.PackID, res.OK, issuerKeyID, res.ReceiptsVerified)
+	}
 	_, _ = fmt.Fprintf(stdout, "manifest hash: %s\n", res.ManifestHash)
 	for _, check := range res.ChecksPassed {
 		_, _ = fmt.Fprintf(stdout, "  check passed: %s\n", check)
@@ -316,7 +338,7 @@ func runSpendProxySavingsVerify(args []string, stdout, stderr io.Writer) int {
 	if !res.SavingsClaimValid {
 		_, _ = fmt.Fprintln(stdout, "note: parity bar not met — this pack records a negative result, no savings claim")
 	}
-	return 0
+	return exit
 }
 
 func init() {

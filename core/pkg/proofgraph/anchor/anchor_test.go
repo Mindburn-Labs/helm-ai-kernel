@@ -245,6 +245,8 @@ func TestInMemoryReceiptStore(t *testing.T) {
 }
 
 func TestRekorBackend_MockServer(t *testing.T) {
+	integratedTime := time.Now().Unix()
+	merkleRoot := "deadbeef01234567890abcdef"
 	// Create a mock Rekor server.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -252,7 +254,7 @@ func TestRekorBackend_MockServer(t *testing.T) {
 				"test-uuid": {
 					LogID:          "test-log-id",
 					LogIndex:       42,
-					IntegratedTime: time.Now().Unix(),
+					IntegratedTime: integratedTime,
 					Verification: struct {
 						SignedEntryTimestamp string `json:"signedEntryTimestamp"`
 						InclusionProof       *struct {
@@ -282,12 +284,13 @@ func TestRekorBackend_MockServer(t *testing.T) {
 			return
 		}
 
-		// GET for verification
+		// GET for verification: the logged entry binds the anchored root.
 		response := map[string]rekorResponse{
 			"test-uuid": {
 				LogID:          "test-log-id",
 				LogIndex:       42,
-				IntegratedTime: time.Now().Unix(),
+				IntegratedTime: integratedTime,
+				Body:           rekorTestBody(t, merkleRoot),
 			},
 		}
 		w.WriteHeader(http.StatusOK)
@@ -299,7 +302,7 @@ func TestRekorBackend_MockServer(t *testing.T) {
 	assert.Equal(t, "rekor-v2", backend.Name())
 
 	req := AnchorRequest{
-		MerkleRoot:  "deadbeef01234567890abcdef",
+		MerkleRoot:  merkleRoot,
 		FromLamport: 1,
 		ToLamport:   50,
 		NodeCount:   25,

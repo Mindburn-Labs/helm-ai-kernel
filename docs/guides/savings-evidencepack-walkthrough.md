@@ -38,13 +38,19 @@ parity bar still verifies; `savings_claim_valid` is simply `false`.
 ## One command, all checks
 
 `spend-proxy savings-verify` re-runs the full check set from pack bytes alone
-and prints each named check:
+and prints each named check. Pin the issuer key you expect; the pack's own key
+registry is not a trust root:
 
 ```bash
-helm-ai-kernel spend-proxy savings-verify --pack "$PACK"
+helm-ai-kernel spend-proxy savings-verify --pack "$PACK" \
+  --issuer-key-id spend-proxy-d11333ad0bbd \
+  --issuer-public-key 66b4789478701145b64834a7293cb14d94fd8b6bbf34c370bf39e483ab19c5e6
 ```
 
-Expected output ends with `ok=true` and lists every check below. The rest of
+Expected output reports `offline-verified ok=true` for that issuer and lists
+every check below. Without the two issuer flags the command reports
+`UNVERIFIABLE (self-attested)` and exits 1: the pack is consistent with the
+key registry it carries, but that does not show who produced it. The rest of
 this page performs the same checks **without the HELM binary**, so the
 verification does not depend on trusting our code. You need `python3`,
 `shasum` (or `sha256sum`), and `jq`.
@@ -321,10 +327,12 @@ is byte-identical to JCS). Public keys are hex-encoded in
 `artifacts/trusted_keys.json` under `keys.<key_id>.public_key`.
 
 **Provenance note:** the registry travels inside the pack, so signature checks
-prove the pack is internally consistent under its declared keys. To prove WHO
-produced it, pin the expected `key_id` and public key out-of-band — the
-capture record (Linear HELM-618) publishes both for the reference pack — and
-compare against `artifacts/trusted_keys.json` before trusting the claim.
+against it prove only that the pack is internally consistent under its declared
+keys. To prove who produced it, pin the expected `key_id` and public key
+out of band. The capture record (Linear HELM-618) publishes both for the
+reference pack. Pass them to `savings-verify` as `--issuer-key-id` and
+`--issuer-public-key`, which then checks every signature against the pinned
+key instead of `artifacts/trusted_keys.json`.
 
 ## What the claim means
 

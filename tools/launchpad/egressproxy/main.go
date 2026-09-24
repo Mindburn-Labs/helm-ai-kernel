@@ -15,11 +15,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,7 +55,9 @@ func main() {
 		log.Fatalf("create receipt dir: %v", err)
 	}
 	p := &proxy{launchID: launchID, allowlist: allowlist, receiptDir: receiptDir}
-	_ = p.writeReceipt("ALLOW", "", "proxy_started")
+	if err := p.writeReceipt("ALLOW", "", "", "proxy_started"); err != nil {
+		log.Fatalf("receipt dir is not writable: %v", err)
+	}
 
 	ln, err := net.Listen("tcp", listen)
 	if err != nil {
@@ -73,11 +78,23 @@ type proxy struct {
 	launchID   string
 	allowlist  []string
 	receiptDir string
+	// recoverDst and lookupIP are test seams; nil selects originalDst and the
+	// system resolver.
+	recoverDst func(*net.TCPConn) (string, error)
+	lookupIP   func(ctx context.Context, network, host string) ([]netip.Addr, error)
+	// receiptSeq keeps receipt file names unique within the process.
+	receiptSeq atomic.Uint64
 }
+
+// sniffTimeout bounds each peek at the head of a connection, so a client that
+// never sends first (SSH, SMTP) cannot hold a handler goroutine forever.
+var sniffTimeout = 2 * time.Second
 
 // handle services one intercepted (iptables-REDIRECTed) connection. The original
 // destination is recovered from the kernel via SO_ORIGINAL_DST; the hostname, when
-// present, comes from the TLS ClientHello SNI without terminating TLS.
+// present, comes from the TLS ClientHello SNI without terminating TLS. The
+// workload chooses the SNI, so a hostname is honoured only when the original
+// destination IP is one of that hostname's resolved addresses.
 func (p *proxy) handle(client net.Conn) {
 	br := bufio.NewReaderSize(client, 8192)
 	if isConnectRequest(client, br) {
@@ -89,17 +106,24 @@ func (p *proxy) handle(client net.Conn) {
 		_ = client.Close()
 		return
 	}
-	origDst, err := originalDst(tcp)
+	recoverDst := originalDst
+	if p.recoverDst != nil {
+		recoverDst = p.recoverDst
+	}
+	origDst, err := recoverDst(tcp)
 	if err != nil {
-		_ = p.writeReceipt("ESCALATE", "", "original_dst_unavailable")
+		_ = p.writeReceipt("ESCALATE", "", "", "original_dst_unavailable")
 		_ = client.Close()
 		return
 	}
 
 	// Buffer the client side so the peeked ClientHello bytes are preserved for
-	// forwarding. SNI is best-effort: ECH, non-TLS, or IP-literal traffic yields
-	// no hostname and we fall back to the original IP:port for the allowlist.
+	// forwarding. SNI is best-effort: ECH, non-TLS, server-first, or IP-literal
+	// traffic yields no hostname and we fall back to the original IP:port for the
+	// allowlist.
+	_ = client.SetReadDeadline(time.Now().Add(sniffTimeout))
 	host := sniHost(br)
+	_ = client.SetReadDeadline(time.Time{})
 	destination := origDst
 	if host != "" {
 		if _, port, err := net.SplitHostPort(origDst); err == nil {
@@ -110,28 +134,68 @@ func (p *proxy) handle(client net.Conn) {
 	}
 
 	if !networkAllowed(destination, p.allowlist) {
-		_ = p.writeReceipt("DENY", destination, "destination_not_allowlisted")
+		_ = p.writeReceipt("DENY", destination, origDst, "destination_not_allowlisted")
 		_ = client.Close()
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if host != "" {
+		resolved, err := p.resolvesTo(ctx, host, origDst)
+		if err != nil {
+			_ = p.writeReceipt("ESCALATE", destination, origDst, "sni_resolution_failed")
+			_ = client.Close()
+			return
+		}
+		if !resolved {
+			_ = p.writeReceipt("DENY", destination, origDst, "sni_not_resolved_to_original_dst")
+			_ = client.Close()
+			return
+		}
+	}
 	var d net.Dialer
-	// Dial the original IP:port the workload targeted (not the SNI hostname) so we
-	// connect exactly where it intended and avoid a re-resolution / DNS-rebind gap.
+	// Dial the original IP:port the workload targeted. With an SNI, resolvesTo
+	// has just tied that IP to the allowlisted name; dialing the IP rather than
+	// the name means no second resolution can move the connection.
 	upstream, err := d.DialContext(ctx, "tcp", origDst)
 	if err != nil {
-		_ = p.writeReceipt("ESCALATE", destination, "upstream_dial_failed")
+		_ = p.writeReceipt("ESCALATE", destination, origDst, "upstream_dial_failed")
 		_ = client.Close()
 		return
 	}
-	_ = p.writeReceipt("ALLOW", destination, "connect_allowed")
+	if err := p.writeReceipt("ALLOW", destination, origDst, "connect_allowed"); err != nil {
+		_ = upstream.Close()
+		_ = client.Close()
+		return
+	}
 	tunnel(client, br, upstream)
 }
 
+// resolvesTo reports whether host resolves to the IP of origDst.
+func (p *proxy) resolvesTo(ctx context.Context, host, origDst string) (bool, error) {
+	dst, err := netip.ParseAddrPort(origDst)
+	if err != nil {
+		return false, err
+	}
+	lookupIP := net.DefaultResolver.LookupNetIP
+	if p.lookupIP != nil {
+		lookupIP = p.lookupIP
+	}
+	addrs, err := lookupIP(ctx, "ip", host)
+	if err != nil {
+		return false, err
+	}
+	for _, addr := range addrs {
+		if addr.Unmap() == dst.Addr().Unmap() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func isConnectRequest(conn net.Conn, br *bufio.Reader) bool {
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(sniffTimeout))
 	head, err := br.Peek(len("CONNECT "))
 	_ = conn.SetReadDeadline(time.Time{})
 	if err != nil {
@@ -143,12 +207,12 @@ func isConnectRequest(conn net.Conn, br *bufio.Reader) bool {
 func (p *proxy) handleCONNECT(client net.Conn, br *bufio.Reader) {
 	request, err := http.ReadRequest(br)
 	if err != nil {
-		_ = p.writeReceipt("ESCALATE", "", "connect_request_parse_failed")
+		_ = p.writeReceipt("ESCALATE", "", "", "connect_request_parse_failed")
 		_ = client.Close()
 		return
 	}
 	if request.Method != http.MethodConnect {
-		_ = p.writeReceipt("DENY", request.Host, "unsupported_proxy_method")
+		_ = p.writeReceipt("DENY", request.Host, "", "unsupported_proxy_method")
 		_, _ = client.Write([]byte("HTTP/1.1 405 Method Not Allowed\r\n\r\n"))
 		_ = client.Close()
 		return
@@ -158,7 +222,7 @@ func (p *proxy) handleCONNECT(client net.Conn, br *bufio.Reader) {
 		destination = normalizeDestination(request.URL.Host)
 	}
 	if !networkAllowed(destination, p.allowlist) {
-		_ = p.writeReceipt("DENY", destination, "destination_not_allowlisted")
+		_ = p.writeReceipt("DENY", destination, "", "destination_not_allowlisted")
 		_, _ = client.Write([]byte("HTTP/1.1 403 Forbidden\r\n\r\n"))
 		_ = client.Close()
 		return
@@ -168,18 +232,24 @@ func (p *proxy) handleCONNECT(client net.Conn, br *bufio.Reader) {
 	var d net.Dialer
 	upstream, err := d.DialContext(ctx, "tcp", destination)
 	if err != nil {
-		_ = p.writeReceipt("ESCALATE", destination, "upstream_dial_failed")
+		_ = p.writeReceipt("ESCALATE", destination, "", "upstream_dial_failed")
 		_, _ = client.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
+		_ = client.Close()
+		return
+	}
+	remoteAddr := upstream.RemoteAddr().String()
+	if err := p.writeReceipt("ALLOW", destination, remoteAddr, "connect_allowed"); err != nil {
+		_, _ = client.Write([]byte("HTTP/1.1 503 Service Unavailable\r\n\r\n"))
+		_ = upstream.Close()
 		_ = client.Close()
 		return
 	}
 	if _, err := client.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
 		_ = upstream.Close()
 		_ = client.Close()
-		_ = p.writeReceipt("ESCALATE", destination, "proxy_connect_response_failed")
+		_ = p.writeReceipt("ESCALATE", destination, remoteAddr, "proxy_connect_response_failed")
 		return
 	}
-	_ = p.writeReceipt("ALLOW", destination, "connect_allowed")
 	tunnel(client, br, upstream)
 }
 
@@ -307,7 +377,18 @@ func parseSNI(b []byte) string {
 	return ""
 }
 
-func (p *proxy) writeReceipt(verdict, destination, reason string) error {
+// writeReceipt records one decision. destination is the name the allowlist
+// matched; remoteAddr is the IP:port the proxy dials or would have dialed. An
+// ALLOW caller must not tunnel when this returns an error.
+func (p *proxy) writeReceipt(verdict, destination, remoteAddr, reason string) error {
+	err := p.persistReceipt(verdict, destination, remoteAddr, reason)
+	if err != nil {
+		log.Printf("egress receipt %s/%s not written: %v", verdict, reason, err)
+	}
+	return err
+}
+
+func (p *proxy) persistReceipt(verdict, destination, remoteAddr, reason string) error {
 	if p.receiptDir == "" {
 		return errors.New("receipt dir missing")
 	}
@@ -317,6 +398,7 @@ func (p *proxy) writeReceipt(verdict, destination, reason string) error {
 		Verdict:  verdict,
 		Subject: map[string]any{
 			"destination": destination,
+			"remote_addr": remoteAddr,
 			"reason":      reason,
 			"allowlist":   append([]string{}, p.allowlist...),
 		},
@@ -325,8 +407,18 @@ func (p *proxy) writeReceipt(verdict, destination, reason string) error {
 	if err != nil {
 		return err
 	}
-	name := sanitize(time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + verdict + "-" + reason + ".json")
-	return os.WriteFile(filepath.Join(p.receiptDir, name), append(data, '\n'), 0o600)
+	seq := strconv.FormatUint(p.receiptSeq.Add(1), 10)
+	name := sanitize(time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + seq + "-" + verdict + "-" + reason + ".json")
+	// O_EXCL: a receipt is never silently replaced by a later one.
+	f, err := os.OpenFile(filepath.Join(p.receiptDir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func splitAllowlist(value string) []string {

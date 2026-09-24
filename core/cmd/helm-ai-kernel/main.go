@@ -475,6 +475,9 @@ func runServerWithOptions(opts serverOptions) error {
 	artRegistry := artifacts.NewRegistry(artStore, verifier)
 
 	// === SUBSYSTEM WIRING ===
+	if err := ensureLocalAPIKeys(dataDir, logger); err != nil {
+		return err
+	}
 	services, svcErr := NewServices(ctx, db, artStore, logger, dataDir, databaseMode)
 	if svcErr != nil {
 		// In production we refuse to start in a degraded state. Subsystems are

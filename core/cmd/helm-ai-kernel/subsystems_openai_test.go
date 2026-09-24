@@ -88,12 +88,17 @@ func TestGovernedOpenAIProxyUsesAuthenticatedTransportEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	capturing := &evaluateRouteCapturingPDP{}
-	svc := &Services{Guardian: guardian.NewGuardian(
-		signer,
-		allowGraphForExtAuthzTest("LLM_INFERENCE"),
-		artifacts.NewRegistry(nil, nil),
-		guardian.WithPDP(capturing),
-	)}
+	rcptStore := &captureReceiptStore{}
+	svc := &Services{
+		Guardian: guardian.NewGuardian(
+			signer,
+			allowGraphForExtAuthzTest("LLM_INFERENCE"),
+			artifacts.NewRegistry(nil, nil),
+			guardian.WithPDP(capturing),
+		),
+		ReceiptStore:  rcptStore,
+		ReceiptSigner: signer,
+	}
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(
 		`{"model":"gpt-test","messages":[],"security_context_trusted":true,"credential_hash":"forged","destination":"attacker.example","egress_destination_required":false,"effect_class":"E0","principal_id":"forged-principal","tenant_id":"forged-tenant","workspace_id":"forged-workspace"}`,
 	))
@@ -106,6 +111,9 @@ func TestGovernedOpenAIProxyUsesAuthenticatedTransportEvidence(t *testing.T) {
 	handleGovernedOpenAIProxy(rec, req, svc)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rcptStore.stored == nil {
+		t.Fatal("forwarded ALLOW has no persisted receipt")
 	}
 	if capturing.request == nil || capturing.request.Principal != "proxy-agent" {
 		t.Fatalf("captured request = %+v", capturing.request)

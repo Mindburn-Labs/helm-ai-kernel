@@ -24,7 +24,6 @@ import (
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
-	trustregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
 const governedOpenAIRequestMaxBytes = privacy.MaxPayloadBytes
@@ -235,9 +234,17 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	}
 
 	// --- Trust Keys (C-2: require admin auth — fail-closed if HELM_ADMIN_API_KEY unset) ---
-	trustKeys := &api.TrustKeyHandler{Registry: trustregistry.NewTrustRegistry()}
-	mux.Handle("/api/v1/trust/keys/add", auth.RequireAdminAuth(trustKeys.HandleAddKey))
-	mux.Handle("/api/v1/trust/keys/revoke", auth.RequireAdminAuth(trustKeys.HandleRevokeKey))
+	// Retired by HELM-742: the routes mutated a process-local registry that no
+	// verifier reads, so a 200 "key_revoked" revoked nothing.
+	for _, path := range []string{"/api/v1/trust/keys/add", "/api/v1/trust/keys/revoke"} {
+		mux.Handle(path, auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			writeRetiredVerificationRoute(w, r.URL.Path)
+		}))
+	}
 
 	// --- MCP Gateway ---
 	mcpGateway, err := newDeployedMCPGateway(svc)
@@ -447,12 +454,17 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		if decision.PolicyDecisionHash != "" {
 			w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
 		}
-		persistDecisionReceipt(r.Context(), svc, decision, req.Principal, bodyBytes, map[string]any{
+		// Fail closed: a decision whose receipt was not persisted is never
+		// forwarded upstream.
+		if err := persistDecisionReceipt(r.Context(), svc, decision, req.Principal, bodyBytes, map[string]any{
 			"source":   "openai.proxy",
 			"action":   req.Action,
 			"resource": req.Resource,
 			"reason":   decision.Reason,
-		})
+		}); err != nil {
+			api.WriteInternalR(w, r, err)
+			return
+		}
 
 		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
 			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)

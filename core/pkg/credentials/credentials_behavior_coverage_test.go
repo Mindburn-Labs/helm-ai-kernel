@@ -1,7 +1,6 @@
 package credentials
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"testing"
@@ -12,88 +11,8 @@ import (
 
 func newTestStore(t *testing.T) (*Store, *sql.DB) {
 	t.Helper()
-	db := setupTestDB(t)
-	key := bytes.Repeat([]byte("x"), 32)
-	s, err := NewStore(db, key, WithEnvFallback(false))
-	if err != nil {
-		t.Fatalf("NewStore: %v", err)
-	}
+	s, db, _ := newKMSStore(t)
 	return s, db
-}
-
-func TestEncryptEmptyString(t *testing.T) {
-	s, db := newTestStore(t)
-	defer db.Close()
-	enc, err := s.encrypt("")
-	if err != nil || enc != "" {
-		t.Fatalf("encrypt empty: got %q, err %v", enc, err)
-	}
-}
-
-func TestDecryptEmptyString(t *testing.T) {
-	s, db := newTestStore(t)
-	defer db.Close()
-	dec, err := s.decrypt("")
-	if err != nil || dec != "" {
-		t.Fatalf("decrypt empty: got %q, err %v", dec, err)
-	}
-}
-
-func TestEncryptDecryptRoundTrip(t *testing.T) {
-	s, db := newTestStore(t)
-	defer db.Close()
-	plain := "secret-token-42"
-	enc, _ := s.encrypt(plain)
-	dec, _ := s.decrypt(enc)
-	if dec != plain {
-		t.Fatalf("round trip failed: got %q", dec)
-	}
-}
-
-func TestDecryptInvalidBase64(t *testing.T) {
-	s, db := newTestStore(t)
-	defer db.Close()
-	_, err := s.decrypt("not-base64!!!")
-	if err == nil {
-		t.Fatal("expected error for invalid base64")
-	}
-}
-
-func TestDecryptTooShortCiphertext(t *testing.T) {
-	s, db := newTestStore(t)
-	defer db.Close()
-	// Valid base64 but too short for nonce
-	_, err := s.decrypt("AQID")
-	if err == nil {
-		t.Fatal("expected error for short ciphertext")
-	}
-}
-
-func TestNewStoreInvalidKeyLength(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	_, err := NewStore(db, []byte("short"))
-	if err == nil {
-		t.Fatal("expected error for short key")
-	}
-}
-
-func TestNewStoreValidKey(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	_, err := NewStore(db, bytes.Repeat([]byte("z"), 32))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestWithEnvFallbackOption(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	s, _ := NewStore(db, bytes.Repeat([]byte("a"), 32), WithEnvFallback(false))
-	if s.envFallback {
-		t.Fatal("envFallback should be false")
-	}
 }
 
 func TestSaveAndRetrieveCredential(t *testing.T) {

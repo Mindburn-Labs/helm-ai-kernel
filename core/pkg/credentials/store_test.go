@@ -1,7 +1,6 @@
 package credentials
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"testing"
@@ -41,46 +40,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func TestStore_EncryptDecrypt(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	key := bytes.Repeat([]byte("a"), 32) // 32-byte key for AES-256
-	store, err := NewStore(db, key)
-	if err != nil {
-		t.Fatalf("failed to create store: %v", err)
-	}
-
-	// Test encryption/decryption
-	original := "super-secret-api-key-12345"
-	encrypted, err := store.encrypt(original)
-	if err != nil {
-		t.Fatalf("encrypt failed: %v", err)
-	}
-
-	if encrypted == original {
-		t.Error("encrypted should not equal original")
-	}
-
-	decrypted, err := store.decrypt(encrypted)
-	if err != nil {
-		t.Fatalf("decrypt failed: %v", err)
-	}
-
-	if decrypted != original {
-		t.Errorf("decrypted = %q, want %q", decrypted, original)
-	}
-}
-
 func TestStore_SaveAndGetCredential(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	key := bytes.Repeat([]byte("b"), 32)
-	store, err := NewStore(db, key, WithEnvFallback(false))
-	if err != nil {
-		t.Fatalf("failed to create store: %v", err)
-	}
+	store, _, _ := newKMSStore(t)
 
 	ctx := context.Background()
 	expiresAt := time.Now().Add(1 * time.Hour)
@@ -126,14 +87,7 @@ func TestStore_SaveAndGetCredential(t *testing.T) {
 }
 
 func TestStore_DeleteCredential(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	key := bytes.Repeat([]byte("c"), 32)
-	store, err := NewStore(db, key, WithEnvFallback(false))
-	if err != nil {
-		t.Fatalf("failed to create store: %v", err)
-	}
+	store, _, _ := newKMSStore(t)
 
 	ctx := context.Background()
 
@@ -167,14 +121,7 @@ func TestStore_DeleteCredential(t *testing.T) {
 }
 
 func TestStore_GetStatus(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	key := bytes.Repeat([]byte("d"), 32)
-	store, err := NewStore(db, key, WithEnvFallback(false))
-	if err != nil {
-		t.Fatalf("failed to create store: %v", err)
-	}
+	store, _, _ := newKMSStore(t)
 
 	ctx := context.Background()
 
@@ -246,22 +193,5 @@ func TestCredential_NeedsRefresh(t *testing.T) {
 				t.Errorf("NeedsRefresh() = %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestStore_InvalidKeyLength(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	// Try with 16-byte key (should fail)
-	_, err := NewStore(db, []byte("16-byte-key-xxx!"))
-	if err == nil {
-		t.Error("expected error for 16-byte key")
-	}
-
-	// Try with 32-byte key (should work)
-	_, err = NewStore(db, bytes.Repeat([]byte("a"), 32))
-	if err != nil {
-		t.Errorf("unexpected error for 32-byte key: %v", err)
 	}
 }

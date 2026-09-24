@@ -3,7 +3,6 @@ package skillpacks
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -27,17 +26,12 @@ func NewReceipt(kind, skillID, verdict, reasonCode, contentHash, policyHash stri
 }
 
 func WriteReceipt(repoRoot string, receipt Receipt) (string, error) {
-	dir := filepath.Join(repoRoot, ".helm", "skillpacks", "receipts")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	name := sanitizePathSegment(receipt.ID) + ".json"
-	path := filepath.Join(dir, name)
+	rel := filepath.Join(".helm", "skillpacks", "receipts", sanitizePathSegment(receipt.ID)+".json")
 	data, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {
 		return "", err
 	}
-	return path, atomicWrite(path, data)
+	return filepath.Join(repoRoot, rel), atomicWrite(repoRoot, rel, data)
 }
 
 // SealProjectionTrustDecision returns the canonical decision hash a configured

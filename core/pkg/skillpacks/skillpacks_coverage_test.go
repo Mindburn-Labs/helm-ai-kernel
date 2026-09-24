@@ -234,7 +234,9 @@ func TestLoaderCatalogAndScannerFileHazards(t *testing.T) {
 }
 
 func TestProjectionStoreMarketplaceAndExportBranches(t *testing.T) {
-	pack := SkillPack{Manifest: testManifest("test/project"), SkillMD: "safe skill"}
+	manifest := firstPartyTestManifest("test/project", "0.1.0")
+	manifest.ContentHash = HashBytes([]byte("safe skill"))
+	pack := SkillPack{Manifest: manifest, SkillMD: "safe skill"}
 	repo := t.TempDir()
 	if _, err := ProjectionPaths(repo, "bad", "codex"); err == nil {
 		t.Fatal("expected invalid projection skill id")

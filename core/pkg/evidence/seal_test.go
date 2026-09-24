@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -510,12 +509,9 @@ func TestVerifyStorageReceiptForSealRejectsHashAndSubjectMismatch(t *testing.T) 
 	}
 }
 
-func TestVerifyEvidenceAnchorReceiptsAcceptsRFC3161AndRekorFakes(t *testing.T) {
+func TestVerifyEvidenceAnchorReceiptsAcceptsBoundRFC3161AndRekorReceipts(t *testing.T) {
 	root := strings.Repeat("a", 64)
-	token, err := asn1.Marshal(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	token := rfc3161TokenForRoot(t, root)
 	rfcSeal := EvidencePackSeal{
 		MerkleRoot: root,
 		AnchorReceipts: []proofanchor.AnchorReceipt{{
@@ -536,16 +532,18 @@ func TestVerifyEvidenceAnchorReceiptsAcceptsRFC3161AndRekorFakes(t *testing.T) {
 		if r.URL.Path != "/api/v1/log/entries" || r.URL.Query().Get("logIndex") != "7" {
 			t.Fatalf("unexpected Rekor request: %s", r.URL.String())
 		}
-		fmt.Fprint(w, `{"uuid":{"logID":"rekor-log","logIndex":7,"integratedTime":1}}`)
+		body := base64.StdEncoding.EncodeToString([]byte(`{"apiVersion":"0.0.1","kind":"hashedrekord","spec":{"data":{"hash":{"algorithm":"sha256","value":"` + root + `"}}}}`))
+		fmt.Fprintf(w, `{"uuid":{"logID":"rekor-log","logIndex":7,"integratedTime":1,"body":%q}}`, body)
 	}))
 	defer rekor.Close()
 	rekorSeal := EvidencePackSeal{
 		MerkleRoot: root,
 		AnchorReceipts: []proofanchor.AnchorReceipt{{
-			Backend:  "rekor-v2",
-			Request:  proofanchor.AnchorRequest{MerkleRoot: root},
-			LogID:    "rekor-log",
-			LogIndex: 7,
+			Backend:        "rekor-v2",
+			Request:        proofanchor.AnchorRequest{MerkleRoot: root},
+			LogID:          "rekor-log",
+			LogIndex:       7,
+			IntegratedTime: time.Unix(1, 0).UTC(),
 		}},
 	}
 	status, errs = verifyEvidenceAnchorReceipts(context.Background(), rekorSeal, &EvidencePackTrustConfig{

@@ -1,6 +1,6 @@
 ---
 title: HELM Launchpad
-last_reviewed: 2026-06-29
+last_reviewed: 2026-09-24
 ---
 
 # HELM Launchpad
@@ -44,8 +44,11 @@ helm-ai-kernel app preflight kilocode --json
 helm-ai-kernel verify --bundle <pack>
 ```
 
-Launchpad reads local EvidencePack trust config from `helm/helm.yaml`,
-`HELM_EVIDENCE_TRUST_CONFIG`, or `$HELM_DATA_DIR/trust/evidence-pack.json`.
+Launchpad reads its EvidencePack trust config from `HELM_EVIDENCE_TRUST_CONFIG`
+or `$HELM_LAUNCHPAD_HOME/trust/evidence-pack.json` (default
+`~/.helm/launchpad`). It never reads `helm/helm.yaml` from the working
+directory. To use a project config, pass it explicitly through
+`HELM_EVIDENCE_TRUST_CONFIG` or `verify --config`.
 
 ## Safety Boundary
 
@@ -66,11 +69,17 @@ Launchpad reads local EvidencePack trust config from `helm/helm.yaml`,
 ```bash
 helm-ai-kernel launch evidence <launch_id> --output <dir>
 helm-ai-kernel evidence inspect <pack>
-helm-ai-kernel verify --bundle <pack>
+helm-ai-kernel verify --bundle <pack> --config <trust-config.yaml>
 ```
 
 Evidence must include lifecycle receipts, artifact refs, policy refs, and a
 verifier result. If a required receipt is missing, hold the claim.
+
+`launch evidence` checks each pack against the Launchpad store's own signing
+key and trust config. `evidence inspect` and `verify` need a trust root from
+`--config`, `HELM_EVIDENCE_TRUST_CONFIG`, or your data-dir trust config.
+Without one, the result is `UNVERIFIABLE`. Add `--allow-self-attested` only
+for a dev-local pack you produced yourself.
 
 ## Troubleshooting
 

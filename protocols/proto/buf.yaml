@@ -1,0 +1,51 @@
+# The buf module for the wire contracts every SDK binding is generated from
+# (Makefile PROTO_DIR; HELM-747, target architecture §11.1).
+#
+# Gates: `make proto-lint` (buf lint plus scripts/ci/check_proto_lint_exemptions.sh),
+# `make proto-breaking` against the pull request base, and the CI `IDL` job
+# against the last v* release tag. Positive controls:
+# scripts/ci/test_proto_gates.sh.
+version: v2
+lint:
+  use:
+    - STANDARD
+  # Recorded exemptions. Every file listed here has shipped in the generated
+  # SDK bindings since v0.8.x. Clearing a finding means renaming a published
+  # message or moving a published file, which changes generated types and
+  # import paths for every SDK consumer and which the FILE rules below reject.
+  #
+  # ignore_only is scoped per file and rule, so on its own it would also
+  # exempt a new badly named RPC in one of these files.
+  # scripts/ci/check_proto_lint_exemptions.sh closes that gap: it pins the
+  # exact findings (23), so any new finding fails, and so does an unrecorded fix.
+  #
+  # New packages follow STANDARD with no exemption. The replacement IDL
+  # (target architecture §11) retires these files instead of renaming them.
+  ignore_only:
+    # package helm.boundary.extauthz.v1 lives in boundary/extauthz/v1/.
+    PACKAGE_DIRECTORY_MATCH:
+      - boundary/extauthz/v1/extauthz.proto
+    # Request/response types predate the <Method>Request/<Method>Response
+    # convention (e.g. Evaluate(PDPRequest) returns (PDPResponse)).
+    RPC_REQUEST_STANDARD_NAME:
+      - boundary/extauthz/v1/extauthz.proto
+      - helm/authority/v1/authority.proto
+      - helm/effects/v1/effects.proto
+      - helm/kernel/v1/helm.proto
+      - helm/truth/v1/truth.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - boundary/extauthz/v1/extauthz.proto
+      - helm/authority/v1/authority.proto
+      - helm/effects/v1/effects.proto
+      - helm/kernel/v1/helm.proto
+      - helm/truth/v1/truth.proto
+    # TruthRegistryService.Register takes and returns TruthObject, and Get
+    # and GetLatest also return it.
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - helm/truth/v1/truth.proto
+breaking:
+  # FILE, the strictest category: the generated SDK source is published, so
+  # a renamed type, moved file or changed Go package is a break even where
+  # the bytes on the wire are unchanged.
+  use:
+    - FILE

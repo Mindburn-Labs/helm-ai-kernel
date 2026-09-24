@@ -181,17 +181,26 @@ proto)
     echo "proto: major ${base_major} -> ${cur_major} — break allowed by version bump"
     exit 0
   fi
-  against=".git#ref=${base},subdir=protocols/policy-schema"
-  if out="$(buf breaking protocols/policy-schema --against "$against" 2>&1)"; then
-    echo "GATE 1 (proto): pass — no backward-incompatible changes vs ${base_label}"
-  else
-    tool_exit=$?
-    if [ "$tool_exit" -eq 100 ]; then
-      report_buf_finding "buf breaking for protocols/policy-schema" "$out"
-      exit 1
+  # protocols/proto is the IDL every SDK binding is generated from (HELM-747);
+  # protocols/policy-schema is the CPI schema module. Each is diffed with its
+  # own buf.yaml breaking rules.
+  broke=0
+  for module in protocols/policy-schema protocols/proto; do
+    against=".git#ref=${base},subdir=${module}"
+    if out="$(buf breaking "$module" --against "$against" 2>&1)"; then
+      echo "proto ${module}: no backward-incompatible changes vs ${base_label}"
+    else
+      tool_exit=$?
+      if [ "$tool_exit" -eq 100 ]; then
+        report_buf_finding "buf breaking for ${module}" "$out"
+        broke=1
+        continue
+      fi
+      report_tool_error "buf breaking for ${module}" "$tool_exit" "$out"
+      exit 2
     fi
-    report_tool_error "buf breaking for protocols/policy-schema" "$tool_exit" "$out"
-    exit 2
-  fi
+  done
+  [ "$broke" -ne 0 ] && exit 1
+  echo "GATE 1 (proto): pass — no backward-incompatible changes vs ${base_label}"
   ;;
 esac

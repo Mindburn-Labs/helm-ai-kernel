@@ -21,7 +21,6 @@ G101 core/cmd/helm-ai-kernel/watch_cmd.go c310b74b3b09
 G101 core/pkg/auth/apikey.go 3b88a5bebaf6
 G101 core/pkg/capability/manifest.go be7940187224
 G101 core/pkg/capability/token_authority.go 41f2ffd67cf5
-G101 core/pkg/compliance/compiler/compiler.go 0ff764f970ca
 G101 core/pkg/conform/reason_codes.go 5743bbaffdaf
 G101 core/pkg/contracts/effect_types.go 4e8faaeff0d0
 G101 core/pkg/contracts/safe_deprecation.go 10e5e0cff1ff

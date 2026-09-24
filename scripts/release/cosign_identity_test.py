@@ -15,7 +15,6 @@ no post-quantum claim.
 from __future__ import annotations
 
 import hashlib
-import os
 import platform
 import re
 import subprocess

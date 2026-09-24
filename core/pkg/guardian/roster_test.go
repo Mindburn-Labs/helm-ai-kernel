@@ -42,7 +42,7 @@ var gateFieldByID = map[GateID]string{
 var nonGateFields = map[string]bool{
 	"signer":                        true,
 	"prg":                           true,
-	"pe":                            true,
+	"policies":                      true,
 	"registry":                      true,
 	"clock":                         true,
 	"envFprint":                     true,

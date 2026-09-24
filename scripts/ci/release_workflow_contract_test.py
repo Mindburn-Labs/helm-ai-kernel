@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard tag-release authority, provenance, and no-fanout invariants.
+"""Guard tag-release validation, provenance, and no-fanout invariants.
 
 quantum_posture: this text-level contract test checks classical cosign and
 checksum workflow wiring; it implements no cryptographic control or
@@ -46,9 +46,9 @@ TAG_RELEASE_MUTATION_JOBS = frozenset(
 NON_RELEASE_MUTATION_JOB_EXEMPTIONS: frozenset[str] = frozenset()
 
 # These source markers classify every current externally mutating job. Keeping
-# the classification here makes a new publisher fail closed until its authority
-# dependency is deliberately reviewed (or it is documented as a non-release
-# exemption above).
+# the classification here makes a new publisher fail closed until its
+# validation dependency is deliberately reviewed (or it is documented as a
+# non-release exemption above).
 EXTERNAL_MUTATION_MARKERS = (
     "actions/attest-build-provenance@",
     "cosign sign",
@@ -66,32 +66,51 @@ EXTERNAL_MUTATION_MARKERS = (
     "softprops/action-gh-release@",
 )
 
-RELEASE_AUTHORITY_GUARD_CLAUSES = (
-    "github.event_name == 'push'",
-    "github.ref_type == 'tag'",
-    "github.actor == 'mindburnlabs'",
-    "github.triggering_actor == 'mindburnlabs'",
-    "github.run_attempt == 1",
+# Every tag-release mutation runs only after these jobs pass. No job waits for a
+# person: automated validation is the only gate (owner policy 2026-09-24).
+RELEASE_VALIDATION_JOBS = frozenset(
+    {
+        "benchmark-pin",
+        "deployment-smoke",
+        "kind-smoke",
+        "release-preflight",
+        "release-smoke",
+        "reproducibility-check",
+        "validate",
+        "version-contract",
+    }
 )
 
-# HELM-732: publish and signing secrets are environment secrets on protected
-# environments (required reviewers + a tag:v* deployment policy). A job can
-# read an environment secret only when it declares that environment, so every
-# job in any workflow that references one of these secrets must declare it.
+# Human-approval and single-attempt gates that were removed and must not return.
+REMOVED_GATE_MARKERS = (
+    "release-authority",
+    "HELM_RELEASE_AUTHORITY_ARMED",
+    "release-production",
+    "github.actor ==",
+    "github.triggering_actor ==",
+    "github.run_attempt",
+    "/approvals",
+)
+
+# npm, PyPI and crates.io publish through OIDC trusted publishing, so no
+# workflow may read a long-lived registry token secret.
+LONG_LIVED_REGISTRY_TOKEN_SECRETS = (
+    "CARGO_REGISTRY_TOKEN",
+    "CRATES_TOKEN",
+    "NODE_AUTH_TOKEN",
+    "NPM_TOKEN",
+    "PYPI_API_TOKEN",
+    "PYPI_TOKEN",
+)
+
+# Maven Central has no OIDC trusted publishing. Its credentials stay
+# environment secrets, so a job can read them only when it declares the
+# environment that holds them.
 PROTECTED_SECRET_ENVIRONMENTS = {
-    "NPM_TOKEN": "npm-production",
-    "PYPI_TOKEN": "pypi-production",
-    "CRATES_TOKEN": "crates-production",
     "MAVEN_USERNAME": "maven-central",
     "MAVEN_PASSWORD": "maven-central",
     "MAVEN_GPG_PRIVATE_KEY": "maven-central",
     "MAVEN_GPG_PASSPHRASE": "maven-central",
-    "HELM_SIGNING_KEY": "release-production",
-    "HELM_EVIDENCE_KMS_KEY_ID": "release-production",
-    "HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX": "release-production",
-    "HELM_EVIDENCE_KMS_SIGN_COMMAND": "release-production",
-    "HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND": "release-production",
-    "HOMEBREW_TAP_TOKEN": "release-production",
 }
 
 
@@ -182,59 +201,54 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "failed convergence must not clobber the passing release receipt",
         )
 
-    def test_release_authority_is_human_gated_armed_and_binds_the_live_tag_object(self) -> None:
-        authority = self.job("release-authority")
-        self.assertEqual(
-            self.job_needs("release-authority"),
-            {
-                "benchmark-pin",
-                "deployment-smoke",
-                "kind-smoke",
-                "release-preflight",
-                "release-smoke",
-                "reproducibility-check",
-                "validate",
-            },
-        )
-        self.assertIn("environment:\n      name: release-production", authority)
-        for clause in RELEASE_AUTHORITY_GUARD_CLAUSES:
-            self.assertIn(clause, self.job_if("release-authority"))
+    def transitive_needs(self, name: str) -> set[str]:
+        seen: set[str] = set()
+        pending = list(self.job_needs(name))
+        while pending:
+            need = pending.pop()
+            if need not in seen:
+                seen.add(need)
+                pending.extend(self.job_needs(need))
+        return seen
 
-        self.assertIn("RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}", authority)
-        self.assertIn(
-            'if [ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]; then',
-            authority,
-        )
+    def test_release_has_no_human_or_single_attempt_gate(self) -> None:
+        self.assertNotIn("release-authority", self.job_blocks)
+        for marker in REMOVED_GATE_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.workflow)
+
+    def test_preflight_binds_the_live_annotated_tag_object(self) -> None:
         # A push payload's `after` value is the annotated tag OBJECT's SHA
         # (observed on v0.8.5 run 34246001234, 2026-09-08), while github.sha is
-        # the commit. The job binds the pushed object to the live ref, and the
-        # ref's target commit to the workflow commit.
-        self.assertIn("PUSH_COMMIT: ${{ github.event.after }}", authority)
-        self.assertIn("WORKFLOW_COMMIT: ${{ github.sha }}", authority)
+        # the commit. The preflight binds the pushed object to the live ref, and
+        # the ref's target commit to the workflow commit.
+        preflight = self.job("release-preflight")
+        self.assertIn("PUSH_COMMIT: ${{ github.event.after }}", preflight)
+        self.assertIn("WORKFLOW_COMMIT: ${{ github.sha }}", preflight)
         self.assertNotIn(
             'if [ "${PUSH_COMMIT}" != "${WORKFLOW_COMMIT}" ]; then',
-            authority,
+            preflight,
         )
         self.assertIn(
             'if [ "${PUSH_COMMIT}" != "${live_tag_object}" ]; then',
-            authority,
+            preflight,
         )
         self.assertIn(
             'gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${GITHUB_REF_NAME}"',
-            authority,
+            preflight,
         )
-        self.assertIn('if [ "${ref_type}" != "tag" ]; then', authority)
+        self.assertIn('if [ "${ref_type}" != "tag" ]; then', preflight)
         self.assertIn(
             'gh api "repos/${GITHUB_REPOSITORY}/git/tags/${live_tag_object}"',
-            authority,
+            preflight,
         )
-        self.assertIn('if [ "${target_type}" != "commit" ]; then', authority)
+        self.assertIn('if [ "${target_type}" != "commit" ]; then', preflight)
         self.assertIn(
             'if [ "${target_commit}" != "${WORKFLOW_COMMIT}" ]; then',
-            authority,
+            preflight,
         )
 
-    def test_every_tag_release_mutation_requires_fresh_conductor_authority(self) -> None:
+    def test_every_tag_release_mutation_runs_after_all_release_validation(self) -> None:
         detected = self.external_mutation_jobs()
         self.assertEqual(
             detected,
@@ -244,8 +258,36 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
         for job_name in sorted(TAG_RELEASE_MUTATION_JOBS):
             with self.subTest(job=job_name):
-                self.assertIn("release-authority", self.job_needs(job_name))
-                self.assertIn("github.run_attempt == 1", self.job_if(job_name))
+                missing = RELEASE_VALIDATION_JOBS - self.transitive_needs(job_name)
+                self.assertFalse(missing, f"{job_name} can publish before {sorted(missing)} pass")
+
+    def test_registry_publishers_use_trusted_publishing(self) -> None:
+        for path in sorted(WORKFLOWS.glob("*.y*ml")):
+            text = path.read_text(encoding="utf-8")
+            for secret in LONG_LIVED_REGISTRY_TOKEN_SECRETS:
+                with self.subTest(workflow=path.name, secret=secret):
+                    self.assertNotIn(f"secrets.{secret}", text)
+        self.assertNotIn("NODE_AUTH_TOKEN", self.workflow)
+
+        npm = self.job("npm-sdk")
+        self.assertIn("id-token: write", npm)
+        self.assertIn("npm install --global npm@11.", npm)
+        self.assertIn("npm publish --access public", npm)
+
+        python = self.job("python-sdk")
+        self.assertIn("id-token: write", python)
+        self.assertIn("pypa/gh-action-pypi-publish@", python)
+        self.assertNotIn("password:", python)
+
+        crates = self.job("crates-sdk")
+        self.assertIn("id-token: write", crates)
+        self.assertIn("rust-lang/crates-io-auth-action@", crates)
+        self.assertIn("CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}", crates)
+
+        # The single trusted-publisher workflow: no second publisher may exist.
+        for duplicate in ("npm-publish.yml", "python-publish.yml", "crates-publish.yml", "maven-publish.yml"):
+            with self.subTest(duplicate=duplicate):
+                self.assertFalse((WORKFLOWS / duplicate).exists())
 
     def test_release_workflow_runs_only_on_version_tag_pushes(self) -> None:
         # Every keyless signature and SLSA attestation minted by release.yml
@@ -335,7 +377,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
     def test_release_creation_requires_prebuilt_console_assets(self) -> None:
         binaries = self.job("binaries")
         self.assertIn(
-            "needs: [validate, deployment-smoke, kind-smoke, release-smoke, release-authority]",
+            "needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin]",
             binaries,
         )
         self.assertIn("HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE }}", binaries)
@@ -355,8 +397,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("console-local-sidecar", binaries)
         self.assertNotIn("HELM_REQUIRE_CONSOLE_LOCAL_SIDECAR", binaries)
 
-        # The two authority-producing jobs remain parallel, but no public
-        # publication may begin before both have succeeded.
+        # The EvidencePack and Console closure jobs remain parallel, but no
+        # public publication may begin before both have succeeded.
         for publisher in (
             "cosign-binaries",
             "container",
@@ -368,16 +410,16 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "console-release-assets",
         ):
             self.assertIn(
-                "needs: [binaries, console-local-sidecar, release-authority]",
+                "needs: [binaries, console-local-sidecar]",
                 self.job(publisher),
                 publisher,
             )
 
-        self.assertIn("needs: [container, release-authority]", self.job("cosign-container"))
+        self.assertIn("needs: container", self.job("cosign-container"))
         self.assertIn("container", self.job("chart"))
         self.assertIn("cosign-container", self.job("chart"))
-        self.assertIn("needs: [chart, release-authority]", self.job("artifacthub-repo"))
-        self.assertIn("needs: [github-release, release-authority]", self.job("homebrew"))
+        self.assertIn("needs: chart", self.job("artifacthub-repo"))
+        self.assertIn("needs: github-release", self.job("homebrew"))
 
         reproducibility = self.job("reproducibility-check")
         self.assertIn("needs: validate", reproducibility)
@@ -403,7 +445,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
     def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
         self.assertIn(
-            "needs: [binaries, console-local-sidecar, release-authority]",
+            "needs: [binaries, console-local-sidecar]",
             console_assets,
         )
         self.assertNotIn("github-release", console_assets)
@@ -439,7 +481,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
         post_release = self.job("post-release-version-drift")
         self.assertIn(
-            "needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets, release-authority]",
+            "needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]",
             post_release,
         )
         self.assertIn("always()", post_release)
@@ -518,19 +560,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                     self.assertEqual(declared, required.pop(), label)
                     checked[label] = declared
         # Guard against a vacuous pass: the known publishers must be seen.
-        for label in (
-            "release.yml:binaries",
-            "release.yml:homebrew",
-            "release.yml:npm-sdk",
-            "release.yml:python-sdk",
-            "release.yml:crates-sdk",
-            "release.yml:maven-sdk",
-            "npm-publish.yml:publish",
-            "python-publish.yml:publish",
-            "crates-publish.yml:publish",
-            "maven-publish.yml:publish",
-        ):
-            self.assertIn(label, checked)
+        self.assertEqual(checked, {"release.yml:maven-sdk": "maven-central"})
 
     def test_console_dispatch_uses_an_immutable_ref_bound_to_the_source_pin(self) -> None:
         console_sidecar = self.job("console-local-sidecar")

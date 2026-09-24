@@ -142,10 +142,10 @@ func TestNewGuardian_RegistryStored(t *testing.T) {
 	}
 }
 
-func TestNewGuardian_PolicyEngineCreated(t *testing.T) {
+func TestNewGuardian_PolicySnapshotCompiled(t *testing.T) {
 	g := newMinimalGuardian()
-	if g.pe == nil {
-		t.Fatal("policy engine should be created")
+	if g.policies == nil || len(g.policies.byContent) != 1 {
+		t.Fatal("the construction-time policy should be compiled")
 	}
 }
 

@@ -666,10 +666,12 @@ func newLocalMCPHTTPServerWithDataDir(port int, authMode, dataDir string) (*http
 }
 
 func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir string, policyGraph *prg.Graph) (*http.Server, error) {
-	// SEC: Default to localhost to prevent accidental network exposure.
-	mcpBind := "127.0.0.1"
-	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
-		mcpBind = envBind
+	// SEC: Default to localhost to prevent accidental network exposure. The
+	// MCP server reads its own bind variable, and `--auth none` is refused off
+	// loopback (audit S-02).
+	mcpBind := listenerBindAddr(mcpBindAddrEnv)
+	if err := requireListenerAuth("mcp serve", mcpBind, authMode != "none", "use --auth static-header or --auth oauth"); err != nil {
+		return nil, err
 	}
 	baseURL := fmt.Sprintf("http://%s:%d", mcpBind, port)
 	catalog, executor, err := newLocalMCPRuntimeWithDataDirAndPolicy(dataDir, policyGraph)
@@ -733,7 +735,7 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 			if provided == "" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 				provided = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			}
-			if provided != expectedKey {
+			if !secretEqual(provided, expectedKey) {
 				http.Error(w, "missing or invalid MCP API key", http.StatusUnauthorized)
 				return
 			}
@@ -814,7 +816,7 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 			}
 			authz := r.Header.Get("Authorization")
 			provided := strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
-			if !strings.HasPrefix(authz, "Bearer ") || provided != expectedToken {
+			if !strings.HasPrefix(authz, "Bearer ") || !secretEqual(provided, expectedToken) {
 				w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer realm="helm-mcp", resource_metadata="%s", resource="%s"`, metadataURL, resource))
 				http.Error(w, "missing or invalid OAuth bearer token", http.StatusUnauthorized)
 				return

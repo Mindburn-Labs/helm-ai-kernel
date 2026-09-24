@@ -15,12 +15,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -434,6 +436,17 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Use the HTTP proxy surface at /v1/chat/completions until Responses WebSocket support is implemented.")
 		return 2
 	}
+
+	// The proxy forwards --api-key and serves the receipt log, so it binds
+	// loopback unless HELM_PROXY_BIND_ADDR says otherwise, and a non-loopback
+	// bind requires HELM_PROXY_TOKEN (audit S-01).
+	proxyBind := listenerBindAddr(proxyBindAddrEnv)
+	proxyToken := os.Getenv(proxyTokenEnv)
+	if err := requireListenerAuth("proxy", proxyBind, proxyToken != "", "set "+proxyTokenEnv+" and have callers send it as their bearer token"); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	noteIgnoredSharedBind(stderr, "the proxy", proxyBindAddrEnv)
 
 	// Normalize upstream URL
 	upstream = strings.TrimSuffix(upstream, "/")
@@ -933,13 +946,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	// Proxy everything else
 	mux.HandleFunc("/", proxy.ServeHTTP)
 
-	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
-	// The proxy is designed as a local sidecar — use HELM_BIND_ADDR=0.0.0.0 to expose.
-	proxyBind := "127.0.0.1"
-	if envBind := os.Getenv("HELM_BIND_ADDR"); envBind != "" {
-		proxyBind = envBind
-	}
-	addr := fmt.Sprintf("%s:%d", proxyBind, port)
+	addr := net.JoinHostPort(proxyBind, strconv.Itoa(port))
 
 	// Responses WebSocket mode: register /v1/responses handler for WS upgrade
 	if websocket {
@@ -989,6 +996,9 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "  Health:      http://%s/healthz\n", addr)
 	_, _ = fmt.Fprintf(stdout, "  Receipts:    %s\n", receiptPath)
 	_, _ = fmt.Fprintf(stdout, "  Tenant:      %s\n", tenantID)
+	if proxyToken != "" {
+		_, _ = fmt.Fprintf(stdout, "  Auth:        bearer token (%s)\n", proxyTokenEnv)
+	}
 	if websocket {
 		_, _ = fmt.Fprintf(stdout, "  WebSocket:   ws://%s/v1/responses (Responses API mode)\n", addr)
 	}
@@ -1023,7 +1033,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		// The proxy is an external ingress edge: run every request inside an
 		// otelhttp server span so an inbound W3C traceparent is continued
 		// (HELM-333) before governance and upstream forwarding run.
-		Handler:           tracing.WrapEdgeHandler(mux, "helm.proxy"),
+		Handler:           tracing.WrapEdgeHandler(wrapProxyAuth(mux, proxyToken), "helm.proxy"),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 

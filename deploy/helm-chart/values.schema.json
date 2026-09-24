@@ -575,6 +575,23 @@
               "default": false,
               "description": "Enable the kernel Prometheus /metrics handler, metrics container port, and metrics Service entry."
             },
+            "bearerTokenSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Existing Secret key holding the bearer token remote scrapers present for /metrics. Without it /metrics answers loopback clients only.",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Secret name; empty keeps /metrics loopback-only."
+                },
+                "key": {
+                  "type": "string",
+                  "default": "token",
+                  "description": "Key inside the Secret that holds the token."
+                }
+              }
+            },
             "serviceMonitor": {
               "type": "object",
               "additionalProperties": false,

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -61,7 +62,32 @@ func NewKernelBridge(g *guardian.Guardian, prgGraph *prg.Graph, pg *proofgraph.G
 //
 // Returns a GovernResult with the decision, reason code, and ProofGraph node ID.
 // This is fail-closed: any error results in denial.
+//
+// Govern carries no transport evidence, so a Guardian with the identity
+// isolation gate (every production Guardian) denies it. Callers that sit
+// behind a trusted transport use GovernBound.
 func (kb *KernelBridge) Govern(ctx context.Context, toolName string, argsHash string, cost *effects.CostBreakdown) (*GovernResult, error) {
+	return kb.govern(ctx, toolName, argsHash, cost, nil)
+}
+
+// Binding is security evidence that a trusted transport boundary, not the
+// model output or the tool arguments, established for one governed call.
+type Binding struct {
+	// CredentialHash is a one-way digest of the credential the transport
+	// accepted. The Guardian's identity-isolation gate requires it.
+	CredentialHash string
+	// SessionID names the caller session the call belongs to, for audit.
+	SessionID string
+}
+
+// GovernBound is Govern for a caller behind a trusted transport: the binding
+// is placed in the Guardian's reserved security context, so the production
+// Guardian can evaluate policy instead of denying for missing identity.
+func (kb *KernelBridge) GovernBound(ctx context.Context, toolName string, argsHash string, cost *effects.CostBreakdown, binding Binding) (*GovernResult, error) {
+	return kb.govern(ctx, toolName, argsHash, cost, &binding)
+}
+
+func (kb *KernelBridge) govern(ctx context.Context, toolName string, argsHash string, cost *effects.CostBreakdown, binding *Binding) (*GovernResult, error) {
 	// 1. Budget check (fail-closed)
 	if kb.budget != nil {
 		amount, costErr := budgetCents(cost)
@@ -121,6 +147,15 @@ func (kb *KernelBridge) Govern(ctx context.Context, toolName string, argsHash st
 		Context: map[string]interface{}{
 			"args_hash": argsHash,
 		},
+	}
+	if binding != nil {
+		if credentialHash := strings.TrimSpace(binding.CredentialHash); credentialHash != "" {
+			req.Context[guardian.ContextSecurityTrusted] = true
+			req.Context[guardian.ContextCredentialHash] = credentialHash
+			if sessionID := strings.TrimSpace(binding.SessionID); sessionID != "" {
+				req.Context[guardian.ContextSessionID] = sessionID
+			}
+		}
 	}
 
 	decision, err := kb.guardian.EvaluateDecision(ctx, req)

@@ -34,6 +34,9 @@ func (r *DockerRunner) Validate(spec *sandbox.SandboxSpec) error {
 	if len(spec.Command) == 0 {
 		return fmt.Errorf("sandbox spec: command is required")
 	}
+	if err := validateEnvNames(spec.Env); err != nil {
+		return err
+	}
 	if spec.Limits.Timeout == 0 {
 		return fmt.Errorf("sandbox spec: timeout is required (prevent runaway)")
 	}
@@ -105,9 +108,7 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 	}
 
 	// Environment
-	for k, v := range spec.Env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
-	}
+	args = append(args, envFlags(spec.Env)...)
 
 	// Mounts
 	for _, m := range spec.Mounts {
@@ -139,6 +140,7 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, r.dockerBin, args...)
+	cmd.Env = commandEnv(spec.Env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -178,7 +180,7 @@ func (r *DockerRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sandbox
 
 	receipt := &sandbox.ExecutionReceipt{
 		ExecutionID: execID,
-		Spec:        *spec,
+		Spec:        receiptSpec(spec),
 		Result:      *result,
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,

@@ -485,9 +485,11 @@ func evidenceSigningSeed(dataDir string) (seed, persistedAt string, err error) {
 	return seed, persistedAt, nil
 }
 
-// loadOrCreateSeedFile reads a hex-encoded 32-byte seed from path, or creates
-// the file with a random seed. Creation is exclusive, so two processes
-// starting on one data dir cannot overwrite each other's key.
+// loadOrCreateSeedFile reads a hex-encoded 32-byte secret from path, or
+// creates the file with a random one. It backs every per-install secret: the
+// evidence seed and the generated admin/service API keys. Creation is
+// exclusive, so two processes starting on one data dir cannot overwrite each
+// other's secret.
 func loadOrCreateSeedFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -527,7 +529,7 @@ func loadOrCreateSeedFile(path string) (string, error) {
 	}
 	seed := strings.TrimSpace(string(data))
 	if raw, err := hex.DecodeString(seed); err != nil || len(raw) != ed25519.SeedSize {
-		return "", fmt.Errorf("%s does not hold a hex 32-byte seed; restore it from backup (packs signed with it verify only under its key)", path)
+		return "", fmt.Errorf("%s does not hold a hex 32-byte secret; restore it from backup", path)
 	}
 	return seed, nil
 }

@@ -70,7 +70,7 @@ No §14.4 candidate is in that list.
 | `core/pkg/a2a/payments` (837) | None | None | — | **Removed**. The `a2a` root package stays. | s2 |
 | `core/pkg/certification` and `certification/admission` (1,445) | None. The root is imported only by `admission`. | None | — | **Removed**. The top-level `certify` CLI was already removed by #971 (HELM-742). | s2 |
 | `core/pkg/policy/wasm` (325) | None | None. It is named by `protocols/policy-schema/v1/canonicalization.md` and `docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md`. | **INV-005** | **Removed** after INV-005 was re-homed to the CEL `decide` in `core/pkg/kernel/authority`, which the Guardian calls in production and whose fail-closed tests now back the invariant. Both documents are corrected. | s2 |
-| `core/pkg/compliance/*` (24 packages, 13,010 LOC) and the `compliance/zkprovider/gdpr17` module | `governance` and `registry`, through `compliance/jcs` only | `compliance/jcs` reaches the Control Plane, Enterprise and Data Plane through `evidence` and `boundary/approvalceremony` | — | **Split**. Move `compliance/jcs` into `canonicalize` behind a compatible path, then remove the regulated packs (H12). | s4 |
+| `core/pkg/compliance/*` (24 packages, 13,010 LOC) and the `compliance/zkprovider/gdpr17` module | `governance` and `registry`, through `compliance/jcs` only | `compliance/jcs` reaches the Control Plane, Enterprise and Data Plane through `evidence` and `boundary/approvalceremony` | — | **Removed** (s4a). `compliance/jcs` moved verbatim to `canonicalize/legacyjson`, so governance and registry hashes stay byte-identical; the regulated packs (H12) and the `gdpr17` module are deleted. | s4a |
 | `core/pkg/conform` (3 packages, 6,078 LOC), gates G0–G15 | `cmd/helm-ai-kernel`: `conform`, `verify`, `demo`, `demo finance`, receipt evaluation | Six HTTP 501 routes from #971. See the notes below the table. | — | **Split**. Keep the `verify`-path helpers (`ValidateEvidencePackStructure`, `VerifyReport`) under the verifier. Delete G0–G15 and `conform`. Remove the routes after a release has carried the deprecation. | s4 |
 | `core/pkg/launchkit` (893), `core/pkg/launchpad/*` (18 packages, 13,236 LOC) | `cmd/helm-ai-kernel` (`up`), `pkg/api` / `tests/launchpad` | None through Go imports. Launchpad retirement is HELM-762. | — | **Disable first** (§14.7: the egress proxy and HTTP launch teardown). Remove with HELM-762. | s4 |
 | `core/pkg/channels/*` (1,588), `core/cmd/channel_gateway` (277) | The `channel_gateway` main; `packs/antispoof` (protected) / `tests/conformance/channels`, `antispoof` | None. `channel_gateway` is not in the release or the images. | — | Remove together with the `antispoof` dependency. This regenerates the manifest. | s4 |
@@ -199,3 +199,38 @@ Two protected paths change: `core/pkg/proofgraph/*` and
 manifest drops exactly the 12 deleted protected files and re-hashes the edited
 protocol document. `check_reason_code_reachability.py` passes, because none of
 the removed packages was the only emitter of a declared reason code.
+
+## Slice 4a evidence
+
+Slice 4a retires `core/pkg/compliance/*`: 24 packages and 13,010 non-test
+lines, plus the `compliance/zkprovider/gdpr17` module. The repository now has
+12 Go modules instead of 13.
+
+- **Callers.** Only `compliance/jcs` had importers: `governance/pdp.go` and
+  `registry/pack_registry.go`. The Control Plane, Enterprise and Data Plane
+  reach it transitively through `evidence` and `boundary/approvalceremony`.
+- **Treatment of `compliance/jcs`.** It moved byte-for-byte to
+  `core/pkg/canonicalize/legacyjson`, with its test. It is `encoding/json`
+  plus a NaN/Inf refusal, not RFC 8785 JCS. Moving it rather than switching
+  its callers to `canonicalize.JCS` keeps every existing decision and pack
+  hash stable. No package outside the kernel imports it directly.
+- **Documentation.** Three coverage rows and the private-docs entry for the
+  compliance README are removed, along with the package test line in
+  `docs/compliance/eu-ai-act-high-risk-pack.md`. The page is a mapping pack
+  backed by `TestCanonicalEUAIActMappingPackContract`, not by the deleted
+  packages, so it stays.
+
+Two reason codes, `ERR_VERIFICATION_SCOPE_REQUIRED` and
+`ERR_HARNESS_CHANGE_CONTRACT_INVALID`, lost their only emitter
+(`core/pkg/harness`) in s1. They now leave:
+- the registry, `verdict.go` and the negative conformance vectors that named
+  them;
+- `reason-codes-known-unreachable.txt`.
+
+The Go core and SDK constants are regenerated with `gen_reason_codes.py`. The
+registry drops from 106 to 104 codes; the reachability gate reports 59 emitted
+and 45 allowlisted.
+
+`dead-packages.sh` after this slice, measured on top of slice 2, reports 101
+importer-less packages, 107 unreachable from every `core/cmd` main, and 252
+`core/pkg` packages (from 121, 130 and 275).

@@ -1167,7 +1167,7 @@ mod tests {
 
     #[test]
     fn test_reason_codes_are_registry_strings() {
-        assert_eq!(reason_codes::ALL.len(), 106);
+        assert_eq!(reason_codes::ALL.len(), 104);
         assert_eq!(reason_codes::EMERGENCY_STOP_FENCED, "EMERGENCY_STOP_FENCED");
         assert!(reason_codes::is_registered(reason_codes::EMERGENCY_STOP_FENCED));
         assert!(!reason_codes::is_registered("NOT_A_REGISTERED_CODE"));

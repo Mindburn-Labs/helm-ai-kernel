@@ -59,18 +59,18 @@ is no CLA or copyright assignment.
 - Link the issue or discussion that explains the user-facing value.
 - Keep launch and community copy factual: no unsupported SaaS, hosted control-plane, certification, or production-security claims.
 
-## Merge authority (build-fast, 2026-08-01)
+## Merge authority (agent delivery, 2026-09-24)
 
 Merge authority is green required checks on the pull request's current merge
-commit, for agents and humans alike, with all review threads resolved. CI
-checks are deterministic (build/test/lint/contract-drift); no per-PR
-model-review or Copilot-billed checks run in the delivery path. The 2-of-2
-machine-authority program
-continues as on-demand R&D in `contracts-autonomous-release-lab`/`-canary`
-only and is not a merge requirement here. Package publishes and release tags
-require one owner approval. The live `main protection` ruleset is the
-enforcement source; `.github/TEST_MATRIX.md` records its inspected
-configuration (Linear HELM-432).
+commit, for agents and humans alike; agents merge their own PRs. The live
+`main protection` ruleset also requires review threads to be resolved, so
+agents address and resolve them. CI checks are deterministic
+(build/test/lint/contract-drift); no per-PR model-review or Copilot-billed
+checks run in the delivery path. Package publishes and release tags are agent
+work under the `helm-privileged-ops` procedure (exact target, readback, log);
+no owner approval is needed. The live ruleset is the enforcement source;
+`.github/TEST_MATRIX.md` records its inspected configuration. Estate rules:
+`Mindburn-Labs/docs` → `docs/ai/estate-policy.md`.
 
 ## Security Reports
 

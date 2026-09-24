@@ -1,4 +1,7 @@
 {{- if and .Values.helm.metrics.enabled .Values.helm.metrics.serviceMonitor.enabled -}}
+{{- if not .Values.helm.metrics.bearerTokenSecret.name -}}
+{{- fail "helm.metrics.serviceMonitor.enabled requires helm.metrics.bearerTokenSecret.name: the kernel answers remote /metrics scrapes only with a bearer token" -}}
+{{- end }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -16,4 +19,9 @@ spec:
     - port: metrics
       interval: {{ .Values.helm.metrics.serviceMonitor.interval }}
       path: /metrics
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.helm.metrics.bearerTokenSecret.name | quote }}
+          key: {{ .Values.helm.metrics.bearerTokenSecret.key | quote }}
 {{- end }}

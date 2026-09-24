@@ -359,6 +359,7 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	metricsPort := envInt("HELM_METRICS_PORT", healthPort)
 	metricsEnabled := envBool("HELM_METRICS_ENABLED")
+	metricsToken := os.Getenv(metricsBearerTokenEnv)
 	suppressAuxiliaryHealth, healthConfigErr := desktopTransportV1SuppressesAuxiliaryHealth(desktopTransport, healthPort, metricsEnabled)
 	if healthConfigErr != nil {
 		return fmt.Errorf("desktop transport v1 configuration: %w", healthConfigErr)
@@ -702,7 +703,7 @@ func runServerWithOptions(opts serverOptions) error {
 		healthMux.HandleFunc("/health", healthHandler)
 		healthMux.HandleFunc("/healthz", healthHandler)
 		if metricsEnabled && metricsPort == healthPort {
-			healthMux.HandleFunc("/metrics", metricsHandler(services))
+			healthMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
 		}
 		healthServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
@@ -722,7 +723,7 @@ func runServerWithOptions(opts serverOptions) error {
 	var metricsServer *http.Server
 	if metricsEnabled && metricsPort != healthPort {
 		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", metricsHandler(services))
+		metricsMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
 		metricsServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
 			Handler:           metricsMux,

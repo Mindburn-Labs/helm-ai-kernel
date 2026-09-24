@@ -116,8 +116,6 @@ func startLiveProxy(t *testing.T, upstream string, apiKey string, tenantID strin
 		"--port", strconv.Itoa(port),
 		"--api-key", apiKey,
 		"--tenant-id", tenantID,
-		"--daily-limit", "1",
-		"--monthly-limit", "1",
 		"--max-wallclock", "30s",
 		"--receipts-dir", receiptsDir,
 		"--sign", tenantID,

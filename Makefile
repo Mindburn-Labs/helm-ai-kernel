@@ -303,6 +303,17 @@ quality-release:
 quality-nightly:
 	$(QUALITY) run nightly
 
+.PHONY: coverage-tcb
+# coverage-tcb holds the kernel TCB packages to the statement-coverage floors in
+# scripts/ci/tcb-coverage-floors.txt; the package list comes from that file.
+coverage-tcb:
+	@set -e; floors="$(CURDIR)/scripts/ci/tcb-coverage-floors.txt"; \
+	profile="$$(mktemp "$${TMPDIR:-/tmp}/tcb-coverage.XXXXXX")"; \
+	trap 'rm -f "$$profile"' EXIT; \
+	pkgs="$$(python3 scripts/ci/check_tcb_coverage.py packages "$$floors")"; \
+	(cd core && go test -count=1 -covermode=atomic -coverprofile="$$profile" $$pkgs); \
+	python3 scripts/ci/check_tcb_coverage.py check "$$profile" "$$floors"
+
 .PHONY: dead-packages
 # dead-packages lists core/pkg packages with no non-test importer across every
 # Go module in the checkout. Registered as an advisory nightly gate; see

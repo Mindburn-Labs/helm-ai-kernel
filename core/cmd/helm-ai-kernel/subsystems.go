@@ -33,7 +33,7 @@ const governedOpenAIRequestMaxBytes = privacy.MaxPayloadBytes
 // Non-TCB enterprise subsystems have been removed from OSS.
 //
 //nolint:gocyclo,gocognit // Route registration is linear and intentionally exhaustive.
-func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
+func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 	log.Println("[helm] routes: Registering API routes...")
 
 	ctx := context.Background()
@@ -365,7 +365,7 @@ func newDeployedMCPGateway(svc *Services) (*mcppkg.Gateway, error) {
 	}
 }
 
-func registerDeployedMCPRoutes(mux *http.ServeMux, gateway *mcppkg.Gateway) {
+func registerDeployedMCPRoutes(mux routeMux, gateway *mcppkg.Gateway) {
 	gatewayMux := http.NewServeMux()
 	gateway.RegisterRoutes(gatewayMux)
 	protected := protectRuntimeHandler(RouteAuthAdmin, gatewayMux.ServeHTTP)

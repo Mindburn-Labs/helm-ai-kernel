@@ -105,7 +105,7 @@ func (q *quickstartRuntime) expired(now time.Time) bool {
 	return !now.UTC().Before(q.ExpiresAt)
 }
 
-func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
+func RegisterLocalFirstRunRoutes(mux routeMux, svc *Services, opts serverOptions) {
 	if opts.Quickstart == nil {
 		return
 	}
@@ -217,7 +217,7 @@ func RegisterLocalFirstRunRoutes(mux *http.ServeMux, svc *Services, opts serverO
 	}))
 }
 
-func registerLocalConsolePeerProofRoute(mux *http.ServeMux, peerProof *localConsolePeerProof) {
+func registerLocalConsolePeerProofRoute(mux routeMux, peerProof *localConsolePeerProof) {
 	if peerProof == nil {
 		return
 	}

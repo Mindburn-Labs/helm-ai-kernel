@@ -13,6 +13,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 // PostgresRegistry implements Registry with SQL persistence.
@@ -59,7 +60,7 @@ CREATE TABLE IF NOT EXISTS registry_installations (
 `
 
 func (r *PostgresRegistry) Init(ctx context.Context) error {
-	_, err := r.db.ExecContext(ctx, pgRegistrySchema)
+	_, err := r.db.ExecContext(ctx, pgRegistrySchema+store.TenantRowSecurityDDL("registry_installations"))
 	return err
 }
 
@@ -228,6 +229,8 @@ func (r *PostgresRegistry) Install(tenantID, packID string) error {
 		return errors.New("pack not found")
 	}
 	query := `INSERT INTO registry_installations (tenant_id, pack_id, installed_at) VALUES ($1, $2, $3) ON CONFLICT (tenant_id, pack_id) DO UPDATE SET installed_at = $3`
-	_, err = r.db.ExecContext(ctx, query, tenantID, packID, time.Now().UTC())
-	return err
+	return store.WithTenant(ctx, r.db, tenantID, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, query, tenantID, packID, time.Now().UTC())
+		return err
+	})
 }

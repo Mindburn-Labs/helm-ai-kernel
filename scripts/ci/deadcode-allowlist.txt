@@ -1,6 +1,6 @@
 # Frozen deadcode allowlist (HELM-745, target architecture R10).
 # Functions in the core module that no shipped binary (scripts/ci/deadcode-roots.txt)
-# can reach, as measured when the gate landed on origin/main 429052d1.
+# can reach, as measured when the gate landed on origin/main 9ac7bf68.
 # Key: <package path> <function>. The list only shrinks:
 #   - deleting or wiring code makes its line stale, and the gate fails until the
 #     line is removed in the same PR (HELM-756 deletion waves shrink it);
@@ -451,6 +451,8 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bundles computeComposedHash
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize Canonicalize
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize JCSString
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize generatePreview
+github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize/legacyjson Marshal
+github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize/legacyjson hasNaNOrInf
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities DefaultModuleRegistry.GetModulesForCapability
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities DefaultModuleRegistry.GetPackForModule
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capabilities FileBlobStore.Get
@@ -489,8 +491,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability TokenAuthority.PubKe
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability TokenAuthority.Store
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability TokenAuthority.sign
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/capability randomHex
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jcs Marshal
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jcs hasNaNOrInf
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/config LoadAllProfiles
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform AllReasonCodes
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform Engine.RegisterGateForProfiles

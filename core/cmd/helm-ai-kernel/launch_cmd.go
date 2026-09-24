@@ -312,6 +312,18 @@ func runLaunchCloudGate(compiled plan.LaunchPlan, substrate lpregistry.Substrate
 		TeardownRequired:     true,
 		EvidencePackRefs:     []string{},
 	}
+	// The local path refuses a non-ALLOW plan in ExecuteLaunch; the cloud path
+	// must refuse it before any provider write too (HELM-740, 02-01).
+	if compiled.KernelVerdict != "ALLOW" {
+		response.KernelVerdict = firstNonEmpty(compiled.KernelVerdict, "DENY")
+		response.Status = firstNonEmpty(compiled.Status, "DENIED")
+		response.ReasonCode = firstNonEmpty(compiled.ReasonCode, "ERR_LAUNCHPAD_PLAN_NOT_ALLOWED")
+		fmt.Fprintf(stderr, "cloud Launchpad beta refused: launch plan verdict is %s (%s)\n", response.KernelVerdict, response.ReasonCode)
+		if writeLaunchJSON(stdout, response) != 0 {
+			return 1
+		}
+		return 1
+	}
 	if !live {
 		fmt.Fprintln(stderr, "cloud Launchpad substrates require --live-cloud-beta and remain dry-run by default")
 		if writeLaunchJSON(stdout, response) != 0 {

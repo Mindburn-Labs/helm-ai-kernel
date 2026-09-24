@@ -96,7 +96,7 @@ type generatedSpecApprovalRecordResponse struct {
 	Version         int64                                     `json:"version"`
 }
 
-func registerGeneratedSpecApprovalRoutes(mux *http.ServeMux, runtime *generatedSpecApprovalRuntime) {
+func registerGeneratedSpecApprovalRoutes(mux routeMux, runtime *generatedSpecApprovalRuntime) {
 	if mux == nil || runtime == nil {
 		return
 	}

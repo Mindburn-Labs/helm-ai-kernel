@@ -111,7 +111,7 @@ type consoleSurfaceDefinition struct {
 // RegisterConsoleRoutes exposes the small platform state surface required by
 // the HELM AI Kernel Console. The handler is read-only and derives state from kernel
 // services; it does not create demonstration data.
-func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
+func RegisterConsoleRoutes(mux routeMux, svc *Services, opts serverOptions) {
 	metaCapabilitiesHandler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)

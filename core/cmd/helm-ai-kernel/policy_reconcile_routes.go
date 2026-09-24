@@ -9,7 +9,7 @@ import (
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 )
 
-func registerPolicyReconcileRoutes(mux *http.ServeMux, svc *Services) {
+func registerPolicyReconcileRoutes(mux routeMux, svc *Services) {
 	mux.HandleFunc("/internal/policy/reconcile", protectRuntimeHandler(RouteAuthService, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)

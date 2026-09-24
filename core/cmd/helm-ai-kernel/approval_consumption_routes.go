@@ -154,7 +154,7 @@ type approvalDispatchAdmissionResponse struct {
 	AdmissionSignature          string                              `json:"admission_signature"`
 }
 
-func registerApprovalGrantConsumptionRoutes(mux *http.ServeMux, runtime *approvalConsumptionRuntime) {
+func registerApprovalGrantConsumptionRoutes(mux routeMux, runtime *approvalConsumptionRuntime) {
 	if mux == nil || runtime == nil {
 		return
 	}

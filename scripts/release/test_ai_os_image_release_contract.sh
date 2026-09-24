@@ -832,7 +832,7 @@ reject_dockerignore_mutation() {
   entry=$1
   fixture="$test_dir/missing-context.dockerignore"
   awk -v entry="$entry" '$0 != entry' .dockerignore > "$fixture"
-  if "$checker" "$workflow" .github/workflows/release.yml Dockerfile "$fixture" >/dev/null 2>&1; then
+  if "$checker" "$workflow" .github/workflows/dev-image.yml Dockerfile "$fixture" >/dev/null 2>&1; then
     echo "Docker context mutation was not rejected: $entry" >&2
     exit 1
   fi
@@ -847,16 +847,16 @@ done < .dockerignore
 
 sed -e 's/^USER /  user /' -e 's/^ENTRYPOINT /  entrypoint /' -e 's/^CMD /  cmd /' \
   Dockerfile > "$test_dir/lowercase-governed.Dockerfile"
-"$checker" "$workflow" .github/workflows/release.yml "$test_dir/lowercase-governed.Dockerfile" >/dev/null
+"$checker" "$workflow" .github/workflows/dev-image.yml "$test_dir/lowercase-governed.Dockerfile" >/dev/null
 
 awk '{ print } END { print "  from alpine:latest" }' Dockerfile > "$test_dir/indented-unpinned.Dockerfile"
-if "$checker" "$workflow" .github/workflows/release.yml "$test_dir/indented-unpinned.Dockerfile" >/dev/null 2>&1; then
+if "$checker" "$workflow" .github/workflows/dev-image.yml "$test_dir/indented-unpinned.Dockerfile" >/dev/null 2>&1; then
   echo 'indented lowercase unpinned Docker base was not rejected' >&2
   exit 1
 fi
 
 awk '{ print } END { print "  run set -e; apk add --no-cache curl" }' Dockerfile > "$test_dir/compound-package-install.Dockerfile"
-if "$checker" "$workflow" .github/workflows/release.yml "$test_dir/compound-package-install.Dockerfile" >/dev/null 2>&1; then
+if "$checker" "$workflow" .github/workflows/dev-image.yml "$test_dir/compound-package-install.Dockerfile" >/dev/null 2>&1; then
   echo 'compound mutable package installation was not rejected' >&2
   exit 1
 fi
@@ -925,9 +925,9 @@ then
 fi
 
 sed 's/:dev-sha-${{ inputs.source_sha }}/:sha-${{ inputs.source_sha }}/' \
-  .github/workflows/release.yml > "$test_dir/legacy-final-tag-collision.yml"
-if "$checker" "$workflow" "$test_dir/legacy-final-tag-collision.yml" >/dev/null 2>&1; then
-  echo 'legacy dev publisher was allowed to collide with the governed immutable tag namespace' >&2
+  .github/workflows/dev-image.yml > "$test_dir/dev-final-tag-collision.yml"
+if "$checker" "$workflow" "$test_dir/dev-final-tag-collision.yml" >/dev/null 2>&1; then
+  echo 'dev-sha publisher was allowed to collide with the governed immutable tag namespace' >&2
   exit 1
 fi
 

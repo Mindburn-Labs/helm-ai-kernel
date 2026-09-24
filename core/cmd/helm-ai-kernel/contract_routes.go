@@ -88,7 +88,7 @@ func (s runtimeEvidenceSealSigner) PublicKeyHex() string {
 	return s.publicKey
 }
 
-func registerContractRoutes(mux *http.ServeMux, svc *Services) {
+func registerContractRoutes(mux routeMux, svc *Services) {
 	mcpQuarantine := mcppkg.NewQuarantineRegistry()
 	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
 	if svc != nil && svc.BoundarySurfaces != nil {

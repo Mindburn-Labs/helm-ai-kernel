@@ -49,8 +49,9 @@ func (h *WellKnownHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(card)
 }
 
-// RegisterWellKnownRoute registers the /.well-known/agent-card.json handler.
-func RegisterWellKnownRoute(mux *http.ServeMux, provider AgentCardProvider) {
+// RegisterWellKnownRoute registers the /.well-known/agent-card.json handler on
+// any mux that can mount a handler, including the kernel's registry-checked API mux.
+func RegisterWellKnownRoute(mux interface{ Handle(string, http.Handler) }, provider AgentCardProvider) {
 	handler := NewWellKnownHandler(provider)
 	mux.Handle("/.well-known/agent-card.json", handler)
 }

@@ -1010,16 +1010,52 @@ func TestClosing_Verify_InvalidPubKey(t *testing.T) {
 }
 
 func TestClosing_Verify_InvalidSignature(t *testing.T) {
-	pub, _, _ := ed25519.GenerateKey(rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	pubHex := hex.EncodeToString(pub)
-	for _, sig := range []string{"not-hex", "", "zzzz"} {
-		t.Run("sig_"+sig, func(t *testing.T) {
-			_, err := Verify(pubHex, sig, []byte("data"))
-			if err == nil && sig != "" {
-				// empty sig decodes to empty bytes, which fails on size check
+	data := []byte("data")
+	validSig := hex.EncodeToString(ed25519.Sign(priv, data))
+	otherDataSig := hex.EncodeToString(ed25519.Sign(priv, []byte("other data")))
+
+	// Positive control: the same key and data do verify, so the refusals
+	// below are about the signature, not a broken fixture.
+	if ok, err := Verify(pubHex, validSig, data); err != nil || !ok {
+		t.Fatalf("control: valid signature must verify, got ok=%v err=%v", ok, err)
+	}
+
+	// Malformed signatures must be refused with an error. Wrong-length inputs
+	// are the F-07 class: a verifier that stops checking length (or caches a
+	// result before decoding) returns true for them.
+	for name, sig := range map[string]string{
+		"not_hex":   "not-hex",
+		"empty":     "",
+		"odd_hex":   "zzzz",
+		"too_short": validSig[:len(validSig)-2],
+		"too_long":  validSig + "00",
+	} {
+		t.Run("malformed_"+name, func(t *testing.T) {
+			ok, err := Verify(pubHex, sig, data)
+			if ok {
+				t.Fatalf("Verify accepted malformed signature %q", sig)
+			}
+			if err == nil {
+				t.Fatalf("Verify returned no error for malformed signature %q", sig)
 			}
 		})
 	}
+
+	// A well-formed signature over different data is a plain rejection.
+	t.Run("signature_over_other_data", func(t *testing.T) {
+		ok, err := Verify(pubHex, otherDataSig, data)
+		if err != nil {
+			t.Fatalf("well-formed signature must not error: %v", err)
+		}
+		if ok {
+			t.Fatal("Verify accepted a signature made over different data")
+		}
+	})
 }
 
 func TestClosing_VerifyMLDSA65_ValidSignature(t *testing.T) {

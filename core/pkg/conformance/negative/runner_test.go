@@ -18,6 +18,21 @@ func TestDefaultCasesHoldTheirVectors(t *testing.T) {
 		t.Fatal("no vector is bound; the suite measures nothing")
 	}
 
+	// Coverage ratchet (T-07): these vectors are bound and must stay bound.
+	// Checking only Bound != 0 let coverage fall from 4 to 1 unnoticed. Add an
+	// id here when a vector gains a harness; never remove one.
+	bound := map[string]bool{}
+	for _, result := range report.Results {
+		if result.Bound {
+			bound[result.VectorID] = true
+		}
+	}
+	for _, id := range []string{"policy-not-ready", "pdp-outage", "missing-credentials", "blocked-egress"} {
+		if !bound[id] {
+			t.Errorf("vector %q is no longer bound to a harness; bound coverage regressed", id)
+		}
+	}
+
 	for _, result := range report.Results {
 		if !result.Bound || result.Pass {
 			continue

@@ -81,13 +81,14 @@ run_uc "UC-002" "PEP Fail-Closed" \
 run_uc "UC-003" "Approval Ceremony" \
     "cd $CORE_DIR && go test ./pkg/escalation/ceremony/... -v"
 
-# UC-004: WASM Transform (sandbox execution)
-run_uc "UC-004" "WASM Transform" \
-    "cd $CORE_DIR && go test ./pkg/runtime/sandbox -run TestWASISandbox -v"
-
-# UC-005: WASM Exhaustion (gas/time/memory limits)
-run_uc "UC-005" "WASM Exhaustion" \
-    "cd $CORE_DIR && go test ./pkg/runtime/sandbox -run TestWASI_ -v"
+# UC-004 (WASM Transform) and UC-005 (WASM Exhaustion) are retired (T-02).
+# Their tests never ran a WASM module: TestWASI_* is arithmetic over
+# pkg/runtime/budget, and TestWASISandbox accepted "not yet implemented" as a
+# pass. No module can run: WASISandbox.Run always fails in resolvePackToWasm,
+# and NewWASISandbox has no caller in a shipped binary (it is on
+# scripts/ci/deadcode-allowlist.txt). A use case can return when the sandbox
+# executes a module on a shipped path, proven by a looping and an allocating
+# .wasm fixture.
 
 # UC-006: Idempotency (receipt-based dedup)
 run_uc "UC-006" "Idempotency" \

@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REGISTRY = ROOT / "scripts" / "ci" / "quality-gates.json"
 EXPECTED_GATE_IDS = {
     "docs-truth",
+    "deadcode",
     "secrets",
     "gosec",
     "govulncheck",

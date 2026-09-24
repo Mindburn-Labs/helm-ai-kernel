@@ -82,6 +82,14 @@ Hermes uses a first-use hook allowlist. Setup writes the hook; it does
 hook). Without `--accept-hooks`, `HERMES_ACCEPT_HOOKS`, or
 `hooks_auto_accept`, a non-TTY session never registers the hook.
 
+## Coverage
+
+This hook is an **observed-only** integration: it classifies the calls the
+client sends it, signs a receipt for each decision, and denies what it
+recognizes or cannot evaluate statically. It is defense in depth, not an
+enforced boundary. See
+[the coverage label](../reference/workstation-governance.md#coverage-label-observed-only).
+
 ## Verify a Hook Decision
 
 Every classified DENY writes a signed receipt under:

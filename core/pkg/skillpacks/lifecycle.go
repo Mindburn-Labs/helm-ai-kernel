@@ -990,7 +990,8 @@ func validateProjectionArtifact(
 		!containsString(effect.CertificationRefs, manifest.ProvenanceRef) {
 		return projectionGeneration{}, nil, nil, fmt.Errorf("skillpacks: certification refs do not bind manifest signature/provenance")
 	}
-	scan, err := Scan(SkillPack{Manifest: manifest, SkillMD: string(contentBytes)})
+	// Signature trust here is the configured verifier's decision (verifyProjectionTrust).
+	scan, err := scanPack(SkillPack{Manifest: manifest, SkillMD: string(contentBytes)}, false)
 	if err != nil || scan.Verdict != VerdictAllow {
 		if err != nil {
 			return projectionGeneration{}, nil, nil, err

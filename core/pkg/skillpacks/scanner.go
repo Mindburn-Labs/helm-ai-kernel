@@ -20,6 +20,14 @@ func ScanPath(path string) (ScanResult, error) {
 }
 
 func Scan(pack SkillPack) (ScanResult, error) {
+	return scanPack(pack, true)
+}
+
+// scanPack runs the SkillPack checks. keyringTrust selects the signature trust
+// anchor: Scan, and through it the live install path, accepts only packs the
+// first-party keyring verifies. ProjectionLifecycle passes false because it
+// binds signature_ref to a decision its configured verifier signs.
+func scanPack(pack SkillPack, keyringTrust bool) (ScanResult, error) {
 	contentHash := HashBytes([]byte(pack.SkillMD))
 	result := ScanResult{
 		SkillID:          pack.Manifest.ID,
@@ -86,6 +94,11 @@ func Scan(pack SkillPack) (ScanResult, error) {
 			setEscalate(&result, "ERR_SKILL_SIGNATURE_INVALID")
 		}
 		add("ERR_SKILL_SIGNATURE_INVALID", "HIGH", err.Error(), "skillpack.json")
+	} else if keyringTrust && pack.Manifest.Status != StatusVerified {
+		// Only verified packs are checked against the trusted keyring. Any other
+		// signature_ref names nothing HELM verified, so the pack is unsigned.
+		setEscalate(&result, "ERR_SKILL_SIGNATURE_UNVERIFIED")
+		add("ERR_SKILL_SIGNATURE_UNVERIFIED", "HIGH", "signature_ref of a non-verified SkillPack is not checked against a trusted publisher key", "skillpack.json")
 	}
 	if pack.Manifest.ScopeDefault == ScopeGlobal {
 		setEscalate(&result, "ERR_GLOBAL_SKILL_INSTALL_DENIED")
@@ -104,11 +117,15 @@ func Scan(pack SkillPack) (ScanResult, error) {
 		add("ERR_SKILL_AUTHORITY_BOUNDARY_MISSING", "HIGH", "manifest must declare that skills do not grant tool permissions", "skillpack.json")
 	}
 	if pack.Root != "" {
-		if repoRoot, err := findRepoRoot(pack.Root); err == nil {
-			if err := ValidatePolicyFile(repoRoot, pack.Manifest.PolicyRef); err != nil {
-				setEscalate(&result, "ERR_SKILL_POLICY_INVALID")
-				add("ERR_SKILL_POLICY_INVALID", "HIGH", err.Error(), pack.Manifest.PolicyRef)
-			}
+		// A pack with no repository above it (a github: fetch lands in a temp
+		// directory) has no policy to check, which must escalate, not pass.
+		repoRoot, err := findRepoRoot(pack.Root)
+		if err == nil {
+			err = ValidatePolicyFile(repoRoot, pack.Manifest.PolicyRef)
+		}
+		if err != nil {
+			setEscalate(&result, "ERR_SKILL_POLICY_INVALID")
+			add("ERR_SKILL_POLICY_INVALID", "HIGH", err.Error(), pack.Manifest.PolicyRef)
 		}
 		if err := scanBundleFiles(pack.Root, add); err != nil {
 			result.Verdict = VerdictDeny

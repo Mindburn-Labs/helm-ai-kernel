@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -2701,5 +2702,16 @@ func TestUpsertHookConfigUpdatesPolicyProfileOnReinstall(t *testing.T) {
 	raw, _ := json.Marshal(root)
 	if !strings.Contains(string(raw), "/policies/new.json") || !strings.Contains(string(raw), "sha256:new") || strings.Contains(string(raw), "/policies/old.json") || strings.Contains(string(raw), "sha256:old") {
 		t.Fatalf("reinstall did not replace stored policy profile: %s", raw)
+	}
+}
+
+// TestSetupHookMatcherCoversClaudeCodeWriteTools is the 04-08 regression: the
+// installed matcher must route every file-writing Claude Code tool to the hook.
+func TestSetupHookMatcherCoversClaudeCodeWriteTools(t *testing.T) {
+	matcher := regexp.MustCompile(setupHookMatcher("claude-code"))
+	for _, tool := range []string{"Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "mcp__filesystem__write_file"} {
+		if !matcher.MatchString(tool) {
+			t.Fatalf("claude-code hook matcher %q misses %s", matcher, tool)
+		}
 	}
 }

@@ -120,7 +120,7 @@ The two are complementary, not competing:
 | | Hook / MCP registration | Process ownership |
 | --- | --- | --- |
 | Applies to | Sessions HELM did **not** launch | Sessions HELM launches |
-| Coverage | Hooked tool classes and routed MCP calls | Everything the child process does |
+| Coverage | Hooked tool classes and routed MCP calls (observed-only) | Everything the child process does |
 | Vendor changes | Client config is modified | Client is unmodified |
 | Evidence | What the agent discloses | What the process was permitted to do |
 

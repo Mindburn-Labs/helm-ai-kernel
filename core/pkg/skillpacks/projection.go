@@ -63,10 +63,11 @@ func Install(pack SkillPack, req InstallRequest) (InstallResult, error) {
 		}
 	} else {
 		for _, projection := range projections {
-			if err := os.MkdirAll(filepath.Dir(projection.Path), 0o755); err != nil {
+			rel, err := filepath.Rel(root, projection.Path)
+			if err != nil {
 				return InstallResult{}, err
 			}
-			if err := atomicWrite(projection.Path, []byte(pack.SkillMD)); err != nil {
+			if err := atomicWrite(root, rel, []byte(pack.SkillMD)); err != nil {
 				return InstallResult{}, err
 			}
 		}
@@ -613,6 +614,15 @@ func Revoke(repoRoot, skillID string) (Receipt, error) {
 	if cursorRoot != nil {
 		defer cursorRoot.Close()
 	}
+	managed, err := openManagedRoot(repoRoot)
+	if err != nil {
+		return Receipt{}, err
+	}
+	defer managed.Close()
+	projectionPaths, err := validateProjectionRevoke(managed, repoRoot, store, skillID)
+	if err != nil {
+		return Receipt{}, err
+	}
 	paths := []Projection{}
 	for i := range store.Installs {
 		if store.Installs[i].SkillID == skillID {
@@ -621,28 +631,11 @@ func Revoke(repoRoot, skillID string) (Receipt, error) {
 			store.Installs[i].UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		}
 	}
-	for _, p := range paths {
-		if strings.EqualFold(strings.TrimSpace(p.Agent), "cursor") {
-			continue
-		}
-		if err := os.Remove(p.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return Receipt{}, err
-		}
+	if err := removeRecordedProjections(managed, projectionPaths); err != nil {
+		return Receipt{}, err
 	}
-	for rel, hashes := range cursorPaths {
-		present, hash, err := observeManagedFile(cursorRoot, rel, maxProjectionArtifactBytes)
-		if err != nil {
-			return Receipt{}, err
-		}
-		if !present {
-			continue
-		}
-		if _, ok := hashes[hash]; !ok {
-			return Receipt{}, fmt.Errorf("%w: Cursor projection changed before revoke", ErrProjectionDrift)
-		}
-		if err := removeManagedFileAt(cursorRoot, rel); err != nil {
-			return Receipt{}, err
-		}
+	if err := removeRecordedProjections(managed, cursorPaths); err != nil {
+		return Receipt{}, err
 	}
 	if err := writeInstallStore(repoRoot, store); err != nil {
 		return Receipt{}, err
@@ -733,6 +726,64 @@ func validateCursorRevoke(root string, store installStore, skillID string) (map[
 	return removals, managed, nil
 }
 
+// validateProjectionRevoke plans the non-Cursor removals. installed.json ships
+// with the repository, so its paths are untrusted: each record's projection is
+// re-derived from its skill and agent, every recorded path must name exactly
+// that file under root, and the file may only be removed while it still holds
+// bytes the store recorded. Nothing is removed if any record fails.
+func validateProjectionRevoke(managed *os.Root, root string, store installStore, skillID string) (map[string]map[string]struct{}, error) {
+	removals := map[string]map[string]struct{}{}
+	for _, record := range store.Installs {
+		if record.SkillID != skillID || strings.EqualFold(strings.TrimSpace(record.Agent), "cursor") {
+			continue
+		}
+		canonical, err := projectionRelativePath(record.SkillID, record.Agent)
+		if err != nil {
+			return nil, err
+		}
+		for _, projection := range record.ProjectionPaths {
+			if projection.Agent != canonical.Agent || !sameProjectionPath(root, projection.Path, canonical.Path) {
+				return nil, fmt.Errorf("%w: revoke path is not the managed %s projection", ErrProjectionPathUnsafe, canonical.Agent)
+			}
+			if removals[canonical.Path] == nil {
+				removals[canonical.Path] = map[string]struct{}{}
+			}
+			removals[canonical.Path][record.ContentHash] = struct{}{}
+		}
+	}
+	for rel, hashes := range removals {
+		present, hash, err := observeManagedFile(managed, rel, maxProjectionArtifactBytes)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := hashes[hash]; present && !ok {
+			return nil, fmt.Errorf("%w: projection differs from its store record", ErrProjectionDrift)
+		}
+	}
+	return removals, nil
+}
+
+// removeRecordedProjections removes each root-relative path that still holds
+// one of its recorded content hashes, without following symlinks.
+func removeRecordedProjections(managed *os.Root, removals map[string]map[string]struct{}) error {
+	for rel, hashes := range removals {
+		present, hash, err := observeManagedFile(managed, rel, maxProjectionArtifactBytes)
+		if err != nil {
+			return err
+		}
+		if !present {
+			continue
+		}
+		if _, ok := hashes[hash]; !ok {
+			return fmt.Errorf("%w: projection changed before revoke", ErrProjectionDrift)
+		}
+		if err := removeManagedFileAt(managed, rel); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ListInstalled(repoRoot string) (any, error) {
 	if repoRoot == "" {
 		var err error
@@ -743,6 +794,10 @@ func ListInstalled(repoRoot string) (any, error) {
 	}
 	return readInstallStore(repoRoot)
 }
+
+// maxInstallStoreBytes bounds the installed.json read. Each record carries its
+// manifest, so 16 MiB leaves room for thousands of installs.
+const maxInstallStoreBytes = 16 << 20
 
 type installStore struct {
 	SchemaVersion string           `json:"schema_version"`
@@ -815,9 +870,16 @@ func markInstallStatus(root, skillID, status string) error {
 }
 
 func readInstallStore(root string) (installStore, error) {
-	path := filepath.Join(root, ".helm", "skillpacks", "installed.json")
 	store := installStore{SchemaVersion: "helm.skillpack.installs.v1", Installs: []installedSkill{}}
-	data, err := os.ReadFile(path)
+	managed, err := openManagedRoot(root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return store, nil
+		}
+		return store, err
+	}
+	defer managed.Close()
+	data, err := readManagedFileAt(managed, filepath.Join(".helm", "skillpacks", "installed.json"), maxInstallStoreBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return store, nil
 	}
@@ -831,13 +893,9 @@ func readInstallStore(root string) (installStore, error) {
 }
 
 func writeInstallStore(root string, store installStore) error {
-	path := filepath.Join(root, ".helm", "skillpacks", "installed.json")
 	data, err := json.MarshalIndent(store, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return atomicWrite(path, data)
+	return atomicWrite(root, filepath.Join(".helm", "skillpacks", "installed.json"), data)
 }

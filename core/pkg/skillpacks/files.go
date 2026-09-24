@@ -1,17 +1,21 @@
 package skillpacks
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 )
 
-func atomicWrite(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+// atomicWrite replaces rel under rootDir. os.Root confines every operation to
+// rootDir, symlinked path components and a symlinked target are refused, and
+// the bytes are staged in a freshly created O_EXCL file with a random name, so
+// a planted "<name>.tmp" link or a symlinked directory cannot redirect them.
+func atomicWrite(rootDir, rel string, data []byte) error {
+	root, err := openManagedRoot(rootDir)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	defer root.Close()
+	return atomicReplaceManagedAt(root, rel, data)
 }
 
 func sanitizePathSegment(value string) string {

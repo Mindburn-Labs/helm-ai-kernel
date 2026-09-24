@@ -262,6 +262,7 @@ deployment-smoke: docker-smoke compose-smoke helm-chart-smoke
 
 release-smoke:
 	python3 scripts/release/console_local_sidecar_test.py
+	python3 scripts/release/cosign_identity_test.py
 	bash scripts/ci/release_smoke.sh
 
 version-drift:

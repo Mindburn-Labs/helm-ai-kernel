@@ -140,13 +140,11 @@ const (
 	ReasonComputeTimeExhausted               ReasonCode = "ERR_COMPUTE_TIME_EXHAUSTED"
 
 	// ── Harness Engineering Reasons (v1.4) ─────────────────────
-	ReasonVerificationScopeRequired       ReasonCode = "ERR_VERIFICATION_SCOPE_REQUIRED"
 	ReasonHarnessTraceRequired            ReasonCode = "ERR_HARNESS_TRACE_REQUIRED"
 	ReasonPlanTransactionRequired         ReasonCode = "ERR_PLAN_TRANSACTION_REQUIRED"
 	ReasonPlanTransactionConflict         ReasonCode = "ERR_PLAN_TRANSACTION_CONFLICT"
 	ReasonAssumptionStale                 ReasonCode = "ERR_ASSUMPTION_STALE"
 	ReasonHarnessMutationRequiresApproval ReasonCode = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL"
-	ReasonHarnessChangeContractInvalid    ReasonCode = "ERR_HARNESS_CHANGE_CONTRACT_INVALID"
 	ReasonGreenTestScopeMissing           ReasonCode = "ERR_GREEN_TEST_SCOPE_MISSING"
 	ReasonGroundedActionRefRequired       ReasonCode = "ERR_GROUNDED_ACTION_REF_REQUIRED"
 	ReasonGUIPostconditionUnverified      ReasonCode = "ERR_GUI_POSTCONDITION_UNVERIFIED"

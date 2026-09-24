@@ -82,15 +82,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/cmd/readme"
     },
     {
-      "slug": "internal/helm-ai-kernel/core/pkg/compliance/readme",
-      "title": "HELM AI Kernel Compliance Package Source Owner",
-      "section": "internal",
-      "source_path": "core/pkg/compliance/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/core/pkg/compliance/readme"
-    },
-    {
       "slug": "internal/helm-ai-kernel/core/pkg/connectors/sandbox/readme",
       "title": "Sandbox Provider Connector Definitions",
       "section": "internal",

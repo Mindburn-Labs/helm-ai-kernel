@@ -5,6 +5,8 @@ last_reviewed: 2026-05-05
 
 # Execution Security Model
 
+<!-- quantum_posture: this page describes classical Ed25519 receipt and permit signing and adds no post-quantum cryptographic control. -->
+
 ## Audience
 
 Security reviewers and runtime maintainers checking how HELM AI Kernel fails closed before dispatch.

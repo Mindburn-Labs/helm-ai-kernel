@@ -77,6 +77,22 @@ nothing, so it is not a pass. It blocks in CI through the required
 block PR or merge today. Promote it with `QUALITY_STRICT=1` locally, or move it
 into the `pr` profile once the constitution has settled.
 
+## TCB Coverage
+
+```bash
+make coverage-tcb
+```
+
+Runs the kernel TCB packages listed in `scripts/ci/tcb-coverage-floors.txt`
+with coverage and holds each to its floor. It is a step in the required
+`kernel` CI job. A listed package must reach the `default` floor (85% of
+statements) unless the file gives it its own lower number. Those numbers are
+frozen at the coverage measured when the gate landed; raise them as tests land,
+never lower them. The gate fails when a package is below its floor, when a
+listed package has no measured statements, when the profile is empty, and when a
+package with its own floor has reached the default, so the exceptions list only
+shrinks. `scripts/ci/check_tcb_coverage_test.py` holds the known-bad inputs.
+
 ## Profiles
 
 | Profile | Command | Purpose |

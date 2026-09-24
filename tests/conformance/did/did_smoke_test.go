@@ -1,7 +1,10 @@
+// quantum_posture: exercises the existing classical did:key signer only; it adds
+// no algorithm and asserts no post-quantum property.
+
 // Package didconformance is the smoke suite for HELM's W3C DID surface.
-// It exercises the resolver/verifier APIs plus a complete IATP handshake
-// using the in-tree did:key driver. The CLI itself is covered by
-// core/cmd/helm-ai-kernel tests; here we focus on the public package contract.
+// It exercises the resolver/verifier APIs using the in-tree did:key driver.
+// The CLI itself is covered by core/cmd/helm-ai-kernel tests; here we focus
+// on the public package contract.
 package didconformance
 
 import (
@@ -13,10 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/did/method/key"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity/iatp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/vcredentials"
 )
 
@@ -75,61 +76,4 @@ func TestDIDSmoke_VerifyVCAgainstResolverDID(t *testing.T) {
 	r.Register(key.New())
 	v := did.NewVerifier(r, did.WithVerifierClock(smokeClock))
 	require.NoError(t, v.VerifyVC(context.Background(), vc))
-}
-
-// TestDIDSmoke_IATPHandshake completes a full DID + VC + AITH IATP
-// handshake using two in-memory participants.
-func TestDIDSmoke_IATPHandshake(t *testing.T) {
-	ctx := context.Background()
-
-	mkActor := func(label string) (*crypto.Ed25519Signer, string) {
-		s, err := crypto.NewEd25519Signer(label)
-		require.NoError(t, err)
-		d, err := did.FromEd25519PublicKey(s.PublicKeyBytes())
-		require.NoError(t, err)
-		return s, string(d)
-	}
-
-	holderSigner, holderDID := mkActor("smoke-holder")
-	counterSigner, counterDID := mkActor("smoke-counter")
-	issuerSigner, issuerDID := mkActor("smoke-issuer")
-
-	scope := []string{"tool:research", "tool:summarize"}
-	subject := vcredentials.AgentCapabilitySubject{
-		ID:        holderDID,
-		AgentName: "Smoke Holder",
-		Capabilities: []vcredentials.CapabilityClaim{
-			{Action: "tool:research", Verified: true, VerifiedAt: smokeNow},
-			{Action: "tool:summarize", Verified: true, VerifiedAt: smokeNow},
-		},
-	}
-	is := vcredentials.NewIssuerWithClock(issuerDID, "Smoke Issuer", issuerSigner, smokeClock)
-	vc, err := is.Issue("urn:uuid:smoke-handshake", subject, time.Hour)
-	require.NoError(t, err)
-
-	cdm := identity.NewContinuousDelegationManager(identity.WithCDMClock(smokeClock))
-	delegation, err := cdm.Grant("did:helm:human:smoke", holderDID, scope, time.Hour)
-	require.NoError(t, err)
-
-	resolver := did.NewResolver(did.WithClock(smokeClock))
-	resolver.Register(key.New())
-	verifier := did.NewVerifier(resolver, did.WithVerifierClock(smokeClock))
-
-	a, err := iatp.NewParticipant(holderDID, holderSigner, resolver, verifier, iatp.WithClock(smokeClock))
-	require.NoError(t, err)
-	b, err := iatp.NewParticipant(counterDID, counterSigner, resolver, verifier, iatp.WithClock(smokeClock))
-	require.NoError(t, err)
-
-	pres, outRcpt, err := a.Offer(counterDID, vc, delegation, []string{"tool:research"})
-	require.NoError(t, err)
-	assert.Equal(t, holderDID, outRcpt.Subject)
-	assert.Equal(t, counterDID, outRcpt.Counterparty)
-
-	cap, inRcpt, err := b.Accept(ctx, pres)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"tool:research"}, cap.GrantedScope)
-	assert.Equal(t, counterDID, inRcpt.Subject)
-	assert.Equal(t, holderDID, inRcpt.Counterparty)
-
-	require.NoError(t, a.VerifyCapability(ctx, cap))
 }

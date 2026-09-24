@@ -21,7 +21,7 @@ calls, results, and messages.
 - Enforcement points: `core/pkg/mcp/aip.go` (delegation chains),
   `core/pkg/mcp/firewall.go` (dispatch reference monitor),
   `core/pkg/guardian` (Gate 5 delegation), `core/pkg/proofgraph`
-  (causal dependency DAG), `core/pkg/policy/wasm` + CEL (policy runtime)
+  (causal dependency DAG), `core/pkg/kernel/authority` (CEL policy runtime)
 
 ## Why PCAS matters to HELM
 

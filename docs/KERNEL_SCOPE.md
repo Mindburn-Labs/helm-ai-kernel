@@ -3,6 +3,8 @@ title: KERNEL_SCOPE
 last_reviewed: 2026-05-12
 ---
 
+<!-- quantum_posture: this page lists the classical Ed25519 signing in core/pkg/crypto and adds no post-quantum cryptographic control. -->
+
 # HELM AI Kernel Scope
 
 ## Audience
@@ -93,7 +95,6 @@ non-TCB supporting infrastructure:
 | `agent/adapter.go`     | KernelBridge choke point                   | ✅ Active |
 | `runtime/budget/`      | Compute budget enforcement                 | ✅ Active |
 | `escalation/ceremony/` | RFC-005 Approval Ceremony                  | ✅ Active |
-| `genesis/ceremony/`    | VGL six-phase Genesis ceremony state machine | ✅ Active |
 | `evidence/`            | Evidence pack export/verify                | ✅ Active |
 | `replay/`              | Replay engine for verification             | ✅ Active |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |

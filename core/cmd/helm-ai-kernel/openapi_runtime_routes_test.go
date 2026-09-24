@@ -21,6 +21,8 @@ import (
 
 func TestOpenAPIPathsAreRegisteredByHelmServeRuntime(t *testing.T) {
 	chdirTempDir(t)
+	// Launchpad routes are published but mounted only when explicitly enabled.
+	t.Setenv(launchpadRoutesEnabledEnv, "1")
 
 	mux := http.NewServeMux()
 	svc, cleanup := newContractRouteTestServices(t)

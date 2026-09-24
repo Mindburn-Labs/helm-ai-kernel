@@ -22,7 +22,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
 )
 
@@ -258,43 +257,6 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 	// ═══════════════════════════════════════════════════════════════
 	// NEW SUBSYSTEM ROUTES (v7/v9 gap implementations)
 	// ═══════════════════════════════════════════════════════════════
-
-	// --- Governed Memory (LKS/CKS) ---
-	mux.HandleFunc("/api/v1/memory/list", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		tier := memory.MemoryTier(r.URL.Query().Get("tier"))
-		if tier == "" {
-			tier = memory.TierLKS
-		}
-		ns := r.URL.Query().Get("namespace")
-		entries, err := svc.GovMemory.List(tier, ns)
-		if err != nil {
-			api.WriteInternalR(w, r, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"tier": tier, "entries": entries, "count": len(entries)})
-	}))
-
-	mux.HandleFunc("/api/v1/memory/promote", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		// Bound the body: this handler mutates governed memory.
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-		var req memory.PromotionRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid body")
-			return
-		}
-		result, err := memory.Promote(svc.GovMemory, req)
-		if err != nil {
-			api.WriteError(w, http.StatusConflict, "Promotion Failed", err.Error())
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(result)
-	}))
 
 	// --- Context Bundles ---
 	mux.HandleFunc("/api/v1/context/bundles", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {

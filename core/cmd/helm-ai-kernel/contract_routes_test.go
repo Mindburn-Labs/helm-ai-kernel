@@ -324,7 +324,9 @@ func TestArtifactReceiptRefsRequireCanonicalTenantOwnership(t *testing.T) {
 		return rec
 	}
 
-	if rec := postScope("tenant-b", "scope-forged-by-tenant-b"); rec.Code != http.StatusBadRequest {
+	// The registry has no tenant dimension, so another tenant is refused before
+	// its receipt references are even checked (HELM-755 S-05).
+	if rec := postScope("tenant-b", "scope-forged-by-tenant-b"); rec.Code != http.StatusForbidden {
 		t.Fatalf("cross-tenant artifact reference status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if _, ok := registry.GetVerificationScope("scope-forged-by-tenant-b"); ok {

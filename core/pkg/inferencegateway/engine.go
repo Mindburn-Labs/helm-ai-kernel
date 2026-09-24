@@ -3,6 +3,9 @@ package inferencegateway
 import (
 	"errors"
 	"fmt"
+	"math"
+	"math/bits"
+	"strconv"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
@@ -28,6 +31,11 @@ const (
 	CostCapClamp CostCapPolicy = "CAP"
 	// CostCapEscalate refuses to settle and surfaces an ESCALATE outcome.
 	CostCapEscalate CostCapPolicy = "ESCALATE"
+	// CostCapDebitActual debits the actual cost even above the ceiling and
+	// reports the difference as SettleResult.OverageCents, which the caller
+	// must record and alert on. Use it when the provider has already been
+	// paid: clamping would under-debit and escalating would debit nothing.
+	CostCapDebitActual CostCapPolicy = "DEBIT_ACTUAL"
 )
 
 // Clock is injectable for deterministic expiry tests.
@@ -65,6 +73,11 @@ type RouteRequest struct {
 	// EstimatedInputTokens / EstimatedOutputTokens drive the pre-dispatch quote.
 	EstimatedInputTokens  int64
 	EstimatedOutputTokens int64
+	// ClampOutputToMandate marks EstimatedOutputTokens as the caller's
+	// enforced output ceiling (max_tokens). Quote lowers it to what the
+	// envelope's per-request limit, remaining budget and route cap can pay
+	// for, and the caller must forward quote.OutputTokens to the provider.
+	ClampOutputToMandate bool
 }
 
 // QuoteResult is the pre-dispatch outcome.
@@ -89,8 +102,11 @@ type SettleResult struct {
 	ActualAmountCents int64
 	BalanceDebitCents int64
 	BalanceAfterCents int64
-	Replayed          bool
-	EvidencePackRef   string
+	// OverageCents is the actual cost above the quote ceiling that
+	// CostCapDebitActual debited; callers must record and alert on it.
+	OverageCents    int64
+	Replayed        bool
+	EvidencePackRef string
 }
 
 // QuoteError carries a fail-closed verdict for callers that must translate it
@@ -215,7 +231,14 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonProviderContractNeeded, "price snapshot is not bound to the reviewed terms profile")
 	}
 
-	quotedCents, err := snapshot.QuoteCents(req.EstimatedInputTokens, req.EstimatedOutputTokens)
+	outputTokens := req.EstimatedOutputTokens
+	if req.ClampOutputToMandate {
+		limit, ok := affordableOutputTokens(snapshot, req.EstimatedInputTokens, mandateCeilingCents(env, route))
+		if ok && limit >= 1 && limit < outputTokens {
+			outputTokens = limit
+		}
+	}
+	quotedCents, err := snapshot.QuoteCents(req.EstimatedInputTokens, outputTokens)
 	if err != nil {
 		return nil, quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonInvalidAmount, err.Error())
 	}
@@ -240,7 +263,7 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 	quote.PrincipalID = req.PrincipalID
 	quote.RequestedModelID = req.RequestedModelID
 	quote.InputTokens = req.EstimatedInputTokens
-	quote.OutputTokens = req.EstimatedOutputTokens
+	quote.OutputTokens = outputTokens
 	quote.ModelSubstituted = substituted
 	if substituted || fallbackUsed {
 		quote.FallbackChain = fallbackChain
@@ -289,11 +312,24 @@ func (e *Engine) Quote(env *economic.AgentSpendEnvelope, req RouteRequest) (*Quo
 	return result, nil
 }
 
+// Lookup returns the committed settlement for a tenant's idempotency key so a
+// caller can answer a replay before it quotes, reserves or dispatches again.
+func (e *Engine) Lookup(tenantID, idempotencyKey string) (*SettleResult, bool) {
+	rec, ok := e.cfg.Ledger.Lookup(idempotencyFromIntent(spendIntentID(tenantID, idempotencyKey)))
+	if !ok {
+		return nil, false
+	}
+	return replayResult(rec), true
+}
+
 // Settle records actual provider usage after dispatch, enforces quote expiry
 // and the cost ceiling, posts the idempotent balanced debit, and returns the
 // usage + settlement receipts. A replay of the same idempotency key (carried by
 // the quote's spend intent) returns the committed receipts without debiting
 // again.
+//
+// Expiry bounds the time between quote and dispatch. A quote whose dispatch
+// reservation was placed in time settles however long the provider took.
 func (e *Engine) Settle(
 	quote *economic.RouteQuote,
 	providerRequestID string,
@@ -314,7 +350,7 @@ func (e *Engine) Settle(
 	}
 
 	now := e.cfg.Now()
-	if quote.Expired(now) {
+	if quote.Expired(now) && !e.cfg.Ledger.hasOpenReservation(quote.ID) {
 		return &SettleResult{ReasonCode: economic.SpendReasonRouteQuoteExpired},
 			quoteErr(economic.BudgetVerdictDeny, economic.SpendReasonRouteQuoteExpired, "route quote expired before settlement")
 	}
@@ -325,12 +361,23 @@ func (e *Engine) Settle(
 		return nil, errors.New("inferencegateway: provider cost cannot be negative")
 	}
 
-	platformFee := (providerCostCents * e.cfg.PlatformFeeBps) / 10_000
+	feeBasis, ok := mulNonNegative(providerCostCents, e.cfg.PlatformFeeBps)
+	if !ok {
+		return nil, errors.New("inferencegateway: platform fee overflow")
+	}
+	platformFee := feeBasis / 10_000
+	if platformFee > math.MaxInt64-providerCostCents {
+		return nil, errors.New("inferencegateway: actual cost overflow")
+	}
 	actual := providerCostCents + platformFee
 
 	capped := false
-	// Enforce the quote ceiling: cap the debit or escalate per policy.
-	if actual > quote.MaxAmountCents {
+	var overage int64
+	// Enforce the quote ceiling: debit the overage, cap the debit or escalate
+	// per policy.
+	if actual > quote.MaxAmountCents && e.cfg.CostCap == CostCapDebitActual {
+		overage = actual - quote.MaxAmountCents
+	} else if actual > quote.MaxAmountCents {
 		if e.cfg.CostCap == CostCapEscalate {
 			return &SettleResult{
 					Escalated:         true,
@@ -344,7 +391,11 @@ func (e *Engine) Settle(
 		// arithmetic (actual == provider + fee) stays exact at the ceiling.
 		capped = true
 		actual = quote.MaxAmountCents
-		platformFee = (actual * e.cfg.PlatformFeeBps) / (10_000 + e.cfg.PlatformFeeBps)
+		ceilingFeeBasis, ok := mulNonNegative(actual, e.cfg.PlatformFeeBps)
+		if !ok {
+			return nil, errors.New("inferencegateway: platform fee overflow")
+		}
+		platformFee = ceilingFeeBasis / (10_000 + e.cfg.PlatformFeeBps)
 		providerCostCents = actual - platformFee
 	}
 
@@ -358,6 +409,12 @@ func (e *Engine) Settle(
 	usage.ProviderPriceSnapshotHash = quote.ProviderPriceSnapshotHash
 	usage.InputTokens = actualInputTokens
 	usage.OutputTokens = actualOutputTokens
+	if overage > 0 {
+		usage.Metadata = map[string]string{
+			"overage_cents":       strconv.FormatInt(overage, 10),
+			"quote_ceiling_cents": strconv.FormatInt(quote.MaxAmountCents, 10),
+		}
+	}
 
 	settlement := e.buildSettlement(quote, usage)
 	usage.LedgerEntryIDs = settlementEntryIDs(settlement)
@@ -366,14 +423,15 @@ func (e *Engine) Settle(
 	settlement.SourceUsageReceiptHash = usage.ContentHash
 	settlement.Reseal()
 
-	// Drop any dispatch reservation for this quote so its hold is not
-	// double-counted against the actual debit that follows. No-op when the
-	// caller did not pre-reserve.
-	e.cfg.Ledger.consumeReservationForDebit(quote.ID)
-
-	rec, err := e.cfg.Ledger.commit(idem, usage, settlement)
+	// The commit consumes any dispatch reservation for this quote, so its hold
+	// is not double-counted against the debit. On failure the hold stays.
+	rec, err := e.cfg.Ledger.commit(idem, usage, settlement, quote.ID)
 	if err != nil {
-		return nil, err
+		return &SettleResult{
+			QuotedAmountCents: quote.QuotedAmountCents,
+			ActualAmountCents: actual,
+			OverageCents:      overage,
+		}, err
 	}
 
 	return &SettleResult{
@@ -385,6 +443,7 @@ func (e *Engine) Settle(
 		ActualAmountCents: rec.UsageReceipt.ActualAmountCents,
 		BalanceDebitCents: rec.BalanceDebitCents,
 		BalanceAfterCents: rec.BalanceAfterCents,
+		OverageCents:      overage,
 		EvidencePackRef:   rec.UsageReceipt.EvidencePackRef,
 	}, nil
 }
@@ -491,4 +550,55 @@ func (e *Engine) quoteEvidenceRef(quote *economic.RouteQuote) string {
 		}
 	}
 	return evidencePackRef(quote.TenantID, idempotencyFromIntent(quote.SpendIntentID), quote.ProviderPriceSnapshotHash)
+}
+
+// mandateCeilingCents is the most one request may cost under its spend
+// mandate: the smallest of the envelope's per-request limit, its remaining
+// budget and the route's own cap.
+func mandateCeilingCents(env *economic.AgentSpendEnvelope, route economic.ModelRoute) int64 {
+	ceiling := env.RemainingCents()
+	if env.PerRequestMaxCents > 0 && env.PerRequestMaxCents < ceiling {
+		ceiling = env.PerRequestMaxCents
+	}
+	if route.MaxAmountCents > 0 && route.MaxAmountCents < ceiling {
+		ceiling = route.MaxAmountCents
+	}
+	return ceiling
+}
+
+// affordableOutputTokens returns the largest output-token count whose quote,
+// with the estimated input, stays within ceilingCents at the snapshot's prices.
+// It mirrors QuoteCents' rounding: ceil(micro/1e6)+request <= ceiling exactly
+// when micro <= (ceiling-request)*1e6. ok is false when the input alone
+// exhausts the ceiling.
+func affordableOutputTokens(s *economic.ProviderPriceSnapshot, inputTokens, ceilingCents int64) (int64, bool) {
+	if s.OutputTokenMicroCents <= 0 {
+		return math.MaxInt64, true
+	}
+	budgetCents := ceilingCents - s.RequestCents
+	if budgetCents <= 0 {
+		return 0, false
+	}
+	budget, ok := mulNonNegative(budgetCents, 1_000_000)
+	if !ok {
+		budget = math.MaxInt64 // a lower bound is still a safe ceiling
+	}
+	inputCost, ok := mulNonNegative(inputTokens, s.InputTokenMicroCents)
+	if !ok || inputCost >= budget {
+		return 0, false
+	}
+	return (budget - inputCost) / s.OutputTokenMicroCents, true
+}
+
+// mulNonNegative returns a*b for non-negative operands and reports false when
+// the product does not fit in an int64.
+func mulNonNegative(a, b int64) (int64, bool) {
+	if a < 0 || b < 0 {
+		return 0, false
+	}
+	hi, lo := bits.Mul64(uint64(a), uint64(b))
+	if hi != 0 || lo > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(lo), true
 }

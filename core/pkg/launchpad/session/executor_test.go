@@ -4,7 +4,10 @@ package session
 import (
 	"archive/tar"
 	"encoding/json"
+	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -612,4 +615,102 @@ func TestExecutorMultiCloudLaunchDryRun(t *testing.T) {
 	if deletedDaytona.State != StateDeleted {
 		t.Fatalf("expected deleted Daytona StateDeleted, got %s", deletedDaytona.State)
 	}
+}
+
+// HELM-740 (17-02): a teardown whose cloud cleanup fails must not report
+// DELETED or claim reconciliation, and the run must stay retryable.
+func TestDeleteLaunchCloudCleanupErrorEndsCleanupFailed(t *testing.T) {
+	t.Setenv("HCLOUD_TOKEN", "")
+	t.Setenv("HELM_LAUNCHPAD_HETZNER_TOKEN", "")
+	root := t.TempDir()
+	store := NewStore(root)
+	run := LaunchRun{
+		LaunchID:          "launch-hetzner-cleanup",
+		AppID:             "hermes",
+		SubstrateID:       "hetzner",
+		State:             StateRunning,
+		KernelVerdict:     "ALLOW",
+		PlanHash:          "sha256:plan",
+		LaunchReceiptRefs: []string{"launch-receipt"},
+		HealthcheckRefs:   []string{"healthcheck-receipt"},
+		SandboxGrantRefs:  []string{"sandbox-grant"},
+		RuntimeHandles: RuntimeHandles{
+			ContainerID:      "4242",
+			CloudResourceIDs: map[string]string{"provider": "hetzner", "server": "4242", "firewall": "77"},
+		},
+	}
+	if err := store.Save(run); err != nil {
+		t.Fatal(err)
+	}
+	executor := NewExecutor(store)
+
+	failed, err := executor.DeleteLaunch(run.LaunchID, true)
+	if !errors.Is(err, ErrCleanupFailed) || !strings.Contains(err.Error(), "HCLOUD_TOKEN missing") {
+		t.Fatalf("expected cleanup failure naming the missing token, got %v", err)
+	}
+	if failed.State != StateCleanupFailed || len(failed.TeardownReceiptRefs) != 0 || !strings.Contains(failed.Reason, "HCLOUD_TOKEN missing") {
+		t.Fatalf("failed cleanup recorded as %s refs=%v reason=%q", failed.State, failed.TeardownReceiptRefs, failed.Reason)
+	}
+	if stored, err := store.Get(run.LaunchID); err != nil || stored.State != StateCleanupFailed {
+		t.Fatalf("stored run after failed cleanup: state=%s err=%v", stored.State, err)
+	}
+	if proofs := evidenceFiles(t, root, "teardown_proof.json"); len(proofs) != 0 {
+		t.Fatalf("teardown proof written for a failed cleanup: %v", proofs)
+	}
+
+	var calls []string
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(provider.Close)
+	t.Setenv("HCLOUD_TOKEN", "test-token")
+	t.Setenv("HELM_LAUNCHPAD_HETZNER_ENDPOINT", provider.URL)
+
+	deleted, err := executor.DeleteLaunch(run.LaunchID, true)
+	if err != nil {
+		t.Fatalf("retry after failed cleanup: %v", err)
+	}
+	if deleted.State != StateDeleted || len(deleted.TeardownReceiptRefs) != 1 {
+		t.Fatalf("retry recorded as %s refs=%v", deleted.State, deleted.TeardownReceiptRefs)
+	}
+	if strings.Join(calls, ",") != "DELETE /servers/4242,DELETE /firewalls/77" {
+		t.Fatalf("unexpected provider calls: %v", calls)
+	}
+	proofs := evidenceFiles(t, root, "teardown_proof.json")
+	if len(proofs) != 1 {
+		t.Fatalf("expected one teardown proof, got %v", proofs)
+	}
+	var proof map[string]any
+	data, err := os.ReadFile(proofs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &proof); err != nil {
+		t.Fatal(err)
+	}
+	if proof["cloud_reconciled"] != true {
+		t.Fatalf("teardown proof does not record the cloud delete: %s", data)
+	}
+	if _, ok := proof["mcp_approvals_revoked"]; ok {
+		t.Fatalf("teardown proof claims an MCP approval revocation nothing performs: %s", data)
+	}
+}
+
+func evidenceFiles(t *testing.T, root, name string) []string {
+	t.Helper()
+	var found []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && filepath.Base(path) == name {
+			found = append(found, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
 }

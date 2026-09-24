@@ -15,8 +15,9 @@ surface for the `helm-ai-kernel` project.
 
 ## Local Commands
 
+- `make check` is exactly what the required `ci / gate` check runs.
 - `make docs-coverage` from the repository root verifies coverage for this surface.
-- `make quality-pr` mirrors the CI summary gate for pull requests.
+- `make quality-pr` is a fast, path-scoped local pre-check.
 - `make quality-nightly` mirrors the scheduled advisory assurance workflow.
 - `make quality-release` mirrors release validation before tag publication.
 - `make openapi-breaking` / `make proto-breaking` run the contract
@@ -38,8 +39,22 @@ surface for the `helm-ai-kernel` project.
   and runtime roles. The
   workflow is source-owned CI evidence; it does not by itself establish branch
   protection or GA release authority.
-- `ci.yml` runs the retained per-surface jobs and the Make-first
-  `quality-pr` summary job.
+- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml@v2`. Its `gate`
+  job, reported as `ci / gate`, is the only required status check. It runs
+  `make check` (the `merge` profile of `scripts/ci/quality-gates.json`, every
+  gate blocking) after `scripts/ci/install_check_tools.sh` installs pinned
+  protoc, buf, oasdiff, kind, ripgrep and the Python gate dependencies, plus a
+  diff-aware dependency scan that fails only on HIGH or CRITICAL advisories a
+  change introduces. It runs on every pull request, merge group and push to
+  `main`, with no path filters.
+- `codeql.yml` is the single CodeQL code-scanning run (Go, JavaScript and
+  TypeScript, Python, Java and Kotlin). It is not required.
+- `helm-integration.yml` runs the minikube Launchpad smoke when the chart or
+  smoke driver changes. The positive lane spends OpenRouter tokens, so on a
+  pull request it runs only with the `launchpad-live-test` label and is
+  skipped otherwise; it never reports success without running. Not required.
+- `lean.yml` and `tla.yml` check the Lean proof and TLA+ specs; `tee-collateral.yml`
+  re-verifies the offline TEE collateral weekly. None is required.
 - `claude-managed-agents-live-evidence.yml` runs the protected Daytona live
   evidence fixture for Claude Managed Agents self-hosted verification, writes a
   signed evidence pack, verifies it offline, and uploads the redacted artifacts.
@@ -68,11 +83,9 @@ surface for the `helm-ai-kernel` project.
   SLSA provenance is generated only by this tag run; there is no manual
   workflow that re-attests assets already attached to a release.
 - `scorecard.yml` carries only the trusted `main` and scheduled runs that
-  publish Scorecard SARIF through OIDC and code-scanning authority;
-  `scorecard-pr.yml` keeps pull-request analysis read-only and retains SARIF
-  as artifact evidence. The OpenSSF results webapp rejects a publishing
-  workflow that defines any other job, so the lanes live in separate files
-  with unchanged job names.
+  publish Scorecard SARIF through OIDC and code-scanning authority. The
+  OpenSSF results webapp rejects a publishing workflow that defines any other
+  job. There is no pull-request Scorecard lane.
 - `version-drift.yml` runs the published registry drift check daily and opens or
   updates one issue when any public channel falls behind `VERSION`. A channel
   that could not be read after the bounded rate-limit retries is reported as

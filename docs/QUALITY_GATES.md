@@ -12,6 +12,7 @@ canonical local interface; `scripts/ci/quality.py` executes the gate registry in
 ## Quick Start
 
 ```bash
+make check            # what CI runs: the merge profile, every gate blocking
 make quality-pr
 make quality-merge
 make quality-release
@@ -75,12 +76,12 @@ them into the `pr` profile once the constitution has settled.
 | Profile | Command | Purpose |
 | --- | --- | --- |
 | PR | `make quality-pr` | Fast documentation, hygiene, Go, TCB, boundary, fixture, and impacted SDK/UI checks. |
-| Merge | `make quality-merge` | Full retained-surface gate with race tests, SDKs, contracts, deployment smoke, and release smoke. |
+| Merge | `make quality-merge` | Full retained-surface gate with race tests, coverage floor, every Go module, SDKs and SDK drift, contracts, docs parity, deployment, kind and release smoke. `make check` runs it with `--strict`, and CI's required `ci / gate` runs `make check`. |
 | Release | `make quality-release` | Release-readiness gate plus prior-release OpenAPI and Proto compatibility checks, reproducible binaries, SBOM, VEX, Cosign bundle verification when available, and release smoke. |
 | Nightly | `make quality-nightly` | Advisory mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, and benchmark checks. |
 
-`make quality-pr` runs path-scoped package gates only when changed files impact
-that surface. Override detection with `QUALITY_CHANGED_FILES`, using newline or
+`make quality-pr` is a fast local pre-check; CI does not use it. It runs
+path-scoped package gates only when changed files impact that surface. Override detection with `QUALITY_CHANGED_FILES`, using newline or
 comma-separated paths.
 
 ## Blocking and Advisory Gates

@@ -34,40 +34,55 @@
       ]
     },
     "merge": {
-      "description": "Full merge gate for retained OSS surfaces.",
+      "description": "Full merge gate: `make check` runs it with every gate blocking, and `ci / gate` runs `make check`.",
       "gates": [
         "quality-self-test",
         "docs-truth",
+        "docs-openapi-parity",
         "version-drift",
         "console-sidecar-pin",
         "release-workflow-contract",
+        "scorecard-workflow-contract",
+        "ai-os-image-release-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
+        "unfinished-markers",
         "go-lint",
+        "proofgraph-signature-writes",
+        "reason-code-reachability",
         "build",
         "go-test",
         "command-tests",
+        "go-module-tests",
+        "launchpad-promotion",
         "verify-fixtures",
+        "tee-collateral",
+        "release-no-mock-tee",
         "tcb-imports",
         "boundary-manifest",
+        "boundary-regression",
         "quantum-crypto-inventory",
         "docker-smoke-hardening",
         "helm-smoke-hardening",
         "tla-tools-hardening",
         "crucible",
+        "benchmark-report",
         "go-race",
-        "go-sdk",
         "python-sdk",
         "ts-sdk",
         "rust-sdk",
         "java-sdk",
+        "sdk-manifest-tests",
+        "sdk-drift",
         "json-schemas",
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
         "contract-breaking-self-test",
         "proto-breaking",
+        "openapi-breaking",
         "deployment-smoke",
+        "kind-smoke",
         "release-smoke"
       ]
     },
@@ -837,6 +852,141 @@
         "scripts/ci/check_dead_packages.py",
         "scripts/ci/dead-packages.sh",
         "scripts/ci/dead-packages-allowlist.txt"
+      ]
+    },
+    {
+      "id": "ai-os-image-release-contract",
+      "title": "AI OS image release contract",
+      "command": "bash scripts/release/test_ai_os_image_release_contract.sh",
+      "timeout_seconds": 600,
+      "paths": [
+        "scripts/release/**",
+        ".github/workflows/release-ai-os-image.yml",
+        ".github/workflows/dev-image.yml",
+        "Dockerfile*"
+      ]
+    },
+    {
+      "id": "unfinished-markers",
+      "title": "Unfinished markers in .github and sdk",
+      "command": "bash scripts/ci/check_unfinished_markers.sh",
+      "timeout_seconds": 120,
+      "paths": [
+        "**"
+      ]
+    },
+    {
+      "id": "proofgraph-signature-writes",
+      "title": "ProofGraph signature write guard",
+      "command": "bash scripts/ci/check_proofgraph_signature_writes.sh",
+      "timeout_seconds": 120,
+      "paths": [
+        "core/**/*.go"
+      ]
+    },
+    {
+      "id": "reason-code-reachability",
+      "title": "Reason-code reachability",
+      "command": "python3 scripts/ci/check_reason_code_reachability.py",
+      "timeout_seconds": 300,
+      "paths": [
+        "core/**",
+        "scripts/ci/check_reason_code_reachability.py"
+      ]
+    },
+    {
+      "id": "go-module-tests",
+      "title": "Every Go module tested without the workspace",
+      "command": "bash scripts/ci/go_module_tests.sh",
+      "timeout_seconds": 2400,
+      "paths": [
+        "**/*.go",
+        "**/go.mod",
+        "**/go.sum"
+      ]
+    },
+    {
+      "id": "launchpad-promotion",
+      "title": "Launchpad promotion drift",
+      "command": "make launchpad-promotion-check",
+      "timeout_seconds": 600,
+      "paths": [
+        "core/**",
+        "registry/launchpad/**"
+      ]
+    },
+    {
+      "id": "tee-collateral",
+      "title": "TEE collateral fixtures",
+      "command": "make tee-collateral-verify",
+      "timeout_seconds": 600,
+      "paths": [
+        "core/pkg/crypto/tee/**",
+        "core/cmd/tee-collateral/**"
+      ]
+    },
+    {
+      "id": "release-no-mock-tee",
+      "title": "Release TEE mock attestation guard",
+      "command": "bash scripts/ci/check_release_no_mock_tee.sh",
+      "timeout_seconds": 120,
+      "paths": [
+        ".github/workflows/**",
+        "scripts/release/**"
+      ]
+    },
+    {
+      "id": "boundary-regression",
+      "title": "Boundary gate regression suite",
+      "command": "make test-boundary",
+      "timeout_seconds": 1200,
+      "paths": [
+        "core/**",
+        "tools/boundary/**"
+      ]
+    },
+    {
+      "id": "sdk-manifest-tests",
+      "title": "SDK manifest unit tests",
+      "command": "make test-sdk-manifest",
+      "timeout_seconds": 300,
+      "paths": [
+        "scripts/sdk/**"
+      ]
+    },
+    {
+      "id": "sdk-drift",
+      "title": "SDK regenerate-and-diff",
+      "command": "make sdk-gen-check",
+      "timeout_seconds": 1200,
+      "paths": [
+        "sdk/**",
+        "scripts/sdk/**",
+        "api/openapi/**",
+        "protocols/**"
+      ]
+    },
+    {
+      "id": "kind-smoke",
+      "title": "kind install smoke",
+      "command": "make kind-smoke",
+      "timeout_seconds": 2400,
+      "paths": [
+        "Dockerfile*",
+        "deploy/**",
+        "core/**",
+        "scripts/ci/kind_smoke.sh"
+      ]
+    },
+    {
+      "id": "docs-openapi-parity",
+      "title": "Public docs and OpenAPI parity",
+      "command": "make docs-openapi-parity",
+      "timeout_seconds": 600,
+      "paths": [
+        "docs/**",
+        "api/openapi/**",
+        "core/cmd/helm-ai-kernel/**"
       ]
     }
   ]

@@ -30,7 +30,7 @@ func NewHandler(store *Store) *Handler {
 
 // RegisterRoutes registers credential API routes on the given mux.
 // All credential routes require authentication (H-1: no more spoofable X-Operator-ID).
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+func (h *Handler) RegisterRoutes(mux interface{ Handle(string, http.Handler) }) {
 	adminAuth := auth.AdminAPIKeyMiddleware()
 	wrap := func(handler http.HandlerFunc) http.Handler {
 		return adminAuth(handler)

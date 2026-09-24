@@ -26,10 +26,12 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
-// HELM-742: routes whose answer claimed a verification that no check
-// produced must answer 501 instead (findings 01-01, 01-06, 02-04, 04-07,
-// 05-01, 23-03).
-func TestRetiredVerificationRoutesReturnNotImplemented(t *testing.T) {
+// HELM-742 retired these routes to 501 because each reported a verification
+// that no check produced (findings 01-01, 01-06, 02-04, 04-07, 05-01, 23-03).
+// HELM-756 removes them: none is routed any more, so no caller can reach a
+// fabricated PASS, a hash-recompute "verified", or a trust-key mutation that no
+// verifier reads.
+func TestRetiredVerificationRoutesAreNotRouted(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
@@ -62,8 +64,8 @@ func TestRetiredVerificationRoutesReturnNotImplemented(t *testing.T) {
 			authorizeTestRequest(req)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
-			if rec.Code != http.StatusNotImplemented {
-				t.Fatalf("status = %d, want 501; body=%s", rec.Code, rec.Body.String())
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404 (not routed); body=%s", rec.Code, rec.Body.String())
 			}
 			body := rec.Body.String()
 			for _, claim := range []string{`"PASS"`, `"verified":true`, "key_revoked", "key_added"} {
@@ -75,23 +77,6 @@ func TestRetiredVerificationRoutesReturnNotImplemented(t *testing.T) {
 	}
 	if reports := surfaces.ListReports(); len(reports) != 0 {
 		t.Fatalf("retired conformance routes persisted reports: %v", reports)
-	}
-}
-
-// HELM-742: the retired routes still require an admin credential, so the 501
-// never answers an unauthenticated caller.
-func TestRetiredVerificationRoutesStillRequireAdmin(t *testing.T) {
-	svc, cleanup := newContractRouteTestServices(t)
-	defer cleanup()
-	mux := http.NewServeMux()
-	RegisterSubsystemRoutes(mux, svc)
-	for _, path := range []string{"/api/v1/conformance/run", "/api/v1/trust/keys/revoke"} {
-		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, req)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("%s without credentials status = %d, want 401", path, rec.Code)
-		}
 	}
 }
 

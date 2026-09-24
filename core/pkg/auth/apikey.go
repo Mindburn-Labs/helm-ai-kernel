@@ -63,12 +63,6 @@ func AdminAPIKeyMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
-// RequireAdminAuth wraps an http.HandlerFunc with API key authentication.
-// Convenience helper for wrapping individual handler functions.
-func RequireAdminAuth(handler http.HandlerFunc) http.Handler {
-	return AdminAPIKeyMiddleware()(http.HandlerFunc(handler))
-}
-
 // BearerToken extracts a case-sensitive Bearer token from an Authorization header.
 func BearerToken(r *http.Request) (string, string, bool) {
 	authHeader := r.Header.Get("Authorization")

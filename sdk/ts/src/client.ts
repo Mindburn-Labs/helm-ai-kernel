@@ -8,8 +8,6 @@ import type {
   Receipt,
   Session,
   VerificationResult,
-  ConformanceRequest,
-  ConformanceResult,
   VersionInfo,
   HelmError,
   ReasonCode,
@@ -451,18 +449,6 @@ export class HelmClient {
   }
 
   // ── Conformance ──────────────────────────────────
-  async conformanceRun(req: ConformanceRequest): Promise<ConformanceResult> {
-    return this.request<ConformanceResult>('POST', '/api/v1/conformance/run', req);
-  }
-
-  async getConformanceReport(reportId: string): Promise<ConformanceResult> {
-    return this.request<ConformanceResult>('GET', `/api/v1/conformance/reports/${reportId}`);
-  }
-
-  async listConformanceReports(): Promise<ConformanceResult[]> {
-    return this.request<ConformanceResult[]>('GET', '/api/v1/conformance/reports');
-  }
-
   async listConformanceVectors(): Promise<NegativeBoundaryVector[]> {
     return this.request<NegativeBoundaryVector[]>('GET', '/api/v1/conformance/vectors');
   }

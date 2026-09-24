@@ -16,8 +16,6 @@ from .types_gen import (
     ApprovalRequest,
     ChatCompletionRequest,
     ChatCompletionResponse,
-    ConformanceRequest,
-    ConformanceResult,
     DecisionRequest,
     EvaluateRequest,
     EvaluateResponse,
@@ -448,25 +446,6 @@ class HelmClient:
         return resp.json()
 
     # ── Conformance ─────────────────────────────────
-    def conformance_run(self, req: ConformanceRequest) -> ConformanceResult:
-        resp = self._client.post("/api/v1/conformance/run", json=_json_body(req))
-        self._check(resp)
-        result = ConformanceResult.from_dict(resp.json())
-        assert result is not None
-        return result
-
-    def get_conformance_report(self, report_id: str) -> ConformanceResult:
-        resp = self._client.get(f"/api/v1/conformance/reports/{_path_segment(report_id, 'report_id')}")
-        self._check(resp)
-        result = ConformanceResult.from_dict(resp.json())
-        assert result is not None
-        return result
-
-    def list_conformance_reports(self) -> list[dict[str, Any]]:
-        resp = self._client.get("/api/v1/conformance/reports")
-        self._check(resp)
-        return resp.json()
-
     def list_conformance_vectors(self) -> list[dict[str, Any]]:
         resp = self._client.get("/api/v1/conformance/vectors")
         self._check(resp)

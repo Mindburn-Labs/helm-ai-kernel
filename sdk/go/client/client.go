@@ -288,20 +288,6 @@ func (c *HelmClient) GetReceipt(receiptHash string) (*Receipt, error) {
 	return &out, err
 }
 
-// ConformanceRun calls POST /api/v1/conformance/run.
-func (c *HelmClient) ConformanceRun(req ConformanceRequest) (*ConformanceResult, error) {
-	var out ConformanceResult
-	err := c.do("POST", "/api/v1/conformance/run", req, &out)
-	return &out, err
-}
-
-// GetConformanceReport calls GET /api/v1/conformance/reports/{id}.
-func (c *HelmClient) GetConformanceReport(reportID string) (*ConformanceResult, error) {
-	var out ConformanceResult
-	err := c.do("GET", "/api/v1/conformance/reports/"+url.PathEscape(reportID), nil, &out)
-	return &out, err
-}
-
 // Health calls GET /healthz.
 func (c *HelmClient) Health() (map[string]string, error) {
 	var out map[string]string

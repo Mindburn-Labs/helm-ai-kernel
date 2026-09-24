@@ -38,17 +38,6 @@ async function main() {
     }
   }
 
-  // 3. Conformance
-  console.log('\n=== Conformance ===');
-  try {
-    const conf = await helm.conformanceRun({ level: 'L2' });
-    console.log('Verdict:', conf.verdict, 'Gates:', conf.gates, 'Failed:', conf.failed);
-  } catch (err) {
-    if (err instanceof HelmApiError) {
-      console.log('Conformance error:', err.reasonCode);
-    }
-  }
-
   // 4. Health
   console.log('\n=== Health ===');
   try {

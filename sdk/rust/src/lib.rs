@@ -747,55 +747,6 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/conformance/run
-    pub fn conformance_run(
-        &self,
-        req: &ConformanceRequest,
-    ) -> Result<ConformanceResult, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url("/api/v1/conformance/run"))
-            .json(req)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ERROR_INTERNAL.into(),
-                ..Default::default()
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ERROR_INTERNAL.into(),
-            ..Default::default()
-        })
-    }
-
-    /// GET /api/v1/conformance/reports/{id}
-    pub fn get_conformance_report(
-        &self,
-        report_id: &str,
-    ) -> Result<ConformanceResult, HelmApiError> {
-        let resp = self
-            .client
-            .get(self.url(&format!("/api/v1/conformance/reports/{}", report_id)))
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ERROR_INTERNAL.into(),
-                ..Default::default()
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ERROR_INTERNAL.into(),
-            ..Default::default()
-        })
-    }
-
     /// GET /api/v1/conformance/negative
     pub fn list_negative_conformance_vectors(
         &self,
@@ -817,10 +768,6 @@ impl HelmClient {
             reason_code: ERROR_INTERNAL.into(),
             ..Default::default()
         })
-    }
-
-    pub fn list_conformance_reports(&self) -> Result<serde_json::Value, HelmApiError> {
-        self.get_value("/api/v1/conformance/reports")
     }
 
     pub fn list_conformance_vectors(&self) -> Result<serde_json::Value, HelmApiError> {

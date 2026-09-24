@@ -1,6 +1,6 @@
 ---
 title: HELM Invariants
-last_reviewed: 2026-07-21
+last_reviewed: 2026-09-24
 ---
 
 # HELM Invariants
@@ -170,6 +170,17 @@ verify: `core/pkg/crypto/keyring.go` · tests `TestExt_MLDSASignatureRejectedByE
 
 ## Live-tree delivery
 
+RETIRED section, 2026-09-24 (HELM-756). INV-013 to INV-020 were held by
+`core/pkg/patchdelivery` and `core/pkg/worktree`. Neither package ever had a
+production caller, a CLI command, a route, or a receipt, and both are deleted.
+Under the target architecture (rev 3.4, §7.1–7.2) agents work inside a bought
+sandbox, and a change reaches a repository only as an effect admitted through
+the gateway. No kernel code writes to a user's live working tree, so the
+behaviour these invariants governed is out of scope here. The authorization
+half of the rules continues under the successors each entry names. The
+decision and its evidence are recorded in
+[the wave-1 retirement inventory](docs/retirement/wave-1-inventory.md).
+
 ### INV-013 — Apply policy is decided in exactly one place
 
 `Eligibility` is the only function that answers "may this patch touch a live
@@ -178,7 +189,12 @@ and acts on the Decision it returns. A caller that re-implements "looks approved
 to me" creates a second policy with no receipt, and the first time the two
 disagree is a mutation nobody authorized.
 
-verify: `core/pkg/patchdelivery/gate.go` · tests `TestEligibilityTriStateMatrix`, `TestEligibilityStructuralRefusals`, `TestEligibilityRequiresALifecycle`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. The single decision point for repository writes is
+now admission: a write is an effect, and INV-008 binds its permit to one
+connector, one action and one scope.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-014 — An override may clear an unknown, never a proven-false
 
@@ -187,7 +203,11 @@ accept that risk. PROVEN-undeliverable is checked before any override is even
 evaluated, because it is a fact about the patch rather than a policy judgment,
 and no authority makes a conflicting patch apply.
 
-verify: `core/pkg/patchdelivery/verifier.go` · tests `TestEligibilityTriStateMatrix`, `TestFinalVerifyTriState`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. Unknown-is-blocking survives as INV-005, which
+answers DENY whenever a decision cannot be made.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-015 — An override binds to the exact patch bytes it accepted
 
@@ -196,7 +216,11 @@ byte and the override no longer authorizes it, because it no longer describes
 it. This is INV-008 in miniature: the reviewed thing and the applied thing must
 be provably identical.
 
-verify: `core/pkg/patchdelivery/gate.go` · test `TestOverrideBindingRejectsAMutatedPatch`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. Content binding survives as INV-008, of which this
+rule was a miniature.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-016 — Override authority has scope only on a run awaiting a decision
 
@@ -205,7 +229,12 @@ reviewed there is no risk decision to accept, so the override is refused and the
 run needs a reviewer. A run that merely hit a broken verifier cannot be waved
 through on authority that was never meant for it.
 
-verify: `core/pkg/patchdelivery/gate.go` · tests `TestOverrideScopeRefusedWhenRunIsNotNeedsDecision`, `TestOverrideRejectsUnknownAction`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. Scoping authority to a decision that was actually
+asked survives as INV-010, which bounds a permit by the verdict that authorized
+it.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-017 — Every live-tree mutation path is registered with a complete fence
 
@@ -215,7 +244,11 @@ unregistered path — or one registered with an empty fence — fails the build.
 point is to make "which code can write to a live tree" an answerable question
 instead of an archaeology exercise.
 
-verify: `core/pkg/patchdelivery/mutation.go` · tests `TestMutationPathsAreRegistered`, `TestRegisterAndPathsAreOrdered`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. The requirement to name every governed path survives
+as INV-024: HELM governs only the calls routed through it, and says so.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-018 — A refused apply leaves the live tree byte-identical
 
@@ -224,7 +257,12 @@ writing. A tree that moved underneath the patch is a refusal, not a merge. When
 a partial write cannot be withdrawn the result says so plainly rather than
 reporting a clean tree the operator does not have.
 
-verify: `core/pkg/patchdelivery/mutation.go` · tests `TestApplyProtectedRefusedForwardApplyLeavesTreeClean`, `TestApplyProtectedRefusesConcurrentEditWithoutDestroyingIt`, `TestApplyProtectedAppliesAllOrNothing`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. With no kernel write path to a live tree there is
+nothing to leave byte-identical. A refused effect is not dispatched at all
+(INV-009).
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-019 — Verification never mutates the live tree, and silence is not a pass
 
@@ -232,7 +270,12 @@ The pre-apply verify runs against an isolated copy and leaves the operator's
 tree untouched. "No gates were configured" is reported as its own state and
 never as "gates passed" — an unasked question has no answer.
 
-verify: `core/pkg/patchdelivery/verifier.go` · tests `TestFinalVerifyLeavesLiveTreeUntouched`, `TestNoGatesConfiguredIsNotReportedAsPassed`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. The rule that silence is not a pass survives as
+INV-025, which forbids a gate from degrading into a no-op that still reports
+success.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-020 — Diff capture is byte-faithful
 
@@ -240,11 +283,26 @@ Work product is captured raw. CRLF survives, binary survives, and the bytes that
 were reviewed are the bytes that get applied. A diff that cannot round-trip
 byte-for-byte is not evidence of anything.
 
-verify: `core/pkg/worktree/worktree.go` · tests `TestCaptureDiffPreservesCRLF`, `TestCaptureDiffPreservesBinary`, `TestApplyProtectedPreservesCRLFAndBinary`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. Byte-faithful binding of the reviewed thing to the
+executed thing survives as INV-008 and INV-001.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ---
 
 ## Agent process envelope
+
+INV-021 to INV-023 are RETIRED, 2026-09-24 (HELM-756). They were held by
+`core/pkg/harness`, which spawned vendor coding-agent CLIs as child processes.
+It never had a production caller and is deleted. In the target architecture
+(rev 3.4, §7.1–7.2) a runner inside the sandbox image speaks the episode
+protocol, and the sandbox holds no credentials at all. Two requirements outlive
+the package: no provider credential reaches an agent run, and each run ends in
+exactly one terminal event (`done` or `failed`). Both must acquire a tested
+owner in the episode runner and the control registry (architecture §14.4)
+before any release claims them. Until then nothing in this repository enforces
+them, and no document may say otherwise. INV-024 stays in force.
 
 ### INV-021 — The provider credential scrub is cross-provider
 
@@ -255,7 +313,13 @@ and the run gets billed to and attributed to a principal HELM never selected.
 The caller's own extra-env channel is scrubbed on the same rule, because a fence
 that holds everywhere except the convenient door is not a fence.
 
-verify: `core/pkg/harness/env.go` · tests `TestScrubProviderEnvRemovesEveryProviderCredential`, `TestComposeEnvFencesTheUnselectedProvider`, `TestComposeEnvScrubsExtraEnv`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. Credential custody moves to the sandbox and model
+gateway (§7.2, §8): the run receives no provider credential at all, which is
+stronger than scrubbing. INV-011 continues to bind each credential to one
+principal.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-022 — Exactly one terminal event per run, on every exit path
 
@@ -265,7 +329,12 @@ that emits none leaves a supervisor waiting on a process that is already gone.
 Killing a run reaps the whole process tree; dropped output is counted rather than
 silently discarded.
 
-verify: `core/pkg/harness/process.go` · tests `TestExactlyOneCompletedOnSpawnFailure`, `TestExactlyOneCompletedOnContextCancel`, `TestKillTreeReapsGrandchildren`, `TestDroppedLinesAreCountedNotDiscarded`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. The episode protocol (§7.1, contract 9) must carry
+this rule with a tested owner. Meanwhile INV-024 limits what may be claimed:
+HELM supervises no agent process, so no run-lifecycle guarantee may be claimed.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-023 — An unenforceable read-only claim is refused, not assumed
 
@@ -279,7 +348,12 @@ declaration instead: it does not advertise `AccessReadonly`, and its `Run`
 refuses the profile unconditionally. That is the stronger form of the same rule,
 because a constant comparison has no failure mode that admits the run.
 
-verify: `core/pkg/harness/claude.go` · tests `TestClaudeReadonlyProbeRefusesUnenforceableBuild`, `TestClaudeReadonlyProbeFailsClosedWhenHelpFails`, `TestScopedHomeIsOutsideTree`, `TestPrimeAgentRefusesReadonly`
+RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+having a production caller. Survives as INV-024: HELM may claim coverage only
+for the path it actually intercepts, and a read-only label nobody enforces is a
+claim about configuration.
+
+verify: `docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule
 
 ### INV-024 — An adapter governs only the calls actually routed through it
 

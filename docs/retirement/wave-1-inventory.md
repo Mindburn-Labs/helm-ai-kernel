@@ -1,0 +1,164 @@
+# Retirement wave 1: caller inventory (HELM-756)
+
+quantum_posture: inventory only; this document names packages and commands but
+exercises, changes, or asserts no cryptographic behaviour.
+
+Status: slice 1 of HELM-756, 2026-09-24, on `main` at `a26ce1ca`.
+
+Architecture rev 3.4 §14.4 lists retirement *candidates*. It is not a
+bulk-deletion instruction. Before a candidate is removed, this inventory
+records four things about it:
+- its callers;
+- its consumers outside this repository;
+- the historical verification it must keep supporting;
+- the invariants it holds.
+
+A candidate is removed only when all four are clear. Everything else waits for
+the slice that clears it.
+
+## Method
+
+- **Reverse imports inside the repository.** `GOWORK=off go list -e -json ./...`
+  runs in each of the 13 Go modules. It separates non-test importers from
+  test-only importers and computes reachability from every `core/cmd/*` main.
+  The importer-less census is `scripts/ci/dead-packages.sh`.
+- **Dead functions.** `GOWORK=off deadcode ./...` runs in `core` over all ten
+  `core/cmd` mains. Of these, only `helm-ai-kernel` ships: it is the only
+  binary in `.goreleaser.yml`, `Dockerfile` and `Dockerfile.slim`.
+- **Workspace imports.** Every repository under the workspace root was searched
+  for Go imports of `github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/...`.
+  Kernel checkouts and the kernel source mirror inside `app-helm-docs`
+  worktrees were excluded.
+  - 19 kernel packages are imported, by `svc-helm-control-plane`,
+    `svc-helm-data-plane`, `svc-agent-sandbox-runner`, `helm-ai-enterprise` and
+    `integration-helm`.
+  - Their transitive closure reaches only one candidate, `compliance/jcs`. It
+    arrives through `evidence` and `boundary/approvalceremony`.
+- **Workspace text references.** A second search looked for each candidate's
+  path in files of every type across the workspace, which catches non-Go
+  consumers such as string contracts, pins and documents.
+- **Public surfaces.** The OpenAPI contract, the CLI, published SDK
+  coordinates, `app-helm-docs`, and this repository's `docs/`, `README.md`
+  and `CLAIMS.md`.
+- **Invariants.** The `verify:` hints in `HELM_INVARIANTS.md`.
+
+The 19 packages imported from outside the kernel are listed here because they
+cannot be removed before the §14.6 port:
+- `agentruntime`, `canonicalize`, `contracts`, `crypto`, `effects`, `events`,
+  `evidence`, `networkproof`, `otel`, `packs/install`, `pdp`,
+  `policy/reconcile`, `privacy`, `skillpacks`, `tracing`;
+- `boundary/approvalceremony`, `boundary/extauthz`,
+  `boundary/generatedspecapproval`, `boundary/generatedspecapprovalceremony`.
+
+No §14.4 candidate is in that list.
+
+## Decisions
+
+| Candidate | Kernel callers (non-test / test-only) | Consumers outside the repo | Invariants | Decision | Slice |
+|---|---|---|---|---|---|
+| `core/pkg/zkgov`, `zkgov/proofmarket` (1,075 LOC) | None. `zkgov` is imported only by its own `proofmarket`. | None. `docs_for_team` has a capability inventory that describes it as "source-present". | — | **Remove now** | s1 |
+| `core/pkg/federation` (533) | None | None | — | **Remove now** | s1 |
+| `core/pkg/forge` (681) | None | None. The Control Plane and Enterprise import `helm-ai-enterprise/core/pkg/forge`, a separate package. | — | **Remove now** | s1 |
+| `core/pkg/harness` (2,518) | None | None. The `integration-helm` `pins.yaml` note describes the Prime Agent adapter as part of pinned commit `de136a36`: a historical description, not a caller. | INV-021, INV-022, INV-023 | **Remove now**; the invariants are retired below | s1 |
+| `core/pkg/worktree` (253) | Only `harness`, removed in the same slice | None | INV-020 | **Remove now** | s1 |
+| `core/pkg/patchdelivery` (988) | None | None | INV-013 to INV-019 | **Remove now** | s1 |
+| `core/pkg/connectors/ton/acton` (2,259) | None | Yes; see the notes below the table. | — | **Keep (blocked)**. Remove once the Control Plane TON connector is retired (§14.4, in the list of Control Plane code that is not ported) and the reason codes are deprecated. | s3 |
+| `core/pkg/identity/iatp` (537) | None / `tests/conformance/did` | None | — | Remove, together with its conformance test | s2 |
+| `core/pkg/proofgraph/consensus` (554), `proofgraph/crdt` (595) | None | None | — | Remove. Both are protected paths, so the manifest must be regenerated. Sequence after the open PRs that edit `protected.manifest`. | s2 |
+| `core/pkg/orgdna` (239), `core/pkg/genesis/ceremony` (318) | None | None. `docs/KERNEL_SCOPE.md` lists `genesis/ceremony` as Active, which is false. | — | Remove, and correct KERNEL_SCOPE | s2 |
+| `core/pkg/a2a/payments` (837) | None | None | — | Remove | s2 |
+| `core/pkg/certification/admission` (777) | None | None | — | Remove. The top-level `certify` CLI was already removed by #971 (HELM-742). | s2 |
+| `core/pkg/policy/wasm` (325) | None | None. It is named by `protocols/policy-schema/v1/canonicalization.md` and `docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md`. | **INV-005** | Re-home INV-005 to CEL `decide` (HELM-750) first, then remove | s2 |
+| `core/pkg/compliance/*` (24 packages, 13,010 LOC) and the `compliance/zkprovider/gdpr17` module | `governance` and `registry`, through `compliance/jcs` only | `compliance/jcs` reaches the Control Plane, Enterprise and Data Plane through `evidence` and `boundary/approvalceremony` | — | **Split**. Move `compliance/jcs` into `canonicalize` behind a compatible path, then remove the regulated packs (H12). | s4 |
+| `core/pkg/conform` (3 packages, 6,078 LOC), gates G0–G15 | `cmd/helm-ai-kernel`: `conform`, `verify`, `demo`, `demo finance`, receipt evaluation | Six HTTP 501 routes from #971. See the notes below the table. | — | **Split**. Keep the `verify`-path helpers (`ValidateEvidencePackStructure`, `VerifyReport`) under the verifier. Delete G0–G15 and `conform`. Remove the routes after a release has carried the deprecation. | s4 |
+| `core/pkg/launchkit` (893), `core/pkg/launchpad/*` (18 packages, 13,236 LOC) | `cmd/helm-ai-kernel` (`up`), `pkg/api` / `tests/launchpad` | None through Go imports. Launchpad retirement is HELM-762. | — | **Disable first** (§14.7: the egress proxy and HTTP launch teardown). Remove with HELM-762. | s4 |
+| `core/pkg/channels/*` (1,588), `core/cmd/channel_gateway` (277) | The `channel_gateway` main; `packs/antispoof` (protected) / `tests/conformance/channels`, `antispoof` | None. `channel_gateway` is not in the release or the images. | — | Remove together with the `antispoof` dependency. This regenerates the manifest. | s4 |
+| MCP rug-pull detector (`core/pkg/mcp/rugpull.go`) and pinned-schema checks | Rug-pull: no non-test caller. `core/pkg/mcp` itself stays. | `mcp-bundle.json` advertises `rug-pull-detection` | — | Remove the detector, the claim and the pinned-schema checks. The pinned-schema checks sit in `api`, which is protected. | s4 |
+| `tee` CLI (`tee_cmd.go`), `core/cmd/tee-collateral`, `.github/workflows/tee-collateral.yml` | `cmd/helm-ai-kernel` | None | — | **Disable first** (§14.7), then remove | s4 |
+| `core/pkg/riskscan` (1,780) | `cmd/helm-ai-kernel` (`scan`, `verify scan`) | None | — | Move to an optional tool or remove | s4 |
+| `core/pkg/shellscan` (3,380) | `cmd/helm-ai-kernel` (`hook`) | None | — | **Keep**, but only inside the observed-only hook (§7.4). The H8 repair is tracked separately. | — |
+| Java SDK (`sdk/java`), Rust SDK (`sdk/rust`) | Not applicable | See the notes below the table. | — | Remove in s5. **Publishing the deprecation is a human action.** | s5 |
+| TLA+ specifications (`proofs/*.tla`, 7 specs), `.github/workflows/tla.yml` | Not applicable | None | — | Review each spec. Keep only the specs tied to code. | s6 |
+| Verification-shaped commands not in §11.4, including `workstation certify` | `cmd/helm-ai-kernel` | Not yet mapped | — | Map them against §11.4 first | s6 |
+
+Notes on the rows marked "see the notes below the table":
+
+- **`core/pkg/connectors/ton/acton`.**
+  - In the Control Plane, `internal/connectors/ton/acton/contract.go:106` delegates execution to this package. The same file pins the hashes of `protocols/json-schemas/connectors/ton/*`.
+  - Its reason codes are published in `protocols/json-schemas/reason-codes`.
+  - Protected golden cases live in `core/pkg/conformance/golden/ton-acton`.
+  - It also appears in a policy template and in two documents.
+- **`core/pkg/conform`, the six HTTP 501 routes.** The routes are `POST /api/v1/conformance/run`, `GET /api/v1/conformance/reports{,/{id}}`, `POST /api/v1/gui/receipts/verify` and `POST /api/v1/trust/keys/{add,revoke}`. Console still generates clients for them and lists them in its operation index. No Console UI caller and no Control Plane caller was found.
+- **Java and Rust SDKs.**
+  - No workspace repository consumes either SDK.
+  - Publishing is configured for both, but whether they reached a registry was not checked:
+    - Java: coordinates `io.github.mindburnlabs:helm-sdk` 0.8.5, through `maven-publish.yml` and `jitpack.yml`;
+    - Rust: the `helm-sdk` 0.8.5 crate, through `crates-publish.yml`.
+  - `protocols/conformance/v1/compatibility-registry.json` (protected) lists both SDKs.
+
+This slice does not touch the routes the Control Plane calls today:
+- `/api/v1/evaluate`
+- `/internal/v1/organization-runtime/evaluate`
+- `/api/v1/receipts`
+- `/internal/v1/generated-spec-approvals/*`
+- `/internal/emergency-stop/fence`
+
+## Historical verification needs and fixtures
+
+- **Slice 1 packages.** None of them emitted a receipt, an EvidencePack, a
+  ProofGraph node, or a published format. The deleted design doc
+  `docs/architecture/agent-process-ownership.md` said so in its claim
+  boundaries. The algorithm id `helm-zkgov-v1` appears in no protocol, schema,
+  fixture or reference pack, so no persisted proof exists that would need a
+  verify-only reader. No fixture is kept.
+- **Later slices.**
+  - `acton`: its EvidencePack fixtures, golden cases and reason codes are decided together with the reason-code deprecation.
+  - Conformance reports: if any signed report was ever handed out, a verify-only `VerifyReport` reader stays.
+  - Receipt versions: they stay verify-only per §14.5.
+
+## Invariants
+
+Removing a package does not remove its requirement (§14.4). Each invariant held
+by a slice-1 package is retired only after its behaviour is shown to be out of
+scope for the kernel, or the requirement is assigned to the replacement path. The
+entries in `HELM_INVARIANTS.md` keep their ids and text, carry a `RETIRED`
+marker, and point at a successor.
+
+| Invariant | Held by | Why it is out of scope in the kernel | Successor / owner |
+|---|---|---|---|
+| INV-013 Apply policy decided in one place | `patchdelivery` | No kernel code writes to a live tree. A repository write is an effect admitted through the gateway (§7.1–7.2). | INV-008 (permit scope) |
+| INV-014 Override clears unknown, never proven-false | `patchdelivery` | Same reason as INV-013 | INV-005 (cannot decide → DENY) |
+| INV-015 Override binds exact patch bytes | `patchdelivery` | Same reason as INV-013 | INV-008 |
+| INV-016 Override scoped to a run awaiting decision | `patchdelivery` | Same reason as INV-013 | INV-010 |
+| INV-017 Every live-tree mutation path registered | `patchdelivery` | Same reason as INV-013 | INV-024 |
+| INV-018 Refused apply leaves tree byte-identical | `patchdelivery` | Same reason as INV-013 | INV-009 |
+| INV-019 Verify never mutates; silence is not a pass | `patchdelivery` | Same reason as INV-013 | INV-025 |
+| INV-020 Diff capture is byte-faithful | `worktree` | Same reason as INV-013 | INV-008, INV-001 |
+| INV-021 Cross-provider credential scrub | `harness` | The kernel spawns no agent process. The sandbox holds no credentials (§7.2, §8). | INV-011. The requirement moves to the episode runner and must acquire a tested owner in the control registry. |
+| INV-022 Exactly one terminal event per run | `harness` | Same reason as INV-021 | The episode protocol (§7.1, contract 9) owns the requirement. INV-024 bars any lifecycle claim until then. |
+| INV-023 Unenforceable read-only claim refused | `harness` | Same reason as INV-021 | INV-024 |
+
+INV-005 is held by `policy/wasm`, so slice 2 must re-home it before that
+package goes. INV-024 cites `core/pkg/runtimeadapters`, which is not a
+candidate.
+
+## Slice 1 evidence
+
+| Measure | Before | After |
+|---|---|---|
+| `core/pkg` packages with non-test Go files | 290 | 283 |
+| Importer-less packages (`dead-packages.sh`) | 135 | 129 |
+| Unreachable from every `core/cmd` main | 146 | 139 |
+| `deadcode ./...` unreachable functions, all `core/cmd` mains | 5,076 | 4,897 |
+| `deadcode ./cmd/helm-ai-kernel` (shipped) | not re-measured | 2,815 |
+
+The shipped count cannot change: no slice-1 package is in the shipped binary's
+import graph, so `deadcode` never loaded them for that main. The package-wide count drops by the 179 functions in
+the deleted packages.
+
+The slice deletes:
+- 54 files;
+- 6,048 non-test lines and 8,314 test lines of Go;
+- the design doc that described the three process-ownership packages.
+
+No protected path is touched, so the boundary manifest does not change.

@@ -650,7 +650,7 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             fake_cosign.chmod(0o755)
             env = os.environ.copy()
             env["PATH"] = f"{fake_bin}:{env['PATH']}"
-            env["KERNEL_RELEASE_TAG"] = "v9.9.9"
+            env["KERNEL_RELEASE_TAG"] = "v0.8.1"
             result = subprocess.run(
                 ["make", "verify-cosign", f"COSIGN_ARTIFACT_DIR={artifacts}"],
                 cwd=REPOSITORY_ROOT,
@@ -661,6 +661,19 @@ class ConsoleLocalSidecarTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("verified=3 failed=0", result.stdout)
+
+            # HELM-733 (25-11): the tag the release job passes is honored, so
+            # a manifest naming another Kernel tag fails closed.
+            env["KERNEL_RELEASE_TAG"] = "v9.9.9"
+            result = subprocess.run(
+                ["bash", str(REPOSITORY_ROOT / "scripts/release/verify_cosign.sh"), str(artifacts)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Console manifest names Kernel v0.8.1, but KERNEL_RELEASE_TAG is v9.9.9", result.stdout)
 
     def test_kernel_cosign_verifier_rejects_console_contract_without_manifest_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

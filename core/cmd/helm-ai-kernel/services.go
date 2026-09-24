@@ -506,7 +506,8 @@ func loadOrCreateSeedFile(path string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("create %s: %w", path, err)
 		}
-		if _, err := f.WriteString(encoded); err == nil {
+		_, err = f.WriteString(encoded)
+		if err == nil {
 			err = f.Sync()
 		}
 		if closeErr := f.Close(); err == nil {

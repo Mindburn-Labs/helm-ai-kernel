@@ -104,14 +104,13 @@ func TestReceiptStoreRecoversCausalStateAfterRestart(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	if err := store.Append(&proxyReceipt{
-		ReceiptID:    "r1",
-		Timestamp:    "2026-01-01T00:00:00Z",
-		Upstream:     "https://api.example.test",
-		InputHash:    "sha256:input1",
-		OutputHash:   "sha256:output1",
-		Status:       "APPROVED",
-		LamportClock: 1,
-	}); err != nil {
+		ReceiptID:  "r1",
+		Timestamp:  "2026-01-01T00:00:00Z",
+		Upstream:   "https://api.example.test",
+		InputHash:  "sha256:input1",
+		OutputHash: "sha256:output1",
+		Status:     "APPROVED",
+	}, nil); err != nil {
 		t.Fatalf("append first receipt: %v", err)
 	}
 	if err := store.Close(); err != nil {
@@ -126,14 +125,13 @@ func TestReceiptStoreRecoversCausalStateAfterRestart(t *testing.T) {
 		t.Fatalf("recovered lamport = %d, want 1", recovered.LastLamport())
 	}
 	if err := recovered.Append(&proxyReceipt{
-		ReceiptID:    "r2",
-		Timestamp:    "2026-01-01T00:00:01Z",
-		Upstream:     "https://api.example.test",
-		InputHash:    "sha256:input2",
-		OutputHash:   "sha256:output2",
-		Status:       "APPROVED",
-		LamportClock: recovered.LastLamport() + 1,
-	}); err != nil {
+		ReceiptID:  "r2",
+		Timestamp:  "2026-01-01T00:00:01Z",
+		Upstream:   "https://api.example.test",
+		InputHash:  "sha256:input2",
+		OutputHash: "sha256:output2",
+		Status:     "APPROVED",
+	}, nil); err != nil {
 		t.Fatalf("append second receipt: %v", err)
 	}
 	if err := recovered.Close(); err != nil {

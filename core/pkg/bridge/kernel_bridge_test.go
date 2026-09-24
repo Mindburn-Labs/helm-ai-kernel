@@ -11,6 +11,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/proofgraph"
 	"github.com/stretchr/testify/assert"
@@ -279,4 +280,41 @@ func TestGovern_DecisionHasToolName(t *testing.T) {
 	require.NotNil(t, result.Decision)
 	// Verify that the decision was made against the explicit tool policy.
 	assert.Equal(t, "ALLOW", result.Decision.Verdict)
+}
+
+// TestGovernBound_SuppliesTrustedTransportEvidence pins the wiring gap behind
+// audit finding 07-01: a Guardian with the identity-isolation gate (every
+// production Guardian has one) denies any request that carries no trusted
+// credential hash, so an unbound bridge can never reach a policy ALLOW.
+func TestGovernBound_SuppliesTrustedTransportEvidence(t *testing.T) {
+	signer, err := crypto.NewEd25519Signer("test-bridge")
+	require.NoError(t, err)
+	prgG := prg.NewGraph()
+	addAllowedToolRule(t, prgG, "get_weather")
+	store, err := artifacts.NewFileStore(t.TempDir())
+	require.NoError(t, err)
+	g := guardian.NewGuardian(signer, prgG, artifacts.NewRegistry(store, signer),
+		guardian.WithIsolationChecker(identity.NewIsolationChecker()))
+	kb := NewKernelBridge(g, prgG, proofgraph.NewGraph(), nil, "tenant-bound")
+	ctx := context.Background()
+
+	unbound, err := kb.Govern(ctx, "get_weather", "sha256:abc", nil)
+	require.NoError(t, err)
+	assert.False(t, unbound.Allowed, "no transport evidence must fail closed")
+	assert.Equal(t, string(contracts.ReasonIdentityIsolationViolation), unbound.ReasonCode)
+
+	bound, err := kb.GovernBound(ctx, "get_weather", "sha256:abc", nil, Binding{
+		CredentialHash: "cred-hash-1",
+		SessionID:      "session-1",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, bound.Decision)
+	assert.True(t, bound.Allowed, "bound call under an allowing policy must be allowed: %s", bound.Decision.Reason)
+	assert.Equal(t, "cred-hash-1", bound.Decision.InputContext[guardian.ContextCredentialHash])
+	assert.Equal(t, "session-1", bound.Decision.InputContext[guardian.ContextSessionID])
+
+	denied, err := kb.GovernBound(ctx, "credential_export", "sha256:bad", nil, Binding{CredentialHash: "cred-hash-1"})
+	require.NoError(t, err)
+	assert.False(t, denied.Allowed, "binding evidence must not bypass policy")
+	assert.Equal(t, string(contracts.ReasonNoPolicy), denied.ReasonCode)
 }

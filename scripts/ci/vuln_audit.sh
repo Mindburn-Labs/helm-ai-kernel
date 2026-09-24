@@ -32,7 +32,19 @@ run_step() {
     fi
 }
 
-run_step "Go govulncheck" bash -c "cd '$ROOT/core' && go run 'golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}' ./..."
+# Scan every Go module, not only core: the satellite modules (sdk/go, examples,
+# tests, tools, gdpr17) pin their own dependency versions. GOWORK=off scans each
+# module on its own go.mod; modules outside go.work cannot load in workspace mode.
+GO_MODULES="$(git -C "$ROOT" ls-files ':(glob)**/go.mod')"
+if [ -z "$GO_MODULES" ]; then
+    echo "::error::no go.mod files found under $ROOT"
+    mark_failure
+fi
+for gomod in $GO_MODULES; do
+    dir="$(dirname "$gomod")"
+    run_step "Go govulncheck $dir" \
+        bash -c "cd '$ROOT/$dir' && GOWORK=off go run 'golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}' ./..."
+done
 
 if command -v npm >/dev/null 2>&1; then
     for dir in "$ROOT/sdk/ts"; do

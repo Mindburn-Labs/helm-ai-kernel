@@ -19,7 +19,7 @@
     "quality_workflow": ".github/workflows/ci.yml",
     "code_scanning": ".github/workflows/codeql.yml",
     "scorecard": ".github/workflows/scorecard.yml",
-    "slsa_provenance": ".github/workflows/slsa-provenance.yml",
+    "slsa_provenance": ".github/workflows/release.yml",
     "release_asset_staging": "scripts/release/stage_release_assets.sh",
     "fuzzing": "oss-fuzz/project.yaml",
     "best_practices_mapping": "BEST_PRACTICES.md"

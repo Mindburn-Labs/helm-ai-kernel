@@ -51,7 +51,7 @@ logical_run_instructions() {
 }
 
 workflow=${1:-.github/workflows/release-ai-os-image.yml}
-legacy_workflow=${2:-.github/workflows/release.yml}
+dev_workflow=${2:-.github/workflows/dev-image.yml}
 dockerfile=${3:-Dockerfile}
 dockerignore=${4:-.dockerignore}
 build_doc=docs/supply-chain/kernel-image-build-v1.md
@@ -322,7 +322,7 @@ require 'smoke: "health-denial-receipt-stop-restart-exact-readback-passed"' "$wo
 require 'final_digest="$(./scripts/release/promote_immutable_image_tag.sh "${staging_ref}" "${final_tag}" "${expected_digest}")"' "$workflow"
 require 'docker buildx imagetools inspect --raw "${final_tag}" > final-image-index.json' "$workflow"
 require 'final-tag-digest-platforms-signature-and-evidence-verified' "$workflow"
-require '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}' "$legacy_workflow"
+require '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}' "$dev_workflow"
 
 for upload_entry in \
   '            grype-db-status.json' \

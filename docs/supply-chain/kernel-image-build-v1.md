@@ -134,7 +134,7 @@ checkpoints are bound explicitly to the owner readback token; the job token is
 reserved for publication operations. Reruns are rejected.
 
 This workflow exclusively owns the governed immutable `sha-<SOURCE_SHA>` tag
-namespace. The legacy `release.yml` QA publisher uses the disjoint
+namespace. The dev-grade `dev-image.yml` QA publisher uses the disjoint
 `dev-sha-<SOURCE_SHA>` namespace and cannot create or overwrite a governed tag.
 
 The immutable producer identity consumed by HELM AI OS assembly is:

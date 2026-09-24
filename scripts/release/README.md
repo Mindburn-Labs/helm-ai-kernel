@@ -120,8 +120,9 @@ falls back to `HEAD` only when that exact VEX file does not exist yet. That
 keeps squash-merged release commits from rewriting tracked OpenVEX timestamps
 while preserving intentional artifact reproduction overrides.
 
-`verify_cosign.sh` verifies every bundle it finds. A run with zero
-`*.cosign.bundle` files proves no signature coverage; check that bundle files
-exist before treating Cosign as part of a release evidence set. If a release has
-no bundle files, use checksums, SBOM, release metadata inspection, offline
-EvidencePack verification, and reproducible-build validation instead.
+`verify_cosign.sh` verifies every bundle it finds against the tag release
+identity `release.yml@refs/tags/v*` (exactly `release.yml@refs/tags/$KERNEL_RELEASE_TAG`
+when that variable is set). It fails when it finds zero `*.cosign.bundle` files
+or a bundle without its artifact, because neither is signature evidence. If a
+release has no bundle files, use checksums, SBOM, release metadata inspection,
+offline EvidencePack verification, and reproducible-build validation instead.

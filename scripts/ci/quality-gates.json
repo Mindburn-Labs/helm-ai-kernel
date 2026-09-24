@@ -650,7 +650,10 @@
         "scripts/ci/release_smoke.sh",
         "scripts/release/**",
         "release/**",
-        "core/**"
+        "core/**",
+        "install.sh",
+        "docs/PUBLISHING.md",
+        "docs/launchpad/HERMES_PRODUCTION_RUNBOOK.md"
       ]
     },
     {

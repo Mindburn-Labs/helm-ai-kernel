@@ -54,7 +54,7 @@ Current branch baseline: `codex/kernel-security-remediation` at `ee2cfd6d`, befo
 | HELM_AI_KERNEL-SUBAGENT-0022 | fixed | Launchpad mount-name containment |
 | HELM_AI_KERNEL-SUBAGENT-0001 | fixed | Proxy DENY containment |
 | HELM_AI_KERNEL-SUBAGENT-0092 | already-fixed-with-regression | Helm smoke helper image and kubeconfig hardening |
-| HELM_AI_KERNEL-SUBAGENT-0099 | already-fixed-with-regression | Certify archive extraction bounds |
+| HELM_AI_KERNEL-SUBAGENT-0099 | already-fixed-with-regression | Certify archive extraction bounds (the `certify` command was removed by HELM-742) |
 | helm-ai-kernel-FILE-0788-A | already-fixed-with-regression | Pinned TLA tools download verification |
 | helm-ai-kernel-FILE-0640-A | already-fixed-with-regression | DOM trap evidence from real browser runs |
 | helm-ai-kernel-FILE-0632-A | already-fixed-with-regression | AIGP evidence derived from node evidence |

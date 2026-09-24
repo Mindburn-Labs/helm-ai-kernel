@@ -1895,6 +1895,12 @@ paths:
       operationId: addTrustKey
       tags: [system]
       summary: Add a trusted signing key
+      deprecated: true
+      description: |
+        Deprecated by HELM-742 and always answers 501. The route mutated a
+        process-local key registry that no verifier reads, so it never changed
+        which keys are trusted. Configure trusted keys in the verifier trust
+        configuration. The operation will be removed in a future release.
       security:
         - AdminBearerAuth: []
       requestBody:
@@ -1918,12 +1924,20 @@ paths:
           $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'
+        '501':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/trust/keys/revoke:
     post:
       operationId: revokeTrustKey
       tags: [system]
       summary: Revoke a trusted signing key
+      deprecated: true
+      description: |
+        Deprecated by HELM-742 and always answers 501. The route mutated a
+        process-local key registry that no verifier reads, so a successful answer
+        revoked nothing. Configure trusted keys in the verifier trust
+        configuration. The operation will be removed in a future release.
       security:
         - AdminBearerAuth: []
       requestBody:
@@ -1946,6 +1960,8 @@ paths:
         '400':
           $ref: '#/components/responses/HelmError'
         '401':
+          $ref: '#/components/responses/HelmError'
+        '501':
           $ref: '#/components/responses/HelmError'
 
   # ── MCP Remote Transport ───────────────────────────
@@ -2835,6 +2851,12 @@ paths:
       operationId: verifyGUIActionReceipt
       tags: [gui]
       summary: Verify a grounded GUI action receipt
+      deprecated: true
+      description: |
+        Deprecated by HELM-742 and always answers 501. The route recomputed the
+        receipt hash instead of checking it, and GUI action receipts carry no
+        signature to verify against a trust root. The operation will be removed in a
+        future release.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -2858,6 +2880,8 @@ paths:
           $ref: '#/components/responses/HelmError'
 
         '403':
+          $ref: '#/components/responses/HelmError'
+        '501':
           $ref: '#/components/responses/HelmError'
   /api/v1/evidence/envelopes:
     get:
@@ -3015,6 +3039,11 @@ paths:
       operationId: runConformance
       tags: [conformance]
       summary: Run conformance tests
+      deprecated: true
+      description: |
+        Deprecated by HELM-742 and always answers 501. The route returned a fixed
+        PASS without running any gate. Run `helm-ai-kernel conform` against an
+        evidence pack instead. The operation will be removed in a future release.
       security:
         - AdminBearerAuth: []
       requestBody:
@@ -3047,12 +3076,19 @@ paths:
           $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'
+        '501':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/conformance/reports/{report_id}:
     get:
       operationId: getConformanceReport
       tags: [conformance]
       summary: Get a conformance report by ID
+      deprecated: true
+      description: |
+        Deprecated by HELM-742 and always answers 501. The route returned a fixed
+        PASS report for any id. Run `helm-ai-kernel conform` against an evidence
+        pack instead. The operation will be removed in a future release.
       security:
         - AdminBearerAuth: []
       parameters:
@@ -3071,12 +3107,19 @@ paths:
           $ref: '#/components/responses/HelmError'
         '401':
           $ref: '#/components/responses/HelmError'
+        '501':
+          $ref: '#/components/responses/HelmError'
 
   /api/v1/conformance/reports:
     get:
       operationId: listConformanceReports
       tags: [conformance]
       summary: List conformance reports
+      deprecated: true
+      description: |
+        Deprecated by HELM-742 and always answers 501. The route listed fixed PASS
+        reports that no gate produced. Run `helm-ai-kernel conform` against an
+        evidence pack instead. The operation will be removed in a future release.
       security:
         - AdminBearerAuth: []
       responses:
@@ -3089,6 +3132,8 @@ paths:
                 items:
                   $ref: '#/components/schemas/ConformanceResult'
         '401':
+          $ref: '#/components/responses/HelmError'
+        '501':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/conformance/vectors:

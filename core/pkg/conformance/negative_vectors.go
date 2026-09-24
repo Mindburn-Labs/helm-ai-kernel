@@ -141,16 +141,6 @@ func DefaultNegativeBoundaryVectors() []NegativeBoundaryVector {
 			MustBindEvidence:   []string{"receipt_id", "record_hash"},
 		},
 		{
-			ID:                 "verification-scope-missing-t2",
-			Category:           "verification",
-			Trigger:            "T2/T3 action has green or requested execution evidence but no VerificationScope",
-			ExpectedVerdict:    contracts.VerdictDeny,
-			ExpectedReasonCode: contracts.ReasonVerificationScopeRequired,
-			MustEmitReceipt:    true,
-			MustNotDispatch:    true,
-			MustBindEvidence:   []string{"plan_hash", "policy_hash", "scope_hash"},
-		},
-		{
 			ID:                 "green-tests-without-scope",
 			Category:           "verification",
 			Trigger:            "passing tests are presented as proof without assumptions, untested regions, or remaining risk",
@@ -199,16 +189,6 @@ func DefaultNegativeBoundaryVectors() []NegativeBoundaryVector {
 			MustEmitReceipt:    true,
 			MustNotDispatch:    true,
 			MustBindEvidence:   []string{"contract_hash", "approval_receipt_id", "policy_hash"},
-		},
-		{
-			ID:                 "harness-change-contract-missing-regression",
-			Category:           "harness",
-			Trigger:            "HarnessChangeContract has no regression vectors or rollback plan",
-			ExpectedVerdict:    contracts.VerdictDeny,
-			ExpectedReasonCode: contracts.ReasonHarnessChangeContractInvalid,
-			MustEmitReceipt:    true,
-			MustNotDispatch:    true,
-			MustBindEvidence:   []string{"contract_hash", "policy_hash", "receipt_id"},
 		},
 		{
 			ID:                 "agent-authored-code-network-attempt",

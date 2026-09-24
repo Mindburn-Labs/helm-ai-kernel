@@ -93,6 +93,40 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Removed — verification outputs that no check produced (HELM-742)
+
+Breaking. These commands and routes reported PASS, verified, certified or
+revoked without running the check they named:
+
+- `helm-ai-kernel certify` is removed. It printed `CERTIFICATION PASSED` for EU
+  AI Act, HIPAA, SOX and GDPR from file-name and field-name matching.
+- `helm-ai-kernel gui receipts verify` is removed. It recomputed the receipt
+  hash instead of comparing it, and GUI action receipts carry no signature.
+- `POST /api/v1/conformance/run`, `GET /api/v1/conformance/reports` and
+  `GET /api/v1/conformance/reports/{report_id}` answer `501`. They returned a
+  fixed PASS, and the list route persisted one. Use `helm-ai-kernel conform`.
+- `POST /api/v1/trust/keys/add` and `POST /api/v1/trust/keys/revoke` answer
+  `501`. They changed a process-local registry that no verifier reads.
+- `POST /api/v1/gui/receipts/verify` answers `501`.
+
+The six operations stay in the OpenAPI contract marked `deprecated` so the
+breaking-change gate permits removing them in a later release. The Console
+surface catalog marks the Conformance and Trust Keys surfaces `unsupported`.
+
+### Changed — verification commands require a trust root (HELM-742)
+
+Breaking for scripts that relied on the old defaults:
+
+- `log verify-consistency` requires `--old-root` and `--new-root`. It no longer
+  falls back to the roots embedded in the proof.
+- `export aat --verify` requires `--public-key`. Every record must carry an
+  `Ed25519` signature by that key; unsigned, re-signed and empty chains fail.
+- `tee verify` always requires the vendor signature chain. The CLI configures no
+  vendor roots, so vendor quotes now fail closed with the reason instead of
+  reporting `ok` for a quote whose signature was never checked.
+- `POST /v1/chat/completions` answers `500` and does not forward the request
+  when the decision receipt cannot be persisted.
+
 ### Changed — policy-head signature source contract
 
 The unreleased `policy/reconcile.SignatureVerifier` source contract now verifies

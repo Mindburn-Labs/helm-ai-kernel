@@ -11,9 +11,9 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/sandbox"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/threatscan"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust"
@@ -57,7 +57,7 @@ type EvaluationContext struct {
 	Request        DecisionRequest
 	ActiveSnapshot *policyreconcile.EffectivePolicySnapshot
 	PolicyVersion  string
-	ActiveGraph    *prg.Graph
+	ActivePolicy   *authority.Snapshot
 	ActivePDP      pdp.PolicyDecisionPoint
 	Tainted        bool
 	Decisions      []*contracts.DecisionRecord

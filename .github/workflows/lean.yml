@@ -5,20 +5,23 @@ on:
     branches: [main]
     paths:
       - "proofs/**"
+      - "scripts/ci/lean_proof_gate.sh"
       - ".github/workflows/lean.yml"
   pull_request:
     branches: [main]
     paths:
       - "proofs/**"
+      - "scripts/ci/lean_proof_gate.sh"
       - ".github/workflows/lean.yml"
   workflow_dispatch: {}
 
 permissions: read-all
 
-# Workstream F / F3 — Phase 3 of the helm-ai-kernel 100% SOTA execution plan.
 # Builds the EffectPermitSoundness Lean proof on every push/PR that
-# touches the proofs tree. Failure here blocks merge to main and gates
-# the release tag (the release workflow polls this job's conclusion).
+# touches the proofs tree, then checks that a theorem closed by `sorry`
+# fails the build (scripts/ci/lean_proof_gate.sh). This job is not a
+# required status check and the release workflow does not read it; a
+# failure here blocks nothing until the ruleset requires it.
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -37,14 +40,20 @@ jobs:
       - name: Install elan + Lean toolchain
         run: |
           set -euo pipefail
-          curl -sSfL \
-            https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
-            -o elan-init.sh
+          # Pinned elan release, verified by sha256 before it runs.
+          ver=4.2.4
+          sha256='42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63'
+          tmp="$(mktemp -d)"
+          archive="$tmp/elan-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/leanprover/elan/releases/download/v${ver}/elan-x86_64-unknown-linux-gnu.tar.gz"
+          printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict -
+          tar -xzf "$archive" -C "$tmp"
           # -y: non-interactive; --default-toolchain none lets the
           # lean-toolchain file in proofs/Lean pin the version on first
           # `lake` invocation, so a single source of truth controls the
           # version across local + CI.
-          sh elan-init.sh -y --default-toolchain none
+          "$tmp/elan-init" -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: Show toolchain
@@ -55,9 +64,8 @@ jobs:
           lean --version
           lake --version
 
-      - name: lake build
-        working-directory: proofs/Lean
-        run: lake build
+      - name: lake build, with a sorry control
+        run: bash scripts/ci/lean_proof_gate.sh
 
       - name: Upload .olean artifact
         if: always()

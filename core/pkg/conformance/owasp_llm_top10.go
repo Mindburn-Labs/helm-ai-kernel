@@ -9,7 +9,8 @@
 // Test ID convention: OWASP-LLMxx-NNN where xx is the OWASP category (01-10)
 // and NNN is a sequential number within that category.
 //
-// Activated by: make test-owasp   (runs "go test ./pkg/conformance/... -run OWASP-")
+// Run with: cd core && go test ./pkg/conformance/ -run TestOWASP_
+// (there is no make target; -run "OWASP-" matches no top-level test and runs nothing)
 package conformance
 
 import (

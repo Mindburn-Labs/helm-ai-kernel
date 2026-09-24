@@ -895,45 +895,83 @@ func TestSafeExecutorAllocatesConcurrentReceiptChainsAtomically(t *testing.T) {
 	}
 }
 
-func TestSafeExecutorRejectsRuntimeEffectDigestMismatch(t *testing.T) {
-	signer, _ := crypto.NewEd25519Signer("test-key")
-	mockDriver := &MockDriver{}
-	executor := NewSafeExecutor(signer, signer, mockDriver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil)
-
+// TestSafeExecutorEffectDigestBinding checks the digest gate both ways: the
+// approved effect dispatches, and a substituted effect, a decision naming a
+// different digest, or an intent naming a different digest is refused before
+// the driver runs, for the digest reason. (It replaces capabilities'
+// TestExecutor_DigestMismatch_I14, whose assertion was an empty if-body.)
+func TestSafeExecutorEffectDigestBinding(t *testing.T) {
 	approvedEffect := &contracts.Effect{
 		EffectID:   "eff-approved",
 		EffectType: "EXECUTE_TOOL",
 		Params:     map[string]any{"tool_name": "deploy", "target": "staging"},
 	}
-	decision := &contracts.DecisionRecord{
-		ID:           "dec-approved",
-		Verdict:      string(contracts.VerdictAllow),
-		EffectDigest: testEffectDigest(t, approvedEffect),
-	}
-	if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
-		t.Fatal(err)
-	}
-	intent := &contracts.AuthorizedExecutionIntent{
-		DecisionID:       decision.ID,
-		EffectDigestHash: decision.EffectDigest,
-		ExpiresAt:        time.Now().Add(time.Hour),
-		AllowedTool:      "deploy",
-	}
-	if err := signer.SignIntent(intent); err != nil {
-		t.Fatal(err)
-	}
-
 	substitutedEffect := &contracts.Effect{
 		EffectID:   "eff-substituted",
 		EffectType: "EXECUTE_TOOL",
 		Params:     map[string]any{"tool_name": "deploy", "target": "production"},
 	}
-	_, _, err := executor.Execute(context.Background(), substitutedEffect, decision, intent)
-	if err == nil {
-		t.Fatal("expected runtime effect digest mismatch")
+	approvedDigest := testEffectDigest(t, approvedEffect)
+	otherDigest := testEffectDigest(t, substitutedEffect)
+
+	cases := []struct {
+		name           string
+		effect         *contracts.Effect
+		decisionDigest string
+		intentDigest   string
+		wantErr        string // empty: must dispatch
+	}{
+		{"approved_effect_dispatches", approvedEffect, approvedDigest, approvedDigest, ""},
+		{"substituted_effect", substitutedEffect, approvedDigest, approvedDigest, "execution blocked: effect digest mismatch"},
+		{"decision_names_other_digest", approvedEffect, otherDigest, approvedDigest, "execution blocked: effect digest mismatch"},
+		{"intent_names_other_digest", approvedEffect, approvedDigest, otherDigest, "execution blocked: intent effect digest mismatch"},
+		{"decision_without_digest", approvedEffect, "", approvedDigest, "execution blocked: decision missing effect digest"},
+		{"intent_without_digest", approvedEffect, approvedDigest, "", "execution blocked: intent missing effect digest hash"},
 	}
-	if mockDriver.Called {
-		t.Fatal("driver dispatched after runtime effect digest mismatch")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			signer, err := crypto.NewEd25519Signer("test-key")
+			if err != nil {
+				t.Fatal(err)
+			}
+			driver := &MockDriver{}
+			executor := NewSafeExecutor(signer, signer, driver, NewMemoryReceiptStore(), nil, nil, "", nil, nil, nil, nil)
+			decision := &contracts.DecisionRecord{
+				ID:           "dec-" + tc.name,
+				Verdict:      string(contracts.VerdictAllow),
+				EffectDigest: tc.decisionDigest,
+				InputContext: map[string]any{"session_id": "session-digest"},
+			}
+			if err := signer.SignDecision(testDecisionAuthority(decision)); err != nil {
+				t.Fatal(err)
+			}
+			intent := &contracts.AuthorizedExecutionIntent{
+				DecisionID:       decision.ID,
+				EffectDigestHash: tc.intentDigest,
+				ExpiresAt:        time.Now().Add(time.Hour),
+				AllowedTool:      "deploy",
+			}
+			if err := signer.SignIntent(intent); err != nil {
+				t.Fatal(err)
+			}
+
+			receipt, _, err := executor.Execute(context.Background(), tc.effect, decision, intent)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("approved effect must dispatch, got %v", err)
+				}
+				if !driver.Called || receipt == nil {
+					t.Fatalf("approved effect: driver called=%v receipt=%v", driver.Called, receipt)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("want error containing %q, got %v", tc.wantErr, err)
+			}
+			if driver.Called {
+				t.Fatal("driver dispatched despite the digest refusal")
+			}
+		})
 	}
 }
 

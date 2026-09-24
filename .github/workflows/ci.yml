@@ -72,6 +72,31 @@ jobs:
           "$HOME/.local/bin/oasdiff" --version
       - name: Run Make-first PR quality profile
         run: make quality-pr
+      # Unit tests of the gate scripts themselves: each proves its gate
+      # rejects known-bad input (unparsable mutation score, rotated signing
+      # key, ...). Unconditional, so a gate cannot lose its control unseen.
+      - name: Gate self-tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s scripts/ci -p '*_test.py' -v
+          python -m unittest discover -s scripts/ci -p 'test_*.py' -v
+      # CONCEPT-CHANGE markers, over the commits this event actually brings.
+      # The nightly run of this gate inspected origin/main..HEAD on main, which
+      # is always empty; invcheck now refuses an empty range.
+      - name: Invariant amendment markers
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) range="${PR_BASE_SHA}..${PR_HEAD_SHA}" ;;
+            push) range="${PUSH_BEFORE}..${GITHUB_SHA}" ;;
+            *) range="HEAD~1..HEAD" ;;
+          esac
+          make concept-gate CONCEPT_RANGE="$range"
 
   hygiene:
     runs-on: ubuntu-latest

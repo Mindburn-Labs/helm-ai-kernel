@@ -153,11 +153,13 @@ and publishes the same version to `Mindburn-Labs/homebrew-tap`;
 documenting `brew install mindburn-labs/tap/helm-ai-kernel` as current.
 
 SDK package manifests and registry versions must remain lockstep with the
-GitHub release tag. npm, PyPI, crates.io, Maven, and Homebrew publication
-require the corresponding registry secrets. If `NPM_TOKEN`, `PYPI_TOKEN`,
-`CRATES_TOKEN`, `HOMEBREW_TAP_TOKEN`, or Maven credentials are absent, the
-release workflow must fail instead of documenting a partial release as
-complete.
+GitHub release tag. npm, PyPI, and crates.io publish through OIDC trusted
+publishing from `release.yml`, with no stored registry token; Maven Central and
+Homebrew publication use the `MAVEN_*` and `HOMEBREW_TAP_TOKEN` secrets. If a
+registry rejects the workflow identity or a secret is absent, the release
+workflow must fail instead of documenting a partial release as complete. A
+failed channel is repaired by re-running the failed jobs of the same tag run;
+channels that already carry the version are skipped.
 
 Do not document an asset as published unless it appears on the GitHub release
 or is produced by a retained workflow and attached to that release.

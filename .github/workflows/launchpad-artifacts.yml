@@ -30,6 +30,7 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/launchpad-artifacts.yml"
+      - ".dockerignore"
       - "policies/launchpad/apps/openclaw.safe.toml"
       - "policies/launchpad/apps/hermes.safe.toml"
       - "policies/launchpad/apps/opencode.safe.toml"

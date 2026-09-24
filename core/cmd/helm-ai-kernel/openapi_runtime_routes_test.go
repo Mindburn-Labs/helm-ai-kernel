@@ -712,14 +712,6 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 			Source: "core/cmd/helm-ai-kernel/console_agui_routes.go:64",
 			Reason: "compat AGUI request contract not yet classified in HELM-481 phase 1",
 		},
-		"POST /api/v1/trust/keys/add": {
-			Source: "core/pkg/api/trust_keys_handler.go:39",
-			Reason: "trust-key request package is deferred to a follow-up slice",
-		},
-		"POST /api/v1/trust/keys/revoke": {
-			Source: "core/pkg/api/trust_keys_handler.go:83",
-			Reason: "trust-key request package is deferred to a follow-up slice",
-		},
 		"POST /mcp": {
 			Source: "core/pkg/mcp/gateway.go:171",
 			Reason: "JSON-RPC request contract is deferred to a follow-up slice",
@@ -748,10 +740,6 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
 			Reason: "harness contract creation request not yet classified in HELM-481 phase 1",
 		},
-		"POST /api/v1/gui/receipts/verify": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
-			Reason: "GUI receipt verification request not yet classified in HELM-481 phase 1",
-		},
 		"POST /api/v1/evidence/envelopes": {
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
 			Reason: "evidence envelope request contract not yet classified in HELM-481 phase 1",
@@ -759,10 +747,6 @@ func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 		"POST /api/v1/replay/verify": {
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
 			Reason: "replay verification request contract not yet classified in HELM-481 phase 1",
-		},
-		"POST /api/v1/conformance/run": {
-			Source: "core/cmd/helm-ai-kernel/contract_routes.go",
-			Reason: "conformance run request contract not yet classified in HELM-481 phase 1",
 		},
 		"POST /api/v1/mcp/registry": {
 			Source: "core/cmd/helm-ai-kernel/contract_routes.go:808",

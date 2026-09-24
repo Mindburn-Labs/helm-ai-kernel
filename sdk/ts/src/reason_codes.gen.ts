@@ -177,8 +177,6 @@ export const ReasonCodes = {
   ERR_COMPUTE_GAS_EXHAUSTED: "ERR_COMPUTE_GAS_EXHAUSTED",
   /** DENY: Sandboxed execution exceeded the configured wall-clock time budget */
   ERR_COMPUTE_TIME_EXHAUSTED: "ERR_COMPUTE_TIME_EXHAUSTED",
-  /** DENY: Medium or high risk execution is missing a VerificationScope */
-  ERR_VERIFICATION_SCOPE_REQUIRED: "ERR_VERIFICATION_SCOPE_REQUIRED",
   /** DENY: Side-effectful execution is missing a hash-linked HarnessTrace */
   ERR_HARNESS_TRACE_REQUIRED: "ERR_HARNESS_TRACE_REQUIRED",
   /** DENY: Multi-artifact or write-bearing execution is missing a PlanTransaction */
@@ -190,8 +188,6 @@ export const ReasonCodes = {
   /** ESCALATE: Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state
   /** requires explicit approval */
   ERR_HARNESS_MUTATION_REQUIRES_APPROVAL: "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL",
-  /** DENY: Harness mutation lacks a valid HarnessChangeContract */
-  ERR_HARNESS_CHANGE_CONTRACT_INVALID: "ERR_HARNESS_CHANGE_CONTRACT_INVALID",
   /** DENY: Passing tests were submitted without a declared verification scope */
   ERR_GREEN_TEST_SCOPE_MISSING: "ERR_GREEN_TEST_SCOPE_MISSING",
   /** DENY: GUI or computer-use action is missing grounded screenshot and DOM/accessibility evidence */

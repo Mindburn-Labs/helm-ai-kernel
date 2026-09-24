@@ -319,10 +319,6 @@ const ErrComputeGasExhausted = "ERR_COMPUTE_GAS_EXHAUSTED"
 // wall-clock time budget
 const ErrComputeTimeExhausted = "ERR_COMPUTE_TIME_EXHAUSTED"
 
-// ErrVerificationScopeRequired DENY: Medium or high risk execution is missing a
-// VerificationScope
-const ErrVerificationScopeRequired = "ERR_VERIFICATION_SCOPE_REQUIRED"
-
 // ErrHarnessTraceRequired DENY: Side-effectful execution is missing a hash-
 // linked HarnessTrace
 const ErrHarnessTraceRequired = "ERR_HARNESS_TRACE_REQUIRED"
@@ -343,10 +339,6 @@ const ErrAssumptionStale = "ERR_ASSUMPTION_STALE"
 // sandbox, policy, verifier, evidence, or routing state requires explicit
 // approval
 const ErrHarnessMutationRequiresApproval = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL"
-
-// ErrHarnessChangeContractInvalid DENY: Harness mutation lacks a valid
-// HarnessChangeContract
-const ErrHarnessChangeContractInvalid = "ERR_HARNESS_CHANGE_CONTRACT_INVALID"
 
 // ErrGreenTestScopeMissing DENY: Passing tests were submitted without a
 // declared verification scope
@@ -496,13 +488,11 @@ var all = [...]string{
 	ErrConnectorContractDrift,
 	ErrComputeGasExhausted,
 	ErrComputeTimeExhausted,
-	ErrVerificationScopeRequired,
 	ErrHarnessTraceRequired,
 	ErrPlanTransactionRequired,
 	ErrPlanTransactionConflict,
 	ErrAssumptionStale,
 	ErrHarnessMutationRequiresApproval,
-	ErrHarnessChangeContractInvalid,
 	ErrGreenTestScopeMissing,
 	ErrGroundedActionRefRequired,
 	ErrGuiPostconditionUnverified,

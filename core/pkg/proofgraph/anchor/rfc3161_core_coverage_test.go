@@ -15,10 +15,6 @@ import (
 )
 
 func TestRFC3161BackendAnchorAndVerifyBranches(t *testing.T) {
-	tsaResponse, err := asn1.Marshal(42)
-	if err != nil {
-		t.Fatal(err)
-	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %s, want POST", r.Method)
@@ -30,10 +26,12 @@ func TestRFC3161BackendAnchorAndVerifyBranches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(body) == 0 {
-			t.Fatal("timestamp request body was empty")
+		var tsReq timestampRequest
+		if _, err := asn1.Unmarshal(body, &tsReq); err != nil {
+			t.Fatalf("timestamp request is not a TimeStampReq: %v", err)
 		}
-		_, _ = w.Write(tsaResponse)
+		// Echo the requested imprint, as a TSA does, in a granted response.
+		_, _ = w.Write(rfc3161TestResponse(t, 0, tsReq.MessageImprint.HashedMessage))
 	}))
 	defer server.Close()
 

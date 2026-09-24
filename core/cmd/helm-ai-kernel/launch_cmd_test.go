@@ -163,9 +163,10 @@ func TestLaunchEvidenceExportVerifiesDirectoryAndArchive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Sealed with the launch store's own key, as the launch flow does.
 	if _, err := evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
 		PackID:  "launch-evidence-test",
-		DataDir: t.TempDir(),
+		DataDir: root,
 	}); err != nil {
 		t.Fatal(err)
 	}

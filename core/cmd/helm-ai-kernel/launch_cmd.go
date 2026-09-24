@@ -130,7 +130,8 @@ func runLaunchEvidence(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "launch evidence requires --export to avoid implying a new evidence mutation")
 		return 2
 	}
-	run, err := session.NewStore("").Get(rest[0])
+	store := session.NewStore("")
+	run, err := store.Get(rest[0])
 	if err != nil {
 		fmt.Fprintf(stderr, "launch evidence error: %v\n", err)
 		return 1
@@ -138,7 +139,7 @@ func runLaunchEvidence(args []string, stdout, stderr io.Writer) int {
 	result := launchEvidenceExport{
 		LaunchID:         run.LaunchID,
 		EvidencePackRefs: run.EvidencePackRefs,
-		Checks:           verifyLaunchEvidenceRefs(run.EvidencePackRefs),
+		Checks:           verifyLaunchEvidenceRefs(run.EvidencePackRefs, store.Root()),
 		State:            run.State,
 		KernelVerdict:    run.KernelVerdict,
 	}
@@ -165,7 +166,12 @@ func runLaunchEvidence(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
+// verifyLaunchEvidenceRefs verifies each pack against the launch store's own
+// trust roots: its configured trust config plus the signing key stored under
+// storeRoot. A pack signed by any other key is not verified, even when the
+// local run record points at it (audit 02-08).
+func verifyLaunchEvidenceRefs(refs []string, storeRoot string) []launchEvidenceCheck {
+	trust, trustErr := evidencepkg.LocalProducerTrustConfig(storeRoot)
 	checks := make([]launchEvidenceCheck, 0, len(refs))
 	for _, ref := range refs {
 		check := launchEvidenceCheck{Ref: ref}
@@ -176,6 +182,11 @@ func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
 			continue
 		}
 		check.Exists = true
+		if trustErr != nil {
+			check.Error = trustErr.Error()
+			checks = append(checks, check)
+			continue
+		}
 		verifyTarget := ref
 		var cleanup func()
 		if !info.IsDir() {
@@ -194,9 +205,7 @@ func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
 			}
 			verifyTarget = tempDir
 		}
-		// Pack was sealed by this process, so its dev-local self-attested
-		// seal carries no provenance question (F-02).
-		report, err := verifier.VerifyLocallyProducedBundle(verifyTarget)
+		report, err := verifier.VerifyBundleWithOptions(verifyTarget, verifier.VerifyOptions{TrustConfig: trust, DataDir: storeRoot})
 		if cleanup != nil {
 			cleanup()
 		}

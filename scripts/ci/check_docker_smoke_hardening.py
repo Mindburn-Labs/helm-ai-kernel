@@ -98,6 +98,9 @@ def check_compose(path: Path) -> None:
     ]:
         require(text, token, path)
     forbid(text, "image: busybox:1.36.1", path)
+    # Literal API keys are published credentials; unset means generated per install.
+    forbid(text, "helm-admin-dev", path)
+    forbid(text, "helm-service-dev", path)
 
 
 def main() -> None:

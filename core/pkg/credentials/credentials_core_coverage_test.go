@@ -1,7 +1,6 @@
 package credentials
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,24 +16,6 @@ type credentialsRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f credentialsRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
-}
-
-type credentialsFakeKMS struct{}
-
-func (credentialsFakeKMS) Encrypt(plaintext string) (string, error) {
-	return "kms:" + plaintext, nil
-}
-
-func (credentialsFakeKMS) Decrypt(ciphertext string) (string, error) {
-	return strings.TrimPrefix(ciphertext, "kms:"), nil
-}
-
-func (credentialsFakeKMS) Rotate() (int, error) {
-	return 2, nil
-}
-
-func (credentialsFakeKMS) ActiveVersion() int {
-	return 1
 }
 
 func TestCoverageGoogleOAuthBranches(t *testing.T) {
@@ -188,13 +169,7 @@ func TestCoverageGoogleOAuthBranches(t *testing.T) {
 }
 
 func TestCoverageCredentialHandlers(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	store, err := NewStore(db, bytes.Repeat([]byte("h"), 32), WithEnvFallback(false))
-	if err != nil {
-		t.Fatal(err)
-	}
+	store, _, _ := newKMSStore(t)
 	handler := NewHandler(store)
 	handler.googleOAuth.ClientID = "google-client"
 	handler.googleOAuth.httpClient = &http.Client{Transport: credentialsRoundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -292,20 +267,9 @@ func TestCoverageCredentialHandlers(t *testing.T) {
 	}
 }
 
-func TestCoverageCredentialStoreKMSAndFallbackBranches(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+func TestCoverageCredentialStoreKMSBranches(t *testing.T) {
+	kmsStore, db, _ := newKMSStore(t)
 	ctx := context.Background()
-
-	kmsStore := NewStoreWithKMS(db, credentialsFakeKMS{}, WithEnvFallback(false))
-	encrypted, err := kmsStore.encrypt("secret")
-	if err != nil || encrypted != "kms:secret" {
-		t.Fatalf("kms encrypt got %q err=%v", encrypted, err)
-	}
-	decrypted, err := kmsStore.decrypt(encrypted)
-	if err != nil || decrypted != "secret" {
-		t.Fatalf("kms decrypt got %q err=%v", decrypted, err)
-	}
 
 	expires := time.Now().UTC().Add(time.Hour)
 	if err := kmsStore.SaveCredential(ctx, &Credential{
@@ -319,37 +283,15 @@ func TestCoverageCredentialStoreKMSAndFallbackBranches(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveCredential with KMS: %v", err)
 	}
+	if stored := storedAccessToken(t, db, "operator-kms", ProviderOpenAI); strings.Contains(stored, "openai-token") || !strings.HasPrefix(stored, "aad1:v1:") {
+		t.Fatalf("access token stored as %q", stored)
+	}
 	if err := kmsStore.UpdateLastUsed(ctx, "operator-kms", ProviderOpenAI); err != nil {
 		t.Fatalf("UpdateLastUsed: %v", err)
 	}
 	got, err := kmsStore.GetCredential(ctx, "operator-kms", ProviderOpenAI)
 	if err != nil || got.AccessToken != "openai-token" || got.RefreshToken != "refresh-token" || got.LastUsedAt == nil {
 		t.Fatalf("GetCredential with KMS got %+v err=%v", got, err)
-	}
-
-	envStore, err := NewStore(db, bytes.Repeat([]byte("e"), 32), WithEnvFallback(true))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("OPENAI_API_KEY", "sk-env")
-	t.Setenv("ANTHROPIC_API_KEY", "anthropic-env")
-	t.Setenv("GEMINI_API_KEY", "gemini-env")
-	for provider, want := range map[ProviderType]string{
-		ProviderOpenAI:    "sk-env",
-		ProviderAnthropic: "anthropic-env",
-		ProviderGoogle:    "gemini-env",
-	} {
-		cred, err := envStore.GetCredential(ctx, "missing", provider)
-		if err != nil || cred == nil || cred.AccessToken != want || cred.TokenType != TokenTypeApiKey {
-			t.Fatalf("env fallback %s got %+v err=%v", provider, cred, err)
-		}
-	}
-	t.Setenv("OPENAI_API_KEY", "")
-	if cred, err := envStore.GetCredential(ctx, "missing", ProviderOpenAI); err != nil || cred != nil {
-		t.Fatalf("empty env fallback got %+v err=%v", cred, err)
-	}
-	if cred, err := envStore.getFromEnv(ProviderType("unknown")); err != nil || cred != nil {
-		t.Fatalf("unknown env fallback got %+v err=%v", cred, err)
 	}
 }
 

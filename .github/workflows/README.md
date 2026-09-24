@@ -94,18 +94,23 @@ before tagging. `DOWNSTREAM_FANOUT_TOKEN` is retained only as a
 `contents:read` token for that preflight. Release jobs must not patch chart or
 SDK package versions in CI.
 
-Publish and signing secrets are environment secrets, never repository secrets.
-Every job that reads one declares the environment that holds it:
-`npm-production` (`NPM_TOKEN`), `pypi-production` (`PYPI_TOKEN`),
-`crates-production` (`CRATES_TOKEN`), `maven-central` (`MAVEN_*`), and
-`release-production` (`HELM_EVIDENCE_KMS_*`,
-`HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND`, `HOMEBREW_TAP_TOKEN`).
-Protecting these environments (required `admins` reviewers and a `v*` tag
-deployment policy) is repository configuration, tracked in HELM-732. Once it is
-in place, each such job waits for approval, and the standalone `*-publish.yml`
-workflows must be dispatched with `--ref v<version>`.
-`scripts/ci/release_workflow_contract_test.py` fails when a job reads one of
-these secrets without declaring its environment.
+No release job waits for a person. The preflight, validation, smoke,
+reproducibility and benchmark jobs are the only gate; every publishing job
+depends on them. To repair a failed publish, re-run the failed jobs of the same
+tag run (`gh run rerun <run-id> --failed`). Re-runs keep the
+`release.yml@refs/tags/v<version>` identity, and each registry publisher skips a
+version that is already published. There are no separate `*-publish.yml`
+workflows.
+
+npm (`@mindburn/helm-ai-kernel`), PyPI (`helm-sdk`) and crates.io (`helm-sdk`)
+use OIDC trusted publishing from `release.yml` in the `npm-production`,
+`pypi-production` and `crates-production` environments; no registry token is
+stored. Maven Central has no OIDC trusted publishing, so `MAVEN_*` stay
+secrets of the `maven-central` environment. `HOMEBREW_TAP_TOKEN` and the
+release EvidencePack KMS secrets are repository secrets.
+`scripts/ci/release_workflow_contract_test.py` fails when a workflow reads a
+long-lived registry token, when a job reads a `MAVEN_*` secret without
+declaring `maven-central`, or when a publisher can start before validation.
 
 ## Documentation Contract
 

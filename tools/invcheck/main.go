@@ -82,7 +82,7 @@ func usage() {
 
   invcheck concept-gate [-root DIR] [-range REV..REV] [-strict-any-edit]
       Require a CONCEPT-CHANGE(INV-NNN) commit marker on any commit in the
-      range that adds, edits, or retires an invariant.
+      range that adds, edits, or retires an invariant. An empty range exits 2.
 `)
 }
 
@@ -532,13 +532,22 @@ func runConceptGate(args []string) int {
 	}
 	shas := strings.Fields(out)
 	fmt.Printf("invcheck concept-gate: %d commit(s) in %s\n", len(shas), commitRange)
+	// An empty range inspects nothing. Reporting PASS for it is how the nightly
+	// run of this gate stayed green forever: on a main checkout origin/main..HEAD
+	// is always empty. The caller must name the commits under review.
+	if len(shas) == 0 {
+		fmt.Fprintf(os.Stderr, "invcheck: %s contains no commits; an empty range is not a pass. "+
+			"Pass the commits under review, e.g. -range BASE..HEAD\n", commitRange)
+		return 2
+	}
 
 	var failures []string
 	touched := 0
 	for _, sha := range shas {
 		names, err := git(*root, "diff-tree", "--no-commit-id", "--name-only", "-r", sha)
 		if err != nil {
-			continue
+			fmt.Fprintf(os.Stderr, "invcheck: cannot list files changed by %s: %v\n", sha, err)
+			return 2
 		}
 		if !contains(strings.Fields(names), constitution) {
 			continue

@@ -1,0 +1,282 @@
+{
+  "profile": "helm.authority.cel.v1;cost_limit=100000",
+  "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff",
+  "policy": {
+    "Rules": {
+      "business-hours-deploy": {
+        "id": "business-hours-deploy",
+        "logic": "AND",
+        "requirements": [
+          {
+            "id": "inside-window",
+            "description": "",
+            "expression": "input.timestamp \u003e= 1790240400 \u0026\u0026 input.timestamp \u003c 1790269200"
+          }
+        ],
+        "children": null
+      },
+      "export-customers": {
+        "id": "export-customers",
+        "logic": "NOT",
+        "requirements": [
+          {
+            "id": "carries-pii",
+            "description": "",
+            "expression": "taint_contains(\"pii\")"
+          }
+        ],
+        "children": null
+      },
+      "gold-lookup": {
+        "id": "gold-lookup",
+        "logic": "AND",
+        "requirements": [
+          {
+            "id": "gold-tier",
+            "description": "",
+            "expression": "input.effect.params.customer.tier == \"gold\""
+          }
+        ],
+        "children": null
+      },
+      "large-refund": {
+        "id": "large-refund",
+        "logic": "AND",
+        "requirements": [
+          {
+            "id": "human-approval",
+            "description": "",
+            "artifact_type": "human_approval"
+          }
+        ],
+        "children": null
+      },
+      "read-ticket": {
+        "id": "read-ticket",
+        "logic": "AND",
+        "requirements": null,
+        "children": null
+      },
+      "small-refund": {
+        "id": "small-refund",
+        "logic": "AND",
+        "requirements": [
+          {
+            "id": "refund-under-100",
+            "description": "",
+            "expression": "input.effect.params.amount \u003c= 100"
+          }
+        ],
+        "children": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "unconditional rule allows",
+      "input": {
+        "action": "read-ticket",
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "ALLOW",
+        "rule_hash": "sha256:187c762eac2bd519fd0533e4b6b530aebe22b06e0773da6c3c8c3f11fa7b2086",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "refund under limit allows",
+      "input": {
+        "action": "small-refund",
+        "attributes": {
+          "effect": {
+            "params": {
+              "amount": 40
+            }
+          }
+        },
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "ALLOW",
+        "rule_hash": "sha256:03a0b65143cf7caab59633f7695e38fb1994b0443dd5cd8ad867379d9b96ffb1",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "refund over limit is missing a requirement",
+      "input": {
+        "action": "small-refund",
+        "attributes": {
+          "effect": {
+            "params": {
+              "amount": 400
+            }
+          }
+        },
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "DENY",
+        "reason_code": "MISSING_REQUIREMENT",
+        "unmet": [
+          "refund-under-100"
+        ],
+        "rule_hash": "sha256:03a0b65143cf7caab59633f7695e38fb1994b0443dd5cd8ad867379d9b96ffb1",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "approval artifact present allows",
+      "input": {
+        "action": "large-refund",
+        "attributes": {
+          "artifacts": [
+            {
+              "type": "human_approval"
+            }
+          ]
+        },
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "ALLOW",
+        "rule_hash": "sha256:6a7b25e8a8ed9d81c7abc5a3be40bbd839f07d23bf92489f6d73cac4e3176e56",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "approval artifact absent denies",
+      "input": {
+        "action": "large-refund",
+        "attributes": {
+          "artifacts": []
+        },
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "DENY",
+        "reason_code": "MISSING_REQUIREMENT",
+        "unmet": [
+          "human-approval"
+        ],
+        "rule_hash": "sha256:6a7b25e8a8ed9d81c7abc5a3be40bbd839f07d23bf92489f6d73cac4e3176e56",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "pii taint denies export",
+      "input": {
+        "action": "export-customers",
+        "attributes": {
+          "taint": [
+            "pii"
+          ]
+        },
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "DENY",
+        "reason_code": "MISSING_REQUIREMENT",
+        "unmet": [
+          "export-customers"
+        ],
+        "rule_hash": "sha256:0466e8a50248185bfaf0c0835408c0625dba2f0fd1f60d33b442b692ea23eea2",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "clean export allows",
+      "input": {
+        "action": "export-customers",
+        "attributes": {
+          "taint": []
+        },
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "ALLOW",
+        "rule_hash": "sha256:0466e8a50248185bfaf0c0835408c0625dba2f0fd1f60d33b442b692ea23eea2",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "stored time inside the window allows",
+      "input": {
+        "action": "business-hours-deploy",
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "ALLOW",
+        "rule_hash": "sha256:7b7001666837fe790b2bd63ae65b7d6cf0f3db3fa3170bc3da4115a51e871948",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "stored time outside the window denies",
+      "input": {
+        "action": "business-hours-deploy",
+        "time": "2026-09-24T23:00:00Z"
+      },
+      "want": {
+        "verdict": "DENY",
+        "reason_code": "MISSING_REQUIREMENT",
+        "unmet": [
+          "inside-window"
+        ],
+        "rule_hash": "sha256:7b7001666837fe790b2bd63ae65b7d6cf0f3db3fa3170bc3da4115a51e871948",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "spoofed timestamp attribute cannot move the clock",
+      "input": {
+        "action": "business-hours-deploy",
+        "attributes": {
+          "timestamp": 1790250000
+        },
+        "time": "2026-09-24T23:00:00Z"
+      },
+      "want": {
+        "verdict": "DENY",
+        "reason_code": "MISSING_REQUIREMENT",
+        "unmet": [
+          "inside-window"
+        ],
+        "rule_hash": "sha256:7b7001666837fe790b2bd63ae65b7d6cf0f3db3fa3170bc3da4115a51e871948",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    },
+    {
+      "name": "missing attribute is an evaluation error",
+      "input": {
+        "action": "gold-lookup",
+        "attributes": {
+          "effect": {
+            "params": {}
+          }
+        },
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "DENY",
+        "reason_code": "PRG_EVALUATION_ERROR",
+        "rule_hash": "sha256:d09f40b3d2e32110f3e6151eb1b53f684aae49d8c50ff7b4d0e82cf87d7f3682",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff",
+        "detail": "requirement gold-tier: no such key: customer"
+      }
+    },
+    {
+      "name": "unknown action has no policy",
+      "input": {
+        "action": "drop-database",
+        "time": "2026-09-24T12:00:00Z"
+      },
+      "want": {
+        "verdict": "DENY",
+        "reason_code": "NO_POLICY_DEFINED",
+        "snapshot_digest": "sha256:002a4e38f4d0cdc4c48f45687660324aaf129f233466d86fadccb9dc5ebe60ff"
+      }
+    }
+  ]
+}

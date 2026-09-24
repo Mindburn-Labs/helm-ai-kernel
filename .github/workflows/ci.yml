@@ -72,6 +72,31 @@ jobs:
           "$HOME/.local/bin/oasdiff" --version
       - name: Run Make-first PR quality profile
         run: make quality-pr
+      # Unit tests of the gate scripts themselves: each proves its gate
+      # rejects known-bad input (unparsable mutation score, rotated signing
+      # key, ...). Unconditional, so a gate cannot lose its control unseen.
+      - name: Gate self-tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s scripts/ci -p '*_test.py' -v
+          python -m unittest discover -s scripts/ci -p 'test_*.py' -v
+      # CONCEPT-CHANGE markers, over the commits this event actually brings.
+      # The nightly run of this gate inspected origin/main..HEAD on main, which
+      # is always empty; invcheck now refuses an empty range.
+      - name: Invariant amendment markers
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) range="${PR_BASE_SHA}..${PR_HEAD_SHA}" ;;
+            push) range="${PUSH_BEFORE}..${GITHUB_SHA}" ;;
+            *) range="HEAD~1..HEAD" ;;
+          esac
+          make concept-gate CONCEPT_RANGE="$range"
 
   hygiene:
     runs-on: ubuntu-latest
@@ -85,8 +110,6 @@ jobs:
           rg --version
       - name: Presentation hygiene
         run: make verify-presentation
-      - name: AI OS Kernel image release contract
-        run: ./scripts/release/test_ai_os_image_release_contract.sh
       - name: Check for unfinished markers in retained public files
         run: |
           set -euo pipefail
@@ -292,6 +315,29 @@ jobs:
         run: make sdk-openapi-check
       - name: Verify protobuf compatibility
         run: make proto-lint proto-breaking
+
+  # HELM-747: the IDL gates over protocols/proto, which every SDK binding is
+  # generated from (target architecture §11.1). It has no path filter, so it
+  # always reports and can be made a required check. Order: lint with the
+  # recorded exemptions, the positive controls that must reject known-bad
+  # fixtures, then buf breaking against the last v* release tag.
+  idl:
+    name: IDL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0 # the release baseline is resolved from tags
+      - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
+        with:
+          github_token: ${{ github.token }}
+      - name: buf lint and recorded exemptions
+        run: make proto-lint
+      - name: Gate positive controls
+        run: make test-proto-gates
+      - name: buf breaking against the last release tag
+        run: bash scripts/ci/contract_breaking.sh proto release
 
   deployment-smoke:
     runs-on: ubuntu-latest

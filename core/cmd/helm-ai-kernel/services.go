@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -218,21 +219,10 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	}
 
 	// --- 4. Credentials (CRED-001: KMS-backed key management) ---
-	keystorePath := kmsKeystorePath(dataDir)
-	keyManager, kmsErr := kms.NewLocalKMS(keystorePath)
+	keyManager, kmsErr := openCredentialKeystore(dataDir)
 	if kmsErr != nil {
 		logger.Warn("KMS init failed — credentials store DISABLED", "error", kmsErr)
 	} else {
-		// Migration: if legacy env key exists, import it as version 0
-		credKeyHex := os.Getenv("CREDENTIALS_ENCRYPTION_KEY")
-		if credKeyHex != "" {
-			encKey, hexErr := hex.DecodeString(credKeyHex)
-			if hexErr == nil && len(encKey) == 32 {
-				_ = keyManager.ImportKey(encKey, 0)
-				logger.Info("KMS: imported legacy env key as version 0")
-			}
-		}
-
 		credStore := credentials.NewStoreWithKMS(db, keyManager)
 		s.Creds = credentials.NewHandler(credStore)
 		logger.Info("subsystem ready", "component", " Credentials Handler initialized (KMS-backed)")
@@ -404,6 +394,23 @@ func shouldInitializeObservability(endpoint string) bool {
 func kmsKeystorePath(dataDir string) string {
 	dataDir = normalizedDataDir(dataDir)
 	return filepath.Join(dataDir, "keys", "credentials.keystore.json")
+}
+
+// openCredentialKeystore opens the keystore that seals stored provider
+// credentials. A legacy CREDENTIALS_ENCRYPTION_KEY seeds a new keystore as
+// version 0, or is imported into an existing one for decryption only. It never
+// re-pins the active version, so a rotation survives restarts (16-02).
+func openCredentialKeystore(dataDir string) (*kms.LocalKMS, error) {
+	path := kmsKeystorePath(dataDir)
+	legacyHex := os.Getenv("CREDENTIALS_ENCRYPTION_KEY")
+	if legacyHex == "" {
+		return kms.NewLocalKMS(path)
+	}
+	legacy, err := hex.DecodeString(legacyHex)
+	if err != nil || len(legacy) != 32 {
+		return nil, errors.New("CREDENTIALS_ENCRYPTION_KEY must be 64 hex characters (32 bytes)")
+	}
+	return kms.NewLocalKMSWithLegacyKey(path, legacy)
 }
 
 func normalizedDataDir(dataDir string) string {

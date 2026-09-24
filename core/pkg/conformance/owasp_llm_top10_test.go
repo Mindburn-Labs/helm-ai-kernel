@@ -18,7 +18,7 @@ import (
 //   - LLM09: Overreliance
 //   - LLM10: Model Theft
 //
-// Activated by: make test-owasp (runs -run "OWASP-")
+// Run with: cd core && go test ./pkg/conformance/ -run TestOWASP_
 func TestOWASP_LLM_Top10(t *testing.T) {
 	suite := NewSuite()
 	RegisterOWASPTests(suite)

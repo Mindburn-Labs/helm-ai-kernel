@@ -389,17 +389,10 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 	}
 	principalID := strings.TrimSpace(principal.GetID())
 	tenantID := strings.TrimSpace(principal.GetTenantID())
-	workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
-	if workspaceID == "" {
-		workspaceID = configuredRuntimeWorkspaceID()
-	}
-	if svc != nil && svc.EmergencyStops != nil {
-		configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
-		configuredWorkspaceID := configuredRuntimeWorkspaceID()
-		if configuredTenantID == "" || tenantID != configuredTenantID || configuredWorkspaceID == "" || workspaceID != configuredWorkspaceID {
-			api.WriteForbidden(w, "Governed proxy tenant/workspace binding could not be verified")
-			return
-		}
+	workspaceID, err := bindRuntimeScope(r, svc, tenantID, workspaceMayDefault)
+	if err != nil {
+		api.WriteForbidden(w, "Governed proxy "+err.Error())
+		return
 	}
 
 	if svc != nil && svc.Guardian != nil {

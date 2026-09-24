@@ -11,7 +11,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -77,21 +76,10 @@ func registerReceiptRoutes(mux routeMux, svc *Services) {
 			api.WriteForbidden(w, "Evaluate route requires authenticated tenant and principal identifiers")
 			return
 		}
-		workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
-		if svc.EmergencyStops != nil {
-			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
-			if configuredTenantID == "" || tenantID != configuredTenantID {
-				api.WriteForbidden(w, "Evaluate route tenant binding could not be verified")
-				return
-			}
-			if workspaceID == "" {
-				api.WriteForbidden(w, "Evaluate route requires an explicit authenticated workspace binding")
-				return
-			}
-			if configuredWorkspaceID := configuredRuntimeWorkspaceID(); configuredWorkspaceID == "" || workspaceID != configuredWorkspaceID {
-				api.WriteForbidden(w, "Evaluate route workspace binding could not be verified")
-				return
-			}
+		workspaceID, err := bindRuntimeScope(r, svc, tenantID, workspaceMustBeAsserted)
+		if err != nil {
+			api.WriteForbidden(w, "Evaluate route "+err.Error())
+			return
 		}
 		organizationRuntime := isOrganizationRuntimeEvaluation(r.Context())
 		executionProfile := strings.TrimSpace(r.Header.Get(companyActivationExecutionProfileHeader))
@@ -1074,13 +1062,8 @@ func authenticatedReceiptTenantScope(r *http.Request, svc *Services) (string, er
 	if err != nil {
 		return "", err
 	}
-	if svc.EmergencyStops == nil {
-		return tenantID, nil
-	}
-	workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
-	configuredWorkspaceID := configuredRuntimeWorkspaceID()
-	if workspaceID == "" || configuredWorkspaceID == "" || workspaceID != configuredWorkspaceID {
-		return "", fmt.Errorf("authenticated workspace binding is required")
+	if _, err := bindRuntimeScope(r, svc, tenantID, workspaceMustBeAsserted); err != nil {
+		return "", err
 	}
 	return tenantID, nil
 }

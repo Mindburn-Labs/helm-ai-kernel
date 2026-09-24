@@ -94,6 +94,19 @@ before tagging. `DOWNSTREAM_FANOUT_TOKEN` is retained only as a
 `contents:read` token for that preflight. Release jobs must not patch chart or
 SDK package versions in CI.
 
+Publish and signing secrets are environment secrets, never repository secrets.
+Every job that reads one declares the environment that holds it:
+`npm-production` (`NPM_TOKEN`), `pypi-production` (`PYPI_TOKEN`),
+`crates-production` (`CRATES_TOKEN`), `maven-central` (`MAVEN_*`), and
+`release-production` (`HELM_EVIDENCE_KMS_*`,
+`HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND`, `HOMEBREW_TAP_TOKEN`).
+Protecting these environments (required `admins` reviewers and a `v*` tag
+deployment policy) is repository configuration, tracked in HELM-732. Once it is
+in place, each such job waits for approval, and the standalone `*-publish.yml`
+workflows must be dispatched with `--ref v<version>`.
+`scripts/ci/release_workflow_contract_test.py` fails when a job reads one of
+these secrets without declaring its environment.
+
 ## Documentation Contract
 
 Generated surface README. This file is a local ownership and validation contract, not the primary docs information architecture entry point. It covers the active CI/CD surface. Keep it aligned with the source path above and update `docs/documentation-coverage.csv` when ownership, interfaces, validation, or lifecycle status changes.

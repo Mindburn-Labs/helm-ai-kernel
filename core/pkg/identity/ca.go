@@ -1,11 +1,11 @@
+// quantum_posture: classical Ed25519 agent certificates, unchanged here; migration
+// follows the kernel-wide signing policy.
+
 // Package identity implements agent identity certificates for HELM.
 //
 // Provides a lightweight Certificate Authority (CA) that issues Ed25519
 // identity certificates to agents, enabling verifiable attribution of
 // governance receipts to authenticated agents.
-//
-// Extends existing pkg/certification/attestation.go and
-// pkg/substrate/identity/passport.go.
 package identity
 
 import (

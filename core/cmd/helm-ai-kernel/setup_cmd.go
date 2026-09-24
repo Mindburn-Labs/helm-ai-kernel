@@ -2450,7 +2450,7 @@ func setupHookMatcher(target string) string {
 	case "deepseek":
 		return "^(bash|write|edit|mcp_.*)$"
 	default:
-		return "^(Bash|Edit|Write|MultiEdit|mcp__.*)$"
+		return "^(Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*)$"
 	}
 }
 

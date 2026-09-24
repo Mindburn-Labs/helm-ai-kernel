@@ -23,6 +23,12 @@ or release artifacts.
   service.
 - The public conformance proof path supports `L1` and `L2` CLI shortcuts.
 
+## Coverage Labels
+
+| Surface | Label | Why |
+| --- | --- | --- |
+| Local coding-agent hooks (`setup claude-code`, `codex`, `hermes`, `deepseek`) | observed-only | The client decides which calls reach the hook, and the hook classifies command text. It denies what it recognizes and what it cannot evaluate statically, but it is defense in depth, not a boundary. |
+
 ## Not Public Claims
 
 - No hosted Enterprise deployment is claimed by this repo.

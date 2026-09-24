@@ -193,3 +193,34 @@ func TestLaunchpadRoutesAreOffByDefault(t *testing.T) {
 		t.Fatalf("Launchpad opt-in mounted %v", got)
 	}
 }
+
+// The Console's local and desktop kernel modes probe and read
+// /api/v1/boundary/status, a configured-tenant store route. Both launchers send
+// the tenant the Kernel is configured with, so they keep answering:
+//   - helm-desktop starts the Kernel without HELM_RUNTIME_TENANT_ID ("default")
+//     and the Console with HELM_KERNEL_TENANT=default, principal system-admin;
+//   - `helm-ai-kernel local console` sets HELM_RUNTIME_TENANT_ID to the
+//     quickstart tenant and passes the same tenant to the Console.
+func TestLocalConsoleCallersKeepBoundaryStatus(t *testing.T) {
+	for _, test := range []struct {
+		name, configuredTenant, configuredPrincipal, tenant, principal string
+	}{
+		{name: "desktop", tenant: defaultRuntimeTenantID, principal: "system-admin"},
+		{name: "local console", configuredTenant: "tenant-local", configuredPrincipal: "principal-local", tenant: "tenant-local", principal: "principal-local"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc, cleanup := newContractRouteTestServices(t)
+			defer cleanup()
+			t.Setenv(runtimeTenantIDEnv, test.configuredTenant)
+			t.Setenv(runtimePrincipalIDEnv, test.configuredPrincipal)
+			SetPrincipalBindingStore(nil)
+			mux := http.NewServeMux()
+			registerContractRoutes(mux, svc)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, tenantRequest(t, http.MethodGet, "/api/v1/boundary/status", test.tenant, test.principal))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}

@@ -20,9 +20,13 @@ open Lake DSL
 -/
 
 package helmAiKernelProofs where
-  -- No special build options; the proof is self-contained and uses no
-  -- external libraries. Mathlib would let us drop a few `simp` calls
-  -- but is not required and would slow CI considerably.
+  -- The proof is self-contained and uses no external libraries. Mathlib
+  -- would let us drop a few `simp` calls but would slow CI considerably.
+  --
+  -- Lean reports `sorry` as a warning, so without this option `lake build`
+  -- exits 0 on an unproven theorem. scripts/ci/lean_proof_gate.sh checks
+  -- that a `sorry` still fails the build.
+  moreLeanArgs := #["-DwarningAsError=true"]
 
 @[default_target]
 lean_lib EffectPermitSoundness where

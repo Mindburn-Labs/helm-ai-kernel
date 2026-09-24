@@ -11,11 +11,10 @@ import (
 )
 
 type ExecutionFirewall struct {
-	Catalog             *ToolCatalog
-	Quarantine          *QuarantineRegistry
-	PolicyEpoch         string
-	RequirePinnedSchema bool
-	Clock               func() time.Time
+	Catalog     *ToolCatalog
+	Quarantine  *QuarantineRegistry
+	PolicyEpoch string
+	Clock       func() time.Time
 
 	// Observe, when non-nil and unexpired, switches the firewall into the
 	// shadow on-ramp: verdicts are computed and sealed exactly as in enforce
@@ -41,14 +40,13 @@ func (g *ObserveGrant) Active(now time.Time) bool {
 }
 
 type ToolCallAuthorization struct {
-	ServerID         string
-	ToolName         string
-	Effect           string
-	ArgsHash         string
-	GrantedScopes    []string
-	PinnedSchemaHash string
-	OAuthResource    string
-	ReceiptID        string
+	ServerID      string
+	ToolName      string
+	Effect        string
+	ArgsHash      string
+	GrantedScopes []string
+	OAuthResource string
+	ReceiptID     string
 }
 
 func NewExecutionFirewall(catalog *ToolCatalog, quarantine *QuarantineRegistry, policyEpoch string) *ExecutionFirewall {
@@ -139,18 +137,10 @@ func (f *ExecutionFirewall) AuthorizeToolCall(ctx context.Context, req ToolCallA
 		return record.Seal()
 	}
 
-	hash, err := ToolSchemaHash(tool)
-	if err != nil {
-		record.Verdict = contracts.VerdictDeny
-		record.ReasonCode = contracts.ReasonSchemaViolation
-		return record.Seal()
-	}
-	if f.RequirePinnedSchema && req.PinnedSchemaHash == "" {
-		record.Verdict = contracts.VerdictEscalate
-		record.ReasonCode = contracts.ReasonSchemaViolation
-		return record.Seal()
-	}
-	if req.PinnedSchemaHash != "" && req.PinnedSchemaHash != hash {
+	// A schema that cannot be hashed is not a schema the boundary can reason
+	// about. There is no caller-supplied "pin" check here: the caller that
+	// supplied the pin also supplied the schema, so it bound nothing (HELM-756).
+	if _, err := ToolSchemaHash(tool); err != nil {
 		record.Verdict = contracts.VerdictDeny
 		record.ReasonCode = contracts.ReasonSchemaViolation
 		return record.Seal()

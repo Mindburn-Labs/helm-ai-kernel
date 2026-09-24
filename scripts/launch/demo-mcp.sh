@@ -31,13 +31,12 @@ echo "==> Inspecting local MCP fixture metadata and schema"
 FIXTURE_JSON="$(python3 scripts/launch/mcp-fixture-server.py --self-test)"
 TOOL_SCHEMA_JSON="$(printf '%s\n' "$FIXTURE_JSON" | python3 -c 'import json,sys; p=json.load(sys.stdin); print(json.dumps(p["tools"][0]["inputSchema"], sort_keys=True, separators=(",",":")))')"
 TOOL_SCHEMA_HASH="$(printf '%s\n' "$TOOL_SCHEMA_JSON" | python3 -c 'import hashlib,json,sys; schema=json.load(sys.stdin); pre={"name":"local.echo","schema":schema}; print("sha256:"+hashlib.sha256(json.dumps(pre, sort_keys=True, separators=(",",":"), ensure_ascii=False).encode()).hexdigest())')"
-printf '%s\n' "$FIXTURE_JSON" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["status"]=="ok"; assert p["tools"][0]["name"]=="local.echo"; print(json.dumps({"fixture":"local-fixture-mcp","tool":"local.echo","schema_pinned":True}, sort_keys=True))'
+printf '%s\n' "$FIXTURE_JSON" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["status"]=="ok"; assert p["tools"][0]["name"]=="local.echo"; print(json.dumps({"fixture":"local-fixture-mcp","tool":"local.echo"}, sort_keys=True))'
 
 echo "==> Generating fail-closed MCP wrapper profile"
 PROFILE_JSON="$(./bin/helm-ai-kernel mcp wrap \
   --server-id "local-fixture-mcp" \
   --upstream-command "$FIXTURE_CMD" \
-  --require-pinned-schema=true \
   --json)"
 printf '%s\n' "$PROFILE_JSON" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["server_id"]=="local-fixture-mcp"; assert p["quarantine_default"]=="quarantined"; assert p["upstream_command"][:2]==["python3","scripts/launch/mcp-fixture-server.py"]; print(json.dumps({"wrapper":p["server_id"],"quarantine_default":p["quarantine_default"]}, sort_keys=True))'
 
@@ -66,7 +65,7 @@ if ! curl -fsS "$HELM_URL/api/health" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> Exercising API quarantine, approval, and schema-pin authorization"
+echo "==> Exercising API quarantine, approval, and scoped authorization"
 python3 - "$HELM_URL" "$FIXTURE_JSON" "$TOOL_SCHEMA_JSON" "$TOOL_SCHEMA_HASH" "$ADMIN_KEY" "$TENANT_ID" <<'PY'
 import json
 import sys
@@ -152,7 +151,6 @@ _, unknown_server = request(
         "tool_name": "local.echo",
         "args_hash": "sha256:unknown-server",
         "tool_schema": tool_schema,
-        "pinned_schema_hash": schema_hash,
     },
     {403},
 )
@@ -211,7 +209,7 @@ _, registry_approval = request(
     {
         "approver_id": "user:local-admin",
         "approval_receipt_id": approval_receipt_id,
-        "reason": "schema pin bound to approval ceremony",
+        "reason": "server approved through the approval ceremony",
     },
     {200},
 )
@@ -229,40 +227,25 @@ _, unknown_tool = request(
 )
 unknown_tool_verdict = require_no_allow(unknown_tool, "unknown tool")
 
-_, missing_pin = request(
-    "POST",
-    "/api/v1/mcp/authorize-call",
-    {
-        "server_id": "local-fixture-mcp",
-        "tool_name": "local.echo",
-        "args_hash": "sha256:missing-pin",
-        "tool_schema": tool_schema,
-    },
-    {403},
-)
-missing_pin_verdict = require_no_allow(missing_pin, "missing schema pin")
-
 _, allowed = request(
     "POST",
     "/api/v1/mcp/authorize-call",
     {
         "server_id": "local-fixture-mcp",
         "tool_name": "local.echo",
-        "args_hash": "sha256:pinned-call",
+        "args_hash": "sha256:approved-call",
         "tool_schema": tool_schema,
-        "pinned_schema_hash": schema_hash,
         "receipt_id": approval_receipt_id,
     },
     {200},
 )
 if allowed["verdict"] != "ALLOW":
-    raise AssertionError(f"pinned fixture call was not allowed: {allowed}")
+    raise AssertionError(f"approved fixture call was not allowed: {allowed}")
 
 print(json.dumps({
     "api_unknown_server": unknown_server_verdict,
     "api_unknown_tool": unknown_tool_verdict,
-    "api_missing_schema_pin": missing_pin_verdict,
-    "api_pinned_call": allowed["verdict"],
+    "api_approved_call": allowed["verdict"],
     "approval_receipt_id": approval_receipt_id,
     "proofgraph_visible": True,
 }, sort_keys=True))
@@ -294,8 +277,7 @@ CLI_ALLOWED="$(./bin/helm-ai-kernel mcp authorize-call \
   --tool-name local.echo \
   --approved \
   --tool-schema-json "$TOOL_SCHEMA_JSON" \
-  --pinned-schema-hash "$TOOL_SCHEMA_HASH" \
   --json)"
-printf '%s\n' "$CLI_ALLOWED" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["verdict"]=="ALLOW"; print(json.dumps({"cli_pinned_call":p["verdict"]}, sort_keys=True))'
+printf '%s\n' "$CLI_ALLOWED" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["verdict"]=="ALLOW"; print(json.dumps({"cli_approved_call":p["verdict"]}, sort_keys=True))'
 
 echo "==> MCP quarantine demo completed with no fixture dispatch for unknown tools or servers."

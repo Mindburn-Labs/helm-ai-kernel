@@ -6385,7 +6385,10 @@ components:
         recommended_action: { type: string }
         quarantine_record_id: { type: string }
         requires_approval: { type: boolean }
-        schema_pin_required: { type: boolean }
+        schema_pin_required:
+          type: boolean
+          deprecated: true
+          description: Always false since HELM-756. No dispatch path enforces a schema pin.
         authorization_needed: { type: boolean }
         scanned_at: { type: string, format: date-time }
 
@@ -6435,7 +6438,10 @@ components:
         granted_scopes:
           type: array
           items: { type: string }
-        pinned_schema_hash: { type: string }
+        pinned_schema_hash:
+          type: string
+          deprecated: true
+          description: Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.
         tool_schema:
           type: object
           additionalProperties: true

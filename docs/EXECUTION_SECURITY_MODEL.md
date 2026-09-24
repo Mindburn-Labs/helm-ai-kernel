@@ -217,7 +217,7 @@ determination that a specific tool call is permitted:
 
     Admissible iff:
       (1) tool ∈ declared surface (Layer A)
-      (2) args conform to pinned schema
+      (2) args conform to the tool's declared schema
       (3) budget sufficient
       (4) PRG requirements satisfied
       (5) identity authorized for resource boundary

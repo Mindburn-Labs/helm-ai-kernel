@@ -192,8 +192,7 @@
         "core/cmd/channel_gateway/**",
         "core/cmd/pack_verify/**",
         "core/cmd/skill_lint/**",
-        "core/cmd/skill_pack/**",
-        "core/cmd/tee-collateral/**"
+        "core/cmd/skill_pack/**"
       ],
       "owner_doc_path": "core/cmd/README.md",
       "public_doc_slugs": [],

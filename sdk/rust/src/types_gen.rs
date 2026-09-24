@@ -5831,6 +5831,7 @@ pub struct McpAuthorizeCallRequest {
     pub args_hash: Option<String>,
     #[serde(rename = "granted_scopes", skip_serializing_if = "Option::is_none")]
     pub granted_scopes: Option<Vec<String>>,
+    /// Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.
     #[serde(rename = "pinned_schema_hash", skip_serializing_if = "Option::is_none")]
     pub pinned_schema_hash: Option<String>,
     #[serde(rename = "tool_schema", skip_serializing_if = "Option::is_none")]
@@ -6247,6 +6248,7 @@ pub struct McpScanResult {
     pub quarantine_record_id: Option<String>,
     #[serde(rename = "requires_approval", skip_serializing_if = "Option::is_none")]
     pub requires_approval: Option<bool>,
+    /// Always false since HELM-756. No dispatch path enforces a schema pin.
     #[serde(rename = "schema_pin_required", skip_serializing_if = "Option::is_none")]
     pub schema_pin_required: Option<bool>,
     #[serde(rename = "authorization_needed", skip_serializing_if = "Option::is_none")]

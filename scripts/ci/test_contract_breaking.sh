@@ -173,11 +173,20 @@ assert_status 2
 assert_contains 'unable to resolve contract-gate base ref origin/missing-base'
 assert_oasdiff_invocations 0
 
+run_proto buf_pass 0
+assert_status 0
+assert_contains 'GATE 1 (proto): pass'
+assert_buf_invocations 2
+assert_buf_log_contains 'subdir=protocols/policy-schema'
+assert_buf_log_contains 'subdir=protocols/proto'
+
+# A finding in one module must not stop the other module being diffed.
 run_proto buf_finding 100
 assert_status 1
-assert_contains 'reported a blocking contract finding'
+assert_contains 'buf breaking for protocols/policy-schema reported a blocking contract finding'
+assert_contains 'buf breaking for protocols/proto reported a blocking contract finding'
 assert_not_contains 'refusing to treat a tool failure'
-assert_buf_invocations 1
+assert_buf_invocations 2
 
 run_proto buf_tool_error 2
 assert_status 2
@@ -193,7 +202,7 @@ assert_oasdiff_invocations 2
 run_proto release_buf_finding 100 release missing-base
 assert_status 1
 assert_contains "contract release baseline: v1.0.0 ($release_base)"
-assert_buf_invocations 1
-assert_buf_log_contains "ref=$release_base"
+assert_buf_invocations 2
+assert_buf_log_contains "ref=$release_base,subdir=protocols/proto"
 
 printf 'contract-breaking self-test passed\n'

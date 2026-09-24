@@ -318,6 +318,29 @@ jobs:
       - name: Verify protobuf compatibility
         run: make proto-lint proto-breaking
 
+  # HELM-747: the IDL gates over protocols/proto, which every SDK binding is
+  # generated from (target architecture §11.1). It has no path filter, so it
+  # always reports and can be made a required check. Order: lint with the
+  # recorded exemptions, the positive controls that must reject known-bad
+  # fixtures, then buf breaking against the last v* release tag.
+  idl:
+    name: IDL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0 # the release baseline is resolved from tags
+      - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
+        with:
+          github_token: ${{ github.token }}
+      - name: buf lint and recorded exemptions
+        run: make proto-lint
+      - name: Gate positive controls
+        run: make test-proto-gates
+      - name: buf breaking against the last release tag
+        run: bash scripts/ci/contract_breaking.sh proto release
+
   deployment-smoke:
     runs-on: ubuntu-latest
     steps:

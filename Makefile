@@ -206,6 +206,8 @@ lint-security:
 
 proto-lint:
 	buf lint protocols/policy-schema
+	buf lint protocols/proto
+	bash scripts/ci/check_proto_lint_exemptions.sh protocols/proto
 
 proto-breaking:
 	bash scripts/ci/contract_breaking.sh proto
@@ -219,6 +221,12 @@ contract-breaking-release:
 
 test-contract-breaking:
 	bash scripts/ci/test_contract_breaking.sh
+
+# Positive controls for the protocols/proto buf gates (HELM-747): real buf,
+# real buf.yaml, known-bad fixtures that must fail.
+.PHONY: test-proto-gates
+test-proto-gates:
+	bash scripts/ci/test_proto_gates.sh
 
 docker-verify:
 	docker build -f Dockerfile -t helm-ai-kernel:verify-root .

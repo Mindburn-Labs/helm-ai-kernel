@@ -253,7 +253,7 @@
       "command": "python3 scripts/ci/release_workflow_contract_test.py",
       "timeout_seconds": 60,
       "paths": [
-        ".github/workflows/release.yml",
+        ".github/workflows/**",
         "scripts/ci/quality-gates.json",
         "scripts/ci/release_workflow_contract_test.py"
       ]

@@ -834,7 +834,7 @@ func TestClassifyNormalizesSensitiveWriteTargets(t *testing.T) {
 		{"hermes config", "echo x > ~/.hermes/config.yaml", ""},
 		{"dsh hooks", "echo x > ~/.dsh/hooks.json", ""},
 		{"dsh cordis patch", "echo x > ~/.dsh/cordis.patch.yml", ""},
-		{"authorized_keys", "echo 'ssh-ed25519 AAAA' >> ~/.ssh/authorized_keys", ""},
+		{"authorized_keys", "echo 'ssh-key AAAA' >> ~/.ssh/authorized_keys", ""},
 		{"bashrc", "echo 'curl x | sh' >> ~/.bashrc", ""},
 		{"zshrc", "echo x >> ~/.zshrc", ""},
 		{"profile", "echo x >> ~/.profile", ""},

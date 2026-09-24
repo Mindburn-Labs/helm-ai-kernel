@@ -334,7 +334,7 @@ description of enforcement.
 | `api/openapi/**` backward compatibility | `make openapi-breaking` → `oasdiff --fail-on ERR` (`Makefile:205-206`, `scripts/ci/contract_breaking.sh:151`), gate `openapi-breaking` in the `pr` profile (`scripts/ci/quality-gates.json:578-588`) run by `make quality-pr` (`ci.yml:75`) | **Yes**, path-scoped to `api/openapi/**` |
 | OpenAPI operation set ↔ served public routes | `make docs-openapi-parity` → `TestPublicDocsOpenAPIContract` (`core/cmd/helm-ai-kernel/openapi_runtime_routes_test.go:77`) | **Yes**, for routes and operationIds — **not** for schema fields |
 | Reference pack ↔ Go implementation, for the packs listed in D4 | `make verify-fixtures`, run by `.github/workflows/ci.yml` — Go parity test **and** independent Python verifier per pack | **Yes** |
-| `protocols/proto/**` lint and backward compatibility | **Unenforced.** `make proto-lint` runs `buf lint protocols/policy-schema` (`Makefile:177-178`) and `make proto-breaking` diffs `protocols/policy-schema` only (`scripts/ci/contract_breaking.sh:184-186`). No buf module is rooted at `protocols/proto/` (`find . -name 'buf.yaml'` returns only `protocols/policy-schema/buf.yaml`). The file holding the receipt and permit wire contracts has never been lint- or breaking-checked. | **No** |
+| `protocols/proto/**` lint and backward compatibility | `protocols/proto/buf.yaml` (HELM-747) roots a buf module there: STANDARD lint, with the 23 findings in the published v1 files exempted per file and rule and pinned exactly by `scripts/ci/check_proto_lint_exemptions.sh`, and FILE breaking rules. `make proto-lint` and `make proto-breaking` (`scripts/ci/contract_breaking.sh`, both buf modules, against the PR base) run in the `kernel` and `contract-drift` CI jobs. The CI `IDL` job adds `buf breaking` against the last `v*` release tag and `make test-proto-gates`, which proves each gate rejects a known-bad fixture. The IDL has no HTTP annotations; HTTP routes are covered by the OpenAPI rows above. | **Yes** against the PR base; against the release tag once `IDL` is a required check |
 | `go-apidiff` on `protocols/` | **Does not exist.** Repository-wide `git grep apidiff` returns nothing. `CLAUDE.md` in the workspace root asserts this gate; the assertion is false and is on P2-9's list. | **No** |
 | Go struct ↔ JSON Schema | `core/pkg/contracts/schema_validation_test.go:106-129` builds a Go literal and validates it against the schema. With no `additionalProperties:false` anywhere in `receipt/v2.json`, a Go field the schema lacks passes, and a schema property no Go field produces is never exercised. The gate is green while the two disagree. | **No, structurally** |
 | Signed preimage field set ↔ published schema | No gate exists. | **No** |
@@ -368,10 +368,11 @@ integrity only, not deployment or global adoption.
   the specs. A pull request that widens a signing envelope without a new version
   constant is now refusable by reference.
 - No gate enforces this ADR. It is an editorial rule until P2-9 lands the
-  schema-versus-preimage parity check and a buf module rooted at
-  `protocols/proto/`. That is stated here rather than implied, because an
-  unenforced rule that reads as enforced is the failure mode this ADR exists to
-  correct.
+  schema-versus-preimage parity check. The buf module rooted at
+  `protocols/proto/` (HELM-747) gates proto lint and compatibility only, not
+  schema-versus-preimage parity. That is stated here rather than implied,
+  because an unenforced rule that reads as enforced is the failure mode this
+  ADR exists to correct.
 
 ## Reconciliation of ADR 0002
 

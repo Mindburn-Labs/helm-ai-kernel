@@ -129,7 +129,9 @@ flowchart TD
 | `persistence.enabled` | `true` | Creates or uses a PVC for `/data`; required in production so policy replay watermarks survive restarts. |
 | `ingress.enabled` | `false` | Enables Kubernetes ingress. |
 | `helm.metrics.enabled` | `false` | Enables `/metrics` on `service.metricsPort`. |
-| `helm.metrics.serviceMonitor.enabled` | `false` | Emits a Prometheus Operator `ServiceMonitor`. |
+| `helm.metrics.bearerTokenSecret.name` | empty | Existing Secret holding the `/metrics` bearer token, rendered as `HELM_METRICS_BEARER_TOKEN`. Empty keeps `/metrics` loopback-only. |
+| `helm.metrics.bearerTokenSecret.key` | `token` | Key inside that Secret. |
+| `helm.metrics.serviceMonitor.enabled` | `false` | Emits a Prometheus Operator `ServiceMonitor` that scrapes with the bearer token; requires `helm.metrics.bearerTokenSecret.name`. |
 | `telemetry.enabled` | `false` | Renders the OTLP variables into the kernel container. Enable per stand, never in a chart default. |
 | `telemetry.metricsExporter` | `none` | Independent OTLP metric push switch. `none` keeps metrics on the Prometheus scrape surface only; `otlp` additionally pushes metric batches to `telemetry.endpoint`. |
 | `telemetry.syntheticLifecycleEvents` | `false` | Renders `HELM_ENV=synthetic` so the kernel publishes governed lifecycle events from a synthetic stand. Requires `telemetry.enabled=true`; never enable for pilot or customer namespaces. |

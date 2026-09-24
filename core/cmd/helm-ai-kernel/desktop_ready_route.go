@@ -27,7 +27,7 @@ func takeDesktopReadyToken() string {
 	return token
 }
 
-func registerDesktopReadyRoute(mux *http.ServeMux, token string) {
+func registerDesktopReadyRoute(mux routeMux, token string) {
 	if token == "" {
 		return
 	}

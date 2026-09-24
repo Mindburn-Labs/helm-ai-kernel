@@ -253,31 +253,49 @@ kubectl -n "$NAMESPACE" patch "deployment/${FULLNAME}" \
     --patch-file "$TMP_DIR/policy-controlplane-patch.yaml" >/dev/null
 
 kubectl -n "$NAMESPACE" rollout status "deployment/${FULLNAME}" --timeout=180s
-kubectl -n "$NAMESPACE" port-forward "svc/${FULLNAME}" "${API_PORT}:8080" >"$TMP_DIR/port-forward.log" 2>&1 &
-PF_PID="$!"
 
-for _ in $(seq 1 60); do
-    if curl -fsS "http://127.0.0.1:${API_PORT}/healthz" >/dev/null 2>&1; then
-        break
+# port-forward binds to one pod, so it has to be reopened after a restart.
+start_port_forward() {
+    if [ -n "$PF_PID" ]; then
+        kill "$PF_PID" >/dev/null 2>&1 || true
+        wait "$PF_PID" 2>/dev/null || true
     fi
-    sleep 1
-done
-curl -fsS "http://127.0.0.1:${API_PORT}/healthz" >/dev/null
+    kubectl -n "$NAMESPACE" port-forward "svc/${FULLNAME}" "${API_PORT}:8080" >>"$TMP_DIR/port-forward.log" 2>&1 &
+    PF_PID="$!"
+    for _ in $(seq 1 60); do
+        if curl -fsS "http://127.0.0.1:${API_PORT}/healthz" >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    curl -fsS "http://127.0.0.1:${API_PORT}/healthz" >/dev/null
+}
 
-curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/evaluate" \
-    -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer ${ADMIN_KEY}" \
-    -H "X-Helm-Tenant-ID: ${TENANT_ID}" \
-    -H "X-Helm-Principal-ID: ${AGENT_ID}" \
-    --data-binary "{\"principal\":\"${AGENT_ID}\",\"action\":\"EXECUTE_TOOL\",\"resource\":\"unknown.tool.kind\",\"context\":{\"session_id\":\"${AGENT_ID}\"}}" >"$TMP_DIR/decision.json"
-python3 - "$TMP_DIR/decision.json" <<'PY'
+AUTH=(-H "Authorization: Bearer ${ADMIN_KEY}" -H "X-Helm-Tenant-ID: ${TENANT_ID}" -H "X-Helm-Principal-ID: ${AGENT_ID}")
+
+# evaluate_unknown_tool OUT records a governed DENY and prints its receipt id.
+evaluate_unknown_tool() {
+    curl -fsS -X POST "http://127.0.0.1:${API_PORT}/api/v1/evaluate" \
+        -H 'Content-Type: application/json' \
+        "${AUTH[@]}" \
+        --data-binary "{\"principal\":\"${AGENT_ID}\",\"action\":\"EXECUTE_TOOL\",\"resource\":\"unknown.tool.kind\",\"context\":{\"session_id\":\"${AGENT_ID}\"}}" >"$1"
+    python3 - "$1" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
 if str(payload.get("verdict", "")).upper() != "DENY":
     raise SystemExit(f"expected DENY decision: {payload}")
+if not payload.get("receipt_id"):
+    raise SystemExit(f"decision names no receipt: {payload}")
+print(payload["receipt_id"])
 PY
+}
 
-AUTH=(-H "Authorization: Bearer ${ADMIN_KEY}" -H "X-Helm-Tenant-ID: ${TENANT_ID}" -H "X-Helm-Principal-ID: ${AGENT_ID}")
+fetch_receipt() {
+    curl -fsS "http://127.0.0.1:${API_PORT}/api/v1/receipts/$1" "${AUTH[@]}" >"$2"
+}
+
+start_port_forward
+RECEIPT_ID="$(evaluate_unknown_tool "$TMP_DIR/decision.json")"
 status="$(curl -sS -o "$TMP_DIR/no-auth.json" -w '%{http_code}' "http://127.0.0.1:${API_PORT}/api/v1/receipts?limit=1")"
 test "$status" = "401" || { echo "::error::expected 401 without auth, got $status"; exit 1; }
 
@@ -304,10 +322,20 @@ if payload.get("verified") is not True and payload.get("verdict") != "PASS":
     raise SystemExit(f"expected replay verification success: {payload}")
 PY
 
-before="$(kubectl -n "$NAMESPACE" get secret "${FULLNAME}-signing" -o jsonpath='{.data.signing-key}')"
+# Persistence across a restart, judged by what the kernel serves: the receipt
+# issued before the restart must come back unchanged from the durable volume,
+# and a receipt issued after it must carry the same signing public key.
+# (Comparing the signing Secret with itself, as this used to, cannot fail.)
+fetch_receipt "$RECEIPT_ID" "$TMP_DIR/receipt.before-restart.json"
 kubectl -n "$NAMESPACE" rollout restart "deployment/${FULLNAME}" >/dev/null
 kubectl -n "$NAMESPACE" rollout status "deployment/${FULLNAME}" --timeout=180s
-after="$(kubectl -n "$NAMESPACE" get secret "${FULLNAME}-signing" -o jsonpath='{.data.signing-key}')"
-test "$before" = "$after" || { echo "::error::signing key changed across restart"; exit 1; }
+start_port_forward
+fetch_receipt "$RECEIPT_ID" "$TMP_DIR/receipt.after-restart.json"
+ISSUED_RECEIPT_ID="$(evaluate_unknown_tool "$TMP_DIR/decision.after-restart.json")"
+fetch_receipt "$ISSUED_RECEIPT_ID" "$TMP_DIR/receipt.issued-after-restart.json"
+python3 "$ROOT/scripts/ci/check_restart_persistence.py" \
+    "$TMP_DIR/receipt.before-restart.json" \
+    "$TMP_DIR/receipt.after-restart.json" \
+    "$TMP_DIR/receipt.issued-after-restart.json"
 
 echo "kind smoke passed"

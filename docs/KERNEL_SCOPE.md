@@ -93,7 +93,6 @@ non-TCB supporting infrastructure:
 | `agent/adapter.go`     | KernelBridge choke point                   | ✅ Active |
 | `runtime/budget/`      | Compute budget enforcement                 | ✅ Active |
 | `escalation/ceremony/` | RFC-005 Approval Ceremony                  | ✅ Active |
-| `genesis/ceremony/`    | VGL six-phase Genesis ceremony state machine | ✅ Active |
 | `evidence/`            | Evidence pack export/verify                | ✅ Active |
 | `replay/`              | Replay engine for verification             | ✅ Active |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |

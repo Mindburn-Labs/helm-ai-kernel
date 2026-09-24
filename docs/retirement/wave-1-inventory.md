@@ -3,7 +3,8 @@
 quantum_posture: inventory only; this document names packages and commands but
 exercises, changes, or asserts no cryptographic behaviour.
 
-Status: slice 1 of HELM-756, 2026-09-24, on `main` at `a26ce1ca`.
+Status: slices 1 and 2 of HELM-756, 2026-09-24. Slice 1 was measured on `main`
+at `a26ce1ca`, slice 2 on `main` at `2f1c11ab`.
 
 Architecture rev 3.4 §14.4 lists retirement *candidates*. It is not a
 bulk-deletion instruction. Before a candidate is removed, this inventory
@@ -63,12 +64,12 @@ No §14.4 candidate is in that list.
 | `core/pkg/worktree` (253) | Only `harness`, removed in the same slice | None | INV-020 | **Remove now** | s1 |
 | `core/pkg/patchdelivery` (988) | None | None | INV-013 to INV-019 | **Remove now** | s1 |
 | `core/pkg/connectors/ton/acton` (2,259) | None | Yes; see the notes below the table. | — | **Keep (blocked)**. Remove once the Control Plane TON connector is retired (§14.4, in the list of Control Plane code that is not ported) and the reason codes are deprecated. | s3 |
-| `core/pkg/identity/iatp` (537) | None / `tests/conformance/did` | None | — | Remove, together with its conformance test | s2 |
-| `core/pkg/proofgraph/consensus` (554), `proofgraph/crdt` (595) | None | None | — | Remove. Both are protected paths, so the manifest must be regenerated. Sequence after the open PRs that edit `protected.manifest`. | s2 |
-| `core/pkg/orgdna` (239), `core/pkg/genesis/ceremony` (318) | None | None. `docs/KERNEL_SCOPE.md` lists `genesis/ceremony` as Active, which is false. | — | Remove, and correct KERNEL_SCOPE | s2 |
-| `core/pkg/a2a/payments` (837) | None | None | — | Remove | s2 |
-| `core/pkg/certification/admission` (777) | None | None | — | Remove. The top-level `certify` CLI was already removed by #971 (HELM-742). | s2 |
-| `core/pkg/policy/wasm` (325) | None | None. It is named by `protocols/policy-schema/v1/canonicalization.md` and `docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md`. | **INV-005** | Re-home INV-005 to CEL `decide` (HELM-750) first, then remove | s2 |
+| `core/pkg/identity/iatp` (537) | None / `tests/conformance/did` | None | — | **Removed**. The IATP handshake test is removed from the DID smoke suite; the DID and VC tests stay. | s2 |
+| `core/pkg/proofgraph/consensus` (554), `proofgraph/crdt` (595) | None | None | — | **Removed**. Both are protected paths; the boundary manifest is regenerated. | s2 |
+| `core/pkg/orgdna` (239), `core/pkg/genesis/ceremony` (318) | None | None. `docs/KERNEL_SCOPE.md` lists `genesis/ceremony` as Active, which is false. | — | **Removed**; the KERNEL_SCOPE row is gone | s2 |
+| `core/pkg/a2a/payments` (837) | None | None | — | **Removed**. The `a2a` root package stays. | s2 |
+| `core/pkg/certification` and `certification/admission` (1,445) | None. The root is imported only by `admission`. | None | — | **Removed**. The top-level `certify` CLI was already removed by #971 (HELM-742). | s2 |
+| `core/pkg/policy/wasm` (325) | None | None. It is named by `protocols/policy-schema/v1/canonicalization.md` and `docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md`. | **INV-005** | **Removed** after INV-005 was re-homed to the CEL `decide` in `core/pkg/kernel/authority`, which the Guardian calls in production and whose fail-closed tests now back the invariant. Both documents are corrected. | s2 |
 | `core/pkg/compliance/*` (24 packages, 13,010 LOC) and the `compliance/zkprovider/gdpr17` module | `governance` and `registry`, through `compliance/jcs` only | `compliance/jcs` reaches the Control Plane, Enterprise and Data Plane through `evidence` and `boundary/approvalceremony` | — | **Split**. Move `compliance/jcs` into `canonicalize` behind a compatible path, then remove the regulated packs (H12). | s4 |
 | `core/pkg/conform` (3 packages, 6,078 LOC), gates G0–G15 | `cmd/helm-ai-kernel`: `conform`, `verify`, `demo`, `demo finance`, receipt evaluation | Six HTTP 501 routes from #971. See the notes below the table. | — | **Split**. Keep the `verify`-path helpers (`ValidateEvidencePackStructure`, `VerifyReport`) under the verifier. Delete G0–G15 and `conform`. Remove the routes after a release has carried the deprecation. | s4 |
 | `core/pkg/launchkit` (893), `core/pkg/launchpad/*` (18 packages, 13,236 LOC) | `cmd/helm-ai-kernel` (`up`), `pkg/api` / `tests/launchpad` | None through Go imports. Launchpad retirement is HELM-762. | — | **Disable first** (§14.7: the egress proxy and HTTP launch teardown). Remove with HELM-762. | s4 |
@@ -138,8 +139,12 @@ marker, and point at a successor.
 | INV-022 Exactly one terminal event per run | `harness` | Same reason as INV-021 | The episode protocol (§7.1, contract 9) owns the requirement. INV-024 bars any lifecycle claim until then. |
 | INV-023 Unenforceable read-only claim refused | `harness` | Same reason as INV-021 | INV-024 |
 
-INV-005 is held by `policy/wasm`, so slice 2 must re-home it before that
-package goes. INV-024 cites `core/pkg/runtimeadapters`, which is not a
+INV-005 was held by `policy/wasm`. Slice 2 re-homes it before deleting the
+package: its owner is now the CEL `decide` in `core/pkg/kernel/authority`, the
+production policy path (HELM-750). The tests `TestDecideFailsClosed`,
+`TestCompileErrorsDenyOnlyTheirAction`, `TestDecideCostLimitDenies`,
+`TestCompileNilGraphDeniesEverything` and `TestPropertyUnknownActionDenies`
+prove it. The rule is kept, not retired. INV-024 cites `core/pkg/runtimeadapters`, which is not a
 candidate.
 
 ## Slice 1 evidence
@@ -162,3 +167,35 @@ The slice deletes:
 - the design doc that described the three process-ownership packages.
 
 No protected path is touched, so the boundary manifest does not change.
+
+## Slice 2 evidence
+
+Slice 2 removes:
+- `proofgraph/consensus` and `proofgraph/crdt`;
+- `orgdna` and `genesis/ceremony`;
+- `identity/iatp`;
+- `a2a/payments`;
+- `certification` and `certification/admission`;
+- `policy/wasm`.
+
+None of them has a non-test importer in any module or an importer in any
+workspace repository. Outside the kernel, only planning and audit documents
+name them: the HELM Genesis plans in the workspace `docs/superpowers`, and
+estate inventories.
+
+| Measure | Before (`2f1c11ab`) | After |
+|---|---|---|
+| `core/pkg` packages with non-test Go files | 283 | 275 |
+| Importer-less packages (`dead-packages.sh`) | 129 | 121 |
+| Unreachable from every `core/cmd` main | 139 | 130 |
+| `deadcode ./...` unreachable functions, all `core/cmd` mains | 4,897 | 4,740 |
+
+The slice deletes:
+- 43 files;
+- 4,850 non-test lines and 5,728 test lines of Go.
+
+Two protected paths change: `core/pkg/proofgraph/*` and
+`protocols/policy-schema/v1/canonicalization.md`. The regenerated boundary
+manifest drops exactly the 12 deleted protected files and re-hashes the edited
+protocol document. `check_reason_code_reachability.py` passes, because none of
+the removed packages was the only emitter of a declared reason code.

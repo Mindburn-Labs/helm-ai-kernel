@@ -631,14 +631,6 @@
       "finality": "instance_parameter"
     },
     {
-      "code": "ERR_VERIFICATION_SCOPE_REQUIRED",
-      "applies_to": ["DENY"],
-      "domain": "harness",
-      "description": "Medium or high risk execution is missing a VerificationScope",
-      "since": "1.4.0",
-      "finality": "instance_parameter"
-    },
-    {
       "code": "ERR_HARNESS_TRACE_REQUIRED",
       "applies_to": ["DENY"],
       "domain": "harness",
@@ -677,13 +669,6 @@
       "description": "Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state requires explicit approval",
       "since": "1.4.0",
       "finality": "ungranted"
-    },
-    {
-      "code": "ERR_HARNESS_CHANGE_CONTRACT_INVALID",
-      "applies_to": ["DENY"],
-      "domain": "harness",
-      "description": "Harness mutation lacks a valid HarnessChangeContract",
-      "since": "1.4.0"
     },
     {
       "code": "ERR_GREEN_TEST_SCOPE_MISSING",

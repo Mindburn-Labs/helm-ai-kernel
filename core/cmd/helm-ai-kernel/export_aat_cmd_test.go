@@ -1,5 +1,8 @@
 package main
 
+// quantum_posture: tests exercise classical Ed25519 AAT record signatures;
+// no post-quantum assurance is claimed.
+
 import (
 	"bytes"
 	"crypto/ed25519"

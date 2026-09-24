@@ -34,6 +34,7 @@ func FakeExecutable(t *testing.T, name, stdout string) *Recorder {
 	script := "#!/bin/sh\n" +
 		"{ printf 'argv:'; for a in \"$@\"; do printf ' [%s]' \"$a\"; done; printf '\\n'; env | sed 's/^/env: /'; } >> '" + rec.log + "'\n" +
 		"printf '%s' '" + strings.ReplaceAll(stdout, "'", "'\\''") + "'\n"
+	// #nosec G306 -- the fake executable must be executable; it lives in t.TempDir() and holds no secret.
 	if err := os.WriteFile(rec.Path, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}

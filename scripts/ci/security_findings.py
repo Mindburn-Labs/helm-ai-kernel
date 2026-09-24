@@ -39,17 +39,32 @@ def digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
+# gosec's taint-analysis rules report different findings for the same tree from
+# one run to the next: in CI, G703 on conform_managed_agents.go appeared in one
+# run of an unchanged tree and not in the next, and a linux runner reports G702
+# on the control fixture where macOS does not. A gate built on them would flake,
+# so they are excluded from the comparison, and the count left out is printed.
+UNSTABLE_GOSEC_RULES = frozenset({"G701", "G702", "G703", "G704", "G705", "G706"})
+
+
 def gosec_keys(report: dict[str, Any], root: str) -> list[str]:
     if "Issues" not in report:
         raise ReportError("golangci-lint report has no Issues field")
     keys = []
+    unstable = 0
     for issue in report["Issues"] or []:
         if issue.get("FromLinter") != "gosec":
             continue
         rule = issue["Text"].split(":", 1)[0].strip()
+        if rule in UNSTABLE_GOSEC_RULES:
+            unstable += 1
+            continue
         path = os.path.relpath(issue["Pos"]["Filename"], root)
         source = "\n".join(line.strip() for line in issue.get("SourceLines") or [])
         keys.append(f"{rule} {path} {digest(source)}")
+    if unstable:
+        print(f"gosec: {unstable} taint-analysis finding(s) ({', '.join(sorted(UNSTABLE_GOSEC_RULES))}) "
+              "not gated: those rules are nondeterministic", file=sys.stderr)
     return sorted(keys)
 
 

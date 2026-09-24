@@ -46,6 +46,10 @@ class KeysTest(unittest.TestCase):
         b = gosec_keys({"Issues": [gosec_issue("G304", "/repo/core/pkg/a.go", 10, "os.ReadFile(q)")]}, "/repo")
         self.assertNotEqual(a, b)
 
+    def test_gosec_taint_rules_are_left_out(self) -> None:
+        issues = [gosec_issue("G703", "/repo/core/a.go", 1, "x"), gosec_issue("G204", "/repo/core/a.go", 2, "y")]
+        self.assertEqual([k.split()[0] for k in gosec_keys({"Issues": issues}, "/repo")], ["G204"])
+
     def test_gosec_report_without_issues_field_is_an_error(self) -> None:
         with self.assertRaises(ReportError):
             gosec_keys({}, "/repo")

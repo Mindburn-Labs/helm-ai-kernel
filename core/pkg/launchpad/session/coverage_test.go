@@ -200,8 +200,8 @@ func TestCoverageExecutorAdditionalBranches(t *testing.T) {
 		run  LaunchRun
 		want string
 	}{
-		{"e2b_missing_key", LaunchRun{LaunchID: "lp-e2b", SubstrateID: "e2b", RuntimeHandles: RuntimeHandles{ContainerID: "sandbox-live", CloudResourceIDs: map[string]string{"provider": "e2b"}}}, "dry-run-or-key-missing"},
-		{"daytona_missing_key", LaunchRun{LaunchID: "lp-daytona", SubstrateID: "daytona", RuntimeHandles: RuntimeHandles{ContainerID: "sandbox-live", CloudResourceIDs: map[string]string{"provider": "daytona"}}}, "dry-run-or-key-missing"},
+		{"e2b_missing_key", LaunchRun{LaunchID: "lp-e2b", SubstrateID: "e2b", RuntimeHandles: RuntimeHandles{ContainerID: "sandbox-live", CloudResourceIDs: map[string]string{"provider": "e2b"}}}, "E2B_API_KEY missing"},
+		{"daytona_missing_key", LaunchRun{LaunchID: "lp-daytona", SubstrateID: "daytona", RuntimeHandles: RuntimeHandles{ContainerID: "sandbox-live", CloudResourceIDs: map[string]string{"provider": "daytona"}}}, "DAYTONA_API_KEY missing"},
 		{"do_missing_token", LaunchRun{LaunchID: "lp-do", PlanHash: "sha256:plan", SubstrateID: "digitalocean", RuntimeHandles: RuntimeHandles{CloudResourceIDs: map[string]string{"provider": "digitalocean", "droplet": "123"}}}, "DIGITALOCEAN_TOKEN missing"},
 		{"hetzner_missing_token", LaunchRun{LaunchID: "lp-hz", PlanHash: "sha256:plan", SubstrateID: "hetzner", RuntimeHandles: RuntimeHandles{CloudResourceIDs: map[string]string{"provider": "hetzner", "server": "123"}}}, "HCLOUD_TOKEN missing"},
 		{"already_reconciled", LaunchRun{LaunchID: "lp-reconciled", SubstrateID: "hetzner", RuntimeHandles: RuntimeHandles{CloudResourceIDs: map[string]string{"provider": "hetzner", "teardown_reconciled": "true"}}}, "already-reconciled"},

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -885,43 +884,6 @@ func TestDesktopTransportProofRouteHasExactInternalRegistryMetadata(t *testing.T
 		}
 	}
 	t.Fatalf("desktop transport proof route %s is missing from the runtime registry", want.Path)
-}
-
-func TestProtectedRuntimeHandlersAreDeclaredInRouteRegistry(t *testing.T) {
-	registered := map[string]RuntimeRouteSpec{}
-	for _, spec := range RuntimeRouteSpecs() {
-		registered[spec.MuxPattern] = spec
-	}
-
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot locate route registry test source")
-	}
-	sourceDir := filepath.Dir(file)
-	routeFiles := []string{
-		"subsystems.go",
-		"receipt_routes.go",
-		"console_routes.go",
-		"local_first_run_routes.go",
-		"console_agui_routes.go",
-		"launchpad_routes.go",
-		"contract_routes.go",
-		"policy_reconcile_routes.go",
-		"emergency_stop_routes.go",
-	}
-	protectedRoute := regexp.MustCompile(`mux\.HandleFunc\("([^"]+)",\s*protectRuntimeHandler`)
-	for _, routeFile := range routeFiles {
-		data, err := os.ReadFile(filepath.Join(sourceDir, routeFile))
-		if err != nil {
-			t.Fatalf("read %s: %v", routeFile, err)
-		}
-		for _, match := range protectedRoute.FindAllStringSubmatch(string(data), -1) {
-			muxPattern := match[1]
-			if _, ok := registered[muxPattern]; !ok {
-				t.Fatalf("protected runtime route %s in %s is missing from route registry", muxPattern, routeFile)
-			}
-		}
-	}
 }
 
 func TestProtectedPublicRoutesDeclareOpenAPISecurity(t *testing.T) {

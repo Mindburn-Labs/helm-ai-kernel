@@ -8,6 +8,9 @@
 // Run: cd core && go test -bench=. -benchmem -count=5 ./benchmarks/
 package benchmarks
 
+// quantum_posture: benchmarks time classical Ed25519 receipt signing; they
+// measure latency and assert no cryptographic property.
+
 import (
 	"context"
 	"database/sql"
@@ -27,6 +30,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 
@@ -257,40 +261,46 @@ func BenchmarkGuardian_EvalOnly(b *testing.B) {
 
 // ── Scenario 5: Isolated CEL policy evaluation ──
 
+// celBenchPolicy compiles the one-rule authority snapshot the CEL-only
+// scenarios decide against, and the input they decide on.
+func celBenchPolicy(tb testing.TB) (*authority.Snapshot, authority.Input) {
+	tb.Helper()
+	graph := prg.NewGraph()
+	if err := graph.AddRule("EXECUTE_TOOL", prg.RequirementSet{
+		ID:           "bench-rule",
+		Requirements: []prg.Requirement{{ID: "low-risk", Expression: `input["action"] == "EXECUTE_TOOL" && input["risk_level"] < 3`}},
+	}); err != nil {
+		tb.Fatal(err)
+	}
+	snapshot, err := authority.Compile(graph)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	input := authority.Input{
+		Action: "EXECUTE_TOOL",
+		Attributes: map[string]any{
+			"risk_level": 2,
+			"principal":  "bench-agent",
+			"resource":   "safe-tool",
+		},
+		Time: time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC),
+	}
+	if d := authority.Decide(input, snapshot); d.Verdict != contracts.VerdictAllow {
+		tb.Fatalf("expected ALLOW from the warm-up decision, got %+v", d)
+	}
+	return snapshot, input
+}
+
 // BenchmarkPolicyEval_CEL_Only measures pure CEL expression evaluation
 // with a pre-compiled, cached program. This is the direct apples-to-apples
 // comparison to Microsoft Agent Governance Toolkit's claimed 12µs/rule.
 func BenchmarkPolicyEval_CEL_Only(b *testing.B) {
-	engine, err := prg.NewPolicyEngine()
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	expression := `input["action"] == "EXECUTE_TOOL" && input["risk_level"] < 3`
-	// PolicyEngine.Evaluate passes its argument directly as the CEL activation,
-	// so we must wrap the data in an "input" key matching the CEL variable name.
-	activation := map[string]interface{}{
-		"input": map[string]interface{}{
-			"action":     "EXECUTE_TOOL",
-			"risk_level": int64(2),
-			"principal":  "bench-agent",
-			"resource":   "safe-tool",
-		},
-	}
-
-	// Pre-warm: compile and cache the expression
-	result, err := engine.Evaluate(expression, activation)
-	if err != nil {
-		b.Fatal(err)
-	}
-	if !result {
-		b.Fatal("expected true from pre-warm evaluation")
-	}
+	snapshot, input := celBenchPolicy(b)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_, _ = engine.Evaluate(expression, activation)
+		_ = authority.Decide(input, snapshot)
 	}
 }
 
@@ -298,31 +308,13 @@ func BenchmarkPolicyEval_CEL_Only(b *testing.B) {
 // Use the result to compute ops/sec: b.N / b.Elapsed().Seconds().
 // Direct comparison to Microsoft Agent Governance Toolkit's claimed 72K ops/sec.
 func BenchmarkPolicyEval_Throughput(b *testing.B) {
-	engine, err := prg.NewPolicyEngine()
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	expression := `input["action"] == "EXECUTE_TOOL" && input["risk_level"] < 3`
-	activation := map[string]interface{}{
-		"input": map[string]interface{}{
-			"action":     "EXECUTE_TOOL",
-			"risk_level": int64(2),
-			"principal":  "bench-agent",
-			"resource":   "safe-tool",
-		},
-	}
-
-	// Pre-warm
-	if _, err := engine.Evaluate(expression, activation); err != nil {
-		b.Fatal(err)
-	}
+	snapshot, input := celBenchPolicy(b)
 
 	b.ResetTimer()
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _ = engine.Evaluate(expression, activation)
+			_ = authority.Decide(input, snapshot)
 		}
 	})
 }
@@ -370,26 +362,8 @@ func TestOverheadReport(t *testing.T) {
 		t.Skip("skipping overhead report in short mode")
 	}
 
-	// Set up isolated CEL engine for policy eval scenarios
-	celEngine, err := prg.NewPolicyEngine()
-	if err != nil {
-		t.Fatal(err)
-	}
-	celExpr := `input["action"] == "EXECUTE_TOOL" && input["risk_level"] < 3`
-	// PolicyEngine.Evaluate passes its argument directly as the CEL activation,
-	// so we must wrap the data in an "input" key matching the CEL variable name.
-	celInput := map[string]interface{}{
-		"input": map[string]interface{}{
-			"action":     "EXECUTE_TOOL",
-			"risk_level": int64(2),
-			"principal":  "bench-agent",
-			"resource":   "safe-tool",
-		},
-	}
-	// Pre-warm CEL cache
-	if _, err := celEngine.Evaluate(celExpr, celInput); err != nil {
-		t.Fatal(err)
-	}
+	// Compile the policy for the isolated CEL scenario once, as activation does.
+	celSnapshot, celInput := celBenchPolicy(t)
 
 	// Measure each scenario with explicit timing
 	scenarios := []struct {
@@ -433,7 +407,7 @@ func TestOverheadReport(t *testing.T) {
 		}},
 		{"cel_eval_only", func(_ *benchHarness) time.Duration {
 			start := time.Now()
-			_, _ = celEngine.Evaluate(celExpr, celInput)
+			_ = authority.Decide(celInput, celSnapshot)
 			return time.Since(start)
 		}},
 		{"ed25519_sign_only", func(h *benchHarness) time.Duration {
@@ -560,7 +534,7 @@ func TestOverheadReport(t *testing.T) {
 				defer wg.Done()
 				localCount := 0
 				for time.Now().Before(deadline) {
-					_, _ = celEngine.Evaluate(celExpr, celInput)
+					_ = authority.Decide(celInput, celSnapshot)
 					localCount++
 				}
 				counts[idx] = localCount

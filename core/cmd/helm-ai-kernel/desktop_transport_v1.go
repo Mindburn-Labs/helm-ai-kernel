@@ -136,7 +136,7 @@ func (t *desktopTransportV1) handoffProof(origin, challenge string) string {
 	return t.hmac(desktopTransportV1HandoffPrefix + "\n" + t.nonce + "\n" + origin + "\n" + challenge)
 }
 
-func registerDesktopTransportV1ProofRoute(mux *http.ServeMux, transport *desktopTransportV1, origin string) {
+func registerDesktopTransportV1ProofRoute(mux routeMux, transport *desktopTransportV1, origin string) {
 	if transport == nil {
 		return
 	}

@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -42,7 +43,7 @@ type GlobalRateLimiter struct {
 	concurrency        chan struct{}
 	lowPriority        chan struct{}
 	lowPriorityShed    bool
-	trustProxy         bool // When true, extract client IP from X-Forwarded-For / X-Real-IP
+	trustedProxies     []*net.IPNet // peers whose X-Real-IP / X-Forwarded-For are honoured
 }
 
 // visitor tracks the rate limiter and last seen time for an IP.
@@ -107,11 +108,41 @@ func (rl *GlobalRateLimiter) WithLowPriorityLoadShed(maxConcurrent int) *GlobalR
 	return rl
 }
 
-// WithTrustProxy enables extraction of client IP from X-Forwarded-For / X-Real-IP headers.
-// Only enable when HELM is behind a trusted reverse proxy.
-func (rl *GlobalRateLimiter) WithTrustProxy(trust bool) *GlobalRateLimiter {
-	rl.trustProxy = trust
+// WithTrustedProxies honours X-Real-IP and X-Forwarded-For only on requests
+// whose connecting peer is inside one of networks: the reverse proxies in front
+// of this deployment. Every other request is keyed by its peer address. A
+// boolean "trust the headers" switch let any directly connected caller pick its
+// own bucket by rotating the header (S-09, reopening F-12).
+func (rl *GlobalRateLimiter) WithTrustedProxies(networks []*net.IPNet) *GlobalRateLimiter {
+	rl.trustedProxies = append([]*net.IPNet(nil), networks...)
 	return rl
+}
+
+// ParseTrustedProxyCIDRs parses a comma-separated list of CIDRs. Blank entries
+// are skipped; every other entry must be a CIDR, not a bare address or name.
+func ParseTrustedProxyCIDRs(raw string) ([]*net.IPNet, error) {
+	var networks []*net.IPNet
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		_, network, err := net.ParseCIDR(entry)
+		if err != nil {
+			return nil, fmt.Errorf("trusted proxy %q is not a CIDR: %w", entry, err)
+		}
+		networks = append(networks, network)
+	}
+	return networks, nil
+}
+
+func (rl *GlobalRateLimiter) trustedProxy(ip net.IP) bool {
+	for _, network := range rl.trustedProxies {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // getVisitor retrieving the limiter for a given IP, creating if necessary.
@@ -181,30 +212,38 @@ func (rl *GlobalRateLimiter) cleanupVisitors() {
 	}
 }
 
-// clientIP extracts the client IP address from the request.
-// When trustProxy is enabled, it prefers X-Real-IP and X-Forwarded-For headers.
+// clientIP returns the address the rate-limit buckets are keyed by. It is the
+// connecting peer unless that peer is a trusted proxy. Behind a trusted proxy it
+// is the proxy-set X-Real-IP, or else the rightmost X-Forwarded-For hop that is
+// not itself a trusted proxy: the leftmost entries are whatever the client sent.
+// A malformed hop ends the walk at the peer, so an unreadable chain shares the
+// proxy's bucket instead of choosing a new one.
 func (rl *GlobalRateLimiter) clientIP(r *http.Request) string {
-	if rl.trustProxy {
-		// X-Real-IP takes priority (single IP set by proxy)
-		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-			return strings.TrimSpace(realIP)
-		}
-		// X-Forwarded-For: client, proxy1, proxy2 — take the first (leftmost) entry
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			if comma := strings.IndexByte(xff, ','); comma > 0 {
-				return strings.TrimSpace(xff[:comma])
-			}
-			return strings.TrimSpace(xff)
-		}
-	}
-
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	peer, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		ip = r.RemoteAddr
-		ip = strings.TrimPrefix(ip, "[")
-		ip = strings.TrimSuffix(ip, "]")
+		peer = strings.TrimSuffix(strings.TrimPrefix(r.RemoteAddr, "["), "]")
 	}
-	return ip
+	peerIP := net.ParseIP(peer)
+	if peerIP == nil || !rl.trustedProxy(peerIP) {
+		return peer
+	}
+	if realIP := net.ParseIP(strings.TrimSpace(r.Header.Get("X-Real-IP"))); realIP != nil {
+		return realIP.String()
+	}
+	var hops []string
+	for _, value := range r.Header.Values("X-Forwarded-For") {
+		hops = append(hops, strings.Split(value, ",")...)
+	}
+	for i := len(hops) - 1; i >= 0; i-- {
+		hop := net.ParseIP(strings.TrimSpace(hops[i]))
+		if hop == nil {
+			break
+		}
+		if !rl.trustedProxy(hop) {
+			return hop.String()
+		}
+	}
+	return peer
 }
 
 // Middleware returns a Handler that enforces rate limits.

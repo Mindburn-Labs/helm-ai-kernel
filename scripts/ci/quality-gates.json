@@ -80,6 +80,8 @@
         "codegen-drift",
         "proto-lint",
         "contract-breaking-self-test",
+        "proto-gates-self-test",
+        "idl-breaking-release",
         "proto-breaking",
         "openapi-breaking",
         "deployment-smoke",
@@ -119,6 +121,7 @@
         "codegen-drift",
         "proto-lint",
         "contract-breaking-self-test",
+        "proto-gates-self-test",
         "contract-breaking-release",
         "benchmark-report",
         "release-readiness",
@@ -162,6 +165,7 @@
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
+        "proto-gates-self-test",
         "proto-breaking"
       ]
     },
@@ -543,6 +547,8 @@
       "timeout_seconds": 300,
       "paths": [
         "protocols/policy-schema/**",
+        "protocols/proto/**",
+        "scripts/ci/check_proto_lint_exemptions.sh",
         "buf.yaml",
         "Makefile"
       ]
@@ -566,7 +572,7 @@
     {
       "id": "contract-breaking-release",
       "title": "Prior-release contract-breaking check",
-      "description": "Diffs OpenAPI and policy-schema contracts against the commit resolved from the immutable prior release tag.",
+      "description": "Diffs OpenAPI and both buf modules (protocols/policy-schema, protocols/proto) against the commit resolved from the immutable prior release tag.",
       "command": "make contract-breaking-release",
       "timeout_seconds": 600,
       "paths": [
@@ -574,6 +580,7 @@
         "api/openapi/**",
         "protocols/specs/effects/openapi.yaml",
         "protocols/policy-schema/**",
+        "protocols/proto/**",
         "VERSION",
         "scripts/ci/contract_breaking.sh",
         "Makefile"
@@ -586,8 +593,24 @@
       "timeout_seconds": 600,
       "paths": [
         "protocols/policy-schema/**",
+        "protocols/proto/**",
         "VERSION",
         "scripts/ci/contract_breaking.sh",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "proto-gates-self-test",
+      "title": "Protocol gate positive controls",
+      "description": "Runs real buf with the protocols/proto buf.yaml against known-bad fixtures (misnamed RPCs, misplaced package, deleted field, deleted file) and the release-baseline gate against a tagged fixture repository; each must fail.",
+      "command": "make test-proto-gates",
+      "timeout_seconds": 600,
+      "paths": [
+        "protocols/proto/**",
+        "protocols/policy-schema/**",
+        "scripts/ci/contract_breaking.sh",
+        "scripts/ci/check_proto_lint_exemptions.sh",
+        "scripts/ci/test_proto_gates.sh",
         "Makefile"
       ]
     },
@@ -995,6 +1018,16 @@
       "paths": [
         "HELM_INVARIANTS.md",
         "tools/invcheck/**"
+      ]
+    },
+    {
+      "id": "idl-breaking-release",
+      "title": "protocols/proto buf breaking against the last release tag",
+      "command": "bash scripts/ci/contract_breaking.sh proto release",
+      "timeout_seconds": 600,
+      "paths": [
+        "protocols/**",
+        "scripts/ci/contract_breaking.sh"
       ]
     }
   ]

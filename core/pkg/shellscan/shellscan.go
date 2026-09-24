@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -26,6 +27,9 @@ const (
 	SignalSensitiveRedirect     = "sensitive-redirect"
 	SignalSensitiveTarget       = "sensitive-target"
 	SignalSensitiveDestructive  = "sensitive-destructive"
+	SignalANSICQuoting          = "ansi-c-quoting"
+	SignalBraceExpansion        = "brace-expansion"
+	SignalGlobCommand           = "glob-command-word"
 )
 
 // maxWrapperDepth bounds recursive unwrapping of eval / sh -c payloads so
@@ -95,20 +99,107 @@ var legacyNeedles = []string{
 	"truncate table",
 }
 
-// sensitiveTargetNeedles mirrors the sensitive-write list in the hook so a
-// shell operation cannot bypass the Write-tool path protection.
-var sensitiveTargetNeedles = []string{
+// sensitiveFileRules match anywhere in a normalized write target: private
+// keys and credentials, and shell or tool startup files that run code when
+// rewritten. The hook's Write-tool path uses the same rules through
+// SensitiveWriteTarget, so a shell write cannot bypass that protection.
+var sensitiveFileRules = []string{
 	".env",
 	".pem",
 	".key",
+	".p12",
+	".pfx",
 	"id_rsa",
+	"id_dsa",
+	"id_ecdsa",
 	"id_ed25519",
+	"authorized_keys",
+	".netrc",
+	".npmrc",
+	".pypirc",
+	".gitconfig",
+	".bashrc",
+	".bash_profile",
+	".bash_login",
+	".profile",
+	".zshrc",
+	".zshenv",
+	".zprofile",
+	".zlogin",
+	".mcp.json",
+	".claude.json",
+	"managed-settings.json",
+}
+
+// sensitivePathRules match the normalized write target resolved against the
+// working directory: repository internals, agent hook and client
+// configuration, credential directories, and scheduler, privilege and
+// autostart locations.
+var sensitivePathRules = []string{
 	".git/",
+	".ssh/",
 	".claude/settings.json",
+	".claude/settings.local.json",
 	".codex/hooks.json",
-	".claude\\settings.json",
-	".codex\\hooks.json",
-	`.git\`,
+	".codex/config.toml",
+	".hermes/config.yaml",
+	".dsh/hooks.json",
+	".dsh/cordis.patch.yml",
+	".aws/credentials",
+	".aws/config",
+	".kube/config",
+	".docker/config.json",
+	".config/gcloud/",
+	".config/git/config",
+	".config/fish/config.fish",
+	".config/systemd/",
+	".config/autostart/",
+	"library/launchagents/",
+	"library/launchdaemons/",
+	"start menu/programs/startup/",
+	"/etc/profile",
+	"/etc/cron",
+	"/var/spool/cron/",
+	"/usr/lib/cron/",
+	"/etc/sudoers",
+}
+
+// SensitiveWriteTarget reports whether writing target could rewrite
+// credentials, agent hook or client configuration, or a file that runs code
+// at login, on a schedule or with privilege, and returns the matching rule.
+// Matching is case-insensitive and runs on the normalized path: backslashes
+// become slashes and ".", ".." and "//" segments are cleaned, so alternate
+// spellings of one file match alike. Path rules also see the target resolved
+// against cwd, so a relative write made inside a protected directory matches.
+func SensitiveWriteTarget(target, cwd string) (string, bool) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", false
+	}
+	cleaned := path.Clean(slashPath(target))
+	lower := strings.ToLower(cleaned)
+	for _, rule := range sensitiveFileRules {
+		if strings.Contains(lower, rule) {
+			return rule, true
+		}
+	}
+	resolved := cleaned
+	if cwd = strings.TrimSpace(cwd); cwd != "" && !path.IsAbs(cleaned) {
+		resolved = path.Join(slashPath(cwd), cleaned)
+	}
+	// Wrapping in slashes lets a directory rule such as ".git/" match the
+	// directory itself as well as anything below it.
+	wrapped := "/" + strings.ToLower(resolved) + "/"
+	for _, rule := range sensitivePathRules {
+		if strings.Contains(wrapped, rule) {
+			return rule, true
+		}
+	}
+	return "", false
+}
+
+func slashPath(value string) string {
+	return strings.ReplaceAll(value, `\`, "/")
 }
 
 // Classify parses and structurally classifies a raw shell command string.
@@ -503,6 +594,7 @@ type collector struct {
 
 	writtenPaths            map[string]bool
 	cwd                     string
+	cwdUnknown              bool // a directory change the classifier could not resolve
 	sensitiveTarget         string
 	destructiveEffect       bool
 	requiresShellPermission bool
@@ -585,6 +677,22 @@ func (c *collector) classifyString(src, via string, depth int) {
 		case *syntax.CmdSubst, *syntax.ProcSubst:
 			c.signal(SignalCommandSubstitution)
 			c.hasIndirection = true
+			c.decide("command substitution cannot be evaluated statically (fail-closed)")
+		case *syntax.SglQuoted:
+			if n.Dollar {
+				c.signal(SignalANSICQuoting)
+				c.decide("ANSI-C quoting cannot be evaluated statically (fail-closed)")
+			}
+		case *syntax.DblQuoted:
+			if n.Dollar {
+				c.signal(SignalANSICQuoting)
+				c.decide("locale quoting cannot be evaluated statically (fail-closed)")
+			}
+		case *syntax.Word:
+			if hasBraceExpansion(n) {
+				c.signal(SignalBraceExpansion)
+				c.decide("brace expansion cannot be evaluated statically (fail-closed)")
+			}
 		case *syntax.FuncDecl:
 			c.hasIndirection = true
 		case *syntax.Redirect:
@@ -684,7 +792,7 @@ func (c *collector) classifyRedirect(r *syntax.Redirect) {
 }
 
 func (c *collector) recordWriteTarget(tok wordTok, source string) {
-	if tok.dynamic {
+	if tok.dynamic || tok.glob {
 		c.recordDynamicSensitiveTarget(tok, source)
 		c.decide(source + " with an unresolvable target (fail-closed)")
 		return
@@ -699,32 +807,65 @@ func (c *collector) recordWriteTarget(tok wordTok, source string) {
 	}
 	c.writtenPaths[c.normalizedPath(tok.text)] = true
 	c.recordSensitiveTarget(tok, "write redirect", SignalSensitiveRedirect)
+	if c.cwdUnknown && !path.IsAbs(slashPath(tok.text)) {
+		c.decide(source + " relative to an unresolved directory change (fail-closed)")
+	}
 }
 
+// recordDynamicSensitiveTarget matches the static fragment of an opaque
+// target (for example the decoded text of $'...' or the literal tail of
+// "$HOME/.bashrc") so a recognizable protected file keeps its file class.
 func (c *collector) recordDynamicSensitiveTarget(tok wordTok, operation string) {
-	target := strings.ToLower(tok.text)
-	for _, needle := range sensitiveTargetNeedles {
-		if strings.Contains(target, needle) {
-			c.recordSensitiveTarget(wordTok{text: needle}, operation, SignalSensitiveTarget)
-			return
-		}
+	if rule, ok := SensitiveWriteTarget(tok.text, ""); ok {
+		c.markSensitiveTarget(rule, operation, SignalSensitiveTarget)
 	}
 }
 
 func (c *collector) recordSensitiveTarget(tok wordTok, operation, signal string) {
-	target := strings.ToLower(tok.text)
-	for _, needle := range sensitiveTargetNeedles {
-		if !strings.Contains(target, needle) {
+	if _, ok := SensitiveWriteTarget(tok.text, c.cwd); ok {
+		c.markSensitiveTarget(tok.text, operation, signal)
+	}
+}
+
+func (c *collector) markSensitiveTarget(target, operation, signal string) {
+	if c.sensitiveTarget == "" {
+		c.sensitiveTarget = target
+	}
+	c.signal(signal)
+	c.recordCompoundEffect()
+	c.decide(fmt.Sprintf("%s to sensitive target %q", operation, target))
+}
+
+// changeDirectory follows cd/pushd inside the command so later relative write
+// targets resolve against the new directory. A directory the classifier
+// cannot resolve (dynamic, globbed, "-", $HOME, a stack entry) makes later
+// relative write targets opaque instead.
+func (c *collector) changeDirectory(args []wordTok) {
+	endOptions := false
+	for _, tok := range args {
+		if tok.dynamic || tok.glob {
+			c.cwdUnknown = true
+			return
+		}
+		if !endOptions && tok.text == "--" {
+			endOptions = true
 			continue
 		}
-		if c.sensitiveTarget == "" {
-			c.sensitiveTarget = tok.text
+		if !endOptions && strings.HasPrefix(tok.text, "-") && tok.text != "-" {
+			continue // -L, -P, -e, -@
 		}
-		c.signal(signal)
-		c.recordCompoundEffect()
-		c.decide(fmt.Sprintf("%s to sensitive target %q", operation, tok.text))
+		if tok.text == "-" || strings.HasPrefix(tok.text, "+") {
+			c.cwdUnknown = true
+			return
+		}
+		target := slashPath(tok.text)
+		if path.IsAbs(target) {
+			c.cwdUnknown = false
+		}
+		c.cwd = c.normalizedPath(target)
 		return
 	}
+	c.cwdUnknown = true // no operand: cd changes to $HOME
 }
 
 // recordDestructiveEffect marks a statically identified effect that needs a
@@ -795,6 +936,52 @@ func (c *collector) classifyCall(call *syntax.CallExpr, via string, depth int) {
 type wordTok struct {
 	text    string
 	dynamic bool
+	// glob is true when an unquoted part holds a pathname-expansion pattern,
+	// so the word names whatever files match at run time.
+	glob bool
+}
+
+// hasGlobPattern reports whether an unquoted literal holds an unescaped "*",
+// "?" or bracket expression. A lone "[" (the test builtin) is not a pattern.
+func hasGlobPattern(lit string) bool {
+	for i := 0; i < len(lit); i++ {
+		switch lit[i] {
+		case '\\':
+			i++
+		case '*', '?':
+			return true
+		case '[':
+			if strings.IndexByte(lit[i+1:], ']') >= 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasBraceExpansion reports whether bash would brace-expand the word. It
+// splits a copy so the parsed word stays intact for the other resolvers.
+func hasBraceExpansion(w *syntax.Word) bool {
+	split := *w
+	if !syntax.SplitBraces(&split) {
+		return false
+	}
+	for _, part := range split.Parts {
+		if _, ok := part.(*syntax.BraceExp); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// decodeANSIC decodes the escapes of a $'...' body. The result is only used
+// to recognize a protected target; the word itself stays opaque.
+func decodeANSIC(value string) string {
+	decoded, _, err := expand.Format(nil, value, nil)
+	if err != nil {
+		return value
+	}
+	return decoded
 }
 
 func unescapeLit(s string) string {
@@ -810,13 +997,21 @@ func unescapeLit(s string) string {
 
 func resolveCommandWord(w *syntax.Word) wordTok {
 	var b strings.Builder
+	glob := false
 	for _, part := range w.Parts {
 		switch p := part.(type) {
 		case *syntax.Lit:
+			glob = glob || hasGlobPattern(p.Value)
 			b.WriteString(unescapeLit(p.Value))
 		case *syntax.SglQuoted:
+			if p.Dollar {
+				return wordTok{dynamic: true}
+			}
 			b.WriteString(p.Value)
 		case *syntax.DblQuoted:
+			if p.Dollar {
+				return wordTok{dynamic: true}
+			}
 			for _, inner := range p.Parts {
 				lit, ok := inner.(*syntax.Lit)
 				if !ok {
@@ -828,19 +1023,27 @@ func resolveCommandWord(w *syntax.Word) wordTok {
 			return wordTok{dynamic: true}
 		}
 	}
-	return wordTok{text: b.String()}
+	return wordTok{text: b.String(), glob: glob}
 }
 
 func resolveWord(w *syntax.Word) wordTok {
 	var b strings.Builder
-	dynamic := false
+	dynamic, glob := false, false
 	for _, part := range w.Parts {
 		switch p := part.(type) {
 		case *syntax.Lit:
+			glob = glob || hasGlobPattern(p.Value)
 			b.WriteString(unescapeLit(p.Value))
 		case *syntax.SglQuoted:
+			if p.Dollar {
+				b.WriteString(decodeANSIC(p.Value))
+				dynamic = true
+				continue
+			}
 			b.WriteString(p.Value)
 		case *syntax.DblQuoted:
+			// $"..." is locale-translated at run time.
+			dynamic = dynamic || p.Dollar
 			for _, inner := range p.Parts {
 				if lit, ok := inner.(*syntax.Lit); ok {
 					b.WriteString(lit.Value)
@@ -853,7 +1056,7 @@ func resolveWord(w *syntax.Word) wordTok {
 			dynamic = true
 		}
 	}
-	return wordTok{text: b.String(), dynamic: dynamic}
+	return wordTok{text: b.String(), dynamic: dynamic, glob: glob}
 }
 
 // valueFlags lists wrapper flags that consume a value (short and long forms;
@@ -1576,6 +1779,11 @@ func (c *collector) classifyTokens(args []wordTok, via string, depth int) {
 			c.decide("dynamic command word cannot be classified statically")
 			return
 		}
+		if head.glob {
+			c.signal(SignalGlobCommand)
+			c.decide("glob in command position cannot be evaluated statically (fail-closed)")
+			return
+		}
 		if c.isWrittenPath(head.text) {
 			// A command path created earlier in this same compound command is
 			// opaque executable source, even when invoked directly rather than
@@ -2170,6 +2378,10 @@ func (c *collector) matchDestructive(cmd Command, args []wordTok, via string, de
 		if c.recordRemoveWriteTargets(cmd.Name, args) {
 			c.recordDestructiveEffect()
 		}
+	case cmd.Name == "cd" || cmd.Name == "pushd":
+		c.changeDirectory(args[1:])
+	case cmd.Name == "popd":
+		c.cwdUnknown = true
 	case cmd.Name == "tar":
 		c.matchTar(args, via, depth)
 	}

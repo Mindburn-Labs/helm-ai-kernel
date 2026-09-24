@@ -193,25 +193,25 @@ func Prefix(tokens []string) string {
 		}
 		tokens = filtered
 	}
-	for length := len(tokens); length > 1; length-- {
-		key := joinTokens(tokens[:length])
+	// Only prefixes as long as the longest dictionary key can match, so the
+	// probe is bounded instead of joining every prefix of a long argument list.
+	for length := min(len(tokens), maxArityKeyTokens); length > 1; length-- {
+		key := strings.Join(tokens[:length], " ")
 		if n, ok := arity[key]; ok && n <= len(tokens) {
-			return joinTokens(tokens[:n])
+			return strings.Join(tokens[:n], " ")
 		}
 	}
 	if n, ok := arity[tokens[0]]; ok && n <= len(tokens) {
-		return joinTokens(tokens[:n])
+		return strings.Join(tokens[:n], " ")
 	}
 	return tokens[0]
 }
 
-func joinTokens(tokens []string) string {
-	out := ""
-	for i, tok := range tokens {
-		if i > 0 {
-			out += " "
-		}
-		out += tok
+// maxArityKeyTokens is the word count of the longest arity dictionary key.
+var maxArityKeyTokens = func() int {
+	longest := 1
+	for key := range arity {
+		longest = max(longest, len(strings.Fields(key)))
 	}
-	return out
-}
+	return longest
+}()

@@ -378,6 +378,11 @@ func (e Executor) ExecuteLaunch(compiled plan.LaunchPlan, opts ExecuteOptions) (
 	return e.persist(run, artifacts)
 }
 
+// ErrCleanupFailed reports a teardown whose cloud or hosted-sandbox cleanup
+// failed or could not be attempted. The run is left CLEANUP_FAILED, not
+// DELETED, and calling DeleteLaunch again retries the cleanup.
+var ErrCleanupFailed = errors.New("launch cleanup failed")
+
 func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error) {
 	run, err := e.Store.Get(launchID)
 	if err != nil {
@@ -390,6 +395,27 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 		return LaunchRun{}, err
 	}
 	runtimeTeardown := teardownRuntimeHandles(run)
+	if cleanupErr, _ := runtimeTeardown["cloud_cleanup_error"].(string); cleanupErr != "" {
+		// The provider resources may still exist, so the run must not read
+		// DELETED and no teardown receipt ref is recorded for it.
+		failure := receipts.NewReceiptForSession("launchpad.teardown_failure", run.LaunchID+":teardown", run.LaunchID, "ALLOW", map[string]any{
+			"cascade":        cascade,
+			"previous_state": previousState,
+			"reconciled":     false,
+			"error":          cleanupErr,
+			"runtime":        runtimeTeardown,
+		})
+		run.State = StateCleanupFailed
+		run.Reason = "teardown incomplete, delete the launch again to retry: " + cleanupErr
+		artifacts := map[string][]byte{}
+		addJSON(artifacts, "receipts/launchpad-teardown-failure.json", failure)
+		failed, err := e.persist(run, artifacts)
+		if err != nil {
+			return LaunchRun{}, err
+		}
+		return failed, fmt.Errorf("%w: %s", ErrCleanupFailed, cleanupErr)
+	}
+	cloudCleanup, _ := runtimeTeardown["cloud_cleanup"].(string)
 	// Teardown is a separate operation from the launch, and LaunchRun does not
 	// persist the launch chain's head hash, so this receipt cannot link back to
 	// it. It is an explicit single-receipt genesis rather than a silent break in
@@ -408,12 +434,11 @@ func (e Executor) DeleteLaunch(launchID string, cascade bool) (LaunchRun, error)
 	artifacts := map[string][]byte{}
 	addJSON(artifacts, "receipts/launchpad-teardown.json", teardown)
 	addJSON(artifacts, "teardown_proof.json", map[string]any{
-		"launch_id":             run.LaunchID,
-		"cascade":               cascade,
-		"teardown_receipt_ref":  teardown.ReceiptID,
-		"cloud_reconciled":      true,
-		"mcp_approvals_revoked": true,
-		"runtime":               runtimeTeardown,
+		"launch_id":            run.LaunchID,
+		"cascade":              cascade,
+		"teardown_receipt_ref": teardown.ReceiptID,
+		"cloud_reconciled":     cloudCleanup == "deleted" || cloudCleanup == "already-reconciled",
+		"runtime":              runtimeTeardown,
 	})
 	return e.persist(run, artifacts)
 }
@@ -449,6 +474,8 @@ func teardownRuntimeHandles(run LaunchRun) map[string]any {
 			} else {
 				result["cloud_cleanup_error"] = err.Error()
 			}
+		} else if apiKey == "" && handles.ContainerID != "" && !strings.Contains(handles.ContainerID, "dry-run") {
+			result["cloud_cleanup_error"] = "E2B_API_KEY missing"
 		} else {
 			result["cloud_cleanup"] = "dry-run-or-key-missing"
 			result["receipt_id"] = "receipt:e2b:" + run.LaunchID + ":teardown-dry-run"
@@ -478,6 +505,8 @@ func teardownRuntimeHandles(run LaunchRun) map[string]any {
 			} else {
 				result["cloud_cleanup_error"] = err.Error()
 			}
+		} else if apiKey == "" && handles.ContainerID != "" && !strings.Contains(handles.ContainerID, "dry-run") {
+			result["cloud_cleanup_error"] = "DAYTONA_API_KEY missing"
 		} else {
 			result["cloud_cleanup"] = "dry-run-or-key-missing"
 			result["receipt_id"] = "receipt:daytona:" + run.LaunchID + ":teardown-dry-run"
@@ -490,6 +519,12 @@ func teardownRuntimeHandles(run LaunchRun) map[string]any {
 			result["attempted"] = true
 			result["provider"] = provider
 			result["cloud_cleanup"] = "already-reconciled"
+			return result
+		}
+		// A dry-run launch provisioned nothing, so there is nothing to delete.
+		if strings.Contains(handles.ContainerID, "dry-run") {
+			result["provider"] = provider
+			result["cloud_cleanup"] = "dry-run"
 			return result
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

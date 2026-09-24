@@ -301,9 +301,17 @@ func TestHetznerCreatesLabeledFirewallAndServer(t *testing.T) {
 			if !ok || labels["helm-launchpad-launch-id"] != "launch-hcloud" {
 				t.Fatalf("missing launch label: %+v", body)
 			}
+			// A Hetzner firewall with no outbound rule leaves egress open, so
+			// deny-by-default egress needs explicit outbound allows (HELM-740, 17-14).
 			rules, ok := body["rules"].([]any)
-			if !ok || len(rules) != 0 {
-				t.Fatalf("default firewall must expose no inbound rules: %+v", body)
+			if !ok || len(rules) == 0 {
+				t.Fatalf("default firewall must restrict egress with explicit outbound rules: %+v", body)
+			}
+			for _, raw := range rules {
+				rule, _ := raw.(map[string]any)
+				if rule["direction"] != "out" || rule["protocol"] != "tcp" || rule["port"] != "443" {
+					t.Fatalf("default firewall must allow only outbound tcp/443: %+v", rule)
+				}
 			}
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"firewall":{"id":77}}`))

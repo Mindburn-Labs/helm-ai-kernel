@@ -101,10 +101,19 @@ func (p HetznerProvisioner) Create(ctx context.Context, req HetznerProvisionRequ
 		return nil, err
 	}
 	labels := hetznerLabels(req)
+	// Hetzner leaves egress open when a firewall has no outbound rule, and
+	// blocks every other outbound flow once one exists. The explicit tcp/443
+	// allow makes egress deny-by-default, matching the DigitalOcean firewall.
+	// No inbound rule is set, so all inbound traffic is dropped.
 	firewallPayload := map[string]any{
 		"name":   firstNonEmpty(req.FirewallName, req.Name+"-firewall"),
 		"labels": labels,
-		"rules":  []any{},
+		"rules": []map[string]any{{
+			"direction":       "out",
+			"protocol":        "tcp",
+			"port":            "443",
+			"destination_ips": []string{"0.0.0.0/0", "::/0"},
+		}},
 	}
 	firewallRaw, err := p.doJSON(ctx, client, endpoint, http.MethodPost, "/firewalls", key, firewallPayload, http.StatusCreated, http.StatusOK)
 	if err != nil {

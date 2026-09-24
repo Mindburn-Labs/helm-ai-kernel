@@ -89,7 +89,8 @@ Notes on the rows marked "see the notes below the table":
   - Its reason codes are published in `protocols/json-schemas/reason-codes`.
   - Protected golden cases live in `core/pkg/conformance/golden/ton-acton`.
   - It also appears in a policy template and in two documents.
-- **`core/pkg/conform`, the six HTTP 501 routes.** The routes are `POST /api/v1/conformance/run`, `GET /api/v1/conformance/reports{,/{id}}`, `POST /api/v1/gui/receipts/verify` and `POST /api/v1/trust/keys/{add,revoke}`. Console still generates clients for them and lists them in its operation index. No Console UI caller and no Control Plane caller was found.
+- **`core/pkg/conform`, the six HTTP 501 routes.** Removed in s4b; see the
+  slice 4b evidence below.
 - **Java and Rust SDKs.**
   - No workspace repository consumes either SDK.
   - Publishing is configured for both, but whether they reached a registry was not checked:
@@ -199,3 +200,38 @@ Two protected paths change: `core/pkg/proofgraph/*` and
 manifest drops exactly the 12 deleted protected files and re-hashes the edited
 protocol document. `check_reason_code_reachability.py` passes, because none of
 the removed packages was the only emitter of a declared reason code.
+
+## Slice 4b evidence
+
+Slice 4b removes the six routes that HELM-742 had already turned into 501s:
+- `POST /api/v1/conformance/run`;
+- `GET /api/v1/conformance/reports` and `GET /api/v1/conformance/reports/{report_id}`;
+- `POST /api/v1/gui/receipts/verify`;
+- `POST /api/v1/trust/keys/add` and `POST /api/v1/trust/keys/revoke`.
+
+Callers were checked read-only on 2026-09-24:
+- **`svc-helm-control-plane`:** none.
+- **`app-helm-console` (`31b6c19`):** the operations appear only in the
+  generated clients (`lib/api/kernel.gen.ts`, `enterprise.gen.ts`) and in
+  `contracts/openapi-operation-index.tsv`. No UI code calls them. The Console
+  reads only the `policies` and `audit` entries of the kernel's surface
+  catalog. `contracts/SURFACE-BACKING-REGISTER.md` names
+  `POST /api/v1/gui/receipts/verify` as backing for a planned verifier
+  surface, but that surface is not built. The Console regenerates its clients
+  on its own side.
+- **`helm-ai-enterprise`:** it serves its own copies of the conformance and
+  trust-key paths, and its SDKs call those copies. None of them calls the
+  kernel.
+- **Kernel SDKs:** the Go, TypeScript, Python, Java and Rust clients each had
+  conformance run, get and list methods. They are removed, together with their
+  tests, READMEs and five examples, and CHANGELOG records the break.
+
+The kernel's own Console surface catalog drops its `conformance` and `trust`
+entries. `TrustKeyHandler` in `core/pkg/api` stays: it has no route, but the
+HELM-495 context-logging contract test uses it as its positive control. Its
+removal belongs to s6.
+
+`oasdiff breaking` reports no incompatible change, because the removed
+operations were deprecated. The SDK models were regenerated from the spec,
+which drops the inline trust-key request and response schemas, and every
+OpenAPI digest pin was updated.

@@ -1,6 +1,6 @@
 # Frozen deadcode allowlist (HELM-745, target architecture R10).
 # Functions in the core module that no shipped binary (scripts/ci/deadcode-roots.txt)
-# can reach, as measured when the gate landed on origin/main dba065f0.
+# can reach, as measured when the gate landed on origin/main 429052d1.
 # Key: <package path> <function>. The list only shrinks:
 #   - deleting or wiring code makes its line stale, and the gate fails until the
 #     line is removed in the same PR (HELM-756 deletion waves shrink it);

@@ -141,9 +141,13 @@ install an iptables REDIRECT that forces ALL outbound TCP from the workload
 container through the egress proxy sidecar on port <port>. This is what makes the
 "every egress goes through the sidecar and leaves a receipt" guarantee real rather
 than honor-based — a direct connection can no longer bypass the proxy. Reuses the
-egress-proxy image (which ships iptables). Exemptions: loopback, the sidecar's own
-uid (65532), and DNS-over-TCP; DNS-over-UDP is untouched because the OUTPUT jump is
-tcp-only, so the workload can still resolve names itself.
+egress-proxy image (which ships iptables and ip6tables). Rules, for the whole Pod:
+- TCP/IPv4: redirected to the proxy, except loopback, the sidecar's own uid
+  (65532), and TCP/53 to the Pod's nameservers (the cluster DNS in resolv.conf).
+- Other IPv4 protocols (UDP, ICMP, ...): rejected, except loopback and UDP/53 to
+  those nameservers, so the workload and the sidecar can still resolve names.
+- IPv6: rejected except loopback. The proxy recovers IPv4 original destinations
+  only, so IPv6 egress would bypass it.
 Usage: {{ include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" .Values.launchpadApps.openclaw.egressSidecar) }}
 */}}
 {{- define "helm-ai-kernel.launchpadApp.egressInit" -}}
@@ -171,14 +175,36 @@ Usage: {{ include "helm-ai-kernel.launchpadApp.egressInit" (dict "sidecar" .Valu
     - -c
     - |
       set -eu
+      # Cluster DNS: the IPv4 nameservers kubelet wrote into this Pod's resolv.conf.
+      dns="$(awk '$1 == "nameserver" && $2 !~ /:/ {print $2}' /etc/resolv.conf)"
       iptables -t nat -N HELM_EGRESS 2>/dev/null || iptables -t nat -F HELM_EGRESS
-      # Exempt loopback, the sidecar's own egress (by uid), and DNS-over-TCP.
+      # Exempt loopback, the sidecar's own egress (by uid), and DNS-over-TCP to cluster DNS only.
       iptables -t nat -A HELM_EGRESS -d 127.0.0.0/8 -j RETURN
       iptables -t nat -A HELM_EGRESS -m owner --uid-owner 65532 -j RETURN
-      iptables -t nat -A HELM_EGRESS -p tcp --dport 53 -j RETURN
+      for ns in $dns; do
+        iptables -t nat -A HELM_EGRESS -p tcp -d "$ns" --dport 53 -j RETURN
+      done
       # Everything else: redirect into the transparent proxy.
       iptables -t nat -A HELM_EGRESS -p tcp -j REDIRECT --to-ports {{ $s.port }}
       iptables -t nat -C OUTPUT -p tcp -j HELM_EGRESS 2>/dev/null || iptables -t nat -A OUTPUT -p tcp -j HELM_EGRESS
+      # Non-TCP IPv4 never reaches the proxy, so reject it outright; only
+      # DNS-over-UDP to cluster DNS remains.
+      iptables -N HELM_EGRESS 2>/dev/null || iptables -F HELM_EGRESS
+      iptables -A HELM_EGRESS -o lo -j RETURN
+      iptables -A HELM_EGRESS -p tcp -j RETURN
+      for ns in $dns; do
+        iptables -A HELM_EGRESS -p udp -d "$ns" --dport 53 -j RETURN
+      done
+      iptables -A HELM_EGRESS -j REJECT
+      iptables -C OUTPUT -j HELM_EGRESS 2>/dev/null || iptables -A OUTPUT -j HELM_EGRESS
+      # IPv6 would bypass the IPv4-only redirect: reject all of it but loopback.
+      # Without kernel IPv6 support there is no IPv6 egress to close.
+      if [ -e /proc/net/if_inet6 ]; then
+        ip6tables -N HELM_EGRESS 2>/dev/null || ip6tables -F HELM_EGRESS
+        ip6tables -A HELM_EGRESS -o lo -j RETURN
+        ip6tables -A HELM_EGRESS -j REJECT
+        ip6tables -C OUTPUT -j HELM_EGRESS 2>/dev/null || ip6tables -A OUTPUT -j HELM_EGRESS
+      fi
   resources:
     limits:
       cpu: "100m"

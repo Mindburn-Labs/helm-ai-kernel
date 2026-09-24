@@ -24,6 +24,14 @@ helm-ai-kernel proxy \
   --receipts-dir ./helm-receipts
 ```
 
+The proxy binds `127.0.0.1`. It reads `HELM_PROXY_BIND_ADDR`, not the
+`HELM_BIND_ADDR` that `serve` uses, and refuses a non-loopback bind unless
+`HELM_PROXY_TOKEN` is set. With a token, every route except `/health` and
+`/healthz` requires `Authorization: Bearer <token>` (set it as the client's
+`OPENAI_API_KEY`); the proxy strips it and forwards `--api-key` upstream.
+`mcp serve --transport http` follows the same rule with `HELM_MCP_BIND_ADDR`
+and refuses `--auth none` off loopback.
+
 ## 3. Point The Client At HELM
 
 ```bash

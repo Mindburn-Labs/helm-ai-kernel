@@ -1,5 +1,9 @@
 package main
 
+// quantum_posture: TEE quote verification relies on classical vendor chains
+// (ECDSA P-384/P-256) and Ed25519 mock quotes; no post-quantum assurance is
+// claimed.
+
 import (
 	"context"
 	"crypto/ed25519"
@@ -200,6 +204,10 @@ func runTeeSelftest(args []string, stdout, stderr io.Writer) int {
 
 // runTeeVerify verifies a quote file against an expected nonce. Useful for
 // auditors who receive a quote out-of-band and want to validate it.
+//
+// The vendor signature chain is always required (HELM-742): without it a
+// quote with the right nonce and a zeroed signature reported "ok". The CLI
+// configures no vendor roots, so vendor quotes fail closed with the reason.
 func runTeeVerify(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("tee verify", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
@@ -234,7 +242,7 @@ func runTeeVerify(args []string, stdout, stderr io.Writer) int {
 	}
 
 	plat := tee.Platform(platform)
-	res, err := tee.Verify(plat, quote, nonce, tee.TrustRoots{AllowMock: plat == tee.PlatformMock})
+	res, err := tee.Verify(plat, quote, nonce, tee.TrustRoots{AllowMock: plat == tee.PlatformMock, RequireSignedChain: true})
 	if err != nil {
 		emitTeeOrFprint(stdout, stderr, jsonOut, map[string]any{
 			"ok":       false,

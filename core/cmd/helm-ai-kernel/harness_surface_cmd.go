@@ -138,30 +138,6 @@ func runHarnessCmd(args []string, stdout, stderr io.Writer) int {
 	})
 }
 
-func runGUICmd(args []string, stdout, stderr io.Writer) int {
-	if len(args) < 2 || args[0] != "receipts" || args[1] != "verify" {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel gui receipts verify --input receipt.json")
-		return 2
-	}
-	fs := flag.NewFlagSet("gui receipts verify", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	input := fs.String("input", "", "GUI action receipt JSON file")
-	if err := fs.Parse(args[2:]); err != nil {
-		return 2
-	}
-	var receipt contracts.GUIActionReceipt
-	if err := readHarnessInput(*input, &receipt); err != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
-	}
-	sealed, err := receipt.Seal()
-	if err != nil {
-		_ = writeSurfaceJSON(stdout, map[string]any{"verified": false, "verdict": "FAIL", "errors": []string{err.Error()}})
-		return 1
-	}
-	return writeSurfaceJSON(stdout, map[string]any{"verified": true, "verdict": "PASS", "receipt": sealed})
-}
-
 type harnessObjectRunner func(action string, id string, input string) (any, int, error)
 
 func runHarnessObjectCommand(args []string, stdout, stderr io.Writer, usage string, run harnessObjectRunner) int {
@@ -254,5 +230,4 @@ func readHarnessInput(path string, target any) error {
 func init() {
 	Register(Subcommand{Name: "traces", Usage: "Inspect hash-linked harness traces", RunFn: runTracesCmd})
 	Register(Subcommand{Name: "harness", Usage: "Inspect harness mutation contracts", RunFn: runHarnessCmd})
-	Register(Subcommand{Name: "gui", Usage: "Verify grounded GUI action receipts", RunFn: runGUICmd})
 }

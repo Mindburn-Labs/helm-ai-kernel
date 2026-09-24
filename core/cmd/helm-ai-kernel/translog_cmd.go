@@ -47,7 +47,7 @@ func openTranslog(dataDir string) (*translog.Log, error) {
 //	helm-ai-kernel log prove --index N [--size M] [--data-dir d]
 //	helm-ai-kernel log prove --old-size A [--new-size B] [--data-dir d]
 //	helm-ai-kernel log verify-inclusion --proof <file> --root <hex>
-//	helm-ai-kernel log verify-consistency --proof <file> [--old-root <hex>] [--new-root <hex>]
+//	helm-ai-kernel log verify-consistency --proof <file> --old-root <hex> --new-root <hex>
 func runTranslogCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) < 1 {
 		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel log <append|sth|prove|verify-inclusion|verify-consistency> [flags]")
@@ -209,24 +209,22 @@ func runTranslogVerifyConsistency(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("log verify-consistency", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
 	proofPath := cmd.String("proof", "", "Path to a consistency proof JSON file (REQUIRED)")
-	oldRoot := cmd.String("old-root", "", "Trusted old hex root hash (default: value embedded in the proof)")
-	newRoot := cmd.String("new-root", "", "Trusted new hex root hash (default: value embedded in the proof)")
+	oldRoot := cmd.String("old-root", "", "Trusted old hex root hash (REQUIRED)")
+	newRoot := cmd.String("new-root", "", "Trusted new hex root hash (REQUIRED)")
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
-	if *proofPath == "" {
-		return cliui.WriteError(stderr, cliui.UsageErrorf("log verify-consistency", "--proof is required"))
+	// Both roots must come from the caller: roots embedded in the proof let a
+	// fabricated proof verify against itself (HELM-742).
+	if *proofPath == "" || *oldRoot == "" || *newRoot == "" {
+		return cliui.WriteError(stderr, cliui.UsageErrorf("log verify-consistency", "--proof, --old-root and --new-root are required"))
 	}
 	var proof translog.ConsistencyProof
 	if err := readTranslogJSON(*proofPath, &proof); err != nil {
 		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "log verify-consistency", "reading proof"))
 	}
-	if *oldRoot != "" {
-		proof.OldRoot = *oldRoot
-	}
-	if *newRoot != "" {
-		proof.NewRoot = *newRoot
-	}
+	proof.OldRoot = *oldRoot
+	proof.NewRoot = *newRoot
 	if err := translog.VerifyConsistency(&proof); err != nil {
 		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "", "INVALID"))
 	}

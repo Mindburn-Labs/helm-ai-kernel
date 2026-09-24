@@ -24,12 +24,30 @@ func TestEvidenceInspectReportsLaunchpadGraph(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("HELM_ALLOW_SELF_ATTESTED_EVIDENCE", "")
+	t.Setenv("HELM_EVIDENCE_TRUST_CONFIG", "")
+	t.Setenv("HELM_DATA_DIR", t.TempDir())
+
+	// Audit 02-08: the pack carries its own dev-local key, so without the
+	// explicit opt-in inspect must not report it verified.
 	var stdout, stderr bytes.Buffer
-	code := runEvidenceInspect([]string{"--json", packDir}, &stdout, &stderr)
-	if code != 0 {
+	if code := runEvidenceInspect([]string{"--json", packDir}, &stdout, &stderr); code != 0 {
 		t.Fatalf("runEvidenceInspect code=%d stderr=%s", code, stderr.String())
 	}
 	var report map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("parse inspect json: %v\n%s", err, stdout.String())
+	}
+	if report["verified"] != false || !strings.HasPrefix(report["summary"].(string), "UNVERIFIABLE") {
+		t.Fatalf("self-attested pack inspected as verified: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	code := runEvidenceInspect([]string{"--json", "--allow-self-attested", packDir}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("runEvidenceInspect code=%d stderr=%s", code, stderr.String())
+	}
+	report = map[string]any{}
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatalf("parse inspect json: %v\n%s", err, stdout.String())
 	}

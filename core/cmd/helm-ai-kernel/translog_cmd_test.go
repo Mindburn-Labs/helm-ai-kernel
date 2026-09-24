@@ -24,7 +24,9 @@ func runLogCLI(t *testing.T, args ...string) (int, string, string) {
 func TestTranslogCLIRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	// Append eight receipt hashes.
+	// Append eight receipt hashes, recording the tree head at size 5 so the
+	// consistency check below uses a root obtained outside the proof.
+	var rootAt5 string
 	for i := 0; i < 8; i++ {
 		receiptHash := sha256.Sum256([]byte(fmt.Sprintf("receipt-%d", i)))
 		code, out, errOut := runLogCLI(t, "log", "append",
@@ -42,6 +44,17 @@ func TestTranslogCLIRoundTrip(t *testing.T) {
 		}
 		if resp.LeafIndex != uint64(i) || resp.TreeSize != uint64(i+1) {
 			t.Fatalf("append %d: got index %d size %d", i, resp.LeafIndex, resp.TreeSize)
+		}
+		if resp.TreeSize == 5 {
+			code, out, errOut := runLogCLI(t, "log", "sth", "--data-dir", dir)
+			if code != 0 {
+				t.Fatalf("sth at size 5 failed (%d): %s", code, errOut)
+			}
+			var sth5 translog.SignedTreeHead
+			if err := json.Unmarshal([]byte(out), &sth5); err != nil {
+				t.Fatalf("sth output not JSON: %v", err)
+			}
+			rootAt5 = sth5.RootHash
 		}
 	}
 
@@ -94,7 +107,7 @@ func TestTranslogCLIRoundTrip(t *testing.T) {
 	if err := os.WriteFile(consPath, []byte(out), 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, out, errOut = runLogCLI(t, "log", "verify-consistency", "--proof", consPath)
+	code, out, errOut = runLogCLI(t, "log", "verify-consistency", "--proof", consPath, "--old-root", rootAt5, "--new-root", sth.RootHash)
 	if code != 0 {
 		t.Fatalf("verify-consistency failed (%d): %s", code, errOut)
 	}
@@ -104,7 +117,7 @@ func TestTranslogCLIRoundTrip(t *testing.T) {
 
 	// Negative: equivocation — a different root claimed at the same new
 	// size must fail consistency verification.
-	code, _, errOut = runLogCLI(t, "log", "verify-consistency", "--proof", consPath, "--new-root", badRoot)
+	code, _, errOut = runLogCLI(t, "log", "verify-consistency", "--proof", consPath, "--old-root", rootAt5, "--new-root", badRoot)
 	if code != 1 {
 		t.Fatalf("verify-consistency with equivocating root: exit %d, want 1 (%s)", code, errOut)
 	}

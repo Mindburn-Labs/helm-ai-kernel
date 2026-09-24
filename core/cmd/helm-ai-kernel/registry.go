@@ -458,7 +458,7 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "evidence",
 			Title: "Evidence",
 			Commands: []string{
-				"verify", "verify-scan", "evidence", "export", "audit", "report", "replay", "rollup", "log", "traces", "gui", "plan", "risk-summary", "conform", "certify", "coverage", "brief",
+				"verify", "verify-scan", "evidence", "export", "audit", "report", "replay", "rollup", "log", "traces", "plan", "risk-summary", "conform", "coverage", "brief",
 			},
 		},
 		{

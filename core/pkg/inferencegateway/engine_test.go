@@ -2,6 +2,7 @@ package inferencegateway
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -405,7 +406,7 @@ func TestLedgerRejectsUnbalancedSettlement(t *testing.T) {
 		{ID: "e1", AccountID: "balance-1", Direction: economic.SettlementDebit, AmountCents: 6, Currency: "USD"},
 		{ID: "e2", AccountID: "treasury-1", Direction: economic.SettlementCredit, AmountCents: 5, Currency: "USD"},
 	})
-	_, err := h.ledger.commit("idem-bad", usage, bad)
+	_, err := h.ledger.commit("idem-bad", usage, bad, "")
 	requireErrContains(t, err, "balanced")
 	if h.ledger.BalanceCents() != 100_000 {
 		t.Fatal("balance must be untouched when settlement is unbalanced")
@@ -543,5 +544,177 @@ func TestEscalatesWhenApprovalRequired(t *testing.T) {
 	}
 	if res.Receipt != nil {
 		t.Fatal("no dispatch receipt may be issued on a non-ALLOW verdict")
+	}
+}
+
+// --- Dispatch guard (HELM-734: 22-01, 22-02, 22-03, 12-01) ---------------------
+
+func TestLookupFindsSettledKeyBeforeDispatch(t *testing.T) {
+	h := newHarness(t)
+	if _, ok := h.engine.Lookup(h.tenant, "idem-look"); ok {
+		t.Fatal("unsettled key must not be found")
+	}
+	settleOne(t, h, "idem-look", "prov-req-look", 2)
+	got, ok := h.engine.Lookup(h.tenant, "idem-look")
+	if !ok || !got.Replayed || got.UsageReceipt == nil {
+		t.Fatalf("Lookup = %+v, %v; want the committed replay", got, ok)
+	}
+	if _, ok := h.engine.Lookup("other-tenant", "idem-look"); ok {
+		t.Fatal("the key must be scoped to its tenant")
+	}
+}
+
+func TestReserveForDispatchIsExclusivePerKey(t *testing.T) {
+	h := newHarness(t)
+	q, err := h.engine.Quote(h.env, h.req("idem-excl", "gpt-4o", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); !errors.Is(err, ErrDispatchConflict) {
+		t.Fatalf("second reserve while in flight = %v, want ErrDispatchConflict", err)
+	}
+	if h.ledger.HoldCents() != q.Quote.MaxAmountCents {
+		t.Fatalf("hold = %d, want one hold of %d", h.ledger.HoldCents(), q.Quote.MaxAmountCents)
+	}
+
+	// A failed dispatch releases; a retry with the same key reserves afresh.
+	if _, err := h.engine.ReleaseReservation(q.Quote); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve after release: %v", err)
+	}
+	if h.ledger.HoldCents() != q.Quote.MaxAmountCents {
+		t.Fatalf("hold after retry = %d, want %d", h.ledger.HoldCents(), q.Quote.MaxAmountCents)
+	}
+
+	// Once settled the key can never reserve again.
+	if _, err := h.engine.Settle(q.Quote, "prov-req-excl", 2, 1000, 480); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); !errors.Is(err, ErrDispatchConflict) {
+		t.Fatalf("reserve after settle = %v, want ErrDispatchConflict", err)
+	}
+}
+
+func TestReserveForDispatchRefusesExpiredQuote(t *testing.T) {
+	h := newHarness(t)
+	q, err := h.engine.Quote(h.env, h.req("idem-late", "gpt-4o", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	h.advance(31 * time.Second)
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err == nil {
+		t.Fatal("an expired quote must not be reserved for dispatch")
+	}
+}
+
+func TestReservedDispatchSettlesAfterQuoteExpiry(t *testing.T) {
+	h := newHarness(t)
+	q, err := h.engine.Quote(h.env, h.req("idem-slow", "gpt-4o", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	h.advance(10 * time.Minute) // the provider took longer than the quote TTL
+	if _, err := h.engine.Settle(q.Quote, "prov-req-slow", 2, 1000, 480); err != nil {
+		t.Fatalf("settle of a reserved dispatch after expiry = %v, want nil", err)
+	}
+	if h.ledger.HoldCents() != 0 {
+		t.Fatalf("hold = %d, want 0 after settlement", h.ledger.HoldCents())
+	}
+}
+
+func TestDebitActualDebitsAndReportsOverage(t *testing.T) {
+	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
+	q, err := h.engine.Quote(h.env, h.req("idem-over", "gpt-4o", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	const providerCost = 300 // 10% fee -> 330 actual against a 2-cent ceiling
+	settle, err := h.engine.Settle(q.Quote, "prov-req-over", providerCost, 1000, 99_999)
+	if err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+	wantActual := int64(providerCost + providerCost*1000/10_000)
+	if settle.Capped || settle.ActualAmountCents != wantActual || settle.BalanceDebitCents != wantActual {
+		t.Fatalf("settle = %+v, want an uncapped debit of %d", settle, wantActual)
+	}
+	if settle.OverageCents != wantActual-q.Quote.MaxAmountCents {
+		t.Fatalf("overage = %d, want %d", settle.OverageCents, wantActual-q.Quote.MaxAmountCents)
+	}
+	if settle.UsageReceipt.Metadata["overage_cents"] == "" {
+		t.Fatal("the usage receipt must record the overage")
+	}
+	if h.ledger.BalanceCents() != 100_000-wantActual || h.ledger.HoldCents() != 0 {
+		t.Fatalf("balance/hold = %d/%d, want %d/0", h.ledger.BalanceCents(), h.ledger.HoldCents(), 100_000-wantActual)
+	}
+}
+
+func TestFailedSettlementKeepsTheHold(t *testing.T) {
+	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
+	q, err := h.engine.Quote(h.env, h.req("idem-broke", "gpt-4o", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	if _, err := h.engine.ReserveForDispatch(q.Quote); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	settle, err := h.engine.Settle(q.Quote, "prov-req-broke", 200_000, 1000, 99_999)
+	requireErrContains(t, err, "exceeds available funds")
+	if settle == nil || settle.ActualAmountCents != 220_000 {
+		t.Fatalf("failed settle = %+v, want the actual cost reported", settle)
+	}
+	if h.ledger.HoldCents() != q.Quote.MaxAmountCents || h.ledger.BalanceCents() != 100_000 {
+		t.Fatalf("hold/balance = %d/%d, want the hold kept and no debit", h.ledger.HoldCents(), h.ledger.BalanceCents())
+	}
+}
+
+func TestSettleRejectsArithmeticOverflow(t *testing.T) {
+	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
+	q, err := h.engine.Quote(h.env, h.req("idem-wrap", "gpt-4o", 1000, 500))
+	if err != nil {
+		t.Fatalf("quote: %v", err)
+	}
+	// providerCost * 1000 bps wraps int64; the old code debited garbage.
+	if _, err := h.engine.Settle(q.Quote, "prov-req-wrap", math.MaxInt64/100, 1000, 500); err == nil {
+		t.Fatal("a platform fee that overflows int64 must fail settlement")
+	}
+	if h.ledger.BalanceCents() != 100_000 {
+		t.Fatalf("balance = %d, want untouched", h.ledger.BalanceCents())
+	}
+}
+
+func TestQuoteClampsOutputToMandate(t *testing.T) {
+	h := newHarness(t)
+	// The envelope allows 10_000 cents per request; gpt-4o output is 1500 µ¢.
+	req := h.req("idem-mandate", "gpt-4o", 1000, 3443392227092449635)
+	if _, err := h.engine.Quote(h.env, req); err == nil {
+		t.Fatal("an unclamped estimate beyond the mandate must not be allowed")
+	}
+	req.ClampOutputToMandate = true
+	res, err := h.engine.Quote(h.env, req)
+	if err != nil {
+		t.Fatalf("clamped quote: %v", err)
+	}
+	// 1000 in * 500 µ¢ leaves 10_000*1e6 - 500_000 µ¢ for output.
+	const want = (10_000*1_000_000 - 1000*500) / 1500
+	if res.Quote.OutputTokens != want || res.Quote.MaxAmountCents != 10_000 {
+		t.Fatalf("clamped output/ceiling = %d/%d, want %d/10000", res.Quote.OutputTokens, res.Quote.MaxAmountCents, want)
+	}
+
+	// A ceiling inside the mandate is left alone.
+	req = h.req("idem-mandate-small", "gpt-4o", 1000, 500)
+	req.ClampOutputToMandate = true
+	if res, err := h.engine.Quote(h.env, req); err != nil || res.Quote.OutputTokens != 500 {
+		t.Fatalf("small ceiling = %+v, %v; want 500 unchanged", res, err)
 	}
 }

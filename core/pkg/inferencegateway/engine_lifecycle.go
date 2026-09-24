@@ -6,13 +6,20 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts/economic"
 )
 
+// ErrDispatchConflict reports that a dispatch for the same quote (and so the
+// same idempotency key) already holds a reservation or has settled.
+var ErrDispatchConflict = errors.New("inferencegateway: a dispatch for this idempotency key is already in flight or settled")
+
 // ReserveForDispatch places the pre-dispatch hold for an ALLOW'd quote. Every
-// dispatch must reserve its estimated max cost before the provider is called;
-// the hold is keyed on the quote id so a retried dispatch reserves exactly once,
-// and it is bound to the quote's signed budget-verdict receipt hash.
+// dispatch must reserve its estimated max cost before the provider is called.
+// The hold is keyed on the quote id, which is derived from the idempotency key,
+// and it is exclusive: while one dispatch holds it, or once it has settled, a
+// second reservation fails with ErrDispatchConflict. After ReleaseReservation
+// a retry may reserve again. The hold is bound to the quote's signed
+// budget-verdict receipt hash.
 //
-// The quote must carry a ReceiptHash (set by Quote on an ALLOW verdict); a quote
-// without one was never authorized for dispatch and is refused.
+// The quote must carry a ReceiptHash (set by Quote on an ALLOW verdict) and be
+// unexpired; otherwise it was never authorized for dispatch and is refused.
 func (e *Engine) ReserveForDispatch(quote *economic.RouteQuote) (*Reservation, error) {
 	if quote == nil {
 		return nil, errors.New("inferencegateway: route quote is required to reserve")
@@ -29,7 +36,10 @@ func (e *Engine) ReserveForDispatch(quote *economic.RouteQuote) (*Reservation, e
 	if quote.MaxAmountCents <= 0 {
 		return nil, errors.New("inferencegateway: quote max amount must be positive to reserve")
 	}
-	return e.cfg.Ledger.Reserve(quote.ID, quote.MaxAmountCents, quote.ReceiptHash)
+	if quote.Expired(e.cfg.Now()) {
+		return nil, errors.New("inferencegateway: route quote expired before dispatch")
+	}
+	return e.cfg.Ledger.reserveExclusive(quote.ID, quote.MaxAmountCents, quote.ReceiptHash)
 }
 
 // ReleaseReservation frees the dispatch hold when a run fails before settlement.

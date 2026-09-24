@@ -67,6 +67,7 @@ fi
 
 echo "==> Exercising API quarantine, approval, and scoped authorization"
 python3 - "$HELM_URL" "$FIXTURE_JSON" "$TOOL_SCHEMA_JSON" "$TOOL_SCHEMA_HASH" "$ADMIN_KEY" "$TENANT_ID" <<'PY'
+import datetime
 import json
 import sys
 import urllib.error
@@ -163,7 +164,7 @@ _, decision = request(
         "principal": "mcp-demo-agent",
         "action": "read-ticket",
         "resource": "ticket:MCP-100",
-        "context": {"demo": "mcp-quarantine"},
+        "context": {"demo": "mcp-quarantine", "session_id": "mcp-demo-agent"},
     },
     {200},
 )
@@ -186,6 +187,10 @@ _, approval = request(
         "quorum": 1,
         "reason": "local fixture schema inspected for public launch demo",
         "receipt_id": approval_receipt_id,
+        # Approvals are timelocked and expire (HELM-742 01-24); an elapsed
+        # timelock lets the single local approver decide immediately.
+        "timelock_until": (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "expires_at": (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     },
     {201},
 )
@@ -198,6 +203,7 @@ _, approval_done = request(
         "actor": "user:local-admin",
         "receipt_id": approval_receipt_id,
         "reason": "approved local fixture only",
+        "expected_ceremony_hash": approval.get("ceremony_hash", ""),
     },
     {200},
 )
@@ -211,9 +217,12 @@ _, registry_approval = request(
         "approval_receipt_id": approval_receipt_id,
         "reason": "server approved through the approval ceremony",
     },
-    {200},
+    {503},
 )
-assert registry_approval["state"] == "approved", registry_approval
+# MCP server approval needs a credential-verified approval authority, which
+# the local boundary does not have, so the route fails closed (NV-005).
+if registry_approval.get("status") != 503:
+    raise AssertionError(f"MCP registry approval did not fail closed: {registry_approval}")
 
 _, unknown_tool = request(
     "POST",
@@ -233,19 +242,19 @@ _, allowed = request(
     {
         "server_id": "local-fixture-mcp",
         "tool_name": "local.echo",
-        "args_hash": "sha256:approved-call",
+        "args_hash": "sha256:quarantined-call",
         "tool_schema": tool_schema,
         "receipt_id": approval_receipt_id,
     },
-    {200},
+    {403},
 )
-if allowed["verdict"] != "ALLOW":
-    raise AssertionError(f"approved fixture call was not allowed: {allowed}")
+quarantined_verdict = require_no_allow(allowed, "server still quarantined")
 
 print(json.dumps({
     "api_unknown_server": unknown_server_verdict,
     "api_unknown_tool": unknown_tool_verdict,
-    "api_approved_call": allowed["verdict"],
+    "api_registry_approval": "unavailable (fail-closed)",
+    "api_quarantined_call": quarantined_verdict,
     "approval_receipt_id": approval_receipt_id,
     "proofgraph_visible": True,
 }, sort_keys=True))
@@ -263,7 +272,7 @@ fi
 printf '%s\n' "$CLI_UNKNOWN_SERVER" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["verdict"] in ("DENY","ESCALATE"); print(json.dumps({"cli_unknown_server":p["verdict"]}, sort_keys=True))'
 
 set +e
-CLI_UNKNOWN_TOOL="$(./bin/helm-ai-kernel mcp authorize-call --server-id cli-local-fixture --tool-name local.missing --approved --json 2>/dev/null)"
+CLI_UNKNOWN_TOOL="$(./bin/helm-ai-kernel mcp authorize-call --server-id cli-local-fixture --tool-name local.missing --json 2>/dev/null)"
 CLI_UNKNOWN_TOOL_CODE=$?
 set -e
 if [ "$CLI_UNKNOWN_TOOL_CODE" -ne 1 ]; then
@@ -272,12 +281,20 @@ if [ "$CLI_UNKNOWN_TOOL_CODE" -ne 1 ]; then
 fi
 printf '%s\n' "$CLI_UNKNOWN_TOOL" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["verdict"] in ("DENY","ESCALATE"); print(json.dumps({"cli_unknown_tool":p["verdict"]}, sort_keys=True))'
 
-CLI_ALLOWED="$(./bin/helm-ai-kernel mcp authorize-call \
+# Local CLI metadata is not an approval authority: --approved fails closed.
+set +e
+CLI_APPROVED_ERR="$(./bin/helm-ai-kernel mcp authorize-call \
   --server-id cli-local-fixture \
   --tool-name local.echo \
   --approved \
   --tool-schema-json "$TOOL_SCHEMA_JSON" \
-  --json)"
-printf '%s\n' "$CLI_ALLOWED" | python3 -c 'import json,sys; p=json.load(sys.stdin); assert p["verdict"]=="ALLOW"; print(json.dumps({"cli_approved_call":p["verdict"]}, sort_keys=True))'
+  --json 2>&1 >/dev/null)"
+CLI_APPROVED_CODE=$?
+set -e
+if [ "$CLI_APPROVED_CODE" -eq 0 ] || ! printf '%s' "$CLI_APPROVED_ERR" | grep -q "approval verification unavailable"; then
+  echo "CLI --approved did not fail closed (exit $CLI_APPROVED_CODE): $CLI_APPROVED_ERR"
+  exit 1
+fi
+echo '{"cli_approved_flag": "unavailable (fail-closed)"}'
 
 echo "==> MCP quarantine demo completed with no fixture dispatch for unknown tools or servers."

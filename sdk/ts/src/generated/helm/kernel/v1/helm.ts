@@ -77,6 +77,14 @@ export function verdictToJSON(object: Verdict): string {
   }
 }
 
+/**
+ * Legacy closed enum. It holds 18 of the codes in
+ * protocols/json-schemas/reason-codes/reason-codes-v1.json, the only reason-code
+ * registry, and every other code decodes as REASON_CODE_UNSPECIFIED. Read the
+ * open-string reason_code_text field beside each use instead. No values are
+ * added here; scripts/ci/gen_reason_codes.py checks that every value is a
+ * registry code and that every use has reason_code_text beside it.
+ */
 export enum ReasonCode {
   REASON_CODE_UNSPECIFIED = 0,
   REASON_CODE_POLICY_VIOLATION = 1,
@@ -336,6 +344,12 @@ export interface Receipt {
   argsHash: string;
   policyHash: string;
   sessionId: string;
+  /**
+   * The registered reason code as an open string (HELM-747). This is the
+   * authoritative field: the closed reason_code enum above represents only
+   * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+   */
+  reasonCodeText: string;
 }
 
 export interface Receipt_MetadataEntry {
@@ -368,6 +382,12 @@ export interface PDPResponse {
   policyRef: string;
   decisionHash: string;
   obligations: Obligation[];
+  /**
+   * The registered reason code as an open string (HELM-747). This is the
+   * authoritative field: the closed reason_code enum above represents only
+   * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+   */
+  reasonCodeText: string;
 }
 
 export interface Obligation {
@@ -393,7 +413,15 @@ export interface EffectResponse {
   reasonCode: ReasonCode;
   reason: string;
   receipt: Receipt | undefined;
-  intent: AuthorizedExecutionIntent | undefined;
+  intent:
+    | AuthorizedExecutionIntent
+    | undefined;
+  /**
+   * The registered reason code as an open string (HELM-747). This is the
+   * authoritative field: the closed reason_code enum above represents only
+   * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+   */
+  reasonCodeText: string;
 }
 
 export interface ExecutionResult {
@@ -1650,6 +1678,7 @@ function createBaseReceipt(): Receipt {
     argsHash: "",
     policyHash: "",
     sessionId: "",
+    reasonCodeText: "",
   };
 }
 
@@ -1726,6 +1755,9 @@ export const Receipt: MessageFns<Receipt> = {
     }
     if (message.sessionId !== "") {
       writer.uint32(194).string(message.sessionId);
+    }
+    if (message.reasonCodeText !== "") {
+      writer.uint32(202).string(message.reasonCodeText);
     }
     return writer;
   },
@@ -1932,6 +1964,14 @@ export const Receipt: MessageFns<Receipt> = {
           message.sessionId = reader.string();
           continue;
         }
+        case 25: {
+          if (tag !== 202) {
+            break;
+          }
+
+          message.reasonCodeText = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2035,6 +2075,11 @@ export const Receipt: MessageFns<Receipt> = {
         : isSet(object.session_id)
         ? globalThis.String(object.session_id)
         : "",
+      reasonCodeText: isSet(object.reasonCodeText)
+        ? globalThis.String(object.reasonCodeText)
+        : isSet(object.reason_code_text)
+        ? globalThis.String(object.reason_code_text)
+        : "",
     };
   },
 
@@ -2118,6 +2163,9 @@ export const Receipt: MessageFns<Receipt> = {
     if (message.sessionId !== "") {
       obj.sessionId = message.sessionId;
     }
+    if (message.reasonCodeText !== "") {
+      obj.reasonCodeText = message.reasonCodeText;
+    }
     return obj;
   },
 
@@ -2158,6 +2206,7 @@ export const Receipt: MessageFns<Receipt> = {
     message.argsHash = object.argsHash ?? "";
     message.policyHash = object.policyHash ?? "";
     message.sessionId = object.sessionId ?? "";
+    message.reasonCodeText = object.reasonCodeText ?? "";
     return message;
   },
 };
@@ -2545,7 +2594,7 @@ export const ContextDescriptor: MessageFns<ContextDescriptor> = {
 };
 
 function createBasePDPResponse(): PDPResponse {
-  return { allow: false, reasonCode: 0, policyRef: "", decisionHash: "", obligations: [] };
+  return { allow: false, reasonCode: 0, policyRef: "", decisionHash: "", obligations: [], reasonCodeText: "" };
 }
 
 export const PDPResponse: MessageFns<PDPResponse> = {
@@ -2564,6 +2613,9 @@ export const PDPResponse: MessageFns<PDPResponse> = {
     }
     for (const v of message.obligations) {
       Obligation.encode(v!, writer.uint32(42).fork()).join();
+    }
+    if (message.reasonCodeText !== "") {
+      writer.uint32(50).string(message.reasonCodeText);
     }
     return writer;
   },
@@ -2615,6 +2667,14 @@ export const PDPResponse: MessageFns<PDPResponse> = {
           message.obligations.push(Obligation.decode(reader, reader.uint32()));
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.reasonCodeText = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2645,6 +2705,11 @@ export const PDPResponse: MessageFns<PDPResponse> = {
       obligations: globalThis.Array.isArray(object?.obligations)
         ? object.obligations.map((e: any) => Obligation.fromJSON(e))
         : [],
+      reasonCodeText: isSet(object.reasonCodeText)
+        ? globalThis.String(object.reasonCodeText)
+        : isSet(object.reason_code_text)
+        ? globalThis.String(object.reason_code_text)
+        : "",
     };
   },
 
@@ -2665,6 +2730,9 @@ export const PDPResponse: MessageFns<PDPResponse> = {
     if (message.obligations?.length) {
       obj.obligations = message.obligations.map((e) => Obligation.toJSON(e));
     }
+    if (message.reasonCodeText !== "") {
+      obj.reasonCodeText = message.reasonCodeText;
+    }
     return obj;
   },
 
@@ -2678,6 +2746,7 @@ export const PDPResponse: MessageFns<PDPResponse> = {
     message.policyRef = object.policyRef ?? "";
     message.decisionHash = object.decisionHash ?? "";
     message.obligations = object.obligations?.map((e) => Obligation.fromPartial(e)) || [];
+    message.reasonCodeText = object.reasonCodeText ?? "";
     return message;
   },
 };
@@ -2986,7 +3055,7 @@ export const EffectRequest_ContextEntry: MessageFns<EffectRequest_ContextEntry> 
 };
 
 function createBaseEffectResponse(): EffectResponse {
-  return { verdict: 0, reasonCode: 0, reason: "", receipt: undefined, intent: undefined };
+  return { verdict: 0, reasonCode: 0, reason: "", receipt: undefined, intent: undefined, reasonCodeText: "" };
 }
 
 export const EffectResponse: MessageFns<EffectResponse> = {
@@ -3005,6 +3074,9 @@ export const EffectResponse: MessageFns<EffectResponse> = {
     }
     if (message.intent !== undefined) {
       AuthorizedExecutionIntent.encode(message.intent, writer.uint32(42).fork()).join();
+    }
+    if (message.reasonCodeText !== "") {
+      writer.uint32(50).string(message.reasonCodeText);
     }
     return writer;
   },
@@ -3056,6 +3128,14 @@ export const EffectResponse: MessageFns<EffectResponse> = {
           message.intent = AuthorizedExecutionIntent.decode(reader, reader.uint32());
           continue;
         }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.reasonCodeText = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3076,6 +3156,11 @@ export const EffectResponse: MessageFns<EffectResponse> = {
       reason: isSet(object.reason) ? globalThis.String(object.reason) : "",
       receipt: isSet(object.receipt) ? Receipt.fromJSON(object.receipt) : undefined,
       intent: isSet(object.intent) ? AuthorizedExecutionIntent.fromJSON(object.intent) : undefined,
+      reasonCodeText: isSet(object.reasonCodeText)
+        ? globalThis.String(object.reasonCodeText)
+        : isSet(object.reason_code_text)
+        ? globalThis.String(object.reason_code_text)
+        : "",
     };
   },
 
@@ -3096,6 +3181,9 @@ export const EffectResponse: MessageFns<EffectResponse> = {
     if (message.intent !== undefined) {
       obj.intent = AuthorizedExecutionIntent.toJSON(message.intent);
     }
+    if (message.reasonCodeText !== "") {
+      obj.reasonCodeText = message.reasonCodeText;
+    }
     return obj;
   },
 
@@ -3113,6 +3201,7 @@ export const EffectResponse: MessageFns<EffectResponse> = {
     message.intent = (object.intent !== undefined && object.intent !== null)
       ? AuthorizedExecutionIntent.fromPartial(object.intent)
       : undefined;
+    message.reasonCodeText = object.reasonCodeText ?? "";
     return message;
   },
 };

@@ -12,6 +12,8 @@ from .client import (
     SandboxBackendProfile,
     SandboxGrant,
 )
+from . import reason_codes
+
 from .types_gen import (
     ApprovalRequest,
     ChatCompletionRequest,
@@ -37,6 +39,7 @@ ChatToolFunction = ChatCompletionRequestToolsInnerFunction
 VerificationChecks = VerificationResultChecks
 
 __all__ = [
+    "reason_codes",
     "HelmClient",
     "HelmApiError",
     "EvidenceEnvelopeExportRequest",

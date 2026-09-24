@@ -231,6 +231,6 @@ The Go core and SDK constants are regenerated with `gen_reason_codes.py`. The
 registry drops from 106 to 104 codes; the reachability gate reports 59 emitted
 and 45 allowlisted.
 
-`dead-packages.sh` after this slice reports 109 importer-less packages, 116
-unreachable from every `core/cmd` main, and 261 `core/pkg` packages. These
-figures do not yet include the s2 removals, which merge separately.
+`dead-packages.sh` after this slice, measured on top of slice 2, reports 101
+importer-less packages, 107 unreachable from every `core/cmd` main, and 252
+`core/pkg` packages (from 121, 130 and 275).

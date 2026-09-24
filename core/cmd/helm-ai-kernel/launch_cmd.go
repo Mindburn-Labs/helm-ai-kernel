@@ -130,7 +130,8 @@ func runLaunchEvidence(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "launch evidence requires --export to avoid implying a new evidence mutation")
 		return 2
 	}
-	run, err := session.NewStore("").Get(rest[0])
+	store := session.NewStore("")
+	run, err := store.Get(rest[0])
 	if err != nil {
 		fmt.Fprintf(stderr, "launch evidence error: %v\n", err)
 		return 1
@@ -138,7 +139,7 @@ func runLaunchEvidence(args []string, stdout, stderr io.Writer) int {
 	result := launchEvidenceExport{
 		LaunchID:         run.LaunchID,
 		EvidencePackRefs: run.EvidencePackRefs,
-		Checks:           verifyLaunchEvidenceRefs(run.EvidencePackRefs),
+		Checks:           verifyLaunchEvidenceRefs(run.EvidencePackRefs, store.Root()),
 		State:            run.State,
 		KernelVerdict:    run.KernelVerdict,
 	}
@@ -165,7 +166,12 @@ func runLaunchEvidence(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
+// verifyLaunchEvidenceRefs verifies each pack against the launch store's own
+// trust roots: its configured trust config plus the signing key stored under
+// storeRoot. A pack signed by any other key is not verified, even when the
+// local run record points at it (audit 02-08).
+func verifyLaunchEvidenceRefs(refs []string, storeRoot string) []launchEvidenceCheck {
+	trust, trustErr := evidencepkg.LocalProducerTrustConfig(storeRoot)
 	checks := make([]launchEvidenceCheck, 0, len(refs))
 	for _, ref := range refs {
 		check := launchEvidenceCheck{Ref: ref}
@@ -176,6 +182,11 @@ func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
 			continue
 		}
 		check.Exists = true
+		if trustErr != nil {
+			check.Error = trustErr.Error()
+			checks = append(checks, check)
+			continue
+		}
 		verifyTarget := ref
 		var cleanup func()
 		if !info.IsDir() {
@@ -194,9 +205,7 @@ func verifyLaunchEvidenceRefs(refs []string) []launchEvidenceCheck {
 			}
 			verifyTarget = tempDir
 		}
-		// Pack was sealed by this process, so its dev-local self-attested
-		// seal carries no provenance question (F-02).
-		report, err := verifier.VerifyLocallyProducedBundle(verifyTarget)
+		report, err := verifier.VerifyBundleWithOptions(verifyTarget, verifier.VerifyOptions{TrustConfig: trust, DataDir: storeRoot})
 		if cleanup != nil {
 			cleanup()
 		}
@@ -311,6 +320,18 @@ func runLaunchCloudGate(compiled plan.LaunchPlan, substrate lpregistry.Substrate
 		ReconcileStatus:      string(lpprovision.ReconcileRequired),
 		TeardownRequired:     true,
 		EvidencePackRefs:     []string{},
+	}
+	// The local path refuses a non-ALLOW plan in ExecuteLaunch; the cloud path
+	// must refuse it before any provider write too (HELM-740, 02-01).
+	if compiled.KernelVerdict != "ALLOW" {
+		response.KernelVerdict = firstNonEmpty(compiled.KernelVerdict, "DENY")
+		response.Status = firstNonEmpty(compiled.Status, "DENIED")
+		response.ReasonCode = firstNonEmpty(compiled.ReasonCode, "ERR_LAUNCHPAD_PLAN_NOT_ALLOWED")
+		fmt.Fprintf(stderr, "cloud Launchpad beta refused: launch plan verdict is %s (%s)\n", response.KernelVerdict, response.ReasonCode)
+		if writeLaunchJSON(stdout, response) != 0 {
+			return 1
+		}
+		return 1
 	}
 	if !live {
 		fmt.Fprintln(stderr, "cloud Launchpad substrates require --live-cloud-beta and remain dry-run by default")

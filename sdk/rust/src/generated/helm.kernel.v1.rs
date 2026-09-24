@@ -185,6 +185,11 @@ pub struct Receipt {
     pub policy_hash: ::prost::alloc::string::String,
     #[prost(string, tag = "24")]
     pub session_id: ::prost::alloc::string::String,
+    /// The registered reason code as an open string (HELM-747). This is the
+    /// authoritative field: the closed reason_code enum above represents only
+    /// 18 of the registry's codes and reads every other code as UNSPECIFIED.
+    #[prost(string, tag = "25")]
+    pub reason_code_text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PdpRequest {
@@ -227,6 +232,11 @@ pub struct PdpResponse {
     pub decision_hash: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "5")]
     pub obligations: ::prost::alloc::vec::Vec<Obligation>,
+    /// The registered reason code as an open string (HELM-747). This is the
+    /// authoritative field: the closed reason_code enum above represents only
+    /// 18 of the registry's codes and reads every other code as UNSPECIFIED.
+    #[prost(string, tag = "6")]
+    pub reason_code_text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Obligation {
@@ -263,6 +273,11 @@ pub struct EffectResponse {
     pub receipt: ::core::option::Option<Receipt>,
     #[prost(message, optional, tag = "5")]
     pub intent: ::core::option::Option<AuthorizedExecutionIntent>,
+    /// The registered reason code as an open string (HELM-747). This is the
+    /// authoritative field: the closed reason_code enum above represents only
+    /// 18 of the registry's codes and reads every other code as UNSPECIFIED.
+    #[prost(string, tag = "6")]
+    pub reason_code_text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutionResult {
@@ -316,6 +331,12 @@ impl Verdict {
         }
     }
 }
+/// Legacy closed enum. It holds 18 of the codes in
+/// protocols/json-schemas/reason-codes/reason-codes-v1.json, the only reason-code
+/// registry, and every other code decodes as REASON_CODE_UNSPECIFIED. Read the
+/// open-string reason_code_text field beside each use instead. No values are
+/// added here; scripts/ci/gen_reason_codes.py checks that every value is a
+/// registry code and that every use has reason_code_text beside it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum ReasonCode {

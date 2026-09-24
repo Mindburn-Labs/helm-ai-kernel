@@ -2,6 +2,8 @@ package economic
 
 import (
 	"errors"
+	"math"
+	"math/bits"
 	"time"
 )
 
@@ -195,17 +197,43 @@ func (s *ProviderPriceSnapshot) QuoteCents(inputTokens, outputTokens int64) (int
 	if inputTokens < 0 || outputTokens < 0 {
 		return 0, errors.New("provider_price_snapshot: token counts cannot be negative")
 	}
-	microCents := inputTokens*s.InputTokenMicroCents + outputTokens*s.OutputTokenMicroCents
-	if microCents < 0 {
+	if s.InputTokenMicroCents < 0 || s.OutputTokenMicroCents < 0 || s.RequestCents < 0 {
+		return 0, errors.New("provider_price_snapshot: price fields cannot be negative")
+	}
+	// Every step is overflow-checked: a sign test alone misses products that
+	// wrap past MaxInt64 twice and land on a small positive value.
+	inputMicro, inOK := mulNonNegative(inputTokens, s.InputTokenMicroCents)
+	outputMicro, outOK := mulNonNegative(outputTokens, s.OutputTokenMicroCents)
+	if !inOK || !outOK || outputMicro > math.MaxInt64-inputMicro {
 		return 0, errors.New("provider_price_snapshot: token cost overflow")
 	}
+	microCents := inputMicro + outputMicro
 	// Round up to the next whole cent (ceil division), then add the flat surcharge.
-	cents := (microCents + 999_999) / 1_000_000
+	cents := microCents / 1_000_000
+	if microCents%1_000_000 != 0 {
+		cents++
+	}
+	if s.RequestCents > math.MaxInt64-cents {
+		return 0, errors.New("provider_price_snapshot: token cost overflow")
+	}
 	total := cents + s.RequestCents
 	if total <= 0 {
 		return 0, errors.New("provider_price_snapshot: quoted cost must be positive")
 	}
 	return total, nil
+}
+
+// mulNonNegative returns a*b for non-negative operands and reports false when
+// the product does not fit in an int64.
+func mulNonNegative(a, b int64) (int64, bool) {
+	if a < 0 || b < 0 {
+		return 0, false
+	}
+	hi, lo := bits.Mul64(uint64(a), uint64(b))
+	if hi != 0 || lo > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(lo), true
 }
 
 func (s *ProviderPriceSnapshot) computeHash() string {

@@ -67,20 +67,7 @@ func TestSkillScanEscalatesGlobalInstallAndMCPAutoEnable(t *testing.T) {
 }
 
 func TestRepoScopedCodexInstallWritesProjectionAndReceipts(t *testing.T) {
-	skillRoot := writeTestSkill(t, Manifest{
-		SchemaVersion:              "helm.skillpack.v1",
-		ID:                         "test/good",
-		Name:                       "Good",
-		Version:                    "0.1.0",
-		Description:                "good skill",
-		Publisher:                  "test",
-		Status:                     StatusExperimental,
-		ScopeDefault:               ScopeRepo,
-		Risk:                       "LOW",
-		LicenseSPDX:                "MIT",
-		SignatureRef:               "sig://test",
-		PermissionsDoNotGrantTools: true,
-	}, "This skill does not grant tool permissions.")
+	skillRoot := writeTestSkill(t, firstPartyTestManifest("test/good", "0.1.0"), "This skill does not grant tool permissions.")
 	pack, err := LoadDir(skillRoot)
 	if err != nil {
 		t.Fatal(err)
@@ -796,18 +783,15 @@ func TestGitHubSkillRefRequiresPinnedDigestAndImmutableRef(t *testing.T) {
 	}
 }
 
+// writeTestSkill writes the pack into the registry of a minimal repository,
+// with the policy file its manifest names, where Scan resolves that policy.
 func writeTestSkill(t *testing.T, manifest Manifest, skill string) string {
 	t.Helper()
-	root := t.TempDir()
-	data, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "skillpack.json"), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "SKILL.md"), []byte(skill), 0o644); err != nil {
-		t.Fatal(err)
+	repo := t.TempDir()
+	root := filepath.Join(repo, "registry", "skills", filepath.FromSlash(manifest.ID))
+	writeSkillAt(t, root, manifest, skill)
+	if manifest.PolicyRef != "" {
+		writeTestFile(t, filepath.Join(repo, filepath.FromSlash(manifest.PolicyRef)), testSkillPolicy)
 	}
 	return root
 }
@@ -818,12 +802,10 @@ func newCursorInstallTestPack(t *testing.T, version, content string) SkillPack {
 
 func newCursorInstallTestPackWithID(t *testing.T, skillID, version, content string) SkillPack {
 	t.Helper()
-	root := writeTestSkill(t, Manifest{
-		SchemaVersion: "helm.skillpack.v1", ID: skillID, Name: "Good", Version: version,
-		Description: "Cursor migration fixture", Publisher: "test", Status: StatusExperimental,
-		ScopeDefault: ScopeRepo, Risk: "LOW", LicenseSPDX: "MIT", SignatureRef: "sig://test/" + version,
-		AgentTargets: []string{"cursor"}, PermissionsDoNotGrantTools: true,
-	}, content)
+	manifest := firstPartyTestManifest(skillID, version)
+	manifest.Description = "Cursor migration fixture"
+	manifest.AgentTargets = []string{"cursor"}
+	root := writeTestSkill(t, manifest, content)
 	pack, err := LoadDir(root)
 	if err != nil {
 		t.Fatal(err)

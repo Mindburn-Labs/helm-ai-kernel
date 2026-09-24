@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,7 +27,7 @@ type launchpadPlanRequest struct {
 	Principal   string `json:"principal"`
 }
 
-func RegisterLaunchpadRoutes(mux *http.ServeMux, svc *Services) {
+func RegisterLaunchpadRoutes(mux routeMux, svc *Services) {
 	mux.HandleFunc("/api/v1/launchpad/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/launchpad/"), "/")
 		catalog, err := registry.LoadCatalog("")
@@ -388,6 +389,10 @@ func handleLaunchpadRunsPath(w http.ResponseWriter, r *http.Request, rest string
 			return
 		}
 		deleted, err := launchsession.NewExecutor(store).DeleteLaunch(runID, true)
+		if errors.Is(err, launchsession.ErrCleanupFailed) {
+			api.WriteError(w, http.StatusBadGateway, "Launch cleanup failed", err.Error())
+			return
+		}
 		if err != nil {
 			api.WriteInternalR(w, r, err)
 			return
@@ -525,6 +530,10 @@ func handleLaunchpadRunPath(w http.ResponseWriter, r *http.Request, rest string,
 			return
 		}
 		deleted, err := launchsession.NewExecutor(store).DeleteLaunch(launchID, true)
+		if errors.Is(err, launchsession.ErrCleanupFailed) {
+			api.WriteError(w, http.StatusBadGateway, "Launch cleanup failed", err.Error())
+			return
+		}
 		if err != nil {
 			api.WriteInternalR(w, r, err)
 			return

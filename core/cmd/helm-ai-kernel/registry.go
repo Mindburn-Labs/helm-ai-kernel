@@ -458,14 +458,14 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "evidence",
 			Title: "Evidence",
 			Commands: []string{
-				"verify", "verify-scan", "evidence", "export", "audit", "report", "replay", "rollup", "log", "traces", "gui", "plan", "risk-summary", "conform", "certify", "coverage", "brief",
+				"verify", "verify-scan", "evidence", "export", "audit", "report", "replay", "rollup", "log", "traces", "plan", "risk-summary", "conform", "coverage", "brief",
 			},
 		},
 		{
 			ID:    "operate",
 			Title: "Operate",
 			Commands: []string{
-				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "did", "freeze", "identity", "import", "incident", "policy", "secret", "tee", "telemetry", "trust", "unfreeze", "workstation",
+				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "credential-keys", "did", "freeze", "identity", "import", "incident", "policy", "secret", "tee", "telemetry", "trust", "unfreeze", "workstation",
 			},
 		},
 	}

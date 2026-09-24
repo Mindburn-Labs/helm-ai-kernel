@@ -6,16 +6,24 @@
 # canonical verification recipe documented in docs/VERIFICATION.md.
 #
 # Usage: verify_cosign.sh [dir]   # default: ./dist
-# A directory containing the Console local-sidecar contract derives its exact
-# Kernel tag from the signed Console manifest; other local artifact checks use
-# the generic workflow identity below.
+# Set KERNEL_RELEASE_TAG=vX.Y.Z to require the exact release identity
+# `release.yml@refs/tags/vX.Y.Z`. A directory containing the Console
+# local-sidecar contract derives that tag from the signed Console manifest (and
+# must agree with KERNEL_RELEASE_TAG when both are present). Otherwise the
+# default identity accepts only release.yml on a v* tag ref: no branch, no
+# other workflow, no other repository.
+#
+# The run fails when it verifies zero bundles or finds a bundle without its
+# artifact: a zero-bundle run is not signature evidence.
 #
 # Caller: Makefile target `verify-cosign`. Documented in docs/VERIFICATION.md.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIR="${1:-dist}"
-DEFAULT_IDENTITY_REGEX='^https://github\.com/Mindburn-Labs/helm-ai-kernel/\.github/workflows/release\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+.*)$'
+RELEASE_WORKFLOW_IDENTITY="https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml"
+RELEASE_TAG_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+DEFAULT_IDENTITY_REGEX='^https://github\.com/Mindburn-Labs/helm-ai-kernel/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
 IDENTITY_REGEX="${COSIGN_IDENTITY_REGEX:-$DEFAULT_IDENTITY_REGEX}"
 ISSUER="${COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 CONSOLE_MANIFEST="helm-console-local-sidecar-release-manifest.json"
@@ -23,6 +31,7 @@ CONSOLE_PRODUCER_BUNDLE="${CONSOLE_MANIFEST}.cosign.bundle"
 KERNEL_MANIFEST_BUNDLE="helm-console-local-sidecar-release-manifest.json.kernel.cosign.bundle"
 CONSOLE_PRODUCER_IDENTITY=""
 KERNEL_RELEASE_IDENTITY=""
+REQUESTED_RELEASE_TAG="${KERNEL_RELEASE_TAG:-}"
 
 if ! printf '%s' "$IDENTITY_REGEX" | grep -Eq '^\^https://github\\?\.com/Mindburn-Labs/helm-ai-kernel/\\?\.github/workflows/[A-Za-z0-9_.-]+\\?\.ya?ml@refs/'; then
     echo "::error::COSIGN_IDENTITY_REGEX must be anchored to a helm-ai-kernel GitHub Actions workflow identity and refs"
@@ -37,6 +46,14 @@ fi
 if [ ! -d "$DIR" ]; then
     echo "::error::artifact directory not found: $DIR"
     exit 1
+fi
+
+if [ -n "$REQUESTED_RELEASE_TAG" ]; then
+    if ! printf '%s' "$REQUESTED_RELEASE_TAG" | grep -Eq "$RELEASE_TAG_REGEX"; then
+        echo "::error::KERNEL_RELEASE_TAG must be a v<major>.<minor>.<patch>[-<prerelease>] release tag, got '$REQUESTED_RELEASE_TAG'"
+        exit 1
+    fi
+    KERNEL_RELEASE_IDENTITY="${RELEASE_WORKFLOW_IDENTITY}@refs/tags/${REQUESTED_RELEASE_TAG}"
 fi
 
 console_contract=0
@@ -74,7 +91,11 @@ PY
         echo "::error::Console release verification requires an exact Kernel tag in the Console manifest"
         exit 1
     fi
-    KERNEL_RELEASE_IDENTITY="https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${kernel_release_tag}"
+    if [ -n "$REQUESTED_RELEASE_TAG" ] && [ "$REQUESTED_RELEASE_TAG" != "$kernel_release_tag" ]; then
+        echo "::error::Console manifest names Kernel ${kernel_release_tag}, but KERNEL_RELEASE_TAG is ${REQUESTED_RELEASE_TAG}"
+        exit 1
+    fi
+    KERNEL_RELEASE_IDENTITY="${RELEASE_WORKFLOW_IDENTITY}@refs/tags/${kernel_release_tag}"
     if ! console_workflow_ref="$(
         python3 "$ROOT/scripts/release/console_local_sidecar.py" pin \
             --pins "$ROOT/release/console-local-sidecar-pins.json" \
@@ -134,7 +155,8 @@ while IFS= read -r bundle; do
             ;;
     esac
     if [ ! -f "$artifact" ]; then
-        echo "::warning::no artifact next to bundle $bundle; skipping"
+        echo "::error::no artifact next to bundle $bundle"
+        fail=$((fail + 1))
         continue
     fi
     echo "verifying $artifact"
@@ -148,4 +170,8 @@ while IFS= read -r bundle; do
 done < <(find "$DIR" -name "*.cosign.bundle" -type f)
 
 echo "verified=$ok failed=$fail"
+if [ "$ok" -eq 0 ] && [ "$fail" -eq 0 ]; then
+    echo "::error::no *.cosign.bundle files under $DIR; a zero-bundle run is not signature evidence"
+    exit 1
+fi
 exit $((fail > 0 ? 1 : 0))

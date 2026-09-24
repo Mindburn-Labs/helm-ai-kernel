@@ -6,6 +6,9 @@
 !release.high_risk.v3.toml
 !reference_packs/
 !reference_packs/**
+# tools/launchpad/artifacts/egress-proxy.Dockerfile builds from the same context.
+!tools/launchpad/egressproxy/
+!tools/launchpad/egressproxy/**
 
 # Keep generated release evidence and repository metadata excluded explicitly.
 .git

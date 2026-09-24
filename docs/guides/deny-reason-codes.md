@@ -11,8 +11,9 @@ authoring policies and running the local MCP approval loop, what usually causes
 them, and the next step that reaches `ALLOW`.
 
 The normative, versioned registry of all codes is
-[Reason Code Registry v1](../../protocols/specs/rfc/reason-codes-v1.md); the Go
-constants live in `core/pkg/contracts/verdict.go`. This page is the
+[Reason Code Registry v1](../../protocols/specs/rfc/reason-codes-v1.md). The SDK
+constants are generated from it, and the Go constants live in
+`core/pkg/contracts/verdict.go`. This page is the
 operator-facing companion: it covers the codes reachable from the Guardian and
 the local `mcp` commands, and what to change when you see one.
 
@@ -121,12 +122,15 @@ Common authoring mistakes this prevents:
   at `input.effect.params.path`.
 - An expression that errors instead of returning false — that surfaces as
   `PRG_EVALUATION_ERROR`, not `MISSING_REQUIREMENT`; inspect the policy source
-  for the detailed expression.
+  for the detailed expression. The same code covers an expression that
+  exceeds the CEL cost limit (for example, a comprehension over a large
+  caller-supplied list) and a requirement with neither an `expression` nor an
+  `artifact_type`, which is refused when the policy is activated.
 
 ## Source Truth
 
 - `core/pkg/contracts/verdict.go` (reason-code constants)
 - `core/pkg/guardian/guardian.go` (policy evaluation and deny reasons)
-- `core/pkg/prg/engine.go` (requirement-set evaluation)
+- `core/pkg/kernel/authority/authority.go` (requirement-set evaluation: `Compile` and `Decide`)
 - `core/pkg/mcp/firewall.go` (MCP approval loop verdicts)
 - `protocols/specs/rfc/reason-codes-v1.md` (normative registry)

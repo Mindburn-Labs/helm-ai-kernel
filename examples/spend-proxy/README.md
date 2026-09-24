@@ -57,7 +57,7 @@ curl -X POST http://127.0.0.1:9095/v1/chat/completions \
   -H 'X-HELM-Agent: agent-live-traffic' \
   -H 'X-HELM-Spend-Envelope: env-baseline' \
   -H 'X-HELM-Idempotency-Key: task-001-baseline' \
-  -d '{"model":"openai/gpt-4o","messages":[{"role":"user","content":"..."}]}'
+  -d '{"model":"openai/gpt-4o","max_tokens":512,"messages":[{"role":"user","content":"..."}]}'
 
 # Substitute route: same requested model, envelope substitutes and the
 # RouteQuote records model_substituted=true.
@@ -66,8 +66,17 @@ curl -X POST http://127.0.0.1:9095/v1/chat/completions \
   -H 'X-HELM-Agent: agent-paired-replay' \
   -H 'X-HELM-Spend-Envelope: env-substitute' \
   -H 'X-HELM-Idempotency-Key: task-001-substitute' \
-  -d '{"model":"openai/gpt-4o","messages":[{"role":"user","content":"..."}]}'
+  -d '{"model":"openai/gpt-4o","max_tokens":512,"messages":[{"role":"user","content":"..."}]}'
 ```
+
+Every chat request must set `max_tokens` (or `max_completion_tokens`), and
+`/v1/responses` must set `max_output_tokens`; requests without one get 400.
+The proxy lowers the ceiling to what the envelope's per-request limit can pay
+for, reserves the quoted amount against the balance, and forwards the ceiling
+to the provider. Output beyond the quote is still debited at actual cost and
+logged as an `ALERT`. An `X-HELM-Idempotency-Key` that already settled is never
+sent upstream again: an identical retry gets the original response while the
+proxy still holds it, and any other reuse (or a replay after a restart) gets 409.
 
 Streaming (`"stream": true`) is supported on `/v1/chat/completions`; the SSE
 bytes pass through verbatim and settlement uses the final usage chunk.
@@ -113,5 +122,10 @@ offline-verifies the pack before writing it. A skeptic re-verifies with no
 receipts dir, ledger, or network:
 
 ```bash
-helm-ai-kernel spend-proxy savings-verify --pack ./helm-spend-evidence/savingspack-<run-id>
+helm-ai-kernel spend-proxy savings-verify --pack ./helm-spend-evidence/savingspack-<run-id> \
+  --issuer-key-id <issuer-key-id> --issuer-public-key <issuer-public-key-hex>
 ```
+
+Pin the issuer key out of band. Without the issuer flags the result is
+`UNVERIFIABLE (self-attested)` and the command exits 1, because the pack's
+own key registry cannot vouch for the pack.

@@ -34,7 +34,7 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	)
 	cmd.StringVar(&file, "file", "", "Path to the receipt/bundle JSON (or pass as a positional argument)")
 	cmd.StringVar(&format, "format", "", "Format id (e.g. helm_external.v1); empty = auto-detect")
-	cmd.StringVar(&publicKey, "public-key", "", "Trusted Ed25519 public key hex. Without it, a bundle-disclosed key caps the result at crypto_compatible_non_conformant")
+	cmd.StringVar(&publicKey, "public-key", "", "Trusted Ed25519 public key hex. Without it, a signature that checks only against a bundle-disclosed key is UNVERIFIABLE (exit 1)")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output the DecisionReport as JSON")
 	if code, ok := cliui.ParseFlags(cmd, reorderFlagsFirst(args, map[string]bool{"file": true, "format": true, "public-key": true}), stderr, "verify decision-receipt", cliui.FormatText); !ok {
 		return code
@@ -61,6 +61,18 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return cliui.WriteErrorFormat(stderr, cliui.Wrapf(err, cliui.ExitUsage, "verify decision-receipt", ""), errFormat)
 	}
+	// A signature checked only against a key the bundle discloses about
+	// itself proves self-consistency, not who signed it (audit 04-06). It is
+	// never reported as verified.
+	unverifiable := report.Verified && report.Classification == contracts.ClassCryptoCompatibleNonConformant
+	if unverifiable {
+		report.Verified = false
+		report.Checks = append(report.Checks, decisionreceipt.DecisionCheck{
+			Name:   "decision:trust_root",
+			Pass:   false,
+			Reason: "no trusted public key: the signature checks only against a key disclosed in the bundle; pass --public-key",
+		})
+	}
 
 	if jsonOutput {
 		enc := json.NewEncoder(stdout)
@@ -70,8 +82,11 @@ func runVerifyDecisionReceiptCmd(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		status := "NOT VERIFIED"
-		if report.Verified {
+		switch {
+		case report.Verified:
 			status = "VERIFIED"
+		case unverifiable:
+			status = "UNVERIFIABLE"
 		}
 		fmt.Fprintf(stdout, "%s  %s  (%d receipt(s))  classification=%s\n", status, report.FormatID, report.ReceiptCount, report.Classification)
 		if report.Classification == contracts.ClassCryptoCompatibleNonConformant {

@@ -111,7 +111,7 @@ type consoleSurfaceDefinition struct {
 // RegisterConsoleRoutes exposes the small platform state surface required by
 // the HELM AI Kernel Console. The handler is read-only and derives state from kernel
 // services; it does not create demonstration data.
-func RegisterConsoleRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
+func RegisterConsoleRoutes(mux routeMux, svc *Services, opts serverOptions) {
 	metaCapabilitiesHandler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
@@ -268,11 +268,11 @@ func consoleSurfaceDefinitions() []consoleSurfaceDefinition {
 		{ID: "receipts", Label: "Receipts", Group: "Proof", Source: "/api/v1/receipts"},
 		{ID: "evidence", Label: "Evidence", Group: "Proof", Source: "/api/v1/evidence/export"},
 		{ID: "replay", Label: "Replay", Group: "Proof", Source: "/api/v1/replay/verify"},
-		{ID: "conformance", Label: "Conformance", Group: "Proof", Source: "/api/v1/conformance/reports"},
+		{ID: "conformance", Label: "Conformance", Group: "Proof", Source: "/api/v1/conformance/reports", Status: "unsupported", UnsupportedReason: retiredConformanceReason},
 		{ID: "proofgraph", Label: "ProofGraph", Group: "Proof", Source: "/api/v1/proofgraph/sessions"},
 		{ID: "harness", Label: "Harness", Group: "Developer", Source: "/api/v1/harness/change-contracts"},
 		{ID: "launchpad", Label: "Launchpad", Group: "Runtime", Source: "/api/v1/launchpad/matrix"},
-		{ID: "trust", Label: "Trust Keys", Group: "Policy", Source: "/api/v1/trust/keys/add"},
+		{ID: "trust", Label: "Trust Keys", Group: "Policy", Source: "/api/v1/trust/keys/add", Status: "unsupported", UnsupportedReason: retiredTrustKeysReason},
 		{ID: "telemetry", Label: "Telemetry", Group: "Developer", Source: "/api/v1/telemetry/otel/config"},
 		{ID: "coexistence", Label: "Coexistence", Group: "Developer", Source: "/api/v1/coexistence/capabilities"},
 		{ID: "audit", Label: "Audit", Group: "Proof", Source: "/api/v1/console/surfaces/audit"},
@@ -473,14 +473,6 @@ func buildConsoleDiagnostics(svc *Services, opts serverOptions, r *http.Request)
 				Source:  "/api/v1/launchpad/launches/{launch_id}",
 				Path:    launchpadRoot,
 			},
-			{
-				ID:      "trust_registry",
-				Label:   "Trust Registry",
-				Status:  "ready",
-				Backend: "oss-legacy-memory",
-				Source:  "/api/v1/trust/keys/add",
-				Detail:  "legacy trust-key admin route is process-local in this OSS runtime",
-			},
 		},
 		Routes: consoleRouteDiagnostics(),
 	}
@@ -581,6 +573,9 @@ func consoleRouteDiagnosticForSpec(spec RuntimeRouteSpec) consoleRouteDiagnostic
 }
 
 func routeUICoverage(spec RuntimeRouteSpec) (string, string) {
+	if reason, retired := retiredVerificationRoutes[spec.Path]; retired {
+		return "unsupported", reason
+	}
 	if spec.Auth == RouteAuthService || spec.ContractStatus == RouteContractInternal {
 		return "unsupported", "service-internal route is not callable from the OSS Console"
 	}

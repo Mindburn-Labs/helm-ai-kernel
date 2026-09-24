@@ -22,7 +22,7 @@ import (
 // The tracer is resolved PER REQUEST, not at wrap time: no WithTracerProvider
 // option is passed, so otelhttp reads otel.GetTracerProvider() inside
 // serveHTTP (otelhttp v0.65.0), and otel's global tracer is a forwarding
-// delegate that back-fills once SetTracerProvider runs (otel v1.44.0). Wrapping
+// delegate that back-fills once SetTracerProvider runs (otel v1.45.0). Wrapping
 // before OTel is configured is therefore fine — only wrapping after traffic has
 // started would lose spans. An earlier comment here claimed construction-time
 // resolution and sent an investigation down the wrong path; do not restore it.

@@ -359,6 +359,7 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	metricsPort := envInt("HELM_METRICS_PORT", healthPort)
 	metricsEnabled := envBool("HELM_METRICS_ENABLED")
+	metricsToken := os.Getenv(metricsBearerTokenEnv)
 	suppressAuxiliaryHealth, healthConfigErr := desktopTransportV1SuppressesAuxiliaryHealth(desktopTransport, healthPort, metricsEnabled)
 	if healthConfigErr != nil {
 		return fmt.Errorf("desktop transport v1 configuration: %w", healthConfigErr)
@@ -616,7 +617,7 @@ func runServerWithOptions(opts serverOptions) error {
 	// (see services.go and subsystems.go for route wiring)
 
 	// Register Subsystem Routes
-	var extraRoutes func(*http.ServeMux)
+	var extraRoutes func(routeMux)
 	if services != nil {
 		services.Guardian = guard
 		services.ReceiptStore = receiptStore
@@ -652,23 +653,25 @@ func runServerWithOptions(opts serverOptions) error {
 			services.TranspLogID = translog.LogIDFromPublicKey(signer.PublicKeyBytes())
 			services.TranspLogDegrade = envBool("HELM_TRANSPARENCY_DEGRADE")
 		}
-		extraRoutes = func(mux *http.ServeMux) {
-			RegisterSubsystemRoutes(mux, services)
-			RegisterConsoleRoutes(mux, services, opts)
-			RegisterLocalFirstRunRoutes(mux, services, opts)
-			RegisterPrincipalBindingRoutes(mux, services, opts)
+		extraRoutes = func(mux routeMux) {
+			registerRuntimeAPIRoutes(mux, services, opts)
 		}
 	}
 
 	// Start API Server. The listener is bound synchronously above so OnReady
 	// cannot advertise a Kernel endpoint that failed to claim its port.
-	mux := http.NewServeMux()
+	// Every pattern mounted here must be declared in RuntimeRouteSpecs(); the
+	// mux panics on an undeclared one rather than serve it.
+	mux := newRuntimeRouteMux()
 	registerDesktopReadyRoute(mux, desktopReadyToken)
 	registerDesktopTransportV1ProofRoute(mux, desktopTransport, apiOrigin)
 	if extraRoutes != nil {
 		extraRoutes(mux)
 	}
-	rateLimiter := buildRuntimeRateLimiter()
+	rateLimiter, err := buildRuntimeRateLimiter()
+	if err != nil {
+		return err
+	}
 	server := &http.Server{
 		Addr:              apiAddr,
 		Handler:           buildAPIHandler(mux, rateLimiter),
@@ -702,7 +705,7 @@ func runServerWithOptions(opts serverOptions) error {
 		healthMux.HandleFunc("/health", healthHandler)
 		healthMux.HandleFunc("/healthz", healthHandler)
 		if metricsEnabled && metricsPort == healthPort {
-			healthMux.HandleFunc("/metrics", metricsHandler(services))
+			healthMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
 		}
 		healthServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
@@ -722,7 +725,7 @@ func runServerWithOptions(opts serverOptions) error {
 	var metricsServer *http.Server
 	if metricsEnabled && metricsPort != healthPort {
 		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", metricsHandler(services))
+		metricsMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
 		metricsServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
 			Handler:           metricsMux,
@@ -967,7 +970,7 @@ func flushObservability(flusher observabilityFlusher) error {
 	return flusher.Shutdown(flushCtx)
 }
 
-func buildRuntimeRateLimiter() *helmapi.GlobalRateLimiter {
+func buildRuntimeRateLimiter() (*helmapi.GlobalRateLimiter, error) {
 	rateLimiter := helmapi.NewGlobalRateLimiter(
 		envInt("HELM_LIMIT_GLOBAL_RPS", envInt("HELM_LIMIT_RPS", 60)),
 		envInt("HELM_LIMIT_GLOBAL_BURST", envInt("HELM_LIMIT_BURST", 120)),
@@ -987,10 +990,14 @@ func buildRuntimeRateLimiter() *helmapi.GlobalRateLimiter {
 	if envBool("HELM_LOAD_SHED_ENABLED") {
 		rateLimiter = rateLimiter.WithLowPriorityLoadShed(envInt("HELM_LOAD_SHED_LOW_PRIORITY_MAX", 0))
 	}
-	if envBool("HELM_TRUST_PROXY_HEADERS") {
-		rateLimiter = rateLimiter.WithTrustProxy(true)
+	trustedProxies, err := helmapi.ParseTrustedProxyCIDRs(os.Getenv("HELM_TRUSTED_PROXY_CIDRS"))
+	if err != nil {
+		return nil, fmt.Errorf("HELM_TRUSTED_PROXY_CIDRS: %w", err)
 	}
-	return rateLimiter
+	if envBool("HELM_TRUST_PROXY_HEADERS") && len(trustedProxies) == 0 {
+		slog.Warn("HELM_TRUST_PROXY_HEADERS is ignored: forwarded client addresses are honoured only from peers in HELM_TRUSTED_PROXY_CIDRS")
+	}
+	return rateLimiter.WithTrustedProxies(trustedProxies), nil
 }
 
 func configurePostgresPool(db *sql.DB) {

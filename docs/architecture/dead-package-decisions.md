@@ -138,12 +138,12 @@ package directory.
 | `core/pkg/evidence/externalhost/adapters` | 584 | 2026-06-20 | yes | 1 | KEEP | test importer: core/pkg/verifier/externalreceipt |
 | `core/pkg/evidencepack/retention` | 110 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/exportadmin` | 268 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/federation` | 533 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/federation` | 533 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/forensics` | 65 | 2026-04-23 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/forge` | 681 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/forge` | 681 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/gateway` | 74 | 2026-04-23 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/genesis/ceremony` | 318 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/harness` | 2518 | 2026-09-01 | yes | 0 | DELETE | doc: docs/architecture/agent-process-ownership.md — named only by docs/architecture/agent-process-ownership.md ("not yet wired"); HELM-658/674/682 do not name the package; last commit 2026-09-01 (#921, Prime Agent harness adapter; introduced by HELM-319 in #772) - owner to confirm before deletion |
+| `core/pkg/harness` | 2518 | 2026-09-01 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md — named only by docs/architecture/agent-process-ownership.md ("not yet wired"); HELM-658/674/682 do not name the package; last commit 2026-09-01 (#921, Prime Agent harness adapter; introduced by HELM-319 in #772) - owner to confirm before deletion |
 | `core/pkg/identity/iatp` | 537 | 2026-05-21 | yes | 1 | KEEP | conformance suite: tests/conformance/did |
 | `core/pkg/integrations/receipts` | 161 | 2026-08-02 | yes | 0 | KEEP | ref: tools/boundary/protected-dirs.sh |
 | `core/pkg/intervention` | 136 | 2026-04-25 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -162,7 +162,7 @@ package directory.
 | `core/pkg/orgdna` | 239 | 2026-04-23 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/packs/antispoof` | 256 | 2026-05-13 | yes | 1 | KEEP | ref: core/pkg/packs/install/install.go; conformance suite: tests/conformance/antispoof |
 | `core/pkg/packs/install` | 744 | 2026-07-27 | yes | 0 | KEEP | svc-helm-control-plane imports it; ref: core/pkg/contracts/pack_manifest_v2.go |
-| `core/pkg/patchdelivery` | 988 | 2026-08-04 | yes | 0 | DELETE | doc: docs/architecture/agent-process-ownership.md — same doc; not named by HELM-658/674/682 |
+| `core/pkg/patchdelivery` | 988 | 2026-08-04 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md — same doc; not named by HELM-658/674/682 |
 | `core/pkg/policy/lint` | 392 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/policy/suggest` | 202 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/policy/verify` | 224 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -200,5 +200,5 @@ package directory.
 | `core/pkg/verifier/agentprovenance` | 549 | 2026-07-27 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/versioning` | 329 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/witness` | 402 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/worktree` | 253 | 2026-08-04 | yes | 0 | DELETE | doc: docs/architecture/agent-process-ownership.md; ref: core/pkg/harness/harness.go; ref: core/pkg/patchdelivery/verifier.go — same doc; not named by HELM-658/674/682; imported only by core/pkg/harness (itself importer-less) |
-| `core/pkg/zkgov/proofmarket` | 482 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/worktree` | 253 | 2026-08-04 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md; ref: core/pkg/harness/harness.go; ref: core/pkg/patchdelivery/verifier.go — same doc; not named by HELM-658/674/682; imported only by core/pkg/harness (itself importer-less) |
+| `core/pkg/zkgov/proofmarket` | 482 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |

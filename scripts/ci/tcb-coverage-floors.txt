@@ -1,0 +1,32 @@
+# Statement-coverage floors for the kernel TCB, enforced by
+# scripts/ci/check_tcb_coverage.py in the required `kernel` CI job
+# (`make coverage-tcb`). Target architecture §13.1-3: core coverage >= 85%.
+#
+# <package under core/pkg> [own floor]
+#
+# A package with no number must reach `default`. A number is a frozen floor for
+# a package that was below the default when the gate landed (measured value
+# minus 0.5). Raise it as tests land; never lower it. The gate fails once such a
+# package reaches the default, so its number must then be deleted.
+#
+# Packages: the eight TCB packages in docs/KERNEL_SCOPE.md (receipts/ has its
+# code in receipts/policies), the offline verifiers, and the packages the old
+# unthresholded TCB profile printed.
+
+default 85
+
+contracts 71.6
+crypto 82.0
+crypto/tee
+guardian
+executor 84.2
+proofgraph 81.4
+trust/registry
+runtime/sandbox 75.6
+receipts/policies 67.0
+verifier 83.6
+receiptverify 57.6
+evidencepack 78.8
+pdp
+firewall
+boundary

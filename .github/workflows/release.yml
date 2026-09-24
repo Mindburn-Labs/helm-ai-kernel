@@ -3,18 +3,19 @@ name: Release
 # quantum_posture: release workflow orchestrates existing signature and
 # attestation publication; it does not implement cryptographic controls.
 
+# HELM-733: tag pushes are the only trigger. Every keyless signature and SLSA
+# attestation this workflow mints therefore carries the identity
+# `.../release.yml@refs/tags/v<version>`, which is exactly what the published
+# verification recipes require. The dev-grade SHA image lane lives in
+# dev-image.yml so its signatures carry a different identity.
+#
+# No job waits for a person: validation and smoke jobs are the only gate. To
+# repair a failed publish, re-run the failed jobs of the same tag run
+# (`gh run rerun <run-id> --failed`); re-runs keep the refs/tags/v* identity,
+# and every registry publisher skips a version that is already published.
 on:
   push:
     tags: ["v*"]
-  # HELM-129: publish an image for an arbitrary commit (e.g. a PR head) so
-  # qa-deploy can pull a registry image instead of side-loading. Mirrors the
-  # source_sha dispatch path of svc-helm-control-plane's release-oci.yml.
-  workflow_dispatch:
-    inputs:
-      source_sha:
-        description: Full commit SHA to publish after green CI
-        required: true
-        type: string
 
 permissions: read-all
 
@@ -27,8 +28,7 @@ jobs:
   version-contract:
     runs-on: ubuntu-latest
     # Root of the tag-release pipeline: every other release job needs-chains
-    # from this one, so skipping it on workflow_dispatch skips the whole v*
-    # pipeline and only container-sha (below) runs.
+    # from this one.
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -44,83 +44,13 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
-      - name: Require tagged commit to be on origin/main
-        run: |
-          set -euo pipefail
-          # The rule is "never release a commit that is not on main". Requiring
-          # the tag to EQUAL current origin/main enforced something stricter and
-          # unachievable: any merge landing while the release runs — or between
-          # a failed job and its rerun — moved main and made the tagged release
-          # permanently uncompletable, even though its commit is still on main.
-          # v0.8.1 hit exactly that: artifacts published from 44bcb7e0, then a
-          # later merge stranded the run. Ancestry keeps the guarantee (the
-          # tagged commit is reachable from main, so nothing off-main ships)
-          # without forbidding the repository to move.
-          tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
-          git fetch --quiet origin main
-          if ! git merge-base --is-ancestor "${tag_commit}" origin/main; then
-            main_commit="$(git rev-parse origin/main)"
-            echo "::error::Refusing to release ${GITHUB_REF_NAME}: tag commit ${tag_commit} is not reachable from origin/main ${main_commit}."
-            exit 1
-          fi
-      - name: Require contracts catalog OpenAPI to already match
-        env:
-          GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::DOWNSTREAM_FANOUT_TOKEN with contents:read on Mindburn-Labs/contracts-catalog is required before release publication."
-            exit 1
-          fi
-          kernel_blob="$(git hash-object --no-filters api/openapi/helm.openapi.yaml)"
-          catalog_blob="$(gh api 'repos/Mindburn-Labs/contracts-catalog/contents/api/specs/helm.openapi.yaml?ref=main' --jq '.sha')"
-          if [ "$kernel_blob" != "$catalog_blob" ]; then
-            echo "::error::contracts-catalog main OpenAPI does not match this tag. Sync and merge the catalog before tagging ${GITHUB_REF_NAME}."
-            exit 1
-          fi
-
-  release-authority:
-    # This is the one human authority boundary for the v* publication train.
-    # The release-production environment must exist, require the designated
-    # conductor's approval, and disallow administrator bypass before this
-    # workflow is enabled. GitHub auto-creates unknown environments without
-    # protection rules, so this job also requires an environment-scoped arming
-    # variable before any publication path may proceed. Validation remains
-    # outside the environment so an invalid candidate fails before asking for
-    # human approval.
-    runs-on: ubuntu-latest
-    needs:
-      - release-preflight
-      - validate
-      - deployment-smoke
-      - kind-smoke
-      - release-smoke
-      - reproducibility-check
-      - benchmark-pin
-    if: >-
-      github.event_name == 'push' &&
-      github.ref_type == 'tag' &&
-      github.actor == 'mindburnlabs' &&
-      github.triggering_actor == 'mindburnlabs' &&
-      github.run_attempt == 1
-    environment:
-      name: release-production
-    permissions:
-      contents: read
-    steps:
       - name: Bind this run to the live annotated tag and pushed commit
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_AUTHORITY_ARMED: ${{ vars.HELM_RELEASE_AUTHORITY_ARMED }}
           PUSH_COMMIT: ${{ github.event.after }}
           WORKFLOW_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
-
-          if [ "${RELEASE_AUTHORITY_ARMED:-}" != "release-production" ]; then
-            echo "::error::release-production environment is not armed. Set environment-scoped HELM_RELEASE_AUTHORITY_ARMED=release-production and keep required reviewers plus administrator-bypass disabled before enabling Release."
-            exit 1
-          fi
           if ! [[ "${PUSH_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Push event after value is not a full commit SHA: ${PUSH_COMMIT}"
             exit 1
@@ -155,6 +85,40 @@ jobs:
           fi
           if [ "${target_commit}" != "${WORKFLOW_COMMIT}" ]; then
             echo "::error::Annotated release tag resolves to ${target_commit}, not workflow commit ${WORKFLOW_COMMIT}."
+            exit 1
+          fi
+      - name: Require tagged commit to be on origin/main
+        run: |
+          set -euo pipefail
+          # The rule is "never release a commit that is not on main". Requiring
+          # the tag to EQUAL current origin/main enforced something stricter and
+          # unachievable: any merge landing while the release runs — or between
+          # a failed job and its rerun — moved main and made the tagged release
+          # permanently uncompletable, even though its commit is still on main.
+          # v0.8.1 hit exactly that: artifacts published from 44bcb7e0, then a
+          # later merge stranded the run. Ancestry keeps the guarantee (the
+          # tagged commit is reachable from main, so nothing off-main ships)
+          # without forbidding the repository to move.
+          tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "${tag_commit}" origin/main; then
+            main_commit="$(git rev-parse origin/main)"
+            echo "::error::Refusing to release ${GITHUB_REF_NAME}: tag commit ${tag_commit} is not reachable from origin/main ${main_commit}."
+            exit 1
+          fi
+      - name: Require contracts catalog OpenAPI to already match
+        env:
+          GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::DOWNSTREAM_FANOUT_TOKEN with contents:read on Mindburn-Labs/contracts-catalog is required before release publication."
+            exit 1
+          fi
+          kernel_blob="$(git hash-object --no-filters api/openapi/helm.openapi.yaml)"
+          catalog_blob="$(gh api 'repos/Mindburn-Labs/contracts-catalog/contents/api/specs/helm.openapi.yaml?ref=main' --jq '.sha')"
+          if [ "$kernel_blob" != "$catalog_blob" ]; then
+            echo "::error::contracts-catalog main OpenAPI does not match this tag. Sync and merge the catalog before tagging ${GITHUB_REF_NAME}."
             exit 1
           fi
 
@@ -262,8 +226,7 @@ jobs:
     # only its aggregate keyless manifest and an exact source pin committed in
     # the Kernel release source; it never accepts a mutable Console main build.
     runs-on: ubuntu-latest
-    needs: [validate, release-authority]
-    if: github.run_attempt == 1
+    needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin]
     outputs:
       manifest_sha256: ${{ steps.console-verify.outputs.manifest_sha256 }}
     permissions:
@@ -394,8 +357,7 @@ jobs:
 
   binaries:
     runs-on: ubuntu-latest
-    needs: [validate, deployment-smoke, kind-smoke, release-smoke, release-authority]
-    if: github.run_attempt == 1
+    needs: [validate, deployment-smoke, kind-smoke, release-smoke, reproducibility-check, benchmark-pin]
     env:
       HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE }}
       HELM_RELEASE_EVIDENCE_ANCHOR_TYPE: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_TYPE }}
@@ -455,8 +417,7 @@ jobs:
     runs-on: ubuntu-latest
     # Keyless signatures are externally visible release evidence. Do not create
     # them until both release authorities have closed successfully.
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
     permissions:
       actions: read
       contents: read
@@ -525,8 +486,7 @@ jobs:
     runs-on: ubuntu-latest
     # Public registry publication starts only after the EvidencePack-backed
     # release assets and the exact Console source closure both succeed.
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
     permissions:
       contents: read
       id-token: write
@@ -589,8 +549,7 @@ jobs:
 
   cosign-container:
     runs-on: ubuntu-latest
-    needs: [container, release-authority]
-    if: github.run_attempt == 1
+    needs: container
     permissions:
       contents: read
       id-token: write
@@ -613,107 +572,6 @@ jobs:
         run: |
           cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.container.outputs.slim-digest }}"
 
-  container-sha:
-    # HELM-129: dispatch-only publisher for an arbitrary commit sha. Guards on
-    # a green CI (ci.yml) run for the sha, then builds, pushes, and
-    # cosign-signs ghcr.io/mindburn-labs/helm-ai-kernel:dev-sha-<sha>. The v* tag
-    # pipeline above is untouched; it skips on dispatch (version-contract
-    # gate) and this job skips on tag pushes. This deliberately does not depend
-    # on release-authority: it is a SHA-addressed, dev-grade QA dispatch lane,
-    # not a version-tag release publisher.
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    # One publish in flight per sha: the tag is deterministic, so two
-    # concurrent dispatches would race the same ghcr tag to different digests.
-    concurrency:
-      group: container-sha-${{ inputs.source_sha }}
-      cancel-in-progress: false
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
-      packages: write
-    env:
-      SOURCE_SHA: ${{ inputs.source_sha }}
-    steps:
-      - name: Validate source SHA format
-        run: |
-          set -euo pipefail
-          if ! [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::source_sha must be a full 40-character lowercase commit sha, got '${SOURCE_SHA}'"
-            exit 1
-          fi
-      - name: Verify source SHA has green CI
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Only count runs whose head repository is THIS repo. A pull_request
-          # run from a fork also lands in this workflow's run list with the
-          # fork's head_sha, so an unfiltered total_count would let a dispatch
-          # publish a signed image built from untrusted, never-merged fork code.
-          matching="$(gh api \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SOURCE_SHA}&status=success&per_page=100" \
-            | jq --arg repo "${GITHUB_REPOSITORY}" \
-                '[.workflow_runs[] | select(.head_repository.full_name == $repo)] | length')"
-          if [[ "${matching}" -lt 1 ]]; then
-            echo "::error::No successful CI (ci.yml) run for ${SOURCE_SHA} originating in ${GITHUB_REPOSITORY}; refusing to publish an unverified commit"
-            exit 1
-          fi
-          echo "Found ${matching} successful in-repo CI run(s) for ${SOURCE_SHA}"
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-        with:
-          ref: ${{ inputs.source_sha }}
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - id: build-meta
-        name: Compute build metadata
-        run: |
-          # Not a tag build: keep main.version semver with an explicit
-          # prerelease marker carrying the short commit.
-          short="$(git rev-parse --short=12 HEAD)"
-          {
-            echo "version=0.0.0-sha.${short}"
-            echo "commit=${short}"
-            echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          } >> "${GITHUB_OUTPUT}"
-      - id: push
-        name: Build and push sha image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          provenance: true
-          sbom: true
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            BUILD_VERSION=${{ steps.build-meta.outputs.version }}
-            BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}
-            BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}
-          # The cosign identity of a dispatch build is the same release.yml as
-          # a v* release, so the image itself must state that it is dev-grade:
-          # never a released version, only a preview of one commit.
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ inputs.source_sha }}
-            org.opencontainers.image.version=${{ steps.build-meta.outputs.version }}
-            org.opencontainers.image.created=${{ steps.build-meta.outputs.build_time }}
-            dev.mindburn.build-grade=dev
-            dev.mindburn.build-origin=release.yml/container-sha(workflow_dispatch)
-      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
-      - name: Sign sha image keyless
-        env:
-          COSIGN_EXPERIMENTAL: "1"
-        run: |
-          cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
-
   benchmark-pin:
     runs-on: ubuntu-latest
     needs: validate
@@ -734,8 +592,7 @@ jobs:
 
   homebrew:
     runs-on: ubuntu-latest
-    needs: [github-release, release-authority]
-    if: github.run_attempt == 1
+    needs: github-release
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -816,8 +673,7 @@ jobs:
 
   chart:
     runs-on: ubuntu-latest
-    needs: [validate, deployment-smoke, kind-smoke, container, cosign-container, release-authority]
-    if: github.run_attempt == 1
+    needs: [validate, deployment-smoke, kind-smoke, container, cosign-container]
     permissions:
       contents: read
       id-token: write
@@ -870,8 +726,7 @@ jobs:
 
   artifacthub-repo:
     runs-on: ubuntu-latest
-    needs: [chart, release-authority]
-    if: github.run_attempt == 1
+    needs: chart
     permissions:
       contents: read
       packages: write
@@ -897,8 +752,7 @@ jobs:
 
   go-sdk-tag:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
     permissions:
       contents: write
     steps:
@@ -945,8 +799,7 @@ jobs:
 
   npm-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
     environment: npm-production
     permissions:
       contents: read
@@ -984,20 +837,22 @@ jobs:
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
+      # npm trusted publishing (OIDC, no registry token) needs npm >= 11.5.1;
+      # Node 22 bundles npm 10. Provenance is attached automatically.
+      - name: Install npm with trusted publishing support
+        if: steps.package.outputs.published != 'true'
+        run: npm install --global npm@11.20.0
       - name: Publish
         if: steps.package.outputs.published != 'true'
         working-directory: sdk/ts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        run: npm publish --access public
       - name: Skip already published package
         if: steps.package.outputs.published == 'true'
         run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already published"
 
   python-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
     environment: pypi-production
     permissions:
       contents: read
@@ -1059,22 +914,22 @@ jobs:
           twine check dist/*
       - name: Publish
         if: steps.package.outputs.published != 'true'
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        # PyPI trusted publishing: the action exchanges the job's OIDC token.
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: sdk/python/dist/
           skip-existing: true
-          password: ${{ secrets.PYPI_TOKEN }}
       - name: Skip already published package
         if: steps.package.outputs.published == 'true'
         run: echo "helm-sdk@${{ steps.package.outputs.version }} is already published"
 
   crates-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
     environment: crates-production
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
@@ -1124,11 +979,15 @@ jobs:
         run: |
           cargo test
           cargo publish --dry-run
+      - name: Mint a short-lived crates.io token (trusted publishing)
+        id: crates-auth
+        if: steps.crate.outputs.published != 'true'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
       - name: Publish
         if: steps.crate.outputs.published != 'true'
         working-directory: sdk/rust
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
         run: cargo publish
       - name: Skip already published crate
         if: steps.crate.outputs.published == 'true'
@@ -1136,8 +995,9 @@ jobs:
 
   maven-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
+    # Maven Central has no OIDC trusted publishing, so these MAVEN_* secrets
+    # are the only long-lived registry credentials left in the release.
     environment: maven-central
     permissions:
       contents: read
@@ -1269,8 +1129,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [release-preflight, release-authority, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets]
-    if: github.run_attempt == 1
+    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets]
     permissions:
       actions: read
       contents: write
@@ -1314,8 +1173,7 @@ jobs:
     # v0.8.0 includes the local Console. Build and verify every Console asset
     # before the one public GitHub release step consumes this artifact.
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, console-local-sidecar]
     permissions:
       actions: read
       contents: read
@@ -1457,8 +1315,7 @@ jobs:
           if-no-files-found: error
 
   slsa-provenance:
-    needs: [binaries, github-release, release-authority]
-    if: github.run_attempt == 1
+    needs: [binaries, github-release]
     permissions:
       actions: read
       contents: write
@@ -1472,9 +1329,8 @@ jobs:
 
   post-release-version-drift:
     runs-on: ubuntu-latest
-    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets, release-authority]
+    needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]
     if: >-
-      github.run_attempt == 1 &&
       always() &&
       needs.github-release.result == 'success' &&
       needs.slsa-provenance.result == 'success' &&

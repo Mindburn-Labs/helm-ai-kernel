@@ -24,7 +24,6 @@ import (
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/memory"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/privacy"
-	trustregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
 const governedOpenAIRequestMaxBytes = privacy.MaxPayloadBytes
@@ -34,7 +33,7 @@ const governedOpenAIRequestMaxBytes = privacy.MaxPayloadBytes
 // Non-TCB enterprise subsystems have been removed from OSS.
 //
 //nolint:gocyclo,gocognit // Route registration is linear and intentionally exhaustive.
-func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
+func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 	log.Println("[helm] routes: Registering API routes...")
 
 	ctx := context.Background()
@@ -235,9 +234,17 @@ func RegisterSubsystemRoutes(mux *http.ServeMux, svc *Services) {
 	}
 
 	// --- Trust Keys (C-2: require admin auth — fail-closed if HELM_ADMIN_API_KEY unset) ---
-	trustKeys := &api.TrustKeyHandler{Registry: trustregistry.NewTrustRegistry()}
-	mux.Handle("/api/v1/trust/keys/add", auth.RequireAdminAuth(trustKeys.HandleAddKey))
-	mux.Handle("/api/v1/trust/keys/revoke", auth.RequireAdminAuth(trustKeys.HandleRevokeKey))
+	// Retired by HELM-742: the routes mutated a process-local registry that no
+	// verifier reads, so a 200 "key_revoked" revoked nothing.
+	for _, path := range []string{"/api/v1/trust/keys/add", "/api/v1/trust/keys/revoke"} {
+		mux.Handle(path, auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				api.WriteMethodNotAllowed(w)
+				return
+			}
+			writeRetiredVerificationRoute(w, r.URL.Path)
+		}))
+	}
 
 	// --- MCP Gateway ---
 	mcpGateway, err := newDeployedMCPGateway(svc)
@@ -358,7 +365,7 @@ func newDeployedMCPGateway(svc *Services) (*mcppkg.Gateway, error) {
 	}
 }
 
-func registerDeployedMCPRoutes(mux *http.ServeMux, gateway *mcppkg.Gateway) {
+func registerDeployedMCPRoutes(mux routeMux, gateway *mcppkg.Gateway) {
 	gatewayMux := http.NewServeMux()
 	gateway.RegisterRoutes(gatewayMux)
 	protected := protectRuntimeHandler(RouteAuthAdmin, gatewayMux.ServeHTTP)
@@ -382,17 +389,10 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 	}
 	principalID := strings.TrimSpace(principal.GetID())
 	tenantID := strings.TrimSpace(principal.GetTenantID())
-	workspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
-	if workspaceID == "" {
-		workspaceID = configuredRuntimeWorkspaceID()
-	}
-	if svc != nil && svc.EmergencyStops != nil {
-		configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
-		configuredWorkspaceID := configuredRuntimeWorkspaceID()
-		if configuredTenantID == "" || tenantID != configuredTenantID || configuredWorkspaceID == "" || workspaceID != configuredWorkspaceID {
-			api.WriteForbidden(w, "Governed proxy tenant/workspace binding could not be verified")
-			return
-		}
+	workspaceID, err := bindRuntimeScope(r, svc, tenantID, workspaceMayDefault)
+	if err != nil {
+		api.WriteForbidden(w, "Governed proxy "+err.Error())
+		return
 	}
 
 	if svc != nil && svc.Guardian != nil {
@@ -447,12 +447,17 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		if decision.PolicyDecisionHash != "" {
 			w.Header().Set("X-Helm-Decision-Hash", decision.PolicyDecisionHash)
 		}
-		persistDecisionReceipt(r.Context(), svc, decision, req.Principal, bodyBytes, map[string]any{
+		// Fail closed: a decision whose receipt was not persisted is never
+		// forwarded upstream.
+		if err := persistDecisionReceipt(r.Context(), svc, decision, req.Principal, bodyBytes, map[string]any{
 			"source":   "openai.proxy",
 			"action":   req.Action,
 			"resource": req.Resource,
 			"reason":   decision.Reason,
-		})
+		}); err != nil {
+			api.WriteInternalR(w, r, err)
+			return
+		}
 
 		if contracts.Verdict(decision.Verdict) != contracts.VerdictAllow {
 			api.WriteError(w, http.StatusForbidden, "Governance Blocked", decision.Reason)

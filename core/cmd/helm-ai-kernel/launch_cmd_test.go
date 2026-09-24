@@ -163,9 +163,10 @@ func TestLaunchEvidenceExportVerifiesDirectoryAndArchive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Sealed with the launch store's own key, as the launch flow does.
 	if _, err := evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
 		PackID:  "launch-evidence-test",
-		DataDir: t.TempDir(),
+		DataDir: root,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -421,6 +422,60 @@ func TestLaunchCloudGateCreatesDigitalOceanProvisionedRun(t *testing.T) {
 	}
 	if run.RuntimeHandles.CloudResourceIDs["provider"] != "digitalocean" {
 		t.Fatalf("cloud provider handle not saved: %+v", run.RuntimeHandles.CloudResourceIDs)
+	}
+}
+
+// HELM-740 (02-01): the cloud beta must not provision for a plan the kernel
+// did not ALLOW, and must not report an ALLOW it never received.
+func TestLaunchCloudGateRefusesNonAllowPlan(t *testing.T) {
+	for _, tc := range []struct {
+		verdict, status, reason string
+	}{
+		{"DENY", "DENIED", "ERR_LAUNCHPAD_F2_CONTRACT_REPAIR_REQUIRED"},
+		{"ESCALATE", "ESCALATED", "ERR_LAUNCHPAD_SECRET_BINDING_INVALID"},
+	} {
+		t.Run(tc.verdict, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("HELM_LAUNCHPAD_HOME", root)
+			t.Setenv("DIGITALOCEAN_TOKEN", "do-test-token")
+			providerCalls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				providerCalls++
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer server.Close()
+			t.Setenv("HELM_LAUNCHPAD_DIGITALOCEAN_ENDPOINT", server.URL)
+
+			compiled := plan.LaunchPlan{
+				LaunchID:      "launch-cloud-" + strings.ToLower(tc.verdict),
+				AppID:         "codex",
+				SubstrateID:   "digitalocean",
+				Principal:     "test.operator",
+				PlanHash:      "sha256:" + strings.Repeat("d", 64),
+				KernelVerdict: tc.verdict,
+				Status:        tc.status,
+				ReasonCode:    tc.reason,
+			}
+			substrate := lpregistry.SubstrateSpec{ID: "digitalocean", Kind: "cloud", Provisioner: "digitalocean"}
+
+			var stdout, stderr bytes.Buffer
+			if code := runLaunchCloudGate(compiled, substrate, true, "approval-1", 25, &stdout, &stderr); code == 0 {
+				t.Fatalf("%s plan was provisioned: stdout=%s", tc.verdict, stdout.String())
+			}
+			if providerCalls != 0 {
+				t.Fatalf("%s plan reached the provider %d times", tc.verdict, providerCalls)
+			}
+			var response launchCloudGateResponse
+			if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.KernelVerdict != tc.verdict || response.Status != tc.status || response.ReasonCode != tc.reason {
+				t.Fatalf("response does not carry the plan verdict: %+v", response)
+			}
+			if _, err := session.NewStore(root).Get(compiled.LaunchID); err == nil {
+				t.Fatalf("%s plan recorded a launch run", tc.verdict)
+			}
+		})
 	}
 }
 

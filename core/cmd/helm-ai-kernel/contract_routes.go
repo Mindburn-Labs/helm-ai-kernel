@@ -88,7 +88,7 @@ func (s runtimeEvidenceSealSigner) PublicKeyHex() string {
 	return s.publicKey
 }
 
-func registerContractRoutes(mux *http.ServeMux, svc *Services) {
+func registerContractRoutes(mux routeMux, svc *Services) {
 	mcpQuarantine := mcppkg.NewQuarantineRegistry()
 	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
 	if svc != nil && svc.BoundarySurfaces != nil {
@@ -593,17 +593,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var receipt contracts.GUIActionReceipt
-		if err := json.NewDecoder(r.Body).Decode(&receipt); err != nil {
-			api.WriteBadRequest(w, "Invalid GUI action receipt JSON")
-			return
-		}
-		sealed, err := receipt.Seal()
-		if err != nil {
-			writeContractJSON(w, http.StatusOK, map[string]any{"verified": false, "verdict": "FAIL", "errors": []string{err.Error()}})
-			return
-		}
-		writeContractJSON(w, http.StatusOK, map[string]any{"verified": true, "verdict": "PASS", "receipt": sealed})
+		writeRetiredVerificationRoute(w, "/api/v1/gui/receipts/verify")
 	}))
 
 	mux.HandleFunc("/api/v1/evidence/envelopes", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -732,24 +722,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		var req struct {
-			Level   string `json:"level"`
-			Profile string `json:"profile"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			api.WriteBadRequest(w, "Invalid conformance request")
-			return
-		}
-		if req.Level != "L1" && req.Level != "L2" && req.Level != "L3" && req.Level != "L4" {
-			api.WriteBadRequest(w, "Conformance level must be L1, L2, L3, or L4")
-			return
-		}
-		report := conformanceReport(req.Level, req.Profile)
-		if err := surfaces.PutReport(report); err != nil {
-			api.WriteError(w, http.StatusInternalServerError, "Boundary registry persistence failed", err.Error())
-			return
-		}
-		writeContractJSON(w, http.StatusOK, report)
+		writeRetiredVerificationRoute(w, "/api/v1/conformance/run")
 	}))
 
 	mux.HandleFunc("/api/v1/conformance/reports", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -757,16 +730,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		reports := surfaces.ListReports()
-		if len(reports) == 0 {
-			report := conformanceReport("L4", "sota-2026")
-			if err := surfaces.PutReport(report); err != nil {
-				api.WriteError(w, http.StatusInternalServerError, "Boundary registry persistence failed", err.Error())
-				return
-			}
-			reports = append(reports, report)
-		}
-		writeContractJSON(w, http.StatusOK, reports)
+		writeRetiredVerificationRoute(w, "/api/v1/conformance/reports")
 	}))
 
 	mux.HandleFunc("/api/v1/conformance/reports/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -774,12 +738,7 @@ func registerContractRoutes(mux *http.ServeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 			return
 		}
-		reportID := strings.TrimPrefix(r.URL.Path, "/api/v1/conformance/reports/")
-		if reportID == "" || strings.Contains(reportID, "/") {
-			api.WriteBadRequest(w, "Invalid conformance report id")
-			return
-		}
-		writeContractJSON(w, http.StatusOK, conformanceReport("L1", "runtime"))
+		writeRetiredVerificationRoute(w, "/api/v1/conformance/reports/{report_id}")
 	}))
 
 	mux.HandleFunc("/api/v1/conformance/vectors", func(w http.ResponseWriter, r *http.Request) {
@@ -2485,21 +2444,24 @@ func telemetryConfig() contracts.TelemetryOTelConfig {
 	}
 }
 
-func conformanceReport(level, profile string) map[string]any {
-	if strings.TrimSpace(profile) == "" {
-		profile = "runtime"
-	}
-	sum := sha256.Sum256([]byte(level + ":" + profile + ":" + displayVersion()))
-	return map[string]any{
-		"report_id": "conf_" + hex.EncodeToString(sum[:8]),
-		"level":     level,
-		"verdict":   "PASS",
-		"gates":     3,
-		"failed":    0,
-		"details": map[string]string{
-			"runtime_routes":      "PASS",
-			"receipt_store":       "PASS",
-			"structured_response": "PASS",
-		},
-	}
+// retiredVerificationRoutes maps each public route retired by HELM-742 to the
+// reason it answers 501. Each route used to report a verification result that
+// no check produced. They stay in the OpenAPI contract, marked deprecated, so a
+// later release can drop them without failing the breaking-change gate.
+var retiredVerificationRoutes = map[string]string{
+	"/api/v1/conformance/run":                 retiredConformanceReason,
+	"/api/v1/conformance/reports":             retiredConformanceReason,
+	"/api/v1/conformance/reports/{report_id}": retiredConformanceReason,
+	"/api/v1/gui/receipts/verify":             "GUI action receipts carry no signature, so the runtime has no trust root to verify them against",
+	"/api/v1/trust/keys/add":                  retiredTrustKeysReason,
+	"/api/v1/trust/keys/revoke":               retiredTrustKeysReason,
+}
+
+const (
+	retiredConformanceReason = "the runtime API does not run conformance gates; run `helm-ai-kernel conform` against an evidence pack"
+	retiredTrustKeysReason   = "trust-key mutation was never wired to a verifier; configure trusted keys in the verifier trust configuration"
+)
+
+func writeRetiredVerificationRoute(w http.ResponseWriter, path string) {
+	api.WriteError(w, http.StatusNotImplemented, "Not implemented", retiredVerificationRoutes[path])
 }

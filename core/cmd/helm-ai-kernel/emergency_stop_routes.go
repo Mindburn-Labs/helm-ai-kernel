@@ -83,7 +83,7 @@ type emergencyStopFenceResponse struct {
 	KernelSignature string            `json:"kernel_signature"`
 }
 
-func registerEmergencyStopFenceRoutes(mux *http.ServeMux, svc *Services) {
+func registerEmergencyStopFenceRoutes(mux routeMux, svc *Services) {
 	mux.HandleFunc("/internal/emergency-stop/fence", protectRuntimeHandler(RouteAuthService, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)

@@ -98,6 +98,8 @@ def check_compose(path: Path) -> None:
     ]:
         require(text, token, path)
     forbid(text, "image: busybox:1.36.1", path)
+    # C-02: a literal evidence seed is a published signing key.
+    forbid(text, "helm-evidence-dev", path)
 
 
 def main() -> None:

@@ -162,6 +162,15 @@ public final class Helm extends com.google.protobuf.GeneratedFile {
   }
 
   /**
+   * <pre>
+   * Legacy closed enum. It holds 18 of the codes in
+   * protocols/json-schemas/reason-codes/reason-codes-v1.json, the only reason-code
+   * registry, and every other code decodes as REASON_CODE_UNSPECIFIED. Read the
+   * open-string reason_code_text field beside each use instead. No values are
+   * added here; scripts/ci/gen_reason_codes.py checks that every value is a
+   * registry code and that every use has reason_code_text beside it.
+   * </pre>
+   *
    * Protobuf enum {@code helm.kernel.v1.ReasonCode}
    */
   public enum ReasonCode
@@ -9809,6 +9818,30 @@ java.lang.String defaultValue);
      */
     com.google.protobuf.ByteString
         getSessionIdBytes();
+
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 25;</code>
+     * @return The reasonCodeText.
+     */
+    java.lang.String getReasonCodeText();
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 25;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    com.google.protobuf.ByteString
+        getReasonCodeTextBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.Receipt}
@@ -9853,6 +9886,7 @@ java.lang.String defaultValue);
       argsHash_ = "";
       policyHash_ = "";
       sessionId_ = "";
+      reasonCodeText_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -10799,6 +10833,57 @@ java.lang.String defaultValue) {
       }
     }
 
+    public static final int REASON_CODE_TEXT_FIELD_NUMBER = 25;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object reasonCodeText_ = "";
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 25;</code>
+     * @return The reasonCodeText.
+     */
+    @java.lang.Override
+    public java.lang.String getReasonCodeText() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        reasonCodeText_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 25;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getReasonCodeTextBytes() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        reasonCodeText_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -10887,6 +10972,9 @@ java.lang.String defaultValue) {
       }
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(sessionId_)) {
         com.google.protobuf.GeneratedMessage.writeString(output, 24, sessionId_);
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 25, reasonCodeText_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -10980,6 +11068,9 @@ java.lang.String defaultValue) {
       if (!com.google.protobuf.GeneratedMessage.isStringEmpty(sessionId_)) {
         size += com.google.protobuf.GeneratedMessage.computeStringSize(24, sessionId_);
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(25, reasonCodeText_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -11044,6 +11135,8 @@ java.lang.String defaultValue) {
           .equals(other.getPolicyHash())) return false;
       if (!getSessionId()
           .equals(other.getSessionId())) return false;
+      if (!getReasonCodeText()
+          .equals(other.getReasonCodeText())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -11108,6 +11201,8 @@ java.lang.String defaultValue) {
       hash = (53 * hash) + getPolicyHash().hashCode();
       hash = (37 * hash) + SESSION_ID_FIELD_NUMBER;
       hash = (53 * hash) + getSessionId().hashCode();
+      hash = (37 * hash) + REASON_CODE_TEXT_FIELD_NUMBER;
+      hash = (53 * hash) + getReasonCodeText().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -11295,6 +11390,7 @@ java.lang.String defaultValue) {
         argsHash_ = "";
         policyHash_ = "";
         sessionId_ = "";
+        reasonCodeText_ = "";
         return this;
       }
 
@@ -11404,6 +11500,9 @@ java.lang.String defaultValue) {
         }
         if (((from_bitField0_ & 0x00800000) != 0)) {
           result.sessionId_ = sessionId_;
+        }
+        if (((from_bitField0_ & 0x01000000) != 0)) {
+          result.reasonCodeText_ = reasonCodeText_;
         }
         result.bitField0_ |= to_bitField0_;
       }
@@ -11528,6 +11627,11 @@ java.lang.String defaultValue) {
         if (!other.getSessionId().isEmpty()) {
           sessionId_ = other.sessionId_;
           bitField0_ |= 0x00800000;
+          onChanged();
+        }
+        if (!other.getReasonCodeText().isEmpty()) {
+          reasonCodeText_ = other.reasonCodeText_;
+          bitField0_ |= 0x01000000;
           onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
@@ -11682,6 +11786,11 @@ java.lang.String defaultValue) {
                 bitField0_ |= 0x00800000;
                 break;
               } // case 194
+              case 202: {
+                reasonCodeText_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x01000000;
+                break;
+              } // case 202
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -13497,6 +13606,108 @@ java.lang.String defaultValue) {
         checkByteStringIsUtf8(value);
         sessionId_ = value;
         bitField0_ |= 0x00800000;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object reasonCodeText_ = "";
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 25;</code>
+       * @return The reasonCodeText.
+       */
+      public java.lang.String getReasonCodeText() {
+        java.lang.Object ref = reasonCodeText_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          reasonCodeText_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 25;</code>
+       * @return The bytes for reasonCodeText.
+       */
+      public com.google.protobuf.ByteString
+          getReasonCodeTextBytes() {
+        java.lang.Object ref = reasonCodeText_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          reasonCodeText_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 25;</code>
+       * @param value The reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeText(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        reasonCodeText_ = value;
+        bitField0_ |= 0x01000000;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 25;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearReasonCodeText() {
+        reasonCodeText_ = getDefaultInstance().getReasonCodeText();
+        bitField0_ = (bitField0_ & ~0x01000000);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 25;</code>
+       * @param value The bytes for reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeTextBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        reasonCodeText_ = value;
+        bitField0_ |= 0x01000000;
         onChanged();
         return this;
       }
@@ -16542,6 +16753,30 @@ java.lang.String defaultValue) {
      */
     helm.kernel.v1.Helm.ObligationOrBuilder getObligationsOrBuilder(
         int index);
+
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The reasonCodeText.
+     */
+    java.lang.String getReasonCodeText();
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    com.google.protobuf.ByteString
+        getReasonCodeTextBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.PDPResponse}
@@ -16569,6 +16804,7 @@ java.lang.String defaultValue) {
       policyRef_ = "";
       decisionHash_ = "";
       obligations_ = java.util.Collections.emptyList();
+      reasonCodeText_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -16737,6 +16973,57 @@ java.lang.String defaultValue) {
       return obligations_.get(index);
     }
 
+    public static final int REASON_CODE_TEXT_FIELD_NUMBER = 6;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object reasonCodeText_ = "";
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The reasonCodeText.
+     */
+    @java.lang.Override
+    public java.lang.String getReasonCodeText() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        reasonCodeText_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getReasonCodeTextBytes() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        reasonCodeText_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -16765,6 +17052,9 @@ java.lang.String defaultValue) {
       }
       for (int i = 0; i < obligations_.size(); i++) {
         output.writeMessage(5, obligations_.get(i));
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 6, reasonCodeText_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -16798,6 +17088,9 @@ java.lang.String defaultValue) {
             }
             size += 1 * count;
           }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(6, reasonCodeText_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
       return size;
@@ -16822,6 +17115,8 @@ java.lang.String defaultValue) {
           .equals(other.getDecisionHash())) return false;
       if (!getObligationsList()
           .equals(other.getObligationsList())) return false;
+      if (!getReasonCodeText()
+          .equals(other.getReasonCodeText())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -16846,6 +17141,8 @@ java.lang.String defaultValue) {
         hash = (37 * hash) + OBLIGATIONS_FIELD_NUMBER;
         hash = (53 * hash) + getObligationsList().hashCode();
       }
+      hash = (37 * hash) + REASON_CODE_TEXT_FIELD_NUMBER;
+      hash = (53 * hash) + getReasonCodeText().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -16988,6 +17285,7 @@ java.lang.String defaultValue) {
           obligationsBuilder_.clear();
         }
         bitField0_ = (bitField0_ & ~0x00000010);
+        reasonCodeText_ = "";
         return this;
       }
 
@@ -17046,6 +17344,9 @@ java.lang.String defaultValue) {
         if (((from_bitField0_ & 0x00000008) != 0)) {
           result.decisionHash_ = decisionHash_;
         }
+        if (((from_bitField0_ & 0x00000020) != 0)) {
+          result.reasonCodeText_ = reasonCodeText_;
+        }
       }
 
       @java.lang.Override
@@ -17101,6 +17402,11 @@ java.lang.String defaultValue) {
               obligationsBuilder_.addAllMessages(other.obligations_);
             }
           }
+        }
+        if (!other.getReasonCodeText().isEmpty()) {
+          reasonCodeText_ = other.reasonCodeText_;
+          bitField0_ |= 0x00000020;
+          onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -17161,6 +17467,11 @@ java.lang.String defaultValue) {
                 }
                 break;
               } // case 42
+              case 50: {
+                reasonCodeText_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000020;
+                break;
+              } // case 50
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -17644,6 +17955,108 @@ java.lang.String defaultValue) {
           obligations_ = null;
         }
         return obligationsBuilder_;
+      }
+
+      private java.lang.Object reasonCodeText_ = "";
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @return The reasonCodeText.
+       */
+      public java.lang.String getReasonCodeText() {
+        java.lang.Object ref = reasonCodeText_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          reasonCodeText_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @return The bytes for reasonCodeText.
+       */
+      public com.google.protobuf.ByteString
+          getReasonCodeTextBytes() {
+        java.lang.Object ref = reasonCodeText_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          reasonCodeText_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @param value The reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeText(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearReasonCodeText() {
+        reasonCodeText_ = getDefaultInstance().getReasonCodeText();
+        bitField0_ = (bitField0_ & ~0x00000020);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @param value The bytes for reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeTextBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return this;
       }
 
       // @@protoc_insertion_point(builder_scope:helm.kernel.v1.PDPResponse)
@@ -19819,6 +20232,30 @@ java.lang.String defaultValue) {
      * <code>.helm.kernel.v1.AuthorizedExecutionIntent intent = 5;</code>
      */
     helm.kernel.v1.Helm.AuthorizedExecutionIntentOrBuilder getIntentOrBuilder();
+
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The reasonCodeText.
+     */
+    java.lang.String getReasonCodeText();
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    com.google.protobuf.ByteString
+        getReasonCodeTextBytes();
   }
   /**
    * Protobuf type {@code helm.kernel.v1.EffectResponse}
@@ -19845,6 +20282,7 @@ java.lang.String defaultValue) {
       verdict_ = 0;
       reasonCode_ = 0;
       reason_ = "";
+      reasonCodeText_ = "";
     }
 
     public static final com.google.protobuf.Descriptors.Descriptor
@@ -19993,6 +20431,57 @@ java.lang.String defaultValue) {
       return intent_ == null ? helm.kernel.v1.Helm.AuthorizedExecutionIntent.getDefaultInstance() : intent_;
     }
 
+    public static final int REASON_CODE_TEXT_FIELD_NUMBER = 6;
+    @SuppressWarnings("serial")
+    private volatile java.lang.Object reasonCodeText_ = "";
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The reasonCodeText.
+     */
+    @java.lang.Override
+    public java.lang.String getReasonCodeText() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs =
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        reasonCodeText_ = s;
+        return s;
+      }
+    }
+    /**
+     * <pre>
+     * The registered reason code as an open string (HELM-747). This is the
+     * authoritative field: the closed reason_code enum above represents only
+     * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+     * </pre>
+     *
+     * <code>string reason_code_text = 6;</code>
+     * @return The bytes for reasonCodeText.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getReasonCodeTextBytes() {
+      java.lang.Object ref = reasonCodeText_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b =
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        reasonCodeText_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -20022,6 +20511,9 @@ java.lang.String defaultValue) {
       if (((bitField0_ & 0x00000002) != 0)) {
         output.writeMessage(5, getIntent());
       }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 6, reasonCodeText_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -20049,6 +20541,9 @@ java.lang.String defaultValue) {
       if (((bitField0_ & 0x00000002) != 0)) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(5, getIntent());
+      }
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(reasonCodeText_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(6, reasonCodeText_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -20079,6 +20574,8 @@ java.lang.String defaultValue) {
         if (!getIntent()
             .equals(other.getIntent())) return false;
       }
+      if (!getReasonCodeText()
+          .equals(other.getReasonCodeText())) return false;
       if (!getUnknownFields().equals(other.getUnknownFields())) return false;
       return true;
     }
@@ -20104,6 +20601,8 @@ java.lang.String defaultValue) {
         hash = (37 * hash) + INTENT_FIELD_NUMBER;
         hash = (53 * hash) + getIntent().hashCode();
       }
+      hash = (37 * hash) + REASON_CODE_TEXT_FIELD_NUMBER;
+      hash = (53 * hash) + getReasonCodeText().hashCode();
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -20255,6 +20754,7 @@ java.lang.String defaultValue) {
           intentBuilder_.dispose();
           intentBuilder_ = null;
         }
+        reasonCodeText_ = "";
         return this;
       }
 
@@ -20310,6 +20810,9 @@ java.lang.String defaultValue) {
               : intentBuilder_.build();
           to_bitField0_ |= 0x00000002;
         }
+        if (((from_bitField0_ & 0x00000020) != 0)) {
+          result.reasonCodeText_ = reasonCodeText_;
+        }
         result.bitField0_ |= to_bitField0_;
       }
 
@@ -20341,6 +20844,11 @@ java.lang.String defaultValue) {
         }
         if (other.hasIntent()) {
           mergeIntent(other.getIntent());
+        }
+        if (!other.getReasonCodeText().isEmpty()) {
+          reasonCodeText_ = other.reasonCodeText_;
+          bitField0_ |= 0x00000020;
+          onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
         onChanged();
@@ -20397,6 +20905,11 @@ java.lang.String defaultValue) {
                 bitField0_ |= 0x00000010;
                 break;
               } // case 42
+              case 50: {
+                reasonCodeText_ = input.readStringRequireUtf8();
+                bitField0_ |= 0x00000020;
+                break;
+              } // case 50
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -20830,6 +21343,108 @@ java.lang.String defaultValue) {
           intent_ = null;
         }
         return intentBuilder_;
+      }
+
+      private java.lang.Object reasonCodeText_ = "";
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @return The reasonCodeText.
+       */
+      public java.lang.String getReasonCodeText() {
+        java.lang.Object ref = reasonCodeText_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          reasonCodeText_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @return The bytes for reasonCodeText.
+       */
+      public com.google.protobuf.ByteString
+          getReasonCodeTextBytes() {
+        java.lang.Object ref = reasonCodeText_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b =
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          reasonCodeText_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @param value The reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeText(
+          java.lang.String value) {
+        if (value == null) { throw new NullPointerException(); }
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearReasonCodeText() {
+        reasonCodeText_ = getDefaultInstance().getReasonCodeText();
+        bitField0_ = (bitField0_ & ~0x00000020);
+        onChanged();
+        return this;
+      }
+      /**
+       * <pre>
+       * The registered reason code as an open string (HELM-747). This is the
+       * authoritative field: the closed reason_code enum above represents only
+       * 18 of the registry's codes and reads every other code as UNSPECIFIED.
+       * </pre>
+       *
+       * <code>string reason_code_text = 6;</code>
+       * @param value The bytes for reasonCodeText to set.
+       * @return This builder for chaining.
+       */
+      public Builder setReasonCodeTextBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) { throw new NullPointerException(); }
+        checkByteStringIsUtf8(value);
+        reasonCodeText_ = value;
+        bitField0_ |= 0x00000020;
+        onChanged();
+        return this;
       }
 
       // @@protoc_insertion_point(builder_scope:helm.kernel.v1.EffectResponse)
@@ -22753,7 +23368,7 @@ java.lang.String defaultValue) {
       "(\0132\032.google.protobuf.Timestamp\022.\n\nexpire" +
       "s_at\030\005 \001(\0132\032.google.protobuf.Timestamp\022\021" +
       "\n\tsignature\030\006 \001(\t\022\025\n\rsigner_key_id\030\007 \001(\t" +
-      "\022\021\n\tprincipal\030\010 \001(\t\"\224\005\n\007Receipt\022\027\n\017recei" +
+      "\022\021\n\tprincipal\030\010 \001(\t\"\256\005\n\007Receipt\022\027\n\017recei" +
       "pt_version\030\001 \001(\t\022\022\n\nreceipt_id\030\002 \001(\t\022\023\n\013" +
       "decision_id\030\003 \001(\t\022\021\n\teffect_id\030\004 \001(\t\022(\n\007" +
       "verdict\030\005 \001(\0162\027.helm.kernel.v1.Verdict\022\021" +
@@ -22768,69 +23383,71 @@ java.lang.String defaultValue) {
       "n_id\030\021 \001(\t\022\031\n\021signature_version\030\022 \001(\t\022\016\n" +
       "\006status\030\023 \001(\t\022\023\n\013output_hash\030\024 \001(\t\022\021\n\tpr" +
       "ev_hash\030\025 \001(\t\022\021\n\targs_hash\030\026 \001(\t\022\023\n\013poli" +
-      "cy_hash\030\027 \001(\t\022\022\n\nsession_id\030\030 \001(\t\032/\n\rMet" +
-      "adataEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\002" +
-      "8\001\"\234\001\n\nPDPRequest\022&\n\006effect\030\001 \001(\0132\026.helm" +
-      ".kernel.v1.Effect\0222\n\007subject\030\002 \001(\0132!.hel" +
-      "m.kernel.v1.SubjectDescriptor\0222\n\007context" +
-      "\030\003 \001(\0132!.helm.kernel.v1.ContextDescripto" +
-      "r\"E\n\021SubjectDescriptor\022\021\n\tprincipal\030\001 \001(" +
-      "\t\022\016\n\006tenant\030\002 \001(\t\022\r\n\005roles\030\003 \003(\t\"\252\001\n\021Con" +
-      "textDescriptor\022\024\n\014jurisdiction\030\001 \001(\t\022\023\n\013" +
-      "environment\030\002 \001(\t\0225\n\021time_window_start\030\003" +
-      " \001(\0132\032.google.protobuf.Timestamp\0223\n\017time" +
-      "_window_end\030\004 \001(\0132\032.google.protobuf.Time" +
-      "stamp\"\251\001\n\013PDPResponse\022\r\n\005allow\030\001 \001(\010\022/\n\013" +
-      "reason_code\030\002 \001(\0162\032.helm.kernel.v1.Reaso" +
-      "nCode\022\022\n\npolicy_ref\030\003 \001(\t\022\025\n\rdecision_ha" +
-      "sh\030\004 \001(\t\022/\n\013obligations\030\005 \003(\0132\032.helm.ker" +
-      "nel.v1.Obligation\"i\n\nObligation\022\n\n\002id\030\001 " +
-      "\001(\t\022\014\n\004type\030\002 \001(\t\022\023\n\013description\030\003 \001(\t\022," +
-      "\n\010deadline\030\004 \001(\0132\032.google.protobuf.Times" +
-      "tamp\"\267\001\n\rEffectRequest\022&\n\006effect\030\001 \001(\0132\026" +
-      ".helm.kernel.v1.Effect\022\021\n\tprincipal\030\002 \001(" +
-      "\t\022;\n\007context\030\003 \003(\0132*.helm.kernel.v1.Effe" +
-      "ctRequest.ContextEntry\032.\n\014ContextEntry\022\013" +
-      "\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\340\001\n\016Effec" +
-      "tResponse\022(\n\007verdict\030\001 \001(\0162\027.helm.kernel" +
-      ".v1.Verdict\022/\n\013reason_code\030\002 \001(\0162\032.helm." +
-      "kernel.v1.ReasonCode\022\016\n\006reason\030\003 \001(\t\022(\n\007" +
-      "receipt\030\004 \001(\0132\027.helm.kernel.v1.Receipt\0229" +
-      "\n\006intent\030\005 \001(\0132).helm.kernel.v1.Authoriz" +
-      "edExecutionIntent\"\216\001\n\017ExecutionResult\022\021\n" +
-      "\tintent_id\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\016\n\006out" +
-      "put\030\003 \001(\014\022\025\n\rerror_message\030\004 \001(\t\0220\n\014comp" +
-      "leted_at\030\005 \001(\0132\032.google.protobuf.Timesta" +
-      "mp\"V\n\021CompletionReceipt\022(\n\007receipt\030\001 \001(\013" +
-      "2\027.helm.kernel.v1.Receipt\022\027\n\017proofgraph_" +
-      "node\030\002 \001(\t*]\n\007Verdict\022\027\n\023VERDICT_UNSPECI" +
-      "FIED\020\000\022\021\n\rVERDICT_ALLOW\020\001\022\020\n\014VERDICT_DEN" +
-      "Y\020\002\022\024\n\020VERDICT_ESCALATE\020\003*\243\005\n\nReasonCode" +
-      "\022\033\n\027REASON_CODE_UNSPECIFIED\020\000\022 \n\034REASON_" +
-      "CODE_POLICY_VIOLATION\020\001\022!\n\035REASON_CODE_N" +
-      "O_POLICY_DEFINED\020\002\022$\n REASON_CODE_PRG_EV" +
-      "ALUATION_ERROR\020\003\022#\n\037REASON_CODE_MISSING_" +
-      "REQUIREMENT\020\004\022\030\n\024REASON_CODE_PDP_DENY\020\005\022" +
-      "\031\n\025REASON_CODE_PDP_ERROR\020\006\022\037\n\033REASON_COD" +
-      "E_BUDGET_EXCEEDED\020\007\022\034\n\030REASON_CODE_BUDGE" +
-      "T_ERROR\020\010\022 \n\034REASON_CODE_ENVELOPE_INVALI" +
-      "D\020\t\022 \n\034REASON_CODE_SCHEMA_VIOLATION\020\n\022%\n" +
-      "!REASON_CODE_TEMPORAL_INTERVENTION\020\013\022!\n\035" +
-      "REASON_CODE_TEMPORAL_THROTTLE\020\014\022!\n\035REASO" +
-      "N_CODE_SANDBOX_VIOLATION\020\r\022\"\n\036REASON_COD" +
-      "E_PROVENANCE_FAILURE\020\016\022$\n REASON_CODE_VE" +
-      "RIFICATION_FAILURE\020\017\022 \n\034REASON_CODE_TENA" +
-      "NT_ISOLATION\020\020\022&\n\"REASON_CODE_JURISDICTI" +
-      "ON_VIOLATION\020\021\022/\n+REASON_CODE_SEMANTIC_T" +
-      "HREAT_REVIEW_REQUIRED\020\0222a\n\032PolicyDecisio" +
-      "nPointService\022C\n\010Evaluate\022\032.helm.kernel." +
-      "v1.PDPRequest\032\033.helm.kernel.v1.PDPRespon" +
-      "se2\260\001\n\025EffectBoundaryService\022G\n\006Submit\022\035" +
-      ".helm.kernel.v1.EffectRequest\032\036.helm.ker" +
-      "nel.v1.EffectResponse\022N\n\010Complete\022\037.helm" +
-      ".kernel.v1.ExecutionResult\032!.helm.kernel" +
-      ".v1.CompletionReceiptB&Z$helm.mindburn.r" +
-      "un/kernel/v1;kernelv1b\006proto3"
+      "cy_hash\030\027 \001(\t\022\022\n\nsession_id\030\030 \001(\t\022\030\n\020rea" +
+      "son_code_text\030\031 \001(\t\032/\n\rMetadataEntry\022\013\n\003" +
+      "key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\0028\001\"\234\001\n\nPDPRequ" +
+      "est\022&\n\006effect\030\001 \001(\0132\026.helm.kernel.v1.Eff" +
+      "ect\0222\n\007subject\030\002 \001(\0132!.helm.kernel.v1.Su" +
+      "bjectDescriptor\0222\n\007context\030\003 \001(\0132!.helm." +
+      "kernel.v1.ContextDescriptor\"E\n\021SubjectDe" +
+      "scriptor\022\021\n\tprincipal\030\001 \001(\t\022\016\n\006tenant\030\002 " +
+      "\001(\t\022\r\n\005roles\030\003 \003(\t\"\252\001\n\021ContextDescriptor" +
+      "\022\024\n\014jurisdiction\030\001 \001(\t\022\023\n\013environment\030\002 " +
+      "\001(\t\0225\n\021time_window_start\030\003 \001(\0132\032.google." +
+      "protobuf.Timestamp\0223\n\017time_window_end\030\004 " +
+      "\001(\0132\032.google.protobuf.Timestamp\"\303\001\n\013PDPR" +
+      "esponse\022\r\n\005allow\030\001 \001(\010\022/\n\013reason_code\030\002 " +
+      "\001(\0162\032.helm.kernel.v1.ReasonCode\022\022\n\npolic" +
+      "y_ref\030\003 \001(\t\022\025\n\rdecision_hash\030\004 \001(\t\022/\n\013ob" +
+      "ligations\030\005 \003(\0132\032.helm.kernel.v1.Obligat" +
+      "ion\022\030\n\020reason_code_text\030\006 \001(\t\"i\n\nObligat" +
+      "ion\022\n\n\002id\030\001 \001(\t\022\014\n\004type\030\002 \001(\t\022\023\n\013descrip" +
+      "tion\030\003 \001(\t\022,\n\010deadline\030\004 \001(\0132\032.google.pr" +
+      "otobuf.Timestamp\"\267\001\n\rEffectRequest\022&\n\006ef" +
+      "fect\030\001 \001(\0132\026.helm.kernel.v1.Effect\022\021\n\tpr" +
+      "incipal\030\002 \001(\t\022;\n\007context\030\003 \003(\0132*.helm.ke" +
+      "rnel.v1.EffectRequest.ContextEntry\032.\n\014Co" +
+      "ntextEntry\022\013\n\003key\030\001 \001(\t\022\r\n\005value\030\002 \001(\t:\002" +
+      "8\001\"\372\001\n\016EffectResponse\022(\n\007verdict\030\001 \001(\0162\027" +
+      ".helm.kernel.v1.Verdict\022/\n\013reason_code\030\002" +
+      " \001(\0162\032.helm.kernel.v1.ReasonCode\022\016\n\006reas" +
+      "on\030\003 \001(\t\022(\n\007receipt\030\004 \001(\0132\027.helm.kernel." +
+      "v1.Receipt\0229\n\006intent\030\005 \001(\0132).helm.kernel" +
+      ".v1.AuthorizedExecutionIntent\022\030\n\020reason_" +
+      "code_text\030\006 \001(\t\"\216\001\n\017ExecutionResult\022\021\n\ti" +
+      "ntent_id\030\001 \001(\t\022\017\n\007success\030\002 \001(\010\022\016\n\006outpu" +
+      "t\030\003 \001(\014\022\025\n\rerror_message\030\004 \001(\t\0220\n\014comple" +
+      "ted_at\030\005 \001(\0132\032.google.protobuf.Timestamp" +
+      "\"V\n\021CompletionReceipt\022(\n\007receipt\030\001 \001(\0132\027" +
+      ".helm.kernel.v1.Receipt\022\027\n\017proofgraph_no" +
+      "de\030\002 \001(\t*]\n\007Verdict\022\027\n\023VERDICT_UNSPECIFI" +
+      "ED\020\000\022\021\n\rVERDICT_ALLOW\020\001\022\020\n\014VERDICT_DENY\020" +
+      "\002\022\024\n\020VERDICT_ESCALATE\020\003*\243\005\n\nReasonCode\022\033" +
+      "\n\027REASON_CODE_UNSPECIFIED\020\000\022 \n\034REASON_CO" +
+      "DE_POLICY_VIOLATION\020\001\022!\n\035REASON_CODE_NO_" +
+      "POLICY_DEFINED\020\002\022$\n REASON_CODE_PRG_EVAL" +
+      "UATION_ERROR\020\003\022#\n\037REASON_CODE_MISSING_RE" +
+      "QUIREMENT\020\004\022\030\n\024REASON_CODE_PDP_DENY\020\005\022\031\n" +
+      "\025REASON_CODE_PDP_ERROR\020\006\022\037\n\033REASON_CODE_" +
+      "BUDGET_EXCEEDED\020\007\022\034\n\030REASON_CODE_BUDGET_" +
+      "ERROR\020\010\022 \n\034REASON_CODE_ENVELOPE_INVALID\020" +
+      "\t\022 \n\034REASON_CODE_SCHEMA_VIOLATION\020\n\022%\n!R" +
+      "EASON_CODE_TEMPORAL_INTERVENTION\020\013\022!\n\035RE" +
+      "ASON_CODE_TEMPORAL_THROTTLE\020\014\022!\n\035REASON_" +
+      "CODE_SANDBOX_VIOLATION\020\r\022\"\n\036REASON_CODE_" +
+      "PROVENANCE_FAILURE\020\016\022$\n REASON_CODE_VERI" +
+      "FICATION_FAILURE\020\017\022 \n\034REASON_CODE_TENANT" +
+      "_ISOLATION\020\020\022&\n\"REASON_CODE_JURISDICTION" +
+      "_VIOLATION\020\021\022/\n+REASON_CODE_SEMANTIC_THR" +
+      "EAT_REVIEW_REQUIRED\020\0222a\n\032PolicyDecisionP" +
+      "ointService\022C\n\010Evaluate\022\032.helm.kernel.v1" +
+      ".PDPRequest\032\033.helm.kernel.v1.PDPResponse" +
+      "2\260\001\n\025EffectBoundaryService\022G\n\006Submit\022\035.h" +
+      "elm.kernel.v1.EffectRequest\032\036.helm.kerne" +
+      "l.v1.EffectResponse\022N\n\010Complete\022\037.helm.k" +
+      "ernel.v1.ExecutionResult\032!.helm.kernel.v" +
+      "1.CompletionReceiptB&Z$helm.mindburn.run" +
+      "/kernel/v1;kernelv1b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -22872,7 +23489,7 @@ java.lang.String defaultValue) {
     internal_static_helm_kernel_v1_Receipt_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_Receipt_descriptor,
-        new java.lang.String[] { "ReceiptVersion", "ReceiptId", "DecisionId", "EffectId", "Verdict", "Principal", "Tool", "Action", "Timestamp", "Lamport", "ProofgraphNode", "Signature", "SignerKeyId", "PayloadHash", "ReasonCode", "Metadata", "CorrelationId", "SignatureVersion", "Status", "OutputHash", "PrevHash", "ArgsHash", "PolicyHash", "SessionId", });
+        new java.lang.String[] { "ReceiptVersion", "ReceiptId", "DecisionId", "EffectId", "Verdict", "Principal", "Tool", "Action", "Timestamp", "Lamport", "ProofgraphNode", "Signature", "SignerKeyId", "PayloadHash", "ReasonCode", "Metadata", "CorrelationId", "SignatureVersion", "Status", "OutputHash", "PrevHash", "ArgsHash", "PolicyHash", "SessionId", "ReasonCodeText", });
     internal_static_helm_kernel_v1_Receipt_MetadataEntry_descriptor =
       internal_static_helm_kernel_v1_Receipt_descriptor.getNestedType(0);
     internal_static_helm_kernel_v1_Receipt_MetadataEntry_fieldAccessorTable = new
@@ -22902,7 +23519,7 @@ java.lang.String defaultValue) {
     internal_static_helm_kernel_v1_PDPResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_PDPResponse_descriptor,
-        new java.lang.String[] { "Allow", "ReasonCode", "PolicyRef", "DecisionHash", "Obligations", });
+        new java.lang.String[] { "Allow", "ReasonCode", "PolicyRef", "DecisionHash", "Obligations", "ReasonCodeText", });
     internal_static_helm_kernel_v1_Obligation_descriptor =
       getDescriptor().getMessageType(10);
     internal_static_helm_kernel_v1_Obligation_fieldAccessorTable = new
@@ -22926,7 +23543,7 @@ java.lang.String defaultValue) {
     internal_static_helm_kernel_v1_EffectResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_helm_kernel_v1_EffectResponse_descriptor,
-        new java.lang.String[] { "Verdict", "ReasonCode", "Reason", "Receipt", "Intent", });
+        new java.lang.String[] { "Verdict", "ReasonCode", "Reason", "Receipt", "Intent", "ReasonCodeText", });
     internal_static_helm_kernel_v1_ExecutionResult_descriptor =
       getDescriptor().getMessageType(13);
     internal_static_helm_kernel_v1_ExecutionResult_fieldAccessorTable = new

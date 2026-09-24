@@ -1,13 +1,14 @@
 package main
 
-// quantum_posture: AAT record signatures are optional classical Ed25519
-// (operator-supplied seed); chain integrity is classical-only and no
+// quantum_posture: AAT record signatures are classical Ed25519 (optional on
+// export, required on verify); chain integrity is classical-only and no
 // post-quantum assurance is claimed for this export/verify path.
 
 import (
 	"bufio"
 	"bytes"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -24,12 +25,14 @@ import (
 //
 // Converts exported audit store entries (the events.json produced by the
 // audit evidence pack) into an IETF draft-sharif-agent-audit-trail
-// conformant JSON Lines chain, or verifies an existing AAT chain.
+// conformant JSON Lines chain, or verifies an existing AAT chain. Verification
+// requires --public-key: every record must carry an Ed25519 signature by that
+// key, so an unsigned, re-signed or empty chain fails (HELM-742).
 //
 // Exit codes:
 //
 //	0 = export/verify completed
-//	1 = verification failed (chain broken or signature invalid)
+//	1 = verification failed (chain broken, signature missing or invalid, or empty chain)
 //	2 = usage or runtime error
 func runExportAATCmd(args []string, stdout, stderr io.Writer) int {
 	cmd := flag.NewFlagSet("export aat", flag.ContinueOnError)
@@ -41,6 +44,7 @@ func runExportAATCmd(args []string, stdout, stderr io.Writer) int {
 		agentID    string
 		signKeyHex string
 		verifyPath string
+		pubKeyHex  string
 	)
 
 	cmd.StringVar(&inPath, "in", "", "Path to audit entries JSON array (events.json)")
@@ -48,13 +52,18 @@ func runExportAATCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&agentID, "agent-id", "", "Agent identity recorded on every AAT record (REQUIRED for export)")
 	cmd.StringVar(&signKeyHex, "sign-key", "", "Hex-encoded Ed25519 seed for optional record signatures")
 	cmd.StringVar(&verifyPath, "verify", "", "Verify an existing AAT JSONL chain instead of exporting")
+	cmd.StringVar(&pubKeyHex, "public-key", "", "Hex-encoded trusted Ed25519 public key every record must be signed by (REQUIRED with --verify)")
 
 	if err := cmd.Parse(args); err != nil {
 		return 2
 	}
 
 	if verifyPath != "" {
-		return verifyAATFile(verifyPath, stdout, stderr)
+		trusted, err := hex.DecodeString(pubKeyHex)
+		if err != nil || len(trusted) != ed25519.PublicKeySize {
+			return cliui.WriteError(stderr, cliui.UsageErrorf("export aat --verify", "--public-key must be a %d-byte hex Ed25519 public key", ed25519.PublicKeySize))
+		}
+		return verifyAATFile(verifyPath, ed25519.PublicKey(trusted), stdout, stderr)
 	}
 
 	if inPath == "" || agentID == "" {
@@ -102,7 +111,7 @@ func runExportAATCmd(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func verifyAATFile(path string, stdout, stderr io.Writer) int {
+func verifyAATFile(path string, trusted ed25519.PublicKey, stdout, stderr io.Writer) int {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat --verify", "cannot read %s", path))
@@ -126,9 +135,44 @@ func verifyAATFile(path string, stdout, stderr io.Writer) int {
 	if err := scanner.Err(); err != nil {
 		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitUsage, "export aat --verify", "reading %s", path))
 	}
+	if len(records) == 0 {
+		return cliui.WriteError(stderr, cliui.Wrapf(fmt.Errorf("%s holds no AAT records", path), cliui.ExitFailure, "", "AAT verification FAILED"))
+	}
 	if err := audit.VerifyAATChain(records); err != nil {
 		return cliui.WriteError(stderr, cliui.Wrapf(err, cliui.ExitFailure, "", "AAT verification FAILED"))
 	}
+	for i, record := range records {
+		if err := verifyAATRecordSignedBy(record, trusted); err != nil {
+			return cliui.WriteError(stderr, cliui.Wrapf(fmt.Errorf("record %d: %w", i, err), cliui.ExitFailure, "", "AAT verification FAILED"))
+		}
+	}
 	_, _ = fmt.Fprintf(stdout, "AAT chain OK: %d records verified\n", len(records))
 	return 0
+}
+
+// verifyAATRecordSignedBy checks the record's signature against the trusted
+// key. audit.VerifyAATChain skips records without an exact "Ed25519"
+// signature and trusts the key the record carries, so it cannot tell a signed
+// chain from an unsigned or re-signed one.
+func verifyAATRecordSignedBy(record audit.AATRecord, trusted ed25519.PublicKey) error {
+	sig := record.Signature
+	if sig == nil {
+		return fmt.Errorf("%w: unsigned", audit.ErrAATBadSignature)
+	}
+	if sig.Algorithm != "Ed25519" {
+		return fmt.Errorf("%w: algorithm %q is not Ed25519", audit.ErrAATBadSignature, sig.Algorithm)
+	}
+	pub, err := base64.StdEncoding.DecodeString(sig.PublicKey)
+	if err != nil || !bytes.Equal(pub, trusted) {
+		return fmt.Errorf("%w: not signed by the trusted key", audit.ErrAATBadSignature)
+	}
+	value, err := base64.StdEncoding.DecodeString(sig.Value)
+	if err != nil {
+		return fmt.Errorf("%w: signature malformed", audit.ErrAATBadSignature)
+	}
+	digest, err := hex.DecodeString(record.RecordHash)
+	if err != nil || !ed25519.Verify(trusted, digest, value) {
+		return fmt.Errorf("%w: signature does not verify", audit.ErrAATBadSignature)
+	}
+	return nil
 }

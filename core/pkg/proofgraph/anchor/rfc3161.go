@@ -139,9 +139,12 @@ func (r *RFC3161Backend) Anchor(ctx context.Context, req AnchorRequest) (*Anchor
 	return receipt, nil
 }
 
-// Verify checks the RFC 3161 timestamp token.
-// Full verification requires parsing the ASN.1 TimeStampResp and validating
-// the TSA's certificate chain. This is a structural check.
+// Verify binds the RFC 3161 timestamp token to the anchored root: the response
+// must be granted, carry a TSTInfo, and its SHA-256 message imprint must equal
+// the digest Anchor submitted for receipt.Request.MerkleRoot.
+//
+// It does not validate the TSA's CMS signature or certificate chain, so it
+// shows which root a token names, not that a trusted TSA issued it.
 func (r *RFC3161Backend) Verify(_ context.Context, receipt *AnchorReceipt) error {
 	if receipt.Backend != rfc3161BackendName {
 		return fmt.Errorf("rfc3161: receipt backend mismatch: got %s", receipt.Backend)
@@ -151,18 +154,73 @@ func (r *RFC3161Backend) Verify(_ context.Context, receipt *AnchorReceipt) error
 		return fmt.Errorf("rfc3161: empty timestamp token")
 	}
 
-	// Decode the base64-encoded TSA response to verify it's valid ASN.1.
 	tsaResp, err := base64.StdEncoding.DecodeString(receipt.Signature)
 	if err != nil {
 		return fmt.Errorf("rfc3161: decode timestamp token: %w", err)
 	}
-
-	// Verify the response is valid ASN.1 (structural check).
-	var raw asn1.RawValue
-	_, err = asn1.Unmarshal(tsaResp, &raw)
+	imprint, err := rfc3161MessageImprint(tsaResp)
 	if err != nil {
-		return fmt.Errorf("rfc3161: invalid ASN.1 timestamp response: %w", err)
+		return err
 	}
-
+	rootBytes, err := hex.DecodeString(receipt.Request.MerkleRoot)
+	if err != nil {
+		return fmt.Errorf("rfc3161: decode merkle root: %w", err)
+	}
+	want := sha256.Sum256(rootBytes)
+	if !imprint.HashAlgorithm.Algorithm.Equal(oidSHA256) || !bytes.Equal(imprint.HashedMessage, want[:]) {
+		return fmt.Errorf("rfc3161: timestamp token does not bind merkle root %s", receipt.Request.MerkleRoot)
+	}
 	return nil
+}
+
+var (
+	oidSignedData = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 2}
+	oidTSTInfo    = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 16, 1, 4}
+)
+
+// encapsulatedContentInfo is the CMS EncapsulatedContentInfo (RFC 5652 §5.2).
+type encapsulatedContentInfo struct {
+	EContentType asn1.ObjectIdentifier
+	EContent     []byte `asn1:"explicit,optional,tag:0"`
+}
+
+// tstInfoImprint reads TSTInfo (RFC 3161 §2.4.2) up to its message imprint.
+type tstInfoImprint struct {
+	Version        int
+	Policy         asn1.ObjectIdentifier
+	MessageImprint messageImprint
+}
+
+// rfc3161MessageImprint extracts the TSTInfo message imprint from a
+// TimeStampResp, or from a bare TimeStampToken, and rejects any response
+// whose status is not granted.
+func rfc3161MessageImprint(der []byte) (messageImprint, error) {
+	token := der
+	var resp timeStampResp
+	if rest, err := asn1.Unmarshal(der, &resp); err == nil && len(rest) == 0 {
+		if resp.Status.Status != 0 && resp.Status.Status != 1 {
+			return messageImprint{}, fmt.Errorf("rfc3161: timestamp response not granted (status %d)", resp.Status.Status)
+		}
+		if len(resp.TimeStampToken.FullBytes) == 0 {
+			return messageImprint{}, fmt.Errorf("rfc3161: timestamp response carries no token")
+		}
+		token = resp.TimeStampToken.FullBytes
+	}
+	var ci contentInfo
+	if rest, err := asn1.Unmarshal(token, &ci); err != nil || len(rest) != 0 || !ci.ContentType.Equal(oidSignedData) {
+		return messageImprint{}, fmt.Errorf("rfc3161: timestamp token is not CMS SignedData")
+	}
+	var sd signedData
+	if _, err := asn1.Unmarshal(ci.Content.Bytes, &sd); err != nil {
+		return messageImprint{}, fmt.Errorf("rfc3161: parse SignedData: %w", err)
+	}
+	var eci encapsulatedContentInfo
+	if _, err := asn1.Unmarshal(sd.EncapContentInfo.FullBytes, &eci); err != nil || !eci.EContentType.Equal(oidTSTInfo) {
+		return messageImprint{}, fmt.Errorf("rfc3161: timestamp token does not carry a TSTInfo")
+	}
+	var info tstInfoImprint
+	if _, err := asn1.Unmarshal(eci.EContent, &info); err != nil {
+		return messageImprint{}, fmt.Errorf("rfc3161: parse TSTInfo: %w", err)
+	}
+	return info.MessageImprint, nil
 }

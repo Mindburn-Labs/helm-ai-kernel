@@ -206,6 +206,8 @@ lint-security:
 
 proto-lint:
 	buf lint protocols/policy-schema
+	buf lint protocols/proto
+	bash scripts/ci/check_proto_lint_exemptions.sh protocols/proto
 
 proto-breaking:
 	bash scripts/ci/contract_breaking.sh proto
@@ -219,6 +221,12 @@ contract-breaking-release:
 
 test-contract-breaking:
 	bash scripts/ci/test_contract_breaking.sh
+
+# Positive controls for the protocols/proto buf gates (HELM-747): real buf,
+# real buf.yaml, known-bad fixtures that must fail.
+.PHONY: test-proto-gates
+test-proto-gates:
+	bash scripts/ci/test_proto_gates.sh
 
 docker-verify:
 	docker build -f Dockerfile -t helm-ai-kernel:verify-root .
@@ -262,6 +270,7 @@ deployment-smoke: docker-smoke compose-smoke helm-chart-smoke
 
 release-smoke:
 	python3 scripts/release/console_local_sidecar_test.py
+	python3 scripts/release/cosign_identity_test.py
 	bash scripts/ci/release_smoke.sh
 
 version-drift:
@@ -293,6 +302,17 @@ quality-release:
 
 quality-nightly:
 	$(QUALITY) run nightly
+
+.PHONY: coverage-tcb
+# coverage-tcb holds the kernel TCB packages to the statement-coverage floors in
+# scripts/ci/tcb-coverage-floors.txt; the package list comes from that file.
+coverage-tcb:
+	@set -e; floors="$(CURDIR)/scripts/ci/tcb-coverage-floors.txt"; \
+	profile="$$(mktemp "$${TMPDIR:-/tmp}/tcb-coverage.XXXXXX")"; \
+	trap 'rm -f "$$profile"' EXIT; \
+	pkgs="$$(python3 scripts/ci/check_tcb_coverage.py packages "$$floors")"; \
+	(cd core && go test -count=1 -covermode=atomic -coverprofile="$$profile" $$pkgs); \
+	python3 scripts/ci/check_tcb_coverage.py check "$$profile" "$$floors"
 
 .PHONY: dead-packages
 # dead-packages lists core/pkg packages with no non-test importer across every

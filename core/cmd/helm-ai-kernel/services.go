@@ -6,12 +6,16 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -218,21 +222,10 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	}
 
 	// --- 4. Credentials (CRED-001: KMS-backed key management) ---
-	keystorePath := kmsKeystorePath(dataDir)
-	keyManager, kmsErr := kms.NewLocalKMS(keystorePath)
+	keyManager, kmsErr := openCredentialKeystore(dataDir)
 	if kmsErr != nil {
 		logger.Warn("KMS init failed — credentials store DISABLED", "error", kmsErr)
 	} else {
-		// Migration: if legacy env key exists, import it as version 0
-		credKeyHex := os.Getenv("CREDENTIALS_ENCRYPTION_KEY")
-		if credKeyHex != "" {
-			encKey, hexErr := hex.DecodeString(credKeyHex)
-			if hexErr == nil && len(encKey) == 32 {
-				_ = keyManager.ImportKey(encKey, 0)
-				logger.Info("KMS: imported legacy env key as version 0")
-			}
-		}
-
 		credStore := credentials.NewStoreWithKMS(db, keyManager)
 		s.Creds = credentials.NewHandler(credStore)
 		logger.Info("subsystem ready", "component", " Credentials Handler initialized (KMS-backed)")
@@ -313,12 +306,9 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	logger.Info("subsystem ready", "component", " Obligation Engine initialized")
 
 	// --- 10. Evidence ---
-	evidenceKey, defaultedEvidenceKey, err := evidenceSigningSeedFromEnv()
+	evidenceKey, evidenceKeyPath, err := evidenceSigningSeed(dataDir)
 	if err != nil {
 		return nil, err
-	}
-	if defaultedEvidenceKey {
-		logger.Warn("EVIDENCE_SIGNING_KEY not set — using default seed (not safe for production)")
 	}
 	// evidenceKey is a signing seed, not a key id. It previously reached
 	// NewEd25519Signer, which discarded it and generated a random keypair, so
@@ -331,6 +321,10 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 	if evidenceKeyDerived {
 		logger.Warn("EVIDENCE_SIGNING_KEY is not a 32-byte hex/base64 seed — deriving one by hashing it; " +
 			"supply a generated seed for production")
+	}
+	if evidenceKeyPath != "" {
+		logger.Warn("EVIDENCE_SIGNING_KEY not set — signing evidence with this install's generated key; "+
+			"configure an explicit key for production", "path", evidenceKeyPath, "public_key", evidenceSigner.PublicKey())
 	}
 	s.Evidence = evidence.NewExporter(evidenceSigner, evidenceSigner.KeyID)
 	logger.Info("subsystem ready", "component", " Evidence Exporter initialized")
@@ -406,6 +400,23 @@ func kmsKeystorePath(dataDir string) string {
 	return filepath.Join(dataDir, "keys", "credentials.keystore.json")
 }
 
+// openCredentialKeystore opens the keystore that seals stored provider
+// credentials. A legacy CREDENTIALS_ENCRYPTION_KEY seeds a new keystore as
+// version 0, or is imported into an existing one for decryption only. It never
+// re-pins the active version, so a rotation survives restarts (16-02).
+func openCredentialKeystore(dataDir string) (*kms.LocalKMS, error) {
+	path := kmsKeystorePath(dataDir)
+	legacyHex := os.Getenv("CREDENTIALS_ENCRYPTION_KEY")
+	if legacyHex == "" {
+		return kms.NewLocalKMS(path)
+	}
+	legacy, err := hex.DecodeString(legacyHex)
+	if err != nil || len(legacy) != 32 {
+		return nil, errors.New("CREDENTIALS_ENCRYPTION_KEY must be 64 hex characters (32 bytes)")
+	}
+	return kms.NewLocalKMSWithLegacyKey(path, legacy)
+}
+
 func normalizedDataDir(dataDir string) string {
 	if strings.TrimSpace(dataDir) == "" {
 		dataDir = strings.TrimSpace(os.Getenv("HELM_DATA_DIR"))
@@ -445,15 +456,80 @@ func defaultBoundaryRegistryPath() string {
 	return filepath.Join(dataDir, "boundary", "surfaces.json")
 }
 
-func evidenceSigningSeedFromEnv() (string, bool, error) {
-	seed := strings.TrimSpace(os.Getenv("EVIDENCE_SIGNING_KEY"))
+// publishedEvidenceSeeds are literals that shipped as defaults in the binary,
+// compose file and smoke scripts. Their private keys are derivable by anyone,
+// so evidence signed under them proves nothing (C-02).
+var publishedEvidenceSeeds = []string{"helm-evidence-bundle", "helm-evidence-dev", "helm-evidence-smoke"}
+
+// evidenceSigningSeed returns the evidence signing secret. EVIDENCE_SIGNING_KEY
+// wins; the Helm chart sets it from a random per-install Secret. Without it a
+// production process refuses to start, and any other process uses a random
+// seed generated once and kept at <dataDir>/evidence.key, whose path is
+// returned. Every install therefore has its own key, stable across restarts.
+func evidenceSigningSeed(dataDir string) (seed, persistedAt string, err error) {
+	seed = strings.TrimSpace(os.Getenv("EVIDENCE_SIGNING_KEY"))
+	if slices.Contains(publishedEvidenceSeeds, seed) {
+		return "", "", fmt.Errorf("EVIDENCE_SIGNING_KEY is the published default %q, whose private key anyone can derive; unset it to use a generated per-install key, or supply a generated 32-byte seed", seed)
+	}
 	if seed != "" {
-		return seed, false, nil
+		return seed, "", nil
 	}
 	if envBool("HELM_PRODUCTION") {
-		return "", false, fmt.Errorf("production mode requires EVIDENCE_SIGNING_KEY")
+		return "", "", fmt.Errorf("production mode requires EVIDENCE_SIGNING_KEY")
 	}
-	return "helm-evidence-bundle", true, nil
+	persistedAt = filepath.Join(dataDir, "evidence.key")
+	seed, err = loadOrCreateSeedFile(persistedAt)
+	if err != nil {
+		return "", "", err
+	}
+	return seed, persistedAt, nil
+}
+
+// loadOrCreateSeedFile reads a hex-encoded 32-byte seed from path, or creates
+// the file with a random seed. Creation is exclusive, so two processes
+// starting on one data dir cannot overwrite each other's key.
+func loadOrCreateSeedFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return "", fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+		}
+		seed := make([]byte, ed25519.SeedSize)
+		if _, err := rand.Read(seed); err != nil {
+			return "", fmt.Errorf("generate %s: %w", path, err)
+		}
+		encoded := hex.EncodeToString(seed)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, os.ErrExist) {
+			return loadOrCreateSeedFile(path)
+		}
+		if err != nil {
+			return "", fmt.Errorf("create %s: %w", path, err)
+		}
+		_, err = f.WriteString(encoded)
+		if err == nil {
+			err = f.Sync()
+		}
+		if closeErr := f.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			_ = os.Remove(path)
+			return "", fmt.Errorf("write %s: %w", path, err)
+		}
+		return encoded, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	if info, statErr := os.Stat(path); statErr == nil && runtime.GOOS != "windows" && info.Mode().Perm()&0o007 != 0 {
+		return "", fmt.Errorf("%s is accessible to other users (mode %o); expected 600", path, info.Mode().Perm())
+	}
+	seed := strings.TrimSpace(string(data))
+	if raw, err := hex.DecodeString(seed); err != nil || len(raw) != ed25519.SeedSize {
+		return "", fmt.Errorf("%s does not hold a hex 32-byte seed; restore it from backup (packs signed with it verify only under its key)", path)
+	}
+	return seed, nil
 }
 
 // otlpEndpointFromEnv returns the OTLP gRPC target from the standard

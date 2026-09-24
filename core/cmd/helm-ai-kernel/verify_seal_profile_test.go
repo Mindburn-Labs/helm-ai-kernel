@@ -6,10 +6,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,6 +130,16 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("HELM_DATA_DIR", dataDir)
 	packDir := writeCLISealedPack(t, dataDir)
+	roots, err := evidencepkg.ComputeEvidencePackIndexRoots(packDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A Rekor log whose entry at index 7 records this pack's root.
+	rekor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		body := base64.StdEncoding.EncodeToString([]byte(`{"apiVersion":"0.0.1","kind":"hashedrekord","spec":{"data":{"hash":{"algorithm":"sha256","value":"` + roots.MerkleRoot + `"}}}}`))
+		_, _ = fmt.Fprintf(w, `{"uuid":{"logID":"rekor-log","logIndex":7,"integratedTime":1788000000,"body":%q}}`, body)
+	}))
+	defer rekor.Close()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +153,7 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 			KMSKeyID:  "kms-key",
 			PublicKey: hex.EncodeToString(publicKey),
 		},
-		Anchor: evidencepkg.EvidencePackSealAnchor{Type: "rfc3161", URI: "http://tsa.example", Status: "configured"},
+		Anchor: evidencepkg.EvidencePackSealAnchor{Type: "rekor", URI: rekor.URL, Status: "configured"},
 		Storage: evidencepkg.EvidencePackSealStorage{
 			Type:       "s3",
 			Bucket:     "customer-audit",
@@ -155,14 +167,6 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 	if _, err := evidencepkg.SaveEvidencePackTrustConfig(dataDir, cfg); err != nil {
 		t.Fatal(err)
 	}
-	token, err := asn1.Marshal(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	roots, err := evidencepkg.ComputeEvidencePackIndexRoots(packDir)
-	if err != nil {
-		t.Fatal(err)
-	}
 	_, err = evidencepkg.SealEvidencePack(context.Background(), packDir, evidencepkg.SealEvidencePackOptions{
 		PackID:      "customer-pack",
 		Profile:     evidencepkg.EvidenceTrustProfileCustomer,
@@ -173,10 +177,11 @@ func TestVerifyProfileCustomerPassesWithAnchorAndStorageReceipt(t *testing.T) {
 			publicKey:  publicKey,
 		},
 		AnchorReceipts: []proofanchor.AnchorReceipt{{
-			Backend:   "rfc3161",
-			Request:   proofanchor.AnchorRequest{MerkleRoot: roots.MerkleRoot},
-			LogID:     "http://tsa.example",
-			Signature: base64.StdEncoding.EncodeToString(token),
+			Backend:        "rekor-v2",
+			Request:        proofanchor.AnchorRequest{MerkleRoot: roots.MerkleRoot},
+			LogID:          "rekor-log",
+			LogIndex:       7,
+			IntegratedTime: time.Unix(1788000000, 0).UTC(),
 		}},
 	})
 	if err != nil {

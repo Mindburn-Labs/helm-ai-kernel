@@ -66,10 +66,6 @@ func main() {
         log.Fatal(err)
     }
     fmt.Println(res.Choices[0].Message.Content)
-
-    // Conformance
-    conf, _ := c.ConformanceRun(helm.ConformanceRequest{Level: "L2"})
-    fmt.Println(conf.Verdict, conf.Gates, "gates")
 }
 ```
 
@@ -91,9 +87,6 @@ func main() {
 | `VerifyEvidence(bundle)` | `POST /api/v1/evidence/verify` |
 | `ReplayVerify(bundle)` | `POST /api/v1/replay/verify` |
 | `CreateEvidenceEnvelopeManifest(req)` | `POST /api/v1/evidence/envelopes` |
-| `ConformanceRun(req)` | `POST /api/v1/conformance/run` |
-| `GetConformanceReport(reportID)` | `GET /api/v1/conformance/reports/{id}` |
-| `ListConformanceReports()` | `GET /api/v1/conformance/reports` |
 | `ListNegativeConformanceVectors()` | `GET /api/v1/conformance/negative` |
 | `ListConformanceVectors()` | `GET /api/v1/conformance/vectors` |
 | `ListMCPRegistry()` | `GET /api/v1/mcp/registry` |

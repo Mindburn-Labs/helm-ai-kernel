@@ -202,8 +202,6 @@ func TestOpenAPISpec_EndpointCoverage(t *testing.T) {
 		{"/api/v1/console/bootstrap", "console"},
 		{"/api/v1/evaluate", "console"},
 		{"/api/v1/receipts", "console"},
-		{"/api/v1/trust/keys/add", "trust"},
-		{"/api/v1/trust/keys/revoke", "trust"},
 		{"/v1/chat/completions", "proxy"},
 		{"/mcp/v1/capabilities", "mcp"},
 		{"/mcp/v1/execute", "mcp"},
@@ -225,8 +223,5 @@ func TestOpenAPISpec_EndpointCoverage(t *testing.T) {
 	}
 	if groups["governance"] < 2 {
 		t.Error("governance group should have at least 2 endpoints")
-	}
-	if groups["trust"] < 2 {
-		t.Error("trust group should have at least 2 endpoints")
 	}
 }

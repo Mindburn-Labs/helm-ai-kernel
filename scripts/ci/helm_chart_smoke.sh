@@ -339,6 +339,24 @@ assert_contains "$openclaw_rendered" "OPENROUTER_API_KEY"
 assert_not_contains "$openclaw_rendered" "OPENAI_API_KEY"
 assert_not_contains "$openclaw_rendered" "OPENAI_BASE_URL"
 
+# egress-init must close the paths around the TCP/IPv4 redirect: TCP/53 and
+# UDP/53 only to the Pod's nameservers, every other non-TCP IPv4 packet
+# rejected, and IPv6 rejected. A TCP/53 exemption without -d reopens a direct
+# path to any host.
+assert_contains "$openclaw_rendered" 'iptables -t nat -A HELM_EGRESS -p tcp -d "$ns" --dport 53 -j RETURN'
+assert_not_contains "$openclaw_rendered" 'iptables -t nat -A HELM_EGRESS -p tcp --dport 53 -j RETURN'
+assert_contains "$openclaw_rendered" 'iptables -A HELM_EGRESS -p udp -d "$ns" --dport 53 -j RETURN'
+assert_contains "$openclaw_rendered" 'iptables -A HELM_EGRESS -j REJECT'
+assert_contains "$openclaw_rendered" 'iptables -C OUTPUT -j HELM_EGRESS 2>/dev/null || iptables -A OUTPUT -j HELM_EGRESS'
+assert_contains "$openclaw_rendered" 'ip6tables -A HELM_EGRESS -j REJECT'
+assert_contains "$openclaw_rendered" 'ip6tables -C OUTPUT -j HELM_EGRESS 2>/dev/null || ip6tables -A OUTPUT -j HELM_EGRESS'
+egress_init_script="$RENDER_DIR/rendered-egress-init.sh"
+awk '/name: egress-init/{capture=1} capture && /- \|/{script=1; next} script && /^[[:space:]]+resources:/{exit} script{print}' "$openclaw_rendered" >"$egress_init_script"
+if [ ! -s "$egress_init_script" ] || ! sh -n "$egress_init_script"; then
+    echo "::error::rendered egress-init script is missing or is not valid sh"
+    exit 1
+fi
+
 openclaw_provider_fail_log="$RENDER_DIR/openclaw-invalid-provider.log"
 if helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \

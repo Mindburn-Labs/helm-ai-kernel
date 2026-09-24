@@ -72,11 +72,19 @@ best-effort), enforces the per-app allowlist
 (`https://openrouter.ai/api/v1`), and writes a receipt for **every**
 attempt — allow and deny. The workload needs no `HTTP_PROXY` env.
 
+The workload chooses the SNI, so the sidecar honours a hostname only when
+the original destination IP is one of the addresses that hostname resolves
+to; a forged SNI is denied. Each receipt names both the hostname and the
+real IP:port, and a connection whose ALLOW receipt cannot be written is
+not tunnelled. The same `egress-init` rejects all other IPv4 protocols
+(UDP, ICMP) except DNS to the Pod's nameservers, exempts TCP/53 from the
+redirect only toward those nameservers, and rejects IPv6 egress.
+
 Caveats — what this does **not** cover: SNI is best-effort (TLS 1.3 ECH,
-non-TLS, or IP-literal traffic yields a receipt keyed by IP rather than
-hostname); only TCP egress is intercepted, so DNS/UDP/ICMP are out of
-scope (DNS-tunnel exfiltration is a separate control). The honest claim
-is "every **TCP** egress goes through the sidecar and leaves a receipt".
+non-TLS, or IP-literal traffic is matched and receipted by IP rather than
+hostname); queries through the cluster resolver still leave the Pod, so
+DNS-tunnel exfiltration is a separate control; and a hostname whose DNS
+answers differ between the workload's lookup and the sidecar's is denied.
 
 ## Source Truth
 

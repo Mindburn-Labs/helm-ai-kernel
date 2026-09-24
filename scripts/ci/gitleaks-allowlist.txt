@@ -1,0 +1,57 @@
+# Frozen gitleaks allowlist (HELM-745). Findings in the tracked tree when the
+# blocking secret scan landed: test fixtures and example placeholders. Keys are
+# <rule> <file> <sha256 of the secret, 12 hex>; the secret is never stored.
+# Delete a line when its finding goes away (the gate fails on a stale line).
+# Never add one: a new finding is fixed, or the fixture moves under an
+# allowlisted fixtures path in .gitleaks.toml.
+curl-auth-header docs/INTEGRATIONS/openai_baseurl.md ed5a18fb8f80
+curl-auth-header examples/governed_local_inference/run.sh dba73d3fcb67
+curl-auth-header examples/governed_local_inference/run.sh dba73d3fcb67
+generic-api-key core/cmd/helm-ai-kernel/scan_cmd_test.go f070612ce502
+generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
+generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
+generic-api-key core/pkg/channels/signature_verify_test.go 2a81f24ea84e
+generic-api-key core/pkg/channels/signature_verify_test.go 5666dd812932
+generic-api-key core/pkg/conformance/owasp_llm_top10.go ec12bec21f55
+generic-api-key core/pkg/contracts/launch_effect_types_test.go c94237b3626e
+generic-api-key core/pkg/evidence/externalhost/adapters/adapters_test.go ac6e7bfb8d7f
+generic-api-key core/pkg/evidence/externalhost/adapters/adapters_test.go fb498cd1dd2f
+generic-api-key core/pkg/governance/agent_safety.go a35aada80bc9
+generic-api-key core/pkg/governance/governance_integration_coverage_test.go 2dfbec468270
+generic-api-key core/pkg/identity/did/did.go e83ccbb94ce4
+generic-api-key core/pkg/identity/did/document.go 44c8054e2347
+generic-api-key core/pkg/kernel/secrets_test.go 6a376fc0ee06
+generic-api-key core/pkg/launchpad/redact/redact_test.go 4557346159d1
+generic-api-key core/pkg/launchpad/session/runtime_starter.go 4026d1d3357a
+generic-api-key core/pkg/networkproof/types.go 40ca42358f37
+generic-api-key core/pkg/patchdelivery/verifier_test.go 9787577eb430
+generic-api-key core/pkg/riskscan/scan_test.go f070612ce502
+generic-api-key core/pkg/riskscan/scan_test.go f070612ce502
+generic-api-key core/pkg/verifier/externalreceipt/externalreceipt_test.go ac6e7bfb8d7f
+generic-api-key core/pkg/verifier/externalreceipt/externalreceipt_test.go fb498cd1dd2f
+generic-api-key tests/conformance/a2a/a2a_conformance_test.go 4be3bbb809d2
+generic-api-key tests/conformance/a2a/a2a_conformance_test.go 79d8444cc417
+generic-api-key tools/launchpad/egressproxy/main_test.go 5223dd08d6cd
+github-pat core/pkg/modelcatalog/catalog_test.go b16856bcebcc
+gitlab-pat core/internal/cli/tui/pentest_test.go 3450b4fcb4ae
+jwt core/pkg/mcp/catalog_test.go 66980714638d
+jwt core/pkg/privacy/privacy_mcp_test.go e8ca12ef816f
+private-key core/internal/cli/tui/pentest_test.go e47995eb7da7
+private-key core/pkg/httpsig/httpsig_test.go 652ba8926370
+private-key core/pkg/mcp/catalog.go 09ce64f6a444
+private-key core/pkg/privacy/privacy_mcp_test.go 54f087fb3150
+private-key core/pkg/privacy/privacy_mcp_test.go 926f64e95431
+stripe-access-token core/pkg/api/governed_gateway_test.go c93456ba23fe
+stripe-access-token core/pkg/api/governed_gateway_test.go c93456ba23fe
+stripe-access-token core/pkg/api/openai_proxy_privacy_test.go c93456ba23fe
+stripe-access-token core/pkg/llm/gateway/router_test.go c93456ba23fe
+stripe-access-token core/pkg/mcp/privacy_firewall_test.go 034f3af82c34
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go 034f3af82c34
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go 034f3af82c34
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go 034f3af82c34
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go 034f3af82c34
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go c93456ba23fe
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go c93456ba23fe
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go c93456ba23fe
+stripe-access-token core/pkg/privacy/privacy_mcp_test.go c93456ba23fe
+stripe-access-token core/pkg/spendproxy/server_test.go c93456ba23fe

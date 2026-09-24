@@ -303,44 +303,40 @@ const (
 
 // bindRuntimeScope binds a request to the tenant and workspace this Kernel is
 // configured to serve, and returns the workspace the request may act in.
-// tenantID is the tenant the route gate authenticated. The rule is the same
-// whether or not HELM_EMERGENCY_STOP_FENCE_ENABLED is set; before HELM-755 it
-// ran only with the fence on, so by default the workspace header reached policy
-// unverified (S-08).
+// tenantID is the tenant the route gate authenticated.
 //
-//   - HELM_RUNTIME_WORKSPACE_ID configured: this Kernel serves one scope. The
-//     tenant must be HELM_RUNTIME_TENANT_ID, because the configured workspace
-//     belongs to it, and X-Helm-Workspace-ID, when sent, must name that
-//     workspace. workspaceMustBeAsserted also requires the header.
-//   - Not configured: this Kernel has no scope to check against. The tenant is
-//     whatever the route gate bound (the env pair or a registered binding), and
-//     X-Helm-Workspace-ID is the credential holder's unverified assertion. That
-//     holder can already assert any registered tenant, so the assertion widens
-//     nothing the shared credential does not; it is still not isolation.
-//   - The emergency-stop fence covers only the configured scope. With it on,
-//     an unconfigured scope refuses every request rather than evaluate outside
-//     the fence.
+// With the emergency-stop fence on, the Kernel serves one configured scope:
+// the tenant must be HELM_RUNTIME_TENANT_ID, X-Helm-Workspace-ID must name
+// HELM_RUNTIME_WORKSPACE_ID (workspaceMustBeAsserted also requires the header),
+// and an unconfigured scope refuses every request, because the fence covers
+// only that scope. The header is the Control Plane's assertion, checked against
+// configuration; it never selects a scope.
 //
-// With a configured scope the header is the Control Plane's assertion, checked
-// against configuration; it never selects a scope. None of this isolates
-// tenants from a caller that holds the shared credential (ADR-0004 §5.2).
+// With the fence off, nothing is bound here (S-08, known gap). Deployed Control
+// Planes call fence-off Kernels whose configured scope is a placeholder, with
+// each session's real tenant; one configured tenant cannot serve them. The
+// tenant is whatever the route gate bound (the env pair or a registered
+// binding) and the workspace is the caller's unverified assertion. Binding both
+// needs identity from a verified token, a later HELM-755 slice. Neither mode
+// isolates tenants from a caller that holds the shared credential (ADR-0004
+// §5.2).
 func bindRuntimeScope(r *http.Request, svc *Services, tenantID string, assertion workspaceAssertion) (string, error) {
-	configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
-	configuredWorkspaceID := configuredRuntimeWorkspaceID()
 	assertedWorkspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
-	if configuredWorkspaceID == "" {
-		if svc != nil && svc.EmergencyStops != nil {
-			return "", fmt.Errorf("workspace binding could not be verified: the emergency-stop fence requires %s", runtimeWorkspaceIDEnv)
+	configuredWorkspaceID := configuredRuntimeWorkspaceID()
+	if svc == nil || svc.EmergencyStops == nil {
+		if assertedWorkspaceID == "" && assertion == workspaceMayDefault {
+			return configuredWorkspaceID, nil
 		}
 		return assertedWorkspaceID, nil
 	}
+	configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
 	if configuredTenantID == "" || tenantID != configuredTenantID {
 		return "", fmt.Errorf("tenant binding could not be verified")
 	}
 	if assertedWorkspaceID == "" && assertion == workspaceMustBeAsserted {
-		return "", fmt.Errorf("an explicit authenticated workspace binding is required")
+		return "", fmt.Errorf("requires an explicit authenticated workspace binding")
 	}
-	if assertedWorkspaceID != "" && assertedWorkspaceID != configuredWorkspaceID {
+	if configuredWorkspaceID == "" || (assertedWorkspaceID != "" && assertedWorkspaceID != configuredWorkspaceID) {
 		return "", fmt.Errorf("workspace binding could not be verified")
 	}
 	return configuredWorkspaceID, nil

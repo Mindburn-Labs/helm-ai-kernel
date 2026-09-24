@@ -91,10 +91,11 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
 - The fence covers only the configured scope, so it requires
   `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_WORKSPACE_ID`. Without a
   configured workspace, governed evaluation fails closed while the fence is on.
-- The tenant/workspace binding itself does not depend on the fence: whenever
-  `HELM_RUNTIME_WORKSPACE_ID` is configured, evaluate, receipt reads, the
-  governed OpenAI-compatible proxy and ext-authz accept only the configured
-  tenant and workspace. See
+- With the fence on, evaluate, receipt reads and the governed
+  OpenAI-compatible proxy accept only the configured tenant and workspace.
+  With it off they do not bind the configured scope, which is a known gap
+  pending tenant-from-token. Ext-authz binds the configured scope in both
+  modes. See
   [Tenant and Workspace Binding](reference/http-api.md#tenant-and-workspace-binding).
   No route trusts a workspace supplied in JSON.
 - The intended fence coverage is new governed dispatches only. Current proven

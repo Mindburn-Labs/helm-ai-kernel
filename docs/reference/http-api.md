@@ -50,8 +50,8 @@ public docs surface.
 
 The Kernel does not issue tenant tokens. On the routes the Control Plane calls,
 the tenant, principal and workspace are the Control Plane's assertion under a
-Kernel credential, checked against what the Kernel was configured and told to
-serve. This applies whether or not `HELM_EMERGENCY_STOP_FENCE_ENABLED` is set.
+Kernel credential. How much of that assertion is checked depends on
+`HELM_EMERGENCY_STOP_FENCE_ENABLED`; see the workspace rules below the table.
 
 | Route | Credential | Tenant and principal | Workspace |
 | --- | --- | --- | --- |
@@ -64,20 +64,27 @@ serve. This applies whether or not `HELM_EMERGENCY_STOP_FENCE_ENABLED` is set.
 
 Workspace binding, for the first three rows:
 
-- **`HELM_RUNTIME_WORKSPACE_ID` configured.** The Kernel serves that one scope.
-  The authenticated tenant must equal `HELM_RUNTIME_TENANT_ID`, so a registered
-  binding for another tenant is refused. `X-Helm-Workspace-ID` must name the
-  configured workspace; evaluate and receipt reads require the header.
-- **Not configured.** Nothing checks the workspace. `X-Helm-Workspace-ID` is the
-  credential holder's unverified assertion and is recorded as such. With the
-  emergency-stop fence enabled, an unconfigured workspace refuses every
-  request, because the fence covers only the configured scope.
+- **Fence on.** The Kernel serves one configured scope. The authenticated
+  tenant must equal `HELM_RUNTIME_TENANT_ID`, so a registered binding for
+  another tenant is refused. `X-Helm-Workspace-ID` must name
+  `HELM_RUNTIME_WORKSPACE_ID`; evaluate and receipt reads require the header.
+  An unconfigured workspace refuses every request, because the fence covers
+  only the configured scope.
+- **Fence off (the default, and the deployed QA and staging shape).** Nothing
+  binds the tenant or workspace to the configured scope. The tenant is whatever
+  the route gate accepted: the env pair or any registered binding.
+  `X-Helm-Workspace-ID` is the caller's unverified assertion. This is a known
+  gap. A multi-tenant Control Plane cannot be served by one configured tenant,
+  so the fix is identity taken from a verified token, planned for a later
+  HELM-755 slice.
+
+Ext-authz is the exception: it is bound to the configured scope in both modes.
 
 Request bodies and `context` never select a scope; see below.
 
 **What this does not provide.** The admin credential is shared. Whoever holds
-it can assert any registered tenant, and on a Kernel without a configured
-workspace any workspace. These checks catch a missing or wrong binding from a
+it can assert any registered tenant, and with the fence off any workspace.
+These checks catch a missing or wrong binding from a
 correct caller; they do not isolate tenants from a compromised caller. That
 needs per-tenant credentials or identity taken from a verified token, which is
 not implemented yet.

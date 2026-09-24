@@ -38,8 +38,10 @@ services:
     environment:
       HELM_REGION: "us"
       HELM_ENABLE_OPENAI_PROXY: "1"
-      HELM_ADMIN_API_KEY: "${HELM_ADMIN_API_KEY:-helm-admin-dev}"
-      HELM_SERVICE_API_KEY: "${HELM_SERVICE_API_KEY:-helm-service-dev}"
+      # Unset: the kernel generates per-install keys in the data volume
+      # (/var/lib/helm-ai-kernel/admin.key and service.key).
+      HELM_ADMIN_API_KEY: "${HELM_ADMIN_API_KEY:-}"
+      HELM_SERVICE_API_KEY: "${HELM_SERVICE_API_KEY:-}"
       HELM_RUNTIME_TENANT_ID: "${HELM_RUNTIME_TENANT_ID:-default}"
       HELM_RUNTIME_PRINCIPAL_ID: "${HELM_RUNTIME_PRINCIPAL_ID:-system-admin}"
       HELM_HEALTH_PORT: "8081"

@@ -792,7 +792,12 @@ type SavingsVerificationResult struct {
 	ParityBarMet      bool     `json:"parity_bar_met"`
 	SavingsClaimValid bool     `json:"savings_claim_valid"`
 	Offline           bool     `json:"offline"`
-	OK                bool     `json:"ok"`
+	// SelfAttested is true when the signatures were checked only against the
+	// trusted-key registry carried inside the pack. OK then means internally
+	// consistent, not issued by anyone in particular; pin the issuer key with
+	// VerifySavingsEvidenceOfflineWithIssuer to establish provenance.
+	SelfAttested bool `json:"self_attested"`
+	OK           bool `json:"ok"`
 }
 
 // VerifySavingsEvidenceOffline verifies a savings EvidencePack from its content
@@ -803,6 +808,15 @@ type SavingsVerificationResult struct {
 // re-binds the price book hash, verifies verdict signatures against the
 // embedded trusted-key registry, and scans views for prompt bodies.
 func VerifySavingsEvidenceOffline(contents map[string][]byte) (*SavingsVerificationResult, error) {
+	return VerifySavingsEvidenceOfflineWithIssuer(contents, nil)
+}
+
+// VerifySavingsEvidenceOfflineWithIssuer runs the same checks as
+// VerifySavingsEvidenceOffline, but when issuerKeys (key id to Ed25519 public
+// key hex) is non-empty every signature must verify against those
+// consumer-pinned keys instead of the registry carried in the pack (audit
+// 13-04). With no pinned keys the result is marked SelfAttested.
+func VerifySavingsEvidenceOfflineWithIssuer(contents map[string][]byte, issuerKeys map[string]string) (*SavingsVerificationResult, error) {
 	manifestJSON, ok := contents["manifest.json"]
 	if !ok {
 		return nil, errors.New("savings evidence verify: manifest.json missing")
@@ -837,6 +851,13 @@ func VerifySavingsEvidenceOffline(contents map[string][]byte) (*SavingsVerificat
 	registry, err := parseSavingsRegistry(rawKeys)
 	if err != nil {
 		return res, err
+	}
+	res.SelfAttested = len(issuerKeys) == 0
+	if !res.SelfAttested {
+		registry, err = pinnedSavingsRegistry(issuerKeys)
+		if err != nil {
+			return res, err
+		}
 	}
 
 	// Detached Ed25519 signatures over the JCS canonicalization of every
@@ -1114,6 +1135,20 @@ func parseSavingsRegistry(rawKeys []byte) (map[string]ed25519.PublicKey, error) 
 		pub, err := hex.DecodeString(raw)
 		if err != nil || len(pub) != ed25519.PublicKeySize {
 			return nil, fmt.Errorf("savings evidence verify: registry key %q is not a valid ed25519 public key", keyID)
+		}
+		out[keyID] = ed25519.PublicKey(pub)
+	}
+	return out, nil
+}
+
+// pinnedSavingsRegistry decodes consumer-pinned issuer keys. They replace the
+// pack's own registry, so a signature by any other key fails as unknown.
+func pinnedSavingsRegistry(issuerKeys map[string]string) (map[string]ed25519.PublicKey, error) {
+	out := make(map[string]ed25519.PublicKey, len(issuerKeys))
+	for keyID, publicKey := range issuerKeys {
+		pub, err := hex.DecodeString(strings.TrimPrefix(strings.TrimSpace(publicKey), "ed25519:"))
+		if err != nil || len(pub) != ed25519.PublicKeySize || strings.TrimSpace(keyID) == "" {
+			return nil, fmt.Errorf("savings evidence verify: pinned issuer key %q is not a valid ed25519 public key", keyID)
 		}
 		out[keyID] = ed25519.PublicKey(pub)
 	}

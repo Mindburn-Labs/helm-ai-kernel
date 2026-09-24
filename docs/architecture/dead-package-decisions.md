@@ -78,26 +78,26 @@ package directory.
 | `core/pkg/celcheck` | 147 | 2026-05-28 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/certification/admission` | 777 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/channels/lark` | 273 | 2026-06-02 | yes | 1 | KEEP | conformance suite: tests/conformance/channels |
-| `core/pkg/compliance` | 633 | 2026-08-24 | yes | 0 | KEEP | doc: docs/documentation-coverage.csv — row in docs/documentation-coverage.csv; parent of the compliance/* cluster |
-| `core/pkg/compliance/cftc` | 448 | 2026-06-20 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/controls` | 173 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/csr` | 1551 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/docs` | 419 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/dora` | 579 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/enforcement` | 386 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/euaiact` | 593 | 2026-08-10 | yes | 0 | KEEP | doc: docs/compliance/eu-ai-act-high-risk-pack.md |
-| `core/pkg/compliance/evidence` | 256 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/fca` | 138 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/gdpr` | 164 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/hipaa` | 247 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/mica` | 326 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/normalize` | 327 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/obligations` | 191 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/risk` | 570 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/sec` | 218 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/sox` | 149 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/templates` | 88 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/compliance/zkprovider/gdpr17` | 628 | 2026-08-24 | yes | 0 | KEEP | doc: docs/documentation-coverage.csv — own Go module; row in docs/documentation-coverage.csv |
+| `core/pkg/compliance` | 633 | 2026-08-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | doc: docs/documentation-coverage.csv — row in docs/documentation-coverage.csv; parent of the compliance/* cluster |
+| `core/pkg/compliance/cftc` | 448 | 2026-06-20 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/controls` | 173 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/csr` | 1551 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/docs` | 419 | 2026-04-23 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/dora` | 579 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/enforcement` | 386 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/euaiact` | 593 | 2026-08-10 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | doc: docs/compliance/eu-ai-act-high-risk-pack.md |
+| `core/pkg/compliance/evidence` | 256 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/fca` | 138 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/gdpr` | 164 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/hipaa` | 247 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/mica` | 326 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/normalize` | 327 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/obligations` | 191 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/risk` | 570 | 2026-04-23 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/sec` | 218 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/sox` | 149 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/templates` | 88 | 2026-04-23 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/compliance/zkprovider/gdpr17` | 628 | 2026-08-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | doc: docs/documentation-coverage.csv — own Go module; row in docs/documentation-coverage.csv |
 | `core/pkg/conformance/agentsafety` | 142 | 2026-06-04 | yes | 1 | KEEP | doc: docs/security/agent-safety-conformance-cases.md; test importer: core/pkg/conformance/scenarios |
 | `core/pkg/conformance/cases` | 402 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/conformance/negative` | 303 | 2026-07-28 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |

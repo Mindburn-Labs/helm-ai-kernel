@@ -261,6 +261,13 @@ spec:
               value: {{ ternary "1" "0" .Values.helm.metrics.enabled | quote }}
             - name: HELM_METRICS_PORT
               value: {{ .Values.service.metricsPort | quote }}
+            {{- with .Values.helm.metrics.bearerTokenSecret.name }}
+            - name: HELM_METRICS_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . | quote }}
+                  key: {{ $.Values.helm.metrics.bearerTokenSecret.key | quote }}
+            {{- end }}
             {{- if .Values.telemetry.enabled }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ required "telemetry.endpoint is required when telemetry.enabled is true" .Values.telemetry.endpoint | quote }}

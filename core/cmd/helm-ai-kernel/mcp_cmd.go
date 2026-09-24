@@ -127,7 +127,7 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 
 	cmd.StringVar(&transport, "transport", "stdio", "Transport: stdio, http")
 	cmd.IntVar(&port, "port", 9100, "Port for HTTP transport")
-	cmd.StringVar(&authMode, "auth", "none", "Auth mode: none, static-header, oauth")
+	cmd.StringVar(&authMode, "auth", "none", "Auth mode: none (loopback bind only), static-header, oauth")
 	cmd.StringVar(&dataDir, "data-dir", "data", "Data directory for local MCP signing state")
 	cmd.StringVar(&policyPath, "policy", "", "Path to a serve policy file; without it, execution is fail-closed (deny-all)")
 
@@ -168,6 +168,7 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "http":
+		noteIgnoredSharedBind(stderr, "mcp serve", mcpBindAddrEnv)
 		server, err := newLocalMCPHTTPServerWithDataDirAndPolicy(port, authMode, dataDir, policyGraph)
 		if err != nil {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
@@ -177,7 +178,7 @@ func runMCPServe(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "   Transport: %s\n", transport)
 		fmt.Fprintf(stdout, "   Port: %d\n", port)
 		fmt.Fprintf(stdout, "   Auth: %s\n\n", authMode)
-		fmt.Fprintf(stdout, "Serving remote HTTP MCP at http://localhost:%d/mcp\n", port)
+		fmt.Fprintf(stdout, "Serving remote HTTP MCP at http://%s/mcp\n", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err.Error() != "http: Server closed" {
 			fmt.Fprintf(stderr, "Error: %v\n", err)
 			return 2

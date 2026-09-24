@@ -29,6 +29,9 @@ import (
 
 func TestExtAuthzAuthorizeRouteSignsAllowPermit(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 	t.Setenv("HELM_EXTAUTHZ_TRUST_ROOT_ID", "kernel-test-root")
 
 	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")
@@ -77,6 +80,9 @@ func TestExtAuthzAuthorizeRouteSignsAllowPermit(t *testing.T) {
 
 func TestExtAuthzAuthorizeRouteSignsDenyWithoutPermit(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 
 	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")
 	if err != nil {
@@ -122,6 +128,9 @@ func TestExtAuthzAuthorizeRouteSignsDenyWithoutPermit(t *testing.T) {
 
 func TestExtAuthzAuthorizeRouteAllowsMatchingPolicySnapshot(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 	t.Setenv("HELM_EXTAUTHZ_TRUST_ROOT_ID", "kernel-test-root")
 
 	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")
@@ -168,6 +177,9 @@ func TestExtAuthzAuthorizeRouteAllowsMatchingPolicySnapshot(t *testing.T) {
 
 func TestExtAuthzAuthorizeRouteExecutesManagedPolicyVerdicts(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 	t.Setenv("HELM_EXTAUTHZ_TRUST_ROOT_ID", "kernel-test-root")
 
 	signer, err := helmcrypto.NewEd25519Signer("extauthz-managed-policy-test")
@@ -240,6 +252,9 @@ func TestExtAuthzAuthorizeRouteExecutesManagedPolicyVerdicts(t *testing.T) {
 
 func TestExtAuthzAuthorizeRouteDeniesPolicySnapshotMismatch(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 
 	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")
 	if err != nil {
@@ -287,6 +302,9 @@ func TestExtAuthzAuthorizeRouteDeniesPolicySnapshotMismatch(t *testing.T) {
 
 func TestExtAuthzAuthorizeRouteRequiresServiceAuth(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 	mux := http.NewServeMux()
 	registerExtAuthzRoutes(mux, &Services{})
 	req := httptest.NewRequest(http.MethodPost, extauthzAuthorizePath, strings.NewReader(`{}`))
@@ -299,6 +317,9 @@ func TestExtAuthzAuthorizeRouteRequiresServiceAuth(t *testing.T) {
 
 func TestExtAuthzAuthorizeRouteBindsAuthenticatedCredentialEvidence(t *testing.T) {
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 	signer, err := helmcrypto.NewEd25519Signer("extauthz-identity-test")
 	if err != nil {
 		t.Fatal(err)
@@ -343,6 +364,9 @@ func TestExtAuthzAuthorizeRouteBindsScopeAndEnforcesFence(t *testing.T) {
 
 	_, stopStore, _ := newEmergencyStopFenceRouteForTest(t)
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 	command := newEmergencyStopFenceCommand(time.Now().UTC())
 	command.CommandID = "stop-command-extauthz-route"
 	if _, _, err := stopStore.Fence(context.Background(), command, emergencyStopAcknowledgementIdentityForTest()); err != nil {
@@ -402,6 +426,9 @@ func TestExtAuthzAuthorizeRouteKeepsGuardianUnderServerSpan(t *testing.T) {
 	defer otelapi.SetTracerProvider(previous)
 
 	t.Setenv(serviceAPIKeyEnv, "route-secret")
+	// Ext-authz binds the scope configured for this Kernel (HELM-755 S-08).
+	t.Setenv(runtimeTenantIDEnv, "tenant-a")
+	t.Setenv(runtimeWorkspaceIDEnv, "workspace-a")
 	t.Setenv("HELM_EXTAUTHZ_TRUST_ROOT_ID", "kernel-test-root")
 
 	signer, err := helmcrypto.NewEd25519Signer("extauthz-test")

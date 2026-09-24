@@ -214,12 +214,6 @@ func (c *HelmClient) ListNegativeConformanceVectors() ([]NegativeBoundaryVector,
 	return out, err
 }
 
-func (c *HelmClient) ListConformanceReports() ([]ConformanceResult, error) {
-	var out []ConformanceResult
-	err := c.do("GET", "/api/v1/conformance/reports", nil, &out)
-	return out, err
-}
-
 func (c *HelmClient) ListConformanceVectors() ([]NegativeBoundaryVector, error) {
 	var out []NegativeBoundaryVector
 	err := c.do("GET", "/api/v1/conformance/vectors", nil, &out)

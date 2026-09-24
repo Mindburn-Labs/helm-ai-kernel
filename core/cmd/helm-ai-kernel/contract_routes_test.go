@@ -1771,11 +1771,11 @@ func TestProtectedRuntimeRoutesFailClosedWithoutCredentials(t *testing.T) {
 
 	contractMux := http.NewServeMux()
 	registerContractRoutes(contractMux, &Services{})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/conformance/run", strings.NewReader(`{"level":"L1"}`))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/evidence/envelopes", nil)
 	rec := httptest.NewRecorder()
 	contractMux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("conformance run without credentials status = %d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("evidence envelopes without credentials status = %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	receiptMux := http.NewServeMux()

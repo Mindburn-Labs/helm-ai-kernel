@@ -606,14 +606,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, contract)
 	}))
 
-	mux.HandleFunc("/api/v1/gui/receipts/verify", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/gui/receipts/verify")
-	}))
-
 	mux.HandleFunc("/api/v1/evidence/envelopes", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			writeContractJSON(w, http.StatusOK, surfaces.ListEnvelopes())
@@ -734,30 +726,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		checks["replay"] = checks["causal_chain"]
 		writeContractJSON(w, http.StatusOK, result)
 	})
-
-	mux.HandleFunc("/api/v1/conformance/run", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/conformance/run")
-	}))
-
-	mux.HandleFunc("/api/v1/conformance/reports", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/conformance/reports")
-	}))
-
-	mux.HandleFunc("/api/v1/conformance/reports/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/conformance/reports/{report_id}")
-	}))
 
 	mux.HandleFunc("/api/v1/conformance/vectors", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -2460,26 +2428,4 @@ func telemetryConfig() contracts.TelemetryOTelConfig {
 		},
 		ExportedSignals: []string{"traces", "metrics", "logs"},
 	}
-}
-
-// retiredVerificationRoutes maps each public route retired by HELM-742 to the
-// reason it answers 501. Each route used to report a verification result that
-// no check produced. They stay in the OpenAPI contract, marked deprecated, so a
-// later release can drop them without failing the breaking-change gate.
-var retiredVerificationRoutes = map[string]string{
-	"/api/v1/conformance/run":                 retiredConformanceReason,
-	"/api/v1/conformance/reports":             retiredConformanceReason,
-	"/api/v1/conformance/reports/{report_id}": retiredConformanceReason,
-	"/api/v1/gui/receipts/verify":             "GUI action receipts carry no signature, so the runtime has no trust root to verify them against",
-	"/api/v1/trust/keys/add":                  retiredTrustKeysReason,
-	"/api/v1/trust/keys/revoke":               retiredTrustKeysReason,
-}
-
-const (
-	retiredConformanceReason = "the runtime API does not run conformance gates; run `helm-ai-kernel conform` against an evidence pack"
-	retiredTrustKeysReason   = "trust-key mutation was never wired to a verifier; configure trusted keys in the verifier trust configuration"
-)
-
-func writeRetiredVerificationRoute(w http.ResponseWriter, path string) {
-	api.WriteError(w, http.StatusNotImplemented, "Not implemented", retiredVerificationRoutes[path])
 }

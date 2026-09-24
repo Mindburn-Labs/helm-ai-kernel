@@ -232,19 +232,6 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 		log.Println("[helm] routes: Credential management routes registered")
 	}
 
-	// --- Trust Keys (C-2: require admin auth — fail-closed if HELM_ADMIN_API_KEY unset) ---
-	// Retired by HELM-742: the routes mutated a process-local registry that no
-	// verifier reads, so a 200 "key_revoked" revoked nothing.
-	for _, path := range []string{"/api/v1/trust/keys/add", "/api/v1/trust/keys/revoke"} {
-		mux.Handle(path, auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodPost {
-				api.WriteMethodNotAllowed(w)
-				return
-			}
-			writeRetiredVerificationRoute(w, r.URL.Path)
-		}))
-	}
-
 	// --- MCP Gateway ---
 	mcpGateway, err := newDeployedMCPGateway(svc)
 	if err != nil {

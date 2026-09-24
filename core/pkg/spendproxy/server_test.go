@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/inferencegateway"
 )
@@ -81,14 +83,19 @@ type mockUpstream struct {
 	lastBody        atomic.Value // []byte
 	lastAuth        atomic.Value // string
 	responseContent atomic.Value // string
+	// completionTokens overrides the reported usage (default 20); a provider
+	// that ignores the forwarded max_tokens reports more than it was allowed.
+	completionTokens atomic.Int64
+	delay            atomic.Int64 // time.Duration before responding
 }
 
 func newMockUpstream(t *testing.T) *mockUpstream {
 	t.Helper()
 	m := &mockUpstream{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
-		m.calls.Add(1)
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		n := m.calls.Add(1)
+		time.Sleep(time.Duration(m.delay.Load()))
 		body, _ := io.ReadAll(r.Body)
 		m.lastBody.Store(body)
 		m.lastAuth.Store(r.Header.Get("Authorization"))
@@ -121,14 +128,39 @@ func newMockUpstream(t *testing.T) *mockUpstream {
 		if configured, _ := m.responseContent.Load().(string); configured != "" {
 			content = configured
 		}
+		completion := m.completionTokens.Load()
+		if completion == 0 {
+			completion = 20
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"id":"cmpl-mock-1","object":"chat.completion","model":%q,`+
+		_, _ = fmt.Fprintf(w, `{"id":"cmpl-mock-%d","object":"chat.completion","model":%q,`+
 			`"choices":[{"index":0,"message":{"role":"assistant","content":%q},"finish_reason":"stop"}],`+
-			`"usage":{"prompt_tokens":100,"completion_tokens":20}}`, req.Model, content)
-	})
+			`"usage":{"prompt_tokens":100,"completion_tokens":%d}}`, n, req.Model, content, completion)
+	}
+	mux.HandleFunc("/v1/chat/completions", handler)
+	mux.HandleFunc("/v1/responses", handler)
 	m.server = httptest.NewServer(mux)
 	t.Cleanup(m.server.Close)
 	return m
+}
+
+// upstreamField decodes one integer field of the last forwarded request body.
+func (m *mockUpstream) upstreamField(t *testing.T, field string) (int64, bool) {
+	t.Helper()
+	raw, _ := m.lastBody.Load().([]byte)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatalf("decode upstream body: %v", err)
+	}
+	v, ok := fields[field]
+	if !ok {
+		return 0, false
+	}
+	var n int64
+	if err := json.Unmarshal(v, &n); err != nil {
+		t.Fatalf("decode upstream %s: %v", field, err)
+	}
+	return n, true
 }
 
 func (m *mockUpstream) upstreamModel(t *testing.T) string {
@@ -149,13 +181,21 @@ type proxyFixture struct {
 	upstream    *mockUpstream
 	receiptsDir string
 	configPath  string
+
+	logMu sync.Mutex
+	logs  []string
 }
 
 func newProxyFixture(t *testing.T) *proxyFixture {
 	t.Helper()
+	return newProxyFixtureWithConfig(t, testConfigJSON)
+}
+
+func newProxyFixtureWithConfig(t *testing.T, configJSON string) *proxyFixture {
+	t.Helper()
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.json")
-	if err := os.WriteFile(configPath, []byte(testConfigJSON), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configJSON), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	upstream := newMockUpstream(t)
@@ -178,7 +218,13 @@ func (f *proxyFixture) start(t *testing.T) {
 		UpstreamBaseURL: f.upstream.server.URL + "/v1",
 		UpstreamAPIKey:  "test-key",
 		SigningSecret:   "0101010101010101010101010101010101010101010101010101010101010101",
-		Logf:            t.Logf,
+		Logf: func(format string, args ...any) {
+			line := fmt.Sprintf(format, args...)
+			f.logMu.Lock()
+			f.logs = append(f.logs, line)
+			f.logMu.Unlock()
+			t.Log(line)
+		},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -200,13 +246,33 @@ func (f *proxyFixture) restart(t *testing.T) {
 	f.start(t)
 }
 
+// alerts returns the logged lines that raise an operator alert.
+func (f *proxyFixture) alerts() []string {
+	f.logMu.Lock()
+	defer f.logMu.Unlock()
+	var out []string
+	for _, line := range f.logs {
+		if strings.Contains(line, "ALERT") {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// post sends an OpenAI-shaped request. It carries max_tokens 64 unless extra
+// overrides it; an extra value of nil removes the field.
 func (f *proxyFixture) post(t *testing.T, path, model, envelope, idem string, extra map[string]any) *http.Response {
 	t.Helper()
 	payload := map[string]any{
-		"model":    model,
-		"messages": []map[string]string{{"role": "user", "content": "hello governed world"}},
+		"model":      model,
+		"messages":   []map[string]string{{"role": "user", "content": "hello governed world"}},
+		"max_tokens": 64,
 	}
 	for k, v := range extra {
+		if v == nil {
+			delete(payload, k)
+			continue
+		}
 		payload[k] = v
 	}
 	body, err := json.Marshal(payload)
@@ -405,6 +471,12 @@ func TestHeaderlessTrafficGovernedByDefaults(t *testing.T) {
 	if usage.EnvelopeID != "env-direct" || usage.AgentID != "agent-live" {
 		t.Fatalf("header-less traffic governed under %s/%s, want env-direct/agent-live", usage.EnvelopeID, usage.AgentID)
 	}
+
+	// Defaults do not waive the output ceiling.
+	resp = f.post(t, "/v1/chat/completions", "base-model", "", "", map[string]any{"max_tokens": nil})
+	if resp.StatusCode != http.StatusBadRequest || f.upstream.calls.Load() != 1 {
+		t.Fatalf("status = %d, upstream calls = %d; want 400 and no new dispatch", resp.StatusCode, f.upstream.calls.Load())
+	}
 }
 
 func TestRestartRestoresBalanceAndIdempotency(t *testing.T) {
@@ -425,12 +497,16 @@ func TestRestartRestoresBalanceAndIdempotency(t *testing.T) {
 		t.Fatalf("replay summary = %+v, want 1 settlement / 1 cent", sum)
 	}
 
-	// Same idempotency key after restart: replay, no double debit, no
-	// duplicate usage/settlement records.
+	// Same idempotency key after restart: the settled key is refused without
+	// a provider call (the response body is not retained across restarts), with
+	// no double debit and no duplicate usage/settlement records.
 	second := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "idem-restart", nil)
-	if second.StatusCode != http.StatusOK {
+	if second.StatusCode != http.StatusConflict {
 		body, _ := io.ReadAll(second.Body)
-		t.Fatalf("replay status = %d, body=%s", second.StatusCode, body)
+		t.Fatalf("replay status = %d, want 409; body=%s", second.StatusCode, body)
+	}
+	if got := f.upstream.calls.Load(); got != 1 {
+		t.Fatalf("upstream calls = %d, want 1: a settled key must not reach the provider", got)
 	}
 	if got := f.server.BalanceCents(); got != 1999 {
 		t.Fatalf("balance after replay = %d, want 1999", got)
@@ -602,5 +678,188 @@ func TestFileStoreRejectsCorruptLog(t *testing.T) {
 	}
 	if _, err := LoadRecords(path); err == nil {
 		t.Fatal("corrupt log line must fail loading")
+	}
+}
+
+func readBody(t *testing.T, resp *http.Response) []byte {
+	t.Helper()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	return body
+}
+
+// TestReplayedKeyNeverReachesProvider is audit verifier VE's 22-01 PoC as a
+// regression test. With an opening balance of 1 cent, one committed request
+// used to buy unlimited provider calls: replays of its key (new prompt, new
+// model, after a restart) all re-dispatched at a zero balance.
+func TestReplayedKeyNeverReachesProvider(t *testing.T) {
+	cfg := strings.Replace(testConfigJSON, `"opening_cents": 2000`, `"opening_cents": 1`, 1)
+	f := newProxyFixtureWithConfig(t, cfg)
+
+	first := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "K", nil)
+	firstBody := readBody(t, first)
+	if first.StatusCode != http.StatusOK || f.server.BalanceCents() != 0 {
+		t.Fatalf("first status = %d, balance = %d; want 200 and 0", first.StatusCode, f.server.BalanceCents())
+	}
+
+	// A fresh key at a zero balance: the reservation is refused before dispatch.
+	if resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "K2", nil); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("fresh key at zero balance: status = %d, want 403", resp.StatusCode)
+	}
+
+	// An identical replay returns the stored response.
+	replay := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "K", nil)
+	if body := readBody(t, replay); replay.StatusCode != http.StatusOK || !bytes.Equal(body, firstBody) {
+		t.Fatalf("identical replay: status = %d, body = %s; want 200 with the stored response %s", replay.StatusCode, body, firstBody)
+	}
+
+	// Reusing the key for a different prompt or model is refused.
+	for i, model := range []string{"base-model", "mini-model", "base-model"} {
+		resp := f.post(t, "/v1/chat/completions", model, "env-direct", "K", map[string]any{
+			"messages": []map[string]string{{"role": "user", "content": fmt.Sprintf("completely different prompt %d", i)}},
+		})
+		if resp.StatusCode != http.StatusConflict {
+			t.Fatalf("reused key %d: status = %d, want 409", i, resp.StatusCode)
+		}
+	}
+
+	f.restart(t)
+	if resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "K", nil); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("replay after restart: status = %d, want 409", resp.StatusCode)
+	}
+
+	byKind := recordsByKind(f.records(t))
+	if got := f.upstream.calls.Load(); got != 1 {
+		t.Fatalf("upstream calls = %d, want 1: only the committed request may reach the provider", got)
+	}
+	if len(byKind[RecordUsage]) != 1 || f.server.BalanceCents() != 0 {
+		t.Fatalf("usage records = %d, balance = %d; want 1 and 0", len(byKind[RecordUsage]), f.server.BalanceCents())
+	}
+}
+
+// TestOutputLimitRequiredClampedAndForwarded is VE's 22-02 PoC: the output
+// ceiling was optional, defaulted to 256 in the quote and was never sent to the
+// provider, so the quote bounded nothing.
+func TestOutputLimitRequiredClampedAndForwarded(t *testing.T) {
+	// env-direct allows 50 cents per request; base-model output is 10000 µ¢
+	// per token, so no request may authorize more than 5000 output tokens.
+	const mandateTokens = 50 * 1_000_000 / 10_000
+
+	for _, tc := range []struct {
+		name, path, field string
+		extra             map[string]any
+	}{
+		{"chat max_tokens", "/v1/chat/completions", "max_tokens", map[string]any{"max_tokens": 40000}},
+		{"chat max_completion_tokens", "/v1/chat/completions", "max_completion_tokens", map[string]any{"max_tokens": nil, "max_completion_tokens": 40000}},
+		{"responses max_output_tokens", "/v1/responses", "max_output_tokens", map[string]any{"max_tokens": nil, "max_output_tokens": 40000}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newProxyFixture(t)
+			resp := f.post(t, tc.path, "base-model", "env-direct", "idem-limit", tc.extra)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, body=%s", resp.StatusCode, readBody(t, resp))
+			}
+			sent, ok := f.upstream.upstreamField(t, tc.field)
+			if !ok || sent <= 0 || sent > mandateTokens {
+				t.Fatalf("forwarded %s = %d (present %v), want 1..%d", tc.field, sent, ok, mandateTokens)
+			}
+			quote := recordsByKind(f.records(t))[RecordRouteQuote][0].RouteQuote
+			if quote.OutputTokens != sent {
+				t.Fatalf("quoted output tokens = %d, forwarded %d; they must match", quote.OutputTokens, sent)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name, path string
+		extra      map[string]any
+	}{
+		{"chat without a ceiling", "/v1/chat/completions", map[string]any{"max_tokens": nil}},
+		{"responses without a ceiling", "/v1/responses", map[string]any{"max_tokens": nil}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newProxyFixture(t)
+			resp := f.post(t, tc.path, "base-model", "env-direct", "idem-nolimit", tc.extra)
+			if resp.StatusCode != http.StatusBadRequest || f.upstream.calls.Load() != 0 {
+				t.Fatalf("status = %d, upstream calls = %d; want 400 and no dispatch", resp.StatusCode, f.upstream.calls.Load())
+			}
+		})
+	}
+}
+
+// TestOverageIsDebitedRecordedAndAlerted is VE's 22-02 settlement half: a
+// provider that bills 40000 output tokens (401 cents here) used to be debited
+// at the 1-cent quote, with the clamped cost in the receipt.
+func TestOverageIsDebitedRecordedAndAlerted(t *testing.T) {
+	f := newProxyFixture(t)
+	f.upstream.completionTokens.Store(40000)
+	resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "idem-overage", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	// 100 in * 5000 + 40000 out * 10000 = 400_500_000 µ¢ -> 401 cents.
+	const actual = 401
+	byKind := recordsByKind(f.records(t))
+	usageRec := byKind[RecordUsage][0]
+	if usageRec.Usage.BalanceDebitCents != actual || usageRec.Usage.ProviderCostCents != actual {
+		t.Fatalf("usage debit/provider cost = %d/%d, want %d", usageRec.Usage.BalanceDebitCents, usageRec.Usage.ProviderCostCents, actual)
+	}
+	if got := f.server.BalanceCents(); got != 2000-actual {
+		t.Fatalf("balance = %d, want %d", got, 2000-actual)
+	}
+	if !strings.Contains(usageRec.Note, "overage") || usageRec.Usage.Metadata["overage_cents"] == "" {
+		t.Fatalf("overage not recorded: note=%q metadata=%v", usageRec.Note, usageRec.Usage.Metadata)
+	}
+	if len(f.alerts()) != 1 {
+		t.Fatalf("alerts = %v, want one overage alert", f.alerts())
+	}
+
+	// The debit survives a restart.
+	f.restart(t)
+	if got := f.server.BalanceCents(); got != 2000-actual {
+		t.Fatalf("balance after restart = %d, want %d", got, 2000-actual)
+	}
+}
+
+// TestUndebitableOverageIsRecordedAndAlerted: when the balance cannot absorb
+// the overage, settlement fails closed and leaves a signed settle_failed line
+// and an alert instead of a silent gap.
+func TestUndebitableOverageIsRecordedAndAlerted(t *testing.T) {
+	cfg := strings.Replace(testConfigJSON, `"opening_cents": 2000`, `"opening_cents": 5`, 1)
+	f := newProxyFixtureWithConfig(t, cfg)
+	f.upstream.completionTokens.Store(40000)
+	resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "idem-undebitable", nil)
+	if resp.StatusCode == http.StatusOK {
+		t.Fatalf("status = 200; a settlement the balance cannot cover must not succeed")
+	}
+	byKind := recordsByKind(f.records(t))
+	if len(byKind[RecordSettleFailed]) != 1 || !strings.Contains(byKind[RecordSettleFailed][0].Note, "401") {
+		t.Fatalf("settle_failed records = %+v, want one naming the 401-cent actual cost", byKind[RecordSettleFailed])
+	}
+	if byKind[RecordSettleFailed][0].PayloadSignature == "" {
+		t.Fatal("settle_failed record must be signed")
+	}
+	if len(f.alerts()) != 1 {
+		t.Fatalf("alerts = %v, want one settlement-failure alert", f.alerts())
+	}
+}
+
+// TestDispatchOutlivingQuoteTTLStillSettles is the 22-03 PoC: a dispatch that
+// outlived the quote TTL was billed upstream but answered 403 and never debited
+// or recorded.
+func TestDispatchOutlivingQuoteTTLStillSettles(t *testing.T) {
+	cfg := strings.Replace(testConfigJSON, `"quote_ttl_seconds": 300`, `"quote_ttl_seconds": 1`, 1)
+	f := newProxyFixtureWithConfig(t, cfg)
+	f.upstream.delay.Store(int64(1200 * time.Millisecond))
+	resp := f.post(t, "/v1/chat/completions", "base-model", "env-direct", "idem-slow", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, readBody(t, resp))
+	}
+	byKind := recordsByKind(f.records(t))
+	if len(byKind[RecordUsage]) != 1 || len(byKind[RecordSettlement]) != 1 || f.server.BalanceCents() != 1999 {
+		t.Fatalf("usage = %d, settlement = %d, balance = %d; want 1, 1, 1999",
+			len(byKind[RecordUsage]), len(byKind[RecordSettlement]), f.server.BalanceCents())
 	}
 }

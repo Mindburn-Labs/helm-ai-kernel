@@ -176,12 +176,22 @@ For the current release target, use `SHA256SUMS.txt`, `sbom.json`,
 `v0.8.5.openvex.json`, `release-attestation.json`, the platform binary assets,
 attached `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 
-Verify a downloaded binary blob:
+Every release signature is made by the tag release workflow, so its signing
+identity names the exact tag:
+`https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/<tag>`.
+Pass that exact string with `--certificate-identity`. Do not use
+`--certificate-identity-regexp`: an unanchored pattern also accepts signatures
+from other workflows, branches and repositories. Dev-grade `dev-sha-<sha>`
+images are signed by `dev-image.yml` and do not verify with these commands.
+
+Verify a downloaded binary blob. Set `HELM_TAG` to the exact tag of the release
+you downloaded:
 
 ```bash
+HELM_TAG=vX.Y.Z  # the exact release tag
 cosign verify-blob \
   --bundle helm-ai-kernel-linux-amd64.cosign.bundle \
-  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-ai-kernel" \
+  --certificate-identity "https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${HELM_TAG}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   helm-ai-kernel-linux-amd64
 ```
@@ -190,13 +200,15 @@ Verify a published container image when a container image has been published
 for the release:
 
 ```bash
+HELM_TAG=vX.Y.Z  # the exact release tag
 cosign verify \
-  --certificate-identity-regexp "Mindburn-Labs/helm-ai-kernel" \
+  --certificate-identity "https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${HELM_TAG}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/mindburn-labs/helm-ai-kernel:<version>
+  "ghcr.io/mindburn-labs/helm-ai-kernel:${HELM_TAG}"
 ```
 
-The same recipe is documented in `docs/VERIFICATION.md`. The local helper
-`scripts/release/verify_cosign.sh` is called via `make verify-cosign`, but it
-requires matching `*.cosign.bundle` files in the downloaded release directory.
-A zero-bundle run is not signature evidence.
+The local helper `scripts/release/verify_cosign.sh` is called via
+`make verify-cosign`; set `KERNEL_RELEASE_TAG=<tag>` to pin the same exact
+identity. It fails when the directory holds no `*.cosign.bundle` files, because
+a zero-bundle run is not signature evidence. `install.sh` verifies the signature
+on `SHA256SUMS.txt` with the same exact identity before it trusts the checksum.

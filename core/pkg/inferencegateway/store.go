@@ -275,10 +275,15 @@ func (l *BalanceLedger) RestoreSettlement(usage *economic.UsageReceipt, settleme
 //   - Fail-closed: the account must be ACTIVE with sufficient available funds;
 //     otherwise nothing is posted.
 //   - Conservation: balance_after == balance_before - balance_debit exactly.
+//
+// reservationKey names the dispatch hold backing this debit, if any. Its
+// funds count as available, and it is consumed only when the debit posts, so
+// a failed commit leaves the hold in place.
 func (l *BalanceLedger) commit(
 	idempotencyKey string,
 	usage *economic.UsageReceipt,
 	settlement *economic.SettlementReceipt,
+	reservationKey string,
 ) (*SettlementRecord, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -311,7 +316,12 @@ func (l *BalanceLedger) commit(
 	if l.account.Status != economic.BalanceAccountActive {
 		return nil, fmt.Errorf("inferencegateway: balance account is %s, debit refused", l.account.Status)
 	}
-	if debit > l.account.AvailableCents() {
+	available := l.account.AvailableCents()
+	reservation := l.openReservationLocked(reservationKey)
+	if reservation != nil {
+		available += reservation.AmountCents
+	}
+	if debit > available {
 		return nil, errors.New("inferencegateway: balance debit exceeds available funds")
 	}
 
@@ -334,6 +344,10 @@ func (l *BalanceLedger) commit(
 		return nil, fmt.Errorf("inferencegateway: ledger entry invalid: %w", err)
 	}
 
+	if reservation != nil {
+		l.releaseHoldLocked(reservation.AmountCents)
+		reservation.Consumed = true
+	}
 	l.account.BalanceCents = before - debit
 	l.account.UpdatedAt = time.Now().UTC()
 	l.entries = append(l.entries, entry)

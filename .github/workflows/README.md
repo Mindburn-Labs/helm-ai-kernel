@@ -45,6 +45,10 @@ surface for the `helm-ai-kernel` project.
   signed evidence pack, verifies it offline, and uploads the redacted artifacts.
   It requires the `claude-managed-agents-live` environment with
   `CLAUDE_MANAGED_AGENTS_LIVE_CONFIG_JSON` and `HELM_SIGNING_KEY_HEX` secrets.
+- `dev-image.yml` is the dispatch-only, dev-grade QA lane. For one exact
+  commit with a green in-repo `ci.yml` run, it publishes and signs
+  `ghcr.io/mindburn-labs/helm-ai-kernel:dev-sha-<sha>`. Its signing identity is
+  `dev-image.yml@refs/heads/main`, so release verification rejects it.
 - `launchpad-artifacts.yml` builds and signs Launchpad OpenClaw, Hermes, and
   egress-proxy artifacts, then runs gated live local-container conformance when
   manually dispatched with the scoped CI key. Main runs retain artifact evidence
@@ -58,16 +62,17 @@ surface for the `helm-ai-kernel` project.
   migration, dependency hygiene, schema, and benchmark checks.
 - `release.yml` calls `make quality-release` before producing binaries,
   container images, SBOM, VEX, attestations, SDK packages, signatures, and
-  `version-status.json`.
+  `version-status.json`. It runs only on `v*` tag pushes, so every keyless
+  signature and SLSA attestation it creates carries the identity
+  `https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v<version>`.
+  SLSA provenance is generated only by this tag run; there is no manual
+  workflow that re-attests assets already attached to a release.
 - `scorecard.yml` carries only the trusted `main` and scheduled runs that
   publish Scorecard SARIF through OIDC and code-scanning authority;
   `scorecard-pr.yml` keeps pull-request analysis read-only and retains SARIF
   as artifact evidence. The OpenSSF results webapp rejects a publishing
   workflow that defines any other job, so the lanes live in separate files
   with unchanged job names.
-- `slsa-provenance.yml` is a manual repair workflow that re-attests the
-  checksum-covered assets already attached to a published release. Normal tag
-  releases generate SLSA provenance from `release.yml`.
 - `version-drift.yml` runs the published registry drift check daily and opens or
   updates one issue when any public channel falls behind `VERSION`. A channel
   that could not be read after the bounded rate-limit retries is reported as

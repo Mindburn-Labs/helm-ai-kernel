@@ -706,7 +706,8 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 		return appendRequiredShellPermission(classifications, command)
 	case strings.HasPrefix(tool, "mcp_"):
 		// Claude/Codex emit mcp__server__tool. Hermes has used that shape and
-		// the older mcp_server_tool form. mcp__ is a prefix of mcp_.
+		// the older mcp_server_tool form. mcp__ is a prefix of mcp_. Only the
+		// HELM server that setup installs is exempt; it governs its own tools.
 		if isHelmSelfMCPTool(tool) {
 			return nil
 		}
@@ -719,15 +720,15 @@ func classifyPreToolPayloads(payload preToolPayload) []hookClassification {
 			Reason:       "MCP tool call",
 		}}
 	// DeepSeek Harness emits lowercase bash/write/edit; EqualFold matches those.
-	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "apply_patch"), strings.EqualFold(tool, "write_file"), strings.EqualFold(tool, "patch"):
-		target := inputString(payload.ToolInput, "file_path", "path", "target_file")
+	case strings.EqualFold(tool, "Edit"), strings.EqualFold(tool, "Write"), strings.EqualFold(tool, "MultiEdit"), strings.EqualFold(tool, "NotebookEdit"), strings.EqualFold(tool, "apply_patch"), strings.EqualFold(tool, "write_file"), strings.EqualFold(tool, "patch"):
+		target := inputString(payload.ToolInput, "file_path", "path", "target_file", "notebook_path")
 		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
-			target = sensitiveApplyPatchTarget(inputString(payload.ToolInput, "command", "cmd", "patch", "diff"))
+			target = sensitiveApplyPatchTarget(inputString(payload.ToolInput, "command", "cmd", "patch", "diff"), payload.CWD)
 		}
 		if target == "" && (strings.EqualFold(tool, "apply_patch") || strings.EqualFold(tool, "patch")) {
 			target = "apply_patch"
 		}
-		if isSensitiveWriteTarget(target) {
+		if isSensitiveWriteTarget(target, payload.CWD) {
 			return []hookClassification{{
 				ShouldDecide: true,
 				Class:        "sensitive-file-write",
@@ -921,13 +922,13 @@ func inputString(input map[string]any, keys ...string) string {
 	return ""
 }
 
-func sensitiveApplyPatchTarget(command string) string {
+func sensitiveApplyPatchTarget(command, cwd string) string {
 	for _, line := range strings.Split(command, "\n") {
 		line = strings.TrimSpace(line)
 		for _, prefix := range []string{"*** Add File:", "*** Update File:", "*** Delete File:"} {
 			if strings.HasPrefix(line, prefix) {
 				target := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-				if isSensitiveWriteTarget(target) {
+				if isSensitiveWriteTarget(target, cwd) {
 					return target
 				}
 			}
@@ -936,39 +937,23 @@ func sensitiveApplyPatchTarget(command string) string {
 	return ""
 }
 
+// isHelmSelfMCPTool matches only the exact server segment setup installs
+// (mcp__<server>__<tool>). A substring or prefix match would exempt any
+// third-party server whose declared name merely contains "helm-ai-kernel".
+// Setup never installs the HELM server for clients that use the older
+// mcp_<server>_<tool> form, so that form is never exempt.
 func isHelmSelfMCPTool(tool string) bool {
-	t := strings.ToLower(tool)
-	return strings.Contains(t, "helm-ai-kernel") || strings.Contains(t, "helm_ai_kernel") || strings.Contains(t, "helm-ai-kernel-governance")
-}
-
-func isSensitiveWriteTarget(path string) bool {
-	p := strings.ToLower(strings.TrimSpace(path))
-	if p == "" {
+	rest, ok := strings.CutPrefix(tool, "mcp__")
+	if !ok {
 		return false
 	}
-	sensitive := []string{
-		".env",
-		".pem",
-		".key",
-		"id_rsa",
-		"id_ed25519",
-		".git/",
-		".git\\",
-		".claude/settings.json",
-		".codex/hooks.json",
-		".hermes/config.yaml",
-		".dsh/hooks.json",
-		".dsh/cordis.patch.yml",
-		".claude\\settings.json",
-		".codex\\hooks.json",
-		".hermes\\config.yaml",
-		".dsh\\hooks.json",
-		".dsh\\cordis.patch.yml",
-	}
-	for _, needle := range sensitive {
-		if strings.Contains(p, needle) {
-			return true
-		}
-	}
-	return false
+	server, _, found := strings.Cut(rest, "__")
+	return found && server == setupMCPServerName
+}
+
+// isSensitiveWriteTarget shares shellscan's normalized rules, so the Write
+// tool and a shell write to the same file are classified alike.
+func isSensitiveWriteTarget(path, cwd string) bool {
+	_, ok := shellscan.SensitiveWriteTarget(path, cwd)
+	return ok
 }

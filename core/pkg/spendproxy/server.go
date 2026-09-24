@@ -116,14 +116,16 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	}
 
 	engine, err := inferencegateway.NewEngine(inferencegateway.EngineConfig{
-		Prices:         prices,
-		Terms:          terms,
-		Ledger:         ledger,
-		TreasuryID:     cfg.TreasuryID,
-		RoutePolicyID:  cfg.RoutePolicyID,
-		QuoteTTL:       time.Duration(cfg.QuoteTTLSeconds) * time.Second,
-		StalePrice:     inferencegateway.StalePriceFailClosed,
-		CostCap:        inferencegateway.CostCapClamp,
+		Prices:        prices,
+		Terms:         terms,
+		Ledger:        ledger,
+		TreasuryID:    cfg.TreasuryID,
+		RoutePolicyID: cfg.RoutePolicyID,
+		QuoteTTL:      time.Duration(cfg.QuoteTTLSeconds) * time.Second,
+		StalePrice:    inferencegateway.StalePriceFailClosed,
+		// The provider has already been paid when settlement runs: debit the
+		// actual cost and alert on any overage instead of clamping it away.
+		CostCap:        inferencegateway.CostCapDebitActual,
 		PlatformFeeBps: cfg.PlatformFeeBps,
 	})
 	if err != nil {
@@ -360,7 +362,20 @@ func (s *Server) handleBuffered(w http.ResponseWriter, r *http.Request, body []b
 			HELM api.GatewayMetadata `json:"helm"`
 		}
 		if err := json.Unmarshal(rec.body.Bytes(), &envl); err == nil {
-			if envl.HELM.SettlementReceipt == nil && envl.HELM.Quote != nil {
+			if envl.HELM.SettleFailed && envl.HELM.Quote != nil {
+				// The provider was called but nothing was debited: close the
+				// audit trail loudly.
+				note := fmt.Sprintf("settlement failed after dispatch (%s/%s): actual %d cents not debited",
+					envl.HELM.Verdict, envl.HELM.ReasonCode, envl.HELM.ActualAmountCents)
+				s.logf("spend-proxy: ALERT: %s for %s", note, envl.HELM.Quote.SpendIntentID)
+				s.appendOrLog(&ReceiptRecord{
+					Kind:          RecordSettleFailed,
+					TenantID:      envl.HELM.Quote.TenantID,
+					SpendIntentID: envl.HELM.Quote.SpendIntentID,
+					Note:          note,
+					RouteQuote:    envl.HELM.Quote,
+				})
+			} else if envl.HELM.SettlementReceipt == nil && envl.HELM.Quote != nil {
 				s.appendOrLog(&ReceiptRecord{
 					Kind:          RecordRouteQuote,
 					TenantID:      envl.HELM.Quote.TenantID,
@@ -396,11 +411,18 @@ func (s *Server) persistOutcome(meta *api.GatewayMetadata) {
 		}
 	}
 	if meta.UsageReceipt != nil {
+		note := ""
+		if meta.OverageCents > 0 {
+			note = fmt.Sprintf("overage: actual %d cents exceeds the quote ceiling by %d cents",
+				meta.ActualAmountCents, meta.OverageCents)
+			s.logf("spend-proxy: ALERT: %s for %s", note, meta.UsageReceipt.SpendIntentID)
+		}
 		s.appendOrLog(&ReceiptRecord{
 			Kind:              RecordUsage,
 			TenantID:          meta.UsageReceipt.TenantID,
 			SpendIntentID:     meta.UsageReceipt.SpendIntentID,
 			BalanceAfterCents: meta.BalanceAfterCents,
+			Note:              note,
 			Usage:             meta.UsageReceipt,
 		})
 	}

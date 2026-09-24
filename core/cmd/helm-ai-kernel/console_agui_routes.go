@@ -28,7 +28,7 @@ type aiKernelAGUIMessage struct {
 // RegisterConsoleAGUIRoutes exposes the optional HELM AI Kernel read-only AG-UI runtime.
 // It is intentionally thin: no commercial graph/spec concepts and no kernel
 // package mutation. Tool results are derived from existing console/demo routes.
-func RegisterConsoleAGUIRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
+func RegisterConsoleAGUIRoutes(mux routeMux, svc *Services, opts serverOptions) {
 	infoHandler := protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)

@@ -21,7 +21,7 @@ import (
 const extauthzAuthorizePath = "/api/v1/extauthz/authorize"
 const extauthzPolicyBindingMismatchReason = "EXTAUTHZ_POLICY_BINDING_MISMATCH"
 
-func registerExtAuthzRoutes(mux *http.ServeMux, svc *Services) {
+func registerExtAuthzRoutes(mux routeMux, svc *Services) {
 	mux.HandleFunc(extauthzAuthorizePath, protectRuntimeHandler(RouteAuthService, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)

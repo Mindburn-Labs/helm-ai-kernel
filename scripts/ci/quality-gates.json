@@ -53,6 +53,7 @@
         "reason-code-reachability",
         "build",
         "go-test",
+        "tcb-coverage",
         "command-tests",
         "go-module-tests",
         "launchpad-promotion",
@@ -1028,6 +1029,17 @@
       "paths": [
         "protocols/**",
         "scripts/ci/contract_breaking.sh"
+      ]
+    },
+    {
+      "id": "tcb-coverage",
+      "title": "TCB package coverage floors",
+      "command": "make coverage-tcb",
+      "timeout_seconds": 1200,
+      "paths": [
+        "core/**",
+        "scripts/ci/check_tcb_coverage.py",
+        "scripts/ci/tcb-coverage-floors.txt"
       ]
     }
   ]

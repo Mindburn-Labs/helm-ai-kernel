@@ -171,6 +171,8 @@ jobs:
         run: make build
       - name: Test
         run: make test
+      - name: TCB coverage floors
+        run: make coverage-tcb
       - name: Independent Go module tests
         run: bash scripts/ci/go_module_tests.sh
       - name: Command tests

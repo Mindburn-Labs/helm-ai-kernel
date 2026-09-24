@@ -21,7 +21,7 @@ type principalBindingRequest struct {
 // register (tenant_id, principal_id) bindings so the kernel can authorize
 // many tenants instead of a single env-configured pair (see
 // pkg/store.PrincipalBindingStore).
-func RegisterPrincipalBindingRoutes(mux *http.ServeMux, svc *Services, opts serverOptions) {
+func RegisterPrincipalBindingRoutes(mux routeMux, svc *Services, opts serverOptions) {
 	mux.HandleFunc("/api/v1/admin/principal-bindings", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)

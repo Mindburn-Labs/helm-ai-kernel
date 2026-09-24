@@ -77,7 +77,7 @@ var demoActions = map[string]demoAction{
 	},
 }
 
-func registerDemoRoutes(mux *http.ServeMux, svc *Services) {
+func registerDemoRoutes(mux routeMux, svc *Services) {
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)

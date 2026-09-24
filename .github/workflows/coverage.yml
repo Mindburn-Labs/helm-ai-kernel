@@ -26,5 +26,5 @@ jobs:
           go test ./pkg/... -covermode=atomic -coverprofile=coverage.out
           total="$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')"
           awk -v total="$total" 'BEGIN { if (total + 0 < 40) { printf("coverage %.1f below 40.0 floor\n", total); exit 1 } }'
-          go test ./pkg/pdp ./pkg/guardian ./pkg/proofgraph ./pkg/crypto/tee -covermode=atomic -coverprofile=tcb.out
-          go tool cover -func=tcb.out
+          # The TCB floors are enforced by `make coverage-tcb` in the required
+          # `kernel` job (ci.yml); this job only holds the whole-tree floor.

@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -167,10 +168,11 @@ func TestCORS_NonMatchingOriginIgnored(t *testing.T) {
 
 func TestRateLimiter_TrustProxy_XRealIP(t *testing.T) {
 	rl := &GlobalRateLimiter{
-		visitors:   make(map[string]*visitor),
-		config:     rateLimitConfig{rps: 100, burst: 100},
-		trustProxy: true,
+		visitors: make(map[string]*visitor),
+		config:   rateLimitConfig{rps: 100, burst: 100},
 	}
+	_, proxies, _ := net.ParseCIDR("10.0.0.0/8")
+	rl.WithTrustedProxies([]*net.IPNet{proxies})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Real-IP", "1.2.3.4")
 	req.RemoteAddr = "10.0.0.1:9999"
@@ -198,23 +200,28 @@ func TestRateLimiter_DefaultIgnoresProxyHeaders(t *testing.T) {
 
 func TestRateLimiter_TrustProxy_XFF(t *testing.T) {
 	rl := &GlobalRateLimiter{
-		visitors:   make(map[string]*visitor),
-		config:     rateLimitConfig{rps: 100, burst: 100},
-		trustProxy: true,
+		visitors: make(map[string]*visitor),
+		config:   rateLimitConfig{rps: 100, burst: 100},
 	}
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	proxies, err := ParseTrustedProxyCIDRs("192.0.2.0/24,10.0.0.0/8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rl.WithTrustedProxies(proxies)
+	req := httptest.NewRequest(http.MethodGet, "/", nil) // peer 192.0.2.1
 	req.Header.Set("X-Forwarded-For", "5.6.7.8, 10.0.0.1")
 	ip := rl.clientIP(req)
 	if ip != "5.6.7.8" {
-		t.Errorf("expected first XFF entry 5.6.7.8, got %s", ip)
+		t.Errorf("expected rightmost untrusted XFF hop 5.6.7.8, got %s", ip)
 	}
 }
 
-func TestRateLimiter_WithTrustProxy(t *testing.T) {
+func TestRateLimiter_WithTrustedProxies(t *testing.T) {
 	rl := &GlobalRateLimiter{visitors: make(map[string]*visitor), config: rateLimitConfig{rps: 10, burst: 10}}
-	rl.WithTrustProxy(true)
-	if !rl.trustProxy {
-		t.Error("trustProxy should be true after WithTrustProxy(true)")
+	_, proxies, _ := net.ParseCIDR("10.0.0.0/8")
+	rl.WithTrustedProxies([]*net.IPNet{proxies})
+	if !rl.trustedProxy(net.ParseIP("10.1.2.3")) || rl.trustedProxy(net.ParseIP("192.0.2.1")) {
+		t.Error("WithTrustedProxies should trust exactly the configured networks")
 	}
 }
 

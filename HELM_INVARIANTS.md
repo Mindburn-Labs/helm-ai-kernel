@@ -94,11 +94,17 @@ verify: `core/pkg/firewall/egress.go` · tests `TestEgressChecker_EmptyPolicyDen
 
 ### INV-005 — A policy runtime that cannot evaluate denies
 
-An unloadable module, a missing entrypoint, a cancelled evaluation: each answers
+A rule that does not compile, an evaluation error, a non-boolean result, an
+evaluation that exceeds its cost limit, an action with no policy: each answers
 DENY. "Could not decide" and "decided to allow" are different facts and the
 kernel never collapses them.
 
-verify: `core/pkg/policy/wasm` · tests `TestRuntime_Evaluate_FailClosed`, `TestExecutor_MissingEntrypoint`, `TestExecutor_ContextCancellation`
+The owner is the CEL `decide` that the Guardian calls on every evaluation
+(HELM-750). The rule was previously pinned to the WASM host
+`core/pkg/policy/wasm`, which never had a production caller and was removed in
+HELM-756.
+
+verify: `core/pkg/kernel/authority/authority.go` · tests `TestDecideFailsClosed`, `TestCompileErrorsDenyOnlyTheirAction`, `TestDecideCostLimitDenies`, `TestCompileNilGraphDeniesEverything`, `TestPropertyUnknownActionDenies`
 
 ### INV-006 — An unclassified effect is irreversible until proven otherwise
 

@@ -68,7 +68,7 @@ package directory.
 
 | package | LOC | last commit | tests? | test-only importers | proposed | evidence |
 |---|---|---|---|---|---|---|
-| `core/pkg/a2a/payments` | 837 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/a2a/payments` | 837 | 2026-06-11 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/actiongraph` | 318 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/aibom` | 313 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/api/trust` | 287 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
@@ -76,7 +76,7 @@ package directory.
 | `core/pkg/authority` | 56 | 2026-05-12 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/buildguard` | 125 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/celcheck` | 147 | 2026-05-28 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/certification/admission` | 777 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/certification/admission` | 777 | 2026-06-11 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/channels/lark` | 273 | 2026-06-02 | yes | 1 | KEEP | conformance suite: tests/conformance/channels |
 | `core/pkg/compliance` | 633 | 2026-08-24 | yes | 0 | KEEP | doc: docs/documentation-coverage.csv — row in docs/documentation-coverage.csv; parent of the compliance/* cluster |
 | `core/pkg/compliance/cftc` | 448 | 2026-06-20 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -142,9 +142,9 @@ package directory.
 | `core/pkg/forensics` | 65 | 2026-04-23 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/forge` | 681 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/gateway` | 74 | 2026-04-23 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/genesis/ceremony` | 318 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/genesis/ceremony` | 318 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/harness` | 2518 | 2026-09-01 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md — named only by docs/architecture/agent-process-ownership.md ("not yet wired"); HELM-658/674/682 do not name the package; last commit 2026-09-01 (#921, Prime Agent harness adapter; introduced by HELM-319 in #772) - owner to confirm before deletion |
-| `core/pkg/identity/iatp` | 537 | 2026-05-21 | yes | 1 | KEEP | conformance suite: tests/conformance/did |
+| `core/pkg/identity/iatp` | 537 | 2026-05-21 | yes | 1 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | conformance suite: tests/conformance/did |
 | `core/pkg/integrations/receipts` | 161 | 2026-08-02 | yes | 0 | KEEP | ref: tools/boundary/protected-dirs.sh |
 | `core/pkg/intervention` | 136 | 2026-04-25 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/kernel/celdp` | 231 | 2026-06-20 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
@@ -159,20 +159,20 @@ package directory.
 | `core/pkg/launchpad/redact` | 104 | 2026-05-31 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/ledger` | 446 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/networkproof` | 2198 | 2026-08-02 | yes | 0 | KEEP | svc-helm-control-plane imports it |
-| `core/pkg/orgdna` | 239 | 2026-04-23 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/orgdna` | 239 | 2026-04-23 | no | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/packs/antispoof` | 256 | 2026-05-13 | yes | 1 | KEEP | ref: core/pkg/packs/install/install.go; conformance suite: tests/conformance/antispoof |
 | `core/pkg/packs/install` | 744 | 2026-07-27 | yes | 0 | KEEP | svc-helm-control-plane imports it; ref: core/pkg/contracts/pack_manifest_v2.go |
 | `core/pkg/patchdelivery` | 988 | 2026-08-04 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md — same doc; not named by HELM-658/674/682 |
 | `core/pkg/policy/lint` | 392 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/policy/suggest` | 202 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/policy/verify` | 224 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/policy/wasm` | 325 | 2026-04-23 | yes | 0 | KEEP | doc: HELM_INVARIANTS.md; doc: docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md; doc: protocols/policy-schema/v1/canonicalization.md |
+| `core/pkg/policy/wasm` | 325 | 2026-04-23 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | doc: HELM_INVARIANTS.md; doc: docs/PCAS_AUTHORIZATION_PROPAGATION_GAP_ANALYSIS.md; doc: protocols/policy-schema/v1/canonicalization.md |
 | `core/pkg/policyloader` | 153 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/proofgraph/aigp` | 624 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/attribution` | 218 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/cloudevents` | 208 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/proofgraph/consensus` | 554 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
-| `core/pkg/proofgraph/crdt` | 595 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/proofgraph/consensus` | 554 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/proofgraph/crdt` | 595 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/graphql` | 136 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/rbac` | 309 | 2026-05-17 | yes | 0 | KEEP | doc: docs/security/agent-safety-conformance-cases.md |
 | `core/pkg/receipts` | 3 | 2026-05-21 | yes | 0 | KEEP | doc: docs/EXECUTION_SECURITY_MODEL.md; doc: docs/reference/execution-boundary.md; ref: tools/boundary/protected-dirs.sh — doc.go + policies fixtures + conformance test; named in docs/EXECUTION_SECURITY_MODEL.md, docs/reference/execution-boundary.md and tools/boundary/protected-dirs.sh |

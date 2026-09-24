@@ -30,3 +30,26 @@ regexes = [
   '''ws_[a-f0-9]{4,8}''',
   '''cg_[a-f0-9]{4,8}''',
 ]
+
+# Current key formats the default ruleset misses or only partly covers (26-11).
+# `bash scripts/ci/security_gates.sh gitleaks` plants a synthetic key of each
+# format, together with a GitHub fine-grained PAT and a PGP private key block,
+# and fails unless every one is reported.
+[[rules]]
+id = "openrouter-api-key"
+description = "OpenRouter API key"
+regex = '''\bsk-or-v1-[0-9a-f]{64}\b'''
+keywords = ["sk-or-v1-"]
+
+[[rules]]
+id = "openai-project-key"
+description = "OpenAI project, service-account or admin key"
+regex = '''\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}'''
+keywords = ["sk-proj-", "sk-svcacct-", "sk-admin-"]
+
+[[rules]]
+id = "helm-signing-seed"
+description = "64-hex HELM signing seed or private key assigned to a HELM_* variable"
+regex = '''HELM_[A-Z0-9_]*(?:SIGNING|SEED|PRIVATE)[A-Z0-9_]*["']?\s*[:=]\s*["']?([0-9a-fA-F]{64})\b'''
+secretGroup = 1
+keywords = ["helm_"]

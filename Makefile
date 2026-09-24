@@ -310,6 +310,12 @@ coverage-tcb:
 	(cd core && go test -count=1 -covermode=atomic -coverprofile="$$profile" $$pkgs); \
 	python3 scripts/ci/check_tcb_coverage.py check "$$profile" "$$floors"
 
+.PHONY: deadcode
+# deadcode fails on functions no shipped binary can reach (scripts/ci/deadcode-roots.txt)
+# unless scripts/ci/deadcode-allowlist.txt lists them; stale entries fail too.
+deadcode:
+	bash scripts/ci/deadcode_gate.sh
+
 .PHONY: dead-packages
 # dead-packages lists core/pkg packages with no non-test importer across every
 # Go module in the checkout. Registered as an advisory nightly gate; see

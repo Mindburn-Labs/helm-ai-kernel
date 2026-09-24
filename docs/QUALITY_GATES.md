@@ -113,7 +113,19 @@ Existing CI truth remains blocking: docs truth, presentation hygiene, Go lint,
 build, tests, TCB import isolation, boundary manifest drift, fixture
 verification, contract drift, deployment smoke, and release smoke.
 
-New noisy gates are Advisory by default: `secrets`, `vuln-audit`,
+The security gates block in the `pr`, `merge` and `release` profiles:
+`secrets` (gitleaks), `gosec`, `govulncheck` (every Go module) and `pip-audit`
+(the Python SDK's hash-pinned runtime requirements). All four run through
+`scripts/ci/security_gates.sh`, which pins each tool by version and sha256 and
+first scans a fixture holding exactly what the gate must catch: a planted key of
+each current format, a `gosec` G204/G401 violation, a call into a vulnerable
+`golang.org/x/text`, a vulnerable `jinja2` pin. If the fixture is not flagged
+the gate exits 2. Findings that existed when the gates landed are frozen in
+`scripts/ci/gosec-allowlist.txt` and `scripts/ci/gitleaks-allowlist.txt`: a
+finding missing from the list fails, and so does a listed finding that no
+longer occurs, so the lists only shrink.
+
+New noisy gates are Advisory by default: `vuln-audit` (npm and cargo),
 `mutation-core`, `flake-core`, `runbooks`, `migrations`,
 `dependency-hygiene`, and `benchmark-report`. Promote them to blocking locally
 or in CI with:

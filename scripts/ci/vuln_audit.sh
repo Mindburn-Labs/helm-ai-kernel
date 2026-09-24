@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Run ecosystem vulnerability audits when the relevant tools are available.
+# Advisory npm and cargo audits when the tools are available.
+# Go (govulncheck, every module) and the Python SDK (pip-audit) are blocking
+# gates in scripts/ci/security_gates.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STRICT="${QUALITY_STRICT:-0}"
-GOVULNCHECK_VERSION="${GOVULNCHECK_VERSION:-v1.3.0}"
 STATUS=0
 
 mark_failure() {
@@ -32,20 +33,6 @@ run_step() {
     fi
 }
 
-# Scan every Go module, not only core: the satellite modules (sdk/go, examples,
-# tests, tools) pin their own dependency versions. GOWORK=off scans each
-# module on its own go.mod; modules outside go.work cannot load in workspace mode.
-GO_MODULES="$(git -C "$ROOT" ls-files ':(glob)**/go.mod')"
-if [ -z "$GO_MODULES" ]; then
-    echo "::error::no go.mod files found under $ROOT"
-    mark_failure
-fi
-for gomod in $GO_MODULES; do
-    dir="$(dirname "$gomod")"
-    run_step "Go govulncheck $dir" \
-        bash -c "cd '$ROOT/$dir' && GOWORK=off go run 'golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}' ./..."
-done
-
 if command -v npm >/dev/null 2>&1; then
     for dir in "$ROOT/sdk/ts"; do
         if [ -f "$dir/package-lock.json" ]; then
@@ -62,12 +49,6 @@ if command -v cargo-audit >/dev/null 2>&1; then
     run_step "Rust cargo audit" bash -lc "cd '$ROOT/sdk/rust' && cargo audit"
 else
     warn_missing "cargo-audit" "Install with: cargo install cargo-audit --locked"
-fi
-
-if command -v pip-audit >/dev/null 2>&1; then
-    run_step "Python pip-audit" bash -lc "cd '$ROOT/sdk/python' && pip-audit"
-else
-    warn_missing "pip-audit" "Install with: python -m pip install pip-audit"
 fi
 
 exit "$STATUS"

@@ -128,7 +128,9 @@ async function proveBrowser(consoleCheckout, consoleURL) {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    await page.goto(consoleURL, { waitUntil: 'domcontentloaded', timeout: STARTUP_TIMEOUT_MS });
+    // Since the v0.8.5 Console pin, `/` opens the Operating Room and the
+    // kernel-mode local proof browser lives on the Work surface at `/chat`.
+    await page.goto(new URL('/chat', consoleURL).toString(), { waitUntil: 'domcontentloaded', timeout: STARTUP_TIMEOUT_MS });
     const proofBrowser = page.locator('[data-testid="local-proof-browser"]');
     const ribbon = page.locator('[data-testid="local-proof-ribbon"]');
     await Promise.all([

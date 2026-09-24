@@ -22,11 +22,11 @@ func Export(pack SkillPack, format, output string) (map[string]any, error) {
 	}
 	switch format {
 	case "codex-skill":
-		path := filepath.Join(output, "skills", filepath.FromSlash(pack.Manifest.ID), "SKILL.md")
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(output, 0o755); err != nil {
 			return nil, err
 		}
-		if err := atomicWrite(path, []byte(pack.SkillMD)); err != nil {
+		rel := filepath.Join("skills", filepath.FromSlash(pack.Manifest.ID), "SKILL.md")
+		if err := atomicWrite(output, rel, []byte(pack.SkillMD)); err != nil {
 			return nil, err
 		}
 	case "codex-plugin":
@@ -41,10 +41,7 @@ func Export(pack SkillPack, format, output string) (map[string]any, error) {
 }
 
 func exportCodexPlugin(pack SkillPack, output string, scan ScanResult) error {
-	if err := os.MkdirAll(filepath.Join(output, ".codex-plugin"), 0o755); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Join(output, "skills", filepath.FromSlash(pack.Manifest.ID)), 0o755); err != nil {
+	if err := os.MkdirAll(output, 0o755); err != nil {
 		return err
 	}
 	plugin := map[string]any{
@@ -74,10 +71,10 @@ func exportCodexPlugin(pack SkillPack, output string, scan ScanResult) error {
 	if err != nil {
 		return err
 	}
-	if err := atomicWrite(filepath.Join(output, ".codex-plugin", "plugin.json"), data); err != nil {
+	if err := atomicWrite(output, filepath.Join(".codex-plugin", "plugin.json"), data); err != nil {
 		return err
 	}
-	return atomicWrite(filepath.Join(output, "skills", filepath.FromSlash(pack.Manifest.ID), "SKILL.md"), []byte(pack.SkillMD))
+	return atomicWrite(output, filepath.Join("skills", filepath.FromSlash(pack.Manifest.ID), "SKILL.md"), []byte(pack.SkillMD))
 }
 
 func MarketplaceInit(repoRoot string) (string, error) {
@@ -89,12 +86,9 @@ func MarketplaceInit(repoRoot string) (string, error) {
 		}
 	}
 	marketplace := Marketplace{SchemaVersion: "helm.codex.marketplace.v1", Plugins: []MarketplacePlugin{}}
-	path := filepath.Join(repoRoot, ".agents", "plugins", "marketplace.json")
+	rel := filepath.Join(".agents", "plugins", "marketplace.json")
 	data, _ := json.MarshalIndent(marketplace, "", "  ")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
-	}
-	return path, atomicWrite(path, data)
+	return filepath.Join(repoRoot, rel), atomicWrite(repoRoot, rel, data)
 }
 
 func MarketplaceAdd(repoRoot, pluginPath string) (MarketplacePlugin, error) {
@@ -147,8 +141,5 @@ func MarketplaceAdd(repoRoot, pluginPath string) (MarketplacePlugin, error) {
 		marketplace.Plugins = append(marketplace.Plugins, entry)
 	}
 	out, _ := json.MarshalIndent(marketplace, "", "  ")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return MarketplacePlugin{}, err
-	}
-	return entry, atomicWrite(path, out)
+	return entry, atomicWrite(repoRoot, filepath.Join(".agents", "plugins", "marketplace.json"), out)
 }

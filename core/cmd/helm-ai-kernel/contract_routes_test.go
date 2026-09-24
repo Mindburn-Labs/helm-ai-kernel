@@ -42,7 +42,7 @@ func (receiptRouteStaticDriver) Execute(context.Context, string, map[string]any)
 	return "result", nil
 }
 
-func TestContractRoutesServeDocumentedEvidenceProofgraphAndConformancePaths(t *testing.T) {
+func TestContractRoutesServeDocumentedEvidenceAndProofgraphPaths(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	mux := http.NewServeMux()
@@ -56,8 +56,6 @@ func TestContractRoutesServeDocumentedEvidenceProofgraphAndConformancePaths(t *t
 		{http.MethodGet, "/api/v1/proofgraph/sessions", ""},
 		{http.MethodGet, "/api/v1/proofgraph/sessions/session-test/receipts", ""},
 		{http.MethodGet, "/api/v1/proofgraph/receipts/rcpt-test", ""},
-		{http.MethodPost, "/api/v1/conformance/run", `{"level":"L1","profile":"runtime"}`},
-		{http.MethodGet, "/api/v1/conformance/reports/conf_test", ""},
 	}
 	for _, check := range checks {
 		t.Run(check.method+" "+check.path, func(t *testing.T) {

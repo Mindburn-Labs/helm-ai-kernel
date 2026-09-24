@@ -84,7 +84,7 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 	cmd.BoolVar(&allowSelfAttested, "allow-self-attested", false,
 		"Accept a dev-local seal whose verification key is carried inside the pack. "+
 			"Such a seal proves internal consistency only, never provenance — anyone can sign their own pack.")
-	cmd.StringVar(&configPath, "config", "", "Evidence trust config path (for example helm/helm.yaml)")
+	cmd.StringVar(&configPath, "config", "", "Evidence trust config path, for example helm/helm.yaml (never read implicitly from the working directory)")
 	cmd.StringVar(&storageReceipt, "storage-receipt", "", "Path to S3 Object Lock storage receipt for customer/high-assurance verification")
 	cmd.StringVar(&externalHostKey, "external-host-public-key", strings.TrimSpace(os.Getenv("HELM_EXTERNAL_HOST_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for external host evidence chains")
 	cmd.StringVar(&trustedPublicKey, "trusted-public-key", strings.TrimSpace(os.Getenv("HELM_VERIFY_PUBLIC_KEY_HEX")), "Trusted Ed25519 public key hex for conformance report signatures")
@@ -268,7 +268,12 @@ func runVerifyCmd(args []string, stdout, stderr io.Writer) int {
 		if report.Verified {
 			printCompactVerifyReport(stdout, report)
 		} else {
-			_, _ = fmt.Fprintf(stdout, "FAILED · envelope %s\n", displayEnvelopeID(report))
+			headline := "FAILED"
+			if strings.HasPrefix(report.Summary, "UNVERIFIABLE") {
+				// Content intact, but no trust root names the signer.
+				headline = "UNVERIFIABLE"
+			}
+			_, _ = fmt.Fprintf(stdout, "%s · envelope %s\n", headline, displayEnvelopeID(report))
 			_, _ = fmt.Fprintf(stdout, "Bundle: %s\n", bundle)
 			for _, c := range report.Checks {
 				if !c.Pass {
@@ -553,20 +558,7 @@ func displayEnvelopeID(report *verifier.VerifyReport) string {
 }
 
 func finalizeVerifyReport(report *verifier.VerifyReport) {
-	failed := 0
-	for _, check := range report.Checks {
-		if !check.Pass {
-			failed++
-		}
-	}
-	report.IssueCount = failed
-	if failed > 0 {
-		report.Verified = false
-		report.Summary = fmt.Sprintf("FAIL: %d/%d checks failed", failed, len(report.Checks))
-		return
-	}
-	report.Verified = true
-	report.Summary = fmt.Sprintf("PASS: %d/%d checks passed", len(report.Checks), len(report.Checks))
+	report.Finalize()
 }
 
 // checkEIDASAnchorMetadata inventories anchor records whose metadata declares

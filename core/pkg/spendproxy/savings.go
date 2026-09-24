@@ -286,6 +286,13 @@ func ExportSavingsEvidencePack(opts SavingsExportOptions) (*SavingsExportResult,
 // content map and runs the full offline verification — the skeptic's
 // entrypoint, no receipts dir or network required.
 func VerifySavingsPackDir(dir string) (*evidencepack.SavingsVerificationResult, error) {
+	return VerifySavingsPackDirWithIssuer(dir, nil)
+}
+
+// VerifySavingsPackDirWithIssuer verifies a written savings pack against
+// consumer-pinned issuer keys (key id to Ed25519 public key hex). With no
+// pinned keys the result is self-attested.
+func VerifySavingsPackDirWithIssuer(dir string, issuerKeys map[string]string) (*evidencepack.SavingsVerificationResult, error) {
 	contents := make(map[string][]byte)
 	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -311,7 +318,7 @@ func VerifySavingsPackDir(dir string) (*evidencepack.SavingsVerificationResult, 
 	if len(contents) == 0 {
 		return nil, fmt.Errorf("spendproxy: savings pack dir %s is empty", dir)
 	}
-	return evidencepack.VerifySavingsEvidenceOffline(contents)
+	return evidencepack.VerifySavingsEvidenceOfflineWithIssuer(contents, issuerKeys)
 }
 
 // routePolicyHashFromSets picks the (single) route policy hash the capture ran

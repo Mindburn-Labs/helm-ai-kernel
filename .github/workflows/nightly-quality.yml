@@ -15,6 +15,10 @@ concurrency:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   QUALITY_STRICT: "0"
+  # concept-gate rejects an empty range, and origin/main..HEAD is empty on a
+  # main checkout. Re-inspect the last 50 commits on main instead; the PR
+  # workflow checks each change as it lands.
+  CONCEPT_RANGE: "HEAD~50..HEAD"
 
 jobs:
   quality-nightly:

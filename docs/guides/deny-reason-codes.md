@@ -121,12 +121,15 @@ Common authoring mistakes this prevents:
   at `input.effect.params.path`.
 - An expression that errors instead of returning false — that surfaces as
   `PRG_EVALUATION_ERROR`, not `MISSING_REQUIREMENT`; inspect the policy source
-  for the detailed expression.
+  for the detailed expression. The same code covers an expression that
+  exceeds the CEL cost limit (for example, a comprehension over a large
+  caller-supplied list) and a requirement with neither an `expression` nor an
+  `artifact_type`, which is refused when the policy is activated.
 
 ## Source Truth
 
 - `core/pkg/contracts/verdict.go` (reason-code constants)
 - `core/pkg/guardian/guardian.go` (policy evaluation and deny reasons)
-- `core/pkg/prg/engine.go` (requirement-set evaluation)
+- `core/pkg/kernel/authority/authority.go` (requirement-set evaluation: `Compile` and `Decide`)
 - `core/pkg/mcp/firewall.go` (MCP approval loop verdicts)
 - `protocols/specs/rfc/reason-codes-v1.md` (normative registry)

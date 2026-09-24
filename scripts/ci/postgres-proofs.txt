@@ -1,0 +1,19 @@
+# Postgres-gated proofs (T-12). Every test in core that skips unless
+# HELM_TEST_POSTGRES_URL is set must be listed here; scripts/ci/postgres_proofs.sh
+# fails on an unlisted one, and fails unless each listed test PASSes its full
+# count against a real Postgres. A skip is a failure, not a pass.
+#
+# <package dir under core> <test> <count> <race|plain>
+# plain: a timing comparison, which the race detector's slowdown would invalidate.
+pkg/boundary TestSQLSurfaceRegistryPersistsRecordsOnPostgres 1 race
+pkg/boundary/approvalceremony TestPostgresLifecycleSingleIssueAndConsume 10 race
+pkg/boundary/approvalceremony TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle 10 race
+pkg/boundary/generatedspecapprovalceremony TestPostgresLifecycleSingleIssueConsumeAndFence 10 race
+pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyActiveBindings 1 race
+pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyVisibility 1 race
+pkg/registry/connectors TestPostgresReleaseAuthorityAppendOnlyCurrentStateAndIsolation 10 race
+pkg/store TestPostgresReceiptAppendCausalParallelOutperformsSQLite 1 plain
+pkg/store TestPostgresReceiptChainHashMigrationPreservesIssuedPredecessorAcrossReload 1 race
+pkg/store TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash 1 race
+pkg/store TestPostgresTenantCursorContinuesWithLateSignedSessionGenesisAfterAppendSequenceMigration 1 race
+pkg/store TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor 1 race

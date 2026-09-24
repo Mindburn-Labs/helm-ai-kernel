@@ -1,64 +1,13 @@
 name: Approval Ceremony
 
+# Runs on every pull request and push to main. The Postgres-gated proofs used to
+# run only when one of a hand-kept list of paths changed, and seven of the eleven
+# never ran at all (T-12).
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - ".github/workflows/approval-ceremony.yml"
-      - "Makefile"
-      - "core/go.mod"
-      - "core/go.sum"
-      - "core/pkg/boundary/approvalceremony/**"
-      - "core/pkg/boundary/approvalverify/**"
-      - "core/pkg/canonicalize/**"
-      - "core/pkg/contracts/**"
-      - "core/pkg/crypto/**"
-      - "core/pkg/store/**"
-      - "core/pkg/effects/**"
-      - "core/pkg/runtimeadapters/mcp/**"
-      - "core/pkg/connectors/github/**"
-      - "core/pkg/registry/connectors/**"
-      - "reference_packs/approval/**"
-      - "reference_packs/connector-release-authority-v1/**"
-      - "reference_packs/effect-close-v1/**"
-      - "reference_packs/effect-disposition-v1/**"
-      - "schemas/connector_release.json"
-      - "schemas/connector_release_authority_envelope.json"
-      - "schemas/connector_effect_acknowledgement.json"
-      - "schemas/connector_effect_acknowledgement_envelope.json"
-      - "schemas/effect_close_receipt.json"
-      - "schemas/effect_disposition_command.json"
-      - "schemas/effect_disposition_command_envelope.json"
-      - "schemas/effect_disposition_receipt.json"
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/approval-ceremony.yml"
-      - "Makefile"
-      - "core/go.mod"
-      - "core/go.sum"
-      - "core/pkg/boundary/approvalceremony/**"
-      - "core/pkg/boundary/approvalverify/**"
-      - "core/pkg/canonicalize/**"
-      - "core/pkg/contracts/**"
-      - "core/pkg/crypto/**"
-      - "core/pkg/store/**"
-      - "core/pkg/effects/**"
-      - "core/pkg/runtimeadapters/mcp/**"
-      - "core/pkg/connectors/github/**"
-      - "core/pkg/registry/connectors/**"
-      - "reference_packs/approval/**"
-      - "reference_packs/connector-release-authority-v1/**"
-      - "reference_packs/effect-close-v1/**"
-      - "reference_packs/effect-disposition-v1/**"
-      - "schemas/connector_release.json"
-      - "schemas/connector_release_authority_envelope.json"
-      - "schemas/connector_effect_acknowledgement.json"
-      - "schemas/connector_effect_acknowledgement_envelope.json"
-      - "schemas/effect_close_receipt.json"
-      - "schemas/effect_disposition_command.json"
-      - "schemas/effect_disposition_command_envelope.json"
-      - "schemas/effect_disposition_receipt.json"
 
 permissions:
   contents: read
@@ -96,11 +45,5 @@ jobs:
         run: make verify-effect-close-vectors
       - name: Verify signed effect disposition vectors
         run: make verify-effect-disposition-vectors
-      - name: Prove non-bypass RLS and single-use concurrency
-        run: make test-approval-ceremony-postgres
-      - name: Prove V5 receipt decision hash migration fails closed
-        run: make test-receipt-store-postgres-migration
-      - name: Prove connector authority append-only isolation and ordering
-        run: make test-connector-release-authority-postgres
-      - name: Prove effect reservation disposition and signed close ordering
-        run: make test-effect-reservation-postgres
+      - name: Postgres-gated proofs (every one listed in scripts/ci/postgres-proofs.txt; a skip fails)
+        run: bash scripts/ci/postgres_proofs.sh

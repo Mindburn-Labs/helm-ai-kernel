@@ -313,6 +313,8 @@ G304 core/cmd/helm-ai-kernel/rollup_cmd.go 67be8c61f327
 G304 core/cmd/helm-ai-kernel/serve_policy.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/serve_policy.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/serve_policy.go e69ba0e5799b
+G304 core/cmd/helm-ai-kernel/services.go 3b99014f581d
+G304 core/cmd/helm-ai-kernel/services.go dbfffc239169
 G304 core/cmd/helm-ai-kernel/setup_cmd.go 84f8ae84aaaf
 G304 core/cmd/helm-ai-kernel/setup_cmd.go 84f8ae84aaaf
 G304 core/cmd/helm-ai-kernel/setup_cmd.go 84f8ae84aaaf

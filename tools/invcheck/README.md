@@ -19,7 +19,11 @@ a `CONCEPT-CHANGE(INV-NNN)` commit marker.
 
 - `make inv-check` runs the constitution gate.
 - `make concept-gate` runs the amendment-marker gate over `CONCEPT_RANGE`
-  (default `origin/main..HEAD`).
+  (default `origin/main..HEAD`). A range with no commits exits 2 rather than
+  passing; CI passes the pull request's `base..head`.
+- `GOWORK=off go test ./...` in this directory runs the concept-gate controls
+  against throwaway git repositories: an unmarked invariant edit must fail, a
+  marked one must pass, and an empty range must be refused.
 - `make docs-coverage` from the repository root verifies coverage for this surface.
 
 `inv-check` self-tests against synthetic negative and positive controls before it

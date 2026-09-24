@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -223,6 +224,84 @@ func TestLaunchpadEntitlementDenialBlocksBeforeRunWrite(t *testing.T) {
 	}
 	if len(runs) != 0 {
 		t.Fatalf("denied launch wrote runs: %#v", runs)
+	}
+}
+
+// HELM-740 (17-02, 02-12): both HTTP teardown routes run the provider delete.
+// A cleanup failure is surfaced and leaves the run CLEANUP_FAILED instead of
+// DELETED, and a retry completes the teardown.
+func TestLaunchpadTeardownRoutesDeleteCloudResourcesAndSurfaceCleanupFailure(t *testing.T) {
+	svc, cleanup := newContractRouteTestServices(t)
+	defer cleanup()
+	svc.DataDir = t.TempDir()
+	svc.DatabaseMode = "sqlite"
+	svc.DatabaseStatus = "ready"
+	svc.LaunchpadStore = launchsession.NewStore(t.TempDir())
+	mux := http.NewServeMux()
+	RegisterSubsystemRoutes(mux, svc)
+
+	var calls []string
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer provider.Close()
+
+	for name, route := range map[string]string{
+		"runs teardown":   "/api/v1/launchpad/runs/%s/teardown",
+		"launches delete": "/api/v1/launchpad/launches/%s/delete",
+	} {
+		t.Run(name, func(t *testing.T) {
+			launchID := "launch-" + strings.ReplaceAll(name, " ", "-")
+			if err := svc.LaunchpadStore.Save(launchsession.LaunchRun{
+				LaunchID:          launchID,
+				AppID:             "openclaw",
+				SubstrateID:       "hetzner",
+				PlanHash:          "sha256:plan",
+				State:             launchsession.StateRunning,
+				KernelVerdict:     "ALLOW",
+				LaunchReceiptRefs: []string{"launch-receipt"},
+				HealthcheckRefs:   []string{"healthcheck-receipt"},
+				SandboxGrantRefs:  []string{"sandbox-grant"},
+				RuntimeHandles: launchsession.RuntimeHandles{
+					ContainerID:      "88",
+					CloudResourceIDs: map[string]string{"provider": "hetzner", "server": "88", "firewall": "77"},
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			post := func() *httptest.ResponseRecorder {
+				req := httptest.NewRequest(http.MethodPost, fmt.Sprintf(route, launchID), nil)
+				authorizeTestRequest(req)
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+				return rec
+			}
+
+			t.Setenv("HCLOUD_TOKEN", "")
+			t.Setenv("HELM_LAUNCHPAD_HETZNER_TOKEN", "")
+			rec := post()
+			if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "HCLOUD_TOKEN missing") {
+				t.Fatalf("failed cleanup status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if run, err := svc.LaunchpadStore.Get(launchID); err != nil || run.State != launchsession.StateCleanupFailed {
+				t.Fatalf("failed cleanup stored state=%s err=%v", run.State, err)
+			}
+
+			calls = nil
+			t.Setenv("HCLOUD_TOKEN", "test-token")
+			t.Setenv("HELM_LAUNCHPAD_HETZNER_ENDPOINT", provider.URL)
+			rec = post()
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("retry status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if strings.Join(calls, ",") != "DELETE /servers/88,DELETE /firewalls/77" {
+				t.Fatalf("teardown did not delete the cloud resources: %v", calls)
+			}
+			if run, err := svc.LaunchpadStore.Get(launchID); err != nil || run.State != launchsession.StateDeleted {
+				t.Fatalf("retry stored state=%s err=%v", run.State, err)
+			}
+		})
 	}
 }
 

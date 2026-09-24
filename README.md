@@ -64,9 +64,11 @@ Local `mcp approve` does not mint MCP authority. Escape hatches: `HELM_NO_TUI=1`
 | Run approved work | `ALLOW` | receipt + evidence |
 | Export a review bundle | verify offline | EvidencePack |
 
-¹ The hook's shell guard matches an intentionally narrow set of destructive
-command patterns — it is not a general shell analyzer. See
-[the guard's scope](docs/reference/workstation-governance.md#enforcement-bridge).
+¹ The local agent hook is an observed-only integration, not an enforced
+boundary. Its shell guard matches an intentionally narrow set of destructive
+command patterns and denies syntax it cannot evaluate statically — it is not a
+general shell analyzer. See
+[the guard's scope](docs/reference/workstation-governance.md#coverage-label-observed-only).
 
 HELM only governs effects that reach its boundary. For example, evals showed
 network egress blocks firing when an agent actually dispatched a LAN or

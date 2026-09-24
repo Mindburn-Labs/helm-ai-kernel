@@ -30,7 +30,11 @@
         "json-schemas",
         "contract-breaking-self-test",
         "proto-breaking",
-        "openapi-breaking"
+        "openapi-breaking",
+        "secrets",
+        "gosec",
+        "govulncheck",
+        "pip-audit"
       ]
     },
     "merge": {
@@ -69,7 +73,11 @@
         "proto-gates-self-test",
         "proto-breaking",
         "deployment-smoke",
-        "release-smoke"
+        "release-smoke",
+        "secrets",
+        "gosec",
+        "govulncheck",
+        "pip-audit"
       ]
     },
     "release": {
@@ -112,7 +120,11 @@
         "sbom",
         "vex",
         "cosign-verify",
-        "release-smoke"
+        "release-smoke",
+        "secrets",
+        "gosec",
+        "govulncheck",
+        "pip-audit"
       ]
     },
     "nightly": {
@@ -130,7 +142,10 @@
         "benchmark-report",
         "invariant-constitution",
         "concept-change-marker",
-        "dead-packages"
+        "dead-packages",
+        "gosec",
+        "govulncheck",
+        "pip-audit"
       ]
     },
     "typecheck": {
@@ -162,7 +177,10 @@
         "secrets",
         "vuln-audit",
         "sbom",
-        "vex"
+        "vex",
+        "gosec",
+        "govulncheck",
+        "pip-audit"
       ]
     },
     "runbooks": {
@@ -727,16 +745,15 @@
     },
     {
       "id": "secrets",
-      "title": "Secret scan",
-      "description": "Advisory first. Set QUALITY_STRICT=1 to make findings block.",
-      "command": "python3 scripts/ci/check_secrets.py",
-      "timeout_seconds": 300,
-      "advisory": true
+      "title": "Secret scan (gitleaks)",
+      "description": "gitleaks over the tracked tree with .gitleaks.toml. A planted-key positive control runs first; findings not in scripts/ci/gitleaks-allowlist.txt, and allowlisted findings that no longer occur, fail.",
+      "command": "bash scripts/ci/security_gates.sh gitleaks",
+      "timeout_seconds": 300
     },
     {
       "id": "vuln-audit",
       "title": "Dependency vulnerability audits",
-      "description": "Runs available ecosystem audit tools. Missing optional tools warn unless QUALITY_STRICT=1.",
+      "description": "npm audit and cargo audit. Go (govulncheck) and the Python SDK (pip-audit) have their own blocking gates.",
       "command": "bash scripts/ci/vuln_audit.sh",
       "timeout_seconds": 1800,
       "advisory": true,
@@ -745,6 +762,27 @@
         "core/go.sum",
         "sdk/**"
       ]
+    },
+    {
+      "id": "gosec",
+      "title": "gosec (golangci-lint)",
+      "description": "gosec over core and sdk/go. A fixture positive control runs first; findings not in scripts/ci/gosec-allowlist.txt, and allowlisted findings that no longer occur, fail.",
+      "command": "bash scripts/ci/security_gates.sh gosec",
+      "timeout_seconds": 2400
+    },
+    {
+      "id": "govulncheck",
+      "title": "govulncheck in every Go module",
+      "description": "Fails on any vulnerability whose vulnerable symbol is reachable, in any tracked go.mod. A fixture that calls a known-vulnerable x/text symbol must be flagged first.",
+      "command": "bash scripts/ci/security_gates.sh govulncheck",
+      "timeout_seconds": 2400
+    },
+    {
+      "id": "pip-audit",
+      "title": "pip-audit of the Python SDK runtime requirements",
+      "description": "Audits the hash-pinned sdk/python/requirements-runtime.txt. A known-vulnerable pin must be flagged first.",
+      "command": "bash scripts/ci/security_gates.sh pip-audit",
+      "timeout_seconds": 900
     },
     {
       "id": "mutation-core",

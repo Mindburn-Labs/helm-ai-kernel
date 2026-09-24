@@ -40,9 +40,10 @@ type Config struct {
 	Currency      string `json:"currency"`
 	// PlatformFeeBps is the platform fee in basis points of provider cost.
 	PlatformFeeBps int64 `json:"platform_fee_bps"`
-	// QuoteTTLSeconds must cover the full dispatch INCLUDING streaming time:
-	// the engine refuses to settle an expired quote, so a stream that outlives
-	// the TTL would leave an authorized-but-unsettled trail.
+	// QuoteTTLSeconds bounds the time between quote and dispatch. A buffered
+	// dispatch reserves its quote before the provider is called and settles
+	// however long the provider takes; the unreserved streaming path still
+	// needs the TTL to cover the whole stream.
 	QuoteTTLSeconds int64 `json:"quote_ttl_seconds"`
 	// PriceTTLHours is how long the loaded price snapshots stay fresh. After
 	// expiry the engine fails closed (ERR_PROVIDER_PRICE_STALE) until the proxy

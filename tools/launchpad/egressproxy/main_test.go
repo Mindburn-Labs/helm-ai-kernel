@@ -1,3 +1,6 @@
+// quantum_posture: these tests use crypto/tls only to put a real ClientHello on
+// the wire and to stand up a throwaway target server; they make no cryptographic
+// claim and add no signing or key material.
 package main
 
 import (

@@ -73,3 +73,12 @@ ReasonHardwareQuorumUnbound                  ERR_HARDWARE_QUORUM_UNBOUND
 ReasonHostProcessUnbound                     ERR_HOST_PROCESS_UNBOUND
 ReasonJurisdiction                           JURISDICTION_VIOLATION
 ReasonTenantIsolation                        TENANT_ISOLATION
+
+# ── Retired emitters, deletion wave 1 (2) ───────────────────────────────────
+# Their only emitter, core/pkg/harness, was deleted in HELM-756 slice 1 (§14.4).
+# conformance/negative_vectors.go still names them. Owner: Ivan (HELM-756).
+# Remove the codes from reason-codes-v1.json and verdict.go together with the
+# conformance gates (HELM-756 s4), after HELM-747 #986 makes the registry the
+# single source of truth.
+ReasonHarnessChangeContractInvalid           ERR_HARNESS_CHANGE_CONTRACT_INVALID
+ReasonVerificationScopeRequired              ERR_VERIFICATION_SCOPE_REQUIRED

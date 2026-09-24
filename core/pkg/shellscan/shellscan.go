@@ -598,6 +598,10 @@ type collector struct {
 	sensitiveTarget         string
 	destructiveEffect       bool
 	requiresShellPermission bool
+
+	// literalWords are heredoc bodies and assignment values, which bash does
+	// not brace-expand.
+	literalWords map[*syntax.Word]bool
 }
 
 func (c *collector) decide(reason string) {
@@ -674,10 +678,12 @@ func (c *collector) classifyString(src, via string, depth int) {
 			case syntax.AndStmt, syntax.OrStmt:
 				c.signal(SignalChaining)
 			}
-		case *syntax.CmdSubst, *syntax.ProcSubst:
-			c.signal(SignalCommandSubstitution)
-			c.hasIndirection = true
-			c.decide("command substitution cannot be evaluated statically (fail-closed)")
+		case *syntax.CmdSubst:
+			c.classifySubstitution(n.Stmts)
+		case *syntax.ProcSubst:
+			c.classifySubstitution(n.Stmts)
+		case *syntax.Assign:
+			c.markLiteralWord(n.Value)
 		case *syntax.SglQuoted:
 			if n.Dollar {
 				c.signal(SignalANSICQuoting)
@@ -689,19 +695,140 @@ func (c *collector) classifyString(src, via string, depth int) {
 				c.decide("locale quoting cannot be evaluated statically (fail-closed)")
 			}
 		case *syntax.Word:
-			if hasBraceExpansion(n) {
+			if !c.literalWords[n] && hasBraceExpansion(n) {
 				c.signal(SignalBraceExpansion)
 				c.decide("brace expansion cannot be evaluated statically (fail-closed)")
 			}
 		case *syntax.FuncDecl:
 			c.hasIndirection = true
 		case *syntax.Redirect:
+			c.markLiteralWord(n.Hdoc)
 			c.classifyRedirect(n)
 		case *syntax.CallExpr:
 			c.classifyCall(n, via, depth)
 		}
 		return true
 	})
+}
+
+func (c *collector) markLiteralWord(w *syntax.Word) {
+	if w == nil {
+		return
+	}
+	if c.literalWords == nil {
+		c.literalWords = map[*syntax.Word]bool{}
+	}
+	c.literalWords[w] = true
+}
+
+// classifySubstitution decides whether a command or process substitution
+// needs a decision of its own. Its inner commands are classified by the
+// surrounding walk either way. A substitution whose every inner command is on
+// the read-only allowlist with literal input yields opaque text, and the word
+// holding it stays dynamic: command position, eval, sh -c, source,
+// interpreters, redirect targets and destructive operands still fail closed
+// on that word. Anything else requires a decision.
+func (c *collector) classifySubstitution(stmts []*syntax.Stmt) {
+	c.signal(SignalCommandSubstitution)
+	c.hasIndirection = true
+	if !readOnlySubstitution(stmts) {
+		c.decide("command substitution runs a command outside the read-only allowlist (fail-closed)")
+	}
+}
+
+// readOnlySubstitution reports whether every statement is one allowlisted
+// read-only command with literal words and at most heredoc or here-string
+// input: no pipelines, lists, assignments, other redirects or nested
+// expansion.
+func readOnlySubstitution(stmts []*syntax.Stmt) bool {
+	if len(stmts) == 0 {
+		return false
+	}
+	for _, stmt := range stmts {
+		if stmt.Negated || stmt.Background || stmt.Coprocess {
+			return false
+		}
+		call, ok := stmt.Cmd.(*syntax.CallExpr)
+		if !ok || len(call.Assigns) > 0 || len(call.Args) == 0 {
+			return false
+		}
+		args := make([]string, 0, len(call.Args))
+		for _, word := range call.Args {
+			tok := resolveWord(word)
+			if tok.dynamic || tok.glob || hasBraceExpansion(word) {
+				return false
+			}
+			args = append(args, tok.text)
+		}
+		literalInput := false
+		for _, redirect := range stmt.Redirs {
+			switch redirect.Op {
+			case syntax.Hdoc, syntax.DashHdoc:
+				literalInput = true
+			case syntax.WordHdoc:
+				if resolveWord(redirect.Word).dynamic {
+					return false
+				}
+				literalInput = true
+			default:
+				return false
+			}
+		}
+		if !readOnlySubstitutionCommand(args, literalInput) {
+			return false
+		}
+	}
+	return true
+}
+
+// readOnlySubstitutionCommand is the deliberately small allowlist of commands
+// whose output may be captured without a decision.
+func readOnlySubstitutionCommand(args []string, literalInput bool) bool {
+	rest := args[1:]
+	switch args[0] {
+	case "cat":
+		// Only the heredoc or here-string itself, never a file.
+		return literalInput && len(rest) == 0
+	case "echo", "printf", "basename", "dirname":
+		return true
+	case "pwd":
+		for _, arg := range rest {
+			if arg != "-L" && arg != "-P" {
+				return false
+			}
+		}
+		return true
+	case "date":
+		// Display formats only; an operand or -s/--set would set the clock.
+		for _, arg := range rest {
+			switch {
+			case strings.HasPrefix(arg, "+"), arg == "-u", arg == "--utc", arg == "--universal",
+				arg == "-R", arg == "--rfc-email", strings.HasPrefix(arg, "-I"),
+				strings.HasPrefix(arg, "--iso-8601"), strings.HasPrefix(arg, "--rfc-3339="):
+			default:
+				return false
+			}
+		}
+		return true
+	case "git":
+		// The subcommand must come first: global options such as -c can run
+		// configured programs.
+		if len(rest) == 0 {
+			return false
+		}
+		switch rest[0] {
+		case "rev-parse":
+			return true
+		case "log":
+			for _, arg := range rest[1:] {
+				if strings.HasPrefix(arg, "--output") {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 func encodedPipeline(node *syntax.BinaryCmd) bool {

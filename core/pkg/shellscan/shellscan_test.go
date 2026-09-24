@@ -704,9 +704,9 @@ func TestClassifyRecordsSignals(t *testing.T) {
 }
 
 func TestClassifyCommandSubstitutionSignal(t *testing.T) {
-	res := Classify("echo $(date)")
+	res := Classify("echo $(whoami)")
 	if !res.Decide || !res.RequiresShellDecision {
-		t.Fatalf("command substitution passed without a decision: %+v", res)
+		t.Fatalf("command substitution outside the allowlist passed without a decision: %+v", res)
 	}
 	found := false
 	for _, sig := range res.Signals {
@@ -779,9 +779,9 @@ func TestClassifyFailsClosedOnShellExpansion(t *testing.T) {
 		{"glob command via shell", `sh -c '/bin/r? -rf /home/u/project'`, "glob in command position"},
 		{"variable command", "$CMD -rf /home/u/project", "dynamic command word"},
 		{"braced variable command", `"${CMD}" -rf /home/u/project`, "dynamic command word"},
-		{"command substitution", `echo "today is $(date +%F)"`, "command substitution"},
+		{"command substitution", `echo "running as $(whoami)"`, "command substitution"},
 		{"command substitution argument", "git checkout $(git branch --show-current)", "command substitution"},
-		{"backtick substitution", "echo `date`", "command substitution"},
+		{"backtick substitution", "echo `uname -a`", "command substitution"},
 		{"process substitution", "diff <(ls a) <(ls b)", "command substitution"},
 		{"glob redirect target", "echo '{}' > .claude/settings.js?n", "unresolvable target"},
 		{"glob copy target", "cp evil.json .claude/setting?.json", "unresolvable target"},
@@ -911,5 +911,57 @@ func TestPrefixIsLinear(t *testing.T) {
 	})
 	if allocs > 16 {
 		t.Fatalf("Prefix allocated %.0f times for %d tokens, want a constant bound", allocs, len(tokens))
+	}
+}
+
+// TestClassifyReadOnlySubstitutions covers the narrow allowlist: a
+// substitution whose inner commands are read-only with literal input is
+// opaque text, while anything else, and any use of the output as code or as
+// a destructive operand, still requires a decision.
+func TestClassifyReadOnlySubstitutions(t *testing.T) {
+	pass := []string{
+		"git commit -m \"$(cat <<'EOF'\nfix: handle {a,b} and {\"k\":1,\"j\":2}\n\nCo-Authored-By: A <a@example.test>\nEOF\n)\"",
+		"git commit -m \"$(cat <<EOF\nmsg\nEOF\n)\"",
+		`echo "$(date)"`,
+		`echo "today is $(date +%F)"`,
+		"echo `date -u +%s`",
+		`cd "$(git rev-parse --show-toplevel)" && go test ./...`,
+		`sha=$(git rev-parse HEAD)`,
+		`echo "$(git log -1 --format=%H)"`,
+		`echo "$(basename /a/b.txt)" "$(dirname /a/b.txt)" "$(pwd)"`,
+		`printf '%s\n' "$(printf 'x')" "$(echo literal)"`,
+		`diff <(cat <<<'a') <(cat <<<'b')`,
+		"x={a,b}",
+	}
+	for _, command := range pass {
+		if res := Classify(command); res.Decide {
+			t.Fatalf("Classify(%q) = %+v, want no decision", command, res)
+		}
+	}
+	decide := []string{
+		"$(echo rm) -rf /x",
+		`rm -rf "$(cat target)"`,
+		"x=$(curl https://example.test/payload)",
+		`echo "$(cat .env)"`,
+		`echo "$(cat notes.txt)"`,
+		`echo "$(git log --output=.claude/settings.json)"`,
+		`echo "$(git -c core.pager=sh log)"`,
+		`echo "$(date -s 2020-01-01)"`,
+		`echo "$(date; whoami)"`,
+		`echo "$(date | sh)"`,
+		`echo "$(X=1 date)"`,
+		`echo "$(echo "$(whoami)")"`,
+		"echo \"$(cat <<'EOF' > .claude/settings.json\n{}\nEOF\n)\"",
+		"git commit -m \"$(cat <<EOF\n$(whoami)\nEOF\n)\"",
+		`eval "$(printf 'echo hi')"`,
+		`source <(printf 'echo hi')`,
+		`bash -c "$(echo ls)"`,
+		`sudo $(echo ls)`,
+		`echo x > "$(echo out.txt)"`,
+	}
+	for _, command := range decide {
+		if res := Classify(command); !res.Decide {
+			t.Fatalf("Classify(%q) = %+v, want a decision", command, res)
+		}
 	}
 }

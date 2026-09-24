@@ -100,9 +100,14 @@ to recognize every destructive tool, alias, or `eval` payload.
 
 Shell syntax whose meaning is only known after expansion also routes to a
 decision rather than passing unclassified: ANSI-C or locale quoting (`$'...'`,
-`$"..."`), brace expansion, command and process substitution, a glob or
-variable in command position, a globbed write target, and a relative write
-after a `cd` whose target cannot be resolved. Under the default profile these
+`$"..."`), brace expansion, a command or process substitution that runs
+anything beyond a small read-only allowlist (`cat` of a heredoc or here-string,
+`date`, `git rev-parse`, `git log`, `pwd`, `basename`, `dirname`, `printf`,
+`echo`, all with literal words), a glob or variable in command position, a
+globbed write target, and a relative write after a `cd` whose target cannot be
+resolved. An allowlisted substitution is opaque text: it still fails closed as
+a command name, an `eval`, `sh -c` or `source` payload, a redirect target, or a
+destructive operand. Under the default profile these
 commands are denied; a policy profile that grants the matching permission
 allows them with a signed receipt. Sensitive write targets are compared after
 path normalization (separators, case, `.`, `..` and repeated slashes, the

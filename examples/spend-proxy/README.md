@@ -113,5 +113,10 @@ offline-verifies the pack before writing it. A skeptic re-verifies with no
 receipts dir, ledger, or network:
 
 ```bash
-helm-ai-kernel spend-proxy savings-verify --pack ./helm-spend-evidence/savingspack-<run-id>
+helm-ai-kernel spend-proxy savings-verify --pack ./helm-spend-evidence/savingspack-<run-id> \
+  --issuer-key-id <issuer-key-id> --issuer-public-key <issuer-public-key-hex>
 ```
+
+Pin the issuer key out of band. Without the issuer flags the result is
+`UNVERIFIABLE (self-attested)` and the command exits 1, because the pack's
+own key registry cannot vouch for the pack.

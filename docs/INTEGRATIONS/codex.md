@@ -52,6 +52,14 @@ helm-ai-kernel mcp print-config --client codex
 The CLI also prints a `codex mcp add ...` command for stdio transport where the
 local Codex CLI supports it.
 
+## Coverage
+
+This hook is an **observed-only** integration: it classifies the calls the
+client sends it, signs a receipt for each decision, and denies what it
+recognizes or cannot evaluate statically. It is defense in depth, not an
+enforced boundary. See
+[the coverage label](../reference/workstation-governance.md#coverage-label-observed-only).
+
 ## Verify A Denial
 
 ```bash

@@ -42,7 +42,7 @@ func isOrganizationRuntimeEvaluation(ctx context.Context) bool {
 	return value
 }
 
-func registerReceiptRoutes(mux *http.ServeMux, svc *Services) {
+func registerReceiptRoutes(mux routeMux, svc *Services) {
 	evaluateHandler := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			api.WriteMethodNotAllowed(w)

@@ -13,7 +13,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+WORKFLOWS = ROOT / ".github" / "workflows"
+WORKFLOW = WORKFLOWS / "release.yml"
+DEV_IMAGE_WORKFLOW = WORKFLOWS / "dev-image.yml"
 VERSION_SURFACES = ROOT / "release" / "version-surfaces.yaml"
 
 TAG_RELEASE_MUTATION_JOBS = frozenset(
@@ -38,11 +40,10 @@ TAG_RELEASE_MUTATION_JOBS = frozenset(
     }
 )
 
-# container-sha publishes a dev-grade dev-sha image for one exact, green-CI
-# commit via workflow_dispatch. It is intentionally not a v-tag release job
-# and therefore must not be coupled to the annotated-tag release authority
-# boundary or the governed sha tag namespace.
-NON_RELEASE_MUTATION_JOB_EXEMPTIONS = frozenset({"container-sha"})
+# HELM-733: release.yml has no non-release publisher. The dev-grade dev-sha
+# lane lives in dev-image.yml, so its keyless signatures never carry the
+# release.yml identity that the verification recipes accept.
+NON_RELEASE_MUTATION_JOB_EXEMPTIONS: frozenset[str] = frozenset()
 
 # These source markers classify every current externally mutating job. Keeping
 # the classification here makes a new publisher fail closed until its authority
@@ -226,21 +227,51 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                 self.assertIn("release-authority", self.job_needs(job_name))
                 self.assertIn("github.run_attempt == 1", self.job_if(job_name))
 
-    def test_container_sha_remains_the_separate_exact_sha_qa_lane(self) -> None:
-        container_sha = self.job("container-sha")
-        self.assertEqual(NON_RELEASE_MUTATION_JOB_EXEMPTIONS, {"container-sha"})
-        self.assertNotIn("release-authority", self.job_needs("container-sha"))
-        self.assertIn("if: github.event_name == 'workflow_dispatch'", container_sha)
-        self.assertIn("No successful CI (ci.yml) run for ${SOURCE_SHA}", container_sha)
+    def test_release_workflow_runs_only_on_version_tag_pushes(self) -> None:
+        # Every keyless signature and SLSA attestation minted by release.yml
+        # carries `release.yml@<triggering ref>`. With a tag-only trigger that
+        # ref is always refs/tags/v*, which is what the recipes pin.
+        trigger = re.search(r"^on:\n(?P<body>(?:[ #][^\n]*\n|\n)*)", self.workflow, re.MULTILINE)
+        self.assertIsNotNone(trigger, "release.yml must declare its triggers")
+        assert trigger is not None
+        body = "\n".join(
+            line for line in trigger.group("body").splitlines() if line.strip() and not line.lstrip().startswith("#")
+        )
+        self.assertEqual(body, '  push:\n    tags: ["v*"]')
+        self.assertNotIn("workflow_dispatch:", self.workflow.split("\njobs:\n", 1)[0])
+        self.assertNotIn("container-sha", self.job_blocks)
+        self.assertNotIn("dev-sha-", self.workflow)
+
+    def test_dev_sha_lane_signs_under_its_own_workflow_identity(self) -> None:
+        dev = DEV_IMAGE_WORKFLOW.read_text(encoding="utf-8")
+        triggers = dev.split("\njobs:\n", 1)[0]
+        self.assertIn("on:\n  workflow_dispatch:\n", triggers)
+        self.assertNotIn("push:", triggers)
+        self.assertNotIn("pull_request", triggers)
         self.assertIn(
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}",
-            container_sha,
+            "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
+            dev,
         )
-        self.assertNotIn(
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ inputs.source_sha }}",
-            container_sha,
+        self.assertIn("No successful CI (ci.yml) run for ${SOURCE_SHA}", dev)
+        self.assertIn("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}", dev)
+        self.assertNotIn("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-", dev)
+        self.assertNotIn("${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v", dev)
+        self.assertIn("dev.mindburn.build-grade=dev", dev)
+        self.assertIn("cosign sign --yes", dev)
+        self.assertNotIn("release-production", dev)
+
+    def test_no_workflow_re_attests_already_published_release_assets(self) -> None:
+        # The former slsa-provenance.yml repair lane minted SLSA L3 provenance
+        # for whatever bytes were attached to a release at dispatch time.
+        self.assertFalse((WORKFLOWS / "slsa-provenance.yml").exists())
+        generator = "slsa-framework/slsa-github-generator/"
+        users = sorted(
+            path.name
+            for path in WORKFLOWS.glob("*.y*ml")
+            if generator in path.read_text(encoding="utf-8")
         )
-        self.assertIn("dev.mindburn.build-grade=dev", container_sha)
+        self.assertEqual(users, ["release.yml"])
+        self.assertNotIn("gh release download", self.job("slsa-provenance"))
 
     def test_tag_release_is_main_only_and_catalog_is_presynced(self) -> None:
         preflight = self.job("release-preflight")

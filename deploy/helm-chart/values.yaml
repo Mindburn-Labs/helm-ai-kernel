@@ -198,6 +198,13 @@ helm:
   # Metrics and observability.
   metrics:
     enabled: false
+    # Without a bearer token the kernel answers /metrics to loopback clients
+    # only. Name an existing Secret key holding the token to allow remote
+    # scrapes; it is rendered as HELM_METRICS_BEARER_TOKEN and used by the
+    # ServiceMonitor, which requires it.
+    bearerTokenSecret:
+      name: ""
+      key: "token"
     serviceMonitor:
       enabled: false
       interval: 30s

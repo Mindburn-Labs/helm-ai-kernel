@@ -3,6 +3,8 @@ title: KERNEL_SCOPE
 last_reviewed: 2026-05-12
 ---
 
+<!-- quantum_posture: this page lists the classical Ed25519 signing in core/pkg/crypto and adds no post-quantum cryptographic control. -->
+
 # HELM AI Kernel Scope
 
 ## Audience

@@ -2,12 +2,17 @@ package guardian
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
 )
@@ -297,4 +302,58 @@ func TestGuardianInvalidatedSnapshotBeforeIntentDenies(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), string(contracts.ReasonPolicyEpochChanged)) || !strings.Contains(err.Error(), policyreconcile.StatusInvalid) {
 		t.Fatalf("expected invalid policy snapshot to deny intent, got %v", err)
 	}
+}
+
+// E-09: a policy that iterates caller-supplied tool arguments is bounded by
+// the authority cost limit on the live EvaluateDecision path. Before, the
+// comprehension ran to completion over any list the caller sent and allowed.
+func TestGuardianPolicyCostLimitDeniesCallerSizedInput(t *testing.T) {
+	graph := prg.NewGraph()
+	require.NoError(t, graph.AddRule("bulk_tool", prg.RequirementSet{
+		ID:           "bulk",
+		Logic:        prg.AND,
+		Requirements: []prg.Requirement{{ID: "all-ones", Expression: "input.effect.params.items.all(x, x == 1)"}},
+	}))
+	g := NewGuardian(&testSigner{}, graph, nil, WithClock(newFixedClock()))
+	decide := func(n int) *contracts.DecisionRecord {
+		items := make([]any, n)
+		for i := range items {
+			items[i] = 1
+		}
+		decision, err := g.EvaluateDecision(context.Background(), DecisionRequest{
+			Principal: "agent",
+			Action:    "EXECUTE_TOOL",
+			Resource:  "bulk_tool",
+			Context:   map[string]any{"items": items},
+		})
+		require.NoError(t, err)
+		return decision
+	}
+
+	require.Equal(t, string(contracts.VerdictAllow), decide(10).Verdict)
+
+	denied := decide(int(authority.CostLimit))
+	require.Equal(t, string(contracts.VerdictDeny), denied.Verdict)
+	require.Equal(t, string(contracts.ReasonPRGEvalError), denied.ReasonCode)
+}
+
+// Policy time is the Guardian's authority clock, passed to decide as an input.
+func TestGuardianPolicyTimeIsTheAuthorityClock(t *testing.T) {
+	clock := newFixedClock()
+	graph := prg.NewGraph()
+	require.NoError(t, graph.AddRule("timed_tool", prg.RequirementSet{
+		ID:           "timed",
+		Requirements: []prg.Requirement{{ID: "at-authority-time", Expression: fmt.Sprintf("input.timestamp == %d", clock.Now().Unix())}},
+	}))
+	g := NewGuardian(&testSigner{}, graph, nil, WithClock(clock))
+	request := DecisionRequest{Principal: "agent", Action: "EXECUTE_TOOL", Resource: "timed_tool", Context: map[string]any{"timestamp": 1}}
+
+	decision, err := g.EvaluateDecision(context.Background(), request)
+	require.NoError(t, err)
+	require.Equal(t, string(contracts.VerdictAllow), decision.Verdict, decision.Reason)
+
+	clock.Advance(time.Second)
+	decision, err = g.EvaluateDecision(context.Background(), request)
+	require.NoError(t, err)
+	require.Equal(t, string(contracts.ReasonMissingRequirement), decision.ReasonCode)
 }

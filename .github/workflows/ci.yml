@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2
+    # Local copy of platform-actions ci.yml@v2; see the header of ci-v2.yml.
+    uses: ./.github/workflows/ci-v2.yml
     with:
       setup-commands: bash scripts/ci/install_check_tools.sh

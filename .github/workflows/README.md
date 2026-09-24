@@ -39,7 +39,9 @@ surface for the `helm-ai-kernel` project.
   and runtime roles. The
   workflow is source-owned CI evidence; it does not by itself establish branch
   protection or GA release authority.
-- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml@v2`. Its `gate`
+- `ci.yml` calls `ci-v2.yml`, a vendored copy of `Mindburn-Labs/platform-actions`
+  `ci.yml@v2` (a public repository cannot call that internal repository's
+  workflows). Its `gate`
   job, reported as `ci / gate`, is the only required status check. It runs
   `make check` (the `merge` profile of `scripts/ci/quality-gates.json`, every
   gate blocking) after `scripts/ci/install_check_tools.sh` installs pinned

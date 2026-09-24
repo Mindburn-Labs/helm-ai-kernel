@@ -24,7 +24,6 @@ generic-api-key core/pkg/kernel/secrets_test.go 6a376fc0ee06
 generic-api-key core/pkg/launchpad/redact/redact_test.go 4557346159d1
 generic-api-key core/pkg/launchpad/session/runtime_starter.go 4026d1d3357a
 generic-api-key core/pkg/networkproof/types.go 40ca42358f37
-generic-api-key core/pkg/patchdelivery/verifier_test.go 9787577eb430
 generic-api-key core/pkg/riskscan/scan_test.go f070612ce502
 generic-api-key core/pkg/riskscan/scan_test.go f070612ce502
 generic-api-key core/pkg/verifier/externalreceipt/externalreceipt_test.go ac6e7bfb8d7f

@@ -151,7 +151,6 @@ G204 core/pkg/boundary/profile/probe.go 0dc651a3efbc
 G204 core/pkg/boundary/profile/probe.go a67c47ce6cfe
 G204 core/pkg/connectors/sandbox/claudemanaged/adapter.go ea7cd7b358b8
 G204 core/pkg/crypto/external_signer.go 7e3591d71382
-G204 core/pkg/harness/process.go 8ff82324e436
 G204 core/pkg/launchkit/providers.go d87999d9533e
 G204 core/pkg/launchpad/cmd/connect.go b57e98a6dcd6
 G204 core/pkg/launchpad/runtime/docker_sidecar_proxy.go 0ed731971d1c
@@ -174,17 +173,12 @@ G204 core/pkg/launchpad/session/executor.go bb16583b2dcd
 G204 core/pkg/launchpad/session/executor.go ef9da2cf376e
 G204 core/pkg/launchpad/session/executor.go f5a2d21b5b27
 G204 core/pkg/launchpad/session/executor.go ffb174d68b5b
-G204 core/pkg/patchdelivery/mutation.go bd83e8a686ac
-G204 core/pkg/patchdelivery/verifier.go bd83e8a686ac
-G204 core/pkg/patchdelivery/verifier.go fa5e34cd36e1
 G204 core/pkg/sandbox/docker/runner.go f1013077bde2
 G204 core/pkg/sandbox/docker/sandboxes.go f98e0ef3149a
 G204 core/pkg/sandbox/docker/sandboxes.go ff3e7a28cb4c
 G204 core/pkg/workstation/capture.go 2a938e2f1850
 G204 core/pkg/workstation/capture.go 45c130aab649
 G204 core/pkg/workstation/capture.go d1621da2ab36
-G204 core/pkg/worktree/worktree.go 373f1b2964b6
-G204 core/pkg/worktree/worktree.go 396de942e480
 G301 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 497686055571
 G301 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 497686055571
 G301 core/cmd/helm-ai-kernel/conform.go f4d15dcd5d79
@@ -452,7 +446,6 @@ G304 core/pkg/launchpad/session/store.go cf5dc9040eb2
 G304 core/pkg/pack/fs_registry.go 6d3ab38598d3
 G304 core/pkg/pack/fs_registry.go ee50f21d9a4f
 G304 core/pkg/packs/install/manifest.go dbfffc239169
-G304 core/pkg/patchdelivery/mutation.go 1f53706404f5
 G304 core/pkg/policy/reconcile/persistent_store.go 9ef7bf203908
 G304 core/pkg/policy/reconcile/persistent_store.go eab592a5a322
 G304 core/pkg/policy/reconcile/reconcile.go e69ba0e5799b

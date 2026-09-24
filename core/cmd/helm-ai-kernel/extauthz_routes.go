@@ -45,13 +45,17 @@ func registerExtAuthzRoutes(mux routeMux, svc *Services) {
 			api.WriteBadRequest(w, "Invalid ext-authz authorization request")
 			return
 		}
-		if svc.EmergencyStops != nil {
-			configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
-			configuredWorkspaceID := configuredRuntimeWorkspaceID()
-			if configuredTenantID == "" || configuredWorkspaceID == "" || req.TenantID != configuredTenantID || req.WorkspaceID != configuredWorkspaceID {
-				api.WriteForbidden(w, "Ext-authz route tenant/workspace binding could not be verified")
-				return
-			}
+		// The service credential carries no tenant, so the scope comes from this
+		// Kernel's configuration. The body's tenant_id and workspace_id are part
+		// of the signed wire shape; they are checked against that scope and never
+		// select it. Before HELM-755 the check ran only with the emergency-stop
+		// fence on, so by default a service-key caller got a signed verdict for
+		// any tenant it named (S-08).
+		configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
+		configuredWorkspaceID := configuredRuntimeWorkspaceID()
+		if configuredTenantID == "" || configuredWorkspaceID == "" || req.TenantID != configuredTenantID || req.WorkspaceID != configuredWorkspaceID {
+			api.WriteForbidden(w, "Ext-authz route tenant/workspace binding could not be verified")
+			return
 		}
 
 		// The ext-authz route shares the public daemon listener. Re-extracting

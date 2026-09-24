@@ -292,6 +292,60 @@ func configuredRuntimeWorkspaceID() string {
 	return strings.TrimSpace(os.Getenv(runtimeWorkspaceIDEnv))
 }
 
+// workspaceAssertion says whether a route needs the caller to name its
+// workspace or lets the configured scope stand in for an absent header.
+type workspaceAssertion bool
+
+const (
+	workspaceMustBeAsserted workspaceAssertion = true
+	workspaceMayDefault     workspaceAssertion = false
+)
+
+// bindRuntimeScope binds a request to the tenant and workspace this Kernel is
+// configured to serve, and returns the workspace the request may act in.
+// tenantID is the tenant the route gate authenticated. The rule is the same
+// whether or not HELM_EMERGENCY_STOP_FENCE_ENABLED is set; before HELM-755 it
+// ran only with the fence on, so by default the workspace header reached policy
+// unverified (S-08).
+//
+//   - HELM_RUNTIME_WORKSPACE_ID configured: this Kernel serves one scope. The
+//     tenant must be HELM_RUNTIME_TENANT_ID, because the configured workspace
+//     belongs to it, and X-Helm-Workspace-ID, when sent, must name that
+//     workspace. workspaceMustBeAsserted also requires the header.
+//   - Not configured: this Kernel has no scope to check against. The tenant is
+//     whatever the route gate bound (the env pair or a registered binding), and
+//     X-Helm-Workspace-ID is the credential holder's unverified assertion. That
+//     holder can already assert any registered tenant, so the assertion widens
+//     nothing the shared credential does not; it is still not isolation.
+//   - The emergency-stop fence covers only the configured scope. With it on,
+//     an unconfigured scope refuses every request rather than evaluate outside
+//     the fence.
+//
+// With a configured scope the header is the Control Plane's assertion, checked
+// against configuration; it never selects a scope. None of this isolates
+// tenants from a caller that holds the shared credential (ADR-0004 §5.2).
+func bindRuntimeScope(r *http.Request, svc *Services, tenantID string, assertion workspaceAssertion) (string, error) {
+	configuredTenantID := strings.TrimSpace(os.Getenv(runtimeTenantIDEnv))
+	configuredWorkspaceID := configuredRuntimeWorkspaceID()
+	assertedWorkspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+	if configuredWorkspaceID == "" {
+		if svc != nil && svc.EmergencyStops != nil {
+			return "", fmt.Errorf("workspace binding could not be verified: the emergency-stop fence requires %s", runtimeWorkspaceIDEnv)
+		}
+		return assertedWorkspaceID, nil
+	}
+	if configuredTenantID == "" || tenantID != configuredTenantID {
+		return "", fmt.Errorf("tenant binding could not be verified")
+	}
+	if assertedWorkspaceID == "" && assertion == workspaceMustBeAsserted {
+		return "", fmt.Errorf("an explicit authenticated workspace binding is required")
+	}
+	if assertedWorkspaceID != "" && assertedWorkspaceID != configuredWorkspaceID {
+		return "", fmt.Errorf("workspace binding could not be verified")
+	}
+	return configuredWorkspaceID, nil
+}
+
 func quickstartSessionExpired(now time.Time) (bool, bool) {
 	raw := strings.TrimSpace(os.Getenv(quickstartExpiresAtEnv))
 	if raw == "" {

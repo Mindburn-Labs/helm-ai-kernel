@@ -46,16 +46,44 @@ public docs surface.
 | `admin` / `authenticated` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` |
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY` |
 
-When `HELM_EMERGENCY_STOP_FENCE_ENABLED=1`, `POST /api/v1/evaluate`
-additionally requires an authenticated tenant matching the server-owned
-`HELM_RUNTIME_TENANT_ID` and `X-Helm-Workspace-ID` matching the server-owned
-`HELM_RUNTIME_WORKSPACE_ID`. A request body cannot choose either scope
-binding. This is a dispatch fence only; it does not cancel already running
-work.
+## Tenant and Workspace Binding
 
-The unauthenticated OpenAI-compatible proxy (`POST /v1/chat/completions`) is
-unavailable while this fence is enabled because request JSON is not an
-authoritative tenant/workspace binding.
+The Kernel does not issue tenant tokens. On the routes the Control Plane calls,
+the tenant, principal and workspace are the Control Plane's assertion under a
+Kernel credential, checked against what the Kernel was configured and told to
+serve. This applies whether or not `HELM_EMERGENCY_STOP_FENCE_ENABLED` is set.
+
+| Route | Credential | Tenant and principal | Workspace |
+| --- | --- | --- | --- |
+| `POST /api/v1/evaluate`, `GET /api/v1/receipts*` | `HELM_ADMIN_API_KEY` | `X-Helm-Tenant-ID` / `X-Helm-Principal-ID`, accepted only as the `HELM_RUNTIME_TENANT_ID`/`HELM_RUNTIME_PRINCIPAL_ID` pair or a pair registered through `POST /api/v1/admin/principal-bindings` | see below |
+| `POST /internal/v1/organization-runtime/evaluate` | `HELM_ORGANIZATION_RUNTIME_API_KEY` | the same headers, all three required, checked against the same pair or registry | see below, plus the company activation record for that tenant and workspace |
+| `POST /v1/chat/completions` | `HELM_ADMIN_API_KEY` | the configured pair only | see below; the configured workspace applies when the header is absent |
+| `POST /api/v1/extauthz/authorize` | `HELM_SERVICE_API_KEY` | `tenant_id` in the body must equal `HELM_RUNTIME_TENANT_ID` | `workspace_id` in the body must equal `HELM_RUNTIME_WORKSPACE_ID`; both must be configured |
+| `/internal/v1/generated-spec-approvals/*`, approval and effect workload routes | workload bearer token | token claims | token claims |
+| `POST /internal/emergency-stop/fence` | `HELM_SERVICE_API_KEY` | the fence command's scope; see [Emergency-stop fence](../EMERGENCY_STOP_FENCE.md) | the same |
+
+Workspace binding, for the first three rows:
+
+- **`HELM_RUNTIME_WORKSPACE_ID` configured.** The Kernel serves that one scope.
+  The authenticated tenant must equal `HELM_RUNTIME_TENANT_ID`, so a registered
+  binding for another tenant is refused. `X-Helm-Workspace-ID` must name the
+  configured workspace; evaluate and receipt reads require the header.
+- **Not configured.** Nothing checks the workspace. `X-Helm-Workspace-ID` is the
+  credential holder's unverified assertion and is recorded as such. With the
+  emergency-stop fence enabled, an unconfigured workspace refuses every
+  request, because the fence covers only the configured scope.
+
+Request bodies and `context` never select a scope; see below.
+
+**What this does not provide.** The admin credential is shared. Whoever holds
+it can assert any registered tenant, and on a Kernel without a configured
+workspace any workspace. These checks catch a missing or wrong binding from a
+correct caller; they do not isolate tenants from a compromised caller. That
+needs per-tenant credentials or identity taken from a verified token, which is
+not implemented yet.
+
+The emergency-stop fence is a dispatch fence only; it does not cancel already
+running work.
 
 ## Receipt Headers
 

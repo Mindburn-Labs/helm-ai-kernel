@@ -131,6 +131,8 @@ def git_lines(args: list[str]) -> set[str] | None:
 
 
 def changed_files() -> set[str] | None:
+    # D is included: deleting a file a gate watches (or depends on) impacts that
+    # gate. Without it, a deletion-only change skipped every path-filtered gate.
     explicit = os.environ.get("QUALITY_CHANGED_FILES")
     if explicit:
         return parse_changed_files_from_env(explicit)
@@ -142,14 +144,14 @@ def changed_files() -> set[str] | None:
     refs.extend(["origin/main...HEAD", "main...HEAD", "HEAD~1...HEAD"])
 
     for ref in refs:
-        files = git_lines(["git", "diff", "--name-only", "--diff-filter=ACMRTUXB", ref])
+        files = git_lines(["git", "diff", "--name-only", "--diff-filter=ACDMRTUXB", ref])
         if files:
             return files
 
     local: set[str] = set()
     for args in (
-        ["git", "diff", "--name-only", "--diff-filter=ACMRTUXB"],
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMRTUXB"],
+        ["git", "diff", "--name-only", "--diff-filter=ACDMRTUXB"],
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACDMRTUXB"],
         ["git", "ls-files", "--others", "--exclude-standard"],
     ):
         files = git_lines(args)

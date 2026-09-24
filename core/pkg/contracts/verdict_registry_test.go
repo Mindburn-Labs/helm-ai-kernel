@@ -2,10 +2,14 @@ package contracts
 
 import (
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"testing"
 )
 
@@ -88,5 +92,55 @@ func loadJSONFile(t *testing.T, path string, target any) {
 	}
 	if err := json.Unmarshal(data, target); err != nil {
 		t.Fatalf("decode %s: %v", path, err)
+	}
+}
+
+// TestReasonCodeDeclarations_MatchRegistry parses verdict.go and requires its
+// ReasonCode constants to be exactly the generated registry: no constant
+// outside the registry, no registry code without a kernel name, no two names
+// for one code.
+func TestReasonCodeDeclarations_MatchRegistry(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "verdict.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse verdict.go: %v", err)
+	}
+	declared := map[string]string{}
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			value := spec.(*ast.ValueSpec)
+			if typ, ok := value.Type.(*ast.Ident); !ok || typ.Name != "ReasonCode" {
+				continue
+			}
+			for i, name := range value.Names {
+				code, err := strconv.Unquote(value.Values[i].(*ast.BasicLit).Value)
+				if err != nil {
+					t.Fatalf("%s: %v", name.Name, err)
+				}
+				if previous, dup := declared[code]; dup {
+					t.Errorf("%s and %s both name %q", previous, name.Name, code)
+				}
+				declared[code] = name.Name
+			}
+		}
+	}
+
+	registered := map[string]bool{}
+	for _, code := range CoreReasonCodes() {
+		registered[string(code)] = true
+		if _, ok := declared[string(code)]; !ok {
+			t.Errorf("registry code %q has no ReasonCode constant in verdict.go", code)
+		}
+	}
+	for code, name := range declared {
+		if !registered[code] {
+			t.Errorf("%s = %q is not in reason-codes-v1.json", name, code)
+		}
+	}
+	if len(declared) == 0 {
+		t.Fatal("no ReasonCode constants parsed from verdict.go")
 	}
 }

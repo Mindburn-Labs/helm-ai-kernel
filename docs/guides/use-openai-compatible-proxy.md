@@ -1,6 +1,6 @@
 ---
 title: Use The OpenAI-Compatible Proxy
-last_reviewed: 2026-06-29
+last_reviewed: 2026-09-24
 ---
 
 # Use The OpenAI-Compatible Proxy
@@ -39,6 +39,21 @@ export OPENAI_API_KEY=local-dev-key
 
 Expected denial responses include `X-Helm-Status: DENIED` and
 `X-Helm-Receipt-ID`.
+
+## What The Proxy Governs
+
+- Tool calls are decided by the Guardian against `--policy` (a serve policy
+  file). Without `--policy`, every tool call is denied.
+- Only OpenAI Chat Completions tool calls (`choices[].message.tool_calls`) are
+  parsed. When a request offers tools, any other response shape is withheld
+  with `X-Helm-Status: UNGOVERNABLE_RESPONSE`.
+- A request that offers tools must send `"stream": false`. A streamed request
+  with tools is refused with `400` and `PROXY_STREAMING_TOOLS_REFUSED` before
+  it reaches the upstream. Streams without tools pass through unreceipted.
+- `--max-iterations` and `--max-wallclock` count per session, named by an
+  `X-Helm-Session-ID` UUID header or, without one, the request's correlation ID.
+- `--daily-limit` and `--monthly-limit` are refused: the proxy sees token
+  counts, not prices.
 
 ## Source Truth
 

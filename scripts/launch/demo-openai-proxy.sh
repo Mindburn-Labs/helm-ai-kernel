@@ -40,7 +40,6 @@ echo "==> 2. Starting HELM Proxy on :$PROXY_PORT"
   --upstream "http://127.0.0.1:$UPSTREAM_PORT/v1" \
   --port "$PROXY_PORT" \
   --tenant-id "launch-demo-tenant" \
-  --daily-limit 5000 \
   --receipts-dir "$TMP_DIR/proxy-receipts" > "$TMP_DIR/proxy.log" 2>&1 &
 PROXY_PID=$!
 for _ in $(seq 1 50); do
@@ -73,7 +72,7 @@ cat "$TMP_DIR/proxy-response.json"
 
 echo ""
 echo "==> 4. Verifying the Intercepted Receipt"
-echo "HELM logs the input token intent, enforces the daily budget, and outputs a cryptographically signed receipt."
+echo "HELM appends a hash-chained receipt for the response it delivered."
 echo ""
 receipt_file="$(find "$TMP_DIR/proxy-receipts" -name '*.jsonl' -type f | sort | tail -n 1)"
 test -s "$receipt_file"

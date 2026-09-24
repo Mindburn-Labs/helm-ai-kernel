@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -23,14 +24,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/bridge"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/budget"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/correlation"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/effects"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/observability"
 	helmotel "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/otel"
@@ -67,6 +67,8 @@ type proxyReceipt struct {
 
 	// helm-specific governance correlation. Equals gen_ai.tool.call.id below.
 	CorrelationID string `json:"correlation_id,omitempty"`
+	// SessionID keys the per-session iteration and wallclock limits.
+	SessionID string `json:"session_id,omitempty"`
 
 	// OTel GenAI semconv mirrors. Persisted alongside the receipt so the
 	// receipt is self-contained for replay/audit even without the OTel trace.
@@ -152,17 +154,23 @@ func recoverReceiptStoreState(path string) (string, uint64, error) {
 	return expectedPrevHash, lastLamport, nil
 }
 
-func (s *receiptStore) Append(rcpt *proxyReceipt) error {
+// Append assigns the receipt's Lamport clock and chain link under the store
+// lock, lets seal finish it (receipt id, signature) with those values, and
+// writes it. Taking the clock here rather than in the request goroutine keeps
+// the clock order and the file order identical under concurrent requests; a
+// caller-assigned clock wedged the chain after one out-of-order completion
+// (audit 03-01). A seal or write error leaves the chain where it was.
+func (s *receiptStore) Append(rcpt *proxyReceipt, seal func(*proxyReceipt) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if rcpt.LamportClock == 0 {
-		return fmt.Errorf("receipt lamport_clock must be non-zero")
-	}
-	if rcpt.LamportClock != s.lastLamport+1 {
-		return fmt.Errorf("receipt lamport_clock %d does not follow %d", rcpt.LamportClock, s.lastLamport)
-	}
+	rcpt.LamportClock = s.lastLamport + 1
 	rcpt.PrevHash = s.prevHash
+	if seal != nil {
+		if err := seal(rcpt); err != nil {
+			return err
+		}
+	}
 
 	data, err := json.Marshal(rcpt)
 	if err != nil {
@@ -197,9 +205,19 @@ type proxyCtxKey struct{ name string }
 
 var (
 	ctxKeyCorrelationID = proxyCtxKey{"correlation_id"}
-	ctxKeyRequestModel  = proxyCtxKey{"request_model"}
+	ctxKeyRequestInfo   = proxyCtxKey{"request_info"}
+	ctxKeySessionID     = proxyCtxKey{"session_id"}
 	ctxKeyTraceparent   = proxyCtxKey{"traceparent"}
 )
+
+// proxySessionHeader names the caller session that --max-iterations and
+// --max-wallclock are counted against. It must be a canonical UUID; without a
+// valid one the request's correlation ID is its session.
+const proxySessionHeader = "X-Helm-Session-ID"
+
+// proxyLocalCredential is the transport identity of an unauthenticated
+// loopback sidecar, the proxy's analogue of `mcp serve --auth none`.
+const proxyLocalCredential = "helm-proxy-local"
 
 // inferGenAISystem maps a configured upstream URL to the OTel GenAI system
 // vocabulary. Falls back to the empty string when the host is unrecognized;
@@ -297,9 +315,175 @@ func pickInt64(m map[string]any, keys ...string) int64 {
 	return 0
 }
 
+// proxyRequestInfo is what the proxy reads from a client request body before
+// forwarding it.
+type proxyRequestInfo struct {
+	model string
+	// stream is true when the body asks the upstream to stream its response.
+	stream bool
+	// toolsDeclared is true when the body offers the model tools, or when the
+	// body is not a JSON object, so tools cannot be ruled out.
+	toolsDeclared bool
+}
+
+func inspectProxyRequest(body []byte) proxyRequestInfo {
+	info := proxyRequestInfo{model: extractRequestModel(body)}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return info
+	}
+	var top map[string]any
+	if err := json.Unmarshal(body, &top); err != nil {
+		info.toolsDeclared = true
+		return info
+	}
+	info.stream, _ = top["stream"].(bool)
+	info.toolsDeclared = declaresTools(top)
+	// Bedrock InvokeModel embeds the provider body as a JSON-encoded string.
+	if inner, ok := top["body"].(string); ok {
+		var nested map[string]any
+		if err := json.Unmarshal([]byte(inner), &nested); err != nil || declaresTools(nested) {
+			info.toolsDeclared = true
+		}
+	}
+	return info
+}
+
+// declaresTools reports whether a request body offers the model tools
+// (`tools`, or the legacy OpenAI `functions`). A value that is present but not
+// a list counts as declared.
+func declaresTools(body map[string]any) bool {
+	for _, key := range []string{"tools", "functions"} {
+		value, ok := body[key]
+		if !ok || value == nil {
+			continue
+		}
+		if list, isList := value.([]any); !isList || len(list) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// proxyToolCall is one tool call read from an OpenAI Chat Completions
+// response. readable is false when its name or its string arguments are
+// missing, so the call cannot be governed and must fail closed.
+type proxyToolCall struct {
+	name      string
+	arguments string
+	readable  bool
+}
+
+// extractChatToolCalls reads every tool call (tool_calls entries and the
+// legacy function_call) from an OpenAI Chat Completions response. chatShape is
+// false unless body is a JSON object with a choices array, the only response
+// shape this proxy can govern.
+func extractChatToolCalls(body []byte) (calls []proxyToolCall, model string, chatShape bool) {
+	var top map[string]any
+	if err := json.Unmarshal(body, &top); err != nil {
+		return nil, "", false
+	}
+	model, _ = top["model"].(string)
+	choices, ok := top["choices"].([]any)
+	if !ok {
+		return nil, model, false
+	}
+	for _, c := range choices {
+		choice, _ := c.(map[string]any)
+		msg, _ := choice["message"].(map[string]any)
+		if raw, present := msg["tool_calls"]; present && raw != nil {
+			entries, isList := raw.([]any)
+			if !isList {
+				calls = append(calls, proxyToolCall{})
+			}
+			for _, entry := range entries {
+				tc, _ := entry.(map[string]any)
+				fn, _ := tc["function"].(map[string]any)
+				calls = append(calls, readProxyFunctionCall(fn))
+			}
+		}
+		if raw, present := msg["function_call"]; present && raw != nil {
+			fn, _ := raw.(map[string]any)
+			calls = append(calls, readProxyFunctionCall(fn))
+		}
+	}
+	return calls, model, true
+}
+
+func readProxyFunctionCall(fn map[string]any) proxyToolCall {
+	name, _ := fn["name"].(string)
+	arguments, isString := fn["arguments"].(string)
+	return proxyToolCall{name: name, arguments: arguments, readable: name != "" && isString}
+}
+
+// maxProxySessions bounds the session table; client-chosen session IDs must
+// not grow it without limit.
+const maxProxySessions = 4096
+
+// proxySessionLimits enforces --max-iterations and --max-wallclock per caller
+// session instead of per process (audit 03-15). Sessions are named by the
+// client, so these are loop guards for a cooperating agent, not an
+// authorization boundary.
+type proxySessionLimits struct {
+	mu            sync.Mutex
+	maxIterations int
+	maxWallclock  time.Duration
+	now           func() time.Time
+	sessions      map[string]*proxySessionState
+}
+
+type proxySessionState struct {
+	started    time.Time
+	iterations int
+}
+
+func newProxySessionLimits(maxIterations int, maxWallclock time.Duration, now func() time.Time) *proxySessionLimits {
+	return &proxySessionLimits{
+		maxIterations: maxIterations,
+		maxWallclock:  maxWallclock,
+		now:           now,
+		sessions:      make(map[string]*proxySessionState),
+	}
+}
+
+// admit counts one governed tool call against sessionID and returns the limit
+// status it trips, or "" when the call is within the session's limits. A
+// session's wallclock starts at its first tool call.
+func (l *proxySessionLimits) admit(sessionID string) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	state, ok := l.sessions[sessionID]
+	if !ok {
+		if len(l.sessions) >= maxProxySessions {
+			l.evictOldestLocked()
+		}
+		state = &proxySessionState{started: now}
+		l.sessions[sessionID] = state
+	}
+	state.iterations++
+	if l.maxIterations > 0 && state.iterations > l.maxIterations {
+		return "PROXY_ITERATION_LIMIT"
+	}
+	if l.maxWallclock > 0 && now.Sub(state.started) > l.maxWallclock {
+		return "PROXY_WALLCLOCK_LIMIT"
+	}
+	return ""
+}
+
+func (l *proxySessionLimits) evictOldestLocked() {
+	var oldestID string
+	var oldest time.Time
+	for id, state := range l.sessions {
+		if oldestID == "" || state.started.Before(oldest) {
+			oldestID, oldest = id, state.started
+		}
+	}
+	delete(l.sessions, oldestID)
+}
+
 func proxyStatusBlocksBody(status string) bool {
 	switch status {
-	case "DENIED", "PEP_VALIDATION_FAILED", "GOVERNANCE_ERROR", "PROXY_ITERATION_LIMIT", "PROXY_WALLCLOCK_LIMIT":
+	case "DENIED", "PEP_VALIDATION_FAILED", "GOVERNANCE_ERROR", "PROXY_ITERATION_LIMIT", "PROXY_WALLCLOCK_LIMIT", "UNGOVERNABLE_RESPONSE":
 		return true
 	default:
 		return false
@@ -340,8 +524,30 @@ func containDeniedProxyResponse(resp *http.Response, status, reasonCode string, 
 		resp.Status = "403 Forbidden"
 		resp.Header.Set("Content-Type", "application/json")
 		resp.Header.Del("Content-Length")
+		resp.Header.Del("Content-Encoding")
 	}
 	return body
+}
+
+// writeStreamingToolsRefusal answers a request that asks for a streamed
+// response while offering tools. The proxy cannot parse a stream, so it cannot
+// hold a streamed tool call for a decision; the request never reaches the
+// upstream (audit 03-02).
+func writeStreamingToolsRefusal(w http.ResponseWriter) {
+	const reason = "PROXY_STREAMING_TOOLS_REFUSED"
+	body, _ := json.Marshal(map[string]any{
+		"error": map[string]any{
+			"message": `HELM proxy cannot govern tool calls in a streamed response; send requests that declare tools with "stream": false`,
+			"type":    "helm_governance_denied",
+			"code":    reason,
+		},
+		"helm": map[string]any{"status": "STREAMING_TOOLS_REFUSED", "reason_code": reason},
+	})
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Helm-Status", "STREAMING_TOOLS_REFUSED")
+	w.Header().Set("X-Helm-Reason-Code", reason)
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = w.Write(body)
 }
 
 // validateToolCallArgs performs PEP validation: validates tool arguments
@@ -365,97 +571,56 @@ func validateToolCallArgs(argsStr string) (string, bool) {
 	return result.ArgsHash, true
 }
 
-// runProxyCmd implements `helm-ai-kernel proxy`.
-//
-// Usage:
-//
-//	helm-ai-kernel proxy --upstream https://api.openai.com/v1 --port 9090
-//
-// Then:
-//
-//	export OPENAI_BASE_URL=http://localhost:9090/v1
-//	python your_app.py  # Every tool call now gets a receipt.
-//
-// Features:
-//   - Receipt persistence: JSONL audit log at --receipts-dir
-//   - PEP validation: tool_call arguments validated as JSON, canonicalized (JCS), and SHA-256 hashed
-//   - Causal chain: receipts linked via PrevHash (SHA-256 of previous receipt)
-//   - Ed25519 signature: receipts signed if --sign is enabled
-//
-// Exit codes:
-//
-//	0 = clean shutdown
-//	2 = config error
-func runProxyCmd(args []string, stdout, stderr io.Writer) int {
-	// Handle `proxy up` alias — strip "up" and pass remaining args
-	if len(args) > 0 && args[0] == "up" {
-		args = args[1:]
-	}
+// proxyConfig is the proxy's resolved configuration.
+type proxyConfig struct {
+	upstream      string
+	apiKey        string
+	jsonOutput    bool
+	verbose       bool
+	receiptsDir   string
+	signKey       string
+	tenantID      string
+	policyGraph   *prg.Graph // nil: every tool call is denied
+	maxIterations int
+	maxWallclock  time.Duration
+}
 
-	cmd := flag.NewFlagSet("proxy", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
+// proxyRuntime is a constructed proxy: the governed handler plus the state the
+// sidecar's own endpoints and shutdown path read.
+type proxyRuntime struct {
+	handler     http.Handler
+	upstream    string
+	receiptPath string
+	store       *receiptStore
+	pg          *proofgraph.Graph
+	signer      *helmcrypto.Ed25519Signer // nil unless --sign
+	close       func()
+}
 
-	var (
-		upstream      string
-		port          int
-		apiKey        string
-		jsonOutput    bool
-		verbose       bool
-		receiptsDir   string
-		signKey       string
-		tenantID      string
-		dailyLimit    int64
-		monthlyLimit  int64
-		maxIterations int
-		maxWallclock  time.Duration
-		websocket     bool
-	)
-
-	cmd.StringVar(&upstream, "upstream", "https://api.openai.com/v1", "Upstream API base URL")
-	cmd.IntVar(&port, "port", 9090, "Local proxy port")
-	cmd.StringVar(&apiKey, "api-key", "", "API key to forward to upstream (or use OPENAI_API_KEY env)")
-	cmd.BoolVar(&jsonOutput, "json", false, "Log receipts as JSON to stdout")
-	cmd.BoolVar(&verbose, "verbose", false, "Verbose logging")
-	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-receipts", "Directory for persistent receipt JSONL logs")
-	cmd.StringVar(&signKey, "sign", "", "Ed25519 signing key seed (enables receipt signatures)")
-	cmd.StringVar(&tenantID, "tenant-id", "default", "Tenant identifier for budget enforcement")
-	cmd.Int64Var(&dailyLimit, "daily-limit", 100000, "Daily budget limit in cents (0=unlimited)")
-	cmd.Int64Var(&monthlyLimit, "monthly-limit", 1000000, "Monthly budget limit in cents (0=unlimited)")
-	cmd.IntVar(&maxIterations, "max-iterations", 10, "Max tool call rounds per session (0=unlimited)")
-	cmd.DurationVar(&maxWallclock, "max-wallclock", 120*time.Second, "Max session wallclock duration (0=unlimited)")
-	cmd.BoolVar(&websocket, "websocket", false, "Request Responses WebSocket mode (unsupported in OSS runtime)")
-
-	if err := cmd.Parse(args); err != nil {
-		return 2
-	}
-
-	if websocket {
-		_, _ = fmt.Fprintln(stderr, "Error: --websocket is not supported in the OSS proxy runtime")
-		_, _ = fmt.Fprintln(stderr, "Use the HTTP proxy surface at /v1/chat/completions until Responses WebSocket support is implemented.")
-		return 2
-	}
-
-	// Normalize upstream URL
-	upstream = strings.TrimSuffix(upstream, "/")
-
+// newProxyRuntime wires the receipt store, signer, Guardian bridge and the
+// governed reverse proxy. runProxyCmd and the tests both build the proxy here,
+// so the tests exercise the shipped wiring rather than a copy of it.
+func newProxyRuntime(cfg proxyConfig, stderr io.Writer) (*proxyRuntime, error) {
+	upstream := cfg.upstream
 	upstreamURL, err := url.Parse(upstream)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: invalid upstream URL: %v\n", err)
-		return 2
+		return nil, fmt.Errorf("invalid upstream URL: %w", err)
 	}
-	if helmcrypto.ProductionMode() {
-		_, _ = fmt.Fprintln(stderr, "Error: helm proxy is disabled under HELM_PRODUCTION: request, response, and SSE payloads do not have verified inline personal-data inspection")
-		return 2
-	}
+	tenantID := cfg.tenantID
+	receiptsDir := cfg.receiptsDir
 
 	// Initialize receipt store
 	receiptPath := filepath.Join(receiptsDir, fmt.Sprintf("receipts-%s.jsonl", time.Now().Format("2006-01-02")))
 	store, err := newReceiptStore(receiptPath)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: failed to initialize receipt store at %s: %v\n", receiptPath, err)
-		return 2
+		return nil, fmt.Errorf("failed to initialize receipt store at %s: %w", receiptPath, err)
 	}
-	defer store.Close()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = store.Close()
+		}
+	}()
 
 	// Ed25519 signer (used for both receipts and KernelBridge governance).
 	//
@@ -464,12 +629,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	// were unverifiable after a restart and the seed was published in every
 	// receipt's KeyID field (F-01).
 	var kernelSigner *helmcrypto.Ed25519Signer
-	if signKey != "" {
+	if cfg.signKey != "" {
 		var derivedFromPassphrase bool
-		kernelSigner, derivedFromPassphrase, err = helmcrypto.NewEd25519SignerFromSecret(signKey, "helm-proxy")
+		kernelSigner, derivedFromPassphrase, err = helmcrypto.NewEd25519SignerFromSecret(cfg.signKey, "helm-proxy")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
-			return 2
+			return nil, fmt.Errorf("failed to create kernel signer: %w", err)
 		}
 		if derivedFromPassphrase {
 			_, _ = fmt.Fprintln(stderr,
@@ -481,45 +645,35 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		// verified once this process exits. Fails closed under HELM_PRODUCTION.
 		kernelSigner, err = helmcrypto.NewEd25519Signer("helm-proxy")
 		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: failed to create kernel signer: %v\n", err)
-			return 2
+			return nil, fmt.Errorf("failed to create kernel signer: %w", err)
 		}
 	}
 
 	// Optional: separate receipt signer (same key for now)
 	var signer *helmcrypto.Ed25519Signer
-	if signKey != "" {
+	if cfg.signKey != "" {
 		signer = kernelSigner
 	}
 
-	// Initialize KernelBridge: Guardian + ProofGraph + Budget
-	prgGraph := prg.NewGraph()
+	// Initialize KernelBridge: Guardian + ProofGraph. The proxy passes no budget
+	// enforcer: it cannot price a tool call (see runProxyCmd).
+	prgGraph := cfg.policyGraph
+	if prgGraph == nil {
+		prgGraph = prg.NewGraph()
+	}
 	artStore, artErr := artifacts.NewFileStore(filepath.Join(receiptsDir, "artifacts"))
 	if artErr != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: failed to create artifact store: %v\n", artErr)
-		return 2
+		return nil, fmt.Errorf("failed to create artifact store: %w", artErr)
 	}
 	artRegistry := artifacts.NewRegistry(artStore, kernelSigner)
 	g, guardianErr := newProductionGuardian(kernelSigner, prgGraph, artRegistry, utcRuntimeClock{})
 	if guardianErr != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: failed to initialize production Guardian: %v\n", guardianErr)
-		return 2
+		return nil, fmt.Errorf("failed to initialize production Guardian: %w", guardianErr)
 	}
 	pg := proofgraph.NewGraph()
-
-	// Budget enforcer (in-memory for sidecar mode)
-	var budgetEnforcer budget.Enforcer
-	if dailyLimit > 0 || monthlyLimit > 0 {
-		memStorage := budget.NewMemoryStorage()
-		enforcer := budget.NewSimpleEnforcer(memStorage)
-		if setErr := enforcer.SetLimits(context.Background(), tenantID, dailyLimit, monthlyLimit); setErr != nil {
-			_, _ = fmt.Fprintf(stderr, "Error: failed to set budget limits: %v\n", setErr)
-			return 2
-		}
-		budgetEnforcer = enforcer
-	}
-
-	kb := bridge.NewKernelBridge(g, prgGraph, pg, budgetEnforcer, tenantID)
+	kb := bridge.NewKernelBridge(g, prgGraph, pg, nil, tenantID)
+	limits := newProxySessionLimits(cfg.maxIterations, cfg.maxWallclock, time.Now)
+	proofPath := filepath.Join(receiptsDir, "proofgraph.json")
 
 	// Governance tracer — attaches OTel GenAI spans to every request.
 	// NoopTracer when no OTLP endpoint is configured; the GovernanceTracer
@@ -532,7 +686,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			Insecure:    os.Getenv("HELM_OTLP_INSECURE") == "1",
 		}); otelErr == nil {
 			otelTracer = rt
-			defer func() { _ = otelTracer.Shutdown(context.Background()) }()
 		} else {
 			log.Printf("[WARN] OTLP exporter setup failed, falling back to noop: %v", otelErr)
 		}
@@ -540,24 +693,8 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 	genAISystem := inferGenAISystem(upstreamURL)
 
-	lamport := store.LastLamport()
-	var iterationCount int64
-	sessionStart := time.Now()
-
 	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
-			// Buffer + restore request body so we can extract the request model
-			// and pass it through to ModifyResponse via the request context.
-			var bodyBytes []byte
-			if req.Body != nil {
-				if b, readErr := io.ReadAll(req.Body); readErr == nil {
-					bodyBytes = b
-					req.Body = io.NopCloser(bytes.NewReader(b))
-					req.ContentLength = int64(len(b))
-				}
-			}
-			requestModel := extractRequestModel(bodyBytes)
-
 			// helm correlation_id — also used as gen_ai.tool.call.id so OTel traces
 			// and helm-ai-kernel receipts cross-reference 1:1.
 			// Adopt-or-mint (telemetry contract §2.2): a valid inbound
@@ -567,7 +704,11 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			corr, _ := tracing.AdoptOrMintFromHeaders(req.Header)
 			ctx := tracing.WithCorrelationID(req.Context(), corr)
 			ctx = context.WithValue(ctx, ctxKeyCorrelationID, string(corr))
-			ctx = context.WithValue(ctx, ctxKeyRequestModel, requestModel)
+			sessionID := strings.TrimSpace(req.Header.Get(proxySessionHeader))
+			if !correlation.IsValid(sessionID) {
+				sessionID = string(corr)
+			}
+			ctx = context.WithValue(ctx, ctxKeySessionID, sessionID)
 
 			// Stamp the product identity onto the edge server span so OTel
 			// traces and receipts join 1:1 (HELM-333); same attribute the
@@ -594,159 +735,132 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			}
 			req.Host = upstreamURL.Host
 
+			// Let the transport negotiate compression itself so it decodes the
+			// response before governance reads it. A client-chosen encoding would
+			// reach ModifyResponse compressed, where no tool call can be parsed.
+			req.Header.Del("Accept-Encoding")
+
 			// Forward API key
-			if apiKey != "" && req.Header.Get("Authorization") == "" {
-				req.Header.Set("Authorization", "Bearer "+apiKey)
+			if cfg.apiKey != "" && req.Header.Get("Authorization") == "" {
+				req.Header.Set("Authorization", "Bearer "+cfg.apiKey)
 			}
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			// The correlation ID is a client-visible join key for both regular
 			// responses and SSE streams, which return before receipt creation.
-			correlationID, _ := resp.Request.Context().Value(ctxKeyCorrelationID).(string)
+			reqCtx := resp.Request.Context()
+			correlationID, _ := reqCtx.Value(ctxKeyCorrelationID).(string)
 			if correlationID != "" {
 				resp.Header.Set("X-Helm-Correlation-ID", correlationID)
 			}
+			info, known := reqCtx.Value(ctxKeyRequestInfo).(proxyRequestInfo)
+			if !known {
+				info.toolsDeclared = true
+			}
 
 			// Detect SSE streaming response
-			contentType := resp.Header.Get("Content-Type")
-			isSSE := strings.Contains(contentType, "text/event-stream")
-
-			if isSSE {
-				// Streaming responses pass through immediately; governance evidence is
-				// recorded after the stream because this proxy path does not parse
-				// chunks inline.
-				log.Printf("[INFO] SSE streaming response detected, applying post-hoc governance")
-				resp.Header.Set("X-Helm-SSE", "post-stream-governance")
-
-				deferMsg, _ := json.Marshal(map[string]any{
+			isSSE := strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream")
+			if isSSE && !info.toolsDeclared {
+				// No tools were offered, so the stream cannot carry a tool call.
+				// It passes through unparsed and unreceipted, and says so.
+				resp.Header.Set("X-Helm-SSE", "passthrough-no-tools")
+				passMsg, _ := json.Marshal(map[string]any{
 					"upstream": upstream,
-					"status":   "POST_STREAM_GOVERNANCE",
+					"status":   "STREAM_PASSTHROUGH_NO_TOOLS",
 				})
-				_, _ = pg.Append(proofgraph.NodeTypeEffect, deferMsg, "helm-proxy", 0)
-
+				_, _ = pg.Append(proofgraph.NodeTypeEffect, passMsg, "helm-proxy", 0)
 				return nil
 			}
 
-			// Non-streaming: read full response body
-			body, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if err != nil {
-				return err
+			// Everything else is read in full before any byte reaches the client.
+			// A stream offered tools is not read at all: it is withheld below.
+			var body []byte
+			if isSSE {
+				_ = resp.Body.Close()
+			} else {
+				b, err := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil {
+					return err
+				}
+				body = b
 			}
 
-			clock := atomic.AddUint64(&lamport, 1)
-
-			// Pull per-request governance state stashed by Director.
-			reqCtx := resp.Request.Context()
-			requestModel, _ := reqCtx.Value(ctxKeyRequestModel).(string)
+			// Pull per-request governance state stashed by the handler and Director.
+			requestModel := info.model
 			traceparent, _ := reqCtx.Value(ctxKeyTraceparent).(string)
+			sessionID, _ := reqCtx.Value(ctxKeySessionID).(string)
+			credentialHash, _ := helmauth.AuthenticatedCredentialHash(reqCtx)
 
 			// Extract OTel GenAI usage from response body.
-			inputTokens, outputTokens, usagePresent, finishReason := extractGenAIUsage(body)
+			inputTokens, outputTokens, _, finishReason := extractGenAIUsage(body)
 
 			// Parse for tool_calls + PEP validation
-			var chatResp map[string]any
-			toolCallCount := 0
+			calls, model, chatShape := extractChatToolCalls(body)
+			toolCallCount := len(calls)
 			var argsHashes []string
 			var argsValid []bool
 			var toolNames []string
-			var model string
 			status := "APPROVED"
 			var reasonCode string
 			var decisionID string
 			var pgNodeID string
 
-			if err := json.Unmarshal(body, &chatResp); err == nil {
-				if m, ok := chatResp["model"].(string); ok {
-					model = m
+			// Tools were offered, but the response is not one the proxy can
+			// inspect: a stream, or a body that is not Chat Completions JSON. A
+			// tool call could be inside it, so it is withheld (audit 03-02).
+			// Non-2xx bodies carry errors, not executable tool calls.
+			if isSSE || (info.toolsDeclared && !chatShape && resp.StatusCode >= 200 && resp.StatusCode < 300) {
+				status = "UNGOVERNABLE_RESPONSE"
+				reasonCode = "PROXY_UNGOVERNABLE_RESPONSE"
+				log.Printf("[DENY] tools were offered but the upstream response (%s) cannot be governed", resp.Header.Get("Content-Type"))
+			}
+
+			for _, call := range calls {
+				toolNames = append(toolNames, call.name)
+
+				// PEP validation: validate + canonicalize + hash
+				hash, valid := "", false
+				if call.readable {
+					hash, valid = validateToolCallArgs(call.arguments)
 				}
-				if choices, ok := chatResp["choices"].([]any); ok {
-					for _, c := range choices {
-						choice, ok := c.(map[string]any)
-						if !ok {
-							continue
-						}
-						msg, ok := choice["message"].(map[string]any)
-						if !ok {
-							continue
-						}
-						if tcs, ok := msg["tool_calls"].([]any); ok {
-							for _, tc := range tcs {
-								toolCallCount++
-								tcMap, ok := tc.(map[string]any)
-								if !ok {
-									continue
-								}
-								fn, ok := tcMap["function"].(map[string]any)
-								if !ok {
-									continue
-								}
+				argsHashes = append(argsHashes, hash)
+				argsValid = append(argsValid, valid)
+				if !valid {
+					status = "PEP_VALIDATION_FAILED"
+					reasonCode = "SCHEMA_VIOLATION"
+					log.Printf("[WARN] PEP validation failed for tool_call %q (missing name or malformed arguments)", call.name)
+					continue
+				}
 
-								// Extract tool name
-								var toolName string
-								if name, ok := fn["name"].(string); ok {
-									toolName = name
-									toolNames = append(toolNames, name)
-								}
+				if limit := limits.admit(sessionID); limit != "" {
+					status = limit
+					reasonCode = limit
+					log.Printf("[DENY] tool=%s session=%s %s", call.name, sessionID, limit)
+					continue
+				}
 
-								// PEP validation: validate + canonicalize + hash
-								if argsStr, ok := fn["arguments"].(string); ok {
-									hash, valid := validateToolCallArgs(argsStr)
-									argsHashes = append(argsHashes, hash)
-									argsValid = append(argsValid, valid)
-									if !valid {
-										status = "PEP_VALIDATION_FAILED"
-										reasonCode = "SCHEMA_VIOLATION"
-										log.Printf("[WARN] PEP validation failed for tool_call args (malformed JSON)")
-									}
-
-									// KernelBridge governance
-									if valid && toolName != "" {
-										// Check iteration limit
-										currIter := atomic.AddInt64(&iterationCount, 1)
-										if maxIterations > 0 && int(currIter) > maxIterations {
-											status = "PROXY_ITERATION_LIMIT"
-											reasonCode = "PROXY_ITERATION_LIMIT"
-											log.Printf("[DENY] iteration limit reached (%d/%d)", currIter, maxIterations)
-										} else if maxWallclock > 0 && time.Since(sessionStart) > maxWallclock {
-											status = "PROXY_WALLCLOCK_LIMIT"
-											reasonCode = "PROXY_WALLCLOCK_LIMIT"
-											log.Printf("[DENY] wallclock limit exceeded (%v > %v)", time.Since(sessionStart), maxWallclock)
-										} else {
-											// Preserve recognized token usage as evidence, but do
-											// not manufacture a zero-cost breakdown when usage is
-											// absent. Token usage remains unpriced, so a configured
-											// budget fails closed in either case until a trusted
-											// monetary price is supplied.
-											var effectCost *effects.CostBreakdown
-											if usagePresent {
-												effectCost = &effects.CostBreakdown{
-													InputTokens:  inputTokens,
-													OutputTokens: outputTokens,
-												}
-											}
-											govResult, govErr := kb.Govern(context.Background(), toolName, hash, effectCost)
-											if govErr != nil {
-												status = "GOVERNANCE_ERROR"
-												reasonCode = "PDP_ERROR"
-												log.Printf("[ERROR] governance error: %v", govErr)
-											} else {
-												reasonCode = govResult.ReasonCode
-												pgNodeID = govResult.NodeID
-												if govResult.Decision != nil {
-													decisionID = govResult.Decision.ID
-												}
-												if !govResult.Allowed {
-													status = "DENIED"
-													log.Printf("[DENY] tool=%s reason=%s node=%s", toolName, reasonCode, pgNodeID)
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
+				// KernelBridge governance. The binding carries the transport
+				// identity the Guardian's isolation gate requires; without it
+				// every tool call was denied before policy ran (audit 07-01).
+				govResult, govErr := kb.GovernBound(context.Background(), call.name, hash, nil, bridge.Binding{
+					CredentialHash: credentialHash,
+					SessionID:      sessionID,
+				})
+				if govErr != nil {
+					status = "GOVERNANCE_ERROR"
+					reasonCode = "PDP_ERROR"
+					log.Printf("[ERROR] governance error: %v", govErr)
+					continue
+				}
+				pgNodeID = govResult.NodeID
+				if govResult.Decision != nil {
+					decisionID = govResult.Decision.ID
+				}
+				if !govResult.Allowed {
+					status = "DENIED"
+					reasonCode = govResult.ReasonCode
+					log.Printf("[DENY] tool=%s reason=%s node=%s", call.name, reasonCode, pgNodeID)
 				}
 			}
 
@@ -771,12 +885,8 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 			// Decide a verdict label for the OTel span.
 			verdict := "ALLOW"
-			if status == "DENIED" || status == "PEP_VALIDATION_FAILED" ||
-				status == "GOVERNANCE_ERROR" || status == "PROXY_ITERATION_LIMIT" ||
-				status == "PROXY_WALLCLOCK_LIMIT" {
-				verdict = "DENY"
-			}
 			if proxyStatusBlocksBody(status) {
+				verdict = "DENY"
 				body = containDeniedProxyResponse(resp, status, reasonCode, toolNames, correlationID)
 			}
 
@@ -784,8 +894,52 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			outHash := sha256.Sum256(body)
 			outHashHex := "sha256:" + hex.EncodeToString(outHash[:])
 
-			// Build receipt
-			rcptID := fmt.Sprintf("rcpt-proxy-%d-%d", time.Now().UnixNano(), clock)
+			rcpt := &proxyReceipt{
+				Timestamp:        time.Now().UTC().Format(time.RFC3339Nano),
+				Upstream:         upstream,
+				Model:            model,
+				OutputHash:       outHashHex,
+				ToolCalls:        toolCallCount,
+				ToolNames:        toolNames,
+				ArgsHashes:       argsHashes,
+				ArgsValid:        argsValid,
+				Status:           status,
+				ReasonCode:       reasonCode,
+				DecisionID:       decisionID,
+				ProofGraphNodeID: pgNodeID,
+
+				// gen_ai.tool.call.id == helm correlation_id (single source of truth).
+				CorrelationID:      correlationID,
+				SessionID:          sessionID,
+				GenAISystem:        genAISystem,
+				GenAIRequestModel:  requestModel,
+				GenAIOperationName: operationName,
+				GenAIToolCallID:    correlationID,
+				GenAIInputTokens:   inputTokens,
+				GenAIOutputTokens:  outputTokens,
+				GenAIFinishReason:  finishReason,
+				Traceparent:        traceparent,
+			}
+
+			// Persist receipt (JSONL, append-only, causal chain). The store
+			// assigns the Lamport clock; the id and signature are sealed with it.
+			// A response whose receipt cannot be written is not delivered.
+			if storeErr := store.Append(rcpt, func(r *proxyReceipt) error {
+				r.ReceiptID = fmt.Sprintf("rcpt-proxy-%d-%d", time.Now().UnixNano(), r.LamportClock)
+				if signer == nil {
+					return nil
+				}
+				payload := fmt.Sprintf("%s:%s:%s:%d", r.ReceiptID, r.OutputHash, r.Status, r.LamportClock)
+				sig, signErr := signer.Sign([]byte(payload))
+				if signErr != nil {
+					return fmt.Errorf("sign receipt: %w", signErr)
+				}
+				r.Signature = sig
+				return nil
+			}); storeErr != nil {
+				log.Printf("[ERROR] receipt persist failed, failing the request: %v", storeErr)
+				return fmt.Errorf("persist governance receipt: %w", storeErr)
+			}
 
 			// Emit OTel GenAI tool_call span. gen_ai.tool.call.id == helm
 			// correlation_id so traces and receipts cross-reference 1:1.
@@ -804,54 +958,12 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 				PolicyID:      decisionID,
 				ProofNodeID:   pgNodeID,
 				CorrelationID: correlationID,
-				ReceiptID:     rcptID,
+				ReceiptID:     rcpt.ReceiptID,
 				TenantID:      tenantID,
 			})
 
-			rcpt := &proxyReceipt{
-				ReceiptID:        rcptID,
-				Timestamp:        time.Now().UTC().Format(time.RFC3339Nano),
-				Upstream:         upstream,
-				Model:            model,
-				OutputHash:       outHashHex,
-				ToolCalls:        toolCallCount,
-				ToolNames:        toolNames,
-				ArgsHashes:       argsHashes,
-				ArgsValid:        argsValid,
-				Status:           status,
-				ReasonCode:       reasonCode,
-				DecisionID:       decisionID,
-				ProofGraphNodeID: pgNodeID,
-				LamportClock:     clock,
-
-				// gen_ai.tool.call.id == helm correlation_id (single source of truth).
-				CorrelationID:      correlationID,
-				GenAISystem:        genAISystem,
-				GenAIRequestModel:  requestModel,
-				GenAIOperationName: operationName,
-				GenAIToolCallID:    correlationID,
-				GenAIInputTokens:   inputTokens,
-				GenAIOutputTokens:  outputTokens,
-				GenAIFinishReason:  finishReason,
-				Traceparent:        traceparent,
-			}
-
-			// Sign receipt if signer available
-			if signer != nil {
-				payload := fmt.Sprintf("%s:%s:%s:%d", rcpt.ReceiptID, rcpt.OutputHash, rcpt.Status, rcpt.LamportClock)
-				sig, signErr := signer.Sign([]byte(payload))
-				if signErr == nil {
-					rcpt.Signature = sig
-				}
-			}
-
-			// Persist receipt (JSONL, append-only, causal chain)
-			if storeErr := store.Append(rcpt); storeErr != nil {
-				log.Printf("[ERROR] receipt persist failed: %v", storeErr)
-			}
-
 			// Persist ProofGraph (JSON snapshot after each append)
-			persistProofGraph(pg, filepath.Join(receiptsDir, "proofgraph.json"))
+			persistProofGraph(pg, proofPath)
 
 			// Inject receipt headers
 			resp.Header.Set("X-Helm-Receipt-ID", rcpt.ReceiptID)
@@ -878,10 +990,10 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			}
 
 			// Log receipt
-			if jsonOutput {
+			if cfg.jsonOutput {
 				rcptJSON, _ := json.Marshal(rcpt)
 				log.Printf("%s", rcptJSON)
-			} else if verbose {
+			} else if cfg.verbose {
 				log.Printf("[RECEIPT] %s | %s | tools=%d | status=%s | %s",
 					rcpt.ReceiptID, rcpt.Model, rcpt.ToolCalls, rcpt.Status, rcpt.OutputHash[:30]+"…")
 			}
@@ -894,6 +1006,174 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			return nil
 		},
 	}
+
+	// The governed entry point reads the request once, refuses a streamed
+	// request that offers tools before it reaches the upstream, and records the
+	// transport identity the Guardian binds decisions to.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body []byte
+		if r.Body != nil {
+			b, readErr := io.ReadAll(r.Body)
+			if readErr != nil {
+				http.Error(w, "failed to read request body", http.StatusBadRequest)
+				return
+			}
+			body = b
+			r.Body = io.NopCloser(bytes.NewReader(b))
+			r.ContentLength = int64(len(b))
+		}
+		info := inspectProxyRequest(body)
+		if info.stream && info.toolsDeclared {
+			slog.WarnContext(r.Context(), "proxy refused a streamed request that offers tools before the upstream call",
+				"reason_code", "PROXY_STREAMING_TOOLS_REFUSED")
+			writeStreamingToolsRefusal(w)
+			return
+		}
+		ctx := context.WithValue(r.Context(), ctxKeyRequestInfo, info)
+		if _, authenticated := helmauth.AuthenticatedCredentialHash(ctx); !authenticated {
+			ctx = helmauth.WithAuthenticatedCredential(ctx, proxyLocalCredential)
+		}
+		proxy.ServeHTTP(w, r.WithContext(ctx))
+	})
+
+	ok = true
+	return &proxyRuntime{
+		handler:     handler,
+		upstream:    upstream,
+		receiptPath: receiptPath,
+		store:       store,
+		pg:          pg,
+		signer:      signer,
+		close: func() {
+			_ = otelTracer.Shutdown(context.Background())
+			_ = store.Close()
+		},
+	}, nil
+}
+
+// runProxyCmd implements `helm-ai-kernel proxy`.
+//
+// Usage:
+//
+//	helm-ai-kernel proxy --upstream https://api.openai.com/v1 --port 9090 --policy ./helm.toml
+//
+// Then:
+//
+//	export OPENAI_BASE_URL=http://localhost:9090/v1
+//	python your_app.py  # Every tool call now gets a verdict and a receipt.
+//
+// Features:
+//   - Receipt persistence: JSONL audit log at --receipts-dir
+//   - PEP validation: tool_call arguments validated as JSON, canonicalized (JCS), and SHA-256 hashed
+//   - Policy: tool calls are decided by the Guardian against --policy; without it every tool call is denied
+//   - Streaming: a request that offers tools must not stream; the proxy cannot parse a stream
+//   - Causal chain: receipts linked via PrevHash (SHA-256 of previous receipt)
+//   - Ed25519 signature: receipts signed if --sign is enabled
+//
+// Exit codes:
+//
+//	0 = clean shutdown
+//	2 = config error
+func runProxyCmd(args []string, stdout, stderr io.Writer) int {
+	// Handle `proxy up` alias — strip "up" and pass remaining args
+	if len(args) > 0 && args[0] == "up" {
+		args = args[1:]
+	}
+
+	cmd := flag.NewFlagSet("proxy", flag.ContinueOnError)
+	cmd.SetOutput(stderr)
+
+	var (
+		upstream      string
+		port          int
+		apiKey        string
+		jsonOutput    bool
+		verbose       bool
+		receiptsDir   string
+		signKey       string
+		tenantID      string
+		policyPath    string
+		dailyLimit    int64
+		monthlyLimit  int64
+		maxIterations int
+		maxWallclock  time.Duration
+		websocket     bool
+	)
+
+	cmd.StringVar(&upstream, "upstream", "https://api.openai.com/v1", "Upstream API base URL")
+	cmd.IntVar(&port, "port", 9090, "Local proxy port")
+	cmd.StringVar(&apiKey, "api-key", "", "API key to forward to upstream (or use OPENAI_API_KEY env)")
+	cmd.BoolVar(&jsonOutput, "json", false, "Log receipts as JSON to stdout")
+	cmd.BoolVar(&verbose, "verbose", false, "Verbose logging")
+	cmd.StringVar(&receiptsDir, "receipts-dir", "./helm-receipts", "Directory for persistent receipt JSONL logs")
+	cmd.StringVar(&signKey, "sign", "", "Ed25519 signing key seed (enables receipt signatures)")
+	cmd.StringVar(&tenantID, "tenant-id", "default", "Tenant identifier recorded as the governing principal")
+	cmd.StringVar(&policyPath, "policy", "", "Path to a serve policy file; without it every tool call is denied (fail-closed)")
+	cmd.Int64Var(&dailyLimit, "daily-limit", 0, "Unsupported: the proxy has no monetary price for a tool call, so a non-zero budget is refused")
+	cmd.Int64Var(&monthlyLimit, "monthly-limit", 0, "Unsupported: the proxy has no monetary price for a tool call, so a non-zero budget is refused")
+	cmd.IntVar(&maxIterations, "max-iterations", 10, "Max tool calls per session (X-Helm-Session-ID) (0=unlimited)")
+	cmd.DurationVar(&maxWallclock, "max-wallclock", 120*time.Second, "Max session duration from its first tool call (0=unlimited)")
+	cmd.BoolVar(&websocket, "websocket", false, "Request Responses WebSocket mode (unsupported in OSS runtime)")
+
+	if err := cmd.Parse(args); err != nil {
+		return 2
+	}
+
+	if websocket {
+		_, _ = fmt.Fprintln(stderr, "Error: --websocket is not supported in the OSS proxy runtime")
+		_, _ = fmt.Fprintln(stderr, "Use the HTTP proxy surface at /v1/chat/completions until Responses WebSocket support is implemented.")
+		return 2
+	}
+	// The budget gate charges cents, and the proxy only ever sees token counts.
+	// A configured budget therefore denied every tool call with BUDGET_ERROR
+	// before policy was consulted (audit 07-01); refuse it instead.
+	if dailyLimit != 0 || monthlyLimit != 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: --daily-limit and --monthly-limit are not supported by the proxy: it sees token counts, not prices, so a budget would deny every tool call with BUDGET_ERROR")
+		return 2
+	}
+	if helmcrypto.ProductionMode() {
+		_, _ = fmt.Fprintln(stderr, "Error: helm proxy is disabled under HELM_PRODUCTION: request, response, and SSE payloads do not have verified inline personal-data inspection")
+		return 2
+	}
+
+	// A serve policy compiles to the Guardian rule graph. Absent --policy the
+	// graph stays empty, which denies every tool call (fail-closed default).
+	var policyGraph *prg.Graph
+	if policyPath != "" {
+		runtimePolicy, err := loadServePolicyRuntime(policyPath)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "Error: load serve policy %q: %v\n", policyPath, err)
+			return 2
+		}
+		policyGraph = runtimePolicy.Graph
+		if authorized := len(runtimePolicy.AllowMap()); authorized == 0 {
+			_, _ = fmt.Fprintf(stderr, "Warning: serve policy %q authorizes 0 actions; every tool call will be denied\n", policyPath)
+		} else {
+			_, _ = fmt.Fprintf(stderr, "Serve policy %q authorizes %d action(s)\n", policyPath, authorized)
+		}
+	}
+
+	rt, err := newProxyRuntime(proxyConfig{
+		upstream:      strings.TrimSuffix(upstream, "/"),
+		apiKey:        apiKey,
+		jsonOutput:    jsonOutput,
+		verbose:       verbose,
+		receiptsDir:   receiptsDir,
+		signKey:       signKey,
+		tenantID:      tenantID,
+		policyGraph:   policyGraph,
+		maxIterations: maxIterations,
+		maxWallclock:  maxWallclock,
+	}, stderr)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	defer rt.close()
+	upstream = rt.upstream
+	receiptPath := rt.receiptPath
+	pg := rt.pg
+	signer := rt.signer
 
 	mux := http.NewServeMux()
 
@@ -931,7 +1211,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	})
 
 	// Proxy everything else
-	mux.HandleFunc("/", proxy.ServeHTTP)
+	mux.Handle("/", rt.handler)
 
 	// SEC: Default to localhost to prevent accidental network exposure (OpenClaw vector).
 	// The proxy is designed as a local sidecar — use HELM_BIND_ADDR=0.0.0.0 to expose.
@@ -947,7 +1227,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 			// Check for WebSocket upgrade
 			if r.Header.Get("Upgrade") != "websocket" {
 				// Not a WS request — fall through to regular proxy
-				proxy.ServeHTTP(w, r)
+				rt.handler.ServeHTTP(w, r)
 				return
 			}
 
@@ -992,8 +1272,10 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	if websocket {
 		_, _ = fmt.Fprintf(stdout, "  WebSocket:   ws://%s/v1/responses (Responses API mode)\n", addr)
 	}
-	if budgetEnforcer != nil {
-		_, _ = fmt.Fprintf(stdout, "  Budget:      daily=%d monthly=%d cents\n", dailyLimit, monthlyLimit)
+	if policyPath != "" {
+		_, _ = fmt.Fprintf(stdout, "  Policy:      %s\n", policyPath)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "  Policy:      none (every tool call is denied)\n")
 	}
 	if maxIterations > 0 {
 		_, _ = fmt.Fprintf(stdout, "  Max Rounds:  %d\n", maxIterations)
@@ -1005,7 +1287,7 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stdout, "  Signing:     Ed25519 (key: %s)\n", signer.KeyID)
 	}
 	_, _ = fmt.Fprintf(stdout, "  ProofGraph: %s\n", filepath.Join(receiptsDir, "proofgraph.json"))
-	_, _ = fmt.Fprintf(stdout, "  Governance:  Guardian → ProofGraph → Budget\n")
+	_, _ = fmt.Fprintf(stdout, "  Governance:  Guardian → ProofGraph\n")
 	_, _ = fmt.Fprintf(stdout, "\n")
 	_, _ = fmt.Fprintf(stdout, "  Drop-in usage:\n")
 	_, _ = fmt.Fprintf(stdout, "    export OPENAI_BASE_URL=http://%s/v1\n", addr)
@@ -1016,7 +1298,8 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stdout, "    # Agents SDK JS uses /v1/responses over WebSocket\n")
 	}
 	_, _ = fmt.Fprintf(stdout, "\n")
-	_, _ = fmt.Fprintf(stdout, "  Every tool call is governed, hashed, and receipted. Ctrl+C to stop.\n")
+	_, _ = fmt.Fprintf(stdout, "  Tool calls are governed, hashed, and receipted; a request that offers tools\n")
+	_, _ = fmt.Fprintf(stdout, "  must not stream, and a response the proxy cannot parse is withheld. Ctrl+C to stop.\n")
 
 	server := &http.Server{
 		Addr: addr,

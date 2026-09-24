@@ -1071,7 +1071,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 
 	budgetErrorGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithBudgetTracker(guardianCoverageBudgetGate{checkErr: errors.New("ledger offline")}))
 	budgetDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-budget", SubjectID: "agent"})
-	if err := budgetErrorGuardian.signDecisionWithGraph(ctx, budgetDecision, &contracts.Effect{EffectID: "effect-budget", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, allowGraphFor("EXECUTE_TOOL"), false); err != nil {
+	if err := budgetErrorGuardian.signDecisionWithPolicy(ctx, budgetDecision, &contracts.Effect{EffectID: "effect-budget", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, compileSnapshot(allowGraphFor("EXECUTE_TOOL")), false); err != nil {
 		t.Fatalf("budget error decision should sign: %v", err)
 	}
 	if budgetDecision.ReasonCode != string(contracts.ReasonBudgetError) {
@@ -1080,7 +1080,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 
 	consumeErrorGuardian := NewGuardian(&testSigner{}, nil, nil, WithClock(clock), WithBudgetTracker(guardianCoverageBudgetGate{allowed: true, consumeErr: errors.New("consume failed")}))
 	consumeDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-consume", SubjectID: "agent"})
-	if err := consumeErrorGuardian.signDecisionWithGraph(ctx, consumeDecision, &contracts.Effect{EffectID: "effect-consume", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, allowGraphFor("EXECUTE_TOOL"), false); err != nil {
+	if err := consumeErrorGuardian.signDecisionWithPolicy(ctx, consumeDecision, &contracts.Effect{EffectID: "effect-consume", EffectType: "EXECUTE_TOOL", Params: map[string]any{"budget_id": "budget-1"}}, nil, nil, compileSnapshot(allowGraphFor("EXECUTE_TOOL")), false); err != nil {
 		t.Fatalf("consume error path should still sign: %v", err)
 	}
 	// A budget consume failure must fail closed: the effect is denied rather
@@ -1090,7 +1090,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 	}
 
 	nilGraphDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-nil-graph", SubjectID: "agent"})
-	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithGraph(ctx, nilGraphDecision, &contracts.Effect{EffectID: "effect-no-policy", EffectType: "UNDECLARED_ACTION", Params: map[string]any{}}, nil, nil, nil, false); err != nil {
+	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithPolicy(ctx, nilGraphDecision, &contracts.Effect{EffectID: "effect-no-policy", EffectType: "UNDECLARED_ACTION", Params: map[string]any{}}, nil, nil, compileSnapshot(nil), false); err != nil {
 		t.Fatalf("nil graph no-policy decision should sign: %v", err)
 	}
 	if nilGraphDecision.ReasonCode != string(contracts.ReasonNoPolicy) {
@@ -1102,7 +1102,7 @@ func TestCoverageGuardianDecisionEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	badCELDecision := testDecisionAuthority(&contracts.DecisionRecord{ID: "dec-bad-cel", SubjectID: "agent"})
-	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithGraph(ctx, badCELDecision, &contracts.Effect{EffectID: "effect-bad-cel", EffectType: "EXECUTE_TOOL", Params: map[string]any{}}, nil, nil, badGraph, false); err != nil {
+	if err := NewGuardian(&testSigner{}, nil, nil, WithClock(clock)).signDecisionWithPolicy(ctx, badCELDecision, &contracts.Effect{EffectID: "effect-bad-cel", EffectType: "EXECUTE_TOOL", Params: map[string]any{}}, nil, nil, compileSnapshot(badGraph), false); err != nil {
 		t.Fatalf("bad CEL decision should sign deny: %v", err)
 	}
 	if badCELDecision.ReasonCode != string(contracts.ReasonPRGEvalError) {

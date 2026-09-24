@@ -7,7 +7,6 @@ import (
 	"sort"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
-	"github.com/google/cel-go/cel"
 )
 
 // LogicOperator defines how requirements are combined.
@@ -32,9 +31,6 @@ type Requirement struct {
 	// CEL Expression (The Node 8 core feature)
 	// Input: "intent", "state", "artifacts" (list of artifacts)
 	Expression string `json:"expression,omitempty"`
-
-	compiledExpression string
-	program            cel.Program
 }
 
 // RequirementSet is a recursive logic tree.
@@ -137,7 +133,7 @@ func (g *Graph) Validate(actionID string, artifacts []*pkg_artifact.ArtifactEnve
 	// instead, and name the evaluator that can.
 	if hasExpressionRequirement(rule) {
 		return false, "", fmt.Errorf(
-			"action %s carries CEL expression requirements: Graph.Validate evaluates artifact presence only — use PolicyEngine.EvaluateRequirementSet",
+			"action %s carries CEL expression requirements: Graph.Validate evaluates artifact presence only — use authority.Decide",
 			actionID,
 		)
 	}
@@ -189,7 +185,7 @@ func hasMalformedRequirement(rs RequirementSet) bool {
 // check is the legacy artifact-presence validator used by Graph.Validate.
 // It evaluates only ArtifactType requirements. Rules carrying CEL Expressions
 // or malformed leaves are rejected by Validate before reaching here. The
-// canonical evaluator that honours CEL is PolicyEngine.EvaluateRequirementSet
+// canonical evaluator that honours CEL is authority.Decide (core/pkg/kernel/authority)
 // — prefer it for policy decisions. This function keeps only the AND/OR/NOT
 // aggregation semantics aligned with that evaluator; its leaf evaluation is
 // deliberately artifact-only.
@@ -228,7 +224,7 @@ func check(rs RequirementSet, artifacts []*pkg_artifact.ArtifactEnvelope) bool {
 	}
 
 	// Combine using the same operator semantics as the canonical CEL path
-	// (PolicyEngine.combineResults): empty logic defaults to AND and NOT is
+	// (authority.Decide): empty logic defaults to AND and NOT is
 	// supported. Kept in sync so the two evaluators do not diverge.
 	switch rs.Logic {
 	case AND, "":

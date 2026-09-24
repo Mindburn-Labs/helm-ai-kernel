@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	pkg_artifact "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
@@ -22,6 +23,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/firewall"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/identity"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pdp"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -200,7 +202,7 @@ func WithAssumptionObserver(o AssumptionObserver) GuardianOption {
 type Guardian struct {
 	signer                        crypto.Signer
 	prg                           *prg.Graph
-	pe                            *prg.PolicyEngine
+	policies                      *authoritySnapshots // Compiled authority snapshots, one per policy content
 	registry                      *pkg_artifact.Registry
 	clock                         Clock
 	tracker                       BudgetGate
@@ -243,25 +245,19 @@ func (g *Guardian) ZeroID() *ZeroIDInterceptor {
 // NewGuardian creates a new Guardian instance. Optional dependencies can be injected
 // using GuardianOption functions (e.g., WithBudgetTracker).
 func NewGuardian(signer crypto.Signer, ruleGraph *prg.Graph, reg *pkg_artifact.Registry, opts ...GuardianOption) *Guardian {
-	pe, prgErr := prg.NewPolicyEngine()
-	if prgErr != nil {
-		slog.Warn("[guardian] PRG policy engine init failed", "error", prgErr)
-	}
 	if ruleGraph == nil {
 		ruleGraph = prg.NewGraph()
-	}
-	if pe != nil {
-		if err := pe.WarmGraph(ruleGraph); err != nil {
-			slog.Warn("[guardian] PRG warm compile failed", "error", err)
-		}
 	}
 
 	g := &Guardian{
 		signer:   signer,
 		prg:      ruleGraph,
-		pe:       pe,
+		policies: &authoritySnapshots{byContent: make(map[string]*authority.Snapshot)},
 		registry: reg,
 	}
+	// Compile the construction-time policy now, so a rule that does not
+	// compile is reported at startup rather than at its first decision.
+	g.policies.get(ruleGraph)
 
 	for _, opt := range opts {
 		opt(g)
@@ -425,10 +421,11 @@ func (g *Guardian) SetSafeDepController(controller *safedep.Controller) {
 
 // SignDecision checks requirements and signs only if met
 func (g *Guardian) SignDecision(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata) error {
-	return g.signDecisionWithGraph(ctx, decision, effect, evidenceHashes, intervention, g.prg, false)
+	policy, _ := g.policies.get(g.prg)
+	return g.signDecisionWithPolicy(ctx, decision, effect, evidenceHashes, intervention, policy, false)
 }
 
-func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, ruleGraph *prg.Graph, pdpAuthoritativeAllow bool) error {
+func (g *Guardian) signDecisionWithPolicy(ctx context.Context, decision *contracts.DecisionRecord, effect *contracts.Effect, evidenceHashes []string, intervention *contracts.InterventionMetadata, policy *authority.Snapshot, pdpAuthoritativeAllow bool) error {
 	if decision == nil {
 		return fmt.Errorf("decision is required")
 	}
@@ -528,30 +525,24 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 
 	var requirementSetHash string
 	if !pdpAuthoritativeAllow {
-		// 4. Validate against PRG. An explicitly authoritative managed PDP ALLOW
-		// replaces only this local policy lookup; all surrounding gates still run.
-		if ruleGraph == nil {
-			ruleGraph = prg.NewGraph()
-		}
-		rule, exists := ruleGraph.Rules[actionID]
-		if !exists {
-			decision.Verdict = string(contracts.VerdictDeny)
-			decision.ReasonCode = string(contracts.ReasonNoPolicy)
-			decision.Reason = fmt.Sprintf("%s: no policy defined for action %s", contracts.ReasonNoPolicy, actionID)
-			return g.signer.SignDecision(decision)
-		}
-
-		// Prepare CEL input
+		// 4. Decide against the active policy. An explicitly authoritative
+		// managed PDP ALLOW replaces only this local policy decision; all
+		// surrounding gates still run.
 		effectMap, err := toMap(effect)
 		if err != nil {
 			return fmt.Errorf("serialize effect policy input: %w", err)
 		}
+		taint := contracts.NormalizeTaintLabels(effect.Taint)
+		if taint == nil {
+			taint = []string{} // an empty list, not null, for input.taint
+		}
+		now := g.clock.Now()
 		input := map[string]interface{}{
-			"action":    actionID,
-			"effect":    effectMap,
-			"artifacts": artifacts,
-			"timestamp": g.clock.Now().Unix(),
-			"taint":     contracts.NormalizeTaintLabels(effect.Taint),
+			authority.KeyAction:    actionID,
+			"effect":               effectMap,
+			"artifacts":            artifacts,
+			authority.KeyTimestamp: now.Unix(),
+			"taint":                taint,
 		}
 		if decision.ThreatScan != nil {
 			// Expose only Guardian-owned typed evidence at the stable CEL path
@@ -559,22 +550,31 @@ func (g *Guardian) signDecisionWithGraph(ctx context.Context, decision *contract
 			input[ContextThreatScan] = decision.ThreatScan.PolicyContext()
 		}
 
-		valid, failures, err := g.pe.EvaluateRequirementSetDetail(rule, input)
-		if err != nil {
+		authz := authority.Decide(authority.Input{Action: actionID, Attributes: input, Time: now}, policy)
+		switch {
+		case authz.Verdict == contracts.VerdictAllow:
+			requirementSetHash = authz.RuleHash
+		case authz.ReasonCode == contracts.ReasonNoPolicy:
+			decision.Verdict = string(contracts.VerdictDeny)
+			decision.ReasonCode = string(contracts.ReasonNoPolicy)
+			decision.Reason = fmt.Sprintf("%s: no policy defined for action %s", contracts.ReasonNoPolicy, actionID)
+			return g.signer.SignDecision(decision)
+		case authz.ReasonCode == contracts.ReasonMissingRequirement:
+			decision.Verdict = string(contracts.VerdictDeny)
+			decision.ReasonCode = string(contracts.ReasonMissingRequirement)
+			decision.Reason = missingRequirementReason(authz.Unmet, input)
+			g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
+			return g.signer.SignDecision(decision)
+		default:
+			// Every other outcome, including one this switch does not know,
+			// is a denial. The detail can name policy internals, so it is
+			// logged rather than returned to the caller.
+			slog.Warn("[guardian] policy evaluation denied", "action", actionID, "reason_code", authz.ReasonCode, "detail", authz.Detail, "snapshot", authz.SnapshotDigest)
 			decision.Verdict = string(contracts.VerdictDeny)
 			decision.ReasonCode = string(contracts.ReasonPRGEvalError)
 			decision.Reason = "PRG Evaluation Error: policy requirement evaluation failed"
 			return g.signer.SignDecision(decision)
 		}
-
-		if !valid {
-			decision.Verdict = string(contracts.VerdictDeny)
-			decision.ReasonCode = string(contracts.ReasonMissingRequirement)
-			decision.Reason = missingRequirementReason(failures, input)
-			g.recordBehavioralEvent(decision.SubjectID, trust.EventPolicyViolate, "PRG requirement not met")
-			return g.signer.SignDecision(decision)
-		}
-		requirementSetHash = rule.Hash()
 	}
 
 	// 4.5 Budget draw-down. The action has passed policy, so consume budget
@@ -902,16 +902,14 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 		attribute.String("resource", req.Resource),
 	)
 
-	activeGraph := g.prg
+	activePolicy, contentHash := g.policies.get(g.prg)
 	activePDP := g.pdp
 	var activeSnapshot *policyreconcile.EffectivePolicySnapshot
 
 	// GOV-001: Content-addressed policy version derived from PRG rule hash.
 	policyVersion := "v1.0.0" // fallback
-	if g.prg != nil {
-		if hash, err := g.prg.ContentHash(); err == nil && hash != "" {
-			policyVersion = "sha256:" + hash
-		}
+	if contentHash != "" {
+		policyVersion = "sha256:" + contentHash
 	}
 	if g.snapshotStore != nil {
 		scope := g.policyScopeFromContext(req.Context)
@@ -949,7 +947,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 		activeSnapshot = snapshot
 		policyVersion = snapshot.PolicyHash
 		if snapshot.Graph != nil {
-			activeGraph = snapshot.Graph
+			activePolicy, _ = g.policies.get(snapshot.Graph)
 		}
 		if snapshot.PDP != nil {
 			activePDP = snapshot.PDP
@@ -1052,7 +1050,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 		Request:             req,
 		ActiveSnapshot:      activeSnapshot,
 		PolicyVersion:       policyVersion,
-		ActiveGraph:         activeGraph,
+		ActivePolicy:        activePolicy,
 		ActivePDP:           activePDP,
 		SessionRiskSnapshot: sessionRiskSnapshot,
 	}
@@ -1211,7 +1209,7 @@ func (g *Guardian) EvaluateDecision(ctx context.Context, req DecisionRequest) (d
 		if err := bindDecisionRequest(decision, req); err != nil {
 			return nil, fmt.Errorf("bind evaluated decision request: %w", err)
 		}
-		err = g.signDecisionWithGraph(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActiveGraph, eCtx.PDPAuthoritativeAllow)
+		err = g.signDecisionWithPolicy(ctx, decision, effect, []string{}, eCtx.Intervention, eCtx.ActivePolicy, eCtx.PDPAuthoritativeAllow)
 		if err != nil {
 			return nil, err
 		}
@@ -1350,6 +1348,55 @@ func attachSessionRiskContext(ctx map[string]interface{}, snapshot SessionRiskSn
 	ctx["risk_accumulation_window"] = snapshot.RiskAccumulationWindow
 }
 
+// maxCompiledSnapshots bounds authoritySnapshots. A kernel holds one policy
+// version per active scope, so the bound is only reached by churn; the cache
+// then starts over rather than growing without limit.
+const maxCompiledSnapshots = 64
+
+// authoritySnapshots compiles each distinct policy content once. Keying by
+// content rather than by graph pointer means a graph changed in place gets a
+// new snapshot instead of a stale one.
+type authoritySnapshots struct {
+	mu        sync.Mutex
+	byContent map[string]*authority.Snapshot
+}
+
+// get returns the compiled snapshot for g and g's content hash. A nil
+// snapshot denies every decision.
+func (c *authoritySnapshots) get(g *prg.Graph) (*authority.Snapshot, string) {
+	if g == nil {
+		g = prg.NewGraph()
+	}
+	key, err := g.ContentHash()
+	if err != nil {
+		slog.Warn("[guardian] policy content hash failed; decisions will deny", "error", err)
+		return nil, ""
+	}
+	if c == nil {
+		return compileSnapshot(g), key
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if s, ok := c.byContent[key]; ok {
+		return s, key
+	}
+	s := compileSnapshot(g)
+	if len(c.byContent) >= maxCompiledSnapshots {
+		clear(c.byContent)
+	}
+	c.byContent[key] = s
+	return s, key
+}
+
+func compileSnapshot(g *prg.Graph) *authority.Snapshot {
+	s, err := authority.Compile(g)
+	if err != nil {
+		// Compile keeps every rule; the ones that failed deny their action.
+		slog.Warn("[guardian] policy rules failed to compile; their actions will deny", "error", err)
+	}
+	return s
+}
+
 func toMap(v any) (map[string]interface{}, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -1365,17 +1412,13 @@ func toMap(v any) (map[string]interface{}, error) {
 // missingRequirementReason builds the actionable deny reason for a PRG rule
 // that evaluated to false. It names each blocking requirement without exposing
 // policy source and lists the input.* fields the policy author can reference.
-func missingRequirementReason(failures []prg.RequirementFailure, input map[string]interface{}) string {
+func missingRequirementReason(unmet []string, input map[string]interface{}) string {
 	var b strings.Builder
 	b.WriteString(string(contracts.ReasonMissingRequirement))
 	b.WriteString(": policy requirement not met")
-	if len(failures) > 0 {
-		parts := make([]string, 0, len(failures))
-		for _, f := range failures {
-			parts = append(parts, f.ID)
-		}
+	if len(unmet) > 0 {
 		b.WriteString("; blocking requirement(s): ")
-		b.WriteString(strings.Join(parts, ", "))
+		b.WriteString(strings.Join(unmet, ", "))
 	}
 	if len(input) > 0 {
 		fields := make([]string, 0, len(input))

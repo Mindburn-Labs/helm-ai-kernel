@@ -98,6 +98,34 @@ statically, it also routes to a decision rather than silently allowing it.
 This remains a selected-effect guardrail, not a complete OS sandbox or a claim
 to recognize every destructive tool, alias, or `eval` payload.
 
+Shell syntax whose meaning is only known after expansion also routes to a
+decision rather than passing unclassified: ANSI-C or locale quoting (`$'...'`,
+`$"..."`), brace expansion, a command or process substitution that runs
+anything beyond a small read-only allowlist (`cat` of a heredoc or here-string,
+`date`, `git rev-parse`, `git log`, `pwd`, `basename`, `dirname`, `printf`,
+`echo`, all with literal words), a glob or variable in command position, a
+globbed write target, and a relative write after a `cd` whose target cannot be
+resolved. An allowlisted substitution is opaque text: it still fails closed as
+a command name, an `eval`, `sh -c` or `source` payload, a redirect target, or a
+destructive operand. Under the default profile these
+commands are denied; a policy profile that grants the matching permission
+allows them with a signed receipt. Sensitive write targets are compared after
+path normalization (separators, case, `.`, `..` and repeated slashes, the
+working directory, and `cd` inside the command), and the Write, Edit,
+MultiEdit and NotebookEdit tools use the same rules as shell writes.
+
+### Coverage label: observed-only
+
+Local coding-agent hooks (`setup claude-code`, `codex`, `hermes`, `deepseek`)
+are an **observed-only** integration, not an enforced boundary. The hook sees
+only the tool calls the client chooses to send it and classifies command text,
+which cannot be made sound against every shell construct. It records what the
+agent attempted, signs a receipt for each classified decision, and denies the
+cases it recognizes, including anything it cannot evaluate statically. Treat it
+as defense in depth. Enforcement for these clients comes from HELM holding the
+credential or the egress path, for example through HELM-served MCP tools, not
+from the hook.
+
 ## Operator workflow
 
 The local operator read model answers the M4 questions from receipts:

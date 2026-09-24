@@ -177,6 +177,28 @@ func (l *BalanceLedger) Reserve(reservationKey string, amountCents int64, quoteR
 	if existing, ok := l.reservations[reservationKey]; ok {
 		return existing, nil // idempotent: same dispatch reserves once
 	}
+	return l.reserveLocked(reservationKey, amountCents, quoteReceiptHash)
+}
+
+// reserveExclusive places a hold that only one dispatch may own: it refuses
+// while a hold for the key is open (a dispatch is in flight or failed to
+// settle) or consumed (the key already settled). A released hold, left by a
+// failed dispatch, is replaced so a retry reserves afresh.
+func (l *BalanceLedger) reserveExclusive(reservationKey string, amountCents int64, quoteReceiptHash string) (*Reservation, error) {
+	if reservationKey == "" || amountCents <= 0 || quoteReceiptHash == "" {
+		return nil, errors.New("inferencegateway: reservation requires a key, a positive amount and a quote receipt hash")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if existing, ok := l.reservations[reservationKey]; ok && !existing.Released {
+		return nil, ErrDispatchConflict
+	}
+	return l.reserveLocked(reservationKey, amountCents, quoteReceiptHash)
+}
+
+// reserveLocked checks funds and posts a new hold. Callers must hold l.mu.
+func (l *BalanceLedger) reserveLocked(reservationKey string, amountCents int64, quoteReceiptHash string) (*Reservation, error) {
 	if l.account.Status != economic.BalanceAccountActive {
 		return nil, fmt.Errorf("inferencegateway: balance account is %s, reservation refused", l.account.Status)
 	}
@@ -268,12 +290,28 @@ func (l *BalanceLedger) releaseHoldLocked(amountCents int64) {
 func (l *BalanceLedger) consumeReservationForDebit(reservationKey string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if res := l.openReservationLocked(reservationKey); res != nil {
+		l.releaseHoldLocked(res.AmountCents)
+		res.Consumed = true
+	}
+}
+
+// openReservationLocked returns the key's reservation while it still holds
+// funds (neither released nor consumed). Callers must hold l.mu.
+func (l *BalanceLedger) openReservationLocked(reservationKey string) *Reservation {
 	res, ok := l.reservations[reservationKey]
 	if !ok || res.Consumed || res.Released {
-		return
+		return nil
 	}
-	l.releaseHoldLocked(res.AmountCents)
-	res.Consumed = true
+	return res
+}
+
+// hasOpenReservation reports whether a dispatch hold for the key still holds
+// funds, i.e. the dispatch was authorized and has not settled or released.
+func (l *BalanceLedger) hasOpenReservation(reservationKey string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.openReservationLocked(reservationKey) != nil
 }
 
 // Adjust is reserved for append-only manual corrections. Legacy approval

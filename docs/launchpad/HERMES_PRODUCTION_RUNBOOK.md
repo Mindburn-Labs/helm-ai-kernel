@@ -1,5 +1,7 @@
 # Hermes Production Proof Runbook
 
+<!-- quantum_posture: this runbook verifies existing classical Sigstore/cosign release signatures; it implements no cryptographic control and makes no post-quantum claim. -->
+
 This runbook produces the first Mindburn-owned production proof for Hermes on
 HELM. It uses the existing `hermes-mindburn` VPS, explicit live mode,
 OpenRouter-only model access, a launch-scoped egress proxy, teardown, and a
@@ -41,12 +43,12 @@ curl -fsSLO "${HELM_RELEASE_URL}/SHA256SUMS.txt.cosign.bundle"
 
 cosign verify-blob \
   --bundle "helm-ai-kernel-${HELM_ARCH}.cosign.bundle" \
-  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-ai-kernel" \
+  --certificate-identity "https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${HELM_VERSION}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   "helm-ai-kernel-${HELM_ARCH}"
 cosign verify-blob \
   --bundle SHA256SUMS.txt.cosign.bundle \
-  --certificate-identity-regexp "https://github.com/Mindburn-Labs/helm-ai-kernel" \
+  --certificate-identity "https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${HELM_VERSION}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   SHA256SUMS.txt
 grep "helm-ai-kernel-${HELM_ARCH}$" SHA256SUMS.txt | sha256sum -c -

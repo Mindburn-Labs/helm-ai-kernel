@@ -111,6 +111,44 @@ func TestProviderPriceSnapshotQuoteCents(t *testing.T) {
 	}
 }
 
+// TestProviderPriceSnapshotQuoteCentsRejectsOverflow covers audit finding 12-01:
+// a product that wraps past MaxInt64 twice lands on a small positive value, so
+// a sign check alone quoted a ~$10B request at 1 cent.
+func TestProviderPriceSnapshotQuoteCentsRejectsOverflow(t *testing.T) {
+	now := time.Now().UTC()
+	s := NewProviderPriceSnapshot("price-1", "openai", "gpt-4o", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
+	s.OutputTokenMicroCents = 300 // $3 per 1M output tokens
+
+	for _, tc := range []struct {
+		name          string
+		input, output int64
+		requestCents  int64
+	}{
+		{name: "double wrap to a small positive product", output: 3443392227092449635},
+		{name: "single wrap to negative", output: (1<<63)/300 + 1},
+		{name: "sum of two in-range products", input: (1<<63-1)/1000 + 1000, output: (1<<63 - 1) / 600},
+		{name: "request surcharge", output: 1_000_000, requestCents: 1<<63 - 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			snap := *s
+			snap.InputTokenMicroCents = 500
+			snap.RequestCents = tc.requestCents
+			got, err := snap.QuoteCents(tc.input, tc.output)
+			if err == nil {
+				t.Fatalf("QuoteCents(%d, %d) = %d, nil; want an overflow error", tc.input, tc.output, got)
+			}
+		})
+	}
+
+	// The largest representable cost still quotes exactly.
+	edge := *s
+	edge.OutputTokenMicroCents = 1_000_000
+	got, err := edge.QuoteCents(0, (1<<63-1)/1_000_000)
+	if err != nil || got != (1<<63-1)/1_000_000 {
+		t.Fatalf("QuoteCents at the int64 edge = %d, %v", got, err)
+	}
+}
+
 func TestBalanceAccountValidationAndAvailability(t *testing.T) {
 	account := NewBalanceAccount("balance-1", "tenant-1", "USD", 1000, "evidence://pack-1")
 	account.HoldCents = 250

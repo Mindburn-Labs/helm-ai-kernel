@@ -86,6 +86,14 @@ that file, Kernel never sees the tool call and the tool runs.
 Unclassified tools are pass-through and write no receipt. The classifier
 decides `bash`, `write`, `edit`, and MCP names that start with `mcp_`.
 
+## Coverage
+
+This hook is an **observed-only** integration: it classifies the calls the
+client sends it, signs a receipt for each decision, and denies what it
+recognizes or cannot evaluate statically. It is defense in depth, not an
+enforced boundary. See
+[the coverage label](../reference/workstation-governance.md#coverage-label-observed-only).
+
 ## Verify a Hook Decision
 
 Every classified DENY writes a signed receipt under:

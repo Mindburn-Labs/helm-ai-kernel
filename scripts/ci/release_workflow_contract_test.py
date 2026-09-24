@@ -74,6 +74,26 @@ RELEASE_AUTHORITY_GUARD_CLAUSES = (
     "github.run_attempt == 1",
 )
 
+# HELM-732: publish and signing secrets are environment secrets on protected
+# environments (required reviewers + a tag:v* deployment policy). A job can
+# read an environment secret only when it declares that environment, so every
+# job in any workflow that references one of these secrets must declare it.
+PROTECTED_SECRET_ENVIRONMENTS = {
+    "NPM_TOKEN": "npm-production",
+    "PYPI_TOKEN": "pypi-production",
+    "CRATES_TOKEN": "crates-production",
+    "MAVEN_USERNAME": "maven-central",
+    "MAVEN_PASSWORD": "maven-central",
+    "MAVEN_GPG_PRIVATE_KEY": "maven-central",
+    "MAVEN_GPG_PASSPHRASE": "maven-central",
+    "HELM_SIGNING_KEY": "release-production",
+    "HELM_EVIDENCE_KMS_KEY_ID": "release-production",
+    "HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX": "release-production",
+    "HELM_EVIDENCE_KMS_SIGN_COMMAND": "release-production",
+    "HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND": "release-production",
+    "HOMEBREW_TAP_TOKEN": "release-production",
+}
+
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
     @classmethod
@@ -463,6 +483,54 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         for mutation, workflow in mutations.items():
             with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
                 self.assert_post_release_status_safety(workflow)
+
+    def test_every_publish_job_declares_the_environment_that_holds_its_secrets(self) -> None:
+        checked: dict[str, str] = {}
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
+            text = path.read_text(encoding="utf-8")
+            if "\njobs:\n" not in text:
+                continue
+            jobs = re.finditer(
+                r"^  (?P<name>[A-Za-z0-9_-]+):\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+                text.split("\njobs:\n", 1)[1],
+                re.MULTILINE | re.DOTALL,
+            )
+            for job in jobs:
+                body = job.group("body")
+                required = {
+                    PROTECTED_SECRET_ENVIRONMENTS[name]
+                    for name in re.findall(r"secrets\.([A-Z0-9_]+)", body)
+                    if name in PROTECTED_SECRET_ENVIRONMENTS
+                }
+                if not required:
+                    continue
+                label = f"{path.name}:{job.group('name')}"
+                with self.subTest(job=label):
+                    self.assertEqual(len(required), 1, f"{label} mixes secrets from {sorted(required)}")
+                    environment = re.search(
+                        r"^    environment:(?: (?P<inline>[A-Za-z0-9_-]+)|\n      name: (?P<named>[A-Za-z0-9_-]+))$",
+                        body,
+                        re.MULTILINE,
+                    )
+                    self.assertIsNotNone(environment, f"{label} reads {sorted(required)} secrets without an environment")
+                    assert environment is not None
+                    declared = environment.group("inline") or environment.group("named")
+                    self.assertEqual(declared, required.pop(), label)
+                    checked[label] = declared
+        # Guard against a vacuous pass: the known publishers must be seen.
+        for label in (
+            "release.yml:binaries",
+            "release.yml:homebrew",
+            "release.yml:npm-sdk",
+            "release.yml:python-sdk",
+            "release.yml:crates-sdk",
+            "release.yml:maven-sdk",
+            "npm-publish.yml:publish",
+            "python-publish.yml:publish",
+            "crates-publish.yml:publish",
+            "maven-publish.yml:publish",
+        ):
+            self.assertIn(label, checked)
 
     def test_console_dispatch_uses_an_immutable_ref_bound_to_the_source_pin(self) -> None:
         console_sidecar = self.job("console-local-sidecar")

@@ -18,6 +18,8 @@ on:
       - "core/pkg/runtimeadapters/mcp/**"
       - "core/pkg/connectors/github/**"
       - "core/pkg/registry/connectors/**"
+      - "core/pkg/postgresmigration/**"
+      - "core/pkg/registry/postgres_registry.go"
       - "reference_packs/approval/**"
       - "reference_packs/connector-release-authority-v1/**"
       - "reference_packs/effect-close-v1/**"
@@ -47,6 +49,8 @@ on:
       - "core/pkg/runtimeadapters/mcp/**"
       - "core/pkg/connectors/github/**"
       - "core/pkg/registry/connectors/**"
+      - "core/pkg/postgresmigration/**"
+      - "core/pkg/registry/postgres_registry.go"
       - "reference_packs/approval/**"
       - "reference_packs/connector-release-authority-v1/**"
       - "reference_packs/effect-close-v1/**"
@@ -104,3 +108,5 @@ jobs:
         run: make test-connector-release-authority-postgres
       - name: Prove effect reservation disposition and signed close ordering
         run: make test-effect-reservation-postgres
+      - name: Prove forced tenant row security on every kernel tenant table
+        run: make test-tenant-rls-postgres

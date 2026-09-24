@@ -316,7 +316,64 @@ func ValidateRuntime(ctx context.Context, db *sql.DB, options RuntimeOptions) er
 			}
 		}
 	}
-	return validateRuntimeRole(ctx, db)
+	if err := validateRuntimeRole(ctx, db); err != nil {
+		return err
+	}
+	unforced, err := TenantTablesWithoutForcedRowSecurity(ctx, db)
+	if err != nil {
+		return err
+	}
+	if len(unforced) > 0 {
+		return fmt.Errorf("kernel postgres tenant tables %v lack forced row security with the tenant policy; run the owner migration command", unforced)
+	}
+	return nil
+}
+
+// TenantTablesWithoutForcedRowSecurity lists the tables in the current schema
+// that have a tenant_id column but are not isolated by it: row security not
+// enabled, not forced, no policy, or a policy whose USING or WITH CHECK does
+// not test app.current_tenant (a permissive policy would undo the others).
+// Serving refuses to start on a non-empty result, and the Postgres catalog
+// test asserts it is empty after a full migration (ADR-0004 B-I3).
+func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT relation.relname
+		FROM pg_catalog.pg_class AS relation
+		JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+		JOIN pg_catalog.pg_attribute AS attribute
+		  ON attribute.attrelid = relation.oid AND attribute.attname = 'tenant_id' AND NOT attribute.attisdropped
+		WHERE namespace.nspname = current_schema()
+		  AND relation.relkind IN ('r', 'p')
+		  AND NOT (
+		      relation.relrowsecurity
+		      AND relation.relforcerowsecurity
+		      AND EXISTS (SELECT 1 FROM pg_catalog.pg_policy AS policy WHERE policy.polrelid = relation.oid)
+		      AND NOT EXISTS (
+		          SELECT 1 FROM pg_catalog.pg_policy AS policy
+		          WHERE policy.polrelid = relation.oid
+		            AND (
+		                COALESCE(pg_catalog.pg_get_expr(policy.polqual, policy.polrelid), '') NOT LIKE '%app.current_tenant%'
+		                OR (policy.polwithcheck IS NOT NULL
+		                    AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) NOT LIKE '%app.current_tenant%')
+		            )
+		      )
+		  )
+		ORDER BY relation.relname`)
+	if err != nil {
+		return nil, fmt.Errorf("inspect kernel postgres row security: %w", err)
+	}
+	defer rows.Close()
+	var unforced []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			return nil, fmt.Errorf("scan kernel postgres row security: %w", err)
+		}
+		unforced = append(unforced, table)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read kernel postgres row security: %w", err)
+	}
+	return unforced, nil
 }
 
 func kernelTableRequired(table string, options RuntimeOptions) bool {

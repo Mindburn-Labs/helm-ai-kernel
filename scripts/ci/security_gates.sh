@@ -112,7 +112,7 @@ gate_gosec() {
     lint="$(tool_golangci)"
     # golangci-lint only: a report with the given modules' gosec findings.
     run_gosec() { # module_dir report
-        (cd "$1" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 "$lint" run --enable-only gosec --path-mode abs --timeout 20m \
+        (cd "$1" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 "$lint" run --enable-only gosec --path-mode abs --uniq-by-line=false --timeout 20m \
             --max-issues-per-linter 0 --max-same-issues 0 --issues-exit-code 0 \
             --output.json.path "$2" --output.text.path /dev/null ./...)
     }

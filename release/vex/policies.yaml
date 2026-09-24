@@ -26,10 +26,22 @@
 
 policies:
   - cve_id: GO-2026-5932
-    product_purl: "pkg:golang/golang.org/x/crypto@v0.53.0"
+    product_purl: "pkg:golang/golang.org/x/crypto@v0.55.0"
     status: not_affected
     justification: vulnerable_code_not_present
-    statement: "golang.org/x/crypto/openpgp is never imported; only x/crypto/hkdf is compiled into the binary; module-granularity gobinary scan flags the whole module"
+    statement: "golang.org/x/crypto/openpgp is never imported; only x/crypto/hkdf and x/crypto/pbkdf2 are compiled into the binary; module-granularity gobinary scan flags the whole module"
+  # x/crypto v0.56.0 fixes the next two but requires Go 1.26; the kernel is pinned
+  # to Go 1.25.13, so it stays on v0.55.0 until the toolchain moves (HELM-743).
+  - cve_id: CVE-2026-56855
+    product_purl: "pkg:golang/golang.org/x/crypto@v0.55.0"
+    status: not_affected
+    justification: vulnerable_code_not_present
+    statement: "GO-2026-6355 is a deadlock in golang.org/x/crypto/ssh, which is never imported; only x/crypto/hkdf and x/crypto/pbkdf2 are compiled into the binary; module-granularity gobinary scan flags the whole module"
+  - cve_id: CVE-2026-78662
+    product_purl: "pkg:golang/golang.org/x/crypto@v0.55.0"
+    status: not_affected
+    justification: vulnerable_code_not_present
+    statement: "GO-2026-6354 is a deadlock in golang.org/x/crypto/ssh, which is never imported; only x/crypto/hkdf and x/crypto/pbkdf2 are compiled into the binary; module-granularity gobinary scan flags the whole module"
   - cve_id: CVE-2026-46600
     product_purl: "pkg:golang/stdlib@1.25.13"
     status: not_affected

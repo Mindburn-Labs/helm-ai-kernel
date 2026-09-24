@@ -73,7 +73,7 @@ products = {
     for statement in payload["statements"]
 }
 expected = {
-    "GO-2026-5932": "pkg:golang/golang.org/x/crypto@v0.53.0",
+    "GO-2026-5932": "pkg:golang/golang.org/x/crypto@v0.55.0",
     "CVE-2026-46600": "pkg:golang/stdlib@1.25.13",
 }
 for vulnerability, product in expected.items():

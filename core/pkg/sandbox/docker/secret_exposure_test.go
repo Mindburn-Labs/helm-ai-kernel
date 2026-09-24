@@ -17,7 +17,7 @@ func secretSpec() *sandbox.SandboxSpec {
 		Image:   "example.com/app@sha256:abc",
 		Command: []string{"/bin/true"},
 		Env:     map[string]string{"OPENROUTER_API_KEY": canary},
-		Limits:  sandbox.ResourceLimits{Timeout: 10 * time.Second, MemoryMB: 64, CPUMillis: 100, MaxProcesses: 8},
+		Limits:  sandbox.ResourceLimits{Timeout: time.Minute, MemoryMB: 64, CPUMillis: 100, MaxProcesses: 8},
 		Network: sandbox.NetworkPolicy{Disabled: true},
 	}
 }

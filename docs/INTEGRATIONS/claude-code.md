@@ -37,8 +37,9 @@ data dir, Kernel URL, draft policy path, and uninstall command.
 
 ## Verify a Hook Decision
 
-Every classified PreToolUse decision, whether allowed or denied, writes a
-signed receipt under:
+The installed matcher routes `Bash`, `Edit`, `Write`, `MultiEdit`,
+`NotebookEdit`, and `mcp__*` calls to the hook. Every classified PreToolUse
+decision, whether allowed or denied, writes a signed receipt under:
 
 ```text
 ~/.helm-ai-kernel/receipts/hooks/
@@ -58,6 +59,14 @@ signer's key out of band with `--trusted-public-key-file` when verifying
 copied receipts — see
 [local signer and trusted verification](../reference/workstation-governance.md#local-signer-and-trusted-verification).
 Receipts signed with pre-v0.7.3 derivable seeds remain untrusted.
+
+## Coverage
+
+This hook is an **observed-only** integration: it classifies the calls the
+client sends it, signs a receipt for each decision, and denies what it
+recognizes or cannot evaluate statically. It is defense in depth, not an
+enforced boundary. See
+[the coverage label](../reference/workstation-governance.md#coverage-label-observed-only).
 
 ## Deny Feedback Format
 

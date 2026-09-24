@@ -908,7 +908,6 @@ func TestHookPreToolStillAllowsBenignBashAfterASTClassifier(t *testing.T) {
 		"git status --short",
 		"go build ./... && go vet ./...",
 		"git log --oneline | head -5",
-		`echo "today is $(date +%F)"`,
 		"npm run build",
 		"python --version",
 		`bash scripts/deploy.sh "$ARG"`,
@@ -1466,4 +1465,161 @@ func globReceipts(t *testing.T, dataDir string) []string {
 		}
 	}
 	return receipts
+}
+
+// runHookPreToolForTest pipes one payload through the real hook entrypoint and
+// reports whether it emitted a Claude Code deny.
+func runHookPreToolForTest(t *testing.T, dataDir string, payload map[string]any, extra ...string) bool {
+	t.Helper()
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	args := append([]string{"--client", "claude-code", "--data-dir", dataDir}, extra...)
+	if code := runHookPreToolCmd(args, bytes.NewReader(raw), &stdout, &stderr); code != 0 {
+		t.Fatalf("hook exit = %d stderr = %s", code, stderr.String())
+	}
+	return strings.Contains(stdout.String(), `"permissionDecision":"deny"`)
+}
+
+// TestHookPreToolFailsClosedOnShellExpansion replays the H8 / 21-01 PoC
+// (verification VD hookpoc/run.py) through the real hook entrypoint: every
+// spelling that shell expansion turns into a destructive command or a hook
+// config rewrite must produce a signed DENY, never "no decision".
+func TestHookPreToolFailsClosedOnShellExpansion(t *testing.T) {
+	commands := []string{
+		`$'\x72\x6d' -rf /home/u/project`,
+		`rm $'\x2d\x72\x66' /home/u/project`,
+		"{rm,-rf,/home/u/project}",
+		"/bin/r? -rf /home/u/project",
+		"/bin/r[m] -rf /home/u/project",
+		`$'\x67it' reset --hard`,
+		`git $'\x72eset' --hard`,
+		`kubectl $'\x64elete' ns prod`,
+		`echo '{}' > $'.claude/settings.js\x6fn'`,
+		`cp evil.json $'.claude/settings.js\x6fn'`,
+		"$CMD -rf /home/u/project",
+		"echo $(date)",
+		"echo '{}' > .claude/./settings.json",
+		"cd .claude && echo '{}' > settings.json",
+	}
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	for _, command := range commands {
+		t.Run(command, func(t *testing.T) {
+			payload := map[string]any{
+				"tool_name":  "Bash",
+				"tool_input": map[string]any{"command": command},
+				"session_id": "poc",
+				"cwd":        "/home/u/project",
+			}
+			if !runHookPreToolForTest(t, tmp, payload) {
+				t.Fatalf("command %q passed without a decision", command)
+			}
+		})
+	}
+	if receipts := globReceipts(t, tmp); len(receipts) < len(commands) {
+		t.Fatalf("receipts = %d, want at least one signed receipt per command (%d)", len(receipts), len(commands))
+	}
+}
+
+// TestHookPreToolKeepsFileClassForEscapedHookConfigWrite proves a shell grant
+// does not cover rewriting a hook configuration spelled with ANSI-C escapes.
+func TestHookPreToolKeepsFileClassForEscapedHookConfigWrite(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	profile := filepath.Join(kernelRepoRoot(t), "fixtures", "workstation", "policies", "observe_draft.v1.allow.json")
+	payload := map[string]any{
+		"tool_name":  "Bash",
+		"tool_input": map[string]any{"command": `echo '{}' > $'.claude/settings.js\x6fn'`},
+	}
+	if !runHookPreToolForTest(t, tmp, payload, "--policy-profile", profile, "--policy-profile-sha256", hookPolicyProfileDigest(t, profile)) {
+		t.Fatal("escaped hook config rewrite was not denied under a shell grant")
+	}
+	denied := false
+	for _, path := range globReceipts(t, tmp) {
+		receipt, err := workstation.LoadDecisionReceipt(path)
+		if err != nil {
+			t.Fatalf("load receipt: %v", err)
+		}
+		if receipt.Request.EffectType == contracts.EffectTypeWorkstationFileWrite && receipt.Verdict == contracts.WorkstationVerdictDeny {
+			denied = true
+		}
+	}
+	if !denied {
+		t.Fatal("no FILE_WRITE DENY receipt for the escaped hook config rewrite")
+	}
+}
+
+// TestHookPreToolExemptsOnlyTheInstalledHelmMCPServer is the 02-09
+// regression: only the exact server name setup installs is exempt.
+func TestHookPreToolExemptsOnlyTheInstalledHelmMCPServer(t *testing.T) {
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	for _, tool := range []string{
+		"mcp__evil-helm-ai-kernel-proxy__exec",
+		"mcp__x__helm_ai_kernel_exec",
+		"mcp__helm-ai-kernel-governance-evil__decide",
+		"mcp__helm-ai-kernel__decide",
+		"mcp_helm_ai_kernel_governance_decide",
+	} {
+		t.Run(tool, func(t *testing.T) {
+			if !runHookPreToolForTest(t, tmp, map[string]any{"tool_name": tool, "tool_input": map[string]any{}}) {
+				t.Fatalf("MCP tool %q skipped the decision path", tool)
+			}
+		})
+	}
+	before := len(globReceipts(t, tmp))
+	if runHookPreToolForTest(t, tmp, map[string]any{"tool_name": "mcp__" + setupMCPServerName + "__decide", "tool_input": map[string]any{}}) {
+		t.Fatal("the installed HELM MCP server was denied")
+	}
+	if after := len(globReceipts(t, tmp)); after != before {
+		t.Fatalf("the installed HELM MCP server wrote a receipt (%d -> %d)", before, after)
+	}
+}
+
+// TestHookPreToolDeniesPersistenceWrites is the 02-10 / 21-02 / 04-08
+// regression for the Write, Edit and NotebookEdit tools.
+func TestHookPreToolDeniesPersistenceWrites(t *testing.T) {
+	cases := []struct {
+		tool  string
+		key   string
+		value string
+	}{
+		{"Write", "file_path", "/home/u/.ssh/authorized_keys"},
+		{"Write", "file_path", "/home/u/.bashrc"},
+		{"Edit", "file_path", "/home/u/.zshrc"},
+		{"Write", "file_path", "/home/u/.gitconfig"},
+		{"Write", "file_path", "/etc/crontab"},
+		{"Write", "file_path", "/etc/sudoers.d/agent"},
+		{"Write", "file_path", "/home/u/project/.claude/./settings.json"},
+		{"Write", "file_path", "/home/u/project/.claude/settings.local.json"},
+		{"MultiEdit", "file_path", "settings.json"},
+		{"NotebookEdit", "notebook_path", "/home/u/project/.git/hooks/pre-commit"},
+	}
+	tmp := t.TempDir()
+	restoreHookClock(t)
+	for _, tc := range cases {
+		t.Run(tc.tool+" "+tc.value, func(t *testing.T) {
+			cwd := "/home/u/project"
+			if tc.tool == "MultiEdit" {
+				cwd = "/home/u/project/.claude"
+			}
+			payload := map[string]any{
+				"tool_name":  tc.tool,
+				"tool_input": map[string]any{tc.key: tc.value},
+				"cwd":        cwd,
+			}
+			if !runHookPreToolForTest(t, tmp, payload) {
+				t.Fatalf("%s to %q passed without a decision", tc.tool, tc.value)
+			}
+		})
+	}
+	if runHookPreToolForTest(t, tmp, map[string]any{
+		"tool_name":  "NotebookEdit",
+		"tool_input": map[string]any{"notebook_path": "/home/u/project/analysis.ipynb"},
+	}) {
+		t.Fatal("ordinary notebook edit was denied")
+	}
 }

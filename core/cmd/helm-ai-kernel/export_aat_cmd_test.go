@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -80,10 +82,12 @@ func TestExportAATRoundTrip(t *testing.T) {
 		t.Fatal("AAT CLI export is not deterministic")
 	}
 
-	// Verify mode passes on a valid chain.
+	// Verify mode passes on a valid chain signed by the trusted key.
+	seed, _ := hex.DecodeString(signKey)
+	trustedKey := hex.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
 	stdout.Reset()
 	stderr.Reset()
-	if code := runExportCmd([]string{"aat", "--verify", outPath}, &stdout, &stderr); code != 0 {
+	if code := runExportCmd([]string{"aat", "--verify", outPath, "--public-key", trustedKey}, &stdout, &stderr); code != 0 {
 		t.Fatalf("verify exited %d: %s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "AAT chain OK") {
@@ -98,7 +102,7 @@ func TestExportAATRoundTrip(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := runExportCmd([]string{"aat", "--verify", tamperedPath}, &stdout, &stderr); code != 1 {
+	if code := runExportCmd([]string{"aat", "--verify", tamperedPath, "--public-key", trustedKey}, &stdout, &stderr); code != 1 {
 		t.Fatalf("expected exit 1 for tampered chain, got %d: %s", code, stderr.String())
 	}
 }

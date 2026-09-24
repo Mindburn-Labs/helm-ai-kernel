@@ -80,8 +80,6 @@ func TestOpenAPISpec_Integrity(t *testing.T) {
 		"/api/v1/console/bootstrap",
 		"/api/v1/evaluate",
 		"/api/v1/receipts",
-		"/api/v1/trust/keys/add",
-		"/api/v1/trust/keys/revoke",
 		"/v1/chat/completions",
 		"/mcp/v1/capabilities",
 		"/mcp/v1/execute",

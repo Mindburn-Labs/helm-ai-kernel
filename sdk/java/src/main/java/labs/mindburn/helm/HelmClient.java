@@ -460,31 +460,12 @@ public class HelmClient {
                 .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
     }
 
-    /** POST /api/v1/conformance/run */
-    public ConformanceResult conformanceRun(ConformanceRequest req) {
-        HttpRequest r = this.req("POST", "/api/v1/conformance/run")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
-                .build();
-        return send(r, ConformanceResult.class);
-    }
-
-    /** GET /api/v1/conformance/reports/{id} */
-    public ConformanceResult getConformanceReport(String reportId) {
-        HttpRequest r = req("GET", "/api/v1/conformance/reports/" + reportId)
-                .GET().build();
-        return send(r, ConformanceResult.class);
-    }
-
     /** GET /api/v1/conformance/negative */
     public List<NegativeBoundaryVector> listNegativeConformanceVectors() {
         HttpRequest r = req("GET", "/api/v1/conformance/negative")
                 .GET().build();
         return sendList(r, new TypeReference<List<NegativeBoundaryVector>>() {
         });
-    }
-
-    public JsonElement listConformanceReports() {
-        return sendJson(req("GET", "/api/v1/conformance/reports").GET().build());
     }
 
     public JsonElement listConformanceVectors() {

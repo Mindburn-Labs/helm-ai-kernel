@@ -113,6 +113,27 @@ The six operations stay in the OpenAPI contract marked `deprecated` so the
 breaking-change gate permits removing them in a later release. The Console
 surface catalog marks the Conformance and Trust Keys surfaces `unsupported`.
 
+### Removed — the six retired verification routes (HELM-756)
+
+Breaking. The six operations that answered `501` since HELM-742 are no longer
+routed; they now answer `404`. They also leave the OpenAPI contract.
+
+The routes are:
+- `POST /api/v1/conformance/run`;
+- `GET /api/v1/conformance/reports` and `GET /api/v1/conformance/reports/{report_id}`;
+- `POST /api/v1/gui/receipts/verify`;
+- `POST /api/v1/trust/keys/add` and `POST /api/v1/trust/keys/revoke`.
+
+The SDK methods that called them are removed:
+- Go: `ConformanceRun`, `GetConformanceReport` and `ListConformanceReports`;
+- TypeScript and Java: `conformanceRun`, `getConformanceReport` and
+  `listConformanceReports`;
+- Python and Rust: `conformance_run`, `get_conformance_report` and
+  `list_conformance_reports`.
+
+The Console surface catalog drops its Conformance and Trust Keys entries. Run
+conformance with `helm-ai-kernel conform` against an evidence pack.
+
 ### Changed — verification commands require a trust root (HELM-742)
 
 Breaking for scripts that relied on the old defaults:

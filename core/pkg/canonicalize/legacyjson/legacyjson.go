@@ -1,4 +1,10 @@
-package jcs
+// Package legacyjson keeps the byte format that governance decision hashes and
+// registry pack hashes have always used: encoding/json output (sorted map keys)
+// plus a refusal of NaN and Infinity. It is NOT RFC 8785 JCS. It moved here
+// verbatim from core/pkg/compliance/jcs when compliance/* was retired
+// (HELM-756), so every existing hash stays byte-identical. New code hashes with
+// canonicalize.JCS.
+package legacyjson
 
 import (
 	"encoding/json"

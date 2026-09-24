@@ -49,6 +49,11 @@ test-effect-reservation-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle -count=10
 
+.PHONY: test-tenant-rls-postgres
+test-tenant-rls-postgres:
+	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
+	cd core && go test -race ./pkg/postgresmigration -run '^(TestKernelTenantTablesHaveForcedRowSecurity|TestTenantRowSecurityCheckDetectsWeakenedTables|TestTenantRowSecurityIsolatesTenantsForARestrictedRole)$$' -count=1 -v
+
 .PHONY: verify-canonical-json-vectors
 
 # The canonicalization contract every other vector pack is built on. Run this

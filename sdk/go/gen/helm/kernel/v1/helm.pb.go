@@ -82,6 +82,12 @@ func (Verdict) EnumDescriptor() ([]byte, []int) {
 	return file_helm_kernel_v1_helm_proto_rawDescGZIP(), []int{0}
 }
 
+// Legacy closed enum. It holds 18 of the codes in
+// protocols/json-schemas/reason-codes/reason-codes-v1.json, the only reason-code
+// registry, and every other code decodes as REASON_CODE_UNSPECIFIED. Read the
+// open-string reason_code_text field beside each use instead. No values are
+// added here; scripts/ci/gen_reason_codes.py checks that every value is a
+// registry code and that every use has reason_code_text beside it.
 type ReasonCode int32
 
 const (
@@ -802,8 +808,12 @@ type Receipt struct {
 	ArgsHash         string `protobuf:"bytes,22,opt,name=args_hash,json=argsHash,proto3" json:"args_hash,omitempty"`
 	PolicyHash       string `protobuf:"bytes,23,opt,name=policy_hash,json=policyHash,proto3" json:"policy_hash,omitempty"`
 	SessionId        string `protobuf:"bytes,24,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The registered reason code as an open string (HELM-747). This is the
+	// authoritative field: the closed reason_code enum above represents only
+	// 18 of the registry's codes and reads every other code as UNSPECIFIED.
+	ReasonCodeText string `protobuf:"bytes,25,opt,name=reason_code_text,json=reasonCodeText,proto3" json:"reason_code_text,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Receipt) Reset() {
@@ -1004,6 +1014,13 @@ func (x *Receipt) GetSessionId() string {
 	return ""
 }
 
+func (x *Receipt) GetReasonCodeText() string {
+	if x != nil {
+		return x.ReasonCodeText
+	}
+	return ""
+}
+
 type PDPRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Effect        *Effect                `protobuf:"bytes,1,opt,name=effect,proto3" json:"effect,omitempty"`
@@ -1193,14 +1210,18 @@ func (x *ContextDescriptor) GetTimeWindowEnd() *timestamppb.Timestamp {
 }
 
 type PDPResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Allow         bool                   `protobuf:"varint,1,opt,name=allow,proto3" json:"allow,omitempty"`
-	ReasonCode    ReasonCode             `protobuf:"varint,2,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
-	PolicyRef     string                 `protobuf:"bytes,3,opt,name=policy_ref,json=policyRef,proto3" json:"policy_ref,omitempty"`
-	DecisionHash  string                 `protobuf:"bytes,4,opt,name=decision_hash,json=decisionHash,proto3" json:"decision_hash,omitempty"`
-	Obligations   []*Obligation          `protobuf:"bytes,5,rep,name=obligations,proto3" json:"obligations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Allow        bool                   `protobuf:"varint,1,opt,name=allow,proto3" json:"allow,omitempty"`
+	ReasonCode   ReasonCode             `protobuf:"varint,2,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
+	PolicyRef    string                 `protobuf:"bytes,3,opt,name=policy_ref,json=policyRef,proto3" json:"policy_ref,omitempty"`
+	DecisionHash string                 `protobuf:"bytes,4,opt,name=decision_hash,json=decisionHash,proto3" json:"decision_hash,omitempty"`
+	Obligations  []*Obligation          `protobuf:"bytes,5,rep,name=obligations,proto3" json:"obligations,omitempty"`
+	// The registered reason code as an open string (HELM-747). This is the
+	// authoritative field: the closed reason_code enum above represents only
+	// 18 of the registry's codes and reads every other code as UNSPECIFIED.
+	ReasonCodeText string `protobuf:"bytes,6,opt,name=reason_code_text,json=reasonCodeText,proto3" json:"reason_code_text,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PDPResponse) Reset() {
@@ -1266,6 +1287,13 @@ func (x *PDPResponse) GetObligations() []*Obligation {
 		return x.Obligations
 	}
 	return nil
+}
+
+func (x *PDPResponse) GetReasonCodeText() string {
+	if x != nil {
+		return x.ReasonCodeText
+	}
+	return ""
 }
 
 type Obligation struct {
@@ -1397,14 +1425,18 @@ func (x *EffectRequest) GetContext() map[string]string {
 }
 
 type EffectResponse struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Verdict       Verdict                    `protobuf:"varint,1,opt,name=verdict,proto3,enum=helm.kernel.v1.Verdict" json:"verdict,omitempty"`
-	ReasonCode    ReasonCode                 `protobuf:"varint,2,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
-	Reason        string                     `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	Receipt       *Receipt                   `protobuf:"bytes,4,opt,name=receipt,proto3" json:"receipt,omitempty"`
-	Intent        *AuthorizedExecutionIntent `protobuf:"bytes,5,opt,name=intent,proto3" json:"intent,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState     `protogen:"open.v1"`
+	Verdict    Verdict                    `protobuf:"varint,1,opt,name=verdict,proto3,enum=helm.kernel.v1.Verdict" json:"verdict,omitempty"`
+	ReasonCode ReasonCode                 `protobuf:"varint,2,opt,name=reason_code,json=reasonCode,proto3,enum=helm.kernel.v1.ReasonCode" json:"reason_code,omitempty"`
+	Reason     string                     `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Receipt    *Receipt                   `protobuf:"bytes,4,opt,name=receipt,proto3" json:"receipt,omitempty"`
+	Intent     *AuthorizedExecutionIntent `protobuf:"bytes,5,opt,name=intent,proto3" json:"intent,omitempty"`
+	// The registered reason code as an open string (HELM-747). This is the
+	// authoritative field: the closed reason_code enum above represents only
+	// 18 of the registry's codes and reads every other code as UNSPECIFIED.
+	ReasonCodeText string `protobuf:"bytes,6,opt,name=reason_code_text,json=reasonCodeText,proto3" json:"reason_code_text,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *EffectResponse) Reset() {
@@ -1470,6 +1502,13 @@ func (x *EffectResponse) GetIntent() *AuthorizedExecutionIntent {
 		return x.Intent
 	}
 	return nil
+}
+
+func (x *EffectResponse) GetReasonCodeText() string {
+	if x != nil {
+		return x.ReasonCodeText
+	}
+	return ""
 }
 
 type ExecutionResult struct {
@@ -1671,7 +1710,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1c\n" +
 	"\tsignature\x18\x06 \x01(\tR\tsignature\x12\"\n" +
 	"\rsigner_key_id\x18\a \x01(\tR\vsignerKeyId\x12\x1c\n" +
-	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xb2\a\n" +
+	"\tprincipal\x18\b \x01(\tR\tprincipal\"\xdc\a\n" +
 	"\aReceipt\x12'\n" +
 	"\x0freceipt_version\x18\x01 \x01(\tR\x0ereceiptVersion\x12\x1d\n" +
 	"\n" +
@@ -1703,7 +1742,8 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\vpolicy_hash\x18\x17 \x01(\tR\n" +
 	"policyHash\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x18 \x01(\tR\tsessionId\x1a;\n" +
+	"session_id\x18\x18 \x01(\tR\tsessionId\x12(\n" +
+	"\x10reason_code_text\x18\x19 \x01(\tR\x0ereasonCodeText\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb6\x01\n" +
@@ -1720,7 +1760,7 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\fjurisdiction\x18\x01 \x01(\tR\fjurisdiction\x12 \n" +
 	"\venvironment\x18\x02 \x01(\tR\venvironment\x12F\n" +
 	"\x11time_window_start\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0ftimeWindowStart\x12B\n" +
-	"\x0ftime_window_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rtimeWindowEnd\"\xe2\x01\n" +
+	"\x0ftime_window_end\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rtimeWindowEnd\"\x8c\x02\n" +
 	"\vPDPResponse\x12\x14\n" +
 	"\x05allow\x18\x01 \x01(\bR\x05allow\x12;\n" +
 	"\vreason_code\x18\x02 \x01(\x0e2\x1a.helm.kernel.v1.ReasonCodeR\n" +
@@ -1728,7 +1768,8 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\n" +
 	"policy_ref\x18\x03 \x01(\tR\tpolicyRef\x12#\n" +
 	"\rdecision_hash\x18\x04 \x01(\tR\fdecisionHash\x12<\n" +
-	"\vobligations\x18\x05 \x03(\v2\x1a.helm.kernel.v1.ObligationR\vobligations\"\x8a\x01\n" +
+	"\vobligations\x18\x05 \x03(\v2\x1a.helm.kernel.v1.ObligationR\vobligations\x12(\n" +
+	"\x10reason_code_text\x18\x06 \x01(\tR\x0ereasonCodeText\"\x8a\x01\n" +
 	"\n" +
 	"Obligation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -1741,14 +1782,15 @@ const file_helm_kernel_v1_helm_proto_rawDesc = "" +
 	"\acontext\x18\x03 \x03(\v2*.helm.kernel.v1.EffectRequest.ContextEntryR\acontext\x1a:\n" +
 	"\fContextEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x02\n" +
 	"\x0eEffectResponse\x121\n" +
 	"\averdict\x18\x01 \x01(\x0e2\x17.helm.kernel.v1.VerdictR\averdict\x12;\n" +
 	"\vreason_code\x18\x02 \x01(\x0e2\x1a.helm.kernel.v1.ReasonCodeR\n" +
 	"reasonCode\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x121\n" +
 	"\areceipt\x18\x04 \x01(\v2\x17.helm.kernel.v1.ReceiptR\areceipt\x12A\n" +
-	"\x06intent\x18\x05 \x01(\v2).helm.kernel.v1.AuthorizedExecutionIntentR\x06intent\"\xc4\x01\n" +
+	"\x06intent\x18\x05 \x01(\v2).helm.kernel.v1.AuthorizedExecutionIntentR\x06intent\x12(\n" +
+	"\x10reason_code_text\x18\x06 \x01(\tR\x0ereasonCodeText\"\xc4\x01\n" +
 	"\x0fExecutionResult\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12\x16\n" +

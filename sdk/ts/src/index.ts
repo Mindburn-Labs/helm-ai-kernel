@@ -82,3 +82,6 @@ export type {
   VersionInfo,
   ExportRequest,
 } from "./types.gen.js";
+
+export { ReasonCodes, isRegisteredReasonCode } from "./reason_codes.gen.js";
+export type { RegisteredReasonCode } from "./reason_codes.gen.js";

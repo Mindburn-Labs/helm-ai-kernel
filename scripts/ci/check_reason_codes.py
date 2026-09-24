@@ -23,8 +23,13 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import gen_reason_codes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "protocols/json-schemas/reason-codes/reason-codes-v1.schema.json"
@@ -144,15 +149,19 @@ def main() -> int:
     validate("registry", registry, schema, schema, failures)
     if isinstance(registry, dict) and isinstance(registry.get("codes"), list):
         legibility(registry["codes"], failures)
+    if not failures:
+        # The registry generates every language's constants and bounds the
+        # proto enum (HELM-747); a valid registry out of step with them fails.
+        failures.extend(gen_reason_codes.check(ROOT))
 
     if failures:
-        print(f"reason-code registry does not validate against {SCHEMA_PATH.relative_to(ROOT)}:")
+        print(f"reason-code registry, or what it generates, fails ({SCHEMA_PATH.relative_to(ROOT)}, gen_reason_codes.py):")
         for failure in failures:
             print(f"- {failure}")
         return 1
 
     codes = registry.get("codes", [])
-    print(f"reason-code registry check passed: {len(codes)} entries valid against the v1 schema.")
+    print(f"reason-code registry check passed: {len(codes)} entries valid against the v1 schema; generated constants and proto in sync.")
     return 0
 
 

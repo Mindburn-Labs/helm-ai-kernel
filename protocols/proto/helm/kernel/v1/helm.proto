@@ -21,6 +21,12 @@ enum Verdict {
   VERDICT_ESCALATE = 3;
 }
 
+// Legacy closed enum. It holds 18 of the codes in
+// protocols/json-schemas/reason-codes/reason-codes-v1.json, the only reason-code
+// registry, and every other code decodes as REASON_CODE_UNSPECIFIED. Read the
+// open-string reason_code_text field beside each use instead. No values are
+// added here; scripts/ci/gen_reason_codes.py checks that every value is a
+// registry code and that every use has reason_code_text beside it.
 enum ReasonCode {
   REASON_CODE_UNSPECIFIED = 0;
   REASON_CODE_POLICY_VIOLATION = 1;
@@ -152,6 +158,10 @@ message Receipt {
   string args_hash = 22;
   string policy_hash = 23;
   string session_id = 24;
+  // The registered reason code as an open string (HELM-747). This is the
+  // authoritative field: the closed reason_code enum above represents only
+  // 18 of the registry's codes and reads every other code as UNSPECIFIED.
+  string reason_code_text = 25;
 }
 
 // ── PDP Service ────────────────────────────────────────────────
@@ -181,6 +191,10 @@ message PDPResponse {
   string policy_ref = 3;
   string decision_hash = 4;
   repeated Obligation obligations = 5;
+  // The registered reason code as an open string (HELM-747). This is the
+  // authoritative field: the closed reason_code enum above represents only
+  // 18 of the registry's codes and reads every other code as UNSPECIFIED.
+  string reason_code_text = 6;
 }
 
 message Obligation {
@@ -208,6 +222,10 @@ message EffectResponse {
   string reason = 3;
   Receipt receipt = 4;
   AuthorizedExecutionIntent intent = 5;
+  // The registered reason code as an open string (HELM-747). This is the
+  // authoritative field: the closed reason_code enum above represents only
+  // 18 of the registry's codes and reads every other code as UNSPECIFIED.
+  string reason_code_text = 6;
 }
 
 message ExecutionResult {

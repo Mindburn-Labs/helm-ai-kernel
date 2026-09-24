@@ -11,8 +11,9 @@ authoring policies and running the local MCP approval loop, what usually causes
 them, and the next step that reaches `ALLOW`.
 
 The normative, versioned registry of all codes is
-[Reason Code Registry v1](../../protocols/specs/rfc/reason-codes-v1.md); the Go
-constants live in `core/pkg/contracts/verdict.go`. This page is the
+[Reason Code Registry v1](../../protocols/specs/rfc/reason-codes-v1.md). The SDK
+constants are generated from it, and the Go constants live in
+`core/pkg/contracts/verdict.go`. This page is the
 operator-facing companion: it covers the codes reachable from the Guardian and
 the local `mcp` commands, and what to change when you see one.
 

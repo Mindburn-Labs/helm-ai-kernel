@@ -149,6 +149,29 @@ production runtime rejects `mountedFile`, whose filesystem timestamp is not a
 source-owned monotonic publication epoch. This entry does not claim a tagged
 release or production deployment.
 
+### Changed — workstation hook fails closed on shell expansion
+
+The pre-tool hook's shell classifier now routes ANSI-C and locale quoting
+(`$'...'`, `$"..."`), brace expansion, command and process substitution that
+runs anything outside a small read-only allowlist, globs or variables in
+command position, globbed write targets, and writes after an unresolvable `cd`
+through the signed decision path instead of passing them without a decision.
+A substitution that only runs allowlisted read-only commands on literal input
+(`cat` of a heredoc, `date`, `git rev-parse`, `git log`, `pwd`,
+`basename`/`dirname`, `printf`/`echo`) yields an opaque word, so the usual
+`git commit -m "$(cat <<'EOF' ... EOF)"` still passes, while that word stays
+fail-closed in command position, `eval`, `sh -c`, `source`, redirect targets
+and destructive operands. Sensitive write targets are normalized before matching and
+share one list between the Write tool and shell writes; the list now includes
+SSH `authorized_keys`, shell startup files, `.gitconfig`, cron, sudoers,
+`.claude/settings.local.json` and the Hermes/DeepSeek hook files. The HELM MCP
+self-exemption matches the installed server name exactly, and the Claude Code
+matcher adds `NotebookEdit`. Commands that use the decided forms are denied
+under the default profile unless a policy profile grants the shell or file
+permission. The hook remains an
+observed-only integration; see
+[workstation governance](docs/reference/workstation-governance.md#coverage-label-observed-only).
+
 ## [0.8.5] - 2026-08-23
 
 Source-prepared v0.8.5 notes for the current Kernel tree. These entries do not

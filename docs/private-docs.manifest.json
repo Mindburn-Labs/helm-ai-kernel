@@ -757,15 +757,6 @@
       "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/sdk/readme"
     },
     {
-      "slug": "internal/helm-ai-kernel/scripts/tla/readme",
-      "title": "Tla",
-      "section": "internal",
-      "source_path": "scripts/tla/README.md",
-      "access": "staff",
-      "sensitivity": "internal",
-      "docs_origin_hint": "helm.docs.mindburn.org/internal/helm-ai-kernel/scripts/tla/readme"
-    },
-    {
       "slug": "internal/helm-ai-kernel/scripts/usecases/readme",
       "title": "Usecases",
       "section": "internal",

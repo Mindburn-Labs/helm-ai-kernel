@@ -79,7 +79,7 @@ No §14.4 candidate is in that list.
 | `core/pkg/riskscan` (1,780) | `cmd/helm-ai-kernel` (`scan`, `verify scan`) | None | — | Move to an optional tool or remove | s4 |
 | `core/pkg/shellscan` (3,380) | `cmd/helm-ai-kernel` (`hook`) | None | — | **Keep**, but only inside the observed-only hook (§7.4). The H8 repair is tracked separately. | — |
 | Java SDK (`sdk/java`), Rust SDK (`sdk/rust`) | Not applicable | See the notes below the table. | — | Remove in s5. **Publishing the deprecation is a human action.** | s5 |
-| TLA+ specifications (`proofs/*.tla`, 7 specs), `.github/workflows/tla.yml` | Not applicable | None | — | Review each spec. Keep only the specs tied to code. | s6 |
+| TLA+ specifications (`proofs/*.tla`, 7 specs), `.github/workflows/tla.yml` | Not applicable | None in the Console, the Control Plane or the docs site | — | **Removed** (s6b). None was tied to code. | s6b |
 | Verification-shaped commands not in §11.4, including `workstation certify` | `cmd/helm-ai-kernel` | Not yet mapped | — | Map them against §11.4 first | s6 |
 
 Notes on the rows marked "see the notes below the table":
@@ -291,3 +291,33 @@ Not changed in this slice:
   `session_id`. That fix is separate.
 - Launchpad's `require_schema_pin` app-spec field stays; it belongs to the
   Launchpad slice (HELM-762).
+
+## Slice 6b evidence
+
+Each TLA+ spec was checked for a tie to code, meaning trace validation, a
+generated artifact, or a test that asserts correspondence. None had one.
+
+- `GuardianPipeline.tla`, `SafeDeprecationMode.tla` and
+  `protocols/specs/tla/HelmKernel.tla` were model-checked in isolation by the
+  `tla` workflow. They describe the pre-HELM-750 gate pipeline, not the CEL
+  `decide` that now runs.
+- `CSNFDeterminism`, `DelegationModel`, `ProofGraphConsistency`,
+  `TenantIsolation` and `TrustPropagation` had no model-checking config and were
+  never checked.
+- The conformance checklist item `delegation.narrowing_only` was marked
+  required and was "verified" by `DelegationModel.tla` invariant
+  `NarrowingOnly`, which that spec never defined. It now points at
+  `TestDelegationSession_EffectiveTools` and is no longer required.
+
+Callers checked read-only: none in `app-helm-console`, `svc-helm-control-plane`
+or `app-helm-docs`.
+
+Removed with the specs:
+- the `tla` workflow and `scripts/tla`;
+- the `tla-tools-hardening` quality gate and its checker.
+
+The Lean proof stays. Doc and tier references are updated:
+- `BEST_PRACTICES`, `AEGIS_COMPARISON`, the clawguard note and the Lean README
+  are revised;
+- the `CONFORMANCE_GUIDE` and compatibility registry "sovereign" tier now say
+  "formal invariant alignment" instead of TLA+.

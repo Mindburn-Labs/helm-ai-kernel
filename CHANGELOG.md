@@ -93,6 +93,17 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Removed — the TLA+ specifications (HELM-756)
+
+- The seven TLA+ specs in `proofs/` and `protocols/specs/tla/HelmKernel.tla`
+  are removed, together with the `tla` workflow, `scripts/tla` and the
+  `tla-tools-hardening` quality gate.
+- No spec was tied to the code it described. Three were model-checked in
+  isolation, and four were never checked at all. One conformance checklist
+  item cited an invariant, `NarrowingOnly`, that its spec never defined.
+- The Lean proof (`proofs/EffectPermitSoundness.lean`, `proofs/Lean`) is
+  unchanged.
+
 ### Removed — the MCP rug-pull detector, the caller-supplied schema pin and the `tee` CLI (HELM-756)
 
 Breaking.

@@ -6,10 +6,10 @@ no P1 policy bundle, however constructed, can cause `Decide` to return
 ALLOW for a request a P0 ceiling forbids.
 
 Workstream F / F2 + F3 — Phase 3 of the helm-ai-kernel formal proof execution
-plan. Companion to the existing TLA+ specs in `proofs/`
-(`GuardianPipeline.tla`, `DelegationModel.tla`, etc.) which model
-liveness and message-ordering properties; the Lean proof targets the
-single safety property that admits a clean function-level statement.
+plan. The TLA+ specs that used to sit beside it in `proofs/` were retired in
+HELM-756 because none was tied to the code it described; the Lean proof
+targets the single safety property that admits a clean function-level
+statement.
 
 ## Local validation
 
@@ -77,8 +77,8 @@ It does **not** verify the following:
    load; integrity of that loading path is verified elsewhere.
 4. **Concurrency / re-entrancy.** `Decide` is modeled as a pure
    function. The Go implementation's concurrent access patterns and
-   ordering guarantees are covered by the existing TLA+ specs
-   (`GuardianPipeline.tla`) and Apalache CI gating, not here.
+   ordering guarantees are not covered here, and since HELM-756 no
+   formal spec covers them either.
 5. **The full P0 / P1 / P2 layering.** The model collapses to two
    layers (ceiling + bundle). P2 (per-request override / break-glass)
    is not modeled; that layer is required by construction to be

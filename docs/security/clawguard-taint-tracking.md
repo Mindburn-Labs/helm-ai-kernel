@@ -68,9 +68,9 @@ The decision remains fail-closed: denial uses `TAINTED_DATA_EGRESS_DENY`, and is
 
 ### Enforcement default
 
-Enforcement is **on by default**. `proofs/GuardianPipeline.tla` states `TaintSafeEgress`
-unconditionally and model-checks it on every PR, so a non-enforcing default left the
-implementation weaker than its own proof.
+Enforcement is **on by default**. The retired `GuardianPipeline.tla` spec (removed in
+HELM-756 because it was not tied to the code) stated `TaintSafeEgress` unconditionally,
+and a non-enforcing default left the implementation weaker than that stated rule.
 
 `HELM_TAINT_TRACKING` now acts as an **opt-out**, intended for incident response:
 

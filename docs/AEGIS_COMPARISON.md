@@ -45,7 +45,7 @@ stands, with every HELM claim bound to a test or benchmark in this repo.
 | Attack coverage | 48 curated attacks blocked across 14 frameworks | MCPTox suite (4 attack categories: tool poisoning, typosquat, hidden instructions, cross-server), OWASP LLM Top 10 conformance tests (`go test ./pkg/conformance/ -run TestOWASP_`), `make crucible` use cases UC-001–UC-012. Different corpus — a direct run of the AEGIS 48-attack suite has not been performed in-repo. |
 | False positives | ~1.2% FP | Not directly comparable: HELM verdicts are deterministic policy evaluation (CEL, scope, schema validity), not a probabilistic classifier — FP rate is a property of the configured policy, not the engine. Fail-closed defaults (unknown server/tool/scope = DENY) are the conservative direction. |
 | Kill switch / HITL | Kill switch + human-in-the-loop approvals | Quarantine registry (default-deny until approved), approval ceremonies (`helm-ai-kernel approvals`), freeze gate (Guardian Gate 1), ESCALATE verdict path |
-| Formal grounding | — | TLA+-verified guardian pipeline (`proofs/GuardianPipeline.tla`), golden fixtures, conformance levels |
+| Formal grounding | — | Lean proofs (`proofs/Lean`), golden fixtures, conformance vectors |
 
 ## Honest gaps / follow-ups
 

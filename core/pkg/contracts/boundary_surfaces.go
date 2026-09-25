@@ -319,15 +319,18 @@ type MCPScanResult struct {
 }
 
 type MCPAuthorizeCallRequest struct {
-	ServerID         string   `json:"server_id"`
-	ToolName         string   `json:"tool_name"`
-	ArgsHash         string   `json:"args_hash,omitempty"`
-	GrantedScopes    []string `json:"granted_scopes,omitempty"`
-	PinnedSchemaHash string   `json:"pinned_schema_hash,omitempty"`
-	ToolSchema       any      `json:"tool_schema,omitempty"`
-	OutputSchema     any      `json:"output_schema,omitempty"`
-	OAuthResource    string   `json:"oauth_resource,omitempty"`
-	ReceiptID        string   `json:"receipt_id,omitempty"`
+	ServerID      string   `json:"server_id"`
+	ToolName      string   `json:"tool_name"`
+	ArgsHash      string   `json:"args_hash,omitempty"`
+	GrantedScopes []string `json:"granted_scopes,omitempty"`
+	// Deprecated: ignored since HELM-756. The same caller supplied the schema
+	// and its "pin", so the check bound nothing. Kept so older clients still
+	// decode; it will be removed with the next contract major.
+	PinnedSchemaHash string `json:"pinned_schema_hash,omitempty"`
+	ToolSchema       any    `json:"tool_schema,omitempty"`
+	OutputSchema     any    `json:"output_schema,omitempty"`
+	OAuthResource    string `json:"oauth_resource,omitempty"`
+	ReceiptID        string `json:"receipt_id,omitempty"`
 }
 
 type SandboxPreflightRequest struct {

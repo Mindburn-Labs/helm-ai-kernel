@@ -23,8 +23,7 @@ records per intercepted call.
 - Overhead benchmarks: `core/pkg/mcp/aegis_overhead_bench_test.go`
   (`cd core && go test ./pkg/mcp/ -bench BenchmarkPreExecution -run '^$' -benchmem`)
 - Attack-suite analogs: `core/pkg/mcp/mcptox_test.go` (tool poisoning,
-  rug pull, typosquatting, hidden instructions, schema manipulation,
-  cross-server), the OWASP LLM Top 10 conformance tests
+  typosquatting, hidden instructions, cross-server), the OWASP LLM Top 10 conformance tests
   (`cd core && go test ./pkg/conformance/ -run TestOWASP_`), `make crucible`
 
 ## Why this matters
@@ -43,8 +42,8 @@ stands, with every HELM claim bound to a test or benchmark in this repo.
 | Per-call evidence | Ed25519-signed, SHA-256 hash-chained record per intercepted call | SHA-256 hash-chained append-only audit store with tamper detection (`TestAegisParityHashChainPerInterceptedCall`, `TestAegisParityTamperDetection`); sealed JCS/SHA-256 `ExecutionBoundaryRecord` per decision; Ed25519 signatures over chain heads and records via key ring/SoftHSM (`TestAegisParityEd25519SignedChainHead`); standardized export via AAT JSONL (`helm-ai-kernel export aat`) — **parity reached** |
 | Exportable proof | Per-call records | `ExportBundle`/`VerifyBundle` re-verifiable bundles (`TestAegisParityExportedBundleReverifies`), EvidencePacks (JCS canonical manifests), AAT export mode |
 | Overhead | ~8.3ms median per call | In-process authorize path measured at ~6.2µs allow / ~5.7µs deny per call (Apple M4 Max, `BenchmarkPreExecutionAuthorize*`; machine-specific — regenerate with the bench command above; `make bench-report` for the canonical harness). Proxy-mode deployments add transport cost not captured here. |
-| Attack coverage | 48 curated attacks blocked across 14 frameworks | MCPTox suite (6 attack categories incl. tool poisoning, rug pull, typosquat, hidden instructions, schema manipulation, cross-server), OWASP LLM Top 10 conformance tests (`go test ./pkg/conformance/ -run TestOWASP_`), `make crucible` use cases UC-001–UC-012. Different corpus — a direct run of the AEGIS 48-attack suite has not been performed in-repo. |
-| False positives | ~1.2% FP | Not directly comparable: HELM verdicts are deterministic policy evaluation (CEL/WASM, scope, schema pin), not a probabilistic classifier — FP rate is a property of the configured policy, not the engine. Fail-closed defaults (unknown server/tool/scope = DENY) are the conservative direction. |
+| Attack coverage | 48 curated attacks blocked across 14 frameworks | MCPTox suite (4 attack categories: tool poisoning, typosquat, hidden instructions, cross-server), OWASP LLM Top 10 conformance tests (`go test ./pkg/conformance/ -run TestOWASP_`), `make crucible` use cases UC-001–UC-012. Different corpus — a direct run of the AEGIS 48-attack suite has not been performed in-repo. |
+| False positives | ~1.2% FP | Not directly comparable: HELM verdicts are deterministic policy evaluation (CEL, scope, schema validity), not a probabilistic classifier — FP rate is a property of the configured policy, not the engine. Fail-closed defaults (unknown server/tool/scope = DENY) are the conservative direction. |
 | Kill switch / HITL | Kill switch + human-in-the-loop approvals | Quarantine registry (default-deny until approved), approval ceremonies (`helm-ai-kernel approvals`), freeze gate (Guardian Gate 1), ESCALATE verdict path |
 | Formal grounding | — | TLA+-verified guardian pipeline (`proofs/GuardianPipeline.tla`), golden fixtures, conformance levels |
 

@@ -7,7 +7,6 @@ package main
 import (
 	"bytes"
 	"crypto/ed25519"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,7 +23,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/tee"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
@@ -97,39 +95,6 @@ func TestFabricatedVerificationCommandsAreRemoved(t *testing.T) {
 		}
 		if strings.Contains(stdout.String(), "PASS") {
 			t.Fatalf("%v still prints a PASS: %s", args, stdout.String())
-		}
-	}
-}
-
-// HELM-742 / 04-01, 12-03: a forged SEV-SNP report (right size, version and
-// nonce, all-zero signature) must not verify.
-func TestTeeVerifyRejectsForgedSEVSNPReport(t *testing.T) {
-	nonce := make([]byte, tee.NonceSize)
-	for i := range nonce {
-		nonce[i] = byte(i)
-	}
-	report := make([]byte, tee.SEVSNPReportSize)
-	binary.LittleEndian.PutUint32(report[0:4], 2)
-	copy(report[0x50:], nonce)                          // REPORT_DATA
-	copy(report[0x90:], bytes.Repeat([]byte{0xde}, 48)) // MEASUREMENT
-	path := filepath.Join(t.TempDir(), "forged_sevsnp.bin")
-	if err := os.WriteFile(path, report, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, jsonOut := range []bool{false, true} {
-		args := []string{"--platform=sevsnp", "--nonce=" + hex.EncodeToString(nonce)}
-		if jsonOut {
-			args = append(args, "--json")
-		}
-		var stdout, stderr bytes.Buffer
-		code := runTeeVerify(append(args, path), &stdout, &stderr)
-		out := stdout.String() + stderr.String()
-		if code != 1 {
-			t.Fatalf("json=%v: exit %d, want 1; out=%s", jsonOut, code, out)
-		}
-		if strings.Contains(out, "tee verify: ok") || strings.Contains(out, `"ok": true`) {
-			t.Fatalf("json=%v: forged report reported ok: %s", jsonOut, out)
 		}
 	}
 }

@@ -11886,7 +11886,7 @@ class MCPAuthorizeCallRequest(BaseModel):
     tool_name: StrictStr
     args_hash: Optional[StrictStr] = None
     granted_scopes: Optional[List[StrictStr]] = None
-    pinned_schema_hash: Optional[StrictStr] = None
+    pinned_schema_hash: Optional[StrictStr] = Field(default=None, description="Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.")
     tool_schema: Optional[Dict[str, Any]] = None
     output_schema: Optional[Dict[str, Any]] = None
     oauth_resource: Optional[StrictStr] = None
@@ -12646,7 +12646,7 @@ class MCPScanResult(BaseModel):
     recommended_action: Optional[StrictStr] = None
     quarantine_record_id: Optional[StrictStr] = None
     requires_approval: Optional[StrictBool] = None
-    schema_pin_required: Optional[StrictBool] = None
+    schema_pin_required: Optional[StrictBool] = Field(default=None, description="Always false since HELM-756. No dispatch path enforces a schema pin.")
     authorization_needed: Optional[StrictBool] = None
     scanned_at: Optional[datetime] = None
     __properties: ClassVar[List[str]] = ["server_id", "risk", "state", "tool_count", "findings", "recommended_action", "quarantine_record_id", "requires_approval", "schema_pin_required", "authorization_needed", "scanned_at"]

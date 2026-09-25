@@ -74,8 +74,8 @@ No §14.4 candidate is in that list.
 | `core/pkg/conform` (3 packages, 6,078 LOC), gates G0–G15 | `cmd/helm-ai-kernel`: `conform`, `verify`, `demo`, `demo finance`, receipt evaluation | Six HTTP 501 routes from #971. See the notes below the table. | — | **Split**. Keep the `verify`-path helpers (`ValidateEvidencePackStructure`, `VerifyReport`) under the verifier. Delete G0–G15 and `conform`. Remove the routes after a release has carried the deprecation. | s4 |
 | `core/pkg/launchkit` (893), `core/pkg/launchpad/*` (18 packages, 13,236 LOC) | `cmd/helm-ai-kernel` (`up`), `pkg/api` / `tests/launchpad` | None through Go imports. Launchpad retirement is HELM-762. | — | **Disable first** (§14.7: the egress proxy and HTTP launch teardown). Remove with HELM-762. | s4 |
 | `core/pkg/channels/*` (1,588), `core/cmd/channel_gateway` (277) | The `channel_gateway` main; `packs/antispoof` (protected) / `tests/conformance/channels`, `antispoof` | None. `channel_gateway` is not in the release or the images. | — | Remove together with the `antispoof` dependency. This regenerates the manifest. | s4 |
-| MCP rug-pull detector (`core/pkg/mcp/rugpull.go`) and pinned-schema checks | Rug-pull: no non-test caller. `core/pkg/mcp` itself stays. | `mcp-bundle.json` advertises `rug-pull-detection` | — | Remove the detector, the claim and the pinned-schema checks. The pinned-schema checks sit in `api`, which is protected. | s4 |
-| `tee` CLI (`tee_cmd.go`), `core/cmd/tee-collateral`, `.github/workflows/tee-collateral.yml` | `cmd/helm-ai-kernel` | None | — | **Disable first** (§14.7), then remove | s4 |
+| MCP rug-pull detector (`core/pkg/mcp/rugpull.go`) and pinned-schema checks | Rug-pull: no non-test caller. `core/pkg/mcp` itself stays. | `mcp-bundle.json` advertises `rug-pull-detection` | — | **Rug-pull: removed** (s4c). **Pinned schema: disabled by default** (s4c): the published docs-site MCP guide still passes `--require-pinned-schema=true`, so the flags and the `pinned_schema_hash` field stay accepted but ignored. | s4c |
+| `tee` CLI (`tee_cmd.go`), `core/cmd/tee-collateral`, `.github/workflows/tee-collateral.yml` | `cmd/helm-ai-kernel` | None | — | **Removed** (s4c). No caller in the Console, the Control Plane or the docs site. | s4c |
 | `core/pkg/riskscan` (1,780) | `cmd/helm-ai-kernel` (`scan`, `verify scan`) | None | — | **Extracted** (s4e) to `tools/riskscan` (binary `helm-risk-scan`); kernel `scan`/`verify-scan` are one-release stubs; `--upload` dropped. | s4e |
 | `core/pkg/shellscan` (3,380) | `cmd/helm-ai-kernel` (`hook`) | None | — | **Keep**, but only inside the observed-only hook (§7.4). The H8 repair is tracked separately. | — |
 | Java SDK (`sdk/java`), Rust SDK (`sdk/rust`) | Not applicable | See the notes below the table. | — | Remove in s5. **Publishing the deprecation is a human action.** | s5 |
@@ -270,6 +270,27 @@ removal belongs to s6.
 operations were deprecated. The SDK models were regenerated from the spec,
 which drops the inline trust-key request and response schemas, and every
 OpenAPI digest pin was updated.
+
+## Slice 4c evidence
+
+Callers were checked read-only in `app-helm-console`, `svc-helm-control-plane`,
+`app-helm-docs` and `helm-ai-enterprise`.
+
+| Surface | Callers found | Decision |
+|---|---|---|
+| `RugPullDetector` (`core/pkg/mcp/rugpull.go`) | None in any module or repo. Claimed only in `mcp-bundle.json` and in kernel docs. | Removed, with its tests and the claim. `ToolDefinition` and the `fixedClock` test helper move to `docscan.go` and `mcptox_test.go`, because `mcp scan` and other tests use them. |
+| Pinned schema: `RequirePinnedSchema` and `ToolCallAuthorization.PinnedSchemaHash` in the firewall | Set only by `mcp authorize-call` (CLI and HTTP). The production bridge runs with no firewall (audit E-05). | **Disabled.** The firewall no longer reads a pin, but still denies a schema it cannot hash. |
+| `mcp wrap --require-pinned-schema` | The docs site's `integrations/mcp.md` passes `--require-pinned-schema=true`. | **Kept and ignored.** The flag defaults to `false`, and the profile no longer claims a `schema_pin` control. The kernel docs drop the flag; the docs-site copy is re-synced by its owner. |
+| `mcp authorize-call --pinned-schema-hash`, HTTP `pinned_schema_hash`, discovery `schema_pin_required` | The docs site publishes the OpenAPI field. The Console's generated client carries it, but no UI calls `authorizeMcpCall`. | **Kept and ignored.** The OpenAPI properties are marked `deprecated`, and `schema_pin_required` is always `false`. Removal waits for the next contract major. |
+| `SCHEMA_VIOLATION` | A general reason code emitted by the PDPs, the executor and shellscan. | **Kept.** Only its remediation text in `deny-reason-codes.md` changes. |
+| `helm-ai-kernel tee`, `core/cmd/tee-collateral`, `.github/workflows/tee-collateral.yml` | None. The docs site does not document them. | Removed. `make tee-collateral-verify` keeps running the package tests, so the `ci.yml` step, which #983 is rewriting, needs no edit. `core/pkg/crypto/tee` and `crypto/tee/collateral` are now importer-less protected packages and go to s6 with `deadcode`. |
+
+Not changed in this slice:
+- `scripts/launch/demo-mcp.sh` is updated for the new behaviour but fails on
+  `main` before it reaches the MCP section: `/api/v1/evaluate` now requires a
+  `session_id`. That fix is separate.
+- Launchpad's `require_schema_pin` app-spec field stays; it belongs to the
+  Launchpad slice (HELM-762).
 
 ## Slice 4e evidence
 

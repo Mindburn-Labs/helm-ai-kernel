@@ -46177,9 +46177,11 @@ public static class MCPAuthorizeCallRequest {
   }
 
    /**
-   * Get pinnedSchemaHash
+   * Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.
    * @return pinnedSchemaHash
+   * @deprecated
   **/
+  @Deprecated
   @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_PINNED_SCHEMA_HASH)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
@@ -50657,9 +50659,11 @@ public static class MCPScanResult {
   }
 
    /**
-   * Get schemaPinRequired
+   * Always false since HELM-756. No dispatch path enforces a schema pin.
    * @return schemaPinRequired
+   * @deprecated
   **/
+  @Deprecated
   @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_SCHEMA_PIN_REQUIRED)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)

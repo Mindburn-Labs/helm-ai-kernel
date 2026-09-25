@@ -36,17 +36,36 @@ def parse_manifest(text: str) -> dict[tuple[str, str], int]:
     return entries
 
 
+FUNC = re.compile(r"^func (\w+)\(", re.MULTILINE)
+
+
 def discover(core: Path) -> set[tuple[str, str]]:
+    """Tests that skip without HELM_TEST_POSTGRES_URL: they read it themselves
+    or call a helper (in the same package's test files) that does."""
     found = set()
+    by_package: dict[Path, list[str]] = {}
     for path in core.rglob("*_test.go"):
-        text = path.read_text(encoding="utf-8")
-        if GATE not in text:
+        by_package.setdefault(path.parent, []).append(path.read_text(encoding="utf-8"))
+    for package, texts in by_package.items():
+        if not any(GATE in text for text in texts):
             continue
-        funcs = list(TEST_FUNC.finditer(text))
-        for i, match in enumerate(funcs):
-            end = funcs[i + 1].start() if i + 1 < len(funcs) else len(text)
-            if GATE in text[match.start():end]:
-                found.add((path.parent.relative_to(core).as_posix(), match.group(1)))
+        bodies: dict[str, str] = {}
+        for text in texts:
+            funcs = list(FUNC.finditer(text))
+            for i, match in enumerate(funcs):
+                end = funcs[i + 1].start() if i + 1 < len(funcs) else len(text)
+                bodies[match.group(1)] = text[match.start():end]
+        gated = {name for name, body in bodies.items() if GATE in body}
+        grew = True
+        while grew:
+            grew = False
+            for name, body in bodies.items():
+                if name not in gated and any(re.search(rf"\b{re.escape(h)}\(", body) for h in gated):
+                    gated.add(name)
+                    grew = True
+        for name in gated:
+            if name.startswith("Test"):
+                found.add((package.relative_to(core).as_posix(), name))
     return found
 
 

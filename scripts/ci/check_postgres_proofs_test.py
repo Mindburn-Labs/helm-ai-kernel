@@ -56,6 +56,21 @@ class DiscoverTest(unittest.TestCase):
             )
             self.assertEqual(discover(core), {("pkg/a", "TestGated")})
 
+    def test_finds_tests_gated_through_a_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            core = pathlib.Path(tmp)
+            (core / "pkg" / "b").mkdir(parents=True)
+            (core / "pkg" / "b" / "helper_test.go").write_text(
+                'package b\n\nfunc openDB(t *testing.T) {\n\tif os.Getenv("HELM_TEST_POSTGRES_URL") == "" {\n\t\tt.Skip("x")\n\t}\n}\n\n'
+                "func schema(t *testing.T) { openDB(t) }\n"
+            )
+            (core / "pkg" / "b" / "b_test.go").write_text(
+                "package b\n\nfunc TestDirect(t *testing.T) { openDB(t) }\n\n"
+                "func TestIndirect(t *testing.T) { schema(t) }\n\n"
+                "func TestUnrelated(t *testing.T) {}\n"
+            )
+            self.assertEqual(discover(core), {("pkg/b", "TestDirect"), ("pkg/b", "TestIndirect")})
+
     def test_committed_manifest_matches_the_tree(self) -> None:
         root = pathlib.Path(__file__).resolve().parents[2]
         manifest = parse_manifest((root / "scripts/ci/postgres-proofs.txt").read_text())

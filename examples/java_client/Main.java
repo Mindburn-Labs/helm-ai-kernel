@@ -25,15 +25,6 @@ public class Main {
             System.out.println("Denied: " + e.reasonCode + " — " + e.getMessage());
         }
 
-        // 2. Conformance
-        System.out.println("\n=== Conformance ===");
-        try {
-            var conf = helm.conformanceRun(new ConformanceRequest("L2"));
-            System.out.println("Verdict: " + conf.verdict + " Gates: " + conf.gates + " Failed: " + conf.failed);
-        } catch (HelmClient.HelmApiException e) {
-            System.out.println("Conformance error: " + e.reasonCode);
-        }
-
         // 3. Health
         System.out.println("\n=== Health ===");
         try {

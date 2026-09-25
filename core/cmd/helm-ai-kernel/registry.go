@@ -465,7 +465,7 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "operate",
 			Title: "Operate",
 			Commands: []string{
-				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "credential-keys", "did", "freeze", "identity", "import", "incident", "policy", "secret", "tee", "telemetry", "trust", "unfreeze", "workstation",
+				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "credential-keys", "did", "freeze", "identity", "import", "incident", "policy", "secret", "telemetry", "trust", "unfreeze", "workstation",
 			},
 		},
 	}

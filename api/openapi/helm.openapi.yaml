@@ -1890,81 +1890,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/trust/keys/add:
-    post:
-      operationId: addTrustKey
-      tags: [system]
-      summary: Add a trusted signing key
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route mutated a
-        process-local key registry that no verifier reads, so it never changed
-        which keys are trusted. Configure trusted keys in the verifier trust
-        configuration. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddTrustKeyRequest'
-      responses:
-        '200':
-          description: Trust key added
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status: { type: string }
-                  tenant_id: { type: string }
-                  key_id: { type: string }
-        '400':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/trust/keys/revoke:
-    post:
-      operationId: revokeTrustKey
-      tags: [system]
-      summary: Revoke a trusted signing key
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route mutated a
-        process-local key registry that no verifier reads, so a successful answer
-        revoked nothing. Configure trusted keys in the verifier trust
-        configuration. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RevokeTrustKeyRequest'
-      responses:
-        '200':
-          description: Trust key revoked
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status: { type: string }
-                  tenant_id: { type: string }
-                  key_id: { type: string }
-        '400':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  # ── MCP Remote Transport ───────────────────────────
   /mcp:
     get:
       operationId: getMCPTransport
@@ -2846,43 +2771,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/gui/receipts/verify:
-    post:
-      operationId: verifyGUIActionReceipt
-      tags: [gui]
-      summary: Verify a grounded GUI action receipt
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route recomputed the
-        receipt hash instead of checking it, and GUI action receipts carry no
-        signature to verify against a trust root. The operation will be removed in a
-        future release.
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HelmTenantIDHeader'
-        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GUIActionReceipt'
-      responses:
-        '200':
-          description: GUI action receipt verification result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '401':
-          $ref: '#/components/responses/HelmError'
-
-        '403':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/envelopes:
     get:
       operationId: listEvidenceEnvelopeManifests
@@ -3034,108 +2922,6 @@ paths:
           $ref: '#/components/responses/HelmError'
 
   # ── Conformance ─────────────────────────────────────
-  /api/v1/conformance/run:
-    post:
-      operationId: runConformance
-      tags: [conformance]
-      summary: Run conformance tests
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route returned a fixed
-        PASS without running any gate. Run `helm-ai-kernel conform` against an
-        evidence pack instead. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConformanceRequest'
-            example:
-              level: "L2"
-              profile: "full"
-      responses:
-        '200':
-          description: Conformance result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConformanceResult'
-              example:
-                report_id: "conf_abc123"
-                level: "L2"
-                verdict: "PASS"
-                gates: 12
-                failed: 0
-                details:
-                  jcs_canonicalization: "PASS"
-                  pep_boundary: "PASS"
-                  wasi_sandbox: "PASS"
-        '400':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/conformance/reports/{report_id}:
-    get:
-      operationId: getConformanceReport
-      tags: [conformance]
-      summary: Get a conformance report by ID
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route returned a fixed
-        PASS report for any id. Run `helm-ai-kernel conform` against an evidence
-        pack instead. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - name: report_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Conformance report
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConformanceResult'
-        '404':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/conformance/reports:
-    get:
-      operationId: listConformanceReports
-      tags: [conformance]
-      summary: List conformance reports
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route listed fixed PASS
-        reports that no gate produced. Run `helm-ai-kernel conform` against an
-        evidence pack instead. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      responses:
-        '200':
-          description: Conformance reports
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ConformanceResult'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
   /api/v1/conformance/vectors:
     get:
       operationId: listConformanceVectors
@@ -6385,7 +6171,10 @@ components:
         recommended_action: { type: string }
         quarantine_record_id: { type: string }
         requires_approval: { type: boolean }
-        schema_pin_required: { type: boolean }
+        schema_pin_required:
+          type: boolean
+          deprecated: true
+          description: Always false since HELM-756. No dispatch path enforces a schema pin.
         authorization_needed: { type: boolean }
         scanned_at: { type: string, format: date-time }
 
@@ -6435,7 +6224,10 @@ components:
         granted_scopes:
           type: array
           items: { type: string }
-        pinned_schema_hash: { type: string }
+        pinned_schema_hash:
+          type: string
+          deprecated: true
+          description: Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.
         tool_schema:
           type: object
           additionalProperties: true

@@ -1,7 +1,7 @@
 name: Approval Ceremony
 
 # Runs on every pull request and push to main. The Postgres-gated proofs used to
-# run only when one of a hand-kept list of paths changed, and seven of the eleven
+# run only when one of a hand-kept list of paths changed, and most of them
 # never ran at all (T-12).
 on:
   workflow_dispatch:

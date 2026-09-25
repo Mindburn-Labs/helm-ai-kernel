@@ -6,11 +6,14 @@
 # <package dir under core> <test> <count> <race|plain>
 # plain: a timing comparison, which the race detector's slowdown would invalidate.
 pkg/boundary TestSQLSurfaceRegistryPersistsRecordsOnPostgres 1 race
-pkg/boundary/approvalceremony TestPostgresLifecycleSingleIssueAndConsume 10 race
 pkg/boundary/approvalceremony TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle 10 race
+pkg/boundary/approvalceremony TestPostgresLifecycleSingleIssueAndConsume 10 race
 pkg/boundary/generatedspecapprovalceremony TestPostgresLifecycleSingleIssueConsumeAndFence 10 race
 pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyActiveBindings 1 race
 pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyVisibility 1 race
+pkg/postgresmigration TestKernelTenantTablesHaveForcedRowSecurity 1 race
+pkg/postgresmigration TestTenantRowSecurityCheckDetectsWeakenedTables 1 race
+pkg/postgresmigration TestTenantRowSecurityIsolatesTenantsForARestrictedRole 1 race
 pkg/registry/connectors TestPostgresReleaseAuthorityAppendOnlyCurrentStateAndIsolation 10 race
 pkg/store TestPostgresReceiptAppendCausalParallelOutperformsSQLite 1 plain
 pkg/store TestPostgresReceiptChainHashMigrationPreservesIssuedPredecessorAcrossReload 1 race

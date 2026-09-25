@@ -377,9 +377,42 @@ func TestValidateRuntimeAcceptsRestrictedRoleWithoutDDL(t *testing.T) {
 	expectRuntimeVersion(mock, 1, 1, 1)
 	expectRuntimeColumns(mock)
 	expectRuntimeRole(mock, true, false, false)
+	expectTenantRowSecurity(mock)
 
 	if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err != nil {
 		t.Fatalf("ValidateRuntime rejected restricted role: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+	}
+}
+
+func expectTenantRowSecurity(mock sqlmock.Sqlmock, unforced ...string) {
+	rows := sqlmock.NewRows([]string{"relname"})
+	for _, table := range unforced {
+		rows.AddRow(table)
+	}
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT relation.relname\n\t\tFROM pg_catalog.pg_class AS relation")).WillReturnRows(rows)
+}
+
+// A schema migrated before HELM-755 has tenant tables without forced row
+// security; serving must refuse it and name the tables.
+func TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	expectRuntimeTables(mock, RuntimeOptions{})
+	expectRuntimeVersion(mock, 1, 1, 1)
+	expectRuntimeColumns(mock)
+	expectRuntimeRole(mock, true, false, false)
+	expectTenantRowSecurity(mock, "principal_bindings", "registry_installations")
+
+	err = ValidateRuntime(context.Background(), db, RuntimeOptions{})
+	if err == nil || !strings.Contains(err.Error(), "principal_bindings") || !strings.Contains(err.Error(), "forced row security") {
+		t.Fatalf("ValidateRuntime accepted tenant tables without forced row security, err=%v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)

@@ -93,6 +93,27 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Removed — the MCP rug-pull detector, the caller-supplied schema pin and the `tee` CLI (HELM-756)
+
+Breaking.
+
+- The `RugPullDetector` in `core/pkg/mcp` is removed. No code path called
+  it, and `mcp-bundle.json` no longer advertises `rug-pull-detection`.
+- The MCP firewall no longer reads a caller-supplied schema pin, because the
+  same caller supplied both the schema and its pin, so the check bound
+  nothing.
+  - `mcp authorize-call` no longer escalates a call that omits a pin. It
+    still denies a tool schema that is not valid JSON Schema.
+  - `--pinned-schema-hash` and `mcp wrap --require-pinned-schema` are still
+    accepted, so existing scripts keep parsing, but both are ignored and
+    `--require-pinned-schema` defaults to `false`.
+  - The HTTP request field `pinned_schema_hash` is deprecated and ignored.
+    The discovery field `schema_pin_required` is deprecated and always
+    `false`.
+- `helm-ai-kernel tee` and the `tee-collateral` command are removed, along
+  with the `tee-collateral` workflow. `make tee-collateral-verify` still runs
+  the collateral package tests.
+
 ### Removed — verification outputs that no check produced (HELM-742)
 
 Breaking. These commands and routes reported PASS, verified, certified or
@@ -112,6 +133,27 @@ revoked without running the check they named:
 The six operations stay in the OpenAPI contract marked `deprecated` so the
 breaking-change gate permits removing them in a later release. The Console
 surface catalog marks the Conformance and Trust Keys surfaces `unsupported`.
+
+### Removed — the six retired verification routes (HELM-756)
+
+Breaking. The six operations that answered `501` since HELM-742 are no longer
+routed; they now answer `404`. They also leave the OpenAPI contract.
+
+The routes are:
+- `POST /api/v1/conformance/run`;
+- `GET /api/v1/conformance/reports` and `GET /api/v1/conformance/reports/{report_id}`;
+- `POST /api/v1/gui/receipts/verify`;
+- `POST /api/v1/trust/keys/add` and `POST /api/v1/trust/keys/revoke`.
+
+The SDK methods that called them are removed:
+- Go: `ConformanceRun`, `GetConformanceReport` and `ListConformanceReports`;
+- TypeScript and Java: `conformanceRun`, `getConformanceReport` and
+  `listConformanceReports`;
+- Python and Rust: `conformance_run`, `get_conformance_report` and
+  `list_conformance_reports`.
+
+The Console surface catalog drops its Conformance and Trust Keys entries. Run
+conformance with `helm-ai-kernel conform` against an evidence pack.
 
 ### Changed — verification commands require a trust root (HELM-742)
 

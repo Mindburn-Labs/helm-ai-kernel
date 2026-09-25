@@ -1,6 +1,7 @@
-// Package executor provides EvidencePack production.
-// Per Section 6 - EvidencePack Normative Contract
-package executor
+// Package scanpack produces and validates the contracts.EvidencePack that
+// helm-risk-scan exports (Section 6, EvidencePack normative contract). It moved
+// here from core/pkg/executor in HELM-756: the risk scan was its only caller.
+package scanpack
 
 import (
 	"context"

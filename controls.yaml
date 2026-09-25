@@ -13,12 +13,20 @@
 #                  shipped binary; `reason` says what is missing.
 #   unmanaged      nothing in this tree enforces the claim; `reason` says why.
 #
+# plane is runtime (the default) or build. A build entry is a control that CI
+# holds rather than a binary: it names gates instead of entry points, and each
+# gate must block pull requests.
+#
 # References are checked by `make controls-check`:
-#   entry_points   <core dir>.<Func> or <core dir>.<Type>.<Method>
-#   tests          <core dir>.<TestName>, as `go test -list` reports it
-#   removal_mutation  optional. The gate applies it with `go test -overlay`
-#                  and requires every removal test to pass without it and
-#                  fail with it.
+#   entry_points   <core dir>.<Func> or <core dir>.<Type>.<Method>; an
+#                  enforced entry's must be reachable from a shipped binary
+#   gates          quality:<gate id> (in the pr profile, not advisory) or
+#                  workflow:<file>#<job> (runs on pull_request, unconditional)
+#   tests          <core or tools dir>.<TestName>. Every named test is run and
+#                  must pass; only a test listed in
+#                  scripts/ci/postgres-proofs.txt is left to the Postgres job
+#   removal_proofs every removal test of an enforced runtime entry must fail
+#                  once one of its proofs deletes the control
 #
 # Ids are never removed or reused: retire an invariant in place, and keep a
 # control's number. A gap in either sequence fails the gate.
@@ -125,6 +133,143 @@ sections:
       them, and no document may say otherwise. INV-024 stays in force.
   - id: repository-gates
     title: "Repository-level enforcement"
+
+# Removal proofs. Each deletes one control from one file through
+# `go test -overlay`; every test it names must then fail. Together an
+# enforced runtime entry's proofs must name all of its removal tests.
+# They sit apart from the entries because they are anchored to code:
+# when the code moves, the anchor stops matching and the gate says so.
+removal_proofs:
+  - control: INV-001
+    file: core/pkg/canonicalize/jcs.go
+    find: "\tif isASCII(a) && isASCII(b) {\n\t\treturn a < b\n\t}\n"
+    replace: "\tif isASCII(a) && isASCII(b) {\n\t\treturn a > b\n\t}\n"
+    tests:
+      - "core/pkg/canonicalize.TestJCS_Sorting"
+      - "core/pkg/canonicalize.TestJCS_RecursiveSorting"
+  - control: INV-002
+    file: core/pkg/proofgraph/node.go
+    find: "\t\tPrincipalSeq: n.PrincipalSeq,\n\t\tPayload:      n.Payload,\n\t\tSig:          n.Sig,\n"
+    replace: "\t\tPrincipalSeq: n.PrincipalSeq + uint64(n.Timestamp),\n\t\tPayload:      n.Payload,\n\t\tSig:          n.Sig,\n"
+    tests:
+      - "core/pkg/proofgraph.TestNodeHash_TimestampExcluded"
+  - control: INV-002
+    file: core/pkg/proofgraph/graph.go
+    find: "\tdefer g.mu.Unlock()\n\n\tg.lamport++\n\n\t// Standard v1.2"
+    replace: "\tdefer g.mu.Unlock()\n\n\t// Standard v1.2"
+    tests:
+      - "core/pkg/proofgraph.TestGraph_LamportMonotonicity"
+  - control: INV-003
+    file: core/pkg/evidencepack/merkle.go
+    find: "\th.Write([]byte{merkleInnerPrefix})\n\th.Write(left)\n\th.Write(right)\n"
+    replace: "\th.Write([]byte{merkleInnerPrefix})\n\t_, _ = left, right\n"
+    tests:
+      - "core/pkg/evidencepack.TestInclusionPath_TamperedSiblingFails"
+      - "core/pkg/evidencepack.TestInclusionPath_WrongEntryFails"
+  - control: INV-004
+    file: core/pkg/firewall/egress.go
+    find: "\t// Fail-closed: not in allowlist → deny\n\tdecision.Allowed = false\n"
+    replace: "\t// Fail-closed: not in allowlist → deny\n\tdecision.Allowed = true\n"
+    tests:
+      - "core/pkg/firewall.TestEgressChecker_EmptyPolicyDenyAll"
+      - "core/pkg/firewall.TestEgressChecker_NilPolicyDenyAll"
+      - "core/pkg/firewall.TestEgressChecker_UnknownDomainDenied"
+  - control: INV-005
+    file: core/pkg/kernel/authority/authority.go
+    find: "func deny(d Decision, code contracts.ReasonCode, detail string) Decision {\n\td.Verdict = contracts.VerdictDeny\n"
+    replace: "func deny(d Decision, code contracts.ReasonCode, detail string) Decision {\n\td.Verdict = contracts.VerdictAllow\n"
+    tests:
+      - "core/pkg/kernel/authority.TestDecideFailsClosed"
+      - "core/pkg/kernel/authority.TestCompileNilGraphDeniesEverything"
+      - "core/pkg/kernel/authority.TestPropertyUnknownActionDenies"
+  - control: INV-011
+    file: core/pkg/identity/isolation.go
+    find: "\t\tif existing != principalID {\n"
+    replace: "\t\tif false && existing != principalID {\n"
+    tests:
+      - "core/pkg/identity.TestIsolationChecker_DifferentPrincipalReuse"
+      - "core/pkg/identity.TestIsolationChecker_ViolationHistory"
+  - control: CTL-001
+    file: core/pkg/guardian/guardian.go
+    find: "\t\tcase authz.ReasonCode == contracts.ReasonNoPolicy:\n\t\t\tdecision.Verdict = string(contracts.VerdictDeny)\n"
+    replace: "\t\tcase authz.ReasonCode == contracts.ReasonNoPolicy:\n\t\t\tdecision.Verdict = string(contracts.VerdictAllow)\n"
+    tests:
+      - "core/pkg/guardian.TestExt_NoPolicyDefined"
+      - "core/pkg/guardian.TestExt_NilPolicyGraphFailsClosedWithoutPanic"
+  - control: CTL-002
+    file: core/cmd/helm-ai-kernel/route_auth.go
+    find: "\tcase RouteAuthAdmin, RouteAuthAuthenticated:\n\t\treturn requireRuntimeAdmin(handler)\n"
+    replace: "\tcase RouteAuthAdmin, RouteAuthAuthenticated:\n\t\treturn handler\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestRuntimeRoutesRefuseCallersWithoutTheirDeclaredCredential"
+  - control: CTL-003
+    file: core/pkg/postgresmigration/migrations.go
+    find: "\tif len(unforced) > 0 {\n\t\treturn fmt.Errorf(\"kernel postgres tenant tables %v lack forced row security"
+    replace: "\tif false && len(unforced) > 0 {\n\t\treturn fmt.Errorf(\"kernel postgres tenant tables %v lack forced row security"
+    tests:
+      - "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity"
+  - control: CTL-004
+    file: core/pkg/guardian/interceptor.go
+    find: "\tif f.g.freezeCtrl != nil && f.g.freezeCtrl.IsFrozen() {\n"
+    replace: "\tif false && f.g.freezeCtrl != nil && f.g.freezeCtrl.IsFrozen() {\n"
+    tests:
+      - "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode"
+      - "core/pkg/guardian.TestExt_FreezeVerdictIsDeny"
+  - control: CTL-005
+    file: core/pkg/guardian/interceptor.go
+    find: "\t\tif fenced {\n\t\t\treturn f.scopedStopDeny(\n"
+    replace: "\t\tif false && fenced {\n\t\t\treturn f.scopedStopDeny(\n"
+    tests:
+      - "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch"
+  - control: CTL-006
+    file: core/cmd/helm-ai-kernel/route_auth.go
+    find: "\tif configuredTenantID == \"\" || tenantID != configuredTenantID {\n"
+    replace: "\tif false && (configuredTenantID == \"\" || tenantID != configuredTenantID) {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestFencedReceiptReadsBindTheConfiguredTenant"
+  - control: CTL-008
+    file: core/pkg/boundary/approvalceremony/consumption_service.go
+    find: "\tif err != nil || !validToken(identity.Subject) || !validToken(identity.TenantID) ||\n\t\t!validToken(identity.WorkspaceID) || !validToken(identity.Audience) {\n"
+    replace: "\tif _ = err; false {\n"
+    tests:
+      - "core/pkg/boundary/approvalceremony.TestServiceRejectsUnverifiedConsumerBeforePersistence"
+  - control: CTL-009
+    file: core/pkg/verifier/verifier.go
+    find: "\t\t\tactualHash := sha256Hex(content)\n\t\t\tif actualHash != expectedHash {\n"
+    replace: "\t\t\tactualHash := sha256Hex(content)\n\t\t\tif false && actualHash != expectedHash {\n"
+    tests:
+      - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
+  - control: CTL-010
+    file: core/pkg/mcp/server.go
+    find: "\t\t\tDecisionLatencyMs: decisionLatency,\n\t\t}))\n\n\t\tswitch decision.Verdict {\n"
+    replace: "\t\t\tDecisionLatencyMs: decisionLatency,\n\t\t}))\n\n\t\tdecision.Verdict = string(contracts.VerdictAllow)\n\t\tswitch decision.Verdict {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph"
+  - control: CTL-012
+    file: core/cmd/helm-ai-kernel/verify_receipt_cmd.go
+    find: "\tintegrityValid := receiptEmbeddedIntegrityValid(&receipt)\n"
+    replace: "\tintegrityValid := receiptEmbeddedIntegrityValid(&receipt)\n\tintegrityValid = true\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITamperedVerdict"
+      - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITamperedSignature"
+  - control: CTL-013
+    file: core/pkg/api/middleware.go
+    find: "\t\tlimiter := rl.getVisitor(ip)\n\t\tif !limiter.Allow() {\n"
+    replace: "\t\tlimiter := rl.getVisitor(ip)\n\t\tif _ = limiter.Allow(); false {\n"
+    tests:
+      - "core/pkg/api.TestGlobalRateLimiter_Middleware_RejectsOverLimit"
+  - control: CTL-014
+    file: core/pkg/boundary/approvalceremony/postgres_dispatch_admission.go
+    find: "\t\tadmission.EffectHash != request.EffectHash || admission.Action != request.Action {\n\t\treturn ErrTransitionConflict\n"
+    replace: "\t\tadmission.EffectHash != request.EffectHash || admission.Action != request.Action {\n\t\treturn nil\n"
+    tests:
+      - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
+  - control: CTL-016
+    file: core/pkg/api/governed_gateway.go
+    find: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); ok {\n"
+    replace: "\tif settled, ok := g.engine.Lookup(tenantID, hdr.IdempotencyKey); false && ok {\n"
+    tests:
+      - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
 
 controls:
 
@@ -270,10 +415,6 @@ controls:
         - "core/pkg/firewall.TestEgressChecker_UnknownDomainDenied"
       bypass:
         - "core/pkg/guardian.TestEgressGateUsesTrustedDestinationRequirementInsteadOfRiskClass"
-    removal_mutation:
-      file: core/pkg/firewall/egress.go
-      find: "\t// Fail-closed: not in allowlist → deny\n\tdecision.Allowed = false\n"
-      replace: "\t// Fail-closed: not in allowlist → deny\n\tdecision.Allowed = true\n"
     section: fail-closed
     body: |
       An empty allowlist is deny-all, not allow-all. A nil policy is deny-all. An
@@ -311,10 +452,6 @@ controls:
         - "core/pkg/kernel/authority.TestCompileNilGraphDeniesEverything"
         - "core/pkg/kernel/authority.TestPropertyUnknownActionDenies"
       bypass: []
-    removal_mutation:
-      file: core/pkg/kernel/authority/authority.go
-      find: "func deny(d Decision, code contracts.ReasonCode, detail string) Decision {\n\td.Verdict = contracts.VerdictDeny\n"
-      replace: "func deny(d Decision, code contracts.ReasonCode, detail string) Decision {\n\td.Verdict = contracts.VerdictAllow\n"
     section: fail-closed
     body: |
       A rule that does not compile, an evaluation error, a non-boolean result, an
@@ -528,10 +665,6 @@ controls:
         - "core/pkg/identity.TestIsolationChecker_DifferentPrincipalReuse"
         - "core/pkg/identity.TestIsolationChecker_ViolationHistory"
       bypass: []
-    removal_mutation:
-      file: core/pkg/identity/isolation.go
-      find: "\t\tif existing != principalID {\n"
-      replace: "\t\tif false && existing != principalID {\n"
     section: authorization
     body: |
       The first binding of a credential hash to a principal is permanent. The same
@@ -971,23 +1104,32 @@ controls:
     claim: >-
       The gates that prove these invariants are themselves gated and self-test
       before they scan.
-    status: observed-only
-    reason: >-
-      Held by build-time gates (make controls-check, make verify-boundary, go
-      run tools/tcbcheck/main.go), not by a shipped binary. The registry's
-      reachability rule scores runtime entry points only, so this entry cannot
-      be enforced in its terms yet; a build-plane entry kind is HELM-746 slice
-      2.
-    entry_points: []
+    status: enforced
+    plane: build
+    gates:
+      - "quality:control-registry"
+      - "quality:tcb-imports"
+      - "quality:boundary-manifest"
+      - "workflow:.github/workflows/ci.yml#quality-pr"
     config: []
     protected_operations:
-      - "Pull requests to this repository."
+      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck) and the boundary manifest (make verify-boundary), plus the CONCEPT-CHANGE marker check in the quality-pr job."
     bypass_assumptions:
-      - "A gate marked advisory in scripts/ci/quality-gates.json reports without blocking; make inv-check and make concept-gate run advisory in the nightly profile."
+      - "Branch protection decides which checks are required; this entry proves the gates run and block in CI, not that the repository settings require them."
+      - "make test-boundary (the boundary gate's own regression suite) runs in the kernel job and is shell, so no Go test here names it."
     tests:
-      allowed: []
-      forbidden: []
-      removal: []
+      allowed:
+        - "tools/invcheck.TestConceptGatePassesAMarkedInvariantEdit"
+        - "tools/tcbcheck.TestCleanTreePasses"
+      forbidden:
+        - "tools/invcheck.TestConceptGateFailsAnUnmarkedInvariantEdit"
+        - "tools/invcheck.TestConceptGateRejectsAnEmptyRange"
+        - "tools/tcbcheck.TestForbiddenImportFails"
+        - "tools/tcbcheck.TestEmptyScanIsNotAPass"
+      removal:
+        - "tools/invcheck.TestVerifyControlsDiscriminate"
+        - "tools/invcheck.TestRegistryControlsDiscriminate"
+        - "tools/tcbcheck.TestSelfTestRejectsABrokenMatcher"
       bypass: []
     section: repository-gates
     body: |
@@ -1028,10 +1170,6 @@ controls:
       bypass:
         - "core/pkg/guardian.TestAuthoritativePDPAllowReplacesOnlyLocalPRG"
         - "core/cmd/helm-ai-kernel.TestProductionEntrypointsCannotBypassCheckedGuardianFactory"
-    removal_mutation:
-      file: core/pkg/guardian/guardian.go
-      find: "\t\tcase authz.ReasonCode == contracts.ReasonNoPolicy:\n\t\t\tdecision.Verdict = string(contracts.VerdictDeny)\n"
-      replace: "\t\tcase authz.ReasonCode == contracts.ReasonNoPolicy:\n\t\t\tdecision.Verdict = string(contracts.VerdictAllow)\n"
 
   - id: CTL-002
     title: "Route auth tiers"
@@ -1070,10 +1208,6 @@ controls:
       bypass:
         - "core/cmd/helm-ai-kernel.TestPublicRoutesAreDeclaredWithAReason"
         - "core/cmd/helm-ai-kernel.TestRouteProbesDetectAnUnguardedHandler"
-    removal_mutation:
-      file: core/cmd/helm-ai-kernel/route_auth.go
-      find: "\tcase RouteAuthAdmin, RouteAuthAuthenticated:\n\t\treturn requireRuntimeAdmin(handler)\n"
-      replace: "\tcase RouteAuthAdmin, RouteAuthAuthenticated:\n\t\treturn handler\n"
 
   - id: CTL-003
     title: "FORCE RLS on Postgres tenant tables"
@@ -1102,9 +1236,9 @@ controls:
         - "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity"
         - "core/pkg/postgresmigration.TestValidateRuntimeRejectsSchemaOwnerWithoutDDL"
         - "core/pkg/postgresmigration.TestTenantRowSecurityIsolatesTenantsForARestrictedRole"
+        - "core/pkg/postgresmigration.TestTenantRowSecurityCheckDetectsWeakenedTables"
       removal:
         - "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity"
-        - "core/pkg/postgresmigration.TestTenantRowSecurityCheckDetectsWeakenedTables"
       bypass:
         - "core/pkg/postgresmigration.TestKernelTenantTablesHaveForcedRowSecurity"
         - "core/pkg/postgresmigration.TestValidateRuntimeRejectsReplicationRoleWithoutDDL"
@@ -1247,7 +1381,7 @@ controls:
     protected_operations:
       - "Approval grant consumption through the approval consumption routes on Postgres."
     bypass_assumptions:
-      - "The single-consume proof needs Postgres; it skips in make test and runs in .github/workflows/approval-ceremony.yml, where a skip fails."
+      - "The single-consume guard is SQL. Its proof needs Postgres and runs in .github/workflows/approval-ceremony.yml, where a skip fails; the removal proof here covers the verified-workload check only."
     tests:
       allowed:
         - "core/pkg/boundary/approvalceremony.TestServiceConsumesAndRecoversOnlyForExactWorkloadIdentity"
@@ -1256,7 +1390,7 @@ controls:
         - "core/pkg/boundary/approvalceremony.TestPostgresLifecycleSingleIssueAndConsume"
         - "core/cmd/helm-ai-kernel.TestApprovalGrantConsumptionRoutesFailClosedOnWorkloadAuthentication"
       removal:
-        - "core/pkg/boundary/approvalceremony.TestPostgresLifecycleSingleIssueAndConsume"
+        - "core/pkg/boundary/approvalceremony.TestServiceRejectsUnverifiedConsumerBeforePersistence"
       bypass:
         - "core/cmd/helm-ai-kernel.TestApprovalGrantConsumptionConsumeEnforcesVerifiedScopedFence"
 
@@ -1274,6 +1408,7 @@ controls:
       - "`helm-ai-kernel verify` over an EvidencePack bundle."
     bypass_assumptions:
       - "A self-attested seal is rejected by default; a caller that opts into accepting one gets weaker evidence."
+      - "Chain tamper detection is layered (the recomputed receipt hash, the raw-bytes hash and prev_hash linkage), so no single deletion removes it; the removal proof covers the manifest file-hash check."
     tests:
       allowed:
         - "core/pkg/verifier.TestVerifyBundle_Valid"
@@ -1283,7 +1418,6 @@ controls:
         - "core/pkg/verifier.TestVerifyBundleRejectsUntrustedEmbeddedSignatures"
       removal:
         - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
-        - "core/pkg/verifier.TestChainIntegrity_DetectsTamperedReceiptBody"
       bypass:
         - "core/pkg/verifier.TestVerifyBundle_RejectsSelfAttestedSealByDefault"
 
@@ -1292,26 +1426,30 @@ controls:
     owner: Mindburn Labs core team (kernel)
     claim: >-
       A tool call through the HELM MCP server is decided by the Guardian before
-      dispatch; a denied call or an unapproved server never reaches the
-      executor.
+      dispatch, and a denied call never reaches the tool handler. Every MCP
+      transport routes tools/call through the governed executor.
     status: enforced
     entry_points:
       - "core/pkg/mcp.GovernedExecutor.Execute"
+      - "core/pkg/mcp.GovernanceFirewall.WrapToolHandler"
     config: []
     protected_operations:
       - "tools/call over the HELM MCP server's stdio and HTTP transports."
     bypass_assumptions:
       - "A client that talks to a tool server directly is not governed (INV-024)."
       - "`helm-ai-kernel mcp approve` refuses to mint approval authority without a verifier."
+      - "The transport proofs run with a test executor built on launchpadmcp.Authorize; the Guardian decision is proven through the local MCP runtime's executor."
     tests:
       allowed:
+        - "core/cmd/helm-ai-kernel.TestLocalMCPRuntimeAuthorizesExecutionWithPolicyGraph"
         - "core/cmd/helm-ai-kernel.TestMCPMediationProofTransportsRouteToolCallsThroughExecutor"
       forbidden:
+        - "core/cmd/helm-ai-kernel.TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph"
         - "core/cmd/helm-ai-kernel.TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports"
         - "core/cmd/helm-ai-kernel.TestMCPMediationProofUnapprovedServersBlockDispatchAcrossTransports"
         - "core/cmd/helm-ai-kernel.TestMCPMediationProofSchemaErrorsBlockBeforeExecutor"
       removal:
-        - "core/cmd/helm-ai-kernel.TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports"
+        - "core/cmd/helm-ai-kernel.TestLocalMCPRuntimeFailsClosedWithoutPolicyGraph"
       bypass:
         - "core/cmd/helm-ai-kernel.TestMCPMediationProofUnsupportedWebSocketTransportFailsClosed"
         - "core/cmd/helm-ai-kernel.TestRunMCPApproveFailsClosedWithoutVerifier"
@@ -1407,9 +1545,9 @@ controls:
         - "core/pkg/api.TestGlobalRateLimiter_Middleware_RejectsOverLimit"
       removal:
         - "core/pkg/api.TestGlobalRateLimiter_Middleware_RejectsOverLimit"
-        - "core/cmd/helm-ai-kernel.TestBuildAPIHandlerLayerOrder"
       bypass:
         - "core/pkg/api.TestRateLimiterIgnoresForwardedHeadersFromUntrustedPeer"
+        - "core/cmd/helm-ai-kernel.TestBuildAPIHandlerLayerOrder"
 
   - id: CTL-014
     title: "Dispatch admission is idempotent"
@@ -1483,6 +1621,7 @@ controls:
     bypass_assumptions:
       - "The ledger is a JSONL file, not Postgres (R5)."
       - "The spend-proxy listener has no auth; the tenant comes from configuration."
+      - "A denied route is refused for many independent reasons (model, price, terms, balance), so no single mutation removes the quote gate; the removal proof covers replay-before-dispatch."
     tests:
       allowed:
         - "core/pkg/spendproxy.TestGovernedRouteEndToEnd"
@@ -1491,7 +1630,6 @@ controls:
         - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
         - "core/pkg/spendproxy.TestUnknownEnvelopeFailsClosed"
       removal:
-        - "core/pkg/spendproxy.TestDeniedRouteNoDispatchAndDurableAudit"
         - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
       bypass: []
 

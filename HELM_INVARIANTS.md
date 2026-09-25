@@ -62,12 +62,14 @@ The numbered-invariant pattern follows razzant/claudexor (MIT).
 
 Generated from [`controls.yaml`](controls.yaml) by `make controls`; do not edit
 this section or the invariant text below by hand. `make controls-check` fails
-when this file or `coverage-map.json` differs from the registry. An entry is
-`enforced` only when every entry point is reachable from a shipped binary
-(`scripts/ci/deadcode-roots.txt`) and its allowed, forbidden and removal tests
-exist. Everything else is `observed-only` or `unmanaged`, with the reason.
+when this file or `coverage-map.json` differs from the registry. A runtime
+entry is `enforced` only when every entry point is reachable from a shipped
+binary (`scripts/ci/deadcode-roots.txt`), its allowed, forbidden and removal
+tests run and pass, and deleting the control makes its removal tests fail. A
+`build` entry is held by CI gates that block pull requests. Everything else
+is `observed-only` or `unmanaged`, with the reason.
 
-42 controls: 19 enforced, 11 observed-only, 12 unmanaged (11 of them retired invariants).
+42 controls: 20 enforced (1 of them by CI gates), 10 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -95,7 +97,7 @@ exist. Everything else is `observed-only` or `unmanaged`, with the reason.
 | INV-022 | Exactly one terminal event per run, on every exit path | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-024. |
 | INV-023 | An unenforceable read-only claim is refused, not assumed | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-024. |
 | INV-024 | An adapter governs only the calls actually routed through it | unmanaged | A limit on what may be claimed, not a runtime control. No code can check that an adapter's documentation names the paths it does not intercept; the review question in its verify: line is human-owned. |
-| INV-025 | The gates that prove these invariants are themselves gated | observed-only | Held by build-time gates (make controls-check, make verify-boundary, go run tools/tcbcheck/main.go), not by a shipped binary. The registry's reachability rule scores runtime entry points only, so this entry cannot be enforced in its terms yet; a build-plane entry kind is HELM-746 slice 2. |
+| INV-025 | The gates that prove these invariants are themselves gated | enforced (build) | — |
 | CTL-001 | Guardian default-deny | enforced | — |
 | CTL-002 | Route auth tiers | enforced | — |
 | CTL-003 | FORCE RLS on Postgres tenant tables | enforced | — |

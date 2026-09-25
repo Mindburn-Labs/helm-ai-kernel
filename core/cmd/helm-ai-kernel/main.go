@@ -700,16 +700,12 @@ func runServerWithOptions(opts serverOptions) error {
 
 	var healthServer *http.Server
 	if !suppressAuxiliaryHealth {
-		healthMux := http.NewServeMux()
-		healthHandler := func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("OK"))
-		}
-		healthMux.HandleFunc("/health", healthHandler)
-		healthMux.HandleFunc("/healthz", healthHandler)
+		healthMux := newListenerRouteMux(listenerHealth)
+		var healthMetrics http.HandlerFunc
 		if metricsEnabled && metricsPort == healthPort {
-			healthMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
+			healthMetrics = protectedMetricsHandler(services, metricsToken)
 		}
+		registerHealthRoutes(healthMux, healthMetrics)
 		healthServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
 			Handler:           healthMux,
@@ -727,8 +723,8 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	var metricsServer *http.Server
 	if metricsEnabled && metricsPort != healthPort {
-		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
+		metricsMux := newListenerRouteMux(listenerMetrics)
+		registerMetricsRoutes(metricsMux, protectedMetricsHandler(services, metricsToken))
 		metricsServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
 			Handler:           metricsMux,

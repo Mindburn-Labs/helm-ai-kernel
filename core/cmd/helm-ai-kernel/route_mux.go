@@ -20,13 +20,21 @@ type routeMux interface {
 // list of what the listener serves (H22). The refusal is a panic at startup:
 // an undeclared route is a build defect, and serving it is worse than not
 // starting.
+//
+// A mux made by newListenerRouteMux checks one of the binary's other listeners
+// against ListenerRouteSpecs() in the same way.
 type runtimeRouteMux struct {
-	mux     *http.ServeMux
-	mounted []string
+	mux      *http.ServeMux
+	listener string // empty for the API listener
+	mounted  []string
 }
 
 func newRuntimeRouteMux() *runtimeRouteMux {
 	return &runtimeRouteMux{mux: http.NewServeMux()}
+}
+
+func newListenerRouteMux(listener string) *runtimeRouteMux {
+	return &runtimeRouteMux{mux: http.NewServeMux(), listener: listener}
 }
 
 func (m *runtimeRouteMux) Handle(pattern string, handler http.Handler) {
@@ -54,10 +62,23 @@ func (m *runtimeRouteMux) Mounted() []string {
 }
 
 func (m *runtimeRouteMux) declare(pattern string) {
-	if len(declaredRouteSpecs(pattern)) == 0 {
+	if m.listener != "" {
+		if !listenerRouteDeclared(m.listener, pattern) {
+			panic(fmt.Sprintf("%s listener route %q is not declared in ListenerRouteSpecs(); declare its auth tier and scope before mounting it", m.listener, pattern))
+		}
+	} else if len(declaredRouteSpecs(pattern)) == 0 {
 		panic(fmt.Sprintf("route %q is not declared in RuntimeRouteSpecs(); declare its auth tier, rate class and contract status before mounting it", pattern))
 	}
 	m.mounted = append(m.mounted, pattern)
+}
+
+func listenerRouteDeclared(listener, pattern string) bool {
+	for _, spec := range ListenerRouteSpecs() {
+		if spec.Listener == listener && spec.MuxPattern == pattern {
+			return true
+		}
+	}
+	return false
 }
 
 // declaredRouteSpecs returns the registry entries a mux pattern serves. A
@@ -85,4 +106,23 @@ func registerRuntimeAPIRoutes(mux routeMux, services *Services, opts serverOptio
 	RegisterConsoleRoutes(mux, services, opts)
 	RegisterLocalFirstRunRoutes(mux, services, opts)
 	RegisterPrincipalBindingRoutes(mux, services, opts)
+}
+
+// registerHealthRoutes mounts the health listener's routes, and /metrics when
+// the metrics listener shares its port (metrics is nil otherwise).
+func registerHealthRoutes(mux routeMux, metrics http.HandlerFunc) {
+	health := func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	}
+	mux.HandleFunc("/health", health)
+	mux.HandleFunc("/healthz", health)
+	if metrics != nil {
+		mux.HandleFunc("/metrics", metrics)
+	}
+}
+
+// registerMetricsRoutes mounts the metrics listener's routes.
+func registerMetricsRoutes(mux routeMux, metrics http.HandlerFunc) {
+	mux.HandleFunc("/metrics", metrics)
 }

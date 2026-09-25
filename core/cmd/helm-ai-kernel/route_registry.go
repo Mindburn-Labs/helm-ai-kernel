@@ -243,3 +243,71 @@ func PublicRuntimeRouteSpecs() []RuntimeRouteSpec {
 	}
 	return public
 }
+
+// The binary's other HTTP listeners. RuntimeRouteSpecs() declares the API
+// listener; ListenerRouteSpecs() declares these, and each mounts its routes on
+// a newListenerRouteMux that refuses a pattern not declared for it.
+const (
+	listenerHealth     = "health"      // server: HELM_HEALTH_PORT
+	listenerMetrics    = "metrics"     // server: HELM_METRICS_PORT when it differs from the health port
+	listenerMCP        = "mcp serve"   // mcp serve --transport http
+	listenerProxy      = "proxy"       // proxy
+	listenerSpendProxy = "spend-proxy" // spend-proxy
+)
+
+const (
+	// RouteAuthMetricsToken is HELM_METRICS_BEARER_TOKEN; without one the route
+	// answers loopback peers only (protectedMetricsHandler).
+	RouteAuthMetricsToken RouteAuth = "metrics_token"
+	// RouteAuthListenerCredential is the subcommand's own credential: mcp serve
+	// --auth static-header|oauth, or the proxy's HELM_PROXY_TOKEN. Without one,
+	// requireListenerAuth refuses a non-loopback bind.
+	RouteAuthListenerCredential RouteAuth = "listener_credential"
+)
+
+// ListenerRouteSpec declares a route on a listener other than the API
+// listener. None of these listeners binds a tenant per request, so Scope says
+// whose data the route serves.
+type ListenerRouteSpec struct {
+	Listener   string
+	MuxPattern string
+	Auth       RouteAuth
+	Scope      string
+}
+
+func ListenerRouteSpecs() []ListenerRouteSpec {
+	const (
+		liveness      = "liveness only; no data"
+		processWide   = "process-wide metrics across every tenant"
+		localMCP      = "the local MCP catalog, policy and data directory; no tenant"
+		proxyTenant   = "the proxy's single --tenant-id"
+		spendEnvelope = "the spend-proxy's configured envelopes; no caller credential, bound to --addr (127.0.0.1 by default)"
+	)
+	return []ListenerRouteSpec{
+		{Listener: listenerHealth, MuxPattern: "/health", Auth: RouteAuthPublic, Scope: liveness},
+		{Listener: listenerHealth, MuxPattern: "/healthz", Auth: RouteAuthPublic, Scope: liveness},
+		{Listener: listenerHealth, MuxPattern: "/metrics", Auth: RouteAuthMetricsToken, Scope: processWide + "; mounted here when the metrics port is the health port"},
+		{Listener: listenerMetrics, MuxPattern: "/metrics", Auth: RouteAuthMetricsToken, Scope: processWide},
+
+		{Listener: listenerMCP, MuxPattern: "/mcp", Auth: RouteAuthListenerCredential, Scope: localMCP},
+		{Listener: listenerMCP, MuxPattern: "/mcp/v1/capabilities", Auth: RouteAuthListenerCredential, Scope: localMCP},
+		{Listener: listenerMCP, MuxPattern: "/mcp/v1/execute", Auth: RouteAuthListenerCredential, Scope: localMCP},
+		{Listener: listenerMCP, MuxPattern: "/.well-known/oauth-protected-resource", Auth: RouteAuthListenerCredential, Scope: "RFC 9728 metadata, no data; --auth oauth exempts it"},
+		{Listener: listenerMCP, MuxPattern: "/.well-known/oauth-protected-resource/mcp", Auth: RouteAuthListenerCredential, Scope: "RFC 9728 metadata, no data; --auth oauth exempts it"},
+		{Listener: listenerMCP, MuxPattern: "/.well-known/agent-card.json", Auth: RouteAuthListenerCredential, Scope: "A2A agent card; no data"},
+		{Listener: listenerMCP, MuxPattern: "/health", Auth: RouteAuthListenerCredential, Scope: liveness},
+		{Listener: listenerMCP, MuxPattern: "/healthz", Auth: RouteAuthListenerCredential, Scope: liveness},
+
+		{Listener: listenerProxy, MuxPattern: "/health", Auth: RouteAuthPublic, Scope: "liveness; names the upstream URL"},
+		{Listener: listenerProxy, MuxPattern: "/healthz", Auth: RouteAuthPublic, Scope: "liveness; names the upstream URL"},
+		{Listener: listenerProxy, MuxPattern: "/helm/receipts", Auth: RouteAuthListenerCredential, Scope: "the receipt log of " + proxyTenant},
+		{Listener: listenerProxy, MuxPattern: "/helm/proofgraph", Auth: RouteAuthListenerCredential, Scope: "the ProofGraph of " + proxyTenant},
+		{Listener: listenerProxy, MuxPattern: "/", Auth: RouteAuthListenerCredential, Scope: "every other path, forwarded to --upstream under governance as " + proxyTenant},
+
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/chat/completions", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/responses", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/embeddings", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/models", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/helm/spend/health", Auth: RouteAuthPublic, Scope: "liveness, balance and receipt-log path"},
+	}
+}

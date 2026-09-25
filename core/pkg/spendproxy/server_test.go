@@ -230,7 +230,9 @@ func (f *proxyFixture) start(t *testing.T) {
 		t.Fatalf("new server: %v", err)
 	}
 	f.server = server
-	f.http = httptest.NewServer(server.Handler())
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+	f.http = httptest.NewServer(mux)
 	t.Cleanup(func() {
 		f.http.Close()
 		_ = server.Close()

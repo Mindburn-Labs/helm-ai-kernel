@@ -109,7 +109,7 @@ Breaking.
 - **Channels.** `core/pkg/channels`, `channel_gateway` and
   `core/pkg/packs/antispoof` are removed; nothing called them.
 - **LaunchKit.** `helm-ai-kernel up` is off by default. Set
-  `HELM_ENABLE_LAUNCHKIT=1` to run it.
+  `HELM_LAUNCHKIT_ENABLED=1` to run it.
 
 ### Removed — the MCP rug-pull detector, the caller-supplied schema pin and the `tee` CLI (HELM-756)
 

@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchkit"
@@ -20,9 +19,9 @@ func init() {
 // LaunchKit and Launchpad as a platform (HELM-762), and §14.7 prefers turning a
 // retired component off by default to repairing it, so `up` refuses to launch
 // unless an operator sets this explicitly (HELM-756).
-const launchKitEnableEnv = "HELM_ENABLE_LAUNCHKIT"
+const launchKitEnableEnv = "HELM_LAUNCHKIT_ENABLED"
 
-func launchKitEnabled() bool { return os.Getenv(launchKitEnableEnv) == "1" }
+func launchKitEnabled() bool { return envBool(launchKitEnableEnv) }
 
 func isHelpArg(args []string) bool {
 	for _, a := range args {

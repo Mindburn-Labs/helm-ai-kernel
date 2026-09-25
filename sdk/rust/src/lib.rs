@@ -686,51 +686,6 @@ impl HelmClient {
         })
     }
 
-    /// POST /api/v1/conformance/run
-    pub fn conformance_run(
-        &self,
-        req: &ConformanceRequest,
-    ) -> Result<ConformanceResult, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url("/api/v1/conformance/run"))
-            .json(req)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
-        })
-    }
-
-    /// GET /api/v1/conformance/reports/{id}
-    pub fn get_conformance_report(
-        &self,
-        report_id: &str,
-    ) -> Result<ConformanceResult, HelmApiError> {
-        let resp = self
-            .client
-            .get(self.url(&format!("/api/v1/conformance/reports/{}", report_id)))
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
-        })
-    }
-
     /// GET /api/v1/conformance/negative
     pub fn list_negative_conformance_vectors(
         &self,
@@ -750,10 +705,6 @@ impl HelmClient {
             message: e.to_string(),
             reason_code: ReasonCode::ErrorInternal,
         })
-    }
-
-    pub fn list_conformance_reports(&self) -> Result<serde_json::Value, HelmApiError> {
-        self.get_value("/api/v1/conformance/reports")
     }
 
     pub fn list_conformance_vectors(&self) -> Result<serde_json::Value, HelmApiError> {
@@ -1167,7 +1118,7 @@ mod tests {
 
     #[test]
     fn test_reason_codes_are_registry_strings() {
-        assert_eq!(reason_codes::ALL.len(), 106);
+        assert_eq!(reason_codes::ALL.len(), 104);
         assert_eq!(reason_codes::EMERGENCY_STOP_FENCED, "EMERGENCY_STOP_FENCED");
         assert!(reason_codes::is_registered(reason_codes::EMERGENCY_STOP_FENCED));
         assert!(!reason_codes::is_registered("NOT_A_REGISTERED_CODE"));

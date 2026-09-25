@@ -21,7 +21,6 @@ G101 core/cmd/helm-ai-kernel/watch_cmd.go c310b74b3b09
 G101 core/pkg/auth/apikey.go 3b88a5bebaf6
 G101 core/pkg/capability/manifest.go be7940187224
 G101 core/pkg/capability/token_authority.go 41f2ffd67cf5
-G101 core/pkg/compliance/compiler/compiler.go 0ff764f970ca
 G101 core/pkg/conform/reason_codes.go 5743bbaffdaf
 G101 core/pkg/contracts/effect_types.go 4e8faaeff0d0
 G101 core/pkg/contracts/safe_deprecation.go 10e5e0cff1ff
@@ -106,7 +105,6 @@ G115 core/pkg/kms/kms.go 0c5b6ee8c6de
 G115 core/pkg/kms/kms.go 4f078372fcad
 G115 core/pkg/otel/governance_tracer.go 6f4893ebd0c9
 G115 core/pkg/otel/governance_tracer.go fa749bbe492b
-G115 core/pkg/policy/wasm/executor.go 0e02dbae7d6c
 G115 core/pkg/privacy/mpc.go 5d8e07b03f73
 G115 core/pkg/privacy/privacy.go 160873b302bc
 G115 core/pkg/privacy/privacy.go b9a02391f631
@@ -549,5 +547,4 @@ G306 core/pkg/launchpad/promotion/derived.go 5cb015abcd17
 G306 core/pkg/launchpad/promotion/derived.go 5cb015abcd17
 G306 core/pkg/launchpad/promotion/derived.go f38075821ca2
 G306 core/pkg/launchpad/promotion/manifest.go 5cb015abcd17
-G404 core/pkg/proofgraph/crdt/sync.go 031926d32adb
 G404 core/pkg/scheduler/evaluator.go fa2f5df6f527

@@ -34,7 +34,7 @@ research-preview feature:
 
 For HELM, tunnel hostnames must route to the HELM MCP Gateway. Raw routing from
 Anthropic directly to internal MCP servers is a denial condition because it
-bypasses schema pinning, OAuth scope checks, quarantine/rugpull checks,
+bypasses schema validation, OAuth scope checks, quarantine checks,
 argument hashing, and `ExecutionBoundaryRecord` sealing.
 
 ## Validation

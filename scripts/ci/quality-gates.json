@@ -34,7 +34,8 @@
         "secrets",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "deadcode"
       ]
     },
     "merge": {
@@ -95,7 +96,8 @@
         "secrets",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "deadcode"
       ]
     },
     "release": {
@@ -142,7 +144,8 @@
         "secrets",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "deadcode"
       ]
     },
     "nightly": {
@@ -898,6 +901,13 @@
         "HELM_INVARIANTS.md",
         "tools/invcheck/**"
       ]
+    },
+    {
+      "id": "deadcode",
+      "title": "Unreachable code in shipped binaries",
+      "description": "golang.org/x/tools deadcode from scripts/ci/deadcode-roots.txt. A planted-function positive control runs first; unreachable functions not in scripts/ci/deadcode-allowlist.txt, and allowlisted functions that are no longer unreachable, fail.",
+      "command": "bash scripts/ci/deadcode_gate.sh",
+      "timeout_seconds": 1200
     },
     {
       "id": "dead-packages",

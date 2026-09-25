@@ -53,6 +53,11 @@ test-effect-reservation-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/approvalceremony -run TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle -count=10
 
+.PHONY: test-tenant-rls-postgres
+test-tenant-rls-postgres:
+	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
+	cd core && go test -race ./pkg/postgresmigration -run '^(TestKernelTenantTablesHaveForcedRowSecurity|TestTenantRowSecurityCheckDetectsWeakenedTables|TestTenantRowSecurityIsolatesTenantsForARestrictedRole)$$' -count=1 -v
+
 .PHONY: verify-canonical-json-vectors
 
 # The canonicalization contract every other vector pack is built on. Run this
@@ -171,7 +176,7 @@ verify-fixtures:
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto
 
 tee-collateral-verify:
-	cd core && go test ./pkg/crypto/tee/collateral -count=1 && go run ./cmd/tee-collateral -bundle pkg/crypto/tee/collateral/testdata/offline_bundle.json
+	cd core && go test ./pkg/crypto/tee/collateral -count=1
 
 verify-presentation:
 	bash tools/verify-presentation.sh
@@ -314,6 +319,12 @@ coverage-tcb:
 	pkgs="$$(python3 scripts/ci/check_tcb_coverage.py packages "$$floors")"; \
 	(cd core && go test -count=1 -covermode=atomic -coverprofile="$$profile" $$pkgs); \
 	python3 scripts/ci/check_tcb_coverage.py check "$$profile" "$$floors"
+
+.PHONY: deadcode
+# deadcode fails on functions no shipped binary can reach (scripts/ci/deadcode-roots.txt)
+# unless scripts/ci/deadcode-allowlist.txt lists them; stale entries fail too.
+deadcode:
+	bash scripts/ci/deadcode_gate.sh
 
 .PHONY: dead-packages
 # dead-packages lists core/pkg packages with no non-test importer across every

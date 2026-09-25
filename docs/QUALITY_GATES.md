@@ -94,6 +94,22 @@ listed package has no measured statements, when the profile is empty, and when a
 package with its own floor has reached the default, so the exceptions list only
 shrinks. `scripts/ci/check_tcb_coverage_test.py` holds the known-bad inputs.
 
+## Unreachable Code
+
+```bash
+make deadcode
+```
+
+Runs `golang.org/x/tools/cmd/deadcode` from the shipped binaries listed in
+`scripts/ci/deadcode-roots.txt` (today `core/cmd/helm-ai-kernel`) for
+linux/amd64, and blocks in the `pr`, `merge` and `release` profiles. A planted
+unreachable function in a throwaway program must be reported first, or the gate
+exits 2. The functions that were unreachable when the gate landed are frozen in
+`scripts/ci/deadcode-allowlist.txt`, keyed by package and function. New dead code
+fails the gate: wire it, delete it, or declare its binary as a root. A listed
+function that is no longer dead also fails the gate, and the message says to
+delete that line in the same PR, so deletion work shrinks the list.
+
 ## Profiles
 
 | Profile | Command | Purpose |

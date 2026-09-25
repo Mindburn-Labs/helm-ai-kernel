@@ -175,8 +175,6 @@ pub const ERR_CONNECTOR_CONTRACT_DRIFT: &str = "ERR_CONNECTOR_CONTRACT_DRIFT";
 pub const ERR_COMPUTE_GAS_EXHAUSTED: &str = "ERR_COMPUTE_GAS_EXHAUSTED";
 /// DENY: Sandboxed execution exceeded the configured wall-clock time budget
 pub const ERR_COMPUTE_TIME_EXHAUSTED: &str = "ERR_COMPUTE_TIME_EXHAUSTED";
-/// DENY: Medium or high risk execution is missing a VerificationScope
-pub const ERR_VERIFICATION_SCOPE_REQUIRED: &str = "ERR_VERIFICATION_SCOPE_REQUIRED";
 /// DENY: Side-effectful execution is missing a hash-linked HarnessTrace
 pub const ERR_HARNESS_TRACE_REQUIRED: &str = "ERR_HARNESS_TRACE_REQUIRED";
 /// DENY: Multi-artifact or write-bearing execution is missing a PlanTransaction
@@ -188,8 +186,6 @@ pub const ERR_ASSUMPTION_STALE: &str = "ERR_ASSUMPTION_STALE";
 /// ESCALATE: Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state
 /// requires explicit approval
 pub const ERR_HARNESS_MUTATION_REQUIRES_APPROVAL: &str = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL";
-/// DENY: Harness mutation lacks a valid HarnessChangeContract
-pub const ERR_HARNESS_CHANGE_CONTRACT_INVALID: &str = "ERR_HARNESS_CHANGE_CONTRACT_INVALID";
 /// DENY: Passing tests were submitted without a declared verification scope
 pub const ERR_GREEN_TEST_SCOPE_MISSING: &str = "ERR_GREEN_TEST_SCOPE_MISSING";
 /// DENY: GUI or computer-use action is missing grounded screenshot and DOM/accessibility evidence
@@ -309,13 +305,11 @@ pub const ALL: &[&str] = &[
     ERR_CONNECTOR_CONTRACT_DRIFT,
     ERR_COMPUTE_GAS_EXHAUSTED,
     ERR_COMPUTE_TIME_EXHAUSTED,
-    ERR_VERIFICATION_SCOPE_REQUIRED,
     ERR_HARNESS_TRACE_REQUIRED,
     ERR_PLAN_TRANSACTION_REQUIRED,
     ERR_PLAN_TRANSACTION_CONFLICT,
     ERR_ASSUMPTION_STALE,
     ERR_HARNESS_MUTATION_REQUIRES_APPROVAL,
-    ERR_HARNESS_CHANGE_CONTRACT_INVALID,
     ERR_GREEN_TEST_SCOPE_MISSING,
     ERR_GROUNDED_ACTION_REF_REQUIRED,
     ERR_GUI_POSTCONDITION_UNVERIFIED,

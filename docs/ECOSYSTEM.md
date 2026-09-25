@@ -32,6 +32,6 @@ flowchart LR
 
 - [MCP integration](INTEGRATIONS/mcp.md)
 - [Codebase Memory MCP integration](INTEGRATIONS/codebase_memory_mcp.md)
-- [OpenAI-compatible proxy example](EXAMPLES.md#openai-compatible-proxy)
+- [OpenAI-compatible proxy example](INTEGRATIONS/openai_baseurl.md)
 - [Execution security model](EXECUTION_SECURITY_MODEL.md)
 - [Launch proof assets](../examples/launch/README.md)

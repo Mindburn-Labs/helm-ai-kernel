@@ -30,8 +30,12 @@ flowchart TD
 
 ## One-command path
 ```bash
-helm-ai-kernel up hermes --target local --live --json
+HELM_ENABLE_LAUNCHKIT=1 helm-ai-kernel up hermes --target local --live --json
 ```
+
+`helm-ai-kernel up` (LaunchKit) is off by default since HELM-756, because the
+target architecture retires LaunchKit as a platform (§14.4, HELM-762). Set
+`HELM_ENABLE_LAUNCHKIT=1` to run it.
 
 ## Headless path
 ```bash

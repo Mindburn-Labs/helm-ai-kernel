@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskenvelope"
+	"github.com/Mindburn-Labs/helm-ai-kernel/tools/riskscan/internal/riskenvelope"
 )
 
 type receiptProjectionInput struct {

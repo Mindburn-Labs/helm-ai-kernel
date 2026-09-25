@@ -1,8 +1,10 @@
 # Governed Capability Registry (R1)
 
-**Status:** core in-process enforcement is implemented: strict manifest
-loading, a content-addressed registry, and Guardian resolution bind registered
-capability facts before downstream policy evaluation. A durable registry
+**Status:** implemented and tested as a Guardian option (`WithCapabilityRegistry`)
+that no shipped binary installs, so nothing resolves capabilities in `serve`,
+`proxy` or `mcp serve` today (`controls.yaml` CTL-042). As an option: strict
+manifest loading, a content-addressed registry, and Guardian resolution bind
+registered capability facts before downstream policy evaluation. A durable registry
 service, certification lifecycle API, import adapters, and protocol-dispatch
 integration remain follow-up work.
 **Origin:** Step AOS alignment workstream (2026-07-24), research:

@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-42 controls: 20 enforced (1 of them by CI gates), 10 observed-only, 12 unmanaged (11 of them retired invariants).
+70 controls: 31 enforced (1 of them by CI gates), 27 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -115,6 +115,34 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-015 | Effect reservation before dispatch | observed-only | Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt, as is the generic api.IdempotencyMiddleware. The Postgres tests prove the library only. |
 | CTL-016 | Spend proxy quotes before dispatch | enforced | — |
 | CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
+| CTL-018 | Tainted-data egress deny | enforced | — |
+| CTL-019 | Guardian threat-scan gate | enforced | — |
+| CTL-020 | Context-fingerprint gate | enforced | — |
+| CTL-021 | ZeroID and SPIFFE envelopes are refused | enforced | — |
+| CTL-022 | The request body carries no security authority | enforced | — |
+| CTL-023 | Untenanted stores serve only the configured tenant | enforced | — |
+| CTL-024 | Policy reconciliation fails closed | enforced | — |
+| CTL-025 | MCP authorize-call quarantine firewall | enforced | — |
+| CTL-026 | Non-loopback listeners require auth | observed-only | Reachable and tested, but deleting the check makes the listener start and block, so the refusal tests hang rather than fail. A removal proof needs a test that asserts the refusal without serving; none exists yet. |
+| CTL-027 | Offline update-bundle verification | enforced | — |
+| CTL-028 | External host receipt-chain verification | enforced | — |
+| CTL-029 | Operator TUI typed ceremony | enforced | — |
+| CTL-030 | MCP HTTP OAuth | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
+| CTL-031 | Proxy withholds ungovernable tool responses | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
+| CTL-032 | Savings-pack verification needs a pinned issuer | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
+| CTL-033 | Launchpad local-container preflight and egress allowlist | observed-only | Reachable from core/cmd/helm-ai-kernel and tested, but no removal proof deletes the control yet, so R1 does not count it as enforced. Found by the HELM-746 claim sweep. |
+| CTL-034 | Delegation-session gate | observed-only | Production wires an empty in-memory delegation store that nothing writes, so every delegation_session_id denies. The documented checks (session capabilities within the delegator's policy, scope and principal) never run against a real session. |
+| CTL-035 | Local coding-agent hook shell guard | observed-only | The client decides which calls reach the hook, and classifying command text cannot be sound; the docs label this integration observed-only. It denies a narrow set of destructive patterns and syntax it cannot evaluate statically. |
+| CTL-036 | Workstation enforce wrapper | observed-only | Only a refusal test exists; no allowed-case or removal test shows the wrapper exits 126 on DENY and runs the command on ALLOW. |
+| CTL-037 | Workstation decision-receipt verification | observed-only | Tested, but no removal proof deletes the check yet, so R1 does not count it as enforced. |
+| CTL-038 | Kubernetes transparent egress for Launchpad | observed-only | Held by an iptables REDIRECT and tools/launchpad/egressproxy, both outside the core module and the shipped binary; this gate neither reaches nor runs them. |
+| CTL-039 | Release publication gates | observed-only | Held by the release workflow at publication time. A build-plane entry here must be a gate that blocks pull requests, which these are not. |
+| CTL-040 | Effect close | observed-only | EffectCloser.Close is in scripts/ci/deadcode-allowlist.txt: no shipped path closes an effect. |
+| CTL-041 | Connector release authority | observed-only | The writer, PostgresReleaseAuthorityAdminStore.Append, is in scripts/ci/deadcode-allowlist.txt, so no shipped path records a release authority for the reader to enforce. |
+| CTL-042 | Guardian governance options not installed | observed-only | The capability registry, task capability tokens, rollback plans, session risk memory and privilege resolver are Guardian options that no shipped binary installs: each With* option is in scripts/ci/deadcode-allowlist.txt. |
+| CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter, SentinelConnector, VaultakStateBridge and AIPVerifier are libraries that no shipped binary mounts or calls; their methods are in scripts/ci/deadcode-allowlist.txt. |
+| CTL-044 | WASI sandbox containment | observed-only | The shipped server refuses every WASI pack run because it has no PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are records only. |
+| CTL-045 | Connector contract pinning | observed-only | ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel. |
 
 ---
 

@@ -75,6 +75,8 @@ const (
 	planeRuntime = "runtime"
 	planeBuild   = "build"
 
+	mutationTimeout = "3m"
+
 	reachable   = "reachable"
 	unreachable = "unreachable"
 	missing     = "missing"
@@ -887,8 +889,11 @@ func proveRemoval(root string, rp removalProof) problems {
 		return p
 	}
 	mod := module(refs[0].Dir)
-	args := append([]string{"test", "-json", "-count=1", "-overlay", overlay, "-run", runPattern(refs)}, packageArgs(mod, refs)...)
+	// A deleted control can turn a refusal into a call that blocks (a server
+	// that now starts, say). The timeout bounds that; a killed run proves nothing.
+	args := append([]string{"test", "-json", "-count=1", "-timeout", mutationTimeout, "-overlay", overlay, "-run", runPattern(refs)}, packageArgs(mod, refs)...)
 	out, _ := goCmd(root, mod, testEnv(mod), args...)
+	timedOut := strings.Contains(out, "panic: test timed out")
 	events, err := testEvents(out)
 	if err != nil {
 		p.add("mutation-run", rp.Control, "%v", err)
@@ -898,7 +903,10 @@ func proveRemoval(root string, rp removalProof) problems {
 	for _, s := range rp.Tests {
 		if got[s] != "fail" {
 			action := got[s]
-			if action == "" {
+			switch {
+			case action == "" && timedOut:
+				action = "no result: the run hit the " + mutationTimeout + " timeout, so the test blocks without the control"
+			case action == "":
 				action = "did not run (does the mutated package compile?)"
 			}
 			p.add("removal-not-proven", rp.Control, "%s with the control removed (%s): want fail, got %s", s, rp.File, action)

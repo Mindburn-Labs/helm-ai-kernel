@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -331,6 +332,7 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		api.WriteMethodNotAllowed(w)
 		return
 	}
+	r = withoutKernelCredential(r)
 	principal, err := auth.GetPrincipal(r.Context())
 	if err != nil || principal == nil || strings.TrimSpace(principal.GetID()) == "" || strings.TrimSpace(principal.GetTenantID()) == "" {
 		api.WriteError(w, http.StatusUnauthorized, "Authentication required", "governed proxy requires an authenticated tenant boundary")
@@ -454,4 +456,44 @@ func csvEnv(key string) []string {
 		}
 	}
 	return values
+}
+
+// withoutKernelCredential returns r without an Authorization header that
+// carries a kernel credential. api.HandleOpenAIProxy forwards Authorization to
+// the model provider as the provider credential, so a legacy caller that
+// authenticates with the admin key as a bearer token would otherwise hand the
+// kernel's key to the provider (R8). The Control Plane token path already drops
+// its token; a provider key sent beside X-HELM-API-Key is kept.
+func withoutKernelCredential(r *http.Request) *http.Request {
+	value := strings.TrimSpace(r.Header.Get("Authorization"))
+	if value == "" {
+		return r
+	}
+	candidates := []string{value}
+	if _, credential, ok := strings.Cut(value, " "); ok {
+		candidates = append(candidates, strings.TrimSpace(credential))
+	}
+	for _, candidate := range candidates {
+		if isKernelCredential(candidate) {
+			stripped := r.Clone(r.Context())
+			stripped.Header.Del("Authorization")
+			return stripped
+		}
+	}
+	return r
+}
+
+// isKernelCredential reports whether value is one of the kernel's own runtime
+// credentials: the admin, service or organization-runtime API key.
+func isKernelCredential(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, env := range []string{auth.AdminAPIKeyEnv, serviceAPIKeyEnv, organizationRuntimeAPIKeyEnv} {
+		key := strings.TrimSpace(os.Getenv(env))
+		if key != "" && subtle.ConstantTimeCompare([]byte(value), []byte(key)) == 1 {
+			return true
+		}
+	}
+	return false
 }

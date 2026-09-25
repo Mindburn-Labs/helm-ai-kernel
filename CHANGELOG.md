@@ -93,6 +93,16 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Fixed — the chat proxy never forwards a kernel credential (HELM-780)
+
+- `POST /v1/chat/completions` forwards `Authorization` to the model provider
+  as the provider credential.
+- A legacy caller that authenticated with `HELM_ADMIN_API_KEY` as a bearer
+  token therefore sent the kernel's key to the provider.
+- An `Authorization` value that is the admin, service or organization-runtime
+  key is now dropped before forwarding. A provider key sent beside
+  `X-HELM-API-Key` is still forwarded.
+
 ### Removed — `workstation certify` and the unrouted trust-key handler (HELM-756)
 
 Breaking.

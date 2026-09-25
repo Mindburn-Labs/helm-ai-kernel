@@ -1,0 +1,1525 @@
+# controls.yaml — the HELM control registry (binding rule R1, HELM-746).
+#
+# Every enforcement claim this kernel makes is an entry here. An entry names
+# its owner, entry points, configuration, protected operations and bypass
+# assumptions, and the Go tests for the allowed operation, the forbidden
+# operation, removal of the control and the bypass cases that apply.
+#
+# status is one of:
+#   enforced       every entry point is reachable from a shipped binary
+#                  (scripts/ci/deadcode-roots.txt) and the allowed, forbidden
+#                  and removal tests exist. Only this tested path is enforced.
+#   observed-only  code or tests exist, but the path is not enforced in a
+#                  shipped binary; `reason` says what is missing.
+#   unmanaged      nothing in this tree enforces the claim; `reason` says why.
+#
+# References are checked by `make controls-check`:
+#   entry_points   <core dir>.<Func> or <core dir>.<Type>.<Method>
+#   tests          <core dir>.<TestName>, as `go test -list` reports it
+#   removal_mutation  optional. The gate applies it with `go test -overlay`
+#                  and requires every removal test to pass without it and
+#                  fail with it.
+#
+# Ids are never removed or reused: retire an invariant in place, and keep a
+# control's number. A gap in either sequence fails the gate.
+#
+# INV-NNN entries also carry the text of HELM_INVARIANTS.md (section, body,
+# verify). That file and coverage-map.json are generated: edit this file, then
+# run `make controls`. A commit that changes an invariant's text still needs a
+# CONCEPT-CHANGE(INV-NNN) marker (`make concept-gate`).
+#
+# quantum_posture: this registry records which code paths hold existing
+# signing, hashing and key-separation properties. It pins no algorithm and
+# makes no post-quantum claim; migration follows kernel-wide signing policy.
+
+version: 1
+
+# The frame of HELM_INVARIANTS.md around the invariant blocks.
+document:
+  title: HELM Invariants
+  last_reviewed: "2026-09-24"
+  preamble: |
+    The properties this kernel does not trade away, each one pinned to the artifact
+    that proves it.
+
+    ## How this document works
+
+    **Ids are permanent.** An invariant is `INV-NNN`. Numbers are never renumbered
+    and never reused. When an invariant stops being the right rule it keeps its id,
+    gains a `RETIRED` marker, and points at whatever superseded it. A reader who
+    finds `INV-007` in a two-year-old commit message must land on the same idea it
+    described then, even if the answer today is "that became `INV-019`".
+
+    **Every invariant carries a `verify:` hint.** The hint names the test, gate, or
+    artifact that proves the claim. An invariant nobody can check is a wish, not an
+    invariant — and a wish written in this format is worse than no entry at all,
+    because it borrows the authority of the ones that are real.
+
+    **Hint form is load-bearing.** A `verify:` line either cites references in
+    backticks — repo paths, Go test names, `make` targets — or it is free prose. The
+    gate resolves the backticked references and refuses anything dangling. It does
+    not touch the prose, and it prints every prose hint under a heading saying so.
+    Some obligations are genuinely human-owned; the honest move is to mark them,
+    not to dress them as automation. An invariant may carry one line of each.
+
+    **Amending this file requires a marker.** A commit that adds, edits, or retires
+    an invariant must carry `CONCEPT-CHANGE(INV-NNN)` in its message naming every id
+    it touched. Editing the surrounding prose is not a concept change and needs no
+    marker. This is what stops the constitution from drifting one convenient
+    sentence at a time.
+
+    **This file is generated.** [`controls.yaml`](controls.yaml) is the control
+    registry (binding rule R1). It holds the text of every invariant together with
+    its owner, entry points, protected operations, bypass assumptions and tests,
+    plus the controls that are not invariants. Edit the registry and run
+    `make controls`, which rewrites this file and `coverage-map.json`. The marker
+    rule above still applies to the invariant text.
+
+    **Gates.**
+
+    ```bash
+    make inv-check        # hints resolve; ids unique; checker self-tests first
+    make concept-gate     # amendments carry a CONCEPT-CHANGE marker
+    make controls-check   # registry valid; enforced paths reachable and tested; files current
+    ```
+
+    `make inv-check` runs synthetic negative controls before it reads this file and
+    fails itself if any control comes back wrong. A checker that has stopped
+    discriminating would report a green constitution it never inspected, which is
+    strictly worse than having no checker at all.
+
+    The numbered-invariant pattern follows razzant/claudexor (MIT).
+
+sections:
+  - id: determinism
+    title: "Determinism and canonicalization"
+  - id: fail-closed
+    title: "Fail-closed enforcement"
+  - id: authorization
+    title: "Authorization binding"
+  - id: live-tree-delivery
+    title: "Live-tree delivery"
+    intro: |
+      RETIRED section, 2026-09-24 (HELM-756). INV-013 to INV-020 were held by
+      `core/pkg/patchdelivery` and `core/pkg/worktree`. Neither package ever had a
+      production caller, a CLI command, a route, or a receipt, and both are deleted.
+      Under the target architecture (rev 3.4, §7.1–7.2) agents work inside a bought
+      sandbox, and a change reaches a repository only as an effect admitted through
+      the gateway. No kernel code writes to a user's live working tree, so the
+      behaviour these invariants governed is out of scope here. The authorization
+      half of the rules continues under the successors each entry names. The
+      decision and its evidence are recorded in
+      [the wave-1 retirement inventory](docs/retirement/wave-1-inventory.md).
+  - id: agent-process-envelope
+    title: "Agent process envelope"
+    intro: |
+      INV-021 to INV-023 are RETIRED, 2026-09-24 (HELM-756). They were held by
+      `core/pkg/harness`, which spawned vendor coding-agent CLIs as child processes.
+      It never had a production caller and is deleted. In the target architecture
+      (rev 3.4, §7.1–7.2) a runner inside the sandbox image speaks the episode
+      protocol, and the sandbox holds no credentials at all. Two requirements outlive
+      the package: no provider credential reaches an agent run, and each run ends in
+      exactly one terminal event (`done` or `failed`). Both must acquire a tested
+      owner in the episode runner and the control registry (architecture §14.4)
+      before any release claims them. Until then nothing in this repository enforces
+      them, and no document may say otherwise. INV-024 stays in force.
+  - id: repository-gates
+    title: "Repository-level enforcement"
+
+controls:
+
+  - id: INV-001
+    title: "Every hashed structure is JCS-canonical first"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A structure whose hash is signed, compared or stored is hashed over its
+      RFC 8785 (JCS) canonical form.
+    status: enforced
+    entry_points:
+      - "core/pkg/canonicalize.JCS"
+      - "core/pkg/canonicalize.CanonicalHash"
+    config: []
+    protected_operations:
+      - "Hashing a value through canonicalize.JCS or canonicalize.CanonicalHash before it is signed, compared or stored."
+    bypass_assumptions:
+      - "A caller that hashes encoding/json output directly skips canonicalization. No gate finds such callers, so the claim covers hashes computed through these entry points only."
+    tests:
+      allowed:
+        - "core/pkg/canonicalize.TestCanonicalHash_Stability"
+        - "core/pkg/canonicalize.TestJCS_Sorting"
+      forbidden:
+        - "core/pkg/canonicalize.TestJCS_RecursiveSorting"
+        - "core/pkg/canonicalize.TestJCS_NoHTMLEscaping"
+      removal:
+        - "core/pkg/canonicalize.TestJCS_Sorting"
+        - "core/pkg/canonicalize.TestJCS_RecursiveSorting"
+      bypass: []
+    section: determinism
+    body: |
+      Anything whose hash is signed, compared, or stored goes through JCS (RFC 8785)
+      before SHA-256. Two hosts that disagree about key order or number formatting
+      would produce two hashes for one fact, and every downstream proof would inherit
+      the disagreement. Canonicalization is what makes an EvidencePack verify
+      identically on a machine that never saw the run.
+    verify:
+      - "`core/pkg/canonicalize/jcs.go` · tests `TestCanonicalHash_Stability`, `TestJCS_RecursiveSorting`, `FuzzJCS`"
+
+  - id: INV-002
+    title: "ProofGraph ordering and node hashes are wall-clock independent"
+    owner: Mindburn Labs core team (proofgraph)
+    claim: >-
+      ProofGraph Lamport values increase monotonically and a node hash excludes
+      its timestamp.
+    status: enforced
+    entry_points:
+      - "core/pkg/proofgraph.Graph.Append"
+      - "core/pkg/proofgraph.Node.ComputeNodeHash"
+    config: []
+    protected_operations:
+      - "Appending a node to a ProofGraph."
+      - "Computing and re-validating a node hash."
+    bypass_assumptions:
+      - "A node assembled without Graph.Append gets no Lamport value from the graph; Graph.ValidateChain recomputes every hash when the graph is read back."
+    tests:
+      allowed:
+        - "core/pkg/proofgraph.TestGraph_AppendAndValidate"
+        - "core/pkg/proofgraph.TestNodeHash_TimestampExcluded"
+      forbidden:
+        - "core/pkg/proofgraph.TestDAGValidation_TamperedNode"
+        - "core/pkg/proofgraph.TestGraph_LamportMonotonicity"
+      removal:
+        - "core/pkg/proofgraph.TestNodeHash_TimestampExcluded"
+        - "core/pkg/proofgraph.TestGraph_LamportMonotonicity"
+      bypass: []
+    section: determinism
+    body: |
+      Lamport values increase monotonically, and a node's hash excludes its timestamp.
+      Causal order is a property of the graph, not of whichever clock happened to
+      observe it, so replaying the same run on a different host reproduces the same
+      node identities.
+    verify:
+      - "`core/pkg/proofgraph/node.go`, `core/pkg/proofgraph/graph.go` · tests `TestNodeHash_TimestampExcluded`, `TestGraph_LamportMonotonicity`, `TestDAGValidation_TamperedNode`"
+
+  - id: INV-003
+    title: "EvidencePack roots are deterministic and inclusion is tamper-evident"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      An EvidencePack Merkle root is a function of its entries alone, and an
+      inclusion path fails once any sibling is altered.
+    status: enforced
+    entry_points:
+      - "core/pkg/evidencepack.ComputeEntriesMerkleRoot"
+      - "core/pkg/evidencepack.VerifyInclusionPath"
+    config: []
+    protected_operations:
+      - "Computing an EvidencePack root."
+      - "Verifying an entry's inclusion path."
+    bypass_assumptions:
+      - "A verifier that trusts a pack's stated root without recomputing it gets no protection from this control."
+    tests:
+      allowed:
+        - "core/pkg/evidencepack.TestComputeEntriesMerkleRoot_Deterministic"
+        - "core/pkg/evidencepack.TestInclusionPath_RoundTripEveryEntry"
+      forbidden:
+        - "core/pkg/evidencepack.TestInclusionPath_TamperedSiblingFails"
+        - "core/pkg/evidencepack.TestInclusionPath_WrongEntryFails"
+        - "core/pkg/evidencepack.TestVerifyInclusionPath_RejectsMalformedHashes"
+      removal:
+        - "core/pkg/evidencepack.TestInclusionPath_TamperedSiblingFails"
+        - "core/pkg/evidencepack.TestInclusionPath_WrongEntryFails"
+      bypass: []
+    section: determinism
+    body: |
+      The Merkle root over pack entries is a function of the entries alone, and an
+      inclusion path stops verifying the moment any sibling is altered. A pack that
+      hashed differently on re-computation would prove nothing; one whose proofs
+      survived tampering would prove the wrong thing.
+    verify:
+      - "`core/pkg/evidencepack/merkle.go` · tests `TestComputeEntriesMerkleRoot_Deterministic`, `TestInclusionPath_RoundTripEveryEntry`, `TestInclusionPath_TamperedSiblingFails`"
+
+  - id: INV-004
+    title: "Egress enforcement is fail-closed"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Egress is fail-closed: an empty or nil allowlist denies everything and an
+      explicit deny beats an allow.
+    status: enforced
+    entry_points:
+      - "core/pkg/firewall.EgressChecker.CheckEgress"
+      - "core/pkg/guardian.TaintEgressInterceptor.Evaluate"
+    config:
+      - "No knob: core/cmd/helm-ai-kernel/production_guardian.go builds the checker with a nil policy, which denies every destination."
+    protected_operations:
+      - "A Guardian evaluation whose trusted context names a destination or requires one."
+    bypass_assumptions:
+      - "The check runs only when the trusted request context names a destination or requires one. HELM is not on the network path, so egress never submitted for a decision is ungoverned (INV-024)."
+      - "No knob feeds an allowlist, so the shipped binary denies every egress-classed request; the allowed-case tests exercise the checker with a policy the binary cannot configure."
+    tests:
+      allowed:
+        - "core/pkg/firewall.TestEgressChecker_AllowedDomain"
+        - "core/pkg/firewall.TestEgressChecker_CIDRAllowed"
+      forbidden:
+        - "core/pkg/firewall.TestEgressChecker_EmptyPolicyDenyAll"
+        - "core/pkg/firewall.TestEgressChecker_NilPolicyDenyAll"
+        - "core/pkg/firewall.TestEgressChecker_DeniedTakesPrecedence"
+        - "core/pkg/firewall.TestEgressChecker_UnknownDomainDenied"
+        - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+      removal:
+        - "core/pkg/firewall.TestEgressChecker_EmptyPolicyDenyAll"
+        - "core/pkg/firewall.TestEgressChecker_NilPolicyDenyAll"
+        - "core/pkg/firewall.TestEgressChecker_UnknownDomainDenied"
+      bypass:
+        - "core/pkg/guardian.TestEgressGateUsesTrustedDestinationRequirementInsteadOfRiskClass"
+    removal_mutation:
+      file: core/pkg/firewall/egress.go
+      find: "\t// Fail-closed: not in allowlist → deny\n\tdecision.Allowed = false\n"
+      replace: "\t// Fail-closed: not in allowlist → deny\n\tdecision.Allowed = true\n"
+    section: fail-closed
+    body: |
+      An empty allowlist is deny-all, not allow-all. A nil policy is deny-all. An
+      explicit deny always beats an allow. The failure mode of a misconfigured
+      firewall must be a blocked request, never an unrecorded one.
+    verify:
+      - "`core/pkg/firewall/egress.go` · tests `TestEgressChecker_EmptyPolicyDenyAll`, `TestEgressChecker_NilPolicyDenyAll`, `TestEgressChecker_DeniedTakesPrecedence`"
+
+  - id: INV-005
+    title: "A policy runtime that cannot evaluate denies"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A policy that cannot be evaluated, or an action with no policy, is denied.
+    status: enforced
+    entry_points:
+      - "core/pkg/kernel/authority.Decide"
+      - "core/pkg/kernel/authority.Compile"
+    config: []
+    protected_operations:
+      - "Every Guardian evaluation decided by the CEL authority snapshot."
+    bypass_assumptions:
+      - "A decision path that does not call authority.Decide is outside this control."
+    tests:
+      allowed:
+        - "core/pkg/kernel/authority.TestDecideConditions"
+        - "core/pkg/kernel/authority.TestDecideLogic"
+      forbidden:
+        - "core/pkg/kernel/authority.TestDecideFailsClosed"
+        - "core/pkg/kernel/authority.TestCompileErrorsDenyOnlyTheirAction"
+        - "core/pkg/kernel/authority.TestDecideCostLimitDenies"
+        - "core/pkg/kernel/authority.TestCompileNilGraphDeniesEverything"
+        - "core/pkg/kernel/authority.TestPropertyUnknownActionDenies"
+      removal:
+        - "core/pkg/kernel/authority.TestDecideFailsClosed"
+        - "core/pkg/kernel/authority.TestCompileNilGraphDeniesEverything"
+        - "core/pkg/kernel/authority.TestPropertyUnknownActionDenies"
+      bypass: []
+    removal_mutation:
+      file: core/pkg/kernel/authority/authority.go
+      find: "func deny(d Decision, code contracts.ReasonCode, detail string) Decision {\n\td.Verdict = contracts.VerdictDeny\n"
+      replace: "func deny(d Decision, code contracts.ReasonCode, detail string) Decision {\n\td.Verdict = contracts.VerdictAllow\n"
+    section: fail-closed
+    body: |
+      A rule that does not compile, an evaluation error, a non-boolean result, an
+      evaluation that exceeds its cost limit, an action with no policy: each answers
+      DENY. "Could not decide" and "decided to allow" are different facts and the
+      kernel never collapses them.
+
+      The owner is the CEL `decide` that the Guardian calls on every evaluation
+      (HELM-750). The rule was previously pinned to the WASM host
+      `core/pkg/policy/wasm`, which never had a production caller and was removed in
+      HELM-756.
+    verify:
+      - "`core/pkg/kernel/authority/authority.go` · tests `TestDecideFailsClosed`, `TestCompileErrorsDenyOnlyTheirAction`, `TestDecideCostLimitDenies`, `TestCompileNilGraphDeniesEverything`, `TestPropertyUnknownActionDenies`"
+
+  - id: INV-006
+    title: "An unclassified effect is irreversible until proven otherwise"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      An effect type the reversibility table has never seen is treated as
+      irreversible.
+    status: observed-only
+    reason: >-
+      The reversibility classifier is unreachable from core/cmd/helm-ai-kernel:
+      ReversibilityClassifier.Classify and DefaultForType are in
+      scripts/ci/deadcode-allowlist.txt. No shipped path classifies an effect,
+      so the default governs nothing at runtime.
+    entry_points:
+      - "core/pkg/effects.ReversibilityClassifier.Classify"
+      - "core/pkg/effects.ReversibilityClassifier.DefaultForType"
+    config: []
+    protected_operations:
+      - "Classifying an effect's reversibility before its approval requirement is set."
+    bypass_assumptions:
+      - "No shipped caller exists."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/effects.TestUnknownEffectTypeDefaultsToIrreversible"
+      removal: []
+      bypass: []
+    section: fail-closed
+    body: |
+      An effect type the reversibility table has never seen is treated as
+      irreversible, so it inherits the strictest approval requirement rather than the
+      laxest. The safe default for an unknown is the expensive one.
+    verify:
+      - "`core/pkg/effects/reversibility.go` · test `TestUnknownEffectTypeDefaultsToIrreversible`"
+
+  - id: INV-007
+    title: "A verdict the gateway cannot verify is not a verdict"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      The gateway fails closed on a kernel outage, a malformed response, a wrong
+      trust root or a stale policy epoch.
+    status: observed-only
+    reason: >-
+      The verifier is a library that no shipped binary calls: VerifyResponse and
+      EvaluateGatewayResponse are in scripts/ci/deadcode-allowlist.txt. The
+      gateway that would run it is not in this repository, so the tests prove
+      the library, not a production path.
+    entry_points:
+      - "core/pkg/boundary/extauthz.VerifyResponse"
+      - "core/pkg/boundary/extauthz.EvaluateGatewayResponse"
+    config: []
+    protected_operations:
+      - "Gateway verification of a signed kernel verdict before dispatch."
+    bypass_assumptions:
+      - "A gateway that does not call the verifier dispatches without it."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/boundary/extauthz.TestGatewayResponseFailsClosedOnKernelOutageOrUnverifiableVerdict"
+        - "core/pkg/boundary/extauthz.TestMalformedRequestOrResponseFailsClosedEvenWhenSigned"
+        - "core/pkg/boundary/extauthz.TestTrustRootBindingRejectsWrongRoot"
+      removal: []
+      bypass: []
+    section: fail-closed
+    body: |
+      Kernel outage, malformed response, wrong trust root, stale policy epoch: the
+      gateway fails closed on each. A signature it cannot check is treated as one that
+      failed, never as one it may skip.
+    verify:
+      - "`core/pkg/boundary/extauthz/verifier.go` · tests `TestGatewayResponseFailsClosedOnKernelOutageOrUnverifiableVerdict`, `TestMalformedRequestOrResponseFailsClosedEvenWhenSigned`, `TestTrustRootBindingRejectsWrongRoot`"
+
+  - id: INV-008
+    title: "An EffectPermit authorizes one connector, one action, one scope"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      An EffectPermit authorizes one connector, one action and one scope, and is
+      consumed once.
+    status: observed-only
+    reason: >-
+      The verifier is a library that no shipped binary calls:
+      PermitLedger.ConsumePermit and EvaluateAndConsumeGatewayResponse are in
+      scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in
+      this repository, so the tests prove the library, not a production path.
+    entry_points:
+      - "core/pkg/boundary/extauthz.PermitLedger.ConsumePermit"
+      - "core/pkg/boundary/extauthz.EvaluateAndConsumeGatewayResponse"
+    config: []
+    protected_operations:
+      - "Binding a permit to its verdict and effect, and consuming it."
+    bypass_assumptions:
+      - "A gateway that does not consume permits through the ledger can replay them."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/boundary/extauthz.TestPermitLedgerRejectsDirectBindingMismatchAndReplayKeys"
+        - "core/pkg/boundary/extauthz.TestEvaluateAndConsumeRequiresDurablePermitConsumer"
+      removal: []
+      bypass: []
+    section: authorization
+    body: |
+      A permit is bound to the verdict that issued it and to the exact effect it
+      describes. It cannot be replayed against a different connector, widened to a
+      different action, or reused after consumption. Authorization that travels is
+      not authorization.
+    verify:
+      - "`core/pkg/effects/types.go` · tests `TestPermitLedgerRejectsDirectBindingMismatchAndReplayKeys`, `TestEvaluateAndConsumeRequiresDurablePermitConsumer`"
+
+  - id: INV-009
+    title: "DENY and ESCALATE carry no permit material"
+    owner: Mindburn Labs core team (kernel)
+    claim: A DENY or ESCALATE verdict carries no permit material.
+    status: observed-only
+    reason: >-
+      The verifier is a library that no shipped binary calls: VerifyResponse is
+      in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not
+      in this repository, so the tests prove the library, not a production path.
+    entry_points:
+      - "core/pkg/boundary/extauthz.VerifyResponse"
+    config: []
+    protected_operations:
+      - "Gateway verification of a non-allowing verdict."
+    bypass_assumptions:
+      - "A gateway that does not call the verifier does not check the verdict shape."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/boundary/extauthz.TestDenyAndEscalateCannotCarryPermitMaterial"
+      removal: []
+      bypass: []
+    section: authorization
+    body: |
+      A non-allowing verdict cannot ship anything a connector could mistake for
+      authority. The absence of a permit is the enforcement; a "denied" response
+      carrying permit fields would be one deserialization bug away from an allow.
+    verify:
+      - "`core/pkg/boundary/extauthz/verifier.go` · test `TestDenyAndEscalateCannotCarryPermitMaterial`"
+
+  - id: INV-010
+    title: "A permit cannot outlive the verdict that authorized it"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A permit expires no later than the verdict that authorized it, and an
+      expired permit fails before dispatch.
+    status: observed-only
+    reason: >-
+      The verifier is a library that no shipped binary calls: VerifyResponse is
+      in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not
+      in this repository, so the tests prove the library, not a production path.
+    entry_points:
+      - "core/pkg/boundary/extauthz.VerifyResponse"
+    config: []
+    protected_operations:
+      - "Gateway verification of permit and verdict expiry."
+    bypass_assumptions:
+      - "A gateway that does not call the verifier does not check expiry."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/boundary/extauthz.TestPermitExpiryCannotOutliveVerdict"
+        - "core/pkg/boundary/extauthz.TestExpiredPermitFailsBeforeDispatch"
+        - "core/pkg/boundary/extauthz.TestAllowRequiresExplicitVerifierContextAndBoundedTTL"
+      removal: []
+      bypass: []
+    section: authorization
+    body: |
+      Permit expiry is bounded by verdict expiry, and an expired permit fails before
+      dispatch rather than at the connector. The window in which an effect may execute
+      is the window in which someone actually authorized it.
+    verify:
+      - "`core/pkg/boundary/extauthz/verifier.go` · tests `TestPermitExpiryCannotOutliveVerdict`, `TestExpiredPermitFailsBeforeDispatch`, `TestAllowRequiresExplicitVerifierContextAndBoundedTTL`"
+
+  - id: INV-011
+    title: "A credential binds to exactly one principal"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      The first binding of a credential hash to a principal is permanent; a
+      different principal presenting it is an isolation violation.
+    status: enforced
+    entry_points:
+      - "core/pkg/identity.IsolationChecker.ValidateAgentIdentity"
+      - "core/pkg/guardian.PDPInterceptor.Evaluate"
+    config: []
+    protected_operations:
+      - "A Guardian evaluation that names a principal: the trusted credential hash is bound to it."
+    bypass_assumptions:
+      - "Bindings live in process memory, so a restart forgets them (R5 wants a Postgres row)."
+      - "The gate runs only when the request names a principal."
+      - "Tenant routes share HELM_ADMIN_API_KEY, so a second principal presenting that key in the same process is refused; no test covers that interaction."
+    tests:
+      allowed:
+        - "core/pkg/identity.TestIsolationChecker_FirstBindingAllowed"
+        - "core/pkg/identity.TestIsolationChecker_SamePrincipalIdempotent"
+      forbidden:
+        - "core/pkg/identity.TestIsolationChecker_DifferentPrincipalReuse"
+        - "core/pkg/guardian.TestExt_IdentityIsolationViolationDenies"
+        - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+      removal:
+        - "core/pkg/identity.TestIsolationChecker_DifferentPrincipalReuse"
+        - "core/pkg/identity.TestIsolationChecker_ViolationHistory"
+      bypass: []
+    removal_mutation:
+      file: core/pkg/identity/isolation.go
+      find: "\t\tif existing != principalID {\n"
+      replace: "\t\tif false && existing != principalID {\n"
+    section: authorization
+    body: |
+      The first binding of a credential hash to a principal is permanent. The same
+      principal may re-present it; a different principal presenting it is an isolation
+      violation and is receipted as one. This is the agent-impersonation path, and it
+      is closed by construction rather than by review.
+    verify:
+      - "`core/pkg/identity/isolation.go` · tests `TestIsolationChecker_DifferentPrincipalReuse`, `TestIsolationChecker_SamePrincipalIdempotent`, `TestIsolationChecker_ViolationHistory`"
+
+  - id: INV-012
+    title: "Signature algorithms do not cross-verify"
+    owner: Mindburn Labs core team (crypto)
+    claim: >-
+      Signature algorithms do not cross-verify, an empty key ring cannot sign
+      and a revoked key cannot verify.
+    status: observed-only
+    reason: >-
+      The key ring is unreachable from core/cmd/helm-ai-kernel: every KeyRing
+      method is in scripts/ci/deadcode-allowlist.txt, so no shipped signing or
+      verification path goes through it.
+    entry_points:
+      - "core/pkg/crypto.KeyRing.Verify"
+      - "core/pkg/crypto.KeyRing.RevokeKey"
+    config: []
+    protected_operations:
+      - "Signing and verifying through a crypto.KeyRing."
+    bypass_assumptions:
+      - "No shipped caller exists."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/crypto.TestExt_MLDSASignatureRejectedByEd25519"
+        - "core/pkg/crypto.TestExt_Ed25519SignatureRejectedByMLDSA"
+        - "core/pkg/crypto.TestKeyRing_EmptySignFails"
+        - "core/pkg/crypto.TestExt_KeyRingVerifyDecisionRevokedKey"
+      removal: []
+      bypass: []
+    section: authorization
+    body: |
+      A signature produced under one algorithm is rejected by the verifier for
+      another, an empty key ring cannot sign at all, and a revoked key cannot verify.
+      Algorithm agility is a migration property, never a downgrade path.
+
+      quantum_posture: this entry records an existing algorithm-separation and
+      revocation property of the key ring. It pins no algorithm and asserts no
+      post-quantum claim; migration follows kernel-wide signing policy.
+    verify:
+      - "`core/pkg/crypto/keyring.go` · tests `TestExt_MLDSASignatureRejectedByEd25519`, `TestExt_Ed25519SignatureRejectedByMLDSA`, `TestKeyRing_EmptySignFails`, `TestExt_KeyRingVerifyDecisionRevokedKey`"
+
+  - id: INV-013
+    title: "Apply policy is decided in exactly one place"
+    owner: Mindburn Labs core team (kernel)
+    claim: Apply policy is decided in exactly one place.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-008.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      `Eligibility` is the only function that answers "may this patch touch a live
+      tree". Every caller — CLI, control API, scheduler, future UI — routes through it
+      and acts on the Decision it returns. A caller that re-implements "looks approved
+      to me" creates a second policy with no receipt, and the first time the two
+      disagree is a mutation nobody authorized.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. The single decision point for repository writes is
+      now admission: a write is an effect, and INV-008 binds its permit to one
+      connector, one action and one scope.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-014
+    title: "An override may clear an unknown, never a proven-false"
+    owner: Mindburn Labs core team (kernel)
+    claim: An override may clear an unknown, never a proven-false.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-005.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      Deliverability is tri-state. UNKNOWN blocks fail-closed and an operator may
+      accept that risk. PROVEN-undeliverable is checked before any override is even
+      evaluated, because it is a fact about the patch rather than a policy judgment,
+      and no authority makes a conflicting patch apply.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Unknown-is-blocking survives as INV-005, which
+      answers DENY whenever a decision cannot be made.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-015
+    title: "An override binds to the exact patch bytes it accepted"
+    owner: Mindburn Labs core team (kernel)
+    claim: An override binds to the exact patch bytes it accepted.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-008.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      The override carries the SHA-256 of the patch the operator looked at. Change one
+      byte and the override no longer authorizes it, because it no longer describes
+      it. This is INV-008 in miniature: the reviewed thing and the applied thing must
+      be provably identical.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Content binding survives as INV-008, of which this
+      rule was a miniature.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-016
+    title: "Override authority has scope only on a run awaiting a decision"
+    owner: Mindburn Labs core team (kernel)
+    claim: Override authority has scope only on a run awaiting a decision.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-010.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      An override answers a question that was actually asked. On a run nobody has
+      reviewed there is no risk decision to accept, so the override is refused and the
+      run needs a reviewer. A run that merely hit a broken verifier cannot be waved
+      through on authority that was never meant for it.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Scoping authority to a decision that was actually
+      asked survives as INV-010, which bounds a permit by the verdict that authorized
+      it.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-017
+    title: "Every live-tree mutation path is registered with a complete fence"
+    owner: Mindburn Labs core team (kernel)
+    claim: Every live-tree mutation path is registered with a complete fence.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-024.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      Each code path that can write to a user's repository on behalf of an agent run
+      is named in the registry and declares the enforcement in front of it. An
+      unregistered path — or one registered with an empty fence — fails the build. The
+      point is to make "which code can write to a live tree" an answerable question
+      instead of an archaeology exercise.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. The requirement to name every governed path survives
+      as INV-024: HELM governs only the calls routed through it, and says so.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-018
+    title: "A refused apply leaves the live tree byte-identical"
+    owner: Mindburn Labs core team (kernel)
+    claim: A refused apply leaves the live tree byte-identical.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-009.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      Apply is all-or-nothing and re-asserts the target preimage immediately before
+      writing. A tree that moved underneath the patch is a refusal, not a merge. When
+      a partial write cannot be withdrawn the result says so plainly rather than
+      reporting a clean tree the operator does not have.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. With no kernel write path to a live tree there is
+      nothing to leave byte-identical. A refused effect is not dispatched at all
+      (INV-009).
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-019
+    title: "Verification never mutates the live tree, and silence is not a pass"
+    owner: Mindburn Labs core team (kernel)
+    claim: Verification never mutates the live tree, and silence is not a pass.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-025.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      The pre-apply verify runs against an isolated copy and leaves the operator's
+      tree untouched. "No gates were configured" is reported as its own state and
+      never as "gates passed" — an unasked question has no answer.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. The rule that silence is not a pass survives as
+      INV-025, which forbids a gate from degrading into a no-op that still reports
+      success.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-020
+    title: "Diff capture is byte-faithful"
+    owner: Mindburn Labs core team (kernel)
+    claim: Diff capture is byte-faithful.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-008 and INV-001.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: live-tree-delivery
+    body: |
+      Work product is captured raw. CRLF survives, binary survives, and the bytes that
+      were reviewed are the bytes that get applied. A diff that cannot round-trip
+      byte-for-byte is not evidence of anything.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Byte-faithful binding of the reviewed thing to the
+      executed thing survives as INV-008 and INV-001.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-021
+    title: "The provider credential scrub is cross-provider"
+    owner: Mindburn Labs core team (kernel)
+    claim: The provider credential scrub is cross-provider.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-011.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: agent-process-envelope
+    body: |
+      A run routed to one model provider is stripped of every provider's credentials
+      and base-URL redirects, not just the routed vendor's. Otherwise a multi-provider
+      CLI can be steered by a config file or a fallback path onto an inherited key,
+      and the run gets billed to and attributed to a principal HELM never selected.
+      The caller's own extra-env channel is scrubbed on the same rule, because a fence
+      that holds everywhere except the convenient door is not a fence.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Credential custody moves to the sandbox and model
+      gateway (§7.2, §8): the run receives no provider credential at all, which is
+      stronger than scrubbing. INV-011 continues to bind each credential to one
+      principal.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-022
+    title: "Exactly one terminal event per run, on every exit path"
+    owner: Mindburn Labs core team (kernel)
+    claim: Exactly one terminal event per run, on every exit path.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-024.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: agent-process-envelope
+    body: |
+      Clean exit, non-zero exit, spawn failure, context cancellation: each produces one
+      completion and no more. A run that emits two terminals double-counts, and one
+      that emits none leaves a supervisor waiting on a process that is already gone.
+      Killing a run reaps the whole process tree; dropped output is counted rather than
+      silently discarded.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. The episode protocol (§7.1, contract 9) must carry
+      this rule with a tested owner. Meanwhile INV-024 limits what may be claimed:
+      HELM supervises no agent process, so no run-lifecycle guarantee may be claimed.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-023
+    title: "An unenforceable read-only claim is refused, not assumed"
+    owner: Mindburn Labs core team (kernel)
+    claim: An unenforceable read-only claim is refused, not assumed.
+    status: unmanaged
+    reason: >-
+      Retired 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Its rule survives as INV-024.
+    retired: true
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: agent-process-envelope
+    body: |
+      If the vendor build cannot be shown to honour the read-only flags HELM passes it,
+      the run is refused rather than started on the assumption that it will behave. A
+      probe that cannot answer fails closed. Scoped HOME lives outside the work tree so
+      vendor state cannot leak into the diff.
+
+      A vendor that has no read-only posture to probe is refused at the capability
+      declaration instead: it does not advertise `AccessReadonly`, and its `Run`
+      refuses the profile unconditionally. That is the stronger form of the same rule,
+      because a constant comparison has no failure mode that admits the run.
+
+      RETIRED 2026-09-24 (HELM-756): the implementation was deleted without ever
+      having a production caller. Survives as INV-024: HELM may claim coverage only
+      for the path it actually intercepts, and a read-only label nobody enforces is a
+      claim about configuration.
+    verify:
+      - "`docs/retirement/wave-1-inventory.md` · retirement record; no code in this tree holds the rule"
+
+  - id: INV-024
+    title: "An adapter governs only the calls actually routed through it"
+    owner: Mindburn Labs core team (kernel)
+    claim: An adapter governs only the calls actually routed through it.
+    status: unmanaged
+    reason: >-
+      A limit on what may be claimed, not a runtime control. No code can check
+      that an adapter's documentation names the paths it does not intercept; the
+      review question in its verify: line is human-owned.
+    entry_points: []
+    config: []
+    protected_operations: []
+    bypass_assumptions: []
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: agent-process-envelope
+    body: |
+      HELM enforces on the path that reaches it. A configured MCP server or a hooked
+      tool class governs the calls it receives and nothing else — not arbitrary client,
+      browser, IDE, or desktop actions that never cross the boundary.
+    verify:
+      - "`core/pkg/runtimeadapters` · adapter interface and its implementations"
+      - "review question on any new adapter — name the call path HELM intercepts and the ones it does not. Coverage asserted without that path is a claim about configuration, not about enforcement, and belongs in neither docs nor a deck."
+
+  - id: INV-025
+    title: "The gates that prove these invariants are themselves gated"
+    owner: Mindburn Labs core team (conformance)
+    claim: >-
+      The gates that prove these invariants are themselves gated and self-test
+      before they scan.
+    status: observed-only
+    reason: >-
+      Held by build-time gates (make controls-check, make verify-boundary, go
+      run tools/tcbcheck/main.go), not by a shipped binary. The registry's
+      reachability rule scores runtime entry points only, so this entry cannot
+      be enforced in its terms yet; a build-plane entry kind is HELM-746 slice
+      2.
+    entry_points: []
+    config: []
+    protected_operations:
+      - "Pull requests to this repository."
+    bypass_assumptions:
+      - "A gate marked advisory in scripts/ci/quality-gates.json reports without blocking; make inv-check and make concept-gate run advisory in the nightly profile."
+    tests:
+      allowed: []
+      forbidden: []
+      removal: []
+      bypass: []
+    section: repository-gates
+    body: |
+      TCB import isolation, the boundary manifest, and this constitution are checked by
+      tooling that runs in the same pipeline as the code it guards. The invariant
+      checker self-tests against synthetic bad input before every real scan and fails
+      itself when it stops discriminating, because a gate that silently degrades into
+      a no-op is indistinguishable from a passing one right up until it matters.
+    verify:
+      - "`tools/tcbcheck/main.go`, `tools/invcheck/main.go` · `make inv-check`, `make concept-gate`, `make verify-boundary`"
+
+  - id: CTL-001
+    title: "Guardian default-deny"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      An action with no policy, a nil policy graph or a failed policy evaluation
+      is denied, and the denial is signed.
+    status: enforced
+    entry_points:
+      - "core/pkg/guardian.Guardian.EvaluateDecision"
+    config:
+      - "No knob turns the default off. A managed PDP whose ALLOW is marked authoritative replaces only the local policy decision (see bypass)."
+    protected_operations:
+      - "POST /api/v1/evaluate, the ext_authz route and MCP tool calls, which all decide through Guardian.EvaluateDecision."
+    bypass_assumptions:
+      - "An authoritative managed PDP ALLOW replaces the local no-policy deny; every other Guardian gate still runs."
+      - "A dispatch that never asks the Guardian is not governed (INV-024)."
+    tests:
+      allowed:
+        - "core/pkg/guardian.TestGuardian_SignDecision"
+        - "core/cmd/helm-ai-kernel.TestProxyNonStreamingToolCallGetsPolicyVerdict"
+      forbidden:
+        - "core/pkg/guardian.TestExt_NoPolicyDefined"
+        - "core/pkg/guardian.TestExt_NilPolicyGraphFailsClosedWithoutPanic"
+      removal:
+        - "core/pkg/guardian.TestExt_NoPolicyDefined"
+        - "core/pkg/guardian.TestExt_NilPolicyGraphFailsClosedWithoutPanic"
+      bypass:
+        - "core/pkg/guardian.TestAuthoritativePDPAllowReplacesOnlyLocalPRG"
+        - "core/cmd/helm-ai-kernel.TestProductionEntrypointsCannotBypassCheckedGuardianFactory"
+    removal_mutation:
+      file: core/pkg/guardian/guardian.go
+      find: "\t\tcase authz.ReasonCode == contracts.ReasonNoPolicy:\n\t\t\tdecision.Verdict = string(contracts.VerdictDeny)\n"
+      replace: "\t\tcase authz.ReasonCode == contracts.ReasonNoPolicy:\n\t\t\tdecision.Verdict = string(contracts.VerdictAllow)\n"
+
+  - id: CTL-002
+    title: "Route auth tiers"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Every route the API listener serves is declared with an auth tier, and a
+      caller without that tier's credential is refused.
+    status: enforced
+    entry_points:
+      - "core/cmd/helm-ai-kernel.protectRuntimeHandler"
+      - "core/cmd/helm-ai-kernel.runtimeRouteMux.declare"
+    config:
+      - "HELM_ADMIN_API_KEY"
+      - "HELM_SERVICE_API_KEY"
+      - "HELM_ORGANIZATION_RUNTIME_API_KEY"
+      - "HELM_RUNTIME_TENANT_ID"
+      - "HELM_RUNTIME_PRINCIPAL_ID"
+      - "HELM_RUNTIME_WORKSPACE_ID"
+    protected_operations:
+      - "Every route in RuntimeRouteSpecs() mounted on the API listener through runtimeRouteMux."
+    bypass_assumptions:
+      - "RouteAuthPublic routes serve without a credential; each is declared with a reason."
+      - "Listeners outside runtimeRouteMux (the MCP server and the proxy) have their own auth and are not covered here."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestTenantScopedRuntimeAuthBindsConfiguredTenantAndPrincipal"
+        - "core/cmd/helm-ai-kernel.TestServiceInternalRuntimeAuthRequiresConfiguredToken"
+        - "core/cmd/helm-ai-kernel.TestOrganizationRuntimeAuthBindsExplicitIdentity"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestRuntimeRoutesRefuseCallersWithoutTheirDeclaredCredential"
+        - "core/cmd/helm-ai-kernel.TestRuntimeRouteMuxRefusesUndeclaredPatterns"
+        - "core/cmd/helm-ai-kernel.TestTenantScopedRuntimeAuthRejectsTenantMismatch"
+        - "core/cmd/helm-ai-kernel.TestServiceInternalRuntimeAuthFailsClosedWhenUnconfigured"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestRuntimeRoutesRefuseCallersWithoutTheirDeclaredCredential"
+      bypass:
+        - "core/cmd/helm-ai-kernel.TestPublicRoutesAreDeclaredWithAReason"
+        - "core/cmd/helm-ai-kernel.TestRouteProbesDetectAnUnguardedHandler"
+    removal_mutation:
+      file: core/cmd/helm-ai-kernel/route_auth.go
+      find: "\tcase RouteAuthAdmin, RouteAuthAuthenticated:\n\t\treturn requireRuntimeAdmin(handler)\n"
+      replace: "\tcase RouteAuthAdmin, RouteAuthAuthenticated:\n\t\treturn handler\n"
+
+  - id: CTL-003
+    title: "FORCE RLS on Postgres tenant tables"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Every kernel tenant table on Postgres is under FORCE ROW LEVEL SECURITY
+      with the tenant policy, and a runtime role that could bypass it is refused
+      at startup.
+    status: enforced
+    entry_points:
+      - "core/pkg/postgresmigration.ValidateRuntime"
+      - "core/pkg/store.WithTenant"
+    config:
+      - "DATABASE_URL (unset selects SQLite Lite Mode, which has no row security)"
+    protected_operations:
+      - "Reads and writes to kernel tenant tables through store.WithTenant on Postgres."
+    bypass_assumptions:
+      - "Lite Mode (SQLite, no DATABASE_URL) has no row security."
+      - "The receipts table has no tenant_id and sits outside row security; receipt tenancy is enforced in application code."
+      - "The Postgres proofs skip in make test and run in .github/workflows/approval-ceremony.yml through scripts/ci/postgres_proofs.sh, where a skip fails."
+    tests:
+      allowed:
+        - "core/pkg/postgresmigration.TestValidateRuntimeAcceptsRestrictedRoleWithoutDDL"
+        - "core/pkg/postgresmigration.TestTenantRowSecurityIsolatesTenantsForARestrictedRole"
+      forbidden:
+        - "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity"
+        - "core/pkg/postgresmigration.TestValidateRuntimeRejectsSchemaOwnerWithoutDDL"
+        - "core/pkg/postgresmigration.TestTenantRowSecurityIsolatesTenantsForARestrictedRole"
+      removal:
+        - "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity"
+        - "core/pkg/postgresmigration.TestTenantRowSecurityCheckDetectsWeakenedTables"
+      bypass:
+        - "core/pkg/postgresmigration.TestKernelTenantTablesHaveForcedRowSecurity"
+        - "core/pkg/postgresmigration.TestValidateRuntimeRejectsReplicationRoleWithoutDDL"
+
+  - id: CTL-004
+    title: "Global freeze"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      While the kernel is frozen every Guardian evaluation is denied with
+      SYSTEM_FROZEN.
+    status: enforced
+    entry_points:
+      - "core/pkg/guardian.FreezeInterceptor.Evaluate"
+    config:
+      - "HELM_DATA_DIR (freeze_state.json), written by `helm-ai-kernel freeze`"
+    protected_operations:
+      - "Every Guardian evaluation while frozen."
+    bypass_assumptions:
+      - "The freeze is a local state file, so it holds per host, not across replicas, and anyone who can write HELM_DATA_DIR can set or clear it."
+      - "`serve --data-dir` does not export HELM_DATA_DIR, so the server reads ./data/freeze_state.json unless the variable is set."
+    tests:
+      allowed:
+        - "core/pkg/guardian.TestExt_UnfreezeAllowsDecisions"
+      forbidden:
+        - "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode"
+        - "core/pkg/guardian.TestExt_FreezeVerdictIsDeny"
+        - "core/cmd/helm-ai-kernel.TestProductionGuardianTracksPersistedFreezeState"
+      removal:
+        - "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode"
+        - "core/pkg/guardian.TestExt_FreezeVerdictIsDeny"
+      bypass:
+        - "core/pkg/kernel.TestFreezeControllerRefreshesExternalStateAndFailsClosed"
+
+  - id: CTL-005
+    title: "Scoped emergency-stop fence"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      With the emergency-stop fence enabled, a dispatch in a fenced tenant and
+      workspace is denied, an unscoped dispatch is denied, and an unreadable
+      fence store denies.
+    status: enforced
+    entry_points:
+      - "core/pkg/guardian.FreezeInterceptor.Evaluate"
+      - "core/pkg/guardian.FreezeInterceptor.scopedStopDeny"
+    config:
+      - "HELM_EMERGENCY_STOP_FENCE_ENABLED (off by default; off means no fence is read)"
+    protected_operations:
+      - "Guardian evaluations when a scoped-stop reader is configured."
+      - "POST /internal/emergency-stop/fence, which records a signed fence command."
+    bypass_assumptions:
+      - "With HELM_EMERGENCY_STOP_FENCE_ENABLED off, no scoped fence is enforced."
+      - "Only the server's Guardian reads the fence; the `proxy` and `mcp serve` Guardians are built without it."
+      - "The fence denies newly governed dispatches only; it does not cancel work already in flight."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestEmergencyStopFenceRoutePersistsSignedFenceAndReplays"
+      forbidden:
+        - "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch"
+        - "core/pkg/guardian.TestScopedStopReaderFailureFailsClosedForScopedDispatch"
+        - "core/cmd/helm-ai-kernel.TestEmergencyStopFenceRouteFailsClosed"
+        - "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled"
+      removal:
+        - "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch"
+      bypass:
+        - "core/pkg/guardian.TestScopedStopReaderDeniesUnscopedEvaluationToPreventFenceBypass"
+
+  - id: CTL-006
+    title: "Fence-scope binding"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      With the emergency-stop fence enabled, runtime routes bind the configured
+      tenant and workspace, and a caller asserting another scope is refused.
+    status: enforced
+    entry_points:
+      - "core/cmd/helm-ai-kernel.bindRuntimeScope"
+    config:
+      - "HELM_EMERGENCY_STOP_FENCE_ENABLED"
+      - "HELM_RUNTIME_TENANT_ID"
+      - "HELM_RUNTIME_WORKSPACE_ID"
+    protected_operations:
+      - "Evaluate, receipt and ext_authz routes while the fence is enabled."
+    bypass_assumptions:
+      - "With the fence off (the chart default), nothing is bound: the kernel answers for the tenant the caller asserts. This is the known gap that CTL-007 records."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestFencedReceiptReadsBindTheConfiguredTenant"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestFencedReceiptReadsBindTheConfiguredTenant"
+        - "core/cmd/helm-ai-kernel.TestReceiptRoutesRequireConfiguredWorkspaceWhenScopedFenceEnabled"
+        - "core/cmd/helm-ai-kernel.TestExtAuthzTakesTheScopeFromConfigurationNotTheBody"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestFencedReceiptReadsBindTheConfiguredTenant"
+      bypass:
+        - "core/cmd/helm-ai-kernel.TestFenceOffControlPlaneCallersKeepTheirPreviousBehavior"
+
+  - id: CTL-007
+    title: "Tenant and principal come from the token"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Tenant and principal come only from the authenticated credential (binding
+      rule R9).
+    status: observed-only
+    reason: >-
+      Not held. Tenant and principal arrive as X-Helm-Tenant-ID and
+      X-Helm-Principal-ID headers beside a shared bearer key. The kernel checks
+      them against the configured pair or a principal-binding row, but does not
+      derive them from the credential. Only the approval workload routes take
+      tenant and workspace from a verified JWT, and CTL-006 binds the configured
+      scope while the emergency-stop fence is on.
+    entry_points:
+      - "core/cmd/helm-ai-kernel.requireRuntimeTenant"
+    config:
+      - "HELM_RUNTIME_TENANT_ID"
+      - "HELM_RUNTIME_PRINCIPAL_ID"
+    protected_operations:
+      - "Tenant-scoped runtime routes."
+    bypass_assumptions:
+      - "Any holder of the shared key may assert any registered tenant and principal pair."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestTenantScopedRuntimeAuthRejectsTenantMismatch"
+        - "core/cmd/helm-ai-kernel.TestTenantScopedRuntimeAuthRejectsNonEnvPairNotInStore"
+      removal: []
+      bypass: []
+
+  - id: CTL-008
+    title: "Approval grant is consumed once"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      An approval grant is consumed at most once, only by the verified workload
+      it names.
+    status: enforced
+    entry_points:
+      - "core/pkg/boundary/approvalceremony.Service.ConsumeGrant"
+    config:
+      - "HELM_APPROVAL_CONSUMPTION_ENABLED (off by default; off means the routes are absent)"
+      - "HELM_APPROVAL_CONSUMER_ISSUER"
+      - "HELM_APPROVAL_CONSUMER_AUDIENCE"
+    protected_operations:
+      - "Approval grant consumption through the approval consumption routes on Postgres."
+    bypass_assumptions:
+      - "The single-consume proof needs Postgres; it skips in make test and runs in .github/workflows/approval-ceremony.yml, where a skip fails."
+    tests:
+      allowed:
+        - "core/pkg/boundary/approvalceremony.TestServiceConsumesAndRecoversOnlyForExactWorkloadIdentity"
+      forbidden:
+        - "core/pkg/boundary/approvalceremony.TestServiceRejectsUnverifiedConsumerBeforePersistence"
+        - "core/pkg/boundary/approvalceremony.TestPostgresLifecycleSingleIssueAndConsume"
+        - "core/cmd/helm-ai-kernel.TestApprovalGrantConsumptionRoutesFailClosedOnWorkloadAuthentication"
+      removal:
+        - "core/pkg/boundary/approvalceremony.TestPostgresLifecycleSingleIssueAndConsume"
+      bypass:
+        - "core/cmd/helm-ai-kernel.TestApprovalGrantConsumptionConsumeEnforcesVerifiedScopedFence"
+
+  - id: CTL-009
+    title: "Evidence bundle verification"
+    owner: Mindburn Labs core team (conformance)
+    claim: >-
+      Receipts and evidence bundles verify, and a tampered, truncated or
+      untrusted bundle fails verification.
+    status: enforced
+    entry_points:
+      - "core/pkg/verifier.VerifyBundleWithOptions"
+    config: []
+    protected_operations:
+      - "`helm-ai-kernel verify` over an EvidencePack bundle."
+    bypass_assumptions:
+      - "A self-attested seal is rejected by default; a caller that opts into accepting one gets weaker evidence."
+    tests:
+      allowed:
+        - "core/pkg/verifier.TestVerifyBundle_Valid"
+      forbidden:
+        - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
+        - "core/pkg/verifier.TestChainIntegrity_DetectsTamperedReceiptBody"
+        - "core/pkg/verifier.TestVerifyBundleRejectsUntrustedEmbeddedSignatures"
+      removal:
+        - "core/pkg/verifier.TestVerifyBundle_HashMismatch"
+        - "core/pkg/verifier.TestChainIntegrity_DetectsTamperedReceiptBody"
+      bypass:
+        - "core/pkg/verifier.TestVerifyBundle_RejectsSelfAttestedSealByDefault"
+
+  - id: CTL-010
+    title: "MCP tool-call mediation"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A tool call through the HELM MCP server is decided by the Guardian before
+      dispatch; a denied call or an unapproved server never reaches the
+      executor.
+    status: enforced
+    entry_points:
+      - "core/pkg/mcp.GovernedExecutor.Execute"
+    config: []
+    protected_operations:
+      - "tools/call over the HELM MCP server's stdio and HTTP transports."
+    bypass_assumptions:
+      - "A client that talks to a tool server directly is not governed (INV-024)."
+      - "`helm-ai-kernel mcp approve` refuses to mint approval authority without a verifier."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestMCPMediationProofTransportsRouteToolCallsThroughExecutor"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports"
+        - "core/cmd/helm-ai-kernel.TestMCPMediationProofUnapprovedServersBlockDispatchAcrossTransports"
+        - "core/cmd/helm-ai-kernel.TestMCPMediationProofSchemaErrorsBlockBeforeExecutor"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestMCPMediationProofPolicyDenialsBlockDispatchAcrossTransports"
+      bypass:
+        - "core/cmd/helm-ai-kernel.TestMCPMediationProofUnsupportedWebSocketTransportFailsClosed"
+        - "core/cmd/helm-ai-kernel.TestRunMCPApproveFailsClosedWithoutVerifier"
+
+  - id: CTL-011
+    title: "Guardian budget draw-down"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      An action that passes policy draws down its budget, and a failed draw-down
+      denies it.
+    status: observed-only
+    reason: >-
+      No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no
+      production caller and WithBudgetTracker is in
+      scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at
+      runtime. GET /api/v1/budget/status nonetheless reports a hard-coded active
+      enforcer.
+    entry_points:
+      - "core/pkg/guardian.Guardian.SetBudgetTracker"
+    config: []
+    protected_operations:
+      - "Guardian evaluations of actions that carry a budget_id."
+    bypass_assumptions:
+      - "No budget tracker is configured in a shipped binary."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/guardian.TestGuardian_BudgetConsumeFailureFailsClosed"
+        - "core/pkg/guardian.TestGuardian_BudgetEnforcement"
+      removal: []
+      bypass: []
+
+  - id: CTL-012
+    title: "Decision receipts are signed and tampering fails"
+    owner: Mindburn Labs core team (crypto)
+    claim: >-
+      Every governed decision is persisted with a signed receipt, and a receipt
+      whose verdict or signature was altered fails `helm-ai-kernel verify
+      receipt`.
+    status: enforced
+    entry_points:
+      - "core/cmd/helm-ai-kernel.persistDecisionReceiptForTenantWithProvenance"
+      - "core/cmd/helm-ai-kernel.runVerifyReceiptCmd"
+    config:
+      - "HELM_TRANSPARENCY_DEGRADE (defers the transparency-log anchor; does not skip signing)"
+    protected_operations:
+      - "Receipts written by the evaluate route, the governed proxy and the MCP gateway."
+      - "Offline verification against a trusted public key."
+    bypass_assumptions:
+      - "Verification needs the caller to supply the trusted key; a self-attested key is refused by default."
+      - "MCP gateway receipts are written outside tenant scope."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITrustedCopiedFile"
+        - "core/cmd/helm-ai-kernel.TestPersistDecisionReceiptSignsAndStoresReceipt"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITamperedVerdict"
+        - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITamperedSignature"
+        - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLIWrongTrustedKey"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITamperedVerdict"
+        - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITamperedSignature"
+      bypass:
+        - "core/pkg/receiptverify.TestSelfAttestedKeyIsRefusedByDefault"
+        - "core/cmd/helm-ai-kernel.TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed"
+
+  - id: CTL-013
+    title: "API rate limiting"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      The API listener sheds requests over the configured global, class,
+      endpoint and actor rates.
+    status: enforced
+    entry_points:
+      - "core/pkg/api.GlobalRateLimiter.Middleware"
+      - "core/cmd/helm-ai-kernel.buildAPIHandler"
+    config:
+      - "HELM_LIMIT_GLOBAL_RPS"
+      - "HELM_LIMIT_GLOBAL_BURST"
+      - "HELM_LIMIT_ACTOR_RPS"
+      - "HELM_LIMIT_ENDPOINT_RPS"
+      - "HELM_CONCURRENCY_MAX"
+      - "HELM_TRUSTED_PROXY_CIDRS"
+    protected_operations:
+      - "Every request to the API listener."
+    bypass_assumptions:
+      - "Raising the limits weakens the control; nothing bounds them."
+      - "Forwarded headers count only from peers in HELM_TRUSTED_PROXY_CIDRS."
+    tests:
+      allowed:
+        - "core/pkg/api.TestGlobalRateLimiter_Middleware_AllowsWithinLimit"
+      forbidden:
+        - "core/pkg/api.TestGlobalRateLimiter_Middleware_RejectsOverLimit"
+      removal:
+        - "core/pkg/api.TestGlobalRateLimiter_Middleware_RejectsOverLimit"
+        - "core/cmd/helm-ai-kernel.TestBuildAPIHandlerLayerOrder"
+      bypass:
+        - "core/pkg/api.TestRateLimiterIgnoresForwardedHeadersFromUntrustedPeer"
+
+  - id: CTL-014
+    title: "Dispatch admission is idempotent"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A dispatch admission stores its idempotency key hash; an exact retry
+      returns the same record and a changed request conflicts.
+    status: enforced
+    entry_points:
+      - "core/pkg/boundary/approvalceremony.DispatchAdmitter.Claim"
+    config:
+      - "HELM_APPROVAL_CONSUMPTION_ENABLED (off by default; off means the route is absent)"
+      - "HELM_APPROVAL_DISPATCH_SCOPE"
+    protected_operations:
+      - "POST /internal/v1/approval-grants/admit-dispatch on Postgres. The kernel admits; the data plane dispatches."
+    bypass_assumptions:
+      - "The SQL-level proof is Postgres-gated and runs in .github/workflows/approval-ceremony.yml."
+    tests:
+      allowed:
+        - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
+        - "core/cmd/helm-ai-kernel.TestApprovalDispatchAdmissionRoutesUseSeparateVerifiedCapability"
+      forbidden:
+        - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
+        - "core/cmd/helm-ai-kernel.TestApprovalDispatchAdmissionRoutesFailClosedBeforeAuthority"
+      removal:
+        - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
+      bypass:
+        - "core/cmd/helm-ai-kernel.TestApprovalDispatchAdmissionFenceDenialIsBounded"
+
+  - id: CTL-015
+    title: "Effect reservation before dispatch"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      An admitted dispatch reserves its effect in Postgres before anything is
+      sent, so a duplicate never creates a second dispatch (binding rule R6).
+    status: observed-only
+    reason: >-
+      Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and
+      EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt,
+      as is the generic api.IdempotencyMiddleware. The Postgres tests prove the
+      library only.
+    entry_points:
+      - "core/pkg/boundary/approvalceremony.EffectReservationAdmitter.Admit"
+    config: []
+    protected_operations:
+      - "Reserving an effect for an admitted dispatch."
+    bypass_assumptions:
+      - "No shipped caller exists."
+    tests:
+      allowed: []
+      forbidden:
+        - "core/pkg/boundary/approvalceremony.TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle"
+      removal: []
+      bypass: []
+
+  - id: CTL-016
+    title: "Spend proxy quotes before dispatch"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      In `helm-ai-kernel spend-proxy`, an inference request is dispatched only
+      after an allowing quote, and a replayed idempotency key never reaches the
+      provider.
+    status: enforced
+    entry_points:
+      - "core/pkg/api.GovernedGateway.handleInference"
+      - "core/pkg/inferencegateway.Engine.Quote"
+    config:
+      - "spend-proxy --addr (default 127.0.0.1; a non-loopback address is not refused)"
+    protected_operations:
+      - "Inference requests through the spend proxy."
+    bypass_assumptions:
+      - "The ledger is a JSONL file, not Postgres (R5)."
+      - "The spend-proxy listener has no auth; the tenant comes from configuration."
+    tests:
+      allowed:
+        - "core/pkg/spendproxy.TestGovernedRouteEndToEnd"
+      forbidden:
+        - "core/pkg/spendproxy.TestDeniedRouteNoDispatchAndDurableAudit"
+        - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
+        - "core/pkg/spendproxy.TestUnknownEnvelopeFailsClosed"
+      removal:
+        - "core/pkg/spendproxy.TestDeniedRouteNoDispatchAndDurableAudit"
+        - "core/pkg/spendproxy.TestReplayedKeyNeverReachesProvider"
+      bypass: []
+
+  - id: CTL-017
+    title: "Boundary Enforcement Profile attestation"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      The kernel compiles systemd and nftables enforcement artifacts from
+      hash-bound policy input and fails attestation when the live posture
+      drifts.
+    status: observed-only
+    reason: >-
+      The kernel attests; systemd and nftables enforce. The shipped binary
+      observes posture at service start and on demand, and
+      deploy/appliance/helm-boundary-attest.service turns a failed attestation
+      into a blocked gateway start.
+    entry_points:
+      - "core/cmd/helm-ai-kernel.runBoundaryProfileAttest"
+    config: []
+    protected_operations:
+      - "Gateway start on the appliance."
+    bypass_assumptions:
+      - "Drift between attestations is not detected; the check is not continuous."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestBoundaryProfileCompileVerifyFlow"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestBoundaryProfileAttestEnforceFailsClosedOffAppliance"
+        - "core/cmd/helm-ai-kernel.TestBoundaryProfileAttestTamperedArtifactsHardError"
+      removal: []
+      bypass: []

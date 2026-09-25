@@ -607,10 +607,24 @@ CONCEPT_RANGE ?= origin/main..HEAD
 # inv-check self-tests against synthetic bad input before it reads
 # HELM_INVARIANTS.md, and fails itself if a control comes back wrong.
 inv-check:
-	go run tools/invcheck/main.go verify
+	cd tools/invcheck && GOWORK=off go run . verify -root ../..
 
 concept-gate:
-	go run tools/invcheck/main.go concept-gate -range "$(CONCEPT_RANGE)"
+	cd tools/invcheck && GOWORK=off go run . concept-gate -root ../.. -range "$(CONCEPT_RANGE)"
+
+.PHONY: controls controls-check
+
+# controls.yaml is the control registry (binding rule R1). `controls` rewrites
+# HELM_INVARIANTS.md and coverage-map.json from it. `controls-check` resolves
+# the invariant hints, self-tests on planted registry entries, then fails on an
+# invalid entry, an enforced entry point no shipped binary reaches, a named test
+# `go test -list` does not report, a removal mutation the tests survive, or a
+# generated file that differs from the registry.
+controls:
+	cd tools/invcheck && GOWORK=off go run . controls -root ../.. -write
+
+controls-check:
+	cd tools/invcheck && GOWORK=off go run . verify -root ../.. && GOWORK=off go run . controls -root ../..
 
 .PHONY: launchpad-promotion-check
 launchpad-promotion-check:

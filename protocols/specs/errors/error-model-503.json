@@ -1,0 +1,24 @@
+{
+  "type": "https://helm.mindburn.run/errors/503",
+  "title": "Service Unavailable",
+  "status": 503,
+  "detail": "emergency-stop fence active",
+  "code": "unavailable",
+  "message": "emergency-stop fence active",
+  "details": [
+    {
+      "type": "helm.errors.v1.ErrorDetail",
+      "value": "ChVFTUVSR0VOQ1lfU1RPUF9GRU5DRUQQAQ",
+      "debug": {
+        "reason_code": "EMERGENCY_STOP_FENCED",
+        "retryable": true
+      }
+    }
+  ],
+  "error": {
+    "message": "emergency-stop fence active",
+    "type": "internal_error",
+    "code": "unavailable",
+    "reason_code": "EMERGENCY_STOP_FENCED"
+  }
+}

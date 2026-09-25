@@ -31626,18 +31626,287 @@ public static class HealthCheck200Response {
 
 
 /**
- * HelmError
+ * The one HELM error model (target architecture §11.1), written by core/pkg/httperr for every HTTP error. It is an RFC 7807 problem (type, title, status, detail, instance, trace_id) whose extension members form a Connect error (code, message, details; https://connectrpc.com/docs/protocol/#error-end-stream). details holds one helm.errors.v1.ErrorDetail with the registered reason code and whether a retry can succeed. &#x60;error&#x60; repeats the message in the shape SDK releases up to v0.8.5 parse; it is deprecated and goes at the next major version.
  */
 @JsonPropertyOrder({
+  HelmError.JSON_PROPERTY_CODE,
+  HelmError.JSON_PROPERTY_MESSAGE,
+  HelmError.JSON_PROPERTY_DETAILS,
+  HelmError.JSON_PROPERTY_TYPE,
+  HelmError.JSON_PROPERTY_TITLE,
+  HelmError.JSON_PROPERTY_STATUS,
+  HelmError.JSON_PROPERTY_DETAIL,
+  HelmError.JSON_PROPERTY_INSTANCE,
+  HelmError.JSON_PROPERTY_TRACE_ID,
   HelmError.JSON_PROPERTY_ERROR
 })
 @javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
 public static class HelmError {
+  public static final String JSON_PROPERTY_CODE = "code";
+  private String code;
+
+  public static final String JSON_PROPERTY_MESSAGE = "message";
+  private String message;
+
+  public static final String JSON_PROPERTY_DETAILS = "details";
+  private List<HelmErrorDetail> details;
+
+  public static final String JSON_PROPERTY_TYPE = "type";
+  private String type;
+
+  public static final String JSON_PROPERTY_TITLE = "title";
+  private String title;
+
+  public static final String JSON_PROPERTY_STATUS = "status";
+  private Integer status;
+
+  public static final String JSON_PROPERTY_DETAIL = "detail";
+  private String detail;
+
+  public static final String JSON_PROPERTY_INSTANCE = "instance";
+  private String instance;
+
+  public static final String JSON_PROPERTY_TRACE_ID = "trace_id";
+  private String traceId;
+
   public static final String JSON_PROPERTY_ERROR = "error";
   private HelmErrorError error;
 
   public HelmError() {
   }
+
+  public HelmError code(String code) {
+    this.code = code;
+    return this;
+  }
+
+   /**
+   * Connect error code: canceled, unknown, invalid_argument, deadline_exceeded, not_found, already_exists, permission_denied, resource_exhausted, failed_precondition, aborted, out_of_range, unimplemented, internal, unavailable, data_loss or unauthenticated.
+   * @return code
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getCode() {
+    return code;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_CODE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setCode(String code) {
+    this.code = code;
+  }
+
+
+  public HelmError message(String message) {
+    this.message = message;
+    return this;
+  }
+
+   /**
+   * Human-readable error message
+   * @return message
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_MESSAGE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getMessage() {
+    return message;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_MESSAGE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setMessage(String message) {
+    this.message = message;
+  }
+
+
+  public HelmError details(List<HelmErrorDetail> details) {
+    this.details = details;
+    return this;
+  }
+
+  public HelmError addDetailsItem(HelmErrorDetail detailsItem) {
+    if (this.details == null) {
+      this.details = new ArrayList<>();
+    }
+    this.details.add(detailsItem);
+    return this;
+  }
+
+   /**
+   * Get details
+   * @return details
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DETAILS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public List<HelmErrorDetail> getDetails() {
+    return details;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DETAILS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDetails(List<HelmErrorDetail> details) {
+    this.details = details;
+  }
+
+
+  public HelmError type(String type) {
+    this.type = type;
+    return this;
+  }
+
+   /**
+   * RFC 7807 problem type URI
+   * @return type
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getType() {
+    return type;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setType(String type) {
+    this.type = type;
+  }
+
+
+  public HelmError title(String title) {
+    this.title = title;
+    return this;
+  }
+
+   /**
+   * RFC 7807 short summary
+   * @return title
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTitle() {
+    return title;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TITLE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTitle(String title) {
+    this.title = title;
+  }
+
+
+  public HelmError status(Integer status) {
+    this.status = status;
+    return this;
+  }
+
+   /**
+   * RFC 7807 copy of the HTTP status code
+   * @return status
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public Integer getStatus() {
+    return status;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_STATUS)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setStatus(Integer status) {
+    this.status = status;
+  }
+
+
+  public HelmError detail(String detail) {
+    this.detail = detail;
+    return this;
+  }
+
+   /**
+   * RFC 7807 explanation; equal to message
+   * @return detail
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getDetail() {
+    return detail;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DETAIL)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setDetail(String detail) {
+    this.detail = detail;
+  }
+
+
+  public HelmError instance(String instance) {
+    this.instance = instance;
+    return this;
+  }
+
+   /**
+   * RFC 7807 request path, when known
+   * @return instance
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_INSTANCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getInstance() {
+    return instance;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_INSTANCE)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setInstance(String instance) {
+    this.instance = instance;
+  }
+
+
+  public HelmError traceId(String traceId) {
+    this.traceId = traceId;
+    return this;
+  }
+
+   /**
+   * Request trace identifier, when known
+   * @return traceId
+  **/
+  @javax.annotation.Nullable
+  @JsonProperty(JSON_PROPERTY_TRACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+
+  public String getTraceId() {
+    return traceId;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TRACE_ID)
+  @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
+  public void setTraceId(String traceId) {
+    this.traceId = traceId;
+  }
+
 
   public HelmError error(HelmErrorError error) {
     this.error = error;
@@ -31647,7 +31916,9 @@ public static class HelmError {
    /**
    * Get error
    * @return error
+   * @deprecated
   **/
+  @Deprecated
   @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_ERROR)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
@@ -31676,19 +31947,285 @@ public static class HelmError {
       return false;
     }
     HelmError helmError = (HelmError) o;
-    return Objects.equals(this.error, helmError.error);
+    return Objects.equals(this.code, helmError.code) &&
+        Objects.equals(this.message, helmError.message) &&
+        Objects.equals(this.details, helmError.details) &&
+        Objects.equals(this.type, helmError.type) &&
+        Objects.equals(this.title, helmError.title) &&
+        Objects.equals(this.status, helmError.status) &&
+        Objects.equals(this.detail, helmError.detail) &&
+        Objects.equals(this.instance, helmError.instance) &&
+        Objects.equals(this.traceId, helmError.traceId) &&
+        Objects.equals(this.error, helmError.error);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(error);
+    return Objects.hash(code, message, details, type, title, status, detail, instance, traceId, error);
   }
 
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("class HelmError {\n");
+    sb.append("    code: ").append(toIndentedString(code)).append("\n");
+    sb.append("    message: ").append(toIndentedString(message)).append("\n");
+    sb.append("    details: ").append(toIndentedString(details)).append("\n");
+    sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    title: ").append(toIndentedString(title)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    detail: ").append(toIndentedString(detail)).append("\n");
+    sb.append("    instance: ").append(toIndentedString(instance)).append("\n");
+    sb.append("    traceId: ").append(toIndentedString(traceId)).append("\n");
     sb.append("    error: ").append(toIndentedString(error)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    String containerSuffix = "";
+    String containerPrefix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+      containerSuffix = "]";
+      containerPrefix = "[";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `code` to the URL query string
+    if (getCode() != null) {
+      joiner.add(String.format("%scode%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `message` to the URL query string
+    if (getMessage() != null) {
+      joiner.add(String.format("%smessage%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getMessage()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `details` to the URL query string
+    if (getDetails() != null) {
+      for (int i = 0; i < getDetails().size(); i++) {
+        if (getDetails().get(i) != null) {
+          joiner.add(getDetails().get(i).toUrlQueryString(String.format("%sdetails%s%s", prefix, suffix,
+          "".equals(suffix) ? "" : String.format("%s%d%s", containerPrefix, i, containerSuffix))));
+        }
+      }
+    }
+
+    // add `type` to the URL query string
+    if (getType() != null) {
+      joiner.add(String.format("%stype%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `title` to the URL query string
+    if (getTitle() != null) {
+      joiner.add(String.format("%stitle%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTitle()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `status` to the URL query string
+    if (getStatus() != null) {
+      joiner.add(String.format("%sstatus%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getStatus()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `detail` to the URL query string
+    if (getDetail() != null) {
+      joiner.add(String.format("%sdetail%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getDetail()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `instance` to the URL query string
+    if (getInstance() != null) {
+      joiner.add(String.format("%sinstance%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getInstance()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `trace_id` to the URL query string
+    if (getTraceId() != null) {
+      joiner.add(String.format("%strace_id%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getTraceId()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `error` to the URL query string
+    if (getError() != null) {
+      joiner.add(getError().toUrlQueryString(prefix + "error" + suffix));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.8.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * A Connect error detail holding a helm.errors.v1.ErrorDetail (protocols/proto/helm/errors/v1/errors.proto).
+ */
+@JsonPropertyOrder({
+  HelmErrorDetail.JSON_PROPERTY_TYPE,
+  HelmErrorDetail.JSON_PROPERTY_VALUE,
+  HelmErrorDetail.JSON_PROPERTY_DEBUG
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class HelmErrorDetail {
+  public static final String JSON_PROPERTY_TYPE = "type";
+  private String type;
+
+  public static final String JSON_PROPERTY_VALUE = "value";
+  private String value;
+
+  public static final String JSON_PROPERTY_DEBUG = "debug";
+  private HelmErrorDetailFields debug;
+
+  public HelmErrorDetail() {
+  }
+
+  public HelmErrorDetail type(String type) {
+    this.type = type;
+    return this;
+  }
+
+   /**
+   * Fully qualified protobuf message name, helm.errors.v1.ErrorDetail
+   * @return type
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getType() {
+    return type;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_TYPE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setType(String type) {
+    this.type = type;
+  }
+
+
+  public HelmErrorDetail value(String value) {
+    this.value = value;
+    return this;
+  }
+
+   /**
+   * The ErrorDetail protobuf binary, base64-encoded without padding
+   * @return value
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_VALUE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getValue() {
+    return value;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_VALUE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setValue(String value) {
+    this.value = value;
+  }
+
+
+  public HelmErrorDetail debug(HelmErrorDetailFields debug) {
+    this.debug = debug;
+    return this;
+  }
+
+   /**
+   * Get debug
+   * @return debug
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_DEBUG)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public HelmErrorDetailFields getDebug() {
+    return debug;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_DEBUG)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setDebug(HelmErrorDetailFields debug) {
+    this.debug = debug;
+  }
+
+
+  /**
+   * Return true if this HelmErrorDetail object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    HelmErrorDetail helmErrorDetail = (HelmErrorDetail) o;
+    return Objects.equals(this.type, helmErrorDetail.type) &&
+        Objects.equals(this.value, helmErrorDetail.value) &&
+        Objects.equals(this.debug, helmErrorDetail.debug);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(type, value, debug);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class HelmErrorDetail {\n");
+    sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    value: ").append(toIndentedString(value)).append("\n");
+    sb.append("    debug: ").append(toIndentedString(debug)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -31732,9 +32269,19 @@ public static class HelmError {
 
     StringJoiner joiner = new StringJoiner("&");
 
-    // add `error` to the URL query string
-    if (getError() != null) {
-      joiner.add(getError().toUrlQueryString(prefix + "error" + suffix));
+    // add `type` to the URL query string
+    if (getType() != null) {
+      joiner.add(String.format("%stype%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getType()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `value` to the URL query string
+    if (getValue() != null) {
+      joiner.add(String.format("%svalue%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getValue()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `debug` to the URL query string
+    if (getDebug() != null) {
+      joiner.add(getDebug().toUrlQueryString(prefix + "debug" + suffix));
     }
 
     return joiner.toString();
@@ -31758,8 +32305,178 @@ public static class HelmError {
 
 
 /**
- * HelmErrorError
+ * The ErrorDetail fields as JSON
  */
+@JsonPropertyOrder({
+  HelmErrorDetailFields.JSON_PROPERTY_REASON_CODE,
+  HelmErrorDetailFields.JSON_PROPERTY_RETRYABLE
+})
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", comments = "Generator version: 7.4.0")
+public static class HelmErrorDetailFields {
+  public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
+  private String reasonCode;
+
+  public static final String JSON_PROPERTY_RETRYABLE = "retryable";
+  private Boolean retryable;
+
+  public HelmErrorDetailFields() {
+  }
+
+  public HelmErrorDetailFields reasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+    return this;
+  }
+
+   /**
+   * Registered code from reason-codes-v1.json as an open string, or empty when the error carries none. Never a closed enum.
+   * @return reasonCode
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public String getReasonCode() {
+    return reasonCode;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_REASON_CODE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setReasonCode(String reasonCode) {
+    this.reasonCode = reasonCode;
+  }
+
+
+  public HelmErrorDetailFields retryable(Boolean retryable) {
+    this.retryable = retryable;
+    return this;
+  }
+
+   /**
+   * Whether repeating the same request can succeed
+   * @return retryable
+  **/
+  @javax.annotation.Nonnull
+  @JsonProperty(JSON_PROPERTY_RETRYABLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+
+  public Boolean getRetryable() {
+    return retryable;
+  }
+
+
+  @JsonProperty(JSON_PROPERTY_RETRYABLE)
+  @JsonInclude(value = JsonInclude.Include.ALWAYS)
+  public void setRetryable(Boolean retryable) {
+    this.retryable = retryable;
+  }
+
+
+  /**
+   * Return true if this HelmErrorDetailFields object is equal to o.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    HelmErrorDetailFields helmErrorDetailFields = (HelmErrorDetailFields) o;
+    return Objects.equals(this.reasonCode, helmErrorDetailFields.reasonCode) &&
+        Objects.equals(this.retryable, helmErrorDetailFields.retryable);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(reasonCode, retryable);
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("class HelmErrorDetailFields {\n");
+    sb.append("    reasonCode: ").append(toIndentedString(reasonCode)).append("\n");
+    sb.append("    retryable: ").append(toIndentedString(retryable)).append("\n");
+    sb.append("}");
+    return sb.toString();
+  }
+
+  /**
+   * Convert the given object to string with each line indented by 4 spaces
+   * (except the first line).
+   */
+  private String toIndentedString(Object o) {
+    if (o == null) {
+      return "null";
+    }
+    return o.toString().replace("\n", "\n    ");
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @return URL query string
+   */
+  public String toUrlQueryString() {
+    return toUrlQueryString(null);
+  }
+
+  /**
+   * Convert the instance into URL query string.
+   *
+   * @param prefix prefix of the query string
+   * @return URL query string
+   */
+  public String toUrlQueryString(String prefix) {
+    String suffix = "";
+    if (prefix == null) {
+      // style=form, explode=true, e.g. /pet?name=cat&type=manx
+      prefix = "";
+    } else {
+      // deepObject style e.g. /pet?id[name]=cat&id[type]=manx
+      prefix = prefix + "[";
+      suffix = "]";
+    }
+
+    StringJoiner joiner = new StringJoiner("&");
+
+    // add `reason_code` to the URL query string
+    if (getReasonCode() != null) {
+      joiner.add(String.format("%sreason_code%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getReasonCode()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    // add `retryable` to the URL query string
+    if (getRetryable() != null) {
+      joiner.add(String.format("%sretryable%s=%s", prefix, suffix, URLEncoder.encode(String.valueOf(getRetryable()), StandardCharsets.UTF_8).replaceAll("\\+", "%20")));
+    }
+
+    return joiner.toString();
+  }
+}
+
+/*
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.8.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+
+
+
+
+/**
+ * Legacy error shape, kept for SDK releases up to v0.8.5.
+ * @deprecated
+ */
+@Deprecated
 @JsonPropertyOrder({
   HelmErrorError.JSON_PROPERTY_MESSAGE,
   HelmErrorError.JSON_PROPERTY_TYPE,
@@ -31772,114 +32489,14 @@ public static class HelmErrorError {
   public static final String JSON_PROPERTY_MESSAGE = "message";
   private String message;
 
-  /**
-   * Gets or Sets type
-   */
-  public enum TypeEnum {
-    INVALID_REQUEST("invalid_request"),
-
-    AUTHENTICATION_ERROR("authentication_error"),
-
-    PERMISSION_DENIED("permission_denied"),
-
-    NOT_FOUND("not_found"),
-
-    INTERNAL_ERROR("internal_error");
-
-    private String value;
-
-    TypeEnum(String value) {
-      this.value = value;
-    }
-
-    @JsonValue
-    public String getValue() {
-      return value;
-    }
-
-    @Override
-    public String toString() {
-      return String.valueOf(value);
-    }
-
-    @JsonCreator
-    public static TypeEnum fromValue(String value) {
-      for (TypeEnum b : TypeEnum.values()) {
-        if (b.value.equals(value)) {
-          return b;
-        }
-      }
-      throw new IllegalArgumentException("Unexpected value '" + value + "'");
-    }
-  }
-
   public static final String JSON_PROPERTY_TYPE = "type";
-  private TypeEnum type;
+  private String type;
 
   public static final String JSON_PROPERTY_CODE = "code";
   private String code;
 
-  /**
-   * HELM-specific reason code
-   */
-  public enum ReasonCodeEnum {
-    DENY_TOOL_NOT_FOUND("DENY_TOOL_NOT_FOUND"),
-
-    DENY_SCHEMA_MISMATCH("DENY_SCHEMA_MISMATCH"),
-
-    DENY_OUTPUT_DRIFT("DENY_OUTPUT_DRIFT"),
-
-    DENY_BUDGET_EXCEEDED("DENY_BUDGET_EXCEEDED"),
-
-    DENY_APPROVAL_REQUIRED("DENY_APPROVAL_REQUIRED"),
-
-    DENY_APPROVAL_TIMEOUT("DENY_APPROVAL_TIMEOUT"),
-
-    DENY_SANDBOX_TRAP("DENY_SANDBOX_TRAP"),
-
-    DENY_GAS_EXHAUSTION("DENY_GAS_EXHAUSTION"),
-
-    DENY_TIME_LIMIT("DENY_TIME_LIMIT"),
-
-    DENY_MEMORY_LIMIT("DENY_MEMORY_LIMIT"),
-
-    DENY_POLICY_VIOLATION("DENY_POLICY_VIOLATION"),
-
-    DENY_TRUST_KEY_REVOKED("DENY_TRUST_KEY_REVOKED"),
-
-    DENY_IDEMPOTENCY_DUPLICATE("DENY_IDEMPOTENCY_DUPLICATE"),
-
-    ERROR_INTERNAL("ERROR_INTERNAL");
-
-    private String value;
-
-    ReasonCodeEnum(String value) {
-      this.value = value;
-    }
-
-    @JsonValue
-    public String getValue() {
-      return value;
-    }
-
-    @Override
-    public String toString() {
-      return String.valueOf(value);
-    }
-
-    @JsonCreator
-    public static ReasonCodeEnum fromValue(String value) {
-      for (ReasonCodeEnum b : ReasonCodeEnum.values()) {
-        if (b.value.equals(value)) {
-          return b;
-        }
-      }
-      throw new IllegalArgumentException("Unexpected value '" + value + "'");
-    }
-  }
-
   public static final String JSON_PROPERTY_REASON_CODE = "reason_code";
-  private ReasonCodeEnum reasonCode;
+  private String reasonCode;
 
   public static final String JSON_PROPERTY_DETAILS = "details";
   private Map<String, Object> details = new HashMap<>();
@@ -31912,27 +32529,27 @@ public static class HelmErrorError {
   }
 
 
-  public HelmErrorError type(TypeEnum type) {
+  public HelmErrorError type(String type) {
     this.type = type;
     return this;
   }
 
    /**
-   * Get type
+   * invalid_request, authentication_error, permission_denied, not_found or internal_error
    * @return type
   **/
   @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_TYPE)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public TypeEnum getType() {
+  public String getType() {
     return type;
   }
 
 
   @JsonProperty(JSON_PROPERTY_TYPE)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
-  public void setType(TypeEnum type) {
+  public void setType(String type) {
     this.type = type;
   }
 
@@ -31943,7 +32560,7 @@ public static class HelmErrorError {
   }
 
    /**
-   * Machine-readable error code
+   * The Connect error code
    * @return code
   **/
   @javax.annotation.Nonnull
@@ -31962,27 +32579,27 @@ public static class HelmErrorError {
   }
 
 
-  public HelmErrorError reasonCode(ReasonCodeEnum reasonCode) {
+  public HelmErrorError reasonCode(String reasonCode) {
     this.reasonCode = reasonCode;
     return this;
   }
 
    /**
-   * HELM-specific reason code
+   * Same as the ErrorDetail reason_code; an open string, empty when there is none
    * @return reasonCode
   **/
   @javax.annotation.Nonnull
   @JsonProperty(JSON_PROPERTY_REASON_CODE)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
 
-  public ReasonCodeEnum getReasonCode() {
+  public String getReasonCode() {
     return reasonCode;
   }
 
 
   @JsonProperty(JSON_PROPERTY_REASON_CODE)
   @JsonInclude(value = JsonInclude.Include.ALWAYS)
-  public void setReasonCode(ReasonCodeEnum reasonCode) {
+  public void setReasonCode(String reasonCode) {
     this.reasonCode = reasonCode;
   }
 
@@ -46177,9 +46794,11 @@ public static class MCPAuthorizeCallRequest {
   }
 
    /**
-   * Get pinnedSchemaHash
+   * Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.
    * @return pinnedSchemaHash
+   * @deprecated
   **/
+  @Deprecated
   @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_PINNED_SCHEMA_HASH)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)
@@ -50657,9 +51276,11 @@ public static class MCPScanResult {
   }
 
    /**
-   * Get schemaPinRequired
+   * Always false since HELM-756. No dispatch path enforces a schema pin.
    * @return schemaPinRequired
+   * @deprecated
   **/
+  @Deprecated
   @javax.annotation.Nullable
   @JsonProperty(JSON_PROPERTY_SCHEMA_PIN_REQUIRED)
   @JsonInclude(value = JsonInclude.Include.USE_DEFAULTS)

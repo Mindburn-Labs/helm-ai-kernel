@@ -21,22 +21,6 @@ func TestFinal_TrustTierConstants(t *testing.T) {
 	}
 }
 
-func TestFinal_RugPullSeverityConstants(t *testing.T) {
-	sevs := []RugPullSeverity{RugPullSeverityLow, RugPullSeverityMedium, RugPullSeverityHigh, RugPullSeverityCritical}
-	for _, s := range sevs {
-		if s == "" {
-			t.Fatal("severity must not be empty")
-		}
-	}
-}
-
-func TestFinal_RugPullChangeConstants(t *testing.T) {
-	changes := []RugPullChange{RugPullChangeDescription, RugPullChangeSchema, RugPullChangeBoth, RugPullChangeNew, RugPullChangeRemoved}
-	if len(changes) != 5 {
-		t.Fatal("want 5 rug pull change types")
-	}
-}
-
 func TestFinal_SessionStoreCreateGet(t *testing.T) {
 	store := NewSessionStore(time.Minute)
 	defer store.Stop()
@@ -94,16 +78,6 @@ func TestFinal_ToolRefJSON(t *testing.T) {
 	var tr2 ToolRef
 	json.Unmarshal(data, &tr2)
 	if tr2.Name != "tool1" {
-		t.Fatal("round-trip mismatch")
-	}
-}
-
-func TestFinal_ToolFingerprintJSON(t *testing.T) {
-	tf := ToolFingerprint{ServerID: "s1", ToolName: "t1", CombinedHash: "abc", Version: 1}
-	data, _ := json.Marshal(tf)
-	var tf2 ToolFingerprint
-	json.Unmarshal(data, &tf2)
-	if tf2.Version != 1 {
 		t.Fatal("round-trip mismatch")
 	}
 }

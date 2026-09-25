@@ -39,9 +39,6 @@ G101 core/pkg/networkproof/verifier.go 490bf36bbfe2
 G101 core/pkg/observability/genai_attrs.go e4137b979f53
 G101 core/pkg/observability/genai_attrs.go ea2b39609f80
 G101 core/pkg/privacy/privacy.go a929360790a3
-G101 core/pkg/riskenvelope/envelope.go 52efb2b1051e
-G101 core/pkg/riskenvelope/envelope.go 555837b5f3ef
-G101 core/pkg/riskenvelope/envelope.go ecaabe90573a
 G101 core/pkg/skillpacks/scanner.go e28bd738f74c
 G101 core/pkg/vcredentials/types.go 6d844b37256f
 G101 core/pkg/vcredentials/types.go c413bf25ea12
@@ -65,10 +62,6 @@ G104 core/pkg/edge/sync.go 5e50387450f9
 G104 core/pkg/identity/file_store.go 26fea49d9f88
 G104 core/pkg/launchpad/cmd/connect.go 930e744e4129
 G104 core/pkg/metrics/governance.go e6cfe1127a26
-G104 core/pkg/riskscan/evidence_pack.go 1d0126bf2c5e
-G104 core/pkg/riskscan/evidence_pack.go 85e4cdc80a07
-G104 core/pkg/riskscan/evidence_pack.go 85e4cdc80a07
-G104 core/pkg/riskscan/evidence_pack.go 85e4cdc80a07
 G104 core/pkg/spendproxy/server.go ee260a174c83
 G104 core/pkg/spendproxy/server.go ee260a174c83
 G104 core/pkg/spendproxy/server.go ee260a174c83
@@ -173,7 +166,6 @@ G301 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 497686055571
 G301 core/cmd/helm-ai-kernel/boundary_profile_cmd.go 497686055571
 G301 core/cmd/helm-ai-kernel/conform.go f4d15dcd5d79
 G301 core/cmd/helm-ai-kernel/import_cmd.go e0decfd79b94
-G301 core/cmd/helm-ai-kernel/scan_cmd.go f4d15dcd5d79
 G301 core/cmd/helm-ai-kernel/workstation_m3_cmd.go 43a3be5abf81
 G301 core/cmd/helm-ai-kernel/workstation_m3_cmd.go 9e78d8cfa2aa
 G301 core/pkg/connectors/sandbox/claudemanaged/adapter.go 0182c9d01a95
@@ -182,7 +174,6 @@ G301 core/pkg/connectors/sandbox/claudemanaged/adapter.go a818d82d6a6a
 G301 core/pkg/connectors/sandbox/claudemanaged/adapter.go e3450d325022
 G301 core/pkg/connectors/sandbox/claudemanaged/adapter.go ecd0d0e37c67
 G301 core/pkg/launchpad/promotion/derived.go f4d15dcd5d79
-G301 core/pkg/riskscan/evidence_pack.go 9e78d8cfa2aa
 G301 core/pkg/skillpacks/github.go 497686055571
 G301 core/pkg/skillpacks/github.go c2bf4deaa654
 G301 core/pkg/skillpacks/lifecycle.go 84d3de24ebc6
@@ -411,11 +402,6 @@ G304 core/pkg/policy/reconcile/reconcile.go e69ba0e5799b
 G304 core/pkg/policyloader/loader.go dbfffc239169
 G304 core/pkg/replay/replay.go 378b1b60131a
 G304 core/pkg/replay/tape_bridge.go 70cf39abc284
-G304 core/pkg/riskenvelope/envelope.go dbfffc239169
-G304 core/pkg/riskscan/evidence_pack.go eab592a5a322
-G304 core/pkg/riskscan/receipts.go dbfffc239169
-G304 core/pkg/riskscan/scan.go 5c0e0d89d469
-G304 core/pkg/riskscan/scan.go dbfffc239169
 G304 core/pkg/security/suites/dom_trap.go 537da70b9acb
 G304 core/pkg/skillpacks/github.go 60c09d522cae
 G304 core/pkg/skillpacks/loader.go 8f256b8ef0f4
@@ -497,7 +483,6 @@ G306 core/cmd/helm-ai-kernel/plan_cmd.go c69b5349492c
 G306 core/cmd/helm-ai-kernel/plan_cmd.go e8f0a8a57fa3
 G306 core/cmd/helm-ai-kernel/policy_cmd.go e2488fe2e705
 G306 core/cmd/helm-ai-kernel/proof_report.go bf6446105a85
-G306 core/cmd/helm-ai-kernel/scan_cmd.go 5cb015abcd17
 G306 core/cmd/helm-ai-kernel/verify_cmd.go c969766683a0
 G306 core/cmd/semantic-model-gen/main.go 3a434e869278
 G306 core/cmd/semantic-model-gen/main.go 9379ef3a015b

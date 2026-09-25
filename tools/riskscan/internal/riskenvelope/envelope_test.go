@@ -368,7 +368,7 @@ func readRiskEnvelopeSchema(t *testing.T) ([]byte, string) {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	root := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
+	root := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", ".."))
 	schemaPath := filepath.Join(root, "protocols", "json-schemas", "risk-envelope", "v1.json")
 	data, err := os.ReadFile(schemaPath)
 	if err != nil {

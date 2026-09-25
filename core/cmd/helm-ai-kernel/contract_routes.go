@@ -878,11 +878,11 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			Risk:                string(record.Risk),
 			State:               string(record.State),
 			ToolCount:           len(record.ToolNames),
-			Findings:            []string{"unknown MCP server defaults to quarantine", "schema pins required before call-time dispatch"},
+			Findings:            []string{"unknown MCP server defaults to quarantine"},
 			RecommendedAction:   "approve or revoke after review",
 			QuarantineRecordID:  record.ServerID,
 			RequiresApproval:    true,
-			SchemaPinRequired:   true,
+			SchemaPinRequired:   false,
 			AuthorizationNeeded: true,
 			ScannedAt:           time.Now().UTC(),
 		})
@@ -945,15 +945,13 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			}
 		}
 		firewall := mcppkg.NewExecutionFirewall(catalog, mcpQuarantine, "api")
-		firewall.RequirePinnedSchema = true
 		record, err := firewall.AuthorizeToolCall(r.Context(), mcppkg.ToolCallAuthorization{
-			ServerID:         req.ServerID,
-			ToolName:         req.ToolName,
-			ArgsHash:         req.ArgsHash,
-			GrantedScopes:    req.GrantedScopes,
-			PinnedSchemaHash: req.PinnedSchemaHash,
-			OAuthResource:    req.OAuthResource,
-			ReceiptID:        req.ReceiptID,
+			ServerID:      req.ServerID,
+			ToolName:      req.ToolName,
+			ArgsHash:      req.ArgsHash,
+			GrantedScopes: req.GrantedScopes,
+			OAuthResource: req.OAuthResource,
+			ReceiptID:     req.ReceiptID,
 		})
 		if err != nil {
 			api.WriteInternalR(w, r, err)

@@ -20,7 +20,6 @@ HELM or that arbitrary tool calls cross the boundary.
 helm-ai-kernel mcp wrap \
   --server-id helm-demo-shell \
   --upstream-command "npx -y shell-mcp-server" \
-  --require-pinned-schema=true \
   --json
 ```
 

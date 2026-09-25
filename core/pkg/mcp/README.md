@@ -2,7 +2,7 @@
 
 ## Audience
 
-Use this file when changing MCP gateway behavior, tool catalogs, trust checks, OAuth context, argument scanning, quarantine, rug-pull detection, or session handling.
+Use this file when changing MCP gateway behavior, tool catalogs, trust checks, OAuth context, argument scanning, quarantine, or session handling.
 
 ## Responsibility
 
@@ -26,7 +26,7 @@ Public docs should link here from:
 - Catalog and docs scanning: `catalog.go`, `docscan.go`.
 - Argument and execution safety: `argscan.go`, `firewall.go`, `quarantine.go`.
 - Trust and auth context: `trust.go`, `jwks.go`, `oauth_context.go`, `delegation_scope_test.go`.
-- Supply-chain risk checks: `rugpull.go`, `typosquat.go`, `mcptox_test.go`.
+- Supply-chain risk checks: `typosquat.go`, `docscan.go`, `mcptox_test.go`.
 
 ## Documentation Rules
 

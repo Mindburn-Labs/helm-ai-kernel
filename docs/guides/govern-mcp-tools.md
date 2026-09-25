@@ -5,7 +5,7 @@ last_reviewed: 2026-07-15
 
 # Govern MCP Tools
 
-Generate a scoped MCP profile, require schema pins, and inspect authorization
+Generate a scoped MCP profile and inspect authorization
 receipts before you wire an executor or upstream proxy.
 
 ## 1. Start HELM
@@ -20,7 +20,6 @@ helm-ai-kernel serve --policy ./release.high_risk.v3.toml
 helm-ai-kernel mcp wrap \
   --server-id shell-mcp-server \
   --upstream-command "npx -y shell-mcp-server" \
-  --require-pinned-schema=true \
   --json
 ```
 

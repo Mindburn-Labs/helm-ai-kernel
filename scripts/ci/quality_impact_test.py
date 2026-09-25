@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
+import unittest.mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
@@ -37,7 +37,7 @@ class ImpactFilterTest(unittest.TestCase):
             change(repo)
             git(repo, "commit", "-q", "-am", "change")
             env = {k: v for k, v in os.environ.items() if k not in ("QUALITY_CHANGED_FILES", "GITHUB_BASE_REF")}
-            with mock.patch.object(quality, "ROOT", repo), mock.patch.dict(os.environ, env, clear=True):
+            with unittest.mock.patch.object(quality, "ROOT", repo), unittest.mock.patch.dict(os.environ, env, clear=True):
                 return quality.changed_files()
 
     def test_deleted_file_is_a_change(self) -> None:

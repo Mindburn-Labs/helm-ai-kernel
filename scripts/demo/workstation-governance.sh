@@ -25,7 +25,6 @@ $helm_bin workstation denied --input "$receipt_out"
 $helm_bin workstation memory --input "$receipt_out"
 $helm_bin workstation loops --input "$receipt_out"
 $helm_bin workstation evidence --receipt "$receipt_out" --out "$evidence_dir"
-$helm_bin workstation certify --fixtures "$repo_root/fixtures/workstation" --mode high-risk-effect-capable
 
 cat <<EOF
 

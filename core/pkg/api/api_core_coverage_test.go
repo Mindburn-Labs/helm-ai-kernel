@@ -1,3 +1,4 @@
+// quantum_posture: API coverage tests sign and verify receipts with classical Ed25519 test keys; no post-quantum assurance is claimed.
 package api
 
 import (

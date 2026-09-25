@@ -1,3 +1,4 @@
+// quantum_posture: spend authority tests sign and verify BudgetVerdict receipts with classical Ed25519 test keys; no post-quantum assurance is claimed.
 package economic
 
 import (

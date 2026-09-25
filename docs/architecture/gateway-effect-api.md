@@ -6,7 +6,7 @@ control and makes no post-quantum claim; token verification is ADR-0005's. -->
 
 Status: draft wire contract, HELM-751 slice 1, 2026-09-25. This revision
 includes WS-B's review of 2026-09-25 (PR #1015), which the coordinator
-accepted. Under target architecture rev 3.4 §1 the contract is *Specified*: it
+accepted, and the coordinator's resolutions of 2026-09-26 (see "Resolved"). Under target architecture rev 3.4 §1 the contract is *Specified*: it
 is versioned, and no server stands behind it. Nothing in this repository
 serves these RPCs yet.
 
@@ -51,9 +51,9 @@ ADR-0001 §1). Its payload belongs to contract 5.
   reserved, so nothing is released.
 
 Rev 3.4 §4.3 has no `ESCALATED → CANCELLED` edge, and §4.2 does not list
-`Cancel` among the mutating entry points. This contract adds both at WS-B's
-request, and rev 3.4 should record them. `Cancel` fails once dispatch has
-started, because a dispatched call cannot be retracted.
+`Cancel` among the mutating entry points. Both are a recorded amendment to
+rev 3.4 (see "Resolved"). `Cancel` fails once dispatch has started, because a
+dispatched call cannot be retracted.
 
 Two rules apply everywhere:
 
@@ -208,27 +208,52 @@ contract test enforces that. ADR-0005 allows one scope per token. An RPC may
 accept tokens of more than one scope; `Cancel` does.
 
 WS-B (Control Plane) proposed the scopes on 2026-09-25: one per authority
-class, not one per RPC and not one blanket scope. Mapped onto the real RPC
+class, not one per RPC and not one blanket scope. The coordinator resolved the
+open points on 2026-09-26 (see "Resolved" below). Mapped onto the real RPC
 names:
 
-| Scope | RPCs | Minted for |
-|---|---|---|
-| `helm.gateway.propose` | `Propose`; `Cancel` of one's own attempt | the run or agent principal on the worker path |
-| `helm.gateway.decide` | `Approve`, `Reject` | a human principal only, from an interactive session, never a worker |
-| `helm.gateway.read` | `GetAttempt` (§4.2's `Get`), `GetAttemptContent`, `ListAttempts` in s2, `result_ref` blobs | any principal with workspace read |
-| `helm.gateway.stop` | `Stop`, `Lift`; `Cancel` of another principal's attempt | human operators and admins only |
-| `helm.gateway.execute` | the model gateway's inference endpoint (§8). `Dispatch` and `Observe` have no external caller and would take it if they ever get one | a workload principal, never a human |
+| Scope | RPCs | Minted for | Token rules |
+|---|---|---|---|
+| `helm.gateway.propose` | `Propose`; `Cancel` of one's own attempt | any principal, humans included | — |
+| `helm.gateway.decide` | `Approve`, `Reject` | a human principal only, from an interactive session, never a worker | single-use; bound by `authorization_details` |
+| `helm.gateway.read` | `GetAttempt` (§4.2's `Get`), `GetAttemptContent`, `ListAttempts` in s2, `result_ref` blobs | any principal with workspace read | — |
+| `helm.gateway.stop` | `Stop`, `Lift`; `Cancel` of another principal's attempt | human operators and admins only | single-use; a `Lift` token is bound by `authorization_details` |
+| `helm.gateway.execute` | `Dispatch`, `Observe`, and the model gateway's inference endpoint (§8) | workload principals only: the Control Plane backend and SDK agent runtimes. Never a human session, and never a worker's propose token | — |
 
 WS-B's table lists "Get, GetAttempt" for `helm.gateway.read`. They are one RPC:
 §4.2's `Get` is `GetAttempt`.
 
-WS-B also proposed that a `helm.gateway.decide` token be single-use per
-attempt: the kernel requires the `txn` claim to equal the attempt ID being
-decided and rejects a reused `jti`. The same rule applies to `Lift`. This is
-recorded as a proposal for the implementing slice (HELM-755 S4 / HELM-751),
-not as a wire change; the proto comments document the `txn` binding. For
-`Lift` this note maps `txn` to `stop_id`, since no attempt exists yet when
-`Lift` is called.
+### Binding decide and lift tokens (RFC 9396)
+
+A decide token and a `Lift` token each name their one target in the RFC 9396
+`authorization_details` claim. `txn` keeps its ADR-0005 meaning, a unique
+transaction ID that is logged.
+
+For `Approve` and `Reject`, the claim is:
+
+```json
+"authorization_details": [
+  {"type": "helm_effect_decision", "attempt_id": "<attempt_id>", "action": "approve"}
+]
+```
+
+`action` is `approve` or `reject`. The gateway requires exactly one entry of
+this type. Its `attempt_id` must equal the request's, and its `action` must
+match the RPC; otherwise the call is `permission_denied`.
+
+For `Lift`, the claim is:
+
+```json
+"authorization_details": [
+  {"type": "helm_stop_lift", "stop_id": "<stop_id>"}
+]
+```
+
+`stop_id` must equal the request's. The lift attempt that `Lift` creates is
+then approved with a decide token bound to that attempt, like any other.
+
+`Stop` tokens need no binding. A stop narrows authority, and a stop token is
+single-use anyway.
 
 ### Model calls
 
@@ -242,52 +267,67 @@ A model call is admitted like any other effect, then dispatched differently
 3. The gateway injects the provider key (R8), claims the permit, streams the
    response and settles it (ADR-0003).
 
-The dispatch of a model call is therefore caller-initiated through that
-endpoint, not through the `Dispatch` RPC. HELM-752 names the model-call effect
-type and the endpoint.
+Model calls keep this inference-endpoint path. Other effects are dispatched
+through the `Dispatch` RPC. HELM-752 names the model-call effect type and the
+endpoint.
 
-### Where the proposal conflicts with rev 3.4 or the ADRs
+## Resolved (coordinator, 2026-09-26)
 
-These need a decision before the implementing slice, not a silent choice:
+The first revision of this note listed six points where WS-B's scope proposal
+conflicted with rev 3.4 or the ADRs. They are resolved as follows.
 
-1. **`Dispatch` and `Observe` with no external caller.** Rev 3.4 §4.2 says
-   "The product backend, MCP exposure and SDKs all call them", and §2 has the
-   product backend call the gateway's operations over mTLS.
-   - Keeping them internal means the gateway dispatches non-model effects on
-     its own once an attempt is `ADMITTED`. The product no longer chooses when
-     an admitted effect happens; it can only `Cancel` before dispatch.
-   - Model calls are the exception: they are dispatched by the caller through
-     the inference endpoint.
+1. **`Dispatch` and `Observe` are external RPCs**, as rev 3.4 §4.2 has them.
+   Their scope is `helm.gateway.execute`, minted only for workload principals
+   (the Control Plane backend and SDK agent runtimes), never from a human
+   session or a worker's propose token. The product therefore still decides
+   when an admitted effect is dispatched. Model calls keep the
+   inference-endpoint path described above.
+2. **Single-use decide and stop tokens: accepted.** This needs an ADR-0005
+   amendment, proposed below for §9. It covers the `decide` and `stop` scopes
+   only; every other scope keeps "no replay cache".
+3. **`txn` is not overloaded.** Decide and lift tokens bind their target
+   through RFC 9396 `authorization_details`, with the claim shapes above.
+4. **`helm.gateway.propose` may be minted for any principal**, humans
+   included: effects started from the Console, and authority changes proposed
+   from the organization module (§12.4). Separation of duties comes from two
+   things: propose and decide are different scopes, and the approver must
+   differ from the requester (ADR-0001 I6). Limiting who can propose is not
+   the mechanism.
+5. **Approvers are humans only.** This narrows ADR-0001 I6, which requires a
+   verified principal distinct from the requester. The narrowing is
+   compatible. The gateway checks the approver's `kind` in its own principals
+   table, not a claim from whoever minted the token.
+6. **`Cancel` and the `ESCALATED → CANCELLED` edge** are a recorded amendment
+   to rev 3.4 §4.2 (a new mutating entry point, narrowing, no approval) and
+   §4.3 (a new edge). The coordinator reports it to Ivan.
 
-   This is a §4.2 change. The wire keeps both RPCs, since they are §4.2
-   operations.
-2. **Rejecting a reused `jti`.** ADR-0005 §2 and §6 say the kernel keeps no
-   replay cache and that individual revocation relies on the short TTL.
-   - A single-use rule needs an ADR-0005 amendment, and under R5 the used-`jti`
-     set must be a Postgres row, not process memory.
-   - For `Approve` and `Reject` it adds little: the `txn` binding limits the
-     token to one attempt, and a repeated decision on that attempt is already a
-     no-op (approvals are unique per attempt and return `existing = true`).
-   - For `Lift` it does add something: without it, a replayed token with a new
-     idempotency key creates a second lift attempt, which still needs its own
-     approval.
-3. **`txn` equal to the attempt ID.** ADR-0005 §2 defines `txn` as a unique
-   transaction ID that is logged, not an idempotency key. Phase 2 caches tokens
-   per (principal, tenant, workspace, scope) for up to 300 s. A decide token
-   bound to one attempt cannot be cached, so each decision costs one signing
-   hop at the issuer. That is acceptable at human approval rates, but it is a
-   new token profile that ADR-0005 has to describe.
-4. **`helm.gateway.propose` only for run or agent principals.** Rev 3.4 does
-   not restrict who proposes. Authority changes are proposed from the
-   organization module (§12.4, `helm.authority.change`), and humans start
-   effects from the Console. If those go through `Propose`, the scope must also
-   be minted for human sessions.
-5. **Human-only approvers.** This narrows rev 3.4 §4.2 and ADR-0001 I6, which
-   require a verified principal distinct from the requester. It is compatible.
-   The gateway must still check the approver's `kind` in its own principals
-   table rather than trust whoever minted the token.
-6. **`Cancel` and the `ESCALATED → CANCELLED` edge** extend §4.2 and §4.3 (see
-   Operations).
+### Proposed ADR-0005 amendment (for §9)
+
+> **Single-use tokens for the gateway's `decide` and `stop` scopes.** A token
+> with scope `helm.gateway.decide` or `helm.gateway.stop` is single-use. The
+> gateway records each accepted token's `jti` in a Postgres table
+> (`authority.token_replay`, keyed by issuer and `jti`) in the same
+> transaction as the operation the token authorizes (R5). A second use of the
+> same `jti` is refused with 403.
+>
+> - Rows carry the token's `exp` and are deleted once `exp` plus the 30 s skew
+>   allowance has passed. At that point the token is invalid anyway, so no
+>   replay window opens.
+> - Process memory is never the replay store.
+> - Every other scope, including the four Control Plane routes of §2, keeps
+>   "no replay cache": replay there is bounded by the TTL and by the R6
+>   idempotency keys.
+>
+> **Binding.** Decide tokens carry `authorization_details` (RFC 9396)
+> `[{"type": "helm_effect_decision", "attempt_id", "action": "approve" | "reject"}]`.
+> Lift tokens carry `[{"type": "helm_stop_lift", "stop_id"}]`. The gateway
+> refuses a token whose binding does not match the call. `txn` keeps its §2
+> meaning. Because a bound token names one target, the phase-2 cache (§5)
+> does not apply to these two scopes: they are minted per decision, which
+> costs one issuer signing hop at human approval rates.
+>
+> **Audience.** The gateway has its own audience, `helm-gateway:<env>`. A
+> token for the kernel audience is refused by the gateway, and the reverse.
 
 ## WS-B's answers to the open questions (2026-09-25)
 

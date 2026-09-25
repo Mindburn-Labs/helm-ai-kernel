@@ -417,16 +417,16 @@ func rpcScopes(src string) (map[string][]string, error) {
 	return scopes, nil
 }
 
-// Each RPC names exactly the token scopes WS-B proposed on 2026-09-25
-// (docs/architecture/gateway-effect-api.md). "none": no external caller.
+// Each RPC names exactly the token scopes WS-B proposed and the coordinator
+// resolved (docs/architecture/gateway-effect-api.md, "Resolved").
 func TestRPCTokenScopes(t *testing.T) {
 	want := map[string][]string{
 		"Propose":           {"helm.gateway.propose"},
 		"Approve":           {"helm.gateway.decide"},
 		"Reject":            {"helm.gateway.decide"},
 		"Cancel":            {"helm.gateway.propose", "helm.gateway.stop"},
-		"Dispatch":          {"none"},
-		"Observe":           {"none"},
+		"Dispatch":          {"helm.gateway.execute"},
+		"Observe":           {"helm.gateway.execute"},
 		"GetAttempt":        {"helm.gateway.read"},
 		"GetAttemptContent": {"helm.gateway.read"},
 		"Stop":              {"helm.gateway.stop"},

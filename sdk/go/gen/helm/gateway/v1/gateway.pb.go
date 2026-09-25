@@ -10,7 +10,8 @@
 // EffectGatewayService: Propose, Approve/Reject, Dispatch, Observe, Get
 // (GetAttempt) and Stop/Lift. WS-B's review of this contract (2026-09-25)
 // adds Cancel, the ADR-0001 narrowing ADMITTED -> CANCELLED, and
-// GetAttemptContent, a read. Transaction semantics are ADR-0001 (admission,
+// GetAttemptContent, a read. Cancel and its ESCALATED -> CANCELLED edge are a
+// recorded amendment to rev 3.4 §4.2 and §4.3. Transaction semantics are ADR-0001 (admission,
 // approval, dispatch claim, stops), ADR-0003 (settlement) and ADR-0005
 // (tenant from the token). Design note: docs/architecture/gateway-effect-api.md.
 //
@@ -23,12 +24,18 @@
 //     never grant authority (R3). Attempts belong to the workspace of the
 //     token that proposed them.
 //   - Token scopes. Each RPC names the token scopes it accepts; ADR-0005
-//     allows one scope per token. Scopes are one per authority class, as
-//     WS-B proposed on 2026-09-25: helm.gateway.propose, helm.gateway.decide,
-//     helm.gateway.read and helm.gateway.stop. helm.gateway.execute is for
-//     workload principals only: the model gateway's inference endpoint takes
-//     it (§8), and so would Dispatch or Observe if they ever get an external
-//     caller.
+//     allows one scope per token. Scopes are one per authority class (WS-B
+//     proposal, resolved by the coordinator on 2026-09-26):
+//     helm.gateway.propose (any principal), helm.gateway.decide (human
+//     principals only), helm.gateway.read, helm.gateway.stop (human operators
+//     and admins) and helm.gateway.execute (workload principals only, never a
+//     human session or a worker's propose token). Separation of duties comes
+//     from propose and decide being different scopes plus the
+//     approver-not-requester check (ADR-0001 I6).
+//   - Token binding. decide tokens and Lift's stop token name their target in
+//     the RFC 9396 authorization_details claim; txn keeps its ADR-0005
+//     meaning. decide and stop tokens are single-use: the gateway rejects a
+//     reused jti (proposed ADR-0005 amendment; design note, "Resolved").
 //   - Decisions are states, not errors. DENIED, ESCALATED, CANCELLED and
 //     UNKNOWN are attempt states in a successful response. A Connect error
 //     means the gateway could not evaluate the request. Every error carries
@@ -82,7 +89,8 @@ const (
 //	            DISPATCHING or DISPATCHED -> UNKNOWN
 //	              -> RECONCILED(SUCCEEDED | FAILED) | ESCALATED_TO_HUMAN
 //	ADMITTED -> CANCELLED (before dispatch; reservation released)
-//	ESCALATED -> CANCELLED (Cancel; added by this contract, nothing held)
+//	ESCALATED -> CANCELLED (Cancel; nothing held. A recorded amendment to
+//	                        rev 3.4 §4.3)
 //	terminal -> SETTLED -> COMPENSATED (explicit, adapter-supported only)
 //
 // A reservation is released only by a transition to a state with lower

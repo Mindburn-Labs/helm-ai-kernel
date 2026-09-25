@@ -6,7 +6,8 @@ syntax = "proto3";
 // EffectGatewayService: Propose, Approve/Reject, Dispatch, Observe, Get
 // (GetAttempt) and Stop/Lift. WS-B's review of this contract (2026-09-25)
 // adds Cancel, the ADR-0001 narrowing ADMITTED -> CANCELLED, and
-// GetAttemptContent, a read. Transaction semantics are ADR-0001 (admission,
+// GetAttemptContent, a read. Cancel and its ESCALATED -> CANCELLED edge are a
+// recorded amendment to rev 3.4 §4.2 and §4.3. Transaction semantics are ADR-0001 (admission,
 // approval, dispatch claim, stops), ADR-0003 (settlement) and ADR-0005
 // (tenant from the token). Design note: docs/architecture/gateway-effect-api.md.
 //
@@ -19,12 +20,18 @@ syntax = "proto3";
 //     never grant authority (R3). Attempts belong to the workspace of the
 //     token that proposed them.
 //   - Token scopes. Each RPC names the token scopes it accepts; ADR-0005
-//     allows one scope per token. Scopes are one per authority class, as
-//     WS-B proposed on 2026-09-25: helm.gateway.propose, helm.gateway.decide,
-//     helm.gateway.read and helm.gateway.stop. helm.gateway.execute is for
-//     workload principals only: the model gateway's inference endpoint takes
-//     it (§8), and so would Dispatch or Observe if they ever get an external
-//     caller.
+//     allows one scope per token. Scopes are one per authority class (WS-B
+//     proposal, resolved by the coordinator on 2026-09-26):
+//     helm.gateway.propose (any principal), helm.gateway.decide (human
+//     principals only), helm.gateway.read, helm.gateway.stop (human operators
+//     and admins) and helm.gateway.execute (workload principals only, never a
+//     human session or a worker's propose token). Separation of duties comes
+//     from propose and decide being different scopes plus the
+//     approver-not-requester check (ADR-0001 I6).
+//   - Token binding. decide tokens and Lift's stop token name their target in
+//     the RFC 9396 authorization_details claim; txn keeps its ADR-0005
+//     meaning. decide and stop tokens are single-use: the gateway rejects a
+//     reused jti (proposed ADR-0005 amendment; design note, "Resolved").
 //   - Decisions are states, not errors. DENIED, ESCALATED, CANCELLED and
 //     UNKNOWN are attempt states in a successful response. A Connect error
 //     means the gateway could not evaluate the request. Every error carries
@@ -83,7 +90,8 @@ service EffectGatewayService {
   // (ADR-0001 §1): idempotency first, authority rows locked, stops read after
   // the locks, counters locked, decide, then reserve and issue the permit.
   //
-  // Token scope: helm.gateway.propose.
+  // Token scope: helm.gateway.propose, which may be minted for any principal,
+  // humans included (Console-originated effects, authority changes).
   //
   // The attempt is keyed by (tenant from the token, idempotency_key) and a
   // request digest the gateway computes over every ProposeRequest field
@@ -118,9 +126,14 @@ service EffectGatewayService {
   // denies.
   //
   // Token scope: helm.gateway.decide, minted for human principals only, from
-  // an interactive session (WS-B, 2026-09-25). Proposed for the implementing
-  // slice: a decide token is single-use per attempt, its txn claim must
-  // equal attempt_id, and a reused jti is rejected.
+  // an interactive session. Human-only narrows ADR-0001 I6, which requires a
+  // verified principal distinct from the requester; the two are compatible.
+  // The token is single-use (a reused jti is rejected) and bound to one
+  // decision by its authorization_details claim:
+  //   [{"type": "helm_effect_decision", "attempt_id": "<attempt_id>",
+  //     "action": "approve"}]
+  // A token whose attempt_id or action differs from the call is
+  // permission_denied.
   //
   // Preconditions, checked before anything is recorded (ADR-0001 §1
   // "Approval", invariant I6). A failure is an error on the call, and the
@@ -145,7 +158,8 @@ service EffectGatewayService {
   // reserved, so nothing is released.
   //
   // Token scope: helm.gateway.decide, with the same principal, digest and
-  // token rules as Approve; a rejection needs no step-up. An attempt that is
+  // token rules as Approve, and "action": "reject" in its
+  // authorization_details; a rejection needs no step-up. An attempt that is
   // no longer ESCALATED is returned unchanged with existing true.
   rpc Reject(RejectRequest) returns (RejectResponse);
 
@@ -169,9 +183,9 @@ service EffectGatewayService {
   // Dispatch claims the permit of an ADMITTED attempt and sends the effect
   // through its adapter, which injects the provider credential (R8).
   //
-  // Token scope: none for external callers; the gateway dispatches
-  // internally (WS-B, 2026-09-25). helm.gateway.execute is reserved for a
-  // workload principal, never a human, if an external caller is added.
+  // Token scope: helm.gateway.execute, minted only for workload principals
+  // (the Control Plane backend, SDK agent runtimes), never from a human
+  // session or a worker's propose token (rev 3.4 §4.2).
   //
   // Model calls do not use this RPC. The caller presents the permit to the
   // model gateway's inference endpoint (helm.gateway.execute, workload
@@ -207,8 +221,7 @@ service EffectGatewayService {
   // Observe reads the effect back from the provider through the adapter and
   // records one observation.
   //
-  // Token scope: none for external callers, as for Dispatch;
-  // helm.gateway.execute is reserved.
+  // Token scope: helm.gateway.execute, as for Dispatch.
   //
   //   - DISPATCHED: becomes OBSERVED with a SUCCEEDED or FAILED outcome, or
   //     UNKNOWN when the read-back is inconclusive.
@@ -247,7 +260,7 @@ service EffectGatewayService {
   // [reason_code: EMERGENCY_STOP_FENCED].
   //
   // Token scope: helm.gateway.stop, minted for human operators and admins
-  // only (WS-B, 2026-09-25).
+  // only. The token is single-use: a reused jti is rejected.
   rpc Stop(StopRequest) returns (StopResponse);
 
   // Lift proposes lifting a stop. Lifting widens authority, so it is an
@@ -257,8 +270,11 @@ service EffectGatewayService {
   // ESCALATED. It follows Approve and Dispatch like any other attempt; the
   // stop is lifted when the attempt is dispatched.
   //
-  // Token scope: helm.gateway.stop. Proposed for the implementing slice
-  // (WS-B, 2026-09-25): a single-use token whose txn claim equals stop_id.
+  // Token scope: helm.gateway.stop. The token is single-use and bound to the
+  // stop by its authorization_details claim:
+  //   [{"type": "helm_stop_lift", "stop_id": "<stop_id>"}]
+  // Approving the resulting attempt takes a decide token bound to that
+  // attempt, as for any other.
   rpc Lift(LiftRequest) returns (LiftResponse);
 }
 
@@ -565,7 +581,8 @@ message EffectAttempt {
 //               DISPATCHING or DISPATCHED -> UNKNOWN
 //                 -> RECONCILED(SUCCEEDED | FAILED) | ESCALATED_TO_HUMAN
 //   ADMITTED -> CANCELLED (before dispatch; reservation released)
-//   ESCALATED -> CANCELLED (Cancel; added by this contract, nothing held)
+//   ESCALATED -> CANCELLED (Cancel; nothing held. A recorded amendment to
+//                           rev 3.4 §4.3)
 //   terminal -> SETTLED -> COMPENSATED (explicit, adapter-supported only)
 //
 // A reservation is released only by a transition to a state with lower

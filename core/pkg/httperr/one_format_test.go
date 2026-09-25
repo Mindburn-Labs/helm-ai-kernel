@@ -1,7 +1,10 @@
 package httperr
 
 import (
+	"errors"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -26,7 +29,15 @@ var bypass = regexp.MustCompile(`http\.Error\(|"application/problem\+json"`)
 func TestHELMAPIWritesOneErrorFormat(t *testing.T) {
 	root := filepath.Join("..", "..")
 	used := map[string]bool{}
+	scanned := map[string]bool{}
 	for _, dir := range []string{"pkg/api", "cmd/helm-ai-kernel"} {
+		// Enterprise mirrors core/pkg but not the Kernel command, so the
+		// command directory is checked only where it exists.
+		if _, err := os.Stat(filepath.Join(root, dir)); dir == "cmd/helm-ai-kernel" && errors.Is(err, fs.ErrNotExist) {
+			t.Logf("skipping %s: not in this checkout", dir)
+			continue
+		}
+		scanned[dir] = true
 		files, err := filepath.Glob(filepath.Join(root, dir, "*.go"))
 		if err != nil || len(files) == 0 {
 			t.Fatalf("no Go files under %s: %v", dir, err)
@@ -51,7 +62,7 @@ func TestHELMAPIWritesOneErrorFormat(t *testing.T) {
 		}
 	}
 	for rel := range oneFormatExempt {
-		if !used[rel] {
+		if scanned[path.Dir(rel)] && !used[rel] {
 			t.Errorf("%s no longer bypasses httperr; remove it from oneFormatExempt", rel)
 		}
 	}

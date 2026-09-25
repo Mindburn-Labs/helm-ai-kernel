@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/executor"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskenvelope"
+	"github.com/Mindburn-Labs/helm-ai-kernel/tools/riskscan/internal/riskenvelope"
+	"github.com/Mindburn-Labs/helm-ai-kernel/tools/riskscan/internal/scanpack"
 )
 
 const (
@@ -50,7 +50,7 @@ func WriteEvidencePack(path string, envelope riskenvelope.RiskEnvelope, previews
 	if err != nil {
 		return err
 	}
-	if issues := executor.ValidateEvidencePack(pack); len(issues) > 0 {
+	if issues := scanpack.ValidateEvidencePack(pack); len(issues) > 0 {
 		return fmt.Errorf("validate evidence pack: %s", strings.Join(issues, "; "))
 	}
 	packJSON, err := json.MarshalIndent(pack, "", "  ")
@@ -129,8 +129,8 @@ func buildEvidencePack(envelope riskenvelope.RiskEnvelope, previews map[string][
 		})
 	}
 
-	producer := executor.NewEvidencePackProducer("local-risk-scan")
-	pack, err := producer.Produce(context.Background(), &executor.EvidencePackInput{
+	producer := scanpack.NewEvidencePackProducer("local-risk-scan")
+	pack, err := producer.Produce(context.Background(), &scanpack.EvidencePackInput{
 		ActorID:             riskScanActorID,
 		ActorType:           "module",
 		SessionID:           envelope.EnvelopeID,
@@ -224,7 +224,7 @@ func VerifyEvidencePack(packDir string) EvidencePackVerification {
 	if strings.TrimSpace(pack.Attestation.PackHash) == "" {
 		return verificationError(result, fmt.Errorf("evidence pack attestation.pack_hash is required"))
 	}
-	if issues := executor.ValidateEvidencePack(&pack); len(issues) > 0 {
+	if issues := scanpack.ValidateEvidencePack(&pack); len(issues) > 0 {
 		return verificationError(result, fmt.Errorf("validate evidence pack: %s", strings.Join(issues, "; ")))
 	}
 	if pack.Attestation.Signature != "" || pack.Attestation.SignerID != "" {

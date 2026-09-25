@@ -106,6 +106,21 @@ Breaking.
   since HELM-742.
 - **`GovernedGateway`'s internal-error response now carries the request.**
   Log lines for that response are therefore joined to their trace.
+
+### Removed — TLA+ specifications not tied to code (HELM-756)
+
+- Seven TLA+ specs are removed: six in `proofs/`
+  (`CSNFDeterminism`, `DelegationModel`, `ProofGraphConsistency`,
+  `SafeDeprecationMode`, `TenantIsolation`, `TrustPropagation`) and
+  `protocols/specs/tla/HelmKernel.tla`. None was tied to the code it
+  described; four were never model-checked.
+- `proofs/GuardianPipeline.tla` stays and is still model-checked by the `tla`
+  workflow. `core/pkg/guardian/spec_roster_test.go` ties its gate set to the Go
+  `GateID` declarations.
+- The workflow now checks only that spec, and the `tla-tools-hardening` gate
+  still guards its toolchain download.
+- The Lean proof is unchanged.
+
 ### Removed — conformance gates G1–G15 and GX, channels; LaunchKit off by default (HELM-756)
 
 Breaking.
@@ -164,6 +179,23 @@ revoked without running the check they named:
 The six operations stay in the OpenAPI contract marked `deprecated` so the
 breaking-change gate permits removing them in a later release. The Console
 surface catalog marks the Conformance and Trust Keys surfaces `unsupported`.
+
+### Changed — the agent risk scan is its own binary, `helm-risk-scan` (HELM-756)
+
+Breaking.
+
+- `helm-ai-kernel scan` and `helm-ai-kernel verify-scan` move to a separate
+  binary built from `tools/riskscan`:
+  - `helm-risk-scan scan` takes the same options, except `--upload`,
+    `--upload-url` and `--yes`, which are removed;
+  - `helm-risk-scan verify` replaces `verify-scan`.
+- For one release the kernel keeps both old commands as stubs. They print the
+  new command and exit `2`.
+- Nothing leaves the machine any more: no service in the target architecture
+  receives the upload.
+- The default salt file keeps its location, so pseudonyms stay stable.
+- The EvidencePack producer that only the scan used moves out of
+  `core/pkg/executor` with it.
 
 ### Removed — the six retired verification routes (HELM-756)
 

@@ -123,17 +123,34 @@ protected operations, bypass assumptions and the Go tests for the allowed,
 forbidden, removal and bypass cases. `HELM_INVARIANTS.md` and `coverage-map.json`
 are generated from it.
 
-`controls-check` blocks in the `pr` and `merge` profiles. It fails on an invalid
-or missing field, a gap in the id sequence, an `enforced` entry point that no
-binary in `scripts/ci/deadcode-roots.txt` reaches, a named test that
-`go test -list` does not report, and a generated file that differs from the
-registry. Reachability reuses the deadcode gate's roots and allowlist: a symbol
-is reachable when its package is in the roots' `go list -deps` graph for
-linux/amd64 and it is not in `scripts/ci/deadcode-allowlist.txt`. An entry may
-also carry a `removal_mutation`; the gate applies it through `go test -overlay`
-and requires every removal test to pass without it and fail with it. Planted
-bad entries must each fail, and a planted good one must pass, before the real
-registry is judged.
+`controls-check` blocks in the `pr` and `merge` profiles. It fails on:
+
+- an invalid or missing field, or a gap in the id sequence;
+- an `enforced` runtime entry whose entry point no binary in
+  `scripts/ci/deadcode-roots.txt` reaches. A symbol is reachable when its package
+  is in the roots' `go list -deps` graph for linux/amd64 and it is not in
+  `scripts/ci/deadcode-allowlist.txt`, which the deadcode gate keeps equal to the
+  measured unreachable set;
+- a named test that does not run and pass. The gate runs every named test with
+  `go test -run` (the Go test cache replays unchanged passes) and with
+  `HELM_TEST_POSTGRES_URL` cleared, so an unlisted Postgres-gated test shows up as
+  a skip and fails. Tests listed in `scripts/ci/postgres-proofs.txt` are left to
+  the approval-ceremony workflow, which runs them against Postgres and fails on a
+  skip;
+- an `enforced` runtime entry without removal proofs. Each proof in
+  `removal_proofs` deletes the control from one file through `go test -overlay`,
+  and every removal test it names must then fail. Together an entry's proofs
+  must name all of its removal tests, and an anchor that no longer matches
+  exactly once fails;
+- a `build`-plane entry (a control CI holds rather than a binary, such as
+  INV-025) whose gates do not block pull requests. A `quality:<id>` gate must be
+  in the `pr` profile and not advisory; a `workflow:<file>#<job>` job must run on
+  `pull_request` with no job-level condition or `continue-on-error`;
+- a generated file that differs from the registry.
+
+Planted bad entries must each fail, and a planted good one must pass, before the
+real registry is judged. A full run takes under a minute locally with a warm
+build cache.
 
 ## Profiles
 

@@ -129,9 +129,11 @@ func runSpendProxyCmd(args []string, stdout, stderr io.Writer) int {
 			replay.RestoredSettlements, replay.DebitedCents)
 	}
 
+	mux := newListenerRouteMux(listenerSpendProxy)
+	server.RegisterRoutes(mux)
 	httpServer := &http.Server{
 		Addr:              net.JoinHostPort(addr, strconv.Itoa(port)),
-		Handler:           server.Handler(),
+		Handler:           mux,
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 	errCh := make(chan error, 1)

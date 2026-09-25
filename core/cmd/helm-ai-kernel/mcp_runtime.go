@@ -683,23 +683,8 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 		AuthMode: authMode,
 	}, mcppkg.WithGovernedExecutor(executor))
 
-	mux := http.NewServeMux()
-	gateway.RegisterRoutes(mux)
-
-	// A2A agent card discovery (/.well-known/agent-card.json)
-	a2a.RegisterWellKnownRoute(mux, a2a.NewKernelCardProvider(a2a.KernelCardConfig{
-		EndpointURL: baseURL,
-	}))
-
-	healthHandler := func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":    "ok",
-			"transport": "http",
-		})
-	}
-	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/healthz", healthHandler)
+	mux := newListenerRouteMux(listenerMCP)
+	registerLocalMCPRoutes(mux, gateway, baseURL)
 
 	handler, err := wrapMCPAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mux.ServeHTTP(w, r)
@@ -716,6 +701,32 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}, nil
+}
+
+// registerLocalMCPRoutes mounts the mcp serve listener's routes. The gateway
+// registers on its own mux, so the listener forwards the gateway paths it
+// declares; a path the gateway adds is not served until it is declared here.
+func registerLocalMCPRoutes(mux routeMux, gateway *mcppkg.Gateway, baseURL string) {
+	gatewayMux := http.NewServeMux()
+	gateway.RegisterRoutes(gatewayMux)
+	for _, route := range []string{"/mcp", "/mcp/v1/capabilities", "/mcp/v1/execute", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
+		mux.Handle(route, gatewayMux)
+	}
+
+	// A2A agent card discovery (/.well-known/agent-card.json)
+	a2a.RegisterWellKnownRoute(mux, a2a.NewKernelCardProvider(a2a.KernelCardConfig{
+		EndpointURL: baseURL,
+	}))
+
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":    "ok",
+			"transport": "http",
+		})
+	}
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/healthz", healthHandler)
 }
 
 func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, error) {

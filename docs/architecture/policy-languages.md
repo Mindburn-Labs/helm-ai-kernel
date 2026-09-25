@@ -65,7 +65,7 @@ the same input can be verified later.
 ```bash
 helm-ai-kernel bundle build --language=cel ./policy.cel
 helm-ai-kernel policy test --dir policies
-helm-ai-kernel conform --level L1 --json
+helm-ai-kernel conform vectors --json
 ```
 
 Use `DENY` for unsafe or mismatched actions. Use `ESCALATE` when the call

@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-70 controls: 31 enforced (1 of them by CI gates), 27 observed-only, 12 unmanaged (11 of them retired invariants).
+71 controls: 32 enforced (1 of them by CI gates), 27 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -143,6 +143,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter, SentinelConnector, VaultakStateBridge and AIPVerifier are libraries that no shipped binary mounts or calls; their methods are in scripts/ci/deadcode-allowlist.txt. |
 | CTL-044 | WASI sandbox containment | observed-only | The shipped server refuses every WASI pack run because it has no PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are records only. |
 | CTL-045 | Connector contract pinning | observed-only | ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel. |
+| CTL-046 | Kernel credentials never reach the model provider | enforced | — |
 
 ---
 

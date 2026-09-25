@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 70,
-    "enforced": 31,
+    "total": 71,
+    "enforced": 32,
     "observed_only": 27,
     "unmanaged": 12,
     "retired_invariants": 11,
@@ -2841,6 +2841,56 @@
         "bypass": []
       },
       "removal_proofs": []
+    },
+    {
+      "id": "CTL-046",
+      "title": "Kernel credentials never reach the model provider",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "POST /v1/chat/completions on serve never forwards the admin, service or organization-runtime key to the model provider; only a caller's provider key reaches it (R8).",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/cmd/helm-ai-kernel.handleGovernedOpenAIProxy",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.withoutKernelCredential",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "HELM_ADMIN_API_KEY, HELM_SERVICE_API_KEY and HELM_ORGANIZATION_RUNTIME_API_KEY, the values that are dropped"
+      ],
+      "protected_operations": [
+        "The Authorization header that api.HandleOpenAIProxy forwards upstream as the provider credential."
+      ],
+      "bypass_assumptions": [
+        "Only exact kernel keys are recognised, with or without an auth scheme; a value derived from a key is not.",
+        "The Control Plane token path drops its token separately (control_plane_token.go).",
+        "The standalone `helm-ai-kernel proxy` forwards the caller's Authorization; it holds no kernel credential to leak."
+      ],
+      "tests": {
+        "allowed": [
+          "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+        ],
+        "forbidden": [
+          "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+        ],
+        "removal": [
+          "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+        ],
+        "bypass": []
+      },
+      "removal_proofs": [
+        {
+          "file": "core/cmd/helm-ai-kernel/subsystems.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+          ]
+        }
+      ]
     }
   ]
 }

@@ -56,7 +56,7 @@
       "properties": {
         "model_id": {
           "type": "string",
-          "description": "Model identifier (e.g., 'gpt-4-turbo', 'claude-3-opus')"
+          "description": "Model identifier (e.g., 'gpt-6-sol', 'claude-opus-5-5')"
         },
         "model_version": {
           "type": "string",

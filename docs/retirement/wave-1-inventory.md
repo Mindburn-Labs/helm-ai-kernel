@@ -376,3 +376,32 @@ and §14.4 says to move it to a separate optional tool if kept.
   Homebrew formula. No workflow runs goreleaser today: the live release path
   (`make release-binaries`, `scripts/release/*`) does not build the new binary
   yet.
+
+## Slice 6c evidence
+
+quantum_posture: this section names `core/pkg/crypto/hsm`, a key-management
+package; the slice removes it and adds no cryptographic behaviour.
+
+Deleting the conform gates in s4d (#1002) orphaned two protected packages.
+G13 was the only importer of `core/pkg/crypto/hsm` (346 non-test lines, a
+PKCS#11 HSM abstraction). G15 was the only importer of
+`core/pkg/proofgraph/condensation` (323 non-test lines, a condensation engine).
+
+Callers, checked read-only:
+- The reverse-import census over all modules finds no non-test importer and no
+  test-only importer.
+- `helm-ai-enterprise`, `svc-helm-control-plane`, `platform-*` and `worker-*`
+  import neither package.
+
+The dead-packages gate from #1000 reported both as unlisted. Its frozen list
+only shrinks, so both are deleted.
+
+What changes and what does not:
+- `core/pkg/crypto/hsm.go` (SoftHSM, in the `crypto` package) stays. Its
+  comment no longer points production users at the removed PKCS#11 provider.
+- `contracts/condensation.go` and the checkpoint schema stay.
+- No deadcode, gosec or gitleaks allowlist line named either package: the gosec
+  lines for `core/pkg/crypto/hsm.go` belong to the file that stays. So no line
+  is removed.
+- The boundary manifest is regenerated for the two protected paths.
+- `tcb-coverage-floors.txt` lists neither package and is untouched.

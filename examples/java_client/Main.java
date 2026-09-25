@@ -15,7 +15,7 @@ public class Main {
         System.out.println("=== Chat Completions ===");
         try {
             var req = new ChatCompletionRequest();
-            req.model = "gpt-4";
+            req.model = "gpt-6-sol";
             req.messages = List.of(new ChatMessage("user", "List files in /tmp"));
             var res = helm.chatCompletions(req);
             if (res.choices != null && !res.choices.isEmpty()) {

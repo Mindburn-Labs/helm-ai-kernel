@@ -112,3 +112,26 @@ helm-ai-kernel conform negative --json
 
 If `L2` fails, inspect MCP quarantine state, schema pins, admission scope,
 revocation, expiry, and receipt emission.
+
+## Release Smoke or Kubernetes Helm Validation Fails
+
+The release smoke rebuilds reproducible binaries, the SBOM and the OpenVEX
+document from source:
+
+```bash
+make release-smoke
+```
+
+A reproducibility failure means two builds of the same commit differ; check for
+an unpinned toolchain or a timestamp that leaked into the build.
+
+Kubernetes Helm validation renders the chart with a real Kubernetes Helm CLI
+(the pinned container unless `KUBE_HELM_CMD` names one) and asserts each
+guarded misconfiguration fails:
+
+```bash
+make helm-chart-smoke
+```
+
+A failure names the values file and the render or guard that went wrong. The
+`helm-ai-kernel` binary is not Kubernetes Helm; do not point `KUBE_HELM_CMD` at it.

@@ -73,9 +73,9 @@ nothing, so it is not a pass. It blocks in CI through the required
 (`before..after`). The nightly profile re-inspects the last 50 commits on
 `main` (`CONCEPT_RANGE=HEAD~50..HEAD`).
 
-`inv-check` is still an **advisory** gate in the `nightly` profile and does not
-block PR or merge today. Promote it with `QUALITY_STRICT=1` locally, or move it
-into the `pr` profile once the constitution has settled.
+`inv-check` runs only in the `nightly` profile, which is strict: a failure turns
+the nightly red but does not block a PR. Move it into the `pr` profile once the
+constitution has settled.
 
 ## TCB Coverage
 
@@ -116,7 +116,7 @@ delete that line in the same PR, so deletion work shrinks the list.
 | PR | `make quality-pr` | Fast documentation, hygiene, Go, TCB, boundary, fixture, and impacted SDK/UI checks. |
 | Merge | `make quality-merge` | Full retained-surface gate with race tests, SDKs, contracts, deployment smoke, and release smoke. |
 | Release | `make quality-release` | Release-readiness gate plus prior-release OpenAPI and Proto compatibility checks, reproducible binaries, SBOM, VEX, Cosign bundle verification when available, and release smoke. |
-| Nightly | `make quality-nightly` | Advisory mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, and benchmark checks. |
+| Nightly | `make quality-nightly` | Strict (`QUALITY_STRICT=1`) mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, benchmark, invariant and dead-package checks. |
 
 `make quality-pr` runs path-scoped package gates only when changed files impact
 that surface. Override detection with `QUALITY_CHANGED_FILES`, using newline or
@@ -140,14 +140,19 @@ the gate exits 2. Findings that existed when the gates landed are frozen in
 finding missing from the list fails, and so does a listed finding that no
 longer occurs, so the lists only shrink.
 
-New noisy gates are Advisory by default: `vuln-audit` (npm and cargo),
-`mutation-core`, `flake-core`, `runbooks`, `migrations`,
-`dependency-hygiene`, and `benchmark-report`. Promote them to blocking locally
-or in CI with:
+New noisy gates are Advisory in the PR-facing profiles: `vuln-audit` (npm),
+`mutation-core`, `flake-core`, `runbooks`, `migrations`, `dependency-hygiene`,
+`benchmark-report`, `invariant-constitution` and `concept-change-marker`. The
+scheduled nightly runs them strict, so a failure, a crash, a timeout or a
+missing tool turns the nightly red instead of printing a warning:
 
 ```bash
 QUALITY_STRICT=1 make quality-nightly
 ```
+
+`dead-packages` blocks in the `pr` profile: importer-less packages must be
+allowlisted or listed in `scripts/ci/dead-packages-frozen.txt`, and a stale line
+on either list fails, so the PR that deletes a package removes its line.
 
 ## Gate Registry
 

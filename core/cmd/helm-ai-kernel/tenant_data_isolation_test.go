@@ -60,7 +60,6 @@ var tenantDataScope = map[string]string{
 	"/api/v1/harness/change-contracts":      configuredTenantStore,
 	"/api/v1/harness/change-contracts/":     configuredTenantStore,
 	"/api/v1/launchpad/":                    configuredTenantStore,
-	"/api/v1/gui/receipts/verify":           noTenantData,
 	"/api/v1/coexistence/capabilities":      noTenantData,
 	"/api/v1/telemetry/otel/config":         noTenantData,
 }

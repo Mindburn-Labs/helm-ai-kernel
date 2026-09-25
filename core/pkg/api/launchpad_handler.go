@@ -53,7 +53,7 @@ func (s *Server) handleLaunchpad(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "launches/"):
 		s.handleLaunchpadRunPath(w, r, strings.TrimPrefix(path, "launches/"))
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		WriteError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed), "method not allowed")
 	}
 }
 
@@ -92,7 +92,7 @@ func (s *Server) handleLaunchpadLaunch(w http.ResponseWriter, r *http.Request, c
 func (s *Server) handleLaunchpadRunPath(w http.ResponseWriter, r *http.Request, rest string) {
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
 	if len(parts) == 0 || parts[0] == "" {
-		http.Error(w, "launch id required", http.StatusBadRequest)
+		WriteError(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "launch id required")
 		return
 	}
 	launchID := parts[0]
@@ -145,7 +145,7 @@ func (s *Server) handleLaunchpadRunPath(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusAccepted, deleted)
 		return
 	}
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	WriteError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed), "method not allowed")
 }
 
 func decodeLaunchpadPlanRequest(w http.ResponseWriter, r *http.Request) (launchpadPlanRequest, bool) {

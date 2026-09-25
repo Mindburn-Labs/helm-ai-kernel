@@ -11,10 +11,6 @@
 // HTTP routing is deliberately not included — this package exposes the
 // Runner API only; callers (CLI, local controlplane, or commercial
 // tenant-scoped HTTP handlers) wrap it with their preferred transport.
-//
-// This package is distinct from core/pkg/packs/antispoof and
-// core/pkg/packs/last30days, which implement proof-pack verification
-// (a separate concern from installable add-on packs).
 package install
 
 import (

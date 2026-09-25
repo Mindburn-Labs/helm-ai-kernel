@@ -15,11 +15,10 @@ by the compatibility tiers in §8.
 | **Level 3: ProofGraph** | Maintain hash chain with monotonic Lamport clock |
 | **Level 4: Full**       | All above + fail-closed behavior + reason codes  |
 
-> **Do not confuse these with the CLI's `--level` flag.** `helm-ai-kernel
-> conform --level` is a gate-set shortcut over the Go reference's own
-> conformance gates and accepts only `L1` and `L2` — see §3.1. `--level 4`
-> exits 2 with `unknown level "4" (valid: L1, L2)`. The two numbering schemes
-> are unrelated, and no CLI flag asserts a spec level from the table above.
+> **Do not confuse these with the CLI's retired `--level` flag.** `helm-ai-kernel
+> conform --level` was a gate-set shortcut over the Go reference's own gates. It
+> was retired in HELM-756 with gates G1–G15 and GX and now exits 2. No CLI flag
+> asserts a spec level from the table above.
 
 ## 2. Test Vector Structure
 
@@ -74,7 +73,7 @@ runs the gate engine over the current working tree.
 
 | Invocation                    | Behaviour                                                            |
 | ----------------------------- | -------------------------------------------------------------------- |
-| `conform [flags]`             | Runs the conformance gate engine over the current working tree       |
+| `conform [flags]`             | Runs the G0 build-identity gate over the current working tree        |
 | `conform vectors [--json]`    | Prints the built-in negative execution-boundary vectors              |
 | `conform negative [--json]`   | The same vectors, with receipt and dispatch expectations             |
 | `conform managed-agents …`    | Managed-agent live evidence packs                                    |
@@ -82,15 +81,15 @@ runs the gate engine over the current working tree.
 There is **no `conform run` subcommand**. Because Go's flag package stops at
 the first non-flag argument, `run` is taken as a positional, every flag after
 it is ignored, and the command exits 2 with
-`Error: --profile or --level is required`.
+`Error: --profile is required (valid: SMB)`.
 
 Flags accepted by `conform` (source: `core/cmd/helm-ai-kernel/conform.go`):
 
 | Flag                    | Meaning                                                                                    |
 | ----------------------- | ------------------------------------------------------------------------------------------ |
-| `--profile`             | `SMB`, `CORE`, `ENTERPRISE`, `REGULATED_FINANCE`, `REGULATED_HEALTH`, `AGENTIC_WEB_ROUTER` |
-| `--level`               | Gate-set shortcut, `L1` or `L2` only — **not** the §1 spec levels                          |
-| `--gate`                | Run only the named gate(s); repeatable                                                     |
+| `--profile`             | `SMB` only; the other profiles were retired in HELM-756                                     |
+| `--level`               | Retired in HELM-756; exits 2                                                               |
+| `--gate`                | `G0` only; other gates were retired in HELM-756                                            |
 | `--jurisdiction`        | Jurisdiction code (e.g. `US`, `EU`, `APAC`)                                                |
 | `--output`              | EvidencePack output directory (default `artifacts/conformance`)                            |
 | `--json`                | Emit the report as JSON on stdout                                                          |
@@ -100,7 +99,7 @@ Flags accepted by `conform` (source: `core/cmd/helm-ai-kernel/conform.go`):
 | `--evidencepack`        | EvidencePack bound into that manifest (required with `--validation-manifest`)               |
 | `--kernel-commit`       | Kernel commit SHA recorded in that manifest                                                |
 
-Either `--profile` or `--level` is required. Exit codes: `0` all gates pass,
+`--profile` is required. Exit codes: `0` all gates pass,
 `1` a gate failed, `2` runtime or usage error.
 
 The invocation the release gate itself uses (`make conformance-release-report`):

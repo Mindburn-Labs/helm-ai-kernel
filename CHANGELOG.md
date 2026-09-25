@@ -103,6 +103,23 @@ artifacts for that exact capability.
   item cited an invariant, `NarrowingOnly`, that its spec never defined.
 - The Lean proof (`proofs/EffectPermitSoundness.lean`, `proofs/Lean`) is
   unchanged.
+### Removed — conformance gates G1–G15 and GX, channels; LaunchKit off by default (HELM-756)
+
+Breaking.
+
+- **Conformance gates.** `helm-ai-kernel conform` runs only G0, build
+  identity, which is used for the signed release report (`--profile SMB`).
+  - G1–G15, GX, the `CORE`/`ENTERPRISE`/`L3`/regulated/agentic profiles and
+    `--level L1|L2` are retired: no EvidencePack could pass G1 and G7
+    together, and several gates passed without checking anything.
+  - `--level` still parses, but exits `2` and points to
+    `conform vectors --json`.
+  - `conform vectors`, `conform negative` and `conform managed-agents` are
+    unchanged.
+- **Channels.** `core/pkg/channels`, `channel_gateway` and
+  `core/pkg/packs/antispoof` are removed; nothing called them.
+- **LaunchKit.** `helm-ai-kernel up` is off by default. Set
+  `HELM_LAUNCHKIT_ENABLED=1` to run it.
 
 ### Removed — the MCP rug-pull detector, the caller-supplied schema pin and the `tee` CLI (HELM-756)
 

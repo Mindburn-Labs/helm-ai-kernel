@@ -247,15 +247,15 @@ func (s *Server) governedDispatch(r *http.Request, quote *economic.RouteQuote, b
 	return s.upstream.Dispatch(r.Context(), r.URL.Path, quote, body)
 }
 
-// Handler returns the proxy's HTTP surface.
-func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
+// RegisterRoutes mounts the proxy's HTTP surface on mux.
+func (s *Server) RegisterRoutes(mux interface {
+	HandleFunc(string, func(http.ResponseWriter, *http.Request))
+}) {
 	mux.HandleFunc("/v1/chat/completions", s.handleInference)
 	mux.HandleFunc("/v1/responses", s.handleInference)
 	mux.HandleFunc("/v1/embeddings", s.handleInference)
 	mux.HandleFunc("/v1/models", s.gatewayMux.ServeHTTP)
 	mux.HandleFunc("/helm/spend/health", s.handleHealth)
-	return mux
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

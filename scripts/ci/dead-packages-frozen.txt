@@ -13,7 +13,6 @@ core/pkg/attention # has tests
 core/pkg/authority # no tests
 core/pkg/buildguard # has tests
 core/pkg/celcheck # has tests
-core/pkg/channels/lark # 1 test-only importer(s)
 core/pkg/conformance/agentsafety # 1 test-only importer(s)
 core/pkg/conformance/cases # has tests
 core/pkg/conformance/negative # has tests
@@ -73,7 +72,6 @@ core/pkg/launchpad/install # has tests
 core/pkg/launchpad/redact # has tests
 core/pkg/ledger # has tests
 core/pkg/networkproof # has tests
-core/pkg/packs/antispoof # 1 test-only importer(s)
 core/pkg/packs/install # has tests
 core/pkg/policy/lint # has tests
 core/pkg/policy/suggest # has tests

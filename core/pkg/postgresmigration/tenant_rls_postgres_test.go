@@ -126,6 +126,52 @@ func TestKernelTenantTablesHaveForcedRowSecurity(t *testing.T) {
 	}
 }
 
+// ADR-0005 §3: the principal_lookup exception holds only for the exact policy
+// the migration installs; a widened or write-capable variant is reported, and
+// serving refuses a database without it.
+func TestPrincipalLookupExceptionIsExact(t *testing.T) {
+	db, _, _ := postgresTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	check := func(name string, wantPresent bool, wantFlagged bool) {
+		t.Helper()
+		present, err := principalLookupPolicyPresent(ctx, db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		unforced, err := TenantTablesWithoutForcedRowSecurity(ctx, db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		flagged := strings.Contains(strings.Join(unforced, ","), "principal_bindings")
+		if present != wantPresent || flagged != wantFlagged {
+			t.Fatalf("%s: lookup policy present=%v (want %v), principal_bindings flagged=%v (want %v)", name, present, wantPresent, flagged, wantFlagged)
+		}
+	}
+	check("as migrated", true, false)
+	for _, variant := range []struct{ name, ddl string }{
+		{"widened predicate", `CREATE POLICY principal_lookup ON principal_bindings FOR SELECT USING (true OR current_setting('app.current_principal', true) IS NULL)`},
+		{"all commands", `CREATE POLICY principal_lookup ON principal_bindings USING (principal_id = current_setting('app.current_principal', true))`},
+		// A SELECT policy cannot carry WITH CHECK; an ALL policy with one is the write-capable variant.
+		{"with a write check", `CREATE POLICY principal_lookup ON principal_bindings USING (principal_id = current_setting('app.current_principal', true)) WITH CHECK (true)`},
+	} {
+		if _, err := db.ExecContext(ctx, `DROP POLICY principal_lookup ON principal_bindings`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, variant.ddl); err != nil {
+			t.Fatalf("%s: %v", variant.name, err)
+		}
+		check(variant.name, false, true)
+	}
+	if _, err := db.ExecContext(ctx, `DROP POLICY principal_lookup ON principal_bindings`); err != nil {
+		t.Fatal(err)
+	}
+	check("policy dropped", false, false)
+}
+
 // Negative controls (ADR-0004 B-I9): each way of weakening a tenant table is
 // reported, so an empty result above is not what a broken check returns.
 func TestTenantRowSecurityCheckDetectsWeakenedTables(t *testing.T) {
@@ -145,6 +191,9 @@ func TestTenantRowSecurityCheckDetectsWeakenedTables(t *testing.T) {
 		{name: "extra permissive policy", ddl: `CREATE POLICY open_read ON probe_rows USING (true)`, flagged: true},
 		{name: "permissive policy removed", ddl: `DROP POLICY open_read ON probe_rows`, flagged: false},
 		{name: "write check that ignores the tenant", ddl: `CREATE POLICY loose_write ON probe_rows FOR INSERT WITH CHECK (true)`, flagged: true},
+		{name: "loose write removed", ddl: `DROP POLICY loose_write ON probe_rows`, flagged: false},
+		// The principal_lookup exception is for principal_bindings only.
+		{name: "principal lookup on another table", ddl: `CREATE POLICY principal_lookup ON probe_rows FOR SELECT USING (value = current_setting('app.current_principal', true))`, flagged: true},
 	} {
 		if _, err := db.Exec(step.ddl); err != nil {
 			t.Fatalf("%s: %v", step.name, err)
@@ -203,6 +252,16 @@ func TestTenantRowSecurityIsolatesTenantsForARestrictedRole(t *testing.T) {
 	}
 	if ok, err := bindings.Exists(ctx, "tenant-a", "principal-a"); err != nil || !ok {
 		t.Fatalf("tenant A cannot read its own binding: ok=%v err=%v", ok, err)
+	}
+	// ADR-0005 §3: the any-tenant lookup is bound to the principal, not a tenant.
+	if bound, err := bindings.PrincipalBound(ctx, "principal-a"); err != nil || !bound {
+		t.Fatalf("principal lookup for a bound principal: bound=%v err=%v", bound, err)
+	}
+	if bound, err := bindings.PrincipalBound(ctx, "principal-z"); err != nil || bound {
+		t.Fatalf("principal lookup for an unbound principal: bound=%v err=%v", bound, err)
+	}
+	if ok, err := bindings.Exists(ctx, "tenant-b", "principal-a"); err != nil || ok {
+		t.Fatalf("tenant B saw tenant A's binding: ok=%v err=%v", ok, err)
 	}
 
 	var visible int

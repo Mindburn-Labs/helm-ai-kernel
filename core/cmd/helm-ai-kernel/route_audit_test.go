@@ -188,9 +188,17 @@ func (emptyReconciliationCandidates) ListReconciliationCandidates(context.Contex
 // runtime present. The union of their catalogs must equal the registry.
 func runtimeRouteConfigs(t *testing.T) map[string]*runtimeRouteMux {
 	t.Helper()
+	return runtimeRouteConfigsWithIdentity(t, nil)
+}
+
+// runtimeRouteConfigsWithIdentity is runtimeRouteConfigs with the Control
+// Plane token path set to identity (nil: off).
+func runtimeRouteConfigsWithIdentity(t *testing.T, identity *controlPlaneIdentity) map[string]*runtimeRouteMux {
+	t.Helper()
 	chdirTempDir(t)
 	svc, cleanup := newContractRouteTestServices(t)
 	t.Cleanup(cleanup)
+	svc.ControlPlaneIdentity = identity
 	t.Setenv(serviceAPIKeyEnv, probeServiceKey)
 	t.Setenv(organizationRuntimeAPIKeyEnv, probeOrganizationRuntimeKey)
 	t.Setenv(runtimeTenantIDEnv, probeTenant)

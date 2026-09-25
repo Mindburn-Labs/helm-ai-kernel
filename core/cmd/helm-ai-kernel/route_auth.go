@@ -321,7 +321,7 @@ const (
 // isolates tenants from a caller that holds the shared credential (ADR-0004
 // §5.2).
 func bindRuntimeScope(r *http.Request, svc *Services, tenantID string, assertion workspaceAssertion) (string, error) {
-	assertedWorkspaceID := strings.TrimSpace(r.Header.Get(workspaceHeader))
+	assertedWorkspaceID := requestWorkspaceID(r)
 	configuredWorkspaceID := configuredRuntimeWorkspaceID()
 	if svc == nil || svc.EmergencyStops == nil {
 		if assertedWorkspaceID == "" && assertion == workspaceMayDefault {

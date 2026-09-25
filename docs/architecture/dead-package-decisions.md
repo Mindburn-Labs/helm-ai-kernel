@@ -123,6 +123,8 @@ package directory.
 | `core/pkg/crypto/mtls` | 627 | 2026-06-11 | yes | 1 | KEEP | test importer: core/pkg/crypto |
 | `core/pkg/crypto/sdjwt` | 301 | 2026-04-23 | yes | 2 | KEEP | ref: core/pkg/evidencepack/inclusionproof.go; ref: core/pkg/evidencepack/merkle.go; test importer: core/pkg/crypto; test importer: core/pkg/evidencepack |
 | `core/pkg/crypto/shredding` | 193 | 2026-04-23 | yes | 1 | KEEP | test importer: core/pkg/crypto |
+| `core/pkg/crypto/tee` | 1906 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6d, see docs/retirement/wave-1-inventory.md) | importer-less since the `tee` CLI was removed in s4c (#997); no workspace repo imports it (Enterprise has its own copy) |
+| `core/pkg/crypto/tee/collateral` | 219 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6d, see docs/retirement/wave-1-inventory.md) | importer-less since `core/cmd/tee-collateral` was removed in s4c (#997) |
 | `core/pkg/crypto/tls` | 98 | 2026-04-23 | yes | 1 | KEEP | test importer: core/pkg/crypto |
 | `core/pkg/crypto/zk` | 257 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/database` | 142 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |

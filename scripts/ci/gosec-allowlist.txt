@@ -90,13 +90,6 @@ G115 core/pkg/connectors/arc/connector.go d3f988b04eba
 G115 core/pkg/connectors/arc/connector.go dcfa27e37bc6
 G115 core/pkg/contracts/company_activation_record.go 596e71c1dfc8
 G115 core/pkg/contracts/launch_effect_types.go 11b1dc584da5
-G115 core/pkg/crypto/tee/nitro.go 3f74d7537752
-G115 core/pkg/crypto/tee/nitro.go 63b2d7ec87d4
-G115 core/pkg/crypto/tee/nitro.go 9a30b3dfe567
-G115 core/pkg/crypto/tee/nitro_cose.go 0ccc9d02d67c
-G115 core/pkg/crypto/tee/nitro_cose.go 0ccc9d02d67c
-G115 core/pkg/crypto/tee/nitro_cose.go 10e813e6fb0f
-G115 core/pkg/crypto/tee/nitro_cose.go 27335f4c1d27
 G115 core/pkg/delegation/manager.go 4c7c23daadf8
 G115 core/pkg/identity/did/did.go 388f3f6e05a6
 G115 core/pkg/identity/did/did.go f1b78733243f
@@ -377,7 +370,6 @@ G304 core/pkg/connectors/sandbox/claudemanaged/adapter.go 22cd442b88fb
 G304 core/pkg/connectors/ton/acton/script_manifest.go dbfffc239169
 G304 core/pkg/crypto/hsm.go 0f126902b13b
 G304 core/pkg/crypto/hsm.go df1469f38d82
-G304 core/pkg/crypto/tee/collateral/bundle.go dbfffc239169
 G304 core/pkg/evidence/externalhost/externalhost.go dbfffc239169
 G304 core/pkg/evidence/seal.go 3b5f87d18ff4
 G304 core/pkg/evidence/seal.go 3f9cc40a5d53

@@ -190,8 +190,6 @@ jobs:
         run: make proto-breaking
       - name: Verify fixtures
         run: make verify-fixtures
-      - name: TEE collateral fixtures
-        run: make tee-collateral-verify
       - name: Release TEE mock attestation guard
         run: bash scripts/ci/check_release_no_mock_tee.sh
       - name: Boundary registry drift

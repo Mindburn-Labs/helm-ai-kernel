@@ -577,9 +577,6 @@ func runServerWithOptions(opts serverOptions) error {
 	if policyStore != nil {
 		guardianOpts = append(guardianOpts, guardian.WithPolicySnapshots(policyStore, policyScope))
 	}
-	if services != nil && services.EmergencyStops != nil {
-		guardianOpts = append(guardianOpts, guardian.WithScopedStopReader(services.EmergencyStops))
-	}
 	if services != nil && services.Observability != nil {
 		guardianOpts = append(guardianOpts, guardian.WithOTel())
 	}
@@ -611,7 +608,11 @@ func runServerWithOptions(opts serverOptions) error {
 		guardianOpts = append(guardianOpts, guardian.WithWarmLeaseManager(warmMgr))
 	}
 
-	guard, err := newProductionGuardian(signer, ruleGraph, artRegistry, runtimeClock, guardianOpts...)
+	guardianState := productionGuardianState{DataDir: dataDir}
+	if services != nil && services.EmergencyStops != nil {
+		guardianState.Stops = services.EmergencyStops
+	}
+	guard, err := newProductionGuardian(signer, ruleGraph, artRegistry, runtimeClock, guardianState, guardianOpts...)
 	if err != nil {
 		return fmt.Errorf("initialize production Guardian: %w", err)
 	}

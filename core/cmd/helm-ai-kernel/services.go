@@ -204,18 +204,9 @@ func NewServices(ctx context.Context, db *sql.DB, artStore artifacts.Store, logg
 		if _, err := configuredEmergencyStopCommandVerifier(); err != nil {
 			return nil, fmt.Errorf("scoped emergency-stop fence command authority: %w", err)
 		}
-		if db == nil {
-			return nil, fmt.Errorf("scoped emergency-stop fence requires a durable database")
-		}
-		var stopOptions []kernel.ScopedStopStoreOption
-		if databaseMode == "postgres" {
-			stopOptions = append(stopOptions, kernel.WithPostgresScopeLocks())
-		}
-		emergencyStops := kernel.NewScopedStopStore(db, time.Now, stopOptions...)
-		if databaseMode != "postgres" {
-			if err := emergencyStops.Init(ctx); err != nil {
-				return nil, fmt.Errorf("init scoped emergency-stop store: %w", err)
-			}
+		emergencyStops, err := openEmergencyStopStore(ctx, db, databaseMode)
+		if err != nil {
+			return nil, err
 		}
 		s.EmergencyStops = emergencyStops
 		logger.Info("subsystem ready", "component", " Scoped emergency-stop fence store initialized")

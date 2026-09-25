@@ -34,13 +34,19 @@ helm-ai-kernel verify --bundle <path> --json  # verify an exported EvidencePack
 ## Stopping everything
 
 ```bash
-helm-ai-kernel freeze --principal <id>
-helm-ai-kernel unfreeze --principal <id>
+helm-ai-kernel freeze --principal <id> --data-dir <dir>
+helm-ai-kernel unfreeze --principal <id> --data-dir <dir>
 ```
 
 Global freeze is the deliberate stop lever. Use it when you need dispatch to stop
 before you have diagnosed why — freezing is cheap, and a fail-closed kernel that
 denies is behaving correctly, not malfunctioning.
+
+The freeze is `freeze_state.json` in the kernel data directory. Pass the same
+`--data-dir` the server runs with (`serve --data-dir`, `mcp serve --data-dir`).
+Without it both sides use `$HELM_DATA_DIR`, then `./data` under the working
+directory. `proxy` reads `$HELM_DATA_DIR`. The file holds per host, not across
+replicas.
 
 ## Policy
 

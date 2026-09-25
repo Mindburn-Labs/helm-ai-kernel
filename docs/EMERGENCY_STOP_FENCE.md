@@ -91,6 +91,14 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
 - The fence covers only the configured scope, so it requires
   `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_WORKSPACE_ID`. Without a
   configured workspace, governed evaluation fails closed while the fence is on.
+- `serve`, `proxy` and `mcp serve` read the same fence store and bind the same
+  configured scope, so a fence recorded through the Kernel route denies through
+  all three. `proxy` and `mcp serve` open the store in `DATABASE_URL`, or in
+  the Lite Mode database `<data dir>/helm.db` (`mcp serve --data-dir`;
+  `$HELM_DATA_DIR` for `proxy`), and refuse to start while the fence is on
+  without the configured scope. `proxy --tenant-id` must equal
+  `HELM_RUNTIME_TENANT_ID`. Tenant and workspace names in MCP tool arguments are
+  replaced by the configured scope.
 - With the fence on, evaluate, receipt reads and the governed
   OpenAI-compatible proxy accept only the configured tenant and workspace.
   With it off they do not bind the configured scope, which is a known gap

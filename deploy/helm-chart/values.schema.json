@@ -392,6 +392,38 @@
               "minLength": 1,
               "default": "default",
               "description": "Server-bound workspace ID used by governed evaluation when the scoped emergency-stop fence is enabled. The request body never selects this value."
+            },
+            "controlPlaneIdentity": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Control Plane identity tokens (ADR-0005). All four strings empty disables the token path; set them together.",
+              "properties": {
+                "jwksURL": {
+                  "type": "string",
+                  "default": "",
+                  "description": "https URL of the Control Plane workload identity JWKS (HELM_CP_IDENTITY_JWKS_URL)."
+                },
+                "issuer": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Exact iss of the Control Plane issuer (HELM_CP_IDENTITY_ISSUER)."
+                },
+                "audience": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Exact aud, helm-kernel:<deployment id>, one per environment (HELM_CP_IDENTITY_AUDIENCE)."
+                },
+                "actor": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Exact act.sub of the Control Plane workload (HELM_CP_IDENTITY_ACTOR)."
+                },
+                "requireCNF": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Require cnf.x5t#S256 to match the TLS client certificate (HELM_CP_IDENTITY_REQUIRE_CNF). Only for mTLS deployments."
+                }
+              }
             }
           }
         },

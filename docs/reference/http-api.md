@@ -49,9 +49,32 @@ public docs surface.
 ## Tenant and Workspace Binding
 
 The Kernel does not issue tenant tokens. On the routes the Control Plane calls,
-the tenant, principal and workspace are the Control Plane's assertion under a
-Kernel credential. How much of that assertion is checked depends on
-`HELM_EMERGENCY_STOP_FENCE_ENABLED`; see the workspace rules below the table.
+the tenant, principal and workspace come from one of two places:
+
+- **A Control Plane identity token (ADR-0005, dual-accept).** It is accepted
+  when `HELM_CP_IDENTITY_JWKS_URL`, `HELM_CP_IDENTITY_ISSUER`,
+  `HELM_CP_IDENTITY_AUDIENCE` and `HELM_CP_IDENTITY_ACTOR` are set, on
+  `POST /api/v1/evaluate`, `POST /internal/v1/organization-runtime/evaluate`,
+  `GET /api/v1/receipts*` and `POST /v1/chat/completions`. The bearer is an
+  RS256 token from that issuer, verified against its key set:
+  - `sub` is the principal;
+  - `tenant_id` and `workspace_id` are the scope;
+  - `act.sub` must be the configured actor;
+  - `scope` must name the route family (`helm.evaluate`,
+    `helm.organization_runtime.evaluate`, `helm.receipts.read`,
+    `helm.proxy.chat`);
+  - the lifetime is at most 300 s.
+
+  Identity headers are then optional and must equal the claims. When
+  `principal_bindings` holds rows for `sub`, the token's tenant must be one of
+  them; a principal with no row passes on the token and is counted in
+  `helm_token_unbound_principal_total{route}`. With the fence on, the token's
+  scope must still be the configured one.
+- **Otherwise, the legacy path:** the Control Plane's assertion in headers
+  under a shared Kernel credential, as in the table below. Each such request
+  is counted in `helm_legacy_header_identity_total{route}`. How much of the
+  assertion is checked depends on `HELM_EMERGENCY_STOP_FENCE_ENABLED`; see the
+  workspace rules below the table.
 
 | Route | Credential | Tenant and principal | Workspace |
 | --- | --- | --- | --- |
@@ -82,7 +105,11 @@ Ext-authz is the exception: it is bound to the configured scope in both modes.
 
 Request bodies and `context` never select a scope; see below.
 
-**What this does not provide.** The admin credential is shared. Whoever holds
+**What this does not provide.** With a token, identity no longer comes from
+headers, but a compromised Control Plane issuer can still mint a token for any
+tenant, and a token can be replayed within its lifetime by anyone who can read
+the plain-HTTP pod traffic; `HELM_CP_IDENTITY_REQUIRE_CNF` binds tokens to an
+mTLS client certificate where one exists. On the legacy path the admin credential is shared. Whoever holds
 it can assert any registered tenant, and with the fence off any workspace.
 These checks catch a missing or wrong binding from a
 correct caller; they do not isolate tenants from a compromised caller. That

@@ -1,0 +1,346 @@
+package main
+
+// quantum_posture: Control Plane identity tokens are classical RS256 JWTs
+// verified against the Control Plane's JWKS (ADR-0005 §4); no post-quantum
+// claim is made.
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
+	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
+)
+
+// ADR-0005 phase 1 (dual-accept). The Control Plane may present a token its
+// workload identity issuer signed instead of the shared kernel key and the
+// X-Helm-* identity headers. The tenant, principal and workspace then come
+// from the token's claims and nothing else. With HELM_CP_IDENTITY_* unset the
+// token path is off and every request takes the legacy path unchanged.
+const (
+	cpIdentityJWKSURLEnv    = "HELM_CP_IDENTITY_JWKS_URL"
+	cpIdentityIssuerEnv     = "HELM_CP_IDENTITY_ISSUER"
+	cpIdentityAudienceEnv   = "HELM_CP_IDENTITY_AUDIENCE"
+	cpIdentityActorEnv      = "HELM_CP_IDENTITY_ACTOR"
+	cpIdentityMaxTTLEnv     = "HELM_CP_IDENTITY_MAX_TTL"
+	cpIdentityRequireCNFEnv = "HELM_CP_IDENTITY_REQUIRE_CNF"
+	cpIdentityCAFileEnv     = "HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE"
+
+	cpIdentityMaxTTLCeiling = 300 * time.Second
+	cpIdentityClockSkew     = 30 * time.Second
+
+	cpScopeEvaluate            = "helm.evaluate"
+	cpScopeOrganizationRuntime = "helm.organization_runtime.evaluate"
+	cpScopeReceiptsRead        = "helm.receipts.read"
+	cpScopeProxyChat           = "helm.proxy.chat"
+
+	controlPlaneTokenRole = "control-plane-token"
+)
+
+// tokenValidator is the part of mcp.JWKSValidator the guard uses.
+type tokenValidator interface {
+	ValidateAuthorization(string) (*mcppkg.OAuthTokenClaims, error)
+}
+
+type controlPlaneIdentity struct {
+	issuer     string
+	validator  tokenValidator
+	requireCNF bool
+}
+
+// newControlPlaneIdentityFromEnv returns nil when no HELM_CP_IDENTITY_* value
+// is set. A partial configuration is a startup error, not a silently
+// disabled check.
+func newControlPlaneIdentityFromEnv() (*controlPlaneIdentity, error) {
+	values := map[string]string{}
+	for _, name := range []string{cpIdentityJWKSURLEnv, cpIdentityIssuerEnv, cpIdentityAudienceEnv, cpIdentityActorEnv} {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			values[name] = value
+		}
+	}
+	if len(values) == 0 {
+		return nil, nil
+	}
+	if len(values) != 4 {
+		return nil, fmt.Errorf("%s, %s, %s and %s must be set together", cpIdentityJWKSURLEnv, cpIdentityIssuerEnv, cpIdentityAudienceEnv, cpIdentityActorEnv)
+	}
+	maxTTL := cpIdentityMaxTTLCeiling
+	if raw := strings.TrimSpace(os.Getenv(cpIdentityMaxTTLEnv)); raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil || parsed <= 0 || parsed > cpIdentityMaxTTLCeiling {
+			return nil, fmt.Errorf("%s must be a duration in (0, %s]", cpIdentityMaxTTLEnv, cpIdentityMaxTTLCeiling)
+		}
+		maxTTL = parsed
+	}
+	client, err := newGeneratedSpecApprovalOutboundClient(strings.TrimSpace(os.Getenv(cpIdentityCAFileEnv)))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", cpIdentityCAFileEnv, err)
+	}
+	return &controlPlaneIdentity{
+		issuer: values[cpIdentityIssuerEnv],
+		validator: mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
+			JWKSURL:       values[cpIdentityJWKSURLEnv],
+			Issuer:        values[cpIdentityIssuerEnv],
+			Audience:      values[cpIdentityAudienceEnv],
+			RequiredActor: values[cpIdentityActorEnv],
+			Algorithms:    []string{"RS256"},
+			MaxTokenTTL:   maxTTL,
+			Leeway:        cpIdentityClockSkew,
+			HTTPClient:    client,
+		}),
+		requireCNF: envBool(cpIdentityRequireCNFEnv),
+	}, nil
+}
+
+// presentedToken returns the bearer when it parses as a JWT whose issuer is
+// the configured Control Plane issuer. Anything else, the shared admin key
+// included, takes the legacy path. The claims are not trusted here; the
+// validator checks them next.
+func (cp *controlPlaneIdentity) presentedToken(r *http.Request) (string, bool) {
+	if cp == nil {
+		return "", false
+	}
+	token, _, ok := helmauth.BearerToken(r)
+	if !ok || strings.Count(token, ".") != 2 {
+		return "", false
+	}
+	var claims jwt.RegisteredClaims
+	if _, _, err := jwt.NewParser().ParseUnverified(token, &claims); err != nil {
+		return "", false
+	}
+	return token, claims.Issuer == cp.issuer
+}
+
+type tokenWorkspaceContextKey struct{}
+
+// requestWorkspaceID is the workspace a request asserts: the token's claim on
+// the token path, otherwise X-Helm-Workspace-ID.
+func requestWorkspaceID(r *http.Request) string {
+	if workspace, ok := r.Context().Value(tokenWorkspaceContextKey{}).(string); ok {
+		return workspace
+	}
+	return strings.TrimSpace(r.Header.Get(workspaceHeader))
+}
+
+// protectControlPlaneTokenOr guards a route that accepts both the legacy
+// credential (legacy) and a Control Plane token for scope. RuntimeRouteSpecs
+// declares the pairing as AlternateAuth; route is the metric label.
+func protectControlPlaneTokenOr(svc *Services, legacy RouteAuth, route, scope string, handler http.HandlerFunc) http.HandlerFunc {
+	controlPlaneIdentityMetrics.declareRoute(route)
+	legacyHandler := protectRuntimeHandler(legacy, func(w http.ResponseWriter, r *http.Request) {
+		controlPlaneIdentityMetrics.recordLegacy(r.Context(), route)
+		handler(w, r)
+	})
+	return func(w http.ResponseWriter, r *http.Request) {
+		var cp *controlPlaneIdentity
+		if svc != nil {
+			cp = svc.ControlPlaneIdentity
+		}
+		token, ok := cp.presentedToken(r)
+		if !ok {
+			legacyHandler(w, r)
+			return
+		}
+		cp.serve(w, r, token, route, scope, handler)
+	}
+}
+
+func (cp *controlPlaneIdentity) serve(w http.ResponseWriter, r *http.Request, token, route, scope string, handler http.HandlerFunc) {
+	claims, err := cp.validator.ValidateAuthorization(token)
+	if err != nil {
+		if validationErr, ok := err.(*mcppkg.JWKSValidationError); ok && validationErr.Kind == mcppkg.JWKSErrFetchFailed {
+			api.WriteError(w, http.StatusServiceUnavailable, "Control Plane identity unavailable", "the Control Plane signing keys could not be loaded")
+			return
+		}
+		httperr.WriteUnauthorized(w, "Invalid Control Plane identity token")
+		return
+	}
+	principalID := strings.TrimSpace(claims.RegisteredClaims.Subject)
+	if principalID == "" || claims.TenantID == "" || (scope != cpScopeProxyChat && claims.WorkspaceID == "") {
+		httperr.WriteUnauthorized(w, "Control Plane identity token lacks its principal, tenant or workspace")
+		return
+	}
+	if cp.requireCNF && (r.TLS == nil || len(r.TLS.PeerCertificates) == 0 ||
+		!mcppkg.CertificateMatchesThumbprint(r.TLS.PeerCertificates[0], claims.CertificateThumbprint)) {
+		httperr.WriteUnauthorized(w, "Control Plane identity token is not bound to this client certificate")
+		return
+	}
+	if !tokenHasScope(claims.Scopes, scope) {
+		api.WriteForbidden(w, "Control Plane identity token does not carry the "+scope+" scope")
+		return
+	}
+	// Identity headers are no longer the source; when sent they must agree.
+	for header, claim := range map[string]string{tenantHeader: claims.TenantID, principalHeader: principalID, workspaceHeader: claims.WorkspaceID} {
+		if asserted := strings.TrimSpace(r.Header.Get(header)); asserted != "" && asserted != claim {
+			api.WriteForbidden(w, header+" does not match the Control Plane identity token")
+			return
+		}
+	}
+	if asserted := strings.TrimSpace(r.URL.Query().Get("tenant_id")); asserted != "" && asserted != claims.TenantID {
+		api.WriteForbidden(w, "tenant_id does not match the Control Plane identity token")
+		return
+	}
+	bound, err := tokenPrincipalBound(r.Context(), claims.TenantID, principalID)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "control plane token binding check failed, denying", "route", route, "error", err)
+		api.WriteForbidden(w, "Control Plane principal binding could not be verified")
+		return
+	}
+	if bound == principalBoundElsewhere {
+		api.WriteForbidden(w, "Control Plane principal is bound to other tenants, not this one")
+		return
+	}
+	if bound == principalUnbound {
+		controlPlaneIdentityMetrics.unbound.WithLabelValues(route).Inc()
+	}
+
+	roles := []string{controlPlaneTokenRole}
+	if scope == cpScopeOrganizationRuntime {
+		roles = append(roles, organizationRuntimeRole)
+	}
+	ctx := helmauth.WithPrincipal(r.Context(), &helmauth.BasePrincipal{ID: principalID, TenantID: claims.TenantID, Roles: roles})
+	ctx = helmauth.WithAuthenticatedCredential(ctx, token)
+	ctx = context.WithValue(ctx, tokenWorkspaceContextKey{}, claims.WorkspaceID)
+	slog.DebugContext(ctx, "control plane token accepted", "route", route, "txn", claims.TransactionID, "jti", claims.RegisteredClaims.ID)
+	handler(w, r.WithContext(ctx))
+}
+
+type principalBinding int
+
+const (
+	principalBoundHere principalBinding = iota
+	principalUnbound
+	principalBoundElsewhere
+)
+
+// tokenPrincipalBound is the ADR-0005 §3 cross-check. A principal with a
+// binding row must be bound to the token's tenant; a principal with none
+// passes on the token alone (and is counted). The tenant lookup runs in a
+// transaction bound to the token's tenant (store.WithTenant under forced row
+// security); the any-tenant lookup is bound to the principal.
+func tokenPrincipalBound(ctx context.Context, tenantID, principalID string) (principalBinding, error) {
+	bindings := principalBindingStore
+	if bindings == nil {
+		return principalUnbound, nil
+	}
+	here, err := bindings.Exists(ctx, tenantID, principalID)
+	if err != nil {
+		return 0, err
+	}
+	if here {
+		return principalBoundHere, nil
+	}
+	lookup, ok := bindings.(store.PrincipalBindingLookup)
+	if !ok {
+		return 0, fmt.Errorf("principal binding store %T cannot look a principal up across tenants", bindings)
+	}
+	anywhere, err := lookup.PrincipalBound(ctx, principalID)
+	if err != nil {
+		return 0, err
+	}
+	if anywhere {
+		return principalBoundElsewhere, nil
+	}
+	return principalUnbound, nil
+}
+
+func tokenHasScope(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+// controlPlaneIdentityMetrics are the ADR-0005 phase-3 signals, per route:
+// helm_legacy_header_identity_total counts requests still authenticated by the
+// shared key and headers; helm_token_unbound_principal_total counts valid
+// tokens whose principal has no binding row.
+var controlPlaneIdentityMetrics = newControlPlaneIdentityMetricSet(time.Now)
+
+type controlPlaneIdentityMetricSet struct {
+	registry *prometheus.Registry
+	legacy   *prometheus.CounterVec
+	unbound  *prometheus.CounterVec
+
+	mu         sync.Mutex
+	now        func() time.Time
+	lastLogged map[string]time.Time
+}
+
+const legacyIdentityLogInterval = time.Hour
+
+func newControlPlaneIdentityMetricSet(now func() time.Time) *controlPlaneIdentityMetricSet {
+	m := &controlPlaneIdentityMetricSet{
+		registry: prometheus.NewRegistry(),
+		legacy: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "helm_legacy_header_identity_total",
+			Help: "Requests on Control Plane routes authenticated by the shared kernel key and X-Helm-* identity headers (ADR-0005).",
+		}, []string{"route"}),
+		unbound: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "helm_token_unbound_principal_total",
+			Help: "Valid Control Plane identity tokens whose principal has no principal_bindings row (ADR-0005 §3).",
+		}, []string{"route"}),
+		now:        now,
+		lastLogged: map[string]time.Time{},
+	}
+	m.registry.MustRegister(m.legacy, m.unbound)
+	return m
+}
+
+// declareRoute makes both series exist at zero for route, so "zero on every
+// route" is observable rather than inferred from absence.
+func (m *controlPlaneIdentityMetricSet) declareRoute(route string) {
+	m.legacy.WithLabelValues(route)
+	m.unbound.WithLabelValues(route)
+}
+
+// recordLegacy counts one legacy-authenticated request and logs it at most
+// once per route, tenant and principal per hour.
+func (m *controlPlaneIdentityMetricSet) recordLegacy(ctx context.Context, route string) {
+	m.legacy.WithLabelValues(route).Inc()
+	tenantID, principalID := "", ""
+	if principal, err := helmauth.GetPrincipal(ctx); err == nil && principal != nil {
+		tenantID, principalID = principal.GetTenantID(), principal.GetID()
+	}
+	if m.shouldLog(route + "\x00" + tenantID + "\x00" + principalID) {
+		slog.InfoContext(ctx, "legacy header identity used on a Control Plane route (ADR-0005 phase 1)",
+			"route", route, "tenant_id", tenantID, "principal_id", principalID)
+	}
+}
+
+func (m *controlPlaneIdentityMetricSet) shouldLog(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	if last, ok := m.lastLogged[key]; ok && now.Sub(last) < legacyIdentityLogInterval {
+		return false
+	}
+	// Bounded: entries older than the interval can no longer suppress a line.
+	if len(m.lastLogged) >= 4096 {
+		for k, last := range m.lastLogged {
+			if now.Sub(last) >= legacyIdentityLogInterval {
+				delete(m.lastLogged, k)
+			}
+		}
+	}
+	m.lastLogged[key] = now
+	return true
+}
+
+func (m *controlPlaneIdentityMetricSet) PrometheusGatherer() prometheus.Gatherer {
+	return m.registry
+}

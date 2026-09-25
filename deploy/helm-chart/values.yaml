@@ -135,6 +135,15 @@ helm:
     # Server-owned workspace binding used by governed evaluation when the
     # scoped emergency-stop fence is enabled.
     workspaceID: "default"
+    # Control Plane identity tokens (ADR-0005, dual-accept). Empty disables the
+    # token path; the Control Plane routes then take the shared key and
+    # X-Helm-* headers as before. Set all four together.
+    controlPlaneIdentity:
+      jwksURL: ""   # https JWKS of the Control Plane workload identity issuer
+      issuer: ""    # exact "iss" of that issuer
+      audience: ""  # "helm-kernel:<deployment id>", one per environment
+      actor: ""     # exact "act.sub", e.g. spiffe://helm/control-plane
+      requireCNF: false  # require cnf.x5t#S256 to match the client certificate (mTLS only)
 
   # Governed GitHub effects. Supplying an existing Secret arms the shipped
   # signed-permit connector; an empty Secret name keeps every github.* tool

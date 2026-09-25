@@ -6,6 +6,10 @@ package mcp
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/subtle"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +38,8 @@ const (
 	JWKSErrKeyNotFound      JWKSValidationErrorKind = "key_not_found"
 	JWKSErrMalformedToken   JWKSValidationErrorKind = "malformed_token"
 	JWKSErrFetchFailed      JWKSValidationErrorKind = "jwks_fetch_failed"
+	JWKSErrInvalidActor     JWKSValidationErrorKind = "invalid_actor"
+	JWKSErrInvalidLifetime  JWKSValidationErrorKind = "invalid_lifetime"
 )
 
 // JWKSValidationError is returned when bearer token validation fails.
@@ -55,6 +61,16 @@ type JWKSConfig struct {
 	Scopes                []string // HELM_OAUTH_SCOPES — required scopes
 	AllowInsecureLoopback bool     // test/dev-only allowance for httptest loopback JWKS endpoints
 	HTTPClient            *http.Client
+
+	// The fields below are optional; zero values keep the behaviour above.
+	// Algorithms, when set, is the only accepted list of JWS "alg" values.
+	Algorithms []string
+	// RequiredActor, when set, must equal the RFC 8693 "act.sub" claim.
+	RequiredActor string
+	// MaxTokenTTL, when positive, requires "iat" and bounds exp - iat.
+	MaxTokenTTL time.Duration
+	// Leeway is the clock skew allowed on exp, nbf and iat.
+	Leeway time.Duration
 }
 
 // OAuthTokenClaims contains validated token claims needed by MCP authorization.
@@ -64,6 +80,13 @@ type OAuthTokenClaims struct {
 	Resources        []string
 	TenantID         string
 	WorkspaceID      string
+	// Actor is the RFC 8693 "act.sub" claim, the workload acting for Subject.
+	Actor string
+	// CertificateThumbprint is "cnf.x5t#S256": the base64url SHA-256 of the
+	// client certificate the token is bound to (RFC 8705), when present.
+	CertificateThumbprint string
+	// TransactionID is the "txn" claim, when present.
+	TransactionID string
 }
 
 type jwksClaims struct {
@@ -72,6 +95,13 @@ type jwksClaims struct {
 	Resources   []string `json:"resources"`
 	TenantID    string   `json:"tenant_id"`
 	WorkspaceID string   `json:"workspace_id"`
+	Act         *struct {
+		Sub string `json:"sub"`
+	} `json:"act,omitempty"`
+	Cnf *struct {
+		X5tS256 string `json:"x5t#S256"`
+	} `json:"cnf,omitempty"`
+	Txn string `json:"txn"`
 	jwt.RegisteredClaims
 }
 
@@ -121,12 +151,19 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		return nil, err
 	}
 
-	parser := jwt.NewParser(
+	options := []jwt.ParserOption{
 		jwt.WithIssuer(v.config.Issuer),
 		jwt.WithAudience(v.config.Audience),
 		jwt.WithExpirationRequired(),
 		jwt.WithIssuedAt(),
-	)
+	}
+	if len(v.config.Algorithms) > 0 {
+		options = append(options, jwt.WithValidMethods(v.config.Algorithms))
+	}
+	if v.config.Leeway > 0 {
+		options = append(options, jwt.WithLeeway(v.config.Leeway))
+	}
+	parser := jwt.NewParser(options...)
 
 	claims := &jwksClaims{}
 	token, err := parser.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (any, error) {
@@ -184,6 +221,20 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		}
 	}
 
+	if v.config.RequiredActor != "" && (claims.Act == nil || claims.Act.Sub != v.config.RequiredActor) {
+		return nil, &JWKSValidationError{Kind: JWKSErrInvalidActor, Message: "act.sub does not name the required actor"}
+	}
+	if v.config.MaxTokenTTL > 0 {
+		if claims.IssuedAt == nil || claims.ExpiresAt == nil ||
+			!claims.ExpiresAt.After(claims.IssuedAt.Time) ||
+			claims.ExpiresAt.Sub(claims.IssuedAt.Time) > v.config.MaxTokenTTL {
+			return nil, &JWKSValidationError{
+				Kind:    JWKSErrInvalidLifetime,
+				Message: fmt.Sprintf("token lifetime must be positive and at most %s", v.config.MaxTokenTTL),
+			}
+		}
+	}
+
 	resources := claims.resourceIndicators()
 	if v.config.Resource != "" && !containsString(resources, v.config.Resource) {
 		return nil, &JWKSValidationError{
@@ -192,13 +243,31 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		}
 	}
 
-	return &OAuthTokenClaims{
+	out := &OAuthTokenClaims{
 		RegisteredClaims: claims.RegisteredClaims,
 		Scopes:           strings.Fields(claims.Scope),
 		Resources:        resources,
 		TenantID:         strings.TrimSpace(claims.TenantID),
 		WorkspaceID:      strings.TrimSpace(claims.WorkspaceID),
-	}, nil
+		TransactionID:    strings.TrimSpace(claims.Txn),
+	}
+	if claims.Act != nil {
+		out.Actor = strings.TrimSpace(claims.Act.Sub)
+	}
+	if claims.Cnf != nil {
+		out.CertificateThumbprint = strings.TrimSpace(claims.Cnf.X5tS256)
+	}
+	return out, nil
+}
+
+// CertificateMatchesThumbprint reports whether cert is the certificate a
+// token's "cnf.x5t#S256" names (RFC 8705 §3.1).
+func CertificateMatchesThumbprint(cert *x509.Certificate, thumbprint string) bool {
+	if cert == nil || thumbprint == "" {
+		return false
+	}
+	sum := sha256.Sum256(cert.Raw)
+	return subtle.ConstantTimeCompare([]byte(base64.RawURLEncoding.EncodeToString(sum[:])), []byte(thumbprint)) == 1
 }
 
 func (c *jwksClaims) resourceIndicators() []string {

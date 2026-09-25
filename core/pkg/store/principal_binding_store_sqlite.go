@@ -66,3 +66,13 @@ func (s *SQLitePrincipalBindingStore) Exists(ctx context.Context, tenantID, prin
 	}
 	return true, nil
 }
+
+// PrincipalBound reports whether principalID has a binding in any tenant.
+func (s *SQLitePrincipalBindingStore) PrincipalBound(ctx context.Context, principalID string) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM principal_bindings WHERE principal_id = ? LIMIT 1`, principalID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}

@@ -333,6 +333,7 @@ func ValidateRuntime(ctx context.Context, db *sql.DB, options RuntimeOptions) er
 // that have a tenant_id column but are not isolated by it: row security not
 // enabled, not forced, no policy, or a policy whose USING or WITH CHECK does
 // not test app.current_tenant (a permissive policy would undo the others).
+// principal_bindings' principal_lookup policy is the single named exception.
 // Serving refuses to start on a non-empty result, and the Postgres catalog
 // test asserts it is empty after a full migration (ADR-0004 B-I3).
 func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]string, error) {
@@ -350,6 +351,14 @@ func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]st
 		      AND NOT EXISTS (
 		          SELECT 1 FROM pg_catalog.pg_policy AS policy
 		          WHERE policy.polrelid = relation.oid
+		            -- The one allowed exception: principal_bindings' SELECT-only
+		            -- principal_lookup policy, keyed by app.current_principal.
+		            AND NOT (
+		                relation.relname = 'principal_bindings'
+		                AND policy.polname = 'principal_lookup'
+		                AND policy.polcmd = 'r'
+		                AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) LIKE '%app.current_principal%'
+		            )
 		            AND (
 		                COALESCE(pg_catalog.pg_get_expr(policy.polqual, policy.polrelid), '') NOT LIKE '%app.current_tenant%'
 		                OR (policy.polwithcheck IS NOT NULL

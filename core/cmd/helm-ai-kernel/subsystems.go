@@ -53,7 +53,7 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 	// --- OpenAI-Compatible Proxy (governed inference) ---
 	// Wraps api.HandleOpenAIProxy with Guardian governance enforcement and receipt headers.
 	// Requires HELM_UPSTREAM_URL to be set for real upstream forwarding.
-	mux.HandleFunc("/v1/chat/completions", protectRuntimeHandler(RouteAuthConfiguredTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/chat/completions", protectControlPlaneTokenOr(svc, RouteAuthConfiguredTenant, "/v1/chat/completions", cpScopeProxyChat, func(w http.ResponseWriter, r *http.Request) {
 		handleGovernedOpenAIProxy(w, r, svc)
 	}))
 

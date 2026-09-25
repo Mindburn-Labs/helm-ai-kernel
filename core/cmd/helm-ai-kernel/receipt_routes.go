@@ -261,10 +261,10 @@ func registerReceiptRoutes(mux routeMux, svc *Services) {
 			Signature:                              decision.Signature,
 		})
 	}
-	mux.HandleFunc("/api/v1/evaluate", protectRuntimeHandler(RouteAuthTenant, evaluateHandler))
-	mux.HandleFunc(companyActivationOrganizationRuntimePath, protectRuntimeHandler(RouteAuthOrganizationRuntime, bindOrganizationRuntimeEvaluation(evaluateHandler)))
+	mux.HandleFunc("/api/v1/evaluate", protectControlPlaneTokenOr(svc, RouteAuthTenant, "/api/v1/evaluate", cpScopeEvaluate, evaluateHandler))
+	mux.HandleFunc(companyActivationOrganizationRuntimePath, protectControlPlaneTokenOr(svc, RouteAuthOrganizationRuntime, companyActivationOrganizationRuntimePath, cpScopeOrganizationRuntime, bindOrganizationRuntimeEvaluation(evaluateHandler)))
 
-	mux.HandleFunc("/api/v1/receipts/tail", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/receipts/tail", protectControlPlaneTokenOr(svc, RouteAuthTenant, "/api/v1/receipts/tail", cpScopeReceiptsRead, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -339,7 +339,7 @@ func registerReceiptRoutes(mux routeMux, svc *Services) {
 		}
 	}))
 
-	mux.HandleFunc("/api/v1/receipts", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/receipts", protectControlPlaneTokenOr(svc, RouteAuthTenant, "/api/v1/receipts", cpScopeReceiptsRead, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -392,7 +392,7 @@ func registerReceiptRoutes(mux routeMux, svc *Services) {
 		})
 	}))
 
-	mux.HandleFunc("/api/v1/receipts/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/receipts/", protectControlPlaneTokenOr(svc, RouteAuthTenant, "/api/v1/receipts/", cpScopeReceiptsRead, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return

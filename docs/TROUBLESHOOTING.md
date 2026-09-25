@@ -103,11 +103,10 @@ A successful upstream response is not proof that the request crossed HELM.
 
 ## Conformance Failure
 
-Run the public levels:
+Run the conformance vectors:
 
 ```bash
-helm-ai-kernel conform --level L1 --json
-helm-ai-kernel conform --level L2 --json
+helm-ai-kernel conform vectors --json
 helm-ai-kernel conform negative --json
 ```
 

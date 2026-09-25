@@ -123,16 +123,6 @@ func TestFinal_UsageEventJSON(t *testing.T) {
 	}
 }
 
-func TestFinal_EvidencePackInputJSON(t *testing.T) {
-	epi := EvidencePackInput{SessionID: "s1"}
-	data, _ := json.Marshal(epi)
-	var epi2 EvidencePackInput
-	json.Unmarshal(data, &epi2)
-	if epi2.SessionID != "s1" {
-		t.Fatal("round-trip mismatch")
-	}
-}
-
 func TestFinal_VisualEvidenceConfigJSON(t *testing.T) {
 	vec := VisualEvidenceConfig{MaxSnapshotsPerPack: 10}
 	data, _ := json.Marshal(vec)

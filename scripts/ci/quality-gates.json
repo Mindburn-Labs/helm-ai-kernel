@@ -35,7 +35,8 @@
         "gosec",
         "govulncheck",
         "pip-audit",
-        "deadcode"
+        "deadcode",
+        "control-registry"
       ]
     },
     "merge": {
@@ -79,7 +80,8 @@
         "gosec",
         "govulncheck",
         "pip-audit",
-        "deadcode"
+        "deadcode",
+        "control-registry"
       ]
     },
     "release": {
@@ -908,6 +910,13 @@
         "scripts/ci/dead-packages.sh",
         "scripts/ci/dead-packages-allowlist.txt"
       ]
+    },
+    {
+      "id": "control-registry",
+      "title": "Control registry and generated coverage map",
+      "description": "Binding rule R1 (HELM-746). Resolves the invariant hints, self-tests on planted registry entries, then fails on an invalid controls.yaml entry, an enforced entry point unreachable from scripts/ci/deadcode-roots.txt, a named test that go test -list does not report, a removal mutation the tests survive, or a HELM_INVARIANTS.md or coverage-map.json that differs from the registry.",
+      "command": "make controls-check",
+      "timeout_seconds": 900
     }
   ]
 }

@@ -73,9 +73,9 @@ nothing, so it is not a pass. It blocks in CI through the required
 (`before..after`). The nightly profile re-inspects the last 50 commits on
 `main` (`CONCEPT_RANGE=HEAD~50..HEAD`).
 
-`inv-check` is still an **advisory** gate in the `nightly` profile and does not
-block PR or merge today. Promote it with `QUALITY_STRICT=1` locally, or move it
-into the `pr` profile once the constitution has settled.
+`inv-check` is an **advisory** gate in the `nightly` profile. It also runs as
+the first step of `make controls-check`, which blocks in the `pr` and `merge`
+profiles (see Control Registry below), so a dangling hint fails a pull request.
 
 ## TCB Coverage
 
@@ -108,6 +108,31 @@ exits 2. The functions that were unreachable when the gate landed are frozen in
 fails the gate: wire it, delete it, or declare its binary as a root. A listed
 function that is no longer dead also fails the gate, and the message says to
 delete that line in the same PR, so deletion work shrinks the list.
+
+## Control Registry
+
+```bash
+make controls          # regenerate HELM_INVARIANTS.md and coverage-map.json
+make controls-check    # inv-check, then the registry gate
+```
+
+`controls.yaml` is the control registry (binding rule R1). Every claimed control
+and every invariant is an entry naming its owner, entry points, configuration,
+protected operations, bypass assumptions and the Go tests for the allowed,
+forbidden, removal and bypass cases. `HELM_INVARIANTS.md` and `coverage-map.json`
+are generated from it.
+
+`controls-check` blocks in the `pr` and `merge` profiles. It fails on an invalid
+or missing field, a gap in the id sequence, an `enforced` entry point that no
+binary in `scripts/ci/deadcode-roots.txt` reaches, a named test that
+`go test -list` does not report, and a generated file that differs from the
+registry. Reachability reuses the deadcode gate's roots and allowlist: a symbol
+is reachable when its package is in the roots' `go list -deps` graph for
+linux/amd64 and it is not in `scripts/ci/deadcode-allowlist.txt`. An entry may
+also carry a `removal_mutation`; the gate applies it through `go test -overlay`
+and requires every removal test to pass without it and fail with it. Planted
+bad entries must each fail, and a planted good one must pass, before the real
+registry is judged.
 
 ## Profiles
 

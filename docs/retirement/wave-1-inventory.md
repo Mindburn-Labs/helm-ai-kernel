@@ -76,7 +76,7 @@ No §14.4 candidate is in that list.
 | `core/pkg/channels/*` (1,588), `core/cmd/channel_gateway` (277) | The `channel_gateway` main; `packs/antispoof` (protected) / `tests/conformance/channels`, `antispoof` | None. `channel_gateway` is not in the release or the images. | — | **Removed** (s4d), together with `packs/antispoof`, its only importer, and both conformance suites. The boundary manifest is regenerated. | s4d |
 | MCP rug-pull detector (`core/pkg/mcp/rugpull.go`) and pinned-schema checks | Rug-pull: no non-test caller. `core/pkg/mcp` itself stays. | `mcp-bundle.json` advertises `rug-pull-detection` | — | **Rug-pull: removed** (s4c). **Pinned schema: disabled by default** (s4c): the published docs-site MCP guide still passes `--require-pinned-schema=true`, so the flags and the `pinned_schema_hash` field stay accepted but ignored. | s4c |
 | `tee` CLI (`tee_cmd.go`), `core/cmd/tee-collateral`, `.github/workflows/tee-collateral.yml` | `cmd/helm-ai-kernel` | None | — | **Removed** (s4c). No caller in the Console, the Control Plane or the docs site. | s4c |
-| `core/pkg/riskscan` (1,780) | `cmd/helm-ai-kernel` (`scan`, `verify scan`) | None | — | Move to an optional tool or remove | s4 |
+| `core/pkg/riskscan` (1,780) | `cmd/helm-ai-kernel` (`scan`, `verify scan`) | None | — | **Extracted** (s4e) to `tools/riskscan` (binary `helm-risk-scan`); kernel `scan`/`verify-scan` are one-release stubs; `--upload` dropped. | s4e |
 | `core/pkg/shellscan` (3,380) | `cmd/helm-ai-kernel` (`hook`) | None | — | **Keep**, but only inside the observed-only hook (§7.4). The H8 repair is tracked separately. | — |
 | Java SDK (`sdk/java`), Rust SDK (`sdk/rust`) | Not applicable | See the notes below the table. | — | Remove in s5. **Publishing the deprecation is a human action.** | s5 |
 | TLA+ specifications (`proofs/*.tla`, 7 specs), `.github/workflows/tla.yml` | Not applicable | None in the Console, the Control Plane or the docs site | — | **Removed** (s6b). None was tied to code. | s6b |
@@ -340,6 +340,42 @@ Launchpad retirement stays with HELM-762, and the egress-proxy image rebuild is
 outside this slice.
 
 **Gates.** Stale allowlist lines removed: 18 deadcode, 32 gosec and 2 gitleaks.
+
+## Slice 4e evidence
+
+The decision (HELM-756, 2026-09-25) was to extract the scan, not delete it. The
+public docs site opens its quickstart with it, it only observes configuration,
+and §14.4 says to move it to a separate optional tool if kept.
+
+- **Callers.** Only `helm-ai-kernel scan` and `verify-scan`. No route serves
+  it, and the Console, the Control Plane and Enterprise do not call it.
+- **What moves.**
+  - `core/pkg/riskscan` and `core/pkg/riskenvelope` go to
+    `tools/riskscan/internal/`, a separate Go module with its own `main`
+    (`helm-risk-scan`) and tests. The code sits outside the kernel binary, the
+    TCB and the line budget.
+  - The EvidencePack producer in `core/pkg/executor`, together with its tests,
+    moves to `tools/riskscan/internal/scanpack`. The scan was its only caller:
+    Enterprise tests use Enterprise's own copy. Leaving it would have made it
+    new dead code in the shipped binary.
+- **Stubs.** `helm-ai-kernel scan` and `verify-scan` stay for one release. They
+  print the new command and exit 2. The TUI's safety handling for `scan` is
+  unchanged.
+- **Removed.** `--upload`, `--upload-url`, `--yes` and `UploadEnvelope`. No
+  service in the target architecture receives the upload.
+- **Kept.** The default salt path, so pseudonyms stay stable.
+- **Fixtures.** The key-shaped test fixture is now built at runtime, so the
+  secret scanner does not flag the moved tests.
+- **Gates.**
+  - 3 gitleaks, 15 gosec and 1 deadcode allowlist lines went stale and are
+    removed.
+  - The gosec gate scans `core` and `sdk/go` only, so `tools/riskscan` is now
+    outside its scope. Extending the gate to it means allowlisting its
+    findings under their new paths. That is a HELM-745 decision.
+- **Release.** `.goreleaser.yml` gains a `helm-risk-scan` build, archive and
+  Homebrew formula. No workflow runs goreleaser today: the live release path
+  (`make release-binaries`, `scripts/release/*`) does not build the new binary
+  yet.
 
 ## Slice 6a evidence
 

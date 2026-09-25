@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 )
 
 // ────────────────────────────────────────────────────────────────────────
@@ -156,63 +155,6 @@ func TestStress_MerkleLeafBytes(t *testing.T) {
 // Evidence pack with 50 entries
 // ────────────────────────────────────────────────────────────────────────
 
-func TestStress_EvidencePackProducer50Entries(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	input := &EvidencePackInput{
-		ActorID:    "actor-1",
-		DecisionID: "dec-1",
-		EffectID:   "eff-1",
-		Status:     "SUCCESS",
-	}
-	pack, err := producer.Produce(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pack.PackID == "" || pack.Attestation.PackHash == "" {
-		t.Fatal("pack missing required fields")
-	}
-}
-
-func TestStress_EvidencePackValidation(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-	})
-	issues := ValidateEvidencePack(pack)
-	if len(issues) != 0 {
-		t.Fatalf("unexpected validation issues: %v", issues)
-	}
-}
-
-func TestStress_EvidencePackValidationMissingFields(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{Status: "SUCCESS"})
-	pack.Identity.ActorID = ""
-	pack.Policy.DecisionID = ""
-	pack.Effect.EffectID = ""
-	issues := ValidateEvidencePack(pack)
-	if len(issues) < 3 {
-		t.Fatalf("expected at least 3 issues, got %d", len(issues))
-	}
-}
-
-func TestStress_EvidencePackDuration(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	start := time.Now()
-	end := start.Add(5 * time.Second)
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-		StartedAt: start, CompletedAt: end,
-	})
-	if pack.Execution.DurationMs != 5000 {
-		t.Fatalf("expected 5000ms, got %d", pack.Execution.DurationMs)
-	}
-}
-
-// ────────────────────────────────────────────────────────────────────────
-// Concurrent execution 20 goroutines
-// ────────────────────────────────────────────────────────────────────────
-
 func TestStress_ConcurrentMerkleBuilds(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
@@ -231,29 +173,6 @@ func TestStress_ConcurrentMerkleBuilds(t *testing.T) {
 	}
 	wg.Wait()
 }
-
-func TestStress_ConcurrentEvidencePackProduction(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
-		go func(n int) {
-			defer wg.Done()
-			_, err := producer.Produce(context.Background(), &EvidencePackInput{
-				ActorID: fmt.Sprintf("a-%d", n), DecisionID: fmt.Sprintf("d-%d", n),
-				EffectID: fmt.Sprintf("e-%d", n), Status: "SUCCESS",
-			})
-			if err != nil {
-				t.Errorf("goroutine %d: produce failed: %v", n, err)
-			}
-		}(i)
-	}
-	wg.Wait()
-}
-
-// ────────────────────────────────────────────────────────────────────────
-// Every error path
-// ────────────────────────────────────────────────────────────────────────
 
 func TestStress_MCPDriverNilClient(t *testing.T) {
 	d := NewMCPDriver(nil)
@@ -332,30 +251,6 @@ func TestStress_MerkleChain50Deep(t *testing.T) {
 	}
 }
 
-func TestStress_EvidencePackChain50Deep(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	var prevHash string
-	for i := 0; i < 50; i++ {
-		input := &EvidencePackInput{
-			ActorID:    "actor",
-			DecisionID: fmt.Sprintf("dec-%d", i),
-			EffectID:   fmt.Sprintf("eff-%d", i),
-			Status:     "SUCCESS",
-		}
-		if prevHash != "" {
-			input.CheckpointRef = prevHash
-		}
-		pack, err := producer.Produce(context.Background(), input)
-		if err != nil {
-			t.Fatalf("chain %d: %v", i, err)
-		}
-		prevHash = pack.Attestation.PackHash
-	}
-	if prevHash == "" {
-		t.Fatal("expected non-empty final hash")
-	}
-}
-
 func TestStress_MerkleProfileIDConstant(t *testing.T) {
 	if MerkleProfileID != "merkle-v1" {
 		t.Fatalf("unexpected profile ID: %s", MerkleProfileID)
@@ -371,24 +266,6 @@ func TestStress_LeafDomainSeparator(t *testing.T) {
 func TestStress_NodeDomainSeparator(t *testing.T) {
 	if len(NodeDomainSeparator) != 1 || NodeDomainSeparator[0] != 0x01 {
 		t.Fatal("unexpected node domain separator")
-	}
-}
-
-func TestStress_EvidencePackValidationEmptyPackID(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-	})
-	pack.PackID = ""
-	issues := ValidateEvidencePack(pack)
-	found := false
-	for _, issue := range issues {
-		if issue == "pack_id is required" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("expected pack_id validation issue")
 	}
 }
 
@@ -424,28 +301,6 @@ func TestStress_MerkleProofRootMatchesTree(t *testing.T) {
 	proof, _ := tree.GenerateProof(2)
 	if proof.Root != tree.RootHex() {
 		t.Fatal("proof root does not match tree root")
-	}
-}
-
-func TestStress_EvidencePackProducerNilArraysDefault(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-	})
-	if pack.Policy.RulesFired == nil || pack.Receipts.PALReceipts == nil {
-		t.Fatal("nil arrays should be defaulted to empty")
-	}
-}
-
-func TestStress_EvidencePackValidationEmptyStatus(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-	})
-	pack.Execution.Status = ""
-	issues := ValidateEvidencePack(pack)
-	if len(issues) == 0 {
-		t.Fatal("expected validation issue for empty status")
 	}
 }
 
@@ -493,28 +348,5 @@ func TestStress_VerifyViewTamperedRoot(t *testing.T) {
 	valid, _ := VerifyView(view)
 	if valid {
 		t.Fatal("expected invalid for tampered view root")
-	}
-}
-
-func TestStress_EvidencePackRetryCount(t *testing.T) {
-	producer := NewEvidencePackProducer("1.0.0")
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "FAILED", RetryCount: 3,
-	})
-	if pack.Execution.RetryCount != 3 {
-		t.Fatalf("expected retry count 3, got %d", pack.Execution.RetryCount)
-	}
-}
-
-func TestStress_EvidencePackFormatVersion(t *testing.T) {
-	producer := NewEvidencePackProducer("2.0.0")
-	pack, _ := producer.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-	})
-	if pack.FormatVersion != "1.0.0" {
-		t.Fatalf("expected format version 1.0.0, got %s", pack.FormatVersion)
-	}
-	if pack.Attestation.KernelVersion != "2.0.0" {
-		t.Fatalf("expected kernel version 2.0.0, got %s", pack.Attestation.KernelVersion)
 	}
 }

@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,15 +10,18 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskenvelope"
 )
+
+// fakeAPIKey is a key-shaped test fixture, built at runtime so secret scanners
+// do not flag the source.
+var fakeAPIKey = "sk-" + strings.Repeat("1234567890", 3) + "12"
 
 func TestScanCommandWritesLocalArtifacts(t *testing.T) {
 	root := scanFixtureRoot(t)
 	out := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"helm-ai-kernel", "scan",
+	code := run([]string{
+		"scan",
 		"--path", root,
 		"--salt-file", filepath.Join(out, "salt.hex"),
 		"--risk-envelope", filepath.Join(out, "risk.json"),
@@ -59,8 +59,8 @@ func TestScanCommandPrintsCleanBoundaryGrade(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	out := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"helm-ai-kernel", "scan",
+	code := run([]string{
+		"scan",
 		"--path", t.TempDir(),
 		"--salt-file", filepath.Join(out, "salt.hex"),
 		"--no-user-config",
@@ -74,74 +74,12 @@ func TestScanCommandPrintsCleanBoundaryGrade(t *testing.T) {
 	}
 }
 
-func TestScanCommandUploadRequiresURLAndConfirmation(t *testing.T) {
-	root := scanFixtureRoot(t)
-	out := t.TempDir()
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"helm-ai-kernel", "scan",
-		"--path", root,
-		"--salt-file", filepath.Join(out, "salt.hex"),
-		"--upload",
-	}, &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), "--upload-url is required") {
-		t.Fatalf("missing upload url code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
-	}
-
-	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer server.Close()
-	stdout.Reset()
-	stderr.Reset()
-	code = Run([]string{
-		"helm-ai-kernel", "scan",
-		"--path", root,
-		"--salt-file", filepath.Join(out, "salt.hex"),
-		"--upload",
-		"--upload-url", server.URL,
-	}, &stdout, &stderr)
-	if code != 2 || calls != 0 || !strings.Contains(stderr.String(), "Upload not sent") {
-		t.Fatalf("unconfirmed upload code=%d calls=%d stdout=%s stderr=%s", code, calls, stdout.String(), stderr.String())
-	}
-}
-
-func TestScanCommandUploadSendsPrintedBody(t *testing.T) {
-	root := scanFixtureRoot(t)
-	out := t.TempDir()
-	var got []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got, _ = io.ReadAll(r.Body)
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer server.Close()
-
-	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"helm-ai-kernel", "scan",
-		"--path", root,
-		"--salt-file", filepath.Join(out, "salt.hex"),
-		"--upload",
-		"--upload-url", server.URL,
-		"--yes",
-	}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("upload code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
-	}
-	wantHash := riskenvelope.SHA256Ref(got)
-	if !strings.Contains(stdout.String(), "Upload body hash: "+wantHash) {
-		t.Fatalf("stdout hash mismatch, want %s in %s", wantHash, stdout.String())
-	}
-}
-
 func TestScanCommandFromReceiptsWritesEnvelope(t *testing.T) {
 	receipts := scanReceiptFixtureRoot(t)
 	out := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"helm-ai-kernel", "scan",
+	code := run([]string{
+		"scan",
 		"--from-receipts", receipts,
 		"--salt-file", filepath.Join(out, "salt.hex"),
 		"--risk-envelope", filepath.Join(out, "risk.json"),
@@ -170,8 +108,8 @@ func TestScanCommandDoesNotExportOnIncompleteCoverage(t *testing.T) {
 	output := filepath.Join(out, "risk.json")
 	pack := filepath.Join(out, "risk.tar")
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"helm-ai-kernel", "scan",
+	code := run([]string{
+		"scan",
 		"--path", root,
 		"--salt-file", filepath.Join(out, "salt.hex"),
 		"--risk-envelope", output,
@@ -203,8 +141,8 @@ func TestScanCommandCanExcludeUserConfig(t *testing.T) {
 	out := t.TempDir()
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{
-		"helm-ai-kernel", "scan",
+	code := run([]string{
+		"scan",
 		"--path", root,
 		"--salt-file", filepath.Join(out, "salt.hex"),
 	}, &stdout, &stderr)
@@ -214,8 +152,8 @@ func TestScanCommandCanExcludeUserConfig(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	code = Run([]string{
-		"helm-ai-kernel", "scan",
+	code = run([]string{
+		"scan",
 		"--path", root,
 		"--salt-file", filepath.Join(out, "salt.hex"),
 		"--no-user-config",
@@ -231,7 +169,7 @@ func scanFixtureRoot(t *testing.T) string {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "agent.py"), []byte("import anthropic\nOPENAI_API_KEY='sk-12345678901234567890123456789012'\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "agent.py"), []byte("import anthropic\nOPENAI_API_KEY='"+fakeAPIKey+"'\n"), 0o644); err != nil {
 		t.Fatalf("write agent: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(`{"mcpServers":{"private-game-prod":{"command":"deploy-production"}}}`), 0o644); err != nil {
@@ -276,4 +214,52 @@ func scanReceiptFixtureRoot(t *testing.T) string {
 		t.Fatalf("write receipt: %v", err)
 	}
 	return root
+}
+
+func TestVerifyVerifiesArchiveAndFailsClosedOnTampering(t *testing.T) {
+	root := scanFixtureRoot(t)
+	out := t.TempDir()
+	pack := filepath.Join(out, "scan.tar")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{
+		"scan",
+		"--path", root,
+		"--salt-file", filepath.Join(out, "salt.hex"),
+		"--evidence-pack", pack,
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("scan code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"verify", "--bundle", pack, "--json"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("verify code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"verified": true`) {
+		t.Fatalf("verify output=%s", stdout.String())
+	}
+
+	dir := t.TempDir()
+	if err := extractArchive(pack, dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "risk-envelope.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"verify", dir}, &stdout, &stderr); code != 1 {
+		t.Fatalf("tampered verify code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "FAILED") {
+		t.Fatalf("tampered verify output=%s", stdout.String())
+	}
+}
+
+// HELM-756: nothing leaves the machine; the upload flags are gone.
+func TestScanRejectsRemovedUploadFlag(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"scan", "--path", t.TempDir(), "--upload"}, &stdout, &stderr); code != exitUsage {
+		t.Fatalf("--upload code=%d, want %d; stderr=%s", code, exitUsage, stderr.String())
+	}
 }

@@ -65,7 +65,7 @@ are client libraries, not executable Kernel installs.
 | OpenClaw / Hermes adapters | [tool runtime adapters](INTEGRATIONS/tool-runtime-adapters.md) |
 | Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
 | Skill Packs | `helm-ai-kernel skills search --json` |
-| Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
+| Agent risk scan | `helm-risk-scan scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` (separate `helm-risk-scan` binary) |
 | MCP quarantine and recovery | `mcp authorize-call`, `mcp quarantine`, `mcp pending`, `mcp receipts`, `mcp revoke`; `mcp approve` rejects opaque local approval metadata |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
 | Receipts | `helm-ai-kernel receipts status --format json`, `mcp receipts --json`, `boundary records --json` |

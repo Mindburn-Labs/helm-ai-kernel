@@ -12,6 +12,7 @@ canonical local interface; `scripts/ci/quality.py` executes the gate registry in
 ## Quick Start
 
 ```bash
+make check            # what CI runs: the merge profile, every gate blocking
 make quality-pr
 make quality-merge
 make quality-release
@@ -85,8 +86,8 @@ make coverage-tcb
 ```
 
 Runs the kernel TCB packages listed in `scripts/ci/tcb-coverage-floors.txt`
-with coverage and holds each to its floor. It is a step in the required
-`kernel` CI job. A listed package must reach the `default` floor (85% of
+with coverage and holds each to its floor. It is the `tcb-coverage` gate of
+`make check` (the required `ci / gate`). A listed package must reach the `default` floor (85% of
 statements) unless the file gives it its own lower number. Those numbers are
 frozen at the coverage measured when the gate landed; raise them as tests land,
 never lower them. The gate fails when a package is below its floor, when a
@@ -123,29 +124,46 @@ protected operations, bypass assumptions and the Go tests for the allowed,
 forbidden, removal and bypass cases. `HELM_INVARIANTS.md` and `coverage-map.json`
 are generated from it.
 
-`controls-check` blocks in the `pr` and `merge` profiles. It fails on an invalid
-or missing field, a gap in the id sequence, an `enforced` entry point that no
-binary in `scripts/ci/deadcode-roots.txt` reaches, a named test that
-`go test -list` does not report, and a generated file that differs from the
-registry. Reachability reuses the deadcode gate's roots and allowlist: a symbol
-is reachable when its package is in the roots' `go list -deps` graph for
-linux/amd64 and it is not in `scripts/ci/deadcode-allowlist.txt`. An entry may
-also carry a `removal_mutation`; the gate applies it through `go test -overlay`
-and requires every removal test to pass without it and fail with it. Planted
-bad entries must each fail, and a planted good one must pass, before the real
-registry is judged.
+`controls-check` blocks in the `pr` and `merge` profiles. It fails on:
+
+- an invalid or missing field, or a gap in the id sequence;
+- an `enforced` runtime entry whose entry point no binary in
+  `scripts/ci/deadcode-roots.txt` reaches. A symbol is reachable when its package
+  is in the roots' `go list -deps` graph for linux/amd64 and it is not in
+  `scripts/ci/deadcode-allowlist.txt`, which the deadcode gate keeps equal to the
+  measured unreachable set;
+- a named test that does not run and pass. The gate runs every named test with
+  `go test -run` (the Go test cache replays unchanged passes) and with
+  `HELM_TEST_POSTGRES_URL` cleared, so an unlisted Postgres-gated test shows up as
+  a skip and fails. Tests listed in `scripts/ci/postgres-proofs.txt` are left to
+  the approval-ceremony workflow, which runs them against Postgres and fails on a
+  skip;
+- an `enforced` runtime entry without removal proofs. Each proof in
+  `removal_proofs` deletes the control from one file through `go test -overlay`,
+  and every removal test it names must then fail. Together an entry's proofs
+  must name all of its removal tests, and an anchor that no longer matches
+  exactly once fails;
+- a `build`-plane entry (a control CI holds rather than a binary, such as
+  INV-025) whose gates do not block pull requests. A `quality:<id>` gate must be
+  in the `pr` profile and not advisory; a `workflow:<file>#<job>` job must run on
+  `pull_request` with no job-level condition or `continue-on-error`;
+- a generated file that differs from the registry.
+
+Planted bad entries must each fail, and a planted good one must pass, before the
+real registry is judged. A full run takes under a minute locally with a warm
+build cache.
 
 ## Profiles
 
 | Profile | Command | Purpose |
 | --- | --- | --- |
 | PR | `make quality-pr` | Fast documentation, hygiene, Go, TCB, boundary, fixture, and impacted SDK/UI checks. |
-| Merge | `make quality-merge` | Full retained-surface gate with race tests, SDKs, contracts, deployment smoke, and release smoke. |
+| Merge | `make quality-merge` | Full retained-surface gate with race tests, coverage floor, every Go module, SDKs and SDK drift, contracts, docs parity, deployment, kind and release smoke. `make check` runs it with `--strict`, and CI's required `ci / gate` runs `make check`. |
 | Release | `make quality-release` | Release-readiness gate plus prior-release OpenAPI and Proto compatibility checks, reproducible binaries, SBOM, VEX, Cosign bundle verification when available, and release smoke. |
 | Nightly | `make quality-nightly` | Strict (`QUALITY_STRICT=1`) mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, benchmark, invariant and dead-package checks. |
 
-`make quality-pr` runs path-scoped package gates only when changed files impact
-that surface. Override detection with `QUALITY_CHANGED_FILES`, using newline or
+`make quality-pr` is a fast local pre-check; CI does not use it. It runs
+path-scoped package gates only when changed files impact that surface. Override detection with `QUALITY_CHANGED_FILES`, using newline or
 comma-separated paths.
 
 ## Blocking and Advisory Gates

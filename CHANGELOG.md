@@ -93,6 +93,20 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Removed — `workstation certify` and the unrouted trust-key handler (HELM-756)
+
+Breaking.
+
+- **`helm-ai-kernel workstation certify` is removed.** It printed an adapter
+  certification (`observe-only`, `enforceable`, `high-risk-effect-capable`)
+  that it computed from checked-in fixtures, not from a running adapter.
+  - The workstation conformance pack no longer lists it.
+  - The adapter levels remain as vocabulary.
+- **`TrustKeyHandler` in `core/pkg/api` is removed.** Nothing had routed it
+  since HELM-742.
+- **`GovernedGateway`'s internal-error response now carries the request.**
+  Log lines for that response are therefore joined to their trace.
+
 ### Removed — the TLA+ specifications (HELM-756)
 
 - The seven TLA+ specs in `proofs/` and `protocols/specs/tla/HelmKernel.tla`

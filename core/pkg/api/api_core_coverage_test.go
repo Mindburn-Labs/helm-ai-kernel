@@ -20,7 +20,6 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	launchregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/launchpad/registry"
-	trustregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/trust/registry"
 )
 
 func apiCoverageTime() time.Time {
@@ -686,56 +685,6 @@ func TestCoverageOpenAIProxyBranches(t *testing.T) {
 	HandleOpenAIProxy(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gpt-test","messages":[]}`)))
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("failed upstream status = %d, want 502", rec.Code)
-	}
-}
-
-func TestCoverageTrustKeyHandlerBranches(t *testing.T) {
-	pub, _, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
-	}
-	pubHex := hex.EncodeToString(pub)
-	handler := &TrustKeyHandler{Registry: trustregistry.NewTrustRegistry()}
-
-	for name, tc := range map[string]struct {
-		method string
-		body   string
-		want   int
-		add    bool
-	}{
-		"add method":      {method: http.MethodGet, want: http.StatusMethodNotAllowed, add: true},
-		"add bad json":    {method: http.MethodPost, body: `{`, want: http.StatusBadRequest, add: true},
-		"add missing":     {method: http.MethodPost, body: `{"tenant_id":"tenant"}`, want: http.StatusBadRequest, add: true},
-		"add bad key":     {method: http.MethodPost, body: `{"tenant_id":"tenant","key_id":"key","public_key":"abc"}`, want: http.StatusBadRequest, add: true},
-		"revoke method":   {method: http.MethodGet, want: http.StatusMethodNotAllowed},
-		"revoke bad json": {method: http.MethodPost, body: `{`, want: http.StatusBadRequest},
-		"revoke missing":  {method: http.MethodPost, body: `{"tenant_id":"tenant"}`, want: http.StatusBadRequest},
-	} {
-		t.Run(name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.body))
-			if tc.add {
-				handler.HandleAddKey(rec, req)
-			} else {
-				handler.HandleRevokeKey(rec, req)
-			}
-			if rec.Code != tc.want {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.want, rec.Body.String())
-			}
-		})
-	}
-
-	rec := httptest.NewRecorder()
-	addBody := fmt.Sprintf(`{"tenant_id":"tenant","key_id":"key","public_key":"%s"}`, pubHex)
-	handler.HandleAddKey(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(addBody)))
-	if rec.Code != http.StatusOK || !handler.Registry.IsAuthorized("tenant", "key") {
-		t.Fatalf("add key status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	rec = httptest.NewRecorder()
-	handler.HandleRevokeKey(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"tenant_id":"tenant","key_id":"key"}`)))
-	if rec.Code != http.StatusOK || handler.Registry.IsAuthorized("tenant", "key") {
-		t.Fatalf("revoke key status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

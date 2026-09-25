@@ -51,11 +51,11 @@ canonical bestpractices.dev project badge.
 - **Automated test suite** — `make test`, `make test-all`, and `make crucible`,
   exercised by `.github/workflows/ci.yml`.
 - **New functionality has tests** — enforced by reviewer expectation in
-  `CONTRIBUTING.md` and by the `kernel` job in `ci.yml`.
+  `CONTRIBUTING.md` and by `make check`, which `ci.yml` runs as `ci / gate`.
 - **Continuous integration** — `.github/workflows/ci.yml` runs on every
   pull request and every push to `main`.
-- **Static analysis** — `make lint` (`go vet`, `gofmt`) plus the linting
-  step in `ci.yml`.
+- **Static analysis** — `make lint` (`go vet`, `gofmt`), run in CI by
+  `make check`, plus CodeQL in `.github/workflows/codeql.yml`.
 - **Dynamic analysis (fuzzing)** — Go native fuzz tests in
   `core/pkg/canonicalize/jcs_fuzz_test.go`,
   `core/pkg/crypto/keyring_fuzz_test.go`,
@@ -86,8 +86,8 @@ canonical bestpractices.dev project badge.
   the build twice on independent runners and diffs the SHA-256 set.
 - **Supply-chain hygiene** — pinned tool versions in `.github/workflows/`,
   per-release benchmark snapshots pinned by `scripts/release/pin_benchmarks.sh`,
-  and Scorecard CI in `.github/workflows/scorecard.yml`, where pull-request runs
-  stay read-only and retain SARIF as artifact evidence.
+  Scorecard CI in `.github/workflows/scorecard.yml` on `main` and on a
+  schedule, and a diff-aware dependency scan on every pull request.
 
 ## Analysis (Gold-only Additions)
 

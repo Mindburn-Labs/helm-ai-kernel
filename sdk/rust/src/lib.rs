@@ -30,27 +30,72 @@ pub mod generated {
     pub mod truth {
         include!("generated/helm.truth.v1.rs");
     }
+    pub mod errors {
+        include!("generated/helm.errors.v1.rs");
+    }
 }
 
+/// Reason code the SDK reports when an error body is not a HELM error.
+const ERROR_INTERNAL: &str = "ERROR_INTERNAL";
+
 /// Error returned by HELM API calls.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct HelmApiError {
     pub status: u16,
     pub message: String,
+    /// Registered reason code from the error's `helm.errors.v1.ErrorDetail`:
+    /// an open string, empty when there is none.
     pub reason_code: ReasonCode,
+    /// Connect error code, such as `not_found` or `unavailable`.
+    pub code: Option<String>,
+    /// Whether repeating the same request can succeed.
+    pub retryable: bool,
 }
 
 impl std::fmt::Display for HelmApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "HELM API {}: {} ({:?})",
+            "HELM API {}: {} ({})",
             self.status, self.message, self.reason_code
         )
     }
 }
 
 impl std::error::Error for HelmApiError {}
+
+/// Reads the HELM error model (core/pkg/httperr): a Connect error in an RFC 7807
+/// body, plus the deprecated `error` member.
+fn api_error(status: u16, body: serde_json::Value) -> HelmApiError {
+    let text = |v: &serde_json::Value| v.as_str().filter(|s| !s.is_empty()).map(str::to_owned);
+    if !body["code"].is_string() && !body["error"].is_object() {
+        return HelmApiError {
+            status,
+            message: "unknown error".into(),
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
+        };
+    }
+    let detail = body["details"]
+        .as_array()
+        .and_then(|d| d.iter().find(|d| d["type"] == "helm.errors.v1.ErrorDetail"))
+        .map(|d| &d["debug"]);
+    HelmApiError {
+        status,
+        message: text(&body["message"])
+            .or_else(|| text(&body["detail"]))
+            .or_else(|| text(&body["error"]["message"]))
+            .unwrap_or_else(|| "unknown error".into()),
+        reason_code: detail
+            .and_then(|d| text(&d["reason_code"]))
+            .or_else(|| text(&body["error"]["reason_code"]))
+            .unwrap_or_default(),
+        code: text(&body["code"]),
+        retryable: detail
+            .and_then(|d| d["retryable"].as_bool())
+            .unwrap_or(false),
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvidenceEnvelopeExportRequest {
@@ -269,18 +314,7 @@ impl HelmClient {
             return Ok(resp);
         }
         let status = resp.status().as_u16();
-        match resp.json::<HelmError>() {
-            Ok(e) => Err(HelmApiError {
-                status,
-                message: e.error.message,
-                reason_code: e.error.reason_code,
-            }),
-            Err(_) => Err(HelmApiError {
-                status,
-                message: "unknown error".into(),
-                reason_code: ReasonCode::ErrorInternal,
-            }),
-        }
+        Err(api_error(status, resp.json().unwrap_or_default()))
     }
 
     fn get_value(&self, path: &str) -> Result<serde_json::Value, HelmApiError> {
@@ -291,13 +325,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -314,13 +350,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -337,13 +375,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -413,13 +453,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -446,7 +488,8 @@ impl HelmClient {
                 return Err(HelmApiError {
                     status: 0,
                     message: format!("evaluate_decision_v5 requires a non-blank {field}"),
-                    reason_code: ReasonCode::ErrorInternal,
+                    reason_code: ERROR_INTERNAL.into(),
+                    ..Default::default()
                 });
             }
         }
@@ -458,13 +501,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -478,13 +523,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -497,13 +544,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -519,13 +568,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -543,13 +594,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.bytes().map(|b| b.to_vec()).map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -570,13 +623,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -597,13 +652,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -620,13 +677,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -676,58 +735,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
-        })
-    }
-
-    /// POST /api/v1/conformance/run
-    pub fn conformance_run(
-        &self,
-        req: &ConformanceRequest,
-    ) -> Result<ConformanceResult, HelmApiError> {
-        let resp = self
-            .client
-            .post(self.url("/api/v1/conformance/run"))
-            .json(req)
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
-        })
-    }
-
-    /// GET /api/v1/conformance/reports/{id}
-    pub fn get_conformance_report(
-        &self,
-        report_id: &str,
-    ) -> Result<ConformanceResult, HelmApiError> {
-        let resp = self
-            .client
-            .get(self.url(&format!("/api/v1/conformance/reports/{}", report_id)))
-            .send()
-            .map_err(|e| HelmApiError {
-                status: 0,
-                message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
-            })?;
-        let resp = self.check(resp)?;
-        resp.json().map_err(|e| HelmApiError {
-            status: 0,
-            message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -742,18 +758,16 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
-    }
-
-    pub fn list_conformance_reports(&self) -> Result<serde_json::Value, HelmApiError> {
-        self.get_value("/api/v1/conformance/reports")
     }
 
     pub fn list_conformance_vectors(&self) -> Result<serde_json::Value, HelmApiError> {
@@ -769,13 +783,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -792,13 +808,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -815,13 +833,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -836,13 +856,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -862,13 +884,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -889,13 +913,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -957,13 +983,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -1117,13 +1145,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 
@@ -1136,13 +1166,15 @@ impl HelmClient {
             .map_err(|e| HelmApiError {
                 status: 0,
                 message: e.to_string(),
-                reason_code: ReasonCode::ErrorInternal,
+                reason_code: ERROR_INTERNAL.into(),
+                ..Default::default()
             })?;
         let resp = self.check(resp)?;
         resp.json().map_err(|e| HelmApiError {
             status: 0,
             message: e.to_string(),
-            reason_code: ReasonCode::ErrorInternal,
+            reason_code: ERROR_INTERNAL.into(),
+            ..Default::default()
         })
     }
 }
@@ -1169,7 +1201,9 @@ mod tests {
     fn test_reason_codes_are_registry_strings() {
         assert_eq!(reason_codes::ALL.len(), 104);
         assert_eq!(reason_codes::EMERGENCY_STOP_FENCED, "EMERGENCY_STOP_FENCED");
-        assert!(reason_codes::is_registered(reason_codes::EMERGENCY_STOP_FENCED));
+        assert!(reason_codes::is_registered(
+            reason_codes::EMERGENCY_STOP_FENCED
+        ));
         assert!(!reason_codes::is_registered("NOT_A_REGISTERED_CODE"));
     }
 
@@ -1212,10 +1246,21 @@ mod tests {
     }
 
     #[test]
-    fn test_reason_code_serde() {
-        let code = ReasonCode::DenyToolNotFound;
-        let json = serde_json::to_string(&code).unwrap();
-        assert_eq!(json, "\"DENY_TOOL_NOT_FOUND\"");
+    fn test_api_error_reads_the_error_model() {
+        // The kernel pins this body in core/pkg/httperr (TestErrorModelVector).
+        let body: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../protocols/specs/errors/error-model-503.json"
+        ))
+        .unwrap();
+        let err = api_error(503, body);
+        assert_eq!(err.message, "emergency-stop fence active");
+        assert_eq!(err.reason_code, "EMERGENCY_STOP_FENCED");
+        assert_eq!(err.code.as_deref(), Some("unavailable"));
+        assert!(err.retryable);
+        assert_eq!(
+            api_error(500, serde_json::Value::Null).reason_code,
+            ERROR_INTERNAL
+        );
     }
 
     #[test]

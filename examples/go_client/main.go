@@ -48,17 +48,6 @@ func main() {
 		fmt.Printf("Exported: %d bytes\n", len(pack))
 	}
 
-	// 3. Conformance
-	fmt.Println("\n=== Conformance ===")
-	conf, err := client.ConformanceRun(helm.ConformanceRequest{Level: "L2"})
-	if err != nil {
-		if apiErr, ok := err.(*helm.HelmApiError); ok {
-			fmt.Printf("Conformance error: %s\n", apiErr.ReasonCode)
-		}
-	} else {
-		fmt.Printf("Verdict: %s Gates: %d Failed: %d\n", conf.GetVerdict(), conf.GetGates(), conf.GetFailed())
-	}
-
 	// 4. Health
 	fmt.Println("\n=== Health ===")
 	health, err := client.Health()

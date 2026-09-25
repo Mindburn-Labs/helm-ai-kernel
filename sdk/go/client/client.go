@@ -16,9 +16,15 @@ import (
 
 // HelmApiError is returned when the API responds with a non-2xx status.
 type HelmApiError struct {
-	Status     int
-	Message    string
+	Status  int
+	Message string
+	// ReasonCode is the registered reason code from the error's
+	// helm.errors.v1.ErrorDetail: an open string, empty when there is none.
 	ReasonCode ReasonCode
+	// Code is the Connect error code, such as "not_found" or "unavailable".
+	Code string
+	// Retryable reports whether repeating the same request can succeed.
+	Retryable bool
 }
 
 func (e *HelmApiError) Error() string {
@@ -282,20 +288,6 @@ func (c *HelmClient) GetReceipt(receiptHash string) (*Receipt, error) {
 	return &out, err
 }
 
-// ConformanceRun calls POST /api/v1/conformance/run.
-func (c *HelmClient) ConformanceRun(req ConformanceRequest) (*ConformanceResult, error) {
-	var out ConformanceResult
-	err := c.do("POST", "/api/v1/conformance/run", req, &out)
-	return &out, err
-}
-
-// GetConformanceReport calls GET /api/v1/conformance/reports/{id}.
-func (c *HelmClient) GetConformanceReport(reportID string) (*ConformanceResult, error) {
-	var out ConformanceResult
-	err := c.do("GET", "/api/v1/conformance/reports/"+url.PathEscape(reportID), nil, &out)
-	return &out, err
-}
-
 // Health calls GET /healthz.
 func (c *HelmClient) Health() (map[string]string, error) {
 	var out map[string]string
@@ -310,16 +302,52 @@ func (c *HelmClient) Version() (*VersionInfo, error) {
 	return &out, err
 }
 
+// errorBody is the HELM error model (core/pkg/httperr): an RFC 7807 problem
+// whose extension members form a Connect error with one
+// helm.errors.v1.ErrorDetail, plus the deprecated "error" member.
+type errorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Detail  string `json:"detail"`
+	Details []struct {
+		Type  string `json:"type"`
+		Debug struct {
+			ReasonCode string `json:"reason_code"`
+			Retryable  bool   `json:"retryable"`
+		} `json:"debug"`
+	} `json:"details"`
+	Legacy *struct {
+		Message    string `json:"message"`
+		ReasonCode string `json:"reason_code"`
+	} `json:"error"`
+}
+
 func helmAPIErrorFromResponse(resp *http.Response) error {
-	var helmErr HelmError
-	if err := json.NewDecoder(resp.Body).Decode(&helmErr); err == nil {
-		return &HelmApiError{
-			Status:     resp.StatusCode,
-			Message:    helmErr.Error.Message,
-			ReasonCode: helmErr.Error.ReasonCode,
+	var body errorBody
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || (body.Code == "" && body.Legacy == nil) {
+		return &HelmApiError{Status: resp.StatusCode, Message: "unknown error", ReasonCode: ReasonErrorInternal}
+	}
+	out := &HelmApiError{Status: resp.StatusCode, Code: body.Code, Message: firstNonEmpty(body.Message, body.Detail)}
+	for _, detail := range body.Details {
+		if detail.Type == "helm.errors.v1.ErrorDetail" {
+			out.ReasonCode, out.Retryable = detail.Debug.ReasonCode, detail.Debug.Retryable
+			break
 		}
 	}
-	return &HelmApiError{Status: resp.StatusCode, Message: "unknown error", ReasonCode: ReasonErrorInternal}
+	if body.Legacy != nil {
+		out.Message = firstNonEmpty(out.Message, body.Legacy.Message)
+		out.ReasonCode = firstNonEmpty(out.ReasonCode, body.Legacy.ReasonCode)
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func parseHeaderInt(raw string) int {

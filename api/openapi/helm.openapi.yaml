@@ -1890,81 +1890,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/trust/keys/add:
-    post:
-      operationId: addTrustKey
-      tags: [system]
-      summary: Add a trusted signing key
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route mutated a
-        process-local key registry that no verifier reads, so it never changed
-        which keys are trusted. Configure trusted keys in the verifier trust
-        configuration. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddTrustKeyRequest'
-      responses:
-        '200':
-          description: Trust key added
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status: { type: string }
-                  tenant_id: { type: string }
-                  key_id: { type: string }
-        '400':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/trust/keys/revoke:
-    post:
-      operationId: revokeTrustKey
-      tags: [system]
-      summary: Revoke a trusted signing key
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route mutated a
-        process-local key registry that no verifier reads, so a successful answer
-        revoked nothing. Configure trusted keys in the verifier trust
-        configuration. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RevokeTrustKeyRequest'
-      responses:
-        '200':
-          description: Trust key revoked
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status: { type: string }
-                  tenant_id: { type: string }
-                  key_id: { type: string }
-        '400':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  # ── MCP Remote Transport ───────────────────────────
   /mcp:
     get:
       operationId: getMCPTransport
@@ -2846,43 +2771,6 @@ paths:
 
         '403':
           $ref: '#/components/responses/HelmError'
-  /api/v1/gui/receipts/verify:
-    post:
-      operationId: verifyGUIActionReceipt
-      tags: [gui]
-      summary: Verify a grounded GUI action receipt
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route recomputed the
-        receipt hash instead of checking it, and GUI action receipts carry no
-        signature to verify against a trust root. The operation will be removed in a
-        future release.
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/HelmTenantIDHeader'
-        - $ref: '#/components/parameters/HelmPrincipalIDHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GUIActionReceipt'
-      responses:
-        '200':
-          description: GUI action receipt verification result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '401':
-          $ref: '#/components/responses/HelmError'
-
-        '403':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
   /api/v1/evidence/envelopes:
     get:
       operationId: listEvidenceEnvelopeManifests
@@ -3034,108 +2922,6 @@ paths:
           $ref: '#/components/responses/HelmError'
 
   # ── Conformance ─────────────────────────────────────
-  /api/v1/conformance/run:
-    post:
-      operationId: runConformance
-      tags: [conformance]
-      summary: Run conformance tests
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route returned a fixed
-        PASS without running any gate. Run `helm-ai-kernel conform` against an
-        evidence pack instead. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConformanceRequest'
-            example:
-              level: "L2"
-              profile: "full"
-      responses:
-        '200':
-          description: Conformance result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConformanceResult'
-              example:
-                report_id: "conf_abc123"
-                level: "L2"
-                verdict: "PASS"
-                gates: 12
-                failed: 0
-                details:
-                  jcs_canonicalization: "PASS"
-                  pep_boundary: "PASS"
-                  wasi_sandbox: "PASS"
-        '400':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/conformance/reports/{report_id}:
-    get:
-      operationId: getConformanceReport
-      tags: [conformance]
-      summary: Get a conformance report by ID
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route returned a fixed
-        PASS report for any id. Run `helm-ai-kernel conform` against an evidence
-        pack instead. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      parameters:
-        - name: report_id
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Conformance report
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConformanceResult'
-        '404':
-          $ref: '#/components/responses/HelmError'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
-  /api/v1/conformance/reports:
-    get:
-      operationId: listConformanceReports
-      tags: [conformance]
-      summary: List conformance reports
-      deprecated: true
-      description: |
-        Deprecated by HELM-742 and always answers 501. The route listed fixed PASS
-        reports that no gate produced. Run `helm-ai-kernel conform` against an
-        evidence pack instead. The operation will be removed in a future release.
-      security:
-        - AdminBearerAuth: []
-      responses:
-        '200':
-          description: Conformance reports
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ConformanceResult'
-        '401':
-          $ref: '#/components/responses/HelmError'
-        '501':
-          $ref: '#/components/responses/HelmError'
-
   /api/v1/conformance/vectors:
     get:
       operationId: listConformanceVectors
@@ -4151,10 +3937,53 @@ components:
   schemas:
     HelmError:
       type: object
+      description: >-
+        The one HELM error model (target architecture §11.1), written by
+        core/pkg/httperr for every HTTP error. It is an RFC 7807 problem (type,
+        title, status, detail, instance, trace_id) whose extension members form a
+        Connect error (code, message, details;
+        https://connectrpc.com/docs/protocol/#error-end-stream). details holds one
+        helm.errors.v1.ErrorDetail with the registered reason code and whether a
+        retry can succeed. `error` repeats the message in the shape SDK releases up
+        to v0.8.5 parse; it is deprecated and goes at the next major version.
       required: [error]
       properties:
+        code:
+          type: string
+          description: >-
+            Connect error code: canceled, unknown, invalid_argument,
+            deadline_exceeded, not_found, already_exists, permission_denied,
+            resource_exhausted, failed_precondition, aborted, out_of_range,
+            unimplemented, internal, unavailable, data_loss or unauthenticated.
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelmErrorDetail'
+        type:
+          type: string
+          description: RFC 7807 problem type URI
+        title:
+          type: string
+          description: RFC 7807 short summary
+        status:
+          type: integer
+          description: RFC 7807 copy of the HTTP status code
+        detail:
+          type: string
+          description: RFC 7807 explanation; equal to message
+        instance:
+          type: string
+          description: RFC 7807 request path, when known
+        trace_id:
+          type: string
+          description: Request trace identifier, when known
         error:
           type: object
+          deprecated: true
+          description: Legacy error shape, kept for SDK releases up to v0.8.5.
           required: [message, type, code, reason_code]
           properties:
             message:
@@ -4162,32 +3991,47 @@ components:
               description: Human-readable error message
             type:
               type: string
-              enum: [invalid_request, authentication_error, permission_denied, not_found, internal_error]
+              description: invalid_request, authentication_error, permission_denied, not_found or internal_error
             code:
               type: string
-              description: Machine-readable error code
+              description: The Connect error code
             reason_code:
               type: string
-              description: HELM-specific reason code
-              enum:
-                - DENY_TOOL_NOT_FOUND
-                - DENY_SCHEMA_MISMATCH
-                - DENY_OUTPUT_DRIFT
-                - DENY_BUDGET_EXCEEDED
-                - DENY_APPROVAL_REQUIRED
-                - DENY_APPROVAL_TIMEOUT
-                - DENY_SANDBOX_TRAP
-                - DENY_GAS_EXHAUSTION
-                - DENY_TIME_LIMIT
-                - DENY_MEMORY_LIMIT
-                - DENY_POLICY_VIOLATION
-                - DENY_TRUST_KEY_REVOKED
-                - DENY_IDEMPOTENCY_DUPLICATE
-                - ERROR_INTERNAL
+              description: Same as the ErrorDetail reason_code; an open string, empty when there is none
             details:
               type: object
               description: Additional error context
               additionalProperties: true
+
+    HelmErrorDetail:
+      type: object
+      description: >-
+        A Connect error detail holding a helm.errors.v1.ErrorDetail
+        (protocols/proto/helm/errors/v1/errors.proto).
+      required: [type, value, debug]
+      properties:
+        type:
+          type: string
+          description: Fully qualified protobuf message name, helm.errors.v1.ErrorDetail
+        value:
+          type: string
+          description: The ErrorDetail protobuf binary, base64-encoded without padding
+        debug:
+          $ref: '#/components/schemas/HelmErrorDetailFields'
+
+    HelmErrorDetailFields:
+      type: object
+      description: The ErrorDetail fields as JSON
+      required: [reason_code, retryable]
+      properties:
+        reason_code:
+          type: string
+          description: >-
+            Registered code from reason-codes-v1.json as an open string, or empty
+            when the error carries none. Never a closed enum.
+        retryable:
+          type: boolean
+          description: Whether repeating the same request can succeed
 
     ChatCompletionRequest:
       type: object
@@ -6385,7 +6229,10 @@ components:
         recommended_action: { type: string }
         quarantine_record_id: { type: string }
         requires_approval: { type: boolean }
-        schema_pin_required: { type: boolean }
+        schema_pin_required:
+          type: boolean
+          deprecated: true
+          description: Always false since HELM-756. No dispatch path enforces a schema pin.
         authorization_needed: { type: boolean }
         scanned_at: { type: string, format: date-time }
 
@@ -6435,7 +6282,10 @@ components:
         granted_scopes:
           type: array
           items: { type: string }
-        pinned_schema_hash: { type: string }
+        pinned_schema_hash:
+          type: string
+          deprecated: true
+          description: Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.
         tool_schema:
           type: object
           additionalProperties: true
@@ -6729,11 +6579,25 @@ components:
           schema:
             $ref: '#/components/schemas/HelmError'
           example:
+            code: "not_found"
+            message: "Tool not found: unknown_tool"
+            details:
+              - type: "helm.errors.v1.ErrorDetail"
+                value: ""
+                debug: { reason_code: "", retryable: false }
+            type: "https://helm.mindburn.run/errors/404"
+            title: "Not Found"
+            status: 404
+            detail: "Tool not found: unknown_tool"
             error:
               message: "Tool not found: unknown_tool"
-              type: "invalid_request"
-              code: "tool_not_found"
-              reason_code: "DENY_TOOL_NOT_FOUND"
+              type: "not_found"
+              code: "not_found"
+              reason_code: ""
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/HelmError'
+
     IdempotencyConflict:
       description: Idempotency key was reused with a different request fingerprint
       content:

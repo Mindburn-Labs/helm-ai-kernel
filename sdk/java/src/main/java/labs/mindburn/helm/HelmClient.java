@@ -3,8 +3,10 @@ package labs.mindburn.helm;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -81,12 +83,23 @@ public class HelmClient {
     /** Thrown when the HELM API returns a non-2xx response. */
     public static class HelmApiException extends RuntimeException {
         public final int status;
+        /** Registered reason code from the error's helm.errors.v1.ErrorDetail; an open string, empty when there is none. */
         public final String reasonCode;
+        /** Connect error code, such as "not_found" or "unavailable"; null when the body is not a HELM error. */
+        public final String code;
+        /** Whether repeating the same request can succeed. */
+        public final boolean retryable;
 
         public HelmApiException(int status, String message, String reasonCode) {
+            this(status, message, reasonCode, null, false);
+        }
+
+        public HelmApiException(int status, String message, String reasonCode, String code, boolean retryable) {
             super(message);
             this.status = status;
             this.reasonCode = reasonCode;
+            this.code = code;
+            this.retryable = retryable;
         }
     }
 
@@ -240,19 +253,39 @@ public class HelmClient {
         }
     }
 
+    /** Reads the HELM error model (core/pkg/httperr): a Connect error in an RFC 7807 body, plus the deprecated "error" member. */
     private HelmApiException apiError(int status, String body) {
-        HelmError err = null;
+        JsonNode root = null;
         try {
-            err = mapper.readValue(body, HelmError.class);
+            root = mapper.readTree(body);
         } catch (IOException ignored) {
             // Non-JSON error bodies fall through to the raw-body message.
         }
-        HelmErrorError error = err != null ? err.getError() : null;
-        String message = error != null && error.getMessage() != null ? error.getMessage() : body;
-        String reasonCode = error != null && error.getReasonCode() != null
-                ? error.getReasonCode().getValue()
-                : "ERROR_INTERNAL";
-        return new HelmApiException(status, message, reasonCode);
+        if (root == null || !root.isObject() || !(root.path("code").isTextual() || root.path("error").isObject())) {
+            return new HelmApiException(status, body, "ERROR_INTERNAL");
+        }
+        JsonNode legacy = root.path("error");
+        JsonNode detail = MissingNode.getInstance();
+        for (JsonNode item : root.path("details")) {
+            if ("helm.errors.v1.ErrorDetail".equals(item.path("type").asText())) {
+                detail = item.path("debug");
+                break;
+            }
+        }
+        String message = firstNonEmpty(root.path("message").asText(""), root.path("detail").asText(""),
+                legacy.path("message").asText(""), body);
+        String reasonCode = firstNonEmpty(detail.path("reason_code").asText(""), legacy.path("reason_code").asText(""), "");
+        String code = root.path("code").isTextual() ? root.path("code").asText() : null;
+        return new HelmApiException(status, message, reasonCode, code, detail.path("retryable").asBoolean(false));
+    }
+
+    private static String firstNonEmpty(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isEmpty()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private <T> T send(HttpRequest request, Class<T> type) {
@@ -460,31 +493,12 @@ public class HelmClient {
                 .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
     }
 
-    /** POST /api/v1/conformance/run */
-    public ConformanceResult conformanceRun(ConformanceRequest req) {
-        HttpRequest r = this.req("POST", "/api/v1/conformance/run")
-                .POST(HttpRequest.BodyPublishers.ofString(toJson(req)))
-                .build();
-        return send(r, ConformanceResult.class);
-    }
-
-    /** GET /api/v1/conformance/reports/{id} */
-    public ConformanceResult getConformanceReport(String reportId) {
-        HttpRequest r = req("GET", "/api/v1/conformance/reports/" + reportId)
-                .GET().build();
-        return send(r, ConformanceResult.class);
-    }
-
     /** GET /api/v1/conformance/negative */
     public List<NegativeBoundaryVector> listNegativeConformanceVectors() {
         HttpRequest r = req("GET", "/api/v1/conformance/negative")
                 .GET().build();
         return sendList(r, new TypeReference<List<NegativeBoundaryVector>>() {
         });
-    }
-
-    public JsonElement listConformanceReports() {
-        return sendJson(req("GET", "/api/v1/conformance/reports").GET().build());
     }
 
     public JsonElement listConformanceVectors() {

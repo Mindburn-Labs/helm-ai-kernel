@@ -1063,7 +1063,7 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 	toolName := cmd.String("tool-name", "", "Tool name")
 	argsHash := cmd.String("args-hash", "sha256:local", "Canonical tool args hash")
 	scopes := cmd.String("scopes", "", "Comma-separated granted OAuth scopes")
-	pinnedSchema := cmd.String("pinned-schema-hash", "", "Pinned tool schema hash")
+	_ = cmd.String("pinned-schema-hash", "", "Deprecated and ignored (HELM-756): the caller-supplied pin bound nothing")
 	toolSchemaJSON := cmd.String("tool-schema-json", "", "JSON Schema for a discovered server-local tool")
 	outputSchemaJSON := cmd.String("output-schema-json", "", "Output JSON Schema for a discovered server-local tool")
 	oauthResource := cmd.String("oauth-resource", "https://helm.local/mcp", "OAuth resource indicator")
@@ -1115,16 +1115,14 @@ func runMCPAuthorizeCall(args []string, stdout, stderr io.Writer) int {
 		_, _ = quarantine.Discover(context.Background(), mcppkg.DiscoverServerRequest{ServerID: *serverID, ToolNames: []string{*toolName}})
 	}
 	firewall := mcppkg.NewExecutionFirewall(catalog, quarantine, "local-cli")
-	firewall.RequirePinnedSchema = true
 	authorization := mcppkg.ToolCallAuthorization{
-		ServerID:         *serverID,
-		ToolName:         *toolName,
-		Effect:           *effect,
-		ArgsHash:         *argsHash,
-		GrantedScopes:    splitCSV(*scopes),
-		PinnedSchemaHash: *pinnedSchema,
-		OAuthResource:    *oauthResource,
-		ReceiptID:        *receiptID,
+		ServerID:      *serverID,
+		ToolName:      *toolName,
+		Effect:        *effect,
+		ArgsHash:      *argsHash,
+		GrantedScopes: splitCSV(*scopes),
+		OAuthResource: *oauthResource,
+		ReceiptID:     *receiptID,
 	}
 	record, err := firewall.AuthorizeToolCall(context.Background(), authorization)
 	if err != nil {
@@ -1200,16 +1198,10 @@ func mcpAuthorizeCallNextStep(record contracts.ExecutionBoundaryRecord, catalog 
 	}
 	tool, ok := catalog.Lookup(toolName)
 	if !ok || (tool.ServerID != "" && tool.ServerID != serverID) {
-		// The tool is not in the local catalog, so there is no schema to pin;
-		// the caller must supply one explicitly.
-		next = append(next, "--tool-schema-json '<tool JSON Schema>'", "--pinned-schema-hash <hash>")
+		// The tool is not in the local catalog; the caller must supply its schema.
+		next = append(next, "--tool-schema-json '<tool JSON Schema>'")
 		return strings.Join(next, " ")
 	}
-	hash, err := mcppkg.ToolSchemaHash(tool)
-	if err != nil {
-		return ""
-	}
-	next = append(next, "--pinned-schema-hash "+shellToken(hash))
 	if tool.ServerID == "" {
 		return strings.Join(next, " ")
 	}
@@ -1248,9 +1240,9 @@ func mcpVerdictReason(record contracts.ExecutionBoundaryRecord) string {
 		return "MCP server approval expired or was revoked"
 	case contracts.ReasonSchemaViolation:
 		if record.Verdict == contracts.VerdictDeny {
-			return "pinned schema hash does not match the tool's current schema"
+			return "the tool's schema is not a valid JSON Schema"
 		}
-		return "MCP tool schema requires approval or pinning"
+		return "MCP tool is not in the catalog for this server"
 	case contracts.ReasonInsufficientPrivilege:
 		return "granted scopes do not cover the tool's required scopes"
 	case contracts.ReasonVerification:

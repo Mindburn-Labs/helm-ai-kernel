@@ -44,8 +44,8 @@ make sdk-manifest-verify  # fast hash check of committed files vs manifests (no 
 make test-sdk-manifest    # unit tests for the manifest tool
 ```
 
-`make sdk-gen-check` runs in CI as the `sdk-drift` job in
-`.github/workflows/ci.yml`. When it fails, either regenerate and commit
+`make sdk-gen-check` runs in CI as the `sdk-drift` gate of `make check`
+(`ci / gate` in `.github/workflows/ci.yml`). When it fails, either regenerate and commit
 (`bash scripts/sdk/gen.sh && git add sdk/`) after an intentional spec or
 generator change, or revert manual edits to generated files.
 

@@ -81,7 +81,7 @@ flowchart TD
 | `networkPolicy.egress` | `[]` | Explicit production egress peers and ports. `ipBlock` peers must be exact `/32` or `/128` hosts. |
 | `launchpadApps.hermes.mode` | `job` | `job` renders the promoted single-query smoke Job; `deployment` renders a long-lived Hermes gateway Deployment without claiming live F2 promotion. |
 | `launchpadApps.hermes.provider` | `openrouter` | Provider passed to the default Hermes Job command. |
-| `launchpadApps.hermes.model` | `openai/gpt-4o-mini` | Model passed to the default Hermes Job command. |
+| `launchpadApps.hermes.model` | `openai/gpt-6-luna` | Model passed to the default Hermes Job command. |
 | `launchpadApps.hermes.query` | `ping` | Single query passed to the default Hermes Job command. |
 | `launchpadApps.hermes.commandOverride` | `[]` | Full command array replacement for operator-specific Hermes runtime evidence. |
 | `replicaCount` | `1` | Kernel pod count. Production is single-writer until policy replay watermarks move to a distributed transactional store. |

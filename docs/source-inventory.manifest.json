@@ -188,7 +188,6 @@
       "classification": "source-owner-doc",
       "source_patterns": [
         "core/cmd/bootstrap/**",
-        "core/cmd/channel_gateway/**",
         "core/cmd/pack_verify/**",
         "core/cmd/skill_lint/**",
         "core/cmd/skill_pack/**"

@@ -41,7 +41,7 @@ echo ""
 echo "3. OpenAI-compatible chat:"
 if curl -s -X POST "$HELM_URL/v1/chat/completions" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}' \
+  -d '{"model":"gpt-6-sol","messages":[{"role":"user","content":"hello"}]}' \
   -o "$TMP_DIR/chat.json"; then
   pretty_json "$TMP_DIR/chat.json"
 else

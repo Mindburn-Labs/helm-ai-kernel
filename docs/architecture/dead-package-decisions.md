@@ -77,7 +77,7 @@ package directory.
 | `core/pkg/buildguard` | 125 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/celcheck` | 147 | 2026-05-28 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/certification/admission` | 777 | 2026-06-11 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/channels/lark` | 273 | 2026-06-02 | yes | 1 | KEEP | conformance suite: tests/conformance/channels |
+| `core/pkg/channels/lark` | 273 | 2026-06-02 | yes | 1 | DELETED (HELM-756 s4d, see docs/retirement/wave-1-inventory.md) | conformance suite: tests/conformance/channels |
 | `core/pkg/compliance` | 633 | 2026-08-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | doc: docs/documentation-coverage.csv — row in docs/documentation-coverage.csv; parent of the compliance/* cluster |
 | `core/pkg/compliance/cftc` | 448 | 2026-06-20 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/compliance/controls` | 173 | 2026-04-24 | yes | 0 | DELETED (HELM-756 s4a, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -118,6 +118,7 @@ package directory.
 | `core/pkg/connectors/ton/acton` | 2259 | 2026-06-11 | yes | 0 | KEEP | ref: core/pkg/policy/templates/ton_acton.mapl — core/pkg/policy/templates/ton_acton.mapl ships a policy template for it |
 | `core/pkg/constitution` | 616 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/contracts/schemas` | 61 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/crypto/hsm` | 346 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6c, see docs/retirement/wave-1-inventory.md) | orphaned by the conform retirement (#1002): its only importer was gate G13; no workspace repo imports it |
 | `core/pkg/crypto/keystore` | 477 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/crypto/mtls` | 627 | 2026-06-11 | yes | 1 | KEEP | test importer: core/pkg/crypto |
 | `core/pkg/crypto/sdjwt` | 301 | 2026-04-23 | yes | 2 | KEEP | ref: core/pkg/evidencepack/inclusionproof.go; ref: core/pkg/evidencepack/merkle.go; test importer: core/pkg/crypto; test importer: core/pkg/evidencepack |
@@ -160,7 +161,7 @@ package directory.
 | `core/pkg/ledger` | 446 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
 | `core/pkg/networkproof` | 2198 | 2026-08-02 | yes | 0 | KEEP | svc-helm-control-plane imports it |
 | `core/pkg/orgdna` | 239 | 2026-04-23 | no | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer |
-| `core/pkg/packs/antispoof` | 256 | 2026-05-13 | yes | 1 | KEEP | ref: core/pkg/packs/install/install.go; conformance suite: tests/conformance/antispoof |
+| `core/pkg/packs/antispoof` | 256 | 2026-05-13 | yes | 1 | DELETED (HELM-756 s4d, see docs/retirement/wave-1-inventory.md) | ref: core/pkg/packs/install/install.go; conformance suite: tests/conformance/antispoof |
 | `core/pkg/packs/install` | 744 | 2026-07-27 | yes | 0 | KEEP | svc-helm-control-plane imports it; ref: core/pkg/contracts/pack_manifest_v2.go |
 | `core/pkg/patchdelivery` | 988 | 2026-08-04 | yes | 0 | DELETED (HELM-756 s1, see docs/retirement/wave-1-inventory.md) | doc: docs/architecture/agent-process-ownership.md — same doc; not named by HELM-658/674/682 |
 | `core/pkg/policy/lint` | 392 | 2026-04-23 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
@@ -171,6 +172,7 @@ package directory.
 | `core/pkg/proofgraph/aigp` | 624 | 2026-06-11 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/attribution` | 218 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/cloudevents` | 208 | 2026-05-13 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
+| `core/pkg/proofgraph/condensation` | 323 | 2026-09-25 | yes | 0 | DELETED (HELM-756 s6c, see docs/retirement/wave-1-inventory.md) | orphaned by the conform retirement (#1002): its only importer was gate G15; no workspace repo imports it |
 | `core/pkg/proofgraph/consensus` | 554 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/crdt` | 595 | 2026-05-13 | yes | 0 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/proofgraph/graphql` | 136 | 2026-06-02 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |

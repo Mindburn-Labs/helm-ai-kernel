@@ -335,7 +335,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set launchpadApps.openclaw.enabled=true >"$openclaw_rendered"
 assert_contains "$openclaw_rendered" 'openclaw models set "$OPENCLAW_MODEL"'
-assert_contains "$openclaw_rendered" 'value: "openrouter/openai/gpt-4o-mini"'
+assert_contains "$openclaw_rendered" 'value: "openrouter/openai/gpt-6-luna"'
 assert_contains "$openclaw_rendered" "OPENROUTER_API_KEY"
 assert_not_contains "$openclaw_rendered" "OPENAI_API_KEY"
 assert_not_contains "$openclaw_rendered" "OPENAI_BASE_URL"
@@ -362,7 +362,7 @@ openclaw_provider_fail_log="$RENDER_DIR/openclaw-invalid-provider.log"
 if helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set launchpadApps.openclaw.enabled=true \
-    --set-string launchpadApps.openclaw.model=openai/gpt-5.5 >"$RENDER_DIR/openclaw-invalid-provider.yaml" 2>"$openclaw_provider_fail_log"; then
+    --set-string launchpadApps.openclaw.model=openai/gpt-6-sol >"$RENDER_DIR/openclaw-invalid-provider.yaml" 2>"$openclaw_provider_fail_log"; then
     echo "::error::OpenClaw render with a provider outside the OpenRouter egress boundary unexpectedly succeeded"
     exit 1
 fi
@@ -373,7 +373,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set launchpadApps.hermes.enabled=true \
     --set launchpadApps.hermes.provider=anthropic \
-    --set-string launchpadApps.hermes.model=anthropic/claude-3-5-haiku \
+    --set-string launchpadApps.hermes.model=anthropic/claude-haiku-4.5 \
     --set-string launchpadApps.hermes.query="chart smoke" >"$hermes_job_rendered"
 assert_contains "$hermes_job_rendered" "kind: Job"
 assert_contains "$hermes_job_rendered" "helm-ai-kernel-hermes"
@@ -384,7 +384,7 @@ if grep -Eq 'kube_helm[[:space:]]+test[[:space:]][^#]*--logs' "$ROOT/scripts/ci/
     echo "::error::launchpad smoke requests Helm test logs after successful hooks are deleted"
     exit 1
 fi
-assert_contains "$hermes_job_rendered" "anthropic/claude-3-5-haiku"
+assert_contains "$hermes_job_rendered" "anthropic/claude-haiku-4.5"
 assert_contains "$hermes_job_rendered" "chart smoke"
 assert_contains "$hermes_job_rendered" "--provider"
 

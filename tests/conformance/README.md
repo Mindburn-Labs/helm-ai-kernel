@@ -39,8 +39,6 @@ make docs-truth
 Public docs may claim conformance only for profiles and checks represented in this directory.
 
 `helm-ai-kernel conform --level L1|L2` and `helm-ai-kernel test conformance --level L1|L2`
-are local compatibility aliases. They seed deterministic baseline evidence so
-developers can exercise the gates without a release EvidencePack. Public
-release certification must use a non-seeded release EvidencePack and
-conformance report; `make conformance-release-gate` rejects reports marked
-`seeded-local-baseline`.
+were retired in HELM-756 with gates G1–G15 and GX; they exit 2. Public release
+certification uses the signed G0 report from `make conformance-release-report`,
+checked by `make conformance-release-gate`.

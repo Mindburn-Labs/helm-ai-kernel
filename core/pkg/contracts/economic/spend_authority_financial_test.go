@@ -40,7 +40,7 @@ func TestProviderTermsProfileValidationRedlines(t *testing.T) {
 
 func TestProviderPriceSnapshotValidationAndStaleness(t *testing.T) {
 	now := time.Now().UTC()
-	snapshot := NewProviderPriceSnapshot("price-1", "openai", "gpt-5-mini", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
+	snapshot := NewProviderPriceSnapshot("price-1", "openai", "gpt-6-luna", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
 	snapshot.InputTokenMicroCents = 10
 	snapshot.OutputTokenMicroCents = 80
 	snapshot.ContentHash = snapshot.computeHash()
@@ -59,14 +59,14 @@ func TestProviderPriceSnapshotValidationAndStaleness(t *testing.T) {
 	snapshot.OutputTokenMicroCents = 0
 	requireEconomicErrorContains(t, snapshot.Validate(), "at least one price field is required")
 
-	snapshot = NewProviderPriceSnapshot("price-1", "openai", "gpt-5-mini", "USD", "terms-1", "sha256:source", now, now)
+	snapshot = NewProviderPriceSnapshot("price-1", "openai", "gpt-6-luna", "USD", "terms-1", "sha256:source", now, now)
 	snapshot.RequestCents = 1
 	requireEconomicErrorContains(t, snapshot.Validate(), "expires_at must be after effective_at")
 }
 
 func TestProviderPriceSnapshotQuoteCents(t *testing.T) {
 	now := time.Now().UTC()
-	s := NewProviderPriceSnapshot("price-1", "openai", "gpt-4o", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
+	s := NewProviderPriceSnapshot("price-1", "openai", "gpt-6-sol", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
 	s.InputTokenMicroCents = 500   // 0.0005 cents/token
 	s.OutputTokenMicroCents = 1500 // 0.0015 cents/token
 
@@ -104,7 +104,7 @@ func TestProviderPriceSnapshotQuoteCents(t *testing.T) {
 	}
 
 	// A zero-priced request must not produce a non-positive quote.
-	zero := NewProviderPriceSnapshot("price-z", "openai", "gpt-4o", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
+	zero := NewProviderPriceSnapshot("price-z", "openai", "gpt-6-sol", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
 	zero.InputTokenMicroCents = 1
 	if _, err := zero.QuoteCents(0, 0); err == nil {
 		t.Fatal("QuoteCents must reject a zero total")
@@ -116,7 +116,7 @@ func TestProviderPriceSnapshotQuoteCents(t *testing.T) {
 // a sign check alone quoted a ~$10B request at 1 cent.
 func TestProviderPriceSnapshotQuoteCentsRejectsOverflow(t *testing.T) {
 	now := time.Now().UTC()
-	s := NewProviderPriceSnapshot("price-1", "openai", "gpt-4o", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
+	s := NewProviderPriceSnapshot("price-1", "openai", "gpt-6-sol", "USD", "terms-1", "sha256:source", now, now.Add(time.Hour))
 	s.OutputTokenMicroCents = 300 // $3 per 1M output tokens
 
 	for _, tc := range []struct {

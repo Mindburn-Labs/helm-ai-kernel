@@ -43,7 +43,7 @@ func TestEngineClockOverride(t *testing.T) {
 
 func TestProfilesContainsRequiredIDs(t *testing.T) {
 	profiles := Profiles()
-	required := []ProfileID{ProfileSMB, ProfileCore, ProfileEnterprise, ProfileL3}
+	required := []ProfileID{ProfileSMB}
 	for _, id := range required {
 		if _, ok := profiles[id]; !ok {
 			t.Fatalf("missing profile %s", id)
@@ -71,13 +71,6 @@ func TestGatesForSMBIncludesG0(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("SMB should include G0")
-	}
-}
-
-func TestProfileEnterpriseInheritsCore(t *testing.T) {
-	profiles := Profiles()
-	if profiles[ProfileEnterprise].Inherits != ProfileCore {
-		t.Fatal("Enterprise should inherit from Core")
 	}
 }
 

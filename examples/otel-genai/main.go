@@ -66,8 +66,8 @@ func run(out io.Writer) error {
 	// SIEM exporter consumes.
 	gt.TraceGenAIToolCall(ctx, helmotel.GenAIToolCallEvent{
 		System:        observability.GenAISystemOpenAI,
-		RequestModel:  "gpt-4o",
-		ResponseModel: "gpt-4o-2024-08-06",
+		RequestModel:  "gpt-6-sol",
+		ResponseModel: "gpt-6-sol",
 		ResponseID:    "chatcmpl-example",
 		OperationName: observability.GenAIOperationToolCall,
 		ToolName:      "search_web",

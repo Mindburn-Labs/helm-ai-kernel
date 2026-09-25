@@ -64,7 +64,7 @@ entire command array for operators with provider-specific runtime evidence.
 {{- else -}}
 {{- $query := $cfg.query | default "ping" -}}
 {{- $provider := $cfg.provider | default "openrouter" -}}
-{{- $model := $cfg.model | default "openai/gpt-4o-mini" -}}
+{{- $model := $cfg.model | default "openai/gpt-6-luna" -}}
 {{- $shellCommand := printf "HOME=/var/lib/hermes hermes --q %s --provider %s --model %s --ignore_user_config --quiet" ($query | quote) ($provider | quote) ($model | quote) -}}
 - "/bin/sh"
 - "-c"

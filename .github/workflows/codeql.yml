@@ -46,19 +46,29 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
+      # Manual build mode extracts only what is compiled here, so compile every
+      # package and test binary of every tracked Go module (26-09: the old list
+      # skipped nine of the ten core/cmd mains, tools/* and the nested modules).
+      # The step fails if a module does not build or if any core/cmd main was
+      # not in the compiled package list.
       - if: matrix.language == 'go'
-        name: Build Go modules for CodeQL
+        name: Build every Go module for CodeQL
         run: |
+          set -euo pipefail
           go version
-          go test \
-            ./core/cmd/helm-ai-kernel \
-            ./core/pkg/... \
-            ./examples/go_client/... \
-            ./examples/otel-genai/... \
-            ./sdk/go/... \
-            ./tests/conformance/... \
-            ./tests/launchpad/... \
-            -run '^$'
+          modules="$(git ls-files ':(glob)**/go.mod' | xargs -n1 dirname | sort -u)"
+          test -n "$modules"
+          : > "$RUNNER_TEMP/codeql-packages.txt"
+          for module in $modules; do
+            echo "==> $module"
+            (cd "$module" && GOWORK=off go list -f '{{.ImportPath}}' ./... >> "$RUNNER_TEMP/codeql-packages.txt")
+            (cd "$module" && GOWORK=off go test ./... -run '^$' >/dev/null)
+          done
+          for main in core/cmd/*/; do
+            pkg="github.com/Mindburn-Labs/helm-ai-kernel/${main%/}"
+            grep -qx "$pkg" "$RUNNER_TEMP/codeql-packages.txt" || { echo "::error::$pkg was not compiled for CodeQL"; exit 1; }
+          done
+          echo "compiled $(wc -l < "$RUNNER_TEMP/codeql-packages.txt") packages across $(echo "$modules" | wc -l) modules"
       - uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
         with:
           category: "/language:${{ matrix.language }}"

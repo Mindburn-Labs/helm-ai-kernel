@@ -9,7 +9,7 @@ import (
 // reconciliation has a real internal-side content hash to bind against.
 func usageReceiptFor(t *testing.T, id, providerRequestID string, providerCostCents int64) *UsageReceipt {
 	t.Helper()
-	r := NewUsageReceipt(id, "tenant-1", "rq-"+id, "si-"+id, "env-"+id, "agent-1", "openai", "gpt-4o", providerCostCents+1_000, providerCostCents, 10, "USD", "policy-1", "evidence://"+id)
+	r := NewUsageReceipt(id, "tenant-1", "rq-"+id, "si-"+id, "env-"+id, "agent-1", "openai", "gpt-6-sol", providerCostCents+1_000, providerCostCents, 10, "USD", "policy-1", "evidence://"+id)
 	r.ProviderRequestID = providerRequestID
 	r.ProviderPriceSnapshotHash = "sha256:price-" + id
 	r.SettlementReceiptHash = "sha256:settle-" + id
@@ -22,7 +22,7 @@ func usageReceiptFor(t *testing.T, id, providerRequestID string, providerCostCen
 }
 
 func invoiceLine(lineID, providerRequestID string, billed int64) ProviderInvoiceLine {
-	return ProviderInvoiceLine{LineID: lineID, ProviderRequestID: providerRequestID, ModelID: "gpt-4o", BilledCostCents: billed, Currency: "USD"}
+	return ProviderInvoiceLine{LineID: lineID, ProviderRequestID: providerRequestID, ModelID: "gpt-6-sol", BilledCostCents: billed, Currency: "USD"}
 }
 
 func reconWindow() (time.Time, time.Time) {

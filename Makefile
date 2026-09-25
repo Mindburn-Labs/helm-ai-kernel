@@ -41,6 +41,12 @@ test-approval-ceremony-postgres:
 test-receipt-store-postgres-migration:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/store -run '^(TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash|TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor)$$' -count=1
+# postgres-proofs runs every Postgres-gated proof in scripts/ci/postgres-proofs.txt
+# against HELM_TEST_POSTGRES_URL and fails on any skip, failure or short count.
+.PHONY: postgres-proofs
+postgres-proofs:
+	bash scripts/ci/postgres_proofs.sh
+
 test-generated-spec-approval-ceremony-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/boundary/generatedspecapprovalceremony -run TestPostgresLifecycleSingleIssueConsumeAndFence -count=10

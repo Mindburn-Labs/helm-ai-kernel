@@ -6,24 +6,27 @@
 //
 // Zone C's effect gateway exposes the six operations of rev 3.4 §4.2 through
 // EffectGatewayService: Propose, Approve/Reject, Dispatch, Observe, Get
-// (GetAttempt) and Stop/Lift. They are the only mutating entry points to
-// authority. Transaction semantics are ADR-0001 (admission, approval,
-// dispatch claim, stops), ADR-0003 (settlement) and ADR-0005 (tenant from the
-// token). Design note: docs/architecture/gateway-effect-api.md.
+// (GetAttempt) and Stop/Lift. WS-B's review of this contract (2026-09-25)
+// adds Cancel, the ADR-0001 narrowing ADMITTED -> CANCELLED, and
+// GetAttemptContent, a read. Transaction semantics are ADR-0001 (admission,
+// approval, dispatch claim, stops), ADR-0003 (settlement) and ADR-0005
+// (tenant from the token). Design note: docs/architecture/gateway-effect-api.md.
 //
 // Wire rules:
 //
-//   - Identity. Tenant and principal come only from the caller's token
-//     (rule R9, ADR-0005). No request message carries a tenant, a caller
-//     principal or a workspace. Identifiers that appear in requests
-//     (mandate_id, stop scope keys) are selectors the gateway checks against
-//     the authenticated principal; they never grant authority (R3).
-//   - Token scopes. Each RPC names the one token scope it accepts (ADR-0005
-//     allows one scope per token). Scopes are one per authority class, as
+//   - Identity. Tenant, workspace and principal come only from the caller's
+//     token (rule R9, ADR-0005). No request message carries them.
+//     Identifiers that appear in requests (mandate_id, stop scope keys) are
+//     selectors the gateway checks against the authenticated principal; they
+//     never grant authority (R3). Attempts belong to the workspace of the
+//     token that proposed them.
+//   - Token scopes. Each RPC names the token scopes it accepts; ADR-0005
+//     allows one scope per token. Scopes are one per authority class, as
 //     WS-B proposed on 2026-09-25: helm.gateway.propose, helm.gateway.decide,
-//     helm.gateway.read, helm.gateway.stop, and helm.gateway.execute, which is
-//     reserved for workload principals if Dispatch or Observe ever get an
-//     external caller.
+//     helm.gateway.read and helm.gateway.stop. helm.gateway.execute is for
+//     workload principals only: the model gateway's inference endpoint takes
+//     it (§8), and so would Dispatch or Observe if they ever get an external
+//     caller.
 //   - Decisions are states, not errors. DENIED, ESCALATED, CANCELLED and
 //     UNKNOWN are attempt states in a successful response. A Connect error
 //     means the gateway could not evaluate the request. Every error carries
@@ -37,10 +40,14 @@
 //   - Amounts are integers: resource units, currency minor units, or model
 //     spend in currency micro-units. There is no floating-point field.
 //   - Idempotency (R6). Propose, Stop and Lift carry a tenant-scoped
-//     idempotency key. Approve, Reject and Dispatch are idempotent on the
-//     attempt: repeating one returns the attempt as stored and never starts
-//     a second dispatch. Repeating Observe may record another read-back, and
-//     never dispatches.
+//     idempotency key. Approve, Reject, Cancel and Dispatch are idempotent on
+//     the attempt: repeating one returns the attempt as stored and never
+//     starts a second dispatch. Repeating Observe may record another
+//     read-back, and never dispatches.
+//   - Held field numbers. A few field numbers are kept free for fields whose
+//     shape a later slice decides; the message comments name them and a
+//     contract test keeps them unassigned. They are not `reserved`, because
+//     buf breaking would then reject the field that later takes the number.
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
 // values and no signatures or keys. Token verification is ADR-0005's and adds
@@ -84,6 +91,9 @@ const (
 	// EffectGatewayServiceRejectProcedure is the fully-qualified name of the EffectGatewayService's
 	// Reject RPC.
 	EffectGatewayServiceRejectProcedure = "/helm.gateway.v1.EffectGatewayService/Reject"
+	// EffectGatewayServiceCancelProcedure is the fully-qualified name of the EffectGatewayService's
+	// Cancel RPC.
+	EffectGatewayServiceCancelProcedure = "/helm.gateway.v1.EffectGatewayService/Cancel"
 	// EffectGatewayServiceDispatchProcedure is the fully-qualified name of the EffectGatewayService's
 	// Dispatch RPC.
 	EffectGatewayServiceDispatchProcedure = "/helm.gateway.v1.EffectGatewayService/Dispatch"
@@ -93,6 +103,9 @@ const (
 	// EffectGatewayServiceGetAttemptProcedure is the fully-qualified name of the EffectGatewayService's
 	// GetAttempt RPC.
 	EffectGatewayServiceGetAttemptProcedure = "/helm.gateway.v1.EffectGatewayService/GetAttempt"
+	// EffectGatewayServiceGetAttemptContentProcedure is the fully-qualified name of the
+	// EffectGatewayService's GetAttemptContent RPC.
+	EffectGatewayServiceGetAttemptContentProcedure = "/helm.gateway.v1.EffectGatewayService/GetAttemptContent"
 	// EffectGatewayServiceStopProcedure is the fully-qualified name of the EffectGatewayService's Stop
 	// RPC.
 	EffectGatewayServiceStopProcedure = "/helm.gateway.v1.EffectGatewayService/Stop"
@@ -111,7 +124,8 @@ type EffectGatewayServiceClient interface {
 	//
 	// The attempt is keyed by (tenant from the token, idempotency_key) and a
 	// request digest the gateway computes over every ProposeRequest field
-	// except idempotency_key, together with the authenticated principal.
+	// except idempotency_key, together with the authenticated principal
+	// (ADR-0001 §1 step 1, R6).
 	//   - New key: the attempt is created and decided. The response state is
 	//     ADMITTED, DENIED or ESCALATED.
 	//   - Same key, same digest: the stored attempt is returned untouched, in
@@ -135,17 +149,28 @@ type EffectGatewayServiceClient interface {
 	// [reason_code: APPROVAL_REQUIRED].
 	Propose(context.Context, *connect.Request[ProposeRequest]) (*connect.Response[ProposeResponse], error)
 	// Approve records an approval for an ESCALATED attempt and re-runs
-	// admission with it, in the same transaction (ADR-0001 §5.5). The response
-	// state is ADMITTED, or DENIED if admission now denies.
+	// admission with it, in the same transaction (ADR-0001 §1 "Approval",
+	// §5.5). The response state is ADMITTED, or DENIED if admission now
+	// denies.
 	//
 	// Token scope: helm.gateway.decide, minted for human principals only, from
-	// an interactive session (WS-B, 2026-09-25). The approver is the token's
-	// principal and must be an active principal of the tenant other than the
-	// requester (§4.2, F-08). Self-approval is DENIED
-	// [reason_code_pending: APPROVER_NOT_DISTINCT]. Proposed for the
-	// implementing slice (WS-B, 2026-09-25): a decide token is single-use per
-	// attempt, its txn claim must equal attempt_id, and a reused jti is
-	// rejected.
+	// an interactive session (WS-B, 2026-09-25). Proposed for the implementing
+	// slice: a decide token is single-use per attempt, its txn claim must
+	// equal attempt_id, and a reused jti is rejected.
+	//
+	// Preconditions, checked before anything is recorded (ADR-0001 §1
+	// "Approval", invariant I6). A failure is an error on the call, and the
+	// attempt stays ESCALATED, unchanged:
+	//   - The approver is the token's principal and must be an active
+	//     principal of the tenant other than the requester (§4.2, F-08).
+	//     Self-approval is permission_denied
+	//     [reason_code_pending: APPROVER_NOT_DISTINCT].
+	//   - approval_digest must equal the pending approval's digest, or the call
+	//     is failed_precondition.
+	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
+	//     authority widening, stop lifts) fail closed with permission_denied
+	//     [reason_code_pending: STEP_UP_REQUIRED] until the step-up assertion
+	//     field exists (held field number 4).
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.
@@ -154,16 +179,37 @@ type EffectGatewayServiceClient interface {
 	// is REJECTED [reason_code_pending: APPROVAL_REJECTED]. Nothing was
 	// reserved, so nothing is released.
 	//
-	// Token scope: helm.gateway.decide, with the same principal and token
-	// rules as Approve. An attempt that is no longer ESCALATED is returned
-	// unchanged with existing true.
+	// Token scope: helm.gateway.decide, with the same principal, digest and
+	// token rules as Approve; a rejection needs no step-up. An attempt that is
+	// no longer ESCALATED is returned unchanged with existing true.
 	Reject(context.Context, *connect.Request[RejectRequest]) (*connect.Response[RejectResponse], error)
+	// Cancel withdraws an attempt before dispatch: the ADR-0001 transition
+	// ADMITTED -> CANCELLED, which voids the permit and releases the
+	// reservation in the same transaction (ADR-0003), and ESCALATED ->
+	// CANCELLED, which removes a pending approval and has nothing to release.
+	// Cancelling narrows authority, so it needs no approval (§4.1 item 7).
+	// CANCELLED by Cancel has an empty reason_code.
+	//
+	// Token scope: helm.gateway.propose, when the token's principal is the
+	// requester.
+	// Token scope: helm.gateway.stop, for an operator cancelling another
+	// principal's attempt.
+	//
+	// An attempt already DENIED, REJECTED, EXPIRED or CANCELLED is returned
+	// unchanged with existing true. DISPATCHING or any later state is
+	// failed_precondition: a dispatched call cannot be retracted (§4.3).
+	Cancel(context.Context, *connect.Request[CancelRequest]) (*connect.Response[CancelResponse], error)
 	// Dispatch claims the permit of an ADMITTED attempt and sends the effect
 	// through its adapter, which injects the provider credential (R8).
 	//
 	// Token scope: none for external callers; the gateway dispatches
 	// internally (WS-B, 2026-09-25). helm.gateway.execute is reserved for a
 	// workload principal, never a human, if an external caller is added.
+	//
+	// Model calls do not use this RPC. The caller presents the permit to the
+	// model gateway's inference endpoint (helm.gateway.execute, workload
+	// principal), which claims the permit, injects the provider key, streams
+	// the response and settles (§8, HELM-752).
 	//
 	// The claim (ADR-0001 §1, "Dispatch claim") re-locks the authority rows,
 	// re-reads stops and compares each row's version with the permit's
@@ -180,8 +226,9 @@ type EffectGatewayServiceClient interface {
 	//     DISPATCHED, OBSERVED when the provider's response is a definitive
 	//     outcome, or UNKNOWN when the response is ambiguous or missing.
 	//
-	// Stops and revocations take effect at admission and at this claim. They
-	// cannot retract a call that is already dispatched.
+	// Stops and revocations take effect at admission and at this claim
+	// (ADR-0001 invariant I4). They cannot retract a call that is already
+	// dispatched.
 	//
 	// An attempt that is CANCELLED, DISPATCHING or in any later state is
 	// returned unchanged with existing true. UNKNOWN is never re-dispatched by
@@ -210,6 +257,14 @@ type EffectGatewayServiceClient interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetAttempt(context.Context, *connect.Request[GetAttemptRequest]) (*connect.Response[GetAttemptResponse], error)
+	// GetAttemptContent returns the argument bytes of one attempt (§5.6
+	// content), so an approver's client can check them against
+	// argument_digest and recompute the approval digest before it submits a
+	// decision. not_found also covers content that was never retained or has
+	// been erased.
+	//
+	// Token scope: helm.gateway.read.
+	GetAttemptContent(context.Context, *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error)
 	// Stop writes a stop row and bumps the version of its scope's control row
 	// (ADR-0001 §1, narrowing transitions). Narrowing needs no approval
 	// (§4.1 item 7). Admissions after the commit are DENIED and admitted
@@ -221,10 +276,10 @@ type EffectGatewayServiceClient interface {
 	Stop(context.Context, *connect.Request[StopRequest]) (*connect.Response[StopResponse], error)
 	// Lift proposes lifting a stop. Lifting widens authority, so it is an
 	// effect attempt of type helm.authority.lift that needs approval by
-	// another principal (§4.1 item 7, ADR-0001 §1); its payload is contract 5.
-	// The response carries that attempt, normally ESCALATED. It follows
-	// Approve and Dispatch like any other attempt; the stop is lifted when the
-	// attempt is dispatched.
+	// another principal, with step-up (§4.1 item 7, §10.1, ADR-0001 §1); its
+	// payload is contract 5. The response carries that attempt, normally
+	// ESCALATED. It follows Approve and Dispatch like any other attempt; the
+	// stop is lifted when the attempt is dispatched.
 	//
 	// Token scope: helm.gateway.stop. Proposed for the implementing slice
 	// (WS-B, 2026-09-25): a single-use token whose txn claim equals stop_id.
@@ -260,6 +315,12 @@ func NewEffectGatewayServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(effectGatewayServiceMethods.ByName("Reject")),
 			connect.WithClientOptions(opts...),
 		),
+		cancel: connect.NewClient[CancelRequest, CancelResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceCancelProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("Cancel")),
+			connect.WithClientOptions(opts...),
+		),
 		dispatch: connect.NewClient[DispatchRequest, DispatchResponse](
 			httpClient,
 			baseURL+EffectGatewayServiceDispatchProcedure,
@@ -276,6 +337,13 @@ func NewEffectGatewayServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+EffectGatewayServiceGetAttemptProcedure,
 			connect.WithSchema(effectGatewayServiceMethods.ByName("GetAttempt")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getAttemptContent: connect.NewClient[GetAttemptContentRequest, GetAttemptContentResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceGetAttemptContentProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("GetAttemptContent")),
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
@@ -296,14 +364,16 @@ func NewEffectGatewayServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // effectGatewayServiceClient implements EffectGatewayServiceClient.
 type effectGatewayServiceClient struct {
-	propose    *connect.Client[ProposeRequest, ProposeResponse]
-	approve    *connect.Client[ApproveRequest, ApproveResponse]
-	reject     *connect.Client[RejectRequest, RejectResponse]
-	dispatch   *connect.Client[DispatchRequest, DispatchResponse]
-	observe    *connect.Client[ObserveRequest, ObserveResponse]
-	getAttempt *connect.Client[GetAttemptRequest, GetAttemptResponse]
-	stop       *connect.Client[StopRequest, StopResponse]
-	lift       *connect.Client[LiftRequest, LiftResponse]
+	propose           *connect.Client[ProposeRequest, ProposeResponse]
+	approve           *connect.Client[ApproveRequest, ApproveResponse]
+	reject            *connect.Client[RejectRequest, RejectResponse]
+	cancel            *connect.Client[CancelRequest, CancelResponse]
+	dispatch          *connect.Client[DispatchRequest, DispatchResponse]
+	observe           *connect.Client[ObserveRequest, ObserveResponse]
+	getAttempt        *connect.Client[GetAttemptRequest, GetAttemptResponse]
+	getAttemptContent *connect.Client[GetAttemptContentRequest, GetAttemptContentResponse]
+	stop              *connect.Client[StopRequest, StopResponse]
+	lift              *connect.Client[LiftRequest, LiftResponse]
 }
 
 // Propose calls helm.gateway.v1.EffectGatewayService.Propose.
@@ -321,6 +391,11 @@ func (c *effectGatewayServiceClient) Reject(ctx context.Context, req *connect.Re
 	return c.reject.CallUnary(ctx, req)
 }
 
+// Cancel calls helm.gateway.v1.EffectGatewayService.Cancel.
+func (c *effectGatewayServiceClient) Cancel(ctx context.Context, req *connect.Request[CancelRequest]) (*connect.Response[CancelResponse], error) {
+	return c.cancel.CallUnary(ctx, req)
+}
+
 // Dispatch calls helm.gateway.v1.EffectGatewayService.Dispatch.
 func (c *effectGatewayServiceClient) Dispatch(ctx context.Context, req *connect.Request[DispatchRequest]) (*connect.Response[DispatchResponse], error) {
 	return c.dispatch.CallUnary(ctx, req)
@@ -334,6 +409,11 @@ func (c *effectGatewayServiceClient) Observe(ctx context.Context, req *connect.R
 // GetAttempt calls helm.gateway.v1.EffectGatewayService.GetAttempt.
 func (c *effectGatewayServiceClient) GetAttempt(ctx context.Context, req *connect.Request[GetAttemptRequest]) (*connect.Response[GetAttemptResponse], error) {
 	return c.getAttempt.CallUnary(ctx, req)
+}
+
+// GetAttemptContent calls helm.gateway.v1.EffectGatewayService.GetAttemptContent.
+func (c *effectGatewayServiceClient) GetAttemptContent(ctx context.Context, req *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error) {
+	return c.getAttemptContent.CallUnary(ctx, req)
 }
 
 // Stop calls helm.gateway.v1.EffectGatewayService.Stop.
@@ -357,7 +437,8 @@ type EffectGatewayServiceHandler interface {
 	//
 	// The attempt is keyed by (tenant from the token, idempotency_key) and a
 	// request digest the gateway computes over every ProposeRequest field
-	// except idempotency_key, together with the authenticated principal.
+	// except idempotency_key, together with the authenticated principal
+	// (ADR-0001 §1 step 1, R6).
 	//   - New key: the attempt is created and decided. The response state is
 	//     ADMITTED, DENIED or ESCALATED.
 	//   - Same key, same digest: the stored attempt is returned untouched, in
@@ -381,17 +462,28 @@ type EffectGatewayServiceHandler interface {
 	// [reason_code: APPROVAL_REQUIRED].
 	Propose(context.Context, *connect.Request[ProposeRequest]) (*connect.Response[ProposeResponse], error)
 	// Approve records an approval for an ESCALATED attempt and re-runs
-	// admission with it, in the same transaction (ADR-0001 §5.5). The response
-	// state is ADMITTED, or DENIED if admission now denies.
+	// admission with it, in the same transaction (ADR-0001 §1 "Approval",
+	// §5.5). The response state is ADMITTED, or DENIED if admission now
+	// denies.
 	//
 	// Token scope: helm.gateway.decide, minted for human principals only, from
-	// an interactive session (WS-B, 2026-09-25). The approver is the token's
-	// principal and must be an active principal of the tenant other than the
-	// requester (§4.2, F-08). Self-approval is DENIED
-	// [reason_code_pending: APPROVER_NOT_DISTINCT]. Proposed for the
-	// implementing slice (WS-B, 2026-09-25): a decide token is single-use per
-	// attempt, its txn claim must equal attempt_id, and a reused jti is
-	// rejected.
+	// an interactive session (WS-B, 2026-09-25). Proposed for the implementing
+	// slice: a decide token is single-use per attempt, its txn claim must
+	// equal attempt_id, and a reused jti is rejected.
+	//
+	// Preconditions, checked before anything is recorded (ADR-0001 §1
+	// "Approval", invariant I6). A failure is an error on the call, and the
+	// attempt stays ESCALATED, unchanged:
+	//   - The approver is the token's principal and must be an active
+	//     principal of the tenant other than the requester (§4.2, F-08).
+	//     Self-approval is permission_denied
+	//     [reason_code_pending: APPROVER_NOT_DISTINCT].
+	//   - approval_digest must equal the pending approval's digest, or the call
+	//     is failed_precondition.
+	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
+	//     authority widening, stop lifts) fail closed with permission_denied
+	//     [reason_code_pending: STEP_UP_REQUIRED] until the step-up assertion
+	//     field exists (held field number 4).
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.
@@ -400,16 +492,37 @@ type EffectGatewayServiceHandler interface {
 	// is REJECTED [reason_code_pending: APPROVAL_REJECTED]. Nothing was
 	// reserved, so nothing is released.
 	//
-	// Token scope: helm.gateway.decide, with the same principal and token
-	// rules as Approve. An attempt that is no longer ESCALATED is returned
-	// unchanged with existing true.
+	// Token scope: helm.gateway.decide, with the same principal, digest and
+	// token rules as Approve; a rejection needs no step-up. An attempt that is
+	// no longer ESCALATED is returned unchanged with existing true.
 	Reject(context.Context, *connect.Request[RejectRequest]) (*connect.Response[RejectResponse], error)
+	// Cancel withdraws an attempt before dispatch: the ADR-0001 transition
+	// ADMITTED -> CANCELLED, which voids the permit and releases the
+	// reservation in the same transaction (ADR-0003), and ESCALATED ->
+	// CANCELLED, which removes a pending approval and has nothing to release.
+	// Cancelling narrows authority, so it needs no approval (§4.1 item 7).
+	// CANCELLED by Cancel has an empty reason_code.
+	//
+	// Token scope: helm.gateway.propose, when the token's principal is the
+	// requester.
+	// Token scope: helm.gateway.stop, for an operator cancelling another
+	// principal's attempt.
+	//
+	// An attempt already DENIED, REJECTED, EXPIRED or CANCELLED is returned
+	// unchanged with existing true. DISPATCHING or any later state is
+	// failed_precondition: a dispatched call cannot be retracted (§4.3).
+	Cancel(context.Context, *connect.Request[CancelRequest]) (*connect.Response[CancelResponse], error)
 	// Dispatch claims the permit of an ADMITTED attempt and sends the effect
 	// through its adapter, which injects the provider credential (R8).
 	//
 	// Token scope: none for external callers; the gateway dispatches
 	// internally (WS-B, 2026-09-25). helm.gateway.execute is reserved for a
 	// workload principal, never a human, if an external caller is added.
+	//
+	// Model calls do not use this RPC. The caller presents the permit to the
+	// model gateway's inference endpoint (helm.gateway.execute, workload
+	// principal), which claims the permit, injects the provider key, streams
+	// the response and settles (§8, HELM-752).
 	//
 	// The claim (ADR-0001 §1, "Dispatch claim") re-locks the authority rows,
 	// re-reads stops and compares each row's version with the permit's
@@ -426,8 +539,9 @@ type EffectGatewayServiceHandler interface {
 	//     DISPATCHED, OBSERVED when the provider's response is a definitive
 	//     outcome, or UNKNOWN when the response is ambiguous or missing.
 	//
-	// Stops and revocations take effect at admission and at this claim. They
-	// cannot retract a call that is already dispatched.
+	// Stops and revocations take effect at admission and at this claim
+	// (ADR-0001 invariant I4). They cannot retract a call that is already
+	// dispatched.
 	//
 	// An attempt that is CANCELLED, DISPATCHING or in any later state is
 	// returned unchanged with existing true. UNKNOWN is never re-dispatched by
@@ -456,6 +570,14 @@ type EffectGatewayServiceHandler interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetAttempt(context.Context, *connect.Request[GetAttemptRequest]) (*connect.Response[GetAttemptResponse], error)
+	// GetAttemptContent returns the argument bytes of one attempt (§5.6
+	// content), so an approver's client can check them against
+	// argument_digest and recompute the approval digest before it submits a
+	// decision. not_found also covers content that was never retained or has
+	// been erased.
+	//
+	// Token scope: helm.gateway.read.
+	GetAttemptContent(context.Context, *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error)
 	// Stop writes a stop row and bumps the version of its scope's control row
 	// (ADR-0001 §1, narrowing transitions). Narrowing needs no approval
 	// (§4.1 item 7). Admissions after the commit are DENIED and admitted
@@ -467,10 +589,10 @@ type EffectGatewayServiceHandler interface {
 	Stop(context.Context, *connect.Request[StopRequest]) (*connect.Response[StopResponse], error)
 	// Lift proposes lifting a stop. Lifting widens authority, so it is an
 	// effect attempt of type helm.authority.lift that needs approval by
-	// another principal (§4.1 item 7, ADR-0001 §1); its payload is contract 5.
-	// The response carries that attempt, normally ESCALATED. It follows
-	// Approve and Dispatch like any other attempt; the stop is lifted when the
-	// attempt is dispatched.
+	// another principal, with step-up (§4.1 item 7, §10.1, ADR-0001 §1); its
+	// payload is contract 5. The response carries that attempt, normally
+	// ESCALATED. It follows Approve and Dispatch like any other attempt; the
+	// stop is lifted when the attempt is dispatched.
 	//
 	// Token scope: helm.gateway.stop. Proposed for the implementing slice
 	// (WS-B, 2026-09-25): a single-use token whose txn claim equals stop_id.
@@ -502,6 +624,12 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 		connect.WithSchema(effectGatewayServiceMethods.ByName("Reject")),
 		connect.WithHandlerOptions(opts...),
 	)
+	effectGatewayServiceCancelHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceCancelProcedure,
+		svc.Cancel,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("Cancel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	effectGatewayServiceDispatchHandler := connect.NewUnaryHandler(
 		EffectGatewayServiceDispatchProcedure,
 		svc.Dispatch,
@@ -518,6 +646,13 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 		EffectGatewayServiceGetAttemptProcedure,
 		svc.GetAttempt,
 		connect.WithSchema(effectGatewayServiceMethods.ByName("GetAttempt")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	effectGatewayServiceGetAttemptContentHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceGetAttemptContentProcedure,
+		svc.GetAttemptContent,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("GetAttemptContent")),
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
@@ -541,12 +676,16 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 			effectGatewayServiceApproveHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceRejectProcedure:
 			effectGatewayServiceRejectHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceCancelProcedure:
+			effectGatewayServiceCancelHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceDispatchProcedure:
 			effectGatewayServiceDispatchHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceObserveProcedure:
 			effectGatewayServiceObserveHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceGetAttemptProcedure:
 			effectGatewayServiceGetAttemptHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceGetAttemptContentProcedure:
+			effectGatewayServiceGetAttemptContentHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceStopProcedure:
 			effectGatewayServiceStopHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceLiftProcedure:
@@ -572,6 +711,10 @@ func (UnimplementedEffectGatewayServiceHandler) Reject(context.Context, *connect
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.Reject is not implemented"))
 }
 
+func (UnimplementedEffectGatewayServiceHandler) Cancel(context.Context, *connect.Request[CancelRequest]) (*connect.Response[CancelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.Cancel is not implemented"))
+}
+
 func (UnimplementedEffectGatewayServiceHandler) Dispatch(context.Context, *connect.Request[DispatchRequest]) (*connect.Response[DispatchResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.Dispatch is not implemented"))
 }
@@ -582,6 +725,10 @@ func (UnimplementedEffectGatewayServiceHandler) Observe(context.Context, *connec
 
 func (UnimplementedEffectGatewayServiceHandler) GetAttempt(context.Context, *connect.Request[GetAttemptRequest]) (*connect.Response[GetAttemptResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.GetAttempt is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) GetAttemptContent(context.Context, *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.GetAttemptContent is not implemented"))
 }
 
 func (UnimplementedEffectGatewayServiceHandler) Stop(context.Context, *connect.Request[StopRequest]) (*connect.Response[StopResponse], error) {

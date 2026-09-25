@@ -5,10 +5,14 @@
 // on a planted violation first, so a checker that cannot fail fails the test.
 //
 // quantum_posture: contract test only; it reads descriptors and the proto
-// source, and signs or verifies nothing.
+// source, computes SHA-256 approval-digest vectors, and signs or verifies
+// nothing.
 package gatewayv1
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,10 +22,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const protoRel = "protocols/proto/helm/gateway/v1/gateway.proto"
@@ -36,9 +42,10 @@ func service(t *testing.T) protoreflect.ServiceDescriptor {
 	return svc
 }
 
-// The six operations of rev 3.4 §4.2, as eight unary RPCs.
+// The six operations of rev 3.4 §4.2 as eight unary RPCs, plus Cancel and
+// GetAttemptContent from WS-B's review.
 func TestServiceHasTheSixOperations(t *testing.T) {
-	want := []string{"Propose", "Approve", "Reject", "Dispatch", "Observe", "GetAttempt", "Stop", "Lift"}
+	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "Stop", "Lift"}
 	methods := service(t).Methods()
 	var got []string
 	for i := 0; i < methods.Len(); i++ {
@@ -56,7 +63,7 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		}
 		level := m.Options().(*descriptorpb.MethodOptions).GetIdempotencyLevel()
 		wantLevel := descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN
-		if name == "GetAttempt" {
+		if name == "GetAttempt" || name == "GetAttemptContent" {
 			wantLevel = descriptorpb.MethodOptions_NO_SIDE_EFFECTS
 		}
 		if level != wantLevel {
@@ -69,14 +76,19 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 
 	// The Connect routes WS-B's adapter calls.
 	procedures := map[string]string{
-		EffectGatewayServiceProposeProcedure:    "Propose",
-		EffectGatewayServiceApproveProcedure:    "Approve",
-		EffectGatewayServiceRejectProcedure:     "Reject",
-		EffectGatewayServiceDispatchProcedure:   "Dispatch",
-		EffectGatewayServiceObserveProcedure:    "Observe",
-		EffectGatewayServiceGetAttemptProcedure: "GetAttempt",
-		EffectGatewayServiceStopProcedure:       "Stop",
-		EffectGatewayServiceLiftProcedure:       "Lift",
+		EffectGatewayServiceProposeProcedure:           "Propose",
+		EffectGatewayServiceApproveProcedure:           "Approve",
+		EffectGatewayServiceRejectProcedure:            "Reject",
+		EffectGatewayServiceCancelProcedure:            "Cancel",
+		EffectGatewayServiceDispatchProcedure:          "Dispatch",
+		EffectGatewayServiceObserveProcedure:           "Observe",
+		EffectGatewayServiceGetAttemptProcedure:        "GetAttempt",
+		EffectGatewayServiceGetAttemptContentProcedure: "GetAttemptContent",
+		EffectGatewayServiceStopProcedure:              "Stop",
+		EffectGatewayServiceLiftProcedure:              "Lift",
+	}
+	if len(procedures) != len(want) {
+		t.Errorf("%d procedure constants checked, want %d", len(procedures), len(want))
 	}
 	for procedure, method := range procedures {
 		if want := "/helm.gateway.v1.EffectGatewayService/" + method; procedure != want {
@@ -359,12 +371,14 @@ func TestReasonCodesExistInRegistry(t *testing.T) {
 			t.Errorf("the proto no longer names %s", code)
 		}
 	}
-	// ADR-0001 §6's codes to register, plus IDEMPOTENCY_CONFLICT. When one is
+	// ADR-0001 §6's codes to register, plus IDEMPOTENCY_CONFLICT and
+	// STEP_UP_REQUIRED, which this contract adds. When one is
 	// registered, this test fails until its marker changes.
 	for _, code := range []string{
 		"PRINCIPAL_INACTIVE", "MANDATE_INACTIVE", "MANDATE_OUTSIDE_VALIDITY", "EFFECT_OUT_OF_SCOPE",
 		"PER_CALL_LIMIT", "ARITHMETIC_OVERFLOW", "APPROVER_NOT_DISTINCT", "APPROVAL_REJECTED",
 		"INSUFFICIENT_CREDIT", "ROUTE_UNPRICED", "AUTHORITY_CHANGED", "PERMIT_EXPIRED", "IDEMPOTENCY_CONFLICT",
+		"STEP_UP_REQUIRED",
 	} {
 		if !slices.Contains(pending, code) && !slices.Contains(registered, code) {
 			t.Errorf("the proto no longer names %s", code)
@@ -403,18 +417,20 @@ func rpcScopes(src string) (map[string][]string, error) {
 	return scopes, nil
 }
 
-// Each RPC names exactly one token scope, per WS-B's 2026-09-25 proposal
+// Each RPC names exactly the token scopes WS-B proposed on 2026-09-25
 // (docs/architecture/gateway-effect-api.md). "none": no external caller.
 func TestRPCTokenScopes(t *testing.T) {
-	want := map[string]string{
-		"Propose":    "helm.gateway.propose",
-		"Approve":    "helm.gateway.decide",
-		"Reject":     "helm.gateway.decide",
-		"Dispatch":   "none",
-		"Observe":    "none",
-		"GetAttempt": "helm.gateway.read",
-		"Stop":       "helm.gateway.stop",
-		"Lift":       "helm.gateway.stop",
+	want := map[string][]string{
+		"Propose":           {"helm.gateway.propose"},
+		"Approve":           {"helm.gateway.decide"},
+		"Reject":            {"helm.gateway.decide"},
+		"Cancel":            {"helm.gateway.propose", "helm.gateway.stop"},
+		"Dispatch":          {"none"},
+		"Observe":           {"none"},
+		"GetAttempt":        {"helm.gateway.read"},
+		"GetAttemptContent": {"helm.gateway.read"},
+		"Stop":              {"helm.gateway.stop"},
+		"Lift":              {"helm.gateway.stop"},
 	}
 
 	planted := "  // Token scope: helm.gateway.read.\n  // Token scope: helm.gateway.stop.\n  rpc Planted(PlantedRequest) returns (PlantedResponse);\n" +
@@ -431,9 +447,94 @@ func TestRPCTokenScopes(t *testing.T) {
 	if len(got) != len(want) {
 		t.Errorf("found scopes for %d RPCs, want %d: %v", len(got), len(want), got)
 	}
-	for rpc, scope := range want {
-		if s := got[rpc]; len(s) != 1 || s[0] != scope {
-			t.Errorf("rpc %s names token scopes %v, want exactly [%s]", rpc, s, scope)
+	for rpc, scopes := range want {
+		if s := got[rpc]; !slices.Equal(s, scopes) {
+			t.Errorf("rpc %s names token scopes %v, want %v", rpc, s, scopes)
 		}
+	}
+}
+
+// Field numbers held for fields a later slice shapes (the step-up assertion,
+// typed result payloads). They are not `reserved`, since buf breaking would
+// then reject the field that takes the number, so this test keeps them free.
+// The slice that adds such a field updates this list.
+func TestHeldFieldNumbersStayFree(t *testing.T) {
+	held := []struct {
+		msg     protoreflect.MessageDescriptor
+		numbers []protoreflect.FieldNumber
+	}{
+		{(&ApproveRequest{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{4}},
+		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{7, 8, 9, 10, 11, 12, 13, 14, 15}},
+	}
+	for _, h := range held {
+		for _, n := range h.numbers {
+			if f := h.msg.Fields().ByNumber(n); f != nil {
+				t.Errorf("%s field %d is held, but %s uses it", h.msg.FullName(), n, f.Name())
+			}
+		}
+	}
+	// Planted: ApproveRequest field 1 is taken, and ByNumber must see it.
+	if (&ApproveRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(1) == nil {
+		t.Fatal("ByNumber missed a field that exists")
+	}
+}
+
+// approvalDigestV1 is the reference construction of
+// PendingApproval.approval_digest, as the design note specifies it.
+func approvalDigestV1(attemptID string, targetDigest, argumentDigest []byte, quote []*ResourceAmount, expiresAt *timestamppb.Timestamp) []byte {
+	h := sha256.New()
+	u64 := func(v uint64) {
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], v)
+		h.Write(b[:])
+	}
+	field := func(b []byte) {
+		u64(uint64(len(b)))
+		h.Write(b)
+	}
+	field([]byte("helm.gateway.v1.approval-digest.v1"))
+	field([]byte(attemptID))
+	field(targetDigest)
+	field(argumentDigest)
+	sorted := slices.Clone(quote)
+	slices.SortFunc(sorted, func(a, b *ResourceAmount) int { return strings.Compare(a.GetUnit(), b.GetUnit()) })
+	u64(uint64(len(sorted)))
+	for _, q := range sorted {
+		field([]byte(q.GetUnit()))
+		u64(uint64(q.GetAmount()))
+	}
+	u64(uint64(expiresAt.GetSeconds()))
+	var nanos [4]byte
+	binary.BigEndian.PutUint32(nanos[:], uint32(expiresAt.GetNanos()))
+	h.Write(nanos[:])
+	return h.Sum(nil)
+}
+
+// The approval-digest test vector. The expected value was computed by a
+// separate Python implementation of the design note's construction; the
+// note carries the same value, so a client can check its own encoder.
+func TestApprovalDigestVector(t *testing.T) {
+	const want = "cb2cd8caa08ee2544750dd59644a0d2f3bb16a729be108520055c2f72c5f53d7"
+	target := sha256.Sum256([]byte("github.com/Mindburn-Labs/example/pull/42"))
+	args := sha256.Sum256([]byte(`{"merge_method":"squash"}`))
+	quote := []*ResourceAmount{{Unit: "count", Amount: 1}, {Unit: "USD", Amount: 2500}}
+	expires := timestamppb.New(time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC))
+
+	got := hex.EncodeToString(approvalDigestV1("0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d", target[:], args[:], quote, expires))
+	if got != want {
+		t.Fatalf("approval digest = %s, want %s", got, want)
+	}
+	// Planted: reordering the quote input must not change the digest, and
+	// changing an amount must.
+	reordered := approvalDigestV1("0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d", target[:], args[:], []*ResourceAmount{quote[1], quote[0]}, expires)
+	if hex.EncodeToString(reordered) != want {
+		t.Error("the digest depends on quote order; entries must be sorted by unit")
+	}
+	changed := approvalDigestV1("0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d", target[:], args[:], []*ResourceAmount{{Unit: "count", Amount: 1}, {Unit: "USD", Amount: 2501}}, expires)
+	if hex.EncodeToString(changed) == want {
+		t.Error("the digest ignores the quote amount")
+	}
+	if !strings.Contains(readRepoFile(t, "docs/architecture/gateway-effect-api.md"), want) {
+		t.Error("docs/architecture/gateway-effect-api.md does not carry the test vector")
 	}
 }

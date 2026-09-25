@@ -9515,15 +9515,70 @@ export function HealthCheck200ResponseToJSON(value?: HealthCheck200Response | nu
 
 
 /**
- *
+ * The one HELM error model (target architecture §11.1), written by core/pkg/httperr for every HTTP error. It is an RFC 7807 problem (type, title, status, detail, instance, trace_id) whose extension members form a Connect error (code, message, details; https://connectrpc.com/docs/protocol/#error-end-stream). details holds one helm.errors.v1.ErrorDetail with the registered reason code and whether a retry can succeed. `error` repeats the message in the shape SDK releases up to v0.8.5 parse; it is deprecated and goes at the next major version.
  * @export
  * @interface HelmError
  */
 export interface HelmError {
     /**
+     * Connect error code: canceled, unknown, invalid_argument, deadline_exceeded, not_found, already_exists, permission_denied, resource_exhausted, failed_precondition, aborted, out_of_range, unimplemented, internal, unavailable, data_loss or unauthenticated.
+     * @type {string}
+     * @memberof HelmError
+     */
+    code?: string;
+    /**
+     * Human-readable error message
+     * @type {string}
+     * @memberof HelmError
+     */
+    message?: string;
+    /**
+     *
+     * @type {Array<HelmErrorDetail>}
+     * @memberof HelmError
+     */
+    details?: Array<HelmErrorDetail>;
+    /**
+     * RFC 7807 problem type URI
+     * @type {string}
+     * @memberof HelmError
+     */
+    type?: string;
+    /**
+     * RFC 7807 short summary
+     * @type {string}
+     * @memberof HelmError
+     */
+    title?: string;
+    /**
+     * RFC 7807 copy of the HTTP status code
+     * @type {number}
+     * @memberof HelmError
+     */
+    status?: number;
+    /**
+     * RFC 7807 explanation; equal to message
+     * @type {string}
+     * @memberof HelmError
+     */
+    detail?: string;
+    /**
+     * RFC 7807 request path, when known
+     * @type {string}
+     * @memberof HelmError
+     */
+    instance?: string;
+    /**
+     * Request trace identifier, when known
+     * @type {string}
+     * @memberof HelmError
+     */
+    trace_id?: string;
+    /**
      *
      * @type {HelmErrorError}
      * @memberof HelmError
+     * @deprecated
      */
     error: HelmErrorError;
 }
@@ -9546,6 +9601,15 @@ export function HelmErrorFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     }
     return {
 
+        'code': json['code'] == null ? undefined : json['code'],
+        'message': json['message'] == null ? undefined : json['message'],
+        'details': json['details'] == null ? undefined : ((json['details'] as Array<any>).map(HelmErrorDetailFromJSON)),
+        'type': json['type'] == null ? undefined : json['type'],
+        'title': json['title'] == null ? undefined : json['title'],
+        'status': json['status'] == null ? undefined : json['status'],
+        'detail': json['detail'] == null ? undefined : json['detail'],
+        'instance': json['instance'] == null ? undefined : json['instance'],
+        'trace_id': json['trace_id'] == null ? undefined : json['trace_id'],
         'error': HelmErrorErrorFromJSON(json['error']),
     };
 }
@@ -9556,6 +9620,15 @@ export function HelmErrorToJSON(value?: HelmError | null): any {
     }
     return {
 
+        'code': value['code'],
+        'message': value['message'],
+        'details': value['details'] == null ? undefined : ((value['details'] as Array<any>).map(HelmErrorDetailToJSON)),
+        'type': value['type'],
+        'title': value['title'],
+        'status': value['status'],
+        'detail': value['detail'],
+        'instance': value['instance'],
+        'trace_id': value['trace_id'],
         'error': HelmErrorErrorToJSON(value['error']),
     };
 }
@@ -9574,8 +9647,156 @@ export function HelmErrorToJSON(value?: HelmError | null): any {
  * Do not edit the class manually.
  */
 
+
 /**
+ * A Connect error detail holding a helm.errors.v1.ErrorDetail (protocols/proto/helm/errors/v1/errors.proto).
+ * @export
+ * @interface HelmErrorDetail
+ */
+export interface HelmErrorDetail {
+    /**
+     * Fully qualified protobuf message name, helm.errors.v1.ErrorDetail
+     * @type {string}
+     * @memberof HelmErrorDetail
+     */
+    type: string;
+    /**
+     * The ErrorDetail protobuf binary, base64-encoded without padding
+     * @type {string}
+     * @memberof HelmErrorDetail
+     */
+    value: string;
+    /**
+     *
+     * @type {HelmErrorDetailFields}
+     * @memberof HelmErrorDetail
+     */
+    debug: HelmErrorDetailFields;
+}
+
+/**
+ * Check if a given object implements the HelmErrorDetail interface.
+ */
+export function instanceOfHelmErrorDetail(value: object): boolean {
+    if (!('type' in value)) return false;
+    if (!('value' in value)) return false;
+    if (!('debug' in value)) return false;
+    return true;
+}
+
+export function HelmErrorDetailFromJSON(json: any): HelmErrorDetail {
+    return HelmErrorDetailFromJSONTyped(json, false);
+}
+
+export function HelmErrorDetailFromJSONTyped(json: any, ignoreDiscriminator: boolean): HelmErrorDetail {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'type': json['type'],
+        'value': json['value'],
+        'debug': HelmErrorDetailFieldsFromJSON(json['debug']),
+    };
+}
+
+export function HelmErrorDetailToJSON(value?: HelmErrorDetail | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'type': value['type'],
+        'value': value['value'],
+        'debug': HelmErrorDetailFieldsToJSON(value['debug']),
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
  *
+ * The version of the OpenAPI document: 0.8.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ * The ErrorDetail fields as JSON
+ * @export
+ * @interface HelmErrorDetailFields
+ */
+export interface HelmErrorDetailFields {
+    /**
+     * Registered code from reason-codes-v1.json as an open string, or empty when the error carries none. Never a closed enum.
+     * @type {string}
+     * @memberof HelmErrorDetailFields
+     */
+    reason_code: string;
+    /**
+     * Whether repeating the same request can succeed
+     * @type {boolean}
+     * @memberof HelmErrorDetailFields
+     */
+    retryable: boolean;
+}
+
+/**
+ * Check if a given object implements the HelmErrorDetailFields interface.
+ */
+export function instanceOfHelmErrorDetailFields(value: object): boolean {
+    if (!('reason_code' in value)) return false;
+    if (!('retryable' in value)) return false;
+    return true;
+}
+
+export function HelmErrorDetailFieldsFromJSON(json: any): HelmErrorDetailFields {
+    return HelmErrorDetailFieldsFromJSONTyped(json, false);
+}
+
+export function HelmErrorDetailFieldsFromJSONTyped(json: any, ignoreDiscriminator: boolean): HelmErrorDetailFields {
+    if (json == null) {
+        return json;
+    }
+    return {
+
+        'reason_code': json['reason_code'],
+        'retryable': json['retryable'],
+    };
+}
+
+export function HelmErrorDetailFieldsToJSON(value?: HelmErrorDetailFields | null): any {
+    if (value == null) {
+        return value;
+    }
+    return {
+
+        'reason_code': value['reason_code'],
+        'retryable': value['retryable'],
+    };
+}
+
+/* tslint:disable */
+/* eslint-disable */
+/**
+ * HELM Kernel API
+ * Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+ *
+ * The version of the OpenAPI document: 0.8.5
+ *
+ *
+ * NOTE: This class is auto generated by OpenAPI Generator (https://openapi-generator.tech).
+ * https://openapi-generator.tech
+ * Do not edit the class manually.
+ */
+
+/**
+ * Legacy error shape, kept for SDK releases up to v0.8.5.
  * @export
  * @interface HelmErrorError
  */
@@ -9587,23 +9808,23 @@ export interface HelmErrorError {
      */
     message: string;
     /**
-     *
+     * invalid_request, authentication_error, permission_denied, not_found or internal_error
      * @type {string}
      * @memberof HelmErrorError
      */
-    type: HelmErrorErrorTypeEnum;
+    type: string;
     /**
-     * Machine-readable error code
+     * The Connect error code
      * @type {string}
      * @memberof HelmErrorError
      */
     code: string;
     /**
-     * HELM-specific reason code
+     * Same as the ErrorDetail reason_code; an open string, empty when there is none
      * @type {string}
      * @memberof HelmErrorError
      */
-    reason_code: HelmErrorErrorReasonCodeEnum;
+    reason_code: string;
     /**
      * Additional error context
      * @type {{ [key: string]: any; }}
@@ -9611,41 +9832,6 @@ export interface HelmErrorError {
      */
     details?: { [key: string]: any; };
 }
-
-
-/**
- * @export
- */
-export const HelmErrorErrorTypeEnum = {
-    InvalidRequest: 'invalid_request',
-    AuthenticationError: 'authentication_error',
-    PermissionDenied: 'permission_denied',
-    NotFound: 'not_found',
-    InternalError: 'internal_error'
-} as const;
-export type HelmErrorErrorTypeEnum = typeof HelmErrorErrorTypeEnum[keyof typeof HelmErrorErrorTypeEnum];
-
-/**
- * @export
- */
-export const HelmErrorErrorReasonCodeEnum = {
-    DenyToolNotFound: 'DENY_TOOL_NOT_FOUND',
-    DenySchemaMismatch: 'DENY_SCHEMA_MISMATCH',
-    DenyOutputDrift: 'DENY_OUTPUT_DRIFT',
-    DenyBudgetExceeded: 'DENY_BUDGET_EXCEEDED',
-    DenyApprovalRequired: 'DENY_APPROVAL_REQUIRED',
-    DenyApprovalTimeout: 'DENY_APPROVAL_TIMEOUT',
-    DenySandboxTrap: 'DENY_SANDBOX_TRAP',
-    DenyGasExhaustion: 'DENY_GAS_EXHAUSTION',
-    DenyTimeLimit: 'DENY_TIME_LIMIT',
-    DenyMemoryLimit: 'DENY_MEMORY_LIMIT',
-    DenyPolicyViolation: 'DENY_POLICY_VIOLATION',
-    DenyTrustKeyRevoked: 'DENY_TRUST_KEY_REVOKED',
-    DenyIdempotencyDuplicate: 'DENY_IDEMPOTENCY_DUPLICATE',
-    ErrorInternal: 'ERROR_INTERNAL'
-} as const;
-export type HelmErrorErrorReasonCodeEnum = typeof HelmErrorErrorReasonCodeEnum[keyof typeof HelmErrorErrorReasonCodeEnum];
-
 
 /**
  * Check if a given object implements the HelmErrorError interface.
@@ -19989,4 +20175,5 @@ export function VersionInfoToJSON(value?: VersionInfo | null): any {
 }
 
 
-export type ReasonCode = HelmErrorErrorReasonCodeEnum;
+/** A reason code: an open string. Registered names are in reason_codes.gen.ts. */
+export type ReasonCode = string;

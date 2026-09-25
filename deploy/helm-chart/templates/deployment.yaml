@@ -444,6 +444,10 @@ spec:
               value: {{ .actor | quote }}
             - name: HELM_CP_IDENTITY_REQUIRE_CNF
               value: {{ ternary "1" "0" (default false .requireCNF) | quote }}
+            {{- if .caBundleConfigMap }}
+            - name: HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE
+              value: {{ printf "/var/run/secrets/helm-cp-identity-ca/%s" (default "ca.crt" .caBundleKey) | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             - name: HELM_EMERGENCY_STOP_FENCE_ENABLED
@@ -526,6 +530,13 @@ spec:
               mountPath: /var/run/secrets/helm-policy-controlplane-tls
               readOnly: true
             {{- end }}
+            {{- with .Values.helm.auth.controlPlaneIdentity }}
+            {{- if .caBundleConfigMap }}
+            - name: cp-identity-ca
+              mountPath: /var/run/secrets/helm-cp-identity-ca
+              readOnly: true
+            {{- end }}
+            {{- end }}
         {{- if and .Values.helm.policy.reloadHints.enabled .Values.helm.policy.reloadHints.configReloaderSidecar.enabled }}
         - name: config-reloader
           image: {{ .Values.helm.policy.reloadHints.configReloaderSidecar.image | quote }}
@@ -565,6 +576,13 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- with .Values.helm.auth.controlPlaneIdentity }}
+        {{- if .caBundleConfigMap }}
+        - name: cp-identity-ca
+          configMap:
+            name: {{ .caBundleConfigMap | quote }}
+        {{- end }}
+        {{- end }}
         {{- if and (eq .Values.helm.policy.source.kind "controlplane") (eq .Values.helm.policy.source.controlplane.auth.mode "serviceAccountJWT") }}
         - name: policy-service-account-token
           projected:

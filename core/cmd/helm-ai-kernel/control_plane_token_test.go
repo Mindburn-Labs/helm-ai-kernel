@@ -19,10 +19,13 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -33,7 +36,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/artifacts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
@@ -92,13 +98,37 @@ func (i *testCPIssuerKeys) publish(kid string, published bool) {
 	i.published[kid] = published
 }
 
-func (i *testCPIssuerKeys) identity() *controlPlaneIdentity {
+// identity builds the token path through the production constructor, from
+// HELM_CP_IDENTITY_* with a pinned CA bundle for the httptest issuer.
+func (i *testCPIssuerKeys) identity(t *testing.T) *controlPlaneIdentity {
+	t.Helper()
+	caFile := filepath.Join(t.TempDir(), "control-plane-ca.pem")
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: i.server.Certificate().Raw}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(cpIdentityJWKSURLEnv, i.server.URL)
+	t.Setenv(cpIdentityIssuerEnv, testCPIssuer)
+	t.Setenv(cpIdentityAudienceEnv, testCPAudience)
+	t.Setenv(cpIdentityActorEnv, testCPActor)
+	t.Setenv(cpIdentityCAFileEnv, caFile)
+	t.Setenv(cpIdentityMaxTTLEnv, "")
+	t.Setenv(cpIdentityRequireCNFEnv, "")
+	identity, err := newControlPlaneIdentityFromEnv()
+	if err != nil || identity == nil {
+		t.Fatalf("control plane identity from env: identity=%v err=%v", identity, err)
+	}
+	return identity
+}
+
+// rotationIdentity refreshes on every unknown kid, so a rotation test does not
+// wait out the production 30s refresh interval (pkg/mcp tests that limit).
+func (i *testCPIssuerKeys) rotationIdentity() *controlPlaneIdentity {
 	return &controlPlaneIdentity{
 		issuer: testCPIssuer,
 		validator: mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
 			JWKSURL: i.server.URL, Issuer: testCPIssuer, Audience: testCPAudience, RequiredActor: testCPActor,
 			Algorithms: []string{"RS256"}, MaxTokenTTL: cpIdentityMaxTTLCeiling, Leeway: cpIdentityClockSkew,
-			HTTPClient: i.server.Client(),
+			HTTPClient: i.server.Client(), MinRefreshInterval: time.Nanosecond,
 		}),
 	}
 }
@@ -231,6 +261,20 @@ func cpTokenProbes(t *testing.T, issuer *testCPIssuerKeys) []cpTokenProbe {
 	signed := func(mutate func(tokenClaims) tokenClaims) func(RuntimeRouteSpec) string {
 		return func(spec RuntimeRouteSpec) string { return issuer.mint(t, "k1", mutate(good(spec))) }
 	}
+	withMethod := func(method jwt.SigningMethod) func(RuntimeRouteSpec) string {
+		return func(spec RuntimeRouteSpec) string {
+			token := jwt.NewWithClaims(method, jwt.MapClaims(good(spec)))
+			token.Header["kid"] = "k1"
+			issuer.mu.Lock()
+			key := issuer.keys["k1"]
+			issuer.mu.Unlock()
+			signed, err := token.SignedString(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return signed
+		}
+	}
 	unauthorized, forbidden := []int{http.StatusUnauthorized}, []int{http.StatusForbidden}
 	now := time.Now()
 	return []cpTokenProbe{
@@ -261,7 +305,13 @@ func cpTokenProbes(t *testing.T, issuer *testCPIssuerKeys) []cpTokenProbe {
 			}
 			return token
 		}, want: unauthorized},
+		{name: "alg RS512", token: withMethod(jwt.SigningMethodRS512), want: unauthorized},
+		{name: "alg PS256", token: withMethod(jwt.SigningMethodPS256), want: unauthorized},
+		{name: "two audiences", token: signed(func(c tokenClaims) tokenClaims {
+			return c.with("aud", []string{testCPAudience, "helm-kernel:other-environment"})
+		}), want: unauthorized},
 		{name: "wrong scope", token: signed(func(c tokenClaims) tokenClaims { return c.with("scope", "helm.unrelated") }), want: forbidden},
+		{name: "a second scope", token: signed(func(c tokenClaims) tokenClaims { return c.with("scope", c["scope"].(string)+" helm.unrelated") }), want: forbidden},
 		{name: "tenant header disagrees", token: signed(func(c tokenClaims) tokenClaims { return c }), header: map[string]string{tenantHeader: "tenant-other"}, want: forbidden},
 		{name: "principal header disagrees", token: signed(func(c tokenClaims) tokenClaims { return c }), header: map[string]string{principalHeader: "principal-other"}, want: forbidden},
 	}
@@ -288,7 +338,10 @@ func probeCPTokenRoute(t *testing.T, mux http.Handler, spec RuntimeRouteSpec, pr
 		mux.ServeHTTP(rec, cpTokenRequest(t, spec, probe.token(spec), probe.header))
 		refused := false
 		for _, status := range probe.want {
-			refused = refused || rec.Code == status
+			// A 403 must be the guard's refusal, not a policy decision after
+			// the guard let the request through (the proxy's "Governance
+			// Blocked" is also a 403).
+			refused = refused || (rec.Code == status && (status != http.StatusForbidden || authRefused(rec)))
 		}
 		if !refused {
 			failures = append(failures, fmt.Sprintf("%s %s: %s answered %d, want %v", spec.Method, spec.Path, probe.name, rec.Code, probe.want))
@@ -301,7 +354,7 @@ func probeCPTokenRoute(t *testing.T, mux http.Handler, spec RuntimeRouteSpec, pr
 // refuses each broken token and accepts a good one.
 func TestControlPlaneTokenRoutesRefuseEveryBrokenToken(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	mux, _ := cpTokenServices(t, issuer.identity())
+	mux, _ := cpTokenServices(t, issuer.identity(t))
 	probes := cpTokenProbes(t, issuer)
 	declared := 0
 	for _, spec := range RuntimeRouteSpecs() {
@@ -328,33 +381,64 @@ func TestControlPlaneTokenRoutesRefuseEveryBrokenToken(t *testing.T) {
 	}
 }
 
-// A route that does not declare the tier must not accept a token.
+// A route that does not declare the tier must not accept a token, with the
+// token path on: a token for each route family is presented to every other
+// non-public route.
 func TestRoutesWithoutTheTokenTierRefuseAGoodToken(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	token := issuer.mint(t, "k1", baseTokenClaims("default", "principal-a", "default", cpScopeEvaluate+" "+cpScopeReceiptsRead))
-	for name, mux := range runtimeRouteConfigs(t) {
+	muxes := runtimeRouteConfigsWithIdentity(t, issuer.identity(t))
+	tokens := map[string]string{}
+	for _, scope := range []string{cpScopeEvaluate, cpScopeOrganizationRuntime, cpScopeReceiptsRead, cpScopeProxyChat} {
+		tokens[scope] = issuer.mint(t, "k1", baseTokenClaims(probeTenant, probePrincipal, probeWorkspace, scope))
+	}
+	probed := 0
+	for name, mux := range muxes {
 		for _, spec := range RuntimeRouteSpecs() {
 			if spec.Auth == RouteAuthPublic || spec.AlternateAuth == RouteAuthControlPlaneToken {
 				continue
 			}
-			req := httptest.NewRequest(spec.Method, representativeRuntimePath(spec.Path), nil)
-			if _, pattern := mux.Handler(req); pattern != spec.MuxPattern && pattern != spec.Method+" "+spec.MuxPattern {
-				continue
-			}
-			req.Header.Set("Authorization", "Bearer "+token)
-			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
-			if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
-				t.Errorf("[%s] %s %s accepted a Control Plane token it does not declare: %d", name, spec.Method, spec.Path, rec.Code)
+			for scope, token := range tokens {
+				req := httptest.NewRequest(spec.Method, representativeRuntimePath(spec.Path), nil)
+				if _, pattern := mux.Handler(req); pattern != spec.MuxPattern && pattern != spec.Method+" "+spec.MuxPattern {
+					continue
+				}
+				probed++
+				req.Header.Set("Authorization", "Bearer "+token)
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+				if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
+					t.Errorf("[%s] %s %s accepted a %s token it does not declare: %d", name, spec.Method, spec.Path, scope, rec.Code)
+				}
 			}
 		}
+	}
+	if probed < 400 {
+		t.Fatalf("only %d probes ran: the route composition is no longer exercised", probed)
+	}
+}
+
+// Wiring the token guard onto a route the registry does not declare for it
+// fails at startup.
+func TestTokenGuardWiringMustMatchTheRegistry(t *testing.T) {
+	for _, test := range []struct{ name, route string }{
+		{name: "undeclared route", route: "/api/v1/proofgraph/sessions"},
+		{name: "unknown route", route: "/api/v1/not-a-route"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("the token guard was wired onto %s", test.route)
+				}
+			}()
+			protectControlPlaneTokenOr(&Services{}, RouteAuthTenant, test.route, cpScopeReceiptsRead, func(http.ResponseWriter, *http.Request) {})
+		})
 	}
 }
 
 // §7.2: a token for one tenant never reads another tenant's receipts.
 func TestControlPlaneTokenReadsOnlyItsTenantsReceipts(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	mux, svc := cpTokenServices(t, issuer.identity())
+	mux, svc := cpTokenServices(t, issuer.identity(t))
 	appendTenantScopedReceipt(t, svc.ReceiptStore.(*store.SQLiteReceiptStore), "tenant-b", "session-b", &contracts.Receipt{
 		ReceiptID: "rcpt-tenant-b", DecisionID: "dec-tenant-b", EffectID: "EXECUTE_TOOL", Status: string(contracts.VerdictDeny),
 		Timestamp: time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC), ExecutorID: "agent.b", Signature: "sig-b", DecisionHash: "sha256:tenant-b", ArgsHash: "args-b",
@@ -385,22 +469,18 @@ func TestControlPlaneTokenReadsOnlyItsTenantsReceipts(t *testing.T) {
 // caller pinned in TestFenceOffControlPlaneCallersKeepTheirPreviousBehavior.
 func TestFenceOffControlPlaneTokenCallersMatchLegacyStatuses(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	mux, _ := cpTokenServices(t, issuer.identity())
+	mux, _ := cpTokenServices(t, issuer.identity(t))
 	const (
 		cpTenant    = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
 		cpPrincipal = "b3f1c2de-2f4a-4c55-9a0e-1f2d3c4b5a69"
 		cpWorkspace = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
 	)
+	// Chat is pinned with a real Guardian and upstream in
+	// TestControlPlaneTokenChatProxyBindsTheTokenTenantAndNeverForwardsTheToken.
 	want := map[string]int{
 		"evaluateDecision": http.StatusOK, "evaluateOrganizationRuntimeDecision": http.StatusOK,
-		"listReceipts": http.StatusOK, "getConsoleReceipt": http.StatusNotFound, "chatCompletions": http.StatusServiceUnavailable,
+		"listReceipts": http.StatusOK, "getConsoleReceipt": http.StatusNotFound,
 	}
-	// The legacy pin calls the proxy with empty Services (no upstream, 503);
-	// mount it the same way, behind the same guard as its registration.
-	proxySvc := &Services{ControlPlaneIdentity: issuer.identity()}
-	proxy := protectControlPlaneTokenOr(proxySvc, RouteAuthConfiguredTenant, "/v1/chat/completions", cpScopeProxyChat, func(w http.ResponseWriter, r *http.Request) {
-		handleGovernedOpenAIProxy(w, r, proxySvc)
-	})
 	for _, spec := range RuntimeRouteSpecs() {
 		status, ok := want[spec.OperationID]
 		if !ok {
@@ -408,11 +488,7 @@ func TestFenceOffControlPlaneTokenCallersMatchLegacyStatuses(t *testing.T) {
 		}
 		token := issuer.mint(t, "k1", baseTokenClaims(cpTenant, cpPrincipal, cpWorkspace, cpRouteScopes[spec.OperationID]))
 		rec := httptest.NewRecorder()
-		if spec.OperationID == "chatCompletions" {
-			proxy(rec, cpTokenRequest(t, spec, token, nil))
-		} else {
-			mux.ServeHTTP(rec, cpTokenRequest(t, spec, token, nil))
-		}
+		mux.ServeHTTP(rec, cpTokenRequest(t, spec, token, nil))
 		if rec.Code != status {
 			t.Errorf("%s: status=%d want %d body=%s", spec.OperationID, rec.Code, status, rec.Body.String())
 		}
@@ -422,7 +498,7 @@ func TestFenceOffControlPlaneTokenCallersMatchLegacyStatuses(t *testing.T) {
 // §7.5: rotate, verify old, verify new, revoke.
 func TestControlPlaneTokenKeyRotation(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	identity := issuer.identity()
+	identity := issuer.rotationIdentity()
 	validate := func(kid string) error {
 		_, err := identity.validator.ValidateAuthorization(issuer.mint(t, kid, baseTokenClaims("default", "p", "w", cpScopeEvaluate)))
 		return err
@@ -490,7 +566,7 @@ func TestControlPlaneTokenProbesCatchAValidatorThatSkipsAudienceOrActor(t *testi
 		{name: "skips act", validator: laxValidator{skipActor: true}, catches: "wrong actor"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			identity := issuer.identity()
+			identity := issuer.identity(t)
 			test.validator.inner = identity.validator
 			identity.validator = test.validator
 			mux, _ := cpTokenServices(t, identity)
@@ -505,7 +581,7 @@ func TestControlPlaneTokenProbesCatchAValidatorThatSkipsAudienceOrActor(t *testi
 // ADR-0005 §3 binding cross-check and helm_token_unbound_principal_total.
 func TestControlPlaneTokenBindingCrossCheck(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	mux, _ := cpTokenServices(t, issuer.identity())
+	mux, _ := cpTokenServices(t, issuer.identity(t))
 	bindings, cleanupBindings := newRouteAuthTestBindingStore(t)
 	t.Cleanup(cleanupBindings)
 	if err := bindings.Upsert(context.Background(), store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-bound"}); err != nil {
@@ -600,7 +676,7 @@ func TestControlPlaneIdentityConfiguration(t *testing.T) {
 // scope (ADR-0005 §3, S2 behaviour).
 func TestFencedKernelBindsTheTokenScopeToTheConfiguredScope(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	mux, svc := cpTokenServices(t, issuer.identity())
+	mux, svc := cpTokenServices(t, issuer.identity(t))
 	svc.EmergencyStops = &kernel.ScopedStopStore{}
 	read := func(tenantID, workspaceID string) int {
 		token := issuer.mint(t, "k1", baseTokenClaims(tenantID, "principal-a", workspaceID, cpScopeReceiptsRead))
@@ -625,7 +701,7 @@ func TestFencedKernelBindsTheTokenScopeToTheConfiguredScope(t *testing.T) {
 // the request arrived with (RFC 8705).
 func TestControlPlaneTokenCertificateBinding(t *testing.T) {
 	issuer := newTestCPIssuer(t, "k1")
-	identity := issuer.identity()
+	identity := issuer.identity(t)
 	identity.requireCNF = true
 	mux, _ := cpTokenServices(t, identity)
 	clientCert := issuer.server.Certificate() // any certificate will do as the client's
@@ -655,5 +731,80 @@ func TestControlPlaneTokenCertificateBinding(t *testing.T) {
 	}
 	if got := read(thumbprint, withCert); got != http.StatusOK {
 		t.Fatalf("token bound to this certificate: %d, want 200", got)
+	}
+}
+
+// The chat proxy with a real Guardian and a stub upstream. Pins, for the
+// fence-off kernel: a token caller and a legacy caller both reach the upstream
+// (same status); the token caller's tenant is the token's, not the configured
+// one (ADR-0005: the token scope is authoritative with the fence off, where
+// legacy chat is pinned to HELM_RUNTIME_TENANT_ID); and the kernel token never
+// reaches the provider.
+func TestControlPlaneTokenChatProxyBindsTheTokenTenantAndNeverForwardsTheToken(t *testing.T) {
+	var upstreamAuth []string
+	var mu sync.Mutex
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		upstreamAuth = append(upstreamAuth, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[]}`))
+	}))
+	defer upstream.Close()
+	issuer := newTestCPIssuer(t, "k1")
+	identity := issuer.identity(t)
+	t.Setenv("HELM_UPSTREAM_URL", upstream.URL)
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, "default")
+	t.Setenv(runtimePrincipalIDEnv, "default")
+	t.Setenv(runtimeWorkspaceIDEnv, "default")
+	SetPrincipalBindingStore(nil)
+
+	signer, err := helmcrypto.NewEd25519Signer("chat-token-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturing := &evaluateRouteCapturingPDP{}
+	svc := &Services{
+		Guardian:             guardian.NewGuardian(signer, allowGraphForExtAuthzTest("LLM_INFERENCE"), artifacts.NewRegistry(nil, nil), guardian.WithPDP(capturing)),
+		ReceiptStore:         &captureReceiptStore{},
+		ReceiptSigner:        signer,
+		ControlPlaneIdentity: identity,
+	}
+	chat := protectControlPlaneTokenOr(svc, RouteAuthConfiguredTenant, "/v1/chat/completions", cpScopeProxyChat, func(w http.ResponseWriter, r *http.Request) {
+		handleGovernedOpenAIProxy(w, r, svc)
+	})
+	call := func(headers map[string]string) (int, string) {
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-test","messages":[]}`))
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		chat(rec, req)
+		tenant := ""
+		if capturing.request != nil {
+			tenant, _ = capturing.request.Context["tenant_id"].(string)
+		}
+		return rec.Code, tenant
+	}
+	const cpTenant = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+	token := issuer.mint(t, "k1", baseTokenClaims(cpTenant, "b3f1c2de-2f4a-4c55-9a0e-1f2d3c4b5a69", "", cpScopeProxyChat))
+
+	legacyStatus, legacyTenant := call(map[string]string{runtimeAPIKeyHeader: testAdminAPIKey, "Authorization": "Bearer provider-secret"})
+	if legacyStatus != http.StatusOK || legacyTenant != "default" {
+		t.Fatalf("legacy chat: status=%d tenant=%q, want 200 for the configured tenant", legacyStatus, legacyTenant)
+	}
+	tokenStatus, tokenTenant := call(map[string]string{runtimeAPIKeyHeader: token, "Authorization": "Bearer provider-secret"})
+	if tokenStatus != legacyStatus || tokenTenant != cpTenant {
+		t.Fatalf("token chat: status=%d tenant=%q, want %d for the token's tenant %q", tokenStatus, tokenTenant, legacyStatus, cpTenant)
+	}
+	bearerStatus, _ := call(map[string]string{"Authorization": "Bearer " + token})
+	if bearerStatus != http.StatusOK {
+		t.Fatalf("token chat with the token as bearer: status=%d", bearerStatus)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(upstreamAuth) != 3 || upstreamAuth[0] != "Bearer provider-secret" || upstreamAuth[1] != "Bearer provider-secret" || upstreamAuth[2] != "" {
+		t.Fatalf("upstream Authorization headers = %q; the provider key must pass and the kernel token never", upstreamAuth)
 	}
 }

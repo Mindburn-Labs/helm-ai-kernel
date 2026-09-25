@@ -88,6 +88,12 @@ func newControlPlaneIdentityFromEnv() (*controlPlaneIdentity, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", cpIdentityCAFileEnv, err)
 	}
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	// The key set is fetched from exactly the configured URL: a redirect would
+	// let whoever controls it choose the keys.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &controlPlaneIdentity{
 		issuer: values[cpIdentityIssuerEnv],
 		validator: mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
@@ -104,15 +110,16 @@ func newControlPlaneIdentityFromEnv() (*controlPlaneIdentity, error) {
 	}, nil
 }
 
-// presentedToken returns the bearer when it parses as a JWT whose issuer is
-// the configured Control Plane issuer. Anything else, the shared admin key
-// included, takes the legacy path. The claims are not trusted here; the
-// validator checks them next.
+// presentedToken returns the credential (X-HELM-API-Key, else the bearer)
+// when it parses as a JWT whose issuer is the configured Control Plane issuer.
+// Anything else, the shared admin key included, takes the legacy path. The
+// claims are not trusted here; the validator checks them next, and it
+// rate-limits the key fetches an unknown kid can cause.
 func (cp *controlPlaneIdentity) presentedToken(r *http.Request) (string, bool) {
 	if cp == nil {
 		return "", false
 	}
-	token, _, ok := helmauth.BearerToken(r)
+	token, _, ok := runtimeCredentialToken(r)
 	if !ok || strings.Count(token, ".") != 2 {
 		return "", false
 	}
@@ -138,6 +145,18 @@ func requestWorkspaceID(r *http.Request) string {
 // credential (legacy) and a Control Plane token for scope. RuntimeRouteSpecs
 // declares the pairing as AlternateAuth; route is the metric label.
 func protectControlPlaneTokenOr(svc *Services, legacy RouteAuth, route, scope string, handler http.HandlerFunc) http.HandlerFunc {
+	// The wiring must match the registry: every entry this pattern serves
+	// declares the token tier as its alternate and legacy as its tier. A route
+	// that takes tokens without declaring it, or the reverse, fails at startup.
+	specs := declaredRouteSpecs(route)
+	if len(specs) == 0 {
+		panic(fmt.Sprintf("Control Plane token route %q is not declared in RuntimeRouteSpecs()", route))
+	}
+	for _, spec := range specs {
+		if spec.AlternateAuth != RouteAuthControlPlaneToken || spec.Auth != legacy {
+			panic(fmt.Sprintf("route %s %s is wired for %s or a Control Plane token but declared %s/%q", spec.Method, spec.Path, legacy, spec.Auth, spec.AlternateAuth))
+		}
+	}
 	controlPlaneIdentityMetrics.declareRoute(route)
 	legacyHandler := protectRuntimeHandler(legacy, func(w http.ResponseWriter, r *http.Request) {
 		controlPlaneIdentityMetrics.recordLegacy(r.Context(), route)
@@ -165,6 +184,12 @@ func (cp *controlPlaneIdentity) serve(w http.ResponseWriter, r *http.Request, to
 			return
 		}
 		httperr.WriteUnauthorized(w, "Invalid Control Plane identity token")
+		return
+	}
+	// One audience (this environment's kernel) and one route family per token
+	// (ADR-0005 §2): a token minted for several cannot be replayed across them.
+	if len(claims.RegisteredClaims.Audience) != 1 {
+		httperr.WriteUnauthorized(w, "Control Plane identity token must name exactly one audience")
 		return
 	}
 	principalID := strings.TrimSpace(claims.RegisteredClaims.Subject)
@@ -214,7 +239,17 @@ func (cp *controlPlaneIdentity) serve(w http.ResponseWriter, r *http.Request, to
 	ctx = helmauth.WithAuthenticatedCredential(ctx, token)
 	ctx = context.WithValue(ctx, tokenWorkspaceContextKey{}, claims.WorkspaceID)
 	slog.DebugContext(ctx, "control plane token accepted", "route", route, "txn", claims.TransactionID, "jti", claims.RegisteredClaims.ID)
-	handler(w, r.WithContext(ctx))
+	forwarded := r.WithContext(ctx)
+	// Never pass the kernel credential on: the chat proxy forwards
+	// Authorization upstream as the provider credential. A token sent there
+	// is dropped; send it in X-HELM-API-Key to keep a provider key in
+	// Authorization.
+	forwarded.Header = r.Header.Clone()
+	forwarded.Header.Del(runtimeAPIKeyHeader)
+	if bearer, _, ok := helmauth.BearerToken(r); ok && bearer == token {
+		forwarded.Header.Del("Authorization")
+	}
+	handler(w, forwarded)
 }
 
 type principalBinding int
@@ -256,13 +291,9 @@ func tokenPrincipalBound(ctx context.Context, tenantID, principalID string) (pri
 	return principalUnbound, nil
 }
 
+// tokenHasScope requires the token to carry exactly the route family's scope.
 func tokenHasScope(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
+	return len(values) == 1 && values[0] == want
 }
 
 // controlPlaneIdentityMetrics are the ADR-0005 phase-3 signals, per route:

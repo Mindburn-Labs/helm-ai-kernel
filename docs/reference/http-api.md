@@ -60,10 +60,20 @@ the tenant, principal and workspace come from one of two places:
   - `sub` is the principal;
   - `tenant_id` and `workspace_id` are the scope;
   - `act.sub` must be the configured actor;
-  - `scope` must name the route family (`helm.evaluate`,
-    `helm.organization_runtime.evaluate`, `helm.receipts.read`,
-    `helm.proxy.chat`);
+  - `aud` must be exactly `HELM_CP_IDENTITY_AUDIENCE`, as its only value;
+  - `scope` must be exactly the route family's scope, and only that one
+    (`helm.evaluate`, `helm.organization_runtime.evaluate`,
+    `helm.receipts.read`, `helm.proxy.chat`);
   - the lifetime is at most 300 s.
+
+  The token may be sent as `Authorization: Bearer` or in `X-HELM-API-Key`.
+  On `POST /v1/chat/completions` send it in `X-HELM-API-Key`: that route
+  forwards `Authorization` upstream as the provider credential, so a token
+  sent there is dropped before the request is forwarded. The key set is
+  fetched at most once per 30 s, whatever `kid` a request names. If the
+  endpoint is unreachable, cached keys keep verifying for up to one hour
+  after the last successful fetch; with no usable keys the route answers
+  `503`.
 
   Identity headers are then optional and must equal the claims. When
   `principal_bindings` holds rows for `sub`, the token's tenant must be one of

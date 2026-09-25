@@ -326,14 +326,49 @@ func ValidateRuntime(ctx context.Context, db *sql.DB, options RuntimeOptions) er
 	if len(unforced) > 0 {
 		return fmt.Errorf("kernel postgres tenant tables %v lack forced row security with the tenant policy; run the owner migration command", unforced)
 	}
+	// Without principal_lookup, forced row security hides every other tenant's
+	// binding from the Control Plane token cross-check, which would then treat
+	// a principal bound elsewhere as unbound and let it through (ADR-0005 §3).
+	lookup, err := principalLookupPolicyPresent(ctx, db)
+	if err != nil {
+		return err
+	}
+	if !lookup {
+		return errors.New("kernel postgres principal_bindings lacks the principal_lookup policy the Control Plane token check relies on; run the owner migration command")
+	}
 	return nil
 }
+
+// principalLookupPolicyPresent reports whether principal_bindings carries the
+// principal_lookup policy exactly as the migration installs it.
+func principalLookupPolicyPresent(ctx context.Context, db *sql.DB) (bool, error) {
+	var present bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM pg_catalog.pg_policy AS policy
+		JOIN pg_catalog.pg_class AS relation ON relation.oid = policy.polrelid
+		JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+		WHERE namespace.nspname = current_schema() AND `+principalLookupPolicyMatch+`)`, store.PrincipalLookupPolicyExpr).Scan(&present); err != nil {
+		return false, fmt.Errorf("inspect principal_bindings lookup policy: %w", err)
+	}
+	return present, nil
+}
+
+// principalLookupPolicyMatch selects the principal_lookup policy exactly as
+// store.MigratePostgresPrincipalBindings installs it; $1 is its predicate.
+const principalLookupPolicyMatch = `relation.relname = 'principal_bindings'
+		AND policy.polname = 'principal_lookup'
+		AND policy.polcmd = 'r'
+		AND policy.polpermissive
+		AND policy.polroles = '{0}'
+		AND policy.polwithcheck IS NULL
+		AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) = $1`
 
 // TenantTablesWithoutForcedRowSecurity lists the tables in the current schema
 // that have a tenant_id column but are not isolated by it: row security not
 // enabled, not forced, no policy, or a policy whose USING or WITH CHECK does
 // not test app.current_tenant (a permissive policy would undo the others).
-// principal_bindings' principal_lookup policy is the single named exception.
+// principal_bindings' principal_lookup policy is the single named exception,
+// matched exactly (principalLookupPolicyMatch).
 // Serving refuses to start on a non-empty result, and the Postgres catalog
 // test asserts it is empty after a full migration (ADR-0004 B-I3).
 func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]string, error) {
@@ -351,14 +386,10 @@ func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]st
 		      AND NOT EXISTS (
 		          SELECT 1 FROM pg_catalog.pg_policy AS policy
 		          WHERE policy.polrelid = relation.oid
-		            -- The one allowed exception: principal_bindings' SELECT-only
-		            -- principal_lookup policy, keyed by app.current_principal.
-		            AND NOT (
-		                relation.relname = 'principal_bindings'
-		                AND policy.polname = 'principal_lookup'
-		                AND policy.polcmd = 'r'
-		                AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) LIKE '%app.current_principal%'
-		            )
+		            -- The one allowed exception: principal_bindings' permissive,
+		            -- SELECT-only principal_lookup policy for PUBLIC, with exactly
+		            -- the installed predicate and no WITH CHECK.
+		            AND NOT (`+principalLookupPolicyMatch+`)
 		            AND (
 		                COALESCE(pg_catalog.pg_get_expr(policy.polqual, policy.polrelid), '') NOT LIKE '%app.current_tenant%'
 		                OR (policy.polwithcheck IS NOT NULL
@@ -366,7 +397,7 @@ func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]st
 		            )
 		      )
 		  )
-		ORDER BY relation.relname`)
+		ORDER BY relation.relname`, store.PrincipalLookupPolicyExpr)
 	if err != nil {
 		return nil, fmt.Errorf("inspect kernel postgres row security: %w", err)
 	}

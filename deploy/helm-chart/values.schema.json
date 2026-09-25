@@ -422,6 +422,16 @@
                   "type": "boolean",
                   "default": false,
                   "description": "Require cnf.x5t#S256 to match the TLS client certificate (HELM_CP_IDENTITY_REQUIRE_CNF). Only for mTLS deployments."
+                },
+                "caBundleConfigMap": {
+                  "type": "string",
+                  "default": "",
+                  "description": "ConfigMap holding the PEM CA that signs the JWKS endpoint's certificate; mounted and passed as HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE. Empty uses the system roots."
+                },
+                "caBundleKey": {
+                  "type": "string",
+                  "default": "ca.crt",
+                  "description": "Key of the CA PEM inside caBundleConfigMap."
                 }
               }
             }

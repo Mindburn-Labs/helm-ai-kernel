@@ -144,6 +144,10 @@ helm:
       audience: ""  # "helm-kernel:<deployment id>", one per environment
       actor: ""     # exact "act.sub", e.g. spiffe://helm/control-plane
       requireCNF: false  # require cnf.x5t#S256 to match the client certificate (mTLS only)
+      # Pinned CA for the JWKS endpoint when it is served under a private CA:
+      # a ConfigMap in this namespace holding the PEM under caBundleKey.
+      caBundleConfigMap: ""
+      caBundleKey: "ca.crt"
 
   # Governed GitHub effects. Supplying an existing Secret arms the shipped
   # signed-permit connector; an empty Secret name keeps every github.* tool

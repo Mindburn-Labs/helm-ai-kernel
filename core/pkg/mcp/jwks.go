@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -71,6 +72,14 @@ type JWKSConfig struct {
 	MaxTokenTTL time.Duration
 	// Leeway is the clock skew allowed on exp, nbf and iat.
 	Leeway time.Duration
+	// MinRefreshInterval bounds how often the key set is fetched, routine
+	// and forced (unknown kid) refreshes alike. Default 30s.
+	MinRefreshInterval time.Duration
+	// MaxStale is how long cached keys keep verifying after the last
+	// successful fetch while the endpoint is unreachable. Default 1h.
+	MaxStale time.Duration
+	// Now is the clock; tests may replace it. Default time.Now.
+	Now func() time.Time
 }
 
 // OAuthTokenClaims contains validated token claims needed by MCP authorization.
@@ -110,12 +119,22 @@ type JWKSValidator struct {
 	config JWKSConfig
 	client *http.Client
 
-	mu   sync.RWMutex
-	keys map[string]*rsa.PublicKey
-	last time.Time
+	mu          sync.RWMutex
+	keys        map[string]*rsa.PublicKey
+	last        time.Time // last successful fetch
+	lastAttempt time.Time // last fetch attempt, successful or not
+	lastErr     error     // result of the last attempt; nil after a success
+
+	// fetchMu admits one fetch at a time. Callers that queue behind it see
+	// the fresh lastAttempt and share that fetch's result (singleflight).
+	fetchMu sync.Mutex
 }
 
-const jwksRefreshInterval = 5 * time.Minute
+const (
+	jwksRefreshInterval           = 5 * time.Minute
+	jwksDefaultMinRefreshInterval = 30 * time.Second
+	jwksDefaultMaxStale           = time.Hour
+)
 
 // NewJWKSValidator creates a validator with the given config.
 func NewJWKSValidator(config JWKSConfig) *JWKSValidator {
@@ -147,7 +166,8 @@ func (v *JWKSValidator) Validate(tokenString string) (*jwt.RegisteredClaims, err
 // ValidateAuthorization parses and validates a bearer token string and returns
 // normalized OAuth metadata used by MCP scope and resource policy.
 func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenClaims, error) {
-	if err := v.refreshKeysIfNeeded(); err != nil {
+	v.refreshKeys(false)
+	if err := v.keysUsable(); err != nil {
 		return nil, err
 	}
 
@@ -189,14 +209,19 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		key, ok := v.keys[kid]
 		v.mu.RUnlock()
 		if !ok {
-			// Force refresh and retry.
-			if err := v.forceRefreshKeys(); err != nil {
-				return nil, err
-			}
+			// An unknown kid may be a rotation: refresh, but at most once per
+			// MinRefreshInterval across all callers. Within that window every
+			// unknown kid is answered from the cache (a global negative cache
+			// that needs no per-kid state an attacker could grow).
+			v.refreshKeys(true)
 			v.mu.RLock()
 			key, ok = v.keys[kid]
+			lastErr := v.lastErr
 			v.mu.RUnlock()
 			if !ok {
+				if lastErr != nil {
+					return nil, asFetchFailed(lastErr)
+				}
 				return nil, &JWKSValidationError{
 					Kind:    JWKSErrKeyNotFound,
 					Message: fmt.Sprintf("key %q not found in JWKS", kid),
@@ -207,6 +232,12 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 	})
 
 	if err != nil {
+		// Keep the kind of an error raised inside the key lookup (a failed
+		// fetch stays a fetch failure) instead of reclassifying its text.
+		var validationErr *JWKSValidationError
+		if errors.As(err, &validationErr) {
+			return nil, validationErr
+		}
 		return nil, classifyJWTError(err)
 	}
 
@@ -325,39 +356,110 @@ func (v *JWKSValidator) validateScopeString(scope string) error {
 	return nil
 }
 
-func (v *JWKSValidator) refreshKeysIfNeeded() error {
-	v.mu.RLock()
-	needsRefresh := len(v.keys) == 0 || time.Since(v.last) > jwksRefreshInterval
-	v.mu.RUnlock()
-
-	if !needsRefresh {
-		return nil
+func (v *JWKSValidator) now() time.Time {
+	if v.config.Now != nil {
+		return v.config.Now()
 	}
-	return v.forceRefreshKeys()
+	return time.Now()
 }
 
-func (v *JWKSValidator) forceRefreshKeys() error {
+func (v *JWKSValidator) minRefreshInterval() time.Duration {
+	if v.config.MinRefreshInterval > 0 {
+		return v.config.MinRefreshInterval
+	}
+	return jwksDefaultMinRefreshInterval
+}
+
+func (v *JWKSValidator) maxStale() time.Duration {
+	if v.config.MaxStale > 0 {
+		return v.config.MaxStale
+	}
+	return jwksDefaultMaxStale
+}
+
+// refreshKeys fetches the key set when it is due: when none is loaded or the
+// cache is older than jwksRefreshInterval, or, with force, whenever. Either
+// way no fetch starts within MinRefreshInterval of the previous attempt, and
+// only one fetch runs at a time. A failed fetch keeps the cached keys and is
+// recorded, so the next attempt waits out the interval instead of retrying on
+// every request.
+func (v *JWKSValidator) refreshKeys(force bool) {
+	due := func() bool {
+		now := v.now()
+		if !v.lastAttempt.IsZero() && now.Sub(v.lastAttempt) < v.minRefreshInterval() {
+			return false
+		}
+		return force || len(v.keys) == 0 || now.Sub(v.last) > jwksRefreshInterval
+	}
+	v.mu.RLock()
+	needed := due()
+	v.mu.RUnlock()
+	if !needed {
+		return
+	}
+	v.fetchMu.Lock()
+	defer v.fetchMu.Unlock()
+	v.mu.RLock()
+	needed = due()
+	v.mu.RUnlock()
+	if !needed {
+		return
+	}
+	keys, err := v.fetchKeys()
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.lastAttempt = v.now()
+	v.lastErr = err
+	if err == nil {
+		v.keys = keys
+		v.last = v.lastAttempt
+	}
+}
+
+// keysUsable fails closed when no key set is loaded, or when the loaded one is
+// older than MaxStale because every refresh since has failed.
+func (v *JWKSValidator) keysUsable() error {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	if len(v.keys) > 0 && v.now().Sub(v.last) <= v.maxStale() {
+		return nil
+	}
+	if v.lastErr != nil {
+		return asFetchFailed(v.lastErr)
+	}
+	return &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: "no signing keys are loaded"}
+}
+
+func asFetchFailed(err error) *JWKSValidationError {
+	var validationErr *JWKSValidationError
+	if errors.As(err, &validationErr) && validationErr.Kind == JWKSErrFetchFailed {
+		return validationErr
+	}
+	return &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
+}
+
+func (v *JWKSValidator) fetchKeys() (map[string]*rsa.PublicKey, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	jwksURL, err := v.validatedJWKSURL()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
 	if err != nil {
-		return &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
+		return nil, &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
 	}
 
 	resp, err := v.client.Do(req)
 	if err != nil {
-		return &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
+		return nil, &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &JWKSValidationError{
+		return nil, &JWKSValidationError{
 			Kind:    JWKSErrFetchFailed,
 			Message: fmt.Sprintf("JWKS endpoint returned %d", resp.StatusCode),
 		}
@@ -365,12 +467,12 @@ func (v *JWKSValidator) forceRefreshKeys() error {
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
+		return nil, &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: err.Error()}
 	}
 
 	var jwks jose.JSONWebKeySet
 	if err := json.Unmarshal(body, &jwks); err != nil {
-		return &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: fmt.Sprintf("parse JWKS: %v", err)}
+		return nil, &JWKSValidationError{Kind: JWKSErrFetchFailed, Message: fmt.Sprintf("parse JWKS: %v", err)}
 	}
 
 	keys := make(map[string]*rsa.PublicKey, len(jwks.Keys))
@@ -389,12 +491,7 @@ func (v *JWKSValidator) forceRefreshKeys() error {
 		keys[kid] = rsaKey
 	}
 
-	v.mu.Lock()
-	v.keys = keys
-	v.last = time.Now()
-	v.mu.Unlock()
-
-	return nil
+	return keys, nil
 }
 
 func (v *JWKSValidator) validatedJWKSURL() (string, error) {

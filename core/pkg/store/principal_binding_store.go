@@ -70,6 +70,12 @@ func MigratePostgresPrincipalBindings(ctx context.Context, db *sql.DB) error {
 	return err
 }
 
+// PrincipalLookupPolicyExpr is how Postgres deparses the principal_lookup
+// USING clause. The runtime check and the row-security catalog compare the
+// installed policy with it exactly, so a widened predicate is not mistaken for
+// this one.
+const PrincipalLookupPolicyExpr = "(principal_id = current_setting('app.current_principal'::text, true))"
+
 const principalLookupPolicyDDL = `DROP POLICY IF EXISTS principal_lookup ON principal_bindings;
 CREATE POLICY principal_lookup ON principal_bindings FOR SELECT
 	USING (principal_id = current_setting('app.current_principal', true));`

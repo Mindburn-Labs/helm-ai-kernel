@@ -1189,7 +1189,75 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 	pg := rt.pg
 	signer := rt.signer
 
-	mux := http.NewServeMux()
+	mux := newListenerRouteMux(listenerProxy)
+	registerProxyRoutes(mux, rt)
+
+	addr := net.JoinHostPort(proxyBind, strconv.Itoa(port))
+
+	_, _ = fmt.Fprintf(stdout, "HELM Proxy Sidecar\n")
+	_, _ = fmt.Fprintf(stdout, "══════════════════\n")
+	_, _ = fmt.Fprintf(stdout, "  Upstream:    %s\n", upstream)
+	_, _ = fmt.Fprintf(stdout, "  Listen:      http://%s\n", addr)
+	_, _ = fmt.Fprintf(stdout, "  Health:      http://%s/healthz\n", addr)
+	_, _ = fmt.Fprintf(stdout, "  Receipts:    %s\n", receiptPath)
+	_, _ = fmt.Fprintf(stdout, "  Tenant:      %s\n", tenantID)
+	if proxyToken != "" {
+		_, _ = fmt.Fprintf(stdout, "  Auth:        bearer token (%s)\n", proxyTokenEnv)
+	}
+	if policyPath != "" {
+		_, _ = fmt.Fprintf(stdout, "  Policy:      %s\n", policyPath)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "  Policy:      none (every tool call is denied)\n")
+	}
+	if maxIterations > 0 {
+		_, _ = fmt.Fprintf(stdout, "  Max Rounds:  %d\n", maxIterations)
+	}
+	if maxWallclock > 0 {
+		_, _ = fmt.Fprintf(stdout, "  Wallclock:   %s\n", maxWallclock)
+	}
+	if signer != nil {
+		_, _ = fmt.Fprintf(stdout, "  Signing:     Ed25519 (key: %s)\n", signer.KeyID)
+	}
+	_, _ = fmt.Fprintf(stdout, "  ProofGraph: %s\n", filepath.Join(receiptsDir, "proofgraph.json"))
+	_, _ = fmt.Fprintf(stdout, "  Governance:  Guardian → ProofGraph\n")
+	_, _ = fmt.Fprintf(stdout, "\n")
+	_, _ = fmt.Fprintf(stdout, "  Drop-in usage:\n")
+	_, _ = fmt.Fprintf(stdout, "    export OPENAI_BASE_URL=http://%s/v1\n", addr)
+	_, _ = fmt.Fprintf(stdout, "    python your_app.py\n")
+	_, _ = fmt.Fprintf(stdout, "\n")
+	_, _ = fmt.Fprintf(stdout, "  Tool calls are governed, hashed, and receipted; a request that offers tools\n")
+	_, _ = fmt.Fprintf(stdout, "  must not stream, and a response the proxy cannot parse is withheld. Ctrl+C to stop.\n")
+
+	server := &http.Server{
+		Addr: addr,
+		// The proxy is an external ingress edge: run every request inside an
+		// otelhttp server span so an inbound W3C traceparent is continued
+		// (HELM-333) before governance and upstream forwarding run.
+		Handler:           tracing.WrapEdgeHandler(wrapProxyAuth(mux, proxyToken), "helm.proxy"),
+		ReadHeaderTimeout: 30 * time.Second,
+	}
+
+	// Graceful shutdown: persist ProofGraph on exit
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt)
+		<-sigChan
+		log.Println("[helm-proxy] shutting down, persisting ProofGraph...")
+		persistProofGraph(pg, filepath.Join(receiptsDir, "proofgraph.json"))
+		server.Close()
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
+	return 0
+}
+
+// registerProxyRoutes mounts the proxy listener's routes.
+func registerProxyRoutes(mux routeMux, rt *proxyRuntime) {
+	upstream, receiptPath, pg := rt.upstream, rt.receiptPath, rt.pg
 
 	// Health endpoint
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -1226,117 +1294,6 @@ func runProxyCmd(args []string, stdout, stderr io.Writer) int {
 
 	// Proxy everything else
 	mux.Handle("/", rt.handler)
-
-	addr := net.JoinHostPort(proxyBind, strconv.Itoa(port))
-
-	// Responses WebSocket mode: register /v1/responses handler for WS upgrade
-	if websocket {
-		mux.HandleFunc("/v1/responses", func(w http.ResponseWriter, r *http.Request) {
-			// Check for WebSocket upgrade
-			if r.Header.Get("Upgrade") != "websocket" {
-				// Not a WS request — fall through to regular proxy
-				rt.handler.ServeHTTP(w, r)
-				return
-			}
-
-			// Respond with WebSocket upgrade awareness
-			// NOTE: Full WebSocket implementation requires nhooyr.io/websocket or gorilla/websocket.
-			// This handler documents the correct endpoint and behavior contract.
-			// The production implementation will:
-			// 1. Upgrade HTTP to WebSocket at /v1/responses
-			// 2. Read JSON events (response.create, etc.)
-			// 3. Preserve previous_response_id chaining
-			// 4. Apply PEP governance on each tool_call event
-			// 5. Generate receipts with deterministic boundaries per event
-			// 6. Forward events to upstream WS endpoint
-			//
-			// Behavior contract (any WS library):
-			// - Correct close semantics (1000 normal, 1001 going away)
-			// - Ping/pong handling (respond within 10s)
-			// - Backpressure: max 64 concurrent inflight messages
-			// - Message size cap: 16MB per frame
-			// - Receipt boundaries: one receipt per response.create event
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotImplemented)
-			errMsg := map[string]any{
-				"error": map[string]any{
-					"type":    "websocket_not_ready",
-					"message": "Responses WebSocket mode endpoint registered at /v1/responses. Full WS upgrade requires websocket library dependency. Use OPENAI_WEBSOCKET_BASE_URL=ws://" + addr + " to target this endpoint.",
-				},
-			}
-			data, _ := json.Marshal(errMsg)
-			_, _ = w.Write(data)
-		})
-	}
-
-	_, _ = fmt.Fprintf(stdout, "HELM Proxy Sidecar\n")
-	_, _ = fmt.Fprintf(stdout, "══════════════════\n")
-	_, _ = fmt.Fprintf(stdout, "  Upstream:    %s\n", upstream)
-	_, _ = fmt.Fprintf(stdout, "  Listen:      http://%s\n", addr)
-	_, _ = fmt.Fprintf(stdout, "  Health:      http://%s/healthz\n", addr)
-	_, _ = fmt.Fprintf(stdout, "  Receipts:    %s\n", receiptPath)
-	_, _ = fmt.Fprintf(stdout, "  Tenant:      %s\n", tenantID)
-	if proxyToken != "" {
-		_, _ = fmt.Fprintf(stdout, "  Auth:        bearer token (%s)\n", proxyTokenEnv)
-	}
-	if websocket {
-		_, _ = fmt.Fprintf(stdout, "  WebSocket:   ws://%s/v1/responses (Responses API mode)\n", addr)
-	}
-	if policyPath != "" {
-		_, _ = fmt.Fprintf(stdout, "  Policy:      %s\n", policyPath)
-	} else {
-		_, _ = fmt.Fprintf(stdout, "  Policy:      none (every tool call is denied)\n")
-	}
-	if maxIterations > 0 {
-		_, _ = fmt.Fprintf(stdout, "  Max Rounds:  %d\n", maxIterations)
-	}
-	if maxWallclock > 0 {
-		_, _ = fmt.Fprintf(stdout, "  Wallclock:   %s\n", maxWallclock)
-	}
-	if signer != nil {
-		_, _ = fmt.Fprintf(stdout, "  Signing:     Ed25519 (key: %s)\n", signer.KeyID)
-	}
-	_, _ = fmt.Fprintf(stdout, "  ProofGraph: %s\n", filepath.Join(receiptsDir, "proofgraph.json"))
-	_, _ = fmt.Fprintf(stdout, "  Governance:  Guardian → ProofGraph\n")
-	_, _ = fmt.Fprintf(stdout, "\n")
-	_, _ = fmt.Fprintf(stdout, "  Drop-in usage:\n")
-	_, _ = fmt.Fprintf(stdout, "    export OPENAI_BASE_URL=http://%s/v1\n", addr)
-	_, _ = fmt.Fprintf(stdout, "    python your_app.py\n")
-	if websocket {
-		_, _ = fmt.Fprintf(stdout, "\n  Responses WebSocket:\n")
-		_, _ = fmt.Fprintf(stdout, "    export OPENAI_WEBSOCKET_BASE_URL=ws://%s\n", addr)
-		_, _ = fmt.Fprintf(stdout, "    # Agents SDK JS uses /v1/responses over WebSocket\n")
-	}
-	_, _ = fmt.Fprintf(stdout, "\n")
-	_, _ = fmt.Fprintf(stdout, "  Tool calls are governed, hashed, and receipted; a request that offers tools\n")
-	_, _ = fmt.Fprintf(stdout, "  must not stream, and a response the proxy cannot parse is withheld. Ctrl+C to stop.\n")
-
-	server := &http.Server{
-		Addr: addr,
-		// The proxy is an external ingress edge: run every request inside an
-		// otelhttp server span so an inbound W3C traceparent is continued
-		// (HELM-333) before governance and upstream forwarding run.
-		Handler:           tracing.WrapEdgeHandler(wrapProxyAuth(mux, proxyToken), "helm.proxy"),
-		ReadHeaderTimeout: 30 * time.Second,
-	}
-
-	// Graceful shutdown: persist ProofGraph on exit
-	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt)
-		<-sigChan
-		log.Println("[helm-proxy] shutting down, persisting ProofGraph...")
-		persistProofGraph(pg, filepath.Join(receiptsDir, "proofgraph.json"))
-		server.Close()
-	}()
-
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
-	}
-
-	return 0
 }
 
 // persistProofGraph serializes the ProofGraph DAG to a JSON file.

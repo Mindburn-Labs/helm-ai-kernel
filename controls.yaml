@@ -1327,8 +1327,10 @@ controls:
       No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no
       production caller and WithBudgetTracker is in
       scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at
-      runtime. No route reports a budget enforcer: GET /api/v1/budget/status,
-      which answered a hard-coded active one, was removed (HELM-780).
+      runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status,
+      which answered a hard-coded active one, and `budget verify`, which printed
+      a constant PASS, were removed (HELM-780). `budget set` records ceilings
+      that nothing enforces.
     entry_points:
       - "core/pkg/guardian.Guardian.SetBudgetTracker"
     config: []

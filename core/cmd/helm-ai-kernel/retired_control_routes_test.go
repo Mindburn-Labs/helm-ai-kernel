@@ -73,3 +73,16 @@ func TestKernelApproveIsRetiredBehindServiceAuth(t *testing.T) {
 		})
 	}
 }
+
+// HELM-780: `budget verify` printed a constant PASS without checking anything
+// (R2). It is removed, like GET /api/v1/budget/status.
+func TestBudgetVerifyIsRemoved(t *testing.T) {
+	t.Setenv("HELM_DATA_DIR", t.TempDir())
+	var stdout, stderr strings.Builder
+	if code := runBudgetSurfaceCmd([]string{"verify"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("budget verify exit = %d, want 2; stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "PASS") {
+		t.Fatalf("budget verify still reports PASS: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}

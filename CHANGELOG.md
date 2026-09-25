@@ -93,7 +93,7 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
-### Removed — the budget status route; kernel approve retired to 501 (HELM-780)
+### Removed — the budget status route and `budget verify`; kernel approve retired to 501 (HELM-780)
 
 Breaking.
 
@@ -101,6 +101,9 @@ Breaking.
   `enforcer: postgres, status: active`, but no shipped binary wires a budget
   tracker into the Guardian. The route was an implementation route, not part
   of the public OpenAPI contract.
+- **`helm-ai-kernel budget verify` is removed.** It printed a constant
+  `Budget verification: PASS` without checking anything. `budget list` and
+  `budget set` are unchanged; the ceilings they record are not enforced.
 - **`POST /api/v1/kernel/approve` always answers 501.** Nothing registered a
   pending approval, so every well-formed submission answered 404 and no
   approval could succeed.

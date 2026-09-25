@@ -7,7 +7,7 @@ last_reviewed: 2026-06-11
 
 Agents propose tool calls; something has to decide which of them may run. HELM AI Kernel is that decision point: a fail-closed boundary that evaluates every consequential tool call against policy before the side effect happens, not after.
 
-Each proposal passes through the guardian pipeline and receives exactly one canonical verdict: ALLOW, DENY, or ESCALATE. Unknown tools and unmatched policy default to deny. ESCALATE stops the action and routes it to a human approver instead of guessing.
+Each proposal passes through the guardian pipeline and receives exactly one canonical verdict: ALLOW, DENY, or ESCALATE. Unknown tools and unmatched policy default to deny. ESCALATE stops the action instead of guessing. The kernel does not route it to an approver; the caller takes it to its own review.
 
 Every verdict is recorded as an Ed25519-signed receipt over a JCS (RFC 8785) canonical form, so the decision, the policy hash, and the requesting identity can be replayed and verified offline long after the agent session ends. Orchestration decides what to attempt; HELM decides what may execute.
 

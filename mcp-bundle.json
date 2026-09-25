@@ -129,7 +129,6 @@
       "profile-aware-signed-receipts",
       "schema-pep-validation",
       "proofgraph-audit-trail",
-      "rug-pull-detection",
       "typosquat-detection",
       "trust-scoring",
       "delegation-scope-enforcement",

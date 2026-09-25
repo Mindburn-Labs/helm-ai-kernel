@@ -34,11 +34,19 @@ it touched. Editing the surrounding prose is not a concept change and needs no
 marker. This is what stops the constitution from drifting one convenient
 sentence at a time.
 
+**This file is generated.** [`controls.yaml`](controls.yaml) is the control
+registry (binding rule R1). It holds the text of every invariant together with
+its owner, entry points, protected operations, bypass assumptions and tests,
+plus the controls that are not invariants. Edit the registry and run
+`make controls`, which rewrites this file and `coverage-map.json`. The marker
+rule above still applies to the invariant text.
+
 **Gates.**
 
 ```bash
-make inv-check      # hints resolve; ids unique; checker self-tests first
-make concept-gate   # amendments carry a CONCEPT-CHANGE marker
+make inv-check        # hints resolve; ids unique; checker self-tests first
+make concept-gate     # amendments carry a CONCEPT-CHANGE marker
+make controls-check   # registry valid; enforced paths reachable and tested; files current
 ```
 
 `make inv-check` runs synthetic negative controls before it reads this file and
@@ -47,6 +55,64 @@ discriminating would report a green constitution it never inspected, which is
 strictly worse than having no checker at all.
 
 The numbered-invariant pattern follows razzant/claudexor (MIT).
+
+---
+
+## Enforcement status
+
+Generated from [`controls.yaml`](controls.yaml) by `make controls`; do not edit
+this section or the invariant text below by hand. `make controls-check` fails
+when this file or `coverage-map.json` differs from the registry. An entry is
+`enforced` only when every entry point is reachable from a shipped binary
+(`scripts/ci/deadcode-roots.txt`) and its allowed, forbidden and removal tests
+exist. Everything else is `observed-only` or `unmanaged`, with the reason.
+
+42 controls: 19 enforced, 11 observed-only, 12 unmanaged (11 of them retired invariants).
+
+| Id | Control | Status | Why it is not enforced |
+| --- | --- | --- | --- |
+| INV-001 | Every hashed structure is JCS-canonical first | enforced | — |
+| INV-002 | ProofGraph ordering and node hashes are wall-clock independent | enforced | — |
+| INV-003 | EvidencePack roots are deterministic and inclusion is tamper-evident | enforced | — |
+| INV-004 | Egress enforcement is fail-closed | enforced | — |
+| INV-005 | A policy runtime that cannot evaluate denies | enforced | — |
+| INV-006 | An unclassified effect is irreversible until proven otherwise | observed-only | The reversibility classifier is unreachable from core/cmd/helm-ai-kernel: ReversibilityClassifier.Classify and DefaultForType are in scripts/ci/deadcode-allowlist.txt. No shipped path classifies an effect, so the default governs nothing at runtime. |
+| INV-007 | A verdict the gateway cannot verify is not a verdict | observed-only | The verifier is a library that no shipped binary calls: VerifyResponse and EvaluateGatewayResponse are in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in this repository, so the tests prove the library, not a production path. |
+| INV-008 | An EffectPermit authorizes one connector, one action, one scope | observed-only | The verifier is a library that no shipped binary calls: PermitLedger.ConsumePermit and EvaluateAndConsumeGatewayResponse are in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in this repository, so the tests prove the library, not a production path. |
+| INV-009 | DENY and ESCALATE carry no permit material | observed-only | The verifier is a library that no shipped binary calls: VerifyResponse is in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in this repository, so the tests prove the library, not a production path. |
+| INV-010 | A permit cannot outlive the verdict that authorized it | observed-only | The verifier is a library that no shipped binary calls: VerifyResponse is in scripts/ci/deadcode-allowlist.txt. The gateway that would run it is not in this repository, so the tests prove the library, not a production path. |
+| INV-011 | A credential binds to exactly one principal | enforced | — |
+| INV-012 | Signature algorithms do not cross-verify | observed-only | The key ring is unreachable from core/cmd/helm-ai-kernel: every KeyRing method is in scripts/ci/deadcode-allowlist.txt, so no shipped signing or verification path goes through it. |
+| INV-013 | Apply policy is decided in exactly one place | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-008. |
+| INV-014 | An override may clear an unknown, never a proven-false | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-005. |
+| INV-015 | An override binds to the exact patch bytes it accepted | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-008. |
+| INV-016 | Override authority has scope only on a run awaiting a decision | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-010. |
+| INV-017 | Every live-tree mutation path is registered with a complete fence | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-024. |
+| INV-018 | A refused apply leaves the live tree byte-identical | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-009. |
+| INV-019 | Verification never mutates the live tree, and silence is not a pass | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-025. |
+| INV-020 | Diff capture is byte-faithful | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-008 and INV-001. |
+| INV-021 | The provider credential scrub is cross-provider | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-011. |
+| INV-022 | Exactly one terminal event per run, on every exit path | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-024. |
+| INV-023 | An unenforceable read-only claim is refused, not assumed | retired | Retired 2026-09-24 (HELM-756): the implementation was deleted without ever having a production caller. Its rule survives as INV-024. |
+| INV-024 | An adapter governs only the calls actually routed through it | unmanaged | A limit on what may be claimed, not a runtime control. No code can check that an adapter's documentation names the paths it does not intercept; the review question in its verify: line is human-owned. |
+| INV-025 | The gates that prove these invariants are themselves gated | observed-only | Held by build-time gates (make controls-check, make verify-boundary, go run tools/tcbcheck/main.go), not by a shipped binary. The registry's reachability rule scores runtime entry points only, so this entry cannot be enforced in its terms yet; a build-plane entry kind is HELM-746 slice 2. |
+| CTL-001 | Guardian default-deny | enforced | — |
+| CTL-002 | Route auth tiers | enforced | — |
+| CTL-003 | FORCE RLS on Postgres tenant tables | enforced | — |
+| CTL-004 | Global freeze | enforced | — |
+| CTL-005 | Scoped emergency-stop fence | enforced | — |
+| CTL-006 | Fence-scope binding | enforced | — |
+| CTL-007 | Tenant and principal come from the token | observed-only | Not held. Tenant and principal arrive as X-Helm-Tenant-ID and X-Helm-Principal-ID headers beside a shared bearer key. The kernel checks them against the configured pair or a principal-binding row, but does not derive them from the credential. Only the approval workload routes take tenant and workspace from a verified JWT, and CTL-006 binds the configured scope while the emergency-stop fence is on. |
+| CTL-008 | Approval grant is consumed once | enforced | — |
+| CTL-009 | Evidence bundle verification | enforced | — |
+| CTL-010 | MCP tool-call mediation | enforced | — |
+| CTL-011 | Guardian budget draw-down | observed-only | No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. GET /api/v1/budget/status nonetheless reports a hard-coded active enforcer. |
+| CTL-012 | Decision receipts are signed and tampering fails | enforced | — |
+| CTL-013 | API rate limiting | enforced | — |
+| CTL-014 | Dispatch admission is idempotent | enforced | — |
+| CTL-015 | Effect reservation before dispatch | observed-only | Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt, as is the generic api.IdempotencyMiddleware. The Postgres tests prove the library only. |
+| CTL-016 | Spend proxy quotes before dispatch | enforced | — |
+| CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
 
 ---
 

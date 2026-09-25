@@ -8,25 +8,19 @@ last_reviewed: 2026-07-01
 Conformance is the runnable check that HELM behaves like the public Kernel
 contract says it behaves.
 
-## Run The Public Levels
+## Run The Conformance Vectors
 
 ```bash
-helm-ai-kernel conform --level L1 --json
-helm-ai-kernel conform --level L2 --json
 helm-ai-kernel conform negative --json
 helm-ai-kernel conform vectors --json
 ```
 
-`L1` covers the local proof path: canonical inputs, receipt shape, offline
-verification, and checkpoint roots.
-
-`L2` adds the MCP execution firewall: quarantine, tool-list/call consistency,
-schema pinning, direct-bypass denial, scoped approvals, revocation, expiry, and
-receipt emission.
-
-Higher levels are not public shortcuts in the Kernel docs. Treat any `L3` or
-`L4` material as source/test coverage until a public command and test-backed
-proof path exists.
+The `--level L1` and `--level L2` gate shortcuts were retired in HELM-756,
+together with gates G1–G15 and GX. No EvidencePack could pass G1 and G7 at the
+same time, and several gates passed without checking anything, so the levels
+could not return a truthful result. `--level` still parses, but it exits 2 and
+points here. The only gate that still runs is G0 (build identity). The release
+pipeline signs a G0 report with `make conformance-release-report`.
 
 ## Maintainer Test Targets
 

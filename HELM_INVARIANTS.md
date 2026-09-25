@@ -106,7 +106,7 @@ exist. Everything else is `observed-only` or `unmanaged`, with the reason.
 | CTL-008 | Approval grant is consumed once | enforced | — |
 | CTL-009 | Evidence bundle verification | enforced | — |
 | CTL-010 | MCP tool-call mediation | enforced | — |
-| CTL-011 | Guardian budget draw-down | observed-only | No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. GET /api/v1/budget/status nonetheless reports a hard-coded active enforcer. |
+| CTL-011 | Guardian budget draw-down | observed-only | No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. No route reports a budget enforcer: GET /api/v1/budget/status, which answered a hard-coded active one, was removed (HELM-780). |
 | CTL-012 | Decision receipts are signed and tampering fails | enforced | — |
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |

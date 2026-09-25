@@ -12,6 +12,12 @@ import (
 // tenant setting the kernel's Postgres stores use; WithTenant sets it.
 const TenantRowSecurityPolicy = "tenant_id = current_setting('app.current_tenant', true)"
 
+// TenantRowSecurityPolicyExpr is how Postgres deparses TenantRowSecurityPolicy
+// on a TEXT tenant_id. The row-security catalog check compares the installed
+// USING and WITH CHECK with it exactly, so a widened predicate that still
+// mentions app.current_tenant is not mistaken for this one.
+const TenantRowSecurityPolicyExpr = "(tenant_id = current_setting('app.current_tenant'::text, true))"
+
 // TenantRowSecurityDDL returns the statements that put table under forced row
 // security with the tenant policy. FORCE makes the policy bind the table owner
 // too, and an unset tenant setting is NULL, which matches no row.

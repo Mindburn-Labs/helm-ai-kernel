@@ -395,7 +395,11 @@ func expectTenantRowSecurity(mock sqlmock.Sqlmock, unforced ...string) {
 	for _, table := range unforced {
 		rows.AddRow(table)
 	}
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT relation.relname\n\t\tFROM pg_catalog.pg_class AS relation")).WillReturnRows(rows)
+	// ValidateRuntime runs the exact catalog check: the deparsed predicates,
+	// not a substring of them.
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT relation.relname\n\t\tFROM pg_catalog.pg_class AS relation")).
+		WithArgs(store.PrincipalLookupPolicyExpr, store.TenantRowSecurityPolicyExpr, tenantWorkspacePolicyExpr, releaseAuthorityPolicyExpr).
+		WillReturnRows(rows)
 }
 
 func expectPrincipalLookupPolicy(mock sqlmock.Sqlmock, present bool) {

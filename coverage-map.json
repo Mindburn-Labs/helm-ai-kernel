@@ -978,7 +978,7 @@
       "id": "CTL-003",
       "title": "FORCE RLS on Postgres tenant tables",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "Every kernel tenant table on Postgres is under FORCE ROW LEVEL SECURITY with the tenant policy, and a runtime role that could bypass it is refused at startup.",
+      "claim": "Every kernel tenant table on Postgres is under FORCE ROW LEVEL SECURITY with an exact tenant policy (its deparsed USING and WITH CHECK, command, permissiveness and roles compared, not searched) and no other policy but principal_bindings' principal_lookup exception. Serving refuses to start on a table that is not, and on a runtime role that could bypass it.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -1012,7 +1012,8 @@
           "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity",
           "core/pkg/postgresmigration.TestValidateRuntimeRejectsSchemaOwnerWithoutDDL",
           "core/pkg/postgresmigration.TestTenantRowSecurityIsolatesTenantsForARestrictedRole",
-          "core/pkg/postgresmigration.TestTenantRowSecurityCheckDetectsWeakenedTables"
+          "core/pkg/postgresmigration.TestTenantRowSecurityCheckDetectsWeakenedTables",
+          "core/pkg/postgresmigration.TestValidateRuntimeRefusesAWidenedTenantPolicy"
         ],
         "removal": [
           "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity"

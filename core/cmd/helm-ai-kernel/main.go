@@ -639,6 +639,10 @@ func runServerWithOptions(opts serverOptions) error {
 		if err != nil {
 			return fmt.Errorf("initialize GeneratedSpec approval runtime: %w", err)
 		}
+		services.ControlPlaneIdentity, err = newControlPlaneIdentityFromEnv()
+		if err != nil {
+			return fmt.Errorf("initialize Control Plane identity: %w", err)
+		}
 
 		// Receipt transparency log: anchor decision-record receipt hashes at
 		// issuance (see persistDecisionReceipt -> anchorReceiptTransparency). The
@@ -810,7 +814,7 @@ func metricsHandler(services *Services) http.HandlerFunc {
 			gatherers = append(gatherers, gatherer)
 		}
 	}
-	gatherers = append(gatherers, verificationMetrics.PrometheusGatherer())
+	gatherers = append(gatherers, verificationMetrics.PrometheusGatherer(), controlPlaneIdentityMetrics.PrometheusGatherer())
 	return promhttp.HandlerFor(gatherers, promhttp.HandlerOpts{EnableOpenMetrics: true}).ServeHTTP
 }
 

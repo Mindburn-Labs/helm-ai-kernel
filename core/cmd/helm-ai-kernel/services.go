@@ -76,6 +76,8 @@ type Services struct {
 	EmergencyStops        *kernel.ScopedStopStore
 	ApprovalConsumption   *approvalConsumptionRuntime
 	GeneratedSpecApproval *generatedSpecApprovalRuntime
+	// ControlPlaneIdentity is nil unless HELM_CP_IDENTITY_* is configured (ADR-0005).
+	ControlPlaneIdentity *controlPlaneIdentity
 
 	// --- Evidence ---
 	Evidence          *evidence.DefaultExporter

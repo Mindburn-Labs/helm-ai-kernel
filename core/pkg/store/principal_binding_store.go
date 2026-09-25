@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -57,8 +58,54 @@ func MigratePostgresPrincipalBindings(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, query); err != nil {
 		return err
 	}
-	_, err := db.ExecContext(ctx, TenantRowSecurityDDL("principal_bindings"))
+	if _, err := db.ExecContext(ctx, TenantRowSecurityDDL("principal_bindings")); err != nil {
+		return err
+	}
+	// principal_lookup lets a transaction bound to one principal read that
+	// principal's bindings in every tenant, and nothing else. The Control Plane
+	// token check needs it: a known principal presented for a tenant it is not
+	// bound to is refused (ADR-0005 §3), and forced tenant row security alone
+	// would hide the other tenants' rows. SELECT only; writes stay tenant-bound.
+	_, err := db.ExecContext(ctx, principalLookupPolicyDDL)
 	return err
+}
+
+// PrincipalLookupPolicyExpr is how Postgres deparses the principal_lookup
+// USING clause. The runtime check and the row-security catalog compare the
+// installed policy with it exactly, so a widened predicate is not mistaken for
+// this one.
+const PrincipalLookupPolicyExpr = "(principal_id = current_setting('app.current_principal'::text, true))"
+
+const principalLookupPolicyDDL = `DROP POLICY IF EXISTS principal_lookup ON principal_bindings;
+CREATE POLICY principal_lookup ON principal_bindings FOR SELECT
+	USING (principal_id = current_setting('app.current_principal', true));`
+
+// PrincipalBindingLookup reports whether a principal is bound to any tenant.
+type PrincipalBindingLookup interface {
+	PrincipalBound(ctx context.Context, principalID string) (bool, error)
+}
+
+// PrincipalBound reports whether principalID has a binding in any tenant. The
+// transaction is bound to that principal (app.current_principal), which the
+// principal_lookup policy admits; no tenant is set, so nothing else is visible.
+func (s *PostgresPrincipalBindingStore) PrincipalBound(ctx context.Context, principalID string) (bool, error) {
+	if strings.TrimSpace(principalID) == "" {
+		return false, errors.New("principal lookup requires a principal")
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_principal', $1, true)`, principalID); err != nil {
+		return false, err
+	}
+	var one int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM principal_bindings WHERE principal_id = $1 LIMIT 1`, principalID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // Upsert inserts a binding, idempotent on (tenant_id, principal_id).

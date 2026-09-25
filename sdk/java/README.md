@@ -59,7 +59,7 @@ class Example {
   public static void main(String[] args) {
     HelmClient client = new HelmClient("http://127.0.0.1:7714");
     ChatCompletionRequest req = new ChatCompletionRequest()
-        .model("gpt-4")
+        .model("gpt-6-sol")
         .messages(List.of(new ChatCompletionRequestMessagesInner()
             .role(ChatCompletionRequestMessagesInner.RoleEnum.USER)
             .content("hello")));

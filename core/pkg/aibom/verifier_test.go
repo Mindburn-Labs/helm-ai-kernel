@@ -10,7 +10,7 @@ func TestVerify_ValidBOM(t *testing.T) {
 	bom, err := Generate(GenerateConfig{
 		Component: "kernel",
 		Models: []ModelProvenance{
-			{ModelID: "m1", Provider: "openai", ModelName: "gpt-4o", ModelVersion: "2025-01"},
+			{ModelID: "m1", Provider: "openai", ModelName: "gpt-6-sol", ModelVersion: "2025-01"},
 		},
 	})
 	if err != nil {
@@ -26,7 +26,7 @@ func TestVerify_TamperedBOM(t *testing.T) {
 	bom, err := Generate(GenerateConfig{
 		Component: "kernel",
 		Models: []ModelProvenance{
-			{ModelID: "m1", Provider: "openai", ModelName: "gpt-4o", ModelVersion: "2025-01"},
+			{ModelID: "m1", Provider: "openai", ModelName: "gpt-6-sol", ModelVersion: "2025-01"},
 		},
 	})
 	if err != nil {
@@ -65,7 +65,7 @@ func TestVerify_MissingHash(t *testing.T) {
 }
 
 func TestDiff_ModelsAddedRemoved(t *testing.T) {
-	modelA := ModelProvenance{ModelID: "ma", Provider: "openai", ModelName: "gpt-4", ModelVersion: "v1"}
+	modelA := ModelProvenance{ModelID: "ma", Provider: "openai", ModelName: "gpt-6-sol", ModelVersion: "v1"}
 	modelB := ModelProvenance{ModelID: "mb", Provider: "anthropic", ModelName: "claude", ModelVersion: "v1"}
 	modelC := ModelProvenance{ModelID: "mc", Provider: "local", ModelName: "llama", ModelVersion: "v3"}
 
@@ -151,7 +151,7 @@ func TestDiff_DepsChanged(t *testing.T) {
 
 func TestDiff_NoDifference(t *testing.T) {
 	models := []ModelProvenance{
-		{ModelID: "m1", Provider: "openai", ModelName: "gpt-4", ModelVersion: "v1"},
+		{ModelID: "m1", Provider: "openai", ModelName: "gpt-6-sol", ModelVersion: "v1"},
 	}
 	deps := []DependencyEntry{
 		{Name: "github.com/foo/bar", Version: "v1.0.0", Type: "go-module"},

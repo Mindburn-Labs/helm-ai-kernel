@@ -1,3 +1,6 @@
+// quantum_posture: SoftHSM holds existing classical Ed25519 and ML-DSA-65 keys;
+// this file adds no algorithm and asserts no new post-quantum property.
+
 package crypto
 
 import (
@@ -19,8 +22,9 @@ const AlgorithmMLDSA65 = "ml-dsa-65"
 
 // SoftHSM provides file-backed key management for Ed25519 and ML-DSA-65.
 // This is a software implementation suitable for development and testing.
-// For production deployments requiring hardware-grade key protection,
-// use the PKCS#11 provider in crypto/hsm.
+// No hardware-backed provider ships in this repository: the PKCS#11
+// abstraction in crypto/hsm had no caller once the conform gates were retired
+// and was removed in HELM-756.
 type SoftHSM struct {
 	keyDir string
 	mu     sync.RWMutex

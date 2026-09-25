@@ -107,12 +107,12 @@ describe('HelmClient', () => {
   // ── chatCompletions ─────────────────────────────────
   describe('chatCompletions', () => {
     it('POSTs to /v1/chat/completions with request body', async () => {
-      const mockRes = { id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: 'gpt-4', choices: [] };
+      const mockRes = { id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: 'gpt-6-sol', choices: [] };
       fetchSpy.mockResolvedValue(jsonResponse(mockRes));
       const client = new HelmClient({ baseUrl: 'http://h' });
 
       const result = await client.chatCompletions({
-        model: 'gpt-4',
+        model: 'gpt-6-sol',
         messages: [{ role: 'user', content: 'hi' }],
       });
 

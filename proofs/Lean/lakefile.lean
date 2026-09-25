@@ -6,8 +6,7 @@ open Lake DSL
 
   Workstream F / F2 + F3 — Phase 3 of the helm-ai-kernel 100% SOTA execution
   plan. The single library target `EffectPermitSoundness` lives one
-  directory up from this lakefile (so the .lean source can sit next to
-  the existing TLA+ specs in proofs/), reached via `srcDir`.
+  directory up from this lakefile (in proofs/), reached via `srcDir`.
 
   Run locally:
 
@@ -30,8 +29,7 @@ package helmAiKernelProofs where
 
 @[default_target]
 lean_lib EffectPermitSoundness where
-  -- The .lean source lives one directory up so it sits alongside the
-  -- existing TLA+ specs in proofs/. Lake resolves module name
-  -- `EffectPermitSoundness` against `srcDir` + ".lean".
+  -- The .lean source lives one directory up, in proofs/. Lake resolves
+  -- module name `EffectPermitSoundness` against `srcDir` + ".lean".
   srcDir := ".."
   roots := #[`EffectPermitSoundness]

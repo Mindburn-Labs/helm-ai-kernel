@@ -79,7 +79,7 @@ No §14.4 candidate is in that list.
 | `core/pkg/riskscan` (1,780) | `cmd/helm-ai-kernel` (`scan`, `verify scan`) | None | — | **Extracted** (s4e) to `tools/riskscan` (binary `helm-risk-scan`); kernel `scan`/`verify-scan` are one-release stubs; `--upload` dropped. | s4e |
 | `core/pkg/shellscan` (3,380) | `cmd/helm-ai-kernel` (`hook`) | None | — | **Keep**, but only inside the observed-only hook (§7.4). The H8 repair is tracked separately. | — |
 | Java SDK (`sdk/java`), Rust SDK (`sdk/rust`) | Not applicable | See the notes below the table. | — | Remove in s5. **Publishing the deprecation is a human action.** | s5 |
-| TLA+ specifications (`proofs/*.tla`, 7 specs), `.github/workflows/tla.yml` | Not applicable | None | — | Review each spec. Keep only the specs tied to code. | s6 |
+| TLA+ specifications (`proofs/*.tla`, 7 specs, plus `protocols/specs/tla/HelmKernel.tla`), `.github/workflows/tla.yml` | `GuardianPipeline.tla` is tied to code by `core/pkg/guardian/spec_roster_test.go`; no other spec has a Go, script or CI tie | None in the Console, the Control Plane or the docs site | — | **GuardianPipeline kept** and still model-checked; the other 7 **removed** (s6b) | s6b |
 | Verification-shaped commands not in §11.4, including `workstation certify` | `cmd/helm-ai-kernel` | `workstation certify`: none in the Console, the Control Plane or the docs site; Enterprise keeps its own copy of the pack and docs | — | `workstation certify` **removed** (s6a). Other verification-shaped commands wait for the §11.4 mapping. | s6a |
 
 Notes on the rows marked "see the notes below the table":
@@ -404,6 +404,37 @@ Callers were checked read-only in `app-helm-console`, `svc-helm-control-plane`,
 - **Deadcode.** The frozen allowlist (#993) is the acceptance gate: `make
   deadcode` reports only allowlisted findings. This slice removes 48 stale
   lines, plus the now-unused `defaultWorkstationFixtureRoot`.
+
+## Slice 6b evidence
+
+"Keep only the specs tied to code." A spec counts as tied if a Go test, script
+or CI step reads it or asserts a correspondence with it. Every Go test, script,
+Makefile and workflow was searched for `proofs/` paths and spec names.
+
+- **Kept: `proofs/GuardianPipeline.tla` and `proofs/guardian.cfg`.**
+  `core/pkg/guardian/spec_roster_test.go` (#887) reads `proofs/guardian.cfg`,
+  and `TestModelGateSetMatchesDeclaredGates` checks that the model's gate set
+  matches the Go `GateID` declarations.
+  - The `tla` workflow still model-checks the spec, trimmed to this one spec.
+  - `scripts/tla` and the `tla-tools-hardening` gate stay, because that gate
+    pins the TLC download.
+  - An earlier version of this slice deleted the spec too. That broke the
+    roster test, which only the full `core` suite runs.
+- **Removed, with no tie to code:**
+  - `SafeDeprecationMode.tla` and `protocols/specs/tla/HelmKernel.tla` were
+    model-checked in isolation. No Go test, script or other step referred to
+    them.
+  - `CSNFDeterminism`, `DelegationModel`, `ProofGraphConsistency`,
+    `TenantIsolation` and `TrustPropagation` had no model-checking config and no
+    reference in code. `TestCSNFDeterminism` in `core/pkg/kernel` shares the
+    name but never reads the spec.
+- **Conformance checklist.** `delegation.narrowing_only` was "verified" by
+  `DelegationModel.tla` invariant `NarrowingOnly`, which that spec never
+  defined. It now points at `TestDelegationSession_EffectiveTools` and is no
+  longer required.
+
+Callers were checked read-only: none in `app-helm-console`,
+`svc-helm-control-plane` or `app-helm-docs`. The Lean proof is unchanged.
 
 ## Slice 6c evidence
 

@@ -61,9 +61,11 @@ canonical bestpractices.dev project badge.
   `core/pkg/crypto/keyring_fuzz_test.go`,
   `core/pkg/guardian/decision_fuzz_test.go`, and seven sibling packages.
   Continuous fuzzing via OSS-Fuzz is configured in `oss-fuzz/`.
-- **Formal methods** — TLA+ specs in `proofs/` (`GuardianPipeline.tla`,
-  `DelegationModel.tla`, `TenantIsolation.tla`, `ProofGraphConsistency.tla`,
-  `CSNFDeterminism.tla`, `TrustPropagation.tla`).
+- **Formal methods** — `proofs/GuardianPipeline.tla`, model-checked by the
+  `tla` workflow, whose gate set `core/pkg/guardian/spec_roster_test.go` ties to
+  the Go gate declarations; and the Lean proof in `proofs/Lean` and
+  `proofs/EffectPermitSoundness.lean`, checked by the `lean` workflow. The other
+  TLA+ specs were retired in HELM-756 because none was tied to code.
 - **Chaos / resilience drills** — `core/pkg/guardian/chaos_test.go`,
   `core/pkg/firewall/chaos_test.go`, `core/pkg/crypto/chaos_test.go`,
   `core/pkg/evidencepack/chaos_test.go`.

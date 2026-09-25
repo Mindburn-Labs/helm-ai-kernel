@@ -2,13 +2,10 @@ package riskscan
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,8 +14,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskenvelope"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/shadow"
+	"github.com/Mindburn-Labs/helm-ai-kernel/tools/riskscan/internal/riskenvelope"
 )
 
 type BuildOptions struct {
@@ -462,28 +459,6 @@ func RenderHTML(envelope riskenvelope.RiskEnvelope) ([]byte, error) {
 		return nil, err
 	}
 	return b.Bytes(), nil
-}
-
-func UploadEnvelope(ctx context.Context, url string, body []byte) error {
-	if strings.TrimSpace(url) == "" {
-		return fmt.Errorf("upload url is required")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "helm-ai-kernel-scan")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("upload failed: %s %s", resp.Status, strings.TrimSpace(string(msg)))
-	}
-	return nil
 }
 
 func projectFindings(findings []shadow.Finding, obs ConfigObservation, salt []byte) ([]riskenvelope.EnvelopeFinding, error) {

@@ -165,6 +165,23 @@ The six operations stay in the OpenAPI contract marked `deprecated` so the
 breaking-change gate permits removing them in a later release. The Console
 surface catalog marks the Conformance and Trust Keys surfaces `unsupported`.
 
+### Changed — the agent risk scan is its own binary, `helm-risk-scan` (HELM-756)
+
+Breaking.
+
+- `helm-ai-kernel scan` and `helm-ai-kernel verify-scan` move to a separate
+  binary built from `tools/riskscan`:
+  - `helm-risk-scan scan` takes the same options, except `--upload`,
+    `--upload-url` and `--yes`, which are removed;
+  - `helm-risk-scan verify` replaces `verify-scan`.
+- For one release the kernel keeps both old commands as stubs. They print the
+  new command and exit `2`.
+- Nothing leaves the machine any more: no service in the target architecture
+  receives the upload.
+- The default salt file keeps its location, so pseudonyms stay stable.
+- The EvidencePack producer that only the scan used moves out of
+  `core/pkg/executor` with it.
+
 ### Removed — the six retired verification routes (HELM-756)
 
 Breaking. The six operations that answered `501` since HELM-742 are no longer

@@ -757,26 +757,26 @@ func TestCredentialsRequestPathLoggingCarriesRequestContext(t *testing.T) {
 	}
 }
 
-// ctxlogAPIConvertedFile is the one file in core/pkg/api that HELM-495
-// converted, and ctxlogAPIConvertedSites is how many sites it converted:
-// TrustKeyHandler.HandleAddKey and HandleRevokeKey, both writing a 500 when the
-// trust-key registry rejects an Apply.
+// ctxlogAPIConvertedFile is the file in core/pkg/api whose request-path 500s
+// carry the request, and ctxlogAPIConvertedSites is how many it has. HELM-495
+// converted TrustKeyHandler's two sites; HELM-756 deleted that unrouted handler
+// and converted GovernedGateway.handleInference instead, a live route, so the
+// positive half of this contract still pins a real conversion.
 const (
-	ctxlogAPIConvertedFile  = "trust_keys_handler.go"
-	ctxlogAPIConvertedSites = 2
+	ctxlogAPIConvertedFile  = "governed_gateway.go"
+	ctxlogAPIConvertedSites = 1
 )
 
 // ctxlogAPIContextFreeBaseline is the package's KNOWN, COUNTED set of
-// context-free emitters still reached while serving a request, by file. EIGHT
+// context-free emitters still reached while serving a request, by file. SEVEN
 // sites, none of them part of the HELM-495 diff:
 //
 //	handlers.go          2  MemoryService.HandleIngest, .HandleSearch
 //	decision_handler.go  4  DecisionHandler.handleList, .handleCreate, .handleResolve,
 //	                        plus the slog.Error in .handleResolve's expiry branch
 //	autonomy_handler.go  1  AutonomyHandler.HandleGetState
-//	governed_gateway.go  1  GovernedGateway.handleInference
 //
-// Eight, not the seven a `grep WriteInternal` reports. Seven is the count of
+// Seven, not the six a `grep WriteInternal` reports. Six is the count of
 // context-free WriteInternal(w, err) calls; the contract is wider than that one
 // helper and also catches decision_handler.go's bare
 // slog.Error("failed to persist expired decision state", ...), which runs
@@ -799,7 +799,6 @@ var ctxlogAPIContextFreeBaseline = map[string]int{
 	"handlers.go":         2,
 	"decision_handler.go": 4,
 	"autonomy_handler.go": 1,
-	"governed_gateway.go": 1,
 }
 
 // TestAPIRequestPathLoggingCarriesRequestContext holds core/pkg/api to the
@@ -808,21 +807,21 @@ var ctxlogAPIContextFreeBaseline = map[string]int{
 // Why this function has to exist: the HELM-495 diff converted two sites in this
 // package, and neither of the two test functions above scans it — the first
 // scans ".", the second core/pkg/credentials. Reverting
-// trust_keys_handler.go's WriteInternalR pair left the entire suite green, so
-// the two conversions were pinned by nothing.
+// the converted WriteInternalR sites left the entire suite green, so the
+// conversions were pinned by nothing.
 //
 // It is a THIRD function rather than a third directory fed to one of the others
 // because this package needs something they do not: a tolerated baseline. The
 // gate here is two-sided —
 //
-//   - the two converted sites must stay converted (asserted positively, by
-//     count, on the file that holds them), and
-//   - the eight that were never in scope must stay exactly eight, in exactly
+//   - the converted site must stay converted (asserted positively, by count,
+//     on the file that holds it), and
+//   - the seven that are not yet converted must stay exactly seven, in exactly
 //     those files.
 //
 // The second half is not bookkeeping. Without it the honest way to satisfy a
 // package-wide "no context-free emitter on a request path" rule would be to
-// convert eight sites on a protected path inside an unrelated diff; with it,
+// convert seven sites on a protected path inside an unrelated diff; with it,
 // the contract records what is not yet converted and fails the moment that set
 // changes in either direction.
 //
@@ -889,8 +888,8 @@ func ctxlogAPIProblems(dir string, s *ctxlogScanner) []string {
 	// Half one: the two sites this diff converted are still converted.
 	if got := s.sawWriteInternalRByFile[ctxlogAPIConvertedFile]; got != ctxlogAPIConvertedSites {
 		problems = append(problems, fmt.Sprintf("%s/%s holds %d api.WriteInternalR call sites, "+
-			"want %d — the HELM-495 conversions in HandleAddKey/HandleRevokeKey were changed. "+
-			"Both 500s must keep carrying the request, or they emit with no trace_id and cannot "+
+			"want %d — the conversion in GovernedGateway.handleInference was changed. "+
+			"The 500 must keep carrying the request, or they emit with no trace_id and cannot "+
 			"be joined to their span.", dir, ctxlogAPIConvertedFile, got, ctxlogAPIConvertedSites))
 	}
 
@@ -1008,7 +1007,7 @@ func TestAPIContextContractCatchesRegressions(t *testing.T) {
 		wantSubstr string
 	}{
 		{
-			name:       "reverted_trust_key_conversion",
+			name:       "reverted_gateway_conversion",
 			file:       ctxlogAPIConvertedFile,
 			old:        "WriteInternalR(w, r, err)",
 			new:        "WriteInternal(w, err)",

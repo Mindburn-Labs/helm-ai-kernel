@@ -80,7 +80,7 @@ No §14.4 candidate is in that list.
 | `core/pkg/shellscan` (3,380) | `cmd/helm-ai-kernel` (`hook`) | None | — | **Keep**, but only inside the observed-only hook (§7.4). The H8 repair is tracked separately. | — |
 | Java SDK (`sdk/java`), Rust SDK (`sdk/rust`) | Not applicable | See the notes below the table. | — | Remove in s5. **Publishing the deprecation is a human action.** | s5 |
 | TLA+ specifications (`proofs/*.tla`, 7 specs), `.github/workflows/tla.yml` | Not applicable | None | — | Review each spec. Keep only the specs tied to code. | s6 |
-| Verification-shaped commands not in §11.4, including `workstation certify` | `cmd/helm-ai-kernel` | Not yet mapped | — | Map them against §11.4 first | s6 |
+| Verification-shaped commands not in §11.4, including `workstation certify` | `cmd/helm-ai-kernel` | `workstation certify`: none in the Console, the Control Plane or the docs site; Enterprise keeps its own copy of the pack and docs | — | `workstation certify` **removed** (s6a). Other verification-shaped commands wait for the §11.4 mapping. | s6a |
 
 Notes on the rows marked "see the notes below the table":
 
@@ -376,6 +376,35 @@ and §14.4 says to move it to a separate optional tool if kept.
   Homebrew formula. No workflow runs goreleaser today: the live release path
   (`make release-binaries`, `scripts/release/*`) does not build the new binary
   yet.
+
+## Slice 6a evidence
+
+Callers were checked read-only in `app-helm-console`, `svc-helm-control-plane`,
+`app-helm-docs` and `helm-ai-enterprise`.
+
+- **`workstation certify`: removed.**
+  - It printed an adapter certification computed from checked-in fixtures.
+  - No caller in the Console, the Control Plane or the docs site. Enterprise
+    carries its own copies of the pack and docs, not a call into the kernel.
+  - Removed with it: `core/pkg/workstation/conformance.go`, its test branches
+    and the fixture-signer trust-anchor test that exercised only that code.
+    Two helpers that importer tests still use move to `helpers_test.go`.
+  - Updated: the protected workstation conformance pack, the workstation
+    docs and the demo script.
+- **`TrustKeyHandler`: removed.**
+  - Its routes were retired in s4b, and it had no other caller.
+  - The HELM-495 context-logging contract used it as the positive control for
+    a converted request-path 500. The live `GovernedGateway.handleInference`
+    500 now carries the request instead (`WriteInternalR`), and the contract
+    pins that site. The baseline of unconverted sites drops from eight to
+    seven.
+- **`crypto/tee`: blocked.** Removing it would drop a package that
+  `scripts/ci/tcb-coverage-floors.txt` lists, and that file is frozen until
+  the owner decides. The package stays until then. It has had no importer
+  since s4c.
+- **Deadcode.** The frozen allowlist (#993) is the acceptance gate: `make
+  deadcode` reports only allowlisted findings. This slice removes 48 stale
+  lines, plus the now-unused `defaultWorkstationFixtureRoot`.
 
 ## Slice 6c evidence
 

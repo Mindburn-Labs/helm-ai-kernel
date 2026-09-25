@@ -205,7 +205,7 @@ participants (runtimes, frameworks, clients):
 | -------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | **Compatible** | Passes core verdict vectors (Level 1–2). Self-certified.                         | Self-reported; not independently verified.                                         |
 | **Verified**   | Passes all Level 4 conformance vectors against published fixtures. CI-exercised. | Verified via published CI workflow. Artifacts published to compatibility registry. |
-| **Sovereign**  | Verified + full TLA+ invariant alignment + independent verifier passes.          | Third-party audit confirms invariant coverage. Eligible for HELM Sovereign badge.  |
+| **Sovereign**  | Verified + formal invariant alignment + independent verifier passes.          | Third-party audit confirms invariant coverage. Eligible for HELM Sovereign badge.  |
 
 ### 8.1 Required Fixture Sets by Tier
 

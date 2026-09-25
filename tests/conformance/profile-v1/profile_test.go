@@ -8,7 +8,7 @@
 //   - checklist.yaml is the source of truth for v1 acceptance criteria.
 //   - This Go file invokes `go test` against the named packages for each
 //     `kind: go_test` check and records pass/fail per axis.
-//   - `kind: shell` and `kind: tla` checks are reported as external checks
+//   - `kind: shell` checks are reported as external checks
 //     dedicated runners" (shell scripts + Apalache CI workflow).
 //
 // Why this file is thin today: the meaningful work of conformance is the

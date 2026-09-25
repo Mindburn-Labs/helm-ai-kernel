@@ -5,7 +5,7 @@
   "tiers": {
     "compatible": "Passes core verdict vectors (Level 1-2). Self-certified.",
     "verified": "Passes Level 4 conformance. CI-exercised. Artifacts published.",
-    "sovereign": "Verified + TLA+ invariant alignment + independent audit."
+    "sovereign": "Verified + formal invariant alignment + independent audit."
   },
   "runtimes": [
     {

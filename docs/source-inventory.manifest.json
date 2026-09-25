@@ -15,7 +15,6 @@
         "AGENTS.md",
         "agent.yaml",
         "catalog-info.yaml",
-        "renovate.json",
         ".editorconfig",
         ".bestpractices.json",
         ".gitignore",

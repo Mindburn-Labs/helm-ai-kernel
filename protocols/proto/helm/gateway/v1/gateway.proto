@@ -35,9 +35,10 @@ syntax = "proto3";
 //   - Amounts are integers: resource units, currency minor units, or model
 //     spend in currency micro-units. There is no floating-point field.
 //   - Idempotency (R6). Propose, Stop and Lift carry a tenant-scoped
-//     idempotency key. Approve, Reject, Dispatch and Observe are idempotent on
-//     the attempt: repeating one returns the attempt as stored and never
-//     starts a second dispatch.
+//     idempotency key. Approve, Reject and Dispatch are idempotent on the
+//     attempt: repeating one returns the attempt as stored and never starts
+//     a second dispatch. Repeating Observe may record another read-back, and
+//     never dispatches.
 //
 // quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
 // values and no signatures or keys. Token verification is ADR-0005's and adds

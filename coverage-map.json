@@ -5,9 +5,9 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 42,
+    "total": 43,
     "enforced": 19,
-    "observed_only": 11,
+    "observed_only": 12,
     "unmanaged": 12,
     "retired_invariants": 11
   },
@@ -1428,6 +1428,50 @@
         "forbidden": [
           "core/cmd/helm-ai-kernel.TestBoundaryProfileAttestEnforceFailsClosedOffAppliance",
           "core/cmd/helm-ai-kernel.TestBoundaryProfileAttestTamperedArtifactsHardError"
+        ],
+        "removal": [],
+        "bypass": []
+      },
+      "removal_proven_by_mutation": false
+    },
+    {
+      "id": "CTL-018",
+      "title": "Mandates only narrow on delegation",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "A delegated mandate is within every mandate above it. A narrowing (stop, revoke, narrow, add or lower a limit) bumps its scope's control-row version in the same transaction. A widening (a root mandate, a lift) needs an approver who is a distinct, active human (HELM-750, ADR-0001).",
+      "status": "observed-only",
+      "reason": "Library only. No shipped binary imports core/pkg/kernel/authority/authorityrows (a declared library root in scripts/ci/dead-packages-allowlist.txt), and admission does not read the authority rows yet. The HELM-751 admission transaction is the first caller. Until it lands, the Postgres tests prove the library.",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Delegate",
+          "reachability": "unreachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Stop",
+          "reachability": "unreachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Lift",
+          "reachability": "unreachable"
+        }
+      ],
+      "config": [],
+      "protected_operations": [
+        "Delegating, narrowing and revoking a mandate; adding and lowering limits; issuing and lifting stops."
+      ],
+      "bypass_assumptions": [
+        "No shipped caller exists, so nothing is enforced at admission.",
+        "The approval argument names principals; it is not yet a verified approval record (HELM-751)."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationOnlyNarrowsOverRandomChains"
+        ],
+        "forbidden": [
+          "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationWaitsForAConcurrentNarrowing",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresStopExpiresAndLiftNeedsApproval",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresEveryNarrowingBumpsItsControlRowVersion",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole"
         ],
         "removal": [],
         "bypass": []

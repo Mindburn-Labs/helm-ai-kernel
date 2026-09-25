@@ -6,9 +6,11 @@ package postgresmigration
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
@@ -166,6 +168,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		{"scoped emergency-stop store", kernel.MigratePostgres},
 		{"approval ceremony stores", approvalceremony.MigratePostgres},
 		{"generated spec approval ceremony store", generatedspecapprovalceremony.MigratePostgres},
+		{"authority rows", migrateAuthorityRows},
 	}
 	for _, step := range steps {
 		if err := step.fn(ctx, db); err != nil {
@@ -174,6 +177,36 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO kernel_schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT (version) DO UPDATE SET name = EXCLUDED.name`, kernelPostgresSchemaVersion, kernelPostgresMigrationName); err != nil {
 		return fmt.Errorf("record kernel migration journal: %w", err)
+	}
+	return nil
+}
+
+//go:embed migrations/001_authority_rows.sql
+var authorityRowsSchemaSQL string
+
+// AuthorityRowTables are the ADR-0001 authority rows (HELM-750). Each has a
+// tenant_id column and is put under forced row security with the tenant
+// policy, so the startup check in ValidateRuntime covers them once they exist.
+// Serving does not read them yet: the admission transaction (HELM-751) will,
+// and then ValidateRuntime requires them.
+var AuthorityRowTables = []string{
+	"authority_tenants",
+	"authority_principals",
+	"authority_effect_types",
+	"authority_mandates",
+	"authority_limits",
+	"authority_stops",
+}
+
+func migrateAuthorityRows(ctx context.Context, db *sql.DB) error {
+	var ddl strings.Builder
+	ddl.WriteString(authorityRowsSchemaSQL)
+	for _, table := range AuthorityRowTables {
+		ddl.WriteString("\n")
+		ddl.WriteString(store.TenantRowSecurityDDL(table))
+	}
+	if _, err := db.ExecContext(ctx, ddl.String()); err != nil {
+		return fmt.Errorf("apply authority rows migration: %w", err)
 	}
 	return nil
 }

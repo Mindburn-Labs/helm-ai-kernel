@@ -10,7 +10,7 @@ async function main() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-4",
+      model: "gpt-6-sol",
       messages: [
         { role: "system", content: "You are a helpful assistant governed by HELM." },
         { role: "user", content: "What time is it?" },

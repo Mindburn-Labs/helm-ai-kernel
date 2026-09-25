@@ -1,3 +1,4 @@
+// quantum_posture: spend authority tests sign and verify BudgetVerdict receipts with classical Ed25519 test keys; no post-quantum assurance is claimed.
 package economic
 
 import (
@@ -11,7 +12,7 @@ import (
 func TestAgentSpendEnvelopeEvaluateSpend(t *testing.T) {
 	envelope := spendAuthorityTestEnvelope()
 
-	decision := envelope.EvaluateSpend(100, "openai", "gpt-5-mini")
+	decision := envelope.EvaluateSpend(100, "openai", "gpt-6-luna")
 	if decision.Verdict != BudgetVerdictAllow {
 		t.Fatalf("verdict = %s, want ALLOW", decision.Verdict)
 	}
@@ -22,26 +23,26 @@ func TestAgentSpendEnvelopeEvaluateSpend(t *testing.T) {
 		t.Fatalf("decision content hash = %q, want sha256 prefix", decision.ContentHash)
 	}
 
-	approval := envelope.EvaluateSpend(800, "openai", "gpt-5-mini")
+	approval := envelope.EvaluateSpend(800, "openai", "gpt-6-luna")
 	if approval.Verdict != BudgetVerdictEscalate || approval.ReasonCode != SpendReasonApprovalRequired {
 		t.Fatalf("approval decision = (%s, %s), want ESCALATE approval", approval.Verdict, approval.ReasonCode)
 	}
 
 	envelope.EmergencyStop = true
-	denied := envelope.EvaluateSpend(100, "openai", "gpt-5-mini")
+	denied := envelope.EvaluateSpend(100, "openai", "gpt-6-luna")
 	if denied.Verdict != BudgetVerdictDeny || denied.ReasonCode != SpendReasonEmergencyStop {
 		t.Fatalf("emergency decision = (%s, %s), want DENY emergency", denied.Verdict, denied.ReasonCode)
 	}
 
 	var missing *AgentSpendEnvelope
-	missingDecision := missing.EvaluateSpend(100, "openai", "gpt-5-mini")
+	missingDecision := missing.EvaluateSpend(100, "openai", "gpt-6-luna")
 	if missingDecision.ReasonCode != SpendReasonEnvelopeNotFound {
 		t.Fatalf("missing envelope reason = %s, want %s", missingDecision.ReasonCode, SpendReasonEnvelopeNotFound)
 	}
 }
 
 func TestSpendAuthorityDecisionCanonicalContentHash(t *testing.T) {
-	decision := spendAuthorityTestEnvelope().EvaluateSpend(100, "openai", "gpt-5-mini")
+	decision := spendAuthorityTestEnvelope().EvaluateSpend(100, "openai", "gpt-6-luna")
 	if decision.CanonicalContentHash() != decision.ContentHash {
 		t.Fatalf("canonical decision hash = %s, want %s", decision.CanonicalContentHash(), decision.ContentHash)
 	}
@@ -58,7 +59,7 @@ func TestAgentSpendEnvelopeEvaluateSpendValidityWindow(t *testing.T) {
 	envelope := spendAuthorityTestEnvelope()
 	envelope.EffectiveAt = time.Now().UTC().Add(time.Hour)
 	envelope.ContentHash = envelope.computeHash()
-	decision := envelope.EvaluateSpend(100, "openai", "gpt-5-mini")
+	decision := envelope.EvaluateSpend(100, "openai", "gpt-6-luna")
 	if decision.Verdict != BudgetVerdictDeny || decision.ReasonCode != SpendReasonEnvelopeNotYetEffective {
 		t.Fatalf("future envelope decision = (%s, %s), want DENY not-yet-effective", decision.Verdict, decision.ReasonCode)
 	}
@@ -67,7 +68,7 @@ func TestAgentSpendEnvelopeEvaluateSpendValidityWindow(t *testing.T) {
 	expired := time.Now().UTC().Add(-time.Second)
 	envelope.ExpiresAt = &expired
 	envelope.ContentHash = envelope.computeHash()
-	decision = envelope.EvaluateSpend(100, "openai", "gpt-5-mini")
+	decision = envelope.EvaluateSpend(100, "openai", "gpt-6-luna")
 	if decision.Verdict != BudgetVerdictDeny || decision.ReasonCode != SpendReasonEnvelopeExpired {
 		t.Fatalf("expired envelope decision = (%s, %s), want DENY expired", decision.Verdict, decision.ReasonCode)
 	}
@@ -119,7 +120,7 @@ func TestAgentSpendEnvelopeValidationAndDeterministicHash(t *testing.T) {
 
 func TestRouteQuoteValidationAndExpiry(t *testing.T) {
 	envelope := spendAuthorityTestEnvelope()
-	decision := envelope.EvaluateSpend(100, "openai", "gpt-5-mini")
+	decision := envelope.EvaluateSpend(100, "openai", "gpt-6-luna")
 	quote := spendAuthorityTestQuote(decision)
 	if err := quote.Validate(); err != nil {
 		t.Fatalf("Validate() = %v, want nil", err)
@@ -144,7 +145,7 @@ func TestBudgetVerdictReceiptSigningAndDecisionBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decision := spendAuthorityTestEnvelope().EvaluateSpend(100, "openai", "gpt-5-mini")
+	decision := spendAuthorityTestEnvelope().EvaluateSpend(100, "openai", "gpt-6-luna")
 	receipt := spendAuthorityTestBudgetVerdictReceipt(decision)
 	if err := receipt.Seal("spend-test-key", privateKey); err != nil {
 		t.Fatalf("Seal() = %v, want nil", err)
@@ -242,7 +243,7 @@ func spendAuthorityTestEnvelope() *AgentSpendEnvelope {
 		"sha256:policy",
 	)
 	envelope.AllowedProviders = []string{"openai", "anthropic"}
-	envelope.AllowedModels = []string{"gpt-5-mini", "claude-sonnet-4"}
+	envelope.AllowedModels = []string{"gpt-6-luna", "claude-sonnet-5"}
 	envelope.ApprovalRequiredAboveCents = 750
 	envelope.ContentHash = envelope.computeHash()
 	return envelope
@@ -255,7 +256,7 @@ func spendAuthorityTestQuote(decision SpendAuthorityDecision) *RouteQuote {
 		"spend-1",
 		"env-1",
 		"agent-1",
-		ModelRoute{ProviderID: "openai", ModelID: "gpt-5-mini", PriceSnapshotHash: "sha256:price"},
+		ModelRoute{ProviderID: "openai", ModelID: "gpt-6-luna", PriceSnapshotHash: "sha256:price"},
 		100,
 		200,
 		"USD",
@@ -273,7 +274,7 @@ func spendAuthorityTestBudgetVerdictReceipt(decision SpendAuthorityDecision) *Bu
 		"env-1",
 		"agent-1",
 		"openai",
-		"gpt-5-mini",
+		"gpt-6-luna",
 		100,
 		200,
 		"USD",
@@ -293,7 +294,7 @@ func spendAuthorityTestUsageReceipt() *UsageReceipt {
 		"env-1",
 		"agent-1",
 		"openai",
-		"gpt-5-mini",
+		"gpt-6-luna",
 		100,
 		180,
 		20,

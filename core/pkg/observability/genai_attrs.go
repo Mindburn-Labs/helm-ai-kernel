@@ -43,7 +43,7 @@ const (
 	GenAIProviderName = "gen_ai.provider.name"
 
 	// GenAIRequestModel is the requested model identifier.
-	// Examples: "gpt-4o", "claude-3-5-sonnet", "anthropic.claude-3-5-sonnet-20241022".
+	// Examples: "gpt-6-sol", "claude-sonnet-5", "anthropic.claude-sonnet-5".
 	GenAIRequestModel = "gen_ai.request.model"
 
 	// GenAIOperationName is the GenAI operation kind.

@@ -245,7 +245,7 @@ func TestLifecycle_ReserveReleaseHold(t *testing.T) {
 func TestEngine_DispatchReserveSettle(t *testing.T) {
 	h := newHarness(t)
 
-	q, err := h.engine.Quote(h.env, h.req("idem-rs", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-rs", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestEngine_DispatchReserveSettle(t *testing.T) {
 func TestEngine_FailedRunReleasesReservation(t *testing.T) {
 	h := newHarness(t)
 
-	q, err := h.engine.Quote(h.env, h.req("idem-fail", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-fail", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestFinanceExport_TotalsMatchLedger(t *testing.T) {
 	// A real governed debit via the engine. Use a large token estimate so the
 	// quote ceiling is high enough that the actual provider cost yields a
 	// non-zero platform fee without being clamped.
-	q, err := h.engine.Quote(h.env, h.req("idem-fx", "gpt-4o", 100_000, 100_000))
+	q, err := h.engine.Quote(h.env, h.req("idem-fx", "gpt-6-sol", 100_000, 100_000))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}

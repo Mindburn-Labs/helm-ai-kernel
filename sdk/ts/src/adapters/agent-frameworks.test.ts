@@ -319,7 +319,7 @@ describe("agent framework adapters", () => {
     expect(
       fromLiteLLMToolCall({
         function: { name: "db.query", arguments: "{}" },
-        model: "gpt-4.1",
+        model: "gpt-6-sol",
       }),
     ).toMatchObject({ framework: "litellm", toolName: "db.query" });
 

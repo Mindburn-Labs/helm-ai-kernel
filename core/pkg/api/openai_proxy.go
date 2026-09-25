@@ -27,9 +27,11 @@ type OpenAIMessage struct {
 	Content string `json:"content"`
 }
 
-// OpenAIChatRequest is the OpenAI-compatible request format.
-// API-001/002: Includes tool_choice, parallel_tool_calls, and response_format
-// for upstream provider pass-through.
+// OpenAIChatRequest is the typed view of an OpenAI-compatible request that the
+// proxy validates. The proxy forwards the caller's whole request object, so
+// fields this view does not model (max_completion_tokens, reasoning_effort,
+// tools, ...) still reach the upstream provider unchanged.
+// API-001/002: Includes tool_choice, parallel_tool_calls, and response_format.
 type OpenAIChatRequest struct {
 	Model             string          `json:"model"`
 	Messages          []OpenAIMessage `json:"messages"`
@@ -81,14 +83,23 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxOpenAIRequestSize)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		WriteBadRequest(w, "Invalid request body")
+		return
+	}
+	// req is validated; fields is what goes upstream, so request parameters
+	// that OpenAIChatRequest does not model are not dropped.
 	var req OpenAIChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &req) != nil || json.Unmarshal(body, &fields) != nil || fields == nil {
 		WriteBadRequest(w, "Invalid request body")
 		return
 	}
 
 	if req.Model == "" {
 		req.Model = "gpt-6-sol"
+		fields["model"], _ = json.Marshal(req.Model)
 	}
 	if req.Stream {
 		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())
@@ -113,7 +124,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forward to upstream with governance
-	upstreamReq, err := json.Marshal(req)
+	upstreamReq, err := json.Marshal(fields)
 	if err != nil {
 		WriteBadRequest(w, fmt.Sprintf("Failed to marshal request: %v", err))
 		return

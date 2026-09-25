@@ -122,6 +122,21 @@ Breaking.
   since HELM-742.
 - **`GovernedGateway`'s internal-error response now carries the request.**
   Log lines for that response are therefore joined to their trace.
+
+### Removed — TLA+ specifications not tied to code (HELM-756)
+
+- Seven TLA+ specs are removed: six in `proofs/`
+  (`CSNFDeterminism`, `DelegationModel`, `ProofGraphConsistency`,
+  `SafeDeprecationMode`, `TenantIsolation`, `TrustPropagation`) and
+  `protocols/specs/tla/HelmKernel.tla`. None was tied to the code it
+  described; four were never model-checked.
+- `proofs/GuardianPipeline.tla` stays and is still model-checked by the `tla`
+  workflow. `core/pkg/guardian/spec_roster_test.go` ties its gate set to the Go
+  `GateID` declarations.
+- The workflow now checks only that spec, and the `tla-tools-hardening` gate
+  still guards its toolchain download.
+- The Lean proof is unchanged.
+
 ### Removed — conformance gates G1–G15 and GX, channels; LaunchKit off by default (HELM-756)
 
 Breaking.

@@ -1,0 +1,42 @@
+name: TLA Specs
+
+# Only GuardianPipeline.tla remains (HELM-756): core/pkg/guardian/spec_roster_test.go
+# ties its gate set to the Go GateID declarations. The other specs were not tied
+# to code and were retired.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  model-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Download TLC
+        id: tlc
+        env:
+          # NOTE: tlaplus v1.8.0 is a rolling pre-release upstream. CI uses the
+          # org-controlled mirror release and still verifies the SHA-256 digest.
+          TLA_TOOLS_VERSION: v1.8.0
+          TLA_TOOLS_JAR_URL: https://github.com/Mindburn-Labs/helm-ai-kernel/releases/download/deps-tla2tools-v1.8.0/tla2tools-v1.8.0.jar
+          TLA_TOOLS_SHA256: 9e27b5e19a69ae1f56aabf8403a6ed5598dbfa6e638908e5278ac39736c1543d
+        # Run the script and capture output separately: `echo "jar=$(...)"`
+        # swallows the script's exit code, letting later steps run with an
+        # empty classpath when the download or digest check fails.
+        run: |
+          jar="$(bash scripts/tla/download-tools.sh)"
+          test -s "$jar"
+          echo "jar=$jar" >> "$GITHUB_OUTPUT"
+      - name: Guardian pipeline spec
+        run: java -cp "${{ steps.tlc.outputs.jar }}" tlc2.TLC -deadlock -config proofs/guardian.cfg proofs/GuardianPipeline.tla

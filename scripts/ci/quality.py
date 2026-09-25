@@ -40,6 +40,7 @@ EXPECTED_GATE_IDS = {
     "deployment-smoke",
     "docker-smoke-hardening",
     "helm-smoke-hardening",
+    "tla-tools-hardening",
     "secrets",
     "vuln-audit",
     "mutation-core",

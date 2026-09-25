@@ -175,30 +175,37 @@ export interface ChatCompletionWithReceipt {
 /** Thrown when the HELM API returns a non-2xx response. */
 export class HelmApiError extends Error {
   readonly status: number;
+  /** Registered reason code from the error's helm.errors.v1.ErrorDetail; an open string, empty when there is none. */
   readonly reasonCode: ReasonCode;
+  /** Connect error code, such as `not_found` or `unavailable`. */
+  readonly code?: string;
+  /** Whether repeating the same request can succeed. */
+  readonly retryable: boolean;
   readonly details?: Record<string, unknown>;
   readonly body?: unknown;
 
   constructor(status: number, body: HelmError | unknown) {
     const helmBody = isHelmError(body) ? body : undefined;
-    const message = helmBody?.error.message ?? `HELM API request failed with HTTP ${status}`;
+    const detail = helmBody?.details?.find((d) => d.type === 'helm.errors.v1.ErrorDetail')?.debug;
+    const message = helmBody?.message || helmBody?.detail || helmBody?.error?.message
+      || `HELM API request failed with HTTP ${status}`;
     super(message);
     this.name = 'HelmApiError';
     this.status = status;
-    this.reasonCode = helmBody?.error.reason_code ?? 'ERROR_INTERNAL';
-    this.details = helmBody?.error.details;
+    this.reasonCode = helmBody ? (detail?.reason_code || helmBody.error?.reason_code || '') : 'ERROR_INTERNAL';
+    this.code = helmBody?.code;
+    this.retryable = detail?.retryable ?? false;
+    this.details = helmBody?.error?.details;
     this.body = body;
   }
 }
 
+/** The HELM error model (core/pkg/httperr): a Connect error in an RFC 7807 body, plus the deprecated `error` member. */
 function isHelmError(body: unknown): body is HelmError {
-  return typeof body === 'object'
-    && body !== null
-    && 'error' in body
-    && typeof (body as { error?: unknown }).error === 'object'
-    && (body as { error?: unknown }).error !== null
-    && 'message' in ((body as { error: Record<string, unknown> }).error)
-    && 'reason_code' in ((body as { error: Record<string, unknown> }).error);
+  if (typeof body !== 'object' || body === null) return false;
+  const candidate = body as { code?: unknown; error?: unknown };
+  return typeof candidate.code === 'string'
+    || (typeof candidate.error === 'object' && candidate.error !== null);
 }
 
 export interface HelmClientConfig {

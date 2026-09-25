@@ -211,12 +211,20 @@ func runtimeRouteConfigs(t *testing.T) map[string]*runtimeRouteMux {
 	svc.GeneratedSpecApproval = generatedSpecApprovalRouteTestRuntime(reject, reject)
 
 	configs := map[string]serverOptions{
-		"serve":              {Mode: "serve", PolicyPath: "policy.toml"},
-		"quickstart":         {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime()},
-		"quickstart console": {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime(), ConsoleMode: true, ConsolePeerProof: &localConsolePeerProof{}},
+		"serve":                {Mode: "serve", PolicyPath: "policy.toml"},
+		"quickstart":           {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime()},
+		"quickstart console":   {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime(), ConsoleMode: true, ConsolePeerProof: &localConsolePeerProof{}},
+		"serve with Launchpad": {Mode: "serve", PolicyPath: "policy.toml"},
 	}
+	t.Setenv(launchpadRoutesEnabledEnv, "")
 	muxes := make(map[string]*runtimeRouteMux, len(configs))
 	for name, opts := range configs {
+		// Launchpad is mounted only on explicit opt-in (HELM-755 S-05).
+		if name == "serve with Launchpad" {
+			t.Setenv(launchpadRoutesEnabledEnv, "1")
+		} else {
+			t.Setenv(launchpadRoutesEnabledEnv, "")
+		}
 		mux := newRuntimeRouteMux()
 		// main mounts the Desktop routes before the service routes.
 		registerDesktopReadyRoute(mux, "probe-desktop-token")

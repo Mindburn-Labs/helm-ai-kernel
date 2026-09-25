@@ -344,7 +344,7 @@ func probeCPTokenRoute(t *testing.T, mux http.Handler, spec RuntimeRouteSpec, pr
 			refused = refused || (rec.Code == status && (status != http.StatusForbidden || authRefused(rec)))
 		}
 		if !refused {
-			failures = append(failures, fmt.Sprintf("%s %s: %s answered %d, want %v", spec.Method, spec.Path, probe.name, rec.Code, probe.want))
+			failures = append(failures, fmt.Sprintf("%s %s: %s answered %d (%.80s), want a guard refusal %v", spec.Method, spec.Path, probe.name, rec.Code, rec.Body.String(), probe.want))
 		}
 	}
 	return failures

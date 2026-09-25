@@ -42,7 +42,7 @@ jobs:
           go-version: "1.25.13"
           cache-dependency-path: "**/go.sum"
           cache: false
-      - uses: github/codeql-action/init@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+      - uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
@@ -69,6 +69,6 @@ jobs:
             grep -qx "$pkg" "$RUNNER_TEMP/codeql-packages.txt" || { echo "::error::$pkg was not compiled for CodeQL"; exit 1; }
           done
           echo "compiled $(wc -l < "$RUNNER_TEMP/codeql-packages.txt") packages across $(echo "$modules" | wc -l) modules"
-      - uses: github/codeql-action/analyze@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4
+      - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
         with:
           category: "/language:${{ matrix.language }}"

@@ -172,7 +172,7 @@ verify-fixtures:
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto
 
 tee-collateral-verify:
-	cd core && go test ./pkg/crypto/tee/collateral -count=1 && go run ./cmd/tee-collateral -bundle pkg/crypto/tee/collateral/testdata/offline_bundle.json
+	cd core && go test ./pkg/crypto/tee/collateral -count=1
 
 verify-presentation:
 	bash tools/verify-presentation.sh

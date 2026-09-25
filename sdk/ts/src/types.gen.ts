@@ -13746,9 +13746,10 @@ export interface MCPAuthorizeCallRequest {
      */
     granted_scopes?: Array<string>;
     /**
-     *
+     * Ignored since HELM-756. The caller supplied both the schema and its pin, so the check bound nothing.
      * @type {string}
      * @memberof MCPAuthorizeCallRequest
+     * @deprecated
      */
     pinned_schema_hash?: string;
     /**
@@ -15023,9 +15024,10 @@ export interface MCPScanResult {
      */
     requires_approval?: boolean;
     /**
-     *
+     * Always false since HELM-756. No dispatch path enforces a schema pin.
      * @type {boolean}
      * @memberof MCPScanResult
+     * @deprecated
      */
     schema_pin_required?: boolean;
     /**

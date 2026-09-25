@@ -33,7 +33,7 @@ helm-ai-kernel receipts tail --agent <agent-id> --server http://127.0.0.1:7714
 | Symptom | First check |
 | --- | --- |
 | Windsurf does not list the HELM MCP server | Re-run `helm-ai-kernel mcp print-config --client windsurf` and compare the installed config. |
-| Tool is quarantined | Check discovery metadata, approval state, and pinned schema hash. |
+| Tool is quarantined | Check discovery metadata, approval state, and the tool's registered schema. |
 | Receipts are missing | Confirm the boundary is running and the client points at HELM. |
 
 ## Source Truth

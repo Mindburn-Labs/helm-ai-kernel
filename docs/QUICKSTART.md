@@ -69,7 +69,7 @@ are client libraries, not executable Kernel installs.
 | MCP quarantine and recovery | `mcp authorize-call`, `mcp quarantine`, `mcp pending`, `mcp receipts`, `mcp revoke`; `mcp approve` rejects opaque local approval metadata |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
 | Receipts | `helm-ai-kernel receipts status --format json`, `mcp receipts --json`, `boundary records --json` |
-| Conformance | `helm-ai-kernel conform --level L1 --json` and `--level L2` |
+| Conformance | `helm-ai-kernel conform vectors --json` and `conform negative --json` |
 | SDKs | source clients under `sdk/` with local test targets |
 
 ## Prove The Boundary

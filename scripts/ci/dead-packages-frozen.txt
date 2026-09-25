@@ -1,4 +1,5 @@
 # Frozen importer-less core/pkg packages (HELM-745 s5b): no non-test importer in any
+# quantum_posture: package paths only (e.g. crypto/tee); this list makes no cryptographic choice.
 # Go module, and no KEEP/WIRE/DELETE decision yet, as of origin/main 51db386c.
 # Read by scripts/ci/check_dead_packages.py next to the allowlist. The list only
 # shrinks: a package that is deleted or gains an importer leaves a STALE line that

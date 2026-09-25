@@ -35,7 +35,8 @@
         "gosec",
         "govulncheck",
         "pip-audit",
-        "deadcode"
+        "deadcode",
+        "dead-packages"
       ]
     },
     "merge": {
@@ -756,7 +757,7 @@
     {
       "id": "vuln-audit",
       "title": "Dependency vulnerability audits",
-      "description": "npm audit and cargo audit. Go (govulncheck) and the Python SDK (pip-audit) have their own blocking gates.",
+      "description": "npm audit of sdk/ts. Go (govulncheck), Python (pip-audit) and Rust (the Rust audit job in codeql.yml) are audited by blocking gates.",
       "command": "bash scripts/ci/vuln_audit.sh",
       "timeout_seconds": 1800,
       "advisory": true,
@@ -796,7 +797,8 @@
       "paths": [
         "core/pkg/**",
         "scripts/ci/mutation-test.sh"
-      ]
+      ],
+      "description": "avito-tech/go-mutesting over core/pkg/firewall, threshold 80%; no parsable score or zero mutants fails."
     },
     {
       "id": "flake-core",
@@ -894,19 +896,13 @@
     {
       "id": "dead-packages",
       "title": "Importer-less package census",
-      "description": "Lists core/pkg packages no other package imports. Advisory until docs/architecture/dead-package-decisions.md has zero open rows, then drop this flag.",
+      "description": "Importer-less core/pkg packages must be allowlisted (deliberate library surface) or listed in scripts/ci/dead-packages-frozen.txt; a stale line on either list fails, so deletion PRs must remove it. Runs in the pr profile so the deletion PR, not the nightly, carries that edit.",
       "command": "make dead-packages",
       "timeout_seconds": 300,
-      "advisory": true,
       "paths": [
         "core/**",
-        "tools/**",
-        "tests/**",
-        "sdk/go/**",
-        "examples/**",
         "scripts/ci/check_dead_packages.py",
-        "scripts/ci/dead-packages.sh",
-        "scripts/ci/dead-packages-allowlist.txt"
+        "scripts/ci/dead-packages*"
       ]
     }
   ]

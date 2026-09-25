@@ -17,7 +17,7 @@ surface for the `helm-ai-kernel` project.
 
 - `make docs-coverage` from the repository root verifies coverage for this surface.
 - `make quality-pr` mirrors the CI summary gate for pull requests.
-- `make quality-nightly` mirrors the scheduled advisory assurance workflow.
+- `make quality-nightly` mirrors the scheduled strict assurance workflow (`QUALITY_STRICT=1`).
 - `make quality-release` mirrors release validation before tag publication.
 - `make openapi-breaking` / `make proto-breaking` run the contract
   breaking-change gate (HELM-151 GATE 1) against the PR base branch —
@@ -58,8 +58,9 @@ surface for the `helm-ai-kernel` project.
 - `launchpad-clean-install.yml` validates the published Homebrew package on a
   macOS runner, launches OpenClaw and Hermes through `local-container`, verifies
   produced EvidencePacks, and uploads redacted GA evidence.
-- `nightly-quality.yml` runs advisory mutation, flake, vulnerability, runbook,
-  migration, dependency hygiene, schema, and benchmark checks.
+- `nightly-quality.yml` runs mutation, flake, vulnerability, runbook,
+  migration, dependency hygiene, schema, benchmark, invariant and dead-package
+  checks with `QUALITY_STRICT=1`: any failure, crash or missing tool is red.
 - `release.yml` calls `make quality-release` before producing binaries,
   container images, SBOM, VEX, attestations, SDK packages, signatures, and
   `version-status.json`. It runs only on `v*` tag pushes, so every keyless

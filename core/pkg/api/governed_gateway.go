@@ -276,7 +276,7 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 	dispatchBody, err := withOutputLimit(body, fields, limitFields, quote.OutputTokens)
 	if err != nil {
 		_, _ = g.engine.ReleaseReservation(quote)
-		WriteInternal(w, err)
+		WriteInternalR(w, r, err)
 		return
 	}
 	outcome, derr := g.dispatch(r, quote, dispatchBody)

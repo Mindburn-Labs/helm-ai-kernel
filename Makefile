@@ -1,6 +1,7 @@
 .PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres test-effect-reservation-postgres verify-receipt-v5-vectors verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-evidence-pack-successor-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 .PHONY: test-generated-spec-approval-ceremony-postgres
 .PHONY: contract-breaking-release test-contract-breaking
+.PHONY: check
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -18,8 +19,11 @@ build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
 	cp bin/helm-ai-kernel bin/helm
 
+# test also enforces the 40% statement-coverage floor on core/pkg.
 test:
-	cd core && go test ./pkg/... ./cmd/release-permit-verify/... ./cmd/receipt_verify/... -count=1
+	cd core && go test ./pkg/... -count=1 -covermode=atomic -coverprofile=coverage.out
+	cd core && go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/, "", $$3); printf("core/pkg coverage %.1f%%\n", $$3); if ($$3 + 0 < 40) { print "coverage below the 40.0% floor"; exit 1 } }'
+	cd core && go test ./cmd/release-permit-verify/... ./cmd/receipt_verify/... -count=1
 
 test-cli:
 	cd core && go test ./cmd/helm-ai-kernel ./cmd/release-permit-verify -count=1
@@ -291,6 +295,13 @@ version-status:
 prepare-version:
 	@test -n "$(PREPARE_VERSION)" || (echo "Usage: make prepare-version VERSION=0.5.6" && exit 2)
 	python3 scripts/release/prepare_version.py "$(PREPARE_VERSION)"
+
+# check is the CI gate: `ci / gate` in .github/workflows/ci.yml runs exactly
+# this on every pull request, merge group and push to main. It runs the merge
+# profile of scripts/ci/quality-gates.json with every gate blocking. CI installs
+# the tools it needs with scripts/ci/install_check_tools.sh.
+check:
+	$(QUALITY) run merge --strict
 
 quality-pr:
 	$(QUALITY) run pr --impact

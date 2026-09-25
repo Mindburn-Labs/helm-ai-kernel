@@ -215,12 +215,14 @@ removal_proofs:
     tests:
       - "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode"
       - "core/pkg/guardian.TestExt_FreezeVerdictIsDeny"
+      - "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
   - control: CTL-005
     file: core/pkg/guardian/interceptor.go
     find: "\t\tif fenced {\n\t\t\treturn f.scopedStopDeny(\n"
     replace: "\t\tif false && fenced {\n\t\t\treturn f.scopedStopDeny(\n"
     tests:
       - "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch"
+      - "core/cmd/helm-ai-kernel.TestEmergencyStopFenceDeniesThroughEveryEntryPoint"
   - control: CTL-006
     file: core/cmd/helm-ai-kernel/route_auth.go
     find: "\tif configuredTenantID == \"\" || tenantID != configuredTenantID {\n"
@@ -1343,14 +1345,11 @@ controls:
         - "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
       removal:
         - "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode"
+        - "core/pkg/guardian.TestExt_FreezeVerdictIsDeny"
         - "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
       bypass:
         - "core/pkg/kernel.TestFreezeControllerRefreshesExternalStateAndFailsClosed"
         - "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
-    removal_mutation:
-      file: core/pkg/guardian/interceptor.go
-      find: "\tif f.g.freezeCtrl != nil && f.g.freezeCtrl.IsFrozen() {\n"
-      replace: "\tif false && f.g.freezeCtrl != nil && f.g.freezeCtrl.IsFrozen() {\n"
 
   - id: CTL-005
     title: "Scoped emergency-stop fence"
@@ -1393,10 +1392,6 @@ controls:
         - "core/pkg/guardian.TestScopedStopReaderDeniesUnscopedEvaluationToPreventFenceBypass"
         - "core/cmd/helm-ai-kernel.TestFencedMCPDecisionsBindTheConfiguredScope"
         - "core/cmd/helm-ai-kernel.TestFencedEntryPointsRefuseToRunWithoutTheFence"
-    removal_mutation:
-      file: core/pkg/guardian/interceptor.go
-      find: "\t\tif fenced {\n"
-      replace: "\t\tif false && fenced {\n"
 
   - id: CTL-006
     title: "Fence-scope binding"

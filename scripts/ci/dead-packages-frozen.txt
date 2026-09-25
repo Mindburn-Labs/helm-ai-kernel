@@ -1,0 +1,109 @@
+# Frozen importer-less core/pkg packages (HELM-745 s5b): no non-test importer in any
+# Go module, and no KEEP/WIRE/DELETE decision yet, as of origin/main 51db386c.
+# Read by scripts/ci/check_dead_packages.py next to the allowlist. The list only
+# shrinks: a package that is deleted or gains an importer leaves a STALE line that
+# fails the gate until the same PR removes it. Never add a line; decide the
+# package instead (docs/architecture/dead-package-decisions.md).
+# <core/pkg/...> # <what the census saw>
+# quantum_posture: package paths only (e.g. crypto/tee); this list makes no cryptographic choice.
+core/pkg/actiongraph # has tests
+core/pkg/aibom # has tests
+core/pkg/api/trust # has tests
+core/pkg/attention # has tests
+core/pkg/authority # no tests
+core/pkg/buildguard # has tests
+core/pkg/celcheck # has tests
+core/pkg/conformance/agentsafety # 1 test-only importer(s)
+core/pkg/conformance/cases # has tests
+core/pkg/conformance/negative # has tests
+core/pkg/conformance/sandbox # 4 test-only importer(s)
+core/pkg/conformance/scenarios # has tests
+core/pkg/connectors/arc # has tests
+core/pkg/connectors/linear # 1 test-only importer(s)
+core/pkg/connectors/oauth2 # has tests
+core/pkg/connectors/sandbox # has tests
+core/pkg/connectors/sandbox/claudemanaged # has tests
+core/pkg/connectors/sandbox/opensandbox # has tests
+core/pkg/connectors/siem/datadog_logs # has tests
+core/pkg/connectors/siem/elastic_ecs # has tests
+core/pkg/connectors/siem/loki # has tests
+core/pkg/connectors/siem/splunk_hec # has tests
+core/pkg/connectors/siem/sumo # has tests
+core/pkg/connectors/slack # has tests
+core/pkg/connectors/ton/acton # has tests
+core/pkg/constitution # has tests
+core/pkg/contracts/schemas # has tests
+core/pkg/crypto/keystore # has tests
+core/pkg/crypto/mtls # 1 test-only importer(s)
+core/pkg/crypto/sdjwt # 2 test-only importer(s)
+core/pkg/crypto/shredding # 1 test-only importer(s)
+core/pkg/crypto/tee # has tests (importer-less since #997 removed the tee CLI)
+core/pkg/crypto/tee/collateral # has tests (importer-less since #997 removed the tee CLI)
+core/pkg/crypto/tls # 1 test-only importer(s)
+core/pkg/crypto/zk # has tests
+core/pkg/database # has tests
+core/pkg/delegation # has tests
+core/pkg/delivery # has tests
+core/pkg/disclosure # no tests
+core/pkg/edge # has tests
+core/pkg/edgegovernance # no tests
+core/pkg/envelope # has tests
+core/pkg/escalation # has tests
+core/pkg/escalation/ceremony # has tests
+core/pkg/evaluation # no tests
+core/pkg/evidence/arc # has tests
+core/pkg/evidence/externalhost/adapters # 1 test-only importer(s)
+core/pkg/evidencepack/retention # has tests
+core/pkg/exportadmin # has tests
+core/pkg/forensics # no tests
+core/pkg/gateway # no tests
+core/pkg/httpsig # has tests
+core/pkg/integrations/receipts # has tests
+core/pkg/intervention # no tests
+core/pkg/kernel/celdp # has tests
+core/pkg/kernel/consistency # has tests
+core/pkg/kernel/errorir # has tests
+core/pkg/kernel/formal # has tests
+core/pkg/kernel/pdp # has tests
+core/pkg/kernel/retry # has tests
+core/pkg/kernel/sovereignty # has tests
+core/pkg/launchpad/conformance # has tests
+core/pkg/launchpad/install # has tests
+core/pkg/launchpad/redact # has tests
+core/pkg/ledger # has tests
+core/pkg/networkproof # has tests
+core/pkg/packs/install # has tests
+core/pkg/policy/lint # has tests
+core/pkg/policy/suggest # has tests
+core/pkg/policy/verify # has tests
+core/pkg/policyloader # has tests
+core/pkg/proofgraph/aigp # has tests
+core/pkg/proofgraph/attribution # has tests
+core/pkg/proofgraph/cloudevents # has tests
+core/pkg/proofgraph/graphql # has tests
+core/pkg/rbac # has tests
+core/pkg/receipts # has tests
+core/pkg/releasegovernance # no tests
+core/pkg/replay # has tests
+core/pkg/rir # has tests
+core/pkg/router # has tests
+core/pkg/runtime # has tests
+core/pkg/runtime/budget # 1 test-only importer(s)
+core/pkg/runtimeadapters/a2a # 1 test-only importer(s)
+core/pkg/runtimeadapters/generic_http # has tests
+core/pkg/runtimeadapters/grpc # has tests
+core/pkg/runtimeadapters/websocket # has tests
+core/pkg/saga # has tests
+core/pkg/scheduler # 1 test-only importer(s)
+core/pkg/security/suites # has tests
+core/pkg/signals # has tests
+core/pkg/skills # has tests
+core/pkg/slo # has tests
+core/pkg/store/objstore/fs # has tests
+core/pkg/surface # no tests
+core/pkg/tenants # has tests
+core/pkg/truth # has tests
+core/pkg/util/resiliency # has tests
+core/pkg/verifier/agentprovenance # has tests
+core/pkg/versioning # has tests
+core/pkg/witness # has tests

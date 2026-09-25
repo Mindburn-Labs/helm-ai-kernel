@@ -326,19 +326,15 @@ func (g *GovernedGateway) handleInference(w http.ResponseWriter, r *http.Request
 	}
 	writeGatewayMetadataHeaders(w, meta)
 	if responsePrivacyErr != nil {
-		w.Header().Set("Content-Type", "application/problem+json")
+		// A HELM error body with the gateway metadata as an extension member.
+		w.Header().Set("Content-Type", httperr.ContentType)
 		w.WriteHeader(http.StatusBadGateway)
 		_ = json.NewEncoder(w).Encode(struct {
 			httperr.ProblemDetail
 			HELM GatewayMetadata `json:"helm"`
 		}{
-			ProblemDetail: httperr.ProblemDetail{
-				Type:   "https://helm.mindburn.run/errors/502",
-				Title:  "provider response blocked",
-				Status: http.StatusBadGateway,
-				Detail: privacy.ErrDataEgressBlocked.Error(),
-			},
-			HELM: meta,
+			ProblemDetail: httperr.NewProblem(http.StatusBadGateway, "provider response blocked", privacy.ErrDataEgressBlocked.Error(), ""),
+			HELM:          meta,
 		})
 		return
 	}

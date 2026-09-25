@@ -172,10 +172,12 @@ s = replace_one(
     "}",
 )
 
-if "export type ReasonCode = HelmErrorErrorReasonCodeEnum;" not in s:
-    if "HelmErrorErrorReasonCodeEnum" not in s:
-        raise SystemExit("ts patch failed: HelmErrorErrorReasonCodeEnum missing; cannot add ReasonCode alias")
-    s += "\nexport type ReasonCode = HelmErrorErrorReasonCodeEnum;\n"
+# Reason codes are open strings on the wire (HELM-747); the registered names
+# are in reason_codes.gen.ts. A closed enum here would be a second registry.
+if "HelmErrorErrorReasonCodeEnum" in s:
+    raise SystemExit("ts postcondition failed: HelmError reason_code rendered as a closed enum")
+if "export type ReasonCode = string;" not in s:
+    s += "\n/** A reason code: an open string. Registered names are in reason_codes.gen.ts. */\nexport type ReasonCode = string;\n"
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY
@@ -452,10 +454,12 @@ for collision in ("pub enum Type {", "pub enum Verdict {", "pub enum Jsonrpc {")
     if collision in s:
         raise SystemExit(f"rs postcondition failed: bare {collision!r} survived rendering")
 
-if "pub type ReasonCode = HelmErrorErrorReasonCode;" not in s:
-    if "pub enum HelmErrorErrorReasonCode" not in s:
-        raise SystemExit("rs patch failed: HelmErrorErrorReasonCode missing; cannot add ReasonCode alias")
-    s += "\npub type ReasonCode = HelmErrorErrorReasonCode;\n"
+# Reason codes are open strings on the wire (HELM-747); the registered names
+# are in reason_codes.rs. A closed enum here would be a second registry.
+if "pub enum HelmErrorErrorReasonCode" in s:
+    raise SystemExit("rs postcondition failed: HelmError reason_code rendered as a closed enum")
+if "pub type ReasonCode = String;" not in s:
+    s += "\n/// A reason code: an open string. Registered names are in `reason_codes`.\npub type ReasonCode = String;\n"
 
 path.write_text("\n".join(line.rstrip() for line in s.splitlines()).rstrip() + "\n")
 PY

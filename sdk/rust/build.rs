@@ -10,6 +10,7 @@ fn main() {
             "helm/effects/v1/effects.proto",
             "helm/intervention/v1/intervention.proto",
             "helm/truth/v1/truth.proto",
+            "helm/errors/v1/errors.proto",
         ];
 
         let proto_paths: Vec<String> = protos

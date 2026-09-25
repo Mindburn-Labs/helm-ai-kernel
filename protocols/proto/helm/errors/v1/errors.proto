@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+// The HELM error detail (target architecture §11.1). Every HELM API error
+// carries exactly one: in the details of a Connect error, and in the error body
+// that core/pkg/httperr writes for HTTP routes.
+package helm.errors.v1;
+
+option go_package = "helm.mindburn.run/errors/v1;errorsv1";
+
+// ErrorDetail is the HELM detail of an API error.
+message ErrorDetail {
+  // A code from protocols/json-schemas/reason-codes/reason-codes-v1.json, as
+  // an open string. Empty when the error carries no registered code.
+  string reason_code = 1;
+  // Whether repeating the same request can succeed.
+  bool retryable = 2;
+}

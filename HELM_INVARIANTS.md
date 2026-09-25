@@ -67,7 +67,7 @@ when this file or `coverage-map.json` differs from the registry. An entry is
 (`scripts/ci/deadcode-roots.txt`) and its allowed, forbidden and removal tests
 exist. Everything else is `observed-only` or `unmanaged`, with the reason.
 
-42 controls: 19 enforced, 11 observed-only, 12 unmanaged (11 of them retired invariants).
+43 controls: 20 enforced, 11 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -113,6 +113,7 @@ exist. Everything else is `observed-only` or `unmanaged`, with the reason.
 | CTL-015 | Effect reservation before dispatch | observed-only | Unreachable from core/cmd/helm-ai-kernel: NewEffectReservationAdmitter and EffectReservationAdmitter.Admit are in scripts/ci/deadcode-allowlist.txt, as is the generic api.IdempotencyMiddleware. The Postgres tests prove the library only. |
 | CTL-016 | Spend proxy quotes before dispatch | enforced | — |
 | CTL-017 | Boundary Enforcement Profile attestation | observed-only | The kernel attests; systemd and nftables enforce. The shipped binary observes posture at service start and on demand, and deploy/appliance/helm-boundary-attest.service turns a failed attestation into a blocked gateway start. |
+| CTL-018 | Production egress is deny-all | enforced | — |
 
 ---
 

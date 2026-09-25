@@ -317,7 +317,9 @@ func newDeployedMCPGateway(svc *Services) (*mcppkg.Gateway, error) {
 func registerDeployedMCPRoutes(mux routeMux, gateway *mcppkg.Gateway) {
 	gatewayMux := http.NewServeMux()
 	gateway.RegisterRoutes(gatewayMux)
-	protected := protectRuntimeHandler(RouteAuthAdmin, gatewayMux.ServeHTTP)
+	// The gateway serves the one configured tenant: its decisions and receipts
+	// carry the tenant the configured-tenant gate binds to the credential.
+	protected := protectRuntimeHandler(RouteAuthConfiguredTenant, gatewayMux.ServeHTTP)
 	for _, route := range []string{"/mcp", "/mcp/v1/capabilities", "/mcp/v1/execute"} {
 		mux.HandleFunc(route, protected)
 	}

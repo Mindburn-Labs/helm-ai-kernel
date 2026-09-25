@@ -93,6 +93,24 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Removed — the budget status route; kernel approve retired to 501 (HELM-780)
+
+Breaking.
+
+- **`GET /api/v1/budget/status` is removed.** It answered a constant
+  `enforcer: postgres, status: active`, but no shipped binary wires a budget
+  tracker into the Guardian. The route was an implementation route, not part
+  of the public OpenAPI contract.
+- **`POST /api/v1/kernel/approve` always answers 501.** Nothing registered a
+  pending approval, so every well-formed submission answered 404 and no
+  approval could succeed.
+  - The operation stays in the OpenAPI contract, marked deprecated, and will be
+    removed in a later release together with the SDK `ApproveIntent` methods.
+  - Use the approval ceremony operations under `/api/v1/approvals`.
+  - `HELM_APPROVER_PUBLIC_KEYS` is no longer read.
+  - `ApproveHandler` in `core/pkg/api` and the approval receipt types in
+    `core/pkg/contracts` are removed.
+
 ### Removed — `workstation certify` and the unrouted trust-key handler (HELM-756)
 
 Breaking.

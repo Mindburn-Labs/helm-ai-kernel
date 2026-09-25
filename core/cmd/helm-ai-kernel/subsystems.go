@@ -77,15 +77,6 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"root": root})
 	}))
 
-	// --- Budget ---
-	mux.HandleFunc("/api/v1/budget/status", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"enforcer": "postgres",
-			"status":   "active",
-		})
-	}))
-
 	// --- Authz ---
 	mux.HandleFunc("/api/v1/authz/check", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -161,8 +152,7 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 
 	// --- Durable receipt API ---
 	registerReceiptRoutes(mux, svc)
-	approveHandler := api.NewApproveHandler(csvEnv("HELM_APPROVER_PUBLIC_KEYS"))
-	mux.HandleFunc("/api/v1/kernel/approve", protectRuntimeHandler(RouteAuthService, approveHandler.HandleApprove))
+	mux.HandleFunc("/api/v1/kernel/approve", protectRuntimeHandler(RouteAuthService, handleRetiredKernelApprove))
 	registerContractRoutes(mux, svc)
 	RegisterLaunchpadRoutes(mux, svc)
 
@@ -440,18 +430,16 @@ func readGovernedOpenAIRequest(w http.ResponseWriter, r *http.Request) ([]byte, 
 	return bodyBytes, body, true
 }
 
-func csvEnv(key string) []string {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return nil
+// retiredKernelApproveDetail explains the 501 from POST /api/v1/kernel/approve.
+const retiredKernelApproveDetail = "POST /api/v1/kernel/approve is deprecated and always answers 501: no runtime path registered a pending approval, so it could never approve an intent. Use the approval ceremony routes under /api/v1/approvals. The operation will be removed in a future release."
+
+// handleRetiredKernelApprove answers the deprecated approve operation (HELM-780).
+// The handler behind it approved only intents in an in-process queue that no
+// shipped path ever filled, so every submission failed.
+func handleRetiredKernelApprove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		api.WriteMethodNotAllowed(w)
+		return
 	}
-	parts := strings.Split(raw, ",")
-	values := make([]string, 0, len(parts))
-	for _, part := range parts {
-		value := strings.TrimSpace(part)
-		if value != "" {
-			values = append(values, value)
-		}
-	}
-	return values
+	api.WriteError(w, http.StatusNotImplemented, "Not implemented", retiredKernelApproveDetail)
 }

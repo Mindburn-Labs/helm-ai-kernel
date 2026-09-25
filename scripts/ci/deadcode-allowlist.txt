@@ -205,9 +205,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime validMessage
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime validModel
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime validToolCallID
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/agentruntime validToolDescriptors
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api ApproveHandler.GetPendingApprovals
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api ApproveHandler.RegisterPendingApproval
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api ApproveHandler.WithClock
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api AuthenticatedPrincipalFromContext
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api AutonomyHandler.HandleControl
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api AutonomyHandler.HandleGetState

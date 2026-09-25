@@ -18,7 +18,7 @@ runtime:
     command:
         - /bin/sh
         - -c
-        - HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet
+        - HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-6-luna --ignore_user_config --quiet
 model_gateway:
     logical_secret: model_gateway
     provider: byo

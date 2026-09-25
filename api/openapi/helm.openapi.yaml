@@ -290,7 +290,7 @@ paths:
             schema:
               $ref: '#/components/schemas/ChatCompletionRequest'
             example:
-              model: gpt-4
+              model: gpt-6-sol
               messages:
                 - role: user
                   content: "List files in /tmp"

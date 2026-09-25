@@ -673,7 +673,7 @@ func TestCoverageOpenAIProxyBranches(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[{"role":"user","content":"hi"}]}`))
 	req.Header.Set("Authorization", "Bearer token")
 	HandleOpenAIProxy(rec, req)
-	if rec.Code != http.StatusTeapot || rec.Header().Get("X-HELM-Governed") != "true" || rec.Header().Get("X-HELM-Model") != "gpt-4" {
+	if rec.Code != http.StatusTeapot || rec.Header().Get("X-HELM-Governed") != "true" || rec.Header().Get("X-HELM-Model") != "gpt-6-sol" {
 		t.Fatalf("upstream proxy status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
 

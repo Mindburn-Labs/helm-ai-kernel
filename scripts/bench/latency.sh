@@ -23,7 +23,7 @@ echo -e "${BOLD}HELM Performance Benchmark${NC}"
 echo "─────────────────────────────────────────"
 
 PAYLOAD='{
-  "model": "gpt-4o-mini",
+  "model": "gpt-6-luna",
   "messages": [{"role": "user", "content": "Return the word OK and nothing else."}],
   "max_tokens": 5
 }'

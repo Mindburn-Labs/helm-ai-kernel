@@ -14,7 +14,7 @@ RUN bun run --cwd packages/opencode fix-node-pty
 RUN bun run --cwd packages/opencode build --single --skip-install
 RUN install -d /licenses/kilocode && cp LICENSE /licenses/kilocode/LICENSE
 
-FROM node:24-bookworm-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e
+FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2
 
 ARG KILO_VERSION
 LABEL io.mindburn.helm.launchpad.recipe="kilocode.helm-owned.v1"

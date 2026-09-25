@@ -32,7 +32,7 @@ use helm_sdk::{ChatCompletionRequest, ChatCompletionRequestMessagesInner, HelmCl
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = HelmClient::new("http://127.0.0.1:7714");
     let result = client.chat_completions(&ChatCompletionRequest::new(
-        "gpt-4".to_string(),
+        "gpt-6-sol".to_string(),
         vec![ChatCompletionRequestMessagesInner::new(
             Role::User,
             "hello".to_string(),

@@ -1242,7 +1242,7 @@
         "model": {
           "type": "string",
           "pattern": "^openrouter/.+",
-          "default": "openrouter/openai/gpt-4o-mini",
+          "default": "openrouter/openai/gpt-6-luna",
           "description": "OpenClaw provider/model reference. The provider must remain openrouter because the chart projects only an OpenRouter credential and allows only the OpenRouter egress origin."
         },
         "tmpfsSize": {
@@ -1297,7 +1297,7 @@
         "model": {
           "type": "string",
           "minLength": 1,
-          "default": "openai/gpt-4o-mini",
+          "default": "openai/gpt-6-luna",
           "description": "Model passed to the default Hermes Job command."
         },
         "query": {

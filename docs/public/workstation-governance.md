@@ -34,6 +34,5 @@ HELM does not claim full control over proprietary hosted agents, private browser
 3. Review the signed Agent Run Receipt with `helm-ai-kernel workstation view`.
 4. Use `helm-ai-kernel workstation enforce` around selected network, MCP, memory, loop, shell, or file effects.
 5. Export a sample EvidencePack with `helm-ai-kernel workstation evidence`.
-6. Certify adapter behavior with `helm-ai-kernel workstation certify`.
 
 This lets a buyer evaluate workstation governance without understanding kernel internals.

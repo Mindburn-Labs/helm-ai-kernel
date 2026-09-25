@@ -149,3 +149,20 @@ Check the GitHub release and local verification artifacts together:
 - v0.8.5 Asset Contract
 - `v0.8.5.openvex.json`
 - `v0.8.5.json`
+
+### Verify Release Assets Locally
+
+Download the release assets into one directory, then check their keyless
+signatures against the exact release identity:
+
+```bash
+KERNEL_RELEASE_TAG=v0.8.5 make verify-cosign COSIGN_ARTIFACT_DIR=<download-dir>
+```
+
+`make verify-cosign` runs `scripts/release/verify_cosign.sh`. It accepts only
+`release.yml` on the `refs/tags/v*` ref and fails when it verifies zero bundles
+or finds a bundle without its artifact.
+
+`make release-smoke` rebuilds the release surface from source: reproducible
+binaries, the SBOM and the OpenVEX document, plus cosign verification when
+bundles are present. It is the same smoke the release workflow runs.

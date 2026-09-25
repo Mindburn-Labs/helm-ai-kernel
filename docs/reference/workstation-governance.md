@@ -169,13 +169,10 @@ The report groups events into `mcp`, `filesystem`, `network`, `memory`, `secret`
 
 ## Conformance and proof
 
-The conformance entrypoint is:
-
-```bash
-helm-ai-kernel workstation certify \
-  --fixtures fixtures/workstation \
-  --mode high-risk-effect-capable
-```
+The fixture-grading `workstation certify` command was removed in HELM-756:
+it certified adapters from checked-in fixtures, not from a running adapter.
+Export evidence with `helm-ai-kernel workstation evidence` and verify it with
+`helm-ai-kernel verify`.
 
 Reference receipts live under `fixtures/workstation/reference/receipts/`. A sample EvidencePack lives under `fixtures/workstation/sample-evidencepack/`.
 

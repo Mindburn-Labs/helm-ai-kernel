@@ -88,7 +88,7 @@ func HandleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Model == "" {
-		req.Model = "gpt-4"
+		req.Model = "gpt-6-sol"
 	}
 	if req.Stream {
 		WriteForbidden(w, privacy.ErrDataEgressBlocked.Error())

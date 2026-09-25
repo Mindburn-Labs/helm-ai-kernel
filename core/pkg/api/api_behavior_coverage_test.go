@@ -329,7 +329,7 @@ func TestOpenAIProxy_InvalidBody(t *testing.T) {
 
 func TestOpenAIProxy_NoUpstream(t *testing.T) {
 	t.Setenv("HELM_UPSTREAM_URL", "")
-	body, _ := json.Marshal(OpenAIChatRequest{Model: "gpt-4", Messages: []OpenAIMessage{{Role: "user", Content: "hi"}}})
+	body, _ := json.Marshal(OpenAIChatRequest{Model: "gpt-6-sol", Messages: []OpenAIMessage{{Role: "user", Content: "hi"}}})
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	HandleOpenAIProxy(w, req)

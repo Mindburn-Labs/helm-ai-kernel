@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 // PostgresLedger is a durable SQL-based implementation of the Ledger.
@@ -46,25 +48,12 @@ CREATE TABLE IF NOT EXISTS obligations (
 	tenant_id TEXT -- Gap 12: Multi-Tenancy
 );
 
--- Gap 12: Enable RLS
-ALTER TABLE obligations ENABLE ROW LEVEL SECURITY;
-
--- Create Policy (Idempotent check required in real migrations, here simple if not exists logic)
--- Note: 'create policy if not exists' is PG 10+.
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE policyname = 'tenant_isolation'
-    ) THEN
-        CREATE POLICY tenant_isolation ON obligations
-        USING (tenant_id = current_setting('app.current_tenant', true)::text);
-    END IF;
-END
-$$;
+-- Forced row security under the kernel tenant policy (HELM-755): a write
+-- that carries no tenant is refused, and nothing reads across tenants.
 `
 
 func (l *PostgresLedger) Init(ctx context.Context) error {
-	_, err := l.db.ExecContext(ctx, pgSchema)
+	_, err := l.db.ExecContext(ctx, pgSchema+store.TenantRowSecurityDDL("obligations"))
 	return err
 }
 

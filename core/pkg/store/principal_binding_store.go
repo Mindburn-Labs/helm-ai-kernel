@@ -54,7 +54,10 @@ func MigratePostgresPrincipalBindings(ctx context.Context, db *sql.DB) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			PRIMARY KEY (tenant_id, principal_id)
 		);`
-	_, err := db.ExecContext(ctx, query)
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return err
+	}
+	_, err := db.ExecContext(ctx, TenantRowSecurityDDL("principal_bindings"))
 	return err
 }
 
@@ -69,15 +72,19 @@ func (s *PostgresPrincipalBindingStore) Upsert(ctx context.Context, b PrincipalB
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, query, b.TenantID, b.PrincipalID, createdAt)
-	return err
+	return WithTenant(ctx, s.db, b.TenantID, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, query, b.TenantID, b.PrincipalID, createdAt)
+		return err
+	})
 }
 
 // Exists reports whether the given (tenant_id, principal_id) pair is bound.
 func (s *PostgresPrincipalBindingStore) Exists(ctx context.Context, tenantID, principalID string) (bool, error) {
 	query := `SELECT 1 FROM principal_bindings WHERE tenant_id = $1 AND principal_id = $2 LIMIT 1`
 	var one int
-	err := s.db.QueryRowContext(ctx, query, tenantID, principalID).Scan(&one)
+	err := WithTenant(ctx, s.db, tenantID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, query, tenantID, principalID).Scan(&one)
+	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil

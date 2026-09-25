@@ -56,6 +56,11 @@ import flows in any framework, but must treat `/api/v1/launchpad/*`,
 the source of truth. Generated AppSpecs remain `generated/untrusted` until
 backend evidence exists.
 
+The Kernel mounts `/api/v1/launchpad/*` only when `HELM_LAUNCHPAD_ROUTES_ENABLED=1`.
+The run store has no tenant dimension, so these routes serve only the
+Kernel's configured tenant. The `helm-ai-kernel launch` CLI and the egress
+sidecar do not use these routes.
+
 ## Entitlement Boundary
 
 Kernel does not create plan state by itself. When

@@ -22602,8 +22602,26 @@ API version: 0.8.5
 // checks if the HelmError type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &HelmError{}
 
-// HelmError struct for HelmError
+// HelmError The one HELM error model (target architecture §11.1), written by core/pkg/httperr for every HTTP error. It is an RFC 7807 problem (type, title, status, detail, instance, trace_id) whose extension members form a Connect error (code, message, details; https://connectrpc.com/docs/protocol/#error-end-stream). details holds one helm.errors.v1.ErrorDetail with the registered reason code and whether a retry can succeed. `error` repeats the message in the shape SDK releases up to v0.8.5 parse; it is deprecated and goes at the next major version.
 type HelmError struct {
+	// Connect error code: canceled, unknown, invalid_argument, deadline_exceeded, not_found, already_exists, permission_denied, resource_exhausted, failed_precondition, aborted, out_of_range, unimplemented, internal, unavailable, data_loss or unauthenticated.
+	Code *string `json:"code,omitempty"`
+	// Human-readable error message
+	Message *string           `json:"message,omitempty"`
+	Details []HelmErrorDetail `json:"details,omitempty"`
+	// RFC 7807 problem type URI
+	Type *string `json:"type,omitempty"`
+	// RFC 7807 short summary
+	Title *string `json:"title,omitempty"`
+	// RFC 7807 copy of the HTTP status code
+	Status *int32 `json:"status,omitempty"`
+	// RFC 7807 explanation; equal to message
+	Detail *string `json:"detail,omitempty"`
+	// RFC 7807 request path, when known
+	Instance *string `json:"instance,omitempty"`
+	// Request trace identifier, when known
+	TraceId *string `json:"trace_id,omitempty"`
+	// Deprecated
 	Error HelmErrorError `json:"error"`
 }
 
@@ -22627,7 +22645,296 @@ func NewHelmErrorWithDefaults() *HelmError {
 	return &this
 }
 
+// GetCode returns the Code field value if set, zero value otherwise.
+func (o *HelmError) GetCode() string {
+	if o == nil || IsNil(o.Code) {
+		var ret string
+		return ret
+	}
+	return *o.Code
+}
+
+// GetCodeOk returns a tuple with the Code field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetCodeOk() (*string, bool) {
+	if o == nil || IsNil(o.Code) {
+		return nil, false
+	}
+	return o.Code, true
+}
+
+// HasCode returns a boolean if a field has been set.
+func (o *HelmError) HasCode() bool {
+	if o != nil && !IsNil(o.Code) {
+		return true
+	}
+
+	return false
+}
+
+// SetCode gets a reference to the given string and assigns it to the Code field.
+func (o *HelmError) SetCode(v string) {
+	o.Code = &v
+}
+
+// GetMessage returns the Message field value if set, zero value otherwise.
+func (o *HelmError) GetMessage() string {
+	if o == nil || IsNil(o.Message) {
+		var ret string
+		return ret
+	}
+	return *o.Message
+}
+
+// GetMessageOk returns a tuple with the Message field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetMessageOk() (*string, bool) {
+	if o == nil || IsNil(o.Message) {
+		return nil, false
+	}
+	return o.Message, true
+}
+
+// HasMessage returns a boolean if a field has been set.
+func (o *HelmError) HasMessage() bool {
+	if o != nil && !IsNil(o.Message) {
+		return true
+	}
+
+	return false
+}
+
+// SetMessage gets a reference to the given string and assigns it to the Message field.
+func (o *HelmError) SetMessage(v string) {
+	o.Message = &v
+}
+
+// GetDetails returns the Details field value if set, zero value otherwise.
+func (o *HelmError) GetDetails() []HelmErrorDetail {
+	if o == nil || IsNil(o.Details) {
+		var ret []HelmErrorDetail
+		return ret
+	}
+	return o.Details
+}
+
+// GetDetailsOk returns a tuple with the Details field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetDetailsOk() ([]HelmErrorDetail, bool) {
+	if o == nil || IsNil(o.Details) {
+		return nil, false
+	}
+	return o.Details, true
+}
+
+// HasDetails returns a boolean if a field has been set.
+func (o *HelmError) HasDetails() bool {
+	if o != nil && !IsNil(o.Details) {
+		return true
+	}
+
+	return false
+}
+
+// SetDetails gets a reference to the given []HelmErrorDetail and assigns it to the Details field.
+func (o *HelmError) SetDetails(v []HelmErrorDetail) {
+	o.Details = v
+}
+
+// GetType returns the Type field value if set, zero value otherwise.
+func (o *HelmError) GetType() string {
+	if o == nil || IsNil(o.Type) {
+		var ret string
+		return ret
+	}
+	return *o.Type
+}
+
+// GetTypeOk returns a tuple with the Type field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetTypeOk() (*string, bool) {
+	if o == nil || IsNil(o.Type) {
+		return nil, false
+	}
+	return o.Type, true
+}
+
+// HasType returns a boolean if a field has been set.
+func (o *HelmError) HasType() bool {
+	if o != nil && !IsNil(o.Type) {
+		return true
+	}
+
+	return false
+}
+
+// SetType gets a reference to the given string and assigns it to the Type field.
+func (o *HelmError) SetType(v string) {
+	o.Type = &v
+}
+
+// GetTitle returns the Title field value if set, zero value otherwise.
+func (o *HelmError) GetTitle() string {
+	if o == nil || IsNil(o.Title) {
+		var ret string
+		return ret
+	}
+	return *o.Title
+}
+
+// GetTitleOk returns a tuple with the Title field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetTitleOk() (*string, bool) {
+	if o == nil || IsNil(o.Title) {
+		return nil, false
+	}
+	return o.Title, true
+}
+
+// HasTitle returns a boolean if a field has been set.
+func (o *HelmError) HasTitle() bool {
+	if o != nil && !IsNil(o.Title) {
+		return true
+	}
+
+	return false
+}
+
+// SetTitle gets a reference to the given string and assigns it to the Title field.
+func (o *HelmError) SetTitle(v string) {
+	o.Title = &v
+}
+
+// GetStatus returns the Status field value if set, zero value otherwise.
+func (o *HelmError) GetStatus() int32 {
+	if o == nil || IsNil(o.Status) {
+		var ret int32
+		return ret
+	}
+	return *o.Status
+}
+
+// GetStatusOk returns a tuple with the Status field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetStatusOk() (*int32, bool) {
+	if o == nil || IsNil(o.Status) {
+		return nil, false
+	}
+	return o.Status, true
+}
+
+// HasStatus returns a boolean if a field has been set.
+func (o *HelmError) HasStatus() bool {
+	if o != nil && !IsNil(o.Status) {
+		return true
+	}
+
+	return false
+}
+
+// SetStatus gets a reference to the given int32 and assigns it to the Status field.
+func (o *HelmError) SetStatus(v int32) {
+	o.Status = &v
+}
+
+// GetDetail returns the Detail field value if set, zero value otherwise.
+func (o *HelmError) GetDetail() string {
+	if o == nil || IsNil(o.Detail) {
+		var ret string
+		return ret
+	}
+	return *o.Detail
+}
+
+// GetDetailOk returns a tuple with the Detail field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetDetailOk() (*string, bool) {
+	if o == nil || IsNil(o.Detail) {
+		return nil, false
+	}
+	return o.Detail, true
+}
+
+// HasDetail returns a boolean if a field has been set.
+func (o *HelmError) HasDetail() bool {
+	if o != nil && !IsNil(o.Detail) {
+		return true
+	}
+
+	return false
+}
+
+// SetDetail gets a reference to the given string and assigns it to the Detail field.
+func (o *HelmError) SetDetail(v string) {
+	o.Detail = &v
+}
+
+// GetInstance returns the Instance field value if set, zero value otherwise.
+func (o *HelmError) GetInstance() string {
+	if o == nil || IsNil(o.Instance) {
+		var ret string
+		return ret
+	}
+	return *o.Instance
+}
+
+// GetInstanceOk returns a tuple with the Instance field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetInstanceOk() (*string, bool) {
+	if o == nil || IsNil(o.Instance) {
+		return nil, false
+	}
+	return o.Instance, true
+}
+
+// HasInstance returns a boolean if a field has been set.
+func (o *HelmError) HasInstance() bool {
+	if o != nil && !IsNil(o.Instance) {
+		return true
+	}
+
+	return false
+}
+
+// SetInstance gets a reference to the given string and assigns it to the Instance field.
+func (o *HelmError) SetInstance(v string) {
+	o.Instance = &v
+}
+
+// GetTraceId returns the TraceId field value if set, zero value otherwise.
+func (o *HelmError) GetTraceId() string {
+	if o == nil || IsNil(o.TraceId) {
+		var ret string
+		return ret
+	}
+	return *o.TraceId
+}
+
+// GetTraceIdOk returns a tuple with the TraceId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *HelmError) GetTraceIdOk() (*string, bool) {
+	if o == nil || IsNil(o.TraceId) {
+		return nil, false
+	}
+	return o.TraceId, true
+}
+
+// HasTraceId returns a boolean if a field has been set.
+func (o *HelmError) HasTraceId() bool {
+	if o != nil && !IsNil(o.TraceId) {
+		return true
+	}
+
+	return false
+}
+
+// SetTraceId gets a reference to the given string and assigns it to the TraceId field.
+func (o *HelmError) SetTraceId(v string) {
+	o.TraceId = &v
+}
+
 // GetError returns the Error field value
+// Deprecated
 func (o *HelmError) GetError() HelmErrorError {
 	if o == nil {
 		var ret HelmErrorError
@@ -22639,6 +22946,7 @@ func (o *HelmError) GetError() HelmErrorError {
 
 // GetErrorOk returns a tuple with the Error field value
 // and a boolean to check if the value has been set.
+// Deprecated
 func (o *HelmError) GetErrorOk() (*HelmErrorError, bool) {
 	if o == nil {
 		return nil, false
@@ -22647,6 +22955,7 @@ func (o *HelmError) GetErrorOk() (*HelmErrorError, bool) {
 }
 
 // SetError sets field value
+// Deprecated
 func (o *HelmError) SetError(v HelmErrorError) {
 	o.Error = v
 }
@@ -22661,6 +22970,33 @@ func (o HelmError) MarshalJSON() ([]byte, error) {
 
 func (o HelmError) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
+	if !IsNil(o.Code) {
+		toSerialize["code"] = o.Code
+	}
+	if !IsNil(o.Message) {
+		toSerialize["message"] = o.Message
+	}
+	if !IsNil(o.Details) {
+		toSerialize["details"] = o.Details
+	}
+	if !IsNil(o.Type) {
+		toSerialize["type"] = o.Type
+	}
+	if !IsNil(o.Title) {
+		toSerialize["title"] = o.Title
+	}
+	if !IsNil(o.Status) {
+		toSerialize["status"] = o.Status
+	}
+	if !IsNil(o.Detail) {
+		toSerialize["detail"] = o.Detail
+	}
+	if !IsNil(o.Instance) {
+		toSerialize["instance"] = o.Instance
+	}
+	if !IsNil(o.TraceId) {
+		toSerialize["trace_id"] = o.TraceId
+	}
 	toSerialize["error"] = o.Error
 	return toSerialize, nil
 }
@@ -22748,17 +23084,404 @@ API version: 0.8.5
 
 // Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.
 
+// checks if the HelmErrorDetail type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &HelmErrorDetail{}
+
+// HelmErrorDetail A Connect error detail holding a helm.errors.v1.ErrorDetail (protocols/proto/helm/errors/v1/errors.proto).
+type HelmErrorDetail struct {
+	// Fully qualified protobuf message name, helm.errors.v1.ErrorDetail
+	Type string `json:"type"`
+	// The ErrorDetail protobuf binary, base64-encoded without padding
+	Value string                `json:"value"`
+	Debug HelmErrorDetailFields `json:"debug"`
+}
+
+type _HelmErrorDetail HelmErrorDetail
+
+// NewHelmErrorDetail instantiates a new HelmErrorDetail object
+// This constructor will assign default values to properties that have it defined,
+// and makes sure properties required by API are set, but the set of arguments
+// will change when the set of required properties is changed
+func NewHelmErrorDetail(type_ string, value string, debug HelmErrorDetailFields) *HelmErrorDetail {
+	this := HelmErrorDetail{}
+	this.Type = type_
+	this.Value = value
+	this.Debug = debug
+	return &this
+}
+
+// NewHelmErrorDetailWithDefaults instantiates a new HelmErrorDetail object
+// This constructor will only assign default values to properties that have it defined,
+// but it doesn't guarantee that properties required by API are set
+func NewHelmErrorDetailWithDefaults() *HelmErrorDetail {
+	this := HelmErrorDetail{}
+	return &this
+}
+
+// GetType returns the Type field value
+func (o *HelmErrorDetail) GetType() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.Type
+}
+
+// GetTypeOk returns a tuple with the Type field value
+// and a boolean to check if the value has been set.
+func (o *HelmErrorDetail) GetTypeOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Type, true
+}
+
+// SetType sets field value
+func (o *HelmErrorDetail) SetType(v string) {
+	o.Type = v
+}
+
+// GetValue returns the Value field value
+func (o *HelmErrorDetail) GetValue() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.Value
+}
+
+// GetValueOk returns a tuple with the Value field value
+// and a boolean to check if the value has been set.
+func (o *HelmErrorDetail) GetValueOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Value, true
+}
+
+// SetValue sets field value
+func (o *HelmErrorDetail) SetValue(v string) {
+	o.Value = v
+}
+
+// GetDebug returns the Debug field value
+func (o *HelmErrorDetail) GetDebug() HelmErrorDetailFields {
+	if o == nil {
+		var ret HelmErrorDetailFields
+		return ret
+	}
+
+	return o.Debug
+}
+
+// GetDebugOk returns a tuple with the Debug field value
+// and a boolean to check if the value has been set.
+func (o *HelmErrorDetail) GetDebugOk() (*HelmErrorDetailFields, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Debug, true
+}
+
+// SetDebug sets field value
+func (o *HelmErrorDetail) SetDebug(v HelmErrorDetailFields) {
+	o.Debug = v
+}
+
+func (o HelmErrorDetail) MarshalJSON() ([]byte, error) {
+	toSerialize, err := o.ToMap()
+	if err != nil {
+		return []byte{}, err
+	}
+	return json.Marshal(toSerialize)
+}
+
+func (o HelmErrorDetail) ToMap() (map[string]interface{}, error) {
+	toSerialize := map[string]interface{}{}
+	toSerialize["type"] = o.Type
+	toSerialize["value"] = o.Value
+	toSerialize["debug"] = o.Debug
+	return toSerialize, nil
+}
+
+func (o *HelmErrorDetail) UnmarshalJSON(data []byte) (err error) {
+	// This validates that all required properties are included in the JSON object
+	// by unmarshalling the object into a generic map with string keys and checking
+	// that every required field exists as a key in the generic map.
+	requiredProperties := []string{
+		"type",
+		"value",
+		"debug",
+	}
+
+	allProperties := make(map[string]interface{})
+
+	err = json.Unmarshal(data, &allProperties)
+
+	if err != nil {
+		return err
+	}
+
+	for _, requiredProperty := range requiredProperties {
+		if _, exists := allProperties[requiredProperty]; !exists {
+			return fmt.Errorf("no value given for required property %v", requiredProperty)
+		}
+	}
+
+	varHelmErrorDetail := _HelmErrorDetail{}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&varHelmErrorDetail)
+
+	if err != nil {
+		return err
+	}
+
+	*o = HelmErrorDetail(varHelmErrorDetail)
+
+	return err
+}
+
+type NullableHelmErrorDetail struct {
+	value *HelmErrorDetail
+	isSet bool
+}
+
+func (v NullableHelmErrorDetail) Get() *HelmErrorDetail {
+	return v.value
+}
+
+func (v *NullableHelmErrorDetail) Set(val *HelmErrorDetail) {
+	v.value = val
+	v.isSet = true
+}
+
+func (v NullableHelmErrorDetail) IsSet() bool {
+	return v.isSet
+}
+
+func (v *NullableHelmErrorDetail) Unset() {
+	v.value = nil
+	v.isSet = false
+}
+
+func NewNullableHelmErrorDetail(val *HelmErrorDetail) *NullableHelmErrorDetail {
+	return &NullableHelmErrorDetail{value: val, isSet: true}
+}
+
+func (v NullableHelmErrorDetail) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.value)
+}
+
+func (v *NullableHelmErrorDetail) UnmarshalJSON(src []byte) error {
+	v.isSet = true
+	return json.Unmarshal(src, &v.value)
+}
+
+/*
+HELM Kernel API
+
+Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+
+API version: 0.8.5
+*/
+
+// Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.
+
+// checks if the HelmErrorDetailFields type satisfies the MappedNullable interface at compile time
+var _ MappedNullable = &HelmErrorDetailFields{}
+
+// HelmErrorDetailFields The ErrorDetail fields as JSON
+type HelmErrorDetailFields struct {
+	// Registered code from reason-codes-v1.json as an open string, or empty when the error carries none. Never a closed enum.
+	ReasonCode string `json:"reason_code"`
+	// Whether repeating the same request can succeed
+	Retryable bool `json:"retryable"`
+}
+
+type _HelmErrorDetailFields HelmErrorDetailFields
+
+// NewHelmErrorDetailFields instantiates a new HelmErrorDetailFields object
+// This constructor will assign default values to properties that have it defined,
+// and makes sure properties required by API are set, but the set of arguments
+// will change when the set of required properties is changed
+func NewHelmErrorDetailFields(reasonCode string, retryable bool) *HelmErrorDetailFields {
+	this := HelmErrorDetailFields{}
+	this.ReasonCode = reasonCode
+	this.Retryable = retryable
+	return &this
+}
+
+// NewHelmErrorDetailFieldsWithDefaults instantiates a new HelmErrorDetailFields object
+// This constructor will only assign default values to properties that have it defined,
+// but it doesn't guarantee that properties required by API are set
+func NewHelmErrorDetailFieldsWithDefaults() *HelmErrorDetailFields {
+	this := HelmErrorDetailFields{}
+	return &this
+}
+
+// GetReasonCode returns the ReasonCode field value
+func (o *HelmErrorDetailFields) GetReasonCode() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.ReasonCode
+}
+
+// GetReasonCodeOk returns a tuple with the ReasonCode field value
+// and a boolean to check if the value has been set.
+func (o *HelmErrorDetailFields) GetReasonCodeOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.ReasonCode, true
+}
+
+// SetReasonCode sets field value
+func (o *HelmErrorDetailFields) SetReasonCode(v string) {
+	o.ReasonCode = v
+}
+
+// GetRetryable returns the Retryable field value
+func (o *HelmErrorDetailFields) GetRetryable() bool {
+	if o == nil {
+		var ret bool
+		return ret
+	}
+
+	return o.Retryable
+}
+
+// GetRetryableOk returns a tuple with the Retryable field value
+// and a boolean to check if the value has been set.
+func (o *HelmErrorDetailFields) GetRetryableOk() (*bool, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Retryable, true
+}
+
+// SetRetryable sets field value
+func (o *HelmErrorDetailFields) SetRetryable(v bool) {
+	o.Retryable = v
+}
+
+func (o HelmErrorDetailFields) MarshalJSON() ([]byte, error) {
+	toSerialize, err := o.ToMap()
+	if err != nil {
+		return []byte{}, err
+	}
+	return json.Marshal(toSerialize)
+}
+
+func (o HelmErrorDetailFields) ToMap() (map[string]interface{}, error) {
+	toSerialize := map[string]interface{}{}
+	toSerialize["reason_code"] = o.ReasonCode
+	toSerialize["retryable"] = o.Retryable
+	return toSerialize, nil
+}
+
+func (o *HelmErrorDetailFields) UnmarshalJSON(data []byte) (err error) {
+	// This validates that all required properties are included in the JSON object
+	// by unmarshalling the object into a generic map with string keys and checking
+	// that every required field exists as a key in the generic map.
+	requiredProperties := []string{
+		"reason_code",
+		"retryable",
+	}
+
+	allProperties := make(map[string]interface{})
+
+	err = json.Unmarshal(data, &allProperties)
+
+	if err != nil {
+		return err
+	}
+
+	for _, requiredProperty := range requiredProperties {
+		if _, exists := allProperties[requiredProperty]; !exists {
+			return fmt.Errorf("no value given for required property %v", requiredProperty)
+		}
+	}
+
+	varHelmErrorDetailFields := _HelmErrorDetailFields{}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	err = decoder.Decode(&varHelmErrorDetailFields)
+
+	if err != nil {
+		return err
+	}
+
+	*o = HelmErrorDetailFields(varHelmErrorDetailFields)
+
+	return err
+}
+
+type NullableHelmErrorDetailFields struct {
+	value *HelmErrorDetailFields
+	isSet bool
+}
+
+func (v NullableHelmErrorDetailFields) Get() *HelmErrorDetailFields {
+	return v.value
+}
+
+func (v *NullableHelmErrorDetailFields) Set(val *HelmErrorDetailFields) {
+	v.value = val
+	v.isSet = true
+}
+
+func (v NullableHelmErrorDetailFields) IsSet() bool {
+	return v.isSet
+}
+
+func (v *NullableHelmErrorDetailFields) Unset() {
+	v.value = nil
+	v.isSet = false
+}
+
+func NewNullableHelmErrorDetailFields(val *HelmErrorDetailFields) *NullableHelmErrorDetailFields {
+	return &NullableHelmErrorDetailFields{value: val, isSet: true}
+}
+
+func (v NullableHelmErrorDetailFields) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.value)
+}
+
+func (v *NullableHelmErrorDetailFields) UnmarshalJSON(src []byte) error {
+	v.isSet = true
+	return json.Unmarshal(src, &v.value)
+}
+
+/*
+HELM Kernel API
+
+Deterministic execution kernel for AI tool calls. Drop-in OpenAI proxy + cryptographic receipts + offline-verifiable evidence packs.
+
+API version: 0.8.5
+*/
+
+// Code generated by OpenAPI Generator (https://openapi-generator.tech); DO NOT EDIT.
+
 // checks if the HelmErrorError type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &HelmErrorError{}
 
-// HelmErrorError struct for HelmErrorError
+// HelmErrorError Legacy error shape, kept for SDK releases up to v0.8.5.
 type HelmErrorError struct {
 	// Human-readable error message
 	Message string `json:"message"`
-	Type    string `json:"type"`
-	// Machine-readable error code
+	// invalid_request, authentication_error, permission_denied, not_found or internal_error
+	Type string `json:"type"`
+	// The Connect error code
 	Code string `json:"code"`
-	// HELM-specific reason code
+	// Same as the ErrorDetail reason_code; an open string, empty when there is none
 	ReasonCode string `json:"reason_code"`
 	// Additional error context
 	Details map[string]interface{} `json:"details,omitempty"`

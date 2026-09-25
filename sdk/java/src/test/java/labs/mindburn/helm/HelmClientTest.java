@@ -320,7 +320,8 @@ public class HelmClientTest {
             HelmClient.HelmApiException exception = assertThrows(HelmClient.HelmApiException.class,
                     () -> client.approveIntent(new TypesGen.ApprovalRequest().intentHash("sha256:intent")));
             assertEquals("approval failed", exception.getMessage());
-            assertEquals("ERROR_INTERNAL", exception.reasonCode);
+            // A HELM error without a registered reason code reports it as empty, not as a made-up code.
+            assertEquals("", exception.reasonCode);
         } finally {
             server.stop(0);
         }

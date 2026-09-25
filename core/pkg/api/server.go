@@ -379,7 +379,7 @@ func (s *Server) ListenAndServe(addr string) error {
 
 func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		WriteError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed), "method not allowed")
 		return
 	}
 	principal, ok := s.requireAuthenticated(w, r)
@@ -397,7 +397,7 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.receiptSigner == nil {
-		http.Error(w, "receipt signer unavailable", http.StatusServiceUnavailable)
+		WriteError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable), "receipt signer unavailable")
 		return
 	}
 
@@ -439,7 +439,7 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	}
 	policyHash := strings.TrimSpace(s.pdp.PolicyHash())
 	if policyHash == "" {
-		http.Error(w, "policy hash unavailable", http.StatusServiceUnavailable)
+		WriteError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable), "policy hash unavailable")
 		return
 	}
 
@@ -454,14 +454,14 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 		lastReceipt, ok := s.receipts[lastID]
 		if !ok {
 			s.mu.Unlock()
-			http.Error(w, "previous receipt unavailable", http.StatusServiceUnavailable)
+			WriteError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable), "previous receipt unavailable")
 			return
 		}
 		var err error
 		prevHash, err = contracts.ReceiptChainHash(lastReceipt)
 		if err != nil {
 			s.mu.Unlock()
-			http.Error(w, "previous receipt hash unavailable", http.StatusServiceUnavailable)
+			WriteError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable), "previous receipt hash unavailable")
 			return
 		}
 		lamport = lastReceipt.LamportClock + 1
@@ -515,7 +515,7 @@ func (s *Server) handleEvaluate(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.receiptSigner.SignReceipt(receipt); err != nil {
 		s.mu.Unlock()
-		http.Error(w, "receipt signing failed", http.StatusServiceUnavailable)
+		WriteError(w, http.StatusServiceUnavailable, http.StatusText(http.StatusServiceUnavailable), "receipt signing failed")
 		return
 	}
 
@@ -564,7 +564,7 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 		receipt, exists := s.receipts[receiptID]
 		s.mu.RUnlock()
 		if !exists {
-			http.Error(w, "receipt not found", http.StatusNotFound)
+			WriteError(w, http.StatusNotFound, http.StatusText(http.StatusNotFound), "receipt not found")
 			return
 		}
 		if !receiptVisibleToPrincipal(receipt, principal) {
@@ -581,7 +581,7 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 		receipt, exists := s.receipts[path]
 		s.mu.RUnlock()
 		if !exists {
-			http.Error(w, "receipt not found", http.StatusNotFound)
+			WriteError(w, http.StatusNotFound, http.StatusText(http.StatusNotFound), "receipt not found")
 			return
 		}
 		if !receiptVisibleToPrincipal(receipt, principal) {
@@ -607,12 +607,12 @@ func (s *Server) handleReceipts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	WriteError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed), "method not allowed")
 }
 
 func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		WriteError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed), "method not allowed")
 		return
 	}
 	principal, ok := s.requireAuthenticated(w, r)

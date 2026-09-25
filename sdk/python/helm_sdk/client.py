@@ -151,12 +151,65 @@ def _path_segment(value: str, name: str) -> str:
 class HelmApiError(Exception):
     """Raised when the HELM API returns a non-2xx response."""
 
-    def __init__(self, status: int, message: str, reason_code: str, details: Any = None, body: Any = None):
+    def __init__(
+        self,
+        status: int,
+        message: str,
+        reason_code: str,
+        details: Any = None,
+        body: Any = None,
+        code: str | None = None,
+        retryable: bool = False,
+    ):
         super().__init__(message)
         self.status = status
+        # Registered reason code from the error's helm.errors.v1.ErrorDetail:
+        # an open string, empty when there is none.
         self.reason_code = reason_code
         self.details = details
         self.body = body
+        # Connect error code, such as "not_found" or "unavailable".
+        self.code = code
+        # Whether repeating the same request can succeed.
+        self.retryable = retryable
+
+
+def _api_error(resp: httpx.Response) -> HelmApiError:
+    """Read the HELM error model (core/pkg/httperr): a Connect error in an
+    RFC 7807 body, plus the deprecated ``error`` member."""
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict) or not (
+        isinstance(body.get("code"), str) or isinstance(body.get("error"), dict)
+    ):
+        return HelmApiError(
+            status=resp.status_code,
+            message=resp.text,
+            reason_code="ERROR_INTERNAL",
+            details=body,
+            body=body if body is not None else resp.text,
+        )
+    raw_legacy = body.get("error")
+    legacy: dict[str, Any] = raw_legacy if isinstance(raw_legacy, dict) else {}
+    detail: dict[str, Any] = {}
+    for item in body.get("details") or []:
+        if isinstance(item, dict) and item.get("type") == "helm.errors.v1.ErrorDetail":
+            detail = item.get("debug") or {}
+            break
+    return HelmApiError(
+        status=resp.status_code,
+        message=body.get("message")
+        or body.get("detail")
+        or legacy.get("message")
+        or resp.text,
+        reason_code=detail.get("reason_code") or legacy.get("reason_code") or "",
+        details=legacy.get("details"),
+        body=body,
+        code=body.get("code"),
+        retryable=bool(detail.get("retryable", False)),
+    )
 
 
 class HelmClient:
@@ -195,23 +248,7 @@ class HelmClient:
 
     def _check(self, resp: httpx.Response) -> None:
         if resp.status_code >= 400:
-            try:
-                body = resp.json()
-                err = body.get("error", {})
-                raise HelmApiError(
-                    status=resp.status_code,
-                    message=err.get("message", resp.text) if isinstance(err, dict) else resp.text,
-                    reason_code=err.get("reason_code", "ERROR_INTERNAL") if isinstance(err, dict) else "ERROR_INTERNAL",
-                    details=err.get("details") if isinstance(err, dict) else body,
-                    body=body,
-                )
-            except (ValueError, KeyError):
-                raise HelmApiError(
-                    status=resp.status_code,
-                    message=resp.text,
-                    reason_code="ERROR_INTERNAL",
-                    body=resp.text,
-                )
+            raise _api_error(resp)
 
     # ── OpenAI Proxy ────────────────────────────────
     def chat_completions(self, req: ChatCompletionRequest) -> ChatCompletionResponse:

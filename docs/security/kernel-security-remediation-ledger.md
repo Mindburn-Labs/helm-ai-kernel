@@ -295,6 +295,9 @@ ecosystems, making Renovate the only dependency path into the repo with no human
 in the loop. Auto-merge is now limited to patch, TCB packages (x/crypto, x/net,
 circl, filippo.io, cel-go, open-policy-agent) never auto-merge at any update
 type, and vulnerability alerts are raised for review rather than merged.
+On 2026-09-24 `renovate.json` was removed: no Renovate App was installed, so it
+never ran. Dependabot version updates now come from the Mindburn-Labs
+`platform-actions` template and merge only through the required `ci / gate`.
 
 ### Remaining after this session
 

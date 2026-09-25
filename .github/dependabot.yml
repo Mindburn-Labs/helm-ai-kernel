@@ -1,50 +1,82 @@
+# From Mindburn-Labs/platform-actions templates/dependabot.yml (v2), plus
+# maven for sdk/java.
 version: 2
-
 updates:
   - package-ecosystem: github-actions
     directory: /
-    open-pull-requests-limit: 0
     schedule:
       interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
 
   - package-ecosystem: gomod
-    directory: /core
-    open-pull-requests-limit: 0
+    directories: ['**/*']
     schedule:
       interval: weekly
-
-  - package-ecosystem: gomod
-    directory: /sdk/go
-    open-pull-requests-limit: 0
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: gomod
-    directory: /tests/conformance
-    open-pull-requests-limit: 0
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: pip
-    directory: /sdk/python
-    open-pull-requests-limit: 0
-    schedule:
-      interval: weekly
+    commit-message:
+      prefix: fix
+      include: scope
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
 
   - package-ecosystem: npm
-    directory: /sdk/ts
-    open-pull-requests-limit: 0
+    directories: ['**/*']
     schedule:
       interval: weekly
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
+
+  - package-ecosystem: pip
+    directories: ['**/*']
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: fix
+      prefix-development: chore
+      include: scope
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
 
   - package-ecosystem: cargo
-    directory: /sdk/rust
-    open-pull-requests-limit: 0
+    directories: ['**/*']
     schedule:
       interval: weekly
+    commit-message:
+      prefix: fix
+      include: scope
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
+
+  - package-ecosystem: docker
+    directories: ['**/*']
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: fix
+      include: scope
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]
 
   - package-ecosystem: maven
     directory: /sdk/java
-    open-pull-requests-limit: 0
     schedule:
       interval: weekly
+    commit-message:
+      prefix: fix
+      include: scope
+    groups:
+      patch-and-minor:
+        update-types: [patch, minor]

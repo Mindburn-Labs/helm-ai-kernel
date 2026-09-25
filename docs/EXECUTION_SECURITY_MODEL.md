@@ -89,7 +89,7 @@ HELM AI Kernel does:
 
 - enforce deny-by-default policy at MCP and OpenAI-compatible dispatch boundaries;
 - emit signed receipts for `ALLOW`, `DENY`, and `ESCALATE` decisions;
-- quarantine unknown MCP servers and tools until they are inspected and approved;
+- quarantine unknown MCP servers and tools (no shipped path approves them yet, so a quarantined server stays quarantined; CTL-025);
 - produce offline-verifiable EvidencePacks for source-backed receipt material.
 
 HELM AI Kernel does not:
@@ -154,7 +154,7 @@ an agent can reach.
 | **Side-effect class profiles** | Read-only, write-limited, or full profiles per tool class |
 | **Connector allowlists** | Per-tenant/app/profile restrictions on which connectors are reachable |
 | **Destination scoping** | Explicit target domain/URL/resource allowlists |
-| **Filesystem/network deny-by-default** | WASI sandbox denies all I/O unless explicitly granted |
+| **Filesystem/network deny-by-default** | WASI sandbox denies all I/O unless explicitly granted. Not wired: the shipped server runs no pack, so this is library code (`controls.yaml` CTL-044) |
 | **Sandbox profile requirement** | Each tool class requires a declared sandbox profile before execution |
 
 ### Architectural Property
@@ -168,7 +168,7 @@ not by runtime checking.
 
 | Component | Package |
 | :--- | :--- |
-| Sandbox isolation | `core/pkg/runtime/sandbox/` |
+| Sandbox isolation (library; the shipped server runs no pack) | `core/pkg/runtime/sandbox/` |
 | Tool catalog / MCP gateway | `core/pkg/mcp/` |
 | Manifest validation | `core/pkg/manifest/` |
 | Budget ceiling (P0) | `core/pkg/runtime/budget/` |
@@ -184,21 +184,22 @@ determination that a specific call, with specific args, at a specific time,
 under a specific policy stack, is permitted.
 
 Dispatch enforcement is a **dispatch-time property** — it is computed for
-every individual call. No call reaches an executor without a signed
-`DecisionRecord`.
+every individual call. No call routed through a HELM adapter, proxy, hook or
+MCP route reaches an executor without a signed `DecisionRecord`; calls that
+never cross HELM are not governed (INV-024).
 
 ### Mechanisms
 
 | Mechanism | Description |
 | :--- | :--- |
-| **Schema PEP** | JCS canonicalization + SHA-256, fail-closed on input/output schema mismatch |
+| **Schema PEP** | JCS canonicalization + SHA-256, fail-closed on input schema mismatch for MCP tool calls (CTL-010, CTL-025); the OpenAI-compatible proxy only requires parseable tool arguments |
 | **PDP/CPI evaluation** | Canonical Policy Index resolves P0 → P1 → P2 → verdict |
 | **Budget enforcement** | ACID-locked budget gates, fail-closed on ceiling breach (`BUDGET_EXCEEDED`) |
-| **Contract pinning** | Connector response schemas are pinned; any drift produces `ERR_CONNECTOR_CONTRACT_DRIFT` |
+| **Contract pinning** | Connector response schemas are pinned and drift produces `ERR_CONNECTOR_CONTRACT_DRIFT`. Not wired: only the preview TON Acton connector, which no shipped binary links, reports it (CTL-045) |
 | **PRG evaluation** | Proof Requirement Graph checks cryptographic prerequisites |
-| **Deny-by-default** | Unknown tools → `DENY_TOOL_NOT_FOUND`. Unknown args → `DENY`. Policy error → `FAIL_CLOSED_ERROR` |
+| **Deny-by-default** | An action with no policy → `NO_POLICY_DEFINED`. A policy that cannot be evaluated → `PRG_EVALUATION_ERROR` (CTL-001, INV-005) |
 | **Delegation session enforcement** | Session capabilities ⊆ delegator's policy; expired/invalid sessions → `DELEGATION_INVALID` |
-| **Threat scan** | TCB scanner detects prompt injection / command injection signals → `THREAT_SIGNAL_DETECTED` |
+| **Threat scan** | TCB scanner denies untrusted input with high-risk findings → `PROMPT_INJECTION_DETECTED`, `TAINTED_INPUT_HIGH_RISK_DENY` and related codes (CTL-019) |
 
 Hardware-backed attestation and zero-knowledge execution research are not
 current public enforcement claims. Do not describe those paths as active until a
@@ -238,7 +239,7 @@ signed `DENY` verdict with a deterministic reason code.
 | Policy contracts | `core/pkg/contracts/` |
 | Gated execution | `core/pkg/executor/` |
 | Canonicalization | `core/pkg/canonicalize/` |
-| Approval ceremonies | `core/pkg/escalation/ceremony/` |
+| Approval ceremonies (library; not linked into the shipped binary) | `core/pkg/escalation/ceremony/` |
 
 ---
 
@@ -260,7 +261,7 @@ boundary operated correctly.
 | **ProofGraph DAG** | Append-only directed acyclic graph with Lamport causal ordering |
 | **Causal hash chain** | Each receipt signs over the previous receipt's signature (`PrevHash`) |
 | **EvidencePack** | Deterministic `.tar` export — same inputs produce identical output bytes |
-| **Merkle condensation** | Risk-tiered checkpoints; low-risk receipts replaceable by inclusion proofs |
+| **Merkle condensation** | Risk-tiered checkpoints; low-risk receipts replaceable by inclusion proofs. Not wired: the condenser has no shipped caller |
 | **Offline replay** | Replay from genesis without network access |
 | **Deny receipts** | Denied calls produce signed receipts with reason codes — not just silently dropped |
 
@@ -275,11 +276,11 @@ visible in the receipt chain.
 
 | Component | Package |
 | :--- | :--- |
-| Receipt enforcement | `core/pkg/receipts/` |
+| Receipt enforcement (library; not linked into the shipped binary) | `core/pkg/receipts/` |
 | ProofGraph DAG | `core/pkg/proofgraph/` |
 | Cryptographic signing | `core/pkg/crypto/` |
 | Evidence export/verify | `core/pkg/evidence/` |
-| Replay engine | `core/pkg/replay/` |
+| Replay engine (library; not linked into the shipped binary) | `core/pkg/replay/` |
 | Trust registry | `core/pkg/trust/registry/` |
 
 ---

@@ -5,9 +5,9 @@ last_reviewed: 2026-06-11
 
 # OpenAI-Compatible Execution Boundary
 
-If your applications already speak the OpenAI chat-completions API, you can put a policy boundary in front of them without changing a line of client code. HELM AI Kernel ships a proxy that accepts OpenAI-compatible requests, evaluates them against your policy, and only then forwards to the upstream model.
+If your applications already speak the OpenAI chat-completions API, you can put a policy boundary in front of them without changing a line of client code. HELM AI Kernel ships a proxy that accepts OpenAI-compatible requests, forwards them to the upstream model, and decides every tool call in the response against your policy before the client sees it.
 
-Requests that violate policy never reach the provider: they return a DENY or ESCALATE verdict instead, and the decision is recorded as a signed receipt either way. Allowed traffic flows through with receipt metadata attached, so every model call in your fleet becomes attributable and replayable.
+Tool calls that violate policy never reach your client: they come back as a DENY or ESCALATE verdict instead, and the decision is recorded as a signed receipt either way. The request itself does reach the provider. Allowed traffic flows through with receipt metadata attached, so every model call in your fleet becomes attributable and replayable.
 
 Start it with one command (`make proxy` in the repository, or the demo script below), point your existing client's base URL at it, and watch the receipt stream record what your agents actually ask for.
 

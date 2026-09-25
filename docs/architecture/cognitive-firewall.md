@@ -41,7 +41,7 @@ The split-compute guard should run before browser side effects are dispatched:
 
 1. The browser-side Sentinel hashes the DOM and visual text, scores presentation-layer prompt-injection risk, and forwards only risk metadata and hashes.
 2. The planner returns a tool intent with `planner_ref` instead of raw chain-of-thought.
-3. `BrowserSplitAdapter` denies side-effecting actions when the Sentinel risk exceeds policy, when the destination is outside domain scope, or when the planner reference is missing.
+3. `BrowserSplitAdapter`, when an embedder calls it, denies side-effecting actions when the Sentinel risk exceeds policy, when the destination is outside domain scope, or when the planner reference is missing.
 4. Deployments that also use Guardian should pass the same destination as `destination`, the page text hash as evidence, and tainted browser content as `user_input`/`source_channel=TOOL_OUTPUT` so Guardian's threat scanner and egress checker can produce the final signed decision.
 
 This keeps semantic reasoning and execution authority split: the planner may propose, but the deterministic guard owns the last pre-dispatch decision.

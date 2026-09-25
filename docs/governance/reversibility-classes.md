@@ -1,6 +1,8 @@
 # Reversibility-Aware Policy Classes (R3)
 
-**Status:** core Guardian enforcement is implemented: validated rollback plans
+**Status:** implemented and tested as a Guardian option (`WithRollbackPlanStore`)
+that no shipped binary installs, so it enforces nothing in `serve`, `proxy` or
+`mcp serve` today (`controls.yaml` CTL-042). As an option, validated rollback plans
 are bound before dispatch for reversible capabilities, invalid or expired
 plans deny, and external paths escalate. Rollback execution, outcome-receipt
 pairing, and authoritative approval-receipt verification remain follow-up.

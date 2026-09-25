@@ -1,5 +1,5 @@
 # Frozen importer-less core/pkg packages (HELM-745 s5b): no non-test importer in any
-# Go module, and no KEEP/WIRE/DELETE decision yet, as of origin/main b9d95382.
+# Go module, and no KEEP/WIRE/DELETE decision yet, as of origin/main 51db386c.
 # Read by scripts/ci/check_dead_packages.py next to the allowlist. The list only
 # shrinks: a package that is deleted or gains an importer leaves a STALE line that
 # fails the gate until the same PR removes it. Never add a line; decide the
@@ -12,14 +12,14 @@ core/pkg/attention # has tests
 core/pkg/authority # no tests
 core/pkg/buildguard # has tests
 core/pkg/celcheck # has tests
-core/pkg/channels/lark # ['github.com/Mindburn-Labs/helm-ai-kernel/tests/conformance/channels'] test-only importer(s)
-core/pkg/conformance/agentsafety # ['core/pkg/conformance/scenarios'] test-only importer(s)
+core/pkg/channels/lark # 1 test-only importer(s)
+core/pkg/conformance/agentsafety # 1 test-only importer(s)
 core/pkg/conformance/cases # has tests
 core/pkg/conformance/negative # has tests
-core/pkg/conformance/sandbox # ['core/pkg/connectors/sandbox/claudemanaged', 'core/pkg/connectors/sandbox/daytona', 'core/pkg/connectors/sandbox/e2b', 'core/pkg/connectors/sandbox/opensandbox'] test-only importer(s)
+core/pkg/conformance/sandbox # 4 test-only importer(s)
 core/pkg/conformance/scenarios # has tests
 core/pkg/connectors/arc # has tests
-core/pkg/connectors/linear # ['core/pkg/runtimeadapters/mcp'] test-only importer(s)
+core/pkg/connectors/linear # 1 test-only importer(s)
 core/pkg/connectors/oauth2 # has tests
 core/pkg/connectors/sandbox # has tests
 core/pkg/connectors/sandbox/claudemanaged # has tests
@@ -34,10 +34,12 @@ core/pkg/connectors/ton/acton # has tests
 core/pkg/constitution # has tests
 core/pkg/contracts/schemas # has tests
 core/pkg/crypto/keystore # has tests
-core/pkg/crypto/mtls # ['core/pkg/crypto'] test-only importer(s)
-core/pkg/crypto/sdjwt # ['core/pkg/crypto', 'core/pkg/evidencepack'] test-only importer(s)
-core/pkg/crypto/shredding # ['core/pkg/crypto'] test-only importer(s)
-core/pkg/crypto/tls # ['core/pkg/crypto'] test-only importer(s)
+core/pkg/crypto/mtls # 1 test-only importer(s)
+core/pkg/crypto/sdjwt # 2 test-only importer(s)
+core/pkg/crypto/shredding # 1 test-only importer(s)
+core/pkg/crypto/tee # has tests (importer-less since #997 removed the tee CLI)
+core/pkg/crypto/tee/collateral # has tests (importer-less since #997 removed the tee CLI)
+core/pkg/crypto/tls # 1 test-only importer(s)
 core/pkg/crypto/zk # has tests
 core/pkg/database # has tests
 core/pkg/delegation # has tests
@@ -50,7 +52,7 @@ core/pkg/escalation # has tests
 core/pkg/escalation/ceremony # has tests
 core/pkg/evaluation # no tests
 core/pkg/evidence/arc # has tests
-core/pkg/evidence/externalhost/adapters # ['core/pkg/verifier/externalreceipt'] test-only importer(s)
+core/pkg/evidence/externalhost/adapters # 1 test-only importer(s)
 core/pkg/evidencepack/retention # has tests
 core/pkg/exportadmin # has tests
 core/pkg/forensics # no tests
@@ -70,7 +72,7 @@ core/pkg/launchpad/install # has tests
 core/pkg/launchpad/redact # has tests
 core/pkg/ledger # has tests
 core/pkg/networkproof # has tests
-core/pkg/packs/antispoof # ['github.com/Mindburn-Labs/helm-ai-kernel/tests/conformance/antispoof'] test-only importer(s)
+core/pkg/packs/antispoof # 1 test-only importer(s)
 core/pkg/packs/install # has tests
 core/pkg/policy/lint # has tests
 core/pkg/policy/suggest # has tests
@@ -87,13 +89,13 @@ core/pkg/replay # has tests
 core/pkg/rir # has tests
 core/pkg/router # has tests
 core/pkg/runtime # has tests
-core/pkg/runtime/budget # ['core/pkg/runtime/sandbox'] test-only importer(s)
-core/pkg/runtimeadapters/a2a # ['github.com/Mindburn-Labs/helm-ai-kernel/tests/conformance/a2a'] test-only importer(s)
+core/pkg/runtime/budget # 1 test-only importer(s)
+core/pkg/runtimeadapters/a2a # 1 test-only importer(s)
 core/pkg/runtimeadapters/generic_http # has tests
 core/pkg/runtimeadapters/grpc # has tests
 core/pkg/runtimeadapters/websocket # has tests
 core/pkg/saga # has tests
-core/pkg/scheduler # ['github.com/Mindburn-Labs/helm-ai-kernel/tests/conformance/scheduling'] test-only importer(s)
+core/pkg/scheduler # 1 test-only importer(s)
 core/pkg/security/suites # has tests
 core/pkg/signals # has tests
 core/pkg/skills # has tests

@@ -10,8 +10,6 @@ curl-auth-header examples/governed_local_inference/run.sh dba73d3fcb67
 generic-api-key core/cmd/helm-ai-kernel/scan_cmd_test.go f070612ce502
 generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
 generic-api-key core/internal/cli/tui/secure_test.go 905b0ba9b608
-generic-api-key core/pkg/channels/signature_verify_test.go 2a81f24ea84e
-generic-api-key core/pkg/channels/signature_verify_test.go 5666dd812932
 generic-api-key core/pkg/conformance/owasp_llm_top10.go ec12bec21f55
 generic-api-key core/pkg/contracts/launch_effect_types_test.go c94237b3626e
 generic-api-key core/pkg/evidence/externalhost/adapters/adapters_test.go ac6e7bfb8d7f

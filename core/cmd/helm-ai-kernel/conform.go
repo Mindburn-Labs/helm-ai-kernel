@@ -59,13 +59,13 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		kernelCommit string
 	)
 
-	cmd.StringVar(&profile, "profile", "", "Conformance profile (REQUIRED unless --level): SMB, CORE, ENTERPRISE, REGULATED_FINANCE, REGULATED_HEALTH, AGENTIC_WEB_ROUTER")
+	cmd.StringVar(&profile, "profile", "", "Conformance profile: SMB (G0 build identity, the signed release report)")
 	cmd.StringVar(&jurisdiction, "jurisdiction", "", "Jurisdiction code (e.g. US, EU, APAC)")
 	cmd.StringVar(&outputDir, "output", "", "Output directory for EvidencePack (default: artifacts/conformance)")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output report as JSON to stdout")
 	cmd.BoolVar(&signed, "signed", false, "Emit signed report artifacts (conform_report.json + .sha256 + .sig)")
 	cmd.Var(&gateFilter, "gate", "Run only specific gate(s) (repeatable)")
-	cmd.StringVar(&level, "level", "", "Conformance level shortcut: L1 (deterministic bytes, ProofGraph, EvidencePack) or L2 (L1 + budget, HITL, replay, tenant, envelope)")
+	cmd.StringVar(&level, "level", "", "Retired (HELM-756): L1/L2 ran gates that could not return a truthful result")
 	cmd.StringVar(&vectorPath, "vector", "", "Run a single external failure conformance vector JSON")
 	cmd.StringVar(&manifestPath, "validation-manifest", "", "Write signed external failure HCV validation manifest JSON")
 	cmd.StringVar(&evidencePack, "evidencepack", "", "EvidencePack tar or directory bound into the validation manifest")
@@ -84,33 +84,31 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		}, stdout, stderr)
 	}
 
-	// Map --level to profile + gate filter
-	if level != "" && profile == "" {
-		switch level {
-		case "L1":
-			profile = "SMB"
-			gateFilter = []string{"G0", "G1", "G2A"}
-		case "L2":
-			profile = "CORE"
-			gateFilter = []string{"G0", "G1", "G2", "G2A", "G3A", "G5", "G8", "GX_ENVELOPE", "GX_TENANT"}
-		default:
-			_, _ = fmt.Fprintf(stderr, "Error: unknown level %q (valid: L1, L2)\n", level)
-			return 2
-		}
+	// HELM-756 retired gates G1–G15 and GX with the levels and profiles built on
+	// them: no EvidencePack could pass G1 and G7 together (audit 08-01), and
+	// several gates passed vacuously. The flag still parses so a documented
+	// command explains itself instead of failing on an unknown flag.
+	if level != "" {
+		_, _ = fmt.Fprintf(stderr, "Error: conformance levels were retired in HELM-756 (%s ran gates that could not return a truthful result).\n", level)
+		_, _ = fmt.Fprintln(stderr, "Run `helm-ai-kernel conform vectors --json` or `helm-ai-kernel conform negative --json` for the conformance vectors.")
+		return 2
 	}
-
 	if profile == "" {
-		_, _ = fmt.Fprintln(stderr, "Error: --profile or --level is required")
-		_, _ = fmt.Fprintln(stderr, "Valid profiles: SMB, CORE, ENTERPRISE, REGULATED_FINANCE, REGULATED_HEALTH, AGENTIC_WEB_ROUTER")
-		_, _ = fmt.Fprintln(stderr, "Valid levels:   L1, L2")
+		_, _ = fmt.Fprintln(stderr, "Error: --profile is required (valid: SMB)")
 		return 2
 	}
 
 	// Validate profile
 	profileID := conform.ProfileID(profile)
-	if conform.GatesForProfile(profileID) == nil && len(gateFilter) == 0 {
-		_, _ = fmt.Fprintf(stderr, "Error: unknown profile %q\n", profile)
+	if conform.GatesForProfile(profileID) == nil {
+		_, _ = fmt.Fprintf(stderr, "Error: unknown or retired profile %q (valid: SMB; the others were retired in HELM-756)\n", profile)
 		return 2
+	}
+	for _, g := range gateFilter {
+		if g != "G0" {
+			_, _ = fmt.Fprintf(stderr, "Error: gate %q was retired in HELM-756; only G0 (build identity) runs\n", g)
+			return 2
+		}
 	}
 
 	// Resolve project root
@@ -120,14 +118,8 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	g1Verifier, err := conformG1ReceiptVerifierFromEnv()
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: invalid G1 receipt verifier: %v\n", err)
-		return 2
-	}
-
-	// Build engine with all gates
-	engine := gates.DefaultEngineWithOptions(gates.RegistryOptions{G1ReceiptVerifier: g1Verifier})
+	// Build the engine: G0 is the only gate that still runs.
+	engine := gates.DefaultEngine()
 
 	// Run conformance
 	opts := &conform.RunOptions{
@@ -136,7 +128,6 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		GateFilter:   []string(gateFilter),
 		ProjectRoot:  projectRoot,
 		OutputDir:    outputDir,
-		SeedBaseline: level != "",
 	}
 
 	report, err := engine.Run(opts)
@@ -223,30 +214,6 @@ func runConform(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
-}
-
-func conformG1ReceiptVerifierFromEnv() (func(data []byte, sig string) error, error) {
-	keyHex := strings.TrimSpace(os.Getenv("HELM_CONFORM_RECEIPT_PUBLIC_KEY_HEX"))
-	if keyHex == "" {
-		return nil, nil
-	}
-	publicKey, err := hex.DecodeString(keyHex)
-	if err != nil {
-		return nil, fmt.Errorf("HELM_CONFORM_RECEIPT_PUBLIC_KEY_HEX must be hex encoded: %w", err)
-	}
-	if len(publicKey) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("HELM_CONFORM_RECEIPT_PUBLIC_KEY_HEX must be a %d-byte Ed25519 public key encoded as hex", ed25519.PublicKeySize)
-	}
-	return func(data []byte, sig string) error {
-		sigBytes, err := hex.DecodeString(strings.TrimPrefix(sig, "hex:"))
-		if err != nil {
-			return fmt.Errorf("receipt signature must be hex encoded: %w", err)
-		}
-		if !ed25519.Verify(ed25519.PublicKey(publicKey), data, sigBytes) {
-			return fmt.Errorf("receipt signature verification failed")
-		}
-		return nil
-	}, nil
 }
 
 type externalFailureVector struct {
@@ -553,5 +520,5 @@ func (f *multiFlag) Set(value string) error {
 }
 
 func init() {
-	Register(Subcommand{Name: "conform", Aliases: []string{"conformance"}, Usage: "Run conformance gates (--level L1|L2 or --profile, --json)", RunFn: runConform})
+	Register(Subcommand{Name: "conform", Aliases: []string{"conformance"}, Usage: "Run the G0 release conformance gate (--profile SMB), or conformance vectors (vectors, negative)", RunFn: runConform})
 }

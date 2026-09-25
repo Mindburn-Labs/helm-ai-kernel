@@ -55,8 +55,8 @@ surface for the `helm-ai-kernel` project.
   smoke driver changes. The positive lane spends OpenRouter tokens, so on a
   pull request it runs only with the `launchpad-live-test` label and is
   skipped otherwise; it never reports success without running. Not required.
-- `lean.yml` and `tla.yml` check the Lean proof and TLA+ specs; `tee-collateral.yml`
-  re-verifies the offline TEE collateral weekly. None is required.
+- `lean.yml` and `tla.yml` check the Lean proof and the GuardianPipeline TLA+
+  spec. Neither is required.
 - `claude-managed-agents-live-evidence.yml` runs the protected Daytona live
   evidence fixture for Claude Managed Agents self-hosted verification, writes a
   signed evidence pack, verifies it offline, and uploads the redacted artifacts.

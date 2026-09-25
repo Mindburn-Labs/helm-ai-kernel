@@ -27,8 +27,20 @@ type launchpadPlanRequest struct {
 	Principal   string `json:"principal"`
 }
 
+// launchpadRoutesEnabledEnv turns on the Launchpad HTTP surface. It is off by
+// default (target architecture §14.7: Launchpad is a retirement candidate, so
+// it is disabled rather than repaired). The CLI and the egress sidecar do not
+// depend on these routes.
+const launchpadRoutesEnabledEnv = "HELM_LAUNCHPAD_ROUTES_ENABLED"
+
+// RegisterLaunchpadRoutes mounts the Launchpad HTTP surface when
+// HELM_LAUNCHPAD_ROUTES_ENABLED is set. Its run store has no tenant dimension,
+// so it serves only the configured tenant (S-05).
 func RegisterLaunchpadRoutes(mux routeMux, svc *Services) {
-	mux.HandleFunc("/api/v1/launchpad/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	if !envBool(launchpadRoutesEnabledEnv) {
+		return
+	}
+	mux.HandleFunc("/api/v1/launchpad/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/v1/launchpad/"), "/")
 		catalog, err := registry.LoadCatalog("")
 		if err != nil {

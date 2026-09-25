@@ -103,6 +103,16 @@ Workspace binding, for the first three rows:
 
 Ext-authz is the exception: it is bound to the configured scope in both modes.
 
+**Stores without a tenant dimension.** The boundary surface registry and the
+Launchpad run store are each one store per process. Their `tenant_scoped`
+routes serve only the configured tenant (`HELM_RUNTIME_TENANT_ID`, `default`
+when unset), and every other bound tenant gets `403`, with the fence on or off.
+These routes are `/api/v1/boundary/{status,capabilities,records}`,
+`/api/v1/evidence/verification-scopes`, `/api/v1/telemetry/harness-traces`,
+`/api/v1/plans/transactions`, `/api/v1/harness/change-contracts` and
+`/api/v1/launchpad/*`, together with their item routes. The Launchpad routes
+are also off unless `HELM_LAUNCHPAD_ROUTES_ENABLED=1`.
+
 Request bodies and `context` never select a scope; see below.
 
 **What this does not provide.** With a token, identity no longer comes from

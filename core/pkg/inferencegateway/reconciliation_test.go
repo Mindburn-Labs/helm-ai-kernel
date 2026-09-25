@@ -13,7 +13,7 @@ import (
 // reconciles against.
 func settleOne(t *testing.T, h *harness, idem, providerReqID string, providerCostCents int64) *economic.UsageReceipt {
 	t.Helper()
-	q, err := h.engine.Quote(h.env, h.req(idem, "gpt-4o", 100_000, 100_000))
+	q, err := h.engine.Quote(h.env, h.req(idem, "gpt-6-sol", 100_000, 100_000))
 	if err != nil {
 		t.Fatalf("quote %s: %v", idem, err)
 	}
@@ -113,7 +113,7 @@ func TestReconcileMismatch_FreezesAndRefusesSpend(t *testing.T) {
 	}
 
 	// A frozen account refuses new spend authority (reserve) and new credits.
-	q, err := h.engine.Quote(h.env, h.req("idem-after-freeze", "gpt-4o", 1000, 1000))
+	q, err := h.engine.Quote(h.env, h.req("idem-after-freeze", "gpt-6-sol", 1000, 1000))
 	if err != nil {
 		t.Fatalf("quote after freeze: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestPaymentFailure_NoNegativeUnmanagedBalance(t *testing.T) {
 		t.Fatalf("payment failure must freeze the account")
 	}
 	// And a frozen account cannot be debited, so no negative balance can follow.
-	q, err := h.engine.Quote(h.env, h.req("idem-pf-2", "gpt-4o", 1000, 1000))
+	q, err := h.engine.Quote(h.env, h.req("idem-pf-2", "gpt-6-sol", 1000, 1000))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}

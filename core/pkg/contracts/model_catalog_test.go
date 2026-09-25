@@ -86,7 +86,7 @@ func TestKnownModelProviders_ReasoningExampleHasToolUse(t *testing.T) {
 func TestKnownModelProviders_ExamplesAvoidCurrentProviderClaims(t *testing.T) {
 	byID := KnownModelProvidersByID()
 	for id := range byID {
-		if id == "openai:gpt-5.4" || id == "google:gemini-3-pro" || id == "anthropic:claude-opus-4-6" {
+		if id == "openai:gpt-6-sol" || id == "google:gemini-3-pro" || id == "anthropic:claude-opus-5-5" {
 			t.Fatalf("catalog must not contain current-provider claim %s", id)
 		}
 	}

@@ -22,7 +22,7 @@ from typing import Any
 
 OPENROUTER_CHAT_COMPLETIONS = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION = "https://openrouter.ai/api/v1/generation"
-DEFAULT_MODEL = "openai/gpt-4o-mini"
+DEFAULT_MODEL = "openai/gpt-6-luna"
 
 
 def read_key() -> str:

@@ -28,7 +28,7 @@ func TestGenerate_WithModels(t *testing.T) {
 	bom, err := Generate(GenerateConfig{
 		Component: "llm-gw",
 		Models: []ModelProvenance{
-			{ModelID: "m1", Provider: "openai", ModelName: "gpt-4o"},
+			{ModelID: "m1", Provider: "openai", ModelName: "gpt-6-sol"},
 		},
 	})
 	if err != nil {

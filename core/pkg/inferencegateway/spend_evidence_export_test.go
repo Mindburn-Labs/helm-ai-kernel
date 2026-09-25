@@ -16,7 +16,7 @@ import (
 func TestSpendEvidencePackExportAndOfflineVerify(t *testing.T) {
 	h := newHarness(t)
 
-	quote, err := h.engine.Quote(h.env, h.req("idem-spend8", "gpt-4o", 1000, 500))
+	quote, err := h.engine.Quote(h.env, h.req("idem-spend8", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}

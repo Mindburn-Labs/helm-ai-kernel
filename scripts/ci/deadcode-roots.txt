@@ -6,7 +6,7 @@
 #
 # Not roots, because no release path builds them: receipt_verify (only the
 # stand-alone `make receipt-verify-binaries`), release-permit-verify,
-# tee-collateral, pack_verify, channel_gateway, bootstrap, semantic-model-gen,
+# pack_verify, bootstrap, semantic-model-gen,
 # skill_lint, skill_pack. Code only they reach counts as dead to the gate. Add a
 # line here when one of them starts shipping.
 core/cmd/helm-ai-kernel

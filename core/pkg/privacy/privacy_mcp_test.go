@@ -201,7 +201,7 @@ func TestProtectJSONSupportsModelResponseProtocolsWithoutWeakeningGenericProtect
 
 func TestProtectModelRequestPreservesSchemaNamesOnlyInDeclarations(t *testing.T) {
 	raw := json.RawMessage(`{
-		"model":"gpt-4o",
+		"model":"gpt-6-sol",
 		"tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string"},"profile":{"type":"object","properties":{"api_key":{"type":"string"}}}},"required":["password"]}}}],
 		"response_format":{"type":"json_schema","json_schema":{"name":"result","schema":{"type":"object","properties":{"access_token":{"type":"string"}}}}}
 	}`)
@@ -214,13 +214,13 @@ func TestProtectModelRequestPreservesSchemaNamesOnlyInDeclarations(t *testing.T)
 			t.Fatalf("schema name %s was not preserved: %s", name, protected)
 		}
 	}
-	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-4o","password":"abc123"}`)); !errors.Is(err, ErrDataEgressBlocked) {
+	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-6-sol","password":"abc123"}`)); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("actual password payload error = %v, want ErrDataEgressBlocked", err)
 	}
-	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-4o","tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string","default":"abc123"}}}}}]}`)); !errors.Is(err, ErrDataEgressBlocked) {
+	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-6-sol","tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string","default":"abc123"}}}}}]}`)); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("password schema default error = %v, want ErrDataEgressBlocked", err)
 	}
-	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-4o","tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"allOf":[{"type":"string","default":"abc123"}]}}}}}]}`)); !errors.Is(err, ErrDataEgressBlocked) {
+	if _, _, err := ProtectModelRequestJSON(context.Background(), json.RawMessage(`{"model":"gpt-6-sol","tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"allOf":[{"type":"string","default":"abc123"}]}}}}}]}`)); !errors.Is(err, ErrDataEgressBlocked) {
 		t.Fatalf("nested password schema default error = %v, want ErrDataEgressBlocked", err)
 	}
 }
@@ -228,7 +228,7 @@ func TestProtectModelRequestPreservesSchemaNamesOnlyInDeclarations(t *testing.T)
 func TestProtectModelRequestKeepsEmbeddedJSONValid(t *testing.T) {
 	embedded := `{"phone":4155552671,"email":"person@example.com"}`
 	raw, err := json.Marshal(map[string]any{
-		"model": "gpt-4o",
+		"model": "gpt-6-sol",
 		"messages": []any{
 			map[string]any{"role": "user", "content": embedded},
 			map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": embedded}}},

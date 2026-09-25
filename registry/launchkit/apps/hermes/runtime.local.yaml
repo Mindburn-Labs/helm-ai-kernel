@@ -3,7 +3,7 @@ target: local-container
 command:
   - /bin/sh
   - -c
-  - HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-4o-mini --ignore_user_config --quiet
+  - HOME=/var/lib/hermes hermes --q ping --provider openrouter --model openai/gpt-6-luna --ignore_user_config --quiet
 healthcheck: helm-launchpad-openrouter-check
 state_dir_env: HOME
 mcp_registry_ref: mcp.registry.yaml

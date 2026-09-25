@@ -14,12 +14,12 @@ import (
 func TestMemoryIntegrityStore_WriteAndReadRoundTrip(t *testing.T) {
 	store := NewMemoryIntegrityStore()
 
-	entry, err := store.Write("config", []byte(`{"model":"gpt-4"}`), "agent-1")
+	entry, err := store.Write("config", []byte(`{"model":"gpt-6-sol"}`), "agent-1")
 	require.NoError(t, err)
 	require.NotNil(t, entry)
 
 	assert.Equal(t, "config", entry.Key)
-	assert.Equal(t, []byte(`{"model":"gpt-4"}`), entry.Value)
+	assert.Equal(t, []byte(`{"model":"gpt-6-sol"}`), entry.Value)
 	assert.Equal(t, "agent-1", entry.WrittenBy)
 	assert.Equal(t, 1, entry.Version)
 	assert.NotEmpty(t, entry.ContentHash)

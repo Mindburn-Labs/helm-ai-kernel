@@ -55,7 +55,7 @@ func main() {
 
     // Chat completions via the HELM boundary.
     res, err := c.ChatCompletions(helm.ChatCompletionRequest{
-        Model:    "gpt-4",
+        Model:    "gpt-6-sol",
         Messages: []helm.ChatMessage{{Role: "user", Content: "List files in /tmp"}},
     })
     if err != nil {

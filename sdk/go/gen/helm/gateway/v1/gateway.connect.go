@@ -30,9 +30,10 @@
 //     one helm.errors.v1.ErrorDetail (reason_code, retryable) in its details.
 //   - Reason codes are open strings from the one registry,
 //     protocols/json-schemas/reason-codes/reason-codes-v1.json (§11.1). In
-//     these comments "[reason_code: X]" names a registered code and
-//     "[reason_code_pending: X]" names a code that ADR-0001 §6 registers in
-//     the slice that first emits it. A contract test keeps both lists true.
+//     these comments a bracketed reason_code marker names a registered code,
+//     and a bracketed reason_code_pending marker names a code that ADR-0001
+//     §6 registers in the slice that first emits it. A contract test keeps
+//     both lists true.
 //   - Amounts are integers: resource units, currency minor units, or model
 //     spend in currency micro-units. There is no floating-point field.
 //   - Idempotency (R6). Propose, Stop and Lift carry a tenant-scoped
@@ -181,10 +182,11 @@ type EffectGatewayServiceClient interface {
 	// Stops and revocations take effect at admission and at this claim. They
 	// cannot retract a call that is already dispatched.
 	//
-	// An attempt past ADMITTED is returned unchanged with existing true.
-	// UNKNOWN is never re-dispatched by this RPC; recovery retries only under
-	// the adapter's declared idempotent or conditional write (§4.3).
-	// Any other state is failed_precondition.
+	// An attempt that is CANCELLED, DISPATCHING or in any later state is
+	// returned unchanged with existing true. UNKNOWN is never re-dispatched by
+	// this RPC; recovery retries only under the adapter's declared idempotent
+	// or conditional write (§4.3). PROPOSED, DENIED, ESCALATED, APPROVED,
+	// REJECTED and EXPIRED are failed_precondition.
 	Dispatch(context.Context, *connect.Request[DispatchRequest]) (*connect.Response[DispatchResponse], error)
 	// Observe reads the effect back from the provider through the adapter and
 	// records one observation.
@@ -426,10 +428,11 @@ type EffectGatewayServiceHandler interface {
 	// Stops and revocations take effect at admission and at this claim. They
 	// cannot retract a call that is already dispatched.
 	//
-	// An attempt past ADMITTED is returned unchanged with existing true.
-	// UNKNOWN is never re-dispatched by this RPC; recovery retries only under
-	// the adapter's declared idempotent or conditional write (§4.3).
-	// Any other state is failed_precondition.
+	// An attempt that is CANCELLED, DISPATCHING or in any later state is
+	// returned unchanged with existing true. UNKNOWN is never re-dispatched by
+	// this RPC; recovery retries only under the adapter's declared idempotent
+	// or conditional write (§4.3). PROPOSED, DENIED, ESCALATED, APPROVED,
+	// REJECTED and EXPIRED are failed_precondition.
 	Dispatch(context.Context, *connect.Request[DispatchRequest]) (*connect.Response[DispatchResponse], error)
 	// Observe reads the effect back from the provider through the adapter and
 	// records one observation.

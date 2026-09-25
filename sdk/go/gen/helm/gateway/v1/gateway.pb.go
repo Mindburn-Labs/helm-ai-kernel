@@ -32,9 +32,10 @@
 //     one helm.errors.v1.ErrorDetail (reason_code, retryable) in its details.
 //   - Reason codes are open strings from the one registry,
 //     protocols/json-schemas/reason-codes/reason-codes-v1.json (§11.1). In
-//     these comments "[reason_code: X]" names a registered code and
-//     "[reason_code_pending: X]" names a code that ADR-0001 §6 registers in
-//     the slice that first emits it. A contract test keeps both lists true.
+//     these comments a bracketed reason_code marker names a registered code,
+//     and a bracketed reason_code_pending marker names a code that ADR-0001
+//     §6 registers in the slice that first emits it. A contract test keeps
+//     both lists true.
 //   - Amounts are integers: resource units, currency minor units, or model
 //     spend in currency micro-units. There is no floating-point field.
 //   - Idempotency (R6). Propose, Stop and Lift carry a tenant-scoped
@@ -1133,7 +1134,7 @@ type DispatchResponse struct {
 	// The attempt: DISPATCHED, OBSERVED, UNKNOWN or CANCELLED, or as stored
 	// when existing is true.
 	Attempt *EffectAttempt `protobuf:"bytes,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	// True when the attempt was already past ADMITTED and nothing changed.
+	// True when the attempt was no longer ADMITTED and nothing changed.
 	Existing      bool `protobuf:"varint,2,opt,name=existing,proto3" json:"existing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

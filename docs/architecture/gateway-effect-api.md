@@ -46,8 +46,8 @@ Two rules apply everywhere:
 - **A duplicate never dispatches twice (R6).** A repeated `Propose` with the
   same key and content returns the stored attempt in whatever state it is in,
   pending or `UNKNOWN` included, with `existing = true`. The same key with
-  different content is `already_exists`. `Dispatch` on an attempt past
-  `ADMITTED` returns it unchanged.
+  different content is `already_exists`. `Dispatch` on an attempt that is
+  `CANCELLED`, `DISPATCHING` or later returns it unchanged.
 
 ## Messages and where they come from
 

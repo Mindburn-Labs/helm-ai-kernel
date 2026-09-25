@@ -311,6 +311,7 @@ jobs:
           python -m pip install --require-hashes -r .github/codegen-requirements.txt
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.0
       - name: Verify generated contracts
         run: make codegen-check
       - name: Verify OpenAPI SDK contract drift

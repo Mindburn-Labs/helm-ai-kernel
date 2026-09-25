@@ -1,4 +1,4 @@
-package executor
+package scanpack
 
 import (
 	"context"

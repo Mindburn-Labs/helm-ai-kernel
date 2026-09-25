@@ -2282,7 +2282,6 @@ github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors nullableAut
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors releaseAuthorityLookup
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors sameConnectorReleaseMaterial
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors verifyReleaseHash
-github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/riskscan CollectConfigObservation
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox BuildSandboxExecutionAuthorization
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox CredentialBroker.GetIssuances
 github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/runtime/sandbox CredentialBroker.IssueToken

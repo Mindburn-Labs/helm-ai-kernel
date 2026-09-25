@@ -129,7 +129,7 @@ response; it does not change the endpoint payload emitted by the Kernel.
 
 ## Fail-Closed Cases
 
-The boundary must deny before dispatch when policy or authorization state is not trustworthy. Public conformance vectors cover at least these cases:
+The boundary must deny before dispatch when policy or authorization state is not trustworthy. Public conformance vectors declare at least these cases; `conform negative` lists them, and most are not yet bound to a running gate (see `core/pkg/conformance/negative`). Only the paths recorded as enforced in `controls.yaml` are enforced:
 
 - missing or stale policy;
 - PDP outage;

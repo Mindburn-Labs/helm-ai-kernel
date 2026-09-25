@@ -126,20 +126,20 @@ func TestCoverageJWKSValidator(t *testing.T) {
 		http.Error(w, "unavailable", http.StatusInternalServerError)
 	}))
 	defer badServer.Close()
-	if err := NewJWKSValidator(JWKSConfig{JWKSURL: badServer.URL, AllowInsecureLoopback: true}).refreshKeysIfNeeded(); !isJWKSKind(err, JWKSErrFetchFailed) {
+	if err := refreshErr(NewJWKSValidator(JWKSConfig{JWKSURL: badServer.URL, AllowInsecureLoopback: true})); !isJWKSKind(err, JWKSErrFetchFailed) {
 		t.Fatalf("expected fetch failed, got %v", err)
 	}
 	invalidJWKS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{`))
 	}))
 	defer invalidJWKS.Close()
-	if err := NewJWKSValidator(JWKSConfig{JWKSURL: invalidJWKS.URL, AllowInsecureLoopback: true}).forceRefreshKeys(); !isJWKSKind(err, JWKSErrFetchFailed) {
+	if err := fetchErr(NewJWKSValidator(JWKSConfig{JWKSURL: invalidJWKS.URL, AllowInsecureLoopback: true})); !isJWKSKind(err, JWKSErrFetchFailed) {
 		t.Fatalf("expected parse JWKS failure, got %v", err)
 	}
-	if err := NewJWKSValidator(JWKSConfig{JWKSURL: "http://[::1"}).forceRefreshKeys(); !isJWKSKind(err, JWKSErrFetchFailed) {
+	if err := fetchErr(NewJWKSValidator(JWKSConfig{JWKSURL: "http://[::1"})); !isJWKSKind(err, JWKSErrFetchFailed) {
 		t.Fatalf("expected bad URL failure, got %v", err)
 	}
-	if err := NewJWKSValidator(JWKSConfig{JWKSURL: "http://jwks.example.test/keys"}).forceRefreshKeys(); !isJWKSKind(err, JWKSErrFetchFailed) || !strings.Contains(err.Error(), "https") {
+	if err := fetchErr(NewJWKSValidator(JWKSConfig{JWKSURL: "http://jwks.example.test/keys"})); !isJWKSKind(err, JWKSErrFetchFailed) || !strings.Contains(err.Error(), "https") {
 		t.Fatalf("expected non-TLS JWKS endpoint rejection, got %v", err)
 	}
 	if _, err := NewJWKSValidator(config).ValidateAuthorization("not-a-jwt"); !isJWKSKind(err, JWKSErrMalformedToken) && !isJWKSKind(err, JWKSErrFetchFailed) {
@@ -368,4 +368,14 @@ func marshalMCPTestValue(t *testing.T, value any) string {
 		t.Fatalf("Marshal: %v", err)
 	}
 	return string(data)
+}
+
+func fetchErr(v *JWKSValidator) error {
+	_, err := v.fetchKeys()
+	return err
+}
+
+func refreshErr(v *JWKSValidator) error {
+	v.refreshKeys(false)
+	return v.keysUsable()
 }

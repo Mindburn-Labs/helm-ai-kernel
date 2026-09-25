@@ -5,6 +5,10 @@ test, scripting, source verification, and library operations. HELM wraps Acton
 so model-proposed TON work crosses PEP/CPI governance before any side effect
 can run.
 
+> Status: preview library. The connector is not linked into
+> `core/cmd/helm-ai-kernel`, so no Acton call crosses HELM in a shipped binary
+> today (`controls.yaml` CTL-045).
+
 The OSS connector is `ton.acton`. It exposes typed actions such as
 `connector.ton.acton.contract.build`, `connector.ton.acton.script.testnet`, and
 `connector.ton.acton.source.verify_dry_run`. It does not expose raw shell

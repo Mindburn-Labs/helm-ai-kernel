@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
 )
 
 var baseRuntimeTables = []string{
@@ -378,6 +380,7 @@ func TestValidateRuntimeAcceptsRestrictedRoleWithoutDDL(t *testing.T) {
 	expectRuntimeColumns(mock)
 	expectRuntimeRole(mock, true, false, false)
 	expectTenantRowSecurity(mock)
+	expectPrincipalLookupPolicy(mock, true)
 
 	if err := ValidateRuntime(context.Background(), db, RuntimeOptions{}); err != nil {
 		t.Fatalf("ValidateRuntime rejected restricted role: %v", err)
@@ -393,6 +396,38 @@ func expectTenantRowSecurity(mock sqlmock.Sqlmock, unforced ...string) {
 		rows.AddRow(table)
 	}
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT relation.relname\n\t\tFROM pg_catalog.pg_class AS relation")).WillReturnRows(rows)
+}
+
+func expectPrincipalLookupPolicy(mock sqlmock.Sqlmock, present bool) {
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT EXISTS (\n\t\tSELECT 1 FROM pg_catalog.pg_policy AS policy")).
+		WithArgs(store.PrincipalLookupPolicyExpr).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(present))
+}
+
+// ADR-0005 §3: a database migrated before the principal_lookup policy existed
+// would make the token cross-check treat a principal bound elsewhere as
+// unbound. Serving must refuse it.
+func TestValidateRuntimeRejectsMissingPrincipalLookupPolicy(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	expectRuntimeTables(mock, RuntimeOptions{})
+	expectRuntimeVersion(mock, 1, 1, 1)
+	expectRuntimeColumns(mock)
+	expectRuntimeRole(mock, true, false, false)
+	expectTenantRowSecurity(mock)
+	expectPrincipalLookupPolicy(mock, false)
+
+	err = ValidateRuntime(context.Background(), db, RuntimeOptions{})
+	if err == nil || !strings.Contains(err.Error(), "principal_lookup") {
+		t.Fatalf("ValidateRuntime accepted a database without the principal_lookup policy, err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("runtime validation issued unexpected SQL (including DDL): %v", err)
+	}
 }
 
 // A schema migrated before HELM-755 has tenant tables without forced row

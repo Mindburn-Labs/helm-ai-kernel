@@ -67,7 +67,12 @@ func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Gra
 	if err != nil {
 		return nil, mcppkg.GovernedExecutor{}, err
 	}
-	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, githubEffects)
+	// The fence database stays open for the life of the mcp serve process.
+	fence, err := openStandaloneEmergencyStopFence(context.Background(), dataDir)
+	if err != nil {
+		return nil, mcppkg.GovernedExecutor{}, err
+	}
+	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, githubEffects, fence.guardianState(dataDir))
 }
 
 func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
@@ -80,17 +85,17 @@ func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog
 // denied, because an empty graph carries no allow rule. Pass a compiled graph
 // (see `mcp serve --policy`) to authorize the actions it declares.
 func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
-	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, nil)
+	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, nil, productionGuardianState{})
 }
 
-func newLocalMCPRuntimeWithSignerPolicyAndEffects(signer helmcrypto.Signer, policyGraph *prg.Graph, githubEffects *githubEffectsRuntime) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
+func newLocalMCPRuntimeWithSignerPolicyAndEffects(signer helmcrypto.Signer, policyGraph *prg.Graph, githubEffects *githubEffectsRuntime, state productionGuardianState) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if signer == nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp signer is required")
 	}
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
 	}
-	guard, err := newProductionGuardian(signer, policyGraph, nil, utcRuntimeClock{})
+	guard, err := newProductionGuardian(signer, policyGraph, nil, utcRuntimeClock{}, state)
 	if err != nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("initialize local MCP production Guardian: %w", err)
 	}
@@ -109,6 +114,10 @@ func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.
 func newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator mcppkg.PolicyEvaluator, githubEffects *githubEffectsRuntime) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if evaluator == nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp policy evaluator is required")
+	}
+	evaluator, err := bindEmergencyStopScope(evaluator)
+	if err != nil {
+		return nil, mcppkg.GovernedExecutor{}, err
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()

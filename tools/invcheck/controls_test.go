@@ -129,8 +129,10 @@ func TestBlockingGatesReadsProfilesAndWorkflows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(qualityGatesFile, `{"profiles":{"pr":{"gates":["a","c"]}},"gates":[{"id":"a"},{"id":"b"},{"id":"c","advisory":true}]}`)
-	write(prWorkflowFile, "on:\n  pull_request:\njobs:\n  quality:\n    steps:\n      - run: make quality-pr\n  soft:\n    continue-on-error: true\n")
+	write(qualityGatesFile, `{"profiles":{"merge":{"gates":["a","c"]}},"gates":[{"id":"a"},{"id":"b"},{"id":"c","advisory":true}]}`)
+	write("Makefile", "check:\n\t$(QUALITY) run merge\n\nother:\n\t@true\n")
+	write(prWorkflowFile, "on:\n  pull_request:\njobs:\n  quality:\n    uses: ./.github/workflows/ci-v2.yml\n  soft:\n    continue-on-error: true\n")
+	write(".github/workflows/ci-v2.yml", "on:\n  workflow_call:\njobs:\n  gate:\n    steps:\n      - run: make check\n")
 	write(".github/workflows/nightly.yml", "on:\n  schedule:\n    - cron: '0 0 * * *'\njobs:\n  night:\n    steps: []\n")
 
 	gates, err := blockingGates(root)
@@ -147,6 +149,24 @@ func TestBlockingGatesReadsProfilesAndWorkflows(t *testing.T) {
 		if !known || (why == "") != blocking {
 			t.Errorf("%s: known=%v reason=%q, want blocking=%v", gate, known, why, blocking)
 		}
+	}
+
+	// --strict turns the advisory gate in the check profile into a blocking one.
+	write("Makefile", "check:\n\t$(QUALITY) run merge --strict\n")
+	if gates, err = blockingGates(root); err != nil {
+		t.Fatal(err)
+	}
+	if why := gates["quality:c"]; why != "" {
+		t.Errorf("quality:c under a strict check profile: reason=%q, want blocking", why)
+	}
+
+	// A PR workflow that no longer reaches make check blocks nothing.
+	write(prWorkflowFile, "on:\n  pull_request:\njobs:\n  quality:\n    steps:\n      - run: make quality-pr\n")
+	if gates, err = blockingGates(root); err != nil {
+		t.Fatal(err)
+	}
+	if why := gates["quality:a"]; why == "" {
+		t.Error("quality:a must not block when the PR workflow does not run make check")
 	}
 }
 

@@ -307,10 +307,9 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 		base["records"] = aggregateActions(receipts)
 	case "approvals":
 		base["status"] = "not_configured"
-		base["source"] = "/api/v1/kernel/approve"
+		base["source"] = "/api/v1/approvals"
 		base["summary"] = map[string]any{
-			"pending": 0,
-			"reason":  "approval submission is wired; pending approval queue persistence is not configured in this runtime",
+			"reason": "this surface does not read the approval ceremony store; list ceremonies through GET /api/v1/approvals",
 		}
 		base["records"] = []any{}
 	case "policies":

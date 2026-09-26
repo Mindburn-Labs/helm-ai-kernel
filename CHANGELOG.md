@@ -112,6 +112,27 @@ Breaking for fenced deployments and for `serve --data-dir`.
     decided for the configured scope. Tenant and workspace names in tool
     arguments no longer reach the fence check.
 
+### Removed — the budget status route and `budget verify`; kernel approve retired to 501 (HELM-780)
+
+Breaking.
+
+- **`GET /api/v1/budget/status` is removed.** It answered a constant
+  `enforcer: postgres, status: active`, but no shipped binary wires a budget
+  tracker into the Guardian. The route was an implementation route, not part
+  of the public OpenAPI contract.
+- **`helm-ai-kernel budget verify` is removed.** It printed a constant
+  `Budget verification: PASS` without checking anything. `budget list` and
+  `budget set` are unchanged; the ceilings they record are not enforced.
+- **`POST /api/v1/kernel/approve` always answers 501.** Nothing registered a
+  pending approval, so every well-formed submission answered 404 and no
+  approval could succeed.
+  - The operation stays in the OpenAPI contract, marked deprecated, and will be
+    removed in a later release together with the SDK `ApproveIntent` methods.
+  - Use the approval ceremony operations under `/api/v1/approvals`.
+  - `HELM_APPROVER_PUBLIC_KEYS` is no longer read.
+  - `ApproveHandler` in `core/pkg/api` and the approval receipt types in
+    `core/pkg/contracts` are removed.
+
 ### Changed — MCP gateway receipts in the configured tenant (HELM-780)
 
 Breaking for MCP clients that send tenant or principal headers.

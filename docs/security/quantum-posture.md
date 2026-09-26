@@ -58,17 +58,16 @@ until an ML-DSA/PQ-backed provider exists and is verified.
 
 ## Operator Approvals
 
-Enterprise operator approvals are profile-aware. Classical approvals verify an
-Ed25519 public key and signature. Hybrid approvals verify an enrolled
-`hybrid:<ed25519_hex>:<mldsa65_hex>` public-key envelope and require both the
-Ed25519 and ML-DSA-65 signatures to verify. Hybrid-required policy rejects an
-Ed25519-only receipt, rejects missing downgrade rejection, and treats the
-enrolled `public_key` envelope as the authority instead of trusting a supplied
-`public_key_set`.
+The kernel verified operator approval signatures on
+`POST /api/v1/kernel/approve`: classical Ed25519, or a hybrid
+`hybrid:<ed25519_hex>:<mldsa65_hex>` envelope whose Ed25519 and ML-DSA-65
+signatures both had to verify. No runtime path ever registered a pending
+approval, so that route could never approve anything. HELM-780 retired it: it
+answers 501, and its verifier is deleted.
 
-That makes operator approval verification hybrid-capable when the enrolled
-operator key and receipt are hybrid. It does not make existing Ed25519 operator
-keys post-quantum, and PQ-only operator approval policy is still unsupported.
+The kernel therefore has no hybrid operator approval path today, and approval
+ceremonies under `/api/v1/approvals` make no post-quantum claim. Do not
+describe kernel operator approvals as hybrid-capable.
 
 ## Console Receipt Display
 

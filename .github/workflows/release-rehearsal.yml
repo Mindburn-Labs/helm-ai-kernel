@@ -1,0 +1,77 @@
+name: Release Rehearsal
+
+# HELM-745: rehearse the next release against main before anyone tags it.
+# scripts/release/rehearse.py works out the version the next tag would carry
+# and checks the pre-publish preconditions of release.yml: the contract gates
+# against the last tag, the contracts-catalog spec, the Console sidecar pin
+# and tag, version lockstep, registry and trusted-publisher readiness, the
+# production chart render, deployment environments, and the presence of every
+# repository secret and variable release.yml reads. Advisory: it is not a
+# required check, and it fails only on a defect that would block any version.
+
+on:
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  rehearse:
+    name: Rehearse the next release
+    if: github.repository == 'Mindburn-Labs/helm-ai-kernel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 0
+      - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
+        with:
+          github_token: ${{ github.token }}
+      - name: Install oasdiff (same pin as release.yml)
+        run: |
+          set -euo pipefail
+          ver=1.23.0
+          tmp="$(mktemp -d)"
+          archive="$tmp/oasdiff_${ver}_linux_amd64.tar.gz"
+          sha256='972b10535c3db4366b9dc3ebc11ca021279af3095267c3cffdca854a3a3c4f89'
+          curl -fsSL -o "$archive" "https://github.com/oasdiff/oasdiff/releases/download/v${ver}/oasdiff_${ver}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict -
+          tar -xzf "$archive" -C "$tmp"
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$tmp/oasdiff" "$HOME/.local/bin/oasdiff"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4.3.1
+        with:
+          version: v3.15.4
+      - name: Rehearse the next release
+        env:
+          # The release preflight's own contents:read token; the rehearsal
+          # sends it only to api.github.com to read contracts-catalog.
+          DOWNSTREAM_FANOUT_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          KUBE_HELM_CMD: helm
+          # Presence booleans only: no other secret value enters this job.
+          REHEARSAL_HAS_CONSOLE_BUNDLE_TOKEN: ${{ secrets.CONSOLE_BUNDLE_TOKEN != '' }}
+          REHEARSAL_HAS_DOWNSTREAM_FANOUT_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN != '' }}
+          REHEARSAL_HAS_HELM_EVIDENCE_KMS_KEY_ID: ${{ secrets.HELM_EVIDENCE_KMS_KEY_ID != '' }}
+          REHEARSAL_HAS_HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX: ${{ secrets.HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX != '' }}
+          REHEARSAL_HAS_HELM_EVIDENCE_KMS_SIGN_COMMAND: ${{ secrets.HELM_EVIDENCE_KMS_SIGN_COMMAND != '' }}
+          REHEARSAL_HAS_HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND: ${{ secrets.HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND != '' }}
+          REHEARSAL_HAS_HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
+          REHEARSAL_HAS_HELM_RELEASE_EVIDENCE_PROFILE: ${{ vars.HELM_RELEASE_EVIDENCE_PROFILE != '' }}
+          REHEARSAL_HAS_HELM_RELEASE_EVIDENCE_ANCHOR_TYPE: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_TYPE != '' }}
+          REHEARSAL_HAS_HELM_RELEASE_EVIDENCE_ANCHOR_URI: ${{ vars.HELM_RELEASE_EVIDENCE_ANCHOR_URI != '' }}
+          REHEARSAL_HAS_HELM_RELEASE_EVIDENCE_STORAGE_URI: ${{ vars.HELM_RELEASE_EVIDENCE_STORAGE_URI != '' }}
+        run: |
+          set -o pipefail
+          make --silent release-rehearsal | tee -a "$GITHUB_STEP_SUMMARY"

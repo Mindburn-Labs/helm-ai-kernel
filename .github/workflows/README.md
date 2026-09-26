@@ -82,6 +82,14 @@ surface for the `helm-ai-kernel` project.
   `https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v<version>`.
   SLSA provenance is generated only by this tag run; there is no manual
   workflow that re-attests assets already attached to a release.
+- `release-rehearsal.yml` runs `make release-rehearsal` on `main` daily and
+  on demand, and writes its table to the run summary: the version the next
+  tag would carry, checked against the pre-publish preconditions of
+  `release.yml`. It is advisory and not a required check. It holds
+  `contents: read`, passes `DOWNSTREAM_FANOUT_TOKEN` only to read
+  `contracts-catalog`, and reports every other secret and variable
+  `release.yml` reads as a presence boolean (`secrets.<NAME> != ''`), so no
+  other secret value enters the job.
 - `scorecard.yml` carries only the trusted `main` and scheduled runs that
   publish Scorecard SARIF through OIDC and code-scanning authority. The
   OpenSSF results webapp rejects a publishing workflow that defines any other

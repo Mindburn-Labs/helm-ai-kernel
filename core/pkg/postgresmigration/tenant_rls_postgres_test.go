@@ -155,6 +155,9 @@ func TestPrincipalLookupExceptionIsExact(t *testing.T) {
 	for _, variant := range []struct{ name, ddl string }{
 		{"widened predicate", `CREATE POLICY principal_lookup ON principal_bindings FOR SELECT USING (true OR current_setting('app.current_principal', true) IS NULL)`},
 		{"all commands", `CREATE POLICY principal_lookup ON principal_bindings USING (principal_id = current_setting('app.current_principal', true))`},
+		// Restrictive, it would be ANDed with the tenant policy and hide the
+		// other tenants' bindings the lookup exists to find.
+		{"restrictive", `CREATE POLICY principal_lookup ON principal_bindings AS RESTRICTIVE FOR SELECT USING (principal_id = current_setting('app.current_principal', true))`},
 		// A SELECT policy cannot carry WITH CHECK; an ALL policy with one is the write-capable variant.
 		{"with a write check", `CREATE POLICY principal_lookup ON principal_bindings USING (principal_id = current_setting('app.current_principal', true)) WITH CHECK (true)`},
 	} {
@@ -170,6 +173,13 @@ func TestPrincipalLookupExceptionIsExact(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("policy dropped", false, false)
+	// The exception is an extra: without the tenant policy beside it the table
+	// is not isolated by tenant.
+	if _, err := db.ExecContext(ctx, `DROP POLICY tenant_isolation ON principal_bindings;
+		CREATE POLICY principal_lookup ON principal_bindings FOR SELECT USING (principal_id = current_setting('app.current_principal', true))`); err != nil {
+		t.Fatal(err)
+	}
+	check("tenant policy dropped", true, true)
 }
 
 // Negative controls (ADR-0004 B-I9): each way of weakening a tenant table is
@@ -177,8 +187,19 @@ func TestPrincipalLookupExceptionIsExact(t *testing.T) {
 func TestTenantRowSecurityCheckDetectsWeakenedTables(t *testing.T) {
 	db, _, _ := postgresTestDB(t)
 	ctx := context.Background()
-	if _, err := db.Exec(`CREATE TABLE probe_rows (tenant_id TEXT NOT NULL, value TEXT)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE probe_rows (tenant_id TEXT NOT NULL, workspace_id TEXT, scope_kind TEXT, value TEXT)`); err != nil {
 		t.Fatal(err)
+	}
+	flagged := func(name string) bool {
+		t.Helper()
+		unforced, err := TenantTablesWithoutForcedRowSecurity(ctx, db)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(unforced) > 1 || (len(unforced) == 1 && unforced[0] != "probe_rows") {
+			t.Fatalf("%s: unexpected tables flagged: %v", name, unforced)
+		}
+		return len(unforced) == 1
 	}
 	for _, step := range []struct {
 		name, ddl string
@@ -198,27 +219,76 @@ func TestTenantRowSecurityCheckDetectsWeakenedTables(t *testing.T) {
 		if _, err := db.Exec(step.ddl); err != nil {
 			t.Fatalf("%s: %v", step.name, err)
 		}
-		unforced, err := TenantTablesWithoutForcedRowSecurity(ctx, db)
-		if err != nil {
-			t.Fatal(err)
+		if got := flagged(step.name); got != step.flagged {
+			t.Fatalf("%s: flagged=%v, want %v", step.name, got, step.flagged)
 		}
-		if flagged := strings.Join(unforced, ",") == "probe_rows"; flagged != step.flagged {
-			t.Fatalf("%s: flagged=%v (%v), want %v", step.name, flagged, unforced, step.flagged)
+	}
+
+	// Each variant starts from the exact tenant policy alone. Every weakened
+	// one mentions app.current_tenant or tenant_id, so only an exact match of
+	// the deparsed predicates, command, permissiveness and roles catches it.
+	tenant := store.TenantRowSecurityPolicy
+	scope := tenant + ` AND workspace_id = current_setting('app.current_workspace', true)`
+	release := `scope_kind = 'global' OR (scope_kind = 'tenant_workspace' AND ` + scope + `)`
+	const replace = `DROP POLICY tenant_isolation ON probe_rows; `
+	reset := `DO $$ DECLARE name text; BEGIN
+			FOR name IN SELECT polname FROM pg_catalog.pg_policy WHERE polrelid = 'probe_rows'::regclass LOOP
+				EXECUTE format('DROP POLICY %I ON probe_rows', name);
+			END LOOP;
+		END $$;
+		ALTER TABLE probe_rows ENABLE ROW LEVEL SECURITY;
+		ALTER TABLE probe_rows FORCE ROW LEVEL SECURITY;
+		CREATE POLICY tenant_isolation ON probe_rows USING (` + tenant + `) WITH CHECK (` + tenant + `)`
+	for _, variant := range []struct {
+		name, ddl string
+		flagged   bool
+	}{
+		{name: "exact tenant policy", ddl: `SELECT 1`, flagged: false},
+		{name: "exact tenant and workspace policy", ddl: replace + `CREATE POLICY scope_isolation ON probe_rows USING (` + scope + `) WITH CHECK (` + scope + `)`, flagged: false},
+		{name: "exact policy, row security not forced", ddl: `ALTER TABLE probe_rows NO FORCE ROW LEVEL SECURITY`, flagged: true},
+		{name: "exact policy, row security disabled", ddl: `ALTER TABLE probe_rows DISABLE ROW LEVEL SECURITY`, flagged: true},
+		{name: "widened with OR true", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows USING (true OR current_setting('app.current_tenant', true) IS NULL) WITH CHECK (true OR current_setting('app.current_tenant', true) IS NULL)`, flagged: true},
+		{name: "widened write check", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows USING (` + tenant + `) WITH CHECK (true OR current_setting('app.current_tenant', true) IS NULL)`, flagged: true},
+		{name: "extra permissive policy that mentions the setting", ddl: `CREATE POLICY tenant_or_unset ON probe_rows USING (current_setting('app.current_tenant', true) IS NOT NULL)`, flagged: true},
+		// Permissive WITH CHECKs are ORed: this one lets any tenant write any row.
+		{name: "extra policy with only a write check", ddl: `CREATE POLICY loose_all_write ON probe_rows WITH CHECK (true)`, flagged: true},
+		{name: "USING without WITH CHECK", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows USING (` + tenant + `)`, flagged: true},
+		{name: "SELECT-only tenant policy", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows FOR SELECT USING (` + tenant + `)`, flagged: true},
+		{name: "UPDATE-only tenant policy", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows FOR UPDATE USING (` + tenant + `) WITH CHECK (` + tenant + `)`, flagged: true},
+		{name: "a different setting name", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows USING (tenant_id = current_setting('app.current_tenant_id', true)) WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true))`, flagged: true},
+		{name: "restrictive tenant policy", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows AS RESTRICTIVE USING (` + tenant + `) WITH CHECK (` + tenant + `)`, flagged: true},
+		{name: "tenant policy for one role", ddl: replace + `CREATE POLICY tenant_isolation ON probe_rows TO CURRENT_USER USING (` + tenant + `) WITH CHECK (` + tenant + `)`, flagged: true},
+		// connector_release_authorities admits global rows to every tenant;
+		// that exception is for its own table and policy only.
+		{name: "release-authority predicate on another table", ddl: replace + `CREATE POLICY connector_release_authorities_scope_isolation ON probe_rows USING (` + release + `) WITH CHECK (` + release + `)`, flagged: true},
+	} {
+		if _, err := db.Exec(reset); err != nil {
+			t.Fatalf("reset before %s: %v", variant.name, err)
+		}
+		if flagged("reset before " + variant.name) {
+			t.Fatalf("the exact tenant policy is flagged before %s", variant.name)
+		}
+		if _, err := db.Exec(variant.ddl); err != nil {
+			t.Fatalf("%s: %v", variant.name, err)
+		}
+		if got := flagged(variant.name); got != variant.flagged {
+			t.Fatalf("%s: flagged=%v, want %v", variant.name, got, variant.flagged)
 		}
 	}
 }
 
-// restrictedRuntimeDB opens schema as a login that is no superuser, has no
-// BYPASSRLS and does not own the tables: the way a serving kernel connects.
-func restrictedRuntimeDB(ctx context.Context, t *testing.T, db *sql.DB, base, schema string) *sql.DB {
+// restrictedRuntimeDB connects as a new login role that is no superuser, has
+// no BYPASSRLS and owns nothing: it holds USAGE on the schema and grant, a
+// GRANT statement with %s for the role.
+func restrictedRuntimeDB(t *testing.T, db *sql.DB, base, schema, grant string) *sql.DB {
 	t.Helper()
 	role := schema + "_runtime"
 	for _, statement := range []string{
 		`CREATE ROLE ` + role + ` LOGIN PASSWORD 'rls-probe' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`,
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
-		`GRANT SELECT, INSERT, UPDATE ON principal_bindings, registry_installations, obligations TO ` + role,
+		fmt.Sprintf(grant, role),
 	} {
-		if _, err := db.ExecContext(ctx, statement); err != nil {
+		if _, err := db.Exec(statement); err != nil {
 			t.Fatalf("%s: %v", statement, err)
 		}
 	}
@@ -236,10 +306,35 @@ func restrictedRuntimeDB(ctx context.Context, t *testing.T, db *sql.DB, base, sc
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Registered after the role cleanup, so it runs first: the role cannot be
-	// dropped while this pool holds connections.
 	t.Cleanup(func() { _ = runtime.Close() })
 	return runtime
+}
+
+// A production database whose tenant policy was widened after the migration
+// must not start serving: ValidateRuntime runs the exact check as the runtime
+// role and names the table.
+func TestValidateRuntimeRefusesAWidenedTenantPolicy(t *testing.T) {
+	db, base, schema := postgresTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	runtime := restrictedRuntimeDB(t, db, base, schema, `GRANT SELECT ON ALL TABLES IN SCHEMA `+schema+` TO %s`)
+	options := RuntimeOptions{EmergencyStops: true, ApprovalConsumption: true, GeneratedSpecApproval: true, ReleaseAuthority: true}
+	if err := ValidateRuntime(ctx, runtime, options); err != nil {
+		t.Fatalf("ValidateRuntime refused the migrated database: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `DROP POLICY tenant_isolation ON obligations;
+		CREATE POLICY tenant_isolation ON obligations
+			USING (true OR current_setting('app.current_tenant', true) IS NULL)
+			WITH CHECK (`+store.TenantRowSecurityPolicy+`)`); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateRuntime(ctx, runtime, options)
+	if err == nil || !strings.Contains(err.Error(), "[obligations]") {
+		t.Fatalf("ValidateRuntime accepted a widened tenant policy on obligations: err=%v", err)
+	}
 }
 
 // B-I5: a restricted role (no superuser, no BYPASSRLS, not the owner) reads and
@@ -251,7 +346,7 @@ func TestTenantRowSecurityIsolatesTenantsForARestrictedRole(t *testing.T) {
 	if err := Migrate(ctx, db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	runtime := restrictedRuntimeDB(ctx, t, db, base, schema)
+	runtime := restrictedRuntimeDB(t, db, base, schema, `GRANT SELECT, INSERT, UPDATE ON principal_bindings, registry_installations, obligations TO %s`)
 
 	bindings, err := store.NewPostgresPrincipalBindingStore(runtime)
 	if err != nil {

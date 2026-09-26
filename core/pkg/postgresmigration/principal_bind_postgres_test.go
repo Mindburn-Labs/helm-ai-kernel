@@ -22,7 +22,7 @@ func TestPostgresPrincipalBindRefusesConcurrentCrossTenantBinds(t *testing.T) {
 	if err := Migrate(ctx, db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	runtime := restrictedRuntimeDB(ctx, t, db, base, schema)
+	runtime := restrictedRuntimeDB(t, db, base, schema, `GRANT SELECT, INSERT ON principal_bindings TO %s`)
 	const tenants = 16
 	runtime.SetMaxOpenConns(tenants)
 	bindings, err := store.NewPostgresPrincipalBindingStore(runtime)

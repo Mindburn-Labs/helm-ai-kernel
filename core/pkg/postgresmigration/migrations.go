@@ -363,11 +363,41 @@ const principalLookupPolicyMatch = `relation.relname = 'principal_bindings'
 		AND policy.polwithcheck IS NULL
 		AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) = $1`
 
+// The deparsed predicates a tenant policy may carry besides
+// store.TenantRowSecurityPolicyExpr, for TEXT columns. The scope policies of
+// the emergency-stop, approval-ceremony and generated-spec stores add the
+// workspace; connector_release_authorities also admits its global rows.
+// They are literals because ValidateRuntime is SELECT-only and cannot derive
+// them by creating a policy; the Postgres catalog test derives them from the
+// real migration on every run, so a Postgres release that deparses them
+// differently fails that proof, and serving fails closed.
+const (
+	tenantWorkspacePolicyExpr  = "((tenant_id = current_setting('app.current_tenant'::text, true)) AND (workspace_id = current_setting('app.current_workspace'::text, true)))"
+	releaseAuthorityPolicyExpr = "((scope_kind = 'global'::text) OR ((scope_kind = 'tenant_workspace'::text) AND (tenant_id = current_setting('app.current_tenant'::text, true)) AND (workspace_id = current_setting('app.current_workspace'::text, true))))"
+)
+
+// tenantPolicyMatch selects a policy that isolates its table by tenant exactly
+// as the kernel migrations install it: for all commands, permissive, for
+// PUBLIC, with a WITH CHECK identical to its USING, and that predicate
+// store.TenantRowSecurityPolicyExpr ($2) or tenantWorkspacePolicyExpr ($3) on
+// any tenant table, or releaseAuthorityPolicyExpr ($4) on
+// connector_release_authorities. It is NULL for a policy without USING or
+// WITH CHECK, which the caller must treat as no match. The policy name is not
+// matched: it does not change what a policy admits, and the stores name theirs
+// differently.
+const tenantPolicyMatch = `policy.polcmd = '*'
+		AND policy.polpermissive
+		AND policy.polroles = '{0}'
+		AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) = pg_catalog.pg_get_expr(policy.polqual, policy.polrelid)
+		AND (pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) IN ($2, $3)
+		     OR (relation.relname = 'connector_release_authorities'
+		         AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) = $4))`
+
 // TenantTablesWithoutForcedRowSecurity lists the tables in the current schema
 // that have a tenant_id column but are not isolated by it: row security not
-// enabled, not forced, no policy, or a policy whose USING or WITH CHECK does
-// not test app.current_tenant (a permissive policy would undo the others).
-// principal_bindings' principal_lookup policy is the single named exception,
+// enabled or not forced, no exact tenant policy (tenantPolicyMatch), or any
+// other policy at all, since a permissive one would widen the tenant policy.
+// principal_bindings' principal_lookup policy is the single allowed extra,
 // matched exactly (principalLookupPolicyMatch).
 // Serving refuses to start on a non-empty result, and the Postgres catalog
 // test asserts it is empty after a full migration (ADR-0004 B-I3).
@@ -382,22 +412,19 @@ func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]st
 		  AND NOT (
 		      relation.relrowsecurity
 		      AND relation.relforcerowsecurity
-		      AND EXISTS (SELECT 1 FROM pg_catalog.pg_policy AS policy WHERE policy.polrelid = relation.oid)
+		      AND EXISTS (
+		          SELECT 1 FROM pg_catalog.pg_policy AS policy
+		          WHERE policy.polrelid = relation.oid AND `+tenantPolicyMatch+`
+		      )
 		      AND NOT EXISTS (
 		          SELECT 1 FROM pg_catalog.pg_policy AS policy
 		          WHERE policy.polrelid = relation.oid
-		            -- The one allowed exception: principal_bindings' permissive,
-		            -- SELECT-only principal_lookup policy for PUBLIC, with exactly
-		            -- the installed predicate and no WITH CHECK.
-		            AND NOT (`+principalLookupPolicyMatch+`)
-		            AND (
-		                COALESCE(pg_catalog.pg_get_expr(policy.polqual, policy.polrelid), '') NOT LIKE '%app.current_tenant%'
-		                OR (policy.polwithcheck IS NOT NULL
-		                    AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) NOT LIKE '%app.current_tenant%')
-		            )
+		            -- A match that is NULL (no USING or no WITH CHECK) is none.
+		            AND NOT COALESCE((`+tenantPolicyMatch+`) OR (`+principalLookupPolicyMatch+`), false)
 		      )
 		  )
-		ORDER BY relation.relname`, store.PrincipalLookupPolicyExpr)
+		ORDER BY relation.relname`,
+		store.PrincipalLookupPolicyExpr, store.TenantRowSecurityPolicyExpr, tenantWorkspacePolicyExpr, releaseAuthorityPolicyExpr)
 	if err != nil {
 		return nil, fmt.Errorf("inspect kernel postgres row security: %w", err)
 	}

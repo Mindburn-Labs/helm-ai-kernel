@@ -77,7 +77,7 @@ option go_package = "helm.mindburn.run/gateway/v1;gatewayv1";
 //     such stop in its tenant. An object of another tenant or workspace is
 //     indistinguishable from a missing one.
 //   - already_exists: Propose, Stop or Lift reused an idempotency key with a
-//     different request [reason_code_pending: IDEMPOTENCY_CONFLICT].
+//     different request [reason_code: IDEMPOTENCY_CONFLICT].
 //   - failed_precondition: the operation does not apply to the attempt's
 //     current state, or an approval digest does not match the attempt.
 //   - unavailable, aborted: transient; ErrorDetail.retryable is true and the
@@ -104,16 +104,16 @@ service EffectGatewayService {
   //     ADMITTED, DISPATCHING) or UNKNOWN. existing is true. Counters are not
   //     touched and no second dispatch can follow.
   //   - Same key, different digest: already_exists
-  //     [reason_code_pending: IDEMPOTENCY_CONFLICT].
+  //     [reason_code: IDEMPOTENCY_CONFLICT].
   //
   // Denial reasons, in decide's order (ADR-0001 §1 step 5):
   // [reason_code: EMERGENCY_STOP_FENCED],
-  // [reason_code_pending: PRINCIPAL_INACTIVE],
-  // [reason_code_pending: MANDATE_INACTIVE],
-  // [reason_code_pending: MANDATE_OUTSIDE_VALIDITY],
-  // [reason_code_pending: EFFECT_OUT_OF_SCOPE],
-  // [reason_code_pending: PER_CALL_LIMIT],
-  // [reason_code_pending: ARITHMETIC_OVERFLOW],
+  // [reason_code: PRINCIPAL_INACTIVE],
+  // [reason_code: MANDATE_INACTIVE],
+  // [reason_code: MANDATE_OUTSIDE_VALIDITY],
+  // [reason_code: EFFECT_OUT_OF_SCOPE],
+  // [reason_code: PER_CALL_LIMIT],
+  // [reason_code: ARITHMETIC_OVERFLOW],
   // [reason_code: BUDGET_EXCEEDED],
   // [reason_code_pending: INSUFFICIENT_CREDIT],
   // [reason_code_pending: ROUTE_UNPRICED]. Escalation:

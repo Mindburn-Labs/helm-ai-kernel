@@ -19,6 +19,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/api"
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth/jwks"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
@@ -30,16 +31,16 @@ import (
 // from the token's claims and nothing else. With HELM_CP_IDENTITY_* unset the
 // token path is off and every request takes the legacy path unchanged.
 const (
-	cpIdentityJWKSURLEnv    = "HELM_CP_IDENTITY_JWKS_URL"
-	cpIdentityIssuerEnv     = "HELM_CP_IDENTITY_ISSUER"
-	cpIdentityAudienceEnv   = "HELM_CP_IDENTITY_AUDIENCE"
-	cpIdentityActorEnv      = "HELM_CP_IDENTITY_ACTOR"
-	cpIdentityMaxTTLEnv     = "HELM_CP_IDENTITY_MAX_TTL"
-	cpIdentityRequireCNFEnv = "HELM_CP_IDENTITY_REQUIRE_CNF"
-	cpIdentityCAFileEnv     = "HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE"
+	cpIdentityJWKSURLEnv    = jwks.EnvCPIdentityJWKSURL
+	cpIdentityIssuerEnv     = jwks.EnvCPIdentityIssuer
+	cpIdentityAudienceEnv   = jwks.EnvCPIdentityAudience
+	cpIdentityActorEnv      = jwks.EnvCPIdentityActor
+	cpIdentityMaxTTLEnv     = jwks.EnvCPIdentityMaxTTL
+	cpIdentityRequireCNFEnv = jwks.EnvCPIdentityRequireCNF
+	cpIdentityCAFileEnv     = jwks.EnvCPIdentityCAFile
 
-	cpIdentityMaxTTLCeiling = 300 * time.Second
-	cpIdentityClockSkew     = 30 * time.Second
+	cpIdentityMaxTTLCeiling = jwks.CPIdentityMaxTTLCeiling
+	cpIdentityClockSkew     = jwks.CPIdentityClockSkew
 
 	cpScopeEvaluate            = "helm.evaluate"
 	cpScopeOrganizationRuntime = "helm.organization_runtime.evaluate"
@@ -62,51 +63,16 @@ type controlPlaneIdentity struct {
 
 // newControlPlaneIdentityFromEnv returns nil when no HELM_CP_IDENTITY_* value
 // is set. A partial configuration is a startup error, not a silently
-// disabled check.
+// disabled check. The kernel requires act.sub to name the configured actor.
 func newControlPlaneIdentityFromEnv() (*controlPlaneIdentity, error) {
-	values := map[string]string{}
-	for _, name := range []string{cpIdentityJWKSURLEnv, cpIdentityIssuerEnv, cpIdentityAudienceEnv, cpIdentityActorEnv} {
-		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-			values[name] = value
-		}
+	identity, err := jwks.ControlPlaneIdentityFromEnv(os.Getenv)
+	if err != nil || identity == nil {
+		return nil, err
 	}
-	if len(values) == 0 {
-		return nil, nil
-	}
-	if len(values) != 4 {
-		return nil, fmt.Errorf("%s, %s, %s and %s must be set together", cpIdentityJWKSURLEnv, cpIdentityIssuerEnv, cpIdentityAudienceEnv, cpIdentityActorEnv)
-	}
-	maxTTL := cpIdentityMaxTTLCeiling
-	if raw := strings.TrimSpace(os.Getenv(cpIdentityMaxTTLEnv)); raw != "" {
-		parsed, err := time.ParseDuration(raw)
-		if err != nil || parsed <= 0 || parsed > cpIdentityMaxTTLCeiling {
-			return nil, fmt.Errorf("%s must be a duration in (0, %s]", cpIdentityMaxTTLEnv, cpIdentityMaxTTLCeiling)
-		}
-		maxTTL = parsed
-	}
-	client, err := newGeneratedSpecApprovalOutboundClient(strings.TrimSpace(os.Getenv(cpIdentityCAFileEnv)))
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", cpIdentityCAFileEnv, err)
-	}
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
-	}
-	// The key set is fetched from exactly the configured URL: a redirect would
-	// let whoever controls it choose the keys.
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &controlPlaneIdentity{
-		issuer: values[cpIdentityIssuerEnv],
-		validator: mcppkg.NewJWKSValidator(mcppkg.JWKSConfig{
-			JWKSURL:       values[cpIdentityJWKSURLEnv],
-			Issuer:        values[cpIdentityIssuerEnv],
-			Audience:      values[cpIdentityAudienceEnv],
-			RequiredActor: values[cpIdentityActorEnv],
-			Algorithms:    []string{"RS256"},
-			MaxTokenTTL:   maxTTL,
-			Leeway:        cpIdentityClockSkew,
-			HTTPClient:    client,
-		}),
-		requireCNF: envBool(cpIdentityRequireCNFEnv),
+		issuer:     identity.Issuer,
+		validator:  identity.Validator(true),
+		requireCNF: identity.RequireCNF,
 	}, nil
 }
 

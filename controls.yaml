@@ -1184,13 +1184,15 @@ controls:
       - "quality:control-registry"
       - "quality:tcb-imports"
       - "quality:boundary-manifest"
+      - "quality:postgres-proofs"
       - "workflow:.github/workflows/ci.yml#ci"
     config: []
     protected_operations:
-      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck) and the boundary manifest (make verify-boundary), plus the CONCEPT-CHANGE marker check, all inside the required `ci / gate` job (`make check`, CI v2)."
+      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck), the boundary manifest (make verify-boundary) and the Postgres-gated proofs (make postgres-proofs), plus the CONCEPT-CHANGE marker check, all inside the required `ci / gate` job (`make check`, CI v2)."
     bypass_assumptions:
       - "Branch protection decides which checks are required; this entry proves the gates run and block in CI, not that the repository settings require them."
       - "make test-boundary (the boundary gate's own regression suite) runs in the kernel job and is shell, so no Go test here names it."
+      - "The postgres-proofs gate's positive controls (no database, an unlisted gated test) are shell in scripts/ci/postgres_proofs_gate.sh and run before every proof run; scripts/ci/check_postgres_proofs_test.py (gate-self-tests) covers the manifest checker, so no Go test here names them."
     tests:
       allowed:
         - "tools/invcheck.TestConceptGatePassesAMarkedInvariantEdit"

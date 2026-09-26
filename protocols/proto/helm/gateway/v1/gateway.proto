@@ -839,8 +839,8 @@ enum SettlementState {
 // Observation is one read of an effect's outcome. Observations carry
 // source, freshness and trust class (§3).
 //
-// Field numbers 7 to 15 are held for typed, bounded result payloads (for
-// example a pull request URL and merge commit), in a slice after s1.
+// result carries the typed, bounded result of the effect types that define
+// one (HELM-753). Field numbers 9 to 15 stay held for later result types.
 message Observation {
   // Where it came from, for example the provider's response or an adapter
   // read-back operation.
@@ -858,6 +858,56 @@ message Observation {
   // helm.gateway.read. The log carries only the reference (R13). Empty when
   // the adapter returns no result.
   string result_ref = 6;
+  // The typed result, set only on a read-back that establishes the outcome.
+  // Its effect type fixes which member may be set; any other is a contract
+  // violation. Clients read these fields, never the provider's raw bytes.
+  oneof result {
+    // github.pull_request.create_draft.
+    GitHubPullRequestResult github_pull_request = 7;
+    // github.branch.create_from_changes.
+    GitHubBranchResult github_branch = 8;
+  }
+}
+
+// GitHubPullRequestResult is a pull request as the adapter read it back
+// (HELM-753). OBSERVED(SUCCEEDED) requires draft = true, head_sha equal to
+// the proposed head_sha, base_ref equal to the proposed base and the proposed
+// title; any other read-back is FAILED with READBACK_MISMATCH, and this
+// result still records what was found.
+message GitHubPullRequestResult {
+  // https://github.com/{owner}/{repo}/pull/{number}.
+  string url = 1;
+  int64 number = 2;
+  // GitHub's global node ID.
+  string node_id = 3;
+  // The head branch name.
+  string head_ref = 4;
+  // The head commit, 40 lowercase hex characters, as read back.
+  string head_sha = 5;
+  // The base branch name.
+  string base_ref = 6;
+  bool draft = 7;
+  // "open" or "closed".
+  string state = 8;
+}
+
+// GitHubBranchResult is a branch as the adapter read it back (HELM-753).
+// OBSERVED(SUCCEEDED) requires all of: refs/heads/{head} points at
+// commit_sha; that commit's parents are exactly [base_sha]; the comparison
+// base_sha...commit_sha lists exactly the proposed paths; and each blob's
+// git SHA-1 equals the one the gateway computes from the proposed content.
+// The result is therefore an attested statement that commit_sha is base_sha
+// plus exactly the proposed files.
+message GitHubBranchResult {
+  // refs/heads/{head}.
+  string ref = 1;
+  // 40 lowercase hex characters.
+  string commit_sha = 2;
+  // 40 lowercase hex characters; equals the proposed base_sha.
+  string base_sha = 3;
+  // SHA-256, 32 bytes, over the files sorted by path, each encoded as
+  // path, 0x00, mode, 0x00, blob SHA-1 in lowercase hex, 0x0A.
+  bytes files_digest = 4;
 }
 
 // Stop is one stop control row (§4.1 item 6).

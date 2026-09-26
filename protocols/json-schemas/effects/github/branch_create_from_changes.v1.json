@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/github/branch_create_from_changes.v1.json",
+  "title": "github.branch.create_from_changes v1 arguments",
+  "description": "EffectDescriptor.arguments for effect_type github.branch.create_from_changes (HELM-753). The target is github.com/{owner}/{repo}; the repository comes only from the target, never from these arguments. The adapter creates the blobs, the tree, a commit whose only parent is base_sha, and then refs/heads/{head}, which must not exist yet. The gateway digests the exact argument bytes, so a client sends the bytes it later shows. Rules JSON Schema cannot express, and the gateway enforces before admission: no duplicate object keys; UTF-8 only; the whole document is at most 65536 bytes; paths are NFC, unique, and contain no empty, '.' or '..' segment; head passes git check-ref-format, starts with the mandate's branch prefix and is not the repository's default branch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "base", "base_sha", "head", "message", "files"],
+  "properties": {
+    "schema": { "const": "helm.github.branch.create_from_changes.v1" },
+    "base": {
+      "description": "The branch the change is based on, for display; base_sha is what binds.",
+      "type": "string", "minLength": 1, "maxLength": 200
+    },
+    "base_sha": {
+      "description": "The only parent of the new commit.",
+      "type": "string", "pattern": "^[0-9a-f]{40}$"
+    },
+    "head": {
+      "description": "The branch to create. It must not exist.",
+      "type": "string", "minLength": 1, "maxLength": 200,
+      "pattern": "^[A-Za-z0-9._/-]+$",
+      "not": { "pattern": "^refs/" }
+    },
+    "message": {
+      "description": "The commit message.",
+      "type": "string", "minLength": 1, "maxLength": 1000
+    },
+    "files": {
+      "description": "Files added or replaced relative to base_sha. v1 has no deletes, symlinks, submodules or binary content.",
+      "type": "array", "minItems": 1, "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "mode", "content_utf8"],
+        "properties": {
+          "path": {
+            "type": "string", "minLength": 1, "maxLength": 255,
+            "not": {
+              "anyOf": [
+                { "pattern": "^/" },
+                { "pattern": "(^|/)\\.\\.?(/|$)" },
+                { "pattern": "//" },
+                { "pattern": "/$" },
+                { "pattern": "^\\.git(/|$)" },
+                { "pattern": "^\\.github/workflows(/|$)" },
+                { "pattern": "[\\u0000-\\u001f\\\\]" }
+              ]
+            }
+          },
+          "mode": { "enum": ["100644", "100755"] },
+          "content_utf8": {
+            "description": "The file content. At most 49152 characters here; the gateway also caps it at 49152 bytes.",
+            "type": "string", "maxLength": 49152
+          }
+        }
+      }
+    }
+  },
+  "x-helm": {
+    "effect_type": "github.branch.create_from_changes",
+    "target": "github.com/{owner}/{repo}",
+    "risk_class": "medium",
+    "idempotent": "conditional: the ref is created only if it does not exist",
+    "observable": "yes: ref, parents, compared paths and blob SHA-1s are read back",
+    "reversible": "yes: deleting the branch (not part of v1)",
+    "mediation": "enforced",
+    "result": "helm.gateway.v1.Observation.github_branch (GitHubBranchResult)"
+  }
+}

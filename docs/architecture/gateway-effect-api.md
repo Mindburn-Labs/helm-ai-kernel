@@ -244,16 +244,91 @@ HELM-750 s2b.
   gateway. The real gateway never takes an activation reference in place of
   a mandate.
 
-### Typed observation results (s1b)
+### Typed observation results and the GitHub effects (HELM-753)
 
-- HELM-751 s3 (the `Dispatch` and `Observe` server) defines the result
-  envelope.
-- HELM-753 (GitHub adapter v2) fills the first typed result, a draft pull
-  request.
-- CRM follows with its own adapter.
+`Observation.result` is a oneof with one member per effect type that defines a
+typed result. Fields 9–15 stay held for later result types
+(`TestHeldFieldNumbersStayFree`). Clients read these fields, never the
+provider's raw bytes.
 
-Until then, `Observation` fields 7–15 stay held by
-`TestHeldFieldNumbersStayFree`, as described above.
+The HELM-789 walking skeleton needs two GitHub effects. Their argument schemas
+are closed JSON Schemas with known-good and known-bad fixtures, checked by the
+`json-schemas` gate:
+
+| Effect type | Arguments | Risk | Result |
+|---|---|---|---|
+| `github.branch.create_from_changes` | `protocols/json-schemas/effects/github/branch_create_from_changes.v1.json` | medium (admitted under a mandate) | `github_branch` (field 8) |
+| `github.pull_request.create_draft` | `protocols/json-schemas/effects/github/pull_request_create_draft.v1.json` | high (escalated) | `github_pull_request` (field 7) |
+
+Rules for both:
+
+- **Target.** The target is `github.com/{owner}/{repo}`, with owner matching
+  `^[A-Za-z0-9-]{1,39}$` and repo matching `^[A-Za-z0-9._-]{1,100}$`. It has
+  no `#`, `?`, extra or trailing `/`. The repository comes only from the
+  target; the arguments never name one (audit 09-02).
+- **Bytes.** The arguments are exact UTF-8 bytes, at most 64 KiB. The gateway
+  refuses duplicate keys, unknown fields and a missing required field before
+  admission, and digests the bytes as sent. The Console shows the same bytes
+  through `GetAttemptContent`.
+
+**Branch.** The adapter creates the blobs, the tree, a commit whose only
+parent is `base_sha`, and then `refs/heads/{head}` if it does not exist. Rules
+the gateway enforces beyond the schema:
+
+- `head` starts with the mandate's branch prefix, `helm/` for the skeleton, and
+  is not the repository's default branch, read at Prepare and again at
+  Dispatch.
+- `.github/workflows/` is refused. A workflow file is code execution and gets
+  its own effect type.
+
+The read-back is SUCCEEDED only if all of these hold:
+
+- the ref points at `commit_sha`;
+- that commit's parents are exactly `[base_sha]`;
+- `compare/{base_sha}...{commit_sha}` lists exactly the proposed paths;
+- each blob's git SHA-1 equals the one computed from the proposed content,
+  `sha1("blob <len>\0" + bytes)`.
+
+Anything else is FAILED with `READBACK_MISMATCH`. If the ref already exists,
+the same commit reconciles to SUCCEEDED and a different one is
+`READBACK_MISMATCH`. Nothing is ever overwritten.
+
+`files_digest` is SHA-256 over the files sorted by path, each encoded as
+`path 0x00 mode 0x00 blob-sha1-hex 0x0A`. Vector, checked by
+`TestGitHubBranchFilesDigestVector`:
+
+| Path | Mode | Content | Blob SHA-1 |
+|---|---|---|---|
+| `docs/skeleton.md` | `100644` | `# Skeleton\n` | `41b86bfc1930f3be282f9d5dcb8b3816deda7b8c` |
+| `scripts/ok.sh` | `100755` | `#!/bin/sh\necho ok\n` | `e37f89b3b76e73e0d000552c897006f0b8ba1b76` |
+
+`files_digest` = `c361fc7cce27fa9aa3f9e7ef1b275961a2418fff20e16fa1846e5bc50b43ec54`
+
+**Draft pull request.** `branch_attempt_id` names the branch attempt. At
+Propose the gateway requires that attempt to meet all of these, or it refuses
+with `PRECONDITION_FAILED` and creates no attempt:
+
+- it is in the same tenant and has the same target;
+- it is `github.branch.create_from_changes` in OBSERVED(SUCCEEDED);
+- its `head` and `base` equal these;
+- its `commit_sha` equals `head_sha`.
+
+The approver's diff is therefore the branch attempt's files, and the gateway
+has checked that they are what `head_sha` contains. At Dispatch the adapter
+re-reads `refs/heads/{head}` and refuses unless it still equals `head_sha`, so
+a push after approval is caught.
+
+Idempotency is conditional: one open pull request per (head, base). On a lost
+response, Observe finds the pull request by head and base. If the provider's
+answer was not definitive, the attempt stays UNKNOWN and is never
+re-dispatched blindly.
+
+The read-back is SUCCEEDED only if `draft` is true, `head_sha` equals the
+proposed value, `base_ref` equals `base`, and the title matches. Otherwise it
+is FAILED with `READBACK_MISMATCH`, and the result still records the URL.
+
+`READBACK_MISMATCH` and `PRECONDITION_FAILED` are registered by the slice that
+first emits them (HELM-751 s3 / HELM-753 adapter).
 
 ### Reason codes
 

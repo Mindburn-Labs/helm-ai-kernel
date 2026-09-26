@@ -174,6 +174,14 @@ const (
 	ReasonCapabilityTokenInvalid        ReasonCode = "CAPABILITY_TOKEN_INVALID"
 	ReasonCapabilityRollbackPlanInvalid ReasonCode = "CAPABILITY_ROLLBACK_PLAN_INVALID"
 	ReasonCapabilityIrreversible        ReasonCode = "CAPABILITY_IRREVERSIBLE"
+
+	// ── Effect adapters (HELM-753, target architecture §9) ────────────────
+	ReasonPreconditionFailed         ReasonCode = "PRECONDITION_FAILED"
+	ReasonReadbackMismatch           ReasonCode = "READBACK_MISMATCH"
+	ReasonPermitArgumentMismatch     ReasonCode = "PERMIT_ARGUMENT_MISMATCH"
+	ReasonProviderCredentialRejected ReasonCode = "PROVIDER_CREDENTIAL_REJECTED" //nolint:gosec // G101: a reason-code name, not a credential
+	ReasonProviderResponseTooLarge   ReasonCode = "PROVIDER_RESPONSE_TOO_LARGE"
+	ReasonProviderError              ReasonCode = "PROVIDER_ERROR"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.

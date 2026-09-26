@@ -62,10 +62,9 @@ ReasonPolicyDeniedHostObservedEgress         ERR_POLICY_DENIED_BUT_HOST_OBSERVED
 ReasonPolicyHashMismatch                     POLICY_HASH_MISMATCH
 ReasonPolicySigInvalid                       POLICY_SIGNATURE_INVALID
 
-# ── Remaining (9) ───────────────────────────────────────────────────────────
+# ── Remaining (8) ───────────────────────────────────────────────────────────
 ReasonComputeGasExhausted                    ERR_COMPUTE_GAS_EXHAUSTED
 ReasonComputeTimeExhausted                   ERR_COMPUTE_TIME_EXHAUSTED
-ReasonConnectorContractDrift                 ERR_CONNECTOR_CONTRACT_DRIFT
 ReasonContinuityStale                        ERR_CONTINUITY_STALE
 ReasonDevFallbackPresent                     ERR_DEV_FALLBACK_PRESENT
 ReasonEmergencyCapsuleInvalid                ERR_EMERGENCY_CAPSULE_INVALID

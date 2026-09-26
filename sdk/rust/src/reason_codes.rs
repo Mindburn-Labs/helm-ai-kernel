@@ -219,6 +219,21 @@ pub const CAPABILITY_TOKEN_INVALID: &str = "CAPABILITY_TOKEN_INVALID";
 pub const CAPABILITY_ROLLBACK_PLAN_INVALID: &str = "CAPABILITY_ROLLBACK_PLAN_INVALID";
 /// DENY: Irreversible effect class cannot dispatch without an authoritative approval integration
 pub const CAPABILITY_IRREVERSIBLE: &str = "CAPABILITY_IRREVERSIBLE";
+/// DENY: A precondition the effect type declares does not hold, so no attempt was created
+pub const PRECONDITION_FAILED: &str = "PRECONDITION_FAILED";
+/// DENY: The adapter's read-back of the provider does not match the proposed effect, so the outcome
+/// is FAILED
+pub const READBACK_MISMATCH: &str = "READBACK_MISMATCH";
+/// DENY: The arguments an adapter was about to send are not the bytes the permit's argument digest
+/// covers
+pub const PERMIT_ARGUMENT_MISMATCH: &str = "PERMIT_ARGUMENT_MISMATCH";
+/// DENY: The connection's credential is unavailable, or the provider rejected it as invalid,
+/// revoked or lacking permission
+pub const PROVIDER_CREDENTIAL_REJECTED: &str = "PROVIDER_CREDENTIAL_REJECTED";
+/// DENY: A provider response exceeded the adapter's size limit and was not read
+pub const PROVIDER_RESPONSE_TOO_LARGE: &str = "PROVIDER_RESPONSE_TOO_LARGE";
+/// DENY: The provider failed or refused the call for a reason other than its credential
+pub const PROVIDER_ERROR: &str = "PROVIDER_ERROR";
 
 /// Every registered reason code, in registry order.
 pub const ALL: &[&str] = &[
@@ -326,6 +341,12 @@ pub const ALL: &[&str] = &[
     CAPABILITY_TOKEN_INVALID,
     CAPABILITY_ROLLBACK_PLAN_INVALID,
     CAPABILITY_IRREVERSIBLE,
+    PRECONDITION_FAILED,
+    READBACK_MISMATCH,
+    PERMIT_ARGUMENT_MISMATCH,
+    PROVIDER_CREDENTIAL_REJECTED,
+    PROVIDER_RESPONSE_TOO_LARGE,
+    PROVIDER_ERROR,
 ];
 
 /// Whether `code` is in the registry.

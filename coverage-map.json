@@ -5,9 +5,9 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 75,
+    "total": 76,
     "enforced": 35,
-    "observed_only": 28,
+    "observed_only": 29,
     "unmanaged": 12,
     "retired_invariants": 11,
     "build_plane": 1
@@ -3140,6 +3140,47 @@
           ]
         }
       ]
+    },
+    {
+      "id": "CTL-051",
+      "title": "Effect adapters act only on the permitted bytes",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "The GitHub effect adapter's Dispatch refuses with PERMIT_ARGUMENT_MISMATCH, before any provider call, unless the permit's argument digest is SHA-256 of the exact argument bytes it is about to act on (audit 09-01). It takes the repository only from a validated github.com/{owner}/{repo} target and refuses arguments outside the closed v1 schemas with SCHEMA_VIOLATION (audit 09-02).",
+      "status": "observed-only",
+      "plane": "runtime",
+      "reason": "Library only. No shipped binary imports core/pkg/gateway/adapters/github (a declared library root in scripts/ci/dead-packages-allowlist.txt). HELM-751 s3 wires helm-gateway's Dispatch to it; that slice adds the removal tests and can claim enforcement for the tested path.",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/gateway/adapters.CheckPermitDigest",
+          "reachability": "unreachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/adapters/github.Adapter.Dispatch",
+          "reachability": "unreachable"
+        }
+      ],
+      "gates": [],
+      "config": [],
+      "protected_operations": [
+        "github.branch.create_from_changes and github.pull_request.create_draft dispatches."
+      ],
+      "bypass_assumptions": [
+        "No shipped caller exists, so nothing is enforced.",
+        "The digest binds the bytes, not their meaning: the gateway's admission decides what those bytes may do."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/gateway/adapters/github.TestQualificationFake"
+        ],
+        "forbidden": [
+          "core/pkg/gateway/adapters.TestCheckPermitDigest",
+          "core/pkg/gateway/adapters/github.TestQualificationFake",
+          "core/pkg/gateway/adapters/github.TestTargets"
+        ],
+        "removal": [],
+        "bypass": []
+      },
+      "removal_proofs": []
     }
   ]
 }

@@ -5,3 +5,4 @@
 # Ratified KEEP rows from docs/architecture/dead-package-decisions.md land here;
 # the gate flips from advisory to strict when that table has zero open rows.
 core/pkg/kernel/authority/authorityrows # HELM-750 s2a authority-row store (ADR-0001); library root until the HELM-751 admission transaction imports it, which makes this line stale
+core/pkg/gateway/adapters/github # HELM-753 GitHub effect adapter v2 (library); importer-less until HELM-751 s3 wires helm-gateway Dispatch/Observe to it, which makes this line stale

@@ -324,7 +324,9 @@ Propose the gateway requires that attempt to meet all of these, or it refuses
 with `PRECONDITION_FAILED` and creates no attempt:
 
 - it is in the same tenant and has the same target;
-- it is `github.branch.create_from_changes` in OBSERVED(SUCCEEDED);
+- it is `github.branch.create_from_changes` in OBSERVED(SUCCEEDED) or
+  RECONCILED(SUCCEEDED). Reconciliation runs the same ref, parent, compare
+  and blob checks as Observe, so both prove the same commit;
 - its `head` and `base` equal these;
 - its `commit_sha` equals `head_sha`.
 
@@ -341,6 +343,13 @@ re-dispatched blindly.
 The read-back is SUCCEEDED only if `draft` is true, `head_sha` equals the
 proposed value, `base_ref` equals `base`, and the title matches. Otherwise it
 is FAILED with `READBACK_MISMATCH`, and the result still records the URL.
+
+**Dispatch-time refusal is a state, not an error.** When the Dispatch-time
+`head` re-read refuses the write, `Dispatch` returns a successful
+`DispatchResponse` whose attempt is OBSERVED(FAILED) with `reason_code`
+`PRECONDITION_FAILED`. It does not return a Connect `failed_precondition`
+error; per the wire rules, a Connect error means the gateway could not
+evaluate the call.
 
 A FAILED outcome carries its reason in `EffectAttempt.reason_code`:
 `READBACK_MISMATCH`, or `PRECONDITION_FAILED` when the Dispatch-time `head`

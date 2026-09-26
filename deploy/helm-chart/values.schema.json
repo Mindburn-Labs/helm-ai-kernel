@@ -393,6 +393,16 @@
               "default": "default",
               "description": "Server-bound workspace ID used by governed evaluation when the scoped emergency-stop fence is enabled. The request body never selects this value."
             },
+            "crossTenantPrincipals": {
+              "type": "array",
+              "default": [],
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[^,\\s]+$"
+              },
+              "description": "Principal IDs that may hold bindings in more than one tenant (HELM_CROSS_TENANT_PRINCIPALS, ADR-0005 §11). Empty refuses every cross-tenant bind with 409. Each listed principal passes the ADR-0005 §3 token cross-check in every tenant it is bound to."
+            },
             "controlPlaneIdentity": {
               "type": "object",
               "additionalProperties": false,

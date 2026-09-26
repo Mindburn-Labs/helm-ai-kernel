@@ -692,9 +692,11 @@ type ProposeRequest struct {
 	// Tenant-scoped idempotency key, 1 to 255 bytes. The SDKs always send one;
 	// without it a retry is a new attempt.
 	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// The leaf mandate the principal acts under. A selector, not a grant: the
-	// gateway admits only if the mandate belongs to the authenticated
-	// principal and every link of its delegation chain allows the effect.
+	// Optional. The gateway resolves the mandate from the token's sub and the
+	// effect type (HELM-750). Set this only to choose among several mandates
+	// that apply. A selector, not a grant: a mandate not held by sub is
+	// denied, and every link of the chosen delegation chain must allow the
+	// effect.
 	MandateId string `protobuf:"bytes,2,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
 	// The commitment or case the effect serves (rev 3.4 §3). Exactly one is
 	// set, except for helm.authority.* effect types, where it is optional
@@ -718,7 +720,8 @@ type ProposeRequest struct {
 	// When an escalation of this attempt expires, if the caller needs it
 	// sooner, for example the deadline of the run waiting on it. Clamped to
 	// the mandate's approval window. Unset: the mandate's approval window.
-	// Part of the request digest like every other field.
+	// Truncated to whole seconds. Part of the request digest like every other
+	// field.
 	ApprovalExpiresAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=approval_expires_at,json=approvalExpiresAt,proto3" json:"approval_expires_at,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -2083,7 +2086,9 @@ type EffectAttempt struct {
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// SHA-256 request digest the idempotency check compares, 32 bytes.
 	RequestDigest []byte `protobuf:"bytes,3,opt,name=request_digest,json=requestDigest,proto3" json:"request_digest,omitempty"`
-	// The principal that proposed it, from its token.
+	// The principal that proposed it: the sub of its Propose token. When a
+	// workload proposed on a human's behalf (RFC 8693 delegation), this is the
+	// human, and approver != requester (ADR-0001 I6) is checked against them.
 	RequesterPrincipalId string `protobuf:"bytes,4,opt,name=requester_principal_id,json=requesterPrincipalId,proto3" json:"requester_principal_id,omitempty"`
 	// The leaf mandate it was proposed under.
 	MandateId string `protobuf:"bytes,5,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
@@ -2139,9 +2144,13 @@ type EffectAttempt struct {
 	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,26,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// The workspace it belongs to, from the proposer's token (R9, ADR-0005).
 	// Reads and decisions need a token for the same workspace.
-	WorkspaceId   string `protobuf:"bytes,27,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	WorkspaceId string `protobuf:"bytes,27,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	// The workload that proposed on requester_principal_id's behalf: the
+	// act.sub of the Propose token (RFC 8693, ADR-0005 §2). Empty when the
+	// principal proposed directly.
+	RequesterActorId string `protobuf:"bytes,28,opt,name=requester_actor_id,json=requesterActorId,proto3" json:"requester_actor_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *EffectAttempt) Reset() {
@@ -2374,6 +2383,13 @@ func (x *EffectAttempt) GetWorkspaceId() string {
 	return ""
 }
 
+func (x *EffectAttempt) GetRequesterActorId() string {
+	if x != nil {
+		return x.RequesterActorId
+	}
+	return ""
+}
+
 type isEffectAttempt_WorkRef interface {
 	isEffectAttempt_WorkRef()
 }
@@ -2398,11 +2414,14 @@ type PendingApproval struct {
 	// and argument digests, the quote as the exposure, and expires_at. Each
 	// byte string is prefixed with its length as a big-endian uint64. The
 	// quote is its entry count, then each entry sorted by unit bytes: the
-	// unit, then the amount as a big-endian uint64. expires_at is its seconds
-	// as a big-endian int64, then its nanos as a big-endian int32. The design
-	// note gives a test vector. Approve and Reject must present it.
+	// unit, then the amount as a big-endian uint64. expires_at is its RFC 3339
+	// UTC text in whole seconds with a "Z" suffix (2026-09-26T12:00:00Z), as a
+	// length-prefixed byte string. The design note gives test vectors.
+	// Approve and Reject must present it.
 	ApprovalDigest []byte `protobuf:"bytes,1,opt,name=approval_digest,json=approvalDigest,proto3" json:"approval_digest,omitempty"`
-	// When the escalation expires and the attempt becomes EXPIRED.
+	// When the escalation expires and the attempt becomes EXPIRED. Always
+	// whole seconds: the gateway truncates it to the second on write, so a
+	// database round-trip cannot change the approval digest.
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2465,9 +2484,13 @@ type Approval struct {
 	// Database time of the decision.
 	DecidedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=decided_at,json=decidedAt,proto3" json:"decided_at,omitempty"`
 	// The approver's reason, as given on Approve or Reject.
-	Reason        string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Reason string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The workload that carried the decision on the approver's behalf: the
+	// act.sub of the decide token (RFC 8693). Empty when the approver's own
+	// session called the gateway directly.
+	ApproverActorId string `protobuf:"bytes,6,opt,name=approver_actor_id,json=approverActorId,proto3" json:"approver_actor_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Approval) Reset() {
@@ -2531,6 +2554,13 @@ func (x *Approval) GetDecidedAt() *timestamppb.Timestamp {
 func (x *Approval) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *Approval) GetApproverActorId() string {
+	if x != nil {
+		return x.ApproverActorId
 	}
 	return ""
 }
@@ -3183,7 +3213,7 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\x06amount\x18\x02 \x01(\x03R\x06amount\"F\n" +
 	"\rDistinctValue\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x12!\n" +
-	"\fvalue_digest\x18\x02 \x01(\fR\vvalueDigest\"\xa7\n" +
+	"\fvalue_digest\x18\x02 \x01(\fR\vvalueDigest\"\xd5\n" +
 	"\n" +
 	"\rEffectAttempt\x12\x1d\n" +
 	"\n" +
@@ -3221,20 +3251,22 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"created_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x1a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12!\n" +
-	"\fworkspace_id\x18\x1b \x01(\tR\vworkspaceIdB\n" +
+	"\fworkspace_id\x18\x1b \x01(\tR\vworkspaceId\x12,\n" +
+	"\x12requester_actor_id\x18\x1c \x01(\tR\x10requesterActorIdB\n" +
 	"\n" +
 	"\bwork_ref\"u\n" +
 	"\x0fPendingApproval\x12'\n" +
 	"\x0fapproval_digest\x18\x01 \x01(\fR\x0eapprovalDigest\x129\n" +
 	"\n" +
-	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xf9\x01\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xa5\x02\n" +
 	"\bApproval\x122\n" +
 	"\x15approver_principal_id\x18\x01 \x01(\tR\x13approverPrincipalId\x12=\n" +
 	"\bdecision\x18\x02 \x01(\x0e2!.helm.gateway.v1.ApprovalDecisionR\bdecision\x12'\n" +
 	"\x0fapproval_digest\x18\x03 \x01(\fR\x0eapprovalDigest\x129\n" +
 	"\n" +
 	"decided_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tdecidedAt\x12\x16\n" +
-	"\x06reason\x18\x05 \x01(\tR\x06reason\"\xdd\x02\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12*\n" +
+	"\x11approver_actor_id\x18\x06 \x01(\tR\x0fapproverActorId\"\xdd\x02\n" +
 	"\x06Permit\x12\x1b\n" +
 	"\tpermit_id\x18\x01 \x01(\tR\bpermitId\x12'\n" +
 	"\x0fargument_digest\x18\x02 \x01(\fR\x0eargumentDigest\x12P\n" +

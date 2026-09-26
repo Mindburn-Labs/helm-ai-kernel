@@ -6,7 +6,8 @@ control and makes no post-quantum claim; token verification is ADR-0005's. -->
 
 Status: draft wire contract, HELM-751 slice 1, 2026-09-25. This revision
 includes WS-B's review of 2026-09-25 (PR #1015), which the coordinator
-accepted, and the coordinator's resolutions of 2026-09-26 (see "Resolved"). Under target architecture rev 3.4 §1 the contract is *Specified*: it
+accepted; the coordinator's resolutions of 2026-09-26 (see "Resolved"); and
+slice 1b (the delegated requester, whole-second approval digests). Under target architecture rev 3.4 §1 the contract is *Specified*: it
 is versioned, and no server stands behind it. Nothing in this repository
 serves these RPCs yet.
 
@@ -74,7 +75,7 @@ Two rules apply everywhere:
 | Message / field | Source |
 |---|---|
 | `ProposeRequest.idempotency_key`, request digest | R6, ADR-0001 §1 step 1. The digest covers every field except the key, plus the authenticated principal. |
-| `ProposeRequest.mandate_id` | ADR-0001 `Request.Mandate`. A selector the gateway checks against the token's principal and the delegation chain; never a grant (R3). |
+| `ProposeRequest.mandate_id` | ADR-0001 `Request.Mandate`. Optional since s1b: the gateway resolves the mandate from `sub` and the effect type, and this selects among several. It must be held by `sub`; never a grant (R3). |
 | `ProposeRequest.work_ref` (`commitment_id` or `case_id`) | Rev 3.4 §3, schema `work_ref`. Optional for `helm.authority.*` until contract 5. |
 | `EffectDescriptor` (`effect_type`, `target`, `arguments`) | §4.1 item 1 effect descriptor. The log carries digests only (R13). |
 | `ResourceAmount` (`quote`) | ADR-0001 `Request.Amounts`. Integer; money is minor units of an ISO 4217 currency (§3). Ignored for model calls, which the gateway prices itself. |
@@ -84,6 +85,7 @@ Two rules apply everywhere:
 | `EffectAttempt.risk_class` | Effect-type control row. Never read from the request. |
 | `EffectAttempt.reason_code` | ADR-0001 §6, registry strings. |
 | `EffectAttempt.workspace_id` | The proposer's token (R9, ADR-0005). Output only. |
+| `EffectAttempt.requester_actor_id`, `Approval.approver_actor_id` | The token's `act.sub` (RFC 8693, ADR-0005 §2). Output only; empty for a direct call. See "The delegated requester". |
 | `PendingApproval.approval_digest`, `ApproveRequest.approval_digest` | §10.1 approval digest, v1 below. An approval binds to the digest the approver saw. |
 | `ApproveRequest.reason`, `RejectRequest.reason`, `Approval.reason` | WS-B review item 2. At most 2000 bytes; required on `Reject`. The log carries the digest (R13). |
 | `Approval` | Schema `authority.approvals`, unique per attempt (I6). |
@@ -153,13 +155,25 @@ on a mismatch. The construction is SHA-256 over the concatenation of:
 4. `field(argument_digest)`: SHA-256 of the argument bytes;
 5. the quote, which is the exposure the approver accepts: `u64(entry count)`,
    then for each entry sorted by unit bytes, `field(unit) || u64(amount)`;
-6. `expires_at`: its seconds as a big-endian int64, then its nanos as a
-   big-endian int32.
+6. `field(expires_at)`: the RFC 3339 text of `expires_at` in UTC, whole
+   seconds, with a `Z` suffix and no fractional part, for example
+   `2026-09-26T12:00:00Z`.
 
 `u64(n)` is an 8-byte big-endian unsigned integer, and `field(b)` is
 `u64(len(b)) || b`. The attempt ID binds the effect type, mandate and
 requester on the server, so the digest follows §10.1's list of fields and
 adds nothing.
+
+**Timestamps are whole seconds (s1b).** Every timestamp in the digest is
+encoded as RFC 3339 UTC text with `Z` and whole seconds. The gateway
+truncates `expires_at` to the second when it writes it, and truncates
+`ProposeRequest.approval_expires_at` the same way. A PostgreSQL `timestamptz`
+round-trip keeps microseconds, so without truncation a stored
+`12:00:00.987654Z` could come back in a different form than the client
+hashed. With truncation, any fractional input produces the same digest as the
+whole second. No server emits digests yet, so s1b changes the v1 encoding in
+place rather than minting v2. The first revision encoded seconds and nanos as
+binary integers.
 
 Test vector:
 
@@ -171,17 +185,75 @@ Test vector:
 | arguments | `{"merge_method":"squash"}` |
 | `argument_digest` | `a251ae0221cb7e5b1c1fb10c05a07c4c17b6f776d117cb73ba78d200afd3ac0f` |
 | quote | `count` = 1, `USD` = 2500 (sorted: `USD`, `count`) |
-| `expires_at` | `2026-09-26T12:00:00Z` (seconds 1790424000, nanos 0) |
-| **approval digest** | `cb2cd8caa08ee2544750dd59644a0d2f3bb16a729be108520055c2f72c5f53d7` |
+| `expires_at` | `2026-09-26T12:00:00Z`, encoded as that 20-byte text |
+| **approval digest** | `7efd7515c4c739e32f6c61ef3214bff08013771f5fdc02da1dd2b1e3806edf31` |
 
-The vector was computed by a Python implementation and matches the Go
-reference in `TestApprovalDigestVector`. That test also fails if this note
-stops carrying the value.
+Truncation case: the same inputs with `expires_at` =
+`2026-09-26T12:00:00.987654Z` encode as `2026-09-26T12:00:00Z` and give the
+same digest, `7efd7515…6edf31`.
+
+`TestApprovalDigestVector` checks both cases against the Go reference and
+against an independent Python implementation,
+`sdk/go/gen/helm/gateway/v1/testdata/approval_digest.py`, which it runs. The
+test also checks that a different second changes the digest, and it fails if
+this note stops carrying the values.
 
 For attempts the Control Plane proposed, it already holds the argument bytes.
 For attempts proposed by others, the Console reads them with
 `GetAttemptContent`. In both cases the client checks
 `sha256(arguments) == argument_digest` before it renders them.
+
+### The delegated requester (s1b)
+
+The Control Plane proposes from its background runner on behalf of a human.
+This uses RFC 8693 delegation, which ADR-0005 tokens already carry: the
+Propose token's `sub` is the requesting human, and its `act.sub` is the
+runner's workload identity.
+
+- The gateway records `requester_principal_id = sub` and
+  `requester_actor_id = act.sub`. `requester_actor_id` is empty when the
+  principal proposed directly.
+- Approver ≠ requester (ADR-0001 I6) is therefore checked against the human.
+  The runner workload can neither approve nor count as a second person.
+- A Propose token whose `sub` is a human principal is accepted only when its
+  `act.sub` is a configured workload actor. Today that is
+  `HELM_CP_IDENTITY_ACTOR`; later it is the gateway's own actor list. Any
+  other actor is `permission_denied`.
+- No request message carries `on_behalf_of` or an actor field (R9). The
+  identity contract test rejects `actor`, `*_actor_id` and `on_behalf_of*`
+  fields in every request.
+- `Approval.approver_actor_id` is the same record for decisions: the
+  `act.sub` of the decide token when a workload (the Control Plane) carries
+  a human's decision, and empty when the approver's session calls the
+  gateway directly. The coordinator asked for the requester's actor "on the
+  Approval record if one exists". On a decision the relevant actor is the one
+  that carried the approver's token, so the field is named for the approver.
+  The requester's actor is already on the attempt.
+
+### Mandate selection (s1b)
+
+There is no mandate lookup RPC. At admission the gateway resolves the mandate
+from the token's `sub` and the effect type, using the mandate rows of
+HELM-750 s2b.
+
+- `ProposeRequest.mandate_id` is an optional selector, for when more than one
+  mandate applies.
+- The selector is valid only if the mandate is held by `sub`. Otherwise the
+  attempt is denied.
+- The Control Plane's activation-ref stand-in works only against the fake
+  gateway. The real gateway never takes an activation reference in place of
+  a mandate.
+
+### Typed observation results (s1b)
+
+- HELM-751 s3 (the `Dispatch` and `Observe` server) defines the result
+  envelope.
+- HELM-753 (GitHub adapter v2) fills the first typed result, a draft pull
+  request.
+- CRM follows with its own adapter.
+
+Until then, `Observation` fields 7–15 stay held by
+`TestHeldFieldNumbersStayFree`, as described above.
 
 ### Reason codes
 

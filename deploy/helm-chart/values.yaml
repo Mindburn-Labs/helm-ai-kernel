@@ -118,6 +118,18 @@ helm:
   # Demo mode (disables real connectors, uses ephemeral keys)
   demoMode: false
 
+  # Native TLS on the API listener (service.port). Name an existing
+  # kubernetes.io/tls Secret, such as one cert-manager issues; its tls.crt and
+  # tls.key are mounted and re-read when rotated. Empty keeps plain HTTP. The
+  # health and metrics listeners stay plain HTTP, so the probes do not change.
+  tls:
+    existingSecret: ""
+    # Client certificates: "" (off), "require" or "verify-if-given". Anything
+    # but "" also mounts ca.crt from existingSecret as the client CA. The
+    # verified certificate feeds the Control Plane token cnf check
+    # (auth.controlPlaneIdentity.requireCNF).
+    clientAuth: ""
+
   # Runtime API authentication. Production rendering refuses to omit these keys
   # because protected evidence, receipt, tenant, and service-internal routes fail
   # closed when no key material is configured.
@@ -127,6 +139,11 @@ helm:
     existingSecret: ""
     adminAPIKeySecretKey: "HELM_ADMIN_API_KEY"
     serviceAPIKeySecretKey: "HELM_SERVICE_API_KEY"
+    # Key inside existingSecret holding the Control Plane's organization-runtime
+    # credential (HELM_ORGANIZATION_RUNTIME_API_KEY). Read only when
+    # existingSecret is set, and optional there: a Secret without the key leaves
+    # the organization-runtime route closed. Set "" to not read it.
+    organizationRuntimeAPIKeySecretKey: "HELM_ORGANIZATION_RUNTIME_API_KEY"
     # Server-bound tenant/principal for tenant-scoped runtime routes. Incoming
     # tenant/principal headers must match these values and cannot select
     # another tenant or principal.

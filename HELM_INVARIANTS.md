@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-74 controls: 34 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
+75 controls: 35 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -147,6 +147,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-047 | Production egress is deny-all | enforced | — |
 | CTL-048 | Kernel credentials never reach the model provider | enforced | — |
 | CTL-049 | Principal binding integrity | enforced | — |
+| CTL-050 | Public receipt keyring | enforced | — |
 
 ---
 

@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 74,
-    "enforced": 34,
+    "total": 75,
+    "enforced": 35,
     "observed_only": 28,
     "unmanaged": 12,
     "retired_invariants": 11,
@@ -3079,6 +3079,64 @@
           "tests": [
             "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteRefusesCrossTenantRebind",
             "core/pkg/store.TestPrincipalBindingStoreSQLiteRefusesCrossTenantBind"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-050",
+      "title": "Public receipt keyring",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "GET /api/v1/receipt-keyring publishes exactly the key id, profile and public keys that the running receipt signer stamps on every receipt, in the kernel-evaluate-receipt-keyring.v1 shape the Control Plane pins as HELM_KERNEL_RECEIPT_KEYRING. It carries no private material, and without a publishable signer it answers 503 instead of an empty keyring (HELM-786).",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/cmd/helm-ai-kernel.registerReceiptKeyringRoute",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "HELM_RECEIPT_PROFILE (classical or hybrid) and the root key in the data directory select the signer the route describes."
+      ],
+      "protected_operations": [
+        "GET /api/v1/receipt-keyring on the API listener."
+      ],
+      "bypass_assumptions": [
+        "The route is public and unauthenticated by design; it serves public keys only.",
+        "Over plain HTTP a network attacker can substitute the keyring in transit. Fetch it over the TLS listener (HELM_TLS_*) or pin it out of band.",
+        "The Control Plane trusts what an operator copies into HELM_KERNEL_RECEIPT_KEYRING; the route does not push or rotate that pin."
+      ],
+      "tests": {
+        "allowed": [
+          "core/cmd/helm-ai-kernel.TestReceiptKeyringRouteServesTheExactVector",
+          "core/cmd/helm-ai-kernel.TestReceiptKeyringMatchesTheIdentityStampedOnReceipts",
+          "core/cmd/helm-ai-kernel.TestServeListensOverTLSWhenConfigured"
+        ],
+        "forbidden": [
+          "core/cmd/helm-ai-kernel.TestReceiptKeyringRouteRefusesWithoutASigner",
+          "core/cmd/helm-ai-kernel.TestReceiptKeyringRouteIsReadOnly"
+        ],
+        "removal": [
+          "core/cmd/helm-ai-kernel.TestReceiptKeyringRouteRefusesWithoutASigner",
+          "core/cmd/helm-ai-kernel.TestReceiptKeyringMatchesTheIdentityStampedOnReceipts"
+        ],
+        "bypass": [
+          "core/cmd/helm-ai-kernel.TestPublicRoutesAreDeclaredWithAReason"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/cmd/helm-ai-kernel/receipt_keyring_route.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestReceiptKeyringRouteRefusesWithoutASigner"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-ai-kernel/receipt_keyring_route.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestReceiptKeyringMatchesTheIdentityStampedOnReceipts"
           ]
         }
       ]

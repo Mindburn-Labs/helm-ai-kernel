@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -66,6 +67,12 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 			return nil, err
 		}
 		var args BranchCreateFromChanges
+		if err := requireExactKeys(raw, "schema", "base", "base_sha", "head", "message", "files"); err != nil {
+			return nil, err
+		}
+		if err := requireExactFileKeys(raw); err != nil {
+			return nil, err
+		}
 		if err := strictDecode(raw, &args); err != nil {
 			return nil, err
 		}
@@ -80,6 +87,9 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 			return nil, err
 		}
 		var args RepositoryGet
+		if err := requireExactKeys(raw, "schema", "branch"); err != nil {
+			return nil, err
+		}
 		if err := strictDecode(raw, &args); err != nil {
 			return nil, err
 		}
@@ -96,6 +106,9 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 			return nil, err
 		}
 		var args PullRequestCreateDraft
+		if err := requireExactKeys(raw, "schema", "branch_attempt_id", "base", "head", "head_sha", "title", "body"); err != nil {
+			return nil, err
+		}
 		if err := strictDecode(raw, &args); err != nil {
 			return nil, err
 		}
@@ -303,7 +316,49 @@ func match(name string, v *string, pattern *regexp.Regexp) error {
 	return nil
 }
 
-// strictDecode refuses unknown fields and trailing data.
+// requireExactKeys refuses any key of the object in raw that is not, byte for
+// byte, one of allowed. encoding/json matches struct fields
+// case-insensitively (with Unicode folding: "Head", "HEAD" and "ſchema" all
+// match), so without this a document could carry "head" for the condition's
+// map and "Head" for the typed struct. Duplicate keys are refused earlier, so
+// after this check every key names exactly one field.
+func requireExactKeys(raw []byte, allowed ...string) error {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return invalid("arguments are not one JSON object")
+	}
+	return exactKeys(object, allowed, "")
+}
+
+// requireExactFileKeys applies the exact-key rule to each entry of files.
+func requireExactFileKeys(raw []byte) error {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return invalid("arguments are not one JSON object")
+	}
+	var files []map[string]json.RawMessage
+	if err := json.Unmarshal(object["files"], &files); err != nil {
+		return invalid("files is not a list of objects")
+	}
+	for i, file := range files {
+		if err := exactKeys(file, []string{"path", "mode", "content_utf8"}, fmt.Sprintf("files[%d].", i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func exactKeys(object map[string]json.RawMessage, allowed []string, prefix string) error {
+	for key := range object {
+		if !slices.Contains(allowed, key) {
+			return invalid("unknown field %s%q (field names are exact and case-sensitive)", prefix, key)
+		}
+	}
+	return nil
+}
+
+// strictDecode refuses unknown fields and trailing data. Callers check exact
+// keys first (requireExactKeys): this decoder alone would fold case.
 func strictDecode(raw []byte, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()

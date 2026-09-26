@@ -135,3 +135,30 @@ func TestValidateAgreesWithTheSchemaFixtures(t *testing.T) {
 		t.Fatal("found the fixture directory but no GitHub effect fixture in it")
 	}
 }
+
+// M1: encoding/json folds field names (with Unicode folding), so a document
+// could say one thing to the condition's map and another to the typed struct.
+// Every key must be an exact field name.
+func TestValidateRefusesKeysThatOnlyFoldToAFieldName(t *testing.T) {
+	cases := map[string]struct{ effectType, raw string }{
+		"branch Head":          {GitHubBranchCreateFromChanges, strings.Replace(validBranch, `"head":"helm/skeleton"`, `"head":"helm/skeleton","Head":"release"`, 1)},
+		"branch HEAD":          {GitHubBranchCreateFromChanges, strings.Replace(validBranch, `"head":"helm/skeleton"`, `"HEAD":"helm/skeleton"`, 1)},
+		"branch long-s schema": {GitHubBranchCreateFromChanges, strings.Replace(validBranch, `"schema":`, "\"\u017fchema\":", 1)},
+		"branch file Path":     {GitHubBranchCreateFromChanges, strings.Replace(validBranch, `"path":"docs/skeleton.md"`, `"Path":"docs/skeleton.md"`, 1)},
+		"draft Head":           {GitHubPullRequestCreateDraft, strings.Replace(validDraft, `"head":"helm/skeleton"`, `"head":"helm/skeleton","Head":"release"`, 1)},
+		"draft HEAD":           {GitHubPullRequestCreateDraft, strings.Replace(validDraft, `"head":"helm/skeleton"`, `"HEAD":"helm/skeleton"`, 1)},
+		"draft long-s schema":  {GitHubPullRequestCreateDraft, strings.Replace(validDraft, `"schema":`, "\"\u017fchema\":", 1)},
+		"read Branch":          {GitHubRepositoryGet, `{"schema":"helm.github.repository.get.v1","Branch":"main"}`},
+		"read BRANCH":          {GitHubRepositoryGet, `{"schema":"helm.github.repository.get.v1","branch":"helm/x","BRANCH":"main"}`},
+		"read long-s schema":   {GitHubRepositoryGet, "{\"\u017fchema\":\"helm.github.repository.get.v1\"}"},
+	}
+	for name, c := range cases {
+		if _, err := Validate(c.effectType, target, []byte(c.raw)); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
+		}
+	}
+	// Known good: the exact names still pass.
+	if _, err := Validate(GitHubBranchCreateFromChanges, target, []byte(validBranch)); err != nil {
+		t.Fatal(err)
+	}
+}

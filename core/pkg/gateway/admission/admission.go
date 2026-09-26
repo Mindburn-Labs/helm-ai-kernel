@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -213,7 +214,7 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 			return err
 		}
 		if in.EffectType == effectargs.GitHubPullRequestCreateDraft {
-			if err := checkBranchAttempt(ctx, tx, caller.TenantID, in); err != nil {
+			if err := checkBranchAttempt(ctx, tx, caller, in); err != nil {
 				return err
 			}
 		}
@@ -709,7 +710,8 @@ func (s *Service) condition(text string) *authority.Snapshot {
 // SUCCEEDED, whose head
 // and base equal the pull request's, and whose read-back commit is head_sha.
 // Otherwise no attempt is created.
-func checkBranchAttempt(ctx context.Context, tx *sql.Tx, tenantID string, in ProposeInput) error {
+func checkBranchAttempt(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput) error {
+	tenantID := caller.TenantID
 	var pr effectargs.PullRequestCreateDraft
 	if err := json.Unmarshal(in.Arguments, &pr); err != nil {
 		return err
@@ -717,22 +719,30 @@ func checkBranchAttempt(ctx context.Context, tx *sql.Tx, tenantID string, in Pro
 	failed := func(why string) error {
 		return refuse(CodeFailedPrecondition, contracts.ReasonPreconditionFailed, "branch_attempt_id: %s", why)
 	}
+	// One refusal for "no such attempt", "another workspace's", "not a branch
+	// of this repository" and "not observed to succeed", so the check is no
+	// oracle for attempts the caller cannot read. The reason goes to the log.
+	unusable := func(why string) error {
+		slog.InfoContext(ctx, "draft pull request precondition refused", "branch_attempt_id", *pr.BranchAttemptID, "reason", why)
+		return failed("no observed branch attempt of this repository in this workspace")
+	}
 	var effectType, target, state string
 	var outcome sql.NullString
 	err := tx.QueryRowContext(ctx, `SELECT effect_type, target, state, outcome FROM authority_effect_attempts
-		WHERE tenant_id = $1 AND attempt_id = $2 FOR SHARE`, tenantID, *pr.BranchAttemptID).Scan(&effectType, &target, &state, &outcome)
+		WHERE tenant_id = $1 AND attempt_id = $2 AND workspace_id = $3 FOR SHARE`,
+		tenantID, *pr.BranchAttemptID, caller.WorkspaceID).Scan(&effectType, &target, &state, &outcome)
 	if errors.Is(err, sql.ErrNoRows) {
-		return failed("no such attempt in this tenant")
+		return unusable("no such attempt in this tenant and workspace")
 	}
 	if err != nil {
 		return err
 	}
 	if effectType != effectargs.GitHubBranchCreateFromChanges || target != in.Target {
-		return failed("the attempt is not a branch of this repository")
+		return unusable("the attempt is not a branch of this repository")
 	}
 	// OBSERVED(SUCCEEDED) or RECONCILED(SUCCEEDED) (HELM-753, #1058).
 	if !(state == "OBSERVED" || state == "RECONCILED") || outcome.String != "SUCCEEDED" {
-		return failed("the branch attempt has not been observed to succeed")
+		return unusable("the branch attempt has not been observed to succeed")
 	}
 	var raw []byte
 	err = tx.QueryRowContext(ctx, `SELECT arguments FROM authority_attempt_contents WHERE tenant_id = $1 AND attempt_id = $2`,

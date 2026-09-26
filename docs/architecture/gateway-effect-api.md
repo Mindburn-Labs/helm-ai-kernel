@@ -614,7 +614,9 @@ transaction bound to the token's tenant:
 1. The request is validated first; a malformed request, including arguments
    that break their effect type's closed schema, is `invalid_argument` and
    creates no attempt. Every effect's arguments are one JSON object of at most
-   64 KiB of UTF-8 with no duplicate key. The walking-skeleton effect types
+   64 KiB of UTF-8 with no duplicate key. Field names match exactly and
+   case-sensitively: `Head` or `ſchema` is an unknown field, never a spelling
+   of `head` or `schema`. The walking-skeleton effect types
    are checked against their HELM-753 schemas and the rules those schemas
    state in prose (`core/pkg/gateway/effectargs`).
 2. The attempt is inserted with `ON CONFLICT (tenant_id, idempotency_key) DO
@@ -626,7 +628,10 @@ transaction bound to the token's tenant:
    branch attempt of the same tenant and target in `OBSERVED(SUCCEEDED)` or
    `RECONCILED(SUCCEEDED)`, with the same head and base, and a read-back
    commit equal to `head_sha`; otherwise
-   `failed_precondition` with `PRECONDITION_FAILED`, and no attempt.
+   `failed_precondition` with `PRECONDITION_FAILED`, and no attempt. The
+   branch attempt must be in the caller's workspace; a missing one, another
+   workspace's, another type or an unobserved one get the same refusal text,
+   and the detail goes to the server log.
 4. The mandate is resolved from `sub` and the effect type (the selector, when
    set, must be held by `sub`). Then the tenant row, every principal of the
    chain (the requester, and each holder and delegator), the mandates root to
@@ -689,6 +694,9 @@ human operator's single-use `helm.gateway.stop` token.
   every held exposure released in the same transaction.
 - `DENIED`, `REJECTED`, `EXPIRED` and `CANCELLED` return unchanged.
 - `DISPATCHING` and later are `failed_precondition`.
+
+A request message is capped at 128 KiB after decompression, and a request
+body at 132 KiB as sent, before authentication or any handler runs.
 
 Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
 `SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's

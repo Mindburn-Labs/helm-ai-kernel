@@ -161,7 +161,8 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 	protocols.SetHTTP2(true)
-	apiServer := &http.Server{Handler: mux, TLSConfig: tlsConfig, ReadHeaderTimeout: 10 * time.Second}
+	apiServer := &http.Server{Handler: mux, TLSConfig: tlsConfig, ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
 	address := cfg.listen
 	if cfg.devInsecureListen != "" {
 		// gRPC needs HTTP/2; without TLS that is h2c.
@@ -170,7 +171,8 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		slog.Warn("serving the gateway API over plain HTTP on loopback; never use this outside development", "address", address)
 	}
 	apiServer.Protocols = protocols
-	healthServer := &http.Server{Addr: cfg.healthListen, Handler: healthHandler(db), ReadHeaderTimeout: 10 * time.Second}
+	healthServer := &http.Server{Addr: cfg.healthListen, Handler: healthHandler(db), ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {

@@ -417,6 +417,18 @@ removal_proofs:
     replace: "\t\tif true || id.Scope == scope {\n"
     tests:
       - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
+  - control: CTL-052
+    file: core/pkg/gateway/effectargs/effectargs.go
+    find: "\t\tif !slices.Contains(allowed, key) {\n"
+    replace: "\t\tif false && !slices.Contains(allowed, key) {\n"
+    tests:
+      - "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName"
+  - control: CTL-052
+    file: core/pkg/gateway/server/server.go
+    find: "gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxMessageBytes))"
+    replace: "gatewayv1.NewEffectGatewayServiceHandler(s)"
+    tests:
+      - "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
 
   - control: CTL-053
     file: core/pkg/gateway/server/auth.go
@@ -2836,7 +2848,9 @@ controls:
       records ESCALATED with approval digest v1. Tenant, workspace and
       principal come only from an ADR-0005 token with the RPC's one scope;
       reads outside the token's tenant or workspace are not found; malformed
-      requests and closed-schema argument violations create no attempt
+      requests and closed-schema argument violations (field names matched
+      exactly and case-sensitively) create no attempt, and a request message
+      over 128 KiB, compressed or not, is refused before authentication
       (HELM-751 s2, HELM-750 s2b).
     status: enforced
     entry_points:
@@ -2879,6 +2893,8 @@ controls:
         - "core/pkg/gateway/admission.TestRequestDigestCoversEveryFieldButTheKey"
         - "core/pkg/gateway/effectargs.TestValidateRefusesMalformedArguments"
         - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
+        - "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName"
+        - "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
         - "core/cmd/helm-gateway.TestDevInsecureListenRefusesAnythingButLoopback"
         - "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
         - "core/cmd/helm-gateway.TestServeRequiresAClientCertificateWhenConfigured"
@@ -2887,6 +2903,8 @@ controls:
         - "core/pkg/gateway/admission.TestApprovalDigestV1MatchesTheDesignNoteVector"
         - "core/pkg/gateway/effectargs.TestValidateRefusesMalformedArguments"
         - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
+        - "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName"
+        - "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
       bypass:
         - "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired"
         - "core/pkg/gateway/admission.TestGatewayDoesNotImportTheLegacyRuntime"

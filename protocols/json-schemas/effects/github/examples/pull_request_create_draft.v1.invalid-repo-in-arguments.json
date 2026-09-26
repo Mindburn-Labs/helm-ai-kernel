@@ -1,0 +1,10 @@
+{
+  "schema": "helm.github.pull_request.create_draft.v1",
+  "branch_attempt_id": "0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d",
+  "base": "main",
+  "head": "helm/run-0192f0c4",
+  "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
+  "title": "docs: add the skeleton note",
+  "body": "",
+  "repo": "other/repo"
+}

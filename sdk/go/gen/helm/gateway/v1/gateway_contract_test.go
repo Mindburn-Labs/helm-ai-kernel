@@ -10,6 +10,7 @@
 package gatewayv1
 
 import (
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -468,7 +469,7 @@ func TestHeldFieldNumbersStayFree(t *testing.T) {
 		numbers []protoreflect.FieldNumber
 	}{
 		{(&ApproveRequest{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{4}},
-		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{7, 8, 9, 10, 11, 12, 13, 14, 15}},
+		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{9, 10, 11, 12, 13, 14, 15}},
 	}
 	for _, h := range held {
 		for _, n := range h.numbers {
@@ -583,6 +584,69 @@ func TestApprovalDigestVector(t *testing.T) {
 	for _, v := range []string{want, "2026-09-26T12:00:00.987654Z"} {
 		if !strings.Contains(doc, v) {
 			t.Errorf("docs/architecture/gateway-effect-api.md does not carry %s", v)
+		}
+	}
+}
+
+// Observation's typed results: one oneof, one member per effect type, on the
+// field numbers HELM-753 took from the held range (7 and 8).
+func TestObservationTypedResults(t *testing.T) {
+	md := (&Observation{}).ProtoReflect().Descriptor()
+	oneof := md.Oneofs().ByName("result")
+	if oneof == nil {
+		t.Fatal("Observation has no result oneof")
+	}
+	want := map[protoreflect.Name]protoreflect.FieldNumber{"github_pull_request": 7, "github_branch": 8}
+	if oneof.Fields().Len() != len(want) {
+		t.Fatalf("result has %d members, want %d", oneof.Fields().Len(), len(want))
+	}
+	for name, number := range want {
+		f := oneof.Fields().ByName(name)
+		if f == nil || f.Number() != number {
+			t.Errorf("result member %s: got %v, want field %d", name, f, number)
+		}
+	}
+}
+
+// gitBlobSHA1 is git's blob object ID, the value the branch read-back compares.
+func gitBlobSHA1(content []byte) string {
+	h := sha1.New()
+	fmt.Fprintf(h, "blob %d\x00", len(content))
+	h.Write(content)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// GitHubBranchResult.files_digest, as its comment and the design note define
+// it. The vector is the one in docs/architecture/gateway-effect-api.md; the
+// blob IDs are what `git hash-object` prints for the same bytes.
+func TestGitHubBranchFilesDigestVector(t *testing.T) {
+	type file struct{ path, mode, content string }
+	files := []file{
+		{"scripts/ok.sh", "100755", "#!/bin/sh\necho ok\n"},
+		{"docs/skeleton.md", "100644", "# Skeleton\n"},
+	}
+	blobs := map[string]string{
+		"docs/skeleton.md": "41b86bfc1930f3be282f9d5dcb8b3816deda7b8c",
+		"scripts/ok.sh":    "e37f89b3b76e73e0d000552c897006f0b8ba1b76",
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
+	var enc []byte
+	for _, f := range files {
+		blob := gitBlobSHA1([]byte(f.content))
+		if blob != blobs[f.path] {
+			t.Errorf("%s blob = %s, want %s", f.path, blob, blobs[f.path])
+		}
+		enc = fmt.Appendf(enc, "%s\x00%s\x00%s\n", f.path, f.mode, blob)
+	}
+	got := sha256.Sum256(enc)
+	const want = "c361fc7cce27fa9aa3f9e7ef1b275961a2418fff20e16fa1846e5bc50b43ec54"
+	if hex.EncodeToString(got[:]) != want {
+		t.Fatalf("files_digest = %x, want %s", got, want)
+	}
+	note := readRepoFile(t, "docs/architecture/gateway-effect-api.md")
+	for _, v := range []string{want, blobs["docs/skeleton.md"], blobs["scripts/ok.sh"]} {
+		if !strings.Contains(note, v) {
+			t.Errorf("the design note no longer carries %s", v)
 		}
 	}
 }

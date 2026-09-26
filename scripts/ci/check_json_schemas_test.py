@@ -61,5 +61,34 @@ class JsonSchemaGateFailsClosedTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+GITHUB_EFFECTS = CHECKER.parents[2] / "protocols" / "json-schemas" / "effects" / "github"
+
+
+class GitHubEffectArgumentFixturesTest(unittest.TestCase):
+    """Each GitHub effect schema accepts its known-good fixture and rejects every
+    known-bad one (TA §13.1): a schema that accepted anything, or nothing, fails
+    here rather than in the gateway (HELM-753)."""
+
+    def test_fixtures(self) -> None:
+        import json
+
+        import jsonschema
+
+        schemas = sorted(GITHUB_EFFECTS.glob("*.v1.json"))
+        self.assertEqual(len(schemas), 2, "expected the branch and draft pull request schemas")
+        for schema_path in schemas:
+            stem = schema_path.name.removesuffix(".json")
+            schema = json.loads(schema_path.read_text())
+            validator = jsonschema.Draft202012Validator(schema)
+            valid = GITHUB_EFFECTS / "examples" / f"{stem}.valid.json"
+            errors = list(validator.iter_errors(json.loads(valid.read_text())))
+            self.assertEqual(errors, [], f"{valid.name} must validate")
+            invalid = sorted((GITHUB_EFFECTS / "examples").glob(f"{stem}.invalid-*.json"))
+            self.assertGreaterEqual(len(invalid), 4, f"{stem} needs known-bad fixtures")
+            for path in invalid:
+                with self.subTest(fixture=path.name):
+                    self.assertFalse(validator.is_valid(json.loads(path.read_text())), f"{path.name} must be rejected")
+
+
 if __name__ == "__main__":
     unittest.main()

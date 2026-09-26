@@ -211,7 +211,7 @@ jobs:
         uses: anchore/sbom-action/download-syft@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
 
       - name: Install grype
-        uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
 
       - name: Expose grype on PATH
         run: |
@@ -363,7 +363,7 @@ jobs:
         uses: anchore/sbom-action/download-syft@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
 
       - name: Install grype
-        uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
 
       - name: Expose grype on PATH
         run: |
@@ -628,7 +628,7 @@ jobs:
       - name: Install syft
         uses: anchore/sbom-action/download-syft@55dc4ee22412511ee8c3142cbea40418e6cec693 # v0.17.8
       - name: Install grype
-        uses: anchore/scan-action/download-grype@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
 
       - name: Expose grype on PATH
         run: |

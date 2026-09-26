@@ -848,6 +848,29 @@
       "domain": "operations",
       "description": "A precondition the effect type declares does not hold, so no attempt was created",
       "since": "1.8.0"
+    },
+    {
+      "code": "APPROVER_NOT_DISTINCT",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "The approver is the requester; an approval needs a distinct principal",
+      "since": "1.8.0",
+      "finality": "class_forbidden"
+    },
+    {
+      "code": "APPROVAL_REJECTED",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "A distinct human approver rejected the escalated effect",
+      "since": "1.8.0"
+    },
+    {
+      "code": "STEP_UP_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion the request did not carry",
+      "since": "1.8.0",
+      "finality": "ungranted"
     }
   ]
 }

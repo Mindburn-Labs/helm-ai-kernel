@@ -54,6 +54,58 @@ func (s *Server) Propose(ctx context.Context, req *connect.Request[gatewayv1.Pro
 	return connect.NewResponse(&gatewayv1.ProposeResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
 }
 
+// Approve approves an ESCALATED attempt and re-runs admission (token scope
+// helm.gateway.decide, single-use, bound to the attempt and "approve").
+func (s *Server) Approve(ctx context.Context, req *connect.Request[gatewayv1.ApproveRequest]) (*connect.Response[gatewayv1.ApproveResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeDecide)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkDecisionBinding(id.AuthorizationDetails, req.Msg.GetAttemptId(), "approve"); err != nil {
+		return nil, err
+	}
+	attempt, existing, err := s.Admission.Approve(ctx, id.Caller, id.token(), admission.DecideInput{
+		AttemptID: req.Msg.GetAttemptId(), ApprovalDigest: req.Msg.GetApprovalDigest(), Reason: req.Msg.GetReason(),
+	})
+	if err != nil {
+		return nil, toRPCError(ctx, "Approve", err)
+	}
+	return connect.NewResponse(&gatewayv1.ApproveResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
+}
+
+// Reject rejects an ESCALATED attempt (token scope helm.gateway.decide,
+// single-use, bound to the attempt and "reject").
+func (s *Server) Reject(ctx context.Context, req *connect.Request[gatewayv1.RejectRequest]) (*connect.Response[gatewayv1.RejectResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeDecide)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkDecisionBinding(id.AuthorizationDetails, req.Msg.GetAttemptId(), "reject"); err != nil {
+		return nil, err
+	}
+	attempt, existing, err := s.Admission.Reject(ctx, id.Caller, id.token(), admission.DecideInput{
+		AttemptID: req.Msg.GetAttemptId(), ApprovalDigest: req.Msg.GetApprovalDigest(), Reason: req.Msg.GetReason(),
+	})
+	if err != nil {
+		return nil, toRPCError(ctx, "Reject", err)
+	}
+	return connect.NewResponse(&gatewayv1.RejectResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
+}
+
+// Cancel withdraws an ESCALATED or ADMITTED attempt: the requester with
+// helm.gateway.propose, or an operator with helm.gateway.stop (single-use).
+func (s *Server) Cancel(ctx context.Context, req *connect.Request[gatewayv1.CancelRequest]) (*connect.Response[gatewayv1.CancelResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopePropose, ScopeStop)
+	if err != nil {
+		return nil, err
+	}
+	attempt, existing, err := s.Admission.Cancel(ctx, id.Caller, id.token(), req.Msg.GetAttemptId())
+	if err != nil {
+		return nil, toRPCError(ctx, "Cancel", err)
+	}
+	return connect.NewResponse(&gatewayv1.CancelResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
+}
+
 // GetAttempt returns one attempt (token scope helm.gateway.read).
 func (s *Server) GetAttempt(ctx context.Context, req *connect.Request[gatewayv1.GetAttemptRequest]) (*connect.Response[gatewayv1.GetAttemptResponse], error) {
 	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeRead)

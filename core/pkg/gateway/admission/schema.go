@@ -27,6 +27,8 @@ var Tables = []string{
 	"authority_exposures",
 	"authority_postings",
 	"authority_observations",
+	"authority_approvals",
+	"authority_token_replay",
 }
 
 // migration is one version of the gateway schema.
@@ -38,7 +40,10 @@ type migration struct {
 
 var migrations = []migration{
 	{1, "authority rows and admission", func() (string, error) {
-		return withRowSecurity(mandates.SchemaDDL(), "schema/001_admission.sql", Tables)
+		return withRowSecurity(mandates.SchemaDDL(), "schema/001_admission.sql", Tables[:8])
+	}},
+	{2, "approvals and single-use tokens", func() (string, error) {
+		return withRowSecurity("", "schema/002_decisions.sql", Tables[8:])
 	}},
 }
 

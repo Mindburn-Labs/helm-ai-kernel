@@ -57,6 +57,15 @@ type Input struct {
 	Quote       []Amount
 	ActiveStops []string
 	Counters    []CounterState
+	// Approval is the recorded decision Approve re-admits with; nil on
+	// Propose.
+	Approval *ApprovalState
+}
+
+// ApprovalState is a recorded approval or rejection of the attempt.
+type ApprovalState struct {
+	ApproverID string
+	Approved   bool
 }
 
 // Decision is decide's output. Reason is a registry code (§11.1).
@@ -133,7 +142,15 @@ func Decide(in Input) Decision {
 		}
 	}
 	if needsApproval(in, amount) {
-		return Decision{Verdict: Escalate, Reason: contracts.ReasonApprovalRequired}
+		switch {
+		case in.Approval == nil:
+			return Decision{Verdict: Escalate, Reason: contracts.ReasonApprovalRequired}
+		case in.Approval.ApproverID == in.PrincipalID:
+			// A backstop: Approve refuses self-approval before recording it.
+			return deny(contracts.ReasonApproverNotDistinct)
+		case !in.Approval.Approved:
+			return deny(contracts.ReasonApprovalRejected)
+		}
 	}
 	return Decision{Verdict: Allow}
 }

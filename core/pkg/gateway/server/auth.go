@@ -52,6 +52,8 @@ type Authenticator struct {
 type Identity struct {
 	admission.Caller
 	Scope string
+	// Issuer is the token's iss.
+	Issuer string
 	// TokenID is the jti.
 	TokenID string
 	// ExpiresAt is the token's exp.
@@ -103,6 +105,7 @@ func (a *Authenticator) Authenticate(ctx context.Context, header http.Header, sc
 			PrincipalID: strings.TrimSpace(claims.RegisteredClaims.Subject),
 			ActorID:     claims.Actor,
 		},
+		Issuer:               claims.RegisteredClaims.Issuer,
 		TokenID:              strings.TrimSpace(claims.RegisteredClaims.ID),
 		AuthorizationDetails: claims.AuthorizationDetails,
 	}
@@ -140,4 +143,42 @@ func unauthenticated(message string) error {
 
 func permissionDenied(message string) error {
 	return rpcError(connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege, false, errors.New(message))
+}
+
+// token is what a single-use decide or stop token contributes to admission.
+func (id Identity) token() admission.Token {
+	return admission.Token{Issuer: id.Issuer, ID: id.TokenID, Scope: id.Scope, ExpiresAt: id.ExpiresAt}
+}
+
+// decisionDetail is one RFC 9396 authorization_details entry of a decide
+// token.
+type decisionDetail struct {
+	Type      string `json:"type"`
+	AttemptID string `json:"attempt_id"`
+	Action    string `json:"action"`
+}
+
+// checkDecisionBinding requires exactly one helm_effect_decision entry in the
+// token's authorization_details, naming this attempt and action (proposed
+// ADR-0005 §10). A decide token cannot approve another attempt, or reject
+// where it was minted to approve.
+func checkDecisionBinding(raw json.RawMessage, attemptID, action string) error {
+	var entries []json.RawMessage
+	if len(raw) == 0 || json.Unmarshal(raw, &entries) != nil {
+		return permissionDenied("a decide token must carry authorization_details naming its attempt")
+	}
+	var bound []decisionDetail
+	for _, entry := range entries {
+		var d decisionDetail
+		if json.Unmarshal(entry, &d) == nil && d.Type == "helm_effect_decision" {
+			bound = append(bound, d)
+		}
+	}
+	if len(bound) != 1 {
+		return permissionDenied("a decide token must carry exactly one helm_effect_decision entry")
+	}
+	if bound[0].AttemptID != attemptID || bound[0].Action != action {
+		return permissionDenied("the decide token is bound to another attempt or action")
+	}
+	return nil
 }

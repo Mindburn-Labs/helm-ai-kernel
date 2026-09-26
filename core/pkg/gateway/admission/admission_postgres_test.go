@@ -86,6 +86,7 @@ func newFixture(t *testing.T) *fixture {
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
 		`GRANT SELECT, INSERT, UPDATE ON ` + strings.Join(tables, ", ") + ` TO ` + role,
 		`REVOKE UPDATE ON authority_postings FROM ` + role,
+		`GRANT DELETE ON authority_token_replay TO ` + role,
 		`GRANT SELECT ON gateway_schema_migrations TO ` + role,
 	} {
 		_, err := owner.Exec(statement)

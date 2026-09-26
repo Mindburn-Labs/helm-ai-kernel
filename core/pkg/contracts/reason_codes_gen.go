@@ -118,6 +118,9 @@ var registeredReasonCodes = [...]ReasonCode{
 	"ARITHMETIC_OVERFLOW",
 	"IDEMPOTENCY_CONFLICT",
 	"PRECONDITION_FAILED",
+	"APPROVER_NOT_DISTINCT",
+	"APPROVAL_REJECTED",
+	"STEP_UP_REQUIRED",
 }
 
 // CoreReasonCodes returns the full normative core reason-code registry.

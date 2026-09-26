@@ -9,8 +9,9 @@ includes WS-B's review of 2026-09-25 (PR #1015), which the coordinator
 accepted; the coordinator's resolutions of 2026-09-26 (see "Resolved"); and
 slice 1b (the delegated requester, whole-second approval digests). Under target architecture rev 3.4 §1 the contract is *Specified*: it
 is versioned. Slice 2 adds a server, `helm-gateway`, for `Propose`,
-`GetAttempt` and `GetAttemptContent` (see "The server (slice 2)"); the other
-RPCs answer `unimplemented`.
+`Approve`, `Reject`, `Cancel`, `GetAttempt` and `GetAttemptContent` (see "The
+server (slice 2)"); `Dispatch`, `Observe`, `Stop` and `Lift` answer
+`unimplemented`.
 
 - IDL: [`protocols/proto/helm/gateway/v1/gateway.proto`](../../protocols/proto/helm/gateway/v1/gateway.proto),
   package `helm.gateway.v1`, service `EffectGatewayService`.
@@ -594,6 +595,44 @@ transaction bound to the token's tenant:
 
 **GetAttempt** and **GetAttemptContent** read in the token's tenant and
 workspace; anything else is `not_found`.
+
+**Approve** and **Reject** take a `helm.gateway.decide` token whose
+`authorization_details` holds exactly one `helm_effect_decision` entry for
+this attempt and action; anything else is `permission_denied`. The token is
+single-use: its `jti` is recorded in `authority_token_replay`, keyed by
+tenant, issuer and `jti`, in the decision's own transaction, and a second use
+is refused. Rows are purged once `exp` plus 30 s has passed, and process
+memory is never the replay store. A refused call rolls the record back, so
+only an accepted operation uses up its token. In the transaction the attempt
+is locked `FOR UPDATE`; an attempt no longer `ESCALATED` returns unchanged
+with `existing` true. The preconditions, each an error that leaves the
+attempt `ESCALATED`:
+
+- the approver is not the requester (`APPROVER_NOT_DISTINCT`), and is an
+  active human principal of the tenant in the gateway's own rows
+  (`INSUFFICIENT_PRIVILEGE`);
+- `approval_digest` equals the attempt's (`failed_precondition`);
+- the escalation has not expired (`failed_precondition`,
+  `APPROVAL_TIMEOUT`);
+- Approve only: a high, irreversible or `helm.authority.*` effect needs
+  step-up, which fails closed (`STEP_UP_REQUIRED`). A medium effect that a
+  mandate escalates through `approval_required`, such as the skeleton's draft
+  pull request, is approved without it.
+
+Approve then records the approval and re-runs admission on the stored
+request, re-reading stops, the mandate chain and counters: the attempt
+becomes `ADMITTED` with a hold and a permit, or `DENIED`. Reject records the
+rejection and the attempt becomes `REJECTED` (`APPROVAL_REJECTED`). There is
+one decision per attempt.
+
+**Cancel** takes the requester's `helm.gateway.propose` token, or an active
+human operator's single-use `helm.gateway.stop` token.
+
+- `ESCALATED` becomes `CANCELLED`.
+- `ADMITTED` becomes `CANCELLED`, with the permit voided (`voided_at`) and
+  every held exposure released in the same transaction.
+- `DENIED`, `REJECTED`, `EXPIRED` and `CANCELLED` return unchanged.
+- `DISPATCHING` and later are `failed_precondition`.
 
 Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
 `SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's

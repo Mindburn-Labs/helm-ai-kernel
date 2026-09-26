@@ -179,6 +179,27 @@ func TestDecideAllowsDeniesAndEscalatesInOrder(t *testing.T) {
 		{"approval required for another effect type", root(func(m *mandates.Terms) {
 			m.ApprovalRequired = []string{"github.pull_request.create_draft"}
 		}), Allow, ""},
+		{"approved by a distinct human", func(_ *testing.T, in Input) Input {
+			in.RiskClass = mandates.RiskHigh
+			in.Approval = &ApprovalState{ApproverID: "human-b", Approved: true}
+			return in
+		}, Allow, ""},
+		{"approved by the requester (backstop)", func(_ *testing.T, in Input) Input {
+			in.RiskClass = mandates.RiskHigh
+			in.Approval = &ApprovalState{ApproverID: "human-a", Approved: true}
+			return in
+		}, Deny, contracts.ReasonApproverNotDistinct},
+		{"rejected", func(_ *testing.T, in Input) Input {
+			in.RiskClass = mandates.RiskHigh
+			in.Approval = &ApprovalState{ApproverID: "human-b"}
+			return in
+		}, Deny, contracts.ReasonApprovalRejected},
+		{"a stop after the approval", func(_ *testing.T, in Input) Input {
+			in.RiskClass = mandates.RiskHigh
+			in.Approval = &ApprovalState{ApproverID: "human-b", Approved: true}
+			in.ActiveStops = []string{"s"}
+			return in
+		}, Deny, contracts.ReasonEmergencyStopFenced},
 		{"a denial beats escalation", func(_ *testing.T, in Input) Input {
 			in.RiskClass = mandates.RiskHigh
 			in.Counters = []CounterState{{LimitID: "l", Limit: 0, Delta: 1}}
@@ -202,6 +223,23 @@ func TestDecideAllowsDeniesAndEscalatesInOrder(t *testing.T) {
 		got := Decide(test.edit(t, decideBase(t)))
 		if got.Verdict != test.verdict || got.Reason != test.reason {
 			t.Errorf("%s: Decide = %s %s, want %s %s", test.name, got.Verdict, got.Reason, test.verdict, test.reason)
+		}
+	}
+}
+
+func TestStepUpCoversHighIrreversibleAndAuthorityChanges(t *testing.T) {
+	for _, test := range []struct {
+		risk, effectType string
+		want             bool
+	}{
+		{"high", "github.pull_request.merge", true},
+		{"irreversible", "payment.send", true},
+		{"low", "helm.authority.lift", true},
+		{"medium", "github.pull_request.create_draft", false},
+		{"low", "github.repository.get", false},
+	} {
+		if got := needsStepUp(lockedAttempt{risk: test.risk, effectType: test.effectType}); got != test.want {
+			t.Errorf("%s %s: needsStepUp = %v, want %v", test.risk, test.effectType, got, test.want)
 		}
 	}
 }

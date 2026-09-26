@@ -237,6 +237,13 @@ pub const ARITHMETIC_OVERFLOW: &str = "ARITHMETIC_OVERFLOW";
 pub const IDEMPOTENCY_CONFLICT: &str = "IDEMPOTENCY_CONFLICT";
 /// DENY: A precondition the effect type declares does not hold, so no attempt was created
 pub const PRECONDITION_FAILED: &str = "PRECONDITION_FAILED";
+/// DENY: The approver is the requester; an approval needs a distinct principal
+pub const APPROVER_NOT_DISTINCT: &str = "APPROVER_NOT_DISTINCT";
+/// DENY: A distinct human approver rejected the escalated effect
+pub const APPROVAL_REJECTED: &str = "APPROVAL_REJECTED";
+/// DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion
+/// the request did not carry
+pub const STEP_UP_REQUIRED: &str = "STEP_UP_REQUIRED";
 
 /// Every registered reason code, in registry order.
 pub const ALL: &[&str] = &[
@@ -352,6 +359,9 @@ pub const ALL: &[&str] = &[
     ARITHMETIC_OVERFLOW,
     IDEMPOTENCY_CONFLICT,
     PRECONDITION_FAILED,
+    APPROVER_NOT_DISTINCT,
+    APPROVAL_REJECTED,
+    STEP_UP_REQUIRED,
 ];
 
 /// Whether `code` is in the registry.

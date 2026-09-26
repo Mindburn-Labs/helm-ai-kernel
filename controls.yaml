@@ -418,6 +418,25 @@ removal_proofs:
     tests:
       - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
 
+  - control: CTL-052
+    file: core/pkg/gateway/server/auth.go
+    find: "\tif bound[0].AttemptID != attemptID || bound[0].Action != action {\n"
+    replace: "\tif false && (bound[0].AttemptID != attemptID || bound[0].Action != action) {\n"
+    tests:
+      - "core/pkg/gateway/server.TestDecisionBinding"
+  - control: CTL-052
+    file: core/pkg/gateway/admission/decide.go
+    find: "\t\tcase in.Approval.ApproverID == in.PrincipalID:\n"
+    replace: "\t\tcase false && in.Approval.ApproverID == in.PrincipalID:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
+  - control: CTL-052
+    file: core/pkg/gateway/admission/decisions.go
+    find: "\treturn a.risk == string(mandates.RiskHigh) || a.risk == string(mandates.RiskIrreversible) ||\n"
+    replace: "\treturn false && a.risk == string(mandates.RiskHigh) || a.risk == string(mandates.RiskIrreversible) ||\n"
+    tests:
+      - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+
 controls:
 
   - id: INV-001
@@ -2800,7 +2819,7 @@ controls:
     protected_operations:
       - "Propose, GetAttempt and GetAttemptContent of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
-      - "Approve, Reject, Cancel, Dispatch, Observe, Stop and Lift answer unimplemented in this slice; nothing in the binary consumes a permit yet, so the dispatch-claim half of ADR-0001 (version re-check, stops after admission) is not enforced here."
+      - "Dispatch, Observe, Stop and Lift answer unimplemented in this slice; nothing in the binary consumes a permit yet, so the dispatch-claim half of ADR-0001 (version re-check, stops after admission) is not enforced here. Approve, Reject and Cancel are CTL-052."
       - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which no shipped binary calls yet (CTL-046); the gateway trusts the rows it finds."
       - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2)."
       - "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR)."
@@ -2836,3 +2855,56 @@ controls:
         - "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired"
         - "core/pkg/gateway/admission.TestGatewayDoesNotImportTheLegacyRuntime"
         - "core/cmd/helm-gateway.TestServeOverDevInsecureLoopbackAnswersGRPC"
+  - id: CTL-052
+    title: "Gateway approval decisions"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway records at most one decision per ESCALATED attempt, by an
+      active human principal of the tenant distinct from the requester
+      (ADR-0001 I6), with a helm.gateway.decide token bound by RFC 9396
+      authorization_details to that attempt and action and used once: its
+      jti is recorded in Postgres in the decision's transaction. The
+      approval digest must equal the attempt's, the escalation must not have
+      expired, and high, irreversible or authority-widening effects fail
+      closed until step-up exists (STEP_UP_REQUIRED). Approve re-runs
+      admission in the same transaction, re-reading stops, the mandate chain
+      and counters, so the attempt becomes ADMITTED or DENIED; a refused
+      precondition leaves it ESCALATED. Cancel follows ESCALATED or ADMITTED
+      to CANCELLED only, voiding the permit and releasing held exposure in
+      the same transaction, for the requester's propose token or an active
+      human operator's single-use stop token.
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/admission.Service.Approve"
+      - "core/pkg/gateway/admission.Service.Reject"
+      - "core/pkg/gateway/admission.Service.Cancel"
+      - "core/pkg/gateway/server.Server.Approve"
+      - "core/pkg/gateway/server.Server.Cancel"
+    config:
+      - "The HELM_CP_IDENTITY_* token configuration of CTL-051; decide and stop tokens are minted per decision by the Control Plane and carry iss, jti and exp."
+    protected_operations:
+      - "Approve, Reject and Cancel of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
+    bypass_assumptions:
+      - "Step-up does not exist yet, so a high, irreversible or helm.authority.* effect cannot be approved at all; a medium effect a mandate escalates (approval_required) is approved without it."
+      - "An escalation past its expiry is refused but stays ESCALATED: the River job that moves it to EXPIRED is a later slice."
+      - "A decide token binds the attempt and action; the approver sees and hashes the arguments through GetAttemptContent, which this slice serves but cannot force a client to use."
+      - "Releasing an ADMITTED attempt keeps its distinct-value rows, so the value still counts as seen in its bucket."
+      - "The trust limits of CTL-051 (ADR-0005 issuer trust, no deployment yet) apply."
+    tests:
+      allowed:
+        - "core/pkg/gateway/admission.TestPostgresApproveByADistinctHumanAdmits"
+        - "core/pkg/gateway/server.TestPostgresGatewayDecisionsOnTheWire"
+        - "core/pkg/gateway/admission.TestPostgresCancelReleasesAndFollowsTheAllowedEdges"
+      forbidden:
+        - "core/pkg/gateway/admission.TestPostgresApprovalPreconditionsLeaveTheAttemptEscalated"
+        - "core/pkg/gateway/admission.TestPostgresDecideAndStopTokensAreSingleUse"
+        - "core/pkg/gateway/admission.TestPostgresApproveRereadsStopsAndTheMandate"
+        - "core/pkg/gateway/admission.TestPostgresStepUpAndExpiryFailClosed"
+        - "core/pkg/gateway/admission.TestPostgresConcurrentApprovalsAdmitOnce"
+        - "core/pkg/gateway/server.TestDecisionBinding"
+      removal:
+        - "core/pkg/gateway/server.TestDecisionBinding"
+        - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
+        - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+      bypass:
+        - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"

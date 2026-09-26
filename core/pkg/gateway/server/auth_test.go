@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -142,4 +143,26 @@ func TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired(t *testing.
 func thumbprint(cert *x509.Certificate) string {
 	sum := sha256.Sum256(cert.Raw)
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func TestDecisionBinding(t *testing.T) {
+	const id = "0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d"
+	good := `[{"type":"helm_effect_decision","attempt_id":"` + id + `","action":"approve"},{"type":"other","x":1}]`
+	if err := checkDecisionBinding(json.RawMessage(good), id, "approve"); err != nil {
+		t.Fatalf("a bound token: %v", err)
+	}
+	for name, test := range map[string]struct{ raw, attempt, action string }{
+		"no claim":          {"", id, "approve"},
+		"not a list":        {`{"type":"helm_effect_decision"}`, id, "approve"},
+		"another attempt":   {good, "0192f0c4-7a1e-7c3b-9d2a-000000000000", "approve"},
+		"another action":    {good, id, "reject"},
+		"no decision entry": {`[{"type":"helm_stop_lift","stop_id":"s"}]`, id, "approve"},
+		"two decision entries": {`[{"type":"helm_effect_decision","attempt_id":"` + id + `","action":"approve"},` +
+			`{"type":"helm_effect_decision","attempt_id":"x","action":"approve"}]`, id, "approve"},
+	} {
+		code, reason, _ := errorDetail(t, checkDecisionBinding(json.RawMessage(test.raw), test.attempt, test.action))
+		if code != connect.CodePermissionDenied || reason != "INSUFFICIENT_PRIVILEGE" {
+			t.Errorf("%s: %v %q, want permission_denied", name, code, reason)
+		}
+	}
 }

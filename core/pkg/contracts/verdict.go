@@ -102,6 +102,9 @@ const (
 	ReasonArithmeticOverflow     ReasonCode = "ARITHMETIC_OVERFLOW"
 	ReasonIdempotencyConflict    ReasonCode = "IDEMPOTENCY_CONFLICT"
 	ReasonPreconditionFailed     ReasonCode = "PRECONDITION_FAILED"
+	ReasonApproverNotDistinct    ReasonCode = "APPROVER_NOT_DISTINCT"
+	ReasonApprovalRejected       ReasonCode = "APPROVAL_REJECTED"
+	ReasonStepUpRequired         ReasonCode = "STEP_UP_REQUIRED"
 
 	// ── Privilege Tier Reasons ──────────────
 	ReasonInsufficientPrivilege ReasonCode = "INSUFFICIENT_PRIVILEGE"

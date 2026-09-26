@@ -142,9 +142,12 @@ func newWire(t *testing.T) (gatewayv1.EffectGatewayServiceClient, *issuer, *sql.
 		must(t, rows.CreatePrincipal(ctx, tenant, "human-b", authorityrows.PrincipalHuman))
 		must(t, rows.CreatePrincipal(ctx, tenant, "agent-a", authorityrows.PrincipalAgent))
 		must(t, rows.CreateEffectType(ctx, tenant, effectargs.GitHubBranchCreateFromChanges, authorityrows.RiskMedium))
+		must(t, rows.CreateEffectType(ctx, tenant, "ops.note", authorityrows.RiskLow))
 		_, err = rows.CreateMandate(ctx, tenant, "human-a", authorityrows.Terms{
-			EffectTypes: []string{effectargs.GitHubBranchCreateFromChanges}, Targets: []string{testRepo},
-			Condition: `input.args.head.startsWith("helm/")`, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour),
+			EffectTypes: []string{effectargs.GitHubBranchCreateFromChanges, "ops.note"}, Targets: []string{testRepo, "ops"},
+			Condition:        `input.effect_type == "ops.note" || input.args.head.startsWith("helm/")`,
+			ApprovalRequired: []string{"ops.note"},
+			ValidFrom:        now.Add(-time.Hour), ValidUntil: now.Add(time.Hour),
 		}, authorityrows.WideningApproval{RequesterID: "agent-a", ApproverID: "human-b"})
 		must(t, err)
 	}
@@ -269,4 +272,78 @@ func TestPostgresGatewayAPIOnTheWire(t *testing.T) {
 	direct := iss.token(t, testAudience, "tenant-a", "human-a", ScopePropose, func(c *tokenClaims) { c.Act = nil })
 	_, err = client.Propose(ctx, withToken(branchRequest("wire-7", "helm/x"), direct))
 	wantRPCError(t, "a human's direct propose token", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+}
+
+func decision(attemptID, action string) func(*tokenClaims) {
+	return func(c *tokenClaims) {
+		c.AuthorizationDetails = []map[string]string{{"type": "helm_effect_decision", "attempt_id": attemptID, "action": action}}
+	}
+}
+
+func noteRequest(key string) *gatewayv1.ProposeRequest {
+	return &gatewayv1.ProposeRequest{
+		IdempotencyKey: key,
+		WorkRef:        &gatewayv1.ProposeRequest_CaseId{CaseId: "case-1"},
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: []byte(`{"text":"hi"}`)},
+	}
+}
+
+func TestPostgresGatewayDecisionsOnTheWire(t *testing.T) {
+	client, iss, _ := newWire(t)
+	ctx := context.Background()
+	propose := iss.token(t, testAudience, "tenant-a", "human-a", ScopePropose)
+	resp, err := client.Propose(ctx, withToken(noteRequest("note-1"), propose))
+	must(t, err)
+	attempt := resp.Msg.GetAttempt()
+	if attempt.GetState() != gatewayv1.EffectAttemptState_EFFECT_ATTEMPT_STATE_ESCALATED || attempt.GetPendingApproval() == nil {
+		t.Fatalf("escalation = %+v", attempt)
+	}
+	id := attempt.GetAttemptId()
+	digest := attempt.GetPendingApproval().GetApprovalDigest()
+	// The Console's check: the digest recomputes from what the attempt shows.
+	want := admission.ApprovalDigestV1(id, attempt.GetTargetDigest(), attempt.GetArgumentDigest(), nil, attempt.GetPendingApproval().GetExpiresAt().AsTime())
+	if string(want) != string(digest) {
+		t.Fatal("the pending approval digest does not recompute from the attempt")
+	}
+	approve := func(token string) (*connect.Response[gatewayv1.ApproveResponse], error) {
+		return client.Approve(ctx, withToken(&gatewayv1.ApproveRequest{AttemptId: id, ApprovalDigest: digest, Reason: "ok"}, token))
+	}
+
+	// Known bad: a token bound to reject, to another attempt, or unbound; a
+	// propose token; self-approval.
+	for name, token := range map[string]string{
+		"bound to reject":  iss.token(t, testAudience, "tenant-a", "human-b", ScopeDecide, decision(id, "reject")),
+		"bound to another": iss.token(t, testAudience, "tenant-a", "human-b", ScopeDecide, decision("0192f0c4-7a1e-7c3b-9d2a-000000000000", "approve")),
+		"unbound":          iss.token(t, testAudience, "tenant-a", "human-b", ScopeDecide),
+		"a propose token":  iss.token(t, testAudience, "tenant-a", "human-b", ScopePropose, decision(id, "approve")),
+	} {
+		_, err := approve(token)
+		wantRPCError(t, name, err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	}
+	_, err = approve(iss.token(t, testAudience, "tenant-a", "human-a", ScopeDecide, decision(id, "approve")))
+	wantRPCError(t, "self-approval", err, connect.CodePermissionDenied, contracts.ReasonApproverNotDistinct)
+
+	// Known good: a distinct human's bound decide token admits.
+	good := iss.token(t, testAudience, "tenant-a", "human-b", ScopeDecide, decision(id, "approve"))
+	approved, err := approve(good)
+	must(t, err)
+	got := approved.Msg.GetAttempt()
+	if got.GetState() != gatewayv1.EffectAttemptState_EFFECT_ATTEMPT_STATE_ADMITTED || got.GetApproval().GetApproverPrincipalId() != "human-b" ||
+		got.GetApproval().GetApproverActorId() != testActor || got.GetApproval().GetDecision() != gatewayv1.ApprovalDecision_APPROVAL_DECISION_APPROVED ||
+		got.GetPendingApproval() != nil || got.GetPermit().GetPermitId() == "" {
+		t.Fatalf("approved = %+v", got)
+	}
+	// The same token again is refused, even though the call would be a no-op.
+	_, err = approve(good)
+	wantRPCError(t, "a reused decide token", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+
+	// Cancel by the requester's propose token releases it.
+	cancelled, err := client.Cancel(ctx, withToken(&gatewayv1.CancelRequest{AttemptId: id}, propose))
+	must(t, err)
+	if cancelled.Msg.GetAttempt().GetState() != gatewayv1.EffectAttemptState_EFFECT_ATTEMPT_STATE_CANCELLED {
+		t.Fatalf("cancel = %+v", cancelled.Msg)
+	}
+	read := iss.token(t, testAudience, "tenant-a", "human-a", ScopeRead)
+	_, err = client.Cancel(ctx, withToken(&gatewayv1.CancelRequest{AttemptId: id}, read))
+	wantRPCError(t, "a read token on Cancel", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
 }

@@ -178,15 +178,20 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 		if err != nil {
 			return err
 		}
+		distinct, err := json.Marshal(distinctJSON(in.Distinct))
+		if err != nil {
+			return err
+		}
 		// 1. Idempotency first. A duplicate never locks or changes anything.
 		err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
 				(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
-				 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote, state)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, 'PROPOSED')
+				 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
+				 distinct_values, state)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15, 'PROPOSED')
 			ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
 			RETURNING attempt_id`,
 			caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
-			in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote).Scan(&attemptID)
+			in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct).Scan(&attemptID)
 		if errors.Is(err, sql.ErrNoRows) {
 			var stored []byte
 			if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
@@ -212,7 +217,7 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 				return err
 			}
 		}
-		return s.admit(ctx, tx, caller, in, args, attemptID, argumentDigest[:], targetDigest[:])
+		return s.admit(ctx, tx, caller, in, args, attemptID, argumentDigest[:], targetDigest[:], nil, "PROPOSED")
 	})
 	if err != nil {
 		return Attempt{}, false, err
@@ -241,9 +246,11 @@ type limitRow struct {
 	buckets                   []time.Time
 }
 
-// admit runs steps 2 to 6 for the attempt the caller inserted.
+// admit runs steps 2 to 6 for an attempt in state from: one the caller just
+// inserted (PROPOSED), or an ESCALATED one Approve re-admits with its
+// approval (ADR-0001 §1 "Approval", §5.5).
 func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput, args map[string]any,
-	attemptID string, argumentDigest, targetDigest []byte) error {
+	attemptID string, argumentDigest, targetDigest []byte, approval *ApprovalState, from string) error {
 	var now time.Time
 	if err := tx.QueryRowContext(ctx, `SELECT now()`).Scan(&now); err != nil {
 		return err
@@ -289,6 +296,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		Now: now, PrincipalID: caller.PrincipalID, PrincipalFound: auth.principalFound, PrincipalActive: auth.principalActive,
 		EffectType: in.EffectType, EffectTypeFound: auth.effectTypeFound, RiskClass: auth.riskClass,
 		Target: in.Target, Args: args, Quote: in.Quote, ActiveStops: stops, Counters: counters.states,
+		Approval: approval,
 	}
 	for _, m := range auth.chain {
 		link := Link{Mandate: m}
@@ -333,7 +341,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 			caller.TenantID, permitID, attemptID, argumentDigest, versions, now.Add(s.cfg.PermitTTL)); err != nil {
 			return err
 		}
-		return recordDecision(ctx, tx, caller.TenantID, attemptID, "ADMITTED", "", mandate, risk, nil, nil)
+		return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "ADMITTED", "", mandate, risk, nil, nil)
 	case Escalate:
 		expires := now.Add(s.cfg.ApprovalWindow)
 		if in.ApprovalExpiresAt != nil && in.ApprovalExpiresAt.Before(expires) {
@@ -341,21 +349,25 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		}
 		expires = expires.UTC().Truncate(time.Second)
 		approvalDigest := ApprovalDigestV1(attemptID, targetDigest, argumentDigest, in.Quote, expires)
-		return recordDecision(ctx, tx, caller.TenantID, attemptID, "ESCALATED", decision.Reason, mandate, risk, approvalDigest, expires)
+		return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "ESCALATED", decision.Reason, mandate, risk, approvalDigest, expires)
 	default:
-		return recordDecision(ctx, tx, caller.TenantID, attemptID, "DENIED", decision.Reason, mandate, risk, nil, nil)
+		return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "DENIED", decision.Reason, mandate, risk, nil, nil)
 	}
 }
 
-// recordDecision moves a PROPOSED attempt to the decided state and bumps
-// its version. approvalDigest and expires are set only for ESCALATED.
-func recordDecision(ctx context.Context, tx *sql.Tx, tenantID, attemptID, state string, reason contracts.ReasonCode,
+// recordDecision moves an attempt from state from to the decided state and
+// bumps its version. A decision on a new attempt sets approvalDigest and
+// expires only for ESCALATED; a re-admission keeps the escalation's, which the
+// Approval record refers to.
+func recordDecision(ctx context.Context, tx *sql.Tx, tenantID, attemptID, from, state string, reason contracts.ReasonCode,
 	mandate, risk, approvalDigest, expires any) error {
 	res, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts
-		SET state = $3, reason_code = $4, mandate_id = $5, risk_class = $6, approval_digest = $7, approval_expires_at = $8,
+		SET state = $3, reason_code = $4, mandate_id = $5, risk_class = $6,
+		    approval_digest = CASE WHEN $9 = 'PROPOSED' THEN $7 ELSE approval_digest END,
+		    approval_expires_at = CASE WHEN $9 = 'PROPOSED' THEN $8 ELSE approval_expires_at END,
 		    version = version + 1, updated_at = now()
-		WHERE tenant_id = $1 AND attempt_id = $2 AND state = 'PROPOSED'`,
-		tenantID, attemptID, state, string(reason), mandate, risk, approvalDigest, expires)
+		WHERE tenant_id = $1 AND attempt_id = $2 AND state = $9`,
+		tenantID, attemptID, state, string(reason), mandate, risk, approvalDigest, expires, from)
 	if err != nil {
 		return err
 	}
@@ -754,6 +766,20 @@ func checkCaller(c Caller) error {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token names no tenant, workspace or principal")
 	}
 	return nil
+}
+
+// storedDistinct is a distinct value as the attempt row keeps it.
+type storedDistinct struct {
+	Unit   string `json:"unit"`
+	Digest []byte `json:"digest"`
+}
+
+func distinctJSON(values []DistinctValue) []storedDistinct {
+	out := make([]storedDistinct, 0, len(values))
+	for _, v := range values {
+		out = append(out, storedDistinct{Unit: v.Unit, Digest: v.Digest})
+	}
+	return out
 }
 
 func nonNil(q []Amount) []Amount {

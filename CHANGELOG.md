@@ -133,6 +133,22 @@ Breaking.
   - `ApproveHandler` in `core/pkg/api` and the approval receipt types in
     `core/pkg/contracts` are removed.
 
+### Changed — MCP gateway receipts in the configured tenant (HELM-780)
+
+Breaking for MCP clients that send tenant or principal headers.
+
+- **`/mcp`, `/mcp/v1/capabilities` and `/mcp/v1/execute` on `serve` bind the
+  configured tenant.** They take the same `HELM_ADMIN_API_KEY`, now through the
+  configured-tenant gate that `/v1/chat/completions` uses.
+  - An `X-Helm-Tenant-ID` or `X-Helm-Principal-ID` header that differs from
+    `HELM_RUNTIME_TENANT_ID` / `HELM_RUNTIME_PRINCIPAL_ID` is refused with 403.
+  - The gateway is single-tenant. Registered principal bindings do not extend
+    it.
+- **Gateway decision receipts are written in that tenant.** Before this change
+  they were written outside tenant scope, so `GET /api/v1/receipts` could not
+  list them. Now it lists them for the configured tenant. A decision without an
+  authenticated tenant is refused rather than receipted.
+
 ### Removed — `workstation certify` and the unrouted trust-key handler (HELM-756)
 
 Breaking.

@@ -91,6 +91,7 @@ the tenant, principal and workspace come from one of two places:
 | `POST /api/v1/evaluate`, `GET /api/v1/receipts*` | `HELM_ADMIN_API_KEY` | `X-Helm-Tenant-ID` / `X-Helm-Principal-ID`, accepted only as the `HELM_RUNTIME_TENANT_ID`/`HELM_RUNTIME_PRINCIPAL_ID` pair or a pair registered through `POST /api/v1/admin/principal-bindings` | see below |
 | `POST /internal/v1/organization-runtime/evaluate` | `HELM_ORGANIZATION_RUNTIME_API_KEY` | the same headers, all three required, checked against the same pair or registry | see below, plus the company activation record for that tenant and workspace |
 | `POST /v1/chat/completions` | `HELM_ADMIN_API_KEY` | the configured pair only | see below; the configured workspace applies when the header is absent |
+| `/mcp`, `/mcp/v1/capabilities`, `/mcp/v1/execute` | `HELM_ADMIN_API_KEY` | the configured pair only; optional headers must match it | not bound |
 | `POST /api/v1/extauthz/authorize` | `HELM_SERVICE_API_KEY` | `tenant_id` in the body must equal `HELM_RUNTIME_TENANT_ID` | `workspace_id` in the body must equal `HELM_RUNTIME_WORKSPACE_ID`; both must be configured |
 | `/internal/v1/generated-spec-approvals/*`, approval and effect workload routes | workload bearer token | token claims | token claims |
 | `POST /internal/emergency-stop/fence` | `HELM_SERVICE_API_KEY` | the fence command's scope; see [Emergency-stop fence](../EMERGENCY_STOP_FENCE.md) | the same |
@@ -138,6 +139,22 @@ not implemented yet.
 
 The emergency-stop fence is a dispatch fence only; it does not cancel already
 running work.
+
+**The MCP gateway is single-tenant.** It serves the configured tenant
+(`HELM_RUNTIME_TENANT_ID`, `default` when unset) and refuses a caller that
+asserts another one; registered principal bindings do not extend it. Each
+decision receipt is written in that tenant, so `GET /api/v1/receipts` lists it
+for that tenant.
+
+## Egress
+
+Production egress is deny-all. Every production Guardian (`serve`, `proxy`,
+`mcp serve`) builds its egress checker with no allowlist, and no flag or
+variable supplies one. A decision whose trusted context names or requires a
+destination is denied with `DATA_EGRESS_BLOCKED`. `POST /v1/chat/completions`
+requires its upstream host as that destination, so on `serve` it denies every
+call before reaching the upstream. The standalone `helm-ai-kernel proxy` names
+no destination and is not affected.
 
 ## Receipt Headers
 

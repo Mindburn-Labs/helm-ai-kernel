@@ -249,18 +249,19 @@ HELM-750 s2b.
 ### Typed observation results and the GitHub effects (HELM-753)
 
 `Observation.result` is a oneof with one member per effect type that defines a
-typed result. Fields 9–15 stay held for later result types
+typed result. Fields 10–15 stay held for later result types
 (`TestHeldFieldNumbersStayFree`). Clients read these fields, never the
 provider's raw bytes.
 
-The HELM-789 walking skeleton needs two GitHub effects. Their argument schemas
+The HELM-789 walking skeleton needs three GitHub effects. Their argument schemas
 are closed JSON Schemas with known-good and known-bad fixtures, checked by the
 `json-schemas` gate:
 
 | Effect type | Arguments | Risk | Result |
 |---|---|---|---|
+| `github.repository.get` | `protocols/json-schemas/effects/github/repository_get.v1.json` | low (admitted) | `github_repository` (field 9) |
 | `github.branch.create_from_changes` | `protocols/json-schemas/effects/github/branch_create_from_changes.v1.json` | medium (admitted under a mandate) | `github_branch` (field 8) |
-| `github.pull_request.create_draft` | `protocols/json-schemas/effects/github/pull_request_create_draft.v1.json` | high (escalated) | `github_pull_request` (field 7) |
+| `github.pull_request.create_draft` | `protocols/json-schemas/effects/github/pull_request_create_draft.v1.json` | medium (escalated by mandate policy) | `github_pull_request` (field 7) |
 
 Rules for both:
 
@@ -272,6 +273,20 @@ Rules for both:
   refuses duplicate keys, unknown fields and a missing required field before
   admission, and digests the bytes as sent. The Console shows the same bytes
   through `GetAttemptContent`.
+
+**Risk and approval.** The draft pull request is medium risk: closing it
+reverses it, it is not a production change, and it leaves the default branch
+alone. It escalates because the mandate requires approval for
+`github.pull_request.create_draft` (`approval_required`, an ADR-0001 rule
+class), not because of its risk class. Step-up (§10.1) stays with high or
+irreversible effects, such as merges to the default branch, releases and
+publishes.
+
+**Repository read.** `github.repository.get` reads the default branch and its
+head commit, and the head of a named branch when one is requested. The Control
+Plane proposes it first and copies `default_branch` and `default_branch_sha`
+into the branch attempt's `base` and `base_sha`, so the base comes from a
+gateway read, not from Zone B. It is the skeleton's allowed read.
 
 **Branch.** The adapter creates the blobs, the tree, a commit whose only
 parent is `base_sha`, and then `refs/heads/{head}` if it does not exist. Rules
@@ -311,7 +326,9 @@ Propose the gateway requires that attempt to meet all of these, or it refuses
 with `PRECONDITION_FAILED` and creates no attempt:
 
 - it is in the same tenant and has the same target;
-- it is `github.branch.create_from_changes` in OBSERVED(SUCCEEDED);
+- it is `github.branch.create_from_changes` in OBSERVED(SUCCEEDED) or
+  RECONCILED(SUCCEEDED). Reconciliation runs the same ref, parent, compare
+  and blob checks as Observe, so both prove the same commit;
 - its `head` and `base` equal these;
 - its `commit_sha` equals `head_sha`.
 
@@ -328,6 +345,21 @@ re-dispatched blindly.
 The read-back is SUCCEEDED only if `draft` is true, `head_sha` equals the
 proposed value, `base_ref` equals `base`, and the title matches. Otherwise it
 is FAILED with `READBACK_MISMATCH`, and the result still records the URL.
+
+**Dispatch-time refusal is a state, not an error.** When the Dispatch-time
+`head` re-read refuses the write, `Dispatch` returns a successful
+`DispatchResponse` whose attempt is OBSERVED(FAILED) with `reason_code`
+`PRECONDITION_FAILED`. It does not return a Connect `failed_precondition`
+error; per the wire rules, a Connect error means the gateway could not
+evaluate the call.
+
+A FAILED outcome carries its reason in `EffectAttempt.reason_code`:
+`READBACK_MISMATCH`, or `PRECONDITION_FAILED` when the Dispatch-time `head`
+re-read refused the write. No provider write happened then, so the outcome is
+a certain FAILED and the reservation is released. The Propose-time
+`branch_attempt_id` check creates no attempt; it answers a Connect
+`failed_precondition` error whose `ErrorDetail.reason_code` is
+`PRECONDITION_FAILED`.
 
 `READBACK_MISMATCH` and `PRECONDITION_FAILED` are registered by the slice that
 first emits them (HELM-751 s3 / HELM-753 adapter).

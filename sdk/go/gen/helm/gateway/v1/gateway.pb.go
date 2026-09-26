@@ -2121,7 +2121,11 @@ type EffectAttempt struct {
 	// How the outcome was established.
 	OutcomeBasis OutcomeBasis `protobuf:"varint,16,opt,name=outcome_basis,json=outcomeBasis,proto3,enum=helm.gateway.v1.OutcomeBasis" json:"outcome_basis,omitempty"`
 	// The registry code for the current state, when it has one: the denial,
-	// escalation, rejection, expiry or cancellation reason. Empty otherwise.
+	// escalation, rejection, expiry or cancellation reason, or why an observed
+	// or reconciled outcome is FAILED (for example
+	// [reason_code_pending: READBACK_MISMATCH], or
+	// [reason_code: PRECONDITION_FAILED] when a dispatch-time precondition
+	// refused the write before any provider write). Empty otherwise.
 	ReasonCode string `protobuf:"bytes,17,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
 	// Set while the attempt is ESCALATED.
 	PendingApproval *PendingApproval `protobuf:"bytes,18,opt,name=pending_approval,json=pendingApproval,proto3" json:"pending_approval,omitempty"`
@@ -2913,7 +2917,7 @@ func (x *ModelCallSettlement) GetBillableMicros() int64 {
 // source, freshness and trust class (§3).
 //
 // result carries the typed, bounded result of the effect types that define
-// one (HELM-753). Field numbers 9 to 15 stay held for later result types.
+// one (HELM-753). Field numbers 10 to 15 stay held for later result types.
 type Observation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Where it came from, for example the provider's response or an adapter
@@ -2940,6 +2944,7 @@ type Observation struct {
 	//
 	//	*Observation_GithubPullRequest
 	//	*Observation_GithubBranch
+	//	*Observation_GithubRepository
 	Result        isObservation_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3042,6 +3047,15 @@ func (x *Observation) GetGithubBranch() *GitHubBranchResult {
 	return nil
 }
 
+func (x *Observation) GetGithubRepository() *GitHubRepositoryResult {
+	if x != nil {
+		if x, ok := x.Result.(*Observation_GithubRepository); ok {
+			return x.GithubRepository
+		}
+	}
+	return nil
+}
+
 type isObservation_Result interface {
 	isObservation_Result()
 }
@@ -3056,9 +3070,100 @@ type Observation_GithubBranch struct {
 	GithubBranch *GitHubBranchResult `protobuf:"bytes,8,opt,name=github_branch,json=githubBranch,proto3,oneof"`
 }
 
+type Observation_GithubRepository struct {
+	// github.repository.get.
+	GithubRepository *GitHubRepositoryResult `protobuf:"bytes,9,opt,name=github_repository,json=githubRepository,proto3,oneof"`
+}
+
 func (*Observation_GithubPullRequest) isObservation_Result() {}
 
 func (*Observation_GithubBranch) isObservation_Result() {}
+
+func (*Observation_GithubRepository) isObservation_Result() {}
+
+// GitHubRepositoryResult is a repository read (HELM-753), the source of a
+// later branch attempt's base and base_sha. A read with no provider error is
+// OBSERVED(SUCCEEDED).
+type GitHubRepositoryResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The repository's default branch name.
+	DefaultBranch string `protobuf:"bytes,1,opt,name=default_branch,json=defaultBranch,proto3" json:"default_branch,omitempty"`
+	// Its head commit, 40 lowercase hex characters.
+	DefaultBranchSha string `protobuf:"bytes,2,opt,name=default_branch_sha,json=defaultBranchSha,proto3" json:"default_branch_sha,omitempty"`
+	// The requested branch; empty when none was requested.
+	Branch string `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
+	// Its head commit when it exists; empty otherwise.
+	BranchSha string `protobuf:"bytes,4,opt,name=branch_sha,json=branchSha,proto3" json:"branch_sha,omitempty"`
+	// Whether the requested branch exists. False when none was requested.
+	BranchExists  bool `protobuf:"varint,5,opt,name=branch_exists,json=branchExists,proto3" json:"branch_exists,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubRepositoryResult) Reset() {
+	*x = GitHubRepositoryResult{}
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubRepositoryResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubRepositoryResult) ProtoMessage() {}
+
+func (x *GitHubRepositoryResult) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubRepositoryResult.ProtoReflect.Descriptor instead.
+func (*GitHubRepositoryResult) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *GitHubRepositoryResult) GetDefaultBranch() string {
+	if x != nil {
+		return x.DefaultBranch
+	}
+	return ""
+}
+
+func (x *GitHubRepositoryResult) GetDefaultBranchSha() string {
+	if x != nil {
+		return x.DefaultBranchSha
+	}
+	return ""
+}
+
+func (x *GitHubRepositoryResult) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *GitHubRepositoryResult) GetBranchSha() string {
+	if x != nil {
+		return x.BranchSha
+	}
+	return ""
+}
+
+func (x *GitHubRepositoryResult) GetBranchExists() bool {
+	if x != nil {
+		return x.BranchExists
+	}
+	return false
+}
 
 // GitHubPullRequestResult is a pull request as the adapter read it back
 // (HELM-753). OBSERVED(SUCCEEDED) requires draft = true, head_sha equal to
@@ -3087,7 +3192,7 @@ type GitHubPullRequestResult struct {
 
 func (x *GitHubPullRequestResult) Reset() {
 	*x = GitHubPullRequestResult{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3099,7 +3204,7 @@ func (x *GitHubPullRequestResult) String() string {
 func (*GitHubPullRequestResult) ProtoMessage() {}
 
 func (x *GitHubPullRequestResult) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[31]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3112,7 +3217,7 @@ func (x *GitHubPullRequestResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubPullRequestResult.ProtoReflect.Descriptor instead.
 func (*GitHubPullRequestResult) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{31}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GitHubPullRequestResult) GetUrl() string {
@@ -3195,7 +3300,7 @@ type GitHubBranchResult struct {
 
 func (x *GitHubBranchResult) Reset() {
 	*x = GitHubBranchResult{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3207,7 +3312,7 @@ func (x *GitHubBranchResult) String() string {
 func (*GitHubBranchResult) ProtoMessage() {}
 
 func (x *GitHubBranchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[32]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3220,7 +3325,7 @@ func (x *GitHubBranchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitHubBranchResult.ProtoReflect.Descriptor instead.
 func (*GitHubBranchResult) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{32}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GitHubBranchResult) GetRef() string {
@@ -3277,7 +3382,7 @@ type Stop struct {
 
 func (x *Stop) Reset() {
 	*x = Stop{}
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3289,7 +3394,7 @@ func (x *Stop) String() string {
 func (*Stop) ProtoMessage() {}
 
 func (x *Stop) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[33]
+	mi := &file_helm_gateway_v1_gateway_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3302,7 +3407,7 @@ func (x *Stop) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Stop.ProtoReflect.Descriptor instead.
 func (*Stop) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{33}
+	return file_helm_gateway_v1_gateway_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *Stop) GetStopId() string {
@@ -3539,7 +3644,7 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\x10confirmed_micros\x18\x06 \x01(\x03H\x01R\x0fconfirmedMicros\x88\x01\x01\x12'\n" +
 	"\x0fbillable_micros\x18\a \x01(\x03R\x0ebillableMicrosB\x13\n" +
 	"\x11_estimated_microsB\x13\n" +
-	"\x11_confirmed_micros\"\xb7\x03\n" +
+	"\x11_confirmed_micros\"\x8f\x04\n" +
 	"\vObservation\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x1f\n" +
 	"\vtrust_class\x18\x02 \x01(\tR\n" +
@@ -3551,8 +3656,16 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\n" +
 	"result_ref\x18\x06 \x01(\tR\tresultRef\x12Z\n" +
 	"\x13github_pull_request\x18\a \x01(\v2(.helm.gateway.v1.GitHubPullRequestResultH\x00R\x11githubPullRequest\x12J\n" +
-	"\rgithub_branch\x18\b \x01(\v2#.helm.gateway.v1.GitHubBranchResultH\x00R\fgithubBranchB\b\n" +
-	"\x06result\"\xd9\x01\n" +
+	"\rgithub_branch\x18\b \x01(\v2#.helm.gateway.v1.GitHubBranchResultH\x00R\fgithubBranch\x12V\n" +
+	"\x11github_repository\x18\t \x01(\v2'.helm.gateway.v1.GitHubRepositoryResultH\x00R\x10githubRepositoryB\b\n" +
+	"\x06result\"\xc9\x01\n" +
+	"\x16GitHubRepositoryResult\x12%\n" +
+	"\x0edefault_branch\x18\x01 \x01(\tR\rdefaultBranch\x12,\n" +
+	"\x12default_branch_sha\x18\x02 \x01(\tR\x10defaultBranchSha\x12\x16\n" +
+	"\x06branch\x18\x03 \x01(\tR\x06branch\x12\x1d\n" +
+	"\n" +
+	"branch_sha\x18\x04 \x01(\tR\tbranchSha\x12#\n" +
+	"\rbranch_exists\x18\x05 \x01(\bR\fbranchExists\"\xd9\x01\n" +
 	"\x17GitHubPullRequestResult\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
 	"\x06number\x18\x02 \x01(\x03R\x06number\x12\x17\n" +
@@ -3669,7 +3782,7 @@ func file_helm_gateway_v1_gateway_proto_rawDescGZIP() []byte {
 }
 
 var file_helm_gateway_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
-var file_helm_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_helm_gateway_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_helm_gateway_v1_gateway_proto_goTypes = []any{
 	(EffectAttemptState)(0),           // 0: helm.gateway.v1.EffectAttemptState
 	(EffectOutcome)(0),                // 1: helm.gateway.v1.EffectOutcome
@@ -3711,16 +3824,17 @@ var file_helm_gateway_v1_gateway_proto_goTypes = []any{
 	(*Exposure)(nil),                  // 37: helm.gateway.v1.Exposure
 	(*ModelCallSettlement)(nil),       // 38: helm.gateway.v1.ModelCallSettlement
 	(*Observation)(nil),               // 39: helm.gateway.v1.Observation
-	(*GitHubPullRequestResult)(nil),   // 40: helm.gateway.v1.GitHubPullRequestResult
-	(*GitHubBranchResult)(nil),        // 41: helm.gateway.v1.GitHubBranchResult
-	(*Stop)(nil),                      // 42: helm.gateway.v1.Stop
-	(*timestamppb.Timestamp)(nil),     // 43: google.protobuf.Timestamp
+	(*GitHubRepositoryResult)(nil),    // 40: helm.gateway.v1.GitHubRepositoryResult
+	(*GitHubPullRequestResult)(nil),   // 41: helm.gateway.v1.GitHubPullRequestResult
+	(*GitHubBranchResult)(nil),        // 42: helm.gateway.v1.GitHubBranchResult
+	(*Stop)(nil),                      // 43: helm.gateway.v1.Stop
+	(*timestamppb.Timestamp)(nil),     // 44: google.protobuf.Timestamp
 }
 var file_helm_gateway_v1_gateway_proto_depIdxs = []int32{
 	29, // 0: helm.gateway.v1.ProposeRequest.effect:type_name -> helm.gateway.v1.EffectDescriptor
 	30, // 1: helm.gateway.v1.ProposeRequest.quote:type_name -> helm.gateway.v1.ResourceAmount
 	31, // 2: helm.gateway.v1.ProposeRequest.distinct_values:type_name -> helm.gateway.v1.DistinctValue
-	43, // 3: helm.gateway.v1.ProposeRequest.approval_expires_at:type_name -> google.protobuf.Timestamp
+	44, // 3: helm.gateway.v1.ProposeRequest.approval_expires_at:type_name -> google.protobuf.Timestamp
 	32, // 4: helm.gateway.v1.ProposeResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
 	32, // 5: helm.gateway.v1.ApproveResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
 	32, // 6: helm.gateway.v1.RejectResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
@@ -3729,8 +3843,8 @@ var file_helm_gateway_v1_gateway_proto_depIdxs = []int32{
 	32, // 9: helm.gateway.v1.ObserveResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
 	32, // 10: helm.gateway.v1.GetAttemptResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
 	8,  // 11: helm.gateway.v1.StopRequest.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
-	43, // 12: helm.gateway.v1.StopRequest.expires_at:type_name -> google.protobuf.Timestamp
-	42, // 13: helm.gateway.v1.StopResponse.stop:type_name -> helm.gateway.v1.Stop
+	44, // 12: helm.gateway.v1.StopRequest.expires_at:type_name -> google.protobuf.Timestamp
+	43, // 13: helm.gateway.v1.StopResponse.stop:type_name -> helm.gateway.v1.Stop
 	32, // 14: helm.gateway.v1.LiftResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
 	3,  // 15: helm.gateway.v1.EffectAttempt.risk_class:type_name -> helm.gateway.v1.RiskClass
 	30, // 16: helm.gateway.v1.EffectAttempt.quote:type_name -> helm.gateway.v1.ResourceAmount
@@ -3743,51 +3857,52 @@ var file_helm_gateway_v1_gateway_proto_depIdxs = []int32{
 	37, // 23: helm.gateway.v1.EffectAttempt.exposures:type_name -> helm.gateway.v1.Exposure
 	38, // 24: helm.gateway.v1.EffectAttempt.model_call:type_name -> helm.gateway.v1.ModelCallSettlement
 	39, // 25: helm.gateway.v1.EffectAttempt.latest_observation:type_name -> helm.gateway.v1.Observation
-	43, // 26: helm.gateway.v1.EffectAttempt.created_at:type_name -> google.protobuf.Timestamp
-	43, // 27: helm.gateway.v1.EffectAttempt.updated_at:type_name -> google.protobuf.Timestamp
-	43, // 28: helm.gateway.v1.PendingApproval.expires_at:type_name -> google.protobuf.Timestamp
+	44, // 26: helm.gateway.v1.EffectAttempt.created_at:type_name -> google.protobuf.Timestamp
+	44, // 27: helm.gateway.v1.EffectAttempt.updated_at:type_name -> google.protobuf.Timestamp
+	44, // 28: helm.gateway.v1.PendingApproval.expires_at:type_name -> google.protobuf.Timestamp
 	4,  // 29: helm.gateway.v1.Approval.decision:type_name -> helm.gateway.v1.ApprovalDecision
-	43, // 30: helm.gateway.v1.Approval.decided_at:type_name -> google.protobuf.Timestamp
+	44, // 30: helm.gateway.v1.Approval.decided_at:type_name -> google.protobuf.Timestamp
 	36, // 31: helm.gateway.v1.Permit.authority_versions:type_name -> helm.gateway.v1.AuthorityVersion
-	43, // 32: helm.gateway.v1.Permit.expires_at:type_name -> google.protobuf.Timestamp
-	43, // 33: helm.gateway.v1.Permit.consumed_at:type_name -> google.protobuf.Timestamp
+	44, // 32: helm.gateway.v1.Permit.expires_at:type_name -> google.protobuf.Timestamp
+	44, // 33: helm.gateway.v1.Permit.consumed_at:type_name -> google.protobuf.Timestamp
 	5,  // 34: helm.gateway.v1.AuthorityVersion.kind:type_name -> helm.gateway.v1.AuthorityRowKind
-	43, // 35: helm.gateway.v1.Exposure.bucket_start:type_name -> google.protobuf.Timestamp
+	44, // 35: helm.gateway.v1.Exposure.bucket_start:type_name -> google.protobuf.Timestamp
 	6,  // 36: helm.gateway.v1.Exposure.kind:type_name -> helm.gateway.v1.ExposureKind
 	7,  // 37: helm.gateway.v1.ModelCallSettlement.state:type_name -> helm.gateway.v1.SettlementState
 	1,  // 38: helm.gateway.v1.Observation.outcome:type_name -> helm.gateway.v1.EffectOutcome
-	43, // 39: helm.gateway.v1.Observation.observed_at:type_name -> google.protobuf.Timestamp
-	40, // 40: helm.gateway.v1.Observation.github_pull_request:type_name -> helm.gateway.v1.GitHubPullRequestResult
-	41, // 41: helm.gateway.v1.Observation.github_branch:type_name -> helm.gateway.v1.GitHubBranchResult
-	8,  // 42: helm.gateway.v1.Stop.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
-	43, // 43: helm.gateway.v1.Stop.created_at:type_name -> google.protobuf.Timestamp
-	43, // 44: helm.gateway.v1.Stop.expires_at:type_name -> google.protobuf.Timestamp
-	43, // 45: helm.gateway.v1.Stop.lifted_at:type_name -> google.protobuf.Timestamp
-	9,  // 46: helm.gateway.v1.EffectGatewayService.Propose:input_type -> helm.gateway.v1.ProposeRequest
-	11, // 47: helm.gateway.v1.EffectGatewayService.Approve:input_type -> helm.gateway.v1.ApproveRequest
-	13, // 48: helm.gateway.v1.EffectGatewayService.Reject:input_type -> helm.gateway.v1.RejectRequest
-	15, // 49: helm.gateway.v1.EffectGatewayService.Cancel:input_type -> helm.gateway.v1.CancelRequest
-	17, // 50: helm.gateway.v1.EffectGatewayService.Dispatch:input_type -> helm.gateway.v1.DispatchRequest
-	19, // 51: helm.gateway.v1.EffectGatewayService.Observe:input_type -> helm.gateway.v1.ObserveRequest
-	21, // 52: helm.gateway.v1.EffectGatewayService.GetAttempt:input_type -> helm.gateway.v1.GetAttemptRequest
-	23, // 53: helm.gateway.v1.EffectGatewayService.GetAttemptContent:input_type -> helm.gateway.v1.GetAttemptContentRequest
-	25, // 54: helm.gateway.v1.EffectGatewayService.Stop:input_type -> helm.gateway.v1.StopRequest
-	27, // 55: helm.gateway.v1.EffectGatewayService.Lift:input_type -> helm.gateway.v1.LiftRequest
-	10, // 56: helm.gateway.v1.EffectGatewayService.Propose:output_type -> helm.gateway.v1.ProposeResponse
-	12, // 57: helm.gateway.v1.EffectGatewayService.Approve:output_type -> helm.gateway.v1.ApproveResponse
-	14, // 58: helm.gateway.v1.EffectGatewayService.Reject:output_type -> helm.gateway.v1.RejectResponse
-	16, // 59: helm.gateway.v1.EffectGatewayService.Cancel:output_type -> helm.gateway.v1.CancelResponse
-	18, // 60: helm.gateway.v1.EffectGatewayService.Dispatch:output_type -> helm.gateway.v1.DispatchResponse
-	20, // 61: helm.gateway.v1.EffectGatewayService.Observe:output_type -> helm.gateway.v1.ObserveResponse
-	22, // 62: helm.gateway.v1.EffectGatewayService.GetAttempt:output_type -> helm.gateway.v1.GetAttemptResponse
-	24, // 63: helm.gateway.v1.EffectGatewayService.GetAttemptContent:output_type -> helm.gateway.v1.GetAttemptContentResponse
-	26, // 64: helm.gateway.v1.EffectGatewayService.Stop:output_type -> helm.gateway.v1.StopResponse
-	28, // 65: helm.gateway.v1.EffectGatewayService.Lift:output_type -> helm.gateway.v1.LiftResponse
-	56, // [56:66] is the sub-list for method output_type
-	46, // [46:56] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	44, // 39: helm.gateway.v1.Observation.observed_at:type_name -> google.protobuf.Timestamp
+	41, // 40: helm.gateway.v1.Observation.github_pull_request:type_name -> helm.gateway.v1.GitHubPullRequestResult
+	42, // 41: helm.gateway.v1.Observation.github_branch:type_name -> helm.gateway.v1.GitHubBranchResult
+	40, // 42: helm.gateway.v1.Observation.github_repository:type_name -> helm.gateway.v1.GitHubRepositoryResult
+	8,  // 43: helm.gateway.v1.Stop.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
+	44, // 44: helm.gateway.v1.Stop.created_at:type_name -> google.protobuf.Timestamp
+	44, // 45: helm.gateway.v1.Stop.expires_at:type_name -> google.protobuf.Timestamp
+	44, // 46: helm.gateway.v1.Stop.lifted_at:type_name -> google.protobuf.Timestamp
+	9,  // 47: helm.gateway.v1.EffectGatewayService.Propose:input_type -> helm.gateway.v1.ProposeRequest
+	11, // 48: helm.gateway.v1.EffectGatewayService.Approve:input_type -> helm.gateway.v1.ApproveRequest
+	13, // 49: helm.gateway.v1.EffectGatewayService.Reject:input_type -> helm.gateway.v1.RejectRequest
+	15, // 50: helm.gateway.v1.EffectGatewayService.Cancel:input_type -> helm.gateway.v1.CancelRequest
+	17, // 51: helm.gateway.v1.EffectGatewayService.Dispatch:input_type -> helm.gateway.v1.DispatchRequest
+	19, // 52: helm.gateway.v1.EffectGatewayService.Observe:input_type -> helm.gateway.v1.ObserveRequest
+	21, // 53: helm.gateway.v1.EffectGatewayService.GetAttempt:input_type -> helm.gateway.v1.GetAttemptRequest
+	23, // 54: helm.gateway.v1.EffectGatewayService.GetAttemptContent:input_type -> helm.gateway.v1.GetAttemptContentRequest
+	25, // 55: helm.gateway.v1.EffectGatewayService.Stop:input_type -> helm.gateway.v1.StopRequest
+	27, // 56: helm.gateway.v1.EffectGatewayService.Lift:input_type -> helm.gateway.v1.LiftRequest
+	10, // 57: helm.gateway.v1.EffectGatewayService.Propose:output_type -> helm.gateway.v1.ProposeResponse
+	12, // 58: helm.gateway.v1.EffectGatewayService.Approve:output_type -> helm.gateway.v1.ApproveResponse
+	14, // 59: helm.gateway.v1.EffectGatewayService.Reject:output_type -> helm.gateway.v1.RejectResponse
+	16, // 60: helm.gateway.v1.EffectGatewayService.Cancel:output_type -> helm.gateway.v1.CancelResponse
+	18, // 61: helm.gateway.v1.EffectGatewayService.Dispatch:output_type -> helm.gateway.v1.DispatchResponse
+	20, // 62: helm.gateway.v1.EffectGatewayService.Observe:output_type -> helm.gateway.v1.ObserveResponse
+	22, // 63: helm.gateway.v1.EffectGatewayService.GetAttempt:output_type -> helm.gateway.v1.GetAttemptResponse
+	24, // 64: helm.gateway.v1.EffectGatewayService.GetAttemptContent:output_type -> helm.gateway.v1.GetAttemptContentResponse
+	26, // 65: helm.gateway.v1.EffectGatewayService.Stop:output_type -> helm.gateway.v1.StopResponse
+	28, // 66: helm.gateway.v1.EffectGatewayService.Lift:output_type -> helm.gateway.v1.LiftResponse
+	57, // [57:67] is the sub-list for method output_type
+	47, // [47:57] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_helm_gateway_v1_gateway_proto_init() }
@@ -3807,6 +3922,7 @@ func file_helm_gateway_v1_gateway_proto_init() {
 	file_helm_gateway_v1_gateway_proto_msgTypes[30].OneofWrappers = []any{
 		(*Observation_GithubPullRequest)(nil),
 		(*Observation_GithubBranch)(nil),
+		(*Observation_GithubRepository)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3814,7 +3930,7 @@ func file_helm_gateway_v1_gateway_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helm_gateway_v1_gateway_proto_rawDesc), len(file_helm_gateway_v1_gateway_proto_rawDesc)),
 			NumEnums:      9,
-			NumMessages:   34,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

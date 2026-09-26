@@ -1,0 +1,4 @@
+{
+  "schema": "helm.github.repository.get.v1",
+  "repo": "other/repo"
+}

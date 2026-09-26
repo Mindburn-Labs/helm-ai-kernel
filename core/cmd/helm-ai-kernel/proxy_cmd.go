@@ -668,7 +668,26 @@ func newProxyRuntime(cfg proxyConfig, stderr io.Writer) (*proxyRuntime, error) {
 		return nil, fmt.Errorf("failed to create artifact store: %w", artErr)
 	}
 	artRegistry := artifacts.NewRegistry(artStore, kernelSigner)
-	g, guardianErr := newProductionGuardian(kernelSigner, prgGraph, artRegistry, utcRuntimeClock{})
+	// The proxy reads the same stop state as serve: freeze_state.json and the
+	// Lite Mode fence database in HELM_DATA_DIR (default ./data), or the fence
+	// in DATABASE_URL.
+	fence, err := openStandaloneEmergencyStopFence(context.Background(), "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to open the emergency-stop fence: %w", err)
+	}
+	defer func() {
+		if !ok {
+			_ = fence.Close()
+		}
+	}()
+	var fenceScope emergencyStopScope
+	if fence != nil {
+		fenceScope = fence.scope
+		if tenantID != fenceScope.TenantID {
+			return nil, fmt.Errorf("--tenant-id %q must equal %s %q while %s is on, so the fence covers the tenant this proxy governs", tenantID, runtimeTenantIDEnv, fenceScope.TenantID, emergencyStopFenceEnabledEnv)
+		}
+	}
+	g, guardianErr := newProductionGuardian(kernelSigner, prgGraph, artRegistry, utcRuntimeClock{}, fence.guardianState(""))
 	if guardianErr != nil {
 		return nil, fmt.Errorf("failed to initialize production Guardian: %w", guardianErr)
 	}
@@ -848,6 +867,8 @@ func newProxyRuntime(cfg proxyConfig, stderr io.Writer) (*proxyRuntime, error) {
 				govResult, govErr := kb.GovernBound(context.Background(), call.name, hash, nil, bridge.Binding{
 					CredentialHash: credentialHash,
 					SessionID:      sessionID,
+					TenantID:       fenceScope.TenantID,
+					WorkspaceID:    fenceScope.WorkspaceID,
 				})
 				if govErr != nil {
 					status = "GOVERNANCE_ERROR"
@@ -1049,6 +1070,7 @@ func newProxyRuntime(cfg proxyConfig, stderr io.Writer) (*proxyRuntime, error) {
 		close: func() {
 			_ = otelTracer.Shutdown(context.Background())
 			_ = store.Close()
+			_ = fence.Close()
 		},
 	}, nil
 }

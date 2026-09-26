@@ -5,9 +5,9 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 70,
+    "total": 71,
     "enforced": 31,
-    "observed_only": 27,
+    "observed_only": 28,
     "unmanaged": 12,
     "retired_invariants": 11,
     "build_plane": 1
@@ -980,7 +980,7 @@
       "id": "CTL-003",
       "title": "FORCE RLS on Postgres tenant tables",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "Every kernel tenant table on Postgres is under FORCE ROW LEVEL SECURITY with the tenant policy, and a runtime role that could bypass it is refused at startup.",
+      "claim": "Every kernel tenant table on Postgres is under FORCE ROW LEVEL SECURITY with an exact tenant policy (its deparsed USING and WITH CHECK, command, permissiveness and roles compared, not searched) and no other policy but principal_bindings' principal_lookup exception. Serving refuses to start on a table that is not, and on a runtime role that could bypass it.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -1014,7 +1014,8 @@
           "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity",
           "core/pkg/postgresmigration.TestValidateRuntimeRejectsSchemaOwnerWithoutDDL",
           "core/pkg/postgresmigration.TestTenantRowSecurityIsolatesTenantsForARestrictedRole",
-          "core/pkg/postgresmigration.TestTenantRowSecurityCheckDetectsWeakenedTables"
+          "core/pkg/postgresmigration.TestTenantRowSecurityCheckDetectsWeakenedTables",
+          "core/pkg/postgresmigration.TestValidateRuntimeRefusesAWidenedTenantPolicy"
         ],
         "removal": [
           "core/pkg/postgresmigration.TestValidateRuntimeRejectsTenantTablesWithoutForcedRowSecurity"
@@ -1048,14 +1049,14 @@
       ],
       "gates": [],
       "config": [
-        "HELM_DATA_DIR (freeze_state.json), written by `helm-ai-kernel freeze`"
+        "freeze_state.json in the kernel data directory, written by `helm-ai-kernel freeze --data-dir`: `serve --data-dir` and `mcp serve --data-dir`, else HELM_DATA_DIR, else ./data. `proxy` reads HELM_DATA_DIR."
       ],
       "protected_operations": [
         "Every Guardian evaluation while frozen."
       ],
       "bypass_assumptions": [
-        "The freeze is a local state file, so it holds per host, not across replicas, and anyone who can write HELM_DATA_DIR can set or clear it.",
-        "`serve --data-dir` does not export HELM_DATA_DIR, so the server reads ./data/freeze_state.json unless the variable is set."
+        "The freeze is a local state file, so it holds per host, not across replicas, and anyone who can write the data directory can set or clear it.",
+        "A `freeze` run against another data directory than the server's does not freeze the server."
       ],
       "tests": {
         "allowed": [
@@ -1064,14 +1065,17 @@
         "forbidden": [
           "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode",
           "core/pkg/guardian.TestExt_FreezeVerdictIsDeny",
-          "core/cmd/helm-ai-kernel.TestProductionGuardianTracksPersistedFreezeState"
+          "core/cmd/helm-ai-kernel.TestProductionGuardianTracksPersistedFreezeState",
+          "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
         ],
         "removal": [
           "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode",
-          "core/pkg/guardian.TestExt_FreezeVerdictIsDeny"
+          "core/pkg/guardian.TestExt_FreezeVerdictIsDeny",
+          "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
         ],
         "bypass": [
-          "core/pkg/kernel.TestFreezeControllerRefreshesExternalStateAndFailsClosed"
+          "core/pkg/kernel.TestFreezeControllerRefreshesExternalStateAndFailsClosed",
+          "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
         ]
       },
       "removal_proofs": [
@@ -1079,7 +1083,8 @@
           "file": "core/pkg/guardian/interceptor.go",
           "tests": [
             "core/pkg/guardian.TestExt_FreezeGateDeniesWithReasonCode",
-            "core/pkg/guardian.TestExt_FreezeVerdictIsDeny"
+            "core/pkg/guardian.TestExt_FreezeVerdictIsDeny",
+            "core/cmd/helm-ai-kernel.TestServeReadsTheFreezeFromItsDataDir"
           ]
         }
       ]
@@ -1099,19 +1104,33 @@
         {
           "symbol": "core/pkg/guardian.FreezeInterceptor.scopedStopDeny",
           "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.newProductionGuardian",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.openStandaloneEmergencyStopFence",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/cmd/helm-ai-kernel.fenceScopedEvaluator.EvaluateDecision",
+          "reachability": "reachable"
         }
       ],
       "gates": [],
       "config": [
-        "HELM_EMERGENCY_STOP_FENCE_ENABLED (off by default; off means no fence is read)"
+        "HELM_EMERGENCY_STOP_FENCE_ENABLED (off by default; off means no fence is read)",
+        "HELM_RUNTIME_TENANT_ID and HELM_RUNTIME_WORKSPACE_ID, the one scope a fenced process governs",
+        "DATABASE_URL, or the Lite Mode database \u003cdata dir\u003e/helm.db, which holds the fence store"
       ],
       "protected_operations": [
-        "Guardian evaluations when a scoped-stop reader is configured.",
+        "Guardian evaluations in `serve`, `proxy` and `mcp serve` while the fence is on. All three read one fence store and bind the configured scope; the factory refuses a fenced Guardian without the store.",
         "POST /internal/emergency-stop/fence, which records a signed fence command."
       ],
       "bypass_assumptions": [
         "With HELM_EMERGENCY_STOP_FENCE_ENABLED off, no scoped fence is enforced.",
-        "Only the server's Guardian reads the fence; the `proxy` and `mcp serve` Guardians are built without it.",
+        "`proxy` and `mcp serve` see a fence only in the database they open: the server's DATABASE_URL, or the same Lite Mode data directory on the same host.",
         "The fence denies newly governed dispatches only; it does not cancel work already in flight."
       ],
       "tests": {
@@ -1122,20 +1141,25 @@
           "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch",
           "core/pkg/guardian.TestScopedStopReaderFailureFailsClosedForScopedDispatch",
           "core/cmd/helm-ai-kernel.TestEmergencyStopFenceRouteFailsClosed",
-          "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled"
+          "core/cmd/helm-ai-kernel.TestEvaluateRouteBindsWorkspaceFromVerifiedHeaderWhenScopedFenceEnabled",
+          "core/cmd/helm-ai-kernel.TestEmergencyStopFenceDeniesThroughEveryEntryPoint"
         ],
         "removal": [
-          "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch"
+          "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch",
+          "core/cmd/helm-ai-kernel.TestEmergencyStopFenceDeniesThroughEveryEntryPoint"
         ],
         "bypass": [
-          "core/pkg/guardian.TestScopedStopReaderDeniesUnscopedEvaluationToPreventFenceBypass"
+          "core/pkg/guardian.TestScopedStopReaderDeniesUnscopedEvaluationToPreventFenceBypass",
+          "core/cmd/helm-ai-kernel.TestFencedMCPDecisionsBindTheConfiguredScope",
+          "core/cmd/helm-ai-kernel.TestFencedEntryPointsRefuseToRunWithoutTheFence"
         ]
       },
       "removal_proofs": [
         {
           "file": "core/pkg/guardian/interceptor.go",
           "tests": [
-            "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch"
+            "core/pkg/guardian.TestScopedStopFenceDeniesExplicitlyScopedDispatch",
+            "core/cmd/helm-ai-kernel.TestEmergencyStopFenceDeniesThroughEveryEntryPoint"
           ]
         }
       ]
@@ -2839,6 +2863,54 @@
       "tests": {
         "allowed": [],
         "forbidden": [],
+        "removal": [],
+        "bypass": []
+      },
+      "removal_proofs": []
+    },
+    {
+      "id": "CTL-046",
+      "title": "Mandates only narrow on delegation",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "A delegated mandate is within every mandate above it, and no stop on the tenant, the delegator or the chain is active. A narrowing (stop, revoke, narrow, add or lower a limit) bumps its scope's control-row version in the same transaction. A widening (a root mandate, a lift) needs an active human approver who is neither the requester nor the principal whose authority widens (HELM-750, ADR-0001).",
+      "status": "observed-only",
+      "plane": "runtime",
+      "reason": "Library only. No shipped binary imports core/pkg/kernel/authority/authorityrows (a declared library root in scripts/ci/dead-packages-allowlist.txt), and admission does not read the authority rows yet. The HELM-751 admission transaction is the first caller. Until it lands, the Postgres tests prove the library.",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Delegate",
+          "reachability": "unreachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Stop",
+          "reachability": "unreachable"
+        },
+        {
+          "symbol": "core/pkg/kernel/authority/authorityrows.Store.Lift",
+          "reachability": "unreachable"
+        }
+      ],
+      "gates": [],
+      "config": [],
+      "protected_operations": [
+        "Delegating, narrowing and revoking a mandate; adding and lowering limits; issuing and lifting stops."
+      ],
+      "bypass_assumptions": [
+        "No shipped caller exists, so nothing is enforced at admission.",
+        "The approval argument names principals; it is not yet a verified approval record (HELM-751)."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationOnlyNarrowsOverRandomChains"
+        ],
+        "forbidden": [
+          "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationWaitsForAConcurrentNarrowing",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresStoppedAuthorityCannotDelegate",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresRootMandateNeedsADistinctHumanApprover",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresStopExpiresAndLiftNeedsApproval",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresEveryNarrowingBumpsItsControlRowVersion",
+          "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole"
+        ],
         "removal": [],
         "bypass": []
       },

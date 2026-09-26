@@ -523,6 +523,32 @@ func TestControlPlaneTokenKeyRotation(t *testing.T) {
 	}
 }
 
+// The key set is fetched from exactly the configured URL. A redirect to plain
+// HTTP, or to another HTTPS origin, would let whoever serves the target choose
+// the keys, so a token signed with the target's key must not validate. The
+// client is the one newControlPlaneIdentityFromEnv builds; deleting its
+// CheckRedirect makes both cases fail (review mutant m11).
+func TestControlPlaneIdentityRefusesJWKSRedirects(t *testing.T) {
+	attacker := newTestCPIssuer(t, "attacker")
+	plain := httptest.NewServer(attacker.server.Config.Handler)
+	t.Cleanup(plain.Close)
+	for _, test := range []struct{ name, target string }{
+		{"https to http", plain.URL},
+		{"https to another https origin", attacker.server.URL},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			redirector := httptest.NewTLSServer(http.RedirectHandler(test.target, http.StatusFound))
+			t.Cleanup(redirector.Close)
+			identity := (&testCPIssuerKeys{server: redirector}).identity(t)
+			_, err := identity.validator.ValidateAuthorization(attacker.mint(t, "attacker", baseTokenClaims("default", "p", "w", cpScopeEvaluate)))
+			var validationErr *mcppkg.JWKSValidationError
+			if !errors.As(err, &validationErr) || validationErr.Kind != mcppkg.JWKSErrFetchFailed {
+				t.Fatalf("the JWKS fetch followed a redirect to %s: err=%v", test.target, err)
+			}
+		})
+	}
+}
+
 // laxValidator is a validator that skips the audience or actor check. The
 // §7.1 probes must catch it (§7.6, R2).
 type laxValidator struct {

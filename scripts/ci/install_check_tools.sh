@@ -60,3 +60,4 @@ python -m pip install --only-binary=:all: --require-hashes -r "${ROOT}/.github/s
 python -m pip install --require-hashes -r "${ROOT}/.github/codegen-requirements.txt"
 GOBIN="$bin_dir" go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
 GOBIN="$bin_dir" go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
+GOBIN="$bin_dir" go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.0

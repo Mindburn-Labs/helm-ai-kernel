@@ -1,0 +1,880 @@
+syntax = "proto3";
+
+// The gateway effect API, contract 1 of target architecture rev 3.4 §12.3.
+//
+// Zone C's effect gateway exposes the six operations of rev 3.4 §4.2 through
+// EffectGatewayService: Propose, Approve/Reject, Dispatch, Observe, Get
+// (GetAttempt) and Stop/Lift. WS-B's review of this contract (2026-09-25)
+// adds Cancel, the ADR-0001 narrowing ADMITTED -> CANCELLED, and
+// GetAttemptContent, a read. Cancel and its ESCALATED -> CANCELLED edge are a
+// recorded amendment to rev 3.4 §4.2 and §4.3. Transaction semantics are ADR-0001 (admission,
+// approval, dispatch claim, stops), ADR-0003 (settlement) and ADR-0005
+// (tenant from the token). Design note: docs/architecture/gateway-effect-api.md.
+//
+// Wire rules:
+//
+//   - Identity. Tenant, workspace and principal come only from the caller's
+//     token (rule R9, ADR-0005). No request message carries them.
+//     Identifiers that appear in requests (mandate_id, stop scope keys) are
+//     selectors the gateway checks against the authenticated principal; they
+//     never grant authority (R3). Attempts belong to the workspace of the
+//     token that proposed them.
+//   - Token scopes. Each RPC names the token scopes it accepts; ADR-0005
+//     allows one scope per token. Scopes are one per authority class (WS-B
+//     proposal, resolved by the coordinator on 2026-09-26):
+//     helm.gateway.propose (any principal), helm.gateway.decide (human
+//     principals only), helm.gateway.read, helm.gateway.stop (human operators
+//     and admins) and helm.gateway.execute (workload principals only, never a
+//     human session or a worker's propose token). Separation of duties comes
+//     from propose and decide being different scopes plus the
+//     approver-not-requester check (ADR-0001 I6).
+//   - Token binding. decide tokens and Lift's stop token name their target in
+//     the RFC 9396 authorization_details claim; txn keeps its ADR-0005
+//     meaning. decide and stop tokens are single-use: the gateway rejects a
+//     reused jti (proposed ADR-0005 amendment; design note, "Resolved").
+//   - Decisions are states, not errors. DENIED, ESCALATED, CANCELLED and
+//     UNKNOWN are attempt states in a successful response. A Connect error
+//     means the gateway could not evaluate the request. Every error carries
+//     one helm.errors.v1.ErrorDetail (reason_code, retryable) in its details.
+//   - Reason codes are open strings from the one registry,
+//     protocols/json-schemas/reason-codes/reason-codes-v1.json (§11.1). In
+//     these comments a bracketed reason_code marker names a registered code,
+//     and a bracketed reason_code_pending marker names a code that ADR-0001
+//     §6 registers in the slice that first emits it. A contract test keeps
+//     both lists true.
+//   - Amounts are integers: resource units, currency minor units, or model
+//     spend in currency micro-units. There is no floating-point field.
+//   - Idempotency (R6). Propose, Stop and Lift carry a tenant-scoped
+//     idempotency key. Approve, Reject, Cancel and Dispatch are idempotent on
+//     the attempt: repeating one returns the attempt as stored and never
+//     starts a second dispatch. Repeating Observe may record another
+//     read-back, and never dispatches.
+//   - Held field numbers. A few field numbers are kept free for fields whose
+//     shape a later slice decides; the message comments name them and a
+//     contract test keeps them unassigned. They are not `reserved`, because
+//     buf breaking would then reject the field that later takes the number.
+//
+// quantum_posture: this contract carries SHA-256 digests as opaque 32-byte
+// values and no signatures or keys. Token verification is ADR-0005's and adds
+// no cryptographic control here; no post-quantum claim is made.
+package helm.gateway.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "helm.mindburn.run/gateway/v1;gatewayv1";
+
+// EffectGatewayService is the effect gateway (Zone C, rev 3.4 §2).
+//
+// Connect errors used by every RPC, each with a helm.errors.v1.ErrorDetail:
+//
+//   - unauthenticated: no token, or one the gateway cannot verify (ADR-0005
+//     §3 maps these to 401).
+//   - permission_denied: a valid token whose scope does not cover the RPC, a
+//     selector the authenticated principal may not use, or a decision the
+//     token's principal may not make (Approve, Reject, Cancel).
+//   - invalid_argument: a malformed request [reason_code: SCHEMA_VIOLATION].
+//   - not_found: no such attempt in the token's tenant and workspace, or no
+//     such stop in its tenant. An object of another tenant or workspace is
+//     indistinguishable from a missing one.
+//   - already_exists: Propose, Stop or Lift reused an idempotency key with a
+//     different request [reason_code_pending: IDEMPOTENCY_CONFLICT].
+//   - failed_precondition: the operation does not apply to the attempt's
+//     current state, or an approval digest does not match the attempt.
+//   - unavailable, aborted: transient; ErrorDetail.retryable is true and the
+//     caller retries with the same request.
+//
+// Slice 2 adds ListAttempts (token scope helm.gateway.read); the name is
+// taken. Its shape is in the design note.
+service EffectGatewayService {
+  // Propose prepares and admits one effect in a single transaction
+  // (ADR-0001 §1): idempotency first, authority rows locked, stops read after
+  // the locks, counters locked, decide, then reserve and issue the permit.
+  //
+  // Token scope: helm.gateway.propose, which may be minted for any principal,
+  // humans included (Console-originated effects, authority changes).
+  //
+  // The attempt is keyed by (tenant from the token, idempotency_key) and a
+  // request digest the gateway computes over every ProposeRequest field
+  // except idempotency_key, together with the authenticated principal
+  // (ADR-0001 §1 step 1, R6).
+  //   - New key: the attempt is created and decided. The response state is
+  //     ADMITTED, DENIED or ESCALATED.
+  //   - Same key, same digest: the stored attempt is returned untouched, in
+  //     whatever state it has reached, including a pending one (ESCALATED,
+  //     ADMITTED, DISPATCHING) or UNKNOWN. existing is true. Counters are not
+  //     touched and no second dispatch can follow.
+  //   - Same key, different digest: already_exists
+  //     [reason_code_pending: IDEMPOTENCY_CONFLICT].
+  //
+  // Denial reasons, in decide's order (ADR-0001 §1 step 5):
+  // [reason_code: EMERGENCY_STOP_FENCED],
+  // [reason_code_pending: PRINCIPAL_INACTIVE],
+  // [reason_code_pending: MANDATE_INACTIVE],
+  // [reason_code_pending: MANDATE_OUTSIDE_VALIDITY],
+  // [reason_code_pending: EFFECT_OUT_OF_SCOPE],
+  // [reason_code_pending: PER_CALL_LIMIT],
+  // [reason_code_pending: ARITHMETIC_OVERFLOW],
+  // [reason_code: BUDGET_EXCEEDED],
+  // [reason_code_pending: INSUFFICIENT_CREDIT],
+  // [reason_code_pending: ROUTE_UNPRICED]. Escalation:
+  // [reason_code: APPROVAL_REQUIRED].
+  rpc Propose(ProposeRequest) returns (ProposeResponse);
+
+  // Approve records an approval for an ESCALATED attempt and re-runs
+  // admission with it, in the same transaction (ADR-0001 §1 "Approval",
+  // §5.5). The response state is ADMITTED, or DENIED if admission now
+  // denies.
+  //
+  // Token scope: helm.gateway.decide, minted for human principals only, from
+  // an interactive session. Human-only narrows ADR-0001 I6, which requires a
+  // verified principal distinct from the requester; the two are compatible.
+  // The token is single-use (a reused jti is rejected) and bound to one
+  // decision by its authorization_details claim:
+  //   [{"type": "helm_effect_decision", "attempt_id": "<attempt_id>",
+  //     "action": "approve"}]
+  // A token whose attempt_id or action differs from the call is
+  // permission_denied.
+  //
+  // Preconditions, checked before anything is recorded (ADR-0001 §1
+  // "Approval", invariant I6). A failure is an error on the call, and the
+  // attempt stays ESCALATED, unchanged:
+  //   - The approver is the token's principal and must be an active
+  //     principal of the tenant other than the requester (§4.2, F-08).
+  //     Self-approval is permission_denied
+  //     [reason_code_pending: APPROVER_NOT_DISTINCT].
+  //   - approval_digest must equal the pending approval's digest, or the call
+  //     is failed_precondition.
+  //   - Approvals that need step-up (§10.1: risk class high or irreversible,
+  //     authority widening, stop lifts) fail closed with permission_denied
+  //     [reason_code_pending: STEP_UP_REQUIRED] until the step-up assertion
+  //     field exists (held field number 4).
+  //
+  // An attempt that is no longer ESCALATED is returned unchanged with
+  // existing true.
+  rpc Approve(ApproveRequest) returns (ApproveResponse);
+
+  // Reject records a rejection for an ESCALATED attempt. The response state
+  // is REJECTED [reason_code_pending: APPROVAL_REJECTED]. Nothing was
+  // reserved, so nothing is released.
+  //
+  // Token scope: helm.gateway.decide, with the same principal, digest and
+  // token rules as Approve, and "action": "reject" in its
+  // authorization_details; a rejection needs no step-up. An attempt that is
+  // no longer ESCALATED is returned unchanged with existing true.
+  rpc Reject(RejectRequest) returns (RejectResponse);
+
+  // Cancel withdraws an attempt before dispatch: the ADR-0001 transition
+  // ADMITTED -> CANCELLED, which voids the permit and releases the
+  // reservation in the same transaction (ADR-0003), and ESCALATED ->
+  // CANCELLED, which removes a pending approval and has nothing to release.
+  // Cancelling narrows authority, so it needs no approval (§4.1 item 7).
+  // CANCELLED by Cancel has an empty reason_code.
+  //
+  // Token scope: helm.gateway.propose, when the token's principal is the
+  // requester.
+  // Token scope: helm.gateway.stop, for an operator cancelling another
+  // principal's attempt.
+  //
+  // An attempt already DENIED, REJECTED, EXPIRED or CANCELLED is returned
+  // unchanged with existing true. DISPATCHING or any later state is
+  // failed_precondition: a dispatched call cannot be retracted (§4.3).
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+
+  // Dispatch claims the permit of an ADMITTED attempt and sends the effect
+  // through its adapter, which injects the provider credential (R8).
+  //
+  // Token scope: helm.gateway.execute, minted only for workload principals
+  // (the Control Plane backend, SDK agent runtimes), never from a human
+  // session or a worker's propose token (rev 3.4 §4.2).
+  //
+  // Model calls do not use this RPC. The caller presents the permit to the
+  // model gateway's inference endpoint (helm.gateway.execute, workload
+  // principal), which claims the permit, injects the provider key, streams
+  // the response and settles (§8, HELM-752).
+  //
+  // The claim (ADR-0001 §1, "Dispatch claim") re-locks the authority rows,
+  // re-reads stops and compares each row's version with the permit's
+  // authority_versions, before any provider I/O.
+  //   - Refused: the permit is voided, the attempt becomes CANCELLED and its
+  //     reservation is released in the same transaction. Reasons:
+  //     [reason_code: EMERGENCY_STOP_FENCED],
+  //     [reason_code_pending: AUTHORITY_CHANGED] (any version change, even an
+  //     unrelated widening; the caller proposes again, ADR-0001 §5.4),
+  //     [reason_code_pending: PERMIT_EXPIRED].
+  //   - Claimed: the permit is consumed once, the attempt moves to
+  //     DISPATCHING, and the adapter checks the permit's argument digest
+  //     against the bytes it is about to send. The response state is
+  //     DISPATCHED, OBSERVED when the provider's response is a definitive
+  //     outcome, or UNKNOWN when the response is ambiguous or missing.
+  //
+  // Stops and revocations take effect at admission and at this claim
+  // (ADR-0001 invariant I4). They cannot retract a call that is already
+  // dispatched.
+  //
+  // An attempt that is CANCELLED, DISPATCHING or in any later state is
+  // returned unchanged with existing true. UNKNOWN is never re-dispatched by
+  // this RPC; recovery retries only under the adapter's declared idempotent
+  // or conditional write (§4.3). PROPOSED, DENIED, ESCALATED, APPROVED,
+  // REJECTED and EXPIRED are failed_precondition.
+  rpc Dispatch(DispatchRequest) returns (DispatchResponse);
+
+  // Observe reads the effect back from the provider through the adapter and
+  // records one observation.
+  //
+  // Token scope: helm.gateway.execute, as for Dispatch.
+  //
+  //   - DISPATCHED: becomes OBSERVED with a SUCCEEDED or FAILED outcome, or
+  //     UNKNOWN when the read-back is inconclusive.
+  //   - UNKNOWN: becomes RECONCILED with an outcome, stays UNKNOWN, or
+  //     becomes ESCALATED_TO_HUMAN when the adapter cannot resolve it.
+  //   - Any other state: returned unchanged with existing true and no
+  //     provider I/O.
+  //
+  // Worker death, lease loss or a database failure after dispatch does not
+  // prove failure. An uncertain reservation is not released to make the
+  // state terminal (§4.3).
+  rpc Observe(ObserveRequest) returns (ObserveResponse);
+
+  // GetAttempt returns one attempt. It is rev 3.4 §4.2's "Get".
+  //
+  // Token scope: helm.gateway.read.
+  rpc GetAttempt(GetAttemptRequest) returns (GetAttemptResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetAttemptContent returns the argument bytes of one attempt (§5.6
+  // content), so an approver's client can check them against
+  // argument_digest and recompute the approval digest before it submits a
+  // decision. not_found also covers content that was never retained or has
+  // been erased.
+  //
+  // Token scope: helm.gateway.read.
+  rpc GetAttemptContent(GetAttemptContentRequest) returns (GetAttemptContentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // Stop writes a stop row and bumps the version of its scope's control row
+  // (ADR-0001 §1, narrowing transitions). Narrowing needs no approval
+  // (§4.1 item 7). Admissions after the commit are DENIED and admitted
+  // attempts are CANCELLED at their dispatch claim, both
+  // [reason_code: EMERGENCY_STOP_FENCED].
+  //
+  // Token scope: helm.gateway.stop, minted for human operators and admins
+  // only. The token is single-use: a reused jti is rejected.
+  rpc Stop(StopRequest) returns (StopResponse);
+
+  // Lift proposes lifting a stop. Lifting widens authority, so it is an
+  // effect attempt of type helm.authority.lift that needs approval by
+  // another principal, with step-up (§4.1 item 7, §10.1, ADR-0001 §1); its
+  // payload is contract 5. The response carries that attempt, normally
+  // ESCALATED. It follows Approve and Dispatch like any other attempt; the
+  // stop is lifted when the attempt is dispatched.
+  //
+  // Token scope: helm.gateway.stop. The token is single-use and bound to the
+  // stop by its authorization_details claim:
+  //   [{"type": "helm_stop_lift", "stop_id": "<stop_id>"}]
+  // Approving the resulting attempt takes a decide token bound to that
+  // attempt, as for any other.
+  rpc Lift(LiftRequest) returns (LiftResponse);
+}
+
+// ProposeRequest proposes one effect under one of the principal's mandates.
+message ProposeRequest {
+  // Tenant-scoped idempotency key, 1 to 255 bytes. The SDKs always send one;
+  // without it a retry is a new attempt.
+  string idempotency_key = 1;
+  // The leaf mandate the principal acts under. A selector, not a grant: the
+  // gateway admits only if the mandate belongs to the authenticated
+  // principal and every link of its delegation chain allows the effect.
+  string mandate_id = 2;
+  // The commitment or case the effect serves (rev 3.4 §3). Exactly one is
+  // set, except for helm.authority.* effect types, where it is optional
+  // until contract 5 decides their correlation.
+  oneof work_ref {
+    string commitment_id = 3;
+    string case_id = 4;
+  }
+  // What the effect does.
+  EffectDescriptor effect = 5;
+  // The caller's quote, one entry per unit; units are unique. Admission
+  // reserves it against every limit counted in that unit. Ignored for model
+  // calls: the gateway prices those from the route and the clamped
+  // max_tokens (§8, ADR-0003).
+  repeated ResourceAmount quote = 6;
+  // The values counted by distinct-value limits (ADR-0001 rule class U), as
+  // digests.
+  repeated DistinctValue distinct_values = 7;
+  // When an escalation of this attempt expires, if the caller needs it
+  // sooner, for example the deadline of the run waiting on it. Clamped to
+  // the mandate's approval window. Unset: the mandate's approval window.
+  // Part of the request digest like every other field.
+  google.protobuf.Timestamp approval_expires_at = 8;
+}
+
+// ProposeResponse returns the attempt.
+message ProposeResponse {
+  // The attempt, as created or as stored.
+  EffectAttempt attempt = 1;
+  // True when the idempotency key already named this request: the stored
+  // attempt is returned untouched.
+  bool existing = 2;
+}
+
+// ApproveRequest approves one ESCALATED attempt.
+//
+// Field number 4 is held for the §10.1 step-up assertion. Until that field
+// exists, approvals that need step-up fail closed.
+message ApproveRequest {
+  // The attempt to approve.
+  string attempt_id = 1;
+  // The approval digest the approver was shown:
+  // EffectAttempt.pending_approval.approval_digest. A different digest is
+  // failed_precondition, so an approval binds to exactly what was displayed.
+  bytes approval_digest = 2;
+  // Why the approver approved, for the decision inbox and the audit.
+  // Optional, at most 2000 bytes of UTF-8. The log carries its digest
+  // (R13).
+  string reason = 3;
+}
+
+// ApproveResponse returns the attempt after the approval.
+message ApproveResponse {
+  // The attempt after re-admission, or as stored when existing is true.
+  EffectAttempt attempt = 1;
+  // True when the attempt was no longer ESCALATED and nothing changed.
+  bool existing = 2;
+}
+
+// RejectRequest rejects one ESCALATED attempt.
+message RejectRequest {
+  // The attempt to reject.
+  string attempt_id = 1;
+  // As ApproveRequest.approval_digest.
+  bytes approval_digest = 2;
+  // Why the approver rejected. Required, 1 to 2000 bytes of UTF-8. The log
+  // carries its digest (R13).
+  string reason = 3;
+}
+
+// RejectResponse returns the attempt after the rejection.
+message RejectResponse {
+  // The attempt, REJECTED, or as stored when existing is true.
+  EffectAttempt attempt = 1;
+  // True when the attempt was no longer ESCALATED and nothing changed.
+  bool existing = 2;
+}
+
+// CancelRequest withdraws one ESCALATED or ADMITTED attempt.
+message CancelRequest {
+  // The attempt to cancel.
+  string attempt_id = 1;
+}
+
+// CancelResponse returns the attempt after the cancellation.
+message CancelResponse {
+  // The attempt, CANCELLED, or as stored when existing is true.
+  EffectAttempt attempt = 1;
+  // True when the attempt was already terminal before dispatch and nothing
+  // changed.
+  bool existing = 2;
+}
+
+// DispatchRequest dispatches one ADMITTED attempt.
+message DispatchRequest {
+  // The attempt to dispatch.
+  string attempt_id = 1;
+}
+
+// DispatchResponse returns the attempt after the claim and the provider call.
+message DispatchResponse {
+  // The attempt: DISPATCHED, OBSERVED, UNKNOWN or CANCELLED, or as stored
+  // when existing is true.
+  EffectAttempt attempt = 1;
+  // True when the attempt was no longer ADMITTED and nothing changed.
+  bool existing = 2;
+}
+
+// ObserveRequest reads one dispatched attempt back.
+message ObserveRequest {
+  // The attempt to observe.
+  string attempt_id = 1;
+}
+
+// ObserveResponse returns the attempt and the observation recorded.
+message ObserveResponse {
+  // The attempt after the read-back, or as stored when existing is true.
+  EffectAttempt attempt = 1;
+  // True when the attempt's state admits no read-back and nothing changed.
+  bool existing = 2;
+}
+
+// GetAttemptRequest names one attempt.
+message GetAttemptRequest {
+  // The attempt to read.
+  string attempt_id = 1;
+}
+
+// GetAttemptResponse returns the attempt.
+message GetAttemptResponse {
+  // The attempt as stored.
+  EffectAttempt attempt = 1;
+}
+
+// GetAttemptContentRequest names one attempt.
+message GetAttemptContentRequest {
+  // The attempt whose content to read.
+  string attempt_id = 1;
+}
+
+// GetAttemptContentResponse returns an attempt's argument bytes.
+message GetAttemptContentResponse {
+  // The attempt the content belongs to.
+  string attempt_id = 1;
+  // The exact argument bytes that were proposed. SHA-256 of them equals the
+  // attempt's argument_digest; a client checks that before it trusts them.
+  bytes arguments = 2;
+}
+
+// StopRequest stops new effects in one scope.
+message StopRequest {
+  // Tenant-scoped idempotency key, 1 to 255 bytes.
+  string idempotency_key = 1;
+  // The kind of scope to stop.
+  StopScopeKind scope_kind = 2;
+  // Empty for the tenant scope, which is always the token's tenant.
+  // Otherwise a principal ID, a mandate ID or an effect type in that tenant.
+  string scope_key = 3;
+  // Why the scope is stopped, for operators.
+  string reason = 4;
+  // When the stop ends by itself. Unset: it lasts until lifted.
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+// StopResponse returns the stop.
+message StopResponse {
+  // The stop, as created or as stored.
+  Stop stop = 1;
+  // True when the idempotency key already named this request.
+  bool existing = 2;
+}
+
+// LiftRequest proposes lifting one stop.
+message LiftRequest {
+  // Tenant-scoped idempotency key, 1 to 255 bytes.
+  string idempotency_key = 1;
+  // The stop to lift.
+  string stop_id = 2;
+  // The mandate that allows the principal to propose helm.authority.lift.
+  // A selector, as in ProposeRequest.
+  string mandate_id = 3;
+}
+
+// LiftResponse returns the helm.authority.lift attempt.
+message LiftResponse {
+  // The lift attempt, normally ESCALATED.
+  EffectAttempt attempt = 1;
+  // True when the idempotency key already named this request.
+  bool existing = 2;
+}
+
+// EffectDescriptor is the effect a principal proposes.
+message EffectDescriptor {
+  // A registered effect type, for example "github.pull_request.merge".
+  // The helm.authority.* types are authority changes (§4.1 item 7) and take
+  // contract 5 payloads.
+  string effect_type = 1;
+  // The resource the effect acts on, in the adapter's form.
+  string target = 2;
+  // The exact argument bytes the adapter will send. The log carries only
+  // their digest (R13).
+  bytes arguments = 3;
+}
+
+// ResourceAmount is a non-negative integer amount of one unit.
+message ResourceAmount {
+  // A unit declared by the tenant's limits, for example "count", or an ISO
+  // 4217 currency code for money.
+  string unit = 1;
+  // The amount. Money is integer minor units of the currency.
+  int64 amount = 2;
+}
+
+// DistinctValue is one value counted by a distinct-value limit.
+message DistinctValue {
+  // The unit the distinct-value limit counts in, for example "recipient".
+  string unit = 1;
+  // SHA-256 of the value, 32 bytes.
+  bytes value_digest = 2;
+}
+
+// EffectAttempt is the gateway's record of one effect (§3, §4.3).
+message EffectAttempt {
+  // UUIDv7, assigned by the gateway.
+  string attempt_id = 1;
+  // The key it was proposed under.
+  string idempotency_key = 2;
+  // SHA-256 request digest the idempotency check compares, 32 bytes.
+  bytes request_digest = 3;
+  // The principal that proposed it, from its token.
+  string requester_principal_id = 4;
+  // The leaf mandate it was proposed under.
+  string mandate_id = 5;
+  // The commitment or case it serves. Unset for authority changes until
+  // contract 5 decides their correlation.
+  oneof work_ref {
+    string commitment_id = 6;
+    string case_id = 7;
+  }
+  // The proposed effect type.
+  string effect_type = 8;
+  // The proposed target.
+  string target = 9;
+  // SHA-256 of the target's UTF-8 bytes, 32 bytes.
+  bytes target_digest = 10;
+  // SHA-256 of the argument bytes, 32 bytes.
+  bytes argument_digest = 11;
+  // The effect type's risk class, from the effect-type control row. Never
+  // taken from the request.
+  RiskClass risk_class = 12;
+  // The quote as proposed.
+  repeated ResourceAmount quote = 13;
+  // Where the attempt is in the state machine.
+  EffectAttemptState state = 14;
+  // Set in OBSERVED and RECONCILED, and kept through SETTLED and
+  // COMPENSATED.
+  EffectOutcome outcome = 15;
+  // How the outcome was established.
+  OutcomeBasis outcome_basis = 16;
+  // The registry code for the current state, when it has one: the denial,
+  // escalation, rejection, expiry or cancellation reason. Empty otherwise.
+  string reason_code = 17;
+  // Set while the attempt is ESCALATED.
+  PendingApproval pending_approval = 18;
+  // The recorded approval or rejection, when there is one.
+  Approval approval = 19;
+  // Set from ADMITTED on.
+  Permit permit = 20;
+  // The attempt's current exposure on each counter it loads. Exactly one per
+  // counter bucket (ADR-0003).
+  repeated Exposure exposures = 21;
+  // Set only for model calls (§8).
+  ModelCallSettlement model_call = 22;
+  // The most recent observation, when there is one.
+  Observation latest_observation = 23;
+  // The attempt row's version. It increases with every transition.
+  int64 version = 24;
+  // Database time of the proposal.
+  google.protobuf.Timestamp created_at = 25;
+  // Database time of the last transition.
+  google.protobuf.Timestamp updated_at = 26;
+  // The workspace it belongs to, from the proposer's token (R9, ADR-0005).
+  // Reads and decisions need a token for the same workspace.
+  string workspace_id = 27;
+}
+
+// EffectAttemptState is the §4.3 state machine:
+//
+//   PROPOSED -> DENIED
+//            -> ESCALATED -> APPROVED | REJECTED | EXPIRED
+//            -> ADMITTED (reserved, permit issued)
+//   ADMITTED -> DISPATCHING -> DISPATCHED -> OBSERVED(SUCCEEDED | FAILED)
+//               DISPATCHING or DISPATCHED -> UNKNOWN
+//                 -> RECONCILED(SUCCEEDED | FAILED) | ESCALATED_TO_HUMAN
+//   ADMITTED -> CANCELLED (before dispatch; reservation released)
+//   ESCALATED -> CANCELLED (Cancel; nothing held. A recorded amendment to
+//                           rev 3.4 §4.3)
+//   terminal -> SETTLED -> COMPENSATED (explicit, adapter-supported only)
+//
+// A reservation is released only by a transition to a state with lower
+// exposure, in the transaction that makes it (§8, ADR-0003).
+enum EffectAttemptState {
+  // Not set. Never a stored state.
+  EFFECT_ATTEMPT_STATE_UNSPECIFIED = 0;
+  // Inserted by the admission transaction. Never visible after it commits.
+  EFFECT_ATTEMPT_STATE_PROPOSED = 1;
+  // decide denied it. Terminal; nothing is reserved.
+  EFFECT_ATTEMPT_STATE_DENIED = 2;
+  // Waiting for Approve or Reject [reason_code: APPROVAL_REQUIRED].
+  EFFECT_ATTEMPT_STATE_ESCALATED = 3;
+  // Approved. Approve re-runs admission in the same transaction
+  // (ADR-0001 §5.5), so a committed attempt is ADMITTED or DENIED instead.
+  EFFECT_ATTEMPT_STATE_APPROVED = 4;
+  // Rejected by the approver [reason_code_pending: APPROVAL_REJECTED].
+  // Terminal.
+  EFFECT_ATTEMPT_STATE_REJECTED = 5;
+  // No decision before the escalation expired [reason_code: APPROVAL_TIMEOUT].
+  // Terminal.
+  EFFECT_ATTEMPT_STATE_EXPIRED = 6;
+  // Reserved and holding an unconsumed permit.
+  EFFECT_ATTEMPT_STATE_ADMITTED = 7;
+  // Withdrawn by Cancel, refused at the dispatch claim, or released by the
+  // gateway before dispatch (ADR-0001, ADR-0003). Any reservation is
+  // released in the same transaction. Terminal.
+  EFFECT_ATTEMPT_STATE_CANCELLED = 8;
+  // The permit is consumed and provider I/O may have started.
+  EFFECT_ATTEMPT_STATE_DISPATCHING = 9;
+  // The provider accepted the call; the outcome is not yet observed.
+  EFFECT_ATTEMPT_STATE_DISPATCHED = 10;
+  // The domain state UNKNOWN (§4.3), not an unrecognised enum value: the
+  // effect may or may not have happened. The reservation stays held.
+  EFFECT_ATTEMPT_STATE_UNKNOWN = 11;
+  // The outcome was observed after dispatch. outcome is set.
+  EFFECT_ATTEMPT_STATE_OBSERVED = 12;
+  // An UNKNOWN attempt was resolved by reconciliation. outcome is set.
+  EFFECT_ATTEMPT_STATE_RECONCILED = 13;
+  // An UNKNOWN attempt the adapter cannot resolve, handed to a human.
+  EFFECT_ATTEMPT_STATE_ESCALATED_TO_HUMAN = 14;
+  // Actual usage consumed and the remainder released.
+  EFFECT_ATTEMPT_STATE_SETTLED = 15;
+  // Compensated by a separately admitted effect, where the adapter supports
+  // it.
+  EFFECT_ATTEMPT_STATE_COMPENSATED = 16;
+}
+
+// EffectOutcome is what happened at the provider.
+enum EffectOutcome {
+  // No outcome is established.
+  EFFECT_OUTCOME_UNSPECIFIED = 0;
+  // The effect happened.
+  EFFECT_OUTCOME_SUCCEEDED = 1;
+  // The effect did not happen.
+  EFFECT_OUTCOME_FAILED = 2;
+}
+
+// OutcomeBasis is how an outcome was established.
+enum OutcomeBasis {
+  // No outcome is established.
+  OUTCOME_BASIS_UNSPECIFIED = 0;
+  // Observed after dispatch (state OBSERVED).
+  OUTCOME_BASIS_OBSERVED = 1;
+  // Reconciled from UNKNOWN (state RECONCILED).
+  OUTCOME_BASIS_RECONCILED = 2;
+}
+
+// RiskClass is an effect type's risk class. high and irreversible need
+// approval (ADR-0001 §4).
+enum RiskClass {
+  // Not set.
+  RISK_CLASS_UNSPECIFIED = 0;
+  // Low risk.
+  RISK_CLASS_LOW = 1;
+  // Medium risk.
+  RISK_CLASS_MEDIUM = 2;
+  // High risk; needs approval.
+  RISK_CLASS_HIGH = 3;
+  // Irreversible; needs approval.
+  RISK_CLASS_IRREVERSIBLE = 4;
+}
+
+// PendingApproval is what an approver decides on.
+message PendingApproval {
+  // Approval digest v1, 32 bytes (§10.1): SHA-256 over, in order, the
+  // domain tag "helm.gateway.v1.approval-digest.v1", attempt_id, the target
+  // and argument digests, the quote as the exposure, and expires_at. Each
+  // byte string is prefixed with its length as a big-endian uint64. The
+  // quote is its entry count, then each entry sorted by unit bytes: the
+  // unit, then the amount as a big-endian uint64. expires_at is its seconds
+  // as a big-endian int64, then its nanos as a big-endian int32. The design
+  // note gives a test vector. Approve and Reject must present it.
+  bytes approval_digest = 1;
+  // When the escalation expires and the attempt becomes EXPIRED.
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// Approval is a recorded decision on an escalated attempt. There is at most
+// one per attempt.
+message Approval {
+  // The deciding principal, from its token.
+  string approver_principal_id = 1;
+  // The decision.
+  ApprovalDecision decision = 2;
+  // The digest the approver presented.
+  bytes approval_digest = 3;
+  // Database time of the decision.
+  google.protobuf.Timestamp decided_at = 4;
+  // The approver's reason, as given on Approve or Reject.
+  string reason = 5;
+}
+
+// ApprovalDecision is an approver's decision.
+enum ApprovalDecision {
+  // Not set.
+  APPROVAL_DECISION_UNSPECIFIED = 0;
+  // Approved.
+  APPROVAL_DECISION_APPROVED = 1;
+  // Rejected.
+  APPROVAL_DECISION_REJECTED = 2;
+}
+
+// Permit is the single-use authorization admission issues. The dispatch
+// claim consumes it once, or voids it.
+message Permit {
+  // UUIDv7.
+  string permit_id = 1;
+  // SHA-256 of the admitted argument bytes, 32 bytes. The adapter compares
+  // it with the bytes it is about to send.
+  bytes argument_digest = 2;
+  // The version of every authority row admission locked. The dispatch claim
+  // refuses the permit if any of them changed.
+  repeated AuthorityVersion authority_versions = 3;
+  // After this time the claim refuses the permit
+  // [reason_code_pending: PERMIT_EXPIRED].
+  google.protobuf.Timestamp expires_at = 4;
+  // Set when the dispatch claim consumed the permit.
+  google.protobuf.Timestamp consumed_at = 5;
+  // The consuming claim. Set with consumed_at.
+  string claim_id = 6;
+  // Set when the permit was voided instead: the registry code of the refusal.
+  string void_reason_code = 7;
+}
+
+// AuthorityVersion is the version of one authority row at admission.
+message AuthorityVersion {
+  // The kind of row.
+  AuthorityRowKind kind = 1;
+  // The row's key: empty for the tenant control row, otherwise a principal
+  // ID, a mandate ID, an effect type or a limit ID.
+  string key = 2;
+  // The row's version.
+  int64 version = 3;
+}
+
+// AuthorityRowKind is an authority row admission locks, in lock order
+// (ADR-0001 §1 step 2).
+enum AuthorityRowKind {
+  // Not set.
+  AUTHORITY_ROW_KIND_UNSPECIFIED = 0;
+  // The tenant control row.
+  AUTHORITY_ROW_KIND_TENANT = 1;
+  // The principal.
+  AUTHORITY_ROW_KIND_PRINCIPAL = 2;
+  // A mandate of the delegation chain.
+  AUTHORITY_ROW_KIND_MANDATE = 3;
+  // The effect-type control row.
+  AUTHORITY_ROW_KIND_EFFECT_TYPE = 4;
+  // A limit.
+  AUTHORITY_ROW_KIND_LIMIT = 5;
+}
+
+// Exposure is an attempt's current load on one counter bucket (ADR-0003).
+message Exposure {
+  // The limit the counter belongs to.
+  string limit_id = 1;
+  // The counter bucket. Unset for a limit without a window.
+  google.protobuf.Timestamp bucket_start = 2;
+  // Which amount loads the counter.
+  ExposureKind kind = 3;
+  // The amount, in the limit's unit.
+  int64 amount = 4;
+}
+
+// ExposureKind selects the amount an attempt loads on a counter. Held is
+// carried in the counter's reserved column; estimated and confirmed in its
+// used column (ADR-0003 §1).
+enum ExposureKind {
+  // Not set.
+  EXPOSURE_KIND_UNSPECIFIED = 0;
+  // The reservation.
+  EXPOSURE_KIND_HELD = 1;
+  // Assumed consumption while usage is unknown.
+  EXPOSURE_KIND_ESTIMATED = 2;
+  // Provider-reported consumption.
+  EXPOSURE_KIND_CONFIRMED = 3;
+  // Released; the amount is 0.
+  EXPOSURE_KIND_RELEASED = 4;
+}
+
+// ModelCallSettlement is the money side of one model call (§8, ADR-0003).
+// Amounts are integer micro-units of currency_code; the four quantities are
+// never summed.
+message ModelCallSettlement {
+  // The priced route the call was admitted on.
+  string route = 1;
+  // Where settlement is.
+  SettlementState state = 2;
+  // ISO 4217 currency of every amount below.
+  string currency_code = 3;
+  // The reservation: the admission quote.
+  int64 held_micros = 4;
+  // Assumed consumption. Set from ESTIMATED on.
+  optional int64 estimated_micros = 5;
+  // Provider-reported consumption. Set from CONFIRMED on.
+  optional int64 confirmed_micros = 6;
+  // What the customer is charged.
+  int64 billable_micros = 7;
+}
+
+// SettlementState is a model call's settlement state (ADR-0003 §1).
+enum SettlementState {
+  // Not set.
+  SETTLEMENT_STATE_UNSPECIFIED = 0;
+  // The quote is held.
+  SETTLEMENT_STATE_HELD = 1;
+  // The stream ended without usage; the hold counts as estimated.
+  SETTLEMENT_STATE_ESTIMATED = 2;
+  // No confirmation within the resolution window; the estimate stands.
+  SETTLEMENT_STATE_UNRESOLVED_FINAL = 3;
+  // Usage confirmed; the remainder is released.
+  SETTLEMENT_STATE_CONFIRMED = 4;
+  // Released before dispatch.
+  SETTLEMENT_STATE_RELEASED = 5;
+}
+
+// Observation is one read of an effect's outcome. Observations carry
+// source, freshness and trust class (§3).
+//
+// Field numbers 7 to 15 are held for typed, bounded result payloads (for
+// example a pull request URL and merge commit), in a slice after s1.
+message Observation {
+  // Where it came from, for example the provider's response or an adapter
+  // read-back operation.
+  string source = 1;
+  // The trust class the adapter's qualification record declares (§9.3).
+  string trust_class = 2;
+  // What it shows. Unspecified when it is inconclusive.
+  EffectOutcome outcome = 3;
+  // SHA-256 of the observed provider bytes, 32 bytes.
+  bytes evidence_digest = 4;
+  // When it was observed.
+  google.protobuf.Timestamp observed_at = 5;
+  // A content-addressed reference to the effect's result, for example
+  // "sha256:<hex>", stored as a §5.6 content blob and readable with
+  // helm.gateway.read. The log carries only the reference (R13). Empty when
+  // the adapter returns no result.
+  string result_ref = 6;
+}
+
+// Stop is one stop control row (§4.1 item 6).
+message Stop {
+  // UUIDv7.
+  string stop_id = 1;
+  // The kind of scope stopped.
+  StopScopeKind scope_kind = 2;
+  // Empty for the tenant scope; otherwise the stopped principal, mandate or
+  // effect type.
+  string scope_key = 3;
+  // Why it was stopped.
+  string reason = 4;
+  // The principal that stopped it, from its token.
+  string created_by_principal_id = 5;
+  // Database time of the stop.
+  google.protobuf.Timestamp created_at = 6;
+  // When it ends by itself, if it does.
+  google.protobuf.Timestamp expires_at = 7;
+  // Set when a helm.authority.lift attempt lifted it.
+  google.protobuf.Timestamp lifted_at = 8;
+}
+
+// StopScopeKind is the scope of a stop.
+enum StopScopeKind {
+  // Not set.
+  STOP_SCOPE_KIND_UNSPECIFIED = 0;
+  // The whole tenant.
+  STOP_SCOPE_KIND_TENANT = 1;
+  // One principal.
+  STOP_SCOPE_KIND_PRINCIPAL = 2;
+  // One mandate.
+  STOP_SCOPE_KIND_MANDATE = 3;
+  // One effect type.
+  STOP_SCOPE_KIND_EFFECT_TYPE = 4;
+}

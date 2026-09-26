@@ -3,6 +3,8 @@ title: HTTP API
 last_reviewed: 2026-09-26
 ---
 
+<!-- quantum_posture: this page documents classical TLS on the API listener and publishes the existing classical, hybrid or ML-DSA-65 receipt public keys; it claims no post-quantum transport. -->
+
 # HTTP API
 
 The public HTTP surface is for local proof, boundary evaluation, receipts,

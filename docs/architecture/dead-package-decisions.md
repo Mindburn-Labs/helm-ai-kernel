@@ -148,6 +148,7 @@ package directory.
 | `core/pkg/identity/iatp` | 537 | 2026-05-21 | yes | 1 | DELETED (HELM-756 s2, see docs/retirement/wave-1-inventory.md) | conformance suite: tests/conformance/did |
 | `core/pkg/integrations/receipts` | 161 | 2026-08-02 | yes | 0 | KEEP | ref: tools/boundary/protected-dirs.sh |
 | `core/pkg/intervention` | 136 | 2026-04-25 | no | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer |
+| `core/pkg/kernel/authority/authorityrows` | 791 | 2026-09-26 | yes | 0 | KEEP (HELM-750 s2a, library root until the HELM-751 admission transaction imports it) | ref: tools/boundary/protected-dirs.sh; doc: docs/architecture/authority-rows.md |
 | `core/pkg/kernel/celdp` | 231 | 2026-06-20 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/kernel/consistency` | 513 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |
 | `core/pkg/kernel/errorir` | 74 | 2026-04-24 | yes | 0 | DELETE | no doc, no protocol, no reference pack, no SDK, no importer — protected path: deletion PR needs helm-kernel-reviewer + boundary manifest regen |

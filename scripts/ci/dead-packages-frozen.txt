@@ -5,7 +5,7 @@
 # fails the gate until the same PR removes it. Never add a line; decide the
 # package instead (docs/architecture/dead-package-decisions.md).
 # <core/pkg/...> # <what the census saw>
-# quantum_posture: package paths only (e.g. crypto/tee); this list makes no cryptographic choice.
+# quantum_posture: package paths only (e.g. crypto/keystore); this list makes no cryptographic choice.
 core/pkg/actiongraph # has tests
 core/pkg/aibom # has tests
 core/pkg/api/trust # has tests
@@ -37,8 +37,6 @@ core/pkg/crypto/keystore # has tests
 core/pkg/crypto/mtls # 1 test-only importer(s)
 core/pkg/crypto/sdjwt # 2 test-only importer(s)
 core/pkg/crypto/shredding # 1 test-only importer(s)
-core/pkg/crypto/tee # has tests (importer-less since #997 removed the tee CLI)
-core/pkg/crypto/tee/collateral # has tests (importer-less since #997 removed the tee CLI)
 core/pkg/crypto/tls # 1 test-only importer(s)
 core/pkg/crypto/zk # has tests
 core/pkg/database # has tests

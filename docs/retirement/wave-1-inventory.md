@@ -398,10 +398,9 @@ Callers were checked read-only in `app-helm-console`, `svc-helm-control-plane`,
     500 now carries the request instead (`WriteInternalR`), and the contract
     pins that site. The baseline of unconverted sites drops from eight to
     seven.
-- **`crypto/tee`: blocked.** Removing it would drop a package that
-  `scripts/ci/tcb-coverage-floors.txt` lists, and that file is frozen until
-  the owner decides. The package stays until then. It has had no importer
-  since s4c.
+- **`crypto/tee`: blocked here, removed in s6d.** Removing it would drop a
+  package that `scripts/ci/tcb-coverage-floors.txt` lists, and that file was
+  frozen until the owner decided. It has had no importer since s4c.
 - **Deadcode.** The frozen allowlist (#993) is the acceptance gate: `make
   deadcode` reports only allowlisted findings. This slice removes 48 stale
   lines, plus the now-unused `defaultWorkstationFixtureRoot`.
@@ -465,3 +464,27 @@ What changes and what does not:
   is removed.
 - The boundary manifest is regenerated for the two protected paths.
 - `tcb-coverage-floors.txt` lists neither package and is untouched.
+
+## Slice 6d evidence
+
+quantum_posture: this section names TEE attestation code; the slice removes it
+and adds no cryptographic behaviour.
+
+The owner approved removing TCB floor lines for deleted packages, so
+`core/pkg/crypto/tee` (2,125 non-test lines, including `collateral`) is now
+deleted.
+
+- **Callers.** No importer in any module since s4c removed the `tee` CLI and
+  `core/cmd/tee-collateral`. No caller in the Console, the Control Plane or
+  the docs site. `helm-ai-enterprise` has its own copy of the package, not an
+  import of the kernel's.
+- **Removed with it:**
+  - the `crypto/tee` line in `tcb-coverage-floors.txt`;
+  - both lines in `dead-packages-frozen.txt`;
+  - 8 gosec allowlist lines;
+  - the `tee-collateral-verify` Makefile target and its CI step.
+- **Kept.**
+  - `verify --require-tee` still checks the attestation metadata that
+    receipts declare, and never imported the package.
+  - The release mock-TEE guard (`check_release_no_mock_tee.sh`) still passes.
+  - No control in `controls.yaml` names a TEE symbol.

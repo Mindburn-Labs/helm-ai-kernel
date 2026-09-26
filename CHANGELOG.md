@@ -159,6 +159,17 @@ Breaking for MCP clients that send tenant or principal headers.
   key is now dropped before forwarding. A provider key sent beside
   `X-HELM-API-Key` is still forwarded.
 
+### Removed — `core/pkg/crypto/tee` and its collateral verifier (HELM-756)
+
+<!-- quantum_posture: this entry names a removed attestation package; it adds no cryptographic control. -->
+
+- `core/pkg/crypto/tee` (the SEV-SNP, TDX and Nitro attesters and appraisal)
+  and `core/pkg/crypto/tee/collateral` are removed. Nothing has called them
+  since the `tee` CLI was retired.
+- `make tee-collateral-verify` and its CI step are gone with them.
+- `verify --require-tee` still checks the attestation metadata that receipts
+  declare. It never used this package.
+
 ### Removed — `workstation certify` and the unrouted trust-key handler (HELM-756)
 
 Breaking.

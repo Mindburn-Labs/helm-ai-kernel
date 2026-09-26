@@ -50,6 +50,7 @@ var publicRoutes = map[string]string{
 	"/__helm/config.json":                       "local quickstart bootstrap; identity fields only to loopback peers (F-13)",
 	"/api/v1/local-session/exchange":            "local quickstart token exchange; loopback peers only",
 	desktopReadyPath:                            "Desktop launch proof: HMAC of the caller's nonce; mounted only when Desktop launched the Kernel",
+	receiptKeyringPath:                          "receipt-signing public keys and key ids for the Control Plane's receipt pin; no private material (HELM-786)",
 }
 
 const (
@@ -371,7 +372,7 @@ func TestPublicRoutesAreDeclaredWithAReason(t *testing.T) {
 		}
 	}
 	// Growth needs a reviewed edit to this number, not a quiet append.
-	const maxPublic = 19
+	const maxPublic = 20
 	if len(declared) > maxPublic {
 		t.Fatalf("%d public paths (limit %d): every unauthenticated endpoint is attack surface on a 0.0.0.0 deployment", len(declared), maxPublic)
 	}

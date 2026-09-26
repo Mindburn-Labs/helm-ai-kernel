@@ -348,6 +348,24 @@
           "default": false,
           "description": "Demo mode disables real connectors and uses ephemeral signing keys. Useful for local trials; must be false in production."
         },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Native TLS on the API listener. The health and metrics listeners stay plain HTTP.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Existing kubernetes.io/tls Secret whose tls.crt and tls.key serve the API listener (HELM_TLS_CERT_FILE, HELM_TLS_KEY_FILE). Empty keeps plain HTTP."
+            },
+            "clientAuth": {
+              "type": "string",
+              "enum": ["", "require", "verify-if-given"],
+              "default": "",
+              "description": "Client-certificate verification (HELM_TLS_CLIENT_AUTH). Non-empty mounts ca.crt from existingSecret as HELM_TLS_CLIENT_CA_FILE."
+            }
+          }
+        },
         "auth": {
           "type": "object",
           "additionalProperties": false,
@@ -374,6 +392,11 @@
               "type": "string",
               "default": "HELM_SERVICE_API_KEY",
               "description": "Key inside existingSecret that contains the service API key."
+            },
+            "organizationRuntimeAPIKeySecretKey": {
+              "type": "string",
+              "default": "HELM_ORGANIZATION_RUNTIME_API_KEY",
+              "description": "Key inside existingSecret that holds the organization-runtime credential (HELM_ORGANIZATION_RUNTIME_API_KEY). Read only when existingSecret is set, as an optional key. Empty disables it."
             },
             "tenantID": {
               "type": "string",

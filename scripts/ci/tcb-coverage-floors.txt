@@ -17,7 +17,6 @@ default 85
 
 contracts 71.6
 crypto 82.0
-crypto/tee
 guardian
 proofgraph 81.4
 trust/registry

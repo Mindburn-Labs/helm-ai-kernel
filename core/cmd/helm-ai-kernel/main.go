@@ -364,6 +364,13 @@ func runServerWithOptions(opts serverOptions) error {
 	if healthConfigErr != nil {
 		return fmt.Errorf("desktop transport v1 configuration: %w", healthConfigErr)
 	}
+	apiTLSConfig, tlsConfigErr := serveTLSConfigFromEnv()
+	if tlsConfigErr != nil {
+		return fmt.Errorf("API listener TLS configuration: %w", tlsConfigErr)
+	}
+	if apiTLSConfig != nil && desktopTransport != nil {
+		return errors.New("API listener TLS configuration: HELM_TLS_* is not supported with desktop transport v1")
+	}
 	apiAddr := net.JoinHostPort(bindAddr, strconv.Itoa(port))
 	var (
 		apiListener net.Listener
@@ -687,13 +694,22 @@ func runServerWithOptions(opts serverOptions) error {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		TLSConfig:         apiTLSConfig,
 	}
 	if bindAddr == "0.0.0.0" {
 		logger.Warn("API server binding to all interfaces; ensure firewall rules are in place", "port", port)
 	}
 	go func() {
-		log.Printf("[helm] API server: %s:%d", bindAddr, port)
-		if err := server.Serve(apiListener); err != nil && err != http.ErrServerClosed {
+		var err error
+		if apiTLSConfig != nil {
+			log.Printf("[helm] API server: %s:%d (TLS, client auth %s)", bindAddr, port, apiTLSConfig.ClientAuth)
+			// The certificate comes from TLSConfig.GetCertificate, so no files here.
+			err = server.ServeTLS(apiListener, "", "")
+		} else {
+			log.Printf("[helm] API server: %s:%d", bindAddr, port)
+			err = server.Serve(apiListener)
+		}
+		if err != nil && err != http.ErrServerClosed {
 			logger.Error("API server failed", "error", err)
 		}
 	}()

@@ -66,7 +66,6 @@
         "go-module-tests",
         "launchpad-promotion",
         "verify-fixtures",
-        "tee-collateral",
         "release-no-mock-tee",
         "tcb-imports",
         "boundary-manifest",
@@ -988,16 +987,6 @@
       "paths": [
         "core/**",
         "registry/launchpad/**"
-      ]
-    },
-    {
-      "id": "tee-collateral",
-      "title": "TEE collateral fixtures",
-      "command": "make tee-collateral-verify",
-      "timeout_seconds": 600,
-      "paths": [
-        "core/pkg/crypto/tee/**",
-        "core/cmd/tee-collateral/**"
       ]
     },
     {

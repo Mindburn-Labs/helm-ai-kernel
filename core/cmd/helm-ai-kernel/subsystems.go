@@ -47,6 +47,7 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 	registerPolicyReconcileRoutes(mux, svc)
 	registerExtAuthzRoutes(mux, svc)
 	registerEmergencyStopFenceRoutes(mux, svc)
+	registerReceiptKeyringRoute(mux, svc)
 	registerApprovalGrantConsumptionRoutes(mux, svc.ApprovalConsumption)
 	registerGeneratedSpecApprovalRoutes(mux, svc.GeneratedSpecApproval)
 

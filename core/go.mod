@@ -16,7 +16,6 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cloudflare/circl v1.6.3
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
-	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/cel-go v0.30.0
@@ -146,7 +145,6 @@ require (
 	github.com/tinylib/msgp v1.6.1 // indirect
 	github.com/valyala/fastjson v1.6.7 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.32 // indirect
-	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect

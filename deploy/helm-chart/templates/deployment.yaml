@@ -92,6 +92,12 @@
 {{- if and .Values.helm.githubEffects.apiURL (not .Values.helm.githubEffects.existingSecret) -}}
 {{- fail "helm.githubEffects.apiURL requires helm.githubEffects.existingSecret" -}}
 {{- end -}}
+{{- if and .Values.helm.tls.clientAuth (not .Values.helm.tls.existingSecret) -}}
+{{- fail "helm.tls.clientAuth requires helm.tls.existingSecret, whose ca.crt is the client CA" -}}
+{{- end -}}
+{{- if and .Values.helm.tls.existingSecret .Values.helm.policy.reloadHints.enabled .Values.helm.policy.reloadHints.configReloaderSidecar.enabled -}}
+{{- fail "helm.tls.existingSecret cannot be combined with the config-reloader sidecar, which wakes the API listener over plain HTTP" -}}
+{{- end -}}
 {{- if not (regexMatch "^.+@sha256:[0-9a-f]{64}$" .Values.runtimeInit.image) -}}
 {{- fail "runtimeInit.image must be pinned by immutable sha256 digest" -}}
 {{- end -}}
@@ -382,6 +388,18 @@ spec:
               value: {{ ternary "1" "0" .Values.helm.production | quote }}
             - name: PORT
               value: {{ .Values.service.port | quote }}
+            {{- if .Values.helm.tls.existingSecret }}
+            - name: HELM_TLS_CERT_FILE
+              value: "/var/run/secrets/helm-tls/tls.crt"
+            - name: HELM_TLS_KEY_FILE
+              value: "/var/run/secrets/helm-tls/tls.key"
+            {{- if .Values.helm.tls.clientAuth }}
+            - name: HELM_TLS_CLIENT_CA_FILE
+              value: "/var/run/secrets/helm-tls/ca.crt"
+            - name: HELM_TLS_CLIENT_AUTH
+              value: {{ .Values.helm.tls.clientAuth | quote }}
+            {{- end }}
+            {{- end }}
             - name: HELM_REGION
               value: {{ .Values.helm.region | quote }}
             {{- if .Values.helm.proxy.enabled }}
@@ -414,6 +432,16 @@ spec:
                 secretKeyRef:
                   name: {{ include "helm-ai-kernel.authSecretName" . }}
                   key: {{ .Values.helm.auth.serviceAPIKeySecretKey }}
+            {{- end }}
+            {{- if and .Values.helm.auth.existingSecret .Values.helm.auth.organizationRuntimeAPIKeySecretKey }}
+            - name: HELM_ORGANIZATION_RUNTIME_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.helm.auth.existingSecret }}
+                  key: {{ .Values.helm.auth.organizationRuntimeAPIKeySecretKey }}
+                  # An existing Secret without the key keeps working; the
+                  # organization-runtime route then stays closed.
+                  optional: true
             {{- end }}
             {{- if .Values.helm.githubEffects.existingSecret }}
             - name: HELM_GITHUB_TOKEN
@@ -541,6 +569,12 @@ spec:
               readOnly: true
             {{- end }}
             {{- end }}
+            {{- if .Values.helm.tls.existingSecret }}
+            # A whole-Secret mount (no subPath) so rotated files appear in place.
+            - name: api-tls
+              mountPath: /var/run/secrets/helm-tls
+              readOnly: true
+            {{- end }}
         {{- if and .Values.helm.policy.reloadHints.enabled .Values.helm.policy.reloadHints.configReloaderSidecar.enabled }}
         - name: config-reloader
           image: {{ .Values.helm.policy.reloadHints.configReloaderSidecar.image | quote }}
@@ -596,6 +630,21 @@ spec:
                   audience: {{ required "helm.policy.source.controlplane.auth.serviceAccountJWT.audience is required" .Values.helm.policy.source.controlplane.auth.serviceAccountJWT.audience | quote }}
                   expirationSeconds: {{ .Values.helm.policy.source.controlplane.auth.serviceAccountJWT.expirationSeconds }}
                   path: token
+        {{- end }}
+        {{- if .Values.helm.tls.existingSecret }}
+        - name: api-tls
+          secret:
+            secretName: {{ .Values.helm.tls.existingSecret }}
+            defaultMode: 256
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+              {{- if .Values.helm.tls.clientAuth }}
+              - key: ca.crt
+                path: ca.crt
+              {{- end }}
         {{- end }}
         {{- if and (eq .Values.helm.policy.source.kind "controlplane") .Values.helm.policy.source.controlplane.tls.existingSecret }}
         - name: policy-controlplane-tls

@@ -93,6 +93,9 @@ flowchart TD
 | `helm.auth.adminAPIKey` | empty | Admin API key written to the generated auth secret. |
 | `helm.auth.serviceAPIKey` | empty | Service API key written to the generated auth secret. |
 | `helm.auth.existingSecret` | empty | Existing secret containing auth key entries. |
+| `helm.auth.organizationRuntimeAPIKeySecretKey` | `HELM_ORGANIZATION_RUNTIME_API_KEY` | Optional key in `helm.auth.existingSecret` rendered as `HELM_ORGANIZATION_RUNTIME_API_KEY`; a Secret without it leaves the organization-runtime route closed. Empty disables it. |
+| `helm.tls.existingSecret` | empty | `kubernetes.io/tls` Secret (cert-manager compatible) whose `tls.crt` and `tls.key` serve the API listener over HTTPS; re-read on rotation. Health and metrics listeners stay plain HTTP. |
+| `helm.tls.clientAuth` | empty | `require` or `verify-if-given`: verify client certificates against the Secret's `ca.crt`. Needs `helm.tls.existingSecret`. |
 | `helm.githubEffects.existingSecret` | empty | Existing Secret containing the GitHub token; non-empty activates the shipped signed-permit `github.*` runtime. |
 | `helm.githubEffects.tokenSecretKey` | `HELM_GITHUB_TOKEN` | Key inside the GitHub effects Secret. Raw tokens are not accepted in chart values. |
 | `helm.githubEffects.apiURL` | empty | Optional GitHub-compatible API base URL; requires `existingSecret`. Empty uses github.com. |

@@ -630,7 +630,8 @@ rather than implied.
 **Needs review, not blindly silenced:**
 
 - `G115` integer-overflow conversions in `crypto/tee/nitro.go` and
-  `nitro_cose.go` (7 sites). These parse attestation documents from an enclave,
+  `nitro_cose.go` (7 sites). Resolved by deletion: `crypto/tee` was removed in
+  HELM-756 after its only caller, the `tee` CLI, was retired. These parse attestation documents from an enclave,
   so a truncating conversion on a length or index field is exactly where a
   malformed document would do damage. They should be read individually before
   the gate goes blocking; suppressing them wholesale would defeat the point.

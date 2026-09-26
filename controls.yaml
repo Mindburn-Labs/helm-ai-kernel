@@ -1186,10 +1186,10 @@ controls:
       - "quality:control-registry"
       - "quality:tcb-imports"
       - "quality:boundary-manifest"
-      - "workflow:.github/workflows/ci.yml#quality-pr"
+      - "workflow:.github/workflows/ci.yml#ci"
     config: []
     protected_operations:
-      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck) and the boundary manifest (make verify-boundary), plus the CONCEPT-CHANGE marker check in the quality-pr job."
+      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck) and the boundary manifest (make verify-boundary), plus the CONCEPT-CHANGE marker check, all inside the required `ci / gate` job (`make check`, CI v2)."
     bypass_assumptions:
       - "Branch protection decides which checks are required; this entry proves the gates run and block in CI, not that the repository settings require them."
       - "make test-boundary (the boundary gate's own regression suite) runs in the kernel job and is shell, so no Go test here names it."

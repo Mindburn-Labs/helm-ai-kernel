@@ -352,7 +352,7 @@ func TestTenantRowSecurityIsolatesTenantsForARestrictedRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bindings.Upsert(ctx, store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-a"}); err != nil {
+	if _, err := bindings.Bind(ctx, store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-a"}, false); err != nil {
 		t.Fatalf("tenant A upsert: %v", err)
 	}
 	if ok, err := bindings.Exists(ctx, "tenant-a", "principal-a"); err != nil || !ok {

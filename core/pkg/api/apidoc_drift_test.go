@@ -76,7 +76,6 @@ func TestOpenAPISpec_Integrity(t *testing.T) {
 		"/version",
 		"/mcp",
 		"/.well-known/oauth-protected-resource/mcp",
-		"/api/v1/kernel/approve",
 		"/api/v1/console/bootstrap",
 		"/api/v1/evaluate",
 		"/api/v1/receipts",

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,15 +77,6 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"root": root})
-	}))
-
-	// --- Budget ---
-	mux.HandleFunc("/api/v1/budget/status", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"enforcer": "postgres",
-			"status":   "active",
-		})
 	}))
 
 	// --- Authz ---
@@ -162,8 +154,7 @@ func RegisterSubsystemRoutes(mux routeMux, svc *Services) {
 
 	// --- Durable receipt API ---
 	registerReceiptRoutes(mux, svc)
-	approveHandler := api.NewApproveHandler(csvEnv("HELM_APPROVER_PUBLIC_KEYS"))
-	mux.HandleFunc("/api/v1/kernel/approve", protectRuntimeHandler(RouteAuthService, approveHandler.HandleApprove))
+	mux.HandleFunc("/api/v1/kernel/approve", protectRuntimeHandler(RouteAuthService, handleRetiredKernelApprove))
 	registerContractRoutes(mux, svc)
 	RegisterLaunchpadRoutes(mux, svc)
 
@@ -318,7 +309,9 @@ func newDeployedMCPGateway(svc *Services) (*mcppkg.Gateway, error) {
 func registerDeployedMCPRoutes(mux routeMux, gateway *mcppkg.Gateway) {
 	gatewayMux := http.NewServeMux()
 	gateway.RegisterRoutes(gatewayMux)
-	protected := protectRuntimeHandler(RouteAuthAdmin, gatewayMux.ServeHTTP)
+	// The gateway serves the one configured tenant: its decisions and receipts
+	// carry the tenant the configured-tenant gate binds to the credential.
+	protected := protectRuntimeHandler(RouteAuthConfiguredTenant, gatewayMux.ServeHTTP)
 	for _, route := range []string{"/mcp", "/mcp/v1/capabilities", "/mcp/v1/execute"} {
 		mux.HandleFunc(route, protected)
 	}
@@ -332,6 +325,7 @@ func handleGovernedOpenAIProxy(w http.ResponseWriter, r *http.Request, svc *Serv
 		api.WriteMethodNotAllowed(w)
 		return
 	}
+	r = withoutKernelCredential(r)
 	principal, err := auth.GetPrincipal(r.Context())
 	if err != nil || principal == nil || strings.TrimSpace(principal.GetID()) == "" || strings.TrimSpace(principal.GetTenantID()) == "" {
 		api.WriteError(w, http.StatusUnauthorized, "Authentication required", "governed proxy requires an authenticated tenant boundary")
@@ -441,18 +435,56 @@ func readGovernedOpenAIRequest(w http.ResponseWriter, r *http.Request) ([]byte, 
 	return bodyBytes, body, true
 }
 
-func csvEnv(key string) []string {
-	raw := strings.TrimSpace(os.Getenv(key))
-	if raw == "" {
-		return nil
+// retiredKernelApproveDetail explains the 501 from POST /api/v1/kernel/approve.
+const retiredKernelApproveDetail = "POST /api/v1/kernel/approve is deprecated and always answers 501: no runtime path registered a pending approval, so it could never approve an intent. Use the approval ceremony routes under /api/v1/approvals. The operation will be removed in a future release."
+
+// handleRetiredKernelApprove answers the deprecated approve operation (HELM-780).
+// The handler behind it approved only intents in an in-process queue that no
+// shipped path ever filled, so every submission failed.
+func handleRetiredKernelApprove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		api.WriteMethodNotAllowed(w)
+		return
 	}
-	parts := strings.Split(raw, ",")
-	values := make([]string, 0, len(parts))
-	for _, part := range parts {
-		value := strings.TrimSpace(part)
-		if value != "" {
-			values = append(values, value)
+	api.WriteError(w, http.StatusNotImplemented, "Not implemented", retiredKernelApproveDetail)
+}
+
+// withoutKernelCredential returns r without an Authorization header that
+// carries a kernel credential. api.HandleOpenAIProxy forwards Authorization to
+// the model provider as the provider credential, so a legacy caller that
+// authenticates with the admin key as a bearer token would otherwise hand the
+// kernel's key to the provider (R8). The Control Plane token path already drops
+// its token; a provider key sent beside X-HELM-API-Key is kept.
+func withoutKernelCredential(r *http.Request) *http.Request {
+	value := strings.TrimSpace(r.Header.Get("Authorization"))
+	if value == "" {
+		return r
+	}
+	candidates := []string{value}
+	if _, credential, ok := strings.Cut(value, " "); ok {
+		candidates = append(candidates, strings.TrimSpace(credential))
+	}
+	for _, candidate := range candidates {
+		if isKernelCredential(candidate) {
+			stripped := r.Clone(r.Context())
+			stripped.Header.Del("Authorization")
+			return stripped
 		}
 	}
-	return values
+	return r
+}
+
+// isKernelCredential reports whether value is one of the kernel's own runtime
+// credentials: the admin, service or organization-runtime API key.
+func isKernelCredential(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, env := range []string{auth.AdminAPIKeyEnv, serviceAPIKeyEnv, organizationRuntimeAPIKeyEnv} {
+		key := strings.TrimSpace(os.Getenv(env))
+		if key != "" && subtle.ConstantTimeCompare([]byte(value), []byte(key)) == 1 {
+			return true
+		}
+	}
+	return false
 }

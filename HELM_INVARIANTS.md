@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-72 controls: 32 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
+75 controls: 35 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -108,7 +108,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-008 | Approval grant is consumed once | enforced | — |
 | CTL-009 | Evidence bundle verification | enforced | — |
 | CTL-010 | MCP tool-call mediation | enforced | — |
-| CTL-011 | Guardian budget draw-down | observed-only | No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. GET /api/v1/budget/status nonetheless reports a hard-coded active enforcer. |
+| CTL-011 | Guardian budget draw-down | observed-only | No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status, which answered a hard-coded active one, and `budget verify`, which printed a constant PASS, were removed (HELM-780). `budget set` records ceilings that nothing enforces. |
 | CTL-012 | Decision receipts are signed and tampering fails | enforced | — |
 | CTL-013 | API rate limiting | enforced | — |
 | CTL-014 | Dispatch admission is idempotent | enforced | — |
@@ -144,6 +144,9 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-044 | WASI sandbox containment | observed-only | The shipped server refuses every WASI pack run because it has no PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are records only. |
 | CTL-045 | Connector contract pinning | observed-only | ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel. |
 | CTL-046 | Mandates only narrow on delegation | observed-only | Library only. No shipped binary imports core/pkg/kernel/authority/authorityrows (a declared library root in scripts/ci/dead-packages-allowlist.txt), and admission does not read the authority rows yet. The HELM-751 admission transaction is the first caller. Until it lands, the Postgres tests prove the library. |
+| CTL-047 | Production egress is deny-all | enforced | — |
+| CTL-048 | Kernel credentials never reach the model provider | enforced | — |
+| CTL-049 | Principal binding integrity | enforced | — |
 | CTL-050 | Public receipt keyring | enforced | — |
 
 ---

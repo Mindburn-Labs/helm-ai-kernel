@@ -60,6 +60,7 @@
         "reason-code-reachability",
         "build",
         "go-test",
+        "postgres-proofs",
         "tcb-coverage",
         "command-tests",
         "go-module-tests",
@@ -366,6 +367,21 @@
       "timeout_seconds": 1200,
       "paths": [
         "core/**",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "postgres-proofs",
+      "title": "Postgres-gated proofs",
+      "description": "Runs every proof in scripts/ci/postgres-proofs.txt against PostgreSQL 16 (HELM_TEST_POSTGRES_URL, else a disposable UTC cluster) and fails on a skip, a failure, a short count, an unlisted gated test or a missing database. Positive controls first prove the runner refuses a run without a database and an unlisted test.",
+      "command": "make postgres-proofs",
+      "timeout_seconds": 1800,
+      "paths": [
+        "core/**",
+        "scripts/ci/postgres_proofs.sh",
+        "scripts/ci/postgres_proofs_gate.sh",
+        "scripts/ci/postgres-proofs.txt",
+        "scripts/ci/check_postgres_proofs.py",
         "Makefile"
       ]
     },

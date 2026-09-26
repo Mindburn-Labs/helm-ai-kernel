@@ -460,6 +460,10 @@ spec:
               value: {{ .Values.helm.auth.principalID | quote }}
             - name: HELM_RUNTIME_WORKSPACE_ID
               value: {{ .Values.helm.auth.workspaceID | quote }}
+            {{- with .Values.helm.auth.crossTenantPrincipals }}
+            - name: HELM_CROSS_TENANT_PRINCIPALS
+              value: {{ join "," . | quote }}
+            {{- end }}
             {{- with .Values.helm.auth.controlPlaneIdentity }}
             {{- if or .jwksURL .issuer .audience .actor }}
             - name: HELM_CP_IDENTITY_JWKS_URL

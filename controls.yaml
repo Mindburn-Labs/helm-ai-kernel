@@ -346,6 +346,27 @@ removal_proofs:
     replace: "\tcase \"DENY\":\n\t\treturn \"DENY\", true\n\tdefault:\n\t\treturn \"APPROVE\", true\n"
     tests:
       - "core/internal/cli/tui.TestMatchCeremonyTokenRejectsHomoglyphsAndZW"
+  - control: CTL-047
+    file: core/cmd/helm-ai-kernel/production_guardian.go
+    find: "guardian.WithEgressChecker(firewall.NewEgressChecker(nil).WithClock(clock.Now)),"
+    replace: "guardian.WithEgressChecker(firewall.NewEgressChecker(&firewall.EgressPolicy{AllowedDomains: []string{\"blocked.example\"}}).WithClock(clock.Now)),"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+
+  - control: CTL-048
+    file: core/cmd/helm-ai-kernel/subsystems.go
+    find: "\t\tif isKernelCredential(candidate) {\n"
+    replace: "\t\tif false && isKernelCredential(candidate) {\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+
+  - control: CTL-049
+    file: core/pkg/store/principal_binding_store.go
+    find: "\treturn len(otherTenants) > 0 && !allowCrossTenant\n"
+    replace: "\treturn false\n"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteRefusesCrossTenantRebind"
+      - "core/pkg/store.TestPrincipalBindingStoreSQLiteRefusesCrossTenantBind"
 
   - control: CTL-050
     file: core/cmd/helm-ai-kernel/receipt_keyring_route.go
@@ -1199,13 +1220,15 @@ controls:
       - "quality:control-registry"
       - "quality:tcb-imports"
       - "quality:boundary-manifest"
+      - "quality:postgres-proofs"
       - "workflow:.github/workflows/ci.yml#ci"
     config: []
     protected_operations:
-      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck) and the boundary manifest (make verify-boundary), plus the CONCEPT-CHANGE marker check, all inside the required `ci / gate` job (`make check`, CI v2)."
+      - "Pull requests to this repository: the constitution and registry (make controls-check, which runs inv-check first), TCB import isolation (tools/tcbcheck), the boundary manifest (make verify-boundary) and the Postgres-gated proofs (make postgres-proofs), plus the CONCEPT-CHANGE marker check, all inside the required `ci / gate` job (`make check`, CI v2)."
     bypass_assumptions:
       - "Branch protection decides which checks are required; this entry proves the gates run and block in CI, not that the repository settings require them."
       - "make test-boundary (the boundary gate's own regression suite) runs in the kernel job and is shell, so no Go test here names it."
+      - "The postgres-proofs gate's positive controls (no database, an unlisted gated test) are shell in scripts/ci/postgres_proofs_gate.sh and run before every proof run; scripts/ci/check_postgres_proofs_test.py (gate-self-tests) covers the manifest checker, so no Go test here names them."
     tests:
       allowed:
         - "tools/invcheck.TestConceptGatePassesAMarkedInvariantEdit"
@@ -1318,7 +1341,7 @@ controls:
     bypass_assumptions:
       - "Lite Mode (SQLite, no DATABASE_URL) has no row security."
       - "The receipts table has no tenant_id and sits outside row security; receipt tenancy is enforced in application code."
-      - "The Postgres proofs skip in make test and run in .github/workflows/approval-ceremony.yml through scripts/ci/postgres_proofs.sh, where a skip fails."
+      - "The Postgres proofs skip in make test and run in the postgres-proofs gate of make check (ci / gate) through scripts/ci/postgres_proofs.sh, where a skip or a missing database fails."
     tests:
       allowed:
         - "core/pkg/postgresmigration.TestValidateRuntimeAcceptsRestrictedRoleWithoutDDL"
@@ -1485,7 +1508,7 @@ controls:
     protected_operations:
       - "Approval grant consumption through the approval consumption routes on Postgres."
     bypass_assumptions:
-      - "The single-consume guard is SQL. Its proof needs Postgres and runs in .github/workflows/approval-ceremony.yml, where a skip fails; the removal proof here covers the verified-workload check only."
+      - "The single-consume guard is SQL. Its proof needs Postgres and runs in the postgres-proofs gate of make check (ci / gate), where a skip fails; the removal proof here covers the verified-workload check only."
     tests:
       allowed:
         - "core/pkg/boundary/approvalceremony.TestServiceConsumesAndRecoversOnlyForExactWorkloadIdentity"
@@ -1569,8 +1592,10 @@ controls:
       No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no
       production caller and WithBudgetTracker is in
       scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at
-      runtime. GET /api/v1/budget/status nonetheless reports a hard-coded active
-      enforcer.
+      runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status,
+      which answered a hard-coded active one, and `budget verify`, which printed
+      a constant PASS, were removed (HELM-780). `budget set` records ceilings
+      that nothing enforces.
     entry_points:
       - "core/pkg/guardian.Guardian.SetBudgetTracker"
     config: []
@@ -1604,7 +1629,8 @@ controls:
       - "Offline verification against a trusted public key."
     bypass_assumptions:
       - "Verification needs the caller to supply the trusted key; a self-attested key is refused by default."
-      - "MCP gateway receipts are written outside tenant scope."
+      - "MCP gateway receipts are written in the one configured tenant: the gateway is single-tenant, and a caller asserting another tenant is refused."
+      - "POST /v1/chat/completions on serve writes its receipts outside tenant scope."
     tests:
       allowed:
         - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITrustedCopiedFile"
@@ -1619,6 +1645,8 @@ controls:
       bypass:
         - "core/pkg/receiptverify.TestSelfAttestedKeyIsRefusedByDefault"
         - "core/cmd/helm-ai-kernel.TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed"
+        - "core/cmd/helm-ai-kernel.TestMCPGatewayDecisionsPersistSignedReceiptsInTheConfiguredTenant"
+        - "core/cmd/helm-ai-kernel.TestReceiptPersistingEvaluatorRefusesADecisionWithoutATenant"
 
   - id: CTL-013
     title: "API rate limiting"
@@ -1668,7 +1696,7 @@ controls:
     protected_operations:
       - "POST /internal/v1/approval-grants/admit-dispatch on Postgres. The kernel admits; the data plane dispatches."
     bypass_assumptions:
-      - "The SQL-level proof is Postgres-gated and runs in .github/workflows/approval-ceremony.yml."
+      - "The SQL-level proof is Postgres-gated and runs in the postgres-proofs gate of make check (ci / gate)."
     tests:
       allowed:
         - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"
@@ -2568,6 +2596,98 @@ controls:
         - "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole"
       removal: []
       bypass: []
+  - id: CTL-047
+    title: "Production egress is deny-all"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Every production Guardian (serve, proxy and mcp serve) denies an
+      evaluation whose trusted context names or requires an egress destination,
+      and no configuration adds an allowlist.
+    status: enforced
+    entry_points:
+      - "core/cmd/helm-ai-kernel.newProductionGuardian"
+      - "core/pkg/guardian.TaintEgressInterceptor.Evaluate"
+    config:
+      - "None: newProductionGuardian builds the egress checker with a nil policy, and no flag, variable or file supplies one. Allowing any destination needs a code change."
+    protected_operations:
+      - "Guardian evaluations whose trusted context names a destination or requires one, denied with DATA_EGRESS_BLOCKED."
+      - "POST /v1/chat/completions on serve, which requires its upstream host as the destination and is therefore denied before the upstream is called."
+    bypass_assumptions:
+      - "Egress that no Guardian evaluation names as a trusted destination is not governed by this gate; HELM is not on the network path (INV-024)."
+      - "The checker semantics (empty allowlist denies, explicit deny wins) are INV-004."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestProxyNonStreamingToolCallGetsPolicyVerdict"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+      bypass:
+        - "core/pkg/guardian.TestEgressGateUsesTrustedDestinationRequirementInsteadOfRiskClass"
+  - id: CTL-048
+    title: "Kernel credentials never reach the model provider"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      POST /v1/chat/completions on serve never forwards the admin, service or
+      organization-runtime key to the model provider; only a caller's provider
+      key reaches it (R8).
+    status: enforced
+    entry_points:
+      - "core/cmd/helm-ai-kernel.handleGovernedOpenAIProxy"
+      - "core/cmd/helm-ai-kernel.withoutKernelCredential"
+    config:
+      - "HELM_ADMIN_API_KEY, HELM_SERVICE_API_KEY and HELM_ORGANIZATION_RUNTIME_API_KEY, the values that are dropped"
+    protected_operations:
+      - "The Authorization header that api.HandleOpenAIProxy forwards upstream as the provider credential."
+    bypass_assumptions:
+      - "Only exact kernel keys are recognised, with or without an auth scheme; a value derived from a key is not."
+      - "The Control Plane token path drops its token separately (control_plane_token.go)."
+      - "The standalone `helm-ai-kernel proxy` forwards the caller's Authorization; it holds no kernel credential to leak."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestChatProxyNeverForwardsAKernelCredential"
+      bypass: []
+  - id: CTL-049
+    title: "Principal binding integrity"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A principal is bound in one tenant only. Binding a principal that already
+      has a binding in another tenant is refused with 409 TENANT_ISOLATION and
+      counted in helm_principal_rebind_refused_total; the check and the insert
+      are one transaction, serialized per principal, so concurrent binds into
+      different tenants cannot both succeed. Only principals listed in
+      HELM_CROSS_TENANT_PRINCIPALS may hold bindings in several tenants.
+    status: enforced
+    entry_points:
+      - "core/cmd/helm-ai-kernel.RegisterPrincipalBindingRoutes"
+      - "core/pkg/store.PostgresPrincipalBindingStore.Bind"
+      - "core/pkg/store.SQLitePrincipalBindingStore.Bind"
+    config:
+      - "HELM_CROSS_TENANT_PRINCIPALS"
+    protected_operations:
+      - "POST /api/v1/admin/principal-bindings, and through it the ADR-0005 §3 binding cross-check on Control Plane token routes."
+    bypass_assumptions:
+      - "A principal listed in HELM_CROSS_TENANT_PRINCIPALS may be bound in any number of tenants, and the §3 cross-check then admits its token in each of them. Each such bind is logged."
+      - "Bindings written before this check (or directly in the database) are not revisited; a re-bind of an existing pair answers 200 whatever other tenants the principal holds."
+      - "The route trusts HELM_ADMIN_API_KEY: any holder of that key can bind a fresh principal into any one tenant."
+    tests:
+      allowed:
+        - "core/pkg/store.TestPrincipalBindingStoreSQLite"
+        - "core/cmd/helm-ai-kernel.TestPrincipalBindingRoutesUpsertsAndIsIdempotent"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteRefusesCrossTenantRebind"
+        - "core/pkg/store.TestPrincipalBindingStoreSQLiteRefusesCrossTenantBind"
+        - "core/pkg/postgresmigration.TestPostgresPrincipalBindRefusesConcurrentCrossTenantBinds"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteRefusesCrossTenantRebind"
+        - "core/pkg/store.TestPrincipalBindingStoreSQLiteRefusesCrossTenantBind"
+      bypass:
+        - "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteAllowsListedCrossTenantPrincipals"
+        - "core/cmd/helm-ai-kernel.TestControlPlaneTokenCrossCheckForACrossTenantPrincipal"
 
   - id: CTL-050
     title: "Public receipt keyring"

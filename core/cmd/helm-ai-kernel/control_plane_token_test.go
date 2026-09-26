@@ -610,7 +610,7 @@ func TestControlPlaneTokenBindingCrossCheck(t *testing.T) {
 	mux, _ := cpTokenServices(t, issuer.identity(t))
 	bindings, cleanupBindings := newRouteAuthTestBindingStore(t)
 	t.Cleanup(cleanupBindings)
-	if err := bindings.Upsert(context.Background(), store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-bound"}); err != nil {
+	if _, err := bindings.Bind(context.Background(), store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-bound"}, false); err != nil {
 		t.Fatal(err)
 	}
 	SetPrincipalBindingStore(bindings)
@@ -644,6 +644,35 @@ func TestControlPlaneTokenBindingCrossCheck(t *testing.T) {
 	}
 	if unbound() != before+1 {
 		t.Fatalf("helm_token_unbound_principal_total = %v, want %v after one unbound principal", unbound(), before+1)
+	}
+}
+
+// ADR-0005 §11: a principal allowed to hold bindings in several tenants passes
+// the §3 cross-check in each tenant it is bound to, and only there.
+func TestControlPlaneTokenCrossCheckForACrossTenantPrincipal(t *testing.T) {
+	issuer := newTestCPIssuer(t, "k1")
+	mux, _ := cpTokenServices(t, issuer.identity(t))
+	bindings, cleanupBindings := newRouteAuthTestBindingStore(t)
+	t.Cleanup(cleanupBindings)
+	for _, tenant := range []string{"tenant-a", "tenant-b"} {
+		result, err := bindings.Bind(context.Background(), store.PrincipalBinding{TenantID: tenant, PrincipalID: "helm-workflow-runner"}, true)
+		if err != nil || result.Outcome != store.BindCreated {
+			t.Fatalf("bind runner into %s: %+v %v", tenant, result, err)
+		}
+	}
+	SetPrincipalBindingStore(bindings)
+	var evaluate RuntimeRouteSpec
+	for _, spec := range RuntimeRouteSpecs() {
+		if spec.OperationID == "evaluateDecision" {
+			evaluate = spec
+		}
+	}
+	for tenant, want := range map[string]int{"tenant-a": http.StatusOK, "tenant-b": http.StatusOK, "tenant-c": http.StatusForbidden} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, cpTokenRequest(t, evaluate, issuer.mint(t, "k1", baseTokenClaims(tenant, "helm-workflow-runner", "workspace-a", cpScopeEvaluate)), nil))
+		if rec.Code != want {
+			t.Fatalf("runner token for %s: %d %s, want %d", tenant, rec.Code, rec.Body.String(), want)
+		}
 	}
 }
 

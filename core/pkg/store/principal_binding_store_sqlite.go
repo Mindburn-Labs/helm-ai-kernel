@@ -38,19 +38,38 @@ func (s *SQLitePrincipalBindingStore) migrate() error {
 	return err
 }
 
-// Upsert inserts a binding, idempotent on (tenant_id, principal_id).
-func (s *SQLitePrincipalBindingStore) Upsert(ctx context.Context, b PrincipalBinding) error {
-	query := `
-		INSERT INTO principal_bindings (tenant_id, principal_id, created_at)
-		VALUES (?, ?, ?)
-		ON CONFLICT (tenant_id, principal_id) DO NOTHING
-	`
+// Bind records the binding; see PrincipalBindingStore.Bind. The read and the
+// insert share one transaction.
+func (s *SQLitePrincipalBindingStore) Bind(ctx context.Context, b PrincipalBinding, allowCrossTenant bool) (BindResult, error) {
 	createdAt := b.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, query, b.TenantID, b.PrincipalID, createdAt.Format(time.RFC3339Nano))
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return BindResult{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `SELECT tenant_id FROM principal_bindings WHERE principal_id = ? ORDER BY tenant_id`, b.PrincipalID)
+	if err != nil {
+		return BindResult{}, err
+	}
+	result, err := decideBind(rows, b.TenantID, allowCrossTenant)
+	if err != nil {
+		return BindResult{}, err
+	}
+	if result.Outcome == BindCreated {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO principal_bindings (tenant_id, principal_id, created_at)
+			VALUES (?, ?, ?)
+			ON CONFLICT (tenant_id, principal_id) DO NOTHING`, b.TenantID, b.PrincipalID, createdAt.Format(time.RFC3339Nano)); err != nil {
+			return BindResult{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return BindResult{}, err
+	}
+	return result, nil
 }
 
 // Exists reports whether the given (tenant_id, principal_id) pair is bound.

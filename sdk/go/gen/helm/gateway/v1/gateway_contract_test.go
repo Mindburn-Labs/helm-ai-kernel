@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -182,7 +183,9 @@ func TestStateMachineEnums(t *testing.T) {
 // identityFieldRE matches field names that would assert who the caller is or
 // which tenant or workspace it acts in. Rule R9 and ADR-0005: those come only
 // from the token.
-var identityFieldRE = regexp.MustCompile(`^(tenant|tenant_id|workspace|workspace_id|principal|principal_id|subject|user_id|actor_id|approver_id|.*_principal_id)$`)
+// That includes delegation: the acting workload is the token's act.sub
+// (RFC 8693), never an on_behalf_of or actor field in a request.
+var identityFieldRE = regexp.MustCompile(`^(tenant|tenant_id|workspace|workspace_id|principal|principal_id|subject|user_id|actor|actor_id|approver_id|.*_principal_id|.*_actor_id|on_behalf_of.*)$`)
 
 // identityFields walks a message and every message it contains.
 func identityFields(msg protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool) []string {
@@ -207,7 +210,8 @@ func TestNoRequestCarriesCallerIdentity(t *testing.T) {
 	// Planted violation: EffectAttempt carries requester_principal_id, which
 	// is output only. The checker must see it.
 	planted := (&EffectAttempt{}).ProtoReflect().Descriptor()
-	if got := identityFields(planted, map[protoreflect.FullName]bool{}); !slices.Contains(got, "helm.gateway.v1.EffectAttempt.requester_principal_id") {
+	if got := identityFields(planted, map[protoreflect.FullName]bool{}); !slices.Contains(got, "helm.gateway.v1.EffectAttempt.requester_principal_id") ||
+		!slices.Contains(got, "helm.gateway.v1.EffectAttempt.requester_actor_id") {
 		t.Fatalf("checker missed the planted identity field; got %v", got)
 	}
 
@@ -503,38 +507,82 @@ func approvalDigestV1(attemptID string, targetDigest, argumentDigest []byte, quo
 		field([]byte(q.GetUnit()))
 		u64(uint64(q.GetAmount()))
 	}
-	u64(uint64(expiresAt.GetSeconds()))
-	var nanos [4]byte
-	binary.BigEndian.PutUint32(nanos[:], uint32(expiresAt.GetNanos()))
-	h.Write(nanos[:])
+	field([]byte(rfc3339Seconds(expiresAt)))
 	return h.Sum(nil)
 }
 
-// The approval-digest test vector. The expected value was computed by a
-// separate Python implementation of the design note's construction; the
-// note carries the same value, so a client can check its own encoder.
+// rfc3339Seconds is a timestamp as the digest encodes it: RFC 3339, UTC,
+// whole seconds, "Z" suffix. Any fractional second is dropped.
+func rfc3339Seconds(ts *timestamppb.Timestamp) string {
+	return time.Unix(ts.GetSeconds(), 0).UTC().Format("2006-01-02T15:04:05Z")
+}
+
+// The approval-digest test vectors. testdata/approval_digest.py is a
+// separate Python implementation of the design note's construction; the Go
+// reference, the Python one and the note must all carry the same values, so
+// a client can check its own encoder.
 func TestApprovalDigestVector(t *testing.T) {
-	const want = "cb2cd8caa08ee2544750dd59644a0d2f3bb16a729be108520055c2f72c5f53d7"
+	const want = "7efd7515c4c739e32f6c61ef3214bff08013771f5fdc02da1dd2b1e3806edf31"
+	const attempt = "0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d"
 	target := sha256.Sum256([]byte("github.com/Mindburn-Labs/example/pull/42"))
 	args := sha256.Sum256([]byte(`{"merge_method":"squash"}`))
 	quote := []*ResourceAmount{{Unit: "count", Amount: 1}, {Unit: "USD", Amount: 2500}}
 	expires := timestamppb.New(time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC))
+	// The same instant with a fractional second, as a microsecond database
+	// column might return it: truncation to seconds keeps the digest.
+	subsecond := timestamppb.New(time.Date(2026, 9, 26, 12, 0, 0, 987654000, time.UTC))
 
-	got := hex.EncodeToString(approvalDigestV1("0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d", target[:], args[:], quote, expires))
+	if got := rfc3339Seconds(subsecond); got != "2026-09-26T12:00:00Z" {
+		t.Fatalf("expires_at encodes as %q, want 2026-09-26T12:00:00Z", got)
+	}
+	got := hex.EncodeToString(approvalDigestV1(attempt, target[:], args[:], quote, expires))
 	if got != want {
 		t.Fatalf("approval digest = %s, want %s", got, want)
 	}
-	// Planted: reordering the quote input must not change the digest, and
-	// changing an amount must.
-	reordered := approvalDigestV1("0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d", target[:], args[:], []*ResourceAmount{quote[1], quote[0]}, expires)
+	if got := hex.EncodeToString(approvalDigestV1(attempt, target[:], args[:], quote, subsecond)); got != want {
+		t.Errorf("sub-second expires_at changed the digest to %s; it must truncate to %s", got, want)
+	}
+	// Planted: reordering the quote input must not change the digest;
+	// changing an amount or the expiry second must.
+	reordered := approvalDigestV1(attempt, target[:], args[:], []*ResourceAmount{quote[1], quote[0]}, expires)
 	if hex.EncodeToString(reordered) != want {
 		t.Error("the digest depends on quote order; entries must be sorted by unit")
 	}
-	changed := approvalDigestV1("0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d", target[:], args[:], []*ResourceAmount{{Unit: "count", Amount: 1}, {Unit: "USD", Amount: 2501}}, expires)
+	changed := approvalDigestV1(attempt, target[:], args[:], []*ResourceAmount{{Unit: "count", Amount: 1}, {Unit: "USD", Amount: 2501}}, expires)
 	if hex.EncodeToString(changed) == want {
 		t.Error("the digest ignores the quote amount")
 	}
-	if !strings.Contains(readRepoFile(t, "docs/architecture/gateway-effect-api.md"), want) {
-		t.Error("docs/architecture/gateway-effect-api.md does not carry the test vector")
+	later := approvalDigestV1(attempt, target[:], args[:], quote, timestamppb.New(time.Date(2026, 9, 26, 12, 0, 1, 0, time.UTC)))
+	if hex.EncodeToString(later) == want {
+		t.Error("the digest ignores the expiry second")
+	}
+
+	// The independent Python implementation. A missing interpreter fails
+	// the test: a vector nobody recomputed proves nothing.
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Fatalf("python3 is required for the cross-implementation check: %v", err)
+	}
+	out, err := exec.Command(python, filepath.Join("testdata", "approval_digest.py")).Output()
+	if err != nil {
+		t.Fatalf("testdata/approval_digest.py: %v", err)
+	}
+	var py struct {
+		WholeSeconds       string `json:"whole_seconds"`
+		SubsecondTruncated string `json:"subsecond_truncated"`
+		ExpiresText        string `json:"expires_text"`
+	}
+	if err := json.Unmarshal(out, &py); err != nil {
+		t.Fatalf("testdata/approval_digest.py output: %v", err)
+	}
+	if py.WholeSeconds != want || py.SubsecondTruncated != want || py.ExpiresText != rfc3339Seconds(expires) {
+		t.Errorf("Python reference disagrees with Go: %+v, want %s and %s", py, want, rfc3339Seconds(expires))
+	}
+
+	doc := readRepoFile(t, "docs/architecture/gateway-effect-api.md")
+	for _, v := range []string{want, "2026-09-26T12:00:00.987654Z"} {
+		if !strings.Contains(doc, v) {
+			t.Errorf("docs/architecture/gateway-effect-api.md does not carry %s", v)
+		}
 	}
 }

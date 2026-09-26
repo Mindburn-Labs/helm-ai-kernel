@@ -28,8 +28,8 @@ compiled serve policy used by `mcp serve --policy`).
 | `NO_POLICY_DEFINED` | DENY | No rule in the policy graph covers this action. | Add the action to the policy (serve policy: add the action to the reference pack), or call an action the policy authorizes. |
 | `PRG_EVALUATION_ERROR` | DENY | The CEL expression failed to compile or evaluate (syntax error, missing key, wrong type). | Review the expression in the policy source. Policy source and literals are not copied into the public deny reason. |
 | `ENVELOPE_INVALID` | DENY | The effect envelope failed structural validation. | Inspect the effect construction; this indicates a malformed call, not a policy mismatch. |
-| `BUDGET_EXCEEDED` | DENY | The effect's `budget_id` is over its ceiling. | Raise the budget or stop the run. |
-| `BUDGET_ERROR` | DENY | Budget backend unavailable (fail-closed). | Restore the budget backend; calls are denied until it answers. |
+| `BUDGET_EXCEEDED` | DENY | The effect's `budget_id` is over its ceiling. Emitted only where a budget tracker is installed, and no shipped binary installs one (`controls.yaml` CTL-011). | Raise the budget or stop the run. |
+| `BUDGET_ERROR` | DENY | Budget backend unavailable (fail-closed). Emitted only where a budget tracker is installed; see `BUDGET_EXCEEDED`. | Restore the budget backend; calls are denied until it answers. |
 
 ## MCP Approval Loop Codes
 

@@ -540,13 +540,8 @@ func uniqueSorted(values []string) []string {
 func requestBodyRuntimeContracts() map[string]requestBodyRuntimeContract {
 	return map[string]requestBodyRuntimeContract{
 		"POST /api/v1/kernel/approve": {
-			Type:   reflect.TypeOf(contracts.ApprovalReceipt{}),
-			Source: "core/pkg/api/approve_handler.go:83",
-			AcceptedProperties: []string{
-				"public_key_b64",
-				"signature_b64",
-				"challenge_response",
-			},
+			Source: "core/cmd/helm-ai-kernel/subsystems.go handleRetiredKernelApprove",
+			Reason: "deprecated by HELM-780: the route answers 501 without reading the body",
 		},
 		"POST /api/v1/approvals": {
 			Type: reflect.TypeOf(struct {

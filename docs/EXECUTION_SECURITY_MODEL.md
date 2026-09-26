@@ -117,7 +117,7 @@ HELM AI Kernel does not:
           ┌────────────────────────▼────────────────────────┐
           │  Layer B — Dispatch Enforcement (dispatch-time)  │
           │  Gates EACH call at PEP boundary                │
-          │  schema PEP · budget locks · contract pinning   │
+          │  schema PEP · contract pinning                  │
           │  PDP/CPI verdict · deny-by-default              │
           └────────────────────────┬────────────────────────┘
                                    │
@@ -171,7 +171,7 @@ not by runtime checking.
 | Sandbox isolation (library; the shipped server runs no pack) | `core/pkg/runtime/sandbox/` |
 | Tool catalog / MCP gateway | `core/pkg/mcp/` |
 | Manifest validation | `core/pkg/manifest/` |
-| Budget ceiling (P0) | `core/pkg/runtime/budget/` |
+| Budget ceiling (P0) (library; no shipped binary enforces it, CTL-011) | `core/pkg/runtime/budget/` |
 
 ---
 
@@ -194,7 +194,7 @@ never cross HELM are not governed (INV-024).
 | :--- | :--- |
 | **Schema PEP** | JCS canonicalization + SHA-256, fail-closed on input schema mismatch for MCP tool calls (CTL-010, CTL-025); the OpenAI-compatible proxy only requires parseable tool arguments |
 | **PDP/CPI evaluation** | Canonical Policy Index resolves P0 → P1 → P2 → verdict |
-| **Budget enforcement** | ACID-locked budget gates, fail-closed on ceiling breach (`BUDGET_EXCEEDED`) |
+| **Budget enforcement** | The Guardian draw-down gate denies a breached ceiling (`BUDGET_EXCEEDED`) and an unavailable tracker (`BUDGET_ERROR`). Not wired: no shipped binary installs a budget tracker (CTL-011) |
 | **Contract pinning** | Connector response schemas are pinned and drift produces `ERR_CONNECTOR_CONTRACT_DRIFT`. Not wired: only the preview TON Acton connector, which no shipped binary links, reports it (CTL-045) |
 | **PRG evaluation** | Proof Requirement Graph checks cryptographic prerequisites |
 | **Deny-by-default** | An action with no policy → `NO_POLICY_DEFINED`. A policy that cannot be evaluated → `PRG_EVALUATION_ERROR` (CTL-001, INV-005) |
@@ -221,7 +221,7 @@ determination that a specific tool call is permitted:
     Admissible iff:
       (1) tool ∈ declared surface (Layer A)
       (2) args conform to the tool's declared schema
-      (3) budget sufficient
+      (3) budget sufficient (not checked by a shipped binary; CTL-011)
       (4) PRG requirements satisfied
       (5) identity authorized for resource boundary
       (6) delegation session valid and in scope

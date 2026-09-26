@@ -344,10 +344,13 @@ paths:
       operationId: approveIntent
       tags: [approval]
       summary: Submit an approval for a pending intent
+      deprecated: true
       description: |
-        RFC-005 approval ceremony endpoint.
-        Requires intent_hash, Ed25519 signature, and public key.
-        Returns an approval receipt with causal chain linkage.
+        Deprecated by HELM-780 and always answers 501. No runtime path ever
+        registered a pending approval, so the route could not approve an intent
+        and answered 404 to every well-formed submission. Use the approval
+        ceremony operations under /api/v1/approvals. The operation will be
+        removed in a future release.
       security:
         - ServiceBearerAuth: []
       requestBody:
@@ -378,6 +381,8 @@ paths:
         '401':
           $ref: '#/components/responses/HelmError'
         '403':
+          $ref: '#/components/responses/HelmError'
+        '501':
           $ref: '#/components/responses/HelmError'
 
   /api/v1/evaluate:

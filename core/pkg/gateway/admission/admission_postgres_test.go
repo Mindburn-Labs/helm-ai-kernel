@@ -351,6 +351,18 @@ func TestPostgresDraftPullRequestNeedsItsObservedBranch(t *testing.T) {
 	refused("another repository", "d5", "github.com/Mindburn-Labs/other", draftArgs(branch.ID, "helm/skeleton", commitSHA))
 	note := f.propose(human, note("n1"))
 	refused("an attempt that is not a branch", "d6", repo, draftArgs(note.ID, "helm/skeleton", commitSHA))
+	// L3: another workspace's branch attempt is refused exactly like a
+	// missing one, so the refusal says nothing about attempts the caller
+	// cannot read.
+	otherWorkspace := human
+	otherWorkspace.WorkspaceID = "ws-b"
+	_, _, errForeign := f.svc.Propose(context.Background(), otherWorkspace, proposal("d-ws", effectargs.GitHubPullRequestCreateDraft, repo, draftArgs(branch.ID, "helm/skeleton", commitSHA)))
+	_, _, errMissing := f.svc.Propose(context.Background(), human, proposal("d-missing", effectargs.GitHubPullRequestCreateDraft, repo, draftArgs(uuid.NewString(), "helm/skeleton", commitSHA)))
+	_, _, errNotBranch := f.svc.Propose(context.Background(), human, proposal("d-note", effectargs.GitHubPullRequestCreateDraft, repo, draftArgs(note.ID, "helm/skeleton", commitSHA)))
+	wantRefusal(t, "another workspace's branch attempt", errForeign, CodeFailedPrecondition, contracts.ReasonPreconditionFailed)
+	if errForeign.Error() != errMissing.Error() || errNotBranch.Error() != errMissing.Error() {
+		t.Fatalf("refusals differ: %q, %q, %q", errForeign, errMissing, errNotBranch)
+	}
 	// Known good: the observed branch, its head and its commit.
 	wantState(t, "the observed branch", f.propose(human, proposal("d7", effectargs.GitHubPullRequestCreateDraft, repo, draftArgs(branch.ID, "helm/skeleton", commitSHA))),
 		"ESCALATED", contracts.ReasonApprovalRequired)

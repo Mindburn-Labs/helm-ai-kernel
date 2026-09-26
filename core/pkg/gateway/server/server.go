@@ -32,10 +32,23 @@ type Server struct {
 }
 
 // Handler returns the mount path and the HTTP handler of the service.
+//
+// A request message is capped at MaxMessageBytes after decompression, and the
+// request body at MaxBodyBytes on the wire, both before the message reaches a
+// handler, so an unauthenticated caller cannot make the gateway buffer or
+// inflate more than that.
 func (s *Server) Handler() (string, http.Handler) {
-	path, handler := gatewayv1.NewEffectGatewayServiceHandler(s)
-	return path, withTLSState(handler)
+	path, handler := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxMessageBytes))
+	return path, http.MaxBytesHandler(withTLSState(handler), MaxBodyBytes)
 }
+
+// MaxMessageBytes caps one decoded request message: twice the 64 KiB argument
+// cap leaves room for the rest of a ProposeRequest.
+const MaxMessageBytes = 128 << 10
+
+// MaxBodyBytes caps a request body as sent, envelope and compression
+// included.
+const MaxBodyBytes = MaxMessageBytes + 4<<10
 
 // Propose admits one effect (token scope helm.gateway.propose).
 func (s *Server) Propose(ctx context.Context, req *connect.Request[gatewayv1.ProposeRequest]) (*connect.Response[gatewayv1.ProposeResponse], error) {

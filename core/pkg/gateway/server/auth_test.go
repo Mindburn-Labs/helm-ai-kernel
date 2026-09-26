@@ -4,6 +4,8 @@ package server
 // SHA-256 certificate thumbprints; no post-quantum claim.
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -11,13 +13,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth/jwks"
 	errorsv1 "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/gen/helm/errors/v1"
+	gatewayv1 "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/gen/helm/gateway/v1"
 )
 
 const testActor = "spiffe://helm/control-plane"
@@ -142,4 +147,86 @@ func TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired(t *testing.
 func thumbprint(cert *x509.Certificate) string {
 	sum := sha256.Sum256(cert.Raw)
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// countingValidator records whether authentication ran.
+type countingValidator struct{ calls *int }
+
+func (c countingValidator) ValidateAuthorization(string) (*jwks.OAuthTokenClaims, error) {
+	*c.calls++
+	return goodClaims(), nil
+}
+
+// M2: an oversize request is refused before authentication, whether it is
+// oversize as sent or only once decompressed.
+func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
+	calls := 0
+	api := &Server{Auth: &Authenticator{Validator: countingValidator{&calls}, Actor: testActor}}
+	mux := http.NewServeMux()
+	mux.Handle(api.Handler())
+	server := httptest.NewUnstartedServer(mux)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	big := &gatewayv1.ProposeRequest{
+		IdempotencyKey: "k",
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), MaxMessageBytes+1)},
+	}
+	for name, opts := range map[string][]connect.ClientOption{
+		"plain":        {connect.WithGRPC()},
+		"gzip":         {connect.WithGRPC(), connect.WithSendGzip()},
+		"connect gzip": {connect.WithSendGzip()},
+	} {
+		client := gatewayv1.NewEffectGatewayServiceClient(server.Client(), server.URL, opts...)
+		req := connect.NewRequest(big)
+		req.Header().Set("Authorization", "Bearer a.b.c")
+		_, err := client.Propose(context.Background(), req)
+		if code := connect.CodeOf(err); code != connect.CodeResourceExhausted && code != connect.CodeInvalidArgument {
+			t.Errorf("%s: an oversize request = %v (%v), want it refused for its size", name, code, err)
+		}
+	}
+	// A valid ProposeRequest of 4 MiB, gzipped far under the wire cap: only
+	// the cap after decompression can refuse it.
+	bomb, err := proto.Marshal(&gatewayv1.ProposeRequest{
+		IdempotencyKey: "k",
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), 4<<20)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inflated bytes.Buffer
+	zw := gzip.NewWriter(&inflated)
+	_, _ = zw.Write(bomb)
+	_ = zw.Close()
+	if inflated.Len() >= MaxBodyBytes {
+		t.Fatalf("the gzip bomb is %d bytes on the wire; the test needs it under the body cap", inflated.Len())
+	}
+	var req *http.Request
+	req, err = http.NewRequest(http.MethodPost, server.URL+gatewayv1.EffectGatewayServiceProposeProcedure, &inflated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/proto")
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Authorization", "Bearer a.b.c")
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode == http.StatusOK || resp.Header.Get("Content-Type") == "" {
+		t.Fatalf("a gzip body that inflates past the cap = %d", resp.StatusCode)
+	}
+	if calls != 0 {
+		t.Fatalf("authentication ran %d times for oversize requests", calls)
+	}
+
+	// Known good: a request under the cap reaches authentication.
+	small := connect.NewRequest(&gatewayv1.GetAttemptRequest{AttemptId: "x"})
+	small.Header().Set("Authorization", "Bearer a.b.c")
+	_, _ = gatewayv1.NewEffectGatewayServiceClient(server.Client(), server.URL, connect.WithSendGzip()).GetAttempt(context.Background(), small)
+	if calls != 1 {
+		t.Fatalf("a small request ran authentication %d times, want 1", calls)
+	}
 }

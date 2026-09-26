@@ -3188,7 +3188,7 @@
       "id": "CTL-052",
       "title": "Effect gateway admission",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-gateway admits an effect only in one READ COMMITTED Postgres transaction bound to the token's tenant (ADR-0001): idempotency first on (tenant, key) with a request digest; the mandate resolved from the token's principal and the effect type; the tenant row, the chain's principals, the mandates root to leaf, the effect type and the limits locked FOR SHARE; stops read after the locks; counters locked FOR UPDATE; then a pure decide. ALLOW records ADMITTED with a conditional hold and a permit, DENY records DENIED, and high risk or an approval threshold records ESCALATED with approval digest v1. Tenant, workspace and principal come only from an ADR-0005 token with the RPC's one scope; reads outside the token's tenant or workspace are not found; malformed requests and closed-schema argument violations create no attempt (HELM-751 s2, HELM-750 s2b).",
+      "claim": "helm-gateway admits an effect only in one READ COMMITTED Postgres transaction bound to the token's tenant (ADR-0001): idempotency first on (tenant, key) with a request digest; the mandate resolved from the token's principal and the effect type; the tenant row, the chain's principals, the mandates root to leaf, the effect type and the limits locked FOR SHARE; stops read after the locks; counters locked FOR UPDATE; then a pure decide. ALLOW records ADMITTED with a conditional hold and a permit, DENY records DENIED, and high risk or an approval threshold records ESCALATED with approval digest v1. Tenant, workspace and principal come only from an ADR-0005 token with the RPC's one scope; reads outside the token's tenant or workspace are not found; malformed requests and closed-schema argument violations (field names matched exactly and case-sensitively) create no attempt, and a request message over 128 KiB, compressed or not, is refused before authentication (HELM-751 s2, HELM-750 s2b).",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -3258,6 +3258,8 @@
           "core/pkg/gateway/admission.TestRequestDigestCoversEveryFieldButTheKey",
           "core/pkg/gateway/effectargs.TestValidateRefusesMalformedArguments",
           "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens",
+          "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName",
+          "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication",
           "core/cmd/helm-gateway.TestDevInsecureListenRefusesAnythingButLoopback",
           "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration",
           "core/cmd/helm-gateway.TestServeRequiresAClientCertificateWhenConfigured"
@@ -3266,7 +3268,9 @@
           "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder",
           "core/pkg/gateway/admission.TestApprovalDigestV1MatchesTheDesignNoteVector",
           "core/pkg/gateway/effectargs.TestValidateRefusesMalformedArguments",
-          "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
+          "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens",
+          "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName",
+          "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
         ],
         "bypass": [
           "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired",
@@ -3309,6 +3313,18 @@
           "file": "core/pkg/gateway/server/auth.go",
           "tests": [
             "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/effectargs/effectargs.go",
+          "tests": [
+            "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/server/server.go",
+          "tests": [
+            "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
           ]
         }
       ]

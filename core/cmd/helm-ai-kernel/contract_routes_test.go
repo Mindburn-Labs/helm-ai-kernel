@@ -280,10 +280,10 @@ func TestArtifactReceiptRefsRequireCanonicalTenantOwnership(t *testing.T) {
 	defer cleanup()
 	bindingStore, cleanupBindings := newRouteAuthTestBindingStore(t)
 	defer cleanupBindings()
-	if err := bindingStore.Upsert(context.Background(), store.PrincipalBinding{
+	if _, err := bindingStore.Bind(context.Background(), store.PrincipalBinding{
 		TenantID:    "tenant-b",
 		PrincipalID: "operator-tenant-b",
-	}); err != nil {
+	}, false); err != nil {
 		t.Fatalf("seed tenant-b principal binding: %v", err)
 	}
 	SetPrincipalBindingStore(bindingStore)

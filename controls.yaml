@@ -2515,3 +2515,43 @@ controls:
       forbidden: []
       removal: []
       bypass: []
+
+  - id: CTL-046
+    title: "Mandates only narrow on delegation"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      A delegated mandate is within every mandate above it, and no stop on the
+      tenant, the delegator or the chain is active. A narrowing (stop, revoke,
+      narrow, add or lower a limit) bumps its scope's control-row version in
+      the same transaction. A widening (a root mandate, a lift) needs an
+      active human approver who is neither the requester nor the principal
+      whose authority widens (HELM-750, ADR-0001).
+    status: observed-only
+    reason: >-
+      Library only. No shipped binary imports
+      core/pkg/kernel/authority/authorityrows (a declared library root in
+      scripts/ci/dead-packages-allowlist.txt), and admission does not read the
+      authority rows yet. The HELM-751 admission transaction is the first
+      caller. Until it lands, the Postgres tests prove the library.
+    entry_points:
+      - "core/pkg/kernel/authority/authorityrows.Store.Delegate"
+      - "core/pkg/kernel/authority/authorityrows.Store.Stop"
+      - "core/pkg/kernel/authority/authorityrows.Store.Lift"
+    config: []
+    protected_operations:
+      - "Delegating, narrowing and revoking a mandate; adding and lowering limits; issuing and lifting stops."
+    bypass_assumptions:
+      - "No shipped caller exists, so nothing is enforced at admission."
+      - "The approval argument names principals; it is not yet a verified approval record (HELM-751)."
+    tests:
+      allowed:
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationOnlyNarrowsOverRandomChains"
+      forbidden:
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationWaitsForAConcurrentNarrowing"
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresStoppedAuthorityCannotDelegate"
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresRootMandateNeedsADistinctHumanApprover"
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresStopExpiresAndLiftNeedsApproval"
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresEveryNarrowingBumpsItsControlRowVersion"
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole"
+      removal: []
+      bypass: []

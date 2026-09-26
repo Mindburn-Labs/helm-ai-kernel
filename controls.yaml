@@ -346,6 +346,13 @@ removal_proofs:
     replace: "\tcase \"DENY\":\n\t\treturn \"DENY\", true\n\tdefault:\n\t\treturn \"APPROVE\", true\n"
     tests:
       - "core/internal/cli/tui.TestMatchCeremonyTokenRejectsHomoglyphsAndZW"
+  - control: CTL-047
+    file: core/cmd/helm-ai-kernel/production_guardian.go
+    find: "guardian.WithEgressChecker(firewall.NewEgressChecker(nil).WithClock(clock.Now)),"
+    replace: "guardian.WithEgressChecker(firewall.NewEgressChecker(&firewall.EgressPolicy{AllowedDomains: []string{\"blocked.example\"}}).WithClock(clock.Now)),"
+    tests:
+      - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+
   - control: CTL-048
     file: core/cmd/helm-ai-kernel/subsystems.go
     find: "\t\tif isKernelCredential(candidate) {\n"
@@ -1562,8 +1569,10 @@ controls:
       No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no
       production caller and WithBudgetTracker is in
       scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at
-      runtime. GET /api/v1/budget/status nonetheless reports a hard-coded active
-      enforcer.
+      runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status,
+      which answered a hard-coded active one, and `budget verify`, which printed
+      a constant PASS, were removed (HELM-780). `budget set` records ceilings
+      that nothing enforces.
     entry_points:
       - "core/pkg/guardian.Guardian.SetBudgetTracker"
     config: []
@@ -1597,7 +1606,8 @@ controls:
       - "Offline verification against a trusted public key."
     bypass_assumptions:
       - "Verification needs the caller to supply the trusted key; a self-attested key is refused by default."
-      - "MCP gateway receipts are written outside tenant scope."
+      - "MCP gateway receipts are written in the one configured tenant: the gateway is single-tenant, and a caller asserting another tenant is refused."
+      - "POST /v1/chat/completions on serve writes its receipts outside tenant scope."
     tests:
       allowed:
         - "core/cmd/helm-ai-kernel.TestVerifyReceiptCLITrustedCopiedFile"
@@ -1612,6 +1622,8 @@ controls:
       bypass:
         - "core/pkg/receiptverify.TestSelfAttestedKeyIsRefusedByDefault"
         - "core/cmd/helm-ai-kernel.TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed"
+        - "core/cmd/helm-ai-kernel.TestMCPGatewayDecisionsPersistSignedReceiptsInTheConfiguredTenant"
+        - "core/cmd/helm-ai-kernel.TestReceiptPersistingEvaluatorRefusesADecisionWithoutATenant"
 
   - id: CTL-013
     title: "API rate limiting"
@@ -2560,6 +2572,34 @@ controls:
         - "core/pkg/kernel/authority/authorityrows.TestPostgresEveryNarrowingBumpsItsControlRowVersion"
         - "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole"
       removal: []
+  - id: CTL-047
+    title: "Production egress is deny-all"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      Every production Guardian (serve, proxy and mcp serve) denies an
+      evaluation whose trusted context names or requires an egress destination,
+      and no configuration adds an allowlist.
+    status: enforced
+    entry_points:
+      - "core/cmd/helm-ai-kernel.newProductionGuardian"
+      - "core/pkg/guardian.TaintEgressInterceptor.Evaluate"
+    config:
+      - "None: newProductionGuardian builds the egress checker with a nil policy, and no flag, variable or file supplies one. Allowing any destination needs a code change."
+    protected_operations:
+      - "Guardian evaluations whose trusted context names a destination or requires one, denied with DATA_EGRESS_BLOCKED."
+      - "POST /v1/chat/completions on serve, which requires its upstream host as the destination and is therefore denied before the upstream is called."
+    bypass_assumptions:
+      - "Egress that no Guardian evaluation names as a trusted destination is not governed by this gate; HELM is not on the network path (INV-024)."
+      - "The checker semantics (empty allowlist denies, explicit deny wins) are INV-004."
+    tests:
+      allowed:
+        - "core/cmd/helm-ai-kernel.TestProxyNonStreamingToolCallGetsPolicyVerdict"
+      forbidden:
+        - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+      removal:
+        - "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+      bypass:
+        - "core/pkg/guardian.TestEgressGateUsesTrustedDestinationRequirementInsteadOfRiskClass"
   - id: CTL-048
     title: "Kernel credentials never reach the model provider"
     owner: Mindburn Labs core team (kernel)

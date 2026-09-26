@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 72,
-    "enforced": 32,
+    "total": 73,
+    "enforced": 33,
     "observed_only": 28,
     "unmanaged": 12,
     "retired_invariants": 11,
@@ -1407,7 +1407,7 @@
       "claim": "An action that passes policy draws down its budget, and a failed draw-down denies it.",
       "status": "observed-only",
       "plane": "runtime",
-      "reason": "No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. GET /api/v1/budget/status nonetheless reports a hard-coded active enforcer.",
+      "reason": "No shipped path injects a budget tracker: Guardian.SetBudgetTracker has no production caller and WithBudgetTracker is in scripts/ci/deadcode-allowlist.txt, so the draw-down gate is skipped at runtime. Nothing reports a budget enforcer: GET /api/v1/budget/status, which answered a hard-coded active one, and `budget verify`, which printed a constant PASS, were removed (HELM-780). `budget set` records ceilings that nothing enforces.",
       "entry_points": [
         {
           "symbol": "core/pkg/guardian.Guardian.SetBudgetTracker",
@@ -1460,7 +1460,8 @@
       ],
       "bypass_assumptions": [
         "Verification needs the caller to supply the trusted key; a self-attested key is refused by default.",
-        "MCP gateway receipts are written outside tenant scope."
+        "MCP gateway receipts are written in the one configured tenant: the gateway is single-tenant, and a caller asserting another tenant is refused.",
+        "POST /v1/chat/completions on serve writes its receipts outside tenant scope."
       ],
       "tests": {
         "allowed": [
@@ -1478,7 +1479,9 @@
         ],
         "bypass": [
           "core/pkg/receiptverify.TestSelfAttestedKeyIsRefusedByDefault",
-          "core/cmd/helm-ai-kernel.TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed"
+          "core/cmd/helm-ai-kernel.TestPersistDecisionReceiptBlocksWhenTransparencyAppendFailsFailClosed",
+          "core/cmd/helm-ai-kernel.TestMCPGatewayDecisionsPersistSignedReceiptsInTheConfiguredTenant",
+          "core/cmd/helm-ai-kernel.TestReceiptPersistingEvaluatorRefusesADecisionWithoutATenant"
         ]
       },
       "removal_proofs": [
@@ -2913,6 +2916,58 @@
         "bypass": []
       },
       "removal_proofs": []
+    },
+    {
+      "id": "CTL-047",
+      "title": "Production egress is deny-all",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "Every production Guardian (serve, proxy and mcp serve) denies an evaluation whose trusted context names or requires an egress destination, and no configuration adds an allowlist.",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/cmd/helm-ai-kernel.newProductionGuardian",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/guardian.TaintEgressInterceptor.Evaluate",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "None: newProductionGuardian builds the egress checker with a nil policy, and no flag, variable or file supplies one. Allowing any destination needs a code change."
+      ],
+      "protected_operations": [
+        "Guardian evaluations whose trusted context names a destination or requires one, denied with DATA_EGRESS_BLOCKED.",
+        "POST /v1/chat/completions on serve, which requires its upstream host as the destination and is therefore denied before the upstream is called."
+      ],
+      "bypass_assumptions": [
+        "Egress that no Guardian evaluation names as a trusted destination is not governed by this gate; HELM is not on the network path (INV-024).",
+        "The checker semantics (empty allowlist denies, explicit deny wins) are INV-004."
+      ],
+      "tests": {
+        "allowed": [
+          "core/cmd/helm-ai-kernel.TestProxyNonStreamingToolCallGetsPolicyVerdict"
+        ],
+        "forbidden": [
+          "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+        ],
+        "removal": [
+          "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+        ],
+        "bypass": [
+          "core/pkg/guardian.TestEgressGateUsesTrustedDestinationRequirementInsteadOfRiskClass"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/cmd/helm-ai-kernel/production_guardian.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestProductionGuardianFactoryRunsEveryRequiredDenyGate"
+          ]
+        }
+      ]
     },
     {
       "id": "CTL-048",

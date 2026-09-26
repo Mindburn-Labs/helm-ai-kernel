@@ -5,35 +5,62 @@
   "description": "EffectDescriptor.arguments for effect_type github.pull_request.create_draft (HELM-753). The target is github.com/{owner}/{repo}; the repository comes only from the target. At Propose the gateway requires branch_attempt_id to name, in the same tenant and for the same target, a github.branch.create_from_changes attempt in OBSERVED(SUCCEEDED) whose head and base equal these and whose result commit_sha equals head_sha; otherwise PRECONDITION_FAILED and no attempt. At Dispatch the adapter re-reads refs/heads/{head} and refuses unless it still equals head_sha. Rules JSON Schema cannot express, and the gateway enforces before admission: no duplicate object keys; UTF-8 only; the whole document is at most 65536 bytes; the body is at most 65536 bytes.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "branch_attempt_id", "base", "head", "head_sha", "title", "body"],
+  "required": [
+    "schema",
+    "branch_attempt_id",
+    "base",
+    "head",
+    "head_sha",
+    "title",
+    "body"
+  ],
   "properties": {
-    "schema": { "const": "helm.github.pull_request.create_draft.v1" },
+    "schema": {
+      "const": "helm.github.pull_request.create_draft.v1"
+    },
     "branch_attempt_id": {
       "description": "The github.branch.create_from_changes attempt that created head.",
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },
-    "base": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "base": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "head": {
-      "type": "string", "minLength": 1, "maxLength": 200,
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
       "pattern": "^[A-Za-z0-9._/-]+$",
-      "not": { "pattern": "^refs/" }
+      "not": {
+        "pattern": "^refs/"
+      }
     },
     "head_sha": {
       "description": "The commit the approver's diff shows; a dispatch-time precondition.",
-      "type": "string", "pattern": "^[0-9a-f]{40}$"
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
     },
-    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
-    "body": { "type": "string", "maxLength": 65536 }
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "body": {
+      "type": "string",
+      "maxLength": 65536
+    }
   },
   "x-helm": {
     "effect_type": "github.pull_request.create_draft",
     "target": "github.com/{owner}/{repo}",
-    "risk_class": "high",
+    "risk_class": "medium",
     "idempotent": "conditional: one open pull request per (head, base)",
     "observable": "yes: the pull request is read back by head and base",
     "reversible": "yes: closing the pull request (not part of v1)",
     "mediation": "enforced",
-    "result": "helm.gateway.v1.Observation.github_pull_request (GitHubPullRequestResult)"
+    "result": "helm.gateway.v1.Observation.github_pull_request (GitHubPullRequestResult)",
+    "approval": "required by mandate policy for this effect type; not step-up (step-up is for high or irreversible effects, §10.1)"
   }
 }

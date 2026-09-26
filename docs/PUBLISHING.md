@@ -75,22 +75,46 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.9.0` |
 | Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.9.0`; publish with the subdirectory tag `sdk/go/v0.9.0` |
 
+## Rehearse Before Tagging
+
+`make release-rehearsal` (`scripts/release/rehearse.py`) answers, before a
+tag exists, whether the next release would pass `release.yml`. It picks the
+version the tag would carry: `VERSION` when it is ahead of the latest `v*`
+tag, otherwise the smallest bump the contract gates accept (a break needs a
+major bump, or a minor bump while the version is `0.y.z`). It then checks the
+contract gates against the last tag, the `contracts-catalog` spec blob, the
+Console sidecar pin row and its annotated `helm-console-sidecar-v<version>`
+tag, version lockstep, the npm, PyPI and crates.io packages, the production
+chart render and its key pairs, the deployment environments, and every
+repository secret and variable `release.yml` reads.
+
+Each row is `PASS`, `FAIL`, `ACTION-NEEDED` (a per-release step, printed with
+its remedy) or `UNKNOWN` (not readable here, never a pass). Trusted-publisher
+settings are always `UNKNOWN`, because no registry exposes them; the row names
+the exact settings each registry must hold. The command exits non-zero only on
+a `FAIL`, a defect that blocks any version; `REHEARSAL_ARGS=--strict` fails on
+`ACTION-NEEDED` too. `.github/workflows/release-rehearsal.yml` runs it on
+`main` every day and on demand, and writes the table to the run summary.
+
 ## Release Inputs
 
 Before tagging a release:
 
-1. run `make prepare-version VERSION=<version>` and review the coordinated
+1. run `make release-rehearsal`: fix every `FAIL` row first; its
+   `ACTION-NEEDED` rows name which of the steps below this release needs, so
+   re-run it after step 3 until none is left
+2. run `make prepare-version VERSION=<version>` and review the coordinated
    bump across `VERSION`, chart metadata, SDK manifests, OpenAPI metadata,
    generated SDK headers, and release docs
-2. synchronize `api/openapi/helm.openapi.yaml` into
+3. synchronize `api/openapi/helm.openapi.yaml` into
    `Mindburn-Labs/contracts-catalog` and merge the catalog change to `main`
-3. update `CHANGELOG.md`
-4. run `make docs-coverage docs-truth`
-5. run `make quality-merge`
-6. run `make quality-release`
-7. run `make release-readiness`
-8. run `make release-assets`
-9. after publication, run or confirm `make version-drift-published`
+4. update `CHANGELOG.md`
+5. run `make docs-coverage docs-truth`
+6. run `make quality-merge`
+7. run `make quality-release`
+8. run `make release-readiness`
+9. run `make release-assets`
+10. after publication, run or confirm `make version-drift-published`
 
 Tag-triggered release workflows fail if the tag `v<version>` does not match
 the checked-in `VERSION` file, the tag's peeled commit is not reachable from
@@ -111,6 +135,7 @@ The retained workflow set under `.github/workflows/` covers:
 - Go SDK subdirectory tag publication for `sdk/go/v0.9.0`
 - tag-triggered npm, PyPI, crates.io, and Maven-compatible SDK publication
 - daily published registry drift monitoring through `make version-drift-published`
+- a daily release rehearsal of `main` through `make release-rehearsal`
 
 Release target: `v0.9.0`. The release is complete only after the tagged
 workflow publishes every lockstep channel, attaches `version-status.json` to

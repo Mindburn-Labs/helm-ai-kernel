@@ -29,6 +29,7 @@
         "java-sdk",
         "json-schemas",
         "contract-breaking-self-test",
+        "release-rehearsal-self-test",
         "proto-breaking",
         "openapi-breaking",
         "secrets",
@@ -88,6 +89,7 @@
         "codegen-drift",
         "proto-lint",
         "contract-breaking-self-test",
+        "release-rehearsal-self-test",
         "proto-gates-self-test",
         "idl-breaking-release",
         "proto-breaking",
@@ -135,6 +137,7 @@
         "codegen-drift",
         "proto-lint",
         "contract-breaking-self-test",
+        "release-rehearsal-self-test",
         "proto-gates-self-test",
         "contract-breaking-release",
         "benchmark-report",
@@ -169,7 +172,8 @@
         "dead-packages",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "release-rehearsal"
       ]
     },
     "typecheck": {
@@ -607,6 +611,41 @@
         "scripts/ci/quality-gates.json",
         "scripts/ci/quality.py",
         "Makefile"
+      ]
+    },
+    {
+      "id": "release-rehearsal-self-test",
+      "title": "Release rehearsal regression test",
+      "description": "Hermetic: computes the next version through the real contract gate in a fixture repository, proves catalog fetch errors are UNKNOWN (never PASS), a missing pin row is ACTION-NEEDED, and a planted half key pair in the chart FAILs, and requires release-rehearsal.yml to report every repository secret and variable release.yml reads.",
+      "command": "make test-release-rehearsal",
+      "timeout_seconds": 180,
+      "paths": [
+        ".github/workflows/release.yml",
+        ".github/workflows/release-rehearsal.yml",
+        "scripts/release/rehearse.py",
+        "scripts/release/rehearse_test.py",
+        "scripts/release/check_version_drift.py",
+        "scripts/release/console_local_sidecar.py",
+        "scripts/ci/contract_breaking.sh",
+        "release/console-local-sidecar-pins.json",
+        "release/version-surfaces.yaml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "release-rehearsal",
+      "title": "Release rehearsal against main",
+      "description": "Runs scripts/release/rehearse.py: the version the next tag would carry, checked against the pre-publish preconditions of release.yml. Fails only on a defect that blocks any version; ACTION-NEEDED and UNKNOWN rows are printed, not failed. Needs network; release-rehearsal.yml runs it daily with the release toolchain.",
+      "command": "make release-rehearsal",
+      "timeout_seconds": 900,
+      "advisory": true,
+      "paths": [
+        ".github/workflows/release.yml",
+        "scripts/release/rehearse.py",
+        "deploy/helm-chart/**",
+        "release/console-local-sidecar-pins.json",
+        "api/openapi/helm.openapi.yaml",
+        "VERSION"
       ]
     },
     {

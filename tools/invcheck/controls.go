@@ -1445,8 +1445,12 @@ func checkProfile(root string) (profile string, strict bool) {
 	return profile, strict
 }
 
-// prWorkflowRunsCheck reports whether the PR workflow, or a local reusable
-// workflow it calls, runs `make check`.
+// platformCIWorkflow is the CI v2 reusable workflow; its check job runs
+// `make check` by contract.
+const platformCIWorkflow = "Mindburn-Labs/platform-actions/.github/workflows/ci.yml@"
+
+// prWorkflowRunsCheck reports whether the PR workflow, a local reusable
+// workflow it calls, or the platform-actions CI v2 workflow runs `make check`.
 func prWorkflowRunsCheck(root string) bool {
 	data, err := os.ReadFile(filepath.Join(root, prWorkflowFile))
 	if err != nil {
@@ -1455,6 +1459,9 @@ func prWorkflowRunsCheck(root string) bool {
 	text := string(data)
 	for _, line := range strings.Split(text, "\n") {
 		ref := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "uses:"))
+		if strings.HasPrefix(strings.TrimSpace(line), "uses:") && strings.HasPrefix(ref, platformCIWorkflow) {
+			return true
+		}
 		if strings.HasPrefix(strings.TrimSpace(line), "uses:") && strings.HasPrefix(ref, "./.github/workflows/") {
 			if called, err := os.ReadFile(filepath.Join(root, strings.TrimPrefix(ref, "./"))); err == nil {
 				text += "\n" + string(called)

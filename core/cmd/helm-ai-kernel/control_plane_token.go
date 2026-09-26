@@ -299,13 +299,16 @@ func tokenHasScope(values []string, want string) bool {
 // controlPlaneIdentityMetrics are the ADR-0005 phase-3 signals, per route:
 // helm_legacy_header_identity_total counts requests still authenticated by the
 // shared key and headers; helm_token_unbound_principal_total counts valid
-// tokens whose principal has no binding row.
+// tokens whose principal has no binding row; helm_principal_rebind_refused_total
+// counts binds refused because the principal is bound in another tenant.
 var controlPlaneIdentityMetrics = newControlPlaneIdentityMetricSet(time.Now)
 
 type controlPlaneIdentityMetricSet struct {
 	registry *prometheus.Registry
 	legacy   *prometheus.CounterVec
 	unbound  *prometheus.CounterVec
+
+	rebindRefused prometheus.Counter
 
 	mu         sync.Mutex
 	now        func() time.Time
@@ -325,10 +328,14 @@ func newControlPlaneIdentityMetricSet(now func() time.Time) *controlPlaneIdentit
 			Name: "helm_token_unbound_principal_total",
 			Help: "Valid Control Plane identity tokens whose principal has no principal_bindings row (ADR-0005 §3).",
 		}, []string{"route"}),
+		rebindRefused: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "helm_principal_rebind_refused_total",
+			Help: "Principal binds refused because the principal is already bound in another tenant (ADR-0005 §11).",
+		}),
 		now:        now,
 		lastLogged: map[string]time.Time{},
 	}
-	m.registry.MustRegister(m.legacy, m.unbound)
+	m.registry.MustRegister(m.legacy, m.unbound, m.rebindRefused)
 	return m
 }
 

@@ -148,6 +148,12 @@ helm:
       # a ConfigMap in this namespace holding the PEM under caBundleKey.
       caBundleConfigMap: ""
       caBundleKey: "ca.crt"
+    # Principals that may hold bindings in more than one tenant
+    # (HELM_CROSS_TENANT_PRINCIPALS, ADR-0005 §11), e.g. the Control Plane's
+    # "helm-workflow-runner". Empty: a principal already bound in one tenant is
+    # refused (409) in any other. Listing a principal widens the ADR-0005 §3
+    # token cross-check for exactly that principal to every tenant it is bound to.
+    crossTenantPrincipals: []
 
   # Governed GitHub effects. Supplying an existing Secret arms the shipped
   # signed-permit connector; an empty Secret name keeps every github.* tool

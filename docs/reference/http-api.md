@@ -113,6 +113,21 @@ Workspace binding, for the first three rows:
 
 Ext-authz is the exception: it is bound to the configured scope in both modes.
 
+**Binding a principal.** `POST /api/v1/admin/principal-bindings` (admin key,
+body `{"tenant_id", "principal_id"}`) answers `201` for a new binding and `200`
+when the pair is already bound. A principal holds bindings in one tenant only:
+binding one that is already bound in another tenant answers `409` with reason
+code `TENANT_ISOLATION`, writes nothing, and counts
+`helm_principal_rebind_refused_total`. The check and the insert run in one
+transaction, serialized per principal, so concurrent binds into different
+tenants cannot both succeed (ADR-0005 §11). `HELM_CROSS_TENANT_PRINCIPALS`
+(chart: `helm.auth.crossTenantPrincipals`), a comma-separated list that is
+empty by default, names the principals that may hold bindings in several
+tenants, such as the Control Plane's `helm-workflow-runner`; each such bind is
+logged. Listing a principal widens the token cross-check above for exactly
+that principal: its token passes in every tenant it is bound to, and is still
+refused in any tenant it is not.
+
 **Stores without a tenant dimension.** The boundary surface registry and the
 Launchpad run store are each one store per process. Their `tenant_scoped`
 routes serve only the configured tenant (`HELM_RUNTIME_TENANT_ID`, `default`

@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 70,
-    "enforced": 31,
+    "total": 71,
+    "enforced": 32,
     "observed_only": 27,
     "unmanaged": 12,
     "retired_invariants": 11,
@@ -2841,6 +2841,68 @@
         "bypass": []
       },
       "removal_proofs": []
+    },
+    {
+      "id": "CTL-046",
+      "title": "Principal binding integrity",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "A principal is bound in one tenant only. Binding a principal that already has a binding in another tenant is refused with 409 TENANT_ISOLATION and counted in helm_principal_rebind_refused_total; the check and the insert are one transaction, serialized per principal, so concurrent binds into different tenants cannot both succeed. Only principals listed in HELM_CROSS_TENANT_PRINCIPALS may hold bindings in several tenants.",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/cmd/helm-ai-kernel.RegisterPrincipalBindingRoutes",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/store.PostgresPrincipalBindingStore.Bind",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/store.SQLitePrincipalBindingStore.Bind",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "HELM_CROSS_TENANT_PRINCIPALS"
+      ],
+      "protected_operations": [
+        "POST /api/v1/admin/principal-bindings, and through it the ADR-0005 §3 binding cross-check on Control Plane token routes."
+      ],
+      "bypass_assumptions": [
+        "A principal listed in HELM_CROSS_TENANT_PRINCIPALS may be bound in any number of tenants, and the §3 cross-check then admits its token in each of them. Each such bind is logged.",
+        "Bindings written before this check (or directly in the database) are not revisited; a re-bind of an existing pair answers 200 whatever other tenants the principal holds.",
+        "The route trusts HELM_ADMIN_API_KEY: any holder of that key can bind a fresh principal into any one tenant."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/store.TestPrincipalBindingStoreSQLite",
+          "core/cmd/helm-ai-kernel.TestPrincipalBindingRoutesUpsertsAndIsIdempotent"
+        ],
+        "forbidden": [
+          "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteRefusesCrossTenantRebind",
+          "core/pkg/store.TestPrincipalBindingStoreSQLiteRefusesCrossTenantBind",
+          "core/pkg/postgresmigration.TestPostgresPrincipalBindRefusesConcurrentCrossTenantBinds"
+        ],
+        "removal": [
+          "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteRefusesCrossTenantRebind",
+          "core/pkg/store.TestPrincipalBindingStoreSQLiteRefusesCrossTenantBind"
+        ],
+        "bypass": [
+          "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteAllowsListedCrossTenantPrincipals",
+          "core/cmd/helm-ai-kernel.TestControlPlaneTokenCrossCheckForACrossTenantPrincipal"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/store/principal_binding_store.go",
+          "tests": [
+            "core/cmd/helm-ai-kernel.TestPrincipalBindingRouteRefusesCrossTenantRebind",
+            "core/pkg/store.TestPrincipalBindingStoreSQLiteRefusesCrossTenantBind"
+          ]
+        }
+      ]
     }
   ]
 }

@@ -208,15 +208,10 @@ func TestTenantRowSecurityCheckDetectsWeakenedTables(t *testing.T) {
 	}
 }
 
-// B-I5: a restricted role (no superuser, no BYPASSRLS, not the owner) reads and
-// writes only the tenant its transaction is bound to.
-func TestTenantRowSecurityIsolatesTenantsForARestrictedRole(t *testing.T) {
-	db, base, schema := postgresTestDB(t)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	if err := Migrate(ctx, db); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+// restrictedRuntimeDB opens schema as a login that is no superuser, has no
+// BYPASSRLS and does not own the tables: the way a serving kernel connects.
+func restrictedRuntimeDB(ctx context.Context, t *testing.T, db *sql.DB, base, schema string) *sql.DB {
+	t.Helper()
 	role := schema + "_runtime"
 	for _, statement := range []string{
 		`CREATE ROLE ` + role + ` LOGIN PASSWORD 'rls-probe' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`,
@@ -241,13 +236,28 @@ func TestTenantRowSecurityIsolatesTenantsForARestrictedRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer runtime.Close()
+	// Registered after the role cleanup, so it runs first: the role cannot be
+	// dropped while this pool holds connections.
+	t.Cleanup(func() { _ = runtime.Close() })
+	return runtime
+}
+
+// B-I5: a restricted role (no superuser, no BYPASSRLS, not the owner) reads and
+// writes only the tenant its transaction is bound to.
+func TestTenantRowSecurityIsolatesTenantsForARestrictedRole(t *testing.T) {
+	db, base, schema := postgresTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	runtime := restrictedRuntimeDB(ctx, t, db, base, schema)
 
 	bindings, err := store.NewPostgresPrincipalBindingStore(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bindings.Upsert(ctx, store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-a"}); err != nil {
+	if _, err := bindings.Bind(ctx, store.PrincipalBinding{TenantID: "tenant-a", PrincipalID: "principal-a"}, false); err != nil {
 		t.Fatalf("tenant A upsert: %v", err)
 	}
 	if ok, err := bindings.Exists(ctx, "tenant-a", "principal-a"); err != nil || !ok {

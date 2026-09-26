@@ -662,7 +662,10 @@ workspace; anything else is `not_found`.
 this attempt and action; anything else is `permission_denied`. The token is
 single-use: its `jti` is recorded in `authority_token_replay`, keyed by
 tenant, issuer and `jti`, in the decision's own transaction, and a second use
-is refused. Rows are purged once `exp` plus 30 s has passed, and process
+is refused. A token whose `exp` plus 30 s has passed by the database clock
+is refused too, and rows are purged only after that point, so clock skew
+between the gateway and the database never lets a purge make a token
+replayable. Process
 memory is never the replay store. A refused call rolls the record back, so
 only an accepted operation uses up its token. In the transaction the attempt
 is locked `FOR UPDATE`; an attempt no longer `ESCALATED` returns unchanged
@@ -676,7 +679,9 @@ attempt `ESCALATED`:
 - the escalation has not expired (`failed_precondition`,
   `APPROVAL_TIMEOUT`);
 - Approve only: a high, irreversible or `helm.authority.*` effect needs
-  step-up, which fails closed (`STEP_UP_REQUIRED`). A medium effect that a
+  step-up, which fails closed (`STEP_UP_REQUIRED`). The risk is the one
+  re-admission computes, so a class raised since the escalation counts. A
+  medium effect that a
   mandate escalates through `approval_required`, such as the skeleton's draft
   pull request, is approved without it.
 

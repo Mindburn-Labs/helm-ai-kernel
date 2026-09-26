@@ -238,7 +238,7 @@ func TestStepUpCoversHighIrreversibleAndAuthorityChanges(t *testing.T) {
 		{"medium", "github.pull_request.create_draft", false},
 		{"low", "github.repository.get", false},
 	} {
-		if got := needsStepUp(lockedAttempt{risk: test.risk, effectType: test.effectType}); got != test.want {
+		if got := needsStepUp(test.risk, test.effectType); got != test.want {
 			t.Errorf("%s %s: needsStepUp = %v, want %v", test.risk, test.effectType, got, test.want)
 		}
 	}

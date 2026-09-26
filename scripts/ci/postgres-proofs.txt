@@ -26,7 +26,9 @@ pkg/gateway/admission TestPostgresMigrateIsVersioned 1 race
 pkg/gateway/admission TestPostgresProposeAdmitsDeniesAndEscalates 1 race
 pkg/gateway/admission TestPostgresProposeIsIdempotent 3 race
 pkg/gateway/admission TestPostgresReadsAreTenantAndWorkspaceScoped 1 race
+pkg/gateway/admission TestPostgresSingleUseSurvivesClockSkew 3 race
 pkg/gateway/admission TestPostgresStepUpAndExpiryFailClosed 1 race
+pkg/gateway/admission TestPostgresStepUpFollowsARiskRaisedAfterEscalation 1 race
 pkg/gateway/admission TestPostgresStopsDenyAdmission 3 race
 pkg/gateway/server TestPostgresGatewayAPIOnTheWire 1 race
 pkg/gateway/server TestPostgresGatewayDecisionsOnTheWire 1 race

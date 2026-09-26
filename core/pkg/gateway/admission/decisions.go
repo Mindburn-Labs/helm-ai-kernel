@@ -104,9 +104,11 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 		if !a.now.Before(a.approvalExpiresAt) {
 			return refuse(CodeFailedPrecondition, contracts.ReasonApprovalTimeout, "the escalation expired")
 		}
-		if approve && needsStepUp(a) {
-			return refuse(CodePermissionDenied, contracts.ReasonStepUpRequired,
-				"approving a high-risk, irreversible or authority-widening effect needs a step-up assertion")
+		// Step-up is decided again in readmit on the risk it recomputes, so a
+		// class raised since the escalation still needs it; this check only
+		// refuses early on the stored one.
+		if approve && needsStepUp(a.risk, a.effectType) {
+			return errStepUp
 		}
 		decision := "REJECTED"
 		if approve {
@@ -133,10 +135,13 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 // needsStepUp: §10.1 step-up covers high and irreversible effects and
 // authority widening (helm.authority.*). A medium effect a mandate escalates
 // is approved without it.
-func needsStepUp(a lockedAttempt) bool {
-	return a.risk == string(mandates.RiskHigh) || a.risk == string(mandates.RiskIrreversible) ||
-		strings.HasPrefix(a.effectType, "helm.authority.")
+func needsStepUp(risk, effectType string) bool {
+	return risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||
+		strings.HasPrefix(effectType, "helm.authority.")
 }
+
+var errStepUp = refuse(CodePermissionDenied, contracts.ReasonStepUpRequired,
+	"approving a high-risk, irreversible or authority-widening effect needs a step-up assertion")
 
 // readmit re-runs admission for an ESCALATED attempt with its approval, on
 // the request the attempt stored.
@@ -295,6 +300,17 @@ func release(ctx context.Context, tx *sql.Tx, tenantID, attemptID, cause string)
 func consumeToken(ctx context.Context, tx *sql.Tx, tenantID string, token Token) error {
 	if token.ID == "" || token.Issuer == "" || token.ExpiresAt.IsZero() {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "a single-use token needs iss, jti and exp")
+	}
+	// The validator accepts a token until exp plus the skew by the gateway's
+	// clock; the purge below runs on the database's. Refusing, by the database
+	// clock, any token the purge could already have forgotten means a purge
+	// never makes an accepted token replayable, whatever the clocks say.
+	var stale bool
+	if err := tx.QueryRowContext(ctx, `SELECT $1::timestamptz < now() - interval '30 seconds'`, token.ExpiresAt).Scan(&stale); err != nil {
+		return err
+	}
+	if stale {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token has expired")
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM authority_token_replay
 		WHERE tenant_id = $1 AND expires_at < now() - interval '30 seconds'`, tenantID); err != nil {

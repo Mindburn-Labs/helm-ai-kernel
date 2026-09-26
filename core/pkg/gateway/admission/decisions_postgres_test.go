@@ -328,3 +328,66 @@ func TestPostgresConcurrentApprovalsAdmitOnce(t *testing.T) {
 		t.Fatalf("%d permits", n)
 	}
 }
+
+// L2: step-up follows the risk re-admission computes, not the risk stored at
+// escalation.
+func TestPostgresStepUpFollowsARiskRaisedAfterEscalation(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.escalated("raised")
+	if a.RiskClass != "medium" {
+		t.Fatalf("escalated at %s, want medium", a.RiskClass)
+	}
+	f.ownerTx(tenantA, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE authority_effect_types SET risk_class = 'high', version = version + 1
+			WHERE tenant_id = $1 AND effect_type = $2`, tenantA, effectargs.GitHubPullRequestCreateDraft)
+		return err
+	})
+	_, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), approval(a, ""))
+	wantRefusal(t, "a risk raised to high after escalation", err, CodePermissionDenied, contracts.ReasonStepUpRequired)
+	got, err := f.svc.Get(ctx, human, a.ID)
+	must(t, err)
+	if got.State != "ESCALATED" || got.Approval != nil || got.Version != a.Version {
+		t.Fatalf("a refused step-up changed the attempt: %+v", got)
+	}
+	// Known good: back at medium, the same approval admits.
+	f.ownerTx(tenantA, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE authority_effect_types SET risk_class = 'medium', version = version + 1
+			WHERE tenant_id = $1 AND effect_type = $2`, tenantA, effectargs.GitHubPullRequestCreateDraft)
+		return err
+	})
+	approved, _, err := f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), approval(a, ""))
+	must(t, err)
+	wantState(t, "medium again", approved, "ADMITTED", "")
+}
+
+// L1: a token the purge could already have forgotten is refused by the
+// database clock, so skew between the gateway and the database never makes
+// an accepted decide token replayable.
+func TestPostgresSingleUseSurvivesClockSkew(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.escalated("skew-a")
+	b := f.escalated("skew-b")
+	var dbNow time.Time
+	must(t, f.owner.QueryRow(`SELECT now()`).Scan(&dbNow))
+	// A gateway clock 60 s behind the database accepts this token (exp plus
+	// 30 s is still ahead of it); the database's purge would forget its row.
+	skewed := decideToken("helm.gateway.decide")
+	skewed.ExpiresAt = dbNow.Add(-40 * time.Second)
+	for i, target := range []Attempt{a, b} {
+		_, _, err := f.svc.Approve(ctx, approverB, skewed, approval(target, ""))
+		wantRefusal(t, fmt.Sprintf("use %d of a token past exp plus skew by the database clock", i+1), err, CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	}
+	// Inside the window it is accepted once, and its row outlives any purge
+	// that could still accept it.
+	edge := decideToken("helm.gateway.decide")
+	edge.ExpiresAt = dbNow.Add(-20 * time.Second)
+	_, _, err := f.svc.Approve(ctx, approverB, edge, approval(a, ""))
+	must(t, err)
+	_, _, err = f.svc.Approve(ctx, approverB, edge, approval(b, ""))
+	wantRefusal(t, "a replay inside the window", err, CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	if got, _ := f.svc.Get(ctx, human, b.ID); got.State != "ESCALATED" {
+		t.Fatalf("a replayed token decided another attempt: %s", got.State)
+	}
+}

@@ -3333,7 +3333,7 @@
       "id": "CTL-053",
       "title": "Gateway approval decisions",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-gateway records at most one decision per ESCALATED attempt, by an active human principal of the tenant distinct from the requester (ADR-0001 I6), with a helm.gateway.decide token bound by RFC 9396 authorization_details to that attempt and action and used once: its jti is recorded in Postgres in the decision's transaction. The approval digest must equal the attempt's, the escalation must not have expired, and high, irreversible or authority-widening effects fail closed until step-up exists (STEP_UP_REQUIRED). Approve re-runs admission in the same transaction, re-reading stops, the mandate chain and counters, so the attempt becomes ADMITTED or DENIED; a refused precondition leaves it ESCALATED. Cancel follows ESCALATED or ADMITTED to CANCELLED only, voiding the permit and releasing held exposure in the same transaction, for the requester's propose token or an active human operator's single-use stop token.",
+      "claim": "helm-gateway records at most one decision per ESCALATED attempt, by an active human principal of the tenant distinct from the requester (ADR-0001 I6), with a helm.gateway.decide token bound by RFC 9396 authorization_details to that attempt and action and used once: its jti is recorded in Postgres in the decision's transaction. The approval digest must equal the attempt's, the escalation must not have expired, and high, irreversible or authority-widening effects fail closed until step-up exists (STEP_UP_REQUIRED), judged on the risk re-admission computes. A token past exp plus the skew by the database clock is refused, so a purge never makes one replayable. Approve re-runs admission in the same transaction, re-reading stops, the mandate chain and counters, so the attempt becomes ADMITTED or DENIED; a refused precondition leaves it ESCALATED. Cancel follows ESCALATED or ADMITTED to CANCELLED only, voiding the permit and releasing held exposure in the same transaction, for the requester's propose token or an active human operator's single-use stop token.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -3384,6 +3384,8 @@
           "core/pkg/gateway/admission.TestPostgresApproveRereadsStopsAndTheMandate",
           "core/pkg/gateway/admission.TestPostgresStepUpAndExpiryFailClosed",
           "core/pkg/gateway/admission.TestPostgresConcurrentApprovalsAdmitOnce",
+          "core/pkg/gateway/admission.TestPostgresStepUpFollowsARiskRaisedAfterEscalation",
+          "core/pkg/gateway/admission.TestPostgresSingleUseSurvivesClockSkew",
           "core/pkg/gateway/server.TestDecisionBinding"
         ],
         "removal": [

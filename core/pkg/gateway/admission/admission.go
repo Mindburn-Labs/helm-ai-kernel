@@ -281,6 +281,12 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 			"a human principal proposes through the configured workload actor, not directly")
 	}
 
+	// An approval of an effect whose risk is now high, irreversible or an
+	// authority change needs step-up, whatever the risk was at escalation.
+	if approval != nil && approval.Approved && needsStepUp(string(auth.riskClass), in.EffectType) {
+		return errStepUp
+	}
+
 	// 4. Stops, read in a statement after the locks were granted.
 	stops, err := activeStops(ctx, tx, caller.TenantID, in.EffectType, auth)
 	if err != nil {

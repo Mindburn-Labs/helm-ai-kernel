@@ -444,8 +444,8 @@ removal_proofs:
       - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
   - control: CTL-053
     file: core/pkg/gateway/admission/decisions.go
-    find: "\treturn a.risk == string(mandates.RiskHigh) || a.risk == string(mandates.RiskIrreversible) ||\n"
-    replace: "\treturn false && a.risk == string(mandates.RiskHigh) || a.risk == string(mandates.RiskIrreversible) ||\n"
+    find: "\treturn risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||\n"
+    replace: "\treturn false && risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||\n"
     tests:
       - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
 
@@ -2920,7 +2920,9 @@ controls:
       jti is recorded in Postgres in the decision's transaction. The
       approval digest must equal the attempt's, the escalation must not have
       expired, and high, irreversible or authority-widening effects fail
-      closed until step-up exists (STEP_UP_REQUIRED). Approve re-runs
+      closed until step-up exists (STEP_UP_REQUIRED), judged on the risk
+      re-admission computes. A token past exp plus the skew by the database
+      clock is refused, so a purge never makes one replayable. Approve re-runs
       admission in the same transaction, re-reading stops, the mandate chain
       and counters, so the attempt becomes ADMITTED or DENIED; a refused
       precondition leaves it ESCALATED. Cancel follows ESCALATED or ADMITTED
@@ -2955,6 +2957,8 @@ controls:
         - "core/pkg/gateway/admission.TestPostgresApproveRereadsStopsAndTheMandate"
         - "core/pkg/gateway/admission.TestPostgresStepUpAndExpiryFailClosed"
         - "core/pkg/gateway/admission.TestPostgresConcurrentApprovalsAdmitOnce"
+        - "core/pkg/gateway/admission.TestPostgresStepUpFollowsARiskRaisedAfterEscalation"
+        - "core/pkg/gateway/admission.TestPostgresSingleUseSurvivesClockSkew"
         - "core/pkg/gateway/server.TestDecisionBinding"
       removal:
         - "core/pkg/gateway/server.TestDecisionBinding"

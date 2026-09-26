@@ -788,6 +788,50 @@
       "since": "1.7.0"
     },
     {
+      "code": "PRECONDITION_FAILED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "A precondition the effect type declares does not hold, so no attempt was created",
+      "since": "1.8.0"
+    },
+    {
+      "code": "READBACK_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The adapter's read-back of the provider does not match the proposed effect, so the outcome is FAILED",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PERMIT_ARGUMENT_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The arguments an adapter was about to send are not the bytes the permit's argument digest covers",
+      "since": "1.8.0",
+      "finality": "class_forbidden",
+      "disclosure": "none"
+    },
+    {
+      "code": "PROVIDER_CREDENTIAL_REJECTED",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The connection's credential is unavailable, or the provider rejected it as invalid, revoked or lacking permission",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PROVIDER_RESPONSE_TOO_LARGE",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "A provider response exceeded the adapter's size limit and was not read",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PROVIDER_ERROR",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The provider failed or refused the call for a reason other than its credential",
+      "since": "1.8.0"
+    },
+    {
       "code": "PRINCIPAL_INACTIVE",
       "applies_to": ["DENY"],
       "domain": "identity",
@@ -840,13 +884,6 @@
       "applies_to": ["DENY"],
       "domain": "operations",
       "description": "The idempotency key was already used with a different request",
-      "since": "1.8.0"
-    },
-    {
-      "code": "PRECONDITION_FAILED",
-      "applies_to": ["DENY"],
-      "domain": "operations",
-      "description": "A precondition the effect type declares does not hold, so no attempt was created",
       "since": "1.8.0"
     }
   ]

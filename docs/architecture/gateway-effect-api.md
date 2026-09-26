@@ -360,8 +360,32 @@ a certain FAILED and the reservation is released. The Propose-time
 `failed_precondition` error whose `ErrorDetail.reason_code` is
 `PRECONDITION_FAILED`.
 
-`READBACK_MISMATCH` and `PRECONDITION_FAILED` are registered by the slice that
-first emits them (HELM-751 s3 / HELM-753 adapter).
+The adapter is `core/pkg/gateway/adapters/github` (HELM-753), a library that
+no shipped binary calls until HELM-751 s3 wires `Dispatch` and `Observe` to
+it. It performs all three effects above. It registers and emits `READBACK_MISMATCH` and `PRECONDITION_FAILED`, plus
+`PERMIT_ARGUMENT_MISMATCH` (the permit's argument digest is not SHA-256 of the
+bytes it is about to send, audit 09-01), `PROVIDER_CREDENTIAL_REJECTED`,
+`PROVIDER_RESPONSE_TOO_LARGE` (audit 09-04) and `PROVIDER_ERROR`. Its dispatch
+answers one of three statuses:
+
+- `SENT`: the provider accepted the write, or already holds the ref or open
+  pull request the write would create. The adapter never overwrites it, and
+  `Observe` decides the outcome: SUCCEEDED if it is this effect, otherwise
+  FAILED with `READBACK_MISMATCH`.
+- `NOT_SENT`: nothing visible was written, so the outcome is certainly FAILED
+  with the reason, and the gateway records OBSERVED(FAILED) and releases the
+  reservation. Before the ref exists, the branch's new objects are
+  unreachable. A `PRECONDITION_FAILED` at Dispatch (for example, the head
+  moved) is always `NOT_SENT`, never UNKNOWN.
+- `INDEFINITE`: the write may have happened, for example after a lost answer,
+  a 5xx or a 422 to the write itself. The attempt is UNKNOWN, and `Observe`
+  reconciles it; it is never dispatched again.
+
+The read-back does not check file modes, because the comparison does not
+report them. `files_digest` is computed from the proposal, and the read-back
+has confirmed each blob ID in it but not the modes. `CheckBranchAttempt` in
+the same package is the pure form of the Propose precondition above, for the
+gateway to call.
 
 ### Reason codes
 

@@ -1,6 +1,6 @@
 ---
 title: Kubernetes Deployment
-last_reviewed: 2026-07-10
+last_reviewed: 2026-09-26
 ---
 
 # Kubernetes Deployment
@@ -77,6 +77,34 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | `helm.storage.type` | `sqlite` | Uses local SQLite unless another supported store is configured. |
 | `persistence.enabled` | `true` | Creates or reuses a PVC for receipts, state, and artifacts. |
 | `ingress.enabled` | `false` | Optional ingress; provide TLS and ingress class explicitly. |
+| `helm.tls.existingSecret` | empty | `kubernetes.io/tls` Secret whose `tls.crt` and `tls.key` serve the API listener over HTTPS (`HELM_TLS_CERT_FILE`, `HELM_TLS_KEY_FILE`). Empty keeps plain HTTP. |
+| `helm.tls.clientAuth` | empty | `require` or `verify-if-given` client certificates against the Secret's `ca.crt` (`HELM_TLS_CLIENT_AUTH`, `HELM_TLS_CLIENT_CA_FILE`). Needs `helm.tls.existingSecret`. |
+| `helm.auth.organizationRuntimeAPIKeySecretKey` | `HELM_ORGANIZATION_RUNTIME_API_KEY` | Key read from `helm.auth.existingSecret` into `HELM_ORGANIZATION_RUNTIME_API_KEY`, as an optional key. Empty stops reading it. |
+
+## Native TLS For In-Cluster Callers
+
+The Control Plane reaches the Kernel over HTTPS inside the cluster without an
+Ingress. Issue a certificate for the Kernel Service name, for example with a
+cert-manager `Certificate` whose `secretName` is `helm-kernel-tls`, then:
+
+```bash
+helm upgrade --install helm-ai-kernel deploy/helm-chart \
+  --set helm.auth.existingSecret=helm-auth \
+  --set helm.tls.existingSecret=helm-kernel-tls
+```
+
+The Secret is mounted whole at `/var/run/secrets/helm-tls`, so a rotated
+certificate reaches the running Kernel without a restart. The liveness and
+readiness probes use the plain-HTTP health port and do not change. The chart
+refuses TLS together with the config-reloader sidecar, which wakes the API
+listener over plain HTTP. An Ingress in front of a TLS listener needs its
+controller's HTTPS-backend setting.
+
+Add `--set helm.tls.clientAuth=require` to demand a client certificate signed
+by the Secret's `ca.crt`. Put `HELM_ORGANIZATION_RUNTIME_API_KEY` in the
+`helm-auth` Secret to open the organization-runtime route to the Control
+Plane. The Control Plane pins the receipt signer from
+`GET /api/v1/receipt-keyring`; see [HTTP API](reference/http-api.md#receipt-keyring).
 
 ## Smoke Checks
 

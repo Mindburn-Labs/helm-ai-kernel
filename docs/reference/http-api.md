@@ -1,6 +1,6 @@
 ---
 title: HTTP API
-last_reviewed: 2026-07-11
+last_reviewed: 2026-09-26
 ---
 
 # HTTP API
@@ -18,6 +18,9 @@ Use the CLI first. Use HTTP when you need a local client or generated types.
 | Local boundary | `http://127.0.0.1:7714` |
 | Local API server | `http://127.0.0.1:8080` |
 | OpenAI-compatible proxy | `http://127.0.0.1:9090/v1` |
+
+The API server speaks `https://` instead when native TLS is configured; see
+[Native TLS](#native-tls).
 
 ## Public Route Families
 
@@ -45,6 +48,32 @@ public docs surface.
 | `tenant_scoped` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` and matching tenant/principal context |
 | `admin` / `authenticated` | Requires `Authorization: Bearer $HELM_ADMIN_API_KEY` |
 | `service_internal` | Requires `Authorization: Bearer $HELM_SERVICE_API_KEY` |
+
+## Native TLS
+
+`serve` terminates TLS on its API listener when both of these are set:
+
+| Variable | Meaning |
+| --- | --- |
+| `HELM_TLS_CERT_FILE` | PEM certificate chain for the API listener |
+| `HELM_TLS_KEY_FILE` | PEM private key for that certificate |
+| `HELM_TLS_CLIENT_AUTH` | Optional: `require` or `verify-if-given` client certificates. Unset means off |
+| `HELM_TLS_CLIENT_CA_FILE` | PEM CA bundle for client certificates; required with, and only with, `HELM_TLS_CLIENT_AUTH` |
+
+- Set both the certificate and the key, or neither. Any partial or unreadable
+  configuration stops `serve` at startup; it never falls back to plain HTTP.
+- The minimum protocol version is TLS 1.2.
+- The pair is re-read on the next handshake after either file's modification
+  time or size changes, so a Secret that cert-manager rotates in place is
+  picked up without a restart. A pair that fails to load is skipped and the
+  previous one keeps serving. The client CA is read once at startup.
+- With `HELM_TLS_CLIENT_AUTH=require`, a client without a certificate from
+  that CA is refused during the handshake. The verified certificate is the one
+  `HELM_CP_IDENTITY_REQUIRE_CNF` binds Control Plane tokens to.
+- With none of the variables set, the listener is plain HTTP as before.
+- The health (`HELM_HEALTH_PORT`) and metrics (`HELM_METRICS_PORT`) listeners
+  stay plain HTTP, so Kubernetes probes are unchanged.
+- TLS is not supported together with the Desktop loopback transport.
 
 ## Tenant and Workspace Binding
 
@@ -128,8 +157,9 @@ Request bodies and `context` never select a scope; see below.
 **What this does not provide.** With a token, identity no longer comes from
 headers, but a compromised Control Plane issuer can still mint a token for any
 tenant, and a token can be replayed within its lifetime by anyone who can read
-the plain-HTTP pod traffic; `HELM_CP_IDENTITY_REQUIRE_CNF` binds tokens to an
-mTLS client certificate where one exists. On the legacy path the admin credential is shared. Whoever holds
+the pod traffic when the API listener runs without [native TLS](#native-tls);
+`HELM_CP_IDENTITY_REQUIRE_CNF` binds tokens to the mTLS client certificate
+that `HELM_TLS_CLIENT_AUTH=require` verifies. On the legacy path the admin credential is shared. Whoever holds
 it can assert any registered tenant, and with the fence off any workspace.
 These checks catch a missing or wrong binding from a
 correct caller; they do not isolate tenants from a compromised caller. That
@@ -138,6 +168,33 @@ not implemented yet.
 
 The emergency-stop fence is a dispatch fence only; it does not cancel already
 running work.
+
+## Receipt Keyring
+
+`GET /api/v1/receipt-keyring` is public and read-only. It returns the public
+half of the receipt signer the Kernel is running, in the exact shape the
+Control Plane reads from `HELM_KERNEL_RECEIPT_KEYRING`:
+
+```json
+{"keyring_version":"kernel-evaluate-receipt-keyring.v1","keys":[{"key_id":"root","profile":"classical","ed25519_public_key_hex":"<64 lowercase hex>"}]}
+```
+
+- `key_id`, `profile` and the public keys are the values the signer stamps on
+  every receipt (`key_id`, `signature_profile`, `public_key_set`).
+- `profile` is `classical` (Ed25519, the default), `hybrid` (Ed25519 and
+  ML-DSA-65, with `HELM_RECEIPT_PROFILE=hybrid`, adding
+  `ml_dsa_65_public_key_hex`) or `pqc` (ML-DSA-65 only).
+- The body is one JSON object with no other fields, so it can be stored as
+  the Control Plane's pin as-is:
+
+  ```bash
+  curl -fsS --cacert ca.crt https://<kernel>:8080/api/v1/receipt-keyring
+  ```
+
+- Without a receipt signer the route answers `503`, never an empty `keys`
+  array, which the Control Plane would read as "not configured".
+- It carries no private key material. Fetch it over TLS or check it out of
+  band: over plain HTTP a network attacker could substitute the keys.
 
 ## Receipt Headers
 

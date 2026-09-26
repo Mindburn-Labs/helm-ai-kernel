@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/github/repository_get.v1.json",
+  "title": "github.repository.get v1 arguments",
+  "description": "EffectDescriptor.arguments for effect_type github.repository.get (HELM-753), a read. The target is github.com/{owner}/{repo}; the repository comes only from the target. The result gives the default branch and its head commit, and the requested branch's head when one is named, so a later github.branch.create_from_changes attempt takes base and base_sha from a gateway read instead of from Zone B. Rules JSON Schema cannot express, and the gateway enforces before admission: no duplicate object keys; UTF-8 only; the whole document is at most 4096 bytes; branch passes git check-ref-format.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema"
+  ],
+  "properties": {
+    "schema": {
+      "const": "helm.github.repository.get.v1"
+    },
+    "branch": {
+      "description": "A branch whose head to read as well.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9._/-]+$",
+      "not": {
+        "pattern": "^refs/"
+      }
+    }
+  },
+  "x-helm": {
+    "effect_type": "github.repository.get",
+    "target": "github.com/{owner}/{repo}",
+    "risk_class": "low",
+    "idempotent": "yes: a read",
+    "observable": "yes: the read is the observation",
+    "reversible": "not applicable: no write",
+    "mediation": "enforced",
+    "result": "helm.gateway.v1.Observation.github_repository (GitHubRepositoryResult)"
+  }
+}

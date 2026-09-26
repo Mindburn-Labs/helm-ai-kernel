@@ -42,10 +42,12 @@ test-receipt-store-postgres-migration:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/store -run '^(TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash|TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor)$$' -count=1
 # postgres-proofs runs every Postgres-gated proof in scripts/ci/postgres-proofs.txt
-# against HELM_TEST_POSTGRES_URL and fails on any skip, failure or short count.
+# and fails on any skip, failure or short count. It uses HELM_TEST_POSTGRES_URL
+# when set, else a disposable PostgreSQL 16 cluster; no PostgreSQL 16 fails it.
+# The postgres-proofs quality gate runs it in `make check`.
 .PHONY: postgres-proofs
 postgres-proofs:
-	bash scripts/ci/postgres_proofs.sh
+	bash scripts/ci/postgres_proofs_gate.sh
 
 test-generated-spec-approval-ceremony-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
@@ -517,6 +519,15 @@ bench-pin:
 
 PROTO_DIR := protocols/proto
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto' 2>/dev/null)
+# helm.gateway.v1, the gateway effect API (HELM-751), is served through
+# ConnectRPC (target architecture §11.1), so its Go stubs come from
+# protoc-gen-connect-go, in the same package as the messages, instead of
+# protoc-gen-go-grpc. It has no Python, TypeScript, Java or Rust binding yet:
+# the TS and Python clients are generated for it in their own slice (§11.3),
+# and Java and Rust are being retired (HELM-756). Publishing a gRPC-shaped
+# binding first would freeze a client shape that slice has not chosen.
+CONNECT_PROTO_FILES := $(filter $(PROTO_DIR)/helm/gateway/%,$(PROTO_FILES))
+GRPC_PROTO_FILES := $(filter-out $(CONNECT_PROTO_FILES),$(PROTO_FILES))
 
 codegen: codegen-go codegen-python codegen-ts codegen-java codegen-rust
 
@@ -524,14 +535,17 @@ codegen-go:
 	@mkdir -p sdk/go/gen/kernelv1
 	protoc --go_out=sdk/go/gen --go-grpc_out=sdk/go/gen \
 		--go_opt=paths=source_relative --go-grpc_opt=paths=source_relative \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
+	protoc --go_out=sdk/go/gen --connect-go_out=sdk/go/gen \
+		--go_opt=paths=source_relative --connect-go_opt=paths=source_relative,package_suffix \
+		-I$(PROTO_DIR) $(CONNECT_PROTO_FILES)
 
 codegen-python:
 	@mkdir -p sdk/python/helm_sdk/generated
 	python -m grpc_tools.protoc --python_out=sdk/python/helm_sdk/generated \
 		--grpc_python_out=sdk/python/helm_sdk/generated \
 		--pyi_out=sdk/python/helm_sdk/generated \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
 
 codegen-ts:
 	@mkdir -p sdk/ts/src/generated
@@ -539,12 +553,12 @@ codegen-ts:
 	protoc --plugin=./sdk/ts/node_modules/.bin/protoc-gen-ts_proto \
 		--ts_proto_out=sdk/ts/src/generated \
 		--ts_proto_opt=outputServices=grpc-js \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
 
 codegen-java:
 	@mkdir -p sdk/java/src/main/java
 	protoc --java_out=sdk/java/src/main/java \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
 	@find sdk/java/src/main/java -name '*.java' -print0 | xargs -0 perl -pi -e 's/[ \t]+$$//'
 
 codegen-rust:

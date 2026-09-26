@@ -400,3 +400,92 @@ func TestTenantRowSecurityIsolatesTenantsForARestrictedRole(t *testing.T) {
 		t.Fatalf("an obligation without a tenant was written: err=%v", err)
 	}
 }
+
+// HELM-750 s2a: the authority rows are tenant tables under the same catalog
+// check ValidateRuntime runs. After the migration (twice: it is idempotent)
+// each one exists with tenant_id and forced tenant row security, and weakening
+// any one of them is reported by name.
+func TestAuthorityRowTablesAreCoveredByTheTenantCatalogCheck(t *testing.T) {
+	db, base, schema := postgresTestDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	for run := 0; run < 2; run++ {
+		if err := Migrate(ctx, db); err != nil {
+			t.Fatalf("migrate (run %d): %v", run+1, err)
+		}
+	}
+	for _, table := range AuthorityRowTables {
+		var forced bool
+		err := db.QueryRowContext(ctx, `SELECT relation.relrowsecurity AND relation.relforcerowsecurity
+			FROM pg_catalog.pg_class AS relation
+			JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+			JOIN pg_catalog.pg_attribute AS attribute ON attribute.attrelid = relation.oid AND attribute.attname = 'tenant_id'
+			WHERE namespace.nspname = current_schema() AND relation.relname = $1`, table).Scan(&forced)
+		if err != nil {
+			t.Fatalf("%s: not a tenant table in the kernel schema: %v", table, err)
+		}
+		if !forced {
+			t.Fatalf("%s: row security is not forced", table)
+		}
+	}
+	if unforced, err := TenantTablesWithoutForcedRowSecurity(ctx, db); err != nil || len(unforced) > 0 {
+		t.Fatalf("after migration: unforced=%v err=%v", unforced, err)
+	}
+	for _, table := range AuthorityRowTables {
+		for _, weaken := range []struct{ ddl, restore string }{
+			{`ALTER TABLE ` + table + ` NO FORCE ROW LEVEL SECURITY`, `ALTER TABLE ` + table + ` FORCE ROW LEVEL SECURITY`},
+			{`CREATE POLICY open_read ON ` + table + ` USING (true)`, `DROP POLICY open_read ON ` + table},
+		} {
+			if _, err := db.ExecContext(ctx, weaken.ddl); err != nil {
+				t.Fatalf("%s: %v", weaken.ddl, err)
+			}
+			unforced, err := TenantTablesWithoutForcedRowSecurity(ctx, db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(unforced, ",") != table {
+				t.Fatalf("%s: the catalog check reported %v, want exactly %s", weaken.ddl, unforced, table)
+			}
+			if _, err := db.ExecContext(ctx, weaken.restore); err != nil {
+				t.Fatalf("%s: %v", weaken.restore, err)
+			}
+		}
+	}
+
+	// ValidateRuntime, under a restricted serving role, starts on the
+	// migrated schema and refuses once an authority table loses FORCE.
+	role := schema + "_serving"
+	for _, statement := range []string{
+		`CREATE ROLE ` + role + ` LOGIN PASSWORD 'rls-probe' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`,
+		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
+		`GRANT SELECT ON ALL TABLES IN SCHEMA ` + schema + ` TO ` + role,
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	t.Cleanup(func() {
+		_, _ = db.Exec(`REVOKE ALL ON ALL TABLES IN SCHEMA ` + schema + ` FROM ` + role)
+		_, _ = db.Exec(`REVOKE ALL ON SCHEMA ` + schema + ` FROM ` + role)
+		_, _ = db.Exec(`DROP ROLE IF EXISTS ` + role)
+	})
+	parsed, err := url.Parse(withSearchPath(t, base, schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed.User = url.UserPassword(role, "rls-probe")
+	serving, err := sql.Open("postgres", parsed.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serving.Close()
+	if err := ValidateRuntime(ctx, serving, RuntimeOptions{}); err != nil {
+		t.Fatalf("ValidateRuntime refused the migrated schema: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `ALTER TABLE authority_mandates NO FORCE ROW LEVEL SECURITY`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRuntime(ctx, serving, RuntimeOptions{}); err == nil || !strings.Contains(err.Error(), "authority_mandates") {
+		t.Fatalf("ValidateRuntime started with authority_mandates unforced: %v", err)
+	}
+}

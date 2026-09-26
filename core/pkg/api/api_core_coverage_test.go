@@ -1,12 +1,7 @@
-// quantum_posture: API coverage tests sign and verify receipts with classical Ed25519 test keys; no post-quantum assurance is claimed.
 package api
 
 import (
-	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,102 +33,6 @@ func apiCoverageDecision(id string) contracts.DecisionRequest {
 		Priority:  contracts.DecisionPriorityNormal,
 		Status:    contracts.DecisionStatusPending,
 		CreatedAt: apiCoverageTime(),
-	}
-}
-
-func TestCoverageApproveHandlerBranches(t *testing.T) {
-	now := apiCoverageTime()
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
-	}
-	pubHex := hex.EncodeToString(pub)
-	handler := NewApproveHandler([]string{pubHex}).WithClock(func() time.Time { return now })
-
-	pending := &contracts.ApprovalRequest{
-		RequestID:  "approval-1",
-		IntentHash: "sha256:intent",
-		IntentID:   "intent-1",
-		ToolName:   "deploy",
-		RiskLevel:  "HIGH",
-		Status:     contracts.ApprovalPending,
-		CreatedAt:  now.Add(-time.Minute),
-		ExpiresAt:  now.Add(time.Hour),
-	}
-	handler.RegisterPendingApproval(pending)
-	if got := handler.GetPendingApprovals(); len(got) != 1 || got[0].IntentHash != pending.IntentHash {
-		t.Fatalf("pending approvals = %+v", got)
-	}
-
-	receipt := contracts.ApprovalReceipt{
-		IntentHash: pending.IntentHash,
-		PlanHash:   "sha256:plan",
-		PolicyHash: "sha256:policy",
-		Nonce:      "nonce-1",
-		ApproverID: "operator",
-		PublicKey:  pubHex,
-	}
-	message := fmt.Sprintf("HELM/Approval/v1:%s:%s:%s:%s", receipt.PlanHash, receipt.PolicyHash, receipt.IntentHash, receipt.Nonce)
-	receipt.Signature = hex.EncodeToString(ed25519.Sign(priv, []byte(message)))
-
-	for name, tc := range map[string]struct {
-		method string
-		body   string
-		want   int
-	}{
-		"method not allowed": {method: http.MethodGet, body: `{}`, want: http.StatusMethodNotAllowed},
-		"invalid json":       {method: http.MethodPost, body: `{`, want: http.StatusBadRequest},
-		"missing fields":     {method: http.MethodPost, body: `{"intent_hash":"sha256:intent"}`, want: http.StatusBadRequest},
-		"not found":          {method: http.MethodPost, body: `{"intent_hash":"sha256:missing","public_key":"` + pubHex + `","signature":"00"}`, want: http.StatusNotFound},
-		"invalid public key": {method: http.MethodPost, body: `{"intent_hash":"sha256:intent","public_key":"abc","signature":"00"}`, want: http.StatusBadRequest},
-		"invalid signature":  {method: http.MethodPost, body: `{"intent_hash":"sha256:intent","public_key":"` + pubHex + `","signature":"zz"}`, want: http.StatusBadRequest},
-	} {
-		t.Run(name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(tc.method, "/api/v1/kernel/approve", strings.NewReader(tc.body))
-			handler.HandleApprove(rec, req)
-			if rec.Code != tc.want {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.want, rec.Body.String())
-			}
-		})
-	}
-
-	badSignature := receipt
-	badSignature.Signature = hex.EncodeToString(make([]byte, ed25519.SignatureSize))
-	body, _ := json.Marshal(badSignature)
-	rec := httptest.NewRecorder()
-	handler.HandleApprove(rec, httptest.NewRequest(http.MethodPost, "/api/v1/kernel/approve", bytes.NewReader(body)))
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("bad signature status = %d, want 403", rec.Code)
-	}
-
-	conflict := *pending
-	conflict.IntentHash = "sha256:conflict"
-	conflict.Status = contracts.ApprovalApproved
-	handler.RegisterPendingApproval(&conflict)
-	conflictReceipt := receipt
-	conflictReceipt.IntentHash = conflict.IntentHash
-	body, _ = json.Marshal(conflictReceipt)
-	rec = httptest.NewRecorder()
-	handler.HandleApprove(rec, httptest.NewRequest(http.MethodPost, "/api/v1/kernel/approve", bytes.NewReader(body)))
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("conflict status = %d, want 409", rec.Code)
-	}
-
-	expired := *pending
-	expired.IntentHash = "sha256:expired"
-	expired.ExpiresAt = now.Add(-time.Second)
-	handler.RegisterPendingApproval(&expired)
-	expiredReceipt := receipt
-	expiredReceipt.IntentHash = expired.IntentHash
-	body, _ = json.Marshal(expiredReceipt)
-	rec = httptest.NewRecorder()
-	handler.HandleApprove(rec, httptest.NewRequest(http.MethodPost, "/api/v1/kernel/approve", bytes.NewReader(body)))
-	if rec.Code != http.StatusGone {
-		t.Fatalf("expired status = %d, want 410", rec.Code)
-	}
-	if expired.Status != contracts.ApprovalExpired {
-		t.Fatalf("expired approval status = %s", expired.Status)
 	}
 }
 

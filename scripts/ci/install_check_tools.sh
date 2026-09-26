@@ -35,6 +35,12 @@ fetch() {
 sudo apt-get update -qq
 sudo apt-get install --yes --no-install-recommends ripgrep
 
+# PostgreSQL 16 server binaries: the postgres-proofs gate starts a disposable
+# cluster from /usr/lib/postgresql/16/bin. The runner image usually has them.
+if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+    sudo apt-get install --yes --no-install-recommends postgresql-16
+fi
+
 # protoc: fixture descriptors and codegen.
 bash "${ROOT}/scripts/ci/install_protoc.sh"
 
@@ -60,3 +66,4 @@ python -m pip install --only-binary=:all: --require-hashes -r "${ROOT}/.github/s
 python -m pip install --require-hashes -r "${ROOT}/.github/codegen-requirements.txt"
 GOBIN="$bin_dir" go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
 GOBIN="$bin_dir" go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
+GOBIN="$bin_dir" go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.0

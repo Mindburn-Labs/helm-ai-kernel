@@ -3,9 +3,10 @@
 #
 # Diffs an API contract surface against its required baseline and fails on a
 # backward-incompatible change, so a break cannot merge or release silently
-# while the version number claims compatibility. A source-controlled
-# major-version bump remains the only compatibility escape; mutable PR labels
-# and environment variables never downgrade this gate.
+# while the version number claims compatibility. A source-controlled version
+# bump remains the only compatibility escape: a major bump, or a minor bump
+# while the version is still 0.y.z (semver §4). Mutable PR labels and
+# environment variables never downgrade this gate.
 #
 # Usage: contract_breaking.sh <openapi|proto> [base|release]
 # "base" (default) compares against the exact remote PR base named by
@@ -90,12 +91,30 @@ esac
 
 major() { printf '%s' "${1%%.*}"; }              # "1.4.0" -> "1"
 
+# break_allowed <current> <base>: succeeds when the version bump permits a
+# backward-incompatible change. A major bump always does. While both versions
+# are 0.y.z, a minor bump does too: semver §4 reserves 0.y.z for initial
+# development, where the minor is the compatibility boundary. A patch bump
+# never does, and a non-numeric version never does.
+break_allowed() {
+  local cur_major base_major cur_minor base_minor
+  cur_major="$(major "$1")"
+  base_major="$(major "$2")"
+  [[ "$cur_major" =~ ^[0-9]+$ && "$base_major" =~ ^[0-9]+$ ]] || return 1
+  [ "$cur_major" -gt "$base_major" ] && return 0
+  [ "$cur_major" -eq 0 ] && [ "$base_major" -eq 0 ] || return 1
+  cur_minor="$(major "${1#*.}")"
+  base_minor="$(major "${2#*.}")"
+  [[ "$cur_minor" =~ ^[0-9]+$ && "$base_minor" =~ ^[0-9]+$ ]] || return 1
+  [ "$cur_minor" -gt "$base_minor" ]
+}
+
 # $1 = surface label, $2 = differ output. Approval must be represented by
 # source-controlled compatibility/versioning policy, not mutable PR data.
 report_break() {
-  printf '::error::%s: backward-incompatible contract change without a major bump\n' "$1"
+  printf '::error::%s: backward-incompatible contract change without a major bump (or a minor bump in 0.y.z)\n' "$1"
   printf '%s\n' "$2"
-  printf 'Fix it or make an intentional, source-controlled major-version bump.\n'
+  printf 'Fix it or make an intentional, source-controlled version bump (major; minor while in 0.y.z).\n'
   return 1
 }
 
@@ -113,10 +132,12 @@ report_buf_finding() {
   printf '%s\n' "$2"
 }
 
+# Reads the whole input (no early awk exit): under pipefail an early exit
+# SIGPIPEs the writer and fails the assignment that calls this.
 openapi_version() {                              # <ref-or-WORKTREE> <spec-path>; "" if absent
   { if [ "$1" = "WORKTREE" ]; then cat "$2" 2>/dev/null; else git show "$1:$2" 2>/dev/null; fi; } |
     awk '/^[^[:space:]]/ { in_info = ($1 == "info:") }
-         in_info && $1 == "version:" { v = $2; gsub(/["'"'"' ]/, "", v); print v; exit }'
+         in_info && $1 == "version:" && !found { v = $2; gsub(/["'"'"' ]/, "", v); print v; found = 1 }'
 }
 
 case "$kind" in
@@ -132,10 +153,10 @@ openapi)
       echo "openapi ${spec}: new on this branch (no baseline spec to diff) — skip"
       continue
     fi
-    cur_major="$(major "$(openapi_version WORKTREE "$spec")")"
-    base_major="$(major "$(openapi_version "$base" "$spec")")"
-    if [[ "$cur_major" =~ ^[0-9]+$ && "$base_major" =~ ^[0-9]+$ && "$cur_major" -gt "$base_major" ]]; then
-      echo "openapi ${spec}: major ${base_major} -> ${cur_major} — break allowed by version bump"
+    cur_version="$(openapi_version WORKTREE "$spec")"
+    base_version="$(openapi_version "$base" "$spec")"
+    if break_allowed "$cur_version" "$base_version"; then
+      echo "openapi ${spec}: ${base_version} -> ${cur_version} — break allowed by version bump"
       continue
     fi
     base_file="$(mktemp)"
@@ -171,14 +192,12 @@ proto)
     echo "::error::missing VERSION in contract-gate worktree" >&2
     exit 2
   fi
-  cur_major="$(major "$current_version")"
   if ! base_version="$(git show "${base}:VERSION" 2>/dev/null)"; then
     echo "::error::missing VERSION in contract-gate baseline ${base_label}" >&2
     exit 2
   fi
-  base_major="$(major "$base_version")"
-  if [[ "$cur_major" =~ ^[0-9]+$ && "$base_major" =~ ^[0-9]+$ && "$cur_major" -gt "$base_major" ]]; then
-    echo "proto: major ${base_major} -> ${cur_major} — break allowed by version bump"
+  if break_allowed "$current_version" "$base_version"; then
+    echo "proto: ${base_version} -> ${current_version} — break allowed by version bump"
     exit 0
   fi
   # protocols/proto is the IDL every SDK binding is generated from (HELM-747);

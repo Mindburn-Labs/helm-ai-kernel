@@ -404,6 +404,30 @@ const CapabilityRollbackPlanInvalid = "CAPABILITY_ROLLBACK_PLAN_INVALID"
 // without an authoritative approval integration
 const CapabilityIrreversible = "CAPABILITY_IRREVERSIBLE"
 
+// PreconditionFailed DENY: A precondition the effect type declares does not
+// hold, so no attempt was created
+const PreconditionFailed = "PRECONDITION_FAILED"
+
+// ReadbackMismatch DENY: The adapter's read-back of the provider does not match
+// the proposed effect, so the outcome is FAILED
+const ReadbackMismatch = "READBACK_MISMATCH"
+
+// PermitArgumentMismatch DENY: The arguments an adapter was about to send are
+// not the bytes the permit's argument digest covers
+const PermitArgumentMismatch = "PERMIT_ARGUMENT_MISMATCH"
+
+// ProviderCredentialRejected DENY: The connection's credential is unavailable,
+// or the provider rejected it as invalid, revoked or lacking permission
+const ProviderCredentialRejected = "PROVIDER_CREDENTIAL_REJECTED"
+
+// ProviderResponseTooLarge DENY: A provider response exceeded the adapter's
+// size limit and was not read
+const ProviderResponseTooLarge = "PROVIDER_RESPONSE_TOO_LARGE"
+
+// ProviderError DENY: The provider failed or refused the call for a reason
+// other than its credential
+const ProviderError = "PROVIDER_ERROR"
+
 // PrincipalInactive DENY: The requesting principal is unknown to the tenant or
 // disabled
 const PrincipalInactive = "PRINCIPAL_INACTIVE"
@@ -431,10 +455,6 @@ const ArithmeticOverflow = "ARITHMETIC_OVERFLOW"
 // IdempotencyConflict DENY: The idempotency key was already used with a
 // different request
 const IdempotencyConflict = "IDEMPOTENCY_CONFLICT"
-
-// PreconditionFailed DENY: A precondition the effect type declares does not
-// hold, so no attempt was created
-const PreconditionFailed = "PRECONDITION_FAILED"
 
 // ApproverNotDistinct DENY: The approver is the requester; an approval needs a
 // distinct principal
@@ -553,6 +573,12 @@ var all = [...]string{
 	CapabilityTokenInvalid,
 	CapabilityRollbackPlanInvalid,
 	CapabilityIrreversible,
+	PreconditionFailed,
+	ReadbackMismatch,
+	PermitArgumentMismatch,
+	ProviderCredentialRejected,
+	ProviderResponseTooLarge,
+	ProviderError,
 	PrincipalInactive,
 	MandateInactive,
 	MandateOutsideValidity,
@@ -560,7 +586,6 @@ var all = [...]string{
 	PerCallLimit,
 	ArithmeticOverflow,
 	IdempotencyConflict,
-	PreconditionFailed,
 	ApproverNotDistinct,
 	ApprovalRejected,
 	StepUpRequired,

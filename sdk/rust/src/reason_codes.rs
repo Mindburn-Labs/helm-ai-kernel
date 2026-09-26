@@ -219,6 +219,21 @@ pub const CAPABILITY_TOKEN_INVALID: &str = "CAPABILITY_TOKEN_INVALID";
 pub const CAPABILITY_ROLLBACK_PLAN_INVALID: &str = "CAPABILITY_ROLLBACK_PLAN_INVALID";
 /// DENY: Irreversible effect class cannot dispatch without an authoritative approval integration
 pub const CAPABILITY_IRREVERSIBLE: &str = "CAPABILITY_IRREVERSIBLE";
+/// DENY: A precondition the effect type declares does not hold, so no attempt was created
+pub const PRECONDITION_FAILED: &str = "PRECONDITION_FAILED";
+/// DENY: The adapter's read-back of the provider does not match the proposed effect, so the outcome
+/// is FAILED
+pub const READBACK_MISMATCH: &str = "READBACK_MISMATCH";
+/// DENY: The arguments an adapter was about to send are not the bytes the permit's argument digest
+/// covers
+pub const PERMIT_ARGUMENT_MISMATCH: &str = "PERMIT_ARGUMENT_MISMATCH";
+/// DENY: The connection's credential is unavailable, or the provider rejected it as invalid,
+/// revoked or lacking permission
+pub const PROVIDER_CREDENTIAL_REJECTED: &str = "PROVIDER_CREDENTIAL_REJECTED";
+/// DENY: A provider response exceeded the adapter's size limit and was not read
+pub const PROVIDER_RESPONSE_TOO_LARGE: &str = "PROVIDER_RESPONSE_TOO_LARGE";
+/// DENY: The provider failed or refused the call for a reason other than its credential
+pub const PROVIDER_ERROR: &str = "PROVIDER_ERROR";
 /// DENY: The requesting principal is unknown to the tenant or disabled
 pub const PRINCIPAL_INACTIVE: &str = "PRINCIPAL_INACTIVE";
 /// DENY: No active mandate held by the principal covers the effect, or a mandate of its chain is
@@ -235,8 +250,6 @@ pub const PER_CALL_LIMIT: &str = "PER_CALL_LIMIT";
 pub const ARITHMETIC_OVERFLOW: &str = "ARITHMETIC_OVERFLOW";
 /// DENY: The idempotency key was already used with a different request
 pub const IDEMPOTENCY_CONFLICT: &str = "IDEMPOTENCY_CONFLICT";
-/// DENY: A precondition the effect type declares does not hold, so no attempt was created
-pub const PRECONDITION_FAILED: &str = "PRECONDITION_FAILED";
 /// DENY: The approver is the requester; an approval needs a distinct principal
 pub const APPROVER_NOT_DISTINCT: &str = "APPROVER_NOT_DISTINCT";
 /// DENY: A distinct human approver rejected the escalated effect
@@ -351,6 +364,12 @@ pub const ALL: &[&str] = &[
     CAPABILITY_TOKEN_INVALID,
     CAPABILITY_ROLLBACK_PLAN_INVALID,
     CAPABILITY_IRREVERSIBLE,
+    PRECONDITION_FAILED,
+    READBACK_MISMATCH,
+    PERMIT_ARGUMENT_MISMATCH,
+    PROVIDER_CREDENTIAL_REJECTED,
+    PROVIDER_RESPONSE_TOO_LARGE,
+    PROVIDER_ERROR,
     PRINCIPAL_INACTIVE,
     MANDATE_INACTIVE,
     MANDATE_OUTSIDE_VALIDITY,
@@ -358,7 +377,6 @@ pub const ALL: &[&str] = &[
     PER_CALL_LIMIT,
     ARITHMETIC_OVERFLOW,
     IDEMPOTENCY_CONFLICT,
-    PRECONDITION_FAILED,
     APPROVER_NOT_DISTINCT,
     APPROVAL_REJECTED,
     STEP_UP_REQUIRED,

@@ -221,6 +221,21 @@ export const ReasonCodes = {
   CAPABILITY_ROLLBACK_PLAN_INVALID: "CAPABILITY_ROLLBACK_PLAN_INVALID",
   /** DENY: Irreversible effect class cannot dispatch without an authoritative approval integration */
   CAPABILITY_IRREVERSIBLE: "CAPABILITY_IRREVERSIBLE",
+  /** DENY: A precondition the effect type declares does not hold, so no attempt was created */
+  PRECONDITION_FAILED: "PRECONDITION_FAILED",
+  /** DENY: The adapter's read-back of the provider does not match the proposed effect, so the
+  /** outcome is FAILED */
+  READBACK_MISMATCH: "READBACK_MISMATCH",
+  /** DENY: The arguments an adapter was about to send are not the bytes the permit's argument
+  /** digest covers */
+  PERMIT_ARGUMENT_MISMATCH: "PERMIT_ARGUMENT_MISMATCH",
+  /** DENY: The connection's credential is unavailable, or the provider rejected it as invalid,
+  /** revoked or lacking permission */
+  PROVIDER_CREDENTIAL_REJECTED: "PROVIDER_CREDENTIAL_REJECTED",
+  /** DENY: A provider response exceeded the adapter's size limit and was not read */
+  PROVIDER_RESPONSE_TOO_LARGE: "PROVIDER_RESPONSE_TOO_LARGE",
+  /** DENY: The provider failed or refused the call for a reason other than its credential */
+  PROVIDER_ERROR: "PROVIDER_ERROR",
   /** DENY: The requesting principal is unknown to the tenant or disabled */
   PRINCIPAL_INACTIVE: "PRINCIPAL_INACTIVE",
   /** DENY: No active mandate held by the principal covers the effect, or a mandate of its chain is
@@ -237,8 +252,6 @@ export const ReasonCodes = {
   ARITHMETIC_OVERFLOW: "ARITHMETIC_OVERFLOW",
   /** DENY: The idempotency key was already used with a different request */
   IDEMPOTENCY_CONFLICT: "IDEMPOTENCY_CONFLICT",
-  /** DENY: A precondition the effect type declares does not hold, so no attempt was created */
-  PRECONDITION_FAILED: "PRECONDITION_FAILED",
   /** DENY: The approver is the requester; an approval needs a distinct principal */
   APPROVER_NOT_DISTINCT: "APPROVER_NOT_DISTINCT",
   /** DENY: A distinct human approver rejected the escalated effect */

@@ -381,56 +381,56 @@ removal_proofs:
     tests:
       - "core/cmd/helm-ai-kernel.TestReceiptKeyringMatchesTheIdentityStampedOnReceipts"
 
-  - control: CTL-051
+  - control: CTL-052
     file: core/pkg/gateway/admission/decide.go
     find: "\tif len(in.ActiveStops) > 0 {\n"
     replace: "\tif false && len(in.ActiveStops) > 0 {\n"
     tests:
       - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
-  - control: CTL-051
+  - control: CTL-052
     file: core/pkg/gateway/admission/decide.go
     find: "\t\tif m.Terms.Targets != nil && !slices.Contains(m.Terms.Targets, in.Target) {\n"
     replace: "\t\tif false && m.Terms.Targets != nil && !slices.Contains(m.Terms.Targets, in.Target) {\n"
     tests:
       - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
-  - control: CTL-051
+  - control: CTL-052
     file: core/pkg/gateway/admission/decide.go
     find: "\tif needsApproval(in, amount) {\n"
     replace: "\tif false && needsApproval(in, amount) {\n"
     tests:
       - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
-  - control: CTL-051
+  - control: CTL-052
     file: core/pkg/gateway/admission/digest.go
     find: "\tfield(&m, []byte(expiresAt.UTC().Truncate(time.Second).Format(\"2006-01-02T15:04:05Z\")))\n"
     replace: "\tfield(&m, []byte(expiresAt.UTC().Format(\"2006-01-02T15:04:05.999999999Z\")))\n"
     tests:
       - "core/pkg/gateway/admission.TestApprovalDigestV1MatchesTheDesignNoteVector"
-  - control: CTL-051
+  - control: CTL-052
     file: core/pkg/gateway/effectargs/effectargs.go
     find: "\t\t\tif _, dup := keys[key]; dup {\n"
     replace: "\t\t\tif _, dup := keys[key]; false && dup {\n"
     tests:
       - "core/pkg/gateway/effectargs.TestValidateRefusesMalformedArguments"
-  - control: CTL-051
+  - control: CTL-052
     file: core/pkg/gateway/server/auth.go
     find: "\t\tif id.Scope == scope {\n"
     replace: "\t\tif true || id.Scope == scope {\n"
     tests:
       - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
 
-  - control: CTL-052
+  - control: CTL-053
     file: core/pkg/gateway/server/auth.go
     find: "\tif bound[0].AttemptID != attemptID || bound[0].Action != action {\n"
     replace: "\tif false && (bound[0].AttemptID != attemptID || bound[0].Action != action) {\n"
     tests:
       - "core/pkg/gateway/server.TestDecisionBinding"
-  - control: CTL-052
+  - control: CTL-053
     file: core/pkg/gateway/admission/decide.go
     find: "\t\tcase in.Approval.ApproverID == in.PrincipalID:\n"
     replace: "\t\tcase false && in.Approval.ApproverID == in.PrincipalID:\n"
     tests:
       - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
-  - control: CTL-052
+  - control: CTL-053
     file: core/pkg/gateway/admission/decisions.go
     find: "\treturn a.risk == string(mandates.RiskHigh) || a.risk == string(mandates.RiskIrreversible) ||\n"
     replace: "\treturn false && a.risk == string(mandates.RiskHigh) || a.risk == string(mandates.RiskIrreversible) ||\n"
@@ -2631,7 +2631,7 @@ controls:
       stops and lifts happen only through the library. Their shipped caller
       is the authority-change effect (helm.authority.*, contract 5) that a
       later HELM-751 slice dispatches. The read side is shipped: helm-gateway
-      admission (CTL-051) reads the same rows through
+      admission (CTL-052) reads the same rows through
       core/pkg/kernel/authority/mandates, re-checks that every link of the
       chain is within the one above it (DELEGATION_SCOPE_VIOLATION), and
       denies under a stop on any holder or delegator of the chain.
@@ -2643,7 +2643,7 @@ controls:
     protected_operations:
       - "Delegating, narrowing and revoking a mandate; adding and lowering limits; issuing and lifting stops."
     bypass_assumptions:
-      - "No shipped caller writes the rows; admission enforces what they say (CTL-051), not how they were written."
+      - "No shipped caller writes the rows; admission enforces what they say (CTL-052), not how they were written."
       - "The approval argument names principals; it is not yet a verified approval record (HELM-751)."
     tests:
       allowed:
@@ -2785,7 +2785,43 @@ controls:
         - "core/cmd/helm-ai-kernel.TestReceiptKeyringMatchesTheIdentityStampedOnReceipts"
       bypass:
         - "core/cmd/helm-ai-kernel.TestPublicRoutesAreDeclaredWithAReason"
+
   - id: CTL-051
+    title: "Effect adapters act only on the permitted bytes"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      The GitHub effect adapter's Dispatch refuses with
+      PERMIT_ARGUMENT_MISMATCH, before any provider call, unless the permit's
+      argument digest is SHA-256 of the exact argument bytes it is about to
+      act on (audit 09-01). It takes the repository only from a validated
+      github.com/{owner}/{repo} target and refuses arguments outside the closed
+      v1 schemas with SCHEMA_VIOLATION (audit 09-02).
+    status: observed-only
+    reason: >-
+      Library only. No shipped binary imports
+      core/pkg/gateway/adapters/github (a declared library root in
+      scripts/ci/dead-packages-allowlist.txt). HELM-751 s3 wires helm-gateway's
+      Dispatch to it; that slice adds the removal tests and can claim
+      enforcement for the tested path.
+    entry_points:
+      - "core/pkg/gateway/adapters.CheckPermitDigest"
+      - "core/pkg/gateway/adapters/github.Adapter.Dispatch"
+    config: []
+    protected_operations:
+      - "github.branch.create_from_changes and github.pull_request.create_draft dispatches."
+    bypass_assumptions:
+      - "No shipped caller exists, so nothing is enforced."
+      - "The digest binds the bytes, not their meaning: the gateway's admission decides what those bytes may do."
+    tests:
+      allowed:
+        - "core/pkg/gateway/adapters/github.TestQualificationFake"
+      forbidden:
+        - "core/pkg/gateway/adapters.TestCheckPermitDigest"
+        - "core/pkg/gateway/adapters/github.TestQualificationFake"
+        - "core/pkg/gateway/adapters/github.TestTargets"
+      removal: []
+      bypass: []
+  - id: CTL-052
     title: "Effect gateway admission"
     owner: Mindburn Labs core team (kernel)
     claim: >-
@@ -2819,7 +2855,7 @@ controls:
     protected_operations:
       - "Propose, GetAttempt and GetAttemptContent of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
-      - "Dispatch, Observe, Stop and Lift answer unimplemented in this slice; nothing in the binary consumes a permit yet, so the dispatch-claim half of ADR-0001 (version re-check, stops after admission) is not enforced here. Approve, Reject and Cancel are CTL-052."
+      - "Dispatch, Observe, Stop and Lift answer unimplemented in this slice; nothing in the binary consumes a permit yet, so the dispatch-claim half of ADR-0001 (version re-check, stops after admission) is not enforced here. Approve, Reject and Cancel are CTL-053."
       - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which no shipped binary calls yet (CTL-046); the gateway trusts the rows it finds."
       - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2)."
       - "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR)."
@@ -2855,7 +2891,7 @@ controls:
         - "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired"
         - "core/pkg/gateway/admission.TestGatewayDoesNotImportTheLegacyRuntime"
         - "core/cmd/helm-gateway.TestServeOverDevInsecureLoopbackAnswersGRPC"
-  - id: CTL-052
+  - id: CTL-053
     title: "Gateway approval decisions"
     owner: Mindburn Labs core team (kernel)
     claim: >-
@@ -2881,7 +2917,7 @@ controls:
       - "core/pkg/gateway/server.Server.Approve"
       - "core/pkg/gateway/server.Server.Cancel"
     config:
-      - "The HELM_CP_IDENTITY_* token configuration of CTL-051; decide and stop tokens are minted per decision by the Control Plane and carry iss, jti and exp."
+      - "The HELM_CP_IDENTITY_* token configuration of CTL-052; decide and stop tokens are minted per decision by the Control Plane and carry iss, jti and exp."
     protected_operations:
       - "Approve, Reject and Cancel of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
@@ -2889,7 +2925,7 @@ controls:
       - "An escalation past its expiry is refused but stays ESCALATED: the River job that moves it to EXPIRED is a later slice."
       - "A decide token binds the attempt and action; the approver sees and hashes the arguments through GetAttemptContent, which this slice serves but cannot force a client to use."
       - "Releasing an ADMITTED attempt keeps its distinct-value rows, so the value still counts as seen in its bucket."
-      - "The trust limits of CTL-051 (ADR-0005 issuer trust, no deployment yet) apply."
+      - "The trust limits of CTL-052 (ADR-0005 issuer trust, no deployment yet) apply."
     tests:
       allowed:
         - "core/pkg/gateway/admission.TestPostgresApproveByADistinctHumanAdmits"

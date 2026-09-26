@@ -1,0 +1,209 @@
+{{- if .Values.gateway.enabled }}
+{{- include "helm-ai-kernel.gatewayValidate" . }}
+{{- $g := .Values.gateway }}
+# The effect gateway (helm-gateway serve, Zone C): same image and tag as the
+# kernel, its own ServiceAccount, and the only Pod that mounts the GitHub App
+# credentials (R8).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helm-ai-kernel.gatewayName" . }}
+  labels:
+    {{- include "helm-ai-kernel.gatewayLabels" . | nindent 4 }}
+spec:
+  replicas: {{ $g.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "helm-ai-kernel.gatewaySelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if $g.github.installationsFile }}
+        checksum/github-installations: {{ $g.github.installationsFile | sha256sum }}
+        {{- end }}
+        {{- with $g.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "helm-ai-kernel.gatewayLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "helm-ai-kernel.gatewayName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: helm-gateway
+          image: {{ include "helm-ai-kernel.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/helm-gateway"]
+          args:
+            - serve
+            {{- if $g.tls.devInsecureLoopback }}
+            # Development only (refused when helm.production=true): plain
+            # HTTP on the Pod's loopback, reachable through kubectl
+            # port-forward and nothing else.
+            - --dev-insecure-listen=127.0.0.1:8443
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: HELM_GATEWAY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $g.database.existingSecret | quote }}
+                  key: {{ $g.database.existingSecretKey | quote }}
+            {{- with $g.controlPlaneIdentity }}
+            - name: HELM_CP_IDENTITY_JWKS_URL
+              value: {{ .jwksURL | quote }}
+            - name: HELM_CP_IDENTITY_ISSUER
+              value: {{ .issuer | quote }}
+            - name: HELM_CP_IDENTITY_AUDIENCE
+              value: {{ .audience | quote }}
+            - name: HELM_CP_IDENTITY_ACTOR
+              value: {{ .actor | quote }}
+            - name: HELM_CP_IDENTITY_REQUIRE_CNF
+              value: {{ ternary "1" "0" (default false .requireCNF) | quote }}
+            {{- if .caBundleConfigMap }}
+            - name: HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE
+              value: {{ printf "/var/run/secrets/helm-gateway-cp-identity-ca/%s" (default "ca.crt" .caBundleKey) | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if $g.tls.existingSecret }}
+            - name: HELM_TLS_CERT_FILE
+              value: "/var/run/secrets/helm-gateway-tls/tls.crt"
+            - name: HELM_TLS_KEY_FILE
+              value: "/var/run/secrets/helm-gateway-tls/tls.key"
+            {{- if $g.tls.clientAuth }}
+            - name: HELM_TLS_CLIENT_CA_FILE
+              value: "/var/run/secrets/helm-gateway-tls/ca.crt"
+            - name: HELM_TLS_CLIENT_AUTH
+              value: {{ $g.tls.clientAuth | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if $g.approvalWindow }}
+            - name: HELM_GATEWAY_APPROVAL_WINDOW
+              value: {{ $g.approvalWindow | quote }}
+            {{- end }}
+            {{- if $g.permitTTL }}
+            - name: HELM_GATEWAY_PERMIT_TTL
+              value: {{ $g.permitTTL | quote }}
+            {{- end }}
+            {{- if $g.github.existingSecret }}
+            # GitHub App credentials as files, for the connection custody of
+            # HELM-751 s3. The current binary does not read them yet.
+            - name: HELM_GATEWAY_GITHUB_APP_ID_FILE
+              value: "/var/run/secrets/helm-gateway-github/app-id"
+            - name: HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE
+              value: "/var/run/secrets/helm-gateway-github/private-key.pem"
+            {{- end }}
+            {{- if $g.github.installationsFile }}
+            - name: HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE
+              value: "/etc/helm-gateway/github/installations.json"
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # /readyz answers only when the database is reachable and its
+          # gateway schema is at this binary's head version.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml $g.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if $g.tls.existingSecret }}
+            # A whole-Secret mount (no subPath) so rotated files appear in place.
+            - name: gateway-tls
+              mountPath: /var/run/secrets/helm-gateway-tls
+              readOnly: true
+            {{- end }}
+            {{- if $g.controlPlaneIdentity.caBundleConfigMap }}
+            - name: cp-identity-ca
+              mountPath: /var/run/secrets/helm-gateway-cp-identity-ca
+              readOnly: true
+            {{- end }}
+            {{- if $g.github.existingSecret }}
+            - name: github-app
+              mountPath: /var/run/secrets/helm-gateway-github
+              readOnly: true
+            {{- end }}
+            {{- if $g.github.installationsFile }}
+            - name: github-installations
+              mountPath: /etc/helm-gateway/github
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if $g.tls.existingSecret }}
+        - name: gateway-tls
+          secret:
+            secretName: {{ $g.tls.existingSecret | quote }}
+            defaultMode: 256
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+              {{- if $g.tls.clientAuth }}
+              - key: ca.crt
+                path: ca.crt
+              {{- end }}
+        {{- end }}
+        {{- if $g.controlPlaneIdentity.caBundleConfigMap }}
+        - name: cp-identity-ca
+          configMap:
+            name: {{ $g.controlPlaneIdentity.caBundleConfigMap | quote }}
+        {{- end }}
+        {{- if $g.github.existingSecret }}
+        - name: github-app
+          secret:
+            secretName: {{ $g.github.existingSecret | quote }}
+            defaultMode: 256
+            items:
+              - key: {{ $g.github.appIdKey | quote }}
+                path: app-id
+              - key: {{ $g.github.privateKeyKey | quote }}
+                path: private-key.pem
+        {{- end }}
+        {{- if $g.github.installationsFile }}
+        - name: github-installations
+          configMap:
+            name: {{ include "helm-ai-kernel.gatewayName" . }}-github-installations
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

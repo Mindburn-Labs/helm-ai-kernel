@@ -88,10 +88,16 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-No public feature claim is active in this section. Keep future work, research
-scaffolds, and hardware-backed enforcement language out of the public changelog
-until a tagged release ships source-owned tests, verifier evidence, and release
-artifacts for that exact capability.
+### Added
+
+- The release image ships `/usr/local/bin/helm-gateway` beside
+  `helm-ai-kernel`. The chart gains a `gateway:` block, off by default, that
+  deploys `helm-gateway serve` with TLS, Control Plane identity tokens, a
+  NetworkPolicy, and a pre-install/pre-upgrade migrate hook. An optional
+  database bootstrap creates the ADR-0004 owner role (`helm_owner`) and runtime
+  role (`helm_gateway`) with least-privilege grants
+  (`deploy/helm-chart/files/gateway-db`). Default chart renders are unchanged.
+  HELM-789.
 
 ## [0.9.0] - 2026-09-26
 

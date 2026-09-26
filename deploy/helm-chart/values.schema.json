@@ -1034,6 +1034,333 @@
         }
       }
     },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Effect gateway (helm-gateway serve, Zone C). Off by default.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render the effect gateway (helm-gateway serve): Deployment, Service, ServiceAccount, NetworkPolicy and the migrate hook Job. Off by default; the default render is unchanged."
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Gateway replicas. Admission state is in Postgres, so replicas share nothing in process."
+        },
+        "podAnnotations": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": true,
+          "description": "Annotations for the gateway Pod."
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Resources for the gateway container and the migrate hook containers."
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Gateway Service.",
+          "properties": {
+            "type": {
+              "type": "string",
+              "default": "ClusterIP",
+              "description": "Gateway Service type."
+            },
+            "port": {
+              "type": "integer",
+              "default": 8443,
+              "description": "Service port for the Connect/gRPC API (container port 8443)."
+            }
+          }
+        },
+        "approvalWindow": {
+          "type": "string",
+          "default": "",
+          "description": "HELM_GATEWAY_APPROVAL_WINDOW, a Go duration. Empty keeps the binary default (24h)."
+        },
+        "permitTTL": {
+          "type": "string",
+          "default": "",
+          "description": "HELM_GATEWAY_PERMIT_TTL, a Go duration. Empty keeps the binary default (10m)."
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "TLS on the gateway API listener.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Existing kubernetes.io/tls Secret for the API listener: tls.crt, tls.key, and ca.crt when clientAuth is set. Required unless devInsecureLoopback."
+            },
+            "clientAuth": {
+              "type": "string",
+              "enum": [
+                "",
+                "require",
+                "verify-if-given"
+              ],
+              "default": "require",
+              "description": "HELM_TLS_CLIENT_AUTH. Non-empty mounts ca.crt from existingSecret as HELM_TLS_CLIENT_CA_FILE."
+            },
+            "devInsecureLoopback": {
+              "type": "boolean",
+              "default": false,
+              "description": "Development only: serve plain HTTP on 127.0.0.1:8443 (--dev-insecure-listen), reachable through kubectl port-forward only. Refused when helm.production=true."
+            }
+          }
+        },
+        "controlPlaneIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "ADR-0005 Control Plane identity tokens; jwksURL, issuer, audience and actor are required when the gateway is enabled.",
+          "properties": {
+            "jwksURL": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_JWKS_URL. Required."
+            },
+            "issuer": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_ISSUER. Required."
+            },
+            "audience": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_AUDIENCE, helm-gateway:<deployment id>. Required."
+            },
+            "actor": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_ACTOR, the Control Plane workload identity (act.sub). Required."
+            },
+            "requireCNF": {
+              "type": "boolean",
+              "default": false,
+              "description": "HELM_CP_IDENTITY_REQUIRE_CNF. Requires tls.clientAuth."
+            },
+            "caBundleConfigMap": {
+              "type": "string",
+              "default": "",
+              "description": "ConfigMap holding a pinned CA for the JWKS endpoint (HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE)."
+            },
+            "caBundleKey": {
+              "type": "string",
+              "default": "ca.crt",
+              "description": "Key of the CA bundle in caBundleConfigMap."
+            }
+          }
+        },
+        "database": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The gateway's PostgreSQL database.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Secret holding HELM_GATEWAY_DATABASE_URL, the serving role's DSN. Required."
+            },
+            "existingSecretKey": {
+              "type": "string",
+              "default": "HELM_GATEWAY_DATABASE_URL",
+              "description": "Key of the runtime DSN in existingSecret."
+            },
+            "migrate": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The migrate hook's DSN without the bootstrap.",
+              "properties": {
+                "existingSecret": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Secret holding the owner DSN `helm-gateway migrate` runs with when the bootstrap is off. Empty uses the runtime DSN, which helm.production=true refuses."
+                },
+                "existingSecretKey": {
+                  "type": "string",
+                  "default": "HELM_GATEWAY_MIGRATE_DATABASE_URL",
+                  "description": "Key of the migrate DSN."
+                }
+              }
+            },
+            "bootstrap": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Database role bootstrap (ADR-0004).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Create the ADR-0004 owner and runtime roles, the schema and the runtime grants in the migrate hook (files/gateway-db)."
+                },
+                "existingSecret": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Secret holding the administrator DSN and, optionally, the runtime role's password."
+                },
+                "adminDatabaseURLKey": {
+                  "type": "string",
+                  "default": "HELM_GATEWAY_ADMIN_DATABASE_URL",
+                  "description": "Key of the administrator DSN (a superuser, or CREATEROLE with CREATE on the database)."
+                },
+                "runtimePasswordKey": {
+                  "type": "string",
+                  "default": "HELM_GATEWAY_ROLE_PASSWORD",
+                  "description": "Optional key of the runtime role's password; absent leaves the password unchanged."
+                },
+                "ownerRole": {
+                  "type": "string",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "default": "helm_owner",
+                  "description": "NOLOGIN role that owns the schema and every table; migrate and the grants run as it."
+                },
+                "runtimeRole": {
+                  "type": "string",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "default": "helm_gateway",
+                  "description": "LOGIN role of the runtime DSN; DML grants only."
+                },
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "default": "helm_gateway",
+                  "description": "Schema of the gateway tables, owned by ownerRole; the runtime role's search_path."
+                },
+                "image": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[0-9a-f]{64}$",
+                  "default": "docker.io/library/postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+                  "description": "Digest-pinned image providing psql for the role and grant steps."
+                }
+              }
+            }
+          }
+        },
+        "github": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "GitHub App credentials for the gateway (read by HELM-751 s3).",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Secret with the GitHub App id and private key, mounted into the gateway Pod only at /var/run/secrets/helm-gateway-github/{app-id,private-key.pem}."
+            },
+            "appIdKey": {
+              "type": "string",
+              "default": "app-id",
+              "description": "Key of the App id in existingSecret."
+            },
+            "privateKeyKey": {
+              "type": "string",
+              "default": "private-key.pem",
+              "description": "Key of the App private key in existingSecret."
+            },
+            "installationsFile": {
+              "type": "string",
+              "default": "",
+              "description": "Installations file contents, rendered into a ConfigMap and mounted at /etc/helm-gateway/github/installations.json."
+            }
+          }
+        },
+        "networkPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Gateway NetworkPolicy. TCP 443 egress is port-only: a NetworkPolicy cannot name api.github.com or the JWKS host.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Render the gateway NetworkPolicy. helm.production=true requires it."
+            },
+            "controlPlane": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The only peers admitted to port 8443; at least one selector is required.",
+              "properties": {
+                "namespaceSelector": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "default": {},
+                  "description": "Namespaces whose Pods may call the API port."
+                },
+                "podSelector": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "default": {},
+                  "description": "Pods that may call the API port; combined with namespaceSelector when both are set."
+                }
+              }
+            },
+            "database": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Egress to the database.",
+              "properties": {
+                "to": {
+                  "type": "array",
+                  "default": [],
+                  "description": "Database peers (NetworkPolicy peers). Required when the NetworkPolicy is enabled.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "port": {
+                  "type": "integer",
+                  "default": 5432,
+                  "description": "Database TCP port."
+                }
+              }
+            },
+            "dns": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Egress to DNS.",
+              "properties": {
+                "to": {
+                  "type": "array",
+                  "default": [
+                    {
+                      "namespaceSelector": {
+                        "matchLabels": {
+                          "kubernetes.io/metadata.name": "kube-system"
+                        }
+                      },
+                      "podSelector": {
+                        "matchLabels": {
+                          "k8s-app": "kube-dns"
+                        }
+                      }
+                    }
+                  ],
+                  "description": "DNS peers for UDP and TCP 53.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "extraEgress": {
+              "type": "array",
+              "default": [],
+              "description": "Additional egress rules, e.g. a JWKS endpoint on a port other than 443. TCP 443 is already open to any address.",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
     "telemetry": {
       "type": "object",
       "additionalProperties": false,

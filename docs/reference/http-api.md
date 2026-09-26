@@ -86,6 +86,12 @@ the tenant, principal and workspace come from one of two places:
   assertion is checked depends on `HELM_EMERGENCY_STOP_FENCE_ENABLED`; see the
   workspace rules below the table.
 
+  On `POST /v1/chat/completions` the same rule protects the Kernel
+  credential: an `Authorization` header whose value is the admin, service or
+  organization-runtime key is dropped before the request is forwarded, so the
+  provider receives no `Authorization` at all. To send a provider key, put the
+  Kernel key in `X-HELM-API-Key` and the provider key in `Authorization`.
+
 | Route | Credential | Tenant and principal | Workspace |
 | --- | --- | --- | --- |
 | `POST /api/v1/evaluate`, `GET /api/v1/receipts*` | `HELM_ADMIN_API_KEY` | `X-Helm-Tenant-ID` / `X-Helm-Principal-ID`, accepted only as the `HELM_RUNTIME_TENANT_ID`/`HELM_RUNTIME_PRINCIPAL_ID` pair or a pair registered through `POST /api/v1/admin/principal-bindings` | see below |

@@ -149,6 +149,16 @@ Breaking for MCP clients that send tenant or principal headers.
   list them. Now it lists them for the configured tenant. A decision without an
   authenticated tenant is refused rather than receipted.
 
+### Fixed — the chat proxy never forwards a kernel credential (HELM-780)
+
+- `POST /v1/chat/completions` forwards `Authorization` to the model provider
+  as the provider credential.
+- A legacy caller that authenticated with `HELM_ADMIN_API_KEY` as a bearer
+  token therefore sent the kernel's key to the provider.
+- An `Authorization` value that is the admin, service or organization-runtime
+  key is now dropped before forwarding. A provider key sent beside
+  `X-HELM-API-Key` is still forwarded.
+
 ### Removed — `core/pkg/crypto/tee` and its collateral verifier (HELM-756)
 
 <!-- quantum_posture: this entry names a removed attestation package; it adds no cryptographic control. -->

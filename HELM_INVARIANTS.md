@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-72 controls: 32 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
+73 controls: 33 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -145,6 +145,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-045 | Connector contract pinning | observed-only | ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel. |
 | CTL-046 | Mandates only narrow on delegation | observed-only | Library only. No shipped binary imports core/pkg/kernel/authority/authorityrows (a declared library root in scripts/ci/dead-packages-allowlist.txt), and admission does not read the authority rows yet. The HELM-751 admission transaction is the first caller. Until it lands, the Postgres tests prove the library. |
 | CTL-047 | Production egress is deny-all | enforced | — |
+| CTL-048 | Kernel credentials never reach the model provider | enforced | — |
 
 ---
 

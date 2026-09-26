@@ -283,9 +283,11 @@ message ProposeRequest {
   // Tenant-scoped idempotency key, 1 to 255 bytes. The SDKs always send one;
   // without it a retry is a new attempt.
   string idempotency_key = 1;
-  // The leaf mandate the principal acts under. A selector, not a grant: the
-  // gateway admits only if the mandate belongs to the authenticated
-  // principal and every link of its delegation chain allows the effect.
+  // Optional. The gateway resolves the mandate from the token's sub and the
+  // effect type (HELM-750). Set this only to choose among several mandates
+  // that apply. A selector, not a grant: a mandate not held by sub is
+  // denied, and every link of the chosen delegation chain must allow the
+  // effect.
   string mandate_id = 2;
   // The commitment or case the effect serves (rev 3.4 §3). Exactly one is
   // set, except for helm.authority.* effect types, where it is optional
@@ -307,7 +309,8 @@ message ProposeRequest {
   // When an escalation of this attempt expires, if the caller needs it
   // sooner, for example the deadline of the run waiting on it. Clamped to
   // the mandate's approval window. Unset: the mandate's approval window.
-  // Part of the request digest like every other field.
+  // Truncated to whole seconds. Part of the request digest like every other
+  // field.
   google.protobuf.Timestamp approval_expires_at = 8;
 }
 
@@ -515,7 +518,9 @@ message EffectAttempt {
   string idempotency_key = 2;
   // SHA-256 request digest the idempotency check compares, 32 bytes.
   bytes request_digest = 3;
-  // The principal that proposed it, from its token.
+  // The principal that proposed it: the sub of its Propose token. When a
+  // workload proposed on a human's behalf (RFC 8693 delegation), this is the
+  // human, and approver != requester (ADR-0001 I6) is checked against them.
   string requester_principal_id = 4;
   // The leaf mandate it was proposed under.
   string mandate_id = 5;
@@ -570,6 +575,10 @@ message EffectAttempt {
   // The workspace it belongs to, from the proposer's token (R9, ADR-0005).
   // Reads and decisions need a token for the same workspace.
   string workspace_id = 27;
+  // The workload that proposed on requester_principal_id's behalf: the
+  // act.sub of the Propose token (RFC 8693, ADR-0005 §2). Empty when the
+  // principal proposed directly.
+  string requester_actor_id = 28;
 }
 
 // EffectAttemptState is the §4.3 state machine:
@@ -673,11 +682,14 @@ message PendingApproval {
   // and argument digests, the quote as the exposure, and expires_at. Each
   // byte string is prefixed with its length as a big-endian uint64. The
   // quote is its entry count, then each entry sorted by unit bytes: the
-  // unit, then the amount as a big-endian uint64. expires_at is its seconds
-  // as a big-endian int64, then its nanos as a big-endian int32. The design
-  // note gives a test vector. Approve and Reject must present it.
+  // unit, then the amount as a big-endian uint64. expires_at is its RFC 3339
+  // UTC text in whole seconds with a "Z" suffix (2026-09-26T12:00:00Z), as a
+  // length-prefixed byte string. The design note gives test vectors.
+  // Approve and Reject must present it.
   bytes approval_digest = 1;
-  // When the escalation expires and the attempt becomes EXPIRED.
+  // When the escalation expires and the attempt becomes EXPIRED. Always
+  // whole seconds: the gateway truncates it to the second on write, so a
+  // database round-trip cannot change the approval digest.
   google.protobuf.Timestamp expires_at = 2;
 }
 
@@ -694,6 +706,10 @@ message Approval {
   google.protobuf.Timestamp decided_at = 4;
   // The approver's reason, as given on Approve or Reject.
   string reason = 5;
+  // The workload that carried the decision on the approver's behalf: the
+  // act.sub of the decide token (RFC 8693). Empty when the approver's own
+  // session called the gateway directly.
+  string approver_actor_id = 6;
 }
 
 // ApprovalDecision is an approver's decision.

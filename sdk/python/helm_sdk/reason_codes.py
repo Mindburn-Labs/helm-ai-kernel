@@ -338,6 +338,27 @@ CAPABILITY_IRREVERSIBLE = "CAPABILITY_IRREVERSIBLE"
 # DENY: Irreversible effect class cannot dispatch without an authoritative approval
 # integration
 
+PRECONDITION_FAILED = "PRECONDITION_FAILED"
+# DENY: A precondition the effect type declares does not hold, so no attempt was created
+
+READBACK_MISMATCH = "READBACK_MISMATCH"
+# DENY: The adapter's read-back of the provider does not match the proposed effect, so
+# the outcome is FAILED
+
+PERMIT_ARGUMENT_MISMATCH = "PERMIT_ARGUMENT_MISMATCH"
+# DENY: The arguments an adapter was about to send are not the bytes the permit's
+# argument digest covers
+
+PROVIDER_CREDENTIAL_REJECTED = "PROVIDER_CREDENTIAL_REJECTED"
+# DENY: The connection's credential is unavailable, or the provider rejected it as
+# invalid, revoked or lacking permission
+
+PROVIDER_RESPONSE_TOO_LARGE = "PROVIDER_RESPONSE_TOO_LARGE"
+# DENY: A provider response exceeded the adapter's size limit and was not read
+
+PROVIDER_ERROR = "PROVIDER_ERROR"
+# DENY: The provider failed or refused the call for a reason other than its credential
+
 ALL: frozenset[str] = frozenset(
     {
         POLICY_VIOLATION,
@@ -444,6 +465,12 @@ ALL: frozenset[str] = frozenset(
         CAPABILITY_TOKEN_INVALID,
         CAPABILITY_ROLLBACK_PLAN_INVALID,
         CAPABILITY_IRREVERSIBLE,
+        PRECONDITION_FAILED,
+        READBACK_MISMATCH,
+        PERMIT_ARGUMENT_MISMATCH,
+        PROVIDER_CREDENTIAL_REJECTED,
+        PROVIDER_RESPONSE_TOO_LARGE,
+        PROVIDER_ERROR,
     }
 )
 

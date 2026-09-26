@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-75 controls: 35 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
+76 controls: 35 enforced (1 of them by CI gates), 29 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -148,6 +148,7 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-048 | Kernel credentials never reach the model provider | enforced | — |
 | CTL-049 | Principal binding integrity | enforced | — |
 | CTL-050 | Public receipt keyring | enforced | — |
+| CTL-051 | Effect adapters act only on the permitted bytes | observed-only | Library only. No shipped binary imports core/pkg/gateway/adapters/github (a declared library root in scripts/ci/dead-packages-allowlist.txt). HELM-751 s3 wires helm-gateway's Dispatch to it; that slice adds the removal tests and can claim enforcement for the tested path. |
 
 ---
 

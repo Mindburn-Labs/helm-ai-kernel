@@ -3,8 +3,8 @@ package reasoncodes
 import "testing"
 
 func TestRegistryStrings(t *testing.T) {
-	if len(All()) != 104 {
-		t.Fatalf("All() = %d codes, want the registry's 104", len(All()))
+	if len(All()) != 110 {
+		t.Fatalf("All() = %d codes, want the registry's 110", len(All()))
 	}
 	if !IsRegistered(EmergencyStopFenced) || EmergencyStopFenced != "EMERGENCY_STOP_FENCED" {
 		t.Fatal("EMERGENCY_STOP_FENCED must be registered under its wire string")

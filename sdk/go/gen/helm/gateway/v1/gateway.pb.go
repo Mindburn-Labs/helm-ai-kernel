@@ -2122,9 +2122,10 @@ type EffectAttempt struct {
 	OutcomeBasis OutcomeBasis `protobuf:"varint,16,opt,name=outcome_basis,json=outcomeBasis,proto3,enum=helm.gateway.v1.OutcomeBasis" json:"outcome_basis,omitempty"`
 	// The registry code for the current state, when it has one: the denial,
 	// escalation, rejection, expiry or cancellation reason, or why an observed
-	// or reconciled outcome is FAILED (for example READBACK_MISMATCH, or
-	// PRECONDITION_FAILED when a dispatch-time precondition refused the write
-	// before any provider write). Empty otherwise.
+	// or reconciled outcome is FAILED (for example
+	// [reason_code: READBACK_MISMATCH], or
+	// [reason_code: PRECONDITION_FAILED] when a dispatch-time precondition
+	// refused the write before any provider write). Empty otherwise.
 	ReasonCode string `protobuf:"bytes,17,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
 	// Set while the attempt is ESCALATED.
 	PendingApproval *PendingApproval `protobuf:"bytes,18,opt,name=pending_approval,json=pendingApproval,proto3" json:"pending_approval,omitempty"`
@@ -3167,8 +3168,9 @@ func (x *GitHubRepositoryResult) GetBranchExists() bool {
 // GitHubPullRequestResult is a pull request as the adapter read it back
 // (HELM-753). OBSERVED(SUCCEEDED) requires draft = true, head_sha equal to
 // the proposed head_sha, base_ref equal to the proposed base and the proposed
-// title; any other read-back is FAILED with READBACK_MISMATCH, and this
-// result still records what was found.
+// title; any other read-back is FAILED with
+// [reason_code: READBACK_MISMATCH], and this result still records what was
+// found.
 type GitHubPullRequestResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// https://github.com/{owner}/{repo}/pull/{number}.

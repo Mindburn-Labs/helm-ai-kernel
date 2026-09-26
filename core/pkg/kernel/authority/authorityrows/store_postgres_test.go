@@ -159,7 +159,11 @@ func TestPostgresDelegationOnlyNarrowsOverRandomChains(t *testing.T) {
 	for run := 0; run < 8; run++ {
 		r := rand.New(rand.NewPCG(750, uint64(run)))
 		rootTerms := randomTerms(r)
-		m, err := s.CreateMandate(ctx, tenantA, holders[r.IntN(len(holders))], rootTerms, root)
+		holder, approval := holders[r.IntN(len(holders))], root
+		if holder == approval.ApproverID {
+			approval.ApproverID = "human-b"
+		}
+		m, err := s.CreateMandate(ctx, tenantA, holder, rootTerms, approval)
 		must(t, err)
 		tree := []Mandate{m}
 
@@ -214,7 +218,11 @@ func TestPostgresDelegationOnlyNarrowsOverRandomChains(t *testing.T) {
 				}
 			default:
 				before := count()
-				_, err := s.Delegate(ctx, tenantA, leaf.ID, "human-b-not-holder", holders[0], leaf.Terms)
+				nonHolder := holders[0]
+				if nonHolder == leaf.HolderID {
+					nonHolder = holders[1]
+				}
+				_, err := s.Delegate(ctx, tenantA, leaf.ID, nonHolder, holders[0], leaf.Terms)
 				wantErr(t, "delegate by a non-holder", err, ErrNotDelegator)
 				if count() != before {
 					t.Fatalf("run %d: a refused delegation wrote a mandate", run)
@@ -309,10 +317,13 @@ func TestPostgresStopExpiresAndLiftNeedsApproval(t *testing.T) {
 	agentScope := Scope{Kind: ScopePrincipal, Key: "agent-a"}
 	sameIDs("before expiry", active(now, agentScope), expiring.ID)
 	sameIDs("a microsecond before expiry", active(expires.Add(-time.Microsecond), agentScope), expiring.ID)
+	sameIDs("400ns before expiry", active(expires.Add(-400*time.Nanosecond), agentScope), expiring.ID)
 	sameIDs("at expiry", active(expires, agentScope))
 	sameIDs("after expiry", active(now.Add(2*time.Hour), agentScope))
 	sameIDs("every scope after expiry", active(now.Add(2*time.Hour)), standing.ID)
 	sameIDs("unrelated scope", active(now, Scope{Kind: ScopePrincipal, Key: "agent-b"}))
+	_, err = s.ActiveStops(ctx, tenantA, now, Scope{Kind: ScopeTenant, Key: "tenant-b"})
+	wantErr(t, "another tenant's tenant scope", err, ErrInvalid)
 
 	past := now.Add(-time.Minute)
 	_, err = s.Stop(ctx, tenantA, StopSpec{Scope: agentScope, Reason: "late", IssuedBy: "service-a", ExpiresAt: &past})
@@ -355,6 +366,11 @@ func TestPostgresStopExpiresAndLiftNeedsApproval(t *testing.T) {
 		t.Fatalf("lift recorded requester %q and approver %q", requester, approver)
 	}
 	wantErr(t, "lift twice", s.Lift(ctx, tenantA, standing.ID, WideningApproval{RequesterID: "agent-a", ApproverID: "human-b"}), ErrInactive)
+	humanStop, err := s.Stop(ctx, tenantA, StopSpec{Scope: Scope{Kind: ScopePrincipal, Key: "human-b"}, Reason: "on leave", IssuedBy: "human-a"})
+	must(t, err)
+	wantErr(t, "a stopped principal approves its own lift",
+		s.Lift(ctx, tenantA, humanStop.ID, WideningApproval{RequesterID: "agent-a", ApproverID: "human-b"}), ErrApproverNotDistinct)
+	must(t, s.Lift(ctx, tenantA, humanStop.ID, WideningApproval{RequesterID: "human-b", ApproverID: "human-a"}))
 	wantErr(t, "lift a missing stop", s.Lift(ctx, tenantA, uuid.New(), WideningApproval{RequesterID: "agent-a", ApproverID: "human-b"}), ErrNotFound)
 
 	// The schema refuses a lift or a root mandate that carries no approval,
@@ -402,6 +418,10 @@ func TestPostgresEveryNarrowingBumpsItsControlRowVersion(t *testing.T) {
 	child, err := s.Delegate(ctx, tenantA, rootMandate.ID, "agent-a", "agent-b", Terms{
 		EffectTypes: []string{"email.send"}, PerCallLimit: amount(100),
 		ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(12 * time.Hour),
+	})
+	must(t, err)
+	grandchild, err := s.Delegate(ctx, tenantA, rootMandate.ID, "agent-a", "agent-c", Terms{
+		EffectTypes: []string{"email.send"}, PerCallLimit: amount(10), ValidFrom: now, ValidUntil: now.Add(time.Hour),
 	})
 	must(t, err)
 
@@ -473,21 +493,9 @@ func TestPostgresEveryNarrowingBumpsItsControlRowVersion(t *testing.T) {
 				ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(24 * time.Hour)})
 			return expect(err, ErrWidens)
 		}, false},
-		{"a delegated limit above the parent's", func() row { return rootRow }, func() error {
-			grandchild, err := s.Delegate(ctx, tenantA, rootMandate.ID, "agent-a", "agent-c", Terms{
-				EffectTypes: []string{"email.send"}, PerCallLimit: amount(10), ValidFrom: now, ValidUntil: now.Add(time.Hour)})
-			if err != nil {
-				return err
-			}
-			before := version(row{"authority_mandates", "mandate_id::text", grandchild.ID.String()})
-			_, err = s.CreateLimit(ctx, tenantA, LimitSpec{MandateID: &grandchild.ID, Unit: "effects", Measure: "count", Window: "day", Value: 51, Span: 1})
-			if err := expect(err, ErrWidens); err != nil {
-				return err
-			}
-			if after := version(row{"authority_mandates", "mandate_id::text", grandchild.ID.String()}); after != before {
-				return fmt.Errorf("refused limit bumped the grandchild from %d to %d", before, after)
-			}
-			return nil
+		{"a delegated limit above the parent's", func() row { return row{"authority_mandates", "mandate_id::text", grandchild.ID.String()} }, func() error {
+			_, err := s.CreateLimit(ctx, tenantA, LimitSpec{MandateID: &grandchild.ID, Unit: "effects", Measure: "count", Window: "day", Value: 51, Span: 1})
+			return expect(err, ErrWidens)
 		}, false},
 		{"raise a limit", func() row { return row{"authority_limits", "limit_id::text", tenantLimit.ID.String()} }, func() error {
 			return expect(s.LowerLimit(ctx, tenantA, tenantLimit.ID, 100_001), ErrWidens)
@@ -618,6 +626,18 @@ func TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole(t *testing.T) {
 	if len(stopsB) != 0 {
 		t.Fatalf("tenant B sees tenant A's stops: %+v", stopsB)
 	}
+	must(t, inTenant(t, runtime, b, func(tx *sql.Tx) error {
+		for _, table := range []string{"authority_tenants", "authority_principals", "authority_mandates", "authority_limits"} {
+			res, err := tx.Exec(`UPDATE `+table+` SET version = version + 1 WHERE tenant_id = $1`, tenantA)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n != 0 {
+				return fmt.Errorf("tenant B updated %d of tenant A's rows in %s", n, table)
+			}
+		}
+		return nil
+	}))
 	if got := scalar[int64](t, runtime, tenantA, `SELECT version FROM authority_mandates WHERE mandate_id = $1`, mandateA.ID); got != versionA {
 		t.Fatalf("tenant B's attempts moved A's mandate version %d -> %d", versionA, got)
 	}
@@ -689,5 +709,138 @@ func TestPostgresDelegationWaitsForAConcurrentNarrowing(t *testing.T) {
 		wantErr(t, "delegation after the parent narrowed", err, ErrWidens)
 	case <-time.After(10 * time.Second):
 		t.Fatal("delegation never proceeded after the narrowing committed")
+	}
+}
+
+// Activating a root mandate widens authority. Without an approval by an
+// active human who is neither the requester nor the holder it is refused and
+// writes nothing, as is a scope naming an effect type with no control row.
+// Registration refuses duplicates and unknown tenants.
+func TestPostgresRootMandateNeedsADistinctHumanApprover(t *testing.T) {
+	s, db, _, _ := postgresStore(t)
+	ctx := context.Background()
+	seed(t, s, tenantA)
+	wantErr(t, "duplicate tenant", s.CreateTenant(ctx, tenantA), ErrExists)
+	wantErr(t, "duplicate principal", s.CreatePrincipal(ctx, tenantA, "agent-a", PrincipalAgent), ErrExists)
+	wantErr(t, "duplicate effect type", s.CreateEffectType(ctx, tenantA, "email.send", RiskLow), ErrExists)
+	wantErr(t, "principal of an unknown tenant", s.CreatePrincipal(ctx, "tenant-z", "agent-a", PrincipalAgent), ErrNotFound)
+	wantErr(t, "unknown principal kind", s.CreatePrincipal(ctx, tenantA, "robot-1", "robot"), ErrInvalid)
+	wantErr(t, "unknown risk class", s.CreateEffectType(ctx, tenantA, "file.delete", "severe"), ErrInvalid)
+
+	now := dbNow(t, db)
+	terms := Terms{EffectTypes: []string{"email.send"}, ValidFrom: now, ValidUntil: now.Add(time.Hour)}
+	count := func() int { return scalar[int](t, db, tenantA, `SELECT count(*) FROM authority_mandates`) }
+	for _, refused := range []struct {
+		name     string
+		holder   string
+		terms    Terms
+		approval WideningApproval
+		want     error
+	}{
+		{"no approval", "agent-a", terms, WideningApproval{}, ErrApprovalRequired},
+		{"self-approved", "agent-a", terms, WideningApproval{RequesterID: "human-a", ApproverID: "human-a"}, ErrApproverNotDistinct},
+		{"approved by its holder", "human-b", terms, WideningApproval{RequesterID: "agent-a", ApproverID: "human-b"}, ErrApproverNotDistinct},
+		{"approved by an agent", "agent-a", terms, WideningApproval{RequesterID: "agent-b", ApproverID: "agent-c"}, ErrApproverNotEligible},
+		{"approved by nobody known", "agent-a", terms, WideningApproval{RequesterID: "agent-b", ApproverID: "ghost"}, ErrApproverNotEligible},
+		{"requested by nobody known", "agent-a", terms, WideningApproval{RequesterID: "ghost", ApproverID: "human-a"}, ErrApproverNotEligible},
+		{"unknown holder", "ghost", terms, root, ErrNotFound},
+		{"unknown effect type", "agent-a", Terms{EffectTypes: []string{"email.send", "file.delete"}, ValidFrom: now, ValidUntil: now.Add(time.Hour)}, root, ErrNotFound},
+	} {
+		before := count()
+		_, err := s.CreateMandate(ctx, tenantA, refused.holder, refused.terms, refused.approval)
+		wantErr(t, refused.name, err, refused.want)
+		if count() != before {
+			t.Fatalf("%s: a refused activation wrote a mandate", refused.name)
+		}
+	}
+	m, err := s.CreateMandate(ctx, tenantA, "agent-a", terms, root)
+	must(t, err)
+	chain, err := s.Chain(ctx, tenantA, m.ID)
+	must(t, err)
+	if len(chain) != 1 || chain[0].CreatedBy != root.RequesterID || chain[0].ApprovedBy != root.ApproverID || chain[0].Depth != 0 {
+		t.Fatalf("root mandate stored as %+v", chain)
+	}
+	err = inTenant(t, db, tenantA, func(tx *sql.Tx) error {
+		_, err := tx.Exec(`UPDATE authority_mandates SET approved_by = holder_id WHERE mandate_id = $1`, m.ID)
+		return err
+	})
+	wantConstraint(t, "a root mandate approved by its holder", err, "23514")
+}
+
+// A stop cannot be sidestepped by delegating: while the tenant, the
+// delegator, or any mandate of the chain is stopped, delegation is refused.
+// Lifting the stop (with approval) lets it through again.
+func TestPostgresStoppedAuthorityCannotDelegate(t *testing.T) {
+	s, db, _, _ := postgresStore(t)
+	ctx := context.Background()
+	seed(t, s, tenantA)
+	now := dbNow(t, db)
+	terms := Terms{EffectTypes: []string{"email.send"}, ValidFrom: now, ValidUntil: now.Add(time.Hour)}
+	parent, err := s.CreateMandate(ctx, tenantA, "agent-a", terms, root)
+	must(t, err)
+	child, err := s.Delegate(ctx, tenantA, parent.ID, "agent-a", "agent-b", terms)
+	must(t, err)
+	lift := WideningApproval{RequesterID: "agent-c", ApproverID: "human-a"}
+	for _, stopped := range []struct {
+		name      string
+		scope     Scope
+		blocked   Mandate // delegating from here is refused
+		delegator string
+		allowed   Mandate // and from here it still works
+		allowedBy string
+	}{
+		{"delegator", Scope{Kind: ScopePrincipal, Key: "agent-a"}, parent, "agent-a", child, "agent-b"},
+		{"chain mandate", Scope{Kind: ScopeMandate, Key: parent.ID.String()}, child, "agent-b", Mandate{}, ""},
+		{"tenant", Scope{Kind: ScopeTenant, Key: tenantA}, child, "agent-b", Mandate{}, ""},
+		{"leaf mandate", Scope{Kind: ScopeMandate, Key: child.ID.String()}, child, "agent-b", parent, "agent-a"},
+	} {
+		stop, err := s.Stop(ctx, tenantA, StopSpec{Scope: stopped.scope, Reason: "stop " + stopped.name, IssuedBy: "human-b"})
+		must(t, err)
+		_, err = s.Delegate(ctx, tenantA, stopped.blocked.ID, stopped.delegator, "agent-c", terms)
+		wantErr(t, "delegate under a "+stopped.name+" stop", err, ErrStopped)
+		if stopped.allowedBy != "" {
+			_, err = s.Delegate(ctx, tenantA, stopped.allowed.ID, stopped.allowedBy, "agent-c", terms)
+			must(t, err)
+		}
+		must(t, s.Lift(ctx, tenantA, stop.ID, lift))
+		_, err = s.Delegate(ctx, tenantA, stopped.blocked.ID, stopped.delegator, "agent-c", terms)
+		must(t, err)
+	}
+
+	// A stop that is still committing makes the delegation wait on the tenant
+	// or principal row it holds, and the delegation then sees it.
+	for _, pending := range []struct{ name, bump, kind, key string }{
+		{"tenant", `UPDATE authority_tenants SET version = version + 1`, "tenant", tenantA},
+		{"delegator", `UPDATE authority_principals SET version = version + 1 WHERE principal_id = 'agent-a'`, "principal", "agent-a"},
+	} {
+		stopping, err := db.Begin()
+		must(t, err)
+		_, err = stopping.Exec(`SELECT set_config('app.current_tenant', $1, true)`, tenantA)
+		must(t, err)
+		_, err = stopping.Exec(pending.bump)
+		must(t, err)
+		stopID := uuid.New()
+		_, err = stopping.Exec(`INSERT INTO authority_stops (tenant_id, stop_id, scope_kind, scope_key, reason, issued_by)
+			VALUES ($1, $2, $3, $4, 'pending', 'human-b')`, tenantA, stopID, pending.kind, pending.key)
+		must(t, err)
+		done := make(chan error, 1)
+		go func() {
+			_, err := s.Delegate(ctx, tenantA, parent.ID, "agent-a", "agent-c", terms)
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			_ = stopping.Rollback()
+			t.Fatalf("%s: delegation did not wait for the committing stop: %v", pending.name, err)
+		case <-time.After(300 * time.Millisecond):
+		}
+		must(t, stopping.Commit())
+		select {
+		case err := <-done:
+			wantErr(t, "delegation after a "+pending.name+" stop committed", err, ErrStopped)
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s: delegation never proceeded", pending.name)
+		}
+		must(t, s.Lift(ctx, tenantA, stopID, lift))
 	}
 }

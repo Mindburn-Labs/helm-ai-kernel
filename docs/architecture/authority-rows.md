@@ -32,18 +32,26 @@ admission transaction (HELM-751, HELM-750 s2b) is the first runtime caller.
   - its validity window lies inside each ancestor's.
 
   Only the parent's holder may delegate, and every link in the chain must be
-  active. The chain is read under `FOR SHARE`, root to leaf, so a narrowing
-  that has not committed yet makes the delegation wait for it.
+  active.
+- **A stop cannot be bypassed by delegating.** Delegation is refused while an
+  active stop covers the tenant, the delegator, or any mandate in the chain.
+  Delegation takes the tenant row, the principals and the chain root to leaf
+  `FOR SHARE`, in the ADR-0001 order, and reads stops after those locks. A
+  narrowing or stop that has not committed yet therefore makes it wait, and it
+  then sees the change.
 - **Narrowing bumps the control row.** Stop, revoke, narrow, add a limit and
   lower a limit each `UPDATE` their scope's control row (tenant, principal,
   mandate, effect type or limit) and bump its `version`, in the same
   transaction as the detail row (ADR-0001 §5.1). A refused transition changes
   nothing.
 - **Widening needs an approval.** Activating a root mandate and lifting a
-  stop take a `WideningApproval`. It names a requester and a distinct, active,
-  human approver. The schema also requires this: a root mandate carries
-  `approved_by`, and a lifted stop carries `lift_requested_by` and
-  `lift_approved_by`, with the two distinct. HELM-751 replaces the argument
+  stop take a `WideningApproval`. It names a requester and an active, human
+  approver. The approver cannot be the requester, or the principal whose
+  authority widens: the new mandate's holder, or the stopped principal or
+  mandate holder. The schema also requires this: a root mandate carries
+  `approved_by`, which differs from `created_by` and `holder_id`, and a lifted
+  stop carries `lift_requested_by` and `lift_approved_by`, with the two
+  distinct. HELM-751 replaces the argument
   with the approval record written by the gateway's Approve path.
 - **Stops expire and lift.** A stop is active until `expires_at` or until it
   is lifted. `ActiveStops` takes the time as an input, and it ignores
@@ -78,6 +86,9 @@ The Postgres proofs are listed in `scripts/ci/postgres-proofs.txt`. They cover:
 
 - narrowing-only delegation over random chains;
 - a delegation that waits for a concurrent narrowing;
+- delegation refused under a tenant, delegator or chain stop, including a stop
+  that is still committing;
+- root-mandate activation refused without a proper approver;
 - stop expiry and approved lift;
 - a version bump on every narrowing;
 - tenant isolation under a restricted role;

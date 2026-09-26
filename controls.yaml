@@ -2503,10 +2503,12 @@ controls:
     title: "Mandates only narrow on delegation"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      A delegated mandate is within every mandate above it. A narrowing (stop,
-      revoke, narrow, add or lower a limit) bumps its scope's control-row
-      version in the same transaction. A widening (a root mandate, a lift)
-      needs an approver who is a distinct, active human (HELM-750, ADR-0001).
+      A delegated mandate is within every mandate above it, and no stop on the
+      tenant, the delegator or the chain is active. A narrowing (stop, revoke,
+      narrow, add or lower a limit) bumps its scope's control-row version in
+      the same transaction. A widening (a root mandate, a lift) needs an
+      active human approver who is neither the requester nor the principal
+      whose authority widens (HELM-750, ADR-0001).
     status: observed-only
     reason: >-
       Library only. No shipped binary imports
@@ -2529,6 +2531,8 @@ controls:
         - "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationOnlyNarrowsOverRandomChains"
       forbidden:
         - "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationWaitsForAConcurrentNarrowing"
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresStoppedAuthorityCannotDelegate"
+        - "core/pkg/kernel/authority/authorityrows.TestPostgresRootMandateNeedsADistinctHumanApprover"
         - "core/pkg/kernel/authority/authorityrows.TestPostgresStopExpiresAndLiftNeedsApproval"
         - "core/pkg/kernel/authority/authorityrows.TestPostgresEveryNarrowingBumpsItsControlRowVersion"
         - "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole"

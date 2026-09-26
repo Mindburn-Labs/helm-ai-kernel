@@ -14,8 +14,13 @@ import (
 	"github.com/lib/pq"
 )
 
-// ErrExists reports a tenant, principal or effect type that is already there.
-var ErrExists = errors.New("authority rows: already exists")
+var (
+	// ErrExists reports a tenant, principal or effect type that is already there.
+	ErrExists = errors.New("authority rows: already exists")
+	// ErrStopped reports a delegation under an active stop on the tenant, the
+	// delegator, or a mandate of the chain.
+	ErrStopped = errors.New("authority rows: stopped")
+)
 
 // PrincipalKind is what a principal is.
 type PrincipalKind string
@@ -55,10 +60,12 @@ type Scope struct {
 }
 
 // WideningApproval authorizes a transition that widens authority: activating
-// a root mandate or lifting a stop. RequesterID asked for it; ApproverID, a
-// distinct, active, human principal of the tenant, approved it. The zero value
-// is no approval. HELM-751 replaces it with the approval record that the
-// gateway's Approve path writes for the helm.authority.* effect.
+// a root mandate or lifting a stop. RequesterID asked for it; ApproverID, an
+// active, human principal of the tenant, approved it. The approver is neither
+// the requester nor the principal whose authority widens (the new mandate's
+// holder, or the stopped principal or mandate holder). The zero value is no
+// approval. HELM-751 replaces it with the approval record that the gateway's
+// Approve path writes for the helm.authority.* effect.
 type WideningApproval struct {
 	RequesterID string
 	ApproverID  string
@@ -182,6 +189,9 @@ func (s *Store) CreateMandate(ctx context.Context, tenantID, holderID string, te
 	if err := approval.check(); err != nil {
 		return Mandate{}, err
 	}
+	if approval.ApproverID == holderID {
+		return Mandate{}, fmt.Errorf("%w: the approver would hold the mandate", ErrApproverNotDistinct)
+	}
 	terms, err := terms.normalized()
 	if err != nil {
 		return Mandate{}, err
@@ -205,8 +215,12 @@ func (s *Store) CreateMandate(ctx context.Context, tenantID, holderID string, te
 // Delegate creates a child of parentID, held by holderID. Only the parent's
 // holder may delegate, every mandate in the chain must be active, and the
 // child's terms must be within the terms of every mandate above it: delegation
-// only narrows. The chain is locked FOR SHARE, root to leaf, so a concurrent
-// narrowing of any of it commits first and is checked, or waits.
+// only narrows. No active stop may cover the tenant, the delegator, or a
+// mandate of the chain, so a stop cannot be sidestepped by delegating.
+//
+// Locks follow ADR-0001 §1: the tenant row, the two principals, then the chain
+// root to leaf, all FOR SHARE, and stops are read after them. A concurrent
+// narrowing or stop of any of those rows commits first and is seen, or waits.
 func (s *Store) Delegate(ctx context.Context, tenantID string, parentID uuid.UUID, delegatorID, holderID string, terms Terms) (Mandate, error) {
 	terms, err := terms.normalized()
 	if err != nil {
@@ -214,6 +228,15 @@ func (s *Store) Delegate(ctx context.Context, tenantID string, parentID uuid.UUI
 	}
 	m := Mandate{HolderID: holderID, Terms: terms, Active: true, CreatedBy: delegatorID, Version: 1}
 	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
+		if err := tx.QueryRowContext(ctx, `SELECT 1 FROM authority_tenants WHERE tenant_id = $1 FOR SHARE`, tenantID).Scan(new(int)); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: tenant %q", ErrNotFound, tenantID)
+			}
+			return err
+		}
+		if err := lockActivePrincipals(ctx, tx, tenantID, delegatorID, holderID); err != nil {
+			return err
+		}
 		chain, err := readChain(ctx, tx, tenantID, parentID, true)
 		if err != nil {
 			return err
@@ -222,6 +245,7 @@ func (s *Store) Delegate(ctx context.Context, tenantID string, parentID uuid.UUI
 		if parent.HolderID != delegatorID {
 			return ErrNotDelegator
 		}
+		stopKeys := []string{string(ScopeTenant) + ":" + tenantID, string(ScopePrincipal) + ":" + delegatorID}
 		for _, link := range chain {
 			if !link.Active {
 				return fmt.Errorf("%w: mandate %s is revoked", ErrInactive, link.ID)
@@ -229,12 +253,17 @@ func (s *Store) Delegate(ctx context.Context, tenantID string, parentID uuid.UUI
 			if err := terms.Within(link.Terms); err != nil {
 				return err
 			}
+			stopKeys = append(stopKeys, string(ScopeMandate)+":"+link.ID.String())
 		}
-		if err := requireActivePrincipal(ctx, tx, tenantID, delegatorID); err != nil {
+		var stopped bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_stops
+				WHERE tenant_id = $1 AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())
+				  AND scope_kind || ':' || scope_key = ANY($2::text[]))`,
+			tenantID, pq.Array(stopKeys)).Scan(&stopped); err != nil {
 			return err
 		}
-		if err := requireActivePrincipal(ctx, tx, tenantID, holderID); err != nil {
-			return err
+		if stopped {
+			return ErrStopped
 		}
 		if parent.Depth == math.MaxInt32 {
 			return fmt.Errorf("%w: delegation depth overflows", ErrInvalid)
@@ -277,7 +306,7 @@ func (s *Store) Narrow(ctx context.Context, tenantID string, mandateID uuid.UUID
 	var m Mandate
 	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
 		current, err := scanMandate(tx.QueryRowContext(ctx, `SELECT `+mandateColumns+` FROM authority_mandates m
-			WHERE tenant_id = $1 AND mandate_id = $2 FOR UPDATE`, tenantID, mandateID))
+			WHERE tenant_id = $1 AND mandate_id = $2 FOR NO KEY UPDATE`, tenantID, mandateID))
 		if err != nil {
 			return err
 		}
@@ -464,6 +493,19 @@ func (s *Store) Lift(ctx context.Context, tenantID string, stopID uuid.UUID, app
 		if lifted.Valid {
 			return fmt.Errorf("%w: stop %s is already lifted", ErrInactive, stopID)
 		}
+		subject := ""
+		switch scope.Kind {
+		case ScopePrincipal:
+			subject = scope.Key
+		case ScopeMandate:
+			if err := tx.QueryRowContext(ctx, `SELECT holder_id FROM authority_mandates WHERE tenant_id = $1 AND mandate_id = $2::uuid`,
+				tenantID, scope.Key).Scan(&subject); err != nil {
+				return err
+			}
+		}
+		if approval.ApproverID == subject {
+			return fmt.Errorf("%w: the approver is the stopped principal", ErrApproverNotDistinct)
+		}
 		if err := approval.verify(ctx, tx, tenantID); err != nil {
 			return err
 		}
@@ -492,15 +534,21 @@ func (s *Store) ActiveStops(ctx context.Context, tenantID string, at time.Time, 
 		if err != nil {
 			return nil, err
 		}
+		if scope.Kind == ScopeTenant && scope.Key != tenantID {
+			return nil, fmt.Errorf("%w: tenant scope %q is not the transaction's tenant", ErrInvalid, scope.Key)
+		}
 		keys = append(keys, string(scope.Kind)+":"+scope.Key)
 	}
+	// Truncate, not round: the database keeps microseconds, and rounding up
+	// could report a stop as expired just before it is.
+	at = at.UTC().Truncate(time.Microsecond)
 	var stops []Stop
 	err := s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, `SELECT stop_id, scope_kind, scope_key, reason, issued_by, created_at, expires_at
 			FROM authority_stops
 			WHERE tenant_id = $1 AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at > $2)
 			  AND (cardinality($3::text[]) = 0 OR scope_kind || ':' || scope_key = ANY($3::text[]))
-			ORDER BY created_at, stop_id`, tenantID, at.UTC(), pq.Array(keys))
+			ORDER BY created_at, stop_id`, tenantID, at, pq.Array(keys))
 		if err != nil {
 			return err
 		}
@@ -560,7 +608,9 @@ func (a WideningApproval) check() error {
 }
 
 // verify checks the approval's principals inside the transaction: the
-// requester is active, and the approver is an active human.
+// requester is active, and the approver is an active human. The rows are not
+// locked: nothing in this slice disables a principal. The admission
+// transaction (HELM-751) takes principals FOR SHARE in the ADR-0001 order.
 func (a WideningApproval) verify(ctx context.Context, tx *sql.Tx, tenantID string) error {
 	var eligible bool
 	err := tx.QueryRowContext(ctx, `SELECT
@@ -747,6 +797,37 @@ func insertLimit(ctx context.Context, tx *sql.Tx, tenantID string, limit Limit) 
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		tenantID, limit.ID, mandate, limit.Spec.Unit, limit.Spec.Measure, limit.Spec.Window, limit.Spec.Value, limit.Spec.Span)
 	return classify(err)
+}
+
+// lockActivePrincipals takes FOR SHARE on the named principals, in id order,
+// and requires each to exist and be active.
+func lockActivePrincipals(ctx context.Context, tx *sql.Tx, tenantID string, principalIDs ...string) error {
+	rows, err := tx.QueryContext(ctx, `SELECT principal_id, status FROM authority_principals
+		WHERE tenant_id = $1 AND principal_id = ANY($2::text[]) ORDER BY principal_id FOR SHARE`, tenantID, pq.Array(principalIDs))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	status := make(map[string]string, len(principalIDs))
+	for rows.Next() {
+		var id, state string
+		if err := rows.Scan(&id, &state); err != nil {
+			return err
+		}
+		status[id] = state
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range principalIDs {
+		switch state, ok := status[id]; {
+		case !ok:
+			return fmt.Errorf("%w: principal %q", ErrNotFound, id)
+		case state != "active":
+			return fmt.Errorf("%w: principal %q is %s", ErrInactive, id, state)
+		}
+	}
+	return nil
 }
 
 func requireActivePrincipal(ctx context.Context, tx *sql.Tx, tenantID, principalID string) error {

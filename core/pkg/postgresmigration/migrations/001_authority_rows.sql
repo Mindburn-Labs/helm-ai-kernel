@@ -46,8 +46,8 @@ CREATE TABLE IF NOT EXISTS authority_effect_types (
 --
 -- Delegation only narrows: a child's terms are within every ancestor's, checked
 -- when it is created (and again at admission, HELM-751). A root mandate widens
--- authority, so it records the principal that approved it, who is not its
--- requester (created_by).
+-- authority, so it records the principal that approved it, who is neither its
+-- requester (created_by) nor its holder.
 CREATE TABLE IF NOT EXISTS authority_mandates (
     tenant_id          TEXT NOT NULL,
     mandate_id         UUID NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS authority_mandates (
     CHECK (valid_until > valid_from),
     CHECK ((parent_id IS NULL) = (depth = 0)),
     CHECK ((parent_id IS NULL) = (approved_by IS NOT NULL)),
-    CHECK (approved_by IS NULL OR approved_by <> created_by)
+    CHECK (approved_by IS NULL OR (approved_by <> created_by AND approved_by <> holder_id))
 );
 
 -- A limit is an authority row: admission locks it FOR SHARE, and lowering it

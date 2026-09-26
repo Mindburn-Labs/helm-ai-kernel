@@ -430,10 +430,13 @@ func readPostgresProofs(root string) (map[string]bool, error) {
 	return listed, nil
 }
 
-// blockingGates records every gate a build-plane entry could name. A quality
-// gate blocks when it is in the pr profile, not advisory, and the PR workflow
-// runs that profile. A workflow job blocks when it runs on pull_request with no
-// job-level condition or continue-on-error.
+// blockingGates records every gate a build-plane entry could name. Under CI v2
+// the PR workflow runs `make check` (directly or through a local reusable
+// workflow), and the Makefile's check recipe names the quality profile it runs
+// and whether it runs it with --strict. A quality gate blocks when it is in
+// that profile and is not advisory, or the profile runs strict (strict turns
+// advisory failures into failures). A workflow job blocks when it runs on
+// pull_request with no job-level condition or continue-on-error.
 func blockingGates(root string) (map[string]string, error) {
 	gates := map[string]string{}
 
@@ -453,21 +456,21 @@ func blockingGates(root string) (map[string]string, error) {
 	if err := json.Unmarshal(data, &quality); err != nil {
 		return nil, fmt.Errorf("%s: %v", qualityGatesFile, err)
 	}
-	inPR := map[string]bool{}
-	for _, id := range quality.Profiles["pr"].Gates {
-		inPR[id] = true
+	profile, strict := checkProfile(root)
+	inProfile := map[string]bool{}
+	for _, id := range quality.Profiles[profile].Gates {
+		inProfile[id] = true
 	}
-	workflow, _ := os.ReadFile(filepath.Join(root, prWorkflowFile))
-	profileRuns := strings.Contains(string(workflow), "make quality-pr")
+	profileRuns := profile != "" && prWorkflowRunsCheck(root)
 	for _, g := range quality.Gates {
 		why := ""
 		switch {
-		case g.Advisory:
-			why = "advisory"
-		case !inPR[g.ID]:
-			why = "not in the pr profile"
 		case !profileRuns:
-			why = prWorkflowFile + " does not run make quality-pr"
+			why = prWorkflowFile + " does not run make check"
+		case !inProfile[g.ID]:
+			why = "not in the " + profile + " profile that make check runs"
+		case g.Advisory && !strict:
+			why = "advisory"
 		}
 		gates["quality:"+g.ID] = why
 	}
@@ -1296,8 +1299,8 @@ func findPlants(deadSymbol string, ev *evidence) (plants, error) {
 		if ev.gates[g] == "" && pl.blockingGate == "" {
 			pl.blockingGate = g
 		}
-		if ev.gates[g] == "advisory" && pl.advisoryGate == "" {
-			pl.advisoryGate = g
+		if ev.gates[g] != "" && pl.advisoryGate == "" {
+			pl.advisoryGate = g // any non-blocking gate
 		}
 	}
 	if pl.deadSymbol == "" || pl.blockingGate == "" || pl.advisoryGate == "" {
@@ -1408,4 +1411,55 @@ func runControls(args []string) int {
 		fmt.Printf("  [%s] %s: %s\n", is.Kind, is.ID, is.Msg)
 	}
 	return 1
+}
+
+// checkProfile reads the Makefile's check recipe and returns the quality
+// profile it runs and whether it runs it with --strict. It returns "" when the
+// recipe is missing or names no profile.
+func checkProfile(root string) (profile string, strict bool) {
+	data, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		return "", false
+	}
+	inCheck := false
+	for _, line := range strings.Split(string(data), "\n") {
+		switch {
+		case strings.HasPrefix(line, "check:"):
+			inCheck = true
+			continue
+		case !inCheck:
+			continue
+		case !strings.HasPrefix(line, "\t"):
+			return profile, strict
+		}
+		fields := strings.Fields(line)
+		for i, f := range fields {
+			if f == "run" && i+1 < len(fields) && profile == "" {
+				profile = fields[i+1]
+			}
+			if f == "--strict" {
+				strict = true
+			}
+		}
+	}
+	return profile, strict
+}
+
+// prWorkflowRunsCheck reports whether the PR workflow, or a local reusable
+// workflow it calls, runs `make check`.
+func prWorkflowRunsCheck(root string) bool {
+	data, err := os.ReadFile(filepath.Join(root, prWorkflowFile))
+	if err != nil {
+		return false
+	}
+	text := string(data)
+	for _, line := range strings.Split(text, "\n") {
+		ref := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "uses:"))
+		if strings.HasPrefix(strings.TrimSpace(line), "uses:") && strings.HasPrefix(ref, "./.github/workflows/") {
+			if called, err := os.ReadFile(filepath.Join(root, strings.TrimPrefix(ref, "./"))); err == nil {
+				text += "\n" + string(called)
+			}
+		}
+	}
+	return strings.Contains(text, "make check")
 }

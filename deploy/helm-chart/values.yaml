@@ -140,10 +140,16 @@ helm:
     adminAPIKeySecretKey: "HELM_ADMIN_API_KEY"
     serviceAPIKeySecretKey: "HELM_SERVICE_API_KEY"
     # Key inside existingSecret holding the Control Plane's organization-runtime
-    # credential (HELM_ORGANIZATION_RUNTIME_API_KEY). Read only when
-    # existingSecret is set, and optional there: a Secret without the key leaves
-    # the organization-runtime route closed. Set "" to not read it.
+    # credential (HELM_ORGANIZATION_RUNTIME_API_KEY). It is wired only together
+    # with controlPlaneActivationPublicKey, because the Kernel needs the pair;
+    # without the public key the organization-runtime route stays closed.
     organizationRuntimeAPIKeySecretKey: "HELM_ORGANIZATION_RUNTIME_API_KEY"
+    # The Control Plane's activation public key
+    # (HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY): 64 lowercase hex characters,
+    # the Ed25519 public key of the Control Plane's HELM_SIGNING_KEY. Public, so
+    # a plain value. Setting it requires existingSecret with the
+    # organization-runtime key; the chart refuses the one without the other.
+    controlPlaneActivationPublicKey: ""
     # Server-bound tenant/principal for tenant-scoped runtime routes. Incoming
     # tenant/principal headers must match these values and cannot select
     # another tenant or principal.

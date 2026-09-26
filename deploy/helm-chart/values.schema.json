@@ -396,7 +396,13 @@
             "organizationRuntimeAPIKeySecretKey": {
               "type": "string",
               "default": "HELM_ORGANIZATION_RUNTIME_API_KEY",
-              "description": "Key inside existingSecret that holds the organization-runtime credential (HELM_ORGANIZATION_RUNTIME_API_KEY). Read only when existingSecret is set, as an optional key. Empty disables it."
+              "description": "Key inside existingSecret that holds the organization-runtime credential (HELM_ORGANIZATION_RUNTIME_API_KEY). Wired only together with controlPlaneActivationPublicKey. Empty disables it."
+            },
+            "controlPlaneActivationPublicKey": {
+              "type": "string",
+              "default": "",
+              "pattern": "^([0-9a-f]{64})?$",
+              "description": "The Control Plane activation public key (HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY), 64 lowercase hex characters. Requires existingSecret with organizationRuntimeAPIKeySecretKey."
             },
             "tenantID": {
               "type": "string",

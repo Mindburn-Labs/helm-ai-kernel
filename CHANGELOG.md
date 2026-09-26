@@ -93,6 +93,20 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Changed — the chart wires the organization-runtime key only with the activation public key (HELM-786)
+
+- New value `helm.auth.controlPlaneActivationPublicKey`: the Control Plane
+  activation public key (`HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY`), 64
+  lowercase hex characters.
+- The Kernel needs that key and `HELM_ORGANIZATION_RUNTIME_API_KEY` together;
+  one without the other fails its service init. The chart now renders the
+  organization-runtime key only with the activation public key, and refuses to
+  render the activation public key without the organization-runtime key.
+- A 0.9.0 deployment that set the organization-runtime key without the
+  activation public key ran in degraded mode; with this chart it renders
+  without the organization-runtime key until
+  `helm.auth.controlPlaneActivationPublicKey` is set.
+
 ## [0.9.0] - 2026-09-26
 
 Source-prepared v0.9.0 notes for the current Kernel tree. These entries do not

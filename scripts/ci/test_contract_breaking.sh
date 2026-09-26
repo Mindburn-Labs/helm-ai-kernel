@@ -45,7 +45,7 @@ write_openapi() {
     'openapi: 3.0.3' \
     'info:' \
     '  title: contract gate fixture' \
-    '  version: 1.0.0' \
+    "  version: ${2:-1.0.0}" \
     'paths: {}' > "$1"
 }
 
@@ -204,5 +204,60 @@ assert_status 1
 assert_contains "contract release baseline: v1.0.0 ($release_base)"
 assert_buf_invocations 2
 assert_buf_log_contains "ref=$release_base,subdir=protocols/proto"
+
+# Semver §4: while both versions are 0.y.z, a minor bump permits a break and a
+# patch bump does not. A 1.x minor bump never does. Each case gets its own
+# repository: a release baseline tag and a candidate that bumps VERSION and
+# both OpenAPI info.version fields.
+version_case() {
+  local name="$1" base_version="$2" candidate_version="$3"
+  local o="$work/${name}-origin.git" sd="$work/${name}-seed"
+  git init --bare "$o" >/dev/null
+  git clone "$o" "$sd" >/dev/null 2>&1
+  (
+    cd "$sd"
+    git config user.name 'HELM contract gate test'
+    git config user.email 'contract-gate-test@example.invalid'
+    write_openapi api/openapi/helm.openapi.yaml "$base_version"
+    write_openapi protocols/specs/effects/openapi.yaml "$base_version"
+    mkdir -p protocols/policy-schema
+    printf '%s\n' "$base_version" > VERSION
+    git add VERSION api/openapi/helm.openapi.yaml protocols/specs/effects/openapi.yaml protocols/policy-schema
+    git commit -m 'test: seed' >/dev/null
+    git branch -M main
+    git tag "v${base_version}"
+    git push origin main "v${base_version}" >/dev/null 2>&1
+    write_openapi api/openapi/helm.openapi.yaml "$candidate_version"
+    write_openapi protocols/specs/effects/openapi.yaml "$candidate_version"
+    printf '%s\n' "$candidate_version" > VERSION
+    git commit -am 'test: candidate' >/dev/null
+  )
+  feature="$sd"
+}
+
+run_version_case() {
+  local kind="$1"
+  if [ "$kind" = openapi ]; then run_openapi "$case_name" missing-base 1 release 1; else run_proto "$case_name" 100 release missing-base; fi
+}
+
+for kind in openapi proto; do
+  version_case "zero-minor-${kind}" 0.8.5 0.9.0
+  case_name="zero_minor_${kind}"
+  run_version_case "$kind"
+  assert_status 0
+  assert_contains '0.8.5 -> 0.9.0 — break allowed by version bump'
+
+  version_case "zero-patch-${kind}" 0.8.5 0.8.6
+  case_name="zero_patch_${kind}"
+  run_version_case "$kind"
+  assert_status 1
+  assert_not_contains 'break allowed by version bump'
+
+  version_case "one-minor-${kind}" 1.0.0 1.1.0
+  case_name="one_minor_${kind}"
+  run_version_case "$kind"
+  assert_status 1
+  assert_not_contains 'break allowed by version bump'
+done
 
 printf 'contract-breaking self-test passed\n'

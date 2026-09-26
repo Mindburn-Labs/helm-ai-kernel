@@ -3,8 +3,12 @@ package authorityrows
 import (
 	"errors"
 	"math/rand/v2"
+	"strings"
 	"testing"
+
 	"time"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 )
 
 // Property tests use fixed seeds so a failure reproduces exactly.
@@ -119,7 +123,7 @@ func contains(xs []string, x string) bool {
 
 func mustNormalize(t *testing.T, terms Terms) Terms {
 	t.Helper()
-	out, err := terms.normalized()
+	out, err := normalized(terms)
 	if err != nil {
 		t.Fatalf("normalize %+v: %v", terms, err)
 	}
@@ -182,7 +186,7 @@ func TestNormalizedRefusesMalformedTerms(t *testing.T) {
 	} {
 		terms := valid
 		mutate(&terms)
-		if _, err := terms.normalized(); !errors.Is(err, ErrInvalid) {
+		if _, err := normalized(terms); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
 	}
@@ -250,5 +254,93 @@ func TestScopeNormalization(t *testing.T) {
 		if _, err := scope.normalized(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%+v: err = %v, want ErrInvalid", scope, err)
 		}
+	}
+}
+
+// HELM-750 s2b terms: targets, a CEL condition and per-effect risk classes.
+func TestMandateTermsTargetsRiskAndCondition(t *testing.T) {
+	base := Terms{EffectTypes: []string{"repo.push"}, ValidFrom: epoch, ValidUntil: epoch.Add(time.Hour)}
+	with := func(edit func(*Terms)) Terms {
+		out := base
+		edit(&out)
+		return out
+	}
+	outer := with(func(t *Terms) {
+		t.Targets = []string{"github.com/o/a", "github.com/o/b"}
+		t.RiskClasses = map[string]RiskClass{"repo.push": RiskHigh}
+		t.ApprovalRequired = []string{"repo.push"}
+	})
+
+	for _, test := range []struct {
+		name  string
+		inner Terms
+		field string // "" when inner is within outer
+	}{
+		{"subset of targets, same risk", with(func(t *Terms) {
+			t.Targets = []string{"github.com/o/a"}
+			t.RiskClasses = map[string]RiskClass{"repo.push": RiskHigh}
+			t.ApprovalRequired = []string{"repo.push"}
+		}), ""},
+		{"raised risk", with(func(t *Terms) {
+			t.Targets = []string{"github.com/o/a"}
+			t.RiskClasses = map[string]RiskClass{"repo.push": RiskIrreversible}
+			t.ApprovalRequired = []string{"repo.push"}
+		}), ""},
+		{"a condition of its own", with(func(t *Terms) {
+			t.Targets = []string{"github.com/o/a"}
+			t.RiskClasses = map[string]RiskClass{"repo.push": RiskHigh}
+			t.Condition = `input.args.head.startsWith("helm/")`
+			t.ApprovalRequired = []string{"repo.push"}
+		}), ""},
+		{"no target list under one", with(func(t *Terms) {
+			t.RiskClasses = map[string]RiskClass{"repo.push": RiskHigh}
+		}), "targets"},
+		{"a target outside the list", with(func(t *Terms) {
+			t.Targets = []string{"github.com/o/c"}
+			t.RiskClasses = map[string]RiskClass{"repo.push": RiskHigh}
+		}), "targets"},
+		{"lowered risk", with(func(t *Terms) {
+			t.Targets = []string{"github.com/o/a"}
+			t.RiskClasses = map[string]RiskClass{"repo.push": RiskMedium}
+		}), "risk_classes"},
+		{"dropped risk", with(func(t *Terms) { t.Targets = []string{"github.com/o/a"} }), "risk_classes"},
+		{"dropped approval requirement", with(func(t *Terms) {
+			t.Targets = []string{"github.com/o/a"}
+			t.RiskClasses = map[string]RiskClass{"repo.push": RiskHigh}
+			t.ApprovalRequired = nil
+		}), "approval_required"},
+	} {
+		err := test.inner.Within(outer)
+		var widens *WidensError
+		switch {
+		case test.field == "" && err != nil:
+			t.Fatalf("%s: %v", test.name, err)
+		case test.field != "" && (!errors.As(err, &widens) || widens.Field != test.field):
+			t.Fatalf("%s: err = %v, want widening of %s", test.name, err, test.field)
+		}
+	}
+
+	for _, refused := range []struct {
+		name  string
+		terms Terms
+	}{
+		{"empty target list", with(func(t *Terms) { t.Targets = []string{} })},
+		{"control character in a target", with(func(t *Terms) { t.Targets = []string{"github.com/o/a\n"} })},
+		{"condition that does not compile", with(func(t *Terms) { t.Condition = "input.args.head.startsWith(" })},
+		{"condition over the limit", with(func(t *Terms) { t.Condition = strings.Repeat("a", MaxConditionBytes+1) })},
+		{"risk class for an effect type out of scope", with(func(t *Terms) { t.RiskClasses = map[string]RiskClass{"email.send": RiskHigh} })},
+		{"unknown risk class", with(func(t *Terms) { t.RiskClasses = map[string]RiskClass{"repo.push": "severe"} })},
+		{"approval required for an effect type out of scope", with(func(t *Terms) { t.ApprovalRequired = []string{"email.send"} })},
+	} {
+		if _, err := normalized(refused.terms); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("%s: err = %v, want ErrInvalid", refused.name, err)
+		}
+	}
+	got, err := normalized(with(func(t *Terms) { t.Targets = []string{"b", "a", "b"} }))
+	if err != nil || strings.Join(got.Targets, ",") != "a,b" {
+		t.Fatalf("targets normalize to %v, %v; want sorted and de-duplicated", got.Targets, err)
+	}
+	if mandates.HigherRisk(RiskMedium, RiskHigh) != RiskHigh || mandates.HigherRisk(RiskIrreversible, "") != RiskIrreversible {
+		t.Fatal("HigherRisk does not order risk classes")
 	}
 }

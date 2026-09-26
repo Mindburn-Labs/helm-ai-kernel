@@ -236,6 +236,29 @@ export const ReasonCodes = {
   PROVIDER_RESPONSE_TOO_LARGE: "PROVIDER_RESPONSE_TOO_LARGE",
   /** DENY: The provider failed or refused the call for a reason other than its credential */
   PROVIDER_ERROR: "PROVIDER_ERROR",
+  /** DENY: The requesting principal is unknown to the tenant or disabled */
+  PRINCIPAL_INACTIVE: "PRINCIPAL_INACTIVE",
+  /** DENY: No active mandate held by the principal covers the effect, or a mandate of its chain is
+  /** revoked */
+  MANDATE_INACTIVE: "MANDATE_INACTIVE",
+  /** DENY: A mandate of the chain is outside its validity window */
+  MANDATE_OUTSIDE_VALIDITY: "MANDATE_OUTSIDE_VALIDITY",
+  /** DENY: A mandate of the chain does not cover the effect type or target, or the effect type has
+  /** no control row */
+  EFFECT_OUT_OF_SCOPE: "EFFECT_OUT_OF_SCOPE",
+  /** DENY: The effect's amount exceeds a per-call limit of the mandate chain */
+  PER_CALL_LIMIT: "PER_CALL_LIMIT",
+  /** DENY: An amount or counter total overflows a 64-bit integer */
+  ARITHMETIC_OVERFLOW: "ARITHMETIC_OVERFLOW",
+  /** DENY: The idempotency key was already used with a different request */
+  IDEMPOTENCY_CONFLICT: "IDEMPOTENCY_CONFLICT",
+  /** DENY: The approver is the requester; an approval needs a distinct principal */
+  APPROVER_NOT_DISTINCT: "APPROVER_NOT_DISTINCT",
+  /** DENY: A distinct human approver rejected the escalated effect */
+  APPROVAL_REJECTED: "APPROVAL_REJECTED",
+  /** DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
+  /** assertion the request did not carry */
+  STEP_UP_REQUIRED: "STEP_UP_REQUIRED",
 } as const;
 
 export type RegisteredReasonCode = (typeof ReasonCodes)[keyof typeof ReasonCodes];

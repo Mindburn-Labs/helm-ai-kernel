@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -150,7 +151,7 @@ func TestMCP20260728AuthorizationSEPVectors(t *testing.T) {
 
 func runTokenVector(t *testing.T, validator *JWKSValidator, key *rsa.PrivateKey, file authzVectorFile, vector authzVector) {
 	t.Helper()
-	token := signMCPTestJWT(t, key, "kid-1", jwksClaims{
+	token := signMCPTestJWT(t, key, "kid-1", mcpTestClaims{
 		Scope:    vector.TokenScope,
 		Resource: vector.TokenResource,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -167,7 +168,7 @@ func runTokenVector(t *testing.T, validator *JWKSValidator, key *rsa.PrivateKey,
 		if err != nil {
 			t.Fatalf("expected token to validate, got %v", err)
 		}
-		if !containsString(claims.Resources, file.Resource) {
+		if !slices.Contains(claims.Resources, file.Resource) {
 			t.Fatalf("validated claims missing bound resource: %+v", claims)
 		}
 		return

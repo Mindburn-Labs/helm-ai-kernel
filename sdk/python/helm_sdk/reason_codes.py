@@ -359,6 +359,39 @@ PROVIDER_RESPONSE_TOO_LARGE = "PROVIDER_RESPONSE_TOO_LARGE"
 PROVIDER_ERROR = "PROVIDER_ERROR"
 # DENY: The provider failed or refused the call for a reason other than its credential
 
+PRINCIPAL_INACTIVE = "PRINCIPAL_INACTIVE"
+# DENY: The requesting principal is unknown to the tenant or disabled
+
+MANDATE_INACTIVE = "MANDATE_INACTIVE"
+# DENY: No active mandate held by the principal covers the effect, or a mandate of its
+# chain is revoked
+
+MANDATE_OUTSIDE_VALIDITY = "MANDATE_OUTSIDE_VALIDITY"
+# DENY: A mandate of the chain is outside its validity window
+
+EFFECT_OUT_OF_SCOPE = "EFFECT_OUT_OF_SCOPE"
+# DENY: A mandate of the chain does not cover the effect type or target, or the effect
+# type has no control row
+
+PER_CALL_LIMIT = "PER_CALL_LIMIT"
+# DENY: The effect's amount exceeds a per-call limit of the mandate chain
+
+ARITHMETIC_OVERFLOW = "ARITHMETIC_OVERFLOW"
+# DENY: An amount or counter total overflows a 64-bit integer
+
+IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+# DENY: The idempotency key was already used with a different request
+
+APPROVER_NOT_DISTINCT = "APPROVER_NOT_DISTINCT"
+# DENY: The approver is the requester; an approval needs a distinct principal
+
+APPROVAL_REJECTED = "APPROVAL_REJECTED"
+# DENY: A distinct human approver rejected the escalated effect
+
+STEP_UP_REQUIRED = "STEP_UP_REQUIRED"
+# DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
+# assertion the request did not carry
+
 ALL: frozenset[str] = frozenset(
     {
         POLICY_VIOLATION,
@@ -471,6 +504,16 @@ ALL: frozenset[str] = frozenset(
         PROVIDER_CREDENTIAL_REJECTED,
         PROVIDER_RESPONSE_TOO_LARGE,
         PROVIDER_ERROR,
+        PRINCIPAL_INACTIVE,
+        MANDATE_INACTIVE,
+        MANDATE_OUTSIDE_VALIDITY,
+        EFFECT_OUT_OF_SCOPE,
+        PER_CALL_LIMIT,
+        ARITHMETIC_OVERFLOW,
+        IDEMPOTENCY_CONFLICT,
+        APPROVER_NOT_DISTINCT,
+        APPROVAL_REJECTED,
+        STEP_UP_REQUIRED,
     }
 )
 

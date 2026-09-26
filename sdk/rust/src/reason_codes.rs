@@ -234,6 +234,29 @@ pub const PROVIDER_CREDENTIAL_REJECTED: &str = "PROVIDER_CREDENTIAL_REJECTED";
 pub const PROVIDER_RESPONSE_TOO_LARGE: &str = "PROVIDER_RESPONSE_TOO_LARGE";
 /// DENY: The provider failed or refused the call for a reason other than its credential
 pub const PROVIDER_ERROR: &str = "PROVIDER_ERROR";
+/// DENY: The requesting principal is unknown to the tenant or disabled
+pub const PRINCIPAL_INACTIVE: &str = "PRINCIPAL_INACTIVE";
+/// DENY: No active mandate held by the principal covers the effect, or a mandate of its chain is
+/// revoked
+pub const MANDATE_INACTIVE: &str = "MANDATE_INACTIVE";
+/// DENY: A mandate of the chain is outside its validity window
+pub const MANDATE_OUTSIDE_VALIDITY: &str = "MANDATE_OUTSIDE_VALIDITY";
+/// DENY: A mandate of the chain does not cover the effect type or target, or the effect type has no
+/// control row
+pub const EFFECT_OUT_OF_SCOPE: &str = "EFFECT_OUT_OF_SCOPE";
+/// DENY: The effect's amount exceeds a per-call limit of the mandate chain
+pub const PER_CALL_LIMIT: &str = "PER_CALL_LIMIT";
+/// DENY: An amount or counter total overflows a 64-bit integer
+pub const ARITHMETIC_OVERFLOW: &str = "ARITHMETIC_OVERFLOW";
+/// DENY: The idempotency key was already used with a different request
+pub const IDEMPOTENCY_CONFLICT: &str = "IDEMPOTENCY_CONFLICT";
+/// DENY: The approver is the requester; an approval needs a distinct principal
+pub const APPROVER_NOT_DISTINCT: &str = "APPROVER_NOT_DISTINCT";
+/// DENY: A distinct human approver rejected the escalated effect
+pub const APPROVAL_REJECTED: &str = "APPROVAL_REJECTED";
+/// DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion
+/// the request did not carry
+pub const STEP_UP_REQUIRED: &str = "STEP_UP_REQUIRED";
 
 /// Every registered reason code, in registry order.
 pub const ALL: &[&str] = &[
@@ -347,6 +370,16 @@ pub const ALL: &[&str] = &[
     PROVIDER_CREDENTIAL_REJECTED,
     PROVIDER_RESPONSE_TOO_LARGE,
     PROVIDER_ERROR,
+    PRINCIPAL_INACTIVE,
+    MANDATE_INACTIVE,
+    MANDATE_OUTSIDE_VALIDITY,
+    EFFECT_OUT_OF_SCOPE,
+    PER_CALL_LIMIT,
+    ARITHMETIC_OVERFLOW,
+    IDEMPOTENCY_CONFLICT,
+    APPROVER_NOT_DISTINCT,
+    APPROVAL_REJECTED,
+    STEP_UP_REQUIRED,
 ];
 
 /// Whether `code` is in the registry.

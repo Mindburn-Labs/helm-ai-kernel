@@ -93,6 +93,18 @@ const (
 	ReasonDelegationScopeViolation    ReasonCode = "DELEGATION_SCOPE_VIOLATION"
 	ReasonDelegationPrincipalMismatch ReasonCode = "DELEGATION_PRINCIPAL_MISMATCH"
 
+	// ── Effect gateway admission (HELM-751, ADR-0001 §6) ───
+	ReasonPrincipalInactive      ReasonCode = "PRINCIPAL_INACTIVE"
+	ReasonMandateInactive        ReasonCode = "MANDATE_INACTIVE"
+	ReasonMandateOutsideValidity ReasonCode = "MANDATE_OUTSIDE_VALIDITY"
+	ReasonEffectOutOfScope       ReasonCode = "EFFECT_OUT_OF_SCOPE"
+	ReasonPerCallLimit           ReasonCode = "PER_CALL_LIMIT"
+	ReasonArithmeticOverflow     ReasonCode = "ARITHMETIC_OVERFLOW"
+	ReasonIdempotencyConflict    ReasonCode = "IDEMPOTENCY_CONFLICT"
+	ReasonApproverNotDistinct    ReasonCode = "APPROVER_NOT_DISTINCT"
+	ReasonApprovalRejected       ReasonCode = "APPROVAL_REJECTED"
+	ReasonStepUpRequired         ReasonCode = "STEP_UP_REQUIRED"
+
 	// ── Privilege Tier Reasons ──────────────
 	ReasonInsufficientPrivilege ReasonCode = "INSUFFICIENT_PRIVILEGE"
 

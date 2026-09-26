@@ -9,10 +9,11 @@
 --
 -- Adapted to the kernel: the tables live in the kernel's schema with an
 -- `authority_` prefix, tenant and principal ids are the kernel's text ids, and
--- row security uses app.current_tenant. postgresmigration applies forced row
--- security with the tenant policy to every table below after this file.
+-- row security uses app.current_tenant. SchemaDDL (schema.go) applies forced
+-- row security with the tenant policy to every table below after this file.
 --
--- Serving code never runs this file; `helm-ai-kernel migrate` does.
+-- Serving code never runs this file; `helm-ai-kernel migrate` and
+-- `helm-gateway migrate` do. Every statement is idempotent.
 
 CREATE TABLE IF NOT EXISTS authority_tenants (
     tenant_id  TEXT PRIMARY KEY CHECK (tenant_id <> ''),
@@ -122,3 +123,27 @@ CREATE TABLE IF NOT EXISTS authority_stops (
 
 CREATE INDEX IF NOT EXISTS authority_stops_active
     ON authority_stops (tenant_id, scope_kind, scope_key) WHERE lifted_at IS NULL;
+
+-- HELM-750 s2b: the mandate terms admission evaluates beyond scope and limits.
+--   targets       the allowlisted targets, exact strings. NULL allows any
+--                 target; a delegated mandate under a list must carry a subset.
+--   condition     a CEL condition over the effect (input.args, input.target,
+--                 input.effect_type). It is compiled when the mandate is
+--                 activated, delegated or narrowed, and a condition that does
+--                 not compile is refused there. Every link's condition must
+--                 hold at admission, so a child's condition only narrows.
+--   approval_required  the effect types for which every call under this
+--                 mandate needs approval, whatever their risk class (a medium
+--                 effect can require approval, ADR-0001 §4). A child keeps
+--                 every ancestor's entries for the effect types it covers.
+--   risk_classes  a risk class per effect type that raises the effect type
+--                 row's class for this mandate (high or irreversible
+--                 escalate). A child never lowers an ancestor's class.
+ALTER TABLE authority_mandates ADD COLUMN IF NOT EXISTS targets TEXT[]
+    CHECK (targets IS NULL OR cardinality(targets) > 0);
+ALTER TABLE authority_mandates ADD COLUMN IF NOT EXISTS condition TEXT
+    CHECK (condition IS NULL OR length(condition) BETWEEN 1 AND 4096);
+ALTER TABLE authority_mandates ADD COLUMN IF NOT EXISTS risk_classes JSONB
+    CHECK (risk_classes IS NULL OR jsonb_typeof(risk_classes) = 'object');
+ALTER TABLE authority_mandates ADD COLUMN IF NOT EXISTS approval_required TEXT[]
+    CHECK (approval_required IS NULL OR cardinality(approval_required) > 0);

@@ -428,6 +428,46 @@ const ProviderResponseTooLarge = "PROVIDER_RESPONSE_TOO_LARGE"
 // other than its credential
 const ProviderError = "PROVIDER_ERROR"
 
+// PrincipalInactive DENY: The requesting principal is unknown to the tenant or
+// disabled
+const PrincipalInactive = "PRINCIPAL_INACTIVE"
+
+// MandateInactive DENY: No active mandate held by the principal covers the
+// effect, or a mandate of its chain is revoked
+const MandateInactive = "MANDATE_INACTIVE"
+
+// MandateOutsideValidity DENY: A mandate of the chain is outside its validity
+// window
+const MandateOutsideValidity = "MANDATE_OUTSIDE_VALIDITY"
+
+// EffectOutOfScope DENY: A mandate of the chain does not cover the effect type
+// or target, or the effect type has no control row
+const EffectOutOfScope = "EFFECT_OUT_OF_SCOPE"
+
+// PerCallLimit DENY: The effect's amount exceeds a per-call limit of the
+// mandate chain
+const PerCallLimit = "PER_CALL_LIMIT"
+
+// ArithmeticOverflow DENY: An amount or counter total overflows a 64-bit
+// integer
+const ArithmeticOverflow = "ARITHMETIC_OVERFLOW"
+
+// IdempotencyConflict DENY: The idempotency key was already used with a
+// different request
+const IdempotencyConflict = "IDEMPOTENCY_CONFLICT"
+
+// ApproverNotDistinct DENY: The approver is the requester; an approval needs a
+// distinct principal
+const ApproverNotDistinct = "APPROVER_NOT_DISTINCT"
+
+// ApprovalRejected DENY: A distinct human approver rejected the escalated
+// effect
+const ApprovalRejected = "APPROVAL_REJECTED"
+
+// StepUpRequired DENY: Approving a high-risk, irreversible or authority-
+// widening effect needs a step-up assertion the request did not carry
+const StepUpRequired = "STEP_UP_REQUIRED"
+
 var all = [...]string{
 	PolicyViolation,
 	NoPolicyDefined,
@@ -539,6 +579,16 @@ var all = [...]string{
 	ProviderCredentialRejected,
 	ProviderResponseTooLarge,
 	ProviderError,
+	PrincipalInactive,
+	MandateInactive,
+	MandateOutsideValidity,
+	EffectOutOfScope,
+	PerCallLimit,
+	ArithmeticOverflow,
+	IdempotencyConflict,
+	ApproverNotDistinct,
+	ApprovalRejected,
+	StepUpRequired,
 }
 
 // All returns every registered reason code, in registry order.

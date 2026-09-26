@@ -141,16 +141,16 @@ type EffectGatewayServiceClient interface {
 	//     ADMITTED, DISPATCHING) or UNKNOWN. existing is true. Counters are not
 	//     touched and no second dispatch can follow.
 	//   - Same key, different digest: already_exists
-	//     [reason_code_pending: IDEMPOTENCY_CONFLICT].
+	//     [reason_code: IDEMPOTENCY_CONFLICT].
 	//
 	// Denial reasons, in decide's order (ADR-0001 §1 step 5):
 	// [reason_code: EMERGENCY_STOP_FENCED],
-	// [reason_code_pending: PRINCIPAL_INACTIVE],
-	// [reason_code_pending: MANDATE_INACTIVE],
-	// [reason_code_pending: MANDATE_OUTSIDE_VALIDITY],
-	// [reason_code_pending: EFFECT_OUT_OF_SCOPE],
-	// [reason_code_pending: PER_CALL_LIMIT],
-	// [reason_code_pending: ARITHMETIC_OVERFLOW],
+	// [reason_code: PRINCIPAL_INACTIVE],
+	// [reason_code: MANDATE_INACTIVE],
+	// [reason_code: MANDATE_OUTSIDE_VALIDITY],
+	// [reason_code: EFFECT_OUT_OF_SCOPE],
+	// [reason_code: PER_CALL_LIMIT],
+	// [reason_code: ARITHMETIC_OVERFLOW],
 	// [reason_code: BUDGET_EXCEEDED],
 	// [reason_code_pending: INSUFFICIENT_CREDIT],
 	// [reason_code_pending: ROUTE_UNPRICED]. Escalation:
@@ -179,19 +179,19 @@ type EffectGatewayServiceClient interface {
 	//   - The approver is the token's principal and must be an active
 	//     principal of the tenant other than the requester (§4.2, F-08).
 	//     Self-approval is permission_denied
-	//     [reason_code_pending: APPROVER_NOT_DISTINCT].
+	//     [reason_code: APPROVER_NOT_DISTINCT].
 	//   - approval_digest must equal the pending approval's digest, or the call
 	//     is failed_precondition.
 	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
 	//     authority widening, stop lifts) fail closed with permission_denied
-	//     [reason_code_pending: STEP_UP_REQUIRED] until the step-up assertion
+	//     [reason_code: STEP_UP_REQUIRED] until the step-up assertion
 	//     field exists (held field number 4).
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.
 	Approve(context.Context, *connect.Request[ApproveRequest]) (*connect.Response[ApproveResponse], error)
 	// Reject records a rejection for an ESCALATED attempt. The response state
-	// is REJECTED [reason_code_pending: APPROVAL_REJECTED]. Nothing was
+	// is REJECTED [reason_code: APPROVAL_REJECTED]. Nothing was
 	// reserved, so nothing is released.
 	//
 	// Token scope: helm.gateway.decide, with the same principal, digest and
@@ -467,16 +467,16 @@ type EffectGatewayServiceHandler interface {
 	//     ADMITTED, DISPATCHING) or UNKNOWN. existing is true. Counters are not
 	//     touched and no second dispatch can follow.
 	//   - Same key, different digest: already_exists
-	//     [reason_code_pending: IDEMPOTENCY_CONFLICT].
+	//     [reason_code: IDEMPOTENCY_CONFLICT].
 	//
 	// Denial reasons, in decide's order (ADR-0001 §1 step 5):
 	// [reason_code: EMERGENCY_STOP_FENCED],
-	// [reason_code_pending: PRINCIPAL_INACTIVE],
-	// [reason_code_pending: MANDATE_INACTIVE],
-	// [reason_code_pending: MANDATE_OUTSIDE_VALIDITY],
-	// [reason_code_pending: EFFECT_OUT_OF_SCOPE],
-	// [reason_code_pending: PER_CALL_LIMIT],
-	// [reason_code_pending: ARITHMETIC_OVERFLOW],
+	// [reason_code: PRINCIPAL_INACTIVE],
+	// [reason_code: MANDATE_INACTIVE],
+	// [reason_code: MANDATE_OUTSIDE_VALIDITY],
+	// [reason_code: EFFECT_OUT_OF_SCOPE],
+	// [reason_code: PER_CALL_LIMIT],
+	// [reason_code: ARITHMETIC_OVERFLOW],
 	// [reason_code: BUDGET_EXCEEDED],
 	// [reason_code_pending: INSUFFICIENT_CREDIT],
 	// [reason_code_pending: ROUTE_UNPRICED]. Escalation:
@@ -505,19 +505,19 @@ type EffectGatewayServiceHandler interface {
 	//   - The approver is the token's principal and must be an active
 	//     principal of the tenant other than the requester (§4.2, F-08).
 	//     Self-approval is permission_denied
-	//     [reason_code_pending: APPROVER_NOT_DISTINCT].
+	//     [reason_code: APPROVER_NOT_DISTINCT].
 	//   - approval_digest must equal the pending approval's digest, or the call
 	//     is failed_precondition.
 	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
 	//     authority widening, stop lifts) fail closed with permission_denied
-	//     [reason_code_pending: STEP_UP_REQUIRED] until the step-up assertion
+	//     [reason_code: STEP_UP_REQUIRED] until the step-up assertion
 	//     field exists (held field number 4).
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.
 	Approve(context.Context, *connect.Request[ApproveRequest]) (*connect.Response[ApproveResponse], error)
 	// Reject records a rejection for an ESCALATED attempt. The response state
-	// is REJECTED [reason_code_pending: APPROVAL_REJECTED]. Nothing was
+	// is REJECTED [reason_code: APPROVAL_REJECTED]. Nothing was
 	// reserved, so nothing is released.
 	//
 	// Token scope: helm.gateway.decide, with the same principal, digest and

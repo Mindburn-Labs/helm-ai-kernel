@@ -1,0 +1,52 @@
+{{- if and .Values.gateway.enabled .Values.gateway.networkPolicy.enabled }}
+{{- include "helm-ai-kernel.gatewayValidate" . }}
+{{- $np := .Values.gateway.networkPolicy }}
+{{- $controlPlane := dict }}
+{{- with $np.controlPlane.namespaceSelector }}{{- $_ := set $controlPlane "namespaceSelector" . }}{{- end }}
+{{- with $np.controlPlane.podSelector }}{{- $_ := set $controlPlane "podSelector" . }}{{- end }}
+# Ingress: the API port from the Control Plane only. The health port has no
+# rule: kubelet probes come from the node. Egress: DNS, the database, and TCP
+# 443 to any address, which covers api.github.com and an https JWKS endpoint.
+# A NetworkPolicy cannot name a host, so the 443 rule is port-only: it does
+# not stop the Pod reaching some other host on 443.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "helm-ai-kernel.gatewayName" . }}
+  labels:
+    {{- include "helm-ai-kernel.gatewayLabels" . | nindent 4 }}
+  annotations:
+    helm.ai/policy-intent: "gateway ingress from the Control Plane only; egress to DNS, the database and TCP 443"
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "helm-ai-kernel.gatewaySelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        {{- toYaml (list $controlPlane) | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 8443
+  egress:
+    - to:
+        {{- toYaml $np.dns.to | nindent 8 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        {{- toYaml $np.database.to | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: {{ $np.database.port }}
+    - ports:
+        - protocol: TCP
+          port: 443
+    {{- with $np.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

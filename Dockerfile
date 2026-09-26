@@ -27,10 +27,19 @@ RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=
       -ldflags="-s -w -X main.version=${BUILD_VERSION} -X main.commit=${BUILD_COMMIT} -X main.buildTime=${BUILD_TIME}" \
       -o /helm-ai-kernel ./cmd/helm-ai-kernel/
 
+# Build the effect gateway (Zone C). It ships in the same image, so one tag and
+# one cosign identity cover both binaries; the chart's gateway block runs it
+# with `command: /usr/local/bin/helm-gateway`.
+RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=cache,id=helm-ai-kernel-go-build,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" go build \
+      -ldflags="-s -w" \
+      -o /helm-gateway ./cmd/helm-gateway/
+
 # ── Stage 2: Runtime ───────────────────────────────────
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
 
 COPY --from=builder /helm-ai-kernel /usr/local/bin/helm-ai-kernel
+COPY --from=builder /helm-gateway /usr/local/bin/helm-gateway
 COPY --from=builder --chown=65532:65532 /runtime-data/ /var/lib/helm-ai-kernel/
 COPY release.high_risk.v3.toml /etc/helm-ai-kernel/release.high_risk.v3.toml
 COPY reference_packs/ /etc/helm-ai-kernel/reference_packs/

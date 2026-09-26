@@ -1,0 +1,164 @@
+{{- if .Values.gateway.enabled }}
+{{- include "helm-ai-kernel.gatewayValidate" . }}
+{{- $g := .Values.gateway }}
+{{- $b := $g.database.bootstrap }}
+{{- $settings := `\getenv owner_role HELM_GATEWAY_OWNER_ROLE
+\getenv runtime_role HELM_GATEWAY_RUNTIME_ROLE
+\getenv schema HELM_GATEWAY_SCHEMA
+SELECT set_config('helm_gateway_bootstrap.owner_role', :'owner_role', false),
+       set_config('helm_gateway_bootstrap.runtime_role', :'runtime_role', false),
+       set_config('helm_gateway_bootstrap.schema', :'schema', false) \g /dev/null` }}
+# Runs before the Deployment on every install and upgrade. Without the
+# bootstrap: `helm-gateway migrate` with the migrate DSN (else the runtime
+# DSN). With it (ADR-0004): 001_roles.sql as the administrator, then migrate
+# and 002_grants.sql as the owner role (SET ROLE through PGOPTIONS), so the
+# owner owns every table and the serving role holds DML grants only.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "helm-ai-kernel.gatewayName" . }}-migrate
+  labels:
+    {{- include "helm-ai-kernel.labels" . | nindent 4 }}
+    app.kubernetes.io/component: effect-gateway-migrate
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/part-of: helm-ai-kernel
+        app.kubernetes.io/component: effect-gateway-migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if $b.enabled }}
+      initContainers:
+        - name: roles
+          image: {{ $b.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              {
+                printf '%s\n' "$HELM_GATEWAY_BOOTSTRAP_SETTINGS" "$HELM_GATEWAY_BOOTSTRAP_SQL"
+                if [ -n "${HELM_GATEWAY_ROLE_PASSWORD:-}" ]; then
+                  printf '%s\n' '\getenv runtime_password HELM_GATEWAY_ROLE_PASSWORD' \
+                    "ALTER ROLE :\"runtime_role\" PASSWORD :'runtime_password';"
+                fi
+              } | psql "$HELM_GATEWAY_ADMIN_DATABASE_URL" -X -q -v ON_ERROR_STOP=1 --single-transaction -f -
+          env:
+            - name: HELM_GATEWAY_ADMIN_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $b.existingSecret | quote }}
+                  key: {{ $b.adminDatabaseURLKey | quote }}
+            - name: HELM_GATEWAY_ROLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $b.existingSecret | quote }}
+                  key: {{ $b.runtimePasswordKey | quote }}
+                  optional: true
+            - name: HELM_GATEWAY_OWNER_ROLE
+              value: {{ $b.ownerRole | quote }}
+            - name: HELM_GATEWAY_RUNTIME_ROLE
+              value: {{ $b.runtimeRole | quote }}
+            - name: HELM_GATEWAY_SCHEMA
+              value: {{ $b.schema | quote }}
+            - name: HELM_GATEWAY_BOOTSTRAP_SETTINGS
+              value: {{ $settings | quote }}
+            - name: HELM_GATEWAY_BOOTSTRAP_SQL
+              value: {{ .Files.Get "files/gateway-db/001_roles.sql" | quote }}
+          resources:
+            {{- toYaml $g.resources | nindent 12 }}
+        - name: migrate
+          image: {{ include "helm-ai-kernel.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/helm-gateway", "migrate"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: HELM_GATEWAY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $b.existingSecret | quote }}
+                  key: {{ $b.adminDatabaseURLKey | quote }}
+            - name: PGOPTIONS
+              value: {{ printf "-c role=%s -c search_path=%s" $b.ownerRole $b.schema | quote }}
+          resources:
+            {{- toYaml $g.resources | nindent 12 }}
+      {{- end }}
+      containers:
+        {{- if $b.enabled }}
+        - name: grants
+          image: {{ $b.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              printf '%s\n' "$HELM_GATEWAY_BOOTSTRAP_SETTINGS" "$HELM_GATEWAY_BOOTSTRAP_SQL" \
+                | psql "$HELM_GATEWAY_ADMIN_DATABASE_URL" -X -q -v ON_ERROR_STOP=1 --single-transaction -f -
+          env:
+            - name: HELM_GATEWAY_ADMIN_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $b.existingSecret | quote }}
+                  key: {{ $b.adminDatabaseURLKey | quote }}
+            - name: PGOPTIONS
+              value: {{ printf "-c role=%s -c search_path=%s" $b.ownerRole $b.schema | quote }}
+            - name: HELM_GATEWAY_OWNER_ROLE
+              value: {{ $b.ownerRole | quote }}
+            - name: HELM_GATEWAY_RUNTIME_ROLE
+              value: {{ $b.runtimeRole | quote }}
+            - name: HELM_GATEWAY_SCHEMA
+              value: {{ $b.schema | quote }}
+            - name: HELM_GATEWAY_BOOTSTRAP_SETTINGS
+              value: {{ $settings | quote }}
+            - name: HELM_GATEWAY_BOOTSTRAP_SQL
+              value: {{ .Files.Get "files/gateway-db/002_grants.sql" | quote }}
+          resources:
+            {{- toYaml $g.resources | nindent 12 }}
+        {{- else }}
+        - name: migrate
+          image: {{ include "helm-ai-kernel.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/helm-gateway", "migrate"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: HELM_GATEWAY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  {{- if $g.database.migrate.existingSecret }}
+                  name: {{ $g.database.migrate.existingSecret | quote }}
+                  key: {{ $g.database.migrate.existingSecretKey | quote }}
+                  {{- else }}
+                  name: {{ $g.database.existingSecret | quote }}
+                  key: {{ $g.database.existingSecretKey | quote }}
+                  {{- end }}
+          resources:
+            {{- toYaml $g.resources | nindent 12 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

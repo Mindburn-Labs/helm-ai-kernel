@@ -388,6 +388,27 @@ assert_persistence_after_restart() {
 }
 
 echo "docker smoke mode=$MODE image=$IMAGE api_port=$API_PORT health_port=$HEALTH_PORT runtime_data_dir=$RUNTIME_DATA_DIR artifact_dir=$ARTIFACT_DIR"
+
+# The release image carries the effect gateway next to the kernel (HELM-789):
+# one tag, one cosign identity, and a non-root user for both binaries.
+check_image_binaries() {
+    local user gateway_usage
+    user="$(docker image inspect "$IMAGE" --format '{{.Config.User}}')"
+    if [ "$user" != "nonroot:nonroot" ]; then
+        echo "::error::$IMAGE runs as '${user}', want nonroot:nonroot"
+        exit 1
+    fi
+    # Without arguments helm-gateway prints its usage and exits 1.
+    gateway_usage="$(docker run --rm --entrypoint /usr/local/bin/helm-gateway "$IMAGE" 2>&1 || true)"
+    if [[ "$gateway_usage" != *"usage: helm-gateway migrate | serve"* ]]; then
+        echo "::error::$IMAGE has no working /usr/local/bin/helm-gateway: ${gateway_usage}"
+        exit 1
+    fi
+}
+
+if [ "$MODE" = "docker" ]; then
+    check_image_binaries
+fi
 start_runtime
 assert_compose_build_metadata
 receipt_id="$(evaluate_unknown_tool)"

@@ -30,25 +30,22 @@ surface for the `helm-ai-kernel` project.
 
 ## Active Quality Workflows
 
-- `approval-ceremony.yml` runs the durable approval lifecycle against a real
-  PostgreSQL service under a `NOSUPERUSER NOBYPASSRLS` runtime role. It pins
-  ceremony/signing golden vectors and repeats the atomic issue/consume,
-  tenant/workspace/audience isolation, signed-expiry, and tamper proofs. It also
-  verifies connector release-authority schemas/vectors and repeats the
-  append-only, forced-RLS PostgreSQL registry proof under least-privilege writer
-  and runtime roles. The
-  workflow is source-owned CI evidence; it does not by itself establish branch
-  protection or GA release authority.
 - `ci.yml` calls `ci-v2.yml`, a vendored copy of `Mindburn-Labs/platform-actions`
   `ci.yml@v2` (a public repository cannot call that internal repository's
   workflows). Its `gate`
   job, reported as `ci / gate`, is the only required status check. It runs
   `make check` (the `merge` profile of `scripts/ci/quality-gates.json`, every
   gate blocking) after `scripts/ci/install_check_tools.sh` installs pinned
-  protoc, buf, oasdiff, kind, ripgrep and the Python gate dependencies, plus a
-  diff-aware dependency scan that fails only on HIGH or CRITICAL advisories a
-  change introduces. It runs on every pull request, merge group and push to
-  `main`, with no path filters.
+  protoc, buf, oasdiff, kind, ripgrep, PostgreSQL 16 and the Python gate
+  dependencies, plus a diff-aware dependency scan that fails only on HIGH or
+  CRITICAL advisories a change introduces. It runs on every pull request, merge
+  group and push to `main`, with no path filters. Its `postgres-proofs` gate
+  (`make postgres-proofs`) starts a disposable PostgreSQL 16 cluster in UTC and
+  runs every Postgres-gated proof in `scripts/ci/postgres-proofs.txt`, among
+  them the approval lifecycle, connector release-authority and forced-RLS
+  tenant proofs under `NOSUPERUSER NOBYPASSRLS` roles; a skip, a missing
+  database or an unlisted gated test fails it. The golden vectors those proofs
+  pair with run in the `verify-fixtures` gate.
 - `codeql.yml` is the single CodeQL code-scanning run (Go, JavaScript and
   TypeScript, Python, Java and Kotlin). It is not required.
 - `helm-integration.yml` runs the minikube Launchpad smoke when the chart or

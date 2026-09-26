@@ -5,7 +5,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-MANIFEST="$ROOT/scripts/ci/postgres-proofs.txt"
+# The overrides exist for the gate's positive control (postgres_proofs_gate.sh),
+# which points them at a planted tree to prove an unlisted proof fails the run.
+CORE="${HELM_POSTGRES_PROOFS_CORE:-$ROOT/core}"
+MANIFEST="${HELM_POSTGRES_PROOFS_MANIFEST:-$ROOT/scripts/ci/postgres-proofs.txt}"
 CHECK="$ROOT/scripts/ci/check_postgres_proofs.py"
 
 if [ -z "${HELM_TEST_POSTGRES_URL:-}" ]; then
@@ -14,7 +17,7 @@ if [ -z "${HELM_TEST_POSTGRES_URL:-}" ]; then
 fi
 
 # Every gated test in the tree is listed, and every listed test still exists.
-python3 "$CHECK" discover "$ROOT/core" "$MANIFEST"
+python3 "$CHECK" discover "$CORE" "$MANIFEST"
 
 LOG="$(mktemp "${TMPDIR:-/tmp}/helm-postgres-proofs.XXXXXX")"
 trap 'rm -f "$LOG"' EXIT
@@ -25,7 +28,7 @@ while read -r package count mode tests; do
     race=()
     [ "$mode" = race ] && race=(-race)
     echo "==> go test ${race[*]} -count=$count ./$package -run '^($tests)\$'"
-    (cd "$ROOT/core" && go test "${race[@]}" -p 1 -count="$count" -v "./$package" -run "^(${tests})\$") >>"$LOG" 2>&1 || status=1
+    (cd "$CORE" && go test "${race[@]}" -p 1 -count="$count" -v "./$package" -run "^(${tests})\$") >>"$LOG" 2>&1 || status=1
 done < <(python3 - "$MANIFEST" <<'PY'
 import sys
 from collections import defaultdict

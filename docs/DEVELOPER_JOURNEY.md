@@ -59,25 +59,25 @@ docker compose up -d
 
 After the tag-driven release and published registry verification complete,
 Java SDK consumers can use the source-target Maven coordinate
-`io.github.mindburnlabs:helm-sdk:0.8.5`:
+`io.github.mindburnlabs:helm-sdk:0.9.0`:
 
 ```xml
 <dependency>
   <groupId>io.github.mindburnlabs</groupId>
   <artifactId>helm-sdk</artifactId>
-  <version>0.8.5</version>
+  <version>0.9.0</version>
 </dependency>
 ```
 
-Current source release target: `v0.8.5`.
+Current source release target: `v0.9.0`.
 The expected release URL is
-`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.5`. Do not
+`https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.9.0`. Do not
 treat its assets as present until the normal release workflow attaches and
-verifies them, including `v0.8.5.openvex.json` and `v0.8.5.json`.
+verifies them, including `v0.9.0.openvex.json` and `v0.9.0.json`.
 
 After the source subdirectory tag is published and verified, Go SDK consumers
-can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.5`; the expected
-tag is `sdk/go/v0.8.5`.
+can pin `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.9.0`; the expected
+tag is `sdk/go/v0.9.0`.
 
 ## Local Boundary
 

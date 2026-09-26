@@ -93,6 +93,25 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+### Changed — one stop state for serve, proxy and mcp serve (HELM-780)
+
+Breaking for fenced deployments and for `serve --data-dir`.
+
+- **The freeze follows the data directory.** `serve --data-dir` and
+  `mcp serve --data-dir` read `freeze_state.json` from that directory, not
+  from `./data` under the working directory. `freeze` and `unfreeze` take
+  `--data-dir` to write it there. Without the flag both still use
+  `$HELM_DATA_DIR`, then `./data`.
+- **The emergency-stop fence reaches `proxy` and `mcp serve`.** With
+  `HELM_EMERGENCY_STOP_FENCE_ENABLED` on, both open the same fence store as
+  `serve` (`DATABASE_URL`, or the Lite Mode `helm.db` in their data directory)
+  and bind `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_WORKSPACE_ID`.
+  - They refuse to start without that scope.
+  - `proxy --tenant-id` must equal `HELM_RUNTIME_TENANT_ID`.
+  - MCP tool calls, including those through `serve`'s `/mcp` gateway, are
+    decided for the configured scope. Tenant and workspace names in tool
+    arguments no longer reach the fence check.
+
 ### Removed — `core/pkg/crypto/tee` and its collateral verifier (HELM-756)
 
 <!-- quantum_posture: this entry names a removed attestation package; it adds no cryptographic control. -->

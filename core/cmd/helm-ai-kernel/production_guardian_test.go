@@ -24,7 +24,7 @@ type fixedProductionGuardianClock struct{ now time.Time }
 func (c fixedProductionGuardianClock) Now() time.Time { return c.now }
 
 func TestProductionGuardianFactoryRequiresAuthorityClock(t *testing.T) {
-	g, err := newProductionGuardian(nil, nil, nil, nil)
+	g, err := newProductionGuardian(nil, nil, nil, nil, productionGuardianState{})
 	if err == nil || g != nil {
 		t.Fatalf("factory without authority clock = (%v, %v), want (nil, error)", g, err)
 	}
@@ -114,7 +114,7 @@ func TestProductionGuardianFactoryRunsEveryRequiredDenyGate(t *testing.T) {
 			if test.extra != nil {
 				options = append(options, test.extra)
 			}
-			g, err := newProductionGuardian(signer, nil, nil, clock, options...)
+			g, err := newProductionGuardian(signer, nil, nil, clock, productionGuardianState{DataDir: t.TempDir()}, options...)
 			if err != nil {
 				t.Fatalf("construct production Guardian: %v", err)
 			}
@@ -228,23 +228,23 @@ func TestProductionGuardianFactoryRejectsNilRequiredOverride(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := newProductionGuardian(signer, nil, nil, clock, guardian.WithDelegationStore(identity.DelegationStore(nil)))
+	g, err := newProductionGuardian(signer, nil, nil, clock, productionGuardianState{DataDir: t.TempDir()}, guardian.WithDelegationStore(identity.DelegationStore(nil)))
 	if err == nil || g != nil {
 		t.Fatalf("nil required override = (%v, %v), want (nil, error)", g, err)
 	}
 }
 
 func TestProductionGuardianTracksPersistedFreezeState(t *testing.T) {
-	t.Setenv("HELM_DATA_DIR", t.TempDir())
+	dataDir := t.TempDir()
 	clock := fixedProductionGuardianClock{now: time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)}
-	if err := saveFreezeState(&persistedFreezeState{Frozen: true, FrozenBy: "operator", FrozenAt: clock.now}); err != nil {
+	if err := saveFreezeState(dataDir, &persistedFreezeState{Frozen: true, FrozenBy: "operator", FrozenAt: clock.now}); err != nil {
 		t.Fatal(err)
 	}
 	signer, err := helmcrypto.NewEd25519SignerFromSeed(bytes.Repeat([]byte{0x71}, 32), "production-freeze-test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := newProductionGuardian(signer, nil, nil, clock)
+	g, err := newProductionGuardian(signer, nil, nil, clock, productionGuardianState{DataDir: dataDir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestProductionGuardianTracksPersistedFreezeState(t *testing.T) {
 		t.Fatalf("frozen decision = %+v", decision)
 	}
 
-	if err := saveFreezeState(&persistedFreezeState{}); err != nil {
+	if err := saveFreezeState(dataDir, &persistedFreezeState{}); err != nil {
 		t.Fatal(err)
 	}
 	decision, err = g.EvaluateDecision(context.Background(), request)

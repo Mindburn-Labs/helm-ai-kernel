@@ -2572,6 +2572,7 @@ controls:
         - "core/pkg/kernel/authority/authorityrows.TestPostgresEveryNarrowingBumpsItsControlRowVersion"
         - "core/pkg/kernel/authority/authorityrows.TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole"
       removal: []
+      bypass: []
   - id: CTL-047
     title: "Production egress is deny-all"
     owner: Mindburn Labs core team (kernel)

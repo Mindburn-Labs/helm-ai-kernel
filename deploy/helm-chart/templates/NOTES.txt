@@ -10,17 +10,17 @@ HELM AI Kernel has been deployed.
 {{- else if contains "NodePort" .Values.service.type }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "helm-ai-kernel.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-  echo http://$NODE_IP:$NODE_PORT
+  echo http{{ if .Values.helm.tls.existingSecret }}s{{ end }}://$NODE_IP:$NODE_PORT
 {{- else if contains "LoadBalancer" .Values.service.type }}
   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
   You can watch the status with:
     kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "helm-ai-kernel.fullname" . }}
 
   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "helm-ai-kernel.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
-  echo http://$SERVICE_IP:{{ .Values.service.port }}
+  echo http{{ if .Values.helm.tls.existingSecret }}s{{ end }}://$SERVICE_IP:{{ .Values.service.port }}
 {{- else if contains "ClusterIP" .Values.service.type }}
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "helm-ai-kernel.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
-  echo "Visit http://127.0.0.1:{{ .Values.service.port }} to access HELM"
+  echo "Visit http{{ if .Values.helm.tls.existingSecret }}s{{ end }}://127.0.0.1:{{ .Values.service.port }} to access HELM"
 {{- end }}
 
 2. Verify health:

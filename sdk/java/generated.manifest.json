@@ -2,13 +2,13 @@
   "files": [
     {
       "path": "src/main/java/labs/mindburn/helm/TypesGen.java",
-      "sha256": "6d85342aad0706930bd76049c1b872306b47155758d8808f13a082113aa7c73a"
+      "sha256": "10e64527f0ee2cb4760c56af4d3043155a8bc2cd780af25fd2b11a7a60238e68"
     }
   ],
   "generator": "openapitools/openapi-generator-cli:v7.4.0@sha256:579832bed49ea6c275ce2fb5f2d515f5b03d2b6243f3c80fa8430e4f5a770e9a",
   "sdk": "java",
   "source": {
-    "sha256": "15172f78b1555a430f4a43314b20400344c2477046e9315350fe5e0568a4bdc4",
+    "sha256": "c01b8db72b5e0905f6b9d33c7eb7c8daac69d8d3ec75e5ee5ac94953e782a815",
     "spec": "api/openapi/helm.openapi.yaml"
   }
 }

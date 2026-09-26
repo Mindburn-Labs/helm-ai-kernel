@@ -93,6 +93,83 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+## [0.9.0] - 2026-09-26
+
+Source-prepared v0.9.0 notes for the current Kernel tree. These entries do not
+claim tag publication, registry availability, hosted or production telemetry,
+customer use, GA status, live OrganizationRuntime proof, or positive savings.
+The minor version moves because several public routes, commands and SDK
+methods are removed or now answer 501; each is listed below.
+
+### Added — native TLS with optional client certificates; public receipt keyring (HELM-786)
+
+- `serve` listens over TLS when `HELM_TLS_CERT_FILE` and `HELM_TLS_KEY_FILE`
+  are both set (TLS 1.2 minimum; the certificate is re-read on rotation). Setting
+  only one fails at startup. `HELM_TLS_CLIENT_AUTH=require|verify-if-given` with
+  `HELM_TLS_CLIENT_CA_FILE` verifies client certificates. Without TLS
+  configuration the listener stays plain HTTP, as before.
+- The chart gains `helm.tls.existingSecret` (cert-manager compatible, optional
+  client CA; probes follow the scheme) and
+  `helm.auth.organizationRuntimeAPIKeySecretKey`. Defaults render as before.
+- `GET /api/v1/receipt-keyring` is public and read-only. It returns the public
+  half of the running receipt signer in the `kernel-evaluate-receipt-keyring.v1`
+  shape the Control Plane pins, and answers 503 when no signer is configured.
+
+### Changed — tenant and principal from the Control Plane token (HELM-755, ADR-0005)
+
+- Phase 1 (dual-accept): the Control Plane-called routes accept a signed
+  Control Plane token (`HELM_CP_IDENTITY_*`) that names tenant, workspace and
+  principal, and cross-check it against the registered principal binding.
+  Header identity keeps working while the Control Plane switches over.
+- A principal is bound in one tenant only. Binding it into a second tenant is
+  refused with 409 `TENANT_ISOLATION`, except for principals listed in
+  `HELM_CROSS_TENANT_PRINCIPALS`.
+- Every kernel tenant table has forced row-level security, and the tenant is
+  bound at connection checkout.
+- The route guard derives from the route registry, every served route is in
+  that registry, and forwarded client IPs are trusted only from configured
+  proxy CIDRs.
+- Launchpad routes are off by default; stores without tenant columns serve
+  the configured tenant only.
+
+### Changed — one error model; reason codes as strings (HELM-747)
+
+- Errors are Connect errors carrying one HELM detail with `reason_code` and
+  `retryable`.
+- Reason codes are open strings generated from the one registry
+  (`protocols/json-schemas/reason-codes/reason-codes-v1.json`), not closed enums.
+- The `helm.gateway.v1` effect API contract (HELM-751) is published as proto
+  and generated Go. No server implements it in this release.
+
+### Security — audit remediation (HELM-734 to HELM-743)
+
+- `proxy` and `mcp serve` refuse an unauthenticated bind to a non-loopback
+  address (HELM-741).
+- The proxy governs non-streaming tool calls and refuses streams it cannot
+  govern instead of passing them through (HELM-739).
+- The spend proxy checks idempotency, reserves and applies an output ceiling
+  before dispatch (HELM-734).
+- Evidence verification requires an explicit trust root, and anchors bind that
+  root (HELM-738). The evidence signing seed is per install, no longer a
+  published literal (HELM-754).
+- The credential keystore binds ciphertexts to their context (AAD) with safe
+  rotation and revocation (HELM-754).
+- Sandbox secrets stay out of docker argv, receipts and compose defaults
+  (HELM-754).
+- Skill-pack install and revoke are contained to the repository root (HELM-737).
+- Launchpad teardown and cloud launch no longer record outcomes that did not
+  happen, and egress is enforced on the dialed IP, not SNI (HELM-740, HELM-735).
+- Release signing identities are anchored and the SLSA repair lane is removed
+  (HELM-733). Dependencies are bumped and every Go module is scanned (HELM-743).
+
+### Added — protocol and telemetry updates
+
+- MCP 2026-07-28 is served beside the earlier handshake revisions (HELM-710).
+- RFC 9421 HTTP Message Signatures, proven against the RFC's test vector
+  (HELM-711).
+- OTel GenAI: `gen_ai.provider.name` and the upstream `execute_tool` span
+  (HELM-712).
+
 ### Changed — one stop state for serve, proxy and mcp serve (HELM-780)
 
 Breaking for fenced deployments and for `serve --data-dir`.

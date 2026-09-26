@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-75 controls: 35 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
+76 controls: 36 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -143,11 +143,12 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-043 | Unwired adapters | observed-only | BrowserSplitAdapter, SentinelConnector, VaultakStateBridge and AIPVerifier are libraries that no shipped binary mounts or calls; their methods are in scripts/ci/deadcode-allowlist.txt. |
 | CTL-044 | WASI sandbox containment | observed-only | The shipped server refuses every WASI pack run because it has no PackVerifier, and WASISandbox.Run and SandboxBroker.Execute are in scripts/ci/deadcode-allowlist.txt. Sandbox grants and preflight are records only. |
 | CTL-045 | Connector contract pinning | observed-only | ValidateAndCanonicalizeToolOutput is in scripts/ci/deadcode-allowlist.txt, and the preview TON Acton connector that also reports drift is not linked into core/cmd/helm-ai-kernel. |
-| CTL-046 | Mandates only narrow on delegation | observed-only | Library only. No shipped binary imports core/pkg/kernel/authority/authorityrows (a declared library root in scripts/ci/dead-packages-allowlist.txt), and admission does not read the authority rows yet. The HELM-751 admission transaction is the first caller. Until it lands, the Postgres tests prove the library. |
+| CTL-046 | Mandates only narrow on delegation | observed-only | The write store has no shipped caller: no binary imports core/pkg/kernel/authority/authorityrows (a declared library root in scripts/ci/dead-packages-allowlist.txt), so delegation, narrowing, stops and lifts happen only through the library. Their shipped caller is the authority-change effect (helm.authority.*, contract 5) that a later HELM-751 slice dispatches. The read side is shipped: helm-gateway admission (CTL-051) reads the same rows through core/pkg/kernel/authority/mandates, re-checks that every link of the chain is within the one above it (DELEGATION_SCOPE_VIOLATION), and denies under a stop on any holder or delegator of the chain. |
 | CTL-047 | Production egress is deny-all | enforced | — |
 | CTL-048 | Kernel credentials never reach the model provider | enforced | — |
 | CTL-049 | Principal binding integrity | enforced | — |
 | CTL-050 | Public receipt keyring | enforced | — |
+| CTL-051 | Effect gateway admission | enforced | — |
 
 ---
 

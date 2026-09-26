@@ -786,6 +786,68 @@
       "domain": "capability",
       "description": "Irreversible effect class cannot dispatch without an authoritative approval integration",
       "since": "1.7.0"
+    },
+    {
+      "code": "PRINCIPAL_INACTIVE",
+      "applies_to": ["DENY"],
+      "domain": "identity",
+      "description": "The requesting principal is unknown to the tenant or disabled",
+      "since": "1.8.0",
+      "finality": "class_forbidden"
+    },
+    {
+      "code": "MANDATE_INACTIVE",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "No active mandate held by the principal covers the effect, or a mandate of its chain is revoked",
+      "since": "1.8.0",
+      "finality": "ungranted"
+    },
+    {
+      "code": "MANDATE_OUTSIDE_VALIDITY",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "A mandate of the chain is outside its validity window",
+      "since": "1.8.0",
+      "finality": "instance_context"
+    },
+    {
+      "code": "EFFECT_OUT_OF_SCOPE",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "A mandate of the chain does not cover the effect type or target, or the effect type has no control row",
+      "since": "1.8.0",
+      "finality": "ungranted"
+    },
+    {
+      "code": "PER_CALL_LIMIT",
+      "applies_to": ["DENY"],
+      "domain": "budget",
+      "description": "The effect's amount exceeds a per-call limit of the mandate chain",
+      "since": "1.8.0",
+      "finality": "instance_parameter"
+    },
+    {
+      "code": "ARITHMETIC_OVERFLOW",
+      "applies_to": ["DENY"],
+      "domain": "budget",
+      "description": "An amount or counter total overflows a 64-bit integer",
+      "since": "1.8.0",
+      "finality": "instance_parameter"
+    },
+    {
+      "code": "IDEMPOTENCY_CONFLICT",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "The idempotency key was already used with a different request",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PRECONDITION_FAILED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "A precondition the effect type declares does not hold, so no attempt was created",
+      "since": "1.8.0"
     }
   ]
 }

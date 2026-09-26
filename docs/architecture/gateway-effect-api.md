@@ -8,8 +8,9 @@ Status: draft wire contract, HELM-751 slice 1, 2026-09-25. This revision
 includes WS-B's review of 2026-09-25 (PR #1015), which the coordinator
 accepted; the coordinator's resolutions of 2026-09-26 (see "Resolved"); and
 slice 1b (the delegated requester, whole-second approval digests). Under target architecture rev 3.4 §1 the contract is *Specified*: it
-is versioned, and no server stands behind it. Nothing in this repository
-serves these RPCs yet.
+is versioned. Slice 2 adds a server, `helm-gateway`, for `Propose`,
+`GetAttempt` and `GetAttemptContent` (see "The server (slice 2)"); the other
+RPCs answer `unimplemented`.
 
 - IDL: [`protocols/proto/helm/gateway/v1/gateway.proto`](../../protocols/proto/helm/gateway/v1/gateway.proto),
   package `helm.gateway.v1`, service `EffectGatewayService`.
@@ -336,12 +337,15 @@ Reason codes are strings from `reason-codes-v1.json`. The proto marks each one
 it names:
 
 - `[reason_code: X]`: registered today. Used: `EMERGENCY_STOP_FENCED`,
-  `BUDGET_EXCEEDED`, `APPROVAL_REQUIRED`, `APPROVAL_TIMEOUT`, `SCHEMA_VIOLATION`.
+  `BUDGET_EXCEEDED`, `APPROVAL_REQUIRED`, `APPROVAL_TIMEOUT`, `SCHEMA_VIOLATION`,
+  and, registered by slice 2 because its admission emits them,
+  `PRINCIPAL_INACTIVE`, `MANDATE_INACTIVE`, `MANDATE_OUTSIDE_VALIDITY`,
+  `EFFECT_OUT_OF_SCOPE`, `PER_CALL_LIMIT`, `ARITHMETIC_OVERFLOW` and
+  `IDEMPOTENCY_CONFLICT`.
 - `[reason_code_pending: X]`: registered by the slice that first emits it,
   because the registry gate rejects codes that nothing emits (ADR-0001 §6).
-  These are ADR-0001 §6's list, plus two that this contract adds:
-  `IDEMPOTENCY_CONFLICT` for the `already_exists` error, and
-  `STEP_UP_REQUIRED` for approvals that fail closed without step-up.
+  These are the rest of ADR-0001 §6's list, plus `STEP_UP_REQUIRED`, which
+  this contract adds for approvals that fail closed without step-up.
 
 The contract test fails if a `reason_code` is not registered, and if a
 `reason_code_pending` has been registered, so the markers stay true as codes
@@ -524,6 +528,104 @@ conflicted with rev 3.4 or the ADRs. They are resolved as follows.
    exists, the product reads attempts, incrementally through `ListAttempts`'
    `updated_after` cursor once s2 lands.
 
+## The server (slice 2)
+
+`core/cmd/helm-gateway` serves the contract; the server lives in
+`core/pkg/gateway/...` and imports nothing from the legacy Guardian, proxy,
+MCP or executor packages (`TestGatewayDoesNotImportTheLegacyRuntime`), so it
+can move to its own repository.
+
+| Command | What it does |
+|---|---|
+| `helm-gateway migrate` | Applies the gateway schema to `HELM_GATEWAY_DATABASE_URL`: the authority rows (`docs/architecture/authority-rows.md`) and the admission tables, each under forced tenant row security, recorded in the `gateway_schema_migrations` journal. It refuses a database newer than the binary. |
+| `helm-gateway serve` | Serves Connect, gRPC and gRPC-Web on `:8443` over TLS (`HELM_TLS_CERT_FILE`, `HELM_TLS_KEY_FILE`; `HELM_TLS_CLIENT_AUTH=require` with `HELM_TLS_CLIENT_CA_FILE` for mutual TLS), and `/healthz` and `/readyz` on `:8081`. `/readyz` answers 200 only when the database is reachable and its schema is at the binary's head. |
+| `helm-gateway serve --dev-insecure-listen 127.0.0.1:PORT` | Plain HTTP (h2c) on a loopback IP, for local development. Any other address is refused; token checks are unchanged. |
+
+Tokens are ADR-0005 tokens, verified by the kernel's one verifier
+(`core/pkg/auth/jwks`) from `HELM_CP_IDENTITY_JWKS_URL`, `_ISSUER`,
+`_AUDIENCE` (the gateway's own, `helm-gateway:<env>`), `_ACTOR`,
+`_MAX_TTL`, `_REQUIRE_CNF` and `_OUTBOUND_CA_BUNDLE_FILE`. A token must carry
+exactly one audience and one scope, `sub`, `tenant_id` and `workspace_id`.
+`act.sub`, when present, must be the configured actor. A human's Propose must
+come through that actor (see "The delegated requester").
+`HELM_GATEWAY_PERMIT_TTL` (default 10m) and `HELM_GATEWAY_APPROVAL_WINDOW`
+(default 24h) tune admission.
+
+**Propose** is ADR-0001's admission transaction, one READ COMMITTED
+transaction bound to the token's tenant:
+
+1. The request is validated first; a malformed request, including arguments
+   that break their effect type's closed schema, is `invalid_argument` and
+   creates no attempt. Every effect's arguments are one JSON object of at most
+   64 KiB of UTF-8 with no duplicate key. The walking-skeleton effect types
+   are checked against their HELM-753 schemas and the rules those schemas
+   state in prose (`core/pkg/gateway/effectargs`).
+2. The attempt is inserted with `ON CONFLICT (tenant_id, idempotency_key) DO
+   NOTHING`. The request digest covers every request field but the key, the
+   token's principal and its workspace. The same key and digest return the
+   stored attempt; another digest is `already_exists` with
+   `IDEMPOTENCY_CONFLICT`.
+3. For `github.pull_request.create_draft`, `branch_attempt_id` must name a
+   branch attempt of the same tenant and target in `OBSERVED(SUCCEEDED)` or
+   `RECONCILED(SUCCEEDED)`, with the same head and base, and a read-back
+   commit equal to `head_sha`; otherwise
+   `failed_precondition` with `PRECONDITION_FAILED`, and no attempt.
+4. The mandate is resolved from `sub` and the effect type (the selector, when
+   set, must be held by `sub`). Then the tenant row, every principal of the
+   chain (the requester, and each holder and delegator), the mandates root to
+   leaf, the effect-type row and the limits are locked `FOR SHARE`; stops are
+   read after the locks; counters are locked `FOR UPDATE` in
+   `(limit_id, bucket_start)` order.
+5. `Decide` (`core/pkg/gateway/admission/decide.go`) is pure. It denies, in
+   order, on a stop, an inactive principal, a missing or revoked mandate, a
+   link wider than its parent (`DELEGATION_SCOPE_VIOLATION`), a validity
+   window, an effect type or target outside a link, a per-call limit, a
+   link's condition (`MISSING_REQUIREMENT`, or `PRG_EVALUATION_ERROR` when it
+   cannot be evaluated), a missing effect-type row, and a counter. It
+   escalates on a high or irreversible risk class (the effect-type row's,
+   raised by any link's `risk_classes`), on a link whose `approval_required`
+   names the effect type (how the skeleton's medium draft pull request
+   escalates), or on an amount at an approval threshold.
+6. ALLOW writes a conditional hold on each counter, the exposure and its
+   posting, and a permit that records every locked row's version; DENY and
+   ESCALATE set the state. ESCALATED carries `approval_expires_at`, the
+   request's value or the approval window, whichever is sooner, truncated to
+   the second, and approval digest v1 over the stored attempt.
+
+**GetAttempt** and **GetAttemptContent** read in the token's tenant and
+workspace; anything else is `not_found`.
+
+Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
+`SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's
+direct Propose carries `INSUFFICIENT_PRIVILEGE`, and for a tenant with no
+authority rows `TENANT_ISOLATION`; `unauthenticated` and `not_found` carry no
+code; a gateway failure is `unavailable` with `retryable` set.
+
+### Slice 2 decisions and open points
+
+- **`ListAttempts` is not served.** The service comment reserves the name and
+  this note gives its shape, but the proto defines no RPC or messages for it.
+  Adding it is a contract change for a later slice.
+- **The approval window is gateway configuration.** The proto clamps
+  `approval_expires_at` to "the mandate's approval window", but mandates have
+  no such term yet; `HELM_GATEWAY_APPROVAL_WINDOW` stands in for it.
+- **A mandate may raise a risk class.** `EffectAttempt.risk_class` is the
+  effect-type row's class raised by the chain's `risk_classes`, never lowered
+  and never taken from the request.
+- **The draft pull request's branch attempt** is accepted in
+  `OBSERVED(SUCCEEDED)` or `RECONCILED(SUCCEEDED)`. Until slice 3 writes
+  observations, only a fixture row can satisfy it.
+- **Conditions are compiled at activation** (`authorityrows` refuses one that
+  does not compile) and once per condition text per gateway process, never per
+  request.
+- **A condition that reads an absent field denies.** A mandate covering
+  several effect types must guard fields only some of them carry, for example
+  `input.effect_type == "github.repository.get" ||
+  input.args.head.startsWith("helm/")`, or the read is denied with
+  `PRG_EVALUATION_ERROR`.
+- **`github.repository.get`** (HELM-753, PR #1058) is validated like the other
+  two skeleton types: its closed schema, a 4 KiB cap and a git branch name.
+
 ## Generated code
 
 - **Go only.** `make codegen-go` generates `helm.gateway.v1` with
@@ -536,11 +638,9 @@ conflicted with rev 3.4 or the ADRs. They are resolved as follows.
   (HELM-756). A `grpc-js` TypeScript binding published now would freeze a
   client shape that slice has not chosen. The `Makefile` names the split:
   `CONNECT_PROTO_FILES` and `GRPC_PROTO_FILES`.
-- **Unused handlers are expected.** Nothing in this repository calls the
-  generated handler constructors, which is normal for a public API surface.
-  The deadcode gate reaches only the `core` module from
-  `core/cmd/helm-ai-kernel`, and `sdk/go` is a separate module, so neither
-  `deadcode-roots.txt` nor the allowlist changes.
+- **The server imports the bindings.** `core` requires `sdk/go` at a pinned
+  version and `connectrpc.com/connect`. `core/cmd/helm-gateway` is a deadcode
+  root (`scripts/ci/deadcode-roots.txt`).
 
 ## What slice 1 does not do
 

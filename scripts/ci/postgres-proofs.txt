@@ -5,16 +5,28 @@
 #
 # <package dir under core> <test> <count> <race|plain>
 # plain: a timing comparison, which the race detector's slowdown would invalidate.
+cmd/helm-gateway TestPostgresGatewayMigrateAndReadiness 1 race
 pkg/boundary TestSQLSurfaceRegistryPersistsRecordsOnPostgres 1 race
 pkg/boundary/approvalceremony TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle 10 race
 pkg/boundary/approvalceremony TestPostgresLifecycleSingleIssueAndConsume 10 race
 pkg/boundary/generatedspecapprovalceremony TestPostgresLifecycleSingleIssueConsumeAndFence 10 race
 pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyActiveBindings 1 race
 pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyVisibility 1 race
+pkg/gateway/admission TestPostgresConcurrentProposalsAdmitOnce 10 race
+pkg/gateway/admission TestPostgresDraftPullRequestNeedsItsObservedBranch 1 race
+pkg/gateway/admission TestPostgresMalformedProposalsCreateNoAttempt 1 race
+pkg/gateway/admission TestPostgresMandateSelectionIsBoundToThePrincipal 1 race
+pkg/gateway/admission TestPostgresMigrateIsVersioned 1 race
+pkg/gateway/admission TestPostgresProposeAdmitsDeniesAndEscalates 1 race
+pkg/gateway/admission TestPostgresProposeIsIdempotent 3 race
+pkg/gateway/admission TestPostgresReadsAreTenantAndWorkspaceScoped 1 race
+pkg/gateway/admission TestPostgresStopsDenyAdmission 3 race
+pkg/gateway/server TestPostgresGatewayAPIOnTheWire 1 race
 pkg/kernel/authority/authorityrows TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole 1 race
 pkg/kernel/authority/authorityrows TestPostgresDelegationOnlyNarrowsOverRandomChains 1 race
 pkg/kernel/authority/authorityrows TestPostgresDelegationWaitsForAConcurrentNarrowing 3 race
 pkg/kernel/authority/authorityrows TestPostgresEveryNarrowingBumpsItsControlRowVersion 3 race
+pkg/kernel/authority/authorityrows TestPostgresMandateTermsRoundTripAndOnlyNarrow 1 race
 pkg/kernel/authority/authorityrows TestPostgresRootMandateNeedsADistinctHumanApprover 1 race
 pkg/kernel/authority/authorityrows TestPostgresStopExpiresAndLiftNeedsApproval 1 race
 pkg/kernel/authority/authorityrows TestPostgresStoppedAuthorityCannotDelegate 3 race

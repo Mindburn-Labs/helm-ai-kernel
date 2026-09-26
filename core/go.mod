@@ -4,9 +4,11 @@ go 1.25.13
 
 require (
 	cloud.google.com/go/storage v1.62.1
+	connectrpc.com/connect v1.21.0
 	github.com/BurntSushi/toml v1.5.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.8.6-0.20260926022856-61c1238b7f31
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.14
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.14

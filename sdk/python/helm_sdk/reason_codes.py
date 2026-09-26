@@ -338,6 +338,32 @@ CAPABILITY_IRREVERSIBLE = "CAPABILITY_IRREVERSIBLE"
 # DENY: Irreversible effect class cannot dispatch without an authoritative approval
 # integration
 
+PRINCIPAL_INACTIVE = "PRINCIPAL_INACTIVE"
+# DENY: The requesting principal is unknown to the tenant or disabled
+
+MANDATE_INACTIVE = "MANDATE_INACTIVE"
+# DENY: No active mandate held by the principal covers the effect, or a mandate of its
+# chain is revoked
+
+MANDATE_OUTSIDE_VALIDITY = "MANDATE_OUTSIDE_VALIDITY"
+# DENY: A mandate of the chain is outside its validity window
+
+EFFECT_OUT_OF_SCOPE = "EFFECT_OUT_OF_SCOPE"
+# DENY: A mandate of the chain does not cover the effect type or target, or the effect
+# type has no control row
+
+PER_CALL_LIMIT = "PER_CALL_LIMIT"
+# DENY: The effect's amount exceeds a per-call limit of the mandate chain
+
+ARITHMETIC_OVERFLOW = "ARITHMETIC_OVERFLOW"
+# DENY: An amount or counter total overflows a 64-bit integer
+
+IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+# DENY: The idempotency key was already used with a different request
+
+PRECONDITION_FAILED = "PRECONDITION_FAILED"
+# DENY: A precondition the effect type declares does not hold, so no attempt was created
+
 ALL: frozenset[str] = frozenset(
     {
         POLICY_VIOLATION,
@@ -444,6 +470,14 @@ ALL: frozenset[str] = frozenset(
         CAPABILITY_TOKEN_INVALID,
         CAPABILITY_ROLLBACK_PLAN_INVALID,
         CAPABILITY_IRREVERSIBLE,
+        PRINCIPAL_INACTIVE,
+        MANDATE_INACTIVE,
+        MANDATE_OUTSIDE_VALIDITY,
+        EFFECT_OUT_OF_SCOPE,
+        PER_CALL_LIMIT,
+        ARITHMETIC_OVERFLOW,
+        IDEMPOTENCY_CONFLICT,
+        PRECONDITION_FAILED,
     }
 )
 

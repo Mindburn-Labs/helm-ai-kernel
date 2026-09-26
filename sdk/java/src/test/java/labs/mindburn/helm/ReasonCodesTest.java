@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class ReasonCodesTest {
     @Test
     void namesEveryRegistryCodeAsItsWireString() {
-        assertEquals(104, ReasonCodes.ALL.size());
+        assertEquals(112, ReasonCodes.ALL.size());
         assertEquals("EMERGENCY_STOP_FENCED", ReasonCodes.EMERGENCY_STOP_FENCED);
         assertTrue(ReasonCodes.isRegistered(ReasonCodes.EMERGENCY_STOP_FENCED));
         assertFalse(ReasonCodes.isRegistered("NOT_A_REGISTERED_CODE"));

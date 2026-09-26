@@ -552,9 +552,10 @@ message EffectAttempt {
   OutcomeBasis outcome_basis = 16;
   // The registry code for the current state, when it has one: the denial,
   // escalation, rejection, expiry or cancellation reason, or why an observed
-  // or reconciled outcome is FAILED (for example READBACK_MISMATCH, or
-  // PRECONDITION_FAILED when a dispatch-time precondition refused the write
-  // before any provider write). Empty otherwise.
+  // or reconciled outcome is FAILED (for example
+  // [reason_code_pending: READBACK_MISMATCH], or
+  // [reason_code: PRECONDITION_FAILED] when a dispatch-time precondition
+  // refused the write before any provider write). Empty otherwise.
   string reason_code = 17;
   // Set while the attempt is ESCALATED.
   PendingApproval pending_approval = 18;

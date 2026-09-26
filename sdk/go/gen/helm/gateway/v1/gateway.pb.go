@@ -2122,9 +2122,10 @@ type EffectAttempt struct {
 	OutcomeBasis OutcomeBasis `protobuf:"varint,16,opt,name=outcome_basis,json=outcomeBasis,proto3,enum=helm.gateway.v1.OutcomeBasis" json:"outcome_basis,omitempty"`
 	// The registry code for the current state, when it has one: the denial,
 	// escalation, rejection, expiry or cancellation reason, or why an observed
-	// or reconciled outcome is FAILED (for example READBACK_MISMATCH, or
-	// PRECONDITION_FAILED when a dispatch-time precondition refused the write
-	// before any provider write). Empty otherwise.
+	// or reconciled outcome is FAILED (for example
+	// [reason_code_pending: READBACK_MISMATCH], or
+	// [reason_code: PRECONDITION_FAILED] when a dispatch-time precondition
+	// refused the write before any provider write). Empty otherwise.
 	ReasonCode string `protobuf:"bytes,17,opt,name=reason_code,json=reasonCode,proto3" json:"reason_code,omitempty"`
 	// Set while the attempt is ESCALATED.
 	PendingApproval *PendingApproval `protobuf:"bytes,18,opt,name=pending_approval,json=pendingApproval,proto3" json:"pending_approval,omitempty"`

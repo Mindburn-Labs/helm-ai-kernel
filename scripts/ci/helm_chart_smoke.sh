@@ -872,13 +872,45 @@ if helm_runner template "$RELEASE" "$CHART" \
 fi
 assert_contains "$tls_reloader_log" "cannot be combined with the config-reloader sidecar"
 
+# A well-formed placeholder: 64 lowercase hex characters, built rather than
+# written out so the secret scanner does not read it as a key.
+activation_key="$(printf 'ab%.0s' $(seq 1 32))"
 org_runtime_rendered="$RENDER_DIR/rendered-org-runtime-key.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
-    --set helm.auth.existingSecret=helm-kernel-auth >"$org_runtime_rendered"
+    --set helm.auth.existingSecret=helm-kernel-auth \
+    --set helm.auth.controlPlaneActivationPublicKey="$activation_key" >"$org_runtime_rendered"
 assert_contains "$org_runtime_rendered" "HELM_ORGANIZATION_RUNTIME_API_KEY"
 assert_contains "$org_runtime_rendered" "key: HELM_ORGANIZATION_RUNTIME_API_KEY"
-assert_contains "$org_runtime_rendered" "optional: true"
+assert_contains "$org_runtime_rendered" "HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY"
+assert_contains "$org_runtime_rendered" "$activation_key"
+
+# Without the activation public key the organization-runtime key is not wired:
+# the Kernel refuses one without the other (degraded service init).
+org_runtime_no_activation="$RENDER_DIR/rendered-org-runtime-no-activation.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.existingSecret=helm-kernel-auth >"$org_runtime_no_activation"
+assert_not_contains "$org_runtime_no_activation" "HELM_ORGANIZATION_RUNTIME_API_KEY"
+assert_not_contains "$org_runtime_no_activation" "HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY"
+
+activation_without_key_log="$RENDER_DIR/activation-without-org-runtime-key.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.controlPlaneActivationPublicKey="$activation_key" >"$RENDER_DIR/activation-without-org-runtime-key.yaml" 2>"$activation_without_key_log"; then
+    echo "::error::the activation public key without the organization-runtime key unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$activation_without_key_log" "requires the organization-runtime key"
+
+activation_bad_log="$RENDER_DIR/activation-bad-key.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.existingSecret=helm-kernel-auth \
+    --set helm.auth.controlPlaneActivationPublicKey=NOTHEX >"$RENDER_DIR/activation-bad-key.yaml" 2>"$activation_bad_log"; then
+    echo "::error::a malformed activation public key unexpectedly rendered"
+    exit 1
+fi
 
 org_runtime_off_rendered="$RENDER_DIR/rendered-org-runtime-key-off.yaml"
 helm_runner template "$RELEASE" "$CHART" \

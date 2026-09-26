@@ -79,7 +79,8 @@ helm upgrade --install helm-ai-kernel deploy/helm-chart \
 | `ingress.enabled` | `false` | Optional ingress; provide TLS and ingress class explicitly. |
 | `helm.tls.existingSecret` | empty | `kubernetes.io/tls` Secret whose `tls.crt` and `tls.key` serve the API listener over HTTPS (`HELM_TLS_CERT_FILE`, `HELM_TLS_KEY_FILE`). Empty keeps plain HTTP. |
 | `helm.tls.clientAuth` | empty | `require` or `verify-if-given` client certificates against the Secret's `ca.crt` (`HELM_TLS_CLIENT_AUTH`, `HELM_TLS_CLIENT_CA_FILE`). Needs `helm.tls.existingSecret`. |
-| `helm.auth.organizationRuntimeAPIKeySecretKey` | `HELM_ORGANIZATION_RUNTIME_API_KEY` | Key read from `helm.auth.existingSecret` into `HELM_ORGANIZATION_RUNTIME_API_KEY`, as an optional key. Empty stops reading it. |
+| `helm.auth.organizationRuntimeAPIKeySecretKey` | `HELM_ORGANIZATION_RUNTIME_API_KEY` | Key read from `helm.auth.existingSecret` into `HELM_ORGANIZATION_RUNTIME_API_KEY`. Wired only together with `helm.auth.controlPlaneActivationPublicKey`. Empty stops reading it. |
+| `helm.auth.controlPlaneActivationPublicKey` | `""` | The Control Plane activation public key (`HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY`), 64 lowercase hex characters. The Kernel needs it together with the organization-runtime key, so the chart refuses to render one without the other. |
 
 ## Native TLS For In-Cluster Callers
 

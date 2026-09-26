@@ -42,10 +42,12 @@ test-receipt-store-postgres-migration:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/store -run '^(TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash|TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor)$$' -count=1
 # postgres-proofs runs every Postgres-gated proof in scripts/ci/postgres-proofs.txt
-# against HELM_TEST_POSTGRES_URL and fails on any skip, failure or short count.
+# and fails on any skip, failure or short count. It uses HELM_TEST_POSTGRES_URL
+# when set, else a disposable PostgreSQL 16 cluster; no PostgreSQL 16 fails it.
+# The postgres-proofs quality gate runs it in `make check`.
 .PHONY: postgres-proofs
 postgres-proofs:
-	bash scripts/ci/postgres_proofs.sh
+	bash scripts/ci/postgres_proofs_gate.sh
 
 test-generated-spec-approval-ceremony-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)

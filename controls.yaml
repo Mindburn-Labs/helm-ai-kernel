@@ -1301,7 +1301,7 @@ controls:
     bypass_assumptions:
       - "Lite Mode (SQLite, no DATABASE_URL) has no row security."
       - "The receipts table has no tenant_id and sits outside row security; receipt tenancy is enforced in application code."
-      - "The Postgres proofs skip in make test and run in .github/workflows/approval-ceremony.yml through scripts/ci/postgres_proofs.sh, where a skip fails."
+      - "The Postgres proofs skip in make test and run in the postgres-proofs gate of make check (ci / gate) through scripts/ci/postgres_proofs.sh, where a skip or a missing database fails."
     tests:
       allowed:
         - "core/pkg/postgresmigration.TestValidateRuntimeAcceptsRestrictedRoleWithoutDDL"
@@ -1455,7 +1455,7 @@ controls:
     protected_operations:
       - "Approval grant consumption through the approval consumption routes on Postgres."
     bypass_assumptions:
-      - "The single-consume guard is SQL. Its proof needs Postgres and runs in .github/workflows/approval-ceremony.yml, where a skip fails; the removal proof here covers the verified-workload check only."
+      - "The single-consume guard is SQL. Its proof needs Postgres and runs in the postgres-proofs gate of make check (ci / gate), where a skip fails; the removal proof here covers the verified-workload check only."
     tests:
       allowed:
         - "core/pkg/boundary/approvalceremony.TestServiceConsumesAndRecoversOnlyForExactWorkloadIdentity"
@@ -1638,7 +1638,7 @@ controls:
     protected_operations:
       - "POST /internal/v1/approval-grants/admit-dispatch on Postgres. The kernel admits; the data plane dispatches."
     bypass_assumptions:
-      - "The SQL-level proof is Postgres-gated and runs in .github/workflows/approval-ceremony.yml."
+      - "The SQL-level proof is Postgres-gated and runs in the postgres-proofs gate of make check (ci / gate)."
     tests:
       allowed:
         - "core/pkg/boundary/approvalceremony.TestDispatchAdmitterBindsPostLockTimeAndExactRetry"

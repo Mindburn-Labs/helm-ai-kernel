@@ -1,16 +1,16 @@
 package github
 
-import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/qualification"
 
 // QualificationSuite is the §9.3 suite of this adapter version. Each case is
 // implemented in qualification_test.go under the same ID, and
 // TestQualificationSuiteIsImplemented fails if the two lists differ. Changing
 // a case changes the suite digest the records carry.
-var QualificationSuite = adapters.Suite{
+var QualificationSuite = qualification.Suite{
 	Adapter:        "github",
 	AdapterVersion: AdapterVersion,
 	SuiteVersion:   "1",
-	Cases: []adapters.SuiteCase{
+	Cases: []qualification.SuiteCase{
 		qcase("branch/happy-path", EffectBranchCreateFromChanges, "baseline",
 			"Prepare, Dispatch and Observe create the branch; the result's commit has parent base_sha and files_digest is the proposal's."),
 		qcase("branch/duplicate-submission", EffectBranchCreateFromChanges, "duplicate submission",
@@ -58,6 +58,6 @@ var QualificationSuite = adapters.Suite{
 	},
 }
 
-func qcase(id, operation, category, description string) adapters.SuiteCase {
-	return adapters.SuiteCase{ID: id, Operation: operation, Category: category, Description: description}
+func qcase(id, operation, category, description string) qualification.SuiteCase {
+	return qualification.SuiteCase{ID: id, Operation: operation, Category: category, Description: description}
 }

@@ -381,6 +381,31 @@ removal_proofs:
     tests:
       - "core/cmd/helm-ai-kernel.TestReceiptKeyringMatchesTheIdentityStampedOnReceipts"
 
+  - control: CTL-051
+    file: core/pkg/gateway/adapters/adapters.go
+    find: "\tif !bytes.Equal(sum[:], permitArgumentDigest) {\n"
+    replace: "\tif false && !bytes.Equal(sum[:], permitArgumentDigest) {\n"
+    tests:
+      - "core/pkg/gateway/adapters.TestCheckPermitDigest"
+  - control: CTL-051
+    file: core/pkg/gateway/adapters/github/args.go
+    find: "\tif !ok || !ownerRE.MatchString(owner) || !repoRE.MatchString(name) || name == \".\" || name == \"..\" {\n"
+    replace: "\tif !ok {\n"
+    tests:
+      - "core/pkg/gateway/adapters/github.TestTargets"
+  - control: CTL-051
+    file: core/cmd/helm-gateway/main.go
+    find: "\tc.Adapters = []adapters.Adapter{github.New(github.WithBaseURL(apiURL))}\n"
+    replace: "\tc.Adapters = []adapters.Adapter{github.New(github.WithBaseURL(apiURL))}[:0]\n"
+    tests:
+      - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+  - control: CTL-051
+    file: core/pkg/gateway/custody/githubapp.go
+    find: "\tif !ok || !allowed(in.Repositories, owner+\"/\"+name) {\n"
+    replace: "\tif !ok {\n"
+    tests:
+      - "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
+
   - control: CTL-052
     file: core/pkg/gateway/admission/decide.go
     find: "\tif len(in.ActiveStops) > 0 {\n"
@@ -448,6 +473,56 @@ removal_proofs:
     replace: "\treturn false && risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||\n"
     tests:
       - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tcase len(in.Stops) > 0:\n"
+    replace: "\tcase false && len(in.Stops) > 0:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestClaimRefusal"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tcase !sameVersions(in.Permitted, in.Current):\n"
+    replace: "\tcase false && !sameVersions(in.Permitted, in.Current):\n"
+    tests:
+      - "core/pkg/gateway/admission.TestClaimRefusal"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tcase in.Expired:\n"
+    replace: "\tcase false && in.Expired:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestClaimRefusal"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tcase adapters.DispatchNotSent:\n\t\treturn \"OBSERVED\"\n"
+    replace: "\tcase adapters.DispatchNotSent, adapters.DispatchIndefinite:\n\t\treturn \"OBSERVED\"\n"
+    tests:
+      - "core/pkg/gateway/admission.TestAfterDispatch"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tcase len(members) != 1 || members[want] == nil:\n"
+    replace: "\tcase false:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tcase result.Absent && insideFence:\n"
+    replace: "\tcase false && result.Absent && insideFence:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestReadBackVerdict"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\treturn caller != \"\" && (caller == requesterActor || caller == requester)\n"
+    replace: "\treturn caller != \"\"\n"
+    tests:
+      - "core/pkg/gateway/admission.TestMayExecute"
+  - control: CTL-051
+    file: core/pkg/gateway/custody/githubapp.go
+    find: "\t\"github.branch.create_from_changes\": {\"contents\": \"write\", \"metadata\": \"read\"},\n"
+    replace: "\t\"github.branch.create_from_changes\": {\"contents\": \"write\", \"metadata\": \"read\", \"administration\": \"write\"},\n"
+    tests:
+      - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
+
 
 controls:
 
@@ -2802,37 +2877,59 @@ controls:
     title: "Effect adapters act only on the permitted bytes"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      The GitHub effect adapter's Dispatch refuses with
-      PERMIT_ARGUMENT_MISMATCH, before any provider call, unless the permit's
-      argument digest is SHA-256 of the exact argument bytes it is about to
-      act on (audit 09-01). It takes the repository only from a validated
-      github.com/{owner}/{repo} target and refuses arguments outside the closed
-      v1 schemas with SCHEMA_VIOLATION (audit 09-02).
-    status: observed-only
-    reason: >-
-      Library only. No shipped binary imports
-      core/pkg/gateway/adapters/github (a declared library root in
-      scripts/ci/dead-packages-allowlist.txt). HELM-751 s3 wires helm-gateway's
-      Dispatch to it; that slice adds the removal tests and can claim
-      enforcement for the tested path.
+      helm-gateway's Dispatch and Observe act on GitHub only through the
+      GitHub effect adapter, for github.repository.get,
+      github.branch.create_from_changes and github.pull_request.create_draft.
+      The adapter's Dispatch refuses with PERMIT_ARGUMENT_MISMATCH, before any
+      provider call, unless the permit's argument digest is SHA-256 of the
+      exact argument bytes it is about to act on (audit 09-01). It takes the
+      repository only from a validated github.com/{owner}/{repo} target and
+      refuses arguments outside the closed v1 schemas with SCHEMA_VIOLATION
+      (audit 09-02). Its credential is an installation token the gateway's
+      GitHub App custody mints per repository, only for a repository the
+      tenant's installation entry allows, scoped to that one repository and
+      to the least permissions its effect type needs, cached per key under
+      that key's own lock, and never logged (R8, HELM-751 s3).
+    status: enforced
     entry_points:
+      - "core/cmd/helm-gateway.effectsFromEnv"
       - "core/pkg/gateway/adapters.CheckPermitDigest"
       - "core/pkg/gateway/adapters/github.Adapter.Dispatch"
-    config: []
+      - "core/pkg/gateway/adapters/github.Adapter.Observe"
+      - "core/pkg/gateway/custody.GitHubApp.Token"
+    config:
+      - "HELM_GATEWAY_GITHUB_APP_ID_FILE, HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE and HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE, all or none (the chart mounts them into the gateway Pod only); without them every GitHub dispatch is NOT_SENT with PROVIDER_CREDENTIAL_REJECTED."
+      - "HELM_GATEWAY_GITHUB_API_URL (default https://api.github.com; https, or http on loopback only)."
     protected_operations:
-      - "github.branch.create_from_changes and github.pull_request.create_draft dispatches."
+      - "Dispatch and Observe of github.repository.get, github.branch.create_from_changes and github.pull_request.create_draft on helm-gateway serve."
     bypass_assumptions:
-      - "No shipped caller exists, so nothing is enforced."
-      - "The digest binds the bytes, not their meaning: the gateway's admission decides what those bytes may do."
+      - "The digest binds the bytes, not their meaning: the gateway's admission decides what those bytes may do (CTL-052)."
+      - "The gateway trusts the App key and installations file as mounted; whoever can write them can widen a tenant's repositories."
+      - "The chart's egress rule for GitHub is port 443 to any address; a NetworkPolicy cannot name api.github.com."
+      - "Prepare is not called by the gateway: the adapter re-checks its preconditions at Dispatch (the head at head_sha, the default branch), which is where they bind."
     tests:
       allowed:
         - "core/pkg/gateway/adapters/github.TestQualificationFake"
+        - "core/pkg/gateway/custody.TestGitHubAppMintsRepositoryScopedTokensAndCachesThem"
+        - "core/pkg/gateway/custody.TestGitHubAppSlowMintBlocksOnlyItsOwnKey"
+        - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+        - "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
       forbidden:
         - "core/pkg/gateway/adapters.TestCheckPermitDigest"
         - "core/pkg/gateway/adapters/github.TestQualificationFake"
         - "core/pkg/gateway/adapters/github.TestTargets"
-      removal: []
-      bypass: []
+        - "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
+        - "core/pkg/gateway/custody.TestGitHubAppConfiguration"
+        - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
+      removal:
+        - "core/pkg/gateway/adapters.TestCheckPermitDigest"
+        - "core/pkg/gateway/adapters/github.TestTargets"
+        - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+        - "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
+        - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
+      bypass:
+        - "core/pkg/gateway/adapters.TestAdaptersDoNotImportTheLegacyRuntime"
+        - "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
   - id: CTL-052
     title: "Effect gateway admission"
     owner: Mindburn Labs core team (kernel)
@@ -2869,7 +2966,7 @@ controls:
     protected_operations:
       - "Propose, GetAttempt and GetAttemptContent of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
-      - "Dispatch, Observe, Stop and Lift answer unimplemented in this slice; nothing in the binary consumes a permit yet, so the dispatch-claim half of ADR-0001 (version re-check, stops after admission) is not enforced here. Approve, Reject and Cancel are CTL-053."
+      - "Stop and Lift answer unimplemented in this slice. The dispatch-claim half of ADR-0001 (version re-check, stops after admission) is CTL-054; Approve, Reject and Cancel are CTL-053."
       - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which no shipped binary calls yet (CTL-046); the gateway trusts the rows it finds."
       - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2)."
       - "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR)."
@@ -2966,3 +3063,78 @@ controls:
         - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
       bypass:
         - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+  - id: CTL-054
+    title: "Gateway dispatch claim and observation"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway dispatches and observes an attempt only for the active
+      workload principal (agent or service) it was proposed through, its
+      requester actor or its requester principal, in the token's tenant and
+      workspace with a helm.gateway.execute token, and dispatches it only
+      through one claim transaction, which records the dispatcher,
+      committed before any provider I/O (ADR-0001 §1, TA §4.1): it locks the
+      attempt and its unused permit, re-locks the authority rows FOR SHARE and
+      reads the stops after them. An active stop (EMERGENCY_STOP_FENCED), an
+      expired permit (PERMIT_EXPIRED), any change to a row the permit was
+      issued under (AUTHORITY_CHANGED) or a mandate outside its validity
+      (MANDATE_OUTSIDE_VALIDITY) voids the permit, releases the held exposure
+      and records CANCELLED; otherwise the permit is consumed once and the
+      attempt becomes DISPATCHING with a fence. The adapter's SENT becomes
+      DISPATCHED and is read back; NOT_SENT becomes OBSERVED(FAILED) with the
+      adapter's reason and releases the hold; INDEFINITE becomes UNKNOWN and
+      keeps it. A repeated Dispatch returns the stored attempt, and UNKNOWN or
+      a DISPATCHING attempt past its fence is only ever read back by Observe,
+      never sent again. A FAILED read-back that rests only on the object's
+      absence is inconclusive until the fence has passed. Observe records the
+      typed result the effect type defines, with evidence_digest and
+      result_ref, SHA-256 over the result's JCS form, and in the same
+      transaction consumes the held exposure (SUCCEEDED, or an object that
+      contradicts the effect) or releases it (absent after the fence)
+      (HELM-751 s3).
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/server.Server.Dispatch"
+      - "core/pkg/gateway/server.Server.Observe"
+      - "core/pkg/gateway/admission.Service.Dispatch"
+      - "core/pkg/gateway/admission.Service.Observe"
+    config:
+      - "HELM_GATEWAY_DISPATCH_TIMEOUT (default 2m) bounds one adapter call; the fence is the claim time plus it plus one minute."
+      - "The HELM_CP_IDENTITY_* token configuration of CTL-052; execute tokens are minted for workload principals only."
+    protected_operations:
+      - "Dispatch and Observe of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
+    bypass_assumptions:
+      - "A provider that applies a write more than a minute after the gateway stopped waiting can be read back as FAILED before it lands; the fence bounds this, it does not remove it."
+      - "UNKNOWN is reconciled only when a workload calls Observe; the polling job and ESCALATED_TO_HUMAN arrive with River (HELM-751 s3b)."
+      - "Stops are written by core/pkg/kernel/authority/authorityrows (CTL-046) until the Stop RPC exists (s3b)."
+      - "An observation is what the adapter read back from the provider (trust class provider_readback); the gateway checks its shape, not its truth."
+      - "A count-unit effect's exposure settles at its observed outcome; the SETTLED state is left to model-call settlement (HELM-752)."
+      - "The trust limits of CTL-052 (ADR-0005 issuer trust) apply."
+    tests:
+      allowed:
+        - "core/pkg/gateway/admission.TestPostgresDispatchClaimsThePermitOnce"
+        - "core/pkg/gateway/admission.TestPostgresObserveRecordsTheTypedResult"
+        - "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
+        - "core/pkg/gateway/admission.TestClaimRefusal"
+      forbidden:
+        - "core/pkg/gateway/admission.TestPostgresPermitIsConsumedOnce"
+        - "core/pkg/gateway/admission.TestPostgresClaimRefusalsCancelAndRelease"
+        - "core/pkg/gateway/admission.TestPostgresLostResponseIsReconciledByObserve"
+        - "core/pkg/gateway/admission.TestPostgresNotSentIsObservedFailedAndReleased"
+        - "core/pkg/gateway/admission.TestPostgresDispatchIsTenantWorkspaceAndWorkloadScoped"
+        - "core/pkg/gateway/admission.TestPostgresAbsenceInsideTheFenceIsInconclusive"
+        - "core/pkg/gateway/admission.TestPostgresContradictedReadBackConsumesTheReservation"
+        - "core/pkg/gateway/admission.TestPostgresLateAnswerAfterTheFenceIsIgnored"
+        - "core/pkg/gateway/admission.TestPostgresOnlyTheProposingWorkloadDispatches"
+        - "core/pkg/gateway/admission.TestReadBackVerdict"
+        - "core/pkg/gateway/admission.TestMayExecute"
+        - "core/pkg/gateway/admission.TestClaimRefusal"
+        - "core/pkg/gateway/admission.TestAfterDispatch"
+        - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
+      removal:
+        - "core/pkg/gateway/admission.TestClaimRefusal"
+        - "core/pkg/gateway/admission.TestAfterDispatch"
+        - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
+        - "core/pkg/gateway/admission.TestReadBackVerdict"
+        - "core/pkg/gateway/admission.TestMayExecute"
+      bypass:
+        - "core/pkg/gateway/admission.TestPostgresCrashAfterTheClaimIsReconciledNeverResent"

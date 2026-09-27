@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/postgresmigration"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 )
 
 func init() {
@@ -31,6 +33,10 @@ func runMigrateCommand(args []string, stdout, stderr io.Writer) int {
 	}
 	dsn, err := validatedMigrationDatabaseURL(os.Getenv)
 	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if dsn, err = pgdsn.WithUTCTimeZone(dsn); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}

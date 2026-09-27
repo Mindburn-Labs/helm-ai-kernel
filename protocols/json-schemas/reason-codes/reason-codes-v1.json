@@ -908,6 +908,20 @@
       "description": "Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion the request did not carry",
       "since": "1.8.0",
       "finality": "ungranted"
+    },
+    {
+      "code": "AUTHORITY_CHANGED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "An authority row the permit was issued under changed before the dispatch claim; the permit is voided and the effect must be proposed again",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PERMIT_EXPIRED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "The permit expired before the dispatch claim; it is voided and the effect must be proposed again",
+      "since": "1.8.0"
     }
   ]
 }

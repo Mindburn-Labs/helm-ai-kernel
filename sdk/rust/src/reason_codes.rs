@@ -257,6 +257,12 @@ pub const APPROVAL_REJECTED: &str = "APPROVAL_REJECTED";
 /// DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion
 /// the request did not carry
 pub const STEP_UP_REQUIRED: &str = "STEP_UP_REQUIRED";
+/// DENY: An authority row the permit was issued under changed before the dispatch claim; the permit
+/// is voided and the effect must be proposed again
+pub const AUTHORITY_CHANGED: &str = "AUTHORITY_CHANGED";
+/// DENY: The permit expired before the dispatch claim; it is voided and the effect must be proposed
+/// again
+pub const PERMIT_EXPIRED: &str = "PERMIT_EXPIRED";
 
 /// Every registered reason code, in registry order.
 pub const ALL: &[&str] = &[
@@ -380,6 +386,8 @@ pub const ALL: &[&str] = &[
     APPROVER_NOT_DISTINCT,
     APPROVAL_REJECTED,
     STEP_UP_REQUIRED,
+    AUTHORITY_CHANGED,
+    PERMIT_EXPIRED,
 ];
 
 /// Whether `code` is in the registry.

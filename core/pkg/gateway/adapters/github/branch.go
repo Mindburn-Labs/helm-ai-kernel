@@ -107,7 +107,9 @@ func (c *client) observeBranch(ctx context.Context, args branchArgs) adapters.Ob
 	if isNotFound(err) {
 		obs := c.observation()
 		obs.GitHubBranch = result
-		return settle(obs, ref+" does not exist")
+		r := settle(obs, ref+" does not exist")
+		r.Absent = true
+		return r
 	}
 	if err != nil {
 		return unknown(err)

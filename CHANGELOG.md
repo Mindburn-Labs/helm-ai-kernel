@@ -93,6 +93,37 @@ scaffolds, and hardware-backed enforcement language out of the public changelog
 until a tagged release ships source-owned tests, verifier evidence, and release
 artifacts for that exact capability.
 
+## [0.10.0] - 2026-09-27
+
+This minor release introduces the gateway service and typed GitHub effect API.
+Publication and the qa-arm walking-skeleton acceptance are recorded separately
+in the release evidence and HELM-789.
+
+### Added — governed GitHub effects (HELM-751, HELM-753)
+
+- `helm-gateway` serves Propose, GetAttempt, GetAttemptContent, Approve,
+  Reject, Cancel, Dispatch and Observe over the authenticated gateway API.
+  Admission resolves mandates and records the attempt, reservation and permit
+  in one Postgres transaction.
+- `github.repository.get`, `github.branch.create_from_changes` and
+  `github.pull_request.create_draft` have typed arguments and observation
+  results. A draft PR is medium risk and escalates when the mandate requires
+  approval. Approval requires a distinct human and a single-use decide token.
+- Dispatch consumes the permit before provider I/O and permits only the
+  proposing workload to dispatch. The GitHub App credential stays in the
+  gateway; installation tokens request the permissions the effect needs.
+  Observe verifies the provider result, while an uncertain dispatch becomes
+  UNKNOWN and is reconciled through read-back.
+- The release rehearsal checks contracts, version surfaces, Console pins,
+  chart configuration and publication prerequisites before tagging, and runs
+  daily on main (HELM-745).
+
+### Fixed — Postgres sessions use UTC (HELM-776)
+
+- Every Postgres DSN pins the session timezone to UTC, so admission and
+  approval timestamps remain consistent when the database default uses a
+  local timezone.
+
 ### Changed — the chart wires the organization-runtime key only with the activation public key (HELM-786)
 
 - New value `helm.auth.controlPlaneActivationPublicKey`: the Control Plane

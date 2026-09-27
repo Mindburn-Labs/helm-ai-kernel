@@ -1,0 +1,261 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-012",
+  "title": "INDEFINITE is UNKNOWN; absence inside the dispatch fence stays UNKNOWN, outside it resolves",
+  "rule": {
+    "statement": "An INDEFINITE dispatch makes the attempt UNKNOWN with its reservation held and no immediate read-back; UNKNOWN is never dispatched again. A read-back that finds nothing inside the dispatch fence is inconclusive: the attempt stays UNKNOWN and the hold stays. After the fence the same absence reconciles to FAILED with READBACK_MISMATCH and releases the reservation.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Dispatch and Observe (slice 3)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "rpc Observe("
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        },
+        "limits": [
+          {
+            "unit": "effects",
+            "window": "day",
+            "value": 5
+          }
+        ]
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "INDEFINITE",
+        "reason_code": "PROVIDER_ERROR"
+      },
+      "observe": {
+        "status": "ABSENT"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    }
+  },
+  "steps": [
+    {
+      "label": "branch",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "branch-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/skeleton",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        },
+        "quote": [
+          {
+            "unit": "effects",
+            "amount": 1
+          }
+        ]
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "permit": "ISSUED",
+          "exposure": "HELD"
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "UNKNOWN",
+          "reason_code": "PROVIDER_ERROR",
+          "permit": "CONSUMED",
+          "exposure": "HELD"
+        },
+        "existing": false,
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 0
+        }
+      }
+    },
+    {
+      "note": "UNKNOWN is never dispatched again.",
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "UNKNOWN",
+          "reason_code": "PROVIDER_ERROR"
+        },
+        "existing": true,
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 0
+        }
+      }
+    },
+    {
+      "note": "Nothing found inside the fence: a write may still land.",
+      "rpc": "Observe",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "UNKNOWN",
+          "reason_code": "PROVIDER_ERROR",
+          "exposure": "HELD"
+        },
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 1
+        }
+      }
+    },
+    {
+      "control": {
+        "kind": "pass_dispatch_fence",
+        "tenant": "tenant-a",
+        "attempt_id": "{{attempt_id:branch}}"
+      }
+    },
+    {
+      "rpc": "Observe",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "RECONCILED",
+          "reason_code": "READBACK_MISMATCH",
+          "outcome": "FAILED",
+          "outcome_basis": "RECONCILED",
+          "exposure": "RELEASED"
+        },
+        "existing": false,
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 2
+        }
+      }
+    }
+  ]
+}

@@ -42,6 +42,8 @@ pkg/gateway/admission TestPostgresSingleUseSurvivesClockSkew 3 race
 pkg/gateway/admission TestPostgresStepUpAndExpiryFailClosed 1 race
 pkg/gateway/admission TestPostgresStepUpFollowsARiskRaisedAfterEscalation 1 race
 pkg/gateway/admission TestPostgresStopsDenyAdmission 3 race
+pkg/gateway/conformance TestPostgresConformanceRunnerRejectsAFlippedExpectation 1 race
+pkg/gateway/conformance TestPostgresGatewayConformanceTable 1 race
 pkg/gateway/server TestPostgresGatewayAPIOnTheWire 1 race
 pkg/gateway/server TestPostgresGatewayDecisionsOnTheWire 1 race
 pkg/gateway/server TestPostgresWalkingSkeletonOnTheWire 1 race

@@ -370,6 +370,8 @@
       "timeout_seconds": 1200,
       "paths": [
         "core/**",
+        "protocols/conformance/gateway/**",
+        "docs/architecture/gateway-effect-api.md",
         "Makefile"
       ]
     },
@@ -381,6 +383,7 @@
       "timeout_seconds": 1800,
       "paths": [
         "core/**",
+        "protocols/conformance/gateway/**",
         "scripts/ci/postgres_proofs.sh",
         "scripts/ci/postgres_proofs_gate.sh",
         "scripts/ci/postgres-proofs.txt",
@@ -550,6 +553,7 @@
         "schemas/**",
         "protocols/json-schemas/**",
         "protocols/specs/**",
+        "protocols/conformance/gateway/**",
         "api/openapi/**",
         ".github/schema-requirements.txt",
         "scripts/ci/check_json_schemas.py",

@@ -2,7 +2,7 @@
 
 # HELM-owned Hermes build recipe.
 # Build context: pinned upstream NousResearch/hermes-agent checkout.
-FROM node:22-bookworm-slim@sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752 AS node
+FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS node
 
 FROM ghcr.io/astral-sh/uv:0.8.14-python3.12-bookworm@sha256:6f0e5c8496f34eba70f7f9f2e55d49e008b095d0395c16e3dda3437f95a2ec71 AS build
 WORKDIR /src/hermes

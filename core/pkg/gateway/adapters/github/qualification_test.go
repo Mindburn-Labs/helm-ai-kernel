@@ -17,6 +17,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/qualification"
 )
 
 // The §9.3 qualification suite. Every case runs the same way against the
@@ -545,22 +546,22 @@ func refusedWith(err error, reason contracts.ReasonCode) bool {
 
 // runQualification runs every suite case against env and returns the
 // records. A case that fails or is skipped leaves its operation unqualified.
-func runQualification(t *testing.T, env *qualEnv) []adapters.QualificationRecord {
-	results := map[string]adapters.CheckStatus{}
+func runQualification(t *testing.T, env *qualEnv) []qualification.Record {
+	results := map[string]qualification.CheckStatus{}
 	for _, c := range QualificationSuite.Cases {
 		run, ok := qualCases[c.ID]
 		if !ok {
 			t.Errorf("suite case %s has no implementation", c.ID)
 			continue
 		}
-		status := adapters.CheckFail
+		status := qualification.CheckFail
 		t.Run(c.ID, func(t *testing.T) {
 			defer func() {
 				switch {
 				case t.Skipped():
-					status = adapters.CheckSkipped
+					status = qualification.CheckSkipped
 				case !t.Failed():
-					status = adapters.CheckPass
+					status = qualification.CheckPass
 				}
 			}()
 			run(t, env)

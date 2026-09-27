@@ -107,8 +107,9 @@ func (i *issuer) validator() *jwks.JWKSValidator {
 }
 
 // newWire migrates a fresh schema, seeds tenants a and b with a skeleton
-// mandate for human-a, and serves the API to a Connect client.
-func newWire(t *testing.T) (gatewayv1.EffectGatewayServiceClient, *issuer, *sql.DB) {
+// mandate for human-a, and serves the API to a Connect client. cfg, when
+// given, configures admission (adapters and credentials).
+func newWire(t *testing.T, cfg ...admission.Config) (gatewayv1.EffectGatewayServiceClient, *issuer, *sql.DB) {
 	t.Helper()
 	base := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if base == "" {
@@ -152,7 +153,7 @@ func newWire(t *testing.T) (gatewayv1.EffectGatewayServiceClient, *issuer, *sql.
 		must(t, err)
 	}
 
-	svc, err := admission.New(db, admission.Config{})
+	svc, err := admission.New(db, append(cfg, admission.Config{})[0])
 	must(t, err)
 	iss := newIssuer(t)
 	api := &Server{Admission: svc, Auth: &Authenticator{Validator: iss.validator(), Actor: testActor}}

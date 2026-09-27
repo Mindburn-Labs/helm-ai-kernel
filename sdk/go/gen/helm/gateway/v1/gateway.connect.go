@@ -233,9 +233,9 @@ type EffectGatewayServiceClient interface {
 	//   - Refused: the permit is voided, the attempt becomes CANCELLED and its
 	//     reservation is released in the same transaction. Reasons:
 	//     [reason_code: EMERGENCY_STOP_FENCED],
-	//     [reason_code_pending: AUTHORITY_CHANGED] (any version change, even an
+	//     [reason_code: AUTHORITY_CHANGED] (any version change, even an
 	//     unrelated widening; the caller proposes again, ADR-0001 §5.4),
-	//     [reason_code_pending: PERMIT_EXPIRED].
+	//     [reason_code: PERMIT_EXPIRED].
 	//   - Claimed: the permit is consumed once, the attempt moves to
 	//     DISPATCHING, and the adapter checks the permit's argument digest
 	//     against the bytes it is about to send. The response state is
@@ -559,9 +559,9 @@ type EffectGatewayServiceHandler interface {
 	//   - Refused: the permit is voided, the attempt becomes CANCELLED and its
 	//     reservation is released in the same transaction. Reasons:
 	//     [reason_code: EMERGENCY_STOP_FENCED],
-	//     [reason_code_pending: AUTHORITY_CHANGED] (any version change, even an
+	//     [reason_code: AUTHORITY_CHANGED] (any version change, even an
 	//     unrelated widening; the caller proposes again, ADR-0001 §5.4),
-	//     [reason_code_pending: PERMIT_EXPIRED].
+	//     [reason_code: PERMIT_EXPIRED].
 	//   - Claimed: the permit is consumed once, the attempt moves to
 	//     DISPATCHING, and the adapter checks the permit's argument digest
 	//     against the bytes it is about to send. The response state is

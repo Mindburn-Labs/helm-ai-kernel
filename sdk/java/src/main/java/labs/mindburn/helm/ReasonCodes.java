@@ -386,6 +386,14 @@ public final class ReasonCodes {
     /** assertion the request did not carry */
     public static final String STEP_UP_REQUIRED = "STEP_UP_REQUIRED";
 
+    /** DENY: An authority row the permit was issued under changed before the dispatch claim; the
+    /** permit is voided and the effect must be proposed again */
+    public static final String AUTHORITY_CHANGED = "AUTHORITY_CHANGED";
+
+    /** DENY: The permit expired before the dispatch claim; it is voided and the effect must be
+    /** proposed again */
+    public static final String PERMIT_EXPIRED = "PERMIT_EXPIRED";
+
     /** Every registered reason code. */
     public static final Set<String> ALL = Set.of(
             POLICY_VIOLATION,
@@ -507,7 +515,9 @@ public final class ReasonCodes {
             IDEMPOTENCY_CONFLICT,
             APPROVER_NOT_DISTINCT,
             APPROVAL_REJECTED,
-            STEP_UP_REQUIRED);
+            STEP_UP_REQUIRED,
+            AUTHORITY_CHANGED,
+            PERMIT_EXPIRED);
 
     /** Whether {@code code} is in the registry. */
     public static boolean isRegistered(String code) {

@@ -963,10 +963,11 @@ docs_containing() {
     ' "$1"
 }
 
-# The installations file in the shape helm-gateway's custody reads (HELM-751
-# s3): exactly tenant_id, owner, installation_id and repositories.
-printf '{"installations":[{"tenant_id":"tenant-smoke","owner":"example","installation_id":1,"repositories":["example/repo"]}]}\n' \
-    >"$RENDER_DIR/gateway-installations.json"
+# Installations files live in the repository, not RENDER_DIR, because the
+# containerized Helm runner sees only the repository (-v "$ROOT:/work").
+# installations.json has the shape helm-gateway's custody reads (HELM-751 s3):
+# exactly tenant_id, owner, installation_id and repositories.
+GATEWAY_TESTDATA="scripts/ci/testdata/helm-gateway"
 gateway_rendered="$RENDER_DIR/rendered-gateway.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
@@ -974,7 +975,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --set gateway.database.bootstrap.enabled=true \
     --set gateway.database.bootstrap.existingSecret=gw-db-admin \
     --set gateway.github.existingSecret=gw-github-app \
-    --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations.json" \
+    --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations.json" \
     --set gateway.github.apiURL=https://ghe.example.internal/api/v3 \
     --set gateway.dispatchTimeout=90s \
     --set gateway.controlPlaneIdentity.caBundleConfigMap=cp-jwks-ca >"$gateway_rendered"
@@ -1170,21 +1171,17 @@ expect_gateway_render_failure cnf-without-client-auth "requireCNF requires gatew
 expect_gateway_render_failure github-secret-only "are set together or not at all" \
     "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app
 expect_gateway_render_failure github-installations-only "are set together or not at all" \
-    "${GATEWAY_ARGS[@]}" --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations.json"
+    "${GATEWAY_ARGS[@]}" --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations.json"
 expect_gateway_render_failure github-api-url-alone "gateway.github.apiURL requires" \
     "${GATEWAY_ARGS[@]}" --set gateway.github.apiURL=https://ghe.example.internal/api/v3
-printf '{"installations":[{"tenant_id":"t","owner":"o","installation_id":1,"repositories":["o/r"],"token":"x"}]}\n' \
-    >"$RENDER_DIR/gateway-installations-extra.json"
-printf '{"installations":[{"owner":"o","installation_id":1}]}\n' >"$RENDER_DIR/gateway-installations-short.json"
-printf '{"installations":[],"extra":1}\n' >"$RENDER_DIR/gateway-installations-top.json"
 for bad in extra short; do
     expect_gateway_render_failure "installations-${bad}" "exactly tenant_id, owner, installation_id and repositories are allowed" \
         "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app \
-        --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations-${bad}.json"
+        --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations-${bad}.json"
 done
 expect_gateway_render_failure installations-top 'must be {"installations": [...]}' \
     "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app \
-    --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations-top.json"
+    --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations-top.json"
 
 gateway_production_args=(
     --set helm.production=true

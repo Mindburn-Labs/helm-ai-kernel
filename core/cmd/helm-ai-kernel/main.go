@@ -30,6 +30,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/postgresmigration"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -435,7 +436,11 @@ func runServerWithOptions(opts serverOptions) error {
 		if err := validateRuntimePostgresURL(dbURL); err != nil {
 			return fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
 		}
-		db, err = sql.Open("postgres", dbURL)
+		utcURL, err := pgdsn.WithUTCTimeZone(dbURL)
+		if err != nil {
+			return fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
+		}
+		db, err = sql.Open("postgres", utcURL)
 		if err != nil {
 			return fmt.Errorf("connect to DB: %w", err)
 		}

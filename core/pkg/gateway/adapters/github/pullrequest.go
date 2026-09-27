@@ -67,7 +67,9 @@ func (c *client) observePullRequest(ctx context.Context, args pullRequestArgs) a
 	obs := c.observation()
 	if len(pulls) == 0 {
 		obs.GitHubPullRequest = &adapters.GitHubPullRequestResult{HeadRef: args.Head, BaseRef: args.Base}
-		return settle(obs, fmt.Sprintf("no pull request from %s into %s", args.Head, args.Base))
+		r := settle(obs, fmt.Sprintf("no pull request from %s into %s", args.Head, args.Base))
+		r.Absent = true
+		return r
 	}
 	// GitHub lists newest first; an open one is the candidate if there is
 	// one, since at most one can be open per head and base.

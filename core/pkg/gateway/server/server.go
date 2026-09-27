@@ -22,8 +22,8 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 )
 
-// Server implements EffectGatewayServiceHandler. Dispatch, Observe, Stop and
-// Lift are later slices and answer unimplemented.
+// Server implements EffectGatewayServiceHandler. Stop and Lift are a later
+// slice and answer unimplemented.
 type Server struct {
 	gatewayv1.UnimplementedEffectGatewayServiceHandler
 
@@ -117,6 +117,36 @@ func (s *Server) Cancel(ctx context.Context, req *connect.Request[gatewayv1.Canc
 		return nil, toRPCError(ctx, "Cancel", err)
 	}
 	return connect.NewResponse(&gatewayv1.CancelResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
+}
+
+// Dispatch claims an ADMITTED attempt's permit and sends the effect through
+// its adapter (token scope helm.gateway.execute, workload principals only).
+// A refused claim, a NOT_SENT and an UNKNOWN are attempt states, not errors.
+func (s *Server) Dispatch(ctx context.Context, req *connect.Request[gatewayv1.DispatchRequest]) (*connect.Response[gatewayv1.DispatchResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeExecute)
+	if err != nil {
+		return nil, err
+	}
+	attempt, existing, err := s.Admission.Dispatch(ctx, id.Caller, req.Msg.GetAttemptId())
+	if err != nil {
+		return nil, toRPCError(ctx, "Dispatch", err)
+	}
+	return connect.NewResponse(&gatewayv1.DispatchResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
+}
+
+// Observe reads a dispatched effect back and records the observation (token
+// scope helm.gateway.execute, workload principals only). It never
+// dispatches.
+func (s *Server) Observe(ctx context.Context, req *connect.Request[gatewayv1.ObserveRequest]) (*connect.Response[gatewayv1.ObserveResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeExecute)
+	if err != nil {
+		return nil, err
+	}
+	attempt, existing, err := s.Admission.Observe(ctx, id.Caller, req.Msg.GetAttemptId())
+	if err != nil {
+		return nil, toRPCError(ctx, "Observe", err)
+	}
+	return connect.NewResponse(&gatewayv1.ObserveResponse{Attempt: attemptProto(attempt), Existing: existing}), nil
 }
 
 // GetAttempt returns one attempt (token scope helm.gateway.read).

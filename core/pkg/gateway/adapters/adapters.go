@@ -190,6 +190,12 @@ type ObserveResult struct {
 	Reason      contracts.ReasonCode
 	Detail      string
 	Observation *Observation
+	// Absent is set on a FAILED that rests only on the object the effect
+	// creates not being found (no ref, no pull request). A write still in
+	// flight at the provider can make it appear later, so the gateway takes
+	// it as inconclusive until the attempt's dispatch fence has passed. A
+	// FAILED with Absent unset found an object that contradicts the effect.
+	Absent bool
 }
 
 // Observation mirrors helm.gateway.v1.Observation without result_ref, which

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/manifest"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store/ledger"
 )
@@ -23,7 +24,11 @@ func main() {
 	}
 	dbURL := os.Args[1]
 
-	db, err := sql.Open("postgres", dbURL)
+	utcURL, err := pgdsn.WithUTCTimeZone(dbURL)
+	if err != nil {
+		log.Fatalf("Invalid db url: %v", err)
+	}
+	db, err := sql.Open("postgres", utcURL)
 	if err != nil {
 		log.Fatalf("Failed to open db: %v", err)
 	}

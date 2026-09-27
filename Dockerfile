@@ -28,7 +28,7 @@ RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=
       -o /helm-ai-kernel ./cmd/helm-ai-kernel/
 
 # ── Stage 2: Runtime ───────────────────────────────────
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:a9329520abc449e3b14d5bc3a6ffae065bdde0f02667fa10880c49b35c109fd1
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
 COPY --from=builder /helm-ai-kernel /usr/local/bin/helm-ai-kernel
 COPY --from=builder --chown=65532:65532 /runtime-data/ /var/lib/helm-ai-kernel/

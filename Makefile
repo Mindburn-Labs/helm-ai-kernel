@@ -1,6 +1,6 @@
 .PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres test-effect-reservation-postgres verify-receipt-v5-vectors verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-evidence-pack-successor-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 .PHONY: test-generated-spec-approval-ceremony-postgres
-.PHONY: contract-breaking-release test-contract-breaking
+.PHONY: contract-breaking-release test-contract-breaking release-rehearsal test-release-rehearsal
 .PHONY: check
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
@@ -282,6 +282,16 @@ version-drift:
 	python3 scripts/release/check_version_drift_test.py
 	python3 scripts/release/prepare_version_test.py
 	python3 scripts/release/check_version_drift.py local
+
+# release-rehearsal checks main against every pre-publish precondition of
+# release.yml for the version the next tag would carry. It exits non-zero only
+# on a defect that blocks any version; pass REHEARSAL_ARGS=--strict to fail on
+# ACTION-NEEDED items as well.
+release-rehearsal:
+	python3 scripts/release/rehearse.py $(REHEARSAL_ARGS)
+
+test-release-rehearsal:
+	python3 scripts/release/rehearse_test.py
 
 version-drift-report:
 	python3 scripts/release/check_version_drift.py --report --write-status version-status.json local

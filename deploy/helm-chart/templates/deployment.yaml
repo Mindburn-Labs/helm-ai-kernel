@@ -41,6 +41,14 @@
 {{- if and .Values.helm.policy.signature.publicKey (not (regexMatch "^[0-9a-fA-F]{64}$" .Values.helm.policy.signature.publicKey)) -}}
 {{- fail "helm.policy.signature.publicKey must be a 64-character hex Ed25519 public key" -}}
 {{- end -}}
+{{- with .Values.helm.auth.controlPlaneActivationPublicKey -}}
+{{- if not (regexMatch "^[0-9a-f]{64}$" .) -}}
+{{- fail "helm.auth.controlPlaneActivationPublicKey must be a 64-character lowercase hex Ed25519 public key" -}}
+{{- end -}}
+{{- if not (and $.Values.helm.auth.existingSecret $.Values.helm.auth.organizationRuntimeAPIKeySecretKey) -}}
+{{- fail "helm.auth.controlPlaneActivationPublicKey requires the organization-runtime key (helm.auth.existingSecret and helm.auth.organizationRuntimeAPIKeySecretKey): the Kernel needs HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY and HELM_ORGANIZATION_RUNTIME_API_KEY together" -}}
+{{- end -}}
+{{- end -}}
 {{- if and .Values.helm.policy.signature.required (not (or .Values.helm.policy.signature.publicKey .Values.helm.policy.signature.existingSecret)) -}}
 {{- fail "helm.policy.signature.required=true requires helm.policy.signature.publicKey or helm.policy.signature.existingSecret" -}}
 {{- end -}}
@@ -433,15 +441,18 @@ spec:
                   name: {{ include "helm-ai-kernel.authSecretName" . }}
                   key: {{ .Values.helm.auth.serviceAPIKeySecretKey }}
             {{- end }}
-            {{- if and .Values.helm.auth.existingSecret .Values.helm.auth.organizationRuntimeAPIKeySecretKey }}
+            {{- /* The Kernel needs the organization-runtime key and the Control
+                   Plane activation public key together; one without the other
+                   fails its service init. So the key is wired only with the
+                   activation public key, and the pair is checked above. */}}
+            {{- if and .Values.helm.auth.controlPlaneActivationPublicKey .Values.helm.auth.existingSecret .Values.helm.auth.organizationRuntimeAPIKeySecretKey }}
+            - name: HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY
+              value: {{ .Values.helm.auth.controlPlaneActivationPublicKey | quote }}
             - name: HELM_ORGANIZATION_RUNTIME_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.helm.auth.existingSecret }}
                   key: {{ .Values.helm.auth.organizationRuntimeAPIKeySecretKey }}
-                  # An existing Secret without the key keeps working; the
-                  # organization-runtime route then stays closed.
-                  optional: true
             {{- end }}
             {{- if .Values.helm.githubEffects.existingSecret }}
             - name: HELM_GITHUB_TOKEN

@@ -250,6 +250,13 @@ pub const PER_CALL_LIMIT: &str = "PER_CALL_LIMIT";
 pub const ARITHMETIC_OVERFLOW: &str = "ARITHMETIC_OVERFLOW";
 /// DENY: The idempotency key was already used with a different request
 pub const IDEMPOTENCY_CONFLICT: &str = "IDEMPOTENCY_CONFLICT";
+/// DENY: The approver is the requester; an approval needs a distinct principal
+pub const APPROVER_NOT_DISTINCT: &str = "APPROVER_NOT_DISTINCT";
+/// DENY: A distinct human approver rejected the escalated effect
+pub const APPROVAL_REJECTED: &str = "APPROVAL_REJECTED";
+/// DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion
+/// the request did not carry
+pub const STEP_UP_REQUIRED: &str = "STEP_UP_REQUIRED";
 
 /// Every registered reason code, in registry order.
 pub const ALL: &[&str] = &[
@@ -370,6 +377,9 @@ pub const ALL: &[&str] = &[
     PER_CALL_LIMIT,
     ARITHMETIC_OVERFLOW,
     IDEMPOTENCY_CONFLICT,
+    APPROVER_NOT_DISTINCT,
+    APPROVAL_REJECTED,
+    STEP_UP_REQUIRED,
 ];
 
 /// Whether `code` is in the registry.

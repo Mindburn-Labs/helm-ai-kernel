@@ -69,7 +69,7 @@ tests run and pass, and deleting the control makes its removal tests fail. A
 `build` entry is held by CI gates that block pull requests. Everything else
 is `observed-only` or `unmanaged`, with the reason.
 
-79 controls: 39 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
+81 controls: 41 enforced (1 of them by CI gates), 28 observed-only, 12 unmanaged (11 of them retired invariants).
 
 | Id | Control | Status | Why it is not enforced |
 | --- | --- | --- | --- |
@@ -152,6 +152,8 @@ is `observed-only` or `unmanaged`, with the reason.
 | CTL-052 | Effect gateway admission | enforced | — |
 | CTL-053 | Gateway approval decisions | enforced | — |
 | CTL-054 | Gateway dispatch claim and observation | enforced | — |
+| CTL-055 | Gateway stops and lifts | enforced | — |
+| CTL-056 | Gateway escalation timers and reconciliation jobs | enforced | — |
 
 ---
 

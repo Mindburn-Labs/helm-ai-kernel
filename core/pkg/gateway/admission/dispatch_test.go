@@ -147,3 +147,42 @@ func TestMayExecute(t *testing.T) {
 		}
 	}
 }
+
+// Authority changes always escalate, and a lift is blocked by every stop but
+// the one it lifts (HELM-751 s3b, M2 of its review).
+func TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops(t *testing.T) {
+	lift := func(t *testing.T) Input {
+		in := decideBase(t)
+		in.EffectType, in.Target, in.RiskClass = effectargs.AuthorityLift, "stop:x", mandates.RiskLow
+		in.Chain[0].Mandate.Terms.EffectTypes = []string{effectargs.AuthorityLift}
+		return in
+	}
+	if d := Decide(lift(t)); d.Verdict != Escalate || d.Reason != contracts.ReasonApprovalRequired {
+		t.Fatalf("a low-risk lift = %+v, want an escalation", d)
+	}
+	stopped := lift(t)
+	stopped.ActiveStops, stopped.LiftsStop = []string{"s"}, "s"
+	if d := Decide(stopped); d.Verdict != Escalate {
+		t.Fatalf("a lift under the stop it lifts = %+v, want it escalated, not fenced", d)
+	}
+	stopped.ActiveStops = []string{"s", "requester-stop"}
+	if d := Decide(stopped); d.Verdict != Deny || d.Reason != contracts.ReasonEmergencyStopFenced {
+		t.Fatalf("a lift under another stop too = %+v, want it fenced", d)
+	}
+	stopped.ActiveStops, stopped.LiftsStop = []string{"s"}, ""
+	if d := Decide(stopped); d.Verdict != Deny {
+		t.Fatalf("a lift naming no stop under a stop = %+v, want it fenced", d)
+	}
+	other := decideBase(t)
+	other.ActiveStops = []string{"s"}
+	if d := Decide(other); d.Verdict != Deny || d.Reason != contracts.ReasonEmergencyStopFenced {
+		t.Fatalf("another effect under a stop = %+v", d)
+	}
+	grant := lift(t)
+	grant.EffectType = "helm.authority.grant"
+	grant.Chain[0].Mandate.Terms.EffectTypes = []string{"helm.authority.grant"}
+	grant.ActiveStops = []string{"s"}
+	if d := Decide(grant); d.Verdict != Deny {
+		t.Fatalf("an authority change other than a lift under a stop = %+v", d)
+	}
+}

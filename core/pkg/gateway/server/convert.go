@@ -113,6 +113,19 @@ func observationProto(o *admission.Observation) *gatewayv1.Observation {
 	return out
 }
 
+func stopProto(s admission.Stop) *gatewayv1.Stop {
+	var kind gatewayv1.StopScopeKind
+	for k, v := range stopKinds {
+		if v == s.ScopeKind {
+			kind = k
+		}
+	}
+	return &gatewayv1.Stop{
+		StopId: s.ID, ScopeKind: kind, ScopeKey: s.ScopeKey, Reason: s.Reason, CreatedByPrincipalId: s.IssuedBy,
+		CreatedAt: timestamppb.New(s.CreatedAt), ExpiresAt: optionalTime(s.ExpiresAt), LiftedAt: optionalTime(s.LiftedAt),
+	}
+}
+
 func optionalTime(t *time.Time) *timestamppb.Timestamp {
 	if t == nil {
 		return nil

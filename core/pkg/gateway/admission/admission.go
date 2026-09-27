@@ -112,12 +112,20 @@ type Config struct {
 	// fence (dispatch_deadline) is the claim time plus this plus a minute.
 	// Default 2m.
 	DispatchTimeout time.Duration
+	// DispatchGrace is added to DispatchTimeout for the fence: a provider can
+	// still apply a write shortly after the gateway stopped waiting for it.
+	// Default 1m.
+	DispatchGrace time.Duration
 	// Adapters perform the effect types they declare (§9.1). An effect type
 	// no adapter declares is not dispatched.
 	Adapters []adapters.Adapter
 	// Credentials is the connection custody the adapters take provider
 	// credentials from (R8). Nil: every dispatch is NOT_SENT for want of one.
 	Credentials Credentials
+	// Jobs enqueues the escalation-expiry and reconciliation jobs in the
+	// transaction that makes them due (TA §6.2). helm-gateway serve always
+	// sets it; nil enqueues nothing, for tests of admission alone.
+	Jobs Enqueuer
 }
 
 // Service runs admission over one database. It holds no tenant data: the
@@ -144,6 +152,9 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 	}
 	if cfg.DispatchTimeout <= 0 {
 		cfg.DispatchTimeout = 2 * time.Minute
+	}
+	if cfg.DispatchGrace <= 0 {
+		cfg.DispatchGrace = time.Minute
 	}
 	byType := map[string]adapters.Adapter{}
 	for _, a := range cfg.Adapters {
@@ -179,78 +190,90 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	if err := checkCaller(caller); err != nil {
 		return Attempt{}, false, err
 	}
+	if in.EffectType == effectargs.AuthorityLift {
+		return Attempt{}, false, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+			"helm.authority.lift is proposed through Lift, which binds the operator's stop token to the stop")
+	}
 	args, err := validateProposal(in)
 	if err != nil {
 		return Attempt{}, false, err
 	}
-	digest := requestDigest(caller, in)
 	var attemptID string
 	var existing bool
 	err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
-		var provisioned bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_tenants WHERE tenant_id = $1)`,
-			caller.TenantID).Scan(&provisioned); err != nil {
-			return err
-		}
-		if !provisioned {
-			return refuse(CodePermissionDenied, contracts.ReasonTenantIsolation, "the token's tenant has no authority rows in this gateway")
-		}
-		id, err := uuid.NewV7()
-		if err != nil {
-			return err
-		}
-		argumentDigest := sha256.Sum256(in.Arguments)
-		targetDigest := sha256.Sum256([]byte(in.Target))
-		quote, err := json.Marshal(nonNil(in.Quote))
-		if err != nil {
-			return err
-		}
-		distinct, err := json.Marshal(distinctJSON(in.Distinct))
-		if err != nil {
-			return err
-		}
-		// 1. Idempotency first. A duplicate never locks or changes anything.
-		err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
-				(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
-				 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
-				 distinct_values, state)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15, 'PROPOSED')
-			ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
-			RETURNING attempt_id`,
-			caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
-			in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct).Scan(&attemptID)
-		if errors.Is(err, sql.ErrNoRows) {
-			var stored []byte
-			if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
-				WHERE tenant_id = $1 AND idempotency_key = $2`, caller.TenantID, in.IdempotencyKey).Scan(&attemptID, &stored); err != nil {
-				return err
-			}
-			if string(stored) != string(digest) {
-				return refuse(CodeAlreadyExists, contracts.ReasonIdempotencyConflict,
-					"the idempotency key was used with a different request")
-			}
-			existing = true
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO authority_attempt_contents (tenant_id, attempt_id, arguments) VALUES ($1, $2, $3)`,
-			caller.TenantID, attemptID, in.Arguments); err != nil {
-			return err
-		}
-		if in.EffectType == effectargs.GitHubPullRequestCreateDraft {
-			if err := checkBranchAttempt(ctx, tx, caller, in); err != nil {
-				return err
-			}
-		}
-		return s.admit(ctx, tx, caller, in, args, attemptID, argumentDigest[:], targetDigest[:], nil, "PROPOSED")
+		var err error
+		attemptID, existing, err = s.proposeTx(ctx, tx, caller, in, args)
+		return err
 	})
 	if err != nil {
 		return Attempt{}, false, err
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err
+}
+
+// proposeTx is Propose's transaction body, in tx: the attempt ID, and whether
+// the idempotency key already named this request.
+func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput, args map[string]any) (string, bool, error) {
+	digest := requestDigest(caller, in)
+	var attemptID string
+	var provisioned bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_tenants WHERE tenant_id = $1)`,
+		caller.TenantID).Scan(&provisioned); err != nil {
+		return "", false, err
+	}
+	if !provisioned {
+		return "", false, refuse(CodePermissionDenied, contracts.ReasonTenantIsolation, "the token's tenant has no authority rows in this gateway")
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", false, err
+	}
+	argumentDigest := sha256.Sum256(in.Arguments)
+	targetDigest := sha256.Sum256([]byte(in.Target))
+	quote, err := json.Marshal(nonNil(in.Quote))
+	if err != nil {
+		return "", false, err
+	}
+	distinct, err := json.Marshal(distinctJSON(in.Distinct))
+	if err != nil {
+		return "", false, err
+	}
+	// 1. Idempotency first. A duplicate never locks or changes anything.
+	err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
+			(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
+			 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
+			 distinct_values, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15, 'PROPOSED')
+		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+		RETURNING attempt_id`,
+		caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
+		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct).Scan(&attemptID)
+	if errors.Is(err, sql.ErrNoRows) {
+		var stored []byte
+		if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
+			WHERE tenant_id = $1 AND idempotency_key = $2`, caller.TenantID, in.IdempotencyKey).Scan(&attemptID, &stored); err != nil {
+			return "", false, err
+		}
+		if string(stored) != string(digest) {
+			return "", false, refuse(CodeAlreadyExists, contracts.ReasonIdempotencyConflict,
+				"the idempotency key was used with a different request")
+		}
+		return attemptID, true, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO authority_attempt_contents (tenant_id, attempt_id, arguments) VALUES ($1, $2, $3)`,
+		caller.TenantID, attemptID, in.Arguments); err != nil {
+		return "", false, err
+	}
+	if in.EffectType == effectargs.GitHubPullRequestCreateDraft {
+		if err := checkBranchAttempt(ctx, tx, caller, in); err != nil {
+			return "", false, err
+		}
+	}
+	return attemptID, false, s.admit(ctx, tx, caller, in, args, attemptID, argumentDigest[:], targetDigest[:], nil, "PROPOSED")
 }
 
 // lockedAuthority is what step 3 locked, with the versions a permit records.
@@ -320,7 +343,13 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	}
 
 	// 5. Counters, FOR UPDATE in (limit_id, bucket_start) order.
-	counters, err := lockCounters(ctx, tx, caller.TenantID, auth.limits, now, in)
+	// Authority changes spend no resource: no limit counts them, so a Lift,
+	// which carries no quote, is never refused by a sum limit (L5).
+	limits := auth.limits
+	if strings.HasPrefix(in.EffectType, "helm.authority.") {
+		limits = nil
+	}
+	counters, err := lockCounters(ctx, tx, caller.TenantID, limits, now, in)
 	if err != nil {
 		return err
 	}
@@ -329,7 +358,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		Now: now, PrincipalID: caller.PrincipalID, PrincipalFound: auth.principalFound, PrincipalActive: auth.principalActive,
 		EffectType: in.EffectType, EffectTypeFound: auth.effectTypeFound, RiskClass: auth.riskClass,
 		Target: in.Target, Args: args, Quote: in.Quote, ActiveStops: stops, Counters: counters.states,
-		Approval: approval,
+		Approval: approval, LiftsStop: liftedStop(in.EffectType, in.Target),
 	}
 	for _, m := range auth.chain {
 		link := Link{Mandate: m}
@@ -382,7 +411,12 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		}
 		expires = expires.UTC().Truncate(time.Second)
 		approvalDigest := ApprovalDigestV1(attemptID, targetDigest, argumentDigest, in.Quote, expires)
-		return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "ESCALATED", decision.Reason, mandate, risk, approvalDigest, expires)
+		if err := recordDecision(ctx, tx, caller.TenantID, attemptID, from, "ESCALATED", decision.Reason, mandate, risk, approvalDigest, expires); err != nil {
+			return err
+		}
+		// The escalation's timer, in the same transaction (TA §6.3).
+		return s.enqueue(ctx, tx, Job{Kind: JobExpireEscalation, TenantID: caller.TenantID, WorkspaceID: caller.WorkspaceID,
+			AttemptID: attemptID, RunAt: expires})
 	default:
 		return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "DENIED", decision.Reason, mandate, risk, nil, nil)
 	}
@@ -444,9 +478,13 @@ func lockAuthority(ctx context.Context, tx *sql.Tx, caller Caller, effectType st
 	}
 	a.versions = append(a.versions, AuthorityVersion{Kind: "tenant", Version: version})
 
-	// The requester and every holder and delegator of the chain: a stop on
-	// any of them suspends the chain (coordinator decision, HELM-750).
+	// The requester, the workload that carries its call (the token's act.sub),
+	// and every holder and delegator of the chain: a stop on any of them
+	// suspends the chain (coordinator decision, HELM-750; TA §4.1 item 6).
 	principals := map[string]struct{}{caller.PrincipalID: {}}
+	if caller.ActorID != "" {
+		principals[caller.ActorID] = struct{}{}
+	}
 	for _, m := range unlocked {
 		principals[m.HolderID] = struct{}{}
 		principals[m.CreatedBy] = struct{}{}
@@ -537,6 +575,30 @@ func lockAuthority(ctx context.Context, tx *sql.Tx, caller Caller, effectType st
 	return a, lrows.Err()
 }
 
+// principalStops locks the principals FOR SHARE, in ID order, and returns the
+// active stops on any of them: the dispatcher at the claim, the approver at
+// Approve. A narrowing Stop updates the principal row, so a stop either
+// commits before this lock or waits for the transaction.
+func principalStops(ctx context.Context, tx *sql.Tx, tenantID string, ids ...string) ([]string, error) {
+	var keys []string
+	set := map[string]bool{}
+	for _, id := range ids {
+		if id != "" && !set[id] {
+			set[id] = true
+			keys = append(keys, id)
+		}
+	}
+	sort.Strings(keys)
+	if _, err := tx.ExecContext(ctx, `SELECT 1 FROM authority_principals WHERE tenant_id = $1 AND principal_id = ANY ($2::text[])
+		ORDER BY principal_id FOR SHARE`, tenantID, pq.Array(keys)); err != nil {
+		return nil, err
+	}
+	for i := range keys {
+		keys[i] = "principal:" + keys[i]
+	}
+	return stopsOn(ctx, tx, tenantID, keys)
+}
+
 // activeStops returns the stops on the tenant, any locked principal, any
 // mandate of the chain, or the effect type that are neither lifted nor
 // expired. It must run after lockAuthority.
@@ -548,6 +610,11 @@ func activeStops(ctx context.Context, tx *sql.Tx, tenantID, effectType string, a
 			keys = append(keys, v.Kind+":"+v.Key)
 		}
 	}
+	return stopsOn(ctx, tx, tenantID, keys)
+}
+
+// stopsOn returns the active stops whose "kind:key" is one of keys.
+func stopsOn(ctx context.Context, tx *sql.Tx, tenantID string, keys []string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT stop_id::text FROM authority_stops
 		WHERE tenant_id = $1 AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())
 		  AND scope_kind || ':' || scope_key = ANY ($2::text[])
@@ -640,7 +707,14 @@ func lockCounters(ctx context.Context, tx *sql.Tx, tenantID string, limits []lim
 		var delta int64
 		switch l.measure {
 		case "sum":
-			delta = quote[l.unit]
+			// Fail closed (HELM-797's prerequisite): a request that names no
+			// amount for a summed unit cannot be held against it.
+			amount, ok := quote[l.unit]
+			if !ok {
+				return counted{}, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+					"a sum limit counts %q, and the quote carries no amount for it", l.unit)
+			}
+			delta = amount
 		case "count":
 			delta = 1
 		case "distinct":

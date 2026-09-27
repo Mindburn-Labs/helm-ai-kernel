@@ -3,9 +3,11 @@ package admission
 import (
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 )
@@ -60,6 +62,31 @@ type Input struct {
 	// Approval is the recorded decision Approve re-admits with; nil on
 	// Propose.
 	Approval *ApprovalState
+	// LiftsStop is the stop a helm.authority.lift attempt lifts; empty for
+	// any other effect.
+	LiftsStop string
+}
+
+// withoutStop is stops without the one a lift lifts.
+func withoutStop(stops []string, lifted string) []string {
+	if lifted == "" {
+		return stops
+	}
+	var out []string
+	for _, id := range stops {
+		if id != lifted {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// liftedStop is the stop a helm.authority.lift attempt on target lifts.
+func liftedStop(effectType, target string) string {
+	if effectType != effectargs.AuthorityLift {
+		return ""
+	}
+	return strings.TrimPrefix(target, "stop:")
 }
 
 // ApprovalState is a recorded approval or rejection of the attempt.
@@ -79,7 +106,10 @@ type Decision struct {
 // then approval. Everything that can deny is checked first, so a human is
 // never asked to approve what would be denied anyway.
 func Decide(in Input) Decision {
-	if len(in.ActiveStops) > 0 {
+	// A lift is not blocked by the one stop it lifts: the lift is itself an
+	// approved, step-up authority change (§4.1 item 7). Every other stop,
+	// on the requester or the tenant included, still applies.
+	if len(withoutStop(in.ActiveStops, in.LiftsStop)) > 0 {
 		return deny(contracts.ReasonEmergencyStopFenced)
 	}
 	if !in.PrincipalFound || !in.PrincipalActive {
@@ -159,6 +189,11 @@ func Decide(in Input) Decision {
 // approval for the effect type, or an amount at or above any link's approval
 // threshold (ADR-0001 §4, HELM-750 terms).
 func needsApproval(in Input, amount int64) bool {
+	// Authority widening (helm.authority.*) always needs a distinct approver
+	// with step-up, whatever the risk rows say (§4.1 item 7, §10.1).
+	if strings.HasPrefix(in.EffectType, "helm.authority.") {
+		return true
+	}
 	if in.RiskClass == mandates.RiskHigh || in.RiskClass == mandates.RiskIrreversible {
 		return true
 	}

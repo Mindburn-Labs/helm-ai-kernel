@@ -98,6 +98,17 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 		if err := requireActiveHuman(ctx, tx, caller, "an approver"); err != nil {
 			return err
 		}
+		// A stopped approver, or a stopped workload carrying the decision,
+		// cannot approve; the attempt stays ESCALATED for another approver.
+		if approve {
+			stops, err := principalStops(ctx, tx, caller.TenantID, caller.PrincipalID, caller.ActorID)
+			if err != nil {
+				return err
+			}
+			if len(stops) > 0 {
+				return refuse(CodePermissionDenied, contracts.ReasonEmergencyStopFenced, "the approver or the workload carrying the decision is stopped")
+			}
+		}
 		if !bytes.Equal(in.ApprovalDigest, a.approvalDigest) {
 			return refuse(CodeFailedPrecondition, "", "approval_digest is not the attempt's approval digest")
 		}

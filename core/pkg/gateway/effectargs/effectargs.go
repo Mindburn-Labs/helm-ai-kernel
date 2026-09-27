@@ -33,6 +33,9 @@ const (
 	GitHubBranchCreateFromChanges = "github.branch.create_from_changes"
 	GitHubPullRequestCreateDraft  = "github.pull_request.create_draft"
 	GitHubRepositoryGet           = "github.repository.get"
+	// AuthorityLift lifts one stop (Lift, HELM-751 s3b). Its target is
+	// "stop:<stop_id>".
+	AuthorityLift = "helm.authority.lift"
 )
 
 // maxRepositoryGetBytes caps github.repository.get's arguments.
@@ -101,6 +104,23 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 				return nil, err
 			}
 		}
+	case AuthorityLift:
+		var args AuthorityLiftArgs
+		if err := requireExactKeys(raw, "schema", "stop_id"); err != nil {
+			return nil, err
+		}
+		if err := strictDecode(raw, &args); err != nil {
+			return nil, err
+		}
+		if err := constant("schema", args.Schema, "helm.authority.lift.v1"); err != nil {
+			return nil, err
+		}
+		if err := match("stop_id", args.StopID, uuidPattern); err != nil {
+			return nil, err
+		}
+		if target != "stop:"+*args.StopID {
+			return nil, invalid("target must be stop:<stop_id>")
+		}
 	case GitHubPullRequestCreateDraft:
 		if err := checkGitHubTarget(target); err != nil {
 			return nil, err
@@ -134,6 +154,14 @@ type BranchFile struct {
 	Path        *string `json:"path"`
 	Mode        *string `json:"mode"`
 	ContentUTF8 *string `json:"content_utf8"`
+}
+
+// AuthorityLiftArgs is helm.authority.lift v1: the stop to lift. Contract 5
+// will version the full authority-change payloads; this is the one the
+// gateway's Lift writes.
+type AuthorityLiftArgs struct {
+	Schema *string `json:"schema"`
+	StopID *string `json:"stop_id"`
 }
 
 // RepositoryGet is github.repository.get v1, a read.

@@ -1,21 +1,17 @@
 {
   "schema": "helm.gateway.conformance.scenario.v1",
-  "id": "GW-008",
-  "title": "A stop issued between approval and dispatch cancels at the dispatch claim",
+  "id": "GW-023",
+  "title": "A principal stop covers the workload that carries a call, and the approver",
   "rule": {
-    "statement": "Stops take effect at admission and at the dispatch claim: a stop on the requester after the approval makes Dispatch a successful response whose attempt is CANCELLED with EMERGENCY_STOP_FENCED, the permit voided and the reservation released, and the adapter is never called. Admission after the stop is DENIED.",
+    "statement": "A stop on a principal stops every call it takes part in (TA §4.1 item 6): a stopped workload (the act.sub that carries a human's calls) can no longer propose for that human, and its Dispatch of an attempt admitted before the stop is CANCELLED with EMERGENCY_STOP_FENCED without reaching the adapter. A stopped human cannot approve: Approve is permission_denied with EMERGENCY_STOP_FENCED, and the attempt stays ESCALATED for another approver.",
     "cites": [
       {
         "doc": "docs/architecture/gateway-effect-api.md",
-        "section": "Dispatch and Observe (slice 3)"
+        "section": "Stop, Lift and jobs (slice 3b)"
       },
       {
         "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
         "section": "rpc Stop("
-      },
-      {
-        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
-        "section": "[reason_code: EMERGENCY_STOP_FENCED]"
       }
     ]
   },
@@ -79,14 +75,7 @@
         "activation": {
           "requester": "agent-a",
           "approver": "human-c"
-        },
-        "limits": [
-          {
-            "unit": "effects",
-            "window": "day",
-            "value": 5
-          }
-        ]
+        }
       }
     ],
     "adapter": {
@@ -124,13 +113,6 @@
       "workspace": "ws-a",
       "jti": "execute-runner"
     },
-    "read-a": {
-      "scope": "helm.gateway.read",
-      "sub": "human-a",
-      "tenant": "tenant-a",
-      "workspace": "ws-a",
-      "jti": "read-a"
-    },
     "approve-b": {
       "scope": "helm.gateway.decide",
       "sub": "human-b",
@@ -145,15 +127,30 @@
           "action": "approve"
         }
       ]
+    },
+    "approve-c": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-c",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "decide-c",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:pr}}",
+          "action": "approve"
+        }
+      ]
     }
   },
   "steps": [
     {
-      "label": "branch",
+      "label": "observed",
       "rpc": "Propose",
       "token": "propose-a",
       "request": {
-        "idempotency_key": "branch-1",
+        "idempotency_key": "observed",
         "commitment_id": "commitment-1",
         "effect": {
           "effect_type": "github.branch.create_from_changes",
@@ -162,7 +159,7 @@
             "schema": "helm.github.branch.create_from_changes.v1",
             "base": "main",
             "base_sha": "0123456789abcdef0123456789abcdef01234567",
-            "head": "helm/skeleton",
+            "head": "helm/observed",
             "message": "Add skeleton",
             "files": [
               {
@@ -172,13 +169,7 @@
               }
             ]
           }
-        },
-        "quote": [
-          {
-            "unit": "effects",
-            "amount": 0
-          }
-        ]
+        }
       },
       "expect": {
         "attempt": {
@@ -191,7 +182,7 @@
       "rpc": "Dispatch",
       "token": "execute-runner",
       "request": {
-        "attempt_id": "{{attempt_id:branch}}"
+        "attempt_id": "{{attempt_id:observed}}"
       },
       "expect": {
         "attempt": {
@@ -213,26 +204,63 @@
           "target": "github.com/Mindburn-Labs/example",
           "arguments_json": {
             "schema": "helm.github.pull_request.create_draft.v1",
-            "branch_attempt_id": "{{attempt_id:branch}}",
+            "branch_attempt_id": "{{attempt_id:observed}}",
             "base": "main",
-            "head": "helm/skeleton",
+            "head": "helm/observed",
             "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
             "title": "Skeleton",
             "body": ""
           }
-        },
-        "quote": [
-          {
-            "unit": "effects",
-            "amount": 1
-          }
-        ]
+        }
       },
       "expect": {
         "attempt": {
           "state": "ESCALATED",
           "reason_code": "APPROVAL_REQUIRED"
         }
+      }
+    },
+    {
+      "label": "admitted",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "admitted",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/admitted",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "note": "An operator stops the approver human-b.",
+      "control": {
+        "kind": "stop",
+        "tenant": "tenant-a",
+        "scope_kind": "principal",
+        "scope_key": "human-b",
+        "issued_by": "human-c"
       }
     },
     {
@@ -244,67 +272,43 @@
         "reason": "ok"
       },
       "expect": {
-        "attempt": {
-          "state": "ADMITTED",
-          "reason_code": "",
-          "permit": "ISSUED",
-          "exposure": "HELD"
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "EMERGENCY_STOP_FENCED"
         }
       }
     },
     {
-      "note": "An operator stops the requester.",
+      "rpc": "Approve",
+      "token": "approve-c",
+      "request": {
+        "attempt_id": "{{attempt_id:pr}}",
+        "approval_digest": "{{approval_digest:pr}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-c"
+        }
+      }
+    },
+    {
+      "note": "An operator stops the runaway runner that carries human-a's calls.",
       "control": {
         "kind": "stop",
         "tenant": "tenant-a",
         "scope_kind": "principal",
-        "scope_key": "human-a",
+        "scope_key": "cp-runner",
         "issued_by": "human-c"
-      }
-    },
-    {
-      "rpc": "Dispatch",
-      "token": "execute-runner",
-      "request": {
-        "attempt_id": "{{attempt_id:pr}}"
-      },
-      "expect": {
-        "attempt": {
-          "state": "CANCELLED",
-          "reason_code": "EMERGENCY_STOP_FENCED",
-          "permit": "VOIDED",
-          "exposure": "RELEASED"
-        },
-        "existing": false,
-        "adapter_calls": {
-          "dispatch": 1,
-          "observe": 1
-        }
-      }
-    },
-    {
-      "rpc": "Dispatch",
-      "token": "execute-runner",
-      "request": {
-        "attempt_id": "{{attempt_id:pr}}"
-      },
-      "expect": {
-        "attempt": {
-          "state": "CANCELLED",
-          "reason_code": "EMERGENCY_STOP_FENCED"
-        },
-        "existing": true,
-        "adapter_calls": {
-          "dispatch": 1,
-          "observe": 1
-        }
       }
     },
     {
       "rpc": "Propose",
       "token": "propose-a",
       "request": {
-        "idempotency_key": "branch-2",
+        "idempotency_key": "after-stop",
         "commitment_id": "commitment-1",
         "effect": {
           "effect_type": "github.branch.create_from_changes",
@@ -323,18 +327,30 @@
               }
             ]
           }
-        },
-        "quote": [
-          {
-            "unit": "effects",
-            "amount": 0
-          }
-        ]
+        }
       },
       "expect": {
         "attempt": {
           "state": "DENIED",
           "reason_code": "EMERGENCY_STOP_FENCED"
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:admitted}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "CANCELLED",
+          "reason_code": "EMERGENCY_STOP_FENCED",
+          "permit": "VOIDED"
+        },
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 1
         }
       }
     }

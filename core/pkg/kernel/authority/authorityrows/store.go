@@ -626,28 +626,17 @@ func (scope Scope) normalized() (Scope, error) {
 // with FOR SHARE (ADR-0001 §1), and version overflow is a database error, not
 // a wrap-around.
 func bumpControlRow(ctx context.Context, tx *sql.Tx, tenantID string, scope Scope, detail func() error) error {
-	var query string
-	args := []any{tenantID}
-	switch scope.Kind {
-	case ScopeTenant:
-		if scope.Key != tenantID {
-			return fmt.Errorf("%w: tenant scope %q is not the transaction's tenant", ErrInvalid, scope.Key)
-		}
-		query = `UPDATE authority_tenants SET version = version + 1 WHERE tenant_id = $1`
-	case ScopePrincipal:
-		query, args = `UPDATE authority_principals SET version = version + 1 WHERE tenant_id = $1 AND principal_id = $2`, append(args, scope.Key)
-	case ScopeMandate:
-		query, args = `UPDATE authority_mandates SET version = version + 1 WHERE tenant_id = $1 AND mandate_id = $2::uuid`, append(args, scope.Key)
-	case ScopeEffectType:
-		query, args = `UPDATE authority_effect_types SET version = version + 1 WHERE tenant_id = $1 AND effect_type = $2`, append(args, scope.Key)
-	default:
+	if scope.Kind == ScopeTenant && scope.Key != tenantID {
+		return fmt.Errorf("%w: tenant scope %q is not the transaction's tenant", ErrInvalid, scope.Key)
+	}
+	found, err := mandates.BumpControlRow(ctx, tx, tenantID, string(scope.Kind), scope.Key)
+	if errors.Is(err, mandates.ErrUnknownScope) {
 		return fmt.Errorf("%w: scope kind %q", ErrInvalid, scope.Kind)
 	}
-	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return classify(err)
 	}
-	if affected(res) != 1 {
+	if !found {
 		return fmt.Errorf("%w: %s %s", ErrNotFound, scope.Kind, scope.Key)
 	}
 	return detail()

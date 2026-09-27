@@ -408,8 +408,8 @@ removal_proofs:
 
   - control: CTL-052
     file: core/pkg/gateway/admission/decide.go
-    find: "\tif len(in.ActiveStops) > 0 {\n"
-    replace: "\tif false && len(in.ActiveStops) > 0 {\n"
+    find: "\tif len(withoutStop(in.ActiveStops, in.LiftsStop)) > 0 {\n"
+    replace: "\tif false && len(withoutStop(in.ActiveStops, in.LiftsStop)) > 0 {\n"
     tests:
       - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
   - control: CTL-052
@@ -457,8 +457,8 @@ removal_proofs:
 
   - control: CTL-053
     file: core/pkg/gateway/server/auth.go
-    find: "\tif bound[0].AttemptID != attemptID || bound[0].Action != action {\n"
-    replace: "\tif false && (bound[0].AttemptID != attemptID || bound[0].Action != action) {\n"
+    find: "\t\tif got, ok := bound[0][key].(string); !ok || got != value {\n"
+    replace: "\t\tif got, ok := bound[0][key].(string); false && (!ok || got != value) {\n"
     tests:
       - "core/pkg/gateway/server.TestDecisionBinding"
   - control: CTL-053
@@ -522,6 +522,42 @@ removal_proofs:
     replace: "\t\"github.branch.create_from_changes\": {\"contents\": \"write\", \"metadata\": \"read\", \"administration\": \"write\"},\n"
     tests:
       - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
+  - control: CTL-055
+    file: core/pkg/gateway/admission/decide.go
+    find: "\tif strings.HasPrefix(in.EffectType, \"helm.authority.\") {\n"
+    replace: "\tif false && strings.HasPrefix(in.EffectType, \"helm.authority.\") {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops"
+  - control: CTL-055
+    file: core/pkg/gateway/admission/decide.go
+    find: "\tif len(withoutStop(in.ActiveStops, in.LiftsStop)) > 0 {\n"
+    replace: "\tif len(in.ActiveStops) > 0 && in.LiftsStop == \"\" {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops"
+  - control: CTL-055
+    file: core/pkg/gateway/admission/decide.go
+    find: "\tif len(withoutStop(in.ActiveStops, in.LiftsStop)) > 0 {\n"
+    replace: "\tif len(in.ActiveStops) > 0 {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops"
+  - control: CTL-055
+    file: core/pkg/gateway/server/auth.go
+    find: "\tif len(bound) != 1 {\n"
+    replace: "\tif len(bound) == 0 {\n"
+    tests:
+      - "core/pkg/gateway/server.TestStopTokenBindings"
+  - control: CTL-056
+    file: core/pkg/gateway/jobs/jobs.go
+    find: "\tfinal := job.Attempt >= job.MaxAttempts\n"
+    replace: "\tfinal := false && job.Attempt >= job.MaxAttempts\n"
+    tests:
+      - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
+  - control: CTL-056
+    file: core/pkg/gateway/jobs/jobs.go
+    find: "\tcase !notBefore.IsZero():\n"
+    replace: "\tcase false:\n"
+    tests:
+      - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
 
 
 controls:
@@ -2966,7 +3002,7 @@ controls:
     protected_operations:
       - "Propose, GetAttempt and GetAttemptContent of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
-      - "Stop and Lift answer unimplemented in this slice. The dispatch-claim half of ADR-0001 (version re-check, stops after admission) is CTL-054; Approve, Reject and Cancel are CTL-053."
+      - "The dispatch-claim half of ADR-0001 (version re-check, stops after admission) is CTL-054; Approve, Reject and Cancel are CTL-053; Stop and Lift are CTL-055."
       - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which no shipped binary calls yet (CTL-046); the gateway trusts the rows it finds."
       - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2)."
       - "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR)."
@@ -2985,6 +3021,7 @@ controls:
         - "core/pkg/gateway/admission.TestPostgresConcurrentProposalsAdmitOnce"
         - "core/pkg/gateway/admission.TestPostgresReadsAreTenantAndWorkspaceScoped"
         - "core/pkg/gateway/admission.TestPostgresMalformedProposalsCreateNoAttempt"
+        - "core/pkg/gateway/admission.TestPostgresSumLimitFailsClosedWithoutItsUnit"
         - "core/pkg/gateway/admission.TestPostgresMandateSelectionIsBoundToThePrincipal"
         - "core/pkg/gateway/admission.TestPostgresDraftPullRequestNeedsItsObservedBranch"
         - "core/pkg/gateway/admission.TestRequestDigestCoversEveryFieldButTheKey"
@@ -3025,7 +3062,8 @@ controls:
       precondition leaves it ESCALATED. Cancel follows ESCALATED or ADMITTED
       to CANCELLED only, voiding the permit and releasing held exposure in
       the same transaction, for the requester's propose token or an active
-      human operator's single-use stop token.
+      human operator's single-use stop token bound by authorization_details
+      (helm_effect_cancel) to that attempt.
     status: enforced
     entry_points:
       - "core/pkg/gateway/admission.Service.Approve"
@@ -3039,7 +3077,7 @@ controls:
       - "Approve, Reject and Cancel of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
       - "Step-up does not exist yet, so a high, irreversible or helm.authority.* effect cannot be approved at all; a medium effect a mandate escalates (approval_required) is approved without it."
-      - "An escalation past its expiry is refused but stays ESCALATED: the River job that moves it to EXPIRED is a later slice."
+      - "An escalation past its expiry is refused; the River job of CTL-056 moves it to EXPIRED."
       - "A decide token binds the attempt and action; the approver sees and hashes the arguments through GetAttemptContent, which this slice serves but cannot force a client to use."
       - "Releasing an ADMITTED attempt keeps its distinct-value rows, so the value still counts as seen in its bucket."
       - "The trust limits of CTL-052 (ADR-0005 issuer trust, no deployment yet) apply."
@@ -3098,14 +3136,14 @@ controls:
       - "core/pkg/gateway/admission.Service.Dispatch"
       - "core/pkg/gateway/admission.Service.Observe"
     config:
-      - "HELM_GATEWAY_DISPATCH_TIMEOUT (default 2m) bounds one adapter call; the fence is the claim time plus it plus one minute."
+      - "HELM_GATEWAY_DISPATCH_TIMEOUT (default 2m) bounds one adapter call; the fence is the claim time plus it plus a one-minute grace."
       - "The HELM_CP_IDENTITY_* token configuration of CTL-052; execute tokens are minted for workload principals only."
     protected_operations:
       - "Dispatch and Observe of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
       - "A provider that applies a write more than a minute after the gateway stopped waiting can be read back as FAILED before it lands; the fence bounds this, it does not remove it."
-      - "UNKNOWN is reconciled only when a workload calls Observe; the polling job and ESCALATED_TO_HUMAN arrive with River (HELM-751 s3b)."
-      - "Stops are written by core/pkg/kernel/authority/authorityrows (CTL-046) until the Stop RPC exists (s3b)."
+      - "UNKNOWN is reconciled by the reconcile job (CTL-056) or a workload's Observe."
+      - "Stops are written by the Stop RPC (CTL-055) or core/pkg/kernel/authority/authorityrows (CTL-046)."
       - "An observation is what the adapter read back from the provider (trust class provider_readback); the gateway checks its shape, not its truth."
       - "A count-unit effect's exposure settles at its observed outcome; the SETTLED state is left to model-call settlement (HELM-752)."
       - "The trust limits of CTL-052 (ADR-0005 issuer trust) apply."
@@ -3138,3 +3176,106 @@ controls:
         - "core/pkg/gateway/admission.TestMayExecute"
       bypass:
         - "core/pkg/gateway/admission.TestPostgresCrashAfterTheClaimIsReconciledNeverResent"
+  - id: CTL-055
+    title: "Gateway stops and lifts"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway's Stop writes a stop row and bumps its scope's control row
+      (tenant, principal, mandate or effect type) in one transaction, for an
+      active human operator of the tenant with a single-use helm.gateway.stop
+      token, idempotent on (tenant, key) with a request digest (HELM-751 s3b).
+      The stop token names the stop request (authorization_details
+      helm_stop), and concurrent Stops under one key make one stop.
+      Admissions after it are DENIED and admitted attempts are CANCELLED at
+      their dispatch claim, both EMERGENCY_STOP_FENCED; a principal stop
+      covers the requester, the workload that carries its call (act.sub), the
+      dispatcher and its act, and a stopped approver cannot approve. A call
+      already dispatched is not retracted and is read back as usual. Lift,
+      the only way to create a helm.authority.lift attempt, proposes one for
+      the stop its single-use stop token names (helm_stop_lift); the lift is
+      blocked by every stop but that one. Every helm.authority.* effect
+      escalates whatever its risk row or approval_required says, counts
+      against no limit, needs a distinct human approver and fails closed
+      without step-up (STEP_UP_REQUIRED).
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/server.Server.Stop"
+      - "core/pkg/gateway/server.Server.Lift"
+      - "core/pkg/gateway/admission.Service.Stop"
+      - "core/pkg/gateway/admission.Service.Lift"
+      - "core/pkg/kernel/authority/mandates.BumpControlRow"
+    config:
+      - "The HELM_CP_IDENTITY_* token configuration of CTL-052; stop tokens are minted per operator action and carry iss, jti and exp."
+    protected_operations:
+      - "Stop and Lift of helm.gateway.v1.EffectGatewayService on helm-gateway serve, and the Console's emergency stop (HELM-799) through Stop."
+    bypass_assumptions:
+      - "Step-up does not exist yet, so no lift can be approved: a stop through the gateway stays until it expires, or until the authority-row store (CTL-046) lifts it with a distinct approver."
+      - "A lift attempt that were ADMITTED has no applier yet: applying the lift at dispatch lands with step-up."
+      - "An operator is whoever the gateway's principal rows record as an active human; the token's issuer is trusted as in CTL-052."
+    tests:
+      allowed:
+        - "core/pkg/gateway/admission.TestPostgresStopBlocksProposeApproveAndDispatch"
+        - "core/pkg/gateway/server.TestPostgresStopLiftAndCancelOnTheWire"
+        - "core/pkg/gateway/server.TestStopTokenBindings"
+      forbidden:
+        - "core/pkg/gateway/admission.TestPostgresStopBlocksProposeApproveAndDispatch"
+        - "core/pkg/gateway/admission.TestPostgresLiftNeedsADistinctStepUpApprover"
+        - "core/pkg/gateway/admission.TestPostgresPrincipalStopCoversTheWorkloadAndTheDispatcher"
+        - "core/pkg/gateway/admission.TestPostgresAStoppedApproverCannotApprove"
+        - "core/pkg/gateway/admission.TestPostgresLiftIsBlockedByEveryStopButItsOwn"
+        - "core/pkg/gateway/admission.TestPostgresConcurrentStopsUnderOneKeyReplay"
+        - "core/pkg/gateway/server.TestPostgresStopLiftAndCancelOnTheWire"
+        - "core/pkg/gateway/admission.TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops"
+        - "core/pkg/gateway/server.TestStopTokenBindings"
+      removal:
+        - "core/pkg/gateway/admission.TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops"
+        - "core/pkg/gateway/server.TestStopTokenBindings"
+      bypass:
+        - "core/pkg/gateway/admission.TestPostgresStopMidFlightDoesNotRetractADispatchedCall"
+  - id: CTL-056
+    title: "Gateway escalation timers and reconciliation jobs"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway enqueues River jobs in its own Postgres in the transaction
+      that makes them due (TA §6.2): an escalation's expiry job with the
+      escalation, and a reconciliation job with the dispatch claim. The
+      expiry job writes EXPIRED (APPROVAL_TIMEOUT) under the attempt's row
+      lock, so an approval and the expiry make exactly one transition. The
+      reconciliation job reads the attempt back with doubling backoff, waits
+      out a dispatch fence without spending an attempt, never dispatches, and
+      at the last attempt moves an attempt still unresolved to
+      ESCALATED_TO_HUMAN with its reservation held, in a transaction of its
+      own, whatever made the read-back fail. A graceful stop lets running
+      jobs finish (a 15 s soft stop) (HELM-751 s3b).
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/jobs.Runner.EnqueueTx"
+      - "core/pkg/gateway/jobs.Runner.Run"
+      - "core/pkg/gateway/admission.Service.ExpireEscalation"
+      - "core/pkg/gateway/admission.Service.Reconcile"
+    config:
+      - "helm-gateway migrate applies River's migrations with the gateway schema; /readyz requires both current. River's tables need the helm_gateway grants listed in the chart's 002_grants.sql."
+      - "Defaults: the first read-back 30s after the claim, backoff 30s doubling to 30m, 12 read-backs (about four hours)."
+    protected_operations:
+      - "Escalation expiry and UNKNOWN reconciliation for every attempt helm-gateway serve admits or dispatches."
+    bypass_assumptions:
+      - "Jobs run in helm-gateway serve; with no serve process running, nothing expires or reconciles until one starts. Jobs are durable rows and run late, never not at all."
+      - "A last attempt whose hand-off transaction itself fails (the database unreachable) is discarded by River; the attempt stays UNKNOWN with its hold, and Observe still resolves it."
+      - "River's tables have no row security; job arguments carry tenant, workspace and attempt IDs only (follow-up L3). All jobs share one worker pool (follow-up L4)."
+      - "River's tables carry job arguments (tenant, workspace and attempt IDs) outside row security; every job binds its own transaction to the tenant it names."
+    tests:
+      allowed:
+        - "core/pkg/gateway/jobs.TestPostgresEscalationExpiresOnItsTimer"
+        - "core/pkg/gateway/jobs.TestPostgresReconcilePollsUnknownToAnOutcome"
+        - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
+      forbidden:
+        - "core/pkg/gateway/jobs.TestPostgresApprovalAndExpiryMakeOneTransition"
+        - "core/pkg/gateway/jobs.TestPostgresReconcileHandsAnUnresolvableAttemptToAHuman"
+        - "core/pkg/gateway/jobs.TestPostgresReconcileWaitsForTheDispatchFence"
+        - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
+        - "core/pkg/gateway/jobs.TestBackoffDoublesToItsCap"
+        - "core/pkg/gateway/admission.TestPostgresFinalReconcileHandsOffWhateverTheReadBackError"
+      removal:
+        - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
+      bypass:
+        - "core/cmd/helm-gateway.TestPostgresGatewayMigrateAndReadiness"

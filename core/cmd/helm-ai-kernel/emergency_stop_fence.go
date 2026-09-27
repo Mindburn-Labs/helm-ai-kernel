@@ -13,6 +13,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 	mcppkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/mcp"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 )
 
 // The scoped emergency-stop fence is the kernel's one stop mechanism (binding
@@ -128,7 +129,11 @@ func openStandaloneEmergencyStopFence(ctx context.Context, dataDir string) (*sta
 		if err := validateRuntimePostgresURL(dbURL); err != nil {
 			return nil, fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
 		}
-		if db, err = sql.Open("postgres", dbURL); err != nil {
+		utcURL, err := pgdsn.WithUTCTimeZone(dbURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
+		}
+		if db, err = sql.Open("postgres", utcURL); err != nil {
 			return nil, fmt.Errorf("open emergency-stop fence database: %w", err)
 		}
 		configurePostgresPool(db)

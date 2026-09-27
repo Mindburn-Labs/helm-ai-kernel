@@ -1,0 +1,265 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-017",
+  "title": "An attempt of another tenant or workspace is indistinguishable from a missing one",
+  "rule": {
+    "statement": "Reads, decisions and dispatch run in the token's tenant and workspace. An attempt of another tenant or another workspace is not_found, exactly as a missing attempt is.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "WS-B's answers to the open questions (2026-09-25)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "not_found: no such attempt in the token's tenant and workspace"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    },
+    "read-tenant-b": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-b",
+      "workspace": "ws-a",
+      "jti": "read-tenant-b"
+    },
+    "read-ws-b": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-b",
+      "jti": "read-ws-b"
+    },
+    "execute-tenant-b": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-b",
+      "workspace": "ws-a",
+      "jti": "execute-tenant-b"
+    }
+  },
+  "steps": [
+    {
+      "label": "branch",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "branch-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/skeleton",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "permit": "ISSUED"
+        }
+      }
+    },
+    {
+      "rpc": "GetAttempt",
+      "token": "read-tenant-b",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "error": {
+          "code": "not_found",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "GetAttemptContent",
+      "token": "read-tenant-b",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "error": {
+          "code": "not_found",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "GetAttempt",
+      "token": "read-ws-b",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "error": {
+          "code": "not_found",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "note": "A missing attempt answers the same.",
+      "rpc": "GetAttempt",
+      "token": "read-a",
+      "request": {
+        "attempt_id": "0192f0c4-7a1e-7c3b-9d2a-000000000000"
+      },
+      "expect": {
+        "error": {
+          "code": "not_found",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-tenant-b",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "error": {
+          "code": "not_found",
+          "reason_code": ""
+        },
+        "adapter_calls": {
+          "dispatch": 0,
+          "observe": 0
+        }
+      }
+    },
+    {
+      "rpc": "GetAttempt",
+      "token": "read-a",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "same_attempt_as": "branch"
+        }
+      }
+    }
+  ]
+}

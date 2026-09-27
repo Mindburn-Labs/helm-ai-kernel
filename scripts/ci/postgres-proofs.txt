@@ -46,6 +46,8 @@ pkg/gateway/admission TestPostgresStopBlocksProposeApproveAndDispatch 1 race
 pkg/gateway/admission TestPostgresStopMidFlightDoesNotRetractADispatchedCall 1 race
 pkg/gateway/admission TestPostgresStopsDenyAdmission 3 race
 pkg/gateway/admission TestPostgresSumLimitFailsClosedWithoutItsUnit 1 race
+pkg/gateway/conformance TestPostgresConformanceRunnerRejectsAFlippedExpectation 1 race
+pkg/gateway/conformance TestPostgresGatewayConformanceTable 1 race
 pkg/gateway/jobs TestPostgresApprovalAndExpiryMakeOneTransition 3 race
 pkg/gateway/jobs TestPostgresEscalationExpiresOnItsTimer 1 race
 pkg/gateway/jobs TestPostgresReconcileHandsAnUnresolvableAttemptToAHuman 1 race

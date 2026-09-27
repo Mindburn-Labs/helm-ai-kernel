@@ -1,0 +1,110 @@
+{
+  "pack_id": "helm-gateway-effect-api-v1",
+  "version": "1.0.0",
+  "status": "active",
+  "scope": "The gateway effect API (helm.gateway.v1 EffectGatewayService) as the real helm-gateway serves it over Connect. Every gateway implementation, real or fake, must pass every scenario.",
+  "contract": "protocols/proto/helm/gateway/v1/gateway.proto",
+  "design_note": "docs/architecture/gateway-effect-api.md",
+  "runner": "core/pkg/gateway/conformance",
+  "scenario_schema": {
+    "file": "scenario.schema.json",
+    "sha256": "fe5faf5c1b91c1248dfa6763d3186cb3e2a88c64635c6d076442cbea17e57e43"
+  },
+  "scenarios": [
+    {
+      "id": "GW-001",
+      "file": "scenarios/GW-001-walking-skeleton.json",
+      "sha256": "8ea7b8b4b8ced85d30342c49ef725778148088795a480ad51bbbdaaf17a3d9e0"
+    },
+    {
+      "id": "GW-002",
+      "file": "scenarios/GW-002-deny-default-branch.json",
+      "sha256": "c56742ea0c28544d584822256be38e99fbb816993a60cca7c47ac95264e27791"
+    },
+    {
+      "id": "GW-003",
+      "file": "scenarios/GW-003-deny-non-allowlisted-repository.json",
+      "sha256": "d26987388ff4f5b0cb21786ce9910bc8c332790c32d15e376290f9ae2c9db115"
+    },
+    {
+      "id": "GW-004",
+      "file": "scenarios/GW-004-self-approval-refused.json",
+      "sha256": "e188a8d4ed7bee6742b7e4ed00a9aed971bbcb2e6d850e5735aee69dbb22ad41"
+    },
+    {
+      "id": "GW-005",
+      "file": "scenarios/GW-005-decide-token-single-use.json",
+      "sha256": "d5daa2ae3922e2d623a899ac69714bdc5b765de3d1dc9ebbc871ec9345e9aec3"
+    },
+    {
+      "id": "GW-006",
+      "file": "scenarios/GW-006-decide-token-binding.json",
+      "sha256": "f20739867a7d49f0e18be94f77981a5c37490a79b4e3e84e3e075df70099ef1a"
+    },
+    {
+      "id": "GW-007",
+      "file": "scenarios/GW-007-step-up-high-not-medium.json",
+      "sha256": "07ec0b6076419a1d158349aa03f3809491a9fd701f41e4ccc8329e7503c364dc"
+    },
+    {
+      "id": "GW-008",
+      "file": "scenarios/GW-008-stop-between-approve-and-dispatch.json",
+      "sha256": "34d5c2b18b6d0c76863de9b7d61f2769dd3ba8943f94b064c140722e004e12fc"
+    },
+    {
+      "id": "GW-009",
+      "file": "scenarios/GW-009-only-the-proposing-workload-dispatches.json",
+      "sha256": "505386ffcca07c7abcbb0141af81845deab975d94e892b8d1b71f76d8c3e1b7c"
+    },
+    {
+      "id": "GW-010",
+      "file": "scenarios/GW-010-only-workload-execute-tokens-dispatch.json",
+      "sha256": "3908b93d72ac918f618bb33a80698918e81a90d75dc2bb14c07dc938b00c7f19"
+    },
+    {
+      "id": "GW-011",
+      "file": "scenarios/GW-011-double-dispatch-calls-the-adapter-once.json",
+      "sha256": "225252cacf77b6685020828bd0fa8a0aef0dadb310782a8fc0db2df29f7429fb"
+    },
+    {
+      "id": "GW-012",
+      "file": "scenarios/GW-012-indefinite-is-unknown-absence-inside-the-fence.json",
+      "sha256": "aa58d4e4a201b339cff79bcc4582b11036cdff9b198c31d58693e43c9f9f8ed5"
+    },
+    {
+      "id": "GW-013",
+      "file": "scenarios/GW-013-sent-then-absent-stays-dispatched-inside-the-fence.json",
+      "sha256": "b2c082699f94d8128ed39cb3be52f3ee9baeb521f511cac3d15c818f0a8786be"
+    },
+    {
+      "id": "GW-014",
+      "file": "scenarios/GW-014-contradicting-readback-consumes-the-reservation.json",
+      "sha256": "803f706ab50a5122948d627a42d72deb726dcc51ab61272f2e988f01bf60f3bb"
+    },
+    {
+      "id": "GW-015",
+      "file": "scenarios/GW-015-not-sent-is-failed-and-released.json",
+      "sha256": "a882f9eaedbff7494cceab4db8675de5dcd9b4323f3e2a5700eb09240f60403b"
+    },
+    {
+      "id": "GW-016",
+      "file": "scenarios/GW-016-idempotent-propose.json",
+      "sha256": "5b02fab8a2ed5d53455da49c73d701e3fc06d7ea01e7541bade9d8bf5a0a7b62"
+    },
+    {
+      "id": "GW-017",
+      "file": "scenarios/GW-017-cross-tenant-and-workspace-reads-are-not-found.json",
+      "sha256": "9ac0d182a9e57c00a460b85396f943eb8d08c35815f8ac4ecf61935bb882412a"
+    },
+    {
+      "id": "GW-018",
+      "file": "scenarios/GW-018-branch-attempt-accepts-reconciled-succeeded.json",
+      "sha256": "a9a39d64b43520ec139bf50febe916bca5fb56999643c74f66bdcf9cefb7a957"
+    },
+    {
+      "id": "GW-019",
+      "file": "scenarios/GW-019-cancel-is-the-requesters-or-an-operators.json",
+      "sha256": "04f933c3e826fbaa8505343d62565d1c4531fcb0a0ec466a0bd0bd8c8c0e766c"
+    }
+  ]
+}

@@ -376,6 +376,16 @@ public final class ReasonCodes {
     /** DENY: The idempotency key was already used with a different request */
     public static final String IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT";
 
+    /** DENY: The approver is the requester; an approval needs a distinct principal */
+    public static final String APPROVER_NOT_DISTINCT = "APPROVER_NOT_DISTINCT";
+
+    /** DENY: A distinct human approver rejected the escalated effect */
+    public static final String APPROVAL_REJECTED = "APPROVAL_REJECTED";
+
+    /** DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
+    /** assertion the request did not carry */
+    public static final String STEP_UP_REQUIRED = "STEP_UP_REQUIRED";
+
     /** Every registered reason code. */
     public static final Set<String> ALL = Set.of(
             POLICY_VIOLATION,
@@ -494,7 +504,10 @@ public final class ReasonCodes {
             EFFECT_OUT_OF_SCOPE,
             PER_CALL_LIMIT,
             ARITHMETIC_OVERFLOW,
-            IDEMPOTENCY_CONFLICT);
+            IDEMPOTENCY_CONFLICT,
+            APPROVER_NOT_DISTINCT,
+            APPROVAL_REJECTED,
+            STEP_UP_REQUIRED);
 
     /** Whether {@code code} is in the registry. */
     public static boolean isRegistered(String code) {

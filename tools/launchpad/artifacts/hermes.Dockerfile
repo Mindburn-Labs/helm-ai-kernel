@@ -12,7 +12,7 @@ COPY . .
 RUN uv sync --frozen --no-dev
 RUN install -d /licenses/hermes && cp LICENSE /licenses/hermes/LICENSE
 
-FROM python:3.14-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56
+FROM python:3.12-slim-bookworm@sha256:d193c6f51a7dbd10395d6328de3a7edb0516fb0608ca138036576f574c3e07d2
 
 LABEL io.mindburn.helm.launchpad.recipe="hermes.helm-owned.v1"
 ENV PATH="/opt/hermes/.venv/bin:${PATH}" \

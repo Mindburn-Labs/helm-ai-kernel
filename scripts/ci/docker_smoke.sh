@@ -389,6 +389,8 @@ assert_persistence_after_restart() {
 
 echo "docker smoke mode=$MODE image=$IMAGE api_port=$API_PORT health_port=$HEALTH_PORT runtime_data_dir=$RUNTIME_DATA_DIR artifact_dir=$ARTIFACT_DIR"
 
+# quantum_posture: checks image contents only; cosign signing is the release
+# workflow's, and nothing here is a cryptographic control.
 # The release image carries the effect gateway next to the kernel (HELM-789):
 # one tag, one cosign identity, and a non-root user for both binaries.
 check_image_binaries() {

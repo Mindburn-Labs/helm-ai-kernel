@@ -1213,12 +1213,12 @@
                 "adminDatabaseURLKey": {
                   "type": "string",
                   "default": "HELM_GATEWAY_ADMIN_DATABASE_URL",
-                  "description": "Key of the administrator DSN (a superuser, or CREATEROLE with CREATE on the database)."
+                  "description": "Key of the administrator DSN (a superuser, or a CREATEROLE role that owns the gateway database)."
                 },
                 "runtimePasswordKey": {
                   "type": "string",
                   "default": "HELM_GATEWAY_ROLE_PASSWORD",
-                  "description": "Optional key of the runtime role's password; absent leaves the password unchanged."
+                  "description": "Key of the runtime role's password in existingSecret, required there when set. It is sent to PostgreSQL only as a client-side SCRAM-SHA-256 verifier. Empty leaves the password unmanaged."
                 },
                 "ownerRole": {
                   "type": "string",
@@ -1278,7 +1278,7 @@
         "networkPolicy": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Gateway NetworkPolicy. TCP 443 egress is port-only: a NetworkPolicy cannot name api.github.com or the JWKS host.",
+          "description": "Gateway NetworkPolicy. The API port admits the Control Plane selector only; the health port 8081 is open for kubelet probes. TCP 443 egress is port-only: a NetworkPolicy cannot name api.github.com or the JWKS host.",
           "properties": {
             "enabled": {
               "type": "boolean",

@@ -169,10 +169,10 @@ before. See [Kubernetes Deployment](../../docs/KUBERNETES_DEPLOYMENT.md#effect-g
 | `gateway.controlPlaneIdentity.caBundleConfigMap` / `caBundleKey` | empty / `ca.crt` | Pinned CA for the JWKS endpoint (`HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE`). |
 | `gateway.database.existingSecret` / `existingSecretKey` | empty / `HELM_GATEWAY_DATABASE_URL` | **Required.** The serving role's DSN (`helm_gateway`). |
 | `gateway.database.migrate.existingSecret` / `existingSecretKey` | empty / `HELM_GATEWAY_MIGRATE_DATABASE_URL` | Owner DSN for the migrate hook when the bootstrap is off. Empty migrates with the runtime DSN, which `helm.production=true` refuses. |
-| `gateway.database.bootstrap.enabled` | `false` | Create the ADR-0004 roles, schema and grants in the migrate hook (`files/gateway-db`). Mutually exclusive with `migrate.existingSecret`. |
-| `gateway.database.bootstrap.existingSecret` | empty | Secret with the administrator DSN (superuser, or `CREATEROLE` with `CREATE` on the database). |
+| `gateway.database.bootstrap.enabled` | `false` | Create the ADR-0004 roles, schema and grants in the migrate hook (`files/gateway-db`), and close the gateway database to PUBLIC so only the runtime role connects. Mutually exclusive with `migrate.existingSecret`. |
+| `gateway.database.bootstrap.existingSecret` | empty | Secret with the administrator DSN (superuser, or a `CREATEROLE` role that owns the gateway database). |
 | `gateway.database.bootstrap.adminDatabaseURLKey` | `HELM_GATEWAY_ADMIN_DATABASE_URL` | Key of the administrator DSN. |
-| `gateway.database.bootstrap.runtimePasswordKey` | `HELM_GATEWAY_ROLE_PASSWORD` | Optional key: the runtime role's password, set on every run when present. |
+| `gateway.database.bootstrap.runtimePasswordKey` | `HELM_GATEWAY_ROLE_PASSWORD` | Key of the runtime role's password (printable ASCII), required in the Secret when set. `helm-gateway db scram-verifier` turns it into a SCRAM-SHA-256 verifier in its own container; PostgreSQL never receives the plaintext. Empty leaves the password unmanaged. |
 | `gateway.database.bootstrap.ownerRole` | `helm_owner` | NOLOGIN owner of the schema and tables; migrate and the grants run as it. |
 | `gateway.database.bootstrap.runtimeRole` | `helm_gateway` | LOGIN role of the runtime DSN; DML grants only. |
 | `gateway.database.bootstrap.schema` | `helm_gateway` | Schema of the gateway tables and the runtime role's `search_path`. |
@@ -181,7 +181,7 @@ before. See [Kubernetes Deployment](../../docs/KUBERNETES_DEPLOYMENT.md#effect-g
 | `gateway.github.appIdKey` / `privateKeyKey` | `app-id` / `private-key.pem` | Keys in `gateway.github.existingSecret`. |
 | `gateway.github.installationsFile` | empty | File contents, rendered into a ConfigMap and mounted at `/etc/helm-gateway/github/installations.json`. |
 | `gateway.networkPolicy.enabled` | `true` | Render the gateway NetworkPolicy; `helm.production=true` requires it. |
-| `gateway.networkPolicy.controlPlane.namespaceSelector` / `podSelector` | `{}` | **Required (one of).** The only peers admitted to port 8443. |
+| `gateway.networkPolicy.controlPlane.namespaceSelector` / `podSelector` | `{}` | **Required (one of).** The only peers admitted to port 8443. The health port 8081 is open to any peer for kubelet probes. |
 | `gateway.networkPolicy.database.to` / `port` | `[]` / `5432` | **Required.** Database egress peers and port. |
 | `gateway.networkPolicy.dns.to` | kube-system `k8s-app: kube-dns` | DNS egress peers (UDP and TCP 53). |
 | `gateway.networkPolicy.extraEgress` | `[]` | Extra egress rules, e.g. a JWKS endpoint on a port other than 443. |

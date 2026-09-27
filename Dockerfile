@@ -27,6 +27,8 @@ RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=
       -ldflags="-s -w -X main.version=${BUILD_VERSION} -X main.commit=${BUILD_COMMIT} -X main.buildTime=${BUILD_TIME}" \
       -o /helm-ai-kernel ./cmd/helm-ai-kernel/
 
+# quantum_posture: the release workflow signs this image keylessly with cosign;
+# this file adds no signing and makes no post-quantum claim.
 # Build the effect gateway (Zone C). It ships in the same image, so one tag and
 # one cosign identity cover both binaries; the chart's gateway block runs it
 # with `command: /usr/local/bin/helm-gateway`.

@@ -3,6 +3,8 @@
 //
 //	helm-gateway migrate   apply the gateway schema to HELM_GATEWAY_DATABASE_URL
 //	helm-gateway serve     serve the API on :8443 (TLS) and health on :8081
+//	helm-gateway db scram-verifier
+//	                       print a PostgreSQL SCRAM-SHA-256 verifier of a password
 //
 // serve requires TLS (HELM_TLS_CERT_FILE, HELM_TLS_KEY_FILE, and for mutual
 // TLS HELM_TLS_CLIENT_AUTH=require with HELM_TLS_CLIENT_CA_FILE) and the
@@ -57,7 +59,7 @@ func main() {
 
 func run(ctx context.Context, args []string, getenv func(string) string, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: helm-gateway migrate | serve [--listen :8443] [--health-listen :8081] [--dev-insecure-listen 127.0.0.1:PORT]")
+		return errors.New("usage: helm-gateway migrate | serve [--listen :8443] [--health-listen :8081] [--dev-insecure-listen 127.0.0.1:PORT] | db scram-verifier")
 	}
 	switch args[0] {
 	case "migrate":
@@ -73,6 +75,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return nil
 	case "serve":
 		return serve(ctx, args[1:], getenv, stderr)
+	case "db":
+		return runDB(args[1:], os.Stdin, os.Stdout, stderr)
 	}
 	return fmt.Errorf("unknown command %q", args[0])
 }

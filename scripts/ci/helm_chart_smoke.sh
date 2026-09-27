@@ -996,8 +996,9 @@ assert_equals_count() {
         exit 1
     fi
 }
-# Kernel Deployment, gateway Deployment and the migrate init container.
-assert_equals_count "$gateway_rendered" 'image: "ghcr.io/mindburn-labs/helm-ai-kernel:v' 3
+# Kernel Deployment, gateway Deployment, and the scram and migrate init
+# containers.
+assert_equals_count "$gateway_rendered" 'image: "ghcr.io/mindburn-labs/helm-ai-kernel:v' 4
 # The gateway Pod: TLS with client auth, probes on the health port, identity.
 assert_contains "$gateway_rendered" 'value: "/var/run/secrets/helm-gateway-tls/tls.crt"'
 assert_contains "$gateway_rendered" 'value: "/var/run/secrets/helm-gateway-tls/ca.crt"'
@@ -1014,8 +1015,28 @@ assert_not_contains "$gateway_rendered" "--dev-insecure-listen"
 # Its ServiceAccount and Pod carry no API token (kernel default render: 1;
 # gateway: ServiceAccount, Pod and migrate Job).
 assert_equals_count "$gateway_rendered" "automountServiceAccountToken: false" 4
-# NetworkPolicy: ingress to 8443 from the Control Plane selector only; egress
-# to DNS, the database peer and TCP 443.
+# NetworkPolicy: ingress to 8443 from the Control Plane selector only, and to
+# the health port 8081 from anywhere (kubelet probes); egress to DNS, the
+# database peer and TCP 443. The ingress block is compared whole.
+gateway_ingress="$(helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --show-only templates/gateway-networkpolicy.yaml | sed -n '/^  ingress:$/,/^  egress:$/p')"
+gateway_ingress_want='  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              helm-cp: enabled
+      ports:
+        - protocol: TCP
+          port: 8443
+    - ports:
+        - protocol: TCP
+          port: 8081
+  egress:'
+if [ "$gateway_ingress" != "$gateway_ingress_want" ]; then
+    echo "::error::gateway NetworkPolicy ingress differs from: API port from the Control Plane only, health port open"
+    printf '%s\n' "$gateway_ingress"
+    exit 1
+fi
 assert_contains "$gateway_rendered" "helm-cp: enabled"
 assert_contains "$gateway_rendered" "cidr: 10.20.30.40/32"
 assert_contains "$gateway_rendered" "k8s-app: kube-dns"
@@ -1028,6 +1049,26 @@ assert_contains "$gateway_rendered" 'value: "-c role=helm_owner -c search_path=h
 assert_contains "$gateway_rendered" "CREATE ROLE %I NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION"
 assert_contains "$gateway_rendered" "has no helm_gateway grant rule"
 assert_contains "$gateway_rendered" '"docker.io/library/postgres:16-alpine@sha256:'
+# The runtime password reaches only the scram container, as a file, and
+# leaves it as a SCRAM-SHA-256 verifier; no psql container gets the
+# plaintext, and no container gets it as an environment variable.
+assert_contains "$gateway_rendered" "- name: scram"
+assert_contains "$gateway_rendered" "- scram-verifier"
+assert_contains "$gateway_rendered" "- --password-file=/var/run/secrets/helm-gateway-bootstrap/runtime-password"
+assert_contains "$gateway_rendered" 'key: "HELM_GATEWAY_ROLE_PASSWORD"'
+assert_contains "$gateway_rendered" "helm_gateway_bootstrap.runtime_verifier"
+assert_not_contains "$gateway_rendered" "name: HELM_GATEWAY_ROLE_PASSWORD"
+assert_not_contains "$gateway_rendered" "runtime_password"
+# The password volume: its definition and one mount, in the scram container.
+assert_equals_count "$gateway_rendered" "name: bootstrap-password" 2
+gateway_unmanaged_password_rendered="$RENDER_DIR/rendered-gateway-unmanaged-password.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --set gateway.database.bootstrap.enabled=true \
+    --set gateway.database.bootstrap.existingSecret=gw-db-admin \
+    --set-string gateway.database.bootstrap.runtimePasswordKey= >"$gateway_unmanaged_password_rendered"
+assert_contains "$gateway_unmanaged_password_rendered" "- name: roles"
+assert_not_contains "$gateway_unmanaged_password_rendered" "- name: scram"
+assert_not_contains "$gateway_unmanaged_password_rendered" "bootstrap-password"
 # The GitHub App Secret and the installations file reach the gateway
 # Deployment and no other object.
 gateway_github_docs="$(docs_containing "$gateway_rendered" "gw-github-app")"
@@ -1129,6 +1170,6 @@ production_controlplane_helm_runner template "$RELEASE" "$CHART" --namespace "$N
     --set gateway.database.bootstrap.enabled=true \
     --set gateway.database.bootstrap.existingSecret=gw-db-admin >"$gateway_production_rendered"
 assert_contains "$gateway_production_rendered" "image: \"ghcr.io/mindburn-labs/helm-ai-kernel@${PRODUCTION_IMAGE_DIGEST}\""
-assert_equals_count "$gateway_production_rendered" "@${PRODUCTION_IMAGE_DIGEST}" 3
+assert_equals_count "$gateway_production_rendered" "@${PRODUCTION_IMAGE_DIGEST}" 4
 
 echo "helm chart smoke passed"

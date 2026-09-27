@@ -86,6 +86,10 @@ func newFixture(t *testing.T) *fixture {
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
 		`GRANT SELECT, INSERT, UPDATE ON ` + strings.Join(tables, ", ") + ` TO ` + role,
 		`REVOKE UPDATE ON authority_postings FROM ` + role,
+		// Admission writes distinct values with INSERT ... ON CONFLICT DO
+		// NOTHING and reads them with EXISTS: SI, as ADR-0004 and the chart's
+		// 002_grants.sql give helm_gateway.
+		`REVOKE UPDATE ON authority_distinct_values FROM ` + role,
 		`GRANT SELECT ON gateway_schema_migrations TO ` + role,
 	} {
 		_, err := owner.Exec(statement)

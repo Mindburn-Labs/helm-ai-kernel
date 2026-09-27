@@ -96,8 +96,10 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   NetworkPolicy, and a pre-install/pre-upgrade migrate hook. An optional
   database bootstrap creates the ADR-0004 owner role (`helm_owner`) and runtime
   role (`helm_gateway`) with least-privilege grants
-  (`deploy/helm-chart/files/gateway-db`). Default chart renders are unchanged.
-  HELM-789.
+  (`deploy/helm-chart/files/gateway-db`), closes the gateway database to
+  PUBLIC, and sets the runtime password only as a client-side SCRAM-SHA-256
+  verifier (`helm-gateway db scram-verifier`). Default chart renders are
+  unchanged. HELM-789.
 
 ### Changed — the chart wires the organization-runtime key only with the activation public key (HELM-786)
 

@@ -3,6 +3,8 @@ title: Kubernetes Deployment
 last_reviewed: 2026-09-26
 ---
 
+<!-- quantum_posture: this page describes classical TLS, keyless cosign image signing and SCRAM-SHA-256 database passwords; it adds no post-quantum cryptographic control. -->
+
 # Kubernetes Deployment
 
 This page documents the repository-owned HELM AI Kernel chart for self-hosted
@@ -149,25 +151,44 @@ and the runtime role must not be a member of the owner role.
 
 With `gateway.database.bootstrap.enabled=true` the hook Job runs, in order:
 
-1. `files/gateway-db/001_roles.sql` with `psql` as the administrator from
+1. `helm-gateway db scram-verifier` in its own container reads the runtime
+   password from the Secret key `HELM_GATEWAY_ROLE_PASSWORD`, mounted as a
+   file, and writes a SCRAM-SHA-256 verifier to an in-memory volume. No other
+   container sees the plaintext, and PostgreSQL receives only the verifier,
+   so the password is not on the wire or in a statement log;
+2. `files/gateway-db/001_roles.sql` with `psql` as the administrator from
    `gateway.database.bootstrap.existingSecret`. It creates or converges both
    roles, grants the administrator membership in the owner, creates the schema
-   owned by the owner, sets the runtime role's `search_path`, and sets its
-   password when the Secret has `HELM_GATEWAY_ROLE_PASSWORD`;
-2. `helm-gateway migrate` with the administrator DSN and
+   owned by the owner, sets the runtime role's `search_path`, sets its
+   password from the verifier (a plaintext value is refused), and closes the
+   gateway database: `REVOKE CONNECT, TEMPORARY ... FROM PUBLIC`, then
+   `GRANT CONNECT` to the runtime role only. The owner role is NOLOGIN and
+   never connects;
+3. `helm-gateway migrate` with the administrator DSN and
    `PGOPTIONS=-c role=helm_owner -c search_path=helm_gateway`, so every table
    is created by the owner;
-3. `files/gateway-db/002_grants.sql` as the owner. It revokes and re-grants the
+4. `files/gateway-db/002_grants.sql` as the owner. It revokes and re-grants the
    runtime set in one transaction and fails on a table it has no rule for.
 
 Each step is idempotent. The administrator may be a superuser, or a role with
-CREATEROLE and CREATE on the database, as on a managed database. A drifted
+CREATEROLE that owns the gateway database, as on a managed database. A drifted
 attribute that the administrator is not allowed to reset, such as BYPASSRLS
 without holding it, fails the Job before migrate runs.
 `core/pkg/gateway/admission/chart_roles_postgres_test.go` runs these files
-against PostgreSQL 16 in both administrator modes, twice each, and checks the
-role attributes, ownership and exact grants. It then serves admission as the
-runtime role.
+against PostgreSQL 16 in both administrator modes, twice each, in a database
+of their own with `log_statement = 'all'`. It checks the role attributes,
+ownership and exact grants; that the plaintext password is absent from the
+server log while a plaintext `ALTER ROLE ... PASSWORD` control is present;
+and that a stand-in Control Plane role cannot connect to the gateway
+database. It then serves admission as the runtime role.
+
+On QA and the pilot production tier the gateway database shares its
+PostgreSQL instance with the Control Plane's. The bootstrap closes the gateway
+database only. Closing the other databases to the gateway role is the
+operator's job, because PostgreSQL grants CONNECT on every new database to
+PUBLIC: run `REVOKE CONNECT ON DATABASE <control plane db> FROM PUBLIC` and
+grant CONNECT to the roles that need it. The bootstrap logs a warning for
+each other database the runtime role can still connect to.
 
 Without the bootstrap, the hook runs `helm-gateway migrate` with
 `gateway.database.migrate.existingSecret`, the owner's DSN. The operator
@@ -179,8 +200,9 @@ development only, and `helm.production=true` refuses to render it.
 
 - **Ingress:** TCP 8443, only from the peers selected by
   `gateway.networkPolicy.controlPlane` (a namespace selector, a Pod selector,
-  or both combined). The health port has no ingress rule; kubelet probes come
-  from the node.
+  or both combined). The health port 8081 (`/healthz`, `/readyz`, no secrets)
+  is open to any peer, so kubelet probes pass under a CNI that applies
+  NetworkPolicy to node traffic.
 - **Egress:**
   - DNS on UDP and TCP 53 to `gateway.networkPolicy.dns.to`;
   - the database on `gateway.networkPolicy.database.port` to

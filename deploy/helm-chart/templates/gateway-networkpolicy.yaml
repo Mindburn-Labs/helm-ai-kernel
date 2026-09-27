@@ -4,8 +4,9 @@
 {{- $controlPlane := dict }}
 {{- with $np.controlPlane.namespaceSelector }}{{- $_ := set $controlPlane "namespaceSelector" . }}{{- end }}
 {{- with $np.controlPlane.podSelector }}{{- $_ := set $controlPlane "podSelector" . }}{{- end }}
-# Ingress: the API port from the Control Plane only. The health port has no
-# rule: kubelet probes come from the node. Egress: DNS, the database, and TCP
+# Ingress: the API port from the Control Plane only; the health port (8081,
+# /healthz and /readyz, no secrets) from anywhere, so kubelet probes pass
+# under a CNI that applies policy to node traffic. Egress: DNS, the database, and TCP
 # 443 to any address, which covers api.github.com and an https JWKS endpoint.
 # A NetworkPolicy cannot name a host, so the 443 rule is port-only: it does
 # not stop the Pod reaching some other host on 443.
@@ -16,7 +17,7 @@ metadata:
   labels:
     {{- include "helm-ai-kernel.gatewayLabels" . | nindent 4 }}
   annotations:
-    helm.ai/policy-intent: "gateway ingress from the Control Plane only; egress to DNS, the database and TCP 443"
+    helm.ai/policy-intent: "gateway API ingress from the Control Plane only, health port open; egress to DNS, the database and TCP 443"
 spec:
   podSelector:
     matchLabels:
@@ -30,6 +31,9 @@ spec:
       ports:
         - protocol: TCP
           port: 8443
+    - ports:
+        - protocol: TCP
+          port: 8081
   egress:
     - to:
         {{- toYaml $np.dns.to | nindent 8 }}

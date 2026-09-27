@@ -12,8 +12,12 @@
 --                                   revocation or cancellation is a state
 --                                   transition
 --   authority_postings              SELECT, INSERT (append-only ledger)
---   authority_token_replay          SELECT, INSERT, UPDATE, DELETE (expired
---                                   single-use token rows are purged)
+--   authority_distinct_values       SELECT, INSERT (INSERT ... ON CONFLICT
+--                                   DO NOTHING and an EXISTS read only)
+--   authority_token_replay          SELECT, INSERT, DELETE (expired
+--                                   single-use token rows are purged; a row
+--                                   is never updated). ADR-0004 amendment
+--                                   of 2026-09-26.
 --   gateway_schema_migrations       SELECT (/readyz compares the version)
 --
 -- No TRUNCATE, REFERENCES or TRIGGER anywhere, and nothing for PUBLIC. Every
@@ -40,8 +44,8 @@ BEGIN
     LOOP
         privileges := CASE
             WHEN t.relname = 'gateway_schema_migrations' THEN 'SELECT'
-            WHEN t.relname = 'authority_postings' THEN 'SELECT, INSERT'
-            WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, UPDATE, DELETE'
+            WHEN t.relname IN ('authority_postings', 'authority_distinct_values') THEN 'SELECT, INSERT'
+            WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, DELETE'
             WHEN t.relname LIKE 'authority\_%' THEN 'SELECT, INSERT, UPDATE'
         END;
         IF privileges IS NULL THEN

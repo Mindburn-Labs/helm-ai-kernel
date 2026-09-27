@@ -423,9 +423,13 @@ gateway:
     # Creates the ADR-0004 roles and grants in the migrate hook: ownerRole
     # (NOLOGIN, owns the schema and tables; migrations SET ROLE to it) and
     # runtimeRole (LOGIN, DML grants only). Neither gets SUPERUSER,
-    # BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION. existingSecret holds
-    # the administrator DSN (a superuser, or CREATEROLE with CREATE on the
-    # database) and, optionally, the runtime role's password.
+    # BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION. The gateway database is
+    # closed to PUBLIC (CONNECT, TEMPORARY); only runtimeRole may connect.
+    # existingSecret holds the administrator DSN (a superuser, or a CREATEROLE
+    # role that owns the gateway database) and the runtime role's password,
+    # which reaches the server only as a SCRAM-SHA-256 verifier computed by
+    # `helm-gateway db scram-verifier`. Set runtimePasswordKey to "" to leave
+    # the password unmanaged.
     bootstrap:
       enabled: false
       existingSecret: ""
@@ -450,7 +454,7 @@ gateway:
     enabled: true
     # The API port admits these peers only. Set one or both; together they
     # select Pods matching podSelector in namespaces matching
-    # namespaceSelector.
+    # namespaceSelector. The health port (8081) is open to kubelet probes.
     controlPlane:
       namespaceSelector: {}
       podSelector: {}

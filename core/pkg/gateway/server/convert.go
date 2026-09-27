@@ -47,6 +47,16 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 			ExpiresAt:      timestamppb.New(*a.ApprovalExpiresAt),
 		}
 	}
+	if ap := a.Approval; ap != nil {
+		decision := gatewayv1.ApprovalDecision_APPROVAL_DECISION_REJECTED
+		if ap.Decision == "APPROVED" {
+			decision = gatewayv1.ApprovalDecision_APPROVAL_DECISION_APPROVED
+		}
+		out.Approval = &gatewayv1.Approval{
+			ApproverPrincipalId: ap.ApproverPrincipalID, Decision: decision, ApprovalDigest: ap.ApprovalDigest,
+			DecidedAt: timestamppb.New(ap.DecidedAt), Reason: ap.Reason, ApproverActorId: ap.ApproverActorID,
+		}
+	}
 	if p := a.Permit; p != nil {
 		permit := &gatewayv1.Permit{
 			PermitId:       p.ID,

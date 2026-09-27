@@ -39,6 +39,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth/jwks"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/server"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/servetls"
 )
 
@@ -233,7 +234,11 @@ func openDatabase(getenv func(string) string) (*sql.DB, error) {
 	if dsn == "" {
 		return nil, fmt.Errorf("%s is required", envDatabaseURL)
 	}
-	return sql.Open("postgres", dsn)
+	utcDSN, err := pgdsn.WithUTCTimeZone(dsn)
+	if err != nil {
+		return nil, err
+	}
+	return sql.Open("postgres", utcDSN)
 }
 
 func admissionConfigFromEnv(getenv func(string) string) (admission.Config, error) {

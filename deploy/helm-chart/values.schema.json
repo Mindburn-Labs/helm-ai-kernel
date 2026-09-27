@@ -1094,6 +1094,11 @@
           "default": "",
           "description": "HELM_GATEWAY_PERMIT_TTL, a Go duration. Empty keeps the binary default (10m)."
         },
+        "dispatchTimeout": {
+          "type": "string",
+          "default": "",
+          "description": "HELM_GATEWAY_DISPATCH_TIMEOUT, a Go duration. Empty keeps the binary default (2m)."
+        },
         "tls": {
           "type": "object",
           "additionalProperties": false,
@@ -1251,7 +1256,7 @@
         "github": {
           "type": "object",
           "additionalProperties": false,
-          "description": "GitHub App credentials for the gateway (read by HELM-751 s3).",
+          "description": "GitHub App credentials for the gateway's connection custody (HELM-751 s3): existingSecret and installationsFile together or not at all.",
           "properties": {
             "existingSecret": {
               "type": "string",
@@ -1271,7 +1276,12 @@
             "installationsFile": {
               "type": "string",
               "default": "",
-              "description": "Installations file contents, rendered into a ConfigMap and mounted at /etc/helm-gateway/github/installations.json."
+              "description": "Installations file contents (JSON): {\"installations\": [{\"tenant_id\", \"owner\", \"installation_id\", \"repositories\": [\"owner/name\"]}]}, no other fields. Rendered into a ConfigMap and mounted at /etc/helm-gateway/github/installations.json. Set together with existingSecret or not at all."
+            },
+            "apiURL": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_GATEWAY_GITHUB_API_URL, the GitHub Enterprise Server API root (https). Empty uses https://api.github.com. Requires existingSecret and installationsFile."
             }
           }
         },

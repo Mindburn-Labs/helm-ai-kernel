@@ -963,7 +963,10 @@ docs_containing() {
     ' "$1"
 }
 
-printf '{"installations":[{"owner":"example","installation_id":1}]}\n' >"$RENDER_DIR/gateway-installations.json"
+# The installations file in the shape helm-gateway's custody reads (HELM-751
+# s3): exactly tenant_id, owner, installation_id and repositories.
+printf '{"installations":[{"tenant_id":"tenant-smoke","owner":"example","installation_id":1,"repositories":["example/repo"]}]}\n' \
+    >"$RENDER_DIR/gateway-installations.json"
 gateway_rendered="$RENDER_DIR/rendered-gateway.yaml"
 helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
@@ -972,7 +975,29 @@ helm_runner template "$RELEASE" "$CHART" \
     --set gateway.database.bootstrap.existingSecret=gw-db-admin \
     --set gateway.github.existingSecret=gw-github-app \
     --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations.json" \
+    --set gateway.github.apiURL=https://ghe.example.internal/api/v3 \
+    --set gateway.dispatchTimeout=90s \
     --set gateway.controlPlaneIdentity.caBundleConfigMap=cp-jwks-ca >"$gateway_rendered"
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_GITHUB_API_URL"
+assert_contains "$gateway_rendered" 'value: "https://ghe.example.internal/api/v3"'
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_DISPATCH_TIMEOUT"
+assert_contains "$gateway_rendered" 'value: "90s"'
+assert_contains "$gateway_rendered" '"installation_id\":1,\"repositories\":[\"example/repo\"]'
+# Secret file modes (s3a review L2): the GitHub App Secret, the TLS key and
+# the bootstrap password are mounted 0400 (defaultMode 256). The Pod's
+# fsGroup 65534 is what lets the non-root user read them: kubelet adds group
+# read for the fsGroup.
+for secret_volume in github-app gateway-tls bootstrap-password; do
+    volume_mode="$(awk -v name="- name: ${secret_volume}" '
+        index($0, name) && $0 ~ ("name: " v "$") { hit = NR }
+        hit && NR > hit && NR <= hit + 4 && /defaultMode:/ { print $2; exit }
+    ' v="$secret_volume" "$gateway_rendered")"
+    if [ "$volume_mode" != "256" ]; then
+        echo "::error::gateway Secret volume ${secret_volume} has defaultMode '${volume_mode}', want 256 (0400)"
+        exit 1
+    fi
+done
+assert_contains "$gateway_rendered" "fsGroup: 65534"
 # Every object: Deployment, Service, ServiceAccount, NetworkPolicy, the
 # installations ConfigMap and the migrate hook Job.
 assert_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-deployment.yaml"
@@ -1140,6 +1165,26 @@ expect_gateway_render_failure bootstrap-same-roles "ownerRole and runtimeRole mu
     --set gateway.database.bootstrap.existingSecret=gw-db-admin --set gateway.database.bootstrap.ownerRole=helm_gateway
 expect_gateway_render_failure cnf-without-client-auth "requireCNF requires gateway.tls.clientAuth" \
     "${GATEWAY_ARGS[@]}" --set gateway.tls.clientAuth= --set gateway.controlPlaneIdentity.requireCNF=true
+# The GitHub App files are all or none, and the installations file has the
+# custody's exact shape.
+expect_gateway_render_failure github-secret-only "are set together or not at all" \
+    "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app
+expect_gateway_render_failure github-installations-only "are set together or not at all" \
+    "${GATEWAY_ARGS[@]}" --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations.json"
+expect_gateway_render_failure github-api-url-alone "gateway.github.apiURL requires" \
+    "${GATEWAY_ARGS[@]}" --set gateway.github.apiURL=https://ghe.example.internal/api/v3
+printf '{"installations":[{"tenant_id":"t","owner":"o","installation_id":1,"repositories":["o/r"],"token":"x"}]}\n' \
+    >"$RENDER_DIR/gateway-installations-extra.json"
+printf '{"installations":[{"owner":"o","installation_id":1}]}\n' >"$RENDER_DIR/gateway-installations-short.json"
+printf '{"installations":[],"extra":1}\n' >"$RENDER_DIR/gateway-installations-top.json"
+for bad in extra short; do
+    expect_gateway_render_failure "installations-${bad}" "exactly tenant_id, owner, installation_id and repositories are allowed" \
+        "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app \
+        --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations-${bad}.json"
+done
+expect_gateway_render_failure installations-top 'must be {"installations": [...]}' \
+    "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app \
+    --set-file gateway.github.installationsFile="$RENDER_DIR/gateway-installations-top.json"
 
 gateway_production_args=(
     --set helm.production=true

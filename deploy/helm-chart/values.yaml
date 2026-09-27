@@ -385,10 +385,12 @@ gateway:
   service:
     type: ClusterIP
     port: 8443
-  # HELM_GATEWAY_APPROVAL_WINDOW and HELM_GATEWAY_PERMIT_TTL as Go durations.
-  # Empty keeps the binary's defaults (24h and 10m).
+  # HELM_GATEWAY_APPROVAL_WINDOW, HELM_GATEWAY_PERMIT_TTL and
+  # HELM_GATEWAY_DISPATCH_TIMEOUT as Go durations. Empty keeps the binary's
+  # defaults (24h, 10m and 2m).
   approvalWindow: ""
   permitTTL: ""
+  dispatchTimeout: ""
   # TLS on the API listener, required: an existing kubernetes.io/tls Secret
   # (tls.crt, tls.key; ca.crt is the client CA when clientAuth is set).
   tls:
@@ -440,16 +442,24 @@ gateway:
       schema: "helm_gateway"
       # psql for the role and grant steps.
       image: "docker.io/library/postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
-  # GitHub App credentials, mounted as files into the gateway Pod only (R8).
-  # The connection custody of HELM-751 s3 reads them; the current binary
-  # does not yet.
+  # GitHub App credentials for the connection custody (HELM-751 s3), mounted
+  # as files into the gateway Pod only (R8). existingSecret (App id and
+  # private key) and installationsFile are set together or not at all; the
+  # binary refuses a partial set, and so does the chart. Without them every
+  # GitHub dispatch is refused (PROVIDER_CREDENTIAL_REJECTED).
   github:
     existingSecret: ""
     appIdKey: "app-id"
     privateKeyKey: "private-key.pem"
-    # Installations file contents, rendered into a ConfigMap and mounted at
-    # /etc/helm-gateway/github/installations.json.
+    # Installations file contents (JSON), rendered into a ConfigMap and
+    # mounted at /etc/helm-gateway/github/installations.json. The shape, with
+    # no other fields:
+    #   {"installations": [{"tenant_id": "...", "owner": "...",
+    #     "installation_id": 123, "repositories": ["owner/name"]}]}
     installationsFile: ""
+    # HELM_GATEWAY_GITHUB_API_URL: GitHub Enterprise Server's API root
+    # (https). Empty uses https://api.github.com.
+    apiURL: ""
   networkPolicy:
     enabled: true
     # The API port admits these peers only. Set one or both; together they

@@ -99,9 +99,13 @@ spec:
             - name: HELM_GATEWAY_PERMIT_TTL
               value: {{ $g.permitTTL | quote }}
             {{- end }}
+            {{- if $g.dispatchTimeout }}
+            - name: HELM_GATEWAY_DISPATCH_TIMEOUT
+              value: {{ $g.dispatchTimeout | quote }}
+            {{- end }}
             {{- if $g.github.existingSecret }}
-            # GitHub App credentials as files, for the connection custody of
-            # HELM-751 s3. The current binary does not read them yet.
+            # GitHub App credentials as files for the connection custody
+            # (HELM-751 s3); all three are set or none is.
             - name: HELM_GATEWAY_GITHUB_APP_ID_FILE
               value: "/var/run/secrets/helm-gateway-github/app-id"
             - name: HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE
@@ -110,6 +114,10 @@ spec:
             {{- if $g.github.installationsFile }}
             - name: HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE
               value: "/etc/helm-gateway/github/installations.json"
+            {{- end }}
+            {{- if $g.github.apiURL }}
+            - name: HELM_GATEWAY_GITHUB_API_URL
+              value: {{ $g.github.apiURL | quote }}
             {{- end }}
           livenessProbe:
             httpGet:

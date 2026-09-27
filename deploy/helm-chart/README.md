@@ -158,6 +158,7 @@ before. See [Kubernetes Deployment](../../docs/KUBERNETES_DEPLOYMENT.md#effect-g
 | `gateway.service.port` | `8443` | Service port of the Connect/gRPC API. |
 | `gateway.approvalWindow` | empty | `HELM_GATEWAY_APPROVAL_WINDOW` (Go duration); empty keeps 24h. |
 | `gateway.permitTTL` | empty | `HELM_GATEWAY_PERMIT_TTL` (Go duration); empty keeps 10m. |
+| `gateway.dispatchTimeout` | empty | `HELM_GATEWAY_DISPATCH_TIMEOUT` (Go duration); empty keeps 2m. |
 | `gateway.tls.existingSecret` | empty | **Required.** `kubernetes.io/tls` Secret: `tls.crt`, `tls.key`, and `ca.crt` when `clientAuth` is set. Mounted whole at `/var/run/secrets/helm-gateway-tls`. |
 | `gateway.tls.clientAuth` | `require` | `require`, `verify-if-given` or empty (`HELM_TLS_CLIENT_AUTH`). |
 | `gateway.tls.devInsecureLoopback` | `false` | Development only: `--dev-insecure-listen=127.0.0.1:8443`, reachable through `kubectl port-forward` only, instead of TLS. Refused with `helm.production=true`. |
@@ -177,9 +178,28 @@ before. See [Kubernetes Deployment](../../docs/KUBERNETES_DEPLOYMENT.md#effect-g
 | `gateway.database.bootstrap.runtimeRole` | `helm_gateway` | LOGIN role of the runtime DSN; DML grants only. |
 | `gateway.database.bootstrap.schema` | `helm_gateway` | Schema of the gateway tables and the runtime role's `search_path`. |
 | `gateway.database.bootstrap.image` | `postgres:16-alpine@sha256:…` | Digest-pinned `psql` image for the role and grant steps. |
-| `gateway.github.existingSecret` | empty | GitHub App id and private key, mounted into the gateway Pod only at `/var/run/secrets/helm-gateway-github/{app-id,private-key.pem}`. |
+| `gateway.github.existingSecret` | empty | GitHub App id and private key, mounted into the gateway Pod only (mode 0400) at `/var/run/secrets/helm-gateway-github/{app-id,private-key.pem}`. Set together with `installationsFile` or not at all. |
 | `gateway.github.appIdKey` / `privateKeyKey` | `app-id` / `private-key.pem` | Keys in `gateway.github.existingSecret`. |
-| `gateway.github.installationsFile` | empty | File contents, rendered into a ConfigMap and mounted at `/etc/helm-gateway/github/installations.json`. |
+| `gateway.github.installationsFile` | empty | JSON, rendered into a ConfigMap and mounted at `/etc/helm-gateway/github/installations.json`. Shape below; any other field fails the render. |
+| `gateway.github.apiURL` | empty | `HELM_GATEWAY_GITHUB_API_URL`, a GitHub Enterprise Server API root (https); empty uses `https://api.github.com`. Needs the two values above. |
+
+The installations file lists, per tenant and GitHub owner, the App
+installation and the repositories (`owner/name`) that tenant may act on. It
+has exactly these fields; `helm-gateway` refuses any other at startup, and the
+chart refuses it at render time:
+
+```json
+{
+  "installations": [
+    {
+      "tenant_id": "tenant-a",
+      "owner": "example-org",
+      "installation_id": 12345678,
+      "repositories": ["example-org/example-repo"]
+    }
+  ]
+}
+```
 | `gateway.networkPolicy.enabled` | `true` | Render the gateway NetworkPolicy; `helm.production=true` requires it. |
 | `gateway.networkPolicy.controlPlane.namespaceSelector` / `podSelector` | `{}` | **Required (one of).** The only peers admitted to port 8443. The health port 8081 is open to any peer for kubelet probes. |
 | `gateway.networkPolicy.database.to` / `port` | `[]` / `5432` | **Required.** Database egress peers and port. |

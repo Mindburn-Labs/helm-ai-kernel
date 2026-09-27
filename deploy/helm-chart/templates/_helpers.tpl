@@ -236,6 +236,15 @@ this, so a missing value fails `helm template` whichever object renders first.
 {{- if and .Values.helm.production (not (or $g.database.bootstrap.enabled $g.database.migrate.existingSecret)) -}}
 {{- fail "helm.production=true with gateway.enabled requires an owner DSN for migrate (gateway.database.bootstrap.enabled or gateway.database.migrate.existingSecret); migrating with the runtime DSN makes the serving role the table owner" -}}
 {{- end -}}
+{{- if ne (empty $g.github.existingSecret) (empty $g.github.installationsFile) -}}
+{{- fail "gateway.github.existingSecret and gateway.github.installationsFile are set together or not at all: helm-gateway refuses a partial set of GitHub App files" -}}
+{{- end -}}
+{{- if and $g.github.apiURL (not $g.github.existingSecret) -}}
+{{- fail "gateway.github.apiURL requires gateway.github.existingSecret and gateway.github.installationsFile" -}}
+{{- end -}}
+{{- with $g.github.installationsFile -}}
+{{- include "helm-ai-kernel.gatewayValidateInstallations" . -}}
+{{- end -}}
 {{- if $g.networkPolicy.enabled -}}
 {{- if and (empty $g.networkPolicy.controlPlane.namespaceSelector) (empty $g.networkPolicy.controlPlane.podSelector) -}}
 {{- fail "gateway.networkPolicy.enabled=true requires gateway.networkPolicy.controlPlane.namespaceSelector or podSelector: the only callers admitted to the API port" -}}
@@ -245,5 +254,29 @@ this, so a missing value fails `helm template` whichever object renders first.
 {{- end -}}
 {{- else if .Values.helm.production -}}
 {{- fail "helm.production=true requires gateway.networkPolicy.enabled=true" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The installations file's shape (custody.Installation, HELM-751 s3): an
+object with only "installations", a non-empty list of objects with exactly
+tenant_id, owner, installation_id and repositories. helm-gateway refuses
+unknown fields at startup; the chart refuses them at render time.
+*/}}
+{{- define "helm-ai-kernel.gatewayValidateInstallations" -}}
+{{- $doc := fromJson (toString .) -}}
+{{- if hasKey $doc "Error" -}}
+{{- fail (printf "gateway.github.installationsFile is not a JSON object: %s" (get $doc "Error")) -}}
+{{- end -}}
+{{- if or (ne (len (keys $doc)) 1) (not (hasKey $doc "installations")) (not (kindIs "slice" (get $doc "installations"))) (empty (get $doc "installations")) -}}
+{{- fail "gateway.github.installationsFile must be {\"installations\": [...]} with at least one entry and no other field" -}}
+{{- end -}}
+{{- range $entry := get $doc "installations" -}}
+{{- if not (kindIs "map" $entry) -}}
+{{- fail "gateway.github.installationsFile: every installation must be an object" -}}
+{{- end -}}
+{{- if ne (keys $entry | sortAlpha | join ",") "installation_id,owner,repositories,tenant_id" -}}
+{{- fail (printf "gateway.github.installationsFile: an installation has fields [%s]; exactly tenant_id, owner, installation_id and repositories are allowed" (keys $entry | sortAlpha | join ", ")) -}}
+{{- end -}}
 {{- end -}}
 {{- end }}

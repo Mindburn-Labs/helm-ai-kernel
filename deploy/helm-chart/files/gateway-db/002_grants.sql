@@ -20,6 +20,14 @@
 --                                   of 2026-09-26.
 --   gateway_schema_migrations       SELECT (/readyz compares the version)
 --
+-- EXTENSION POINT, River job tables (HELM-751 s3b). s3b's migration adds
+-- river_* tables. Until the marked block in the loop below gives each its
+-- rule, a river_* table fails the run with a message pointing here: never
+-- granted by guess. When s3b lands, give each table its exact privileges there and add
+-- the same rows to the exact-privilege table in
+-- core/pkg/gateway/admission/chart_roles_postgres_test.go, which also proves
+-- the refusal below until then.
+--
 -- No TRUNCATE, REFERENCES or TRIGGER anywhere, and nothing for PUBLIC. Every
 -- run first revokes what the runtime role holds, so the result is exactly
 -- this set; the transaction makes the swap atomic for live connections. A
@@ -48,6 +56,13 @@ BEGIN
             WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, DELETE'
             WHEN t.relname LIKE 'authority\_%' THEN 'SELECT, INSERT, UPDATE'
         END;
+        IF t.relname LIKE 'river\_%' THEN
+            -- EXTENSION POINT (HELM-751 s3b): replace this refusal with one
+            -- rule per River table, for example
+            --   privileges := CASE t.relname WHEN 'river_job' THEN '...' END;
+            -- and keep refusing a river_* table no rule names.
+            RAISE EXCEPTION 'River table %.% has no helm_gateway grant rule; add it at the HELM-751 s3b extension point in 002_grants.sql', schema_name, t.relname;
+        END IF;
         IF privileges IS NULL THEN
             RAISE EXCEPTION 'table %.% has no helm_gateway grant rule; add one to 002_grants.sql', schema_name, t.relname;
         END IF;

@@ -218,7 +218,9 @@ on a CNI that implements NetworkPolicy.
 ### GitHub App credentials
 
 `gateway.github.existingSecret` is mounted into the gateway Pod and no other
-Pod (R8), as:
+Pod (R8), with mode 0400. The Pod's `fsGroup` (65534) is what lets the non-root
+user read it, because kubelet adds group read for that group. The Secret is
+mounted as:
 
 - `/var/run/secrets/helm-gateway-github/app-id`
   (`HELM_GATEWAY_GITHUB_APP_ID_FILE`);
@@ -227,9 +229,14 @@ Pod (R8), as:
 
 `gateway.github.installationsFile` is rendered into a ConfigMap and mounted as
 `/etc/helm-gateway/github/installations.json`
-(`HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE`). The current binary does not read
-these files yet; the connection custody of HELM-751 slice 3 will read them at
-these paths.
+(`HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE`). The installations file follows the
+shape in the [chart README](../deploy/helm-chart/README.md#effect-gateway-gateway)
+(`tenant_id`, `owner`, `installation_id` and `repositories`, and nothing
+else). The gateway's connection custody reads all three files, or none: both
+`helm-gateway serve` and the chart refuse a partial set. Without them, every
+GitHub dispatch is refused with `PROVIDER_CREDENTIAL_REJECTED`.
+`gateway.github.apiURL` points the custody at GitHub Enterprise Server, and
+`gateway.dispatchTimeout` bounds one dispatch (2m by default).
 
 ### Example (qa)
 

@@ -260,6 +260,22 @@ func chartBootstrapProof(t *testing.T, base, adminKind string) {
 		t.Fatalf("schema owner %s and %d objects not owned by %s", schemaOwner, foreign, owner)
 	}
 
+	// The grants never guess: a table without a rule fails the run, and a
+	// River table (HELM-751 s3b) fails it naming the marked extension point.
+	for table, message := range map[string]string{
+		"river_job":        "HELM-751 s3b extension point",
+		"unplanned_things": "has no helm_gateway grant rule",
+	} {
+		_, err := ownerDB.Exec(`CREATE TABLE ` + table + ` (id BIGINT)`)
+		must(t, err)
+		if err := run.try(t, ownerDSN, "002_grants.sql"); err == nil || !strings.Contains(err.Error(), message) {
+			t.Fatalf("002_grants.sql with %s: err = %v, want %q", table, err, message)
+		}
+		_, err = ownerDB.Exec(`DROP TABLE ` + table)
+		must(t, err)
+	}
+	run.run(t, ownerDSN, "002_grants.sql")
+
 	// Exactly the grants the admission proofs run under, table by table, and
 	// every table Migrate creates has one.
 	want := map[string]string{"gateway_schema_migrations": "SELECT"}

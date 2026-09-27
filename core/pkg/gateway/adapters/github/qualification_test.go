@@ -17,6 +17,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/qualification"
 )
 
 // The §9.3 qualification suite. Every case runs the same way against the
@@ -272,6 +273,9 @@ var qualCases = map[string]qualCase{
 		}
 		got := a.Observe(context.Background(), env.creds(), other)
 		wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
+		if got.Absent {
+			t.Fatal("a ref that contradicts the effect is reported as absent")
+		}
 		if got.Observation.GitHubBranch.CommitSHA != first.CommitSHA {
 			t.Fatalf("the existing ref was overwritten: %s, was %s", got.Observation.GitHubBranch.CommitSHA, first.CommitSHA)
 		}
@@ -311,6 +315,11 @@ var qualCases = map[string]qualCase{
 		if n := sent.nonRead.Load(); n != 0 {
 			t.Fatalf("a failed precondition sent %d writes", n)
 		}
+		// No ref: FAILED by absence alone, which the gateway holds as
+		// inconclusive inside the dispatch fence.
+		if got := a.Observe(context.Background(), env.creds(), noBase); got.Outcome != adapters.OutcomeFailed || !got.Absent {
+			t.Fatalf("a missing ref read back as %s absent=%v", got.Outcome, got.Absent)
+		}
 	},
 	"branch/readback-mismatch": func(t *testing.T, env *qualEnv) {
 		head := env.head("mismatch")
@@ -323,7 +332,7 @@ var qualCases = map[string]qualCase{
 		} {
 			got := a.Observe(context.Background(), env.creds(), proposal)
 			wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
-			if got.Observation.GitHubBranch.CommitSHA != created.CommitSHA {
+			if got.Absent || got.Observation.GitHubBranch.CommitSHA != created.CommitSHA {
 				t.Fatalf("%s: the result does not record the commit found", name)
 			}
 		}
@@ -438,6 +447,9 @@ var qualCases = map[string]qualCase{
 		if n := sent.nonRead.Load(); n != 0 || env.openPulls(t, head) != 0 {
 			t.Fatalf("a moved head sent %d writes", n)
 		}
+		if got := a.Observe(context.Background(), env.creds(), effect); got.Outcome != adapters.OutcomeFailed || !got.Absent {
+			t.Fatalf("no pull request read back as %s absent=%v", got.Outcome, got.Absent)
+		}
 	},
 	"pull_request/readback-mismatch": func(t *testing.T, env *qualEnv) {
 		effect, pr := env.createPullRequest(t, "pr-mismatch")
@@ -447,7 +459,7 @@ var qualCases = map[string]qualCase{
 		retitled := env.pullRequestEffect(args.Head, args.HeadSHA, "another title")
 		got := a.Observe(context.Background(), env.creds(), retitled)
 		wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
-		if got.Observation.GitHubPullRequest.URL != pr.URL {
+		if got.Absent || got.Observation.GitHubPullRequest.URL != pr.URL {
 			t.Fatalf("the mismatch does not record the URL: %+v", got.Observation.GitHubPullRequest)
 		}
 		env.markReady(t, pr)
@@ -545,22 +557,22 @@ func refusedWith(err error, reason contracts.ReasonCode) bool {
 
 // runQualification runs every suite case against env and returns the
 // records. A case that fails or is skipped leaves its operation unqualified.
-func runQualification(t *testing.T, env *qualEnv) []adapters.QualificationRecord {
-	results := map[string]adapters.CheckStatus{}
+func runQualification(t *testing.T, env *qualEnv) []qualification.Record {
+	results := map[string]qualification.CheckStatus{}
 	for _, c := range QualificationSuite.Cases {
 		run, ok := qualCases[c.ID]
 		if !ok {
 			t.Errorf("suite case %s has no implementation", c.ID)
 			continue
 		}
-		status := adapters.CheckFail
+		status := qualification.CheckFail
 		t.Run(c.ID, func(t *testing.T) {
 			defer func() {
 				switch {
 				case t.Skipped():
-					status = adapters.CheckSkipped
+					status = qualification.CheckSkipped
 				case !t.Failed():
-					status = adapters.CheckPass
+					status = qualification.CheckPass
 				}
 			}()
 			run(t, env)

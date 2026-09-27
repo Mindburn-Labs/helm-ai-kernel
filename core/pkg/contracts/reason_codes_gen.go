@@ -126,6 +126,8 @@ var registeredReasonCodes = [...]ReasonCode{
 	"APPROVER_NOT_DISTINCT",
 	"APPROVAL_REJECTED",
 	"STEP_UP_REQUIRED",
+	"AUTHORITY_CHANGED",
+	"PERMIT_EXPIRED",
 }
 
 // CoreReasonCodes returns the full normative core reason-code registry.

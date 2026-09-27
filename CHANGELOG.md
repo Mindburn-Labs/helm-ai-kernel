@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-27
 ---
 
 # Changelog
@@ -88,18 +88,7 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-### Added
-
-- The release image ships `/usr/local/bin/helm-gateway` beside
-  `helm-ai-kernel`. The chart gains a `gateway:` block, off by default, that
-  deploys `helm-gateway serve` with TLS, Control Plane identity tokens, a
-  NetworkPolicy, and a pre-install/pre-upgrade migrate hook. An optional
-  database bootstrap creates the ADR-0004 owner role (`helm_owner`) and runtime
-  role (`helm_gateway`) with least-privilege grants
-  (`deploy/helm-chart/files/gateway-db`), closes the gateway database to
-  PUBLIC, and sets the runtime password only as a client-side SCRAM-SHA-256
-  verifier (`helm-gateway db scram-verifier`). Default chart renders are
-  unchanged. HELM-789.
+No changes yet.
 
 ## [0.10.0] - 2026-09-27
 
@@ -125,6 +114,42 @@ in the release evidence and HELM-789.
 - The release rehearsal checks contracts, version surfaces, Console pins,
   chart configuration and publication prerequisites before tagging, and runs
   daily on main (HELM-745).
+
+### Added — deployable gateway and database bootstrap (HELM-789)
+
+- The release image ships `/usr/local/bin/helm-gateway` beside
+  `helm-ai-kernel`. The chart gains a `gateway:` block, off by default, that
+  deploys `helm-gateway serve` with TLS, Control Plane identity tokens, a
+  NetworkPolicy, and a pre-install/pre-upgrade migrate hook. An optional
+  database bootstrap creates the ADR-0004 owner role (`helm_owner`) and runtime
+  role (`helm_gateway`) with least-privilege grants
+  (`deploy/helm-chart/files/gateway-db`), closes the gateway database to
+  PUBLIC, and sets the runtime password only as a client-side SCRAM-SHA-256
+  verifier (`helm-gateway db scram-verifier`). Default chart renders are
+  unchanged. HELM-789.
+
+### Added — gateway conformance, Stop and durable jobs (HELM-751)
+
+- The versioned gateway conformance pack defines 23 scenarios shared by
+  the real gateway and Control Plane fakes. Its runner verifies both the
+  declared outcomes and a deliberately flipped expectation.
+- River persists escalation-expiry and UNKNOWN-reconciliation jobs in the
+  gateway database. Approval and expiry make one transition; reconciliation
+  respects the dispatch fence and hands an unresolved final attempt to a
+  human. `helm-gateway migrate` installs River's schema and `/readyz` checks it.
+- `Stop` blocks new work at tenant, principal, mandate or effect-type scope, checking the
+  proposing actor, approval participants and dispatcher at their respective
+  transitions. Calls already sent to a provider cannot be retracted.
+- Stop and operator Cancel require single-use tokens bound to their exact
+  target. Replay of the same idempotent request remains safe; a changed
+  principal or payload cannot reuse the recorded result.
+- `Lift` creates an escalated, high-risk authority-change attempt. Approval
+  fails closed until passkey step-up is available; this release does not
+  apply a lift. Other active stops continue to block the attempt.
+
+- Admission rejects a quote that omits a unit counted by a summed mandate
+  limit, including zero-cost reads that must quote that unit explicitly.
+  Authority-change effects do not consume those limits.
 
 ### Fixed — Postgres sessions use UTC (HELM-776)
 

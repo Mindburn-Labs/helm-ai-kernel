@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
@@ -75,6 +76,9 @@ func (s *Service) Dispatch(ctx context.Context, caller Caller, attemptID string)
 		if err != nil {
 			return err
 		}
+		if !mayExecute(caller.PrincipalID, a.requester, a.requesterActor) {
+			return errNotItsWorkload
+		}
 		switch a.state {
 		case "ADMITTED":
 		case "PROPOSED", "DENIED", "ESCALATED", "APPROVED", "REJECTED", "EXPIRED":
@@ -87,7 +91,7 @@ func (s *Service) Dispatch(ctx context.Context, caller Caller, attemptID string)
 		if !ok {
 			return refuse(CodeFailedPrecondition, "", "no adapter of this gateway performs %s", a.effectType)
 		}
-		c, err = s.claim(ctx, tx, a)
+		c, err = s.claim(ctx, tx, a, caller)
 		if c != nil {
 			c.adapter = adapter
 		}
@@ -114,7 +118,7 @@ type claimed struct {
 
 // claim runs the dispatch claim in tx on an ADMITTED attempt. It returns nil
 // when the claim was refused (and recorded as CANCELLED).
-func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt) (*claimed, error) {
+func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispatcher Caller) (*claimed, error) {
 	var permitID string
 	var permitDigest, stored []byte
 	var expired bool
@@ -182,8 +186,9 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt) (*clai
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE authority_permits SET consumed_at = now(), claim_id = $3
-		WHERE tenant_id = $1 AND permit_id = $2`, a.tenantID, permitID, claimID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE authority_permits
+		SET consumed_at = now(), claim_id = $3, claimed_by_principal_id = $4, claimed_by_actor_id = $5
+		WHERE tenant_id = $1 AND permit_id = $2`, a.tenantID, permitID, claimID, dispatcher.PrincipalID, dispatcher.ActorID); err != nil {
 		return nil, err
 	}
 	fence := s.cfg.DispatchTimeout + dispatchGrace
@@ -374,6 +379,9 @@ func (s *Service) Observe(ctx context.Context, caller Caller, attemptID string) 
 		if err != nil {
 			return err
 		}
+		if !mayExecute(caller.PrincipalID, a.requester, a.requesterActor) {
+			return errNotItsWorkload
+		}
 		switch a.state {
 		case "DISPATCHED", "UNKNOWN":
 		case "DISPATCHING":
@@ -434,17 +442,40 @@ func (s *Service) readBack(ctx context.Context, t observeTarget) {
 		if a.state != t.from {
 			return nil // another read-back got there first
 		}
-		return recordObservation(ctx, tx, t, result)
+		insideFence := !a.dispatchDeadline.Valid || a.now.Before(a.dispatchDeadline.Time)
+		return recordObservation(ctx, tx, t, result, insideFence)
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "recording an observation failed", "attempt_id", t.attemptID, "error", err)
 	}
 }
 
+// readBackVerdict is what one read-back establishes, pure. established is
+// false for an inconclusive read-back, and for a FAILED that rests only on the
+// object's absence while the dispatch fence has not passed: the write may
+// still be landing at the provider (TA §4.3). consume says whether the held
+// exposure is consumed (SUCCEEDED, or a FAILED that found an object
+// contradicting the effect, which a write of ours may have made) rather than
+// released (a FAILED by absence after the fence: the effect did not happen).
+func readBackVerdict(result adapters.ObserveResult, insideFence bool) (established, consume bool) {
+	switch {
+	case result.Outcome == adapters.OutcomeSucceeded:
+		return true, true
+	case result.Outcome != adapters.OutcomeFailed:
+		return false, false
+	case result.Absent && insideFence:
+		return false, false
+	case result.Absent:
+		return true, false
+	}
+	return true, true
+}
+
 // recordObservation writes one read-back. An established outcome settles the
-// attempt; an inconclusive one leaves (or makes) it UNKNOWN.
-func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result adapters.ObserveResult) error {
-	established := result.Outcome == adapters.OutcomeSucceeded || result.Outcome == adapters.OutcomeFailed
+// attempt; an inconclusive one leaves (or makes) it UNKNOWN, except that an
+// absence inside the fence leaves a DISPATCHED attempt DISPATCHED.
+func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result adapters.ObserveResult, insideFence bool) error {
+	established, consume := readBackVerdict(result, insideFence)
 	var kind string
 	var body []byte
 	if established {
@@ -456,14 +487,17 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 		}
 	}
 	if !established {
-		if t.from == "DISPATCHED" {
+		absentInsideFence := result.Absent && result.Outcome == adapters.OutcomeFailed
+		if t.from == "DISPATCHED" && !absentInsideFence {
 			return transition(ctx, tx, t.tenantID, t.attemptID, "DISPATCHED", "UNKNOWN", result.Reason)
 		}
 		return nil
 	}
 	o := result.Observation
 	// result_ref is the content address of the typed result, which the row
-	// keeps (§5.6); empty when the effect type defines no result.
+	// keeps (§5.6): SHA-256 over its RFC 8785 (JCS) form, so it recomputes
+	// from the stored or returned JSON. Empty when the effect type defines no
+	// result.
 	ref := ""
 	var resultCol any
 	if body != nil {
@@ -489,14 +523,15 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 	if t.from == "UNKNOWN" {
 		cause, to = "reconciled", "RECONCILED"
 	}
-	if result.Outcome == adapters.OutcomeSucceeded {
+	if consume {
 		if err := settleHeld(ctx, tx, t.tenantID, t.attemptID, "confirmed", cause); err != nil {
 			return err
 		}
-		return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeSucceeded, "")
-	}
-	if err := release(ctx, tx, t.tenantID, t.attemptID, cause); err != nil {
+	} else if err := release(ctx, tx, t.tenantID, t.attemptID, cause); err != nil {
 		return err
+	}
+	if result.Outcome == adapters.OutcomeSucceeded {
+		return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeSucceeded, "")
 	}
 	return settleState(ctx, tx, t.tenantID, t.attemptID, t.from, to, adapters.OutcomeFailed, result.Reason)
 }
@@ -535,7 +570,7 @@ func typedResult(effectType string, o *adapters.Observation) (string, []byte, er
 	case len(members) != 1 || members[want] == nil:
 		return "", nil, errors.New("the typed result is not the one member the effect type defines")
 	}
-	body, err := json.Marshal(members[want])
+	body, err := canonicalize.JCS(members[want])
 	return want, body, err
 }
 
@@ -556,6 +591,18 @@ func settleState(ctx context.Context, tx *sql.Tx, tenantID, attemptID, from, to 
 	}
 	return nil
 }
+
+// mayExecute: an attempt is dispatched and observed only by the workload it
+// was proposed through (coordinator, 2026-09-27): its requester actor (the
+// act.sub that carried the Propose, such as the Control Plane runner), or its
+// requester principal when that principal is itself the workload.
+// requireWorkload has already refused a human caller.
+func mayExecute(caller, requester, requesterActor string) bool {
+	return caller != "" && (caller == requesterActor || caller == requester)
+}
+
+var errNotItsWorkload = refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
+	"only the workload the attempt was proposed through dispatches or observes it")
 
 // requireWorkload: helm.gateway.execute is for workload principals only
 // (rev 3.4 §4.2), per the gateway's own principal rows, never a human.

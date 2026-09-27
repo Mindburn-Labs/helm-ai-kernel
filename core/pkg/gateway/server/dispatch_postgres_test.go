@@ -209,9 +209,10 @@ func TestPostgresWalkingSkeletonOnTheWire(t *testing.T) {
 	must(t, err)
 
 	propose := iss.token(t, testAudience, "tenant-a", "human-a", ScopePropose)
-	// The Control Plane backend dispatches as a workload principal, directly.
+	// The Control Plane runner, which carried human-a's Propose (act.sub),
+	// dispatches as itself: a workload principal, directly.
 	execute := func() string {
-		return iss.token(t, testAudience, "tenant-a", "agent-a", ScopeExecute, func(c *tokenClaims) { c.Act = nil })
+		return iss.token(t, testAudience, "tenant-a", testActor, ScopeExecute, func(c *tokenClaims) { c.Act = nil })
 	}
 	dispatch := func(what, id string) *gatewayv1.EffectAttempt {
 		t.Helper()
@@ -286,12 +287,13 @@ func TestPostgresWalkingSkeletonOnTheWire(t *testing.T) {
 	// Only a workload dispatches: not the human's token, not a read token.
 	for name, token := range map[string]string{
 		"a human's execute token": iss.token(t, testAudience, "tenant-a", "human-b", ScopeExecute, func(c *tokenClaims) { c.Act = nil }),
-		"a read token":            iss.token(t, testAudience, "tenant-a", "agent-a", ScopeRead, func(c *tokenClaims) { c.Act = nil }),
+		"a read token":            iss.token(t, testAudience, "tenant-a", testActor, ScopeRead, func(c *tokenClaims) { c.Act = nil }),
+		"another workload":        iss.token(t, testAudience, "tenant-a", "agent-a", ScopeExecute, func(c *tokenClaims) { c.Act = nil }),
 	} {
 		_, err := client.Dispatch(ctx, withToken(&gatewayv1.DispatchRequest{AttemptId: pr.GetAttemptId()}, token))
 		wantRPCError(t, name, err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
 	}
-	otherTenant := iss.token(t, testAudience, "tenant-b", "agent-a", ScopeExecute, func(c *tokenClaims) { c.Act = nil })
+	otherTenant := iss.token(t, testAudience, "tenant-b", testActor, ScopeExecute, func(c *tokenClaims) { c.Act = nil })
 	_, err = client.Dispatch(ctx, withToken(&gatewayv1.DispatchRequest{AttemptId: pr.GetAttemptId()}, otherTenant))
 	wantRPCError(t, "another tenant's workload", err, connect.CodeNotFound, "")
 

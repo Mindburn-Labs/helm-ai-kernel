@@ -78,18 +78,34 @@ type GitHubApp struct {
 	// by tenant, then lower-case owner
 	installations map[string]map[string]Installation
 
-	mu    sync.Mutex
-	cache map[cacheKey]cachedToken
+	// mu guards keys only; each key's mint runs under that key's own lock,
+	// so a slow mint for one repository never blocks another.
+	mu   sync.Mutex
+	keys map[cacheKey]*keyState
 }
 
 type cacheKey struct {
 	installation int64
 	repository   string
+	effectType   string
 }
 
-type cachedToken struct {
+// keyState is one key's cached token. lock is a one-slot semaphore, so a
+// waiter can give up when its context ends; token and expires are read and
+// written only while it is held.
+type keyState struct {
+	lock    chan struct{}
 	token   string
 	expires time.Time
+}
+
+// permissions are the GitHub App permissions each effect type's token asks
+// for: the least its Dispatch and Observe need. The token is also scoped to
+// the one repository.
+var permissions = map[string]map[string]string{
+	"github.repository.get":             {"contents": "read", "metadata": "read"},
+	"github.branch.create_from_changes": {"contents": "write", "metadata": "read"},
+	"github.pull_request.create_draft":  {"pull_requests": "write", "contents": "read", "metadata": "read"},
 }
 
 // GitHubAPIURL returns the GitHub API root the gateway uses.
@@ -162,7 +178,7 @@ func NewGitHubApp(appID string, keyPEM, installationsJSON []byte, baseURL string
 		client:        &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		now:           time.Now,
 		installations: map[string]map[string]Installation{},
-		cache:         map[cacheKey]cachedToken{},
+		keys:          map[cacheKey]*keyState{},
 	}
 	for i, in := range file.Installations {
 		owner := strings.ToLower(in.Owner)
@@ -187,9 +203,14 @@ func NewGitHubApp(appID string, keyPEM, installationsJSON []byte, baseURL string
 }
 
 // Token returns an installation token for the one repository the effect
-// targets, when the tenant's installation allows it (admission.Credentials).
-// The token is never logged.
+// targets, with the permissions its effect type needs, when the tenant's
+// installation allows the repository (admission.Credentials). The token is
+// never logged.
 func (g *GitHubApp) Token(ctx context.Context, tenantID string, effect adapters.Effect) (string, error) {
+	perms, ok := permissions[effect.EffectType]
+	if !ok {
+		return "", fmt.Errorf("no GitHub App permissions are defined for %s", effect.EffectType)
+	}
 	owner, name, ok := strings.Cut(strings.TrimPrefix(effect.Target, "github.com/"), "/")
 	if !strings.HasPrefix(effect.Target, "github.com/") || !ok || name == "" {
 		return "", fmt.Errorf("target %q is not a GitHub repository", effect.Target)
@@ -198,18 +219,33 @@ func (g *GitHubApp) Token(ctx context.Context, tenantID string, effect adapters.
 	if !ok || !allowed(in.Repositories, owner+"/"+name) {
 		return "", fmt.Errorf("tenant %q has no GitHub App installation allowing %s/%s", tenantID, owner, name)
 	}
-	key := cacheKey{installation: in.InstallationID, repository: strings.ToLower(name)}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if c, ok := g.cache[key]; ok && g.now().Add(refreshBefore).Before(c.expires) {
-		return c.token, nil
+	st := g.state(cacheKey{installation: in.InstallationID, repository: strings.ToLower(name), effectType: effect.EffectType})
+	select {
+	case st.lock <- struct{}{}:
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
-	token, expires, err := g.mint(ctx, in.InstallationID, name)
+	defer func() { <-st.lock }()
+	if st.token != "" && g.now().Add(refreshBefore).Before(st.expires) {
+		return st.token, nil
+	}
+	token, expires, err := g.mint(ctx, in.InstallationID, name, perms)
 	if err != nil {
 		return "", err
 	}
-	g.cache[key] = cachedToken{token: token, expires: expires}
+	st.token, st.expires = token, expires
 	return token, nil
+}
+
+func (g *GitHubApp) state(key cacheKey) *keyState {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	st, ok := g.keys[key]
+	if !ok {
+		st = &keyState{lock: make(chan struct{}, 1)}
+		g.keys[key] = st
+	}
+	return st
 }
 
 func allowed(repositories []string, repo string) bool {
@@ -222,8 +258,8 @@ func allowed(repositories []string, repo string) bool {
 }
 
 // mint signs the App JWT and exchanges it for an installation token scoped
-// to repository.
-func (g *GitHubApp) mint(ctx context.Context, installationID int64, repository string) (string, time.Time, error) {
+// to repository and perms.
+func (g *GitHubApp) mint(ctx context.Context, installationID int64, repository string, perms map[string]string) (string, time.Time, error) {
 	now := g.now()
 	appJWT, err := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{
 		Issuer: g.appID,
@@ -234,7 +270,7 @@ func (g *GitHubApp) mint(ctx context.Context, installationID int64, repository s
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	body, err := json.Marshal(map[string][]string{"repositories": {repository}})
+	body, err := json.Marshal(map[string]any{"repositories": []string{repository}, "permissions": perms})
 	if err != nil {
 		return "", time.Time{}, err
 	}

@@ -142,6 +142,8 @@ func newWire(t *testing.T, cfg ...admission.Config) (gatewayv1.EffectGatewayServ
 		must(t, rows.CreatePrincipal(ctx, tenant, "human-a", authorityrows.PrincipalHuman))
 		must(t, rows.CreatePrincipal(ctx, tenant, "human-b", authorityrows.PrincipalHuman))
 		must(t, rows.CreatePrincipal(ctx, tenant, "agent-a", authorityrows.PrincipalAgent))
+		// The Control Plane runner humans propose through, a workload.
+		must(t, rows.CreatePrincipal(ctx, tenant, testActor, authorityrows.PrincipalService))
 		must(t, rows.CreateEffectType(ctx, tenant, effectargs.GitHubBranchCreateFromChanges, authorityrows.RiskMedium))
 		must(t, rows.CreateEffectType(ctx, tenant, "ops.note", authorityrows.RiskLow))
 		_, err = rows.CreateMandate(ctx, tenant, "human-a", authorityrows.Terms{

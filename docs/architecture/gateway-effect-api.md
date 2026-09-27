@@ -744,6 +744,16 @@ the gateway's own principal rows; a human is `permission_denied`
 (`INSUFFICIENT_PRIVILEGE`). Attempts are read in the token's tenant and
 workspace, as for every other RPC.
 
+Only the workload the attempt was proposed through may dispatch or observe
+it (coordinator decision, 2026-09-27). That is its requester actor
+(`requester_actor_id`, the `act.sub` that carried the Propose, such as the
+Control Plane runner), or its requester principal when that principal is
+itself the workload. Any other workload in the workspace is
+`permission_denied` (`INSUFFICIENT_PRIVILEGE`), and the attempt is unchanged.
+The claim records the dispatcher in the permit row
+(`claimed_by_principal_id`, `claimed_by_actor_id`). `EffectAttempt` has no
+field for it.
+
 **The dispatch claim** (ADR-0001 §1, TA §4.1 item 3) is one transaction,
 committed before any provider I/O:
 
@@ -792,6 +802,12 @@ this effect, `FAILED` with `READBACK_MISMATCH` if not.
 - `DISPATCHED` becomes `OBSERVED`; `UNKNOWN` becomes `RECONCILED`.
 - An inconclusive read-back leaves `UNKNOWN` (or makes a `DISPATCHED` attempt
   `UNKNOWN`) and records no observation.
+- A `FAILED` that rests only on the object's absence (no ref, no pull
+  request; the adapter sets `ObserveResult.Absent`) is inconclusive until the
+  attempt's `dispatch_deadline` has passed. A write still in flight can make
+  the object appear. The attempt stays `DISPATCHED` or `UNKNOWN`, with its
+  reservation held. Only an object that contradicts the effect fails it
+  early.
 - A `DISPATCHING` attempt inside its fence may still be in flight and returns
   unchanged. Past its fence, which means the gateway died between the claim
   and recording the answer, it becomes `UNKNOWN` and is read back. It is never
@@ -803,15 +819,23 @@ An established read-back records one observation row with the adapter's
 `source`, `trust_class`, `evidence_digest` and `observed_at`. The typed result
 must be exactly the member the effect type defines, or none for a type that
 defines none. Any other shape breaks the contract and counts as inconclusive.
-`result_ref` is `sha256:<hex>` over the stored result JSON, which the row
-keeps. `GetAttempt` returns it as `latest_observation.result`, converted from
+`result_ref` is `sha256:<hex>` over the result's RFC 8785 (JCS) form
+(`core/pkg/canonicalize`). The row keeps the result as JSONB, which may
+reorder keys, so anyone can recompute the reference from the stored or
+returned JSON. `GetAttempt` returns it as `latest_observation.result`, converted from
 the adapter's plain Go mirrors to the generated messages in the server.
 
 **Settlement (ADR-0003, count units).** The observed outcome settles the held
 exposure in the observing transaction. `SUCCEEDED` moves it to `confirmed`:
 the counter moves the amount from `reserved` to `used`, with a reversing held
-posting and a confirmed posting. `FAILED` releases it, because
-`EFFECT_OUTCOME_FAILED` means the effect did not happen. `UNKNOWN` and a
+posting and a confirmed posting. A `FAILED` read-back is settled in one of
+two ways:
+
+- When an object contradicts the effect (`READBACK_MISMATCH` without
+  `Absent`), the reservation is consumed the same way, because a write of
+  ours may have made that object.
+- When the object is absent after the fence, the reservation is released,
+  because the effect did not happen. `UNKNOWN` and a
 `DISPATCHING` attempt keep their hold. The attempt stays `OBSERVED` or
 `RECONCILED`: this slice does not write the `SETTLED` state (see the open
 points below).
@@ -849,9 +873,20 @@ For each call, the custody takes the owner and repository from the effect's
 target and looks up the tenant's entry for that owner. It refuses a repository
 missing from the entry. Otherwise it signs an RS256 App JWT (`iss` is the App
 ID, 9 minutes of lifetime) and posts
-`/app/installations/{id}/access_tokens` with `repositories: [name]`, so the
-token reaches that one repository. Tokens are cached per (installation,
-repository) until 5 minutes before GitHub's expiry. They are never logged.
+`/app/installations/{id}/access_tokens` with `repositories: [name]` and the
+least `permissions` the effect type needs:
+
+| Effect type | Permissions |
+|---|---|
+| `github.repository.get` | `contents: read`, `metadata: read` |
+| `github.branch.create_from_changes` | `contents: write`, `metadata: read` |
+| `github.pull_request.create_draft` | `pull_requests: write`, `contents: read`, `metadata: read` |
+
+A token therefore reaches one repository with one operation's permissions.
+Tokens are cached per (installation, repository, effect type) until 5 minutes
+before GitHub's expiry. Each key mints under its own lock, so a slow mint
+never blocks another key, and a waiter gives up when its context ends. Tokens
+are never logged.
 
 The mandate's `helm/` branch prefix is still the mandate's CEL condition, and
 the adapter re-checks the default branch at `Dispatch`.

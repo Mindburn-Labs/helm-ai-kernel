@@ -273,6 +273,9 @@ var qualCases = map[string]qualCase{
 		}
 		got := a.Observe(context.Background(), env.creds(), other)
 		wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
+		if got.Absent {
+			t.Fatal("a ref that contradicts the effect is reported as absent")
+		}
 		if got.Observation.GitHubBranch.CommitSHA != first.CommitSHA {
 			t.Fatalf("the existing ref was overwritten: %s, was %s", got.Observation.GitHubBranch.CommitSHA, first.CommitSHA)
 		}
@@ -312,6 +315,11 @@ var qualCases = map[string]qualCase{
 		if n := sent.nonRead.Load(); n != 0 {
 			t.Fatalf("a failed precondition sent %d writes", n)
 		}
+		// No ref: FAILED by absence alone, which the gateway holds as
+		// inconclusive inside the dispatch fence.
+		if got := a.Observe(context.Background(), env.creds(), noBase); got.Outcome != adapters.OutcomeFailed || !got.Absent {
+			t.Fatalf("a missing ref read back as %s absent=%v", got.Outcome, got.Absent)
+		}
 	},
 	"branch/readback-mismatch": func(t *testing.T, env *qualEnv) {
 		head := env.head("mismatch")
@@ -324,7 +332,7 @@ var qualCases = map[string]qualCase{
 		} {
 			got := a.Observe(context.Background(), env.creds(), proposal)
 			wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
-			if got.Observation.GitHubBranch.CommitSHA != created.CommitSHA {
+			if got.Absent || got.Observation.GitHubBranch.CommitSHA != created.CommitSHA {
 				t.Fatalf("%s: the result does not record the commit found", name)
 			}
 		}
@@ -439,6 +447,9 @@ var qualCases = map[string]qualCase{
 		if n := sent.nonRead.Load(); n != 0 || env.openPulls(t, head) != 0 {
 			t.Fatalf("a moved head sent %d writes", n)
 		}
+		if got := a.Observe(context.Background(), env.creds(), effect); got.Outcome != adapters.OutcomeFailed || !got.Absent {
+			t.Fatalf("no pull request read back as %s absent=%v", got.Outcome, got.Absent)
+		}
 	},
 	"pull_request/readback-mismatch": func(t *testing.T, env *qualEnv) {
 		effect, pr := env.createPullRequest(t, "pr-mismatch")
@@ -448,7 +459,7 @@ var qualCases = map[string]qualCase{
 		retitled := env.pullRequestEffect(args.Head, args.HeadSHA, "another title")
 		got := a.Observe(context.Background(), env.creds(), retitled)
 		wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
-		if got.Observation.GitHubPullRequest.URL != pr.URL {
+		if got.Absent || got.Observation.GitHubPullRequest.URL != pr.URL {
 			t.Fatalf("the mismatch does not record the URL: %+v", got.Observation.GitHubPullRequest)
 		}
 		env.markReady(t, pr)

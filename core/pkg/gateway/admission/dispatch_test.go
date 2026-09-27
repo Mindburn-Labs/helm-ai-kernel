@@ -109,3 +109,41 @@ func TestTypedResultFollowsTheEffectType(t *testing.T) {
 		}
 	}
 }
+
+func TestReadBackVerdict(t *testing.T) {
+	failed := adapters.ObserveResult{Outcome: adapters.OutcomeFailed}
+	absentFailed := adapters.ObserveResult{Outcome: adapters.OutcomeFailed, Absent: true}
+	for name, c := range map[string]struct {
+		result               adapters.ObserveResult
+		insideFence          bool
+		established, consume bool
+	}{
+		"succeeded":                     {adapters.ObserveResult{Outcome: adapters.OutcomeSucceeded}, true, true, true},
+		"unknown":                       {adapters.ObserveResult{Outcome: adapters.OutcomeUnknown}, false, false, false},
+		"absent inside the fence":       {absentFailed, true, false, false},
+		"absent after the fence":        {absentFailed, false, true, false},
+		"contradicted inside the fence": {failed, true, true, true},
+		"contradicted after the fence":  {failed, false, true, true},
+	} {
+		established, consume := readBackVerdict(c.result, c.insideFence)
+		if established != c.established || (established && consume != c.consume) {
+			t.Errorf("%s: established=%v consume=%v, want %v %v", name, established, consume, c.established, c.consume)
+		}
+	}
+}
+
+func TestMayExecute(t *testing.T) {
+	const runner, human, agent = "spiffe://helm/control-plane", "human-a", "agent-a"
+	if !mayExecute(runner, human, runner) || !mayExecute(agent, agent, "") {
+		t.Fatal("the proposing workload was refused")
+	}
+	for name, c := range map[string][3]string{
+		"another workload":         {agent, human, runner},
+		"the runner on an agent's": {runner, agent, ""},
+		"an empty caller":          {"", human, ""},
+	} {
+		if mayExecute(c[0], c[1], c[2]) {
+			t.Errorf("%s: allowed", name)
+		}
+	}
+}

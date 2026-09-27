@@ -17,15 +17,17 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/authorityrows"
 )
 
-// workload is the Control Plane backend's execute identity: an agent
-// principal, never a human.
-var workload = Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agent-a"}
+// workload is the Control Plane runner's execute identity: the service
+// principal the skeleton's human proposes through (its act.sub), never a
+// human.
+var workload = Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: actor}
 
 // scripted is an adapter whose answers the test sets. By default Dispatch
 // checks the permit digest and is SENT, and Observe is SUCCEEDED with the
@@ -102,6 +104,20 @@ func succeeded(effect adapters.Effect) adapters.ObserveResult {
 		o.GitHubRepository = &adapters.GitHubRepositoryResult{DefaultBranch: "main", DefaultBranchSHA: commitSHA}
 	}
 	return adapters.ObserveResult{Outcome: adapters.OutcomeSucceeded, Observation: o}
+}
+
+// absent is a read-back that finds no object the effect would create.
+func absent(effect adapters.Effect) adapters.ObserveResult {
+	r := succeeded(effect)
+	r.Outcome, r.Reason, r.Absent = adapters.OutcomeFailed, contracts.ReasonReadbackMismatch, true
+	return r
+}
+
+// contradicted is a read-back that finds an object that is not this effect.
+func contradicted(effect adapters.Effect) adapters.ObserveResult {
+	r := succeeded(effect)
+	r.Outcome, r.Reason = adapters.OutcomeFailed, contracts.ReasonReadbackMismatch
+	return r
 }
 
 type fakeCredentials struct{}
@@ -261,7 +277,7 @@ func (f *fixture) claimOnly(svc *Service, attemptID string) {
 		if err != nil {
 			return err
 		}
-		c, err := svc.claim(ctx, tx, a)
+		c, err := svc.claim(ctx, tx, a, workload)
 		if err == nil && c == nil {
 			f.t.Fatal("the claim was refused")
 		}
@@ -298,11 +314,7 @@ func TestPostgresCrashAfterTheClaimIsReconciledNeverResent(t *testing.T) {
 	// After the fence it is UNKNOWN and reconciled by read-back: nothing
 	// was written, so the read-back finds nothing and the hold is released.
 	f.exec(tenantA, `UPDATE authority_effect_attempts SET dispatch_deadline = now() - interval '1 second' WHERE attempt_id = $1`, a.ID)
-	fake.set(nil, func(adapters.Effect) adapters.ObserveResult {
-		r := succeeded(adapters.Effect{EffectType: noteType})
-		r.Outcome, r.Reason = adapters.OutcomeFailed, contracts.ReasonReadbackMismatch
-		return r
-	})
+	fake.set(nil, absent)
 	reconciled, existing, err := svc.Observe(ctx, workload, a.ID)
 	must(t, err)
 	wantOutcome(t, "a crashed dispatch", reconciled, "RECONCILED", "FAILED", contracts.ReasonReadbackMismatch)
@@ -474,8 +486,8 @@ func TestPostgresDispatchIsTenantWorkspaceAndWorkloadScoped(t *testing.T) {
 	svc := f.withAdapter(fake)
 	a := f.propose(human, note("n1"))
 	for name, caller := range map[string]Caller{
-		"another tenant's workload":    {TenantID: tenantB, WorkspaceID: workspace, PrincipalID: "agent-a"},
-		"another workspace's workload": {TenantID: tenantA, WorkspaceID: "ws-b", PrincipalID: "agent-a"},
+		"another tenant's workload":    {TenantID: tenantB, WorkspaceID: workspace, PrincipalID: actor},
+		"another workspace's workload": {TenantID: tenantA, WorkspaceID: "ws-b", PrincipalID: actor},
 	} {
 		_, _, err := svc.Dispatch(ctx, caller, a.ID)
 		wantRefusal(t, name+" dispatching", err, CodeNotFound, "")
@@ -518,11 +530,17 @@ func TestPostgresObserveRecordsTheTypedResult(t *testing.T) {
 	if o == nil || o.GitHubBranch == nil || o.GitHubBranch.CommitSHA != commitSHA || o.GitHubPullRequest != nil {
 		t.Fatalf("observation = %+v", o)
 	}
-	body, err := json.Marshal(o.GitHubBranch)
+	// result_ref recomputes from the JSON Postgres returns: SHA-256 over its
+	// JCS form, whatever JSONB did to the bytes.
+	var stored, ref string
+	f.ownerTx(tenantA, func(tx *sql.Tx) error {
+		return tx.QueryRow(`SELECT result::text, result_ref FROM authority_observations WHERE attempt_id = $1`, branch.ID).Scan(&stored, &ref)
+	})
+	canonical, err := canonicalize.JCS(json.RawMessage(stored))
 	must(t, err)
-	sum := sha256.Sum256(body)
-	if o.ResultRef != "sha256:"+hex.EncodeToString(sum[:]) {
-		t.Fatalf("result_ref %q is not the content address of the result", o.ResultRef)
+	sum := sha256.Sum256(canonical)
+	if o.ResultRef != ref || ref != "sha256:"+hex.EncodeToString(sum[:]) {
+		t.Fatalf("result_ref %q is not SHA-256 of the stored result's JCS form %s", ref, canonical)
 	}
 	// The observed branch satisfies the draft pull request's precondition.
 	in := proposal("pr1", effectargs.GitHubPullRequestCreateDraft, repo, draftArgs(branch.ID, "helm/b1", commitSHA))
@@ -539,4 +557,145 @@ func TestPostgresObserveRecordsTheTypedResult(t *testing.T) {
 	if got.State != "UNKNOWN" || got.LatestObservation != nil {
 		t.Fatalf("a mismatched typed result = %+v", got)
 	}
+}
+
+// passFence moves an attempt's dispatch fence into the past.
+func (f *fixture) passFence(id string) {
+	f.t.Helper()
+	f.exec(tenantA, `UPDATE authority_effect_attempts SET dispatch_deadline = now() - interval '1 second' WHERE attempt_id = $1`, id)
+}
+
+// H1: a FAILED that rests on the object's absence is inconclusive until the
+// dispatch fence has passed; the write may still land.
+func TestPostgresAbsenceInsideTheFenceIsInconclusive(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.notesLimit(5)
+	fake := &scripted{}
+	svc := f.withAdapter(fake)
+
+	// A lost answer, then an immediate read-back that finds nothing.
+	fake.set(func(adapters.Effect) adapters.DispatchResult {
+		return adapters.DispatchResult{Status: adapters.DispatchIndefinite, Reason: contracts.ReasonProviderError}
+	}, absent)
+	a := f.propose(human, quotaNote("lost"))
+	_, _, err := svc.Dispatch(ctx, workload, a.ID)
+	must(t, err)
+	early, _, err := svc.Observe(ctx, workload, a.ID)
+	must(t, err)
+	if early.State != "UNKNOWN" || early.Exposures[0].Kind != "held" || early.LatestObservation != nil {
+		t.Fatalf("absence inside the fence resolved an UNKNOWN attempt: %+v", early)
+	}
+	f.passFence(a.ID)
+	late, _, err := svc.Observe(ctx, workload, a.ID)
+	must(t, err)
+	wantOutcome(t, "absence after the fence", late, "RECONCILED", "FAILED", contracts.ReasonReadbackMismatch)
+	if late.Exposures[0].Kind != "released" {
+		t.Fatalf("exposure = %+v", late.Exposures)
+	}
+
+	// SENT, and the read-back does not see the object yet.
+	fake.set(nil, absent)
+	b := f.propose(human, quotaNote("sent"))
+	sent, _, err := svc.Dispatch(ctx, workload, b.ID)
+	must(t, err)
+	if sent.State != "DISPATCHED" || sent.Exposures[0].Kind != "held" {
+		t.Fatalf("absence right after a SENT write = %+v", sent)
+	}
+	f.passFence(b.ID)
+	observed, _, err := svc.Observe(ctx, workload, b.ID)
+	must(t, err)
+	wantOutcome(t, "absence after the fence", observed, "OBSERVED", "FAILED", contracts.ReasonReadbackMismatch)
+	f.ledgerBalances()
+}
+
+// L4: an object that contradicts the effect after a SENT write means the
+// write may well have happened: FAILED, and the reservation is consumed.
+func TestPostgresContradictedReadBackConsumesTheReservation(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.notesLimit(5)
+	fake := &scripted{}
+	fake.set(nil, contradicted)
+	svc := f.withAdapter(fake)
+	a := f.propose(human, quotaNote("differs"))
+	got, _, err := svc.Dispatch(ctx, workload, a.ID)
+	must(t, err)
+	wantOutcome(t, "a contradicted read-back", got, "OBSERVED", "FAILED", contracts.ReasonReadbackMismatch)
+	if got.Exposures[0].Kind != "confirmed" || got.Exposures[0].Amount != 1 {
+		t.Fatalf("exposure = %+v, want the reservation consumed", got.Exposures)
+	}
+	if used := f.count(tenantA, `SELECT COALESCE(sum(used), 0)::int FROM authority_counters`); used != 1 {
+		t.Fatalf("used = %d, want 1", used)
+	}
+	f.ledgerBalances()
+}
+
+// L3: an adapter answer that arrives after the fence, once Observe has
+// reconciled the attempt, changes nothing.
+func TestPostgresLateAnswerAfterTheFenceIsIgnored(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.notesLimit(5)
+	entered, answer := make(chan struct{}), make(chan struct{})
+	fake := &scripted{}
+	fake.set(func(adapters.Effect) adapters.DispatchResult {
+		close(entered)
+		<-answer
+		return adapters.DispatchResult{Status: adapters.DispatchNotSent, Reason: contracts.ReasonPreconditionFailed}
+	}, nil)
+	svc := f.withAdapter(fake)
+	a := f.propose(human, quotaNote("slow"))
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := svc.Dispatch(ctx, workload, a.ID)
+		done <- err
+	}()
+	<-entered
+	f.passFence(a.ID)
+	reconciled, _, err := svc.Observe(ctx, workload, a.ID)
+	must(t, err)
+	wantOutcome(t, "reconciled while the dispatch hung", reconciled, "RECONCILED", "SUCCEEDED", "")
+	close(answer)
+	must(t, <-done)
+	after, err := svc.Get(ctx, human, a.ID)
+	must(t, err)
+	wantOutcome(t, "after the late answer", after, "RECONCILED", "SUCCEEDED", "")
+	if after.Version != reconciled.Version || after.Exposures[0].Kind != "confirmed" {
+		t.Fatalf("the late NOT_SENT changed the attempt: %+v", after)
+	}
+	f.ledgerBalances()
+}
+
+// M3: only the workload an attempt was proposed through dispatches or
+// observes it.
+func TestPostgresOnlyTheProposingWorkloadDispatches(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	fake := &scripted{}
+	svc := f.withAdapter(fake)
+	agentB := Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agent-a"}
+	a := f.propose(human, note("through-the-runner"))
+	_, _, err := svc.Dispatch(ctx, agentB, a.ID)
+	wantRefusal(t, "another workload's Dispatch", err, CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	_, _, err = svc.Observe(ctx, agentB, a.ID)
+	wantRefusal(t, "another workload's Observe", err, CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	if got, _ := svc.Get(ctx, human, a.ID); got.State != "ADMITTED" || got.Version != a.Version || fake.dispatched.Load() != 0 {
+		t.Fatalf("a refused Dispatch changed the attempt: %+v", got)
+	}
+	// The runner dispatches it, and the claim records who did.
+	_, _, err = svc.Dispatch(ctx, workload, a.ID)
+	must(t, err)
+	if n := f.count(tenantA, `SELECT count(*) FROM authority_permits WHERE attempt_id = $1 AND claimed_by_principal_id = $2 AND claimed_by_actor_id = ''`, a.ID, actor); n != 1 {
+		t.Fatal("the claim does not record its dispatcher")
+	}
+	// An agent that proposes directly dispatches its own attempt, and the
+	// runner cannot.
+	f.rootMandate(tenantA, "agent-a", skeletonTerms(f.now))
+	own := f.propose(agentB, note("agent-direct"))
+	_, _, err = svc.Dispatch(ctx, workload, own.ID)
+	wantRefusal(t, "the runner on an agent's own attempt", err, CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	got, _, err := svc.Dispatch(ctx, agentB, own.ID)
+	must(t, err)
+	wantOutcome(t, "the agent's own dispatch", got, "OBSERVED", "SUCCEEDED", "")
 }

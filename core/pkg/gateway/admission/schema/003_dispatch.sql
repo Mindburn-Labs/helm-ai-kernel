@@ -7,3 +7,9 @@
 -- alone; after it, the attempt is UNKNOWN and Observe reconciles it. It is
 -- never dispatched again (§4.3).
 ALTER TABLE authority_effect_attempts ADD COLUMN IF NOT EXISTS dispatch_deadline TIMESTAMPTZ;
+
+-- Who claimed the permit: the workload principal of the Dispatch token and
+-- its act.sub, if any. Only the workload the attempt was proposed through may
+-- dispatch it.
+ALTER TABLE authority_permits ADD COLUMN IF NOT EXISTS claimed_by_principal_id TEXT;
+ALTER TABLE authority_permits ADD COLUMN IF NOT EXISTS claimed_by_actor_id TEXT;

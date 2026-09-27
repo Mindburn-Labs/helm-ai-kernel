@@ -504,6 +504,24 @@ removal_proofs:
     replace: "\tcase false:\n"
     tests:
       - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tcase result.Absent && insideFence:\n"
+    replace: "\tcase false && result.Absent && insideFence:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestReadBackVerdict"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\treturn caller != \"\" && (caller == requesterActor || caller == requester)\n"
+    replace: "\treturn caller != \"\"\n"
+    tests:
+      - "core/pkg/gateway/admission.TestMayExecute"
+  - control: CTL-051
+    file: core/pkg/gateway/custody/githubapp.go
+    find: "\t\"github.branch.create_from_changes\": {\"contents\": \"write\", \"metadata\": \"read\"},\n"
+    replace: "\t\"github.branch.create_from_changes\": {\"contents\": \"write\", \"metadata\": \"read\", \"administration\": \"write\"},\n"
+    tests:
+      - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
 
 
 controls:
@@ -2870,7 +2888,8 @@ controls:
       (audit 09-02). Its credential is an installation token the gateway's
       GitHub App custody mints per repository, only for a repository the
       tenant's installation entry allows, scoped to that one repository and
-      never logged (R8, HELM-751 s3).
+      to the least permissions its effect type needs, cached per key under
+      that key's own lock, and never logged (R8, HELM-751 s3).
     status: enforced
     entry_points:
       - "core/cmd/helm-gateway.effectsFromEnv"
@@ -2892,6 +2911,7 @@ controls:
       allowed:
         - "core/pkg/gateway/adapters/github.TestQualificationFake"
         - "core/pkg/gateway/custody.TestGitHubAppMintsRepositoryScopedTokensAndCachesThem"
+        - "core/pkg/gateway/custody.TestGitHubAppSlowMintBlocksOnlyItsOwnKey"
         - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
         - "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
       forbidden:
@@ -2900,11 +2920,13 @@ controls:
         - "core/pkg/gateway/adapters/github.TestTargets"
         - "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
         - "core/pkg/gateway/custody.TestGitHubAppConfiguration"
+        - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
       removal:
         - "core/pkg/gateway/adapters.TestCheckPermitDigest"
         - "core/pkg/gateway/adapters/github.TestTargets"
         - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
         - "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
+        - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
       bypass:
         - "core/pkg/gateway/adapters.TestAdaptersDoNotImportTheLegacyRuntime"
         - "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
@@ -3045,9 +3067,11 @@ controls:
     title: "Gateway dispatch claim and observation"
     owner: Mindburn Labs core team (kernel)
     claim: >-
-      helm-gateway dispatches an ADMITTED attempt only for an active workload
-      principal (agent or service) of the token's tenant and workspace with a
-      helm.gateway.execute token, and only through one claim transaction
+      helm-gateway dispatches and observes an attempt only for the active
+      workload principal (agent or service) it was proposed through, its
+      requester actor or its requester principal, in the token's tenant and
+      workspace with a helm.gateway.execute token, and dispatches it only
+      through one claim transaction, which records the dispatcher,
       committed before any provider I/O (ADR-0001 §1, TA §4.1): it locks the
       attempt and its unused permit, re-locks the authority rows FOR SHARE and
       reads the stops after them. An active stop (EMERGENCY_STOP_FENCED), an
@@ -3060,10 +3084,13 @@ controls:
       adapter's reason and releases the hold; INDEFINITE becomes UNKNOWN and
       keeps it. A repeated Dispatch returns the stored attempt, and UNKNOWN or
       a DISPATCHING attempt past its fence is only ever read back by Observe,
-      never sent again. Observe records the typed result the effect type
-      defines, with its content address (result_ref) and evidence_digest, and
-      confirms (SUCCEEDED) or releases (FAILED) the held exposure in the same
-      transaction (HELM-751 s3).
+      never sent again. A FAILED read-back that rests only on the object's
+      absence is inconclusive until the fence has passed. Observe records the
+      typed result the effect type defines, with evidence_digest and
+      result_ref, SHA-256 over the result's JCS form, and in the same
+      transaction consumes the held exposure (SUCCEEDED, or an object that
+      contradicts the effect) or releases it (absent after the fence)
+      (HELM-751 s3).
     status: enforced
     entry_points:
       - "core/pkg/gateway/server.Server.Dispatch"
@@ -3094,6 +3121,12 @@ controls:
         - "core/pkg/gateway/admission.TestPostgresLostResponseIsReconciledByObserve"
         - "core/pkg/gateway/admission.TestPostgresNotSentIsObservedFailedAndReleased"
         - "core/pkg/gateway/admission.TestPostgresDispatchIsTenantWorkspaceAndWorkloadScoped"
+        - "core/pkg/gateway/admission.TestPostgresAbsenceInsideTheFenceIsInconclusive"
+        - "core/pkg/gateway/admission.TestPostgresContradictedReadBackConsumesTheReservation"
+        - "core/pkg/gateway/admission.TestPostgresLateAnswerAfterTheFenceIsIgnored"
+        - "core/pkg/gateway/admission.TestPostgresOnlyTheProposingWorkloadDispatches"
+        - "core/pkg/gateway/admission.TestReadBackVerdict"
+        - "core/pkg/gateway/admission.TestMayExecute"
         - "core/pkg/gateway/admission.TestClaimRefusal"
         - "core/pkg/gateway/admission.TestAfterDispatch"
         - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
@@ -3101,5 +3134,7 @@ controls:
         - "core/pkg/gateway/admission.TestClaimRefusal"
         - "core/pkg/gateway/admission.TestAfterDispatch"
         - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
+        - "core/pkg/gateway/admission.TestReadBackVerdict"
+        - "core/pkg/gateway/admission.TestMayExecute"
       bypass:
         - "core/pkg/gateway/admission.TestPostgresCrashAfterTheClaimIsReconciledNeverResent"

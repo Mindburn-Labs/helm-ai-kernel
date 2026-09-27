@@ -38,7 +38,11 @@ type fakeGitHubApps struct {
 	server  *httptest.Server
 	mu      sync.Mutex
 	minted  []string // "installation:repository"
+	perms   []map[string]string
 	expires time.Duration
+	// hold, when set, stalls every mint for holdRepo until it is closed.
+	hold     chan struct{}
+	holdRepo string
 }
 
 func newFakeGitHubApps(t *testing.T) *fakeGitHubApps {
@@ -63,13 +67,22 @@ func newFakeGitHubApps(t *testing.T) *fakeGitHubApps {
 			return
 		}
 		var body struct {
-			Repositories []string `json:"repositories"`
+			Repositories []string          `json:"repositories"`
+			Permissions  map[string]string `json:"permissions"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Repositories) != 1 {
 			http.Error(w, `{"message":"one repository"}`, http.StatusUnprocessableEntity)
 			return
 		}
 		f.mu.Lock()
+		hold := f.hold
+		stall := hold != nil && body.Repositories[0] == f.holdRepo
+		f.mu.Unlock()
+		if stall {
+			<-hold
+		}
+		f.mu.Lock()
+		f.perms = append(f.perms, body.Permissions)
 		f.minted = append(f.minted, fmt.Sprintf("%d:%s", installation, body.Repositories[0]))
 		n := len(f.minted)
 		expires := f.expires
@@ -236,5 +249,81 @@ func TestGitHubAppConfiguration(t *testing.T) {
 		if (err == nil) != ok {
 			t.Errorf("GitHubAPIURL(%q) err = %v, want ok=%v", raw, err, ok)
 		}
+	}
+}
+
+func TestGitHubAppAsksForTheLeastPermissionsPerEffectType(t *testing.T) {
+	f := newFakeGitHubApps(t)
+	app, err := NewGitHubApp("1234", f.keyPEM(false), []byte(installations), f.server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	want := map[string]map[string]string{
+		"github.repository.get":             {"contents": "read", "metadata": "read"},
+		"github.branch.create_from_changes": {"contents": "write", "metadata": "read"},
+		"github.pull_request.create_draft":  {"pull_requests": "write", "contents": "read", "metadata": "read"},
+	}
+	for _, effectType := range []string{"github.repository.get", "github.branch.create_from_changes", "github.pull_request.create_draft"} {
+		if _, err := app.Token(ctx, "tenant-a", adapters.Effect{EffectType: effectType, Target: "github.com/Mindburn-Labs/example"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.mu.Lock()
+	got := append([]map[string]string(nil), f.perms...)
+	f.mu.Unlock()
+	if len(got) != 3 {
+		t.Fatalf("%d mints, want one per effect type (the cache is keyed by it)", len(got))
+	}
+	for i, effectType := range []string{"github.repository.get", "github.branch.create_from_changes", "github.pull_request.create_draft"} {
+		if fmt.Sprint(got[i]) != fmt.Sprint(want[effectType]) {
+			t.Errorf("%s asked for %v, want %v", effectType, got[i], want[effectType])
+		}
+	}
+	if _, err := app.Token(ctx, "tenant-a", adapters.Effect{EffectType: "github.repository.delete", Target: "github.com/Mindburn-Labs/example"}); err == nil {
+		t.Fatal("a token was minted for an effect type with no permissions defined")
+	}
+}
+
+func TestGitHubAppSlowMintBlocksOnlyItsOwnKey(t *testing.T) {
+	f := newFakeGitHubApps(t)
+	f.hold, f.holdRepo = make(chan struct{}), "example"
+	app, err := NewGitHubApp("1234", f.keyPEM(false), []byte(installations), f.server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	slow := make(chan error, 1)
+	go func() {
+		_, err := app.Token(ctx, "tenant-a", effect("github.com/Mindburn-Labs/example"))
+		slow <- err
+	}()
+	// Wait until the slow mint holds its key's lock.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		st := app.state(cacheKey{installation: 41, repository: "example", effectType: "github.branch.create_from_changes"})
+		if len(st.lock) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the slow mint never started")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// Another key mints while the first is stalled.
+	other, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if _, err := app.Token(other, "tenant-b", effect("github.com/Mindburn-Labs/b-only")); err != nil {
+		t.Fatalf("another tenant's mint waited on a stalled one: %v", err)
+	}
+	// A waiter on the stalled key gives up with its context.
+	short, cancelShort := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancelShort()
+	if _, err := app.Token(short, "tenant-a", effect("github.com/Mindburn-Labs/example")); err == nil {
+		t.Fatal("a waiter on a stalled key did not honour its context")
+	}
+	close(f.hold)
+	if err := <-slow; err != nil {
+		t.Fatal(err)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
@@ -70,20 +71,55 @@ func (s *Service) Stop(ctx context.Context, caller Caller, token Token, in StopI
 	digest := stopDigest(caller, in)
 	var stopID string
 	var existing bool
+	// A concurrent Stop under the same key that commits first makes this
+	// insert a unique violation; the retry then finds its stop and answers
+	// with it, as any replay does.
+	var err error
+	for try := 0; try < 2; try++ {
+		stopID, existing, err = s.stopTx(ctx, caller, token, in, digest)
+		if !errors.Is(err, errStopRaced) {
+			break
+		}
+	}
+	if err != nil {
+		return Stop{}, false, err
+	}
+	stop, err := s.getStop(ctx, caller.TenantID, stopID)
+	return stop, existing, err
+}
+
+var errStopRaced = errors.New("a concurrent stop took the idempotency key")
+
+func (s *Service) stopTx(ctx context.Context, caller Caller, token Token, in StopInput, digest []byte) (string, bool, error) {
+	var stopID string
+	var existing bool
 	err := s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
-		var stored []byte
-		err := tx.QueryRowContext(ctx, `SELECT stop_id::text, request_digest FROM authority_stops
-			WHERE tenant_id = $1 AND idempotency_key = $2`, caller.TenantID, in.IdempotencyKey).Scan(&stopID, &stored)
-		switch {
-		case err == nil && bytes.Equal(stored, digest):
-			existing = true
-			return nil
-		case err == nil:
-			return refuse(CodeAlreadyExists, contracts.ReasonIdempotencyConflict, "the idempotency key was used with a different stop")
-		case !errors.Is(err, sql.ErrNoRows):
+		// replayed reports whether the key already names a stop: this one
+		// (existing), or another request (a conflict).
+		replayed := func() (bool, error) {
+			var stored []byte
+			err := tx.QueryRowContext(ctx, `SELECT stop_id::text, request_digest FROM authority_stops
+				WHERE tenant_id = $1 AND idempotency_key = $2`, caller.TenantID, in.IdempotencyKey).Scan(&stopID, &stored)
+			switch {
+			case err == nil && bytes.Equal(stored, digest):
+				existing = true
+				return true, nil
+			case err == nil:
+				return true, refuse(CodeAlreadyExists, contracts.ReasonIdempotencyConflict, "the idempotency key was used with a different stop")
+			case !errors.Is(err, sql.ErrNoRows):
+				return true, err
+			}
+			return false, nil
+		}
+		if done, err := replayed(); done {
 			return err
 		}
 		if err := consumeToken(ctx, tx, caller.TenantID, token); err != nil {
+			// The same request sent twice at once with the same token: the
+			// copy that lost the token race answers with the winner's stop.
+			if done, lookupErr := replayed(); done {
+				return lookupErr
+			}
 			return err
 		}
 		if err := requireActiveHuman(ctx, tx, caller, "an operator"); err != nil {
@@ -109,13 +145,13 @@ func (s *Service) Stop(ctx context.Context, caller Caller, token Token, in StopI
 				(tenant_id, stop_id, scope_kind, scope_key, reason, issued_by, expires_at, idempotency_key, request_digest)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			caller.TenantID, id, in.ScopeKind, in.ScopeKey, in.Reason, caller.PrincipalID, expires, in.IdempotencyKey, digest)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return errStopRaced
+		}
 		return err
 	})
-	if err != nil {
-		return Stop{}, false, err
-	}
-	stop, err := s.getStop(ctx, caller.TenantID, stopID)
-	return stop, existing, err
+	return stopID, existing, err
 }
 
 func validateStop(caller Caller, in *StopInput) error {

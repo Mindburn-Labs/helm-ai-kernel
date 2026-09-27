@@ -6,6 +6,7 @@ package admission
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -175,4 +176,162 @@ func TestPostgresSumLimitFailsClosedWithoutItsUnit(t *testing.T) {
 	zero.Quote = []Amount{{Unit: "notes", Amount: 0}}
 	wantState(t, "a zero amount of the unit", f.propose(human, zero), "ADMITTED", "")
 	wantState(t, "the unit quoted", f.propose(human, quotaNote("quoted")), "ADMITTED", "")
+}
+
+// H1 of the s3b review: a principal stop on a workload stops what it carries.
+func TestPostgresPrincipalStopCoversTheWorkloadAndTheDispatcher(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	fake := &scripted{}
+	svc := f.withAdapter(fake)
+	admitted := f.propose(human, note("before"))
+	_, _, err := svc.Stop(ctx, operator, stopToken(), StopInput{IdempotencyKey: "stop-runner", ScopeKind: "principal", ScopeKey: actor, Reason: "runaway"})
+	must(t, err)
+	// The runner can no longer propose for a human...
+	wantState(t, "a proposal carried by the stopped runner", f.propose(human, note("after")), "DENIED", contracts.ReasonEmergencyStopFenced)
+	// ...nor dispatch what it proposed before the stop.
+	got, _, err := svc.Dispatch(ctx, workload, admitted.ID)
+	must(t, err)
+	wantState(t, "a dispatch by the stopped runner", got, "CANCELLED", contracts.ReasonEmergencyStopFenced)
+	// An agent's own attempt, dispatched with the stopped runner as its act:
+	// the dispatcher's actor is checked too.
+	f.rootMandate(tenantA, "agent-a", skeletonTerms(f.now))
+	agent := Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agent-a"}
+	own := f.propose(agent, note("agent-own"))
+	wantState(t, "the agent's direct proposal", own, "ADMITTED", "")
+	carried := agent
+	carried.ActorID = actor
+	got, _, err = svc.Dispatch(ctx, carried, own.ID)
+	must(t, err)
+	wantState(t, "a dispatch whose act is the stopped runner", got, "CANCELLED", contracts.ReasonEmergencyStopFenced)
+	if fake.dispatched.Load() != 0 {
+		t.Fatal("a stopped workload reached the adapter")
+	}
+}
+
+func TestPostgresAStoppedApproverCannotApprove(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	a := f.escalated("pr1")
+	_, _, err := f.svc.Stop(ctx, operator, stopToken(), StopInput{IdempotencyKey: "stop-b", ScopeKind: "principal", ScopeKey: "human-b", Reason: "compromised"})
+	must(t, err)
+	_, _, err = f.svc.Approve(ctx, approverB, decideToken("helm.gateway.decide"), approval(a, ""))
+	wantRefusal(t, "a stopped approver", err, CodePermissionDenied, contracts.ReasonEmergencyStopFenced)
+	got, err := f.svc.Get(ctx, human, a.ID)
+	must(t, err)
+	if got.State != "ESCALATED" || got.Approval != nil {
+		t.Fatalf("a stopped approver changed the attempt: %+v", got)
+	}
+	// Another human approves it.
+	approved, _, err := f.svc.Approve(ctx, operator, decideToken("helm.gateway.decide"), approval(a, ""))
+	must(t, err)
+	wantState(t, "an unstopped approver", approved, "ADMITTED", "")
+}
+
+// M2 and M3 of the s3b review: a lift is blocked by every stop but its own,
+// is created only through Lift, and spends no limit.
+func TestPostgresLiftIsBlockedByEveryStopButItsOwn(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	must(t, f.rows.CreateEffectType(ctx, tenantA, effectargs.AuthorityLift, authorityrows.RiskLow))
+	liftMandate := f.rootMandate(tenantA, "human-c", authorityrows.Terms{
+		EffectTypes: []string{effectargs.AuthorityLift}, ValidFrom: f.now.Add(-time.Hour), ValidUntil: f.now.Add(24 * time.Hour),
+	})
+	// A sum limit on the lift's mandate: a Lift carries no quote, and
+	// authority changes spend no resource.
+	_, err := f.rows.CreateLimit(ctx, tenantA, authorityrows.LimitSpec{MandateID: &liftMandate.ID, Unit: "notes", Measure: "sum", Window: "day", Value: 1, Span: 1})
+	must(t, err)
+	stop, _, err := f.svc.Stop(ctx, operator, stopToken(), tenantStop("tenant-stop"))
+	must(t, err)
+	lift, _, err := f.svc.Lift(ctx, operator, stopToken(), LiftInput{IdempotencyKey: "lift-1", StopID: stop.ID})
+	must(t, err)
+	wantState(t, "a lift under its own stop and a sum limit", lift, "ESCALATED", contracts.ReasonApprovalRequired)
+	// A stop on the operator is not the one being lifted: it applies.
+	byB := Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "human-b", ActorID: actor}
+	_, _, err = f.svc.Stop(ctx, byB, stopToken(), StopInput{IdempotencyKey: "stop-c", ScopeKind: "principal", ScopeKey: "human-c", Reason: "x"})
+	must(t, err)
+	fenced, _, err := f.svc.Lift(ctx, operator, stopToken(), LiftInput{IdempotencyKey: "lift-2", StopID: stop.ID})
+	must(t, err)
+	wantState(t, "a lift by a stopped operator", fenced, "DENIED", contracts.ReasonEmergencyStopFenced)
+	// Propose cannot create a lift.
+	in := proposal("lift-by-propose", effectargs.AuthorityLift, "stop:"+stop.ID,
+		[]byte(`{"schema":"helm.authority.lift.v1","stop_id":"`+stop.ID+`"}`))
+	in.CommitmentID = ""
+	_, _, err = f.svc.Propose(ctx, operator, in)
+	wantRefusal(t, "a lift through Propose", err, CodeInvalidArgument, contracts.ReasonSchemaViolation)
+}
+
+// L2 of the s3b review: concurrent Stops under one key make one stop.
+func TestPostgresConcurrentStopsUnderOneKeyReplay(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	shared := stopToken()
+	type answer struct {
+		stop     Stop
+		existing bool
+		err      error
+	}
+	answers := make(chan answer, 8)
+	for i := 0; i < 8; i++ {
+		token := stopToken()
+		if i%2 == 0 {
+			token = shared // the same request, sent twice with its token
+		}
+		go func() {
+			stop, existing, err := f.svc.Stop(ctx, operator, token, tenantStop("one-key"))
+			answers <- answer{stop, existing, err}
+		}()
+	}
+	fresh, id := 0, ""
+	for i := 0; i < 8; i++ {
+		a := <-answers
+		must(t, a.err)
+		if id == "" {
+			id = a.stop.ID
+		}
+		if a.stop.ID != id {
+			t.Fatalf("two stops for one key: %s and %s", id, a.stop.ID)
+		}
+		if !a.existing {
+			fresh++
+		}
+	}
+	if fresh != 1 {
+		t.Fatalf("%d fresh stops for one key", fresh)
+	}
+	if n := f.count(tenantA, `SELECT count(*) FROM authority_stops WHERE idempotency_key = 'one-key'`); n != 1 {
+		t.Fatalf("%d stop rows", n)
+	}
+}
+
+// M1 of the s3b review: the last reconciliation try hands the attempt to a
+// human whatever made its read-back fail.
+func TestPostgresFinalReconcileHandsOffWhateverTheReadBackError(t *testing.T) {
+	f := newFixture(t)
+	withAdapter := f.withAdapter(&scripted{})
+	for name, run := range map[string]func(id string) (bool, time.Time, error){
+		"no adapter for the effect type": func(id string) (bool, time.Time, error) {
+			return f.svc.Reconcile(context.Background(), tenantA, workspace, id, true)
+		},
+		"a cancelled context": func(id string) (bool, time.Time, error) {
+			cancelled, cancel := context.WithCancel(context.Background())
+			cancel()
+			return withAdapter.Reconcile(cancelled, tenantA, workspace, id, true)
+		},
+	} {
+		a := f.propose(human, note("handoff-"+strings.ReplaceAll(name, " ", "-")))
+		f.claimOnly(withAdapter, a.ID)
+		f.passFence(a.ID)
+		// Before the last try, the error is returned for a retry.
+		if _, _, err := f.svc.Reconcile(context.Background(), tenantA, workspace, a.ID, false); err == nil {
+			t.Fatalf("%s: a failed read-back before the last try returned no error", name)
+		}
+		resolved, _, err := run(a.ID)
+		must(t, err)
+		got, err := f.svc.Get(context.Background(), human, a.ID)
+		must(t, err)
+		if !resolved || got.State != "ESCALATED_TO_HUMAN" {
+			t.Fatalf("%s: the last try left %s (resolved=%v)", name, got.State, resolved)
+		}
+	}
 }

@@ -165,6 +165,7 @@ func checkDecisionBinding(raw json.RawMessage, attemptID, action string) error {
 //	helm_effect_decision {attempt_id, action}  Approve, Reject
 //	helm_stop_lift       {stop_id}             Lift
 //	helm_effect_cancel   {attempt_id}          Cancel with a stop token
+//	helm_stop            {idempotency_key, scope_kind, scope_key}  Stop
 func checkBinding(raw json.RawMessage, detailType string, want map[string]string) error {
 	var entries []map[string]any
 	if len(raw) == 0 || json.Unmarshal(raw, &entries) != nil {

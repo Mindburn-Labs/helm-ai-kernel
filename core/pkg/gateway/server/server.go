@@ -165,6 +165,13 @@ func (s *Server) Stop(ctx context.Context, req *connect.Request[gatewayv1.StopRe
 	if !ok {
 		return nil, rpcError(connect.CodeInvalidArgument, contracts.ReasonSchemaViolation, false, errors.New("scope_kind is required"))
 	}
+	// The single-use stop token names the stop it was minted for, so a token
+	// issued to cancel or lift cannot be spent on a tenant-wide stop.
+	if err := checkBinding(id.AuthorizationDetails, "helm_stop", map[string]string{
+		"idempotency_key": req.Msg.GetIdempotencyKey(), "scope_kind": kind, "scope_key": req.Msg.GetScopeKey(),
+	}); err != nil {
+		return nil, err
+	}
 	in := admission.StopInput{IdempotencyKey: req.Msg.GetIdempotencyKey(), ScopeKind: kind, ScopeKey: req.Msg.GetScopeKey(),
 		Reason: req.Msg.GetReason()}
 	if ts := req.Msg.GetExpiresAt(); ts != nil {

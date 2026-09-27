@@ -114,7 +114,10 @@ func New(db *sql.DB, cfg Config) (*Runner, error) {
 		FetchPollInterval: cfg.PollInterval,
 		// A read-back is bounded by the gateway's dispatch timeout (2m).
 		JobTimeout: 5 * time.Minute,
-		Logger:     slog.Default(),
+		// A graceful stop lets running jobs finish (a read-back is bounded
+		// by the dispatch timeout) before their contexts are cancelled.
+		SoftStopTimeout: 15 * time.Second,
+		Logger:          slog.Default(),
 	})
 	if err != nil {
 		return nil, err

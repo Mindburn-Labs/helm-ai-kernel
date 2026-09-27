@@ -463,8 +463,15 @@ For `Lift`, the claim is:
 `stop_id` must equal the request's. The lift attempt that `Lift` creates is
 then approved with a decide token bound to that attempt, like any other.
 
-`Stop` tokens need no binding. A stop narrows authority, and a stop token is
-single-use anyway.
+A `Stop` token names the stop request it was minted for (L1 of the slice 3b
+review), so a token issued to cancel or lift cannot be spent on a tenant-wide
+stop:
+
+```json
+"authorization_details": [
+  {"type": "helm_stop", "idempotency_key": "<key>", "scope_kind": "tenant", "scope_key": ""}
+]
+```
 
 An operator's stop token on `Cancel` names the attempt it withdraws (slice
 3b; L4 of the slice 2 review):
@@ -940,6 +947,16 @@ writes the stop row with its issuer.
   are `CANCELLED` at their dispatch claim, both `EMERGENCY_STOP_FENCED`. A
   call already dispatched is not retracted: it is read back and recorded as
   usual.
+- **Who a principal stop covers** (H1 of the slice 3b review):
+  - the requester;
+  - the workload that carries its call (the Propose token's `act.sub`, locked
+    and versioned with the requester);
+  - the principal that dispatches and its `act.sub`;
+  - the approver and the workload carrying the decision: `Approve` is
+    `permission_denied` (`EMERGENCY_STOP_FENCED`), and the attempt stays
+    `ESCALATED` for another approver.
+- **Concurrent Stops under one key** make one stop. The request that loses
+  the race, or its token's, answers with the winner's stop.
 - **The Console's emergency stop (HELM-799)** is a tenant `Stop`.
 
 **Lift.** `Lift` takes a single-use `helm.gateway.stop` token bound to the
@@ -951,7 +968,14 @@ operator's mandate for that effect type.
 - **Approval.** Every `helm.authority.*` effect escalates, whatever its risk
   row says. It needs a distinct human approver with step-up, and step-up
   fails closed (`STEP_UP_REQUIRED`) until the passkey slice.
-- **Stops.** A stop never blocks its own lift, at admission or at the claim.
+- **Stops.** A lift is not blocked by the one stop it lifts. Every other
+  stop, the operator's own and the tenant's included, still applies, at
+  admission and at the claim.
+- **Only through Lift.** A `Propose` of `helm.authority.lift` is
+  `invalid_argument` (`SCHEMA_VIOLATION`): the lift must come with a stop
+  token bound to its stop.
+- **No limits.** Authority changes spend no resource, so no limit counts a
+  `helm.authority.*` effect. `LiftRequest` carries no quote.
 - **Idempotency.** A replayed key returns the stored attempt without using
   up the token.
 
@@ -960,6 +984,14 @@ HELM-797). Admission refuses a quote that carries no amount for a unit that
 a `sum` limit counts: `invalid_argument` (`SCHEMA_VIOLATION`), and no attempt
 is created. It does not read the missing unit as zero. A zero amount is
 allowed. Distinct-value limits already worked this way.
+
+This applies to reads too: a `github.repository.get` under a mandate with a
+summed unit quotes that unit at 0. Limits belong to the mandate, not to an
+effect type, so the quote names every unit the mandate's limits sum. The
+Control Plane sends the tenant's unit set. An explicit 0 costs nothing, and
+the gateway never has to guess that a unit was meant to be free.
+`helm.authority.*` effects are the one exception above, because no limit
+counts them.
 
 **Jobs (TA §6.1-§6.3).** `core/pkg/gateway/jobs` runs River v0.44.1, the
 newest release on Go 1.25, in the gateway's own Postgres.
@@ -987,7 +1019,15 @@ newest release on Go 1.25, in the gateway's own Postgres.
   - it never dispatches.
 - **Tenancy.** River's tables have no row security and hold only tenant,
   workspace and attempt IDs in job arguments. Each job binds its own
-  transaction to the tenant it names.
+  transaction to the tenant it names. Row security on River's tables is
+  follow-up L3.
+- **Shutdown.** A graceful stop gives running jobs 15 s (River's soft stop)
+  before their contexts are cancelled.
+- **The last try.** On the last reconciliation try, the hand-off to
+  `ESCALATED_TO_HUMAN` runs in its own transaction, whatever made the
+  read-back fail (a missing adapter, lost content, a cancelled context).
+- **Shared pool.** Every job kind shares one worker pool, so a flood of
+  reconciliations can delay expiries. Follow-up L4.
 
 The runtime role needs these grants on River's tables. The chart's
 `002_grants.sql` extension point (#1065) must list them; the job proofs'
@@ -1016,9 +1056,9 @@ fixture grants exactly these:
   applier for it (`Dispatch` answers `failed_precondition`: no adapter). A
   gateway stop lasts until it expires, or until the authority-row store lifts
   it with a distinct approver. The applier comes with step-up.
-- **A reconcile job's last attempt that fails on a database error** is
-  discarded by River without the hand-off. The attempt stays `UNKNOWN`, with
-  its hold, for `Observe`.
+- **A last try whose own hand-off transaction fails** (the database is
+  unreachable) is discarded by River. The attempt stays `UNKNOWN`, with its
+  hold, for `Observe`.
 
 ## Conformance table
 

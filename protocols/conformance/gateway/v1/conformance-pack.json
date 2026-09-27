@@ -109,7 +109,7 @@
     {
       "id": "GW-020",
       "file": "scenarios/GW-020-authority-widening-always-escalates.json",
-      "sha256": "d51b32109c28063c460ebd811104b94fbd02a2b9dd5c8d4d34c97ea650178e48"
+      "sha256": "8ad6776af7c6b7aa4fc1d754fa837abdbeb6fb22b06608debdd20a6867b8eaa8"
     },
     {
       "id": "GW-021",
@@ -120,6 +120,11 @@
       "id": "GW-022",
       "file": "scenarios/GW-022-cancel-stop-token-names-its-attempt.json",
       "sha256": "280d9b5e93879f84047f4beeb0b15df6587d29bc54cd221f99aed82e227f7283"
+    },
+    {
+      "id": "GW-023",
+      "file": "scenarios/GW-023-principal-stop-covers-the-workload-and-the-approver.json",
+      "sha256": "83b5e10be3f675699b10bc0a131bdef0943767825176e88f0ed7ad5bc665c1a1"
     }
   ]
 }

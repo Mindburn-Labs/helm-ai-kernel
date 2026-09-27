@@ -190,6 +190,10 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	if err := checkCaller(caller); err != nil {
 		return Attempt{}, false, err
 	}
+	if in.EffectType == effectargs.AuthorityLift {
+		return Attempt{}, false, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
+			"helm.authority.lift is proposed through Lift, which binds the operator's stop token to the stop")
+	}
 	args, err := validateProposal(in)
 	if err != nil {
 		return Attempt{}, false, err
@@ -339,7 +343,13 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	}
 
 	// 5. Counters, FOR UPDATE in (limit_id, bucket_start) order.
-	counters, err := lockCounters(ctx, tx, caller.TenantID, auth.limits, now, in)
+	// Authority changes spend no resource: no limit counts them, so a Lift,
+	// which carries no quote, is never refused by a sum limit (L5).
+	limits := auth.limits
+	if strings.HasPrefix(in.EffectType, "helm.authority.") {
+		limits = nil
+	}
+	counters, err := lockCounters(ctx, tx, caller.TenantID, limits, now, in)
 	if err != nil {
 		return err
 	}
@@ -348,7 +358,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		Now: now, PrincipalID: caller.PrincipalID, PrincipalFound: auth.principalFound, PrincipalActive: auth.principalActive,
 		EffectType: in.EffectType, EffectTypeFound: auth.effectTypeFound, RiskClass: auth.riskClass,
 		Target: in.Target, Args: args, Quote: in.Quote, ActiveStops: stops, Counters: counters.states,
-		Approval: approval,
+		Approval: approval, LiftsStop: liftedStop(in.EffectType, in.Target),
 	}
 	for _, m := range auth.chain {
 		link := Link{Mandate: m}
@@ -468,9 +478,13 @@ func lockAuthority(ctx context.Context, tx *sql.Tx, caller Caller, effectType st
 	}
 	a.versions = append(a.versions, AuthorityVersion{Kind: "tenant", Version: version})
 
-	// The requester and every holder and delegator of the chain: a stop on
-	// any of them suspends the chain (coordinator decision, HELM-750).
+	// The requester, the workload that carries its call (the token's act.sub),
+	// and every holder and delegator of the chain: a stop on any of them
+	// suspends the chain (coordinator decision, HELM-750; TA §4.1 item 6).
 	principals := map[string]struct{}{caller.PrincipalID: {}}
+	if caller.ActorID != "" {
+		principals[caller.ActorID] = struct{}{}
+	}
 	for _, m := range unlocked {
 		principals[m.HolderID] = struct{}{}
 		principals[m.CreatedBy] = struct{}{}
@@ -561,6 +575,30 @@ func lockAuthority(ctx context.Context, tx *sql.Tx, caller Caller, effectType st
 	return a, lrows.Err()
 }
 
+// principalStops locks the principals FOR SHARE, in ID order, and returns the
+// active stops on any of them: the dispatcher at the claim, the approver at
+// Approve. A narrowing Stop updates the principal row, so a stop either
+// commits before this lock or waits for the transaction.
+func principalStops(ctx context.Context, tx *sql.Tx, tenantID string, ids ...string) ([]string, error) {
+	var keys []string
+	set := map[string]bool{}
+	for _, id := range ids {
+		if id != "" && !set[id] {
+			set[id] = true
+			keys = append(keys, id)
+		}
+	}
+	sort.Strings(keys)
+	if _, err := tx.ExecContext(ctx, `SELECT 1 FROM authority_principals WHERE tenant_id = $1 AND principal_id = ANY ($2::text[])
+		ORDER BY principal_id FOR SHARE`, tenantID, pq.Array(keys)); err != nil {
+		return nil, err
+	}
+	for i := range keys {
+		keys[i] = "principal:" + keys[i]
+	}
+	return stopsOn(ctx, tx, tenantID, keys)
+}
+
 // activeStops returns the stops on the tenant, any locked principal, any
 // mandate of the chain, or the effect type that are neither lifted nor
 // expired. It must run after lockAuthority.
@@ -572,6 +610,11 @@ func activeStops(ctx context.Context, tx *sql.Tx, tenantID, effectType string, a
 			keys = append(keys, v.Kind+":"+v.Key)
 		}
 	}
+	return stopsOn(ctx, tx, tenantID, keys)
+}
+
+// stopsOn returns the active stops whose "kind:key" is one of keys.
+func stopsOn(ctx context.Context, tx *sql.Tx, tenantID string, keys []string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT stop_id::text FROM authority_stops
 		WHERE tenant_id = $1 AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())
 		  AND scope_kind || ':' || scope_key = ANY ($2::text[])

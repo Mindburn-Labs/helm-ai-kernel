@@ -32,11 +32,11 @@
 //     human session or a worker's propose token). Separation of duties comes
 //     from propose and decide being different scopes plus the
 //     approver-not-requester check (ADR-0001 I6).
-//   - Token binding. decide tokens, Lift's stop token and Cancel's stop
-//     token name their target in the RFC 9396 authorization_details claim;
-//     txn keeps its ADR-0005 meaning. decide and stop tokens are single-use:
-//     the gateway rejects a reused jti (proposed ADR-0005 amendment; design
-//     note, "Resolved").
+//   - Token binding. decide tokens and every stop token (Stop, Lift and an
+//     operator's Cancel) name their target in the RFC 9396
+//     authorization_details claim; txn keeps its ADR-0005 meaning.
+//     decide and stop tokens are single-use: the gateway rejects a reused
+//     jti (proposed ADR-0005 amendment; design note, "Resolved").
 //   - Decisions are states, not errors. DENIED, ESCALATED, CANCELLED and
 //     UNKNOWN are attempt states in a successful response. A Connect error
 //     means the gateway could not evaluate the request. Every error carries

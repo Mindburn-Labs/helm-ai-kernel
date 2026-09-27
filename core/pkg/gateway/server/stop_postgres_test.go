@@ -51,8 +51,20 @@ func TestPostgresStopLiftAndCancelOnTheWire(t *testing.T) {
 	must(t, cancel(stopAs(bound("helm_effect_cancel", map[string]string{"attempt_id": id}))))
 
 	// Stop: the tenant, by a human operator.
-	stopped, err := client.Stop(ctx, withToken(&gatewayv1.StopRequest{IdempotencyKey: "stop-1",
-		ScopeKind: gatewayv1.StopScopeKind_STOP_SCOPE_KIND_TENANT, Reason: "incident"}, stopAs()))
+	stopRequest := &gatewayv1.StopRequest{IdempotencyKey: "stop-1", ScopeKind: gatewayv1.StopScopeKind_STOP_SCOPE_KIND_TENANT, Reason: "incident"}
+	stopBinding := bound("helm_stop", map[string]string{"idempotency_key": "stop-1", "scope_kind": "tenant", "scope_key": ""})
+	// A stop token minted to cancel, or bound to another stop, cannot stop
+	// the tenant (L1).
+	for name, token := range map[string]string{
+		"unbound":             stopAs(),
+		"minted for a Cancel": stopAs(bound("helm_effect_cancel", map[string]string{"attempt_id": id})),
+		"another key":         stopAs(bound("helm_stop", map[string]string{"idempotency_key": "stop-x", "scope_kind": "tenant", "scope_key": ""})),
+		"another scope":       stopAs(bound("helm_stop", map[string]string{"idempotency_key": "stop-1", "scope_kind": "principal", "scope_key": "human-a"})),
+	} {
+		_, err := client.Stop(ctx, withToken(stopRequest, token))
+		wantRPCError(t, name+" stop token", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	}
+	stopped, err := client.Stop(ctx, withToken(stopRequest, stopAs(stopBinding)))
 	must(t, err)
 	stop := stopped.Msg.GetStop()
 	if stopped.Msg.GetExisting() || stop.GetStopId() == "" || stop.GetScopeKind() != gatewayv1.StopScopeKind_STOP_SCOPE_KIND_TENANT ||

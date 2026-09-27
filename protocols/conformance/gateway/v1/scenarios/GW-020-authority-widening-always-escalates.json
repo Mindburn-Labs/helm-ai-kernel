@@ -3,7 +3,7 @@
   "id": "GW-020",
   "title": "Every helm.authority.* widening escalates, whatever its risk row or the mandate's approval_required",
   "rule": {
-    "statement": "An authority change widens authority, so it always needs a distinct human approver with step-up (§4.1 item 7, §10.1): a low-risk helm.authority.* effect that the mandate does not list in approval_required is ESCALATED with APPROVAL_REQUIRED, never ADMITTED. The requester cannot approve it, a distinct human's approval fails closed with STEP_UP_REQUIRED until step-up exists, and it stays ESCALATED and undispatchable.",
+    "statement": "An authority change widens authority, so it always needs a distinct human approver with step-up (§4.1 item 7, §10.1): a low-risk helm.authority.* effect that the mandate does not list in approval_required is ESCALATED with APPROVAL_REQUIRED, never ADMITTED. The requester cannot approve it, a distinct human's approval fails closed with STEP_UP_REQUIRED until step-up exists, and it stays ESCALATED and undispatchable. helm.authority.lift is created only through the Lift RPC: a Propose of it is invalid_argument (SCHEMA_VIOLATION).",
     "cites": [
       {
         "doc": "docs/architecture/gateway-effect-api.md",
@@ -160,7 +160,7 @@
       "authorization_details": [
         {
           "type": "helm_effect_decision",
-          "attempt_id": "{{attempt_id:lift}}",
+          "attempt_id": "{{attempt_id:grant}}",
           "action": "approve"
         }
       ]
@@ -175,7 +175,7 @@
       "authorization_details": [
         {
           "type": "helm_effect_decision",
-          "attempt_id": "{{attempt_id:lift}}",
+          "attempt_id": "{{attempt_id:grant}}",
           "action": "approve"
         }
       ]
@@ -206,7 +206,6 @@
       }
     },
     {
-      "label": "lift",
       "rpc": "Propose",
       "token": "propose-a",
       "request": {
@@ -221,10 +220,9 @@
         }
       },
       "expect": {
-        "attempt": {
-          "state": "ESCALATED",
-          "reason_code": "APPROVAL_REQUIRED",
-          "risk_class": "LOW"
+        "error": {
+          "code": "invalid_argument",
+          "reason_code": "SCHEMA_VIOLATION"
         }
       }
     },
@@ -232,8 +230,8 @@
       "rpc": "Approve",
       "token": "approve-self",
       "request": {
-        "attempt_id": "{{attempt_id:lift}}",
-        "approval_digest": "{{approval_digest:lift}}",
+        "attempt_id": "{{attempt_id:grant}}",
+        "approval_digest": "{{approval_digest:grant}}",
         "reason": "mine"
       },
       "expect": {
@@ -247,8 +245,8 @@
       "rpc": "Approve",
       "token": "approve-b",
       "request": {
-        "attempt_id": "{{attempt_id:lift}}",
-        "approval_digest": "{{approval_digest:lift}}",
+        "attempt_id": "{{attempt_id:grant}}",
+        "approval_digest": "{{approval_digest:grant}}",
         "reason": "ok"
       },
       "expect": {
@@ -262,7 +260,7 @@
       "rpc": "GetAttempt",
       "token": "read-a",
       "request": {
-        "attempt_id": "{{attempt_id:lift}}"
+        "attempt_id": "{{attempt_id:grant}}"
       },
       "expect": {
         "attempt": {

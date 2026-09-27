@@ -3606,7 +3606,7 @@
       "id": "CTL-055",
       "title": "Gateway stops and lifts",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-gateway's Stop writes a stop row and bumps its scope's control row (tenant, principal, mandate or effect type) in one transaction, for an active human operator of the tenant with a single-use helm.gateway.stop token, idempotent on (tenant, key) with a request digest (HELM-751 s3b). Admissions after it are DENIED and admitted attempts are CANCELLED at their dispatch claim, both EMERGENCY_STOP_FENCED; a call already dispatched is not retracted and is read back as usual. Lift creates a helm.authority.lift attempt for the stop its single-use stop token names (authorization_details helm_stop_lift). Every helm.authority.* effect escalates whatever its risk row says, needs a distinct human approver and fails closed without step-up (STEP_UP_REQUIRED), and a stop never blocks its own lift.",
+      "claim": "helm-gateway's Stop writes a stop row and bumps its scope's control row (tenant, principal, mandate or effect type) in one transaction, for an active human operator of the tenant with a single-use helm.gateway.stop token, idempotent on (tenant, key) with a request digest (HELM-751 s3b). The stop token names the stop request (authorization_details helm_stop), and concurrent Stops under one key make one stop. Admissions after it are DENIED and admitted attempts are CANCELLED at their dispatch claim, both EMERGENCY_STOP_FENCED; a principal stop covers the requester, the workload that carries its call (act.sub), the dispatcher and its act, and a stopped approver cannot approve. A call already dispatched is not retracted and is read back as usual. Lift, the only way to create a helm.authority.lift attempt, proposes one for the stop its single-use stop token names (helm_stop_lift); the lift is blocked by every stop but that one. Every helm.authority.* effect escalates whatever its risk row or approval_required says, counts against no limit, needs a distinct human approver and fails closed without step-up (STEP_UP_REQUIRED).",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -3652,6 +3652,10 @@
         "forbidden": [
           "core/pkg/gateway/admission.TestPostgresStopBlocksProposeApproveAndDispatch",
           "core/pkg/gateway/admission.TestPostgresLiftNeedsADistinctStepUpApprover",
+          "core/pkg/gateway/admission.TestPostgresPrincipalStopCoversTheWorkloadAndTheDispatcher",
+          "core/pkg/gateway/admission.TestPostgresAStoppedApproverCannotApprove",
+          "core/pkg/gateway/admission.TestPostgresLiftIsBlockedByEveryStopButItsOwn",
+          "core/pkg/gateway/admission.TestPostgresConcurrentStopsUnderOneKeyReplay",
           "core/pkg/gateway/server.TestPostgresStopLiftAndCancelOnTheWire",
           "core/pkg/gateway/admission.TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops",
           "core/pkg/gateway/server.TestStopTokenBindings"
@@ -3678,6 +3682,12 @@
           ]
         },
         {
+          "file": "core/pkg/gateway/admission/decide.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops"
+          ]
+        },
+        {
           "file": "core/pkg/gateway/server/auth.go",
           "tests": [
             "core/pkg/gateway/server.TestStopTokenBindings"
@@ -3689,7 +3699,7 @@
       "id": "CTL-056",
       "title": "Gateway escalation timers and reconciliation jobs",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-gateway enqueues River jobs in its own Postgres in the transaction that makes them due (TA §6.2): an escalation's expiry job with the escalation, and a reconciliation job with the dispatch claim. The expiry job writes EXPIRED (APPROVAL_TIMEOUT) under the attempt's row lock, so an approval and the expiry make exactly one transition. The reconciliation job reads the attempt back with doubling backoff, waits out a dispatch fence without spending an attempt, never dispatches, and moves an attempt still UNKNOWN at the last attempt to ESCALATED_TO_HUMAN with its reservation held (HELM-751 s3b).",
+      "claim": "helm-gateway enqueues River jobs in its own Postgres in the transaction that makes them due (TA §6.2): an escalation's expiry job with the escalation, and a reconciliation job with the dispatch claim. The expiry job writes EXPIRED (APPROVAL_TIMEOUT) under the attempt's row lock, so an approval and the expiry make exactly one transition. The reconciliation job reads the attempt back with doubling backoff, waits out a dispatch fence without spending an attempt, never dispatches, and at the last attempt moves an attempt still unresolved to ESCALATED_TO_HUMAN with its reservation held, in a transaction of its own, whatever made the read-back fail. A graceful stop lets running jobs finish (a 15 s soft stop) (HELM-751 s3b).",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -3720,7 +3730,8 @@
       ],
       "bypass_assumptions": [
         "Jobs run in helm-gateway serve; with no serve process running, nothing expires or reconciles until one starts. Jobs are durable rows and run late, never not at all.",
-        "A reconciliation job whose last attempt fails on a database error is discarded by River without the hand-off; the attempt stays UNKNOWN with its hold, and Observe still resolves it.",
+        "A last attempt whose hand-off transaction itself fails (the database unreachable) is discarded by River; the attempt stays UNKNOWN with its hold, and Observe still resolves it.",
+        "River's tables have no row security; job arguments carry tenant, workspace and attempt IDs only (follow-up L3). All jobs share one worker pool (follow-up L4).",
         "River's tables carry job arguments (tenant, workspace and attempt IDs) outside row security; every job binds its own transaction to the tenant it names."
       ],
       "tests": {
@@ -3734,7 +3745,8 @@
           "core/pkg/gateway/jobs.TestPostgresReconcileHandsAnUnresolvableAttemptToAHuman",
           "core/pkg/gateway/jobs.TestPostgresReconcileWaitsForTheDispatchFence",
           "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt",
-          "core/pkg/gateway/jobs.TestBackoffDoublesToItsCap"
+          "core/pkg/gateway/jobs.TestBackoffDoublesToItsCap",
+          "core/pkg/gateway/admission.TestPostgresFinalReconcileHandsOffWhateverTheReadBackError"
         ],
         "removal": [
           "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"

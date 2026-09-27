@@ -1,0 +1,358 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-023",
+  "title": "A principal stop covers the workload that carries a call, and the approver",
+  "rule": {
+    "statement": "A stop on a principal stops every call it takes part in (TA §4.1 item 6): a stopped workload (the act.sub that carries a human's calls) can no longer propose for that human, and its Dispatch of an attempt admitted before the stop is CANCELLED with EMERGENCY_STOP_FENCED without reaching the adapter. A stopped human cannot approve: Approve is permission_denied with EMERGENCY_STOP_FENCED, and the attempt stays ESCALATED for another approver.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Stop, Lift and jobs (slice 3b)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "rpc Stop("
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "approve-b": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "decide-b",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:pr}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-c": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-c",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "decide-c",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:pr}}",
+          "action": "approve"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "label": "observed",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "observed",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/observed",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:observed}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "OBSERVED",
+          "reason_code": "",
+          "outcome": "SUCCEEDED"
+        }
+      }
+    },
+    {
+      "label": "pr",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "pr-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.create_draft",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.pull_request.create_draft.v1",
+            "branch_attempt_id": "{{attempt_id:observed}}",
+            "base": "main",
+            "head": "helm/observed",
+            "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "title": "Skeleton",
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED"
+        }
+      }
+    },
+    {
+      "label": "admitted",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "admitted",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/admitted",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "note": "An operator stops the approver human-b.",
+      "control": {
+        "kind": "stop",
+        "tenant": "tenant-a",
+        "scope_kind": "principal",
+        "scope_key": "human-b",
+        "issued_by": "human-c"
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-b",
+      "request": {
+        "attempt_id": "{{attempt_id:pr}}",
+        "approval_digest": "{{approval_digest:pr}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "EMERGENCY_STOP_FENCED"
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-c",
+      "request": {
+        "attempt_id": "{{attempt_id:pr}}",
+        "approval_digest": "{{approval_digest:pr}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-c"
+        }
+      }
+    },
+    {
+      "note": "An operator stops the runaway runner that carries human-a's calls.",
+      "control": {
+        "kind": "stop",
+        "tenant": "tenant-a",
+        "scope_kind": "principal",
+        "scope_key": "cp-runner",
+        "issued_by": "human-c"
+      }
+    },
+    {
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "after-stop",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/after-stop",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "DENIED",
+          "reason_code": "EMERGENCY_STOP_FENCED"
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:admitted}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "CANCELLED",
+          "reason_code": "EMERGENCY_STOP_FENCED",
+          "permit": "VOIDED"
+        },
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 1
+        }
+      }
+    }
+  ]
+}

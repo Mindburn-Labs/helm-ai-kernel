@@ -151,9 +151,14 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 	if err != nil {
 		return nil, err
 	}
-	if a.effectType == effectargs.AuthorityLift {
-		stops = nil // a stop never blocks its own lift
+	// The workload dispatching it, and the workload its token names, are
+	// stopped the same way (TA §4.1 item 6).
+	dispatcherStops, err := principalStops(ctx, tx, a.tenantID, dispatcher.PrincipalID, dispatcher.ActorID)
+	if err != nil {
+		return nil, err
 	}
+	stops = append(stops, dispatcherStops...)
+	stops = withoutStop(stops, liftedStop(a.effectType, a.target)) // a lift is not blocked by the stop it lifts
 	reason := claimRefusal(claimInput{Stops: stops, Expired: expired, Permitted: permitted, Current: auth.versions,
 		Chain: auth.chain, Now: a.now})
 	var content []byte

@@ -54,6 +54,7 @@ expectation of each kind (state, error reason, adapter call count, exposure,
 | GW-020 | Every `helm.authority.*` widening escalates, whatever its risk row or `approval_required`; self-approval and approval without step-up are refused |
 | GW-021 | A sum limit refuses a quote that names no amount for its unit (`SCHEMA_VIOLATION`); a zero amount is admitted |
 | GW-022 | An operator's stop token cancels only the attempt its `helm_effect_cancel` entry names |
+| GW-023 | A principal stop covers the workload that carries a call (its Propose and Dispatch) and a stopped approver's Approve |
 
 ## How a fake consumes the table
 
@@ -188,7 +189,9 @@ values.
 ## Not in the table yet
 
 - The `Stop` and `Lift` RPCs are served (HELM-751 s3b), but the table does not
-  drive them yet: stops are a control step, and GW-020 proposes the
-  `helm.authority.lift` effect through `Propose`.
+  drive them yet. Stops are a control step, and GW-020 asserts only that
+  `Propose` refuses `helm.authority.lift`. A lift blocked by a stop other
+  than its own needs runner support for `Lift`; the Postgres proof
+  `TestPostgresLiftIsBlockedByEveryStopButItsOwn` covers it until then.
 - Not covered: `ListAttempts`, escalation expiry and `ESCALATED_TO_HUMAN`
   (the River jobs, which run on timers), and model calls.

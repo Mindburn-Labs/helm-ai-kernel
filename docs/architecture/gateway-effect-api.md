@@ -10,8 +10,9 @@ accepted; the coordinator's resolutions of 2026-09-26 (see "Resolved"); and
 slice 1b (the delegated requester, whole-second approval digests). Under target architecture rev 3.4 §1 the contract is *Specified*: it
 is versioned. Slice 2 adds a server, `helm-gateway`, for `Propose`,
 `Approve`, `Reject`, `Cancel`, `GetAttempt` and `GetAttemptContent` (see "The
-server (slice 2)"); `Dispatch`, `Observe`, `Stop` and `Lift` answer
-`unimplemented`.
+server (slice 2)"). Slice 3 adds `Dispatch` and `Observe` through the
+GitHub adapter (see "Dispatch and Observe (slice 3)"); `Stop` and `Lift`
+answer `unimplemented`.
 
 - IDL: [`protocols/proto/helm/gateway/v1/gateway.proto`](../../protocols/proto/helm/gateway/v1/gateway.proto),
   package `helm.gateway.v1`, service `EffectGatewayService`.
@@ -361,9 +362,8 @@ a certain FAILED and the reservation is released. The Propose-time
 `failed_precondition` error whose `ErrorDetail.reason_code` is
 `PRECONDITION_FAILED`.
 
-The adapter is `core/pkg/gateway/adapters/github` (HELM-753), a library that
-no shipped binary calls until HELM-751 s3 wires `Dispatch` and `Observe` to
-it. It performs all three effects above. It registers and emits `READBACK_MISMATCH` and `PRECONDITION_FAILED`, plus
+The adapter is `core/pkg/gateway/adapters/github` (HELM-753). Since HELM-751
+s3, `helm-gateway`'s `Dispatch` and `Observe` call it. It performs all three effects above. It registers and emits `READBACK_MISMATCH` and `PRECONDITION_FAILED`, plus
 `PERMIT_ARGUMENT_MISMATCH` (the permit's argument digest is not SHA-256 of the
 bytes it is about to send, audit 09-01), `PROVIDER_CREDENTIAL_REJECTED`,
 `PROVIDER_RESPONSE_TOO_LARGE` (audit 09-04) and `PROVIDER_ERROR`. Its dispatch
@@ -385,8 +385,9 @@ answers one of three statuses:
 The read-back does not check file modes, because the comparison does not
 report them. `files_digest` is computed from the proposal, and the read-back
 has confirmed each blob ID in it but not the modes. `CheckBranchAttempt` in
-the same package is the pure form of the Propose precondition above, for the
-gateway to call.
+the same package is the pure form of the Propose precondition above. The
+gateway calls it for the head, base and `head_sha` checks, after its own
+tenant, workspace, type and state checks.
 
 ### Reason codes
 
@@ -398,7 +399,8 @@ it names:
   and, registered by slice 2 because its admission emits them,
   `PRINCIPAL_INACTIVE`, `MANDATE_INACTIVE`, `MANDATE_OUTSIDE_VALIDITY`,
   `EFFECT_OUT_OF_SCOPE`, `PER_CALL_LIMIT`, `ARITHMETIC_OVERFLOW` and
-  `IDEMPOTENCY_CONFLICT`.
+  `IDEMPOTENCY_CONFLICT`; and, registered by slice 3 because its dispatch
+  claim emits them, `AUTHORITY_CHANGED` and `PERMIT_EXPIRED`.
 - `[reason_code_pending: X]`: registered by the slice that first emits it,
   because the registry gate rejects codes that nothing emits (ADR-0001 §6).
   These are the rest of ADR-0001 §6's list, plus `STEP_UP_REQUIRED`, which
@@ -721,8 +723,8 @@ code; a gateway failure is `unavailable` with `retryable` set.
   effect-type row's class raised by the chain's `risk_classes`, never lowered
   and never taken from the request.
 - **The draft pull request's branch attempt** is accepted in
-  `OBSERVED(SUCCEEDED)` or `RECONCILED(SUCCEEDED)`. Until slice 3 writes
-  observations, only a fixture row can satisfy it.
+  `OBSERVED(SUCCEEDED)` or `RECONCILED(SUCCEEDED)`. Slice 3's Observe writes
+  those observations.
 - **Conditions are compiled at activation** (`authorityrows` refuses one that
   does not compile) and once per condition text per gateway process, never per
   request.
@@ -733,6 +735,178 @@ code; a gateway failure is `unavailable` with `retryable` set.
   `PRG_EVALUATION_ERROR`.
 - **`github.repository.get`** (HELM-753, PR #1058) is validated like the other
   two skeleton types: its closed schema, a 4 KiB cap and a git branch name.
+
+## Dispatch and Observe (slice 3)
+
+`Dispatch` and `Observe` take a `helm.gateway.execute` token. The token's
+principal must be an active `agent` or `service` principal of the tenant, per
+the gateway's own principal rows; a human is `permission_denied`
+(`INSUFFICIENT_PRIVILEGE`). Attempts are read in the token's tenant and
+workspace, as for every other RPC.
+
+Only the workload the attempt was proposed through may dispatch or observe
+it (coordinator decision, 2026-09-27). That is its requester actor
+(`requester_actor_id`, the `act.sub` that carried the Propose, such as the
+Control Plane runner), or its requester principal when that principal is
+itself the workload. Any other workload in the workspace is
+`permission_denied` (`INSUFFICIENT_PRIVILEGE`), and the attempt is unchanged.
+The claim records the dispatcher in the permit row
+(`claimed_by_principal_id`, `claimed_by_actor_id`). `EffectAttempt` has no
+field for it.
+
+**The dispatch claim** (ADR-0001 §1, TA §4.1 item 3) is one transaction,
+committed before any provider I/O:
+
+1. The attempt is locked. Only `ADMITTED` is claimed. `CANCELLED`,
+   `DISPATCHING` and every later state return unchanged with `existing` true.
+   `PROPOSED`, `DENIED`, `ESCALATED`, `APPROVED`, `REJECTED` and `EXPIRED`
+   are `failed_precondition`, and so is an effect type no adapter of this
+   gateway performs.
+2. The attempt's unused permit is locked. No unused permit (consumed or
+   voided) is `failed_precondition`: a permit is consumed once.
+3. The authority rows are locked `FOR SHARE` again in the global order, and
+   the stops are read after the locks.
+4. `claimRefusal`, a pure function, decides in this order: an active stop
+   (`EMERGENCY_STOP_FENCED`); an expired permit (`PERMIT_EXPIRED`); any
+   difference between the permit's `authority_versions` and the rows just
+   locked (`AUTHORITY_CHANGED`, ADR-0001 §5.4, even for an unrelated
+   widening); a chain link outside its validity window
+   (`MANDATE_OUTSIDE_VALIDITY`, because a window ends without a version
+   change).
+5. A refusal voids the permit (`void_reason_code`), releases every held
+   exposure, and moves the attempt to `CANCELLED` with the reason. This is a
+   successful response, not an error.
+6. Otherwise the permit is consumed (`consumed_at`, `claim_id`) and the
+   attempt becomes `DISPATCHING`, with its fence `dispatch_deadline` set to
+   the claim time plus `HELM_GATEWAY_DISPATCH_TIMEOUT` (default 2m) plus one
+   minute.
+
+**The adapter call** runs after the commit, bounded by the dispatch timeout
+and detached from the caller's request, so a client that hangs up does not
+interrupt it. The adapter gets its credential from the connection custody for
+each call. Its answer is recorded only if the attempt is still `DISPATCHING`
+under the same `claim_id`:
+
+| Adapter status | Attempt | Reservation |
+|---|---|---|
+| `SENT` | `DISPATCHED`, then read back at once: `OBSERVED` with the outcome, or `UNKNOWN` if inconclusive | settled with the outcome |
+| `NOT_SENT` | `OBSERVED(FAILED)` with the adapter's `reason_code` (for example `PRECONDITION_FAILED`, `PROVIDER_CREDENTIAL_REJECTED`) and a `gateway.dispatch` observation | released |
+| `INDEFINITE` (lost answer, 5xx, 422 to the write) | `UNKNOWN` with the adapter's reason. It is not read back at once, because the provider may still be applying the write | held |
+
+An already existing ref or open pull request is `SENT` without a write. The
+adapter never overwrites it, and the read-back decides: `SUCCEEDED` if it is
+this effect, `FAILED` with `READBACK_MISMATCH` if not.
+
+**Observe** reads back through the adapter and never dispatches.
+
+- `DISPATCHED` becomes `OBSERVED`; `UNKNOWN` becomes `RECONCILED`.
+- An inconclusive read-back leaves `UNKNOWN` (or makes a `DISPATCHED` attempt
+  `UNKNOWN`) and records no observation.
+- A `FAILED` that rests only on the object's absence (no ref, no pull
+  request; the adapter sets `ObserveResult.Absent`) is inconclusive until the
+  attempt's `dispatch_deadline` has passed. A write still in flight can make
+  the object appear. The attempt stays `DISPATCHED` or `UNKNOWN`, with its
+  reservation held. Only an object that contradicts the effect fails it
+  early.
+- A `DISPATCHING` attempt inside its fence may still be in flight and returns
+  unchanged. Past its fence, which means the gateway died between the claim
+  and recording the answer, it becomes `UNKNOWN` and is read back. It is never
+  sent again. Worker death is not proof of failure (TA §4.3).
+- Every other state returns unchanged with `existing` true and no provider
+  I/O.
+
+An established read-back records one observation row with the adapter's
+`source`, `trust_class`, `evidence_digest` and `observed_at`. The typed result
+must be exactly the member the effect type defines, or none for a type that
+defines none. Any other shape breaks the contract and counts as inconclusive.
+`result_ref` is `sha256:<hex>` over the result's RFC 8785 (JCS) form
+(`core/pkg/canonicalize`). The row keeps the result as JSONB, which may
+reorder keys, so anyone can recompute the reference from the stored or
+returned JSON. `GetAttempt` returns it as `latest_observation.result`, converted from
+the adapter's plain Go mirrors to the generated messages in the server.
+
+**Settlement (ADR-0003, count units).** The observed outcome settles the held
+exposure in the observing transaction. `SUCCEEDED` moves it to `confirmed`:
+the counter moves the amount from `reserved` to `used`, with a reversing held
+posting and a confirmed posting. A `FAILED` read-back is settled in one of
+two ways:
+
+- When an object contradicts the effect (`READBACK_MISMATCH` without
+  `Absent`), the reservation is consumed the same way, because a write of
+  ours may have made that object.
+- When the object is absent after the fence, the reservation is released,
+  because the effect did not happen. `UNKNOWN` and a
+`DISPATCHING` attempt keep their hold. The attempt stays `OBSERVED` or
+`RECONCILED`: this slice does not write the `SETTLED` state (see the open
+points below).
+
+**Connection custody (R8).** `core/pkg/gateway/custody` mints GitHub App
+installation tokens, and the adapters never see anything else. The chart
+(#1065) mounts the files into the gateway Pod only:
+
+| Variable | Chart path | Content |
+|---|---|---|
+| `HELM_GATEWAY_GITHUB_APP_ID_FILE` | `/var/run/secrets/helm-gateway-github/app-id` | the numeric App ID |
+| `HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE` | `/var/run/secrets/helm-gateway-github/private-key.pem` | the App's RSA key, PKCS#1 or PKCS#8 PEM |
+| `HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE` | `/etc/helm-gateway/github/installations.json` | the installations file below |
+| `HELM_GATEWAY_GITHUB_API_URL` | — | optional; default `https://api.github.com`. Plain http only on loopback |
+
+The three files are set together or not at all. `serve` refuses a partial
+set. With none set, every GitHub dispatch is `NOT_SENT`
+(`PROVIDER_CREDENTIAL_REJECTED`).
+
+The installations file maps a tenant to its installation and the
+repositories it may act on. Decoding refuses unknown fields:
+
+```json
+{"installations": [
+  {"tenant_id": "tenant-a", "owner": "Mindburn-Labs", "installation_id": 12345,
+   "repositories": ["Mindburn-Labs/example"]}
+]}
+```
+
+- `tenant_id`, `owner` and a positive `installation_id` are required.
+- A (tenant, owner) pair appears once.
+- Each repository is `owner/name` under that owner.
+
+For each call, the custody takes the owner and repository from the effect's
+target and looks up the tenant's entry for that owner. It refuses a repository
+missing from the entry. Otherwise it signs an RS256 App JWT (`iss` is the App
+ID, 9 minutes of lifetime) and posts
+`/app/installations/{id}/access_tokens` with `repositories: [name]` and the
+least `permissions` the effect type needs:
+
+| Effect type | Permissions |
+|---|---|
+| `github.repository.get` | `contents: read`, `metadata: read` |
+| `github.branch.create_from_changes` | `contents: write`, `metadata: read` |
+| `github.pull_request.create_draft` | `pull_requests: write`, `contents: read`, `metadata: read` |
+
+A token therefore reaches one repository with one operation's permissions.
+Tokens are cached per (installation, repository, effect type) until 5 minutes
+before GitHub's expiry. Each key mints under its own lock, so a slow mint
+never blocks another key, and a waiter gives up when its context ends. Tokens
+are never logged.
+
+The mandate's `helm/` branch prefix is still the mandate's CEL condition, and
+the adapter re-checks the default branch at `Dispatch`.
+
+### Slice 3 decisions and open points
+
+- **`Observe` on `DISPATCHING`.** The proto lists `DISPATCHED` and `UNKNOWN`
+  as `Observe`'s inputs. Slice 3 adds `DISPATCHING` past its fence, which is
+  the rev 3.4 §4.3 edge `DISPATCHING → UNKNOWN`. Without it, nothing could
+  reconcile a gateway that died between the claim and the answer.
+- **`SETTLED` is not written.** For count units, the observed outcome is the
+  usage confirmation, so the exposure settles in the observing transaction,
+  and the state stays `OBSERVED` or `RECONCILED`. The draft pull request's
+  precondition needs those states. Whether effect attempts move on to
+  `SETTLED` is left to settlement's owner (HELM-752), together with model
+  calls.
+- **`ESCALATED_TO_HUMAN`** and the polling of `UNKNOWN` come with the River
+  jobs of slice 3b. Until then, a workload calls `Observe`.
+- **The `Observe` scope** is `helm.gateway.execute`, as the proto says. The
+  read scope does not reach it.
 
 ## Generated code
 

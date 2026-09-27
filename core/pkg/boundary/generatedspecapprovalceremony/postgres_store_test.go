@@ -16,6 +16,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/generatedspecapproval"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 	"github.com/lib/pq"
 )
 
@@ -508,11 +509,18 @@ func openGeneratedSpecApprovalTestPostgres(t *testing.T, rawURL, schema, usernam
 	}
 	query := parsed.Query()
 	query.Set("search_path", schema)
+	// Every proof runs on a session whose default time zone is not UTC, through
+	// the same DSN normalisation the binaries use (HELM-776).
+	query.Set("timezone", "Europe/Sofia")
 	parsed.RawQuery = query.Encode()
 	if username != "" {
 		parsed.User = url.UserPassword(username, password)
 	}
-	db, err := sql.Open("postgres", parsed.String())
+	utcDSN, err := pgdsn.WithUTCTimeZone(parsed.String())
+	if err != nil {
+		t.Fatalf("pin UTC on the test DSN: %v", err)
+	}
+	db, err := sql.Open("postgres", utcDSN)
 	if err != nil {
 		t.Fatalf("open Postgres: %v", err)
 	}

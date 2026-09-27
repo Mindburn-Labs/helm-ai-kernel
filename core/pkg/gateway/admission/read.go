@@ -36,12 +36,24 @@ type Attempt struct {
 	OutcomeBasis         string
 	ApprovalDigest       []byte
 	ApprovalExpiresAt    *time.Time
+	Approval             *Approval
 	Permit               *Permit
 	Exposures            []Exposure
 	LatestObservation    *Observation
 	Version              int64
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
+}
+
+// Approval is the recorded decision on an escalated attempt.
+type Approval struct {
+	ApproverPrincipalID string
+	ApproverActorID     string
+	// Decision is APPROVED or REJECTED.
+	Decision       string
+	ApprovalDigest []byte
+	DecidedAt      time.Time
+	Reason         string
 }
 
 // Permit is an attempt's single-use permit.
@@ -161,6 +173,20 @@ func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 	}
 	if err := json.Unmarshal(quote, &a.Quote); err != nil {
 		return Attempt{}, err
+	}
+
+	var approval Approval
+	err = tx.QueryRowContext(ctx, `SELECT approver_principal_id, approver_actor_id, decision, approval_digest, decided_at, reason
+		FROM authority_approvals WHERE tenant_id = $1 AND attempt_id = $2`, caller.TenantID, attemptID).
+		Scan(&approval.ApproverPrincipalID, &approval.ApproverActorID, &approval.Decision, &approval.ApprovalDigest,
+			&approval.DecidedAt, &approval.Reason)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return Attempt{}, err
+	default:
+		approval.DecidedAt = approval.DecidedAt.UTC()
+		a.Approval = &approval
 	}
 
 	var p Permit

@@ -1,4 +1,9 @@
-package adapters
+// Package qualification is the executable adapter qualification of target
+// architecture §9.3: a versioned suite per adapter version and operation, and
+// the record of one run. The adapters' qualification tests use it; no shipped
+// binary does, because qualification runs against a provider environment,
+// not in the request path.
+package qualification
 
 import (
 	"crypto/sha256"
@@ -55,9 +60,9 @@ type CheckResult struct {
 	Status CheckStatus `json:"status"`
 }
 
-// QualificationRecord is the §9.3 record for one adapter version, operation
+// Record is the §9.3 record for one adapter version, operation
 // and environment.
-type QualificationRecord struct {
+type Record struct {
 	Adapter        string        `json:"adapter"`
 	AdapterVersion string        `json:"adapter_version"`
 	Operation      string        `json:"operation"`
@@ -73,15 +78,15 @@ type QualificationRecord struct {
 // Records builds one record per operation of the suite from the results.
 // A case with no result counts as SKIPPED, so an operation qualifies only if
 // every one of its cases is present and PASS.
-func (s Suite) Records(environment string, results map[string]CheckStatus, limitations []string) []QualificationRecord {
-	var out []QualificationRecord
+func (s Suite) Records(environment string, results map[string]CheckStatus, limitations []string) []Record {
+	var out []Record
 	index := map[string]int{}
 	for _, c := range s.Cases {
 		i, ok := index[c.Operation]
 		if !ok {
 			i = len(out)
 			index[c.Operation] = i
-			out = append(out, QualificationRecord{
+			out = append(out, Record{
 				Adapter:        s.Adapter,
 				AdapterVersion: s.AdapterVersion,
 				Operation:      c.Operation,

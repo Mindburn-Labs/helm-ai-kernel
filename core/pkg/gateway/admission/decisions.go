@@ -249,6 +249,15 @@ func transition(ctx context.Context, tx *sql.Tx, tenantID, attemptID, from, to s
 // gives the amount back, and a reversing posting records it (ADR-0003, a
 // lower-exposure transition in the transaction that makes it).
 func release(ctx context.Context, tx *sql.Tx, tenantID, attemptID, cause string) error {
+	return settleHeld(ctx, tx, tenantID, attemptID, "released", cause)
+}
+
+// settleHeld moves every held exposure of the attempt to kind, released or
+// confirmed, in the transaction that makes the transition (ADR-0003). Each
+// move is a reversing held posting and, for confirmed, a confirmed posting of
+// the same amount; the counter moves the amount out of reserved, and into
+// used for confirmed.
+func settleHeld(ctx context.Context, tx *sql.Tx, tenantID, attemptID, kind, cause string) error {
 	rows, err := tx.QueryContext(ctx, `SELECT limit_id::text, bucket_start, amount FROM authority_exposures
 		WHERE tenant_id = $1 AND attempt_id = $2 AND kind = 'held'
 		ORDER BY limit_id, bucket_start FOR UPDATE`, tenantID, attemptID)
@@ -272,9 +281,13 @@ func release(ctx context.Context, tx *sql.Tx, tenantID, attemptID, cause string)
 	if err := rows.Close(); err != nil {
 		return err
 	}
+	used := int64(0)
+	if kind == "confirmed" {
+		used = 1
+	}
 	for _, h := range exposures {
-		if _, err := tx.ExecContext(ctx, `UPDATE authority_counters SET reserved = reserved - $4
-			WHERE tenant_id = $1 AND limit_id = $2 AND bucket_start = $3`, tenantID, h.limitID, h.start, h.amount); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE authority_counters SET reserved = reserved - $4, used = used + $4 * $5
+			WHERE tenant_id = $1 AND limit_id = $2 AND bucket_start = $3`, tenantID, h.limitID, h.start, h.amount, used); err != nil {
 			return err
 		}
 		if h.amount != 0 {
@@ -282,10 +295,20 @@ func release(ctx context.Context, tx *sql.Tx, tenantID, attemptID, cause string)
 				VALUES ($1, $2, $3, $4, 'held', $5, $6)`, tenantID, attemptID, h.limitID, h.start, -h.amount, "reverse:"+cause); err != nil {
 				return err
 			}
+			if kind == "confirmed" {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO authority_postings (tenant_id, attempt_id, limit_id, bucket_start, kind, amount, cause)
+					VALUES ($1, $2, $3, $4, 'confirmed', $5, $6)`, tenantID, attemptID, h.limitID, h.start, h.amount, cause); err != nil {
+					return err
+				}
+			}
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE authority_exposures SET kind = 'released', amount = 0
+		amount := h.amount
+		if kind == "released" {
+			amount = 0
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE authority_exposures SET kind = $5, amount = $6
 			WHERE tenant_id = $1 AND attempt_id = $2 AND limit_id = $3 AND bucket_start = $4`,
-			tenantID, attemptID, h.limitID, h.start); err != nil {
+			tenantID, attemptID, h.limitID, h.start, kind, amount); err != nil {
 			return err
 		}
 	}
@@ -347,6 +370,7 @@ type lockedAttempt struct {
 	mandateID                       string
 	approvalDigest                  []byte
 	approvalExpiresAt, now          time.Time
+	dispatchDeadline                sql.NullTime
 	argumentDigest, targetDigest    []byte
 	quote                           []Amount
 	distinct                        []DistinctValue
@@ -359,10 +383,11 @@ func lockAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 	var quote, distinct []byte
 	err := tx.QueryRowContext(ctx, `SELECT attempt_id, workspace_id, requester_principal_id, requester_actor_id, state, risk_class,
 			effect_type, target, mandate_id::text, approval_digest, approval_expires_at, argument_digest, target_digest,
-			quote, distinct_values, now()
+			quote, distinct_values, dispatch_deadline, now()
 		FROM authority_effect_attempts WHERE tenant_id = $1 AND attempt_id = $2 AND workspace_id = $3 FOR UPDATE`,
 		caller.TenantID, attemptID, caller.WorkspaceID).Scan(&a.id, &a.workspaceID, &a.requester, &a.requesterActor, &a.state, &risk,
-		&a.effectType, &a.target, &mandate, &a.approvalDigest, &expires, &a.argumentDigest, &a.targetDigest, &quote, &distinct, &a.now)
+		&a.effectType, &a.target, &mandate, &a.approvalDigest, &expires, &a.argumentDigest, &a.targetDigest, &quote, &distinct,
+		&a.dispatchDeadline, &a.now)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, errNotFound
 	}

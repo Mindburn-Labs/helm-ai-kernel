@@ -79,10 +79,36 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 		})
 	}
 	if o := a.LatestObservation; o != nil {
-		out.LatestObservation = &gatewayv1.Observation{
-			Source: o.Source, TrustClass: o.TrustClass, Outcome: outcomeProto(o.Outcome),
-			EvidenceDigest: o.EvidenceDigest, ObservedAt: timestamppb.New(o.ObservedAt), ResultRef: o.ResultRef,
-		}
+		out.LatestObservation = observationProto(o)
+	}
+	return out
+}
+
+// observationProto renders an observation with its typed result, converting
+// the adapter's plain mirrors into the generated messages.
+func observationProto(o *admission.Observation) *gatewayv1.Observation {
+	out := &gatewayv1.Observation{
+		Source: o.Source, TrustClass: o.TrustClass, Outcome: outcomeProto(o.Outcome),
+		EvidenceDigest: o.EvidenceDigest, ObservedAt: timestamppb.New(o.ObservedAt), ResultRef: o.ResultRef,
+	}
+	switch {
+	case o.GitHubPullRequest != nil:
+		r := o.GitHubPullRequest
+		out.Result = &gatewayv1.Observation_GithubPullRequest{GithubPullRequest: &gatewayv1.GitHubPullRequestResult{
+			Url: r.URL, Number: r.Number, NodeId: r.NodeID, HeadRef: r.HeadRef, HeadSha: r.HeadSHA, BaseRef: r.BaseRef,
+			Draft: r.Draft, State: r.State,
+		}}
+	case o.GitHubBranch != nil:
+		r := o.GitHubBranch
+		out.Result = &gatewayv1.Observation_GithubBranch{GithubBranch: &gatewayv1.GitHubBranchResult{
+			Ref: r.Ref, CommitSha: r.CommitSHA, BaseSha: r.BaseSHA, FilesDigest: r.FilesDigest,
+		}}
+	case o.GitHubRepository != nil:
+		r := o.GitHubRepository
+		out.Result = &gatewayv1.Observation_GithubRepository{GithubRepository: &gatewayv1.GitHubRepositoryResult{
+			DefaultBranch: r.DefaultBranch, DefaultBranchSha: r.DefaultBranchSHA, Branch: r.Branch, BranchSha: r.BranchSHA,
+			BranchExists: r.BranchExists,
+		}}
 	}
 	return out
 }

@@ -6,17 +6,16 @@ package postgresmigration
 import (
 	"context"
 	"database/sql"
-	_ "embed"
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/approvalceremony"
 	generatedspecapprovalceremony "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/generatedspecapprovalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/credentials"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry"
 	connectorregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
@@ -181,31 +180,15 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-//go:embed migrations/001_authority_rows.sql
-var authorityRowsSchemaSQL string
-
 // AuthorityRowTables are the ADR-0001 authority rows (HELM-750). Each has a
-// tenant_id column and is put under forced row security with the tenant
-// policy, so the startup check in ValidateRuntime covers them once they exist.
-// Serving does not read them yet: the admission transaction (HELM-751) will,
-// and then ValidateRuntime requires them.
-var AuthorityRowTables = []string{
-	"authority_tenants",
-	"authority_principals",
-	"authority_effect_types",
-	"authority_mandates",
-	"authority_limits",
-	"authority_stops",
-}
+// tenant_id column and is under forced row security with the tenant policy,
+// so the startup check in ValidateRuntime covers them once they exist. The
+// kernel does not read them; the effect gateway's admission transaction
+// (HELM-751, cmd/helm-gateway) does, from its own database.
+var AuthorityRowTables = mandates.Tables
 
 func migrateAuthorityRows(ctx context.Context, db *sql.DB) error {
-	var ddl strings.Builder
-	ddl.WriteString(authorityRowsSchemaSQL)
-	for _, table := range AuthorityRowTables {
-		ddl.WriteString("\n")
-		ddl.WriteString(store.TenantRowSecurityDDL(table))
-	}
-	if _, err := db.ExecContext(ctx, ddl.String()); err != nil {
+	if _, err := db.ExecContext(ctx, mandates.SchemaDDL()); err != nil {
 		return fmt.Errorf("apply authority rows migration: %w", err)
 	}
 	return nil

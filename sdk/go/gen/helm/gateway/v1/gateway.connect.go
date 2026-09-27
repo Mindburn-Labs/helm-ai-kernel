@@ -141,16 +141,16 @@ type EffectGatewayServiceClient interface {
 	//     ADMITTED, DISPATCHING) or UNKNOWN. existing is true. Counters are not
 	//     touched and no second dispatch can follow.
 	//   - Same key, different digest: already_exists
-	//     [reason_code_pending: IDEMPOTENCY_CONFLICT].
+	//     [reason_code: IDEMPOTENCY_CONFLICT].
 	//
 	// Denial reasons, in decide's order (ADR-0001 §1 step 5):
 	// [reason_code: EMERGENCY_STOP_FENCED],
-	// [reason_code_pending: PRINCIPAL_INACTIVE],
-	// [reason_code_pending: MANDATE_INACTIVE],
-	// [reason_code_pending: MANDATE_OUTSIDE_VALIDITY],
-	// [reason_code_pending: EFFECT_OUT_OF_SCOPE],
-	// [reason_code_pending: PER_CALL_LIMIT],
-	// [reason_code_pending: ARITHMETIC_OVERFLOW],
+	// [reason_code: PRINCIPAL_INACTIVE],
+	// [reason_code: MANDATE_INACTIVE],
+	// [reason_code: MANDATE_OUTSIDE_VALIDITY],
+	// [reason_code: EFFECT_OUT_OF_SCOPE],
+	// [reason_code: PER_CALL_LIMIT],
+	// [reason_code: ARITHMETIC_OVERFLOW],
 	// [reason_code: BUDGET_EXCEEDED],
 	// [reason_code_pending: INSUFFICIENT_CREDIT],
 	// [reason_code_pending: ROUTE_UNPRICED]. Escalation:
@@ -467,16 +467,16 @@ type EffectGatewayServiceHandler interface {
 	//     ADMITTED, DISPATCHING) or UNKNOWN. existing is true. Counters are not
 	//     touched and no second dispatch can follow.
 	//   - Same key, different digest: already_exists
-	//     [reason_code_pending: IDEMPOTENCY_CONFLICT].
+	//     [reason_code: IDEMPOTENCY_CONFLICT].
 	//
 	// Denial reasons, in decide's order (ADR-0001 §1 step 5):
 	// [reason_code: EMERGENCY_STOP_FENCED],
-	// [reason_code_pending: PRINCIPAL_INACTIVE],
-	// [reason_code_pending: MANDATE_INACTIVE],
-	// [reason_code_pending: MANDATE_OUTSIDE_VALIDITY],
-	// [reason_code_pending: EFFECT_OUT_OF_SCOPE],
-	// [reason_code_pending: PER_CALL_LIMIT],
-	// [reason_code_pending: ARITHMETIC_OVERFLOW],
+	// [reason_code: PRINCIPAL_INACTIVE],
+	// [reason_code: MANDATE_INACTIVE],
+	// [reason_code: MANDATE_OUTSIDE_VALIDITY],
+	// [reason_code: EFFECT_OUT_OF_SCOPE],
+	// [reason_code: PER_CALL_LIMIT],
+	// [reason_code: ARITHMETIC_OVERFLOW],
 	// [reason_code: BUDGET_EXCEEDED],
 	// [reason_code_pending: INSUFFICIENT_CREDIT],
 	// [reason_code_pending: ROUTE_UNPRICED]. Escalation:

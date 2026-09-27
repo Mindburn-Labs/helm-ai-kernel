@@ -3,6 +3,7 @@ package authorityrows
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
@@ -20,26 +22,6 @@ var (
 	// ErrStopped reports a delegation under an active stop on the tenant, the
 	// delegator, or a mandate of the chain.
 	ErrStopped = errors.New("authority rows: stopped")
-)
-
-// PrincipalKind is what a principal is.
-type PrincipalKind string
-
-const (
-	PrincipalHuman   PrincipalKind = "human"
-	PrincipalAgent   PrincipalKind = "agent"
-	PrincipalService PrincipalKind = "service"
-)
-
-// RiskClass is an effect type's risk. High and irreversible effects escalate
-// to approval at admission (ADR-0001 §4).
-type RiskClass string
-
-const (
-	RiskLow          RiskClass = "low"
-	RiskMedium       RiskClass = "medium"
-	RiskHigh         RiskClass = "high"
-	RiskIrreversible RiskClass = "irreversible"
 )
 
 // ScopeKind names the control row a stop applies to.
@@ -69,21 +51,6 @@ type Scope struct {
 type WideningApproval struct {
 	RequesterID string
 	ApproverID  string
-}
-
-// Mandate is a stored mandate.
-type Mandate struct {
-	ID       uuid.UUID
-	ParentID *uuid.UUID // nil for a root mandate
-	Depth    int
-	HolderID string
-	Terms    Terms
-	Active   bool
-	// CreatedBy requested a root mandate, or delegated a child one.
-	CreatedBy string
-	// ApprovedBy approved a root mandate; it is empty for a delegated one.
-	ApprovedBy string
-	Version    int64
 }
 
 // LimitSpec describes a limit: a cap of Value units per window. A nil
@@ -192,7 +159,7 @@ func (s *Store) CreateMandate(ctx context.Context, tenantID, holderID string, te
 	if approval.ApproverID == holderID {
 		return Mandate{}, fmt.Errorf("%w: the approver would hold the mandate", ErrApproverNotDistinct)
 	}
-	terms, err := terms.normalized()
+	terms, err := normalized(terms)
 	if err != nil {
 		return Mandate{}, err
 	}
@@ -222,7 +189,7 @@ func (s *Store) CreateMandate(ctx context.Context, tenantID, holderID string, te
 // root to leaf, all FOR SHARE, and stops are read after them. A concurrent
 // narrowing or stop of any of those rows commits first and is seen, or waits.
 func (s *Store) Delegate(ctx context.Context, tenantID string, parentID uuid.UUID, delegatorID, holderID string, terms Terms) (Mandate, error) {
-	terms, err := terms.normalized()
+	terms, err := normalized(terms)
 	if err != nil {
 		return Mandate{}, err
 	}
@@ -299,13 +266,13 @@ func (s *Store) Revoke(ctx context.Context, tenantID string, mandateID uuid.UUID
 // its version. Mandates delegated from it keep their rows; admission checks
 // every link, so they cannot admit more than the narrowed mandate allows.
 func (s *Store) Narrow(ctx context.Context, tenantID string, mandateID uuid.UUID, terms Terms) (Mandate, error) {
-	terms, err := terms.normalized()
+	terms, err := normalized(terms)
 	if err != nil {
 		return Mandate{}, err
 	}
 	var m Mandate
 	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		current, err := scanMandate(tx.QueryRowContext(ctx, `SELECT `+mandateColumns+` FROM authority_mandates m
+		current, err := mandates.ScanMandate(tx.QueryRowContext(ctx, `SELECT `+mandates.MandateColumns+` FROM authority_mandates m
 			WHERE tenant_id = $1 AND mandate_id = $2 FOR NO KEY UPDATE`, tenantID, mandateID))
 		if err != nil {
 			return err
@@ -316,13 +283,23 @@ func (s *Store) Narrow(ctx context.Context, tenantID string, mandateID uuid.UUID
 		if err := terms.Within(current.Terms); err != nil {
 			return err
 		}
+		// A replaced condition could admit what the old one refused; only
+		// adding one, or keeping it, narrows.
+		if current.Terms.Condition != "" && terms.Condition != current.Terms.Condition {
+			return &WidensError{Field: "condition"}
+		}
 		m = current
 		m.Terms = terms
+		targets, condition, risks, required, err := termsColumns(terms)
+		if err != nil {
+			return err
+		}
 		return tx.QueryRowContext(ctx, `UPDATE authority_mandates
-			SET effect_types = $3, per_call_limit = $4, approval_threshold = $5, valid_from = $6, valid_until = $7, version = version + 1
+			SET effect_types = $3, per_call_limit = $4, approval_threshold = $5, valid_from = $6, valid_until = $7,
+			    targets = $8, condition = $9, risk_classes = $10, approval_required = $11, version = version + 1
 			WHERE tenant_id = $1 AND mandate_id = $2 RETURNING version`,
 			tenantID, mandateID, pq.Array(terms.EffectTypes), nullAmount(terms.PerCallLimit), nullAmount(terms.ApprovalThreshold),
-			terms.ValidFrom, terms.ValidUntil).Scan(&m.Version)
+			terms.ValidFrom, terms.ValidUntil, targets, condition, risks, required).Scan(&m.Version)
 	})
 	return m, err
 }
@@ -676,95 +653,6 @@ func bumpControlRow(ctx context.Context, tx *sql.Tx, tenantID string, scope Scop
 	return detail()
 }
 
-const mandateColumns = `m.mandate_id, m.parent_id, m.depth, m.holder_id, m.effect_types, m.per_call_limit, m.approval_threshold,
-	m.valid_from, m.valid_until, m.status, m.created_by, m.approved_by, m.version`
-
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanMandate(row rowScanner) (Mandate, error) {
-	var m Mandate
-	var parent uuid.NullUUID
-	var perCall, threshold sql.NullInt64
-	var status string
-	var approvedBy sql.NullString
-	err := row.Scan(&m.ID, &parent, &m.Depth, &m.HolderID, pq.Array(&m.Terms.EffectTypes), &perCall, &threshold,
-		&m.Terms.ValidFrom, &m.Terms.ValidUntil, &status, &m.CreatedBy, &approvedBy, &m.Version)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Mandate{}, fmt.Errorf("%w: mandate", ErrNotFound)
-	} else if err != nil {
-		return Mandate{}, err
-	}
-	if parent.Valid {
-		m.ParentID = &parent.UUID
-	}
-	if perCall.Valid {
-		m.Terms.PerCallLimit = &perCall.Int64
-	}
-	if threshold.Valid {
-		m.Terms.ApprovalThreshold = &threshold.Int64
-	}
-	m.Terms.ValidFrom = m.Terms.ValidFrom.UTC()
-	m.Terms.ValidUntil = m.Terms.ValidUntil.UTC()
-	m.Active = status == "active"
-	m.ApprovedBy = approvedBy.String
-	return m, nil
-}
-
-func readMandate(ctx context.Context, tx *sql.Tx, tenantID string, mandateID uuid.UUID) (Mandate, error) {
-	return scanMandate(tx.QueryRowContext(ctx, `SELECT `+mandateColumns+` FROM authority_mandates m
-		WHERE tenant_id = $1 AND mandate_id = $2`, tenantID, mandateID))
-}
-
-// readChain returns mandateID and its ancestors, root first, optionally
-// locking them FOR SHARE in that order (the global lock order of ADR-0001 §1).
-// The walk follows parent_id one depth at a time, so it ends even on a
-// corrupted row.
-func readChain(ctx context.Context, tx *sql.Tx, tenantID string, mandateID uuid.UUID, lock bool) ([]Mandate, error) {
-	query := `WITH RECURSIVE chain AS (
-			SELECT mandate_id, parent_id, depth FROM authority_mandates WHERE tenant_id = $1 AND mandate_id = $2
-			UNION ALL
-			SELECT p.mandate_id, p.parent_id, p.depth FROM authority_mandates p
-			JOIN chain c ON p.mandate_id = c.parent_id AND p.depth = c.depth - 1
-			WHERE p.tenant_id = $1)
-		SELECT ` + mandateColumns + ` FROM authority_mandates m
-		WHERE m.tenant_id = $1 AND m.mandate_id IN (SELECT mandate_id FROM chain)
-		ORDER BY m.depth`
-	if lock {
-		query += ` FOR SHARE OF m`
-	}
-	rows, err := tx.QueryContext(ctx, query, tenantID, mandateID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var chain []Mandate
-	for rows.Next() {
-		m, err := scanMandate(rows)
-		if err != nil {
-			return nil, err
-		}
-		chain = append(chain, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if len(chain) == 0 {
-		return nil, fmt.Errorf("%w: mandate %s", ErrNotFound, mandateID)
-	}
-	for i, m := range chain {
-		linked := (i == 0 && m.ParentID == nil) || (i > 0 && m.ParentID != nil && *m.ParentID == chain[i-1].ID)
-		if m.Depth != i || !linked {
-			return nil, fmt.Errorf("authority rows: mandate %s has a broken delegation chain", mandateID)
-		}
-	}
-	if chain[len(chain)-1].ID != mandateID {
-		return nil, fmt.Errorf("authority rows: mandate %s has a broken delegation chain", mandateID)
-	}
-	return chain, nil
-}
-
 func insertMandate(ctx context.Context, tx *sql.Tx, tenantID string, m *Mandate) error {
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -779,12 +667,16 @@ func insertMandate(ctx context.Context, tx *sql.Tx, tenantID string, m *Mandate)
 	if m.ApprovedBy != "" {
 		approvedBy = m.ApprovedBy
 	}
+	targets, condition, risks, required, err := termsColumns(m.Terms)
+	if err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO authority_mandates (tenant_id, mandate_id, holder_id, parent_id, depth, effect_types,
-			per_call_limit, approval_threshold, valid_from, valid_until, created_by, approved_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			per_call_limit, approval_threshold, valid_from, valid_until, created_by, approved_by, targets, condition, risk_classes, approval_required)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		tenantID, m.ID, m.HolderID, parent, m.Depth, pq.Array(m.Terms.EffectTypes),
 		nullAmount(m.Terms.PerCallLimit), nullAmount(m.Terms.ApprovalThreshold), m.Terms.ValidFrom, m.Terms.ValidUntil,
-		m.CreatedBy, approvedBy)
+		m.CreatedBy, approvedBy, targets, condition, risks, required)
 	return classify(err)
 }
 
@@ -896,4 +788,36 @@ func classify(err error) error {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	return err
+}
+
+// termsColumns are the s2b term values in the order targets, condition,
+// risk_classes, approval_required, each NULL when unset.
+func termsColumns(t Terms) (any, any, any, any, error) {
+	var targets, condition, risks, required any
+	if t.ApprovalRequired != nil {
+		required = pq.Array(t.ApprovalRequired)
+	}
+	if t.Targets != nil {
+		targets = pq.Array(t.Targets)
+	}
+	if t.Condition != "" {
+		condition = t.Condition
+	}
+	if len(t.RiskClasses) > 0 {
+		encoded, err := json.Marshal(t.RiskClasses)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		risks = encoded
+	}
+	return targets, condition, risks, required, nil
+}
+
+func readMandate(ctx context.Context, tx *sql.Tx, tenantID string, mandateID uuid.UUID) (Mandate, error) {
+	return mandates.ScanMandate(tx.QueryRowContext(ctx, `SELECT `+mandates.MandateColumns+` FROM authority_mandates m
+		WHERE tenant_id = $1 AND mandate_id = $2`, tenantID, mandateID))
+}
+
+func readChain(ctx context.Context, tx *sql.Tx, tenantID string, mandateID uuid.UUID, lock bool) ([]Mandate, error) {
+	return mandates.ChainInTx(ctx, tx, tenantID, mandateID, lock)
 }

@@ -117,6 +117,25 @@ func TestPostgresListedTestIsAcceptedWithoutARun(t *testing.T) {
 	}
 }
 
+func TestPRWorkflowRunsCheckFollowsPlatformCI(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, filepath.FromSlash(prWorkflowFile))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for body, want := range map[string]bool{
+		"on:\n  pull_request:\njobs:\n  ci:\n    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2\n": true,
+		"on:\n  pull_request:\njobs:\n  ci:\n    uses: other/repo/.github/workflows/ci.yml@v2\n":                     false,
+	} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := prWorkflowRunsCheck(root); got != want {
+			t.Errorf("prWorkflowRunsCheck(%q) = %v, want %v", body, got, want)
+		}
+	}
+}
+
 func TestBlockingGatesReadsProfilesAndWorkflows(t *testing.T) {
 	root := t.TempDir()
 	write := func(rel, body string) {

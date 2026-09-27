@@ -1,4 +1,4 @@
-package mcp
+package jwks
 
 // quantum_posture: tests sign classical RS256 JWTs for a local JWKS endpoint;
 // no post-quantum claim.

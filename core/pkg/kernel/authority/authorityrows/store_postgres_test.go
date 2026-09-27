@@ -3,7 +3,8 @@ package authorityrows
 // HELM-750 s2a against real Postgres (listed in scripts/ci/postgres-proofs.txt):
 // narrowing-only delegation over random chains, stop expiry and approved lift,
 // a version bump on every narrowing, and tenant isolation under a restricted
-// role. Each test migrates a fresh schema with the kernel's own migration.
+// role. Each test migrates a fresh schema with SchemaDDL, the statements
+// both migrate commands run.
 
 import (
 	"context"
@@ -20,8 +21,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/postgresmigration"
 )
 
 const tenantA = "tenant-a"
@@ -57,7 +56,7 @@ func postgresStore(t *testing.T) (*Store, *sql.DB, string, string) {
 	t.Cleanup(func() { _ = db.Close() })
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	if err := postgresmigration.Migrate(ctx, db); err != nil {
+	if _, err := db.ExecContext(ctx, SchemaDDL()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	store, err := New(db)
@@ -570,7 +569,7 @@ func TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole(t *testing.T) {
 	statements := []string{
 		`CREATE ROLE ` + role + ` LOGIN PASSWORD 'rls-probe' NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB`,
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
-		`GRANT SELECT, INSERT, UPDATE ON ` + strings.Join(postgresmigration.AuthorityRowTables, ", ") + ` TO ` + role,
+		`GRANT SELECT, INSERT, UPDATE ON ` + strings.Join(Tables, ", ") + ` TO ` + role,
 	}
 	for _, statement := range statements {
 		if _, err := owner.Exec(statement); err != nil {
@@ -644,7 +643,7 @@ func TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole(t *testing.T) {
 
 	// Raw SQL: no tenant bound sees nothing; B sees none of A; a row for A
 	// written under B is refused.
-	for _, table := range postgresmigration.AuthorityRowTables {
+	for _, table := range Tables {
 		var n int
 		must(t, runtime.QueryRow(`SELECT count(*) FROM `+table).Scan(&n))
 		if n != 0 {
@@ -842,5 +841,65 @@ func TestPostgresStoppedAuthorityCannotDelegate(t *testing.T) {
 			t.Fatalf("%s: delegation never proceeded", pending.name)
 		}
 		must(t, s.Lift(ctx, tenantA, stopID, lift))
+	}
+}
+
+// HELM-750 s2b: the targets, condition and risk classes survive the database,
+// delegation cannot widen them, a condition that does not compile is refused
+// at activation, and narrowing may add a condition but never replace one.
+func TestPostgresMandateTermsRoundTripAndOnlyNarrow(t *testing.T) {
+	s, db, _, _ := postgresStore(t)
+	ctx := context.Background()
+	seed(t, s, tenantA)
+	now := dbNow(t, db)
+	terms := Terms{
+		EffectTypes: []string{"repo.push"}, ValidFrom: now, ValidUntil: now.Add(time.Hour),
+		Targets:          []string{"github.com/o/b", "github.com/o/a"},
+		Condition:        `input.args.head.startsWith("helm/")`,
+		RiskClasses:      map[string]RiskClass{"repo.push": RiskHigh},
+		ApprovalRequired: []string{"repo.push"},
+	}
+	bad := terms
+	bad.Condition = "input.args.head.startsWith("
+	_, err := s.CreateMandate(ctx, tenantA, "agent-a", bad, root)
+	wantErr(t, "a condition that does not compile", err, ErrInvalid)
+
+	parent, err := s.CreateMandate(ctx, tenantA, "agent-a", terms, root)
+	must(t, err)
+	chain, err := s.Chain(ctx, tenantA, parent.ID)
+	must(t, err)
+	stored := chain[0].Terms
+	if strings.Join(stored.Targets, ",") != "github.com/o/a,github.com/o/b" || stored.Condition != terms.Condition ||
+		stored.RiskClasses["repo.push"] != RiskHigh || strings.Join(stored.ApprovalRequired, ",") != "repo.push" {
+		t.Fatalf("stored terms = %+v", stored)
+	}
+
+	child := Terms{EffectTypes: []string{"repo.push"}, ValidFrom: now, ValidUntil: now.Add(time.Minute),
+		Targets: []string{"github.com/o/a"}, RiskClasses: map[string]RiskClass{"repo.push": RiskHigh}, ApprovalRequired: []string{"repo.push"}}
+	unapproved := child
+	unapproved.ApprovalRequired = nil
+	_, err = s.Delegate(ctx, tenantA, parent.ID, "agent-a", "agent-b", unapproved)
+	wantErr(t, "a child without the approval requirement", err, ErrWidens)
+	wide := child
+	wide.Targets = nil
+	_, err = s.Delegate(ctx, tenantA, parent.ID, "agent-a", "agent-b", wide)
+	wantErr(t, "a child without the target list", err, ErrWidens)
+	lower := child
+	lower.RiskClasses = map[string]RiskClass{"repo.push": RiskLow}
+	_, err = s.Delegate(ctx, tenantA, parent.ID, "agent-a", "agent-b", lower)
+	wantErr(t, "a child that lowers the risk class", err, ErrWidens)
+	delegated, err := s.Delegate(ctx, tenantA, parent.ID, "agent-a", "agent-b", child)
+	must(t, err)
+
+	replaced := stored
+	replaced.Condition = "true"
+	_, err = s.Narrow(ctx, tenantA, parent.ID, replaced)
+	wantErr(t, "narrowing that replaces a condition", err, ErrWidens)
+	added := child
+	added.Condition = `input.args.head.startsWith("helm/agent/")`
+	narrowed, err := s.Narrow(ctx, tenantA, delegated.ID, added)
+	must(t, err)
+	if narrowed.Terms.Condition != added.Condition {
+		t.Fatalf("narrowed condition = %q", narrowed.Terms.Condition)
 	}
 }

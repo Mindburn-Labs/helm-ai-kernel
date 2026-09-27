@@ -3,6 +3,8 @@
 # points. A main belongs here when a release artifact is built from it.
 #
 # core/cmd/helm-ai-kernel: release.yml binaries and the container image.
+# core/cmd/helm-gateway: the effect gateway (HELM-751), a separate Zone C
+# process; its image and chart follow in a later HELM-751 slice.
 #
 # Not roots, because no release path builds them: receipt_verify (only the
 # stand-alone `make receipt-verify-binaries`), release-permit-verify,
@@ -10,3 +12,4 @@
 # skill_lint, skill_pack. Code only they reach counts as dead to the gate. Add a
 # line here when one of them starts shipping.
 core/cmd/helm-ai-kernel
+core/cmd/helm-gateway

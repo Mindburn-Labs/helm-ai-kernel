@@ -1,26 +1,34 @@
-# Authority rows (HELM-750 s2a)
+# Authority rows (HELM-750 s2a, s2b)
 
-Status: schema and library store only. Nothing on the request path reads
-these rows yet. The Guardian's decision, the scoped emergency-stop fence
-(`docs/EMERGENCY_STOP_FENCE.md`) and the freeze controller are unchanged. The
-admission transaction (HELM-751, HELM-750 s2b) is the first runtime caller.
+Status: the effect gateway's admission transaction (`helm-gateway`, HELM-751
+s2; `docs/architecture/gateway-effect-api.md`) reads these rows. Nothing in
+`helm-ai-kernel` reads them: the Guardian's decision, the scoped
+emergency-stop fence (`docs/EMERGENCY_STOP_FENCE.md`) and the freeze
+controller are unchanged. No shipped binary writes them yet; the store below
+is a library until the authority-change effects (`helm.authority.*`,
+contract 5) dispatch through the gateway.
 
 ## What exists
 
-- **Schema:** `core/pkg/postgresmigration/migrations/001_authority_rows.sql`,
-  applied by `helm-ai-kernel migrate` as the "authority rows" step. It creates
+- **Schema:** `core/pkg/kernel/authority/mandates/schema.sql`, applied by
+  `helm-ai-kernel migrate` as the "authority rows" step and by
+  `helm-gateway migrate` in its first version. It creates
   six tables: `authority_tenants`, `authority_principals`,
   `authority_effect_types`, `authority_mandates`, `authority_limits` and
   `authority_stops`. Each has `tenant_id` and forced row security under the
   kernel tenant policy (`app.current_tenant`). The startup check
   `TenantTablesWithoutForcedRowSecurity` in `ValidateRuntime` therefore covers
   them.
+- **Read model:** `core/pkg/kernel/authority/mandates`: the schema, a
+  mandate's terms and the narrowing rule between them (`Terms.Within`),
+  mandate conditions, and the delegation chain read under `FOR SHARE`
+  (`ChainInTx`). The gateway imports only this package.
 - **Store:** `core/pkg/kernel/authority/authorityrows`. It is a typed store for
   tenants, principals, effect types, mandates, delegation, revocation,
   narrowing, limits and stops. Every call runs in one READ COMMITTED
   transaction bound to its tenant. It is a declared library root in
-  `scripts/ci/dead-packages-allowlist.txt` until the admission transaction
-  imports it.
+  `scripts/ci/dead-packages-allowlist.txt` until an authority-change effect
+  calls it (CTL-046).
 
 ## Rules the store enforces
 
@@ -29,9 +37,14 @@ admission transaction (HELM-751, HELM-750 s2b) is the first runtime caller.
   - its effect types are a subset;
   - its per-call limit and approval threshold are present wherever an
     ancestor sets one, and no higher;
-  - its validity window lies inside each ancestor's.
+  - its validity window lies inside each ancestor's;
+  - under an ancestor's target list it carries a subset of that list;
+  - it never lowers an ancestor's risk class for an effect type, and keeps
+    every approval requirement an ancestor sets on its effect types.
 
-  Only the parent's holder may delegate, and every link in the chain must be
+  Conditions are not compared: admission requires every link's condition to
+  hold, so a child's condition only narrows. Narrowing a mandate in place may
+  add a condition but never replace one. Only the parent's holder may delegate, and every link in the chain must be
   active.
 - **A stop cannot be bypassed by delegating.** Delegation is refused while an
   active stop covers the tenant, the delegator, or any mandate in the chain.
@@ -60,6 +73,31 @@ admission transaction (HELM-751, HELM-750 s2b) is the first runtime caller.
 - **Amounts are integer minor units.** Negative amounts are refused. A
   version overflow is a database error, not a wrap-around.
 
+## Mandate terms added in s2b
+
+- **`targets`:** the allowlisted targets, as exact strings. NULL allows any
+  target.
+- **`condition`:** a CEL condition over the effect, with `input.args` (the
+  parsed argument object), `input.target` and `input.effect_type`. It runs in
+  the kernel's CEL environment with its cost limit (`authority.Compile`). A
+  condition that does not compile is refused when the mandate is activated,
+  delegated or narrowed. The walking skeleton's mandate uses
+  `input.args.head.startsWith("helm/")`.
+- **`risk_classes`:** a risk class per effect type that raises the effect type
+  row's class for this mandate. High or irreversible escalates to approval.
+- **`approval_required`:** the effect types for which every call under this
+  mandate needs approval, whatever their risk class. A medium effect can
+  require approval this way (ADR-0001 §4); the skeleton's
+  `github.pull_request.create_draft` does. A child keeps every ancestor's
+  entries for the effect types it covers.
+
+At admission (HELM-751 s2) every link of the chain must allow the effect type
+and the target and satisfy its condition. The chain is re-checked for
+narrowing, and a link wider than its parent is denied with
+`DELEGATION_SCOPE_VIOLATION`. A stop on any holder or delegator of the chain,
+on any of its mandates, on the tenant or on the effect type denies with
+`EMERGENCY_STOP_FENCED`.
+
 ## Differences from the ADR-0001 reference schema
 
 - The tables live in the kernel schema with an `authority_` prefix, not in an
@@ -71,15 +109,17 @@ admission transaction (HELM-751, HELM-750 s2b) is the first runtime caller.
 - Added columns:
   - `approval_threshold`, the typed approval rule on a mandate;
   - `created_by` and `approved_by` on mandates;
-  - `issued_by`, `lift_requested_by` and `lift_approved_by` on stops.
-- Counters, attempts, approvals, permits and the exposure ledger arrive with
-  the admission transaction (HELM-751).
+  - `issued_by`, `lift_requested_by` and `lift_approved_by` on stops;
+  - `targets`, `condition`, `risk_classes` and `approval_required` on
+    mandates (s2b).
+- Counters, attempts, permits and the exposure ledger are the gateway's
+  schema (`core/pkg/gateway/admission/schema`), not this one.
 
 ## Verification
 
 ```sh
 HELM_TEST_POSTGRES_URL=postgres://... bash scripts/ci/postgres_proofs.sh
-cd core && go test ./pkg/kernel/authority/authorityrows ./pkg/postgresmigration
+cd core && go test ./pkg/kernel/authority/... ./pkg/postgresmigration
 ```
 
 The Postgres proofs are listed in `scripts/ci/postgres-proofs.txt`. They cover:
@@ -93,4 +133,6 @@ The Postgres proofs are listed in `scripts/ci/postgres-proofs.txt`. They cover:
 - a version bump on every narrowing;
 - tenant isolation under a restricted role;
 - the catalog check over the new tables, including `ValidateRuntime` under a
-  serving role.
+  serving role;
+- the s2b terms surviving the database, refused widenings of targets and risk
+  classes, a condition that does not compile, and a replaced condition.

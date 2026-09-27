@@ -313,3 +313,39 @@ func readChain(ctx context.Context, tx *sql.Tx, tenantID string, mandateID uuid.
 func ChainInTx(ctx context.Context, tx *sql.Tx, tenantID string, mandateID uuid.UUID, lock bool) ([]Mandate, error) {
 	return readChain(ctx, tx, tenantID, mandateID, lock)
 }
+
+// ErrUnknownScope is a stop scope kind that is not tenant, principal,
+// mandate or effect_type.
+var ErrUnknownScope = errors.New("authority rows: unknown scope kind")
+
+// BumpControlRow bumps the version of a stop scope's control row in tx
+// (ADR-0001 §1: every narrowing transition updates its scope's control row,
+// which conflicts with admission's FOR SHARE). kind is tenant, principal,
+// mandate or effect_type; for tenant, key is the tenant ID. found is false
+// when the tenant has no such row. The authority-row store and the gateway's
+// Stop and Lift share it, so there is one way to take the lock.
+func BumpControlRow(ctx context.Context, tx *sql.Tx, tenantID, kind, key string) (found bool, err error) {
+	var query string
+	args := []any{tenantID}
+	switch kind {
+	case "tenant":
+		if key != tenantID {
+			return false, nil
+		}
+		query = `UPDATE authority_tenants SET version = version + 1 WHERE tenant_id = $1`
+	case "principal":
+		query, args = `UPDATE authority_principals SET version = version + 1 WHERE tenant_id = $1 AND principal_id = $2`, append(args, key)
+	case "mandate":
+		query, args = `UPDATE authority_mandates SET version = version + 1 WHERE tenant_id = $1 AND mandate_id = $2::uuid`, append(args, key)
+	case "effect_type":
+		query, args = `UPDATE authority_effect_types SET version = version + 1 WHERE tenant_id = $1 AND effect_type = $2`, append(args, key)
+	default:
+		return false, ErrUnknownScope
+	}
+	res, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}

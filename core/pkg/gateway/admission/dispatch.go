@@ -30,10 +30,6 @@ type Credentials interface {
 	Token(ctx context.Context, tenantID string, effect adapters.Effect) (string, error)
 }
 
-// dispatchGrace is added to DispatchTimeout for the fence: a provider can
-// still apply a write shortly after the gateway stopped waiting for it.
-const dispatchGrace = time.Minute
-
 // Where a gateway-recorded observation (a NOT_SENT dispatch) comes from.
 const (
 	dispatchSource     = "gateway.dispatch"
@@ -155,6 +151,9 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 	if err != nil {
 		return nil, err
 	}
+	if a.effectType == effectargs.AuthorityLift {
+		stops = nil // a stop never blocks its own lift
+	}
 	reason := claimRefusal(claimInput{Stops: stops, Expired: expired, Permitted: permitted, Current: auth.versions,
 		Chain: auth.chain, Now: a.now})
 	var content []byte
@@ -191,7 +190,7 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 		WHERE tenant_id = $1 AND permit_id = $2`, a.tenantID, permitID, claimID, dispatcher.PrincipalID, dispatcher.ActorID); err != nil {
 		return nil, err
 	}
-	fence := s.cfg.DispatchTimeout + dispatchGrace
+	fence := s.cfg.DispatchTimeout + s.cfg.DispatchGrace
 	res, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts
 		SET state = 'DISPATCHING', dispatch_deadline = now() + $3 * interval '1 millisecond', version = version + 1, updated_at = now()
 		WHERE tenant_id = $1 AND attempt_id = $2 AND state = 'ADMITTED'`, a.tenantID, a.id, fence.Milliseconds())
@@ -200,6 +199,11 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 	}
 	if n, err := res.RowsAffected(); err != nil || n != 1 {
 		return nil, errors.New("admission: the attempt changed state during the claim")
+	}
+	// The reconciliation job, enqueued with the claim (TA §6.2): it drives the
+	// attempt to an outcome whatever happens to this process after the commit.
+	if err := s.enqueue(ctx, tx, Job{Kind: JobReconcile, TenantID: a.tenantID, WorkspaceID: a.workspaceID, AttemptID: a.id}); err != nil {
+		return nil, err
 	}
 	return &claimed{
 		tenantID: a.tenantID, workspaceID: a.workspaceID, attemptID: a.id,
@@ -369,8 +373,6 @@ func (s *Service) Observe(ctx context.Context, caller Caller, attemptID string) 
 	if err := checkAttemptID(attemptID); err != nil {
 		return Attempt{}, false, err
 	}
-	var target *observeTarget
-	var existing bool
 	err := s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
 		if err := requireWorkload(ctx, tx, caller); err != nil {
 			return err
@@ -382,11 +384,34 @@ func (s *Service) Observe(ctx context.Context, caller Caller, attemptID string) 
 		if !mayExecute(caller.PrincipalID, a.requester, a.requesterActor) {
 			return errNotItsWorkload
 		}
+		return nil
+	})
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	existing, _, err := s.observeAttempt(ctx, caller.TenantID, caller.WorkspaceID, attemptID)
+	if err != nil {
+		return Attempt{}, false, err
+	}
+	attempt, err := s.Get(ctx, caller, attemptID)
+	return attempt, existing, err
+}
+
+// observeAttempt is Observe after authorization, shared with the
+// reconciliation job. existing is true when the state admits no read-back;
+// fence is the dispatch deadline of a DISPATCHING attempt still inside it.
+func (s *Service) observeAttempt(ctx context.Context, tenantID, workspaceID, attemptID string) (existing bool, fence time.Time, err error) {
+	var target *observeTarget
+	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
+		a, err := lockAttempt(ctx, tx, Caller{TenantID: tenantID, WorkspaceID: workspaceID}, attemptID)
+		if err != nil {
+			return err
+		}
 		switch a.state {
 		case "DISPATCHED", "UNKNOWN":
 		case "DISPATCHING":
 			if !a.dispatchDeadline.Valid || a.now.Before(a.dispatchDeadline.Time) {
-				existing = true
+				existing, fence = true, a.dispatchDeadline.Time
 				return nil
 			}
 			if err := transition(ctx, tx, a.tenantID, a.id, "DISPATCHING", "UNKNOWN", ""); err != nil {
@@ -410,14 +435,10 @@ func (s *Service) Observe(ctx context.Context, caller Caller, attemptID string) 
 			effect: adapters.Effect{EffectType: a.effectType, Target: a.target, Arguments: content}, adapter: adapter}
 		return nil
 	})
-	if err != nil {
-		return Attempt{}, false, err
-	}
-	if target != nil {
+	if err == nil && target != nil {
 		s.readBack(ctx, *target)
 	}
-	attempt, err := s.Get(ctx, caller, attemptID)
-	return attempt, existing, err
+	return existing, fence, err
 }
 
 // observeTarget is an attempt a read-back runs for, in state from.

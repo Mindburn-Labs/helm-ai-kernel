@@ -3,9 +3,11 @@ package admission
 import (
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 )
@@ -79,7 +81,9 @@ type Decision struct {
 // then approval. Everything that can deny is checked first, so a human is
 // never asked to approve what would be denied anyway.
 func Decide(in Input) Decision {
-	if len(in.ActiveStops) > 0 {
+	// A stop never blocks its own lift: a lift is itself an approved,
+	// step-up authority change (§4.1 item 7).
+	if len(in.ActiveStops) > 0 && in.EffectType != effectargs.AuthorityLift {
 		return deny(contracts.ReasonEmergencyStopFenced)
 	}
 	if !in.PrincipalFound || !in.PrincipalActive {
@@ -159,6 +163,11 @@ func Decide(in Input) Decision {
 // approval for the effect type, or an amount at or above any link's approval
 // threshold (ADR-0001 §4, HELM-750 terms).
 func needsApproval(in Input, amount int64) bool {
+	// Authority widening (helm.authority.*) always needs a distinct approver
+	// with step-up, whatever the risk rows say (§4.1 item 7, §10.1).
+	if strings.HasPrefix(in.EffectType, "helm.authority.") {
+		return true
+	}
 	if in.RiskClass == mandates.RiskHigh || in.RiskClass == mandates.RiskIrreversible {
 		return true
 	}

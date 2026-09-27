@@ -1,7 +1,7 @@
 // Command helm-gateway is the effect gateway (Zone C, HELM-751): the server
 // of the gateway effect API, helm.gateway.v1.EffectGatewayService.
 //
-//	helm-gateway migrate   apply the gateway schema to HELM_GATEWAY_DATABASE_URL
+//	helm-gateway migrate   apply the gateway schema and River's to HELM_GATEWAY_DATABASE_URL
 //	helm-gateway serve     serve the API on :8443 (TLS) and health on :8081
 //
 // serve requires TLS (HELM_TLS_CERT_FILE, HELM_TLS_KEY_FILE, and for mutual
@@ -46,6 +46,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/jobs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/server"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/servetls"
 )
@@ -79,6 +80,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		defer func() { _ = db.Close() }()
 		if err := admission.Migrate(ctx, db); err != nil {
 			return err
+		}
+		if err := jobs.Migrate(ctx, db); err != nil {
+			return fmt.Errorf("river migration: %w", err)
 		}
 		fmt.Fprintf(stderr, "gateway schema at version %d\n", admission.HeadVersion())
 		return nil
@@ -158,10 +162,25 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	// River works the expiry and reconciliation jobs in this process, from
+	// the same database: one deployable, and a leader-elected client, so
+	// replicas share the queue (TA §6.1).
+	runner, err := jobs.New(db, jobs.Config{})
+	if err != nil {
+		return err
+	}
+	admissionConfig.Jobs = runner
 	svc, err := admission.New(db, admissionConfig)
 	if err != nil {
 		return err
 	}
+	runner.Bind(svc)
+	go runner.Run(ctx, 5*time.Second)
+	defer func() {
+		stopping, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		_ = runner.Stop(stopping)
+	}()
 	api := &server.Server{
 		Admission: svc,
 		Auth:      &server.Authenticator{Validator: identity.Validator(false), Actor: identity.Actor, RequireCNF: identity.RequireCNF},
@@ -228,6 +247,8 @@ func healthHandler(db *sql.DB) http.Handler {
 			http.Error(w, "database unreachable", http.StatusServiceUnavailable)
 		case version != admission.HeadVersion():
 			http.Error(w, fmt.Sprintf("gateway schema at version %d, want %d: run helm-gateway migrate", version, admission.HeadVersion()), http.StatusServiceUnavailable)
+		case jobs.Ready(ctx, db) != nil:
+			http.Error(w, "the job tables are not current: run helm-gateway migrate", http.StatusServiceUnavailable)
 		default:
 			_, _ = io.WriteString(w, "ready\n")
 		}

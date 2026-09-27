@@ -253,3 +253,28 @@ func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
 		t.Fatalf("a small request ran authentication %d times, want 1", calls)
 	}
 }
+
+// A stop token names its object: the stop a Lift lifts, the attempt a Cancel
+// withdraws (HELM-751 s3b, L4 of the s2 review).
+func TestStopTokenBindings(t *testing.T) {
+	const stop, attempt = "0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d", "0192f0c4-7a1e-7c3b-9d2a-000000000001"
+	details := func(entries string) json.RawMessage { return json.RawMessage(entries) }
+	if err := checkBinding(details(`[{"type":"helm_stop_lift","stop_id":"`+stop+`"}]`), "helm_stop_lift", map[string]string{"stop_id": stop}); err != nil {
+		t.Fatalf("a bound lift token was refused: %v", err)
+	}
+	if err := checkBinding(details(`[{"type":"helm_effect_cancel","attempt_id":"`+attempt+`"}]`), "helm_effect_cancel", map[string]string{"attempt_id": attempt}); err != nil {
+		t.Fatalf("a bound cancel token was refused: %v", err)
+	}
+	for name, raw := range map[string]string{
+		"none":                 ``,
+		"not a list":           `{"type":"helm_stop_lift","stop_id":"` + stop + `"}`,
+		"another stop":         `[{"type":"helm_stop_lift","stop_id":"` + attempt + `"}]`,
+		"a decide entry":       `[{"type":"helm_effect_decision","attempt_id":"` + stop + `","action":"approve"}]`,
+		"two lift entries":     `[{"type":"helm_stop_lift","stop_id":"` + stop + `"},{"type":"helm_stop_lift","stop_id":"` + stop + `"}]`,
+		"a non-string stop_id": `[{"type":"helm_stop_lift","stop_id":1}]`,
+	} {
+		if err := checkBinding(details(raw), "helm_stop_lift", map[string]string{"stop_id": stop}); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

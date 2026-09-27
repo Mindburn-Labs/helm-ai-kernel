@@ -150,35 +150,39 @@ func (id Identity) token() admission.Token {
 	return admission.Token{Issuer: id.Issuer, ID: id.TokenID, Scope: id.Scope, ExpiresAt: id.ExpiresAt}
 }
 
-// decisionDetail is one RFC 9396 authorization_details entry of a decide
-// token.
-type decisionDetail struct {
-	Type      string `json:"type"`
-	AttemptID string `json:"attempt_id"`
-	Action    string `json:"action"`
-}
-
 // checkDecisionBinding requires exactly one helm_effect_decision entry in the
 // token's authorization_details, naming this attempt and action (proposed
 // ADR-0005 §10). A decide token cannot approve another attempt, or reject
 // where it was minted to approve.
 func checkDecisionBinding(raw json.RawMessage, attemptID, action string) error {
-	var entries []json.RawMessage
+	return checkBinding(raw, "helm_effect_decision", map[string]string{"attempt_id": attemptID, "action": action})
+}
+
+// checkBinding requires exactly one RFC 9396 authorization_details entry of
+// detailType, whose fields equal want. A single-use decide or stop token
+// names the one object it was minted for (ADR-0005 §10 amendment):
+//
+//	helm_effect_decision {attempt_id, action}  Approve, Reject
+//	helm_stop_lift       {stop_id}             Lift
+//	helm_effect_cancel   {attempt_id}          Cancel with a stop token
+func checkBinding(raw json.RawMessage, detailType string, want map[string]string) error {
+	var entries []map[string]any
 	if len(raw) == 0 || json.Unmarshal(raw, &entries) != nil {
-		return permissionDenied("a decide token must carry authorization_details naming its attempt")
+		return permissionDenied("the token must carry authorization_details naming its object")
 	}
-	var bound []decisionDetail
+	var bound []map[string]any
 	for _, entry := range entries {
-		var d decisionDetail
-		if json.Unmarshal(entry, &d) == nil && d.Type == "helm_effect_decision" {
-			bound = append(bound, d)
+		if entry["type"] == detailType {
+			bound = append(bound, entry)
 		}
 	}
 	if len(bound) != 1 {
-		return permissionDenied("a decide token must carry exactly one helm_effect_decision entry")
+		return permissionDenied("the token must carry exactly one " + detailType + " entry")
 	}
-	if bound[0].AttemptID != attemptID || bound[0].Action != action {
-		return permissionDenied("the decide token is bound to another attempt or action")
+	for key, value := range want {
+		if got, ok := bound[0][key].(string); !ok || got != value {
+			return permissionDenied("the token is bound to another object or action")
+		}
 	}
 	return nil
 }

@@ -11,8 +11,9 @@ slice 1b (the delegated requester, whole-second approval digests). Under target 
 is versioned. Slice 2 adds a server, `helm-gateway`, for `Propose`,
 `Approve`, `Reject`, `Cancel`, `GetAttempt` and `GetAttemptContent` (see "The
 server (slice 2)"). Slice 3 adds `Dispatch` and `Observe` through the
-GitHub adapter (see "Dispatch and Observe (slice 3)"); `Stop` and `Lift`
-answer `unimplemented`.
+GitHub adapter (see "Dispatch and Observe (slice 3)"). Slice 3b adds `Stop`
+and `Lift`, and the River jobs that expire escalations and reconcile
+`UNKNOWN` (see "Stop, Lift and jobs (slice 3b)").
 
 - IDL: [`protocols/proto/helm/gateway/v1/gateway.proto`](../../protocols/proto/helm/gateway/v1/gateway.proto),
   package `helm.gateway.v1`, service `EffectGatewayService`.
@@ -465,6 +466,17 @@ then approved with a decide token bound to that attempt, like any other.
 `Stop` tokens need no binding. A stop narrows authority, and a stop token is
 single-use anyway.
 
+An operator's stop token on `Cancel` names the attempt it withdraws (slice
+3b; L4 of the slice 2 review):
+
+```json
+"authorization_details": [
+  {"type": "helm_effect_cancel", "attempt_id": "<attempt_id>"}
+]
+```
+
+A requester cancelling its own attempt with a propose token needs no binding.
+
 ### Model calls
 
 A model call is admitted like any other effect, then dispatched differently
@@ -903,10 +915,103 @@ the adapter re-checks the default branch at `Dispatch`.
   precondition needs those states. Whether effect attempts move on to
   `SETTLED` is left to settlement's owner (HELM-752), together with model
   calls.
-- **`ESCALATED_TO_HUMAN`** and the polling of `UNKNOWN` come with the River
-  jobs of slice 3b. Until then, a workload calls `Observe`.
+- **`ESCALATED_TO_HUMAN`** and the polling of `UNKNOWN` are slice 3b's
+  River jobs (below). A workload may still call `Observe` at any time.
 - **The `Observe` scope** is `helm.gateway.execute`, as the proto says. The
   read scope does not reach it.
+
+## Stop, Lift and jobs (slice 3b)
+
+**Stop.** `Stop` takes a single-use `helm.gateway.stop` token from an active
+human operator of the tenant. In one transaction it bumps the version of the
+scope's control row (the tenant, a principal, a mandate or an effect type;
+`mandates.BumpControlRow`, the same code the authority-row store uses) and
+writes the stop row with its issuer.
+
+- **Idempotency.** It is idempotent on `(tenant, idempotency_key)`, with a
+  request digest over the principal, scope, reason and expiry (schema v4).
+  The same key and request return the stored stop with `existing` true
+  without using up the token, so a retry after a lost answer is safe.
+  Another request under the key is `already_exists`
+  (`IDEMPOTENCY_CONFLICT`).
+- **Validation.** A tenant stop names no `scope_key`, because it is always
+  the token's tenant. A scope the tenant does not have is `not_found`.
+- **Effect.** Admissions after the commit are `DENIED` and admitted attempts
+  are `CANCELLED` at their dispatch claim, both `EMERGENCY_STOP_FENCED`. A
+  call already dispatched is not retracted: it is read back and recorded as
+  usual.
+- **The Console's emergency stop (HELM-799)** is a tenant `Stop`.
+
+**Lift.** `Lift` takes a single-use `helm.gateway.stop` token bound to the
+stop (`helm_stop_lift`). It proposes a `helm.authority.lift` attempt with the
+target `stop:<stop_id>` and the arguments
+`{"schema":"helm.authority.lift.v1","stop_id":"<stop_id>"}`, under the
+operator's mandate for that effect type.
+
+- **Approval.** Every `helm.authority.*` effect escalates, whatever its risk
+  row says. It needs a distinct human approver with step-up, and step-up
+  fails closed (`STEP_UP_REQUIRED`) until the passkey slice.
+- **Stops.** A stop never blocks its own lift, at admission or at the claim.
+- **Idempotency.** A replayed key returns the stored attempt without using
+  up the token.
+
+**Sum limits fail closed** (L5 of the slice 2 review; the prerequisite for
+HELM-797). Admission refuses a quote that carries no amount for a unit that
+a `sum` limit counts: `invalid_argument` (`SCHEMA_VIOLATION`), and no attempt
+is created. It does not read the missing unit as zero. A zero amount is
+allowed. Distinct-value limits already worked this way.
+
+**Jobs (TA §6.1-§6.3).** `core/pkg/gateway/jobs` runs River v0.44.1, the
+newest release on Go 1.25, in the gateway's own Postgres.
+
+- **Driver.** It uses River's `database/sql` driver over the same `lib/pq`
+  pool, so a job is inserted in the admission transaction itself
+  (transactional enqueueing). That driver has no LISTEN, so jobs are worked
+  in poll-only mode.
+- **Where it runs.** `helm-gateway serve` runs the worker in-process. It is
+  leader-elected, and replicas share the queue. `helm-gateway migrate`
+  applies River's migrations after the gateway schema, and `/readyz` requires
+  both to be current.
+- **Expiry job.** The transaction that escalates an attempt enqueues
+  `expire_escalation`, due at `approval_expires_at`. The job locks the
+  attempt `FOR UPDATE`, as `Approve` does, and writes `EXPIRED`
+  (`APPROVAL_TIMEOUT`) if the attempt is still `ESCALATED` past its window.
+  Of an approval and the expiry, exactly one makes a transition.
+- **Reconcile job.** The dispatch claim's transaction enqueues `reconcile`,
+  30 s out. The job runs `Observe`'s read-back without a caller:
+  - inside a dispatch fence it snoozes to the fence, spending no attempt;
+  - an unresolved read-back retries with backoff: 30 s, doubling, capped at
+    30 min;
+  - on the last of 12 attempts, an attempt still `UNKNOWN` becomes
+    `ESCALATED_TO_HUMAN` with its reservation held;
+  - it never dispatches.
+- **Tenancy.** River's tables have no row security and hold only tenant,
+  workspace and attempt IDs in job arguments. Each job binds its own
+  transaction to the tenant it names.
+
+The runtime role needs these grants on River's tables. The chart's
+`002_grants.sql` extension point (#1065) must list them; the job proofs'
+fixture grants exactly these:
+
+| Table | Privileges |
+|---|---|
+| `river_job`, `river_leader`, `river_queue`, `river_notification` | `SELECT, INSERT, UPDATE, DELETE` |
+| `river_migration` | `SELECT` |
+| sequences `river_*` (the `bigserial` ids) | `USAGE` |
+
+### Slice 3b decisions and open points
+
+- **Lift is bound to the stop.** The proto binds a lift token to the stop,
+  not to the attempt. The lift attempt is approved with a decide token bound
+  to it, like any other attempt.
+- **No lift can be applied yet.** A `helm.authority.lift` attempt cannot
+  reach `ADMITTED` until step-up exists, so this slice has no dispatch-time
+  applier for it (`Dispatch` answers `failed_precondition`: no adapter). A
+  gateway stop lasts until it expires, or until the authority-row store lifts
+  it with a distinct approver. The applier comes with step-up.
+- **A reconcile job's last attempt that fails on a database error** is
+  discarded by River without the hand-off. The attempt stays `UNKNOWN`, with
+  its hold, for `Observe`.
 
 ## Generated code
 

@@ -404,7 +404,9 @@ func TestPostgresNotSentIsObservedFailedAndReleased(t *testing.T) {
 	// No credential is NOT_SENT too, never UNKNOWN.
 	bare, err := New(f.runtime, Config{Adapters: []adapters.Adapter{&scripted{}}})
 	must(t, err)
-	b := f.propose(human, note("no-credential"))
+	free := note("no-credential")
+	free.Quote = []Amount{{Unit: "notes", Amount: 0}}
+	b := f.propose(human, free)
 	got, _, err := bare.Dispatch(ctx, workload, b.ID)
 	must(t, err)
 	wantOutcome(t, "no credential", got, "OBSERVED", "FAILED", contracts.ReasonProviderCredentialRejected)

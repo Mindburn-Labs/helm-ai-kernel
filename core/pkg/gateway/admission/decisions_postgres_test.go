@@ -33,10 +33,14 @@ func decideToken(scope string) Token {
 // escalates, over an observed branch.
 func (f *fixture) escalated(key string) Attempt {
 	f.t.Helper()
-	branch := f.propose(human, proposal(key+"-branch", effectargs.GitHubBranchCreateFromChanges, repo, branchArgs("helm/"+key)))
+	// Every summed unit a test's limits count is quoted, as a sum limit
+	// requires (L5); zero holds nothing.
+	branchIn := proposal(key+"-branch", effectargs.GitHubBranchCreateFromChanges, repo, branchArgs("helm/"+key))
+	branchIn.Quote = []Amount{{Unit: "effects", Amount: 0}, {Unit: "notes", Amount: 0}}
+	branch := f.propose(human, branchIn)
 	f.observeBranch(branch.ID, commitSHA)
 	in := proposal(key, effectargs.GitHubPullRequestCreateDraft, repo, draftArgs(branch.ID, "helm/"+key, commitSHA))
-	in.Quote = []Amount{{Unit: "effects", Amount: 1}}
+	in.Quote = []Amount{{Unit: "effects", Amount: 1}, {Unit: "notes", Amount: 0}}
 	a := f.propose(human, in)
 	wantState(f.t, "escalation", a, "ESCALATED", contracts.ReasonApprovalRequired)
 	return a

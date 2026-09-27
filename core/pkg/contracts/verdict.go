@@ -104,6 +104,8 @@ const (
 	ReasonApproverNotDistinct    ReasonCode = "APPROVER_NOT_DISTINCT"
 	ReasonApprovalRejected       ReasonCode = "APPROVAL_REJECTED"
 	ReasonStepUpRequired         ReasonCode = "STEP_UP_REQUIRED"
+	ReasonAuthorityChanged       ReasonCode = "AUTHORITY_CHANGED"
+	ReasonPermitExpired          ReasonCode = "PERMIT_EXPIRED"
 
 	// ── Privilege Tier Reasons ──────────────
 	ReasonInsufficientPrivilege ReasonCode = "INSUFFICIENT_PRIVILEGE"

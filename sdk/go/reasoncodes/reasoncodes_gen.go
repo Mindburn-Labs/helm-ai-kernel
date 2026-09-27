@@ -456,6 +456,18 @@ const ArithmeticOverflow = "ARITHMETIC_OVERFLOW"
 // different request
 const IdempotencyConflict = "IDEMPOTENCY_CONFLICT"
 
+// ApproverNotDistinct DENY: The approver is the requester; an approval needs a
+// distinct principal
+const ApproverNotDistinct = "APPROVER_NOT_DISTINCT"
+
+// ApprovalRejected DENY: A distinct human approver rejected the escalated
+// effect
+const ApprovalRejected = "APPROVAL_REJECTED"
+
+// StepUpRequired DENY: Approving a high-risk, irreversible or authority-
+// widening effect needs a step-up assertion the request did not carry
+const StepUpRequired = "STEP_UP_REQUIRED"
+
 var all = [...]string{
 	PolicyViolation,
 	NoPolicyDefined,
@@ -574,6 +586,9 @@ var all = [...]string{
 	PerCallLimit,
 	ArithmeticOverflow,
 	IdempotencyConflict,
+	ApproverNotDistinct,
+	ApprovalRejected,
+	StepUpRequired,
 }
 
 // All returns every registered reason code, in registry order.

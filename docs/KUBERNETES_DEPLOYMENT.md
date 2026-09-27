@@ -3,6 +3,8 @@ title: Kubernetes Deployment
 last_reviewed: 2026-09-26
 ---
 
+<!-- quantum_posture: this page describes classical TLS, keyless cosign image signing and SCRAM-SHA-256 database passwords; it adds no post-quantum cryptographic control. -->
+
 # Kubernetes Deployment
 
 This page documents the repository-owned HELM AI Kernel chart for self-hosted
@@ -106,6 +108,159 @@ by the Secret's `ca.crt`. Put `HELM_ORGANIZATION_RUNTIME_API_KEY` in the
 `helm-auth` Secret to open the organization-runtime route to the Control
 Plane. The Control Plane pins the receipt signer from
 `GET /api/v1/receipt-keyring`; see [HTTP API](reference/http-api.md#receipt-keyring).
+
+## Effect gateway (helm-gateway)
+
+The release image carries `/usr/local/bin/helm-gateway` next to
+`helm-ai-kernel`, so both run from one tag under one cosign identity.
+`gateway.enabled=true` deploys `helm-gateway serve` from that image; it is off
+by default and the default render does not change. The value table is in the
+[chart README](../deploy/helm-chart/README.md#effect-gateway-gateway).
+
+What renders:
+
+- a Deployment running `helm-gateway serve`, with its own ServiceAccount and
+  no Kubernetes API token, the kernel's Pod and container security contexts,
+  and probes on the health port (`/healthz`; `/readyz` answers only when the
+  database schema is at the binary's head version);
+- a Service on 8443 (TLS, or mutual TLS with `gateway.tls.clientAuth`);
+- a NetworkPolicy, described below;
+- a pre-install/pre-upgrade hook Job that migrates the database before the new
+  Pods start.
+
+Required values fail the render with a message naming them:
+`gateway.tls.existingSecret` (or `gateway.tls.devInsecureLoopback=true`
+outside production), the four `gateway.controlPlaneIdentity.*` values,
+`gateway.database.existingSecret`, and, with the NetworkPolicy on, a Control
+Plane selector and `gateway.networkPolicy.database.to`.
+
+### Database roles: owner and runtime
+
+ADR-0004 separates the role that owns the schema from the role that serves.
+`helm-gateway migrate` creates the tables; whoever runs it owns them, and a
+table owner can turn row-level security off. So migrate runs as the owner and
+`serve` runs as a role with DML grants only:
+
+| Role | Attributes | Does |
+| --- | --- | --- |
+| `helm_owner` | NOLOGIN | Owns the `helm_gateway` schema and every table. The migrate and grant steps `SET ROLE` to it through `PGOPTIONS`. |
+| `helm_gateway` | LOGIN | The runtime DSN. `SELECT, INSERT, UPDATE` on the `authority_*` tables; only `SELECT, INSERT` on `authority_postings` and `authority_distinct_values`; `SELECT, INSERT, DELETE` on `authority_token_replay`; `SELECT` on `gateway_schema_migrations`. River's job tables, once `helm-gateway migrate` has created them: `SELECT, INSERT, UPDATE, DELETE` on `river_job`, `river_leader`, `river_queue` and `river_notification`, `SELECT` on `river_migration`, and `USAGE` on the `river_*` sequences. |
+
+Neither role has SUPERUSER, BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION,
+and the runtime role must not be a member of the owner role.
+
+With `gateway.database.bootstrap.enabled=true` the hook Job runs, in order:
+
+1. `helm-gateway db scram-verifier` in its own container reads the runtime
+   password from the Secret key `HELM_GATEWAY_ROLE_PASSWORD`, mounted as a
+   file, and writes a SCRAM-SHA-256 verifier to an in-memory volume. No other
+   container sees the plaintext, and PostgreSQL receives only the verifier,
+   so the password is not on the wire or in a statement log;
+2. `files/gateway-db/001_roles.sql` with `psql` as the administrator from
+   `gateway.database.bootstrap.existingSecret`. It creates or converges both
+   roles, grants the administrator membership in the owner, creates the schema
+   owned by the owner, sets the runtime role's `search_path`, sets its
+   password from the verifier (a plaintext value is refused), and closes the
+   gateway database: `REVOKE CONNECT, TEMPORARY ... FROM PUBLIC`, then
+   `GRANT CONNECT` to the runtime role only. The owner role is NOLOGIN and
+   never connects;
+3. `helm-gateway migrate` with the administrator DSN and
+   `PGOPTIONS=-c role=helm_owner -c search_path=helm_gateway`, so every table
+   is created by the owner;
+4. `files/gateway-db/002_grants.sql` as the owner. It revokes and re-grants the
+   runtime set in one transaction. The rules cover only the tables that exist,
+   so the same file is right before and after River's tables arrive. The run
+   fails on any table, or any sequence that is not an identity sequence, that
+   has no rule.
+
+Each step is idempotent. The administrator may be a superuser, or a role with
+CREATEROLE that owns the gateway database, as on a managed database. A drifted
+attribute that the administrator is not allowed to reset, such as BYPASSRLS
+without holding it, fails the Job before migrate runs.
+`core/pkg/gateway/admission/chart_roles_postgres_test.go` runs these files
+against PostgreSQL 16 in both administrator modes, twice each, in a database
+of their own with `log_statement = 'all'`. It checks the role attributes,
+ownership and exact grants; that the plaintext password is absent from the
+server log while a plaintext `ALTER ROLE ... PASSWORD` control is present;
+and that a stand-in Control Plane role cannot connect to the gateway
+database. It then serves admission as the runtime role.
+
+On QA and the pilot production tier the gateway database shares its
+PostgreSQL instance with the Control Plane's. The bootstrap closes the gateway
+database only. Closing the other databases to the gateway role is the
+operator's job, because PostgreSQL grants CONNECT on every new database to
+PUBLIC: run `REVOKE CONNECT ON DATABASE <control plane db> FROM PUBLIC` and
+grant CONNECT to the roles that need it. The bootstrap logs a warning for
+each other database the runtime role can still connect to.
+
+Without the bootstrap, the hook runs `helm-gateway migrate` with
+`gateway.database.migrate.existingSecret`, the owner's DSN. The operator
+creates the roles and grants. If that value is empty, migrate runs with the
+runtime DSN and the serving role owns the tables. That is acceptable for
+development only, and `helm.production=true` refuses to render it.
+
+### Network policy
+
+- **Ingress:** TCP 8443, only from the peers selected by
+  `gateway.networkPolicy.controlPlane` (a namespace selector, a Pod selector,
+  or both combined). The health port 8081 (`/healthz`, `/readyz`, no secrets)
+  is open to any peer, so kubelet probes pass under a CNI that applies
+  NetworkPolicy to node traffic.
+- **Egress:**
+  - DNS on UDP and TCP 53 to `gateway.networkPolicy.dns.to`;
+  - the database on `gateway.networkPolicy.database.port` to
+    `gateway.networkPolicy.database.to`;
+  - TCP 443 to any address.
+
+The gateway calls `api.github.com` and fetches the JWKS on 443. A
+NetworkPolicy cannot name a host, so this rule is port-only and does not stop
+the Pod from reaching other hosts on 443. For a JWKS endpoint on another port,
+add a rule under `gateway.networkPolicy.extraEgress`. Enforcement also depends
+on a CNI that implements NetworkPolicy.
+
+### GitHub App credentials
+
+`gateway.github.existingSecret` is mounted into the gateway Pod and no other
+Pod (R8), with mode 0400. The Pod's `fsGroup` (65534) is what lets the non-root
+user read it, because kubelet adds group read for that group. The Secret is
+mounted as:
+
+- `/var/run/secrets/helm-gateway-github/app-id`
+  (`HELM_GATEWAY_GITHUB_APP_ID_FILE`);
+- `/var/run/secrets/helm-gateway-github/private-key.pem`
+  (`HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE`).
+
+`gateway.github.installationsFile` is rendered into a ConfigMap and mounted as
+`/etc/helm-gateway/github/installations.json`
+(`HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE`). The installations file follows the
+shape in the [chart README](../deploy/helm-chart/README.md#effect-gateway-gateway)
+(`tenant_id`, `owner`, `installation_id` and `repositories`, and nothing
+else). The gateway's connection custody reads all three files, or none: both
+`helm-gateway serve` and the chart refuse a partial set. Without them, every
+GitHub dispatch is refused with `PROVIDER_CREDENTIAL_REJECTED`.
+`gateway.github.apiURL` points the custody at GitHub Enterprise Server, and
+`gateway.dispatchTimeout` bounds one dispatch (2m by default).
+
+### Example (qa)
+
+```bash
+helm upgrade --install helm-ai-kernel deploy/helm-chart \
+  --set gateway.enabled=true \
+  --set gateway.tls.existingSecret=helm-gateway-tls \
+  --set gateway.controlPlaneIdentity.jwksURL=https://cp.example.internal/.well-known/jwks.json \
+  --set gateway.controlPlaneIdentity.issuer=https://cp.example.internal \
+  --set gateway.controlPlaneIdentity.audience=helm-gateway:qa \
+  --set gateway.controlPlaneIdentity.actor=spiffe://helm/control-plane \
+  --set gateway.database.existingSecret=helm-gateway-db \
+  --set gateway.database.bootstrap.enabled=true \
+  --set gateway.database.bootstrap.existingSecret=helm-gateway-db-admin \
+  --set gateway.networkPolicy.controlPlane.namespaceSelector.matchLabels.kubernetes\.io/metadata\.name=helm-control-plane \
+  --set gateway.networkPolicy.database.to[0].ipBlock.cidr=10.0.0.10/32
+```
+
+For development without a certificate, set
+`gateway.tls.devInsecureLoopback=true` and reach the API with
+`kubectl port-forward deploy/helm-ai-kernel-gateway 8443:8443`.
 
 ## Smoke Checks
 

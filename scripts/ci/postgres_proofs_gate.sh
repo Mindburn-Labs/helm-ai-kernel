@@ -88,4 +88,7 @@ LC_ALL=C "$BINDIR/pg_ctl" -D "$DATA" -l "$WORK/postgres.log" -w -o \
 LC_ALL=C "$BINDIR/createdb" -h 127.0.0.1 -p "$PORT" -U postgres helm_proofs
 echo "postgres-proofs: disposable $("$BINDIR/postgres" --version) cluster on 127.0.0.1:$PORT, TimeZone $("$BINDIR/psql" -h 127.0.0.1 -p "$PORT" -U postgres -d helm_proofs -Atc 'SHOW TimeZone')"
 
-HELM_TEST_POSTGRES_URL="postgres://postgres@127.0.0.1:$PORT/helm_proofs?sslmode=disable" bash "$PROOFS"
+# HELM_TEST_POSTGRES_LOG lets a proof read the server log, e.g. to show a
+# secret never reached it (core/pkg/gateway/admission/chart_roles_postgres_test.go).
+HELM_TEST_POSTGRES_LOG="$WORK/postgres.log" \
+    HELM_TEST_POSTGRES_URL="postgres://postgres@127.0.0.1:$PORT/helm_proofs?sslmode=disable" bash "$PROOFS"

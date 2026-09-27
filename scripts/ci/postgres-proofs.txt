@@ -17,6 +17,7 @@ pkg/gateway/admission TestPostgresApprovalPreconditionsLeaveTheAttemptEscalated 
 pkg/gateway/admission TestPostgresApproveByADistinctHumanAdmits 1 race
 pkg/gateway/admission TestPostgresApproveRereadsStopsAndTheMandate 1 race
 pkg/gateway/admission TestPostgresCancelReleasesAndFollowsTheAllowedEdges 1 race
+pkg/gateway/admission TestPostgresChartBootstrapGivesTheRuntimeRoleOnlyItsGrants 1 race
 pkg/gateway/admission TestPostgresClaimRefusalsCancelAndRelease 1 race
 pkg/gateway/admission TestPostgresConcurrentApprovalsAdmitOnce 10 race
 pkg/gateway/admission TestPostgresConcurrentProposalsAdmitOnce 10 race

@@ -2582,7 +2582,7 @@ type Permit struct {
 	// refuses the permit if any of them changed.
 	AuthorityVersions []*AuthorityVersion `protobuf:"bytes,3,rep,name=authority_versions,json=authorityVersions,proto3" json:"authority_versions,omitempty"`
 	// After this time the claim refuses the permit
-	// [reason_code_pending: PERMIT_EXPIRED].
+	// [reason_code: PERMIT_EXPIRED].
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	// Set when the dispatch claim consumed the permit.
 	ConsumedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=consumed_at,json=consumedAt,proto3" json:"consumed_at,omitempty"`

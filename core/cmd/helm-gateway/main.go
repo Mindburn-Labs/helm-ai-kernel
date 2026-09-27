@@ -10,6 +10,13 @@
 // audience, helm-gateway:<env>). --dev-insecure-listen serves plain HTTP on a
 // loopback address instead, for local development only; it relaxes nothing
 // else.
+//
+// Dispatch and Observe act on GitHub through the GitHub App whose files the
+// chart mounts into the gateway Pod only (R8): HELM_GATEWAY_GITHUB_APP_ID_FILE,
+// HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE and
+// HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE, all or none, and optionally
+// HELM_GATEWAY_GITHUB_API_URL. Without them every GitHub dispatch is NOT_SENT
+// (PROVIDER_CREDENTIAL_REJECTED).
 package main
 
 // quantum_posture: the listener serves classical TLS 1.2+ (pkg/servetls) and
@@ -35,16 +42,20 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth/jwks"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/server"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/servetls"
 )
 
 const (
-	envDatabaseURL    = "HELM_GATEWAY_DATABASE_URL"
-	envPermitTTL      = "HELM_GATEWAY_PERMIT_TTL"
-	envApprovalWindow = "HELM_GATEWAY_APPROVAL_WINDOW"
+	envDatabaseURL     = "HELM_GATEWAY_DATABASE_URL"
+	envPermitTTL       = "HELM_GATEWAY_PERMIT_TTL"
+	envApprovalWindow  = "HELM_GATEWAY_APPROVAL_WINDOW"
+	envDispatchTimeout = "HELM_GATEWAY_DISPATCH_TIMEOUT"
 )
 
 func main() {
@@ -239,7 +250,8 @@ func openDatabase(getenv func(string) string) (*sql.DB, error) {
 
 func admissionConfigFromEnv(getenv func(string) string) (admission.Config, error) {
 	var c admission.Config
-	for name, target := range map[string]*time.Duration{envPermitTTL: &c.PermitTTL, envApprovalWindow: &c.ApprovalWindow} {
+	for name, target := range map[string]*time.Duration{envPermitTTL: &c.PermitTTL, envApprovalWindow: &c.ApprovalWindow,
+		envDispatchTimeout: &c.DispatchTimeout} {
 		raw := strings.TrimSpace(getenv(name))
 		if raw == "" {
 			continue
@@ -250,5 +262,24 @@ func admissionConfigFromEnv(getenv func(string) string) (admission.Config, error
 		}
 		*target = d
 	}
-	return c, nil
+	return c, effectsFromEnv(getenv, &c)
+}
+
+// effectsFromEnv wires the GitHub adapter and the GitHub App custody.
+func effectsFromEnv(getenv func(string) string, c *admission.Config) error {
+	apiURL, err := custody.GitHubAPIURL(getenv)
+	if err != nil {
+		return err
+	}
+	c.Adapters = []adapters.Adapter{github.New(github.WithBaseURL(apiURL))}
+	app, err := custody.GitHubAppFromEnv(getenv)
+	if err != nil {
+		return err
+	}
+	if app == nil {
+		slog.Warn("no GitHub App is configured; every GitHub dispatch is NOT_SENT", "set", custody.EnvGitHubAppIDFile)
+		return nil
+	}
+	c.Credentials = app
+	return nil
 }

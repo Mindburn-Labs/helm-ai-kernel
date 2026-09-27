@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 )
 
 // Attempt is the stored effect attempt.
@@ -85,7 +87,8 @@ type Exposure struct {
 	Amount      int64
 }
 
-// Observation is the attempt's latest read of its outcome.
+// Observation is the attempt's latest read of its outcome. At most one
+// typed result is set, the one its effect type defines.
 type Observation struct {
 	Source         string
 	TrustClass     string
@@ -93,6 +96,10 @@ type Observation struct {
 	EvidenceDigest []byte
 	ObservedAt     time.Time
 	ResultRef      string
+
+	GitHubPullRequest *adapters.GitHubPullRequestResult
+	GitHubBranch      *adapters.GitHubBranchResult
+	GitHubRepository  *adapters.GitHubRepositoryResult
 }
 
 // Get returns an attempt of the caller's tenant and workspace. Any other
@@ -237,9 +244,12 @@ func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 
 	var o Observation
 	var observedOutcome sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT source, trust_class, outcome, evidence_digest, observed_at, result_ref
+	var kind string
+	var result []byte
+	err = tx.QueryRowContext(ctx, `SELECT source, trust_class, outcome, evidence_digest, observed_at, result_ref, result_kind, result
 		FROM authority_observations WHERE tenant_id = $1 AND attempt_id = $2 ORDER BY observation_id DESC LIMIT 1`,
-		caller.TenantID, attemptID).Scan(&o.Source, &o.TrustClass, &observedOutcome, &o.EvidenceDigest, &o.ObservedAt, &o.ResultRef)
+		caller.TenantID, attemptID).Scan(&o.Source, &o.TrustClass, &observedOutcome, &o.EvidenceDigest, &o.ObservedAt, &o.ResultRef,
+		&kind, &result)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 	case err != nil:
@@ -247,7 +257,31 @@ func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 	default:
 		o.Outcome = observedOutcome.String
 		o.ObservedAt = o.ObservedAt.UTC()
+		if err := o.decodeResult(kind, result); err != nil {
+			return Attempt{}, err
+		}
 		a.LatestObservation = &o
 	}
 	return a, nil
+}
+
+// decodeResult fills the typed result a stored observation carries.
+func (o *Observation) decodeResult(kind string, raw []byte) error {
+	var target any
+	switch kind {
+	case "":
+		return nil
+	case "github_pull_request":
+		o.GitHubPullRequest = &adapters.GitHubPullRequestResult{}
+		target = o.GitHubPullRequest
+	case "github_branch":
+		o.GitHubBranch = &adapters.GitHubBranchResult{}
+		target = o.GitHubBranch
+	case "github_repository":
+		o.GitHubRepository = &adapters.GitHubRepositoryResult{}
+		target = o.GitHubRepository
+	default:
+		return fmt.Errorf("observation result kind %q is not one this gateway reads", kind)
+	}
+	return json.Unmarshal(raw, target)
 }

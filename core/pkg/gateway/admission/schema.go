@@ -45,6 +45,9 @@ var migrations = []migration{
 	{2, "approvals and single-use tokens", func() (string, error) {
 		return withRowSecurity("", "schema/002_decisions.sql", Tables[8:])
 	}},
+	{3, "dispatch claim fence", func() (string, error) {
+		return withRowSecurity("", "schema/003_dispatch.sql", nil)
+	}},
 }
 
 // HeadVersion is the schema version this binary serves.

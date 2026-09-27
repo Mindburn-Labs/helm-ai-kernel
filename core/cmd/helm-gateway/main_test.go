@@ -78,6 +78,12 @@ func TestServeRefusesToStartWithoutItsConfiguration(t *testing.T) {
 		"no database":              {[]string{"serve", "--dev-insecure-listen", "127.0.0.1:0"}, identityEnv, "HELM_GATEWAY_DATABASE_URL"},
 		"bad permit TTL":           {[]string{"serve", "--dev-insecure-listen", "127.0.0.1:0"}, with(identityEnv, map[string]string{"HELM_GATEWAY_PERMIT_TTL": "-1s"}), "HELM_GATEWAY_PERMIT_TTL"},
 		"client auth without a CA": {[]string{"serve"}, with(identityEnv, map[string]string{"HELM_TLS_CLIENT_AUTH": "require"}), "HELM_TLS"},
+		"partial GitHub App config": {[]string{"serve", "--dev-insecure-listen", "127.0.0.1:0"},
+			with(identityEnv, map[string]string{"HELM_GATEWAY_GITHUB_APP_ID_FILE": "/var/run/secrets/helm-gateway-github/app-id"}), "HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE"},
+		"GitHub API over plain HTTP": {[]string{"serve", "--dev-insecure-listen", "127.0.0.1:0"},
+			with(identityEnv, map[string]string{"HELM_GATEWAY_GITHUB_API_URL": "http://ghe.example"}), "HELM_GATEWAY_GITHUB_API_URL"},
+		"bad dispatch timeout": {[]string{"serve", "--dev-insecure-listen", "127.0.0.1:0"},
+			with(identityEnv, map[string]string{"HELM_GATEWAY_DISPATCH_TIMEOUT": "soon"}), "HELM_GATEWAY_DISPATCH_TIMEOUT"},
 		"unknown command":          {[]string{"dispatch"}, nil, "unknown command"},
 		"migrate without database": {[]string{"migrate"}, nil, "HELM_GATEWAY_DATABASE_URL"},
 	} {
@@ -85,6 +91,30 @@ func TestServeRefusesToStartWithoutItsConfiguration(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), test.want) {
 			t.Errorf("%s: err = %v, want one naming %s", name, err, test.want)
 		}
+	}
+}
+
+// TestServeWiresTheGitHubAdapter: serve's admission dispatches the
+// skeleton's GitHub effects through the GitHub adapter (CTL-051), with the
+// App custody as its only credential source.
+func TestServeWiresTheGitHubAdapter(t *testing.T) {
+	cfg, err := admissionConfigFromEnv(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := map[string]bool{}
+	for _, a := range cfg.Adapters {
+		for _, d := range a.Declarations() {
+			declared[d.EffectType] = true
+		}
+	}
+	for _, effectType := range []string{"github.repository.get", "github.branch.create_from_changes", "github.pull_request.create_draft"} {
+		if !declared[effectType] {
+			t.Errorf("serve dispatches no adapter for %s", effectType)
+		}
+	}
+	if cfg.Credentials != nil {
+		t.Fatalf("credentials without a GitHub App: %T", cfg.Credentials)
 	}
 }
 

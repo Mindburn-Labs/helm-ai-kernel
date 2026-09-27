@@ -1,5 +1,6 @@
 // Package admission is the effect gateway's admission transaction (HELM-751
 // s2, ADR-0001 §1): Propose, and the reads of attempts and their content.
+// dispatch.go adds the dispatch claim, Dispatch and Observe (s3).
 //
 // Propose is one PostgreSQL transaction at READ COMMITTED, bound to the
 // token's tenant through app.current_tenant under forced row security:
@@ -41,6 +42,8 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
@@ -105,14 +108,25 @@ type Config struct {
 	// ApprovalWindow bounds how long an escalation stays pending; a
 	// requested approval_expires_at is clamped to it. Default 24h.
 	ApprovalWindow time.Duration
+	// DispatchTimeout bounds one adapter Dispatch or Observe. The dispatch
+	// fence (dispatch_deadline) is the claim time plus this plus a minute.
+	// Default 2m.
+	DispatchTimeout time.Duration
+	// Adapters perform the effect types they declare (§9.1). An effect type
+	// no adapter declares is not dispatched.
+	Adapters []adapters.Adapter
+	// Credentials is the connection custody the adapters take provider
+	// credentials from (R8). Nil: every dispatch is NOT_SENT for want of one.
+	Credentials Credentials
 }
 
 // Service runs admission over one database. It holds no tenant data: the
 // only state it keeps is compiled mandate conditions, keyed by the digest of
 // their text.
 type Service struct {
-	db  *sql.DB
-	cfg Config
+	db       *sql.DB
+	cfg      Config
+	adapters map[string]adapters.Adapter
 
 	conditions sync.Map // [32]byte -> *authority.Snapshot
 }
@@ -128,7 +142,19 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 	if cfg.ApprovalWindow <= 0 {
 		cfg.ApprovalWindow = 24 * time.Hour
 	}
-	return &Service{db: db, cfg: cfg}, nil
+	if cfg.DispatchTimeout <= 0 {
+		cfg.DispatchTimeout = 2 * time.Minute
+	}
+	byType := map[string]adapters.Adapter{}
+	for _, a := range cfg.Adapters {
+		for _, d := range a.Declarations() {
+			if _, dup := byType[d.EffectType]; dup {
+				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
+			}
+			byType[d.EffectType] = a
+		}
+	}
+	return &Service{db: db, cfg: cfg, adapters: byType}, nil
 }
 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID.
@@ -759,19 +785,22 @@ func checkBranchAttempt(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	if err != nil {
 		return err
 	}
-	var branch effectargs.BranchCreateFromChanges
-	if err := json.Unmarshal(raw, &branch); err != nil || branch.Head == nil || branch.Base == nil {
-		return failed("the branch attempt's arguments are unreadable")
-	}
-	if *branch.Head != *pr.Head || *branch.Base != *pr.Base {
-		return failed("head and base differ from the branch attempt's")
-	}
 	var commit sql.NullString
 	err = tx.QueryRowContext(ctx, `SELECT result ->> 'commit_sha' FROM authority_observations
 		WHERE tenant_id = $1 AND attempt_id = $2 AND result_kind = 'github_branch' AND outcome = 'SUCCEEDED'
 		ORDER BY observation_id DESC LIMIT 1`, tenantID, *pr.BranchAttemptID).Scan(&commit)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && commit.String != *pr.HeadSHA) {
-		return failed("head_sha is not the branch attempt's observed commit")
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	// Head, base and head_sha against the branch attempt: the adapter's pure
+	// form of this precondition (HELM-753).
+	err = github.CheckBranchAttempt(github.BranchAttemptView{
+		AttemptID: *pr.BranchAttemptID, TenantID: tenantID, EffectType: effectType, Target: target,
+		State: state, Outcome: outcome.String, Arguments: raw, CommitSHA: commit.String,
+	}, github.PullRequestProposal{TenantID: tenantID, Target: in.Target, Arguments: in.Arguments})
+	var refusal *adapters.Refusal
+	if errors.As(err, &refusal) {
+		return refuse(CodeFailedPrecondition, contracts.ReasonPreconditionFailed, "%s", refusal.Detail)
 	}
 	return err
 }

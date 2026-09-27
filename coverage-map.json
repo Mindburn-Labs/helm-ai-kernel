@@ -5,9 +5,9 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 78,
-    "enforced": 37,
-    "observed_only": 29,
+    "total": 79,
+    "enforced": 39,
+    "observed_only": 28,
     "unmanaged": 12,
     "retired_invariants": 11,
     "build_plane": 1
@@ -3147,42 +3147,96 @@
       "id": "CTL-051",
       "title": "Effect adapters act only on the permitted bytes",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "The GitHub effect adapter's Dispatch refuses with PERMIT_ARGUMENT_MISMATCH, before any provider call, unless the permit's argument digest is SHA-256 of the exact argument bytes it is about to act on (audit 09-01). It takes the repository only from a validated github.com/{owner}/{repo} target and refuses arguments outside the closed v1 schemas with SCHEMA_VIOLATION (audit 09-02).",
-      "status": "observed-only",
+      "claim": "helm-gateway's Dispatch and Observe act on GitHub only through the GitHub effect adapter, for github.repository.get, github.branch.create_from_changes and github.pull_request.create_draft. The adapter's Dispatch refuses with PERMIT_ARGUMENT_MISMATCH, before any provider call, unless the permit's argument digest is SHA-256 of the exact argument bytes it is about to act on (audit 09-01). It takes the repository only from a validated github.com/{owner}/{repo} target and refuses arguments outside the closed v1 schemas with SCHEMA_VIOLATION (audit 09-02). Its credential is an installation token the gateway's GitHub App custody mints per repository, only for a repository the tenant's installation entry allows, scoped to that one repository and never logged (R8, HELM-751 s3).",
+      "status": "enforced",
       "plane": "runtime",
-      "reason": "Library only. No shipped binary imports core/pkg/gateway/adapters/github (a declared library root in scripts/ci/dead-packages-allowlist.txt). HELM-751 s3 wires helm-gateway's Dispatch to it; that slice adds the removal tests and can claim enforcement for the tested path.",
       "entry_points": [
         {
+          "symbol": "core/cmd/helm-gateway.effectsFromEnv",
+          "reachability": "reachable"
+        },
+        {
           "symbol": "core/pkg/gateway/adapters.CheckPermitDigest",
-          "reachability": "unreachable"
+          "reachability": "reachable"
         },
         {
           "symbol": "core/pkg/gateway/adapters/github.Adapter.Dispatch",
-          "reachability": "unreachable"
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/adapters/github.Adapter.Observe",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/custody.GitHubApp.Token",
+          "reachability": "reachable"
         }
       ],
       "gates": [],
-      "config": [],
+      "config": [
+        "HELM_GATEWAY_GITHUB_APP_ID_FILE, HELM_GATEWAY_GITHUB_APP_PRIVATE_KEY_FILE and HELM_GATEWAY_GITHUB_INSTALLATIONS_FILE, all or none (the chart mounts them into the gateway Pod only); without them every GitHub dispatch is NOT_SENT with PROVIDER_CREDENTIAL_REJECTED.",
+        "HELM_GATEWAY_GITHUB_API_URL (default https://api.github.com; https, or http on loopback only)."
+      ],
       "protected_operations": [
-        "github.branch.create_from_changes and github.pull_request.create_draft dispatches."
+        "Dispatch and Observe of github.repository.get, github.branch.create_from_changes and github.pull_request.create_draft on helm-gateway serve."
       ],
       "bypass_assumptions": [
-        "No shipped caller exists, so nothing is enforced.",
-        "The digest binds the bytes, not their meaning: the gateway's admission decides what those bytes may do."
+        "The digest binds the bytes, not their meaning: the gateway's admission decides what those bytes may do (CTL-052).",
+        "The gateway trusts the App key and installations file as mounted; whoever can write them can widen a tenant's repositories.",
+        "The chart's egress rule for GitHub is port 443 to any address; a NetworkPolicy cannot name api.github.com.",
+        "Prepare is not called by the gateway: the adapter re-checks its preconditions at Dispatch (the head at head_sha, the default branch), which is where they bind."
       ],
       "tests": {
         "allowed": [
-          "core/pkg/gateway/adapters/github.TestQualificationFake"
+          "core/pkg/gateway/adapters/github.TestQualificationFake",
+          "core/pkg/gateway/custody.TestGitHubAppMintsRepositoryScopedTokensAndCachesThem",
+          "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter",
+          "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
         ],
         "forbidden": [
           "core/pkg/gateway/adapters.TestCheckPermitDigest",
           "core/pkg/gateway/adapters/github.TestQualificationFake",
-          "core/pkg/gateway/adapters/github.TestTargets"
+          "core/pkg/gateway/adapters/github.TestTargets",
+          "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist",
+          "core/pkg/gateway/custody.TestGitHubAppConfiguration"
         ],
-        "removal": [],
-        "bypass": []
+        "removal": [
+          "core/pkg/gateway/adapters.TestCheckPermitDigest",
+          "core/pkg/gateway/adapters/github.TestTargets",
+          "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter",
+          "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
+        ],
+        "bypass": [
+          "core/pkg/gateway/adapters.TestAdaptersDoNotImportTheLegacyRuntime",
+          "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
+        ]
       },
-      "removal_proofs": []
+      "removal_proofs": [
+        {
+          "file": "core/pkg/gateway/adapters/adapters.go",
+          "tests": [
+            "core/pkg/gateway/adapters.TestCheckPermitDigest"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/adapters/github/args.go",
+          "tests": [
+            "core/pkg/gateway/adapters/github.TestTargets"
+          ]
+        },
+        {
+          "file": "core/cmd/helm-gateway/main.go",
+          "tests": [
+            "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/custody/githubapp.go",
+          "tests": [
+            "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
+          ]
+        }
+      ]
     },
     {
       "id": "CTL-052",
@@ -3232,7 +3286,7 @@
         "Propose, GetAttempt and GetAttemptContent of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
       ],
       "bypass_assumptions": [
-        "Dispatch, Observe, Stop and Lift answer unimplemented in this slice; nothing in the binary consumes a permit yet, so the dispatch-claim half of ADR-0001 (version re-check, stops after admission) is not enforced here. Approve, Reject and Cancel are CTL-053.",
+        "Stop and Lift answer unimplemented in this slice. The dispatch-claim half of ADR-0001 (version re-check, stops after admission) is CTL-054; Approve, Reject and Cancel are CTL-053.",
         "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which no shipped binary calls yet (CTL-046); the gateway trusts the rows it finds.",
         "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2).",
         "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR).",
@@ -3414,6 +3468,106 @@
           "file": "core/pkg/gateway/admission/decisions.go",
           "tests": [
             "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-054",
+      "title": "Gateway dispatch claim and observation",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "helm-gateway dispatches an ADMITTED attempt only for an active workload principal (agent or service) of the token's tenant and workspace with a helm.gateway.execute token, and only through one claim transaction committed before any provider I/O (ADR-0001 §1, TA §4.1): it locks the attempt and its unused permit, re-locks the authority rows FOR SHARE and reads the stops after them. An active stop (EMERGENCY_STOP_FENCED), an expired permit (PERMIT_EXPIRED), any change to a row the permit was issued under (AUTHORITY_CHANGED) or a mandate outside its validity (MANDATE_OUTSIDE_VALIDITY) voids the permit, releases the held exposure and records CANCELLED; otherwise the permit is consumed once and the attempt becomes DISPATCHING with a fence. The adapter's SENT becomes DISPATCHED and is read back; NOT_SENT becomes OBSERVED(FAILED) with the adapter's reason and releases the hold; INDEFINITE becomes UNKNOWN and keeps it. A repeated Dispatch returns the stored attempt, and UNKNOWN or a DISPATCHING attempt past its fence is only ever read back by Observe, never sent again. Observe records the typed result the effect type defines, with its content address (result_ref) and evidence_digest, and confirms (SUCCEEDED) or releases (FAILED) the held exposure in the same transaction (HELM-751 s3).",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/gateway/server.Server.Dispatch",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/server.Server.Observe",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.Dispatch",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.Observe",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "HELM_GATEWAY_DISPATCH_TIMEOUT (default 2m) bounds one adapter call; the fence is the claim time plus it plus one minute.",
+        "The HELM_CP_IDENTITY_* token configuration of CTL-052; execute tokens are minted for workload principals only."
+      ],
+      "protected_operations": [
+        "Dispatch and Observe of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
+      ],
+      "bypass_assumptions": [
+        "A provider that applies a write more than a minute after the gateway stopped waiting can be read back as FAILED before it lands; the fence bounds this, it does not remove it.",
+        "UNKNOWN is reconciled only when a workload calls Observe; the polling job and ESCALATED_TO_HUMAN arrive with River (HELM-751 s3b).",
+        "Stops are written by core/pkg/kernel/authority/authorityrows (CTL-046) until the Stop RPC exists (s3b).",
+        "An observation is what the adapter read back from the provider (trust class provider_readback); the gateway checks its shape, not its truth.",
+        "A count-unit effect's exposure settles at its observed outcome; the SETTLED state is left to model-call settlement (HELM-752).",
+        "The trust limits of CTL-052 (ADR-0005 issuer trust) apply."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/gateway/admission.TestPostgresDispatchClaimsThePermitOnce",
+          "core/pkg/gateway/admission.TestPostgresObserveRecordsTheTypedResult",
+          "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire",
+          "core/pkg/gateway/admission.TestClaimRefusal"
+        ],
+        "forbidden": [
+          "core/pkg/gateway/admission.TestPostgresPermitIsConsumedOnce",
+          "core/pkg/gateway/admission.TestPostgresClaimRefusalsCancelAndRelease",
+          "core/pkg/gateway/admission.TestPostgresLostResponseIsReconciledByObserve",
+          "core/pkg/gateway/admission.TestPostgresNotSentIsObservedFailedAndReleased",
+          "core/pkg/gateway/admission.TestPostgresDispatchIsTenantWorkspaceAndWorkloadScoped",
+          "core/pkg/gateway/admission.TestClaimRefusal",
+          "core/pkg/gateway/admission.TestAfterDispatch",
+          "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
+        ],
+        "removal": [
+          "core/pkg/gateway/admission.TestClaimRefusal",
+          "core/pkg/gateway/admission.TestAfterDispatch",
+          "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
+        ],
+        "bypass": [
+          "core/pkg/gateway/admission.TestPostgresCrashAfterTheClaimIsReconciledNeverResent"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestClaimRefusal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestClaimRefusal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestClaimRefusal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestAfterDispatch"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
           ]
         }
       ]

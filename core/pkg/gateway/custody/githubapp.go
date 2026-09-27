@@ -99,7 +99,8 @@ func GitHubAPIURL(getenv func(string) string) (string, error) {
 		return defaultAPIURL, nil
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || (u.Scheme != "https" && !(u.Scheme == "http" && loopback(u.Hostname()))) {
+	plainLoopback := u != nil && u.Scheme == "http" && loopback(u.Hostname())
+	if err != nil || u.Host == "" || (u.Scheme != "https" && !plainLoopback) {
 		return "", fmt.Errorf("%s must be an https URL (http only on a loopback address)", EnvGitHubAPIURL)
 	}
 	return strings.TrimRight(raw, "/"), nil
@@ -250,7 +251,7 @@ func (g *GitHubApp) mint(ctx context.Context, installationID int64, repository s
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("minting an installation token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxAnswer+1))
 	if err != nil || len(raw) > maxAnswer {
 		return "", time.Time{}, errors.New("minting an installation token: the answer is unreadable or too large")

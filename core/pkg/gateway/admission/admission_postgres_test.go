@@ -112,7 +112,9 @@ func newFixture(t *testing.T) *fixture {
 		for _, p := range []struct {
 			id   string
 			kind authorityrows.PrincipalKind
-		}{{"human-a", authorityrows.PrincipalHuman}, {"human-b", authorityrows.PrincipalHuman}, {"human-c", authorityrows.PrincipalHuman}, {"agent-a", authorityrows.PrincipalAgent}} {
+		}{{"human-a", authorityrows.PrincipalHuman}, {"human-b", authorityrows.PrincipalHuman}, {"human-c", authorityrows.PrincipalHuman}, {"agent-a", authorityrows.PrincipalAgent},
+			// The Control Plane runner humans propose through, a workload.
+			{actor, authorityrows.PrincipalService}} {
 			must(t, rows.CreatePrincipal(ctx, tenant, p.id, p.kind))
 		}
 		must(t, rows.CreateEffectType(ctx, tenant, effectargs.GitHubBranchCreateFromChanges, authorityrows.RiskMedium))

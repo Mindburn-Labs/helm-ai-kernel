@@ -259,6 +259,12 @@ export const ReasonCodes = {
   /** DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
   /** assertion the request did not carry */
   STEP_UP_REQUIRED: "STEP_UP_REQUIRED",
+  /** DENY: An authority row the permit was issued under changed before the dispatch claim; the
+  /** permit is voided and the effect must be proposed again */
+  AUTHORITY_CHANGED: "AUTHORITY_CHANGED",
+  /** DENY: The permit expired before the dispatch claim; it is voided and the effect must be
+  /** proposed again */
+  PERMIT_EXPIRED: "PERMIT_EXPIRED",
 } as const;
 
 export type RegisteredReasonCode = (typeof ReasonCodes)[keyof typeof ReasonCodes];

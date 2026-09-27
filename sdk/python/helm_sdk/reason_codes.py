@@ -382,6 +382,16 @@ ARITHMETIC_OVERFLOW = "ARITHMETIC_OVERFLOW"
 IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
 # DENY: The idempotency key was already used with a different request
 
+APPROVER_NOT_DISTINCT = "APPROVER_NOT_DISTINCT"
+# DENY: The approver is the requester; an approval needs a distinct principal
+
+APPROVAL_REJECTED = "APPROVAL_REJECTED"
+# DENY: A distinct human approver rejected the escalated effect
+
+STEP_UP_REQUIRED = "STEP_UP_REQUIRED"
+# DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
+# assertion the request did not carry
+
 ALL: frozenset[str] = frozenset(
     {
         POLICY_VIOLATION,
@@ -501,6 +511,9 @@ ALL: frozenset[str] = frozenset(
         PER_CALL_LIMIT,
         ARITHMETIC_OVERFLOW,
         IDEMPOTENCY_CONFLICT,
+        APPROVER_NOT_DISTINCT,
+        APPROVAL_REJECTED,
+        STEP_UP_REQUIRED,
     }
 )
 

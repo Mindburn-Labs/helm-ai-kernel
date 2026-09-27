@@ -109,7 +109,7 @@ const (
 	// Approved. Approve re-runs admission in the same transaction
 	// (ADR-0001 §5.5), so a committed attempt is ADMITTED or DENIED instead.
 	EffectAttemptState_EFFECT_ATTEMPT_STATE_APPROVED EffectAttemptState = 4
-	// Rejected by the approver [reason_code_pending: APPROVAL_REJECTED].
+	// Rejected by the approver [reason_code: APPROVAL_REJECTED].
 	// Terminal.
 	EffectAttemptState_EFFECT_ATTEMPT_STATE_REJECTED EffectAttemptState = 5
 	// No decision before the escalation expired [reason_code: APPROVAL_TIMEOUT].

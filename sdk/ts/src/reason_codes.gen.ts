@@ -252,6 +252,13 @@ export const ReasonCodes = {
   ARITHMETIC_OVERFLOW: "ARITHMETIC_OVERFLOW",
   /** DENY: The idempotency key was already used with a different request */
   IDEMPOTENCY_CONFLICT: "IDEMPOTENCY_CONFLICT",
+  /** DENY: The approver is the requester; an approval needs a distinct principal */
+  APPROVER_NOT_DISTINCT: "APPROVER_NOT_DISTINCT",
+  /** DENY: A distinct human approver rejected the escalated effect */
+  APPROVAL_REJECTED: "APPROVAL_REJECTED",
+  /** DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
+  /** assertion the request did not carry */
+  STEP_UP_REQUIRED: "STEP_UP_REQUIRED",
 } as const;
 
 export type RegisteredReasonCode = (typeof ReasonCodes)[keyof typeof ReasonCodes];

@@ -1,0 +1,310 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-018",
+  "title": "branch_attempt_id accepts a branch RECONCILED(SUCCEEDED), and refuses one that is not established",
+  "rule": {
+    "statement": "A draft pull request names its branch attempt, which must be OBSERVED(SUCCEEDED) or RECONCILED(SUCCEEDED) with the same head, base and a commit equal to head_sha. Against an UNKNOWN branch, or with another head_sha, Propose is failed_precondition PRECONDITION_FAILED and creates no attempt; once the branch reconciles SUCCEEDED the same proposal escalates.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Typed observation results and the GitHub effects (HELM-753)"
+      },
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Slice 2 decisions and open points"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "INDEFINITE",
+        "reason_code": "PROVIDER_ERROR"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    }
+  },
+  "steps": [
+    {
+      "label": "branch",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "branch-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/skeleton",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "UNKNOWN",
+          "reason_code": "PROVIDER_ERROR"
+        },
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 0
+        }
+      }
+    },
+    {
+      "note": "The branch is not established yet.",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "pr-early",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.create_draft",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.pull_request.create_draft.v1",
+            "branch_attempt_id": "{{attempt_id:branch}}",
+            "base": "main",
+            "head": "helm/skeleton",
+            "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "title": "Skeleton",
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "code": "failed_precondition",
+          "reason_code": "PRECONDITION_FAILED"
+        }
+      }
+    },
+    {
+      "note": "SUCCEEDED needs no fence.",
+      "rpc": "Observe",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "RECONCILED",
+          "reason_code": "",
+          "outcome": "SUCCEEDED",
+          "outcome_basis": "RECONCILED"
+        },
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 1
+        }
+      }
+    },
+    {
+      "note": "head_sha is not the branch's commit.",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "pr-moved",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.create_draft",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.pull_request.create_draft.v1",
+            "branch_attempt_id": "{{attempt_id:branch}}",
+            "base": "main",
+            "head": "helm/skeleton",
+            "head_sha": "fedcba9876543210fedcba9876543210fedcba98",
+            "title": "Skeleton",
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "code": "failed_precondition",
+          "reason_code": "PRECONDITION_FAILED"
+        }
+      }
+    },
+    {
+      "label": "pr",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "pr-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.create_draft",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.pull_request.create_draft.v1",
+            "branch_attempt_id": "{{attempt_id:branch}}",
+            "base": "main",
+            "head": "helm/skeleton",
+            "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "title": "Skeleton",
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "The refused key created no attempt, so it is free.",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "pr-early",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.create_draft",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.pull_request.create_draft.v1",
+            "branch_attempt_id": "{{attempt_id:branch}}",
+            "base": "main",
+            "head": "helm/skeleton",
+            "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "title": "Skeleton",
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED"
+        },
+        "existing": false
+      }
+    }
+  ]
+}

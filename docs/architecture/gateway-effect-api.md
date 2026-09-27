@@ -908,6 +908,26 @@ the adapter re-checks the default branch at `Dispatch`.
 - **The `Observe` scope** is `helm.gateway.execute`, as the proto says. The
   read scope does not reach it.
 
+## Conformance table
+
+[`protocols/conformance/gateway/v1`](../../protocols/conformance/gateway/v1/README.md)
+turns this note's rules into machine-readable scenarios. The real
+`helm-gateway` must pass them, and so must every fake gateway, such as the
+Control Plane's. Each scenario has:
+
+- fixtures: principals, mandates as data, and the fake adapter's behaviour;
+- steps: RPCs with abstract token claims;
+- the attempt state or Connect error each step must produce.
+
+`core/pkg/gateway/conformance` runs the table against the real gateway on
+PostgreSQL. `TestPostgresGatewayConformanceTable` is a Postgres proof, so the
+table cannot drift from the gateway. Fakes pin the table by commit and by the
+SHA-256 of its `conformance-pack.json`.
+
+New scenarios are additive. A change to an expectation changes a rule, so
+it changes the section of this note that the scenario cites, in the same pull
+request.
+
 ## Generated code
 
 - **Go only.** `make codegen-go` generates `helm.gateway.v1` with

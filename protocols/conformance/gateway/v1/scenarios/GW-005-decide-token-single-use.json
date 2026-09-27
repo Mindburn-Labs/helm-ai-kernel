@@ -1,0 +1,285 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-005",
+  "title": "A decide token is single-use: its jti is refused the second time",
+  "rule": {
+    "statement": "decide tokens are single-use: the gateway records each accepted jti with the decision and refuses a second use with permission_denied, even where the call itself would be a no-op; a fresh token on the decided attempt returns it unchanged.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Binding decide and lift tokens (RFC 9396)"
+      },
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Proposed ADR-0005 amendment (for §9)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "decide and stop tokens are single-use"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    },
+    "approve-b": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "decide-b",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:pr}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-b-fresh": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "decide-b-fresh",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:pr}}",
+          "action": "approve"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "label": "branch",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "branch-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/skeleton",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "OBSERVED",
+          "reason_code": "",
+          "outcome": "SUCCEEDED"
+        }
+      }
+    },
+    {
+      "label": "pr",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "pr-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.create_draft",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.pull_request.create_draft.v1",
+            "branch_attempt_id": "{{attempt_id:branch}}",
+            "base": "main",
+            "head": "helm/skeleton",
+            "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "title": "Skeleton",
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-b",
+      "request": {
+        "attempt_id": "{{attempt_id:pr}}",
+        "approval_digest": "{{approval_digest:pr}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        },
+        "existing": false
+      }
+    },
+    {
+      "note": "The same token again.",
+      "rpc": "Approve",
+      "token": "approve-b",
+      "request": {
+        "attempt_id": "{{attempt_id:pr}}",
+        "approval_digest": "{{approval_digest:pr}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "INSUFFICIENT_PRIVILEGE"
+        }
+      }
+    },
+    {
+      "note": "A fresh jti on an attempt no longer ESCALATED: returned unchanged.",
+      "rpc": "Approve",
+      "token": "approve-b-fresh",
+      "request": {
+        "attempt_id": "{{attempt_id:pr}}",
+        "approval_digest": "{{approval_digest:pr}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        },
+        "existing": true
+      }
+    }
+  ]
+}

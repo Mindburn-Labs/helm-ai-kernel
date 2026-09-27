@@ -17,6 +17,7 @@ pkg/gateway/admission TestPostgresApprovalPreconditionsLeaveTheAttemptEscalated 
 pkg/gateway/admission TestPostgresApproveByADistinctHumanAdmits 1 race
 pkg/gateway/admission TestPostgresApproveRereadsStopsAndTheMandate 1 race
 pkg/gateway/admission TestPostgresCancelReleasesAndFollowsTheAllowedEdges 1 race
+pkg/gateway/admission TestPostgresChartBootstrapGivesTheRuntimeRoleOnlyItsGrants 1 race
 pkg/gateway/admission TestPostgresClaimRefusalsCancelAndRelease 1 race
 pkg/gateway/admission TestPostgresConcurrentApprovalsAdmitOnce 10 race
 pkg/gateway/admission TestPostgresConcurrentProposalsAdmitOnce 10 race
@@ -42,6 +43,8 @@ pkg/gateway/admission TestPostgresSingleUseSurvivesClockSkew 3 race
 pkg/gateway/admission TestPostgresStepUpAndExpiryFailClosed 1 race
 pkg/gateway/admission TestPostgresStepUpFollowsARiskRaisedAfterEscalation 1 race
 pkg/gateway/admission TestPostgresStopsDenyAdmission 3 race
+pkg/gateway/conformance TestPostgresConformanceRunnerRejectsAFlippedExpectation 1 race
+pkg/gateway/conformance TestPostgresGatewayConformanceTable 1 race
 pkg/gateway/server TestPostgresGatewayAPIOnTheWire 1 race
 pkg/gateway/server TestPostgresGatewayDecisionsOnTheWire 1 race
 pkg/gateway/server TestPostgresWalkingSkeletonOnTheWire 1 race

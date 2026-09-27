@@ -51,6 +51,9 @@ expectation of each kind (state, error reason, adapter call count, exposure,
 | GW-017 | Another tenant's or workspace's attempt is `not_found` |
 | GW-018 | `branch_attempt_id` accepts RECONCILED(SUCCEEDED) and refuses a branch that is not established |
 | GW-019 | Cancel is the requester's or a human operator's single-use stop token, and only before dispatch |
+| GW-020 | Every `helm.authority.*` widening escalates, whatever its risk row or `approval_required`; self-approval and approval without step-up are refused |
+| GW-021 | A sum limit refuses a quote that names no amount for its unit (`SCHEMA_VIOLATION`); a zero amount is admitted |
+| GW-022 | An operator's stop token cancels only the attempt its `helm_effect_cancel` entry names |
 
 ## How a fake consumes the table
 
@@ -108,7 +111,7 @@ Run each scenario in a fresh state.
    must still count calls this way.
 6. **Controls** are steps outside the RPC surface:
    - `stop`: an operator's stop row takes effect. The runner writes it
-     directly, because the `Stop` RPC is not served yet.
+     directly; the table does not drive the `Stop` RPC yet.
    - `pass_dispatch_fence`: the attempt's `dispatch_deadline` is now in the
      past.
    - `set_adapter`: the adapter's behaviour changes from the next call on.
@@ -184,14 +187,8 @@ values.
 
 ## Not in the table yet
 
-- `Stop` and `Lift` answer `unimplemented`. Stops are a control step until
-  they are served.
-- Not covered: `ListAttempts`, escalation expiry, model calls, and
-  `ESCALATED_TO_HUMAN`.
-- A `helm.authority.*` effect whose mandate does not list it in
-  `approval_required`, and whose effect-type row is low or medium, is ADMITTED
-  without approval. The contract says authority widening needs another
-  principal's approval (the `Lift` comment in the proto; §4.1 item 7). The
-  table asserts only what the gateway enforces, so it has no scenario for this
-  until the gateway escalates such effects. GW-007 covers the step-up for an
-  escalated one.
+- The `Stop` and `Lift` RPCs are served (HELM-751 s3b), but the table does not
+  drive them yet: stops are a control step, and GW-020 proposes the
+  `helm.authority.lift` effect through `Propose`.
+- Not covered: `ListAttempts`, escalation expiry and `ESCALATED_TO_HUMAN`
+  (the River jobs, which run on timers), and model calls.

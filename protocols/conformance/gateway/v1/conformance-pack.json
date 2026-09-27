@@ -1,6 +1,6 @@
 {
   "pack_id": "helm-gateway-effect-api-v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "status": "active",
   "scope": "The gateway effect API (helm.gateway.v1 EffectGatewayService) as the real helm-gateway serves it over Connect. Every gateway implementation, real or fake, must pass every scenario.",
   "contract": "protocols/proto/helm/gateway/v1/gateway.proto",
@@ -8,7 +8,7 @@
   "runner": "core/pkg/gateway/conformance",
   "scenario_schema": {
     "file": "scenario.schema.json",
-    "sha256": "fe5faf5c1b91c1248dfa6763d3186cb3e2a88c64635c6d076442cbea17e57e43"
+    "sha256": "fde5202d3223ec84277336ebdf08269715192a1e065a0f587ede0c2394c06f68"
   },
   "scenarios": [
     {
@@ -49,7 +49,7 @@
     {
       "id": "GW-008",
       "file": "scenarios/GW-008-stop-between-approve-and-dispatch.json",
-      "sha256": "34d5c2b18b6d0c76863de9b7d61f2769dd3ba8943f94b064c140722e004e12fc"
+      "sha256": "08155aecee0ac5fbfec9afd6e5eb52c1acfc8323abecae3a1a6719df2a4df6bc"
     },
     {
       "id": "GW-009",
@@ -104,7 +104,22 @@
     {
       "id": "GW-019",
       "file": "scenarios/GW-019-cancel-is-the-requesters-or-an-operators.json",
-      "sha256": "04f933c3e826fbaa8505343d62565d1c4531fcb0a0ec466a0bd0bd8c8c0e766c"
+      "sha256": "a8ce72379a52c6d2582fa73182ebd166e2dc84a132b31625dee65f5c39fc8929"
+    },
+    {
+      "id": "GW-020",
+      "file": "scenarios/GW-020-authority-widening-always-escalates.json",
+      "sha256": "d51b32109c28063c460ebd811104b94fbd02a2b9dd5c8d4d34c97ea650178e48"
+    },
+    {
+      "id": "GW-021",
+      "file": "scenarios/GW-021-sum-limit-fails-closed-without-its-unit.json",
+      "sha256": "ad5ea409a430a8f47127e31eebd4c0ccd23224cef6fcdc39f3ce340128967c83"
+    },
+    {
+      "id": "GW-022",
+      "file": "scenarios/GW-022-cancel-stop-token-names-its-attempt.json",
+      "sha256": "280d9b5e93879f84047f4beeb0b15df6587d29bc54cd221f99aed82e227f7283"
     }
   ]
 }

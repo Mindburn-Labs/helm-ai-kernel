@@ -1001,6 +1001,13 @@ fixture grants exactly these:
 
 ### Slice 3b decisions and open points
 
+- **Every `helm.authority.*` type is a widening.** The proto and this note
+  name no `helm.authority.*` narrowing. A stop is the `Stop` RPC, and
+  revoking or narrowing a mandate has no effect type until contract 5. So
+  admission escalates every `helm.authority.*` effect, whatever its risk row
+  or the mandate's `approval_required`, and `Approve` requires step-up for
+  it. A narrowing type that contract 5 adds must be listed as one explicitly.
+  The conformance table's GW-020 asserts this rule.
 - **Lift is bound to the stop.** The proto binds a lift token to the stop,
   not to the attempt. The lift attempt is approved with a decide token bound
   to it, like any other attempt.

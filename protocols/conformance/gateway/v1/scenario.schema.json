@@ -186,7 +186,7 @@
       "additionalProperties": false,
       "required": ["type"],
       "properties": {
-        "type": {"enum": ["helm_effect_decision", "helm_stop_lift"]},
+        "type": {"enum": ["helm_effect_decision", "helm_stop_lift", "helm_effect_cancel"]},
         "attempt_id": {"type": "string"},
         "action": {"enum": ["approve", "reject"]},
         "stop_id": {"type": "string"}
@@ -228,7 +228,7 @@
       ]
     },
     "control": {
-      "description": "A step outside the RPC surface. stop: an operator's stop row takes effect (the Stop RPC is not served yet; the runner writes the row). pass_dispatch_fence: the attempt's dispatch fence (dispatch_deadline) is now in the past. set_adapter: the adapter's behaviour changes from the next call on.",
+      "description": "A step outside the RPC surface. stop: an operator's stop row takes effect (the runner writes the row directly; the table does not drive the Stop RPC yet). pass_dispatch_fence: the attempt's dispatch fence (dispatch_deadline) is now in the past. set_adapter: the adapter's behaviour changes from the next call on.",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind"],

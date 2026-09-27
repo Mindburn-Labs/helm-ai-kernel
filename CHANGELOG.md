@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-27
 ---
 
 # Changelog
@@ -88,7 +88,34 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-### Added
+No changes yet.
+
+## [0.10.0] - 2026-09-27
+
+This minor release introduces the gateway service and typed GitHub effect API.
+Publication and the qa-arm walking-skeleton acceptance are recorded separately
+in the release evidence and HELM-789.
+
+### Added — governed GitHub effects (HELM-751, HELM-753)
+
+- `helm-gateway` serves Propose, GetAttempt, GetAttemptContent, Approve,
+  Reject, Cancel, Dispatch and Observe over the authenticated gateway API.
+  Admission resolves mandates and records the attempt, reservation and permit
+  in one Postgres transaction.
+- `github.repository.get`, `github.branch.create_from_changes` and
+  `github.pull_request.create_draft` have typed arguments and observation
+  results. A draft PR is medium risk and escalates when the mandate requires
+  approval. Approval requires a distinct human and a single-use decide token.
+- Dispatch consumes the permit before provider I/O and permits only the
+  proposing workload to dispatch. The GitHub App credential stays in the
+  gateway; installation tokens request the permissions the effect needs.
+  Observe verifies the provider result, while an uncertain dispatch becomes
+  UNKNOWN and is reconciled through read-back.
+- The release rehearsal checks contracts, version surfaces, Console pins,
+  chart configuration and publication prerequisites before tagging, and runs
+  daily on main (HELM-745).
+
+### Added — deployable gateway and database bootstrap (HELM-789)
 
 - The release image ships `/usr/local/bin/helm-gateway` beside
   `helm-ai-kernel`. The chart gains a `gateway:` block, off by default, that
@@ -100,6 +127,35 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
   PUBLIC, and sets the runtime password only as a client-side SCRAM-SHA-256
   verifier (`helm-gateway db scram-verifier`). Default chart renders are
   unchanged. HELM-789.
+
+### Added — gateway conformance, Stop and durable jobs (HELM-751)
+
+- The versioned gateway conformance pack defines 23 scenarios shared by
+  the real gateway and Control Plane fakes. Its runner verifies both the
+  declared outcomes and a deliberately flipped expectation.
+- River persists escalation-expiry and UNKNOWN-reconciliation jobs in the
+  gateway database. Approval and expiry make one transition; reconciliation
+  respects the dispatch fence and hands an unresolved final attempt to a
+  human. `helm-gateway migrate` installs River's schema and `/readyz` checks it.
+- `Stop` blocks new work at tenant, principal, mandate or effect-type scope, checking the
+  proposing actor, approval participants and dispatcher at their respective
+  transitions. Calls already sent to a provider cannot be retracted.
+- Stop and operator Cancel require single-use tokens bound to their exact
+  target. Replay of the same idempotent request remains safe; a changed
+  principal or payload cannot reuse the recorded result.
+- `Lift` creates an escalated, high-risk authority-change attempt. Approval
+  fails closed until passkey step-up is available; this release does not
+  apply a lift. Other active stops continue to block the attempt.
+
+- Admission rejects a quote that omits a unit counted by a summed mandate
+  limit, including zero-cost reads that must quote that unit explicitly.
+  Authority-change effects do not consume those limits.
+
+### Fixed — Postgres sessions use UTC (HELM-776)
+
+- Every Postgres DSN pins the session timezone to UTC, so admission and
+  approval timestamps remain consistent when the database default uses a
+  local timezone.
 
 ### Changed — the chart wires the organization-runtime key only with the activation public key (HELM-786)
 

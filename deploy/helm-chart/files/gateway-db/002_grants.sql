@@ -20,13 +20,19 @@
 --                                   of 2026-09-26.
 --   gateway_schema_migrations       SELECT (/readyz compares the version)
 --
--- EXTENSION POINT, River job tables (HELM-751 s3b). s3b's migration adds
--- river_* tables. Until the marked block in the loop below gives each its
--- rule, a river_* table fails the run with a message pointing here: never
--- granted by guess. When s3b lands, give each table its exact privileges there and add
--- the same rows to the exact-privilege table in
--- core/pkg/gateway/admission/chart_roles_postgres_test.go, which also proves
--- the refusal below until then.
+--   River's tables (HELM-751 s3b; `helm-gateway migrate` creates them and
+--   the job worker inside `serve` uses them):
+--   river_job, river_leader,        SELECT, INSERT, UPDATE, DELETE
+--   river_queue, river_notification
+--   river_migration                 SELECT (/readyz checks River's version)
+--   river_* sequences               USAGE (their bigserial ids)
+--   The rules apply to the River tables that exist, so this file is right
+--   before and after s3b's migration. A river_* table not named here fails
+--   the run like any other table. The set is the one the job proofs'
+--   fixture grants (core/pkg/gateway/jobs, RiverGrants).
+--
+--   Identity sequences (authority_postings, authority_observations) need no
+--   grant: INSERT on the table covers them. Any other sequence fails the run.
 --
 -- No TRUNCATE, REFERENCES or TRIGGER anywhere, and nothing for PUBLIC. Every
 -- run first revokes what the runtime role holds, so the result is exactly
@@ -55,18 +61,30 @@ BEGIN
             WHEN t.relname IN ('authority_postings', 'authority_distinct_values') THEN 'SELECT, INSERT'
             WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, DELETE'
             WHEN t.relname LIKE 'authority\_%' THEN 'SELECT, INSERT, UPDATE'
+            WHEN t.relname IN ('river_job', 'river_leader', 'river_queue', 'river_notification')
+                THEN 'SELECT, INSERT, UPDATE, DELETE'
+            WHEN t.relname = 'river_migration' THEN 'SELECT'
         END;
-        IF t.relname LIKE 'river\_%' THEN
-            -- EXTENSION POINT (HELM-751 s3b): replace this refusal with one
-            -- rule per River table, for example
-            --   privileges := CASE t.relname WHEN 'river_job' THEN '...' END;
-            -- and keep refusing a river_* table no rule names.
-            RAISE EXCEPTION 'River table %.% has no helm_gateway grant rule; add it at the HELM-751 s3b extension point in 002_grants.sql', schema_name, t.relname;
-        END IF;
         IF privileges IS NULL THEN
             RAISE EXCEPTION 'table %.% has no helm_gateway grant rule; add one to 002_grants.sql', schema_name, t.relname;
         END IF;
         EXECUTE format('GRANT %s ON %I.%I TO %I', privileges, schema_name, t.relname, runtime_role);
+    END LOOP;
+    FOR t IN
+        SELECT c.relname,
+               EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'i') AS identity
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = schema_name AND c.relkind = 'S'
+        ORDER BY c.relname
+    LOOP
+        IF t.identity THEN
+            CONTINUE;
+        ELSIF t.relname LIKE 'river\_%' THEN
+            EXECUTE format('GRANT USAGE ON SEQUENCE %I.%I TO %I', schema_name, t.relname, runtime_role);
+        ELSE
+            RAISE EXCEPTION 'sequence %.% has no helm_gateway grant rule; add one to 002_grants.sql', schema_name, t.relname;
+        END IF;
     END LOOP;
 END
 $$;

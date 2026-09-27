@@ -260,18 +260,28 @@ func chartBootstrapProof(t *testing.T, base, adminKind string) {
 		t.Fatalf("schema owner %s and %d objects not owned by %s", schemaOwner, foreign, owner)
 	}
 
-	// The grants never guess: a table without a rule fails the run, and a
-	// River table (HELM-751 s3b) fails it naming the marked extension point.
-	for table, message := range map[string]string{
-		"river_job":        "HELM-751 s3b extension point",
-		"unplanned_things": "has no helm_gateway grant rule",
+	// River's tables (HELM-751 s3b), as its migration creates them: the rules
+	// apply to the tables that exist. Stand-ins with River's names and
+	// bigserial ids are enough to prove the rules; the job proofs prove the
+	// privileges suffice for River itself.
+	for _, table := range []string{"river_job", "river_leader", "river_queue", "river_notification", "river_migration"} {
+		_, err := ownerDB.Exec(`CREATE TABLE ` + table + ` (id BIGSERIAL PRIMARY KEY)`)
+		must(t, err)
+	}
+	// The grants never guess: a table or sequence without a rule fails the
+	// run, River's included.
+	for statement, message := range map[string]string{
+		`CREATE TABLE river_extra (id BIGINT)`:      "table " + schema + ".river_extra has no helm_gateway grant rule",
+		`CREATE TABLE unplanned_things (id BIGINT)`: "table " + schema + ".unplanned_things has no helm_gateway grant rule",
+		`CREATE SEQUENCE unplanned_counter`:         "sequence " + schema + ".unplanned_counter has no helm_gateway grant rule",
 	} {
-		_, err := ownerDB.Exec(`CREATE TABLE ` + table + ` (id BIGINT)`)
+		_, err := ownerDB.Exec(statement)
 		must(t, err)
 		if err := run.try(t, ownerDSN, "002_grants.sql"); err == nil || !strings.Contains(err.Error(), message) {
-			t.Fatalf("002_grants.sql with %s: err = %v, want %q", table, err, message)
+			t.Fatalf("002_grants.sql after %q: err = %v, want %q", statement, err, message)
 		}
-		_, err = ownerDB.Exec(`DROP TABLE ` + table)
+		object := strings.Fields(statement)[1] + " " + strings.Fields(statement)[2]
+		_, err = ownerDB.Exec(`DROP ` + object)
 		must(t, err)
 	}
 	run.run(t, ownerDSN, "002_grants.sql")
@@ -287,6 +297,10 @@ func chartBootstrapProof(t *testing.T, base, adminKind string) {
 	if _, ok := want["authority_token_replay"]; ok {
 		want["authority_token_replay"] = "DELETE,INSERT,SELECT"
 	}
+	for _, table := range []string{"river_job", "river_leader", "river_queue", "river_notification"} {
+		want[table] = "DELETE,INSERT,SELECT,UPDATE"
+	}
+	want["river_migration"] = "SELECT"
 	rows, err := superGW.Query(`SELECT c.relname, COALESCE((
 			SELECT string_agg(p, ',' ORDER BY p) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
 			WHERE has_table_privilege($2, c.oid, p)), '')
@@ -308,6 +322,32 @@ func chartBootstrapProof(t *testing.T, base, adminKind string) {
 		if got[table] != privileges {
 			t.Fatalf("%s: runtime role holds %q, want %q", table, got[table], privileges)
 		}
+	}
+	// Sequences: USAGE on River's bigserial sequences only; the identity
+	// sequences behind authority_postings and authority_observations need
+	// none.
+	seqRows, err := superGW.Query(`SELECT c.relname, has_sequence_privilege($2, c.oid, 'USAGE'),
+			has_sequence_privilege($2, c.oid, 'SELECT') OR has_sequence_privilege($2, c.oid, 'UPDATE')
+		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relkind = 'S' ORDER BY 1`, schema, runtime)
+	must(t, err)
+	riverSequences := 0
+	for seqRows.Next() {
+		var name string
+		var usage, more bool
+		must(t, seqRows.Scan(&name, &usage, &more))
+		river := strings.HasPrefix(name, "river_")
+		if usage != river || more {
+			t.Fatalf("sequence %s: runtime USAGE=%v, SELECT or UPDATE=%v; want USAGE only on river_* sequences", name, usage, more)
+		}
+		if river {
+			riverSequences++
+		}
+	}
+	must(t, seqRows.Err())
+	_ = seqRows.Close()
+	if riverSequences != 5 {
+		t.Fatalf("%d river_* sequences, want 5", riverSequences)
 	}
 
 	// Database isolation: a Control Plane role on the same instance cannot

@@ -144,7 +144,7 @@ table owner can turn row-level security off. So migrate runs as the owner and
 | Role | Attributes | Does |
 | --- | --- | --- |
 | `helm_owner` | NOLOGIN | Owns the `helm_gateway` schema and every table. The migrate and grant steps `SET ROLE` to it through `PGOPTIONS`. |
-| `helm_gateway` | LOGIN | The runtime DSN. `SELECT, INSERT, UPDATE` on the `authority_*` tables, `SELECT, INSERT` on `authority_postings`, `DELETE` added on `authority_token_replay`, `SELECT` on `gateway_schema_migrations`. |
+| `helm_gateway` | LOGIN | The runtime DSN. `SELECT, INSERT, UPDATE` on the `authority_*` tables; only `SELECT, INSERT` on `authority_postings` and `authority_distinct_values`; `SELECT, INSERT, DELETE` on `authority_token_replay`; `SELECT` on `gateway_schema_migrations`. River's job tables, once `helm-gateway migrate` has created them: `SELECT, INSERT, UPDATE, DELETE` on `river_job`, `river_leader`, `river_queue` and `river_notification`, `SELECT` on `river_migration`, and `USAGE` on the `river_*` sequences. |
 
 Neither role has SUPERUSER, BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION,
 and the runtime role must not be a member of the owner role.
@@ -168,7 +168,10 @@ With `gateway.database.bootstrap.enabled=true` the hook Job runs, in order:
    `PGOPTIONS=-c role=helm_owner -c search_path=helm_gateway`, so every table
    is created by the owner;
 4. `files/gateway-db/002_grants.sql` as the owner. It revokes and re-grants the
-   runtime set in one transaction and fails on a table it has no rule for.
+   runtime set in one transaction. The rules cover only the tables that exist,
+   so the same file is right before and after River's tables arrive. The run
+   fails on any table, or any sequence that is not an identity sequence, that
+   has no rule.
 
 Each step is idempotent. The administrator may be a superuser, or a role with
 CREATEROLE that owns the gateway database, as on a managed database. A drifted

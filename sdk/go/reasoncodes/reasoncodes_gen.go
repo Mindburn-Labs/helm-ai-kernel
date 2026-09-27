@@ -468,6 +468,15 @@ const ApprovalRejected = "APPROVAL_REJECTED"
 // widening effect needs a step-up assertion the request did not carry
 const StepUpRequired = "STEP_UP_REQUIRED"
 
+// AuthorityChanged DENY: An authority row the permit was issued under changed
+// before the dispatch claim; the permit is voided and the effect must be
+// proposed again
+const AuthorityChanged = "AUTHORITY_CHANGED"
+
+// PermitExpired DENY: The permit expired before the dispatch claim; it is
+// voided and the effect must be proposed again
+const PermitExpired = "PERMIT_EXPIRED"
+
 var all = [...]string{
 	PolicyViolation,
 	NoPolicyDefined,
@@ -589,6 +598,8 @@ var all = [...]string{
 	ApproverNotDistinct,
 	ApprovalRejected,
 	StepUpRequired,
+	AuthorityChanged,
+	PermitExpired,
 }
 
 // All returns every registered reason code, in registry order.

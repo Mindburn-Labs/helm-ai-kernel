@@ -1,0 +1,483 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-007",
+  "title": "Step-up is required for high, irreversible and helm.authority.* approvals, not for medium plus approval_required",
+  "rule": {
+    "statement": "Approving a high-risk, irreversible or helm.authority.* effect fails closed with permission_denied STEP_UP_REQUIRED until the step-up assertion exists, and the attempt stays ESCALATED; rejecting it needs no step-up. A medium effect that the mandate escalates through approval_required is approved without step-up.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "WS-B's answers to the open questions (2026-09-25)"
+      },
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "The server (slice 2)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "[reason_code: STEP_UP_REQUIRED]"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.merge",
+        "risk": "high"
+      },
+      {
+        "effect_type": "ops.release.publish",
+        "risk": "irreversible"
+      },
+      {
+        "effect_type": "helm.authority.grant",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      },
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.pull_request.merge",
+          "ops.release.publish",
+          "helm.authority.grant"
+        ],
+        "approval_required": [
+          "helm.authority.grant"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    },
+    "approve-merge": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-merge",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:merge}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "reject-merge": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "reject-merge",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:merge}}",
+          "action": "reject"
+        }
+      ]
+    },
+    "approve-publish": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-publish",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:publish}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-grant": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-grant",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:grant}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-pr": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-pr",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:pr}}",
+          "action": "approve"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "label": "merge",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "merge-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.merge",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "merge_method": "squash"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "HIGH"
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "rpc": "GetAttempt",
+      "token": "read-a",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "note": "A rejection needs no step-up.",
+      "rpc": "Reject",
+      "token": "reject-merge",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "not without step-up"
+      },
+      "expect": {
+        "attempt": {
+          "state": "REJECTED",
+          "reason_code": "APPROVAL_REJECTED",
+          "approver_principal_id": "human-b"
+        }
+      }
+    },
+    {
+      "label": "publish",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "publish-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "ops.release.publish",
+          "target": "release/v1",
+          "arguments_json": {
+            "tag": "v1.0.0"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "IRREVERSIBLE"
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-publish",
+      "request": {
+        "attempt_id": "{{attempt_id:publish}}",
+        "approval_digest": "{{approval_digest:publish}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "Authority widening; work_ref is optional for helm.authority.*.",
+      "label": "grant",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "grant-1",
+        "effect": {
+          "effect_type": "helm.authority.grant",
+          "target": "tenant-a",
+          "arguments_json": {
+            "principal": "agent-a"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "MEDIUM"
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-grant",
+      "request": {
+        "attempt_id": "{{attempt_id:grant}}",
+        "approval_digest": "{{approval_digest:grant}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "rpc": "GetAttempt",
+      "token": "read-a",
+      "request": {
+        "attempt_id": "{{attempt_id:grant}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED"
+        }
+      }
+    },
+    {
+      "label": "branch",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "branch-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/skeleton",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "OBSERVED",
+          "reason_code": "",
+          "outcome": "SUCCEEDED"
+        }
+      }
+    },
+    {
+      "label": "pr",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "pr-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.create_draft",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.pull_request.create_draft.v1",
+            "branch_attempt_id": "{{attempt_id:branch}}",
+            "base": "main",
+            "head": "helm/skeleton",
+            "head_sha": "89abcdef0123456789abcdef0123456789abcdef",
+            "title": "Skeleton",
+            "body": ""
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "note": "Medium plus approval_required: no step-up.",
+      "rpc": "Approve",
+      "token": "approve-pr",
+      "request": {
+        "attempt_id": "{{attempt_id:pr}}",
+        "approval_digest": "{{approval_digest:pr}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-b"
+        }
+      }
+    }
+  ]
+}

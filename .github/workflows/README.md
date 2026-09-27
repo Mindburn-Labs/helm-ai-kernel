@@ -30,9 +30,7 @@ surface for the `helm-ai-kernel` project.
 
 ## Active Quality Workflows
 
-- `ci.yml` calls `ci-v2.yml`, a vendored copy of `Mindburn-Labs/platform-actions`
-  `ci.yml@v2` (a public repository cannot call that internal repository's
-  workflows). Its `gate`
+- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml@v2`. Its `gate`
   job, reported as `ci / gate`, is the only required status check. It runs
   `make check` (the `merge` profile of `scripts/ci/quality-gates.json`, every
   gate blocking) after `scripts/ci/install_check_tools.sh` installs pinned
@@ -82,6 +80,14 @@ surface for the `helm-ai-kernel` project.
   `https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v<version>`.
   SLSA provenance is generated only by this tag run; there is no manual
   workflow that re-attests assets already attached to a release.
+- `release-rehearsal.yml` runs `make release-rehearsal` on `main` daily and
+  on demand, and writes its table to the run summary: the version the next
+  tag would carry, checked against the pre-publish preconditions of
+  `release.yml`. It is advisory and not a required check. It holds
+  `contents: read`, passes `DOWNSTREAM_FANOUT_TOKEN` only to read
+  `contracts-catalog`, and reports every other secret and variable
+  `release.yml` reads as a presence boolean (`secrets.<NAME> != ''`), so no
+  other secret value enters the job.
 - `scorecard.yml` carries only the trusted `main` and scheduled runs that
   publish Scorecard SARIF through OIDC and code-scanning authority. The
   OpenSSF results webapp rejects a publishing workflow that defines any other

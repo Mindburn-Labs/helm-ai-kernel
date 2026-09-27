@@ -21,6 +21,8 @@ specific GitHub release attached a matching asset.
 | `distribute.sh` | Legacy/manual multi-package publication helper. | Manual only; do not treat as automatic release proof. |
 | `check_version_drift.py` | Checks local source versions and published release channels with bounded per-surface requests. | `make version-drift`, `make version-drift-published`, scheduled monitor. |
 | `check_version_drift_test.py` | Self-test for required published-channel coverage and drift-monitor error shaping. | Manual validation for release monitor edits. |
+| `rehearse.py` | Computes the version the next tag would carry and checks the pre-publish preconditions of `release.yml`; prints PASS / FAIL / ACTION-NEEDED / UNKNOWN rows. | `make release-rehearsal`, `release-rehearsal.yml`. |
+| `rehearse_test.py` | Hermetic self-test for the rehearsal: version computation through the real contract gate, catalog and pin outcomes, a planted chart defect. | `make test-release-rehearsal`, `release-rehearsal-self-test` gate. |
 
 ## Drift, unknown, and exit codes
 

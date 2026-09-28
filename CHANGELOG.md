@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-09-27
+last_reviewed: 2026-09-28
 ---
 
 # Changelog
@@ -89,6 +89,23 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 ## [Unreleased]
 
 No changes yet.
+
+## [0.10.1] - 2026-09-28
+
+### Fixed
+
+- Let Homebrew infer the formula version from immutable release URLs, avoiding
+  the strict audit failure that blocked the v0.10.0 tap update.
+- Check inferred Homebrew versions in release drift monitoring while rejecting
+  mixed release URLs and conflicting explicit versions. The release dry run
+  rejects redundant formula version directives before publication.
+
+### Release scope
+
+- Fix-forward release after v0.10.0 published immutable packages and artifacts
+  but failed Homebrew delivery. Published v0.10.0 tags and assets remain intact.
+- Reuses the reviewed Console source from v0.10.0; gateway and trusted-core
+  behavior is unchanged.
 
 ## [0.10.0] - 2026-09-27
 

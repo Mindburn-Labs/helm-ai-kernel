@@ -66,7 +66,7 @@ approval, so that route could never approve anything. HELM-780 retired it: it
 answers 501, and its verifier is deleted.
 
 The kernel therefore has no hybrid operator approval path today, and approval
-ceremonies under `/api/v1/approvals` make no post-quantum claim. Do not
+operator approval ceremonies make no post-quantum claim. Do not
 describe kernel operator approvals as hybrid-capable.
 
 ## Console Receipt Display

@@ -54,7 +54,6 @@ puts <<~RUBY
 class HelmAiKernel < Formula
   desc "Fail-closed execution firewall for AI agents"
   homepage "https://github.com/#{options[:repo]}"
-  version "#{version}"
   license "Apache-2.0"
 
   on_macos do

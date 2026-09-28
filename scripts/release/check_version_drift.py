@@ -530,9 +530,13 @@ def check_artifacthub(surface: dict[str, Any], version: str) -> SurfaceResult:
 
 def check_homebrew_formula(surface: dict[str, Any], version: str) -> SurfaceResult:
     text = request_text(surface["url"])
+    release_tags = unique(re.findall(r"/releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/", text))
+    explicit_versions = unique(re.findall(r'^\s*version "([0-9]+\.[0-9]+\.[0-9]+)"', text, re.MULTILINE))
+    # Homebrew infers our version from the release URL and rejects a redundant
+    # version directive. Keep explicit versions checked for older formulas.
     actual = {
-        "version": unique(re.findall(r'^\s*version "([0-9]+\.[0-9]+\.[0-9]+)"', text, re.MULTILINE)),
-        "release_tags": unique(re.findall(r"/releases/download/(v[0-9]+\.[0-9]+\.[0-9]+)/", text)),
+        "version": explicit_versions or [tag[1:] for tag in release_tags],
+        "release_tags": release_tags,
     }
     expected = {"version": [version], "release_tags": [f"v{version}"]}
     return SurfaceResult(surface["id"], "pass" if actual == expected else "fail", expected, actual, url=surface["human_url"])

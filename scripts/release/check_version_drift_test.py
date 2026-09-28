@@ -14,6 +14,25 @@ import check_version_drift as drift
 
 
 class VersionDriftMonitorTests(unittest.TestCase):
+    def test_homebrew_accepts_inferred_version_and_rejects_drift(self) -> None:
+        surface = {"id": "homebrew-tap", "url": "https://example.test/formula", "human_url": "https://example.test"}
+        def url(version: str) -> str:
+            return f'  url "https://github.com/Mindburn-Labs/helm-ai-kernel/releases/download/v{version}/helm-ai-kernel-darwin-arm64"\n'
+
+        cases = [
+            (url("0.10.1"), "pass"),
+            ('  version "0.10.1"\n' + url("0.10.1"), "pass"),
+            (url("0.10.0"), "fail"),
+            ('  version "0.10.0"\n' + url("0.10.1"), "fail"),
+            ('  version "0.10.1"\n' + url("0.10.0"), "fail"),
+            (url("0.10.1") + url("0.10.0"), "fail"),
+            ('  version "0.10.1"\n', "fail"),
+            ("", "fail"),
+        ]
+        for formula, expected in cases:
+            with self.subTest(formula=formula), mock.patch.object(drift, "request_text", return_value=formula):
+                self.assertEqual(drift.check_homebrew_formula(surface, "0.10.1").status, expected)
+
     def test_http_headers_scope_ambient_github_token_to_github_api(self) -> None:
         with mock.patch.dict(drift.os.environ, {"GITHUB_TOKEN": "repo-token"}):
             self.assertEqual(

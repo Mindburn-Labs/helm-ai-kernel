@@ -82,6 +82,29 @@ before issuing a session or starting bundled Node. The separate producer and
 Kernel Cosign bundles are release evidence; runtime requires neither host Cosign
 nor network access.
 
+## Container image provenance
+
+The source release workflow attests each final main and slim image digest
+with signed SLSA v1 provenance. It then verifies the exact image digest,
+repository, release workflow identity, tag ref, and source commit. A failed
+verification blocks the release. Verified outputs are retained as `main.json`
+and `slim.json` release assets; binary SLSA and BuildKit metadata cover different
+subjects and do not substitute for these image attestations.
+
+For a release produced by this workflow, use its immutable digest and commit:
+
+```sh
+gh attestation verify "oci://ghcr.io/mindburn-labs/helm-ai-kernel@${IMAGE_DIGEST}" \
+  --repo Mindburn-Labs/helm-ai-kernel \
+  --cert-identity "https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/${RELEASE_TAG}" \
+  --source-digest "${SOURCE_COMMIT}" --source-ref "refs/tags/${RELEASE_TAG}" \
+  --predicate-type https://slsa.dev/provenance/v1
+```
+
+This is the source contract for future releases. Existing immutable releases
+without the matching image attestation remain unqualified for this check;
+they are not backfilled by a source change.
+
 ## Public Release Material
 
 | Need | Source path | Public route |

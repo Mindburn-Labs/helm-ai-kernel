@@ -211,6 +211,28 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                 pending.extend(self.job_needs(need))
         return seen
 
+    def test_images_have_signed_exact_digest_provenance(self) -> None:
+        container = self.job("container")
+        self.assertIn("attestations: write", container)
+        for variant, push_id in (("main", "push"), ("slim", "push-slim")):
+            attestation = self.step(container, f"Attest {variant} image provenance")
+            self.assertIn("actions/attest-build-provenance@", attestation)
+            self.assertIn("subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}", attestation)
+            self.assertIn("subject-digest: ${{ steps." + push_id + ".outputs.digest }}", attestation)
+            self.assertIn("push-to-registry: true", attestation)
+            self.assertNotIn("continue-on-error", attestation)
+        verification = self.step(container, "Verify image provenance")
+        for binding in (
+            'oci://${REGISTRY}/${IMAGE_NAME}@${digest}',
+            '--repo "${GITHUB_REPOSITORY}"',
+            'release.yml@${GITHUB_REF}',
+            '--source-digest "${GITHUB_SHA}"',
+            '--source-ref "${GITHUB_REF}"',
+            '--predicate-type https://slsa.dev/provenance/v1',
+        ):
+            self.assertIn(binding, verification)
+        self.assertIn("container", self.transitive_needs("github-release"))
+
     def test_release_has_no_human_or_single_attempt_gate(self) -> None:
         self.assertNotIn("release-authority", self.job_blocks)
         for marker in REMOVED_GATE_MARKERS:

@@ -90,6 +90,22 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 No changes yet.
 
+## [0.10.2] - 2026-09-29
+
+### Fixed
+
+- Wait up to 15 minutes for npm publication to expose both the exact SDK
+  version and its `latest` tag before producing the release version receipt.
+  Authentication failures, malformed responses and conflicting versions fail
+  immediately; an exhausted propagation budget still blocks the release.
+
+### Release scope
+
+- Fix-forward release after npm accepted v0.10.1 but its registry propagation
+  outlasted the one-shot version check. Published v0.10.1 artifacts remain intact.
+- Reuses the reviewed Console source and preserves gateway and trusted-core
+  behavior. Artifact publication and runtime acceptance remain separate gates.
+
 ## [0.10.1] - 2026-09-28
 
 ### Fixed

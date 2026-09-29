@@ -14,6 +14,65 @@ import check_version_drift as drift
 
 
 class VersionDriftMonitorTests(unittest.TestCase):
+    def test_npm_waits_for_exact_version_and_latest(self) -> None:
+        surface = {"id": "npm-sdk", "url": "https://registry.test/pkg", "human_url": "https://registry.test/pkg"}
+        missing = drift.urllib.error.HTTPError(surface["url"] + "/0.10.2", 404, "not found", {}, None)
+        now = [0.0]
+        def sleep(seconds: float) -> None:
+            now[0] += seconds
+        responses = [
+            {"dist-tags": {"latest": "0.10.1"}}, missing,
+            {"dist-tags": {"latest": "0.10.1"}}, {"version": "0.10.2"},
+            {"dist-tags": {"latest": "0.10.2"}}, {"version": "0.10.2"},
+        ]
+        with mock.patch.object(drift, "NPM_PROPAGATION_TIMEOUT_SECONDS", 90), mock.patch.object(drift.time, "monotonic", side_effect=lambda: now[0]), mock.patch.object(drift.time, "sleep", side_effect=sleep), mock.patch.object(drift, "request_json", side_effect=responses) as read:
+            result = drift.check_npm(surface, "0.10.2")
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(now[0], 60)
+        self.assertEqual(read.call_count, 6)
+        self.assertEqual(read.call_args.args[0], surface["url"] + "/0.10.2")
+        self.assertEqual(read.call_args.kwargs["deadline"], 90)
+
+    def test_npm_stale_latest_exhausts_budget_without_pass(self) -> None:
+        surface = {"id": "npm-sdk", "url": "https://registry.test/pkg", "human_url": "https://registry.test/pkg"}
+        now = [0.0]
+        def sleep(seconds: float) -> None:
+            now[0] += seconds
+        def read(url: str, **kwargs: object) -> dict:
+            return {"version": "0.10.2"} if url.endswith("/0.10.2") else {"dist-tags": {"latest": "0.10.1"}}
+        with mock.patch.object(drift, "NPM_PROPAGATION_TIMEOUT_SECONDS", 45), mock.patch.object(drift.time, "monotonic", side_effect=lambda: now[0]), mock.patch.object(drift.time, "sleep", side_effect=sleep), mock.patch.object(drift, "request_json", side_effect=read):
+            result = drift.check_npm(surface, "0.10.2")
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(now[0], 45)
+        self.assertIn("budget exhausted", result.detail)
+
+    def test_npm_real_errors_do_not_wait(self) -> None:
+        surface = {"id": "npm-sdk", "url": "https://registry.test/pkg", "human_url": "https://registry.test/pkg"}
+        cases = [
+            ([{"dist-tags": {"latest": "0.10.3"}}], None),
+            ([{"dist-tags": {"latest": "0.10.2"}}, {"version": "0.10.1"}], None),
+            ([{"dist-tags": {"latest": "garbage"}}], ValueError),
+        ]
+        for code in (401, 403, 500):
+            cases.append(([{"dist-tags": {"latest": "0.10.1"}}, drift.urllib.error.HTTPError(surface["url"], code, "error", {}, None)], drift.urllib.error.HTTPError))
+        for responses, error in cases:
+            with self.subTest(responses=responses), mock.patch.object(drift, "NPM_PROPAGATION_TIMEOUT_SECONDS", 900), mock.patch.object(drift.time, "sleep") as sleep, mock.patch.object(drift, "request_json", side_effect=responses):
+                if error:
+                    with self.assertRaises(error):
+                        drift.check_npm(surface, "0.10.2")
+                else:
+                    self.assertEqual(drift.check_npm(surface, "0.10.2").status, "fail")
+                sleep.assert_not_called()
+
+    def test_npm_deadline_bounds_network_timeout(self) -> None:
+        with mock.patch.object(drift.time, "monotonic", return_value=98), mock.patch.object(drift.urllib.request, "urlopen") as open_url:
+            drift.urlopen_with_retry(drift.http_request("https://registry.test/pkg"), deadline=100)
+            self.assertEqual(open_url.call_args.kwargs["timeout"], 2)
+        with mock.patch.object(drift.time, "monotonic", return_value=100), mock.patch.object(drift.urllib.request, "urlopen") as open_url:
+            with self.assertRaises(TimeoutError):
+                drift.urlopen_with_retry(drift.http_request("https://registry.test/pkg"), deadline=100)
+            open_url.assert_not_called()
+
     def test_homebrew_accepts_inferred_version_and_rejects_drift(self) -> None:
         surface = {"id": "homebrew-tap", "url": "https://example.test/formula", "human_url": "https://example.test"}
         def url(version: str) -> str:

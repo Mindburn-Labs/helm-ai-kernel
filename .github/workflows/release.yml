@@ -1148,6 +1148,7 @@ jobs:
 
   version-status:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs:
       - container
       - chart
@@ -1167,6 +1168,7 @@ jobs:
             --expected-version "$VERSION" \
             --write-status dist/version-status/version-status.json \
             published \
+            --npm-propagation-timeout 900 \
             --only ghcr-image \
             --only ghcr-chart \
             --only npm-sdk \

@@ -46,6 +46,13 @@ func (s *ProviderPriceSnapshot) validatePriceRepresentation() error {
 	if s.CapturedAt.IsZero() || s.EffectiveAt.IsZero() {
 		return errors.New("provider_price_snapshot: v2 capture and effective times are required")
 	}
+	for _, value := range []time.Time{s.CapturedAt, s.EffectiveAt, s.ExpiresAt} {
+		raw, err := value.MarshalJSON()
+		var decoded time.Time
+		if err != nil || decoded.UnmarshalJSON(raw) != nil || !value.Equal(decoded) {
+			return errors.New("provider_price_snapshot: v2 timestamp cannot round-trip as RFC3339")
+		}
+	}
 	if len(s.Currency) != 3 || strings.IndexFunc(s.Currency, func(r rune) bool { return r < 'A' || r > 'Z' }) >= 0 {
 		return errors.New("provider_price_snapshot: v2 currency requires three uppercase letters")
 	}

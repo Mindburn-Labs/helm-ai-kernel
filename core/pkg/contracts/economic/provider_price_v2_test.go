@@ -77,6 +77,8 @@ func TestExactProviderPriceRejectsMixedUnitsAndOverflow(t *testing.T) {
 		func(p *ProviderPriceSnapshot) { p.SchemaVersion = "" },
 		func(p *ProviderPriceSnapshot) { p.CapturedAt = time.Time{} },
 		func(p *ProviderPriceSnapshot) { p.EffectiveAt = time.Time{} },
+		func(p *ProviderPriceSnapshot) { p.CapturedAt = time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC) },
+		func(p *ProviderPriceSnapshot) { p.CapturedAt = p.CapturedAt.In(time.FixedZone("sub-minute", 1)) },
 		func(p *ProviderPriceSnapshot) { p.Currency = "usd" },
 		func(p *ProviderPriceSnapshot) { p.Currency = "US" },
 		func(p *ProviderPriceSnapshot) { p.SourceHash = "sha256:source" },

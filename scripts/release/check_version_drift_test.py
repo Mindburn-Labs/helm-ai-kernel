@@ -52,6 +52,9 @@ class VersionDriftMonitorTests(unittest.TestCase):
             ([{"dist-tags": {"latest": "0.10.3"}}], None),
             ([{"dist-tags": {"latest": "0.10.2"}}, {"version": "0.10.1"}], None),
             ([{"dist-tags": {"latest": "garbage"}}], ValueError),
+            ([{"dist-tags": {"latest": "0.10.2"}}, None], ValueError),
+            ([{"dist-tags": {"latest": "0.10.2"}}, []], ValueError),
+            ([None], ValueError),
         ]
         for code in (401, 403, 500):
             cases.append(([{"dist-tags": {"latest": "0.10.1"}}, drift.urllib.error.HTTPError(surface["url"], code, "error", {}, None)], drift.urllib.error.HTTPError))

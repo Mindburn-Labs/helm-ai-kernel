@@ -524,19 +524,21 @@ def check_npm(surface: dict[str, Any], version: str) -> SurfaceResult:
             raise ValueError(f"unexpected npm latest: {actual!r}")
         if actual is not None and semver_parts(actual, "npm latest") > semver_parts(version, "expected version"):
             return SurfaceResult(surface["id"], "fail", version, actual, url=surface["human_url"], detail="npm latest is newer than the release")
+        exact_visible = True
         try:
             exact = request_json(f"{surface['url'].rstrip('/')}/{version}", deadline=deadline)
         except urllib.error.HTTPError as exc:
             if exc.code != 404:
                 raise
+            exact_visible = False
             exact = None
-        if exact is not None and not isinstance(exact, dict):
+        if exact_visible and not isinstance(exact, dict):
             raise ValueError("malformed npm exact-version metadata")
-        if exact is not None and exact.get("version") != version:
+        if exact_visible and exact.get("version") != version:
             return SurfaceResult(surface["id"], "fail", version, exact.get("version"), url=surface["human_url"], detail="npm exact-version response mismatch")
-        if exact is not None and actual == version:
+        if exact_visible and actual == version:
             return SurfaceResult(surface["id"], "pass", version, actual, url=surface["human_url"], detail="exact version and latest both match")
-        detail = f"pending npm propagation: latest={actual!r}, exact_version_visible={exact is not None}"
+        detail = f"pending npm propagation: latest={actual!r}, exact_version_visible={exact_visible}"
         if deadline is None or time.monotonic() >= deadline:
             return SurfaceResult(surface["id"], "fail", version, actual, url=surface["human_url"], detail=detail + "; wait budget exhausted")
         print(detail, file=sys.stderr, flush=True)

@@ -3152,7 +3152,7 @@
       "plane": "runtime",
       "entry_points": [
         {
-          "symbol": "core/cmd/helm-gateway.effectsFromEnv",
+          "symbol": "core/pkg/gateway/runtime.effectsFromEnv",
           "reachability": "reachable"
         },
         {
@@ -3191,7 +3191,7 @@
           "core/pkg/gateway/adapters/github.TestQualificationFake",
           "core/pkg/gateway/custody.TestGitHubAppMintsRepositoryScopedTokensAndCachesThem",
           "core/pkg/gateway/custody.TestGitHubAppSlowMintBlocksOnlyItsOwnKey",
-          "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter",
+          "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter",
           "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
         ],
         "forbidden": [
@@ -3205,13 +3205,13 @@
         "removal": [
           "core/pkg/gateway/adapters.TestCheckPermitDigest",
           "core/pkg/gateway/adapters/github.TestTargets",
-          "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter",
+          "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter",
           "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist",
           "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
         ],
         "bypass": [
           "core/pkg/gateway/adapters.TestAdaptersDoNotImportTheLegacyRuntime",
-          "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
+          "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutItsConfiguration"
         ]
       },
       "removal_proofs": [
@@ -3228,9 +3228,9 @@
           ]
         },
         {
-          "file": "core/cmd/helm-gateway/main.go",
+          "file": "core/pkg/gateway/runtime/runtime.go",
           "tests": [
-            "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+            "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter"
           ]
         },
         {
@@ -3256,7 +3256,7 @@
       "plane": "runtime",
       "entry_points": [
         {
-          "symbol": "core/cmd/helm-gateway.serve",
+          "symbol": "core/pkg/gateway/runtime.serve",
           "reachability": "reachable"
         },
         {
@@ -3308,7 +3308,7 @@
           "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder",
           "core/pkg/gateway/effectargs.TestValidateAcceptsTheSkeletonArguments",
           "core/pkg/gateway/server.TestAuthenticateTakesIdentityOnlyFromAValidToken",
-          "core/cmd/helm-gateway.TestPostgresGatewayMigrateAndReadiness"
+          "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"
         ],
         "forbidden": [
           "core/pkg/gateway/admission.TestPostgresStopsDenyAdmission",
@@ -3324,9 +3324,9 @@
           "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens",
           "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName",
           "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication",
-          "core/cmd/helm-gateway.TestDevInsecureListenRefusesAnythingButLoopback",
-          "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration",
-          "core/cmd/helm-gateway.TestServeRequiresAClientCertificateWhenConfigured"
+          "core/pkg/gateway/runtime.TestDevInsecureListenRefusesAnythingButLoopback",
+          "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutItsConfiguration",
+          "core/pkg/gateway/runtime.TestServeRequiresAClientCertificateWhenConfigured"
         ],
         "removal": [
           "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder",
@@ -3339,7 +3339,7 @@
         "bypass": [
           "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired",
           "core/pkg/gateway/admission.TestGatewayDoesNotImportTheLegacyRuntime",
-          "core/cmd/helm-gateway.TestServeOverDevInsecureLoopbackAnswersGRPC"
+          "core/pkg/gateway/runtime.TestServeOverDevInsecureLoopbackAnswersGRPC"
         ]
       },
       "removal_proofs": [
@@ -3762,7 +3762,7 @@
           "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
         ],
         "bypass": [
-          "core/cmd/helm-gateway.TestPostgresGatewayMigrateAndReadiness"
+          "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"
         ]
       },
       "removal_proofs": [

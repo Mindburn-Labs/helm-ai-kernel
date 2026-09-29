@@ -13,14 +13,10 @@ class ProviderPriceSchemaTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2] / "protocols/json-schemas/spend"
         schema = json.loads((root / "provider_price_snapshot.v2.schema.json").read_text())
         validator = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
-        price = {
-            "schema_version": "helm.provider-price-snapshot.v2", "id": "price-jev",
-            "provider_id": "typesafe", "model_id": "jev-1.13.0", "currency": "USD",
-            "input_token_nano_cents": 4200, "provider_terms_profile_id": "terms",
-            "source_hash": "sha256:" + "a" * 64, "content_hash": "sha256:" + "b" * 64,
-            "captured_at": "2026-09-29T00:00:00Z", "effective_at": "2026-09-29T00:00:00Z",
-            "expires_at": "2026-09-29T01:00:00Z",
-        }
+        # Shared with the Go producer's golden wire/digest test. These are
+        # synthetic terms and source hashes, not captured provider evidence.
+        fixture = Path(__file__).resolve().parents[2] / "core/pkg/contracts/economic/testdata/provider_price_v2.json"
+        price = json.loads(fixture.read_text())
         validator.validate(price)
         for field, value in [
             ("schema_version", "future"), ("input_token_micro_cents", 4),

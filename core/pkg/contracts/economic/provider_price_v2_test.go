@@ -3,6 +3,8 @@ package economic
 import (
 	"encoding/json"
 	"math"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -13,7 +15,7 @@ func exactPriceFixture() *ProviderPriceSnapshot {
 		SchemaVersion: ProviderPriceSchemaV2,
 		ID:            "price-jev", ProviderID: "typesafe", ModelID: "jev-1.13.0", Currency: "USD",
 		InputTokenNanoCents: 4200, ProviderTermsProfileID: "reviewed-terms",
-		SourceURI: "https://docs.typesafe.ai/models", SourceHash: "sha256:source",
+		SourceURI: "https://docs.typesafe.ai/models", SourceHash: "sha256:" + strings.Repeat("a", 64),
 		CapturedAt: now, EffectiveAt: now, ExpiresAt: now.Add(time.Hour),
 	}
 }
@@ -74,6 +76,11 @@ func TestExactProviderPriceRejectsMixedUnitsAndOverflow(t *testing.T) {
 		func(p *ProviderPriceSnapshot) { p.SchemaVersion = "future" },
 		func(p *ProviderPriceSnapshot) { p.SchemaVersion = "" },
 		func(p *ProviderPriceSnapshot) { p.CapturedAt = time.Time{} },
+		func(p *ProviderPriceSnapshot) { p.EffectiveAt = time.Time{} },
+		func(p *ProviderPriceSnapshot) { p.Currency = "usd" },
+		func(p *ProviderPriceSnapshot) { p.Currency = "US" },
+		func(p *ProviderPriceSnapshot) { p.SourceHash = "sha256:source" },
+		func(p *ProviderPriceSnapshot) { p.SourceHash = "sha256:" + strings.Repeat("g", 64) },
 	} {
 		p := exactPriceFixture()
 		mutate(p)
@@ -99,6 +106,40 @@ func TestExactProviderPriceRejectsMixedUnitsAndOverflow(t *testing.T) {
 	p.OutputTokenNanoCents, p.RequestNanoCents = 0, 1
 	if _, err := p.ExactCostNanoCents(1, 0); err == nil {
 		t.Fatal("request fee overflow accepted")
+	}
+}
+
+func TestExactProviderPriceGoldenWireAndDigest(t *testing.T) {
+	raw, err := os.ReadFile("testdata/provider_price_v2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire ProviderPriceSnapshot
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatal(err)
+	}
+	p := exactPriceFixture()
+	if err := p.Seal(); err != nil {
+		t.Fatal(err)
+	}
+	if wire != *p {
+		t.Fatalf("golden price differs from producer: %+v", p)
+	}
+	// The JSON-schema test reads these same bytes. Re-marshalling must not
+	// discard unknown fields or change any typed field in the golden payload.
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	want, _ := json.Marshal(document)
+	encoded, _ := json.Marshal(p)
+	var produced map[string]any
+	if err := json.Unmarshal(encoded, &produced); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := json.Marshal(produced)
+	if string(got) != string(want) {
+		t.Fatalf("producer wire differs: %s", got)
 	}
 }
 

@@ -1,8 +1,10 @@
 package economic
 
 import (
+	"encoding/hex"
 	"errors"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -41,8 +43,17 @@ func (s *ProviderPriceSnapshot) validatePriceRepresentation() error {
 	if s.InputTokenNanoCents == 0 && s.OutputTokenNanoCents == 0 && s.RequestNanoCents == 0 {
 		return errors.New("provider_price_snapshot: at least one price field is required")
 	}
-	if s.CapturedAt.IsZero() {
-		return errors.New("provider_price_snapshot: v2 captured_at is required")
+	if s.CapturedAt.IsZero() || s.EffectiveAt.IsZero() {
+		return errors.New("provider_price_snapshot: v2 capture and effective times are required")
+	}
+	if len(s.Currency) != 3 || strings.IndexFunc(s.Currency, func(r rune) bool { return r < 'A' || r > 'Z' }) >= 0 {
+		return errors.New("provider_price_snapshot: v2 currency requires three uppercase letters")
+	}
+	if len(s.SourceHash) != 71 || !strings.HasPrefix(s.SourceHash, "sha256:") || strings.ToLower(s.SourceHash) != s.SourceHash {
+		return errors.New("provider_price_snapshot: v2 source_hash requires a SHA-256 digest")
+	}
+	if _, err := hex.DecodeString(s.SourceHash[7:]); err != nil {
+		return errors.New("provider_price_snapshot: v2 source_hash requires a SHA-256 digest")
 	}
 	return nil
 }

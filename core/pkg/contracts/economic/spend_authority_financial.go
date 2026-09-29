@@ -187,10 +187,10 @@ func (s *ProviderPriceSnapshot) Stale(now time.Time) bool {
 
 // QuoteCents computes the quoted cost in whole cents for the given token usage.
 //
-// Token prices are expressed in micro-cents (1e-6 cents) per token so that
-// sub-cent per-token rates remain exact integers. The running total is kept in
-// micro-cents and rounded up to the next whole cent so a quote never
-// under-charges the envelope. RequestCents is a flat per-request surcharge.
+// Legacy token prices use micro-cents (1e-6 cents); v2 uses nano-cents (1e-9
+// cents). The tariff total rounds up for a conservative whole-cent reservation.
+// This reservation is not an exact provider bill. ExactCostNanoCents preserves
+// the unrounded v2 tariff estimate for downstream reconciliation.
 func (s *ProviderPriceSnapshot) QuoteCents(inputTokens, outputTokens int64) (int64, error) {
 	if s == nil {
 		return 0, errors.New("provider_price_snapshot: snapshot is nil")

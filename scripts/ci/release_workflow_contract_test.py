@@ -115,6 +115,16 @@ PROTECTED_SECRET_ENVIRONMENTS = {
 
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
+    def test_pre_release_registry_receipt_waits_without_bypassing_failure(self) -> None:
+        job = self.job("version-status")
+        self.assertIn("timeout-minutes: 25", job)
+        self.assertIn("--npm-propagation-timeout 900", job)
+        self.assertNotIn("--report", job)
+        self.assertNotIn("continue-on-error", job)
+        self.assertNotIn("|| true", job)
+        for surface in ("ghcr-image", "ghcr-chart", "npm-sdk", "pypi-sdk", "crates-sdk", "go-proxy-sdk"):
+            self.assertIn(f"--only {surface}", job)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")

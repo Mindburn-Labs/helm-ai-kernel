@@ -13,6 +13,7 @@ import base64
 import binascii
 import hashlib
 import json
+import math
 import os
 import re
 import socket
@@ -34,6 +35,7 @@ REQUEST_TIMEOUT_SECONDS = 30.0
 RATE_LIMIT_RETRY_ATTEMPTS = 3
 RATE_LIMIT_BACKOFF_SECONDS = 2.0
 RATE_LIMIT_MAX_BACKOFF_SECONDS = 30.0
+NPM_PROPAGATION_TIMEOUT_SECONDS = 0.0
 # A surface the checker could not read. It is not a drift verdict: the published
 # value is unknown, so it must never be reported as a version mismatch.
 STATUS_UNKNOWN = "unknown"
@@ -297,7 +299,16 @@ def rate_limit_backoff(exc: urllib.error.HTTPError, attempt: int) -> float:
     return max(0.0, min(delay, RATE_LIMIT_MAX_BACKOFF_SECONDS))
 
 
-def urlopen_with_retry(request: urllib.request.Request) -> Any:
+def remaining_timeout(deadline: float | None) -> float:
+    if deadline is None:
+        return REQUEST_TIMEOUT_SECONDS
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("npm propagation deadline expired")
+    return min(REQUEST_TIMEOUT_SECONDS, remaining)
+
+
+def urlopen_with_retry(request: urllib.request.Request, *, deadline: float | None = None) -> Any:
     """Open a request, retrying rate-limit refusals with bounded backoff.
 
     Raises SurfaceUnreadable when the host keeps refusing; every other error
@@ -308,13 +319,15 @@ def urlopen_with_retry(request: urllib.request.Request) -> Any:
     while True:
         attempt += 1
         try:
-            return urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS)
+            return urllib.request.urlopen(request, timeout=remaining_timeout(deadline))
         except urllib.error.HTTPError as exc:
             if not is_rate_limited(exc):
                 raise
             if attempt >= attempts:
                 raise SurfaceUnreadable(request.full_url, attempts, exc) from exc
             delay = rate_limit_backoff(exc, attempt)
+            if deadline is not None:
+                delay = min(delay, remaining_timeout(deadline))
             print(
                 f"rate limited by {urllib.parse.urlsplit(request.full_url).hostname} "
                 f"(HTTP {exc.code}); retrying in {delay:g}s ({attempt}/{attempts - 1})",
@@ -323,10 +336,12 @@ def urlopen_with_retry(request: urllib.request.Request) -> Any:
             time.sleep(delay)
 
 
-def request_json(url: str) -> Any:
+def request_json(url: str, *, deadline: float | None = None) -> Any:
     req = http_request(url)
-    with urlopen_with_retry(req) as response:
-        return json.loads(response.read().decode("utf-8"))
+    with urlopen_with_retry(req, deadline=deadline) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    remaining_timeout(deadline)
+    return payload
 
 
 def request_bytes(url: str) -> bytes:
@@ -497,9 +512,37 @@ def check_github_release_slsa_subjects(surface: dict[str, Any], version: str) ->
 
 
 def check_npm(surface: dict[str, Any], version: str) -> SurfaceResult:
-    payload = request_json(surface["url"])
-    actual = payload.get("dist-tags", {}).get("latest")
-    return SurfaceResult(surface["id"], "pass" if actual == version else "fail", version, actual, url=surface["human_url"])
+    # npm can accept an immutable publish before either the exact version or
+    # latest becomes readable. Only those two propagation states may wait.
+    deadline = time.monotonic() + NPM_PROPAGATION_TIMEOUT_SECONDS if NPM_PROPAGATION_TIMEOUT_SECONDS else None
+    while True:
+        payload = request_json(surface["url"], deadline=deadline)
+        if not isinstance(payload, dict) or not isinstance(payload.get("dist-tags"), dict):
+            raise ValueError("malformed npm package metadata")
+        actual = payload["dist-tags"].get("latest")
+        if actual is not None and (not isinstance(actual, str) or not SEMVER_RE.fullmatch(actual)):
+            raise ValueError(f"unexpected npm latest: {actual!r}")
+        if actual is not None and semver_parts(actual, "npm latest") > semver_parts(version, "expected version"):
+            return SurfaceResult(surface["id"], "fail", version, actual, url=surface["human_url"], detail="npm latest is newer than the release")
+        exact_visible = True
+        try:
+            exact = request_json(f"{surface['url'].rstrip('/')}/{version}", deadline=deadline)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise
+            exact_visible = False
+            exact = None
+        if exact_visible and not isinstance(exact, dict):
+            raise ValueError("malformed npm exact-version metadata")
+        if exact_visible and exact.get("version") != version:
+            return SurfaceResult(surface["id"], "fail", version, exact.get("version"), url=surface["human_url"], detail="npm exact-version response mismatch")
+        if exact_visible and actual == version:
+            return SurfaceResult(surface["id"], "pass", version, actual, url=surface["human_url"], detail="exact version and latest both match")
+        detail = f"pending npm propagation: latest={actual!r}, exact_version_visible={exact_visible}"
+        if deadline is None or time.monotonic() >= deadline:
+            return SurfaceResult(surface["id"], "fail", version, actual, url=surface["human_url"], detail=detail + "; wait budget exhausted")
+        print(detail, file=sys.stderr, flush=True)
+        time.sleep(max(0.0, min(30.0, deadline - time.monotonic())))
 
 
 def check_pypi(surface: dict[str, Any], version: str) -> SurfaceResult:
@@ -830,6 +873,7 @@ def parse_args() -> argparse.Namespace:
     published.add_argument("--skip", action="append", default=[], help="published surface id to skip; can be passed more than once")
     published.add_argument("--only", action="append", default=[], help="published surface id to check; when passed, all other published surfaces are skipped")
     published.add_argument("--surface-timeout", type=float, default=REQUEST_TIMEOUT_SECONDS, help="timeout in seconds for each public surface request")
+    published.add_argument("--npm-propagation-timeout", type=float, default=0.0, help="bounded wait in seconds for npm exact version and latest after a successful publish; default disables waiting")
     published.add_argument(
         "--rate-limit-retries",
         type=int,
@@ -840,10 +884,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    global REQUEST_TIMEOUT_SECONDS, RATE_LIMIT_RETRY_ATTEMPTS
+    global REQUEST_TIMEOUT_SECONDS, RATE_LIMIT_RETRY_ATTEMPTS, NPM_PROPAGATION_TIMEOUT_SECONDS
     args = parse_args()
     contract = load_contract(args.contract)
     version = expected_version(contract, args.expected_version)
+    NPM_PROPAGATION_TIMEOUT_SECONDS = float(getattr(args, "npm_propagation_timeout", 0.0))
+    if not math.isfinite(NPM_PROPAGATION_TIMEOUT_SECONDS) or not 0 <= NPM_PROPAGATION_TIMEOUT_SECONDS <= 900:
+        raise SystemExit("--npm-propagation-timeout must be between 0 and 900 seconds")
     if getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS) <= 0:
         raise SystemExit("--surface-timeout must be greater than 0")
     REQUEST_TIMEOUT_SECONDS = float(getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS))

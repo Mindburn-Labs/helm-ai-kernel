@@ -63,6 +63,21 @@ type Effect struct {
 	EffectType string
 	Target     string
 	Arguments  []byte
+	// Invocation is gateway-owned execution context, never effect arguments.
+	// Dispatch receives it only after the single-use claim commits. Observe
+	// reconstructs it from the same persisted permit; it grants no new dispatch.
+	Invocation *Invocation `json:"-"`
+}
+
+// Invocation binds adapter accounting and recovery to the authenticated scope
+// and original committed claim. It is an in-process gateway contract, not a
+// caller-constructible wire grant or a replacement for the argument digest.
+type Invocation struct {
+	TenantID, WorkspaceID, AttemptID, PermitID, ClaimID string
+	RequesterPrincipalID                                string
+	ExpiresAt                                           time.Time
+	// Quote is the admitted resource quote, read under the gateway claim lock.
+	Quote []Amount
 }
 
 // Idempotency is how a repeated dispatch behaves (§9.1).

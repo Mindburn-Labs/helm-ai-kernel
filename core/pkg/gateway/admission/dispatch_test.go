@@ -186,3 +186,16 @@ func TestDecideEscalatesAuthorityChangesAndLetsALiftThroughStops(t *testing.T) {
 		t.Fatalf("an authority change other than a lift under a stop = %+v", d)
 	}
 }
+
+func TestInvocationForUsesLockedScope(t *testing.T) {
+	a := lockedAttempt{tenantID: "tenant", workspaceID: "workspace", id: "attempt", requester: "principal", quote: []Amount{{Unit: "USD", Amount: 13}}}
+	expires := time.Unix(100, 0).UTC()
+	i := invocationFor(a, "permit", "claim", expires)
+	if i.TenantID != a.tenantID || i.WorkspaceID != a.workspaceID || i.AttemptID != a.id || i.RequesterPrincipalID != a.requester || i.PermitID != "permit" || i.ClaimID != "claim" || !i.ExpiresAt.Equal(expires) || len(i.Quote) != 1 || i.Quote[0].Amount != 13 || i.Quote[0].Unit != "USD" {
+		t.Fatalf("wrong invocation: %+v", i)
+	}
+	i.Quote[0].Amount = 1
+	if a.quote[0].Amount != 13 {
+		t.Fatal("adapter mutated the locked quote")
+	}
+}

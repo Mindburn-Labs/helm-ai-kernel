@@ -3128,7 +3128,10 @@ controls:
       result_ref, SHA-256 over the result's JCS form, and in the same
       transaction consumes the held exposure (SUCCEEDED, or an object that
       contradicts the effect) or releases it (absent after the fence)
-      (HELM-751 s3).
+      (HELM-751 s3). Adapter invocation context carries the authenticated
+      tenant/workspace, requester, original attempt/permit/claim, expiry and
+      admitted resource quote from the locked rows, never from arguments.
+      Observe reconstructs the same context without granting another dispatch.
     status: enforced
     entry_points:
       - "core/pkg/gateway/server.Server.Dispatch"
@@ -3149,6 +3152,8 @@ controls:
       - "The trust limits of CTL-052 (ADR-0005 issuer trust) apply."
     tests:
       allowed:
+        - "core/pkg/gateway/admission.TestPostgresAdapterInvocationSurvivesRecovery"
+        - "core/pkg/gateway/admission.TestInvocationForUsesLockedScope"
         - "core/pkg/gateway/admission.TestPostgresDispatchClaimsThePermitOnce"
         - "core/pkg/gateway/admission.TestPostgresObserveRecordsTheTypedResult"
         - "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
@@ -3169,12 +3174,14 @@ controls:
         - "core/pkg/gateway/admission.TestAfterDispatch"
         - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
       removal:
+        - "core/pkg/gateway/admission.TestInvocationForUsesLockedScope"
         - "core/pkg/gateway/admission.TestClaimRefusal"
         - "core/pkg/gateway/admission.TestAfterDispatch"
         - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
         - "core/pkg/gateway/admission.TestReadBackVerdict"
         - "core/pkg/gateway/admission.TestMayExecute"
       bypass:
+        - "core/pkg/gateway/admission.TestPostgresAdapterInvocationSurvivesRecovery"
         - "core/pkg/gateway/admission.TestPostgresCrashAfterTheClaimIsReconciledNeverResent"
   - id: CTL-055
     title: "Gateway stops and lifts"

@@ -211,6 +211,20 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                 pending.extend(self.job_needs(need))
         return seen
 
+    def test_each_image_build_labels_its_exact_source(self) -> None:
+        container = self.job("container")
+        for name in ("Build and push main image", "Build and push slim image"):
+            match = re.search(
+                rf"^        name: {re.escape(name)}\n(?P<body>.*?)(?=^      -|\Z)",
+                container, re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"missing {name} step")
+            assert match is not None
+            build = match.group("body")
+            self.assertIn("org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}", build)
+            self.assertIn("org.opencontainers.image.revision=${{ github.sha }}", build)
+            self.assertIn("org.opencontainers.image.version=${{ github.ref_name }}", build)
+
     def test_images_have_signed_exact_digest_provenance(self) -> None:
         container = self.job("container")
         self.assertIn("attestations: write", container)

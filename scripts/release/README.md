@@ -70,10 +70,10 @@ manifest.
 
 The local Console browser sidecar is a standalone-release asset, never a
 Homebrew resource. A tag release first dispatches the Console's native closure
-builder from a checked-in exact source pin. The immutable source tuple is
-separate from the Console producer workflow identity: that signature is trusted
-at `refs/heads/main` under the Console repository's protected-branch controls;
-it does not claim an immutable workflow revision. `console_local_sidecar.py`
+builder from a checked-in exact source pin. The producer workflow runs from the
+pin's immutable `refs/tags/...` ref, which must resolve to the pinned source
+commit. Its keyless signature identity must name that same ref; a Console
+`main` workflow identity is rejected. `console_local_sidecar.py`
 requires the Console keyless manifest signature, all four native targets,
 archive and inventory integrity, and source/provenance agreement before the
 files enter `dist/release-assets/`. The Kernel release signs that manifest once

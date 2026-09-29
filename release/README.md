@@ -57,7 +57,7 @@ data. Browser UI assets are not Kernel release assets. Where a release
 declares the loopback Console local-sidecar, it is a verified standalone native
 closure—not a Homebrew resource or a hosted UI.
 
-For v0.8.0, the signed Console aggregate manifest is source-pinned and its
+For a Console-enabled release, the signed aggregate manifest is source-pinned and its
 SHA-256 is compiled into every standalone Kernel binary before release staging.
 Each `helm-ai-kernel-<os>-<arch>-console.tar.gz` asset contains that binary
 alongside the exact `console/` layout: both manifest bundles, all raw native
@@ -67,9 +67,9 @@ provenance, source, and target relations before it issues a session or executes
 the bundled Node runtime. No host Cosign installation or network call is
 required at runtime.
 
-The source tuple is immutable; the Console producer signature remains a
-protected-branch `main` workflow trust assumption rather than an immutable
-workflow revision. A separate Kernel bundle binds that exact manifest to the
+The source tuple and producer workflow ref are immutable. The Console producer
+signature must name the pinned `refs/tags/...` ref, resolving to that exact
+source commit; a `main` identity is rejected. A separate Kernel bundle binds that exact manifest to the
 public Kernel tag, is generated once before staging, and remains in the
 standalone layout, checksum set, and GitHub release. Verification derives that
 exact tag from the Console manifest: `make verify-cosign COSIGN_ARTIFACT_DIR=./downloaded-release`.

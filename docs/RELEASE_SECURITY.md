@@ -65,12 +65,12 @@ each primary asset. Browser UI bundles are not Kernel release assets. Where a
 release declares the loopback Console local-sidecar, it is a verified standalone
 native closure—not a Homebrew resource or a hosted UI.
 
-For the v0.8.0 local Console closure, release assembly verifies the producer
+For a local Console closure, release assembly verifies the producer
 bundle and exact Console source pin, signs the aggregate manifest once for the
 exact Kernel tag, and compiles its SHA-256 into the Kernel binary. The Console
-source tuple is immutable, while the producer workflow identity is a declared
-protected-branch `main` trust assumption rather than an immutable workflow
-revision. The separate Kernel bundle is retained in the staged assets, checksum
+source tuple and producer workflow ref are immutable: the signature identity
+must name the pinned `refs/tags/...` ref, which resolves to the exact source
+commit. A Console `main` identity is rejected. The separate Kernel bundle is retained in the staged assets, checksum
 set, standalone layout, and GitHub release; public verification derives the
 exact tag from the Console manifest and does not accept a Kernel `main`
 identity. Each matching

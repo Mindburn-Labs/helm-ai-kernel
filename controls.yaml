@@ -476,6 +476,12 @@ removal_proofs:
 
   - control: CTL-054
     file: core/pkg/gateway/admission/dispatch.go
+    find: "TenantID: a.tenantID, WorkspaceID: a.workspaceID, AttemptID: a.id, PermitID: permitID, ClaimID: claimID, RequesterPrincipalID: a.requester"
+    replace: "TenantID: \"forged\", WorkspaceID: a.workspaceID, AttemptID: a.id, PermitID: permitID, ClaimID: claimID, RequesterPrincipalID: a.requester"
+    tests:
+      - "core/pkg/gateway/admission.TestInvocationForUsesLockedScope"
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
     find: "\tcase len(in.Stops) > 0:\n"
     replace: "\tcase false && len(in.Stops) > 0:\n"
     tests:

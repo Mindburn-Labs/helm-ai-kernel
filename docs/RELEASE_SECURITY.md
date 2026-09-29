@@ -53,24 +53,24 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.10.3`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.3>. The
+Current source release target: `v0.10.4`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.4>. The
 release is complete only when GitHub shows Darwin/Linux/Windows binaries,
 `SHA256SUMS.txt`, `sbom.json`,
-`v0.10.3.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.10.4.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,
-`v0.10.3.json`, `version-status.json`, and matching `*.cosign.bundle` files for
+`v0.10.4.json`, `version-status.json`, and matching `*.cosign.bundle` files for
 each primary asset. Browser UI bundles are not Kernel release assets. Where a
 release declares the loopback Console local-sidecar, it is a verified standalone
 native closure—not a Homebrew resource or a hosted UI.
 
-For the v0.8.0 local Console closure, release assembly verifies the producer
+For a local Console closure, release assembly verifies the producer
 bundle and exact Console source pin, signs the aggregate manifest once for the
 exact Kernel tag, and compiles its SHA-256 into the Kernel binary. The Console
-source tuple is immutable, while the producer workflow identity is a declared
-protected-branch `main` trust assumption rather than an immutable workflow
-revision. The separate Kernel bundle is retained in the staged assets, checksum
+source tuple and producer workflow ref are immutable: the signature identity
+must name the pinned `refs/tags/...` ref, which resolves to the exact source
+commit. A Console `main` identity is rejected. The separate Kernel bundle is retained in the staged assets, checksum
 set, standalone layout, and GitHub release; public verification derives the
 exact tag from the Console manifest and does not accept a Kernel `main`
 identity. Each matching

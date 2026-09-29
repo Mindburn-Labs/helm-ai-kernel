@@ -112,6 +112,7 @@ func (p *ProviderTermsProfile) computeHash() string {
 
 // ProviderPriceSnapshot captures quoted provider pricing at a point in time.
 type ProviderPriceSnapshot struct {
+	SchemaVersion          string    `json:"schema_version,omitempty"`
 	ID                     string    `json:"id"`
 	ProviderID             string    `json:"provider_id"`
 	ModelID                string    `json:"model_id"`
@@ -119,6 +120,9 @@ type ProviderPriceSnapshot struct {
 	InputTokenMicroCents   int64     `json:"input_token_micro_cents,omitempty"`
 	OutputTokenMicroCents  int64     `json:"output_token_micro_cents,omitempty"`
 	RequestCents           int64     `json:"request_cents,omitempty"`
+	InputTokenNanoCents    int64     `json:"input_token_nano_cents,omitempty"`
+	OutputTokenNanoCents   int64     `json:"output_token_nano_cents,omitempty"`
+	RequestNanoCents       int64     `json:"request_nano_cents,omitempty"`
 	ProviderTermsProfileID string    `json:"provider_terms_profile_id"`
 	SourceURI              string    `json:"source_uri,omitempty"`
 	SourceHash             string    `json:"source_hash"`
@@ -168,11 +172,8 @@ func (s *ProviderPriceSnapshot) Validate() error {
 	if s.SourceHash == "" {
 		return errors.New("provider_price_snapshot: source_hash is required")
 	}
-	if s.InputTokenMicroCents < 0 || s.OutputTokenMicroCents < 0 || s.RequestCents < 0 {
-		return errors.New("provider_price_snapshot: price fields cannot be negative")
-	}
-	if s.InputTokenMicroCents == 0 && s.OutputTokenMicroCents == 0 && s.RequestCents == 0 {
-		return errors.New("provider_price_snapshot: at least one price field is required")
+	if err := s.validatePriceRepresentation(); err != nil {
+		return err
 	}
 	if !s.ExpiresAt.After(s.EffectiveAt) {
 		return errors.New("provider_price_snapshot: expires_at must be after effective_at")
@@ -193,6 +194,23 @@ func (s *ProviderPriceSnapshot) Stale(now time.Time) bool {
 func (s *ProviderPriceSnapshot) QuoteCents(inputTokens, outputTokens int64) (int64, error) {
 	if s == nil {
 		return 0, errors.New("provider_price_snapshot: snapshot is nil")
+	}
+	if err := s.validatePriceRepresentation(); err != nil {
+		return 0, err
+	}
+	if s.SchemaVersion == ProviderPriceSchemaV2 {
+		nano, err := s.ExactCostNanoCents(inputTokens, outputTokens)
+		if err != nil {
+			return 0, err
+		}
+		cents := nano / nanoCentsPerCent
+		if nano%nanoCentsPerCent != 0 {
+			cents++
+		}
+		if cents == 0 {
+			return 0, errors.New("provider_price_snapshot: quoted cost must be positive")
+		}
+		return cents, nil
 	}
 	if inputTokens < 0 || outputTokens < 0 {
 		return 0, errors.New("provider_price_snapshot: token counts cannot be negative")
@@ -237,6 +255,9 @@ func mulNonNegative(a, b int64) (int64, bool) {
 }
 
 func (s *ProviderPriceSnapshot) computeHash() string {
+	if s.SchemaVersion != "" {
+		return s.exactPriceDigest()
+	}
 	return hashSpendAuthorityCanonical(struct {
 		ID                    string `json:"id"`
 		ProviderID            string `json:"provider_id"`

@@ -237,6 +237,7 @@ signed closure are promoted together through the deployed Data Plane.
 | Schema                                       | Conformance | Status  | Description                                                                 |
 | -------------------------------------------- | ----------- | ------- | --------------------------------------------------------------------------- |
 | `spend_authority_contracts.v1.schema.json`   | L2          | preview | Spend envelopes, route quotes, receipts, provider terms, balances, and deferred credit lines |
+| `provider_price_snapshot.v2.schema.json` | L2 | preview | Exact nano-cent tariff; separate provider cost and whole-cent reservation |
 
 ### Authority (`authority/`)
 

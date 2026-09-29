@@ -525,6 +525,10 @@ jobs:
           provenance: true
           sbom: true
           platforms: linux/amd64,linux/arm64
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
           build-args: |
             BUILD_VERSION=${{ steps.build-meta.outputs.version }}
             BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}
@@ -542,6 +546,10 @@ jobs:
           provenance: true
           sbom: true
           platforms: linux/amd64,linux/arm64
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
           build-args: |
             BUILD_VERSION=${{ steps.build-meta.outputs.version }}
             BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}

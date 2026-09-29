@@ -90,6 +90,26 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 No changes yet.
 
+## [0.10.3] - 2026-09-29
+
+### Fixed
+
+- Generate binary provenance with the upstream-supported SLSA generator version
+  tag, bind that tag to its reviewed commit, and verify the signed checksum
+  manifest with standard SLSA policy plus exact source and identity checks
+  before registry publication.
+- Require the existing public documentation release metadata and linked routes
+  to pass before publishing immutable artifacts. The final check still requires
+  the newly released documentation version.
+
+### Release scope
+
+- Fix forward after v0.10.2 failed final docs acceptance. Its artifacts and
+  failed workflow receipt remain unchanged; source changes do not qualify old
+  provenance for the standard verifier.
+- Reuse the reviewed Console source and preserve gateway and trusted-core
+  behavior. Publication and the governed runtime journey remain separate gates.
+
 ## [0.10.2] - 2026-09-29
 
 ### Fixed

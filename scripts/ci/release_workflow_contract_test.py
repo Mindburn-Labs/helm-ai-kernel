@@ -62,7 +62,7 @@ EXTERNAL_MUTATION_MARKERS = (
     "push: true",
     "pypa/gh-action-pypi-publish@",
     "run: cargo publish",
-    "slsa-framework/slsa-github-generator/",
+    "uses: slsa-framework/slsa-github-generator/",
     "softprops/action-gh-release@",
 )
 
@@ -124,6 +124,33 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("|| true", job)
         for surface in ("ghcr-image", "ghcr-chart", "npm-sdk", "pypi-sdk", "crates-sdk", "go-proxy-sdk"):
             self.assertIn(f"--only {surface}", job)
+
+    def test_slsa_is_verified_before_github_publication(self) -> None:
+        producer = self.job("slsa-provenance")
+        self.assertIn("generator_generic_slsa3.yml@v2.1.0", producer)
+        self.assertIn("upload-assets: false", producer)
+        self.assertNotIn("github-release", self.job_needs("slsa-provenance"))
+        self.assertIn("verify-slsa", self.job_needs("github-release"))
+        self.assertIn("slsa-provenance", self.job_needs("verify-slsa"))
+        for publisher in ("container", "go-sdk-tag", "npm-sdk", "python-sdk",
+                          "crates-sdk", "maven-sdk", "console-release-assets"):
+            self.assertIn("verify-slsa", self.job_needs(publisher))
+        verifier = self.job("verify-slsa")
+        for marker in ("slsa-verifier verify-artifact dist/SHA256SUMS.txt",
+                       '--source-tag "$GITHUB_REF_NAME"',
+                       '--certificate-github-workflow-sha "$GITHUB_SHA"',
+                       '--certificate-github-workflow-ref "$GITHUB_REF"',
+                       '--certificate-github-workflow-repository "$GITHUB_REPOSITORY"',
+                       "--certificate-oidc-issuer https://token.actions.githubusercontent.com",
+                       "generator_generic_slsa3.yml@refs/tags/v2.1.0",
+                       "sha256sum --check SHA256SUMS.txt"):
+            self.assertIn(marker, verifier)
+        self.assertNotIn("continue-on-error", verifier)
+        self.assertNotIn("|| true", verifier)
+        self.assertIn("python3 scripts/release/check_docs_readiness.py",
+                      self.job("release-preflight"))
+        self.assertIn("commits/v2.1.0", self.job("release-preflight"))
+        self.assertIn("f7dd8c54c2067bafc12ca7a55595d5ee9b75204a", self.job("release-preflight"))
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -455,11 +482,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "maven-sdk",
             "console-release-assets",
         ):
-            self.assertIn(
-                "needs: [binaries, console-local-sidecar]",
-                self.job(publisher),
-                publisher,
-            )
+            self.assertTrue({"binaries", "console-local-sidecar"}.issubset(
+                self.job_needs(publisher)), publisher)
 
         self.assertIn("needs: container", self.job("cosign-container"))
         self.assertIn("container", self.job("chart"))
@@ -490,10 +514,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
-        self.assertIn(
-            "needs: [binaries, console-local-sidecar]",
-            console_assets,
-        )
+        self.assertTrue({"binaries", "console-local-sidecar"}.issubset(
+            self.job_needs("console-release-assets")))
         self.assertNotIn("github-release", console_assets)
         self.assertNotIn("always()", console_assets)
         self.assertIn("make release-binaries-reproducible", console_assets)

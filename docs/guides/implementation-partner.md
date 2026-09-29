@@ -5,7 +5,7 @@ last_reviewed: 2026-07-15
 
 # Implementation Partner Handoff
 
-This guide packages the local, self-hosted HELM AI Kernel v0.10.2 source target for an
+This guide packages the local, self-hosted HELM AI Kernel v0.10.3 source target for an
 implementation partner. It does not describe a hosted HELM API.
 
 NavigoTech Innovation is an official HELM implementation partner.
@@ -22,10 +22,10 @@ brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version
 ```
 
-The expected source release target for this packet is `0.10.2`. This is not a
+The expected source release target for this packet is `0.10.3`. This is not a
 registry availability claim. If the registry or local cache does not return
 that release after publication, stop and use the signed asset from the
-[v0.10.2 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.2).
+[v0.10.3 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.3).
 
 ## 2. Run A Clean Local Proof
 

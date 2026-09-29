@@ -90,6 +90,25 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 No changes yet.
 
+## [0.10.4] - 2026-09-29
+
+### Added
+
+- Pass the authenticated gateway attempt, consumed permit and admitted quote to
+  adapters after the dispatch claim commits, and reconstruct that context during
+  observation. Effect arguments cannot supply or widen this context.
+- Expose the existing gateway lifecycle through `pkg/gateway/runtime.Run` so a
+  product-owned binary can register adapters without depending on commercial
+  components inside Kernel. The OSS gateway uses the same runtime.
+
+### Validation and scope
+
+- The source change passed all PR and merge-group gates, including PostgreSQL
+  proofs, control-removal tests, build/race checks and deployment smoke.
+- Paired Control Plane proof traverses authenticated admission, finance, a
+  synthetic provider, OrganizationRuntime and durable Console readback. This
+  release does not activate a hosted provider or qualify model accuracy.
+
 ## [0.10.3] - 2026-09-29
 
 ### Fixed

@@ -1,4 +1,4 @@
-package main
+package runtime
 
 // quantum_posture: generates classical ECDSA test certificates for the TLS
 // listener; no post-quantum claim.
@@ -14,7 +14,9 @@ import (
 	"crypto/x509/pkix"
 	"database/sql"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"io"
 	"math/big"
 	"net"
@@ -87,7 +89,7 @@ func TestServeRefusesToStartWithoutItsConfiguration(t *testing.T) {
 		"unknown command":          {[]string{"dispatch"}, nil, "unknown command"},
 		"migrate without database": {[]string{"migrate"}, nil, "HELM_GATEWAY_DATABASE_URL"},
 	} {
-		err := run(ctx, test.args, env(test.env), io.Discard)
+		err := Run(ctx, test.args, env(test.env), io.Discard)
 		if err == nil || !strings.Contains(err.Error(), test.want) {
 			t.Errorf("%s: err = %v, want one naming %s", name, err, test.want)
 		}
@@ -135,7 +137,7 @@ func startServe(t *testing.T, args []string, values map[string]string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- run(ctx, append([]string{"serve", "--health-listen", health}, args...), env(values), io.Discard)
+		done <- Run(ctx, append([]string{"serve", "--health-listen", health}, args...), env(values), io.Discard)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -300,10 +302,10 @@ func TestPostgresGatewayMigrateAndReadiness(t *testing.T) {
 		t.Fatalf("readyz before migrate = %d %q", code, body)
 	}
 	var out bytes.Buffer
-	if err := run(context.Background(), []string{"migrate"}, env(values), &out); err != nil {
+	if err := Run(context.Background(), []string{"migrate"}, env(values), &out); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(context.Background(), []string{"migrate"}, env(values), &out); err != nil {
+	if err := Run(context.Background(), []string{"migrate"}, env(values), &out); err != nil {
 		t.Fatalf("a second migrate: %v", err)
 	}
 	// Known good: at head.
@@ -316,9 +318,29 @@ func TestPostgresGatewayMigrateAndReadiness(t *testing.T) {
 	if code, _ := ready(); code != http.StatusServiceUnavailable {
 		t.Fatal("readyz is ready on a schema newer than the binary")
 	}
-	if err := run(context.Background(), []string{"migrate"}, env(values), &out); err == nil {
+	if err := Run(context.Background(), []string{"migrate"}, env(values), &out); err == nil {
 		t.Fatal("migrate accepted a newer schema")
 	}
 }
 
 func sqlOpen(dsn string) (*sql.DB, error) { return sql.Open("postgres", dsn) }
+
+func TestCompositionRunsAfterIdentityValidationAndStopsBeforeListening(t *testing.T) {
+	calls := 0
+	refusal := errors.New("composition refused")
+	configure := func(_ context.Context, db *sql.DB, config *admission.Config) error {
+		calls++
+		if db == nil || len(config.Adapters) == 0 {
+			t.Fatal("existing gateway configuration not supplied")
+		}
+		return refusal
+	}
+	args := []string{"serve", "--dev-insecure-listen", "127.0.0.1:0"}
+	if err := Run(t.Context(), args, env(nil), io.Discard, configure); err == nil || calls != 0 {
+		t.Fatal("composition ran without identity")
+	}
+	values := with(identityEnv, map[string]string{"HELM_GATEWAY_DATABASE_URL": "postgres://127.0.0.1:1/none?sslmode=disable"})
+	if err := Run(t.Context(), args, env(values), io.Discard, configure); !errors.Is(err, refusal) || calls != 1 {
+		t.Fatalf("err=%v calls=%d", err, calls)
+	}
+}

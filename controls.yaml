@@ -394,11 +394,11 @@ removal_proofs:
     tests:
       - "core/pkg/gateway/adapters/github.TestTargets"
   - control: CTL-051
-    file: core/cmd/helm-gateway/main.go
+    file: core/pkg/gateway/runtime/runtime.go
     find: "\tc.Adapters = []adapters.Adapter{github.New(github.WithBaseURL(apiURL))}\n"
     replace: "\tc.Adapters = []adapters.Adapter{github.New(github.WithBaseURL(apiURL))}[:0]\n"
     tests:
-      - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+      - "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter"
   - control: CTL-051
     file: core/pkg/gateway/custody/githubapp.go
     find: "\tif !ok || !allowed(in.Repositories, owner+\"/\"+name) {\n"
@@ -474,6 +474,12 @@ removal_proofs:
     tests:
       - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
 
+  - control: CTL-054
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "TenantID: a.tenantID, WorkspaceID: a.workspaceID, AttemptID: a.id, PermitID: permitID, ClaimID: claimID, RequesterPrincipalID: a.requester"
+    replace: "TenantID: \"forged\", WorkspaceID: a.workspaceID, AttemptID: a.id, PermitID: permitID, ClaimID: claimID, RequesterPrincipalID: a.requester"
+    tests:
+      - "core/pkg/gateway/admission.TestInvocationForUsesLockedScope"
   - control: CTL-054
     file: core/pkg/gateway/admission/dispatch.go
     find: "\tcase len(in.Stops) > 0:\n"
@@ -2928,7 +2934,7 @@ controls:
       that key's own lock, and never logged (R8, HELM-751 s3).
     status: enforced
     entry_points:
-      - "core/cmd/helm-gateway.effectsFromEnv"
+      - "core/pkg/gateway/runtime.effectsFromEnv"
       - "core/pkg/gateway/adapters.CheckPermitDigest"
       - "core/pkg/gateway/adapters/github.Adapter.Dispatch"
       - "core/pkg/gateway/adapters/github.Adapter.Observe"
@@ -2948,7 +2954,7 @@ controls:
         - "core/pkg/gateway/adapters/github.TestQualificationFake"
         - "core/pkg/gateway/custody.TestGitHubAppMintsRepositoryScopedTokensAndCachesThem"
         - "core/pkg/gateway/custody.TestGitHubAppSlowMintBlocksOnlyItsOwnKey"
-        - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+        - "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter"
         - "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
       forbidden:
         - "core/pkg/gateway/adapters.TestCheckPermitDigest"
@@ -2960,12 +2966,12 @@ controls:
       removal:
         - "core/pkg/gateway/adapters.TestCheckPermitDigest"
         - "core/pkg/gateway/adapters/github.TestTargets"
-        - "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+        - "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter"
         - "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist"
         - "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
       bypass:
         - "core/pkg/gateway/adapters.TestAdaptersDoNotImportTheLegacyRuntime"
-        - "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
+        - "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutItsConfiguration"
   - id: CTL-052
     title: "Effect gateway admission"
     owner: Mindburn Labs core team (kernel)
@@ -2987,7 +2993,7 @@ controls:
       (HELM-751 s2, HELM-750 s2b).
     status: enforced
     entry_points:
-      - "core/cmd/helm-gateway.serve"
+      - "core/pkg/gateway/runtime.serve"
       - "core/pkg/gateway/server.Authenticator.Authenticate"
       - "core/pkg/gateway/admission.Service.Propose"
       - "core/pkg/gateway/admission.Decide"
@@ -3014,7 +3020,7 @@ controls:
         - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
         - "core/pkg/gateway/effectargs.TestValidateAcceptsTheSkeletonArguments"
         - "core/pkg/gateway/server.TestAuthenticateTakesIdentityOnlyFromAValidToken"
-        - "core/cmd/helm-gateway.TestPostgresGatewayMigrateAndReadiness"
+        - "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"
       forbidden:
         - "core/pkg/gateway/admission.TestPostgresStopsDenyAdmission"
         - "core/pkg/gateway/admission.TestPostgresProposeIsIdempotent"
@@ -3029,9 +3035,9 @@ controls:
         - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
         - "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName"
         - "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
-        - "core/cmd/helm-gateway.TestDevInsecureListenRefusesAnythingButLoopback"
-        - "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
-        - "core/cmd/helm-gateway.TestServeRequiresAClientCertificateWhenConfigured"
+        - "core/pkg/gateway/runtime.TestDevInsecureListenRefusesAnythingButLoopback"
+        - "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutItsConfiguration"
+        - "core/pkg/gateway/runtime.TestServeRequiresAClientCertificateWhenConfigured"
       removal:
         - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
         - "core/pkg/gateway/admission.TestApprovalDigestV1MatchesTheDesignNoteVector"
@@ -3042,7 +3048,7 @@ controls:
       bypass:
         - "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired"
         - "core/pkg/gateway/admission.TestGatewayDoesNotImportTheLegacyRuntime"
-        - "core/cmd/helm-gateway.TestServeOverDevInsecureLoopbackAnswersGRPC"
+        - "core/pkg/gateway/runtime.TestServeOverDevInsecureLoopbackAnswersGRPC"
   - id: CTL-053
     title: "Gateway approval decisions"
     owner: Mindburn Labs core team (kernel)
@@ -3128,7 +3134,10 @@ controls:
       result_ref, SHA-256 over the result's JCS form, and in the same
       transaction consumes the held exposure (SUCCEEDED, or an object that
       contradicts the effect) or releases it (absent after the fence)
-      (HELM-751 s3).
+      (HELM-751 s3). Adapter invocation context carries the authenticated
+      tenant/workspace, requester, original attempt/permit/claim, expiry and
+      admitted resource quote from the locked rows, never from arguments.
+      Observe reconstructs the same context without granting another dispatch.
     status: enforced
     entry_points:
       - "core/pkg/gateway/server.Server.Dispatch"
@@ -3149,6 +3158,8 @@ controls:
       - "The trust limits of CTL-052 (ADR-0005 issuer trust) apply."
     tests:
       allowed:
+        - "core/pkg/gateway/admission.TestPostgresAdapterInvocationSurvivesRecovery"
+        - "core/pkg/gateway/admission.TestInvocationForUsesLockedScope"
         - "core/pkg/gateway/admission.TestPostgresDispatchClaimsThePermitOnce"
         - "core/pkg/gateway/admission.TestPostgresObserveRecordsTheTypedResult"
         - "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
@@ -3169,12 +3180,14 @@ controls:
         - "core/pkg/gateway/admission.TestAfterDispatch"
         - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
       removal:
+        - "core/pkg/gateway/admission.TestInvocationForUsesLockedScope"
         - "core/pkg/gateway/admission.TestClaimRefusal"
         - "core/pkg/gateway/admission.TestAfterDispatch"
         - "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
         - "core/pkg/gateway/admission.TestReadBackVerdict"
         - "core/pkg/gateway/admission.TestMayExecute"
       bypass:
+        - "core/pkg/gateway/admission.TestPostgresAdapterInvocationSurvivesRecovery"
         - "core/pkg/gateway/admission.TestPostgresCrashAfterTheClaimIsReconciledNeverResent"
   - id: CTL-055
     title: "Gateway stops and lifts"
@@ -3278,4 +3291,4 @@ controls:
       removal:
         - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
       bypass:
-        - "core/cmd/helm-gateway.TestPostgresGatewayMigrateAndReadiness"
+        - "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"

@@ -3152,7 +3152,7 @@
       "plane": "runtime",
       "entry_points": [
         {
-          "symbol": "core/cmd/helm-gateway.effectsFromEnv",
+          "symbol": "core/pkg/gateway/runtime.effectsFromEnv",
           "reachability": "reachable"
         },
         {
@@ -3191,7 +3191,7 @@
           "core/pkg/gateway/adapters/github.TestQualificationFake",
           "core/pkg/gateway/custody.TestGitHubAppMintsRepositoryScopedTokensAndCachesThem",
           "core/pkg/gateway/custody.TestGitHubAppSlowMintBlocksOnlyItsOwnKey",
-          "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter",
+          "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter",
           "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire"
         ],
         "forbidden": [
@@ -3205,13 +3205,13 @@
         "removal": [
           "core/pkg/gateway/adapters.TestCheckPermitDigest",
           "core/pkg/gateway/adapters/github.TestTargets",
-          "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter",
+          "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter",
           "core/pkg/gateway/custody.TestGitHubAppRefusesRepositoriesOutsideTheTenantsAllowlist",
           "core/pkg/gateway/custody.TestGitHubAppAsksForTheLeastPermissionsPerEffectType"
         ],
         "bypass": [
           "core/pkg/gateway/adapters.TestAdaptersDoNotImportTheLegacyRuntime",
-          "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration"
+          "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutItsConfiguration"
         ]
       },
       "removal_proofs": [
@@ -3228,9 +3228,9 @@
           ]
         },
         {
-          "file": "core/cmd/helm-gateway/main.go",
+          "file": "core/pkg/gateway/runtime/runtime.go",
           "tests": [
-            "core/cmd/helm-gateway.TestServeWiresTheGitHubAdapter"
+            "core/pkg/gateway/runtime.TestServeWiresTheGitHubAdapter"
           ]
         },
         {
@@ -3256,7 +3256,7 @@
       "plane": "runtime",
       "entry_points": [
         {
-          "symbol": "core/cmd/helm-gateway.serve",
+          "symbol": "core/pkg/gateway/runtime.serve",
           "reachability": "reachable"
         },
         {
@@ -3308,7 +3308,7 @@
           "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder",
           "core/pkg/gateway/effectargs.TestValidateAcceptsTheSkeletonArguments",
           "core/pkg/gateway/server.TestAuthenticateTakesIdentityOnlyFromAValidToken",
-          "core/cmd/helm-gateway.TestPostgresGatewayMigrateAndReadiness"
+          "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"
         ],
         "forbidden": [
           "core/pkg/gateway/admission.TestPostgresStopsDenyAdmission",
@@ -3324,9 +3324,9 @@
           "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens",
           "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName",
           "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication",
-          "core/cmd/helm-gateway.TestDevInsecureListenRefusesAnythingButLoopback",
-          "core/cmd/helm-gateway.TestServeRefusesToStartWithoutItsConfiguration",
-          "core/cmd/helm-gateway.TestServeRequiresAClientCertificateWhenConfigured"
+          "core/pkg/gateway/runtime.TestDevInsecureListenRefusesAnythingButLoopback",
+          "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutItsConfiguration",
+          "core/pkg/gateway/runtime.TestServeRequiresAClientCertificateWhenConfigured"
         ],
         "removal": [
           "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder",
@@ -3339,7 +3339,7 @@
         "bypass": [
           "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired",
           "core/pkg/gateway/admission.TestGatewayDoesNotImportTheLegacyRuntime",
-          "core/cmd/helm-gateway.TestServeOverDevInsecureLoopbackAnswersGRPC"
+          "core/pkg/gateway/runtime.TestServeOverDevInsecureLoopbackAnswersGRPC"
         ]
       },
       "removal_proofs": [
@@ -3486,7 +3486,7 @@
       "id": "CTL-054",
       "title": "Gateway dispatch claim and observation",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-gateway dispatches and observes an attempt only for the active workload principal (agent or service) it was proposed through, its requester actor or its requester principal, in the token's tenant and workspace with a helm.gateway.execute token, and dispatches it only through one claim transaction, which records the dispatcher, committed before any provider I/O (ADR-0001 §1, TA §4.1): it locks the attempt and its unused permit, re-locks the authority rows FOR SHARE and reads the stops after them. An active stop (EMERGENCY_STOP_FENCED), an expired permit (PERMIT_EXPIRED), any change to a row the permit was issued under (AUTHORITY_CHANGED) or a mandate outside its validity (MANDATE_OUTSIDE_VALIDITY) voids the permit, releases the held exposure and records CANCELLED; otherwise the permit is consumed once and the attempt becomes DISPATCHING with a fence. The adapter's SENT becomes DISPATCHED and is read back; NOT_SENT becomes OBSERVED(FAILED) with the adapter's reason and releases the hold; INDEFINITE becomes UNKNOWN and keeps it. A repeated Dispatch returns the stored attempt, and UNKNOWN or a DISPATCHING attempt past its fence is only ever read back by Observe, never sent again. A FAILED read-back that rests only on the object's absence is inconclusive until the fence has passed. Observe records the typed result the effect type defines, with evidence_digest and result_ref, SHA-256 over the result's JCS form, and in the same transaction consumes the held exposure (SUCCEEDED, or an object that contradicts the effect) or releases it (absent after the fence) (HELM-751 s3).",
+      "claim": "helm-gateway dispatches and observes an attempt only for the active workload principal (agent or service) it was proposed through, its requester actor or its requester principal, in the token's tenant and workspace with a helm.gateway.execute token, and dispatches it only through one claim transaction, which records the dispatcher, committed before any provider I/O (ADR-0001 §1, TA §4.1): it locks the attempt and its unused permit, re-locks the authority rows FOR SHARE and reads the stops after them. An active stop (EMERGENCY_STOP_FENCED), an expired permit (PERMIT_EXPIRED), any change to a row the permit was issued under (AUTHORITY_CHANGED) or a mandate outside its validity (MANDATE_OUTSIDE_VALIDITY) voids the permit, releases the held exposure and records CANCELLED; otherwise the permit is consumed once and the attempt becomes DISPATCHING with a fence. The adapter's SENT becomes DISPATCHED and is read back; NOT_SENT becomes OBSERVED(FAILED) with the adapter's reason and releases the hold; INDEFINITE becomes UNKNOWN and keeps it. A repeated Dispatch returns the stored attempt, and UNKNOWN or a DISPATCHING attempt past its fence is only ever read back by Observe, never sent again. A FAILED read-back that rests only on the object's absence is inconclusive until the fence has passed. Observe records the typed result the effect type defines, with evidence_digest and result_ref, SHA-256 over the result's JCS form, and in the same transaction consumes the held exposure (SUCCEEDED, or an object that contradicts the effect) or releases it (absent after the fence) (HELM-751 s3). Adapter invocation context carries the authenticated tenant/workspace, requester, original attempt/permit/claim, expiry and admitted resource quote from the locked rows, never from arguments. Observe reconstructs the same context without granting another dispatch.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -3525,6 +3525,8 @@
       ],
       "tests": {
         "allowed": [
+          "core/pkg/gateway/admission.TestPostgresAdapterInvocationSurvivesRecovery",
+          "core/pkg/gateway/admission.TestInvocationForUsesLockedScope",
           "core/pkg/gateway/admission.TestPostgresDispatchClaimsThePermitOnce",
           "core/pkg/gateway/admission.TestPostgresObserveRecordsTheTypedResult",
           "core/pkg/gateway/server.TestPostgresWalkingSkeletonOnTheWire",
@@ -3547,6 +3549,7 @@
           "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType"
         ],
         "removal": [
+          "core/pkg/gateway/admission.TestInvocationForUsesLockedScope",
           "core/pkg/gateway/admission.TestClaimRefusal",
           "core/pkg/gateway/admission.TestAfterDispatch",
           "core/pkg/gateway/admission.TestTypedResultFollowsTheEffectType",
@@ -3554,10 +3557,17 @@
           "core/pkg/gateway/admission.TestMayExecute"
         ],
         "bypass": [
+          "core/pkg/gateway/admission.TestPostgresAdapterInvocationSurvivesRecovery",
           "core/pkg/gateway/admission.TestPostgresCrashAfterTheClaimIsReconciledNeverResent"
         ]
       },
       "removal_proofs": [
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestInvocationForUsesLockedScope"
+          ]
+        },
         {
           "file": "core/pkg/gateway/admission/dispatch.go",
           "tests": [
@@ -3752,7 +3762,7 @@
           "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
         ],
         "bypass": [
-          "core/cmd/helm-gateway.TestPostgresGatewayMigrateAndReadiness"
+          "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"
         ]
       },
       "removal_proofs": [

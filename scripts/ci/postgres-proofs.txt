@@ -5,7 +5,7 @@
 #
 # <package dir under core> <test> <count> <race|plain>
 # plain: a timing comparison, which the race detector's slowdown would invalidate.
-cmd/helm-gateway TestPostgresGatewayMigrateAndReadiness 1 race
+pkg/gateway/runtime TestPostgresGatewayMigrateAndReadiness 1 race
 pkg/boundary TestSQLSurfaceRegistryPersistsRecordsOnPostgres 1 race
 pkg/boundary/approvalceremony TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle 10 race
 pkg/boundary/approvalceremony TestPostgresLifecycleSingleIssueAndConsume 10 race
@@ -14,6 +14,7 @@ pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacy
 pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyVisibility 1 race
 pkg/gateway/admission TestPostgresAStoppedApproverCannotApprove 1 race
 pkg/gateway/admission TestPostgresAbsenceInsideTheFenceIsInconclusive 1 race
+pkg/gateway/admission TestPostgresAdapterInvocationSurvivesRecovery 1 race
 pkg/gateway/admission TestPostgresApprovalPreconditionsLeaveTheAttemptEscalated 1 race
 pkg/gateway/admission TestPostgresApproveByADistinctHumanAdmits 1 race
 pkg/gateway/admission TestPostgresApproveRereadsStopsAndTheMandate 1 race

@@ -1,4 +1,4 @@
-package main
+package runtime
 
 // quantum_posture: writes a classical SCRAM-SHA-256 verifier (pkg/gateway/
 // pgscram); no post-quantum claim.

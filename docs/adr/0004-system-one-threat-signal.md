@@ -24,8 +24,9 @@ with an advisory semantic slot (`core/pkg/threatscan`, CTL-019, enforced) that
 the target architecture replaces with `decide` plus admission (TA §14.5).
 
 The owner asked for TypeSafe's System One model (Jev) as an additional
-security-threat check. Its answers are calibrated probabilities to typed
-questions (`noul`, `choice`, `score`). The vendor documents that adversarial
+security-threat check. It returns native probability distributions for typed
+questions (`noul`, `choice`, `score`). Domain calibration is an independent
+evaluation requirement; the distribution is not proof of threat or authority. The vendor documents that adversarial
 content can move the answer, that accuracy falls with unrelated state, and that
 thresholds do not transfer between primitives.
 
@@ -45,13 +46,19 @@ new payload version.
    by a fixed mapping in the kernel, never taken from the provider, and the
    remote signal never produces `CRITICAL`.
 
-2. **Collected before `decide`, stored in the admission transaction, replayed
-   from the row.** The gateway-zone client is called inside `Propose` after the
-   idempotency insert and before `admit`, under a bounded timeout, and its
-   result is inserted into `authority_attempt_signals` in the same transaction.
-   `decide.Input.Signals` is data. A duplicate idempotency key, a re-admission
-   on `Approve`, `Get` and the verifier read the stored row; the provider is
-   called at most once per attempt id.
+2. **Collected through the native model gateway before `decide`, persisted
+   with admission, replayed from rows.** The future integration binds the
+   tenant-scoped parent idempotency key and canonical input digest to a stable
+   child model-call identity. Its admitted model call, reservation, provider
+   attempt and settlement use the native gateway journal. The admission
+   transaction stores the bound completed observation in
+   `authority_attempt_signals`; it does not create a second provider client.
+   `decide.Input.Signals` is data. A duplicate, parent rollback, re-admission on
+   `Approve`, `Get` or verifier replay uses those persisted rows. An ambiguous
+   provider outcome is recorded as unavailable and is not resent automatically.
+   The exact parent/child transaction and recovery protocol remains an
+   implementation contract with required PostgreSQL crash/replay tests; this
+   proposal does not claim at-most-once behavior before those tests exist.
 
 3. **Tighten-only.** `Decide` consults the signal after every deny check and
    the counters and before the approval switch. It can convert ALLOW into
@@ -80,25 +87,29 @@ new payload version.
    signal, the signal requires `v2` and `v1` stays verify-only. The legacy
    `ThreatScanRef` and the V3 decision preimage are not changed.
 
-6. **Credential and egress (R8, CTL-048 pattern).** The API key is read once
-   by the gateway process from `HELM_GATEWAY_SYSTEM_ONE_API_KEY_FILE`, never
-   logged, never in argv, never forwarded. Every state leaving the boundary
-   passes `privacy.ProtectModelRequestJSON`; a privacy error means nothing is
-   sent and the record says `PRIVACY_BOUNDARY_UNAVAILABLE`. The state is a
-   bounded, redacted effect descriptor with a fixed size cap, never the raw
-   payload.
+6. **Credential and egress (R8, CTL-048 pattern).** Provider credentials
+   remain with the configured native model gateway. The threat collector and
+   admission code receive only bound evidence and never obtain a provider key.
+   Every state leaving the boundary passes `privacy.ProtectModelRequestJSON`;
+   a privacy error means nothing is sent and the record says
+   `PRIVACY_BOUNDARY_UNAVAILABLE`. The state is a bounded, redacted effect
+   descriptor with a fixed size cap, never the raw payload. Hosted disclosure
+   additionally requires the approved provider/data scope; local redaction
+   alone does not approve disclosure.
 
 7. **Control registry (R1).** The control is `observed-only` with the reason
    that classification of content is observed-only by design (TA §0.2 item 7);
    it has allowed, forbidden, removal and bypass tests, and it stays
    observed-only.
 
-8. **One model gateway (R4, TA §8).** The call is an LLM call and therefore an
-   effect with a reservation. Until HELM-752 merges, the reservation is a token
-   limit row through the existing counters path, settled from `usage` in the
-   same transaction. When HELM-752 merges, the client becomes an internal route
-   of the one model gateway and settlement moves to `ModelCallSettlement`; the
-   record shape does not change.
+8. **One model gateway (R4, TA §8).** The inference is an admitted model
+   effect with the existing native reservation and exact settlement path.
+   Token counters alone cannot substitute for financial admission. There is no
+   temporary direct TypeSafe client or alternate billing journal. If the native
+   gateway, approved scope, reservation or bound settlement evidence is
+   unavailable, the signal records an unavailable reason. Any policy requiring
+   it applies the existing tighten-only unavailability rule. The completed
+   signal references its canonical model attempt and settlement evidence.
 
 ## Alternatives rejected
 
@@ -108,10 +119,12 @@ new payload version.
 - Wiring the signal into the legacy Guardian interceptor chain: the chain is
   slated for replacement, and CTL-019 is enforced there; an unenforced signal
   inside an enforced control muddles the registry.
-- Two transactions around the provider call: `PROPOSED` would be visible
-  outside the admission transaction, against
-  `docs/architecture/gateway-effect-api.md` ("`PROPOSED` exists only inside
-  the admission transaction").
+- Exposing an intermediate parent `PROPOSED` attempt or treating a provider
+  reply as a completed observation before its native journal is bound. Parent
+  admission remains atomic; the integration must prove recovery of its child
+  model call without repeating egress or settling usage twice.
+- A temporary direct provider route backed only by token counters: this would
+  duplicate the model gateway and bypass the native exact-settlement boundary.
 - Letting the remote signal deny alone: content would decide authority (R3).
 
 ## Consequences

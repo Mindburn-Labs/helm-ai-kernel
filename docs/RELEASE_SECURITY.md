@@ -53,24 +53,24 @@ flowchart TD
 ```
 
 
-Current source release target: `v0.10.2`:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.2>. The
+Current source release target: `v0.10.5`:
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.5>. The
 release is complete only when GitHub shows Darwin/Linux/Windows binaries,
 `SHA256SUMS.txt`, `sbom.json`,
-`v0.10.2.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.10.5.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`,
-`v0.10.2.json`, `version-status.json`, and matching `*.cosign.bundle` files for
+`v0.10.5.json`, `version-status.json`, and matching `*.cosign.bundle` files for
 each primary asset. Browser UI bundles are not Kernel release assets. Where a
 release declares the loopback Console local-sidecar, it is a verified standalone
 native closure—not a Homebrew resource or a hosted UI.
 
-For the v0.8.0 local Console closure, release assembly verifies the producer
+For a local Console closure, release assembly verifies the producer
 bundle and exact Console source pin, signs the aggregate manifest once for the
 exact Kernel tag, and compiles its SHA-256 into the Kernel binary. The Console
-source tuple is immutable, while the producer workflow identity is a declared
-protected-branch `main` trust assumption rather than an immutable workflow
-revision. The separate Kernel bundle is retained in the staged assets, checksum
+source tuple and producer workflow ref are immutable: the signature identity
+must name the pinned `refs/tags/...` ref, which resolves to the exact source
+commit. A Console `main` identity is rejected. The separate Kernel bundle is retained in the staged assets, checksum
 set, standalone layout, and GitHub release; public verification derives the
 exact tag from the Console manifest and does not accept a Kernel `main`
 identity. Each matching
@@ -81,6 +81,20 @@ and its source, target, archive, checksum, inventory, and provenance relations
 before issuing a session or starting bundled Node. The separate producer and
 Kernel Cosign bundles are release evidence; runtime requires neither host Cosign
 nor network access.
+
+## Binary SLSA provenance
+
+The release workflow uses the upstream-supported generic generator tag
+`v2.1.0`, with a preflight check that it resolves to reviewed commit
+`f7dd8c54c2067bafc12ca7a55595d5ee9b75204a`. Before registry publication,
+`slsa-verifier` checks the signed checksum manifest against the Kernel repository,
+release tag and versioned builder. Cosign independently checks the exact builder
+identity, GitHub OIDC issuer, repository, tag ref and source commit. Every file
+listed by that manifest must match its checksum. A failure blocks publication.
+
+This is the source contract for subsequent releases. The raw-SHA builder identity
+on v0.10.2 is rejected by the standard verifier even though exact-identity Cosign
+verification passes. Its immutable provenance is retained without backfill.
 
 ## Container image provenance
 

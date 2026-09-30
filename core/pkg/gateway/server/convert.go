@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	gatewayv1 "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/gen/helm/gateway/v1"
@@ -135,6 +136,16 @@ func optionalTime(t *time.Time) *timestamppb.Timestamp {
 
 func stateProto(state string) gatewayv1.EffectAttemptState {
 	return gatewayv1.EffectAttemptState(gatewayv1.EffectAttemptState_value["EFFECT_ATTEMPT_STATE_"+state])
+}
+
+// stateName is the name an attempt state is stored under, the inverse of
+// stateProto. UNSPECIFIED and a number outside the enum have none.
+func stateName(state gatewayv1.EffectAttemptState) (string, bool) {
+	name, known := gatewayv1.EffectAttemptState_name[int32(state)]
+	if !known || state == gatewayv1.EffectAttemptState_EFFECT_ATTEMPT_STATE_UNSPECIFIED {
+		return "", false
+	}
+	return strings.TrimPrefix(name, "EFFECT_ATTEMPT_STATE_"), true
 }
 
 func riskProto(risk string) gatewayv1.RiskClass {

@@ -15,10 +15,10 @@ files. It is not a complete copy of any GitHub release.
 
 ## Current Release Target
 
-The current source release target is `v0.10.2`. Its expected visible release
+The current source release target is `v0.10.5`. Its expected visible release
 assets are platform binaries for Darwin, Linux, and Windows,
 `helm-ai-kernel.mcpb`, `helm-ai-kernel.rb`, `SHA256SUMS.txt`, `sbom.json`,
-`v0.10.2.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
+`v0.10.5.openvex.json`, `release-attestation.json`, `evidence-pack.tar`,
 `release.high_risk.v3.toml`, `sample-policy-material.tar`,
 `helm-ai-kernel-launchpad-data.tar`, `multiple.intoto.jsonl`, and matching
 `*.cosign.bundle` files for every primary asset.
@@ -26,16 +26,16 @@ assets are platform binaries for Darwin, Linux, and Windows,
 There is no public GitHub Release object for `v0.4.1`; the actual public
 baseline for the `v0.5.0` delta is `v0.4.0`.
 
-## v0.10.2 Asset Contract
+## v0.10.5 Asset Contract
 
-`make release-assets` stages the `v0.10.2` asset set under
+`make release-assets` stages the `v0.10.5` asset set under
 `dist/release-assets/`, and the release workflow must attach that set to the
 GitHub release before publication is claimed:
 
 - five CLI binaries
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.10.2.openvex.json`
+- `v0.10.5.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -57,7 +57,7 @@ data. Browser UI assets are not Kernel release assets. Where a release
 declares the loopback Console local-sidecar, it is a verified standalone native
 closure—not a Homebrew resource or a hosted UI.
 
-For v0.8.0, the signed Console aggregate manifest is source-pinned and its
+For a Console-enabled release, the signed aggregate manifest is source-pinned and its
 SHA-256 is compiled into every standalone Kernel binary before release staging.
 Each `helm-ai-kernel-<os>-<arch>-console.tar.gz` asset contains that binary
 alongside the exact `console/` layout: both manifest bundles, all raw native
@@ -67,9 +67,9 @@ provenance, source, and target relations before it issues a session or executes
 the bundled Node runtime. No host Cosign installation or network call is
 required at runtime.
 
-The source tuple is immutable; the Console producer signature remains a
-protected-branch `main` workflow trust assumption rather than an immutable
-workflow revision. A separate Kernel bundle binds that exact manifest to the
+The source tuple and producer workflow ref are immutable. The Console producer
+signature must name the pinned `refs/tags/...` ref, resolving to that exact
+source commit; a `main` identity is rejected. A separate Kernel bundle binds that exact manifest to the
 public Kernel tag, is generated once before staging, and remains in the
 standalone layout, checksum set, and GitHub release. Verification derives that
 exact tag from the Console manifest: `make verify-cosign COSIGN_ARTIFACT_DIR=./downloaded-release`.

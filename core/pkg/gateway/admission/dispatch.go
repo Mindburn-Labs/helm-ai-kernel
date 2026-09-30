@@ -118,9 +118,10 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 	var permitID string
 	var permitDigest, stored []byte
 	var expired bool
-	err := tx.QueryRowContext(ctx, `SELECT permit_id, argument_digest, authority_versions, expires_at <= now()
+	var expiresAt time.Time
+	err := tx.QueryRowContext(ctx, `SELECT permit_id, argument_digest, authority_versions, expires_at <= now(), expires_at
 		FROM authority_permits WHERE tenant_id = $1 AND attempt_id = $2 AND consumed_at IS NULL AND voided_at IS NULL
-		FOR UPDATE`, a.tenantID, a.id).Scan(&permitID, &permitDigest, &stored, &expired)
+		FOR UPDATE`, a.tenantID, a.id).Scan(&permitID, &permitDigest, &stored, &expired, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, refuse(CodeFailedPrecondition, "", "the attempt holds no unused permit; a permit is consumed once")
 	}
@@ -212,9 +213,18 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 	}
 	return &claimed{
 		tenantID: a.tenantID, workspaceID: a.workspaceID, attemptID: a.id,
-		effect:       adapters.Effect{EffectType: a.effectType, Target: a.target, Arguments: content},
+		effect: adapters.Effect{EffectType: a.effectType, Target: a.target, Arguments: content,
+			Invocation: invocationFor(a, permitID, claimID.String(), expiresAt)},
 		permitDigest: permitDigest, claimID: claimID,
 	}, nil
+}
+
+func invocationFor(a lockedAttempt, permitID, claimID string, expires time.Time) *adapters.Invocation {
+	quote := make([]adapters.Amount, len(a.quote))
+	for i, q := range a.quote {
+		quote[i] = adapters.Amount{Unit: q.Unit, Amount: q.Amount}
+	}
+	return &adapters.Invocation{TenantID: a.tenantID, WorkspaceID: a.workspaceID, AttemptID: a.id, PermitID: permitID, ClaimID: claimID, RequesterPrincipalID: a.requester, ExpiresAt: expires, Quote: quote}
 }
 
 // claimInput is what the dispatch claim read under its locks.
@@ -436,8 +446,14 @@ func (s *Service) observeAttempt(ctx context.Context, tenantID, workspaceID, att
 			a.tenantID, a.id).Scan(&content); err != nil {
 			return err
 		}
+		invocation := invocationFor(a, "", "", time.Time{})
+		if err := tx.QueryRowContext(ctx, `SELECT permit_id, claim_id, expires_at FROM authority_permits
+			WHERE tenant_id=$1 AND attempt_id=$2 AND consumed_at IS NOT NULL`, a.tenantID, a.id).
+			Scan(&invocation.PermitID, &invocation.ClaimID, &invocation.ExpiresAt); err != nil {
+			return err
+		}
 		target = &observeTarget{tenantID: a.tenantID, workspaceID: a.workspaceID, attemptID: a.id, from: a.state,
-			effect: adapters.Effect{EffectType: a.effectType, Target: a.target, Arguments: content}, adapter: adapter}
+			effect: adapters.Effect{EffectType: a.effectType, Target: a.target, Arguments: content, Invocation: invocation}, adapter: adapter}
 		return nil
 	})
 	if err == nil && target != nil {

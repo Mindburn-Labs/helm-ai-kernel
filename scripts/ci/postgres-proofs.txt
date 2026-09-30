@@ -5,7 +5,7 @@
 #
 # <package dir under core> <test> <count> <race|plain>
 # plain: a timing comparison, which the race detector's slowdown would invalidate.
-cmd/helm-gateway TestPostgresGatewayMigrateAndReadiness 1 race
+pkg/gateway/runtime TestPostgresGatewayMigrateAndReadiness 1 race
 pkg/boundary TestSQLSurfaceRegistryPersistsRecordsOnPostgres 1 race
 pkg/boundary/approvalceremony TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle 10 race
 pkg/boundary/approvalceremony TestPostgresLifecycleSingleIssueAndConsume 10 race
@@ -13,7 +13,9 @@ pkg/boundary/generatedspecapprovalceremony TestPostgresLifecycleSingleIssueConsu
 pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyActiveBindings 1 race
 pkg/boundary/generatedspecapprovalceremony TestPostgresStoreInitPreflightsLegacyVisibility 1 race
 pkg/gateway/admission TestPostgresAStoppedApproverCannotApprove 1 race
+pkg/gateway/admission TestPostgresATransactionPastMaxTransactionIsAborted 1 race
 pkg/gateway/admission TestPostgresAbsenceInsideTheFenceIsInconclusive 1 race
+pkg/gateway/admission TestPostgresAdapterInvocationSurvivesRecovery 1 race
 pkg/gateway/admission TestPostgresApprovalPreconditionsLeaveTheAttemptEscalated 1 race
 pkg/gateway/admission TestPostgresApproveByADistinctHumanAdmits 1 race
 pkg/gateway/admission TestPostgresApproveRereadsStopsAndTheMandate 1 race
@@ -33,6 +35,13 @@ pkg/gateway/admission TestPostgresFinalReconcileHandsOffWhateverTheReadBackError
 pkg/gateway/admission TestPostgresLateAnswerAfterTheFenceIsIgnored 1 race
 pkg/gateway/admission TestPostgresLiftIsBlockedByEveryStopButItsOwn 1 race
 pkg/gateway/admission TestPostgresLiftNeedsADistinctStepUpApprover 1 race
+pkg/gateway/admission TestPostgresListAttemptsAreTenantAndWorkspaceScoped 1 race
+pkg/gateway/admission TestPostgresListAttemptsFiltersOrderAndPaging 1 race
+pkg/gateway/admission TestPostgresListAttemptsPageIsOneSnapshot 1 race
+pkg/gateway/admission TestPostgresListAttemptsPageQueryUsesItsIndex 1 race
+pkg/gateway/admission TestPostgresListAttemptsPageSizeDefaultsAndCaps 1 race
+pkg/gateway/admission TestPostgresListAttemptsPinsWatermarkAcrossALateCommitAndLongTraversal 1 race
+pkg/gateway/admission TestPostgresListAttemptsSettledBeforeCoversATransactionThatCommitsOutOfOrder 1 race
 pkg/gateway/admission TestPostgresLostResponseIsReconciledByObserve 1 race
 pkg/gateway/admission TestPostgresMalformedProposalsCreateNoAttempt 1 race
 pkg/gateway/admission TestPostgresMandateSelectionIsBoundToThePrincipal 1 race
@@ -61,6 +70,7 @@ pkg/gateway/jobs TestPostgresReconcilePollsUnknownToAnOutcome 1 race
 pkg/gateway/jobs TestPostgresReconcileWaitsForTheDispatchFence 1 race
 pkg/gateway/server TestPostgresGatewayAPIOnTheWire 1 race
 pkg/gateway/server TestPostgresGatewayDecisionsOnTheWire 1 race
+pkg/gateway/server TestPostgresListAttemptsOnTheWire 1 race
 pkg/gateway/server TestPostgresStopLiftAndCancelOnTheWire 1 race
 pkg/gateway/server TestPostgresWalkingSkeletonOnTheWire 1 race
 pkg/kernel/authority/authorityrows TestPostgresAuthorityRowsIsolateTenantsForARestrictedRole 1 race

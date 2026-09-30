@@ -72,8 +72,8 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.10.2` |
-| Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.10.2`; publish with the subdirectory tag `sdk/go/v0.10.2` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.10.5` |
+| Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.10.5`; publish with the subdirectory tag `sdk/go/v0.10.5` |
 
 ## Rehearse Before Tagging
 
@@ -132,15 +132,15 @@ The retained workflow set under `.github/workflows/` covers:
 - GitHub Release creation for tagged versions
 - Homebrew formula generation for `Mindburn-Labs/homebrew-tap`
 - GHCR image publication for `latest`, version tag, and slim tag
-- Go SDK subdirectory tag publication for `sdk/go/v0.10.2`
+- Go SDK subdirectory tag publication for `sdk/go/v0.10.5`
 - tag-triggered npm, PyPI, crates.io, and Maven-compatible SDK publication
 - daily published registry drift monitoring through `make version-drift-published`
 - a daily release rehearsal of `main` through `make release-rehearsal`
 
-Release target: `v0.10.2`. The release is complete only after the tagged
+Release target: `v0.10.5`. The release is complete only after the tagged
 workflow publishes every lockstep channel, attaches `version-status.json` to
 the GitHub Release, and `make version-drift-published` passes for that version:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.2>.
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.5>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
@@ -154,7 +154,7 @@ The release workflow attaches these assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.10.2.openvex.json`
+- `v0.10.5.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -165,14 +165,14 @@ The release workflow attaches these assets:
 - `helm-ai-kernel-*-console.tar.gz`
 - `CONSOLE-SHA256SUMS.txt`
 - `helm-ai-kernel.rb`
-- `v0.10.2.json`
+- `v0.10.5.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
 AI Act high-risk reference pack. The local Console sidecars and standalone
 browser UI layouts are Kernel release assets; the Homebrew formula does not
 install them.
-The retained release workflow attaches a `helm-ai-kernel.rb` formula asset for version `0.10.2`
+The retained release workflow attaches a `helm-ai-kernel.rb` formula asset for version `0.10.5`
 and publishes the same version to `Mindburn-Labs/homebrew-tap`;
 `version-status.json` must include a passing `homebrew-tap` surface before
 documenting `brew install mindburn-labs/tap/helm-ai-kernel` as current.
@@ -183,8 +183,9 @@ publishing from `release.yml`, with no stored registry token; Maven Central and
 Homebrew publication use the `MAVEN_*` and `HOMEBREW_TAP_TOKEN` secrets. If a
 registry rejects the workflow identity or a secret is absent, the release
 workflow must fail instead of documenting a partial release as complete. A
-failed channel is repaired by re-running the failed jobs of the same tag run;
-channels that already carry the version are skipped.
+failure before any publication may be retried as a complete unchanged workflow.
+After an immutable channel publishes, preserve the partial release and fix
+forward in a new version. Never selectively rerun publishers or move a tag.
 
 Do not document an asset as published unless it appears on the GitHub release
 or is produced by a retained workflow and attached to that release.
@@ -200,7 +201,7 @@ writes the final `SHA256SUMS.txt`.
 
 Every public release must include enough material to verify what was downloaded.
 For the current release target, use `SHA256SUMS.txt`, `sbom.json`,
-`v0.10.2.openvex.json`, `release-attestation.json`, the platform binary assets,
+`v0.10.5.openvex.json`, `release-attestation.json`, the platform binary assets,
 attached `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 
 Every release signature is made by the tag release workflow, so its signing

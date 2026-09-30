@@ -47,7 +47,7 @@ func service(t *testing.T) protoreflect.ServiceDescriptor {
 // The six operations of rev 3.4 §4.2 as eight unary RPCs, plus Cancel and
 // GetAttemptContent from WS-B's review.
 func TestServiceHasTheSixOperations(t *testing.T) {
-	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "Stop", "Lift"}
+	want := []string{"Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent", "ListAttempts", "Stop", "Lift"}
 	methods := service(t).Methods()
 	var got []string
 	for i := 0; i < methods.Len(); i++ {
@@ -65,7 +65,7 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		}
 		level := m.Options().(*descriptorpb.MethodOptions).GetIdempotencyLevel()
 		wantLevel := descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN
-		if name == "GetAttempt" || name == "GetAttemptContent" {
+		if name == "GetAttempt" || name == "GetAttemptContent" || name == "ListAttempts" {
 			wantLevel = descriptorpb.MethodOptions_NO_SIDE_EFFECTS
 		}
 		if level != wantLevel {
@@ -86,6 +86,7 @@ func TestServiceHasTheSixOperations(t *testing.T) {
 		EffectGatewayServiceObserveProcedure:           "Observe",
 		EffectGatewayServiceGetAttemptProcedure:        "GetAttempt",
 		EffectGatewayServiceGetAttemptContentProcedure: "GetAttemptContent",
+		EffectGatewayServiceListAttemptsProcedure:      "ListAttempts",
 		EffectGatewayServiceStopProcedure:              "Stop",
 		EffectGatewayServiceLiftProcedure:              "Lift",
 	}
@@ -219,10 +220,21 @@ func TestNoRequestCarriesCallerIdentity(t *testing.T) {
 	methods := service(t).Methods()
 	for i := 0; i < methods.Len(); i++ {
 		in := methods.Get(i).Input()
-		if found := identityFields(in, map[protoreflect.FullName]bool{}); len(found) > 0 {
-			t.Errorf("%s carries identity fields %v; tenant and principal come only from the token", in.FullName(), found)
+		for _, field := range identityFields(in, map[protoreflect.FullName]bool{}) {
+			if reason, ok := identityFilters[field]; ok {
+				t.Logf("%s is allowed: %s", field, reason)
+				continue
+			}
+			t.Errorf("%s carries the identity field %s; tenant and principal come only from the token", in.FullName(), field)
 		}
 	}
+}
+
+// identityFilters are request fields the identity rule flags by name but that
+// only filter what a list returns: they say whose attempts to list, never who
+// the caller is, which comes only from the token.
+var identityFilters = map[string]string{
+	"helm.gateway.v1.ListAttemptsRequest.requester_principal_id": "a filter on the attempts of another principal",
 }
 
 // floatFields lists float and double fields in a message and the messages it
@@ -434,6 +446,7 @@ func TestRPCTokenScopes(t *testing.T) {
 		"Observe":           {"helm.gateway.execute"},
 		"GetAttempt":        {"helm.gateway.read"},
 		"GetAttemptContent": {"helm.gateway.read"},
+		"ListAttempts":      {"helm.gateway.read"},
 		"Stop":              {"helm.gateway.stop"},
 		"Lift":              {"helm.gateway.stop"},
 	}
@@ -459,16 +472,16 @@ func TestRPCTokenScopes(t *testing.T) {
 	}
 }
 
-// Field numbers held for fields a later slice shapes (the step-up assertion,
-// typed result payloads). They are not `reserved`, since buf breaking would
-// then reject the field that takes the number, so this test keeps them free.
-// The slice that adds such a field updates this list.
+// Field numbers held for fields a later slice shapes (typed result payloads).
+// They are not `reserved`, since buf breaking would then reject the field that
+// takes the number, so this test keeps them free. The slice that adds such a
+// field updates this list. ApproveRequest field 4, the step-up proof, left it
+// when the proof was defined.
 func TestHeldFieldNumbersStayFree(t *testing.T) {
 	held := []struct {
 		msg     protoreflect.MessageDescriptor
 		numbers []protoreflect.FieldNumber
 	}{
-		{(&ApproveRequest{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{4}},
 		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{10, 11, 12, 13, 14, 15}},
 	}
 	for _, h := range held {

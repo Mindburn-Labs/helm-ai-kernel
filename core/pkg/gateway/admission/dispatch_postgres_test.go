@@ -701,3 +701,52 @@ func TestPostgresOnlyTheProposingWorkloadDispatches(t *testing.T) {
 	must(t, err)
 	wantOutcome(t, "the agent's own dispatch", got, "OBSERVED", "SUCCEEDED", "")
 }
+
+func TestPostgresAdapterInvocationSurvivesRecovery(t *testing.T) {
+	f := newFixture(t)
+	adapter := &scripted{}
+	var claimed *adapters.Invocation
+	adapter.set(func(e adapters.Effect) adapters.DispatchResult {
+		i := e.Invocation
+		if i == nil {
+			t.Fatal("committed dispatch omitted its invocation")
+		}
+		current, err := f.svc.Get(t.Context(), human, i.AttemptID)
+		must(t, err)
+		if i.TenantID != tenantA || i.WorkspaceID != workspace || i.RequesterPrincipalID != human.PrincipalID || current.State != "DISPATCHING" || current.Permit == nil || current.Permit.ConsumedAt == nil || i.PermitID != current.Permit.ID || i.ClaimID != current.Permit.ClaimID || !i.ExpiresAt.Equal(current.Permit.ExpiresAt) || len(i.Quote) != 1 || i.Quote[0].Unit != "notes" || i.Quote[0].Amount != 1 {
+			t.Fatalf("unbound invocation: %+v", i)
+		}
+		copy := *i
+		claimed = &copy
+		return adapters.DispatchResult{Status: adapters.DispatchIndefinite}
+	}, func(e adapters.Effect) adapters.ObserveResult {
+		if claimed == nil || e.Invocation == nil || string(mustInvocationJSON(t, e.Invocation)) != string(mustInvocationJSON(t, claimed)) {
+			t.Fatal("recovery changed the original invocation")
+		}
+		return succeeded(e)
+	})
+	in := note("invocation")
+	in.Quote = []Amount{{Unit: "notes", Amount: 1}}
+	// A content field cannot replace trusted scope or the committed claim.
+	in.Arguments = []byte(`{"invocation":{"tenant_id":"forged","claim_id":"forged"}}`)
+	proposed := f.propose(human, in)
+	svc := f.withAdapter(adapter)
+	attempt, _, err := svc.Dispatch(t.Context(), workload, proposed.ID)
+	must(t, err)
+	if attempt.State != "UNKNOWN" {
+		t.Fatal(attempt.State)
+	}
+	fresh := f.withAdapter(adapter)
+	recovered, _, err := fresh.Observe(t.Context(), workload, proposed.ID)
+	must(t, err)
+	if recovered.State != "RECONCILED" || recovered.Outcome != "SUCCEEDED" || adapter.dispatched.Load() != 1 {
+		t.Fatal("recovery did not preserve one dispatch")
+	}
+}
+
+func mustInvocationJSON(t *testing.T, i *adapters.Invocation) []byte {
+	t.Helper()
+	raw, err := json.Marshal(i)
+	must(t, err)
+	return raw
+}

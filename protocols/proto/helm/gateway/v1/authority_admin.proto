@@ -212,6 +212,10 @@ message Provisioning {
   int64 revision = 7;
   // Database time of the apply.
   google.protobuf.Timestamp applied_at = 8;
+  // The service principal that requested the applied plan: the organization's
+  // provisioner. A helm.authority.narrow.v1 plan, which needs no approval,
+  // is accepted only from it.
+  string provisioner = 9;
 }
 
 // ProvisionedNode is a plan node and the mandate it became.

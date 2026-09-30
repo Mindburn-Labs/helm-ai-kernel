@@ -1087,9 +1087,18 @@ the Control Plane syncs its projection incrementally.
   `next_page_token` has more, and the same request with that token continues
   after the last attempt returned. A token belongs to one set of filters; one
   from another set, or a malformed one, is `invalid_argument`.
-- **Cursor.** The incremental cursor is the `updated_at` of the last attempt
-  seen: ask again with `updated_after` set to it. An attempt that changes again
-  is listed again at its new position.
+- **Cursor.** `updated_at` is the database time at which the transaction that
+  last changed the attempt began. Transactions commit out of that order, so an
+  attempt can first appear with an `updated_at` earlier than one already
+  listed, and the last `updated_at` a reader saw is not a safe place to resume.
+  Every page carries `settled_before`: a time later than the longest a gateway
+  transaction may run (every one is bounded), before the moment the page was
+  read. An attempt whose `updated_at` is before `settled_before` is final in
+  the listing: none appears later with an earlier position. A reader that has
+  read to the end asks again with `updated_after` set to the `settled_before`
+  of its last page, never misses a change, and sees the changes after that
+  instant again, so it applies an attempt idempotently. An attempt that changes
+  again is listed again at its new position.
 - **Content.** Each entry is the attempt `GetAttempt` returns. The arguments
   stay behind `GetAttemptContent`.
 - **Status.** The contract is defined; `helm-gateway` answers `unimplemented`
@@ -1115,14 +1124,16 @@ required), with these rules:
 |---|---|
 | `scope` | `helm.gateway.stepup`, and only that. |
 | `sub`, `tenant_id` | the decide token's own: the same approver, the same tenant. |
-| `authorization_details` | exactly one entry `{"type": "helm_step_up", "attempt_id": "<attempt_id>", "approval_digest": "<lower-case hex>", "method": "webauthn"}`, naming the attempt approved and the digest the approver was shown. |
-| `jti`, `exp` | single-use: the `jti` is recorded in `authority_token_replay` in the approval's own transaction, like the decide token's. It expires with the token (at most 300 seconds). |
+| `authorization_details` | exactly one entry `{"type": "helm_step_up", "attempt_id": "<attempt_id>", "approval_digest": "<lower-case hex>", "method": "webauthn", "user_verified": true}`, naming the attempt approved and the digest the approver was shown, and stating that the issuer saw the authenticator's user-verification flag set. |
+| `iat`, `exp` | fresh: `exp` is at most 300 seconds after `iat`, and the call is between them (within the usual clock skew). |
+| `jti` | single-use: recorded in `authority_token_replay` in the approval's own transaction, like the decide token's. |
 
 `Approve` without a proof for an effect that needs one, with an invalid one, or
 with one bound to another attempt or digest, is `permission_denied`
 (`STEP_UP_REQUIRED`), the attempt stays `ESCALATED`, and no token is used up.
-The approval record keeps the proof's `jti` and method. A `Reject` needs no
-proof. Status: the field is defined; `helm-gateway` still fails closed on every
+The approval record keeps the proof exactly as received, with its `jti` and
+method, so that it can be verified again against the issuer's keys. A `Reject`
+needs no proof. Status: the field is defined; `helm-gateway` still fails closed on every
 approval that needs step-up until the change that serves the proof.
 
 ## Conformance table

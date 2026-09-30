@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helm.mindburn.run/schemas/effects/authority/provision.v1.json",
   "title": "helm.authority.provision.v1 arguments",
-  "description": "EffectDescriptor.arguments for effect_type helm.authority.provision.v1: a whole organization's authority plan, applied behind a distinct human's approval. It registers the effect types and principals, and creates the mandates (a tree, delegated from the organization's root mandate) and their limits, in one transaction. Applying a plan whose digest is the applied one changes nothing; a mandate the plan leaves unchanged keeps its id; a change that only narrows is made in place; any widening revokes and re-creates that mandate and every mandate below it. Rules JSON Schema cannot express, and the gateway enforces before admission: no duplicate object keys at any depth; UTF-8 only; the whole document is at most 524288 bytes; principals are listed once each; mandate nodes are listed once each, exactly one has a null parent and its node is the org_ref, every other parent is a node of the plan, and the parents form a tree; every holder is a principal of the plan or one already registered; every effect type a mandate names is listed in effect_types; every child's terms are within its parent's and each of its limits is no higher than the same limit above it; a human the plan may create carries an external_subject, and one that must already be registered is ensure_only; every limit names a mandate node and each mandate has one limit of a given unit, measure, window and span; no principal is both listed and in disable_principals, and no holder of a plan mandate is disabled; valid_until is after valid_from; the target of the effect is the org_ref. The plan digest is the lower-case hex SHA-256 of the RFC 8785 form of this document without base_plan_digest.",
+  "description": "EffectDescriptor.arguments for effect_type helm.authority.provision.v1: a whole organization's authority plan, applied behind a distinct human's approval. It registers the effect types and principals, and creates the mandates (a tree, delegated from the organization's root mandate) and their limits, in one transaction. Applying a plan whose digest is the applied one changes nothing; a mandate the plan leaves unchanged keeps its id; a change that only narrows is made in place; any widening revokes and re-creates that mandate and every mandate below it. Rules JSON Schema cannot express, and the gateway enforces before admission: no duplicate object keys at any depth; UTF-8 only; the whole document is at most 524288 bytes; principals are listed once each; mandate nodes are listed once each, exactly one has a null parent and its node is the org_ref, every other parent is a node of the plan, and the parents form a tree; every holder is a principal of the plan or one already registered; every effect type a mandate names is listed in effect_types; every child's terms are within its parent's and each of its limits is no higher than the same limit above it; a human the plan may create carries an external_subject, and one that must already be registered is ensure_only; every limit names a mandate node and each mandate has one limit of a given unit, measure, window and span; no principal is both listed and in disable_principals, and no holder of a plan mandate is disabled; valid_until is after valid_from; the target of the effect is the org_ref. amounts, limit values and spans are plain integer literals of at most 9007199254740991, with no fraction, exponent or sign, even where the value is whole; approval_required and risk_classes name only effect types of their mandate's terms; no effect type in terms or in effect_types is a helm.authority.* effect type; the validity window is part of a mandate's terms, so an earlier valid_from or a later valid_until widens; disable_principals lists only principals the applied plan lists, never the requester; an effect type's class is only ever raised: a lower class than the registered one leaves it; the requester becomes the organization's provisioner; The plan digest is the lower-case hex SHA-256 of the RFC 8785 form of this document without base_plan_digest.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -105,6 +105,11 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
     },
+    "grantableEffectTypeName": {
+      "description": "An effect type a mandate may grant and a plan may register: not one of the gateway's own helm.authority.* effects.",
+      "type": "string",
+      "pattern": "^(?!helm\\.authority\\.)[a-z][a-z0-9_.-]{0,127}$"
+    },
     "riskClass": {
       "enum": [
         "low",
@@ -132,7 +137,7 @@
       ],
       "properties": {
         "effect_type": {
-          "$ref": "#/$defs/effectTypeName"
+          "$ref": "#/$defs/grantableEffectTypeName"
         },
         "risk_class": {
           "$ref": "#/$defs/riskClass"
@@ -199,7 +204,7 @@
           "maxItems": 64,
           "uniqueItems": true,
           "items": {
-            "$ref": "#/$defs/effectTypeName"
+            "$ref": "#/$defs/grantableEffectTypeName"
           }
         },
         "targets": {
@@ -228,7 +233,7 @@
           "maxItems": 64,
           "uniqueItems": true,
           "items": {
-            "$ref": "#/$defs/effectTypeName"
+            "$ref": "#/$defs/grantableEffectTypeName"
           }
         },
         "approval_threshold": {
@@ -250,7 +255,7 @@
           "type": "object",
           "maxProperties": 64,
           "propertyNames": {
-            "$ref": "#/$defs/effectTypeName"
+            "$ref": "#/$defs/grantableEffectTypeName"
           },
           "additionalProperties": {
             "$ref": "#/$defs/riskClass"

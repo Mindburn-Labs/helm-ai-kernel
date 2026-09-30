@@ -14,11 +14,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -233,13 +235,96 @@ func TestListAttemptsShape(t *testing.T) {
 	if f := resp.Fields().ByName("next_page_token"); f == nil || f.Number() != 2 {
 		t.Error("ListAttemptsResponse.next_page_token is not field 2")
 	}
+	if f := resp.Fields().ByName("settled_before"); f == nil || f.Number() != 3 || f.Message() == nil ||
+		f.Message().FullName() != "google.protobuf.Timestamp" {
+		t.Error("ListAttemptsResponse.settled_before is not the Timestamp field 3")
+	}
+	if resp.Fields().Len() != 3 {
+		t.Errorf("ListAttemptsResponse has %d fields, want 3", resp.Fields().Len())
+	}
 }
 
-// planDigest is the reference plan digest: SHA-256 of the RFC 8785 form of the
-// plan without base_plan_digest. For the ASCII strings and integers a plan
-// carries, that form is compact JSON with the members sorted by name, which is
-// what encoding/json writes for a map. Numbers keep their digits.
-func planDigest(t *testing.T, raw []byte) string {
+// jcs writes v as RFC 8785 (JCS) does, for the values encoding/json produces
+// when it decodes with UseNumber: objects with their members sorted by UTF-16
+// code units, strings as ES6 JSON.stringify writes them (only the quote, the
+// backslash and the control characters are escaped: "&", "<", ">", non-ASCII
+// text and U+2028 stay as they are, which encoding/json does not do), and
+// numbers with their digits as written.
+func jcs(t *testing.T, buf *bytes.Buffer, v any) {
+	t.Helper()
+	switch x := v.(type) {
+	case nil:
+		buf.WriteString("null")
+	case bool:
+		if x {
+			buf.WriteString("true")
+		} else {
+			buf.WriteString("false")
+		}
+	case json.Number:
+		buf.WriteString(x.String())
+	case string:
+		jcsString(buf, x)
+	case []any:
+		buf.WriteByte('[')
+		for i, e := range x {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			jcs(t, buf, e)
+		}
+		buf.WriteByte(']')
+	case map[string]any:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		slices.SortFunc(keys, func(a, b string) int {
+			return slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(b)))
+		})
+		buf.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			jcsString(buf, k)
+			buf.WriteByte(':')
+			jcs(t, buf, x[k])
+		}
+		buf.WriteByte('}')
+	default:
+		t.Fatalf("jcs: %T", v)
+	}
+}
+
+func jcsString(buf *bytes.Buffer, s string) {
+	buf.WriteByte('"')
+	for _, r := range s {
+		switch {
+		case r == '"':
+			buf.WriteString(`\"`)
+		case r == '\\':
+			buf.WriteString(`\\`)
+		case r == '\b':
+			buf.WriteString(`\b`)
+		case r == '\f':
+			buf.WriteString(`\f`)
+		case r == '\n':
+			buf.WriteString(`\n`)
+		case r == '\r':
+			buf.WriteString(`\r`)
+		case r == '\t':
+			buf.WriteString(`\t`)
+		case r < 0x20:
+			buf.WriteString(fmt.Sprintf(`\u%04x`, r))
+		default:
+			buf.WriteRune(r)
+		}
+	}
+	buf.WriteByte('"')
+}
+
+func decodePlan(t *testing.T, raw []byte) map[string]any {
 	t.Helper()
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
@@ -247,31 +332,51 @@ func planDigest(t *testing.T, raw []byte) string {
 	if err := dec.Decode(&plan); err != nil {
 		t.Fatal(err)
 	}
+	return plan
+}
+
+// planDigest is the reference plan digest: SHA-256 of the RFC 8785 form of the
+// plan without base_plan_digest.
+func planDigest(t *testing.T, raw []byte) string {
+	t.Helper()
+	plan := decodePlan(t, raw)
 	delete(plan, "base_plan_digest")
-	canonical, err := json.Marshal(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256(canonical)
+	var canonical bytes.Buffer
+	jcs(t, &canonical, plan)
+	sum := sha256.Sum256(canonical.Bytes())
 	return hex.EncodeToString(sum[:])
 }
 
-// The plan digest test vector. testdata/plan_digest.py is a separate Python
+// The plan digest test vectors. testdata/plan_digest.py is a separate Python
 // implementation; the Go reference, the Python one and the design note must
-// carry the same value, so the Control Plane can check its own encoder before
+// carry the same values, so the Control Plane can check its own encoder before
 // it sends a plan, and the gateway's implementation (core/pkg/gateway/effectargs,
-// over core/pkg/canonicalize) is held to the same value by its own test.
+// over core/pkg/canonicalize) is held to the same values by its own test. The
+// second plan carries what a naive encoder gets wrong: "&&", "<" and ">" in a
+// condition (encoding/json writes them as \u0026, \u003c and \u003e), and
+// non-ASCII text, a character beyond the BMP and U+2028 in a target.
 func TestPlanDigestVector(t *testing.T) {
 	const want = "70d6c47ca51186780504038bdadb939319455ee16c14f59d4829fd1a8bdee5af"
+	const wantEscapes = "81bbed39150fdb7cc7988f955bcdb6be75b150b07b8ca8cd0fe425ffb386b4ef"
 	plan := []byte(readRepoFile(t, "protocols/json-schemas/effects/authority/examples/provision.v1.valid.json"))
+	escapes := []byte(readRepoFile(t, "protocols/json-schemas/effects/authority/examples/provision.v1.valid-escapes.json"))
 	if got := planDigest(t, plan); got != want {
 		t.Fatalf("plan digest = %s, want %s", got, want)
 	}
-	// Planted: base_plan_digest is not part of the digest; any other byte is.
-	var doc map[string]any
-	if err := json.Unmarshal(plan, &doc); err != nil {
+	if got := planDigest(t, escapes); got != wantEscapes {
+		t.Fatalf("escapes plan digest = %s, want %s", got, wantEscapes)
+	}
+	// Planted: the vector discriminates. encoding/json's compact form of the
+	// second plan is a different byte string, so a digest over it differs.
+	naive, err := json.Marshal(decodePlan(t, escapes))
+	if err != nil {
 		t.Fatal(err)
 	}
+	if sum := sha256.Sum256(naive); hex.EncodeToString(sum[:]) == wantEscapes {
+		t.Error("the escapes plan does not tell RFC 8785 from encoding/json")
+	}
+	// Planted: base_plan_digest is not part of the digest; any other byte is.
+	doc := decodePlan(t, plan)
 	doc["base_plan_digest"] = strings.Repeat("f", 64)
 	other, _ := json.Marshal(doc)
 	if got := planDigest(t, other); got != want {
@@ -294,14 +399,18 @@ func TestPlanDigestVector(t *testing.T) {
 	var py struct {
 		Digest        string `json:"digest"`
 		WithOtherBase string `json:"with_other_base"`
+		Escapes       string `json:"escapes"`
 	}
 	if err := json.Unmarshal(out, &py); err != nil {
 		t.Fatalf("testdata/plan_digest.py output: %v", err)
 	}
-	if py.Digest != want || py.WithOtherBase != want {
-		t.Errorf("the Python reference disagrees with Go: %+v, want %s", py, want)
+	if py.Digest != want || py.WithOtherBase != want || py.Escapes != wantEscapes {
+		t.Errorf("the Python reference disagrees with Go: %+v, want %s and %s", py, want, wantEscapes)
 	}
-	if doc := readRepoFile(t, "docs/architecture/gateway-provisioning-api.md"); !strings.Contains(doc, want) {
-		t.Errorf("docs/architecture/gateway-provisioning-api.md does not carry %s", want)
+	doc2 := readRepoFile(t, "docs/architecture/gateway-provisioning-api.md")
+	for _, v := range []string{want, wantEscapes} {
+		if !strings.Contains(doc2, v) {
+			t.Errorf("docs/architecture/gateway-provisioning-api.md does not carry %s", v)
+		}
 	}
 }

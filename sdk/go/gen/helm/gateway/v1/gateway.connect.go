@@ -290,8 +290,11 @@ type EffectGatewayServiceClient interface {
 	// match its filters, oldest change first: ordered by (updated_at,
 	// attempt_id). It finds what the caller did not create, such as the
 	// ESCALATED attempts of SDK agents that propose directly, and lets the
-	// Control Plane sync its projection incrementally: it keeps the last
-	// updated_at it saw and asks again with updated_after.
+	// Control Plane sync its projection incrementally: it keeps the
+	// settled_before of the last page of a full read and asks again with
+	// updated_after set to it. (updated_at is the time the changing transaction
+	// began and transactions commit out of that order, so the last updated_at a
+	// reader saw is not a safe resume point; settled_before is.)
 	//
 	// Token scope: helm.gateway.read.
 	//
@@ -653,8 +656,11 @@ type EffectGatewayServiceHandler interface {
 	// match its filters, oldest change first: ordered by (updated_at,
 	// attempt_id). It finds what the caller did not create, such as the
 	// ESCALATED attempts of SDK agents that propose directly, and lets the
-	// Control Plane sync its projection incrementally: it keeps the last
-	// updated_at it saw and asks again with updated_after.
+	// Control Plane sync its projection incrementally: it keeps the
+	// settled_before of the last page of a full read and asks again with
+	// updated_after set to it. (updated_at is the time the changing transaction
+	// began and transactions commit out of that order, so the last updated_at a
+	// reader saw is not a safe resume point; settled_before is.)
 	//
 	// Token scope: helm.gateway.read.
 	//

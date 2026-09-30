@@ -257,8 +257,11 @@ service EffectGatewayService {
   // match its filters, oldest change first: ordered by (updated_at,
   // attempt_id). It finds what the caller did not create, such as the
   // ESCALATED attempts of SDK agents that propose directly, and lets the
-  // Control Plane sync its projection incrementally: it keeps the last
-  // updated_at it saw and asks again with updated_after.
+  // Control Plane sync its projection incrementally: it keeps the
+  // settled_before of the last page of a full read and asks again with
+  // updated_after set to it. (updated_at is the time the changing transaction
+  // began and transactions commit out of that order, so the last updated_at a
+  // reader saw is not a safe resume point; settled_before is.)
   //
   // Token scope: helm.gateway.read.
   //
@@ -359,15 +362,20 @@ message ApproveRequest {
   // (R13).
   string reason = 3;
   // The §10.1 step-up proof, required to approve an effect that needs step-up
-  // (risk class high or irreversible, and every helm.authority.* widening) and
-  // ignored otherwise. A compact token that the Control Plane's issuer signs
-  // after it verified the approver's WebAuthn assertion over the approval
-  // digest. It carries the scope helm.gateway.stepup, the approver as sub, and
-  // one authorization_details entry
+  // (risk class high or irreversible, and every helm.authority.* widening; a
+  // plan that only narrows needs no approval) and ignored otherwise. A compact
+  // token that the Control Plane's issuer signs after it verified the
+  // approver's WebAuthn assertion over the approval digest, with user
+  // verification. It carries the scope helm.gateway.stepup, the approver as
+  // sub, and one authorization_details entry
   //   {"type": "helm_step_up", "attempt_id": "<attempt_id>",
-  //    "approval_digest": "<hex>", "method": "webauthn"}
+  //    "approval_digest": "<hex>", "method": "webauthn",
+  //    "user_verified": true}
   // naming exactly this attempt and the digest the approver was shown; it is
-  // single-use, and it must be of the decide token's tenant and principal.
+  // single-use, fresh (exp is at most 300 seconds after iat, and the call is
+  // between them), and it must be of the decide token's tenant and principal.
+  // The gateway keeps the proof exactly as received with the approval record,
+  // so that it can be verified again against the issuer's keys.
   // Without a valid proof the approval is permission_denied
   // [reason_code: STEP_UP_REQUIRED] and the attempt stays ESCALATED.
   string step_up_proof = 4;
@@ -502,6 +510,18 @@ message ListAttemptsResponse {
   repeated EffectAttempt attempts = 1;
   // Set when more attempts follow; empty on the last page.
   string next_page_token = 2;
+  // The safe resume point of an incremental reader, database time, set on
+  // every page. An attempt's updated_at is the time the transaction that last
+  // changed it began, and transactions commit out of that order, so an attempt
+  // can first appear with an updated_at earlier than one already listed. Every
+  // gateway transaction is bounded, and settled_before is later than that
+  // bound before the moment the page was read: an attempt whose updated_at is
+  // before settled_before is final in the listing, and none appears later
+  // with an earlier position. A reader that finished a full read continues
+  // with updated_after set to settled_before, never misses a change, and sees
+  // the changes after that instant again, so it applies an attempt
+  // idempotently.
+  google.protobuf.Timestamp settled_before = 3;
 }
 
 // StopRequest stops new effects in one scope.

@@ -579,7 +579,11 @@ type Provisioning struct {
 	// Counts the plans applied to the organization, starting at 1.
 	Revision int64 `protobuf:"varint,7,opt,name=revision,proto3" json:"revision,omitempty"`
 	// Database time of the apply.
-	AppliedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=applied_at,json=appliedAt,proto3" json:"applied_at,omitempty"`
+	AppliedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=applied_at,json=appliedAt,proto3" json:"applied_at,omitempty"`
+	// The service principal that requested the applied plan: the organization's
+	// provisioner. A helm.authority.narrow.v1 plan, which needs no approval,
+	// is accepted only from it.
+	Provisioner   string `protobuf:"bytes,9,opt,name=provisioner,proto3" json:"provisioner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -668,6 +672,13 @@ func (x *Provisioning) GetAppliedAt() *timestamppb.Timestamp {
 		return x.AppliedAt
 	}
 	return nil
+}
+
+func (x *Provisioning) GetProvisioner() string {
+	if x != nil {
+		return x.Provisioner
+	}
+	return ""
 }
 
 // ProvisionedNode is a plan node and the mandate it became.
@@ -1009,7 +1020,7 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\x16GetProvisioningRequest\x12\x17\n" +
 	"\aorg_ref\x18\x01 \x01(\tR\x06orgRef\"\\\n" +
 	"\x17GetProvisioningResponse\x12A\n" +
-	"\fprovisioning\x18\x01 \x01(\v2\x1d.helm.gateway.v1.ProvisioningR\fprovisioning\"\xad\x02\n" +
+	"\fprovisioning\x18\x01 \x01(\v2\x1d.helm.gateway.v1.ProvisioningR\fprovisioning\"\xcf\x02\n" +
 	"\fProvisioning\x12\x17\n" +
 	"\aorg_ref\x18\x01 \x01(\tR\x06orgRef\x12\x1f\n" +
 	"\vplan_digest\x18\x02 \x01(\tR\n" +
@@ -1022,7 +1033,8 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"attempt_id\x18\x06 \x01(\tR\tattemptId\x12\x1a\n" +
 	"\brevision\x18\a \x01(\x03R\brevision\x129\n" +
 	"\n" +
-	"applied_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\"\xc3\x01\n" +
+	"applied_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\x12 \n" +
+	"\vprovisioner\x18\t \x01(\tR\vprovisioner\"\xc3\x01\n" +
 	"\x0fProvisionedNode\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x1d\n" +
 	"\n" +

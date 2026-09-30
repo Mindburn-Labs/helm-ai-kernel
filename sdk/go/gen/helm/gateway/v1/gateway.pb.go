@@ -911,17 +911,22 @@ type ApproveRequest struct {
 	// (R13).
 	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	// The §10.1 step-up proof, required to approve an effect that needs step-up
-	// (risk class high or irreversible, and every helm.authority.* widening) and
-	// ignored otherwise. A compact token that the Control Plane's issuer signs
-	// after it verified the approver's WebAuthn assertion over the approval
-	// digest. It carries the scope helm.gateway.stepup, the approver as sub, and
-	// one authorization_details entry
+	// (risk class high or irreversible, and every helm.authority.* widening; a
+	// plan that only narrows needs no approval) and ignored otherwise. A compact
+	// token that the Control Plane's issuer signs after it verified the
+	// approver's WebAuthn assertion over the approval digest, with user
+	// verification. It carries the scope helm.gateway.stepup, the approver as
+	// sub, and one authorization_details entry
 	//
 	//	{"type": "helm_step_up", "attempt_id": "<attempt_id>",
-	//	 "approval_digest": "<hex>", "method": "webauthn"}
+	//	 "approval_digest": "<hex>", "method": "webauthn",
+	//	 "user_verified": true}
 	//
 	// naming exactly this attempt and the digest the approver was shown; it is
-	// single-use, and it must be of the decide token's tenant and principal.
+	// single-use, fresh (exp is at most 300 seconds after iat, and the call is
+	// between them), and it must be of the decide token's tenant and principal.
+	// The gateway keeps the proof exactly as received with the approval record,
+	// so that it can be verified again against the issuer's keys.
 	// Without a valid proof the approval is permission_denied
 	// [reason_code: STEP_UP_REQUIRED] and the attempt stays ESCALATED.
 	StepUpProof   string `protobuf:"bytes,4,opt,name=step_up_proof,json=stepUpProof,proto3" json:"step_up_proof,omitempty"`
@@ -1811,6 +1816,18 @@ type ListAttemptsResponse struct {
 	Attempts []*EffectAttempt `protobuf:"bytes,1,rep,name=attempts,proto3" json:"attempts,omitempty"`
 	// Set when more attempts follow; empty on the last page.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// The safe resume point of an incremental reader, database time, set on
+	// every page. An attempt's updated_at is the time the transaction that last
+	// changed it began, and transactions commit out of that order, so an attempt
+	// can first appear with an updated_at earlier than one already listed. Every
+	// gateway transaction is bounded, and settled_before is later than that
+	// bound before the moment the page was read: an attempt whose updated_at is
+	// before settled_before is final in the listing, and none appears later
+	// with an earlier position. A reader that finished a full read continues
+	// with updated_after set to settled_before, never misses a change, and sees
+	// the changes after that instant again, so it applies an attempt
+	// idempotently.
+	SettledBefore *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=settled_before,json=settledBefore,proto3" json:"settled_before,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1857,6 +1874,13 @@ func (x *ListAttemptsResponse) GetNextPageToken() string {
 		return x.NextPageToken
 	}
 	return ""
+}
+
+func (x *ListAttemptsResponse) GetSettledBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SettledBefore
+	}
+	return nil
 }
 
 // StopRequest stops new effects in one scope.
@@ -3764,10 +3788,11 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\n" +
 	"page_token\x18\b \x01(\tR\tpageTokenB\n" +
 	"\n" +
-	"\bwork_ref\"z\n" +
+	"\bwork_ref\"\xbd\x01\n" +
 	"\x14ListAttemptsResponse\x12:\n" +
 	"\battempts\x18\x01 \x03(\v2\x1e.helm.gateway.v1.EffectAttemptR\battempts\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe5\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12A\n" +
+	"\x0esettled_before\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\rsettledBefore\"\xe5\x01\n" +
 	"\vStopRequest\x12'\n" +
 	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12=\n" +
 	"\n" +
@@ -4084,69 +4109,70 @@ var file_helm_gateway_v1_gateway_proto_depIdxs = []int32{
 	0,  // 11: helm.gateway.v1.ListAttemptsRequest.states:type_name -> helm.gateway.v1.EffectAttemptState
 	46, // 12: helm.gateway.v1.ListAttemptsRequest.updated_after:type_name -> google.protobuf.Timestamp
 	34, // 13: helm.gateway.v1.ListAttemptsResponse.attempts:type_name -> helm.gateway.v1.EffectAttempt
-	8,  // 14: helm.gateway.v1.StopRequest.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
-	46, // 15: helm.gateway.v1.StopRequest.expires_at:type_name -> google.protobuf.Timestamp
-	45, // 16: helm.gateway.v1.StopResponse.stop:type_name -> helm.gateway.v1.Stop
-	34, // 17: helm.gateway.v1.LiftResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
-	3,  // 18: helm.gateway.v1.EffectAttempt.risk_class:type_name -> helm.gateway.v1.RiskClass
-	32, // 19: helm.gateway.v1.EffectAttempt.quote:type_name -> helm.gateway.v1.ResourceAmount
-	0,  // 20: helm.gateway.v1.EffectAttempt.state:type_name -> helm.gateway.v1.EffectAttemptState
-	1,  // 21: helm.gateway.v1.EffectAttempt.outcome:type_name -> helm.gateway.v1.EffectOutcome
-	2,  // 22: helm.gateway.v1.EffectAttempt.outcome_basis:type_name -> helm.gateway.v1.OutcomeBasis
-	35, // 23: helm.gateway.v1.EffectAttempt.pending_approval:type_name -> helm.gateway.v1.PendingApproval
-	36, // 24: helm.gateway.v1.EffectAttempt.approval:type_name -> helm.gateway.v1.Approval
-	37, // 25: helm.gateway.v1.EffectAttempt.permit:type_name -> helm.gateway.v1.Permit
-	39, // 26: helm.gateway.v1.EffectAttempt.exposures:type_name -> helm.gateway.v1.Exposure
-	40, // 27: helm.gateway.v1.EffectAttempt.model_call:type_name -> helm.gateway.v1.ModelCallSettlement
-	41, // 28: helm.gateway.v1.EffectAttempt.latest_observation:type_name -> helm.gateway.v1.Observation
-	46, // 29: helm.gateway.v1.EffectAttempt.created_at:type_name -> google.protobuf.Timestamp
-	46, // 30: helm.gateway.v1.EffectAttempt.updated_at:type_name -> google.protobuf.Timestamp
-	46, // 31: helm.gateway.v1.PendingApproval.expires_at:type_name -> google.protobuf.Timestamp
-	4,  // 32: helm.gateway.v1.Approval.decision:type_name -> helm.gateway.v1.ApprovalDecision
-	46, // 33: helm.gateway.v1.Approval.decided_at:type_name -> google.protobuf.Timestamp
-	38, // 34: helm.gateway.v1.Permit.authority_versions:type_name -> helm.gateway.v1.AuthorityVersion
-	46, // 35: helm.gateway.v1.Permit.expires_at:type_name -> google.protobuf.Timestamp
-	46, // 36: helm.gateway.v1.Permit.consumed_at:type_name -> google.protobuf.Timestamp
-	5,  // 37: helm.gateway.v1.AuthorityVersion.kind:type_name -> helm.gateway.v1.AuthorityRowKind
-	46, // 38: helm.gateway.v1.Exposure.bucket_start:type_name -> google.protobuf.Timestamp
-	6,  // 39: helm.gateway.v1.Exposure.kind:type_name -> helm.gateway.v1.ExposureKind
-	7,  // 40: helm.gateway.v1.ModelCallSettlement.state:type_name -> helm.gateway.v1.SettlementState
-	1,  // 41: helm.gateway.v1.Observation.outcome:type_name -> helm.gateway.v1.EffectOutcome
-	46, // 42: helm.gateway.v1.Observation.observed_at:type_name -> google.protobuf.Timestamp
-	43, // 43: helm.gateway.v1.Observation.github_pull_request:type_name -> helm.gateway.v1.GitHubPullRequestResult
-	44, // 44: helm.gateway.v1.Observation.github_branch:type_name -> helm.gateway.v1.GitHubBranchResult
-	42, // 45: helm.gateway.v1.Observation.github_repository:type_name -> helm.gateway.v1.GitHubRepositoryResult
-	8,  // 46: helm.gateway.v1.Stop.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
-	46, // 47: helm.gateway.v1.Stop.created_at:type_name -> google.protobuf.Timestamp
-	46, // 48: helm.gateway.v1.Stop.expires_at:type_name -> google.protobuf.Timestamp
-	46, // 49: helm.gateway.v1.Stop.lifted_at:type_name -> google.protobuf.Timestamp
-	9,  // 50: helm.gateway.v1.EffectGatewayService.Propose:input_type -> helm.gateway.v1.ProposeRequest
-	11, // 51: helm.gateway.v1.EffectGatewayService.Approve:input_type -> helm.gateway.v1.ApproveRequest
-	13, // 52: helm.gateway.v1.EffectGatewayService.Reject:input_type -> helm.gateway.v1.RejectRequest
-	15, // 53: helm.gateway.v1.EffectGatewayService.Cancel:input_type -> helm.gateway.v1.CancelRequest
-	17, // 54: helm.gateway.v1.EffectGatewayService.Dispatch:input_type -> helm.gateway.v1.DispatchRequest
-	19, // 55: helm.gateway.v1.EffectGatewayService.Observe:input_type -> helm.gateway.v1.ObserveRequest
-	21, // 56: helm.gateway.v1.EffectGatewayService.GetAttempt:input_type -> helm.gateway.v1.GetAttemptRequest
-	23, // 57: helm.gateway.v1.EffectGatewayService.GetAttemptContent:input_type -> helm.gateway.v1.GetAttemptContentRequest
-	25, // 58: helm.gateway.v1.EffectGatewayService.ListAttempts:input_type -> helm.gateway.v1.ListAttemptsRequest
-	27, // 59: helm.gateway.v1.EffectGatewayService.Stop:input_type -> helm.gateway.v1.StopRequest
-	29, // 60: helm.gateway.v1.EffectGatewayService.Lift:input_type -> helm.gateway.v1.LiftRequest
-	10, // 61: helm.gateway.v1.EffectGatewayService.Propose:output_type -> helm.gateway.v1.ProposeResponse
-	12, // 62: helm.gateway.v1.EffectGatewayService.Approve:output_type -> helm.gateway.v1.ApproveResponse
-	14, // 63: helm.gateway.v1.EffectGatewayService.Reject:output_type -> helm.gateway.v1.RejectResponse
-	16, // 64: helm.gateway.v1.EffectGatewayService.Cancel:output_type -> helm.gateway.v1.CancelResponse
-	18, // 65: helm.gateway.v1.EffectGatewayService.Dispatch:output_type -> helm.gateway.v1.DispatchResponse
-	20, // 66: helm.gateway.v1.EffectGatewayService.Observe:output_type -> helm.gateway.v1.ObserveResponse
-	22, // 67: helm.gateway.v1.EffectGatewayService.GetAttempt:output_type -> helm.gateway.v1.GetAttemptResponse
-	24, // 68: helm.gateway.v1.EffectGatewayService.GetAttemptContent:output_type -> helm.gateway.v1.GetAttemptContentResponse
-	26, // 69: helm.gateway.v1.EffectGatewayService.ListAttempts:output_type -> helm.gateway.v1.ListAttemptsResponse
-	28, // 70: helm.gateway.v1.EffectGatewayService.Stop:output_type -> helm.gateway.v1.StopResponse
-	30, // 71: helm.gateway.v1.EffectGatewayService.Lift:output_type -> helm.gateway.v1.LiftResponse
-	61, // [61:72] is the sub-list for method output_type
-	50, // [50:61] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	46, // 14: helm.gateway.v1.ListAttemptsResponse.settled_before:type_name -> google.protobuf.Timestamp
+	8,  // 15: helm.gateway.v1.StopRequest.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
+	46, // 16: helm.gateway.v1.StopRequest.expires_at:type_name -> google.protobuf.Timestamp
+	45, // 17: helm.gateway.v1.StopResponse.stop:type_name -> helm.gateway.v1.Stop
+	34, // 18: helm.gateway.v1.LiftResponse.attempt:type_name -> helm.gateway.v1.EffectAttempt
+	3,  // 19: helm.gateway.v1.EffectAttempt.risk_class:type_name -> helm.gateway.v1.RiskClass
+	32, // 20: helm.gateway.v1.EffectAttempt.quote:type_name -> helm.gateway.v1.ResourceAmount
+	0,  // 21: helm.gateway.v1.EffectAttempt.state:type_name -> helm.gateway.v1.EffectAttemptState
+	1,  // 22: helm.gateway.v1.EffectAttempt.outcome:type_name -> helm.gateway.v1.EffectOutcome
+	2,  // 23: helm.gateway.v1.EffectAttempt.outcome_basis:type_name -> helm.gateway.v1.OutcomeBasis
+	35, // 24: helm.gateway.v1.EffectAttempt.pending_approval:type_name -> helm.gateway.v1.PendingApproval
+	36, // 25: helm.gateway.v1.EffectAttempt.approval:type_name -> helm.gateway.v1.Approval
+	37, // 26: helm.gateway.v1.EffectAttempt.permit:type_name -> helm.gateway.v1.Permit
+	39, // 27: helm.gateway.v1.EffectAttempt.exposures:type_name -> helm.gateway.v1.Exposure
+	40, // 28: helm.gateway.v1.EffectAttempt.model_call:type_name -> helm.gateway.v1.ModelCallSettlement
+	41, // 29: helm.gateway.v1.EffectAttempt.latest_observation:type_name -> helm.gateway.v1.Observation
+	46, // 30: helm.gateway.v1.EffectAttempt.created_at:type_name -> google.protobuf.Timestamp
+	46, // 31: helm.gateway.v1.EffectAttempt.updated_at:type_name -> google.protobuf.Timestamp
+	46, // 32: helm.gateway.v1.PendingApproval.expires_at:type_name -> google.protobuf.Timestamp
+	4,  // 33: helm.gateway.v1.Approval.decision:type_name -> helm.gateway.v1.ApprovalDecision
+	46, // 34: helm.gateway.v1.Approval.decided_at:type_name -> google.protobuf.Timestamp
+	38, // 35: helm.gateway.v1.Permit.authority_versions:type_name -> helm.gateway.v1.AuthorityVersion
+	46, // 36: helm.gateway.v1.Permit.expires_at:type_name -> google.protobuf.Timestamp
+	46, // 37: helm.gateway.v1.Permit.consumed_at:type_name -> google.protobuf.Timestamp
+	5,  // 38: helm.gateway.v1.AuthorityVersion.kind:type_name -> helm.gateway.v1.AuthorityRowKind
+	46, // 39: helm.gateway.v1.Exposure.bucket_start:type_name -> google.protobuf.Timestamp
+	6,  // 40: helm.gateway.v1.Exposure.kind:type_name -> helm.gateway.v1.ExposureKind
+	7,  // 41: helm.gateway.v1.ModelCallSettlement.state:type_name -> helm.gateway.v1.SettlementState
+	1,  // 42: helm.gateway.v1.Observation.outcome:type_name -> helm.gateway.v1.EffectOutcome
+	46, // 43: helm.gateway.v1.Observation.observed_at:type_name -> google.protobuf.Timestamp
+	43, // 44: helm.gateway.v1.Observation.github_pull_request:type_name -> helm.gateway.v1.GitHubPullRequestResult
+	44, // 45: helm.gateway.v1.Observation.github_branch:type_name -> helm.gateway.v1.GitHubBranchResult
+	42, // 46: helm.gateway.v1.Observation.github_repository:type_name -> helm.gateway.v1.GitHubRepositoryResult
+	8,  // 47: helm.gateway.v1.Stop.scope_kind:type_name -> helm.gateway.v1.StopScopeKind
+	46, // 48: helm.gateway.v1.Stop.created_at:type_name -> google.protobuf.Timestamp
+	46, // 49: helm.gateway.v1.Stop.expires_at:type_name -> google.protobuf.Timestamp
+	46, // 50: helm.gateway.v1.Stop.lifted_at:type_name -> google.protobuf.Timestamp
+	9,  // 51: helm.gateway.v1.EffectGatewayService.Propose:input_type -> helm.gateway.v1.ProposeRequest
+	11, // 52: helm.gateway.v1.EffectGatewayService.Approve:input_type -> helm.gateway.v1.ApproveRequest
+	13, // 53: helm.gateway.v1.EffectGatewayService.Reject:input_type -> helm.gateway.v1.RejectRequest
+	15, // 54: helm.gateway.v1.EffectGatewayService.Cancel:input_type -> helm.gateway.v1.CancelRequest
+	17, // 55: helm.gateway.v1.EffectGatewayService.Dispatch:input_type -> helm.gateway.v1.DispatchRequest
+	19, // 56: helm.gateway.v1.EffectGatewayService.Observe:input_type -> helm.gateway.v1.ObserveRequest
+	21, // 57: helm.gateway.v1.EffectGatewayService.GetAttempt:input_type -> helm.gateway.v1.GetAttemptRequest
+	23, // 58: helm.gateway.v1.EffectGatewayService.GetAttemptContent:input_type -> helm.gateway.v1.GetAttemptContentRequest
+	25, // 59: helm.gateway.v1.EffectGatewayService.ListAttempts:input_type -> helm.gateway.v1.ListAttemptsRequest
+	27, // 60: helm.gateway.v1.EffectGatewayService.Stop:input_type -> helm.gateway.v1.StopRequest
+	29, // 61: helm.gateway.v1.EffectGatewayService.Lift:input_type -> helm.gateway.v1.LiftRequest
+	10, // 62: helm.gateway.v1.EffectGatewayService.Propose:output_type -> helm.gateway.v1.ProposeResponse
+	12, // 63: helm.gateway.v1.EffectGatewayService.Approve:output_type -> helm.gateway.v1.ApproveResponse
+	14, // 64: helm.gateway.v1.EffectGatewayService.Reject:output_type -> helm.gateway.v1.RejectResponse
+	16, // 65: helm.gateway.v1.EffectGatewayService.Cancel:output_type -> helm.gateway.v1.CancelResponse
+	18, // 66: helm.gateway.v1.EffectGatewayService.Dispatch:output_type -> helm.gateway.v1.DispatchResponse
+	20, // 67: helm.gateway.v1.EffectGatewayService.Observe:output_type -> helm.gateway.v1.ObserveResponse
+	22, // 68: helm.gateway.v1.EffectGatewayService.GetAttempt:output_type -> helm.gateway.v1.GetAttemptResponse
+	24, // 69: helm.gateway.v1.EffectGatewayService.GetAttemptContent:output_type -> helm.gateway.v1.GetAttemptContentResponse
+	26, // 70: helm.gateway.v1.EffectGatewayService.ListAttempts:output_type -> helm.gateway.v1.ListAttemptsResponse
+	28, // 71: helm.gateway.v1.EffectGatewayService.Stop:output_type -> helm.gateway.v1.StopResponse
+	30, // 72: helm.gateway.v1.EffectGatewayService.Lift:output_type -> helm.gateway.v1.LiftResponse
+	62, // [62:73] is the sub-list for method output_type
+	51, // [51:62] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_helm_gateway_v1_gateway_proto_init() }

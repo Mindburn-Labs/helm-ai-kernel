@@ -92,6 +92,7 @@ Two rules apply everywhere:
 | `EffectAttempt.risk_class` | Effect-type control row. Never read from the request. |
 | `EffectAttempt.reason_code` | ADR-0001 §6, registry strings. |
 | `EffectAttempt.workspace_id` | The proposer's token (R9, ADR-0005). Output only. |
+| `EffectAttempt.episode` (`EpisodeRef`), `ListAttemptsRequest.episode_id` | The token's `helm_episode` claim (HELM-752 K7): the worker run an attempt was proposed in. Output only, except the list filter; a request cannot name an episode. See "Episode attempts". |
 | `EffectAttempt.requester_actor_id`, `Approval.approver_actor_id` | The token's `act.sub` (RFC 8693, ADR-0005 §2). Output only; empty for a direct call. See "The delegated requester". |
 | `PendingApproval.approval_digest`, `ApproveRequest.approval_digest` | §10.1 approval digest, v1 below. An approval binds to the digest the approver saw. |
 | `ApproveRequest.reason`, `RejectRequest.reason`, `Approval.reason` | WS-B review item 2. At most 2000 bytes; required on `Reject`. The log carries the digest (R13). |
@@ -1083,8 +1084,10 @@ must find `ESCALATED` attempts the Control Plane never created, and because
 the Control Plane syncs its projection incrementally.
 
 - **Filters**, all optional, all narrowing: `states` (any of), `commitment_id`
-  or `case_id`, `requester_principal_id`, `effect_type`, and `updated_after`
-  (exclusive). A filter cannot reach another tenant's or workspace's attempts.
+  or `case_id`, `requester_principal_id`, `effect_type`, `episode_id` (the
+  episode an attempt was proposed in; see "Episode attempts"), and
+  `updated_after` (exclusive). A filter cannot reach another tenant's or
+  workspace's attempts.
 - **Paging.** `page_size` is 1 to 200 (0 means 50); a response with a
   `next_page_token` has more, and the same request with that token continues
   after the last attempt returned. A token belongs to one set of filters; one
@@ -1107,6 +1110,33 @@ the Control Plane syncs its projection incrementally.
   stay behind `GetAttemptContent`.
 - **Status.** Served: `helm-gateway` answers `ListAttempts` under a
   `helm.gateway.read` token.
+
+## Episode attempts
+
+A worker runs in one bounded episode (HELM-752 K7), and its token carries the
+episode as a `helm_episode` claim: `episode_id`, `work_item_id` and
+`organization_version_id`. An attempt proposed with such a token records them:
+
+- **`EffectAttempt.episode`** (`EpisodeRef`: `episode_id`, `work_item_id`,
+  `organization_version_id`) is set for an attempt proposed with an episode
+  token and unset for every other attempt. The gateway copies it from the
+  verified claim alone. No request message carries an episode, except the list
+  filter, which says which attempts to list and never what an attempt records.
+- **`work_item_id` is the attempt's `case_id`.** For a token with an episode
+  claim the work reference is the claim's work item: a request that names a
+  commitment, or a different case, is refused, and a request that names none
+  takes the claim's.
+- **`ListAttemptsRequest.episode_id`** keeps the attempts of one episode. Like
+  every filter it only narrows.
+- **Read isolation.** A token with the Control Plane's service principal and
+  `helm.gateway.read` reads every attempt of its own tenant and workspace. A
+  token that carries an episode claim reads only the attempts of its own
+  episode, through `GetAttempt`, `GetAttemptContent` and `ListAttempts`: any
+  other attempt of the same tenant is `not_found` for it, the same answer as an
+  attempt that does not exist.
+- **Status.** Wire contract only in this slice: the fields exist, and no
+  gateway sets `episode` or honors `episode_id` until the slice that records
+  episodes on the worker listener.
 
 ## Step-up proof
 

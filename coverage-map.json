@@ -5,8 +5,8 @@
     "quantum_posture: this map records which code paths hold existing signing, hashing and key-separation properties; it pins no algorithm and makes no post-quantum claim"
   ],
   "summary": {
-    "total": 81,
-    "enforced": 41,
+    "total": 82,
+    "enforced": 42,
     "observed_only": 28,
     "unmanaged": 12,
     "retired_invariants": 11,
@@ -3852,6 +3852,251 @@
           "file": "core/pkg/gateway/jobs/jobs.go",
           "tests": [
             "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "CTL-057",
+      "title": "Gateway worker endpoint and episode isolation",
+      "owner": "Mindburn Labs core team (kernel)",
+      "claim": "helm-gateway serves its effect types to episode workers as MCP tools at /mcp on the worker listener (HELM-751 K3), stateless, in the 2026-07-28 revision and the legacy initialize handshake. Tenant, workspace, principal, actor and episode come only from the verified worker token; only agent principals are served; tools/list names the effect types of the caller's live mandate chains that the gateway performs; and a tool call is proposed, admitted, dispatched and observed under the same admission transaction and permit as any effect, the permit claimed by the worker's own principal and never under a helm.gateway.execute token. An escalation is a structured non-error result, a denial a tool error with its reason code, and the same request replayed is the same attempt. An attempt proposed under an episode token records the claim's episode and takes its work item as its case; a token with an episode claim proposes under that work item only and reads only the attempts of its own episode that its own principal proposed, in every read of an attempt (HELM-751 N1).",
+      "status": "enforced",
+      "plane": "runtime",
+      "entry_points": [
+        {
+          "symbol": "core/pkg/gateway/runtime.serve",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/mcpserver.Handler.ServeHTTP",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/mcpserver.Gateway.Tools",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/mcpserver.Gateway.Call",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.Propose",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.Get",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.GetContent",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.List",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.PrincipalEffects",
+          "reachability": "reachable"
+        },
+        {
+          "symbol": "core/pkg/gateway/admission.Service.ModelCallReplay",
+          "reachability": "reachable"
+        }
+      ],
+      "gates": [],
+      "config": [
+        "--worker-listen, HELM_GATEWAY_WORKER_AUDIENCE and HELM_GATEWAY_WORKER_MAX_TTL: the worker listener, which serves /mcp and the model endpoints to episode tokens only. It needs HELM_GATEWAY_MODEL_ROUTES_FILE.",
+        "Nothing of its own: the tools are the effect types that the gateway's adapters declare as grantable with an argument schema, and serve refuses to start when one cannot be given a tool name."
+      ],
+      "protected_operations": [
+        "tools/list and tools/call of the MCP endpoint on the worker listener of helm-gateway serve, and GetAttempt, GetAttemptContent, ListAttempts and the stored response of a model call for a token that carries an episode claim."
+      ],
+      "bypass_assumptions": [
+        "Token trust is ADR-0005's: a compromised Control Plane issuer can mint an episode token for any seat and episode. The episode is the token's claim, not something the gateway verifies independently.",
+        "Who can reach the worker listener is the deployment's network policy, not this code: the listener has no client certificate, so a token is all it asks for.",
+        "An attempt proposed without an episode token, such as the Control Plane's own, records no episode, and the isolation binds only a token that carries one.",
+        "A worker can make any call its mandates admit: the endpoint limits what a call may name, not what a model chooses to ask for within its authority.",
+        "An effect's typed result is one of the members the kernel defines (the GitHub results); an effect type of a composition that returns more needs its member in Observation first.",
+        "tools/call runs the dispatch in the request: a client that hangs up does not stop it, and a call that outlives CallTimeout is answered as a failure to repeat, with the attempt left for a read-back or the reconciliation job."
+      ],
+      "tests": {
+        "allowed": [
+          "core/pkg/gateway/mcpserver.TestPostgresToolsListReflectsTheCallersMandates",
+          "core/pkg/gateway/mcpserver.TestPostgresAnAllowedCallIsDispatchedAndObservedInTheSameCall",
+          "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall",
+          "core/pkg/gateway/mcpserver.TestLegacyHandshakeNegotiatesAndKeepsNothing",
+          "core/pkg/gateway/mcpserver.TestModernDiscoveryAndDeterministicPrivateList",
+          "core/pkg/gateway/admission.TestPostgresEpisodeAttemptsRecordTheClaimAndNothingElse",
+          "core/pkg/gateway/modelgw.TestPostgresModelCallsRecordTheEpisodeOfTheirToken"
+        ],
+        "forbidden": [
+          "core/pkg/gateway/mcpserver.TestPostgresADeniedCallIsAToolErrorWithItsReasonCode",
+          "core/pkg/gateway/mcpserver.TestPostgresATokenOfAnotherTenantReachesNothingOfThisOne",
+          "core/pkg/gateway/mcpserver.TestPostgresAnotherEpisodesAttemptIsNotFound",
+          "core/pkg/gateway/mcpserver.TestPostgresTheEpisodeComesFromTheClaimNotTheBody",
+          "core/pkg/gateway/mcpserver.TestPostgresTheEndpointServesOnlyAgentsOfAnEpisode",
+          "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract",
+          "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk",
+          "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope",
+          "core/pkg/gateway/mcpserver.TestModernRequestValidation",
+          "core/pkg/gateway/mcpserver.TestTransportRefusesSmuggledIdentityAndAmbiguousJSON",
+          "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults",
+          "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds",
+          "core/pkg/gateway/admission.TestPostgresAnEpisodeReadsOnlyItsOwnAttempts",
+          "core/pkg/gateway/admission.TestPostgresAModelCallsStoredResponseIsReadOnlyByItsOwnEpisode",
+          "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim",
+          "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim",
+          "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
+        ],
+        "removal": [
+          "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract",
+          "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk",
+          "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope",
+          "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheRequest",
+          "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall",
+          "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults",
+          "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds",
+          "core/pkg/gateway/mcpserver.TestModernRequestValidation",
+          "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim",
+          "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim",
+          "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal",
+          "core/pkg/gateway/admission.TestListStatementHoldsAnEpisodeCallerToItsEpisodeAndPrincipal",
+          "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
+        ],
+        "bypass": [
+          "core/pkg/gateway/runtime.TestServeMountsTheMCPEndpointOnTheWorkerListenerOnly",
+          "core/pkg/gateway/mcpserver.TestPostgresAReplayedCallIsTheSameAttempt",
+          "core/pkg/gateway/mcpserver.TestPostgresAnUnknownOutcomeIsReconcilingUntilItIsKnown",
+          "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
+        ]
+      },
+      "removal_proofs": [
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheRequest"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/gateway.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/http.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/http.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/http.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/http.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestModernRequestValidation"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/mcpserver/http.go",
+          "tests": [
+            "core/pkg/gateway/mcpserver.TestModernRequestValidation"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/episode.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/episode.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/admission.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/server/auth.go",
+          "tests": [
+            "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/read.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/read.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/decisions.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/modelcall.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/list.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestListStatementHoldsAnEpisodeCallerToItsEpisodeAndPrincipal"
           ]
         }
       ]

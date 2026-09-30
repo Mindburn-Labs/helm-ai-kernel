@@ -734,7 +734,10 @@ human operator's single-use `helm.gateway.stop` token.
 - `DISPATCHING` and later are `failed_precondition`.
 
 A request message is capped at 128 KiB after decompression, and a request
-body at 132 KiB as sent, before authentication or any handler runs.
+body at 132 KiB as sent, before authentication or any handler runs. Propose
+alone has a larger cap, because it alone carries an authority plan (at most
+524288 bytes, which a JSON client sends base64-encoded): 764588 bytes of message
+and 768684 bytes of body.
 
 Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
 `SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's

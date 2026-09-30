@@ -29,6 +29,10 @@ const (
 	ScopeRead    = "helm.gateway.read"
 	ScopeStop    = "helm.gateway.stop"
 	ScopeExecute = "helm.gateway.execute"
+	// ScopeProvision registers a tenant's first principals
+	// (AuthorityAdminService.EnsurePrincipals). No other RPC takes it, and the
+	// Control Plane's issuer mints it for its service principal only.
+	ScopeProvision = "helm.gateway.provision"
 )
 
 // TokenValidator verifies a token's signature, issuer, audience, algorithm

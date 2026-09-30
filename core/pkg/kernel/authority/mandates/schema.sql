@@ -147,3 +147,18 @@ ALTER TABLE authority_mandates ADD COLUMN IF NOT EXISTS risk_classes JSONB
     CHECK (risk_classes IS NULL OR jsonb_typeof(risk_classes) = 'object');
 ALTER TABLE authority_mandates ADD COLUMN IF NOT EXISTS approval_required TEXT[]
     CHECK (approval_required IS NULL OR cardinality(approval_required) > 0);
+
+-- Provisioning API: who vouches for a principal. A human carries an external
+-- subject, the pair (external_system, external_subject) such as the Control
+-- Plane and its user id, and the pair is unique per tenant, so one person
+-- cannot be registered as two principals: approver != requester is checked on
+-- principal ids, and two ids for one person would count as two people. Both
+-- columns are set together or neither is. A subject is attached to a
+-- principal once and never changed (authorityrows.Tx.UpsertPrincipal).
+ALTER TABLE authority_principals ADD COLUMN IF NOT EXISTS external_system TEXT
+    CHECK (external_system IS NULL OR external_system ~ '^[a-z0-9][a-z0-9._:-]{0,63}$');
+ALTER TABLE authority_principals ADD COLUMN IF NOT EXISTS external_subject TEXT
+    CHECK ((external_system IS NULL) = (external_subject IS NULL)
+           AND (external_subject IS NULL OR octet_length(external_subject) BETWEEN 1 AND 255));
+CREATE UNIQUE INDEX IF NOT EXISTS authority_principals_external_subject
+    ON authority_principals (tenant_id, external_system, external_subject) WHERE external_system IS NOT NULL;

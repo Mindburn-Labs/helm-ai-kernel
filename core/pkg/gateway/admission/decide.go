@@ -65,6 +65,15 @@ type Input struct {
 	// LiftsStop is the stop a helm.authority.lift attempt lifts; empty for
 	// any other effect.
 	LiftsStop string
+	// MandateFree marks a helm.authority.provision.v1 or narrow.v1 effect. They
+	// are how authority begins, so they need no proposer mandate, and no
+	// effect-type row and no limit: authority for a plan is the approval of its
+	// exact bytes, which the approval digest binds. Chain, RiskClass and Counters
+	// are then unused.
+	MandateFree bool
+	// PrincipalKind is the requester's kind from the tenant's own rows
+	// (human, agent or service), which a MandateFree effect checks.
+	PrincipalKind string
 }
 
 // withoutStop is stops without the one a lift lifts.
@@ -114,6 +123,14 @@ func Decide(in Input) Decision {
 	}
 	if !in.PrincipalFound || !in.PrincipalActive {
 		return deny(contracts.ReasonPrincipalInactive)
+	}
+	if in.MandateFree {
+		// The requester is a registered service principal, never a person or an
+		// agent (an agent's authority is what a plan gives it).
+		if in.PrincipalKind != string(mandates.PrincipalService) {
+			return deny(contracts.ReasonInsufficientPrivilege)
+		}
+		return approvalDecision(in, 0)
 	}
 	if len(in.Chain) == 0 {
 		return deny(contracts.ReasonMandateInactive)
@@ -171,6 +188,12 @@ func Decide(in Input) Decision {
 			return deny(contracts.ReasonBudgetExceeded)
 		}
 	}
+	return approvalDecision(in, amount)
+}
+
+// approvalDecision is the last step: escalate what needs approval and has none,
+// deny what its approver refused or is not distinct for, and allow the rest.
+func approvalDecision(in Input, amount int64) Decision {
 	if needsApproval(in, amount) {
 		switch {
 		case in.Approval == nil:
@@ -190,9 +213,13 @@ func Decide(in Input) Decision {
 // threshold (ADR-0001 §4, HELM-750 terms).
 func needsApproval(in Input, amount int64) bool {
 	// Authority widening (helm.authority.*) always needs a distinct approver
-	// with step-up, whatever the risk rows say (§4.1 item 7, §10.1).
-	if strings.HasPrefix(in.EffectType, "helm.authority.") {
+	// with step-up, whatever the risk rows say (§4.1 item 7, §10.1). A plan
+	// that only narrows is the one exception.
+	if effectargs.WidensAuthority(in.EffectType) {
 		return true
+	}
+	if in.MandateFree {
+		return false
 	}
 	if in.RiskClass == mandates.RiskHigh || in.RiskClass == mandates.RiskIrreversible {
 		return true

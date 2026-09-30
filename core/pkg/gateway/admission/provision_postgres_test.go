@@ -177,8 +177,8 @@ func (f *planFixture) limitValue(tenant string, p *provision.Provisioning, node 
 
 // A plan is proposed by a registered service principal, never by a person or
 // an agent, and needs no proposer mandate: a provision plan is ESCALATED for a
-// distinct human, whose approval needs a step-up assertion until that
-// assertion exists.
+// distinct human, whose approval needs a step-up proof (the wire proofs in
+// package server approve one with it).
 func TestPostgresProvisionPlanIsEscalatedForADistinctHuman(t *testing.T) {
 	f := newPlanFixture(t)
 	ctx := context.Background()

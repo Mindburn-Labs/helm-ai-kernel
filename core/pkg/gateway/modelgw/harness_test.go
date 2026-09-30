@@ -47,7 +47,7 @@ const (
 	// The provider keys the gateway holds, and the tokens callers hold. A test
 	// asserts the first never reach a client, a log or the database, and the
 	// second never reach a provider.
-	keyAnthropic  = "canary-anthropic-api-key-7f3a"
+	keyAnthropic  = "canary-anthropic-api-key-aaaa"
 	keyOpenAI     = "canary-openai-api-key-91bc"
 	keyOpenRouter = "canary-openrouter-api-key-c04d"
 

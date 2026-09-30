@@ -152,6 +152,10 @@ const (
 	maxPlanMandates    = 4096
 	maxPlanLimits      = 8192
 	maxPlanTargets     = 256
+	// maxLimitSpan is the widest sliding window a limit covers, in buckets
+	// (744 hourly buckets are 31 days); authority_limits.span has the same
+	// bound.
+	maxLimitSpan = 744
 )
 
 // ParsePlan parses raw as the arguments of effectType, one of the two plan
@@ -571,9 +575,14 @@ func (p *Plan) parseLimits(top object) error {
 			return err
 		}
 		if raw, ok := o.fields["span"]; ok {
-			span, err := integer(raw, path+".span", 1, 744)
+			span, err := integer(raw, path+".span", 1, maxLimitSpan)
 			if err != nil {
 				return err
+			}
+			// integer bounds span already; the explicit check keeps the
+			// narrowing to int visibly safe on every platform.
+			if span < 1 || span > maxLimitSpan {
+				return invalid("%s.span: out of range", path)
 			}
 			l.Span = int(span)
 		}

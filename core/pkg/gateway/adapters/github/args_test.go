@@ -1,6 +1,7 @@
 package github
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -235,6 +236,12 @@ func TestDeclarationsMatchTheSchemas(t *testing.T) {
 			string(d.Observable) != first(x["observable"]) || string(d.Reversible) != first(x["reversible"]) ||
 			string(d.Mediation) != x["mediation"] {
 			t.Errorf("%s: declaration %+v differs from x-helm %v", effectType, d, x)
+		}
+		// The catalog entry is the published schema, for a target of the
+		// published form, and a mandate may grant what it lists.
+		if d.TargetForm != x["target"] || !bytes.Equal(d.ArgumentSchema, raw) || !d.Grantable || d.Description == "" {
+			t.Errorf("%s: catalog fields target=%q schema=%d bytes grantable=%v description=%q, want target %q and the published schema",
+				effectType, d.TargetForm, len(d.ArgumentSchema), d.Grantable, d.Description, x["target"])
 		}
 	}
 	if len(New().Declarations()) != 3 {

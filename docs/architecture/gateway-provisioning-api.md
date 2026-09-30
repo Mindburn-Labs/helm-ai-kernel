@@ -4,10 +4,13 @@
 digests as opaque values and no signatures or keys. It adds no cryptographic
 control and makes no post-quantum claim; token verification is ADR-0005's. -->
 
-Status: wire contract, 2026-09-30. `helm-gateway` serves it from the change that
-follows this one: until then `helm.authority.provision.v1` and
-`helm.authority.narrow.v1` are refused as unregistered effect types, and the
-three RPCs of `AuthorityAdminService` answer `unimplemented`.
+Status: served, 2026-09-30. `helm-gateway serve` dispatches
+`helm.authority.provision.v1` and `helm.authority.narrow.v1` through the
+authority adapter and mounts the three RPCs of `AuthorityAdminService` on its
+API listener, beside `EffectGatewayService`. Approving a provision plan needs
+a step-up proof, which the approval path takes in its own change: until then
+`Approve` of a provision plan fails closed with `STEP_UP_REQUIRED`, and only a
+narrowing plan, which needs no approval, applies end to end.
 
 - Effect argument schemas:
   [`protocols/json-schemas/effects/authority/provision.v1.json`](../../protocols/json-schemas/effects/authority/provision.v1.json)
@@ -82,8 +85,9 @@ ways, because they are how authority begins:
    from another service principal (a distinct human approves it), and that
    principal is the provisioner from then on. `narrow` reduces authority, which
    is what an operator needs in an incident, so a tenant-wide stop does not
-   block it; a stop on the requester, on the workload that dispatches it or on
-   the effect type does.
+   block it; a stop on the requester or on the workload that dispatches it
+   does. (A plan effect has no effect-type row, so none is stopped by effect
+   type.)
 
 Every other rule of the effect API holds: idempotency key and request digest
 (R6), approver != requester, the single-use decide token, the approval digest,
@@ -240,7 +244,7 @@ the plan applied or not by its digest; it is never dispatched twice.
 |---|---|---|
 | `EnsurePrincipals` | `helm.gateway.provision` | Creates the tenant's control row if it has none, and each listed principal that is not registered. Changes nothing that exists. Idempotent by nature, so it has no idempotency key. |
 | `GetProvisioning` | `helm.gateway.read` | The applied plan of an organization: digest, `version_ref`, `stage`, `revision`, the applying attempt, the provisioner, and each node with its mandate id, holder, parent, current status and version. `not_found` when it has none. |
-| `ListEffectTypes` | `helm.gateway.read` | The catalog: each effect type the gateway performs, with its risk class, declaration, target form, JSON Schema of its arguments and whether a mandate may grant it. The same for every tenant. |
+| `ListEffectTypes` | `helm.gateway.read` | The catalog: each effect type the gateway's adapters declare, with its risk class, declaration, target form, JSON Schema of its arguments and whether a mandate may grant it. The same for every tenant, ordered by effect type. It lists what this process performs: an adapter a deployment composes in (for example the model gateway's) is listed with the declaration it carries. `helm.authority.lift` is proposed through `Lift` and is not listed. |
 
 The tenant comes only from the token. No request names a tenant or a workspace.
 

@@ -4,6 +4,7 @@ package provision
 // signs nothing.
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -328,6 +329,15 @@ func TestDeclarationsAreTheTwoPlanEffects(t *testing.T) {
 	}
 	if got[effectargs.AuthorityProvision] != adapters.RiskIrreversible || got[effectargs.AuthorityNarrow] != adapters.RiskMedium || len(got) != 2 {
 		t.Fatalf("declarations = %v", got)
+	}
+	// Both are listed in the catalog with their published schema and target
+	// form, and neither is one a mandate may grant.
+	for _, d := range a.Declarations() {
+		published, ok := effectargs.ArgumentSchema(d.EffectType)
+		if !ok || !bytes.Equal(d.ArgumentSchema, published) || d.TargetForm != "org:{org_id}" || d.Grantable || d.Description == "" {
+			t.Errorf("%s: catalog fields target=%q schema=%d bytes grantable=%v description=%q",
+				d.EffectType, d.TargetForm, len(d.ArgumentSchema), d.Grantable, d.Description)
+		}
 	}
 	if r, ok := DeclaredRisk(effectargs.AuthorityNarrow); !ok || r != adapters.RiskMedium {
 		t.Errorf("DeclaredRisk(narrow) = %v %v", r, ok)

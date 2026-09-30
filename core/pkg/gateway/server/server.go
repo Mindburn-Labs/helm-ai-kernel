@@ -20,6 +20,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
 // Server implements EffectGatewayServiceHandler.
@@ -35,10 +36,21 @@ type Server struct {
 // A request message is capped at MaxMessageBytes after decompression, and the
 // request body at MaxBodyBytes on the wire, both before the message reaches a
 // handler, so an unauthenticated caller cannot make the gateway buffer or
-// inflate more than that.
+// inflate more than that. Propose alone has the larger caps of
+// MaxProposeMessageBytes and MaxProposeBodyBytes, because it alone carries an
+// authority plan.
 func (s *Server) Handler() (string, http.Handler) {
 	path, handler := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxMessageBytes))
-	return path, http.MaxBytesHandler(withTLSState(handler), MaxBodyBytes)
+	_, propose := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxProposeMessageBytes))
+	handler = http.MaxBytesHandler(withTLSState(handler), MaxBodyBytes)
+	propose = http.MaxBytesHandler(withTLSState(propose), MaxProposeBodyBytes)
+	return path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == gatewayv1.EffectGatewayServiceProposeProcedure {
+			propose.ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // MaxMessageBytes caps one decoded request message: twice the 64 KiB argument
@@ -48,6 +60,15 @@ const MaxMessageBytes = 128 << 10
 // MaxBodyBytes caps a request body as sent, envelope and compression
 // included.
 const MaxBodyBytes = MaxMessageBytes + 4<<10
+
+// MaxProposeMessageBytes caps a decoded ProposeRequest. The largest argument
+// is an authority plan (effectargs.MaxPlanBytes; every other effect is held to
+// 64 KiB), which a JSON client sends base64-encoded; 64 KiB beside it cover the
+// rest of the request.
+const MaxProposeMessageBytes = (effectargs.MaxPlanBytes+2)/3*4 + 64<<10
+
+// MaxProposeBodyBytes caps a Propose body as sent.
+const MaxProposeBodyBytes = MaxProposeMessageBytes + 4<<10
 
 // Propose admits one effect (token scope helm.gateway.propose).
 func (s *Server) Propose(ctx context.Context, req *connect.Request[gatewayv1.ProposeRequest]) (*connect.Response[gatewayv1.ProposeResponse], error) {

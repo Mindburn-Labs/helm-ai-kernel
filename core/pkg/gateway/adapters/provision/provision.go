@@ -40,6 +40,17 @@ const (
 	trustClass        = "gateway_ledger"
 )
 
+// schemaOf is the published argument schema of one of this adapter's effect
+// types. The gateway's own authority effects are never grantable: no mandate
+// names them.
+func schemaOf(effectType string) []byte {
+	body, _ := effectargs.ArgumentSchema(effectType)
+	return body
+}
+
+// targetForm is the form of both effects' target.
+const targetForm = "org:{org_id}"
+
 var declarations = []adapters.Declaration{
 	{
 		EffectType: effectargs.AuthorityProvision,
@@ -51,6 +62,9 @@ var declarations = []adapters.Declaration{
 		Notes: "Applies an organization's whole authority plan in one transaction, by compare-and-set on the digest " +
 			"of the plan applied now; the plan applied again changes nothing. Needs a distinct human's approval with step-up. " +
 			"Observe reads the applied digest back.",
+		TargetForm:     targetForm,
+		Description:    "Applies one organization's whole authority plan: its effect types, principals, mandates and limits.",
+		ArgumentSchema: schemaOf(effectargs.AuthorityProvision),
 	},
 	{
 		EffectType: effectargs.AuthorityNarrow,
@@ -61,6 +75,9 @@ var declarations = []adapters.Declaration{
 		Mediation:  adapters.MediationEnforced,
 		Notes: "Applies a plan that only narrows the one applied, and needs no approval; it is accepted only from the " +
 			"organization's provisioner. Only a provision plan, which needs approval, widens again. Observe reads the applied digest back.",
+		TargetForm:     targetForm,
+		Description:    "Applies a plan that only narrows the organization's applied plan.",
+		ArgumentSchema: schemaOf(effectargs.AuthorityNarrow),
 	},
 }
 

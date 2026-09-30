@@ -140,6 +140,23 @@ type Declaration struct {
 	ActivityTrail bool
 	// Notes qualifies the declaration in one or two sentences.
 	Notes string
+
+	// The rest is the effect type's entry in the catalog that
+	// AuthorityAdminService.ListEffectTypes serves. An adapter that leaves it
+	// empty is listed without a schema, and never as grantable.
+
+	// TargetForm is the form of Effect.Target, for example
+	// "github.com/{owner}/{repo}".
+	TargetForm string
+	// Description is one or two sentences on what the effect does.
+	Description string
+	// ArgumentSchema is the JSON Schema (draft 2020-12) of the effect's
+	// arguments, as UTF-8 JSON. It is closed: the gateway refuses what it does
+	// not allow.
+	ArgumentSchema []byte
+	// Grantable is whether a mandate may grant the effect type. It is false for
+	// the gateway's own authority effects (helm.authority.*).
+	Grantable bool
 }
 
 // Amount is one quote entry, as the proto's ResourceAmount.

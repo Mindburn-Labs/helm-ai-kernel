@@ -39,6 +39,10 @@ func IsAuthorityPlan(effectType string) bool {
 	return effectType == AuthorityProvision || effectType == AuthorityNarrow
 }
 
+// ValidOrgRef reports whether ref can name an organization in a plan:
+// "org:<id>".
+func ValidOrgRef(ref string) bool { return orgRefPattern.MatchString(ref) }
+
 // WidensAuthority reports whether effectType is one of the gateway's own
 // authority effects (helm.authority.*) that widens, and so needs a distinct
 // human's approval with step-up: every one but helm.authority.narrow.v1, which

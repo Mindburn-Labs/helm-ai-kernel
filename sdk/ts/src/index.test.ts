@@ -107,12 +107,12 @@ describe('HelmClient', () => {
   // ── chatCompletions ─────────────────────────────────
   describe('chatCompletions', () => {
     it('POSTs to /v1/chat/completions with request body', async () => {
-      const mockRes = { id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: 'gpt-4', choices: [] };
+      const mockRes = { id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: 'gpt-6-sol', choices: [] };
       fetchSpy.mockResolvedValue(jsonResponse(mockRes));
       const client = new HelmClient({ baseUrl: 'http://h' });
 
       const result = await client.chatCompletions({
-        model: 'gpt-4',
+        model: 'gpt-6-sol',
         messages: [{ role: 'user', content: 'hi' }],
       });
 
@@ -194,31 +194,6 @@ describe('HelmClient', () => {
   });
 
   // ── Conformance ─────────────────────────────────────
-  describe('conformanceRun', () => {
-    it('POSTs to /api/v1/conformance/run', async () => {
-      const report = { report_id: 'rpt1', level: 'L1', verdict: 'PASS', gates: 12, failed: 0, details: {} };
-      fetchSpy.mockResolvedValue(jsonResponse(report));
-      const client = new HelmClient({ baseUrl: 'http://h' });
-      const result = await client.conformanceRun({ level: 'L1' });
-      expect(result.verdict).toBe('PASS');
-      expect(result.gates).toBe(12);
-    });
-  });
-
-  describe('getConformanceReport', () => {
-    it('GETs conformance report by ID', async () => {
-      const report = { report_id: 'rpt1', level: 'L1', verdict: 'PASS', gates: 12, failed: 0, details: {} };
-      fetchSpy.mockResolvedValue(jsonResponse(report));
-      const client = new HelmClient({ baseUrl: 'http://h' });
-      const result = await client.getConformanceReport('rpt1');
-      expect(fetchSpy).toHaveBeenCalledWith(
-        'http://h/api/v1/conformance/reports/rpt1',
-        expect.objectContaining({ method: 'GET' }),
-      );
-      expect(result.report_id).toBe('rpt1');
-    });
-  });
-
   describe('execution boundary surfaces', () => {
     it('creates evidence envelope manifests', async () => {
       fetchSpy.mockResolvedValue(jsonResponse({

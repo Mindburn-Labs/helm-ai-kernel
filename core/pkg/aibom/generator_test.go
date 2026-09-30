@@ -12,7 +12,7 @@ func TestGenerate_BasicBOM(t *testing.T) {
 		{
 			ModelID:      "model-1",
 			Provider:     "anthropic",
-			ModelName:    "claude-sonnet-4",
+			ModelName:    "claude-sonnet-5",
 			ModelVersion: "20250514",
 			License:      "proprietary",
 			Parameters:   "unknown",
@@ -124,7 +124,7 @@ func TestGenerate_ContentHash(t *testing.T) {
 	bom1, err := Generate(GenerateConfig{
 		Component: "component-a",
 		Models: []ModelProvenance{
-			{ModelID: "m1", Provider: "openai", ModelName: "gpt-4", ModelVersion: "v1"},
+			{ModelID: "m1", Provider: "openai", ModelName: "gpt-6-sol", ModelVersion: "v1"},
 		},
 	})
 	if err != nil {

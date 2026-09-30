@@ -88,6 +88,24 @@ func (s runtimeEvidenceSealSigner) PublicKeyHex() string {
 	return s.publicKey
 }
 
+// protectConfiguredTenantStore guards a tenant_scoped route whose store has no
+// tenant dimension: the boundary SurfaceRegistry and the Launchpad run store are
+// each one process-wide store. Such a store belongs to the tenant this Kernel is
+// configured for (HELM_RUNTIME_TENANT_ID, "default" when unset), so any other
+// bound tenant is refused rather than shown or allowed to change that tenant's
+// records (S-05). Partitioning these stores per tenant would need a tenant
+// field on their records and persisted ownership; it is not done.
+func protectConfiguredTenantStore(handler http.HandlerFunc) http.HandlerFunc {
+	return protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+		tenantID, err := authenticatedReceiptTenantID(r.Context())
+		if err != nil || tenantID != configuredRuntimeTenantID() {
+			api.WriteForbidden(w, "This surface is not partitioned by tenant; it serves only the Kernel's configured tenant")
+			return
+		}
+		handler(w, r)
+	})
+}
+
 func registerContractRoutes(mux routeMux, svc *Services) {
 	mcpQuarantine := mcppkg.NewQuarantineRegistry()
 	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
@@ -96,7 +114,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 	}
 	hydrateMCPQuarantine(context.Background(), mcpQuarantine, surfaces.ListMCPServers())
 
-	mux.HandleFunc("/api/v1/boundary/status", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/boundary/status", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -104,7 +122,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, surfaces.Status(displayVersion(), svc != nil && svc.ReceiptStore != nil, svc != nil && svc.ReceiptSigner != nil, countMCPQuarantined(mcpQuarantine.List(r.Context()))))
 	}))
 
-	mux.HandleFunc("/api/v1/boundary/capabilities", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/boundary/capabilities", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -112,7 +130,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, surfaces.Capabilities())
 	}))
 
-	mux.HandleFunc("/api/v1/boundary/records", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/boundary/records", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			api.WriteMethodNotAllowed(w)
 			return
@@ -129,7 +147,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, surfaces.ListRecords(query))
 	}))
 
-	mux.HandleFunc("/api/v1/boundary/records/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/boundary/records/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/boundary/records/")
 		recordID, verify := strings.CutSuffix(suffix, "/verify")
 		if recordID == "" || strings.Contains(recordID, "/") {
@@ -338,7 +356,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, result)
 	})
 
-	mux.HandleFunc("/api/v1/evidence/verification-scopes", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/evidence/verification-scopes", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			writeContractJSON(w, http.StatusOK, surfaces.ListVerificationScopes())
@@ -367,7 +385,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 		}
 	}))
-	mux.HandleFunc("/api/v1/evidence/verification-scopes/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/evidence/verification-scopes/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/evidence/verification-scopes/"), "/verify")
 		if id == "" || strings.Contains(id, "/") {
 			api.WriteBadRequest(w, "Invalid verification scope id")
@@ -393,7 +411,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, scope)
 	}))
 
-	mux.HandleFunc("/api/v1/telemetry/harness-traces", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/telemetry/harness-traces", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			writeContractJSON(w, http.StatusOK, surfaces.ListHarnessTraces())
@@ -422,7 +440,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 		}
 	}))
-	mux.HandleFunc("/api/v1/telemetry/harness-traces/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/telemetry/harness-traces/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/telemetry/harness-traces/"), "/verify")
 		if id == "" || strings.Contains(id, "/") {
 			api.WriteBadRequest(w, "Invalid harness trace id")
@@ -448,7 +466,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, trace)
 	}))
 
-	mux.HandleFunc("/api/v1/plans/transactions", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/plans/transactions", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			writeContractJSON(w, http.StatusOK, surfaces.ListPlanTransactions())
@@ -477,7 +495,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 		}
 	}))
-	mux.HandleFunc("/api/v1/plans/transactions/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/plans/transactions/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		id, verify := strings.CutSuffix(strings.TrimPrefix(r.URL.Path, "/api/v1/plans/transactions/"), "/verify")
 		if id == "" || strings.Contains(id, "/") {
 			api.WriteBadRequest(w, "Invalid plan transaction id")
@@ -503,7 +521,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		writeContractJSON(w, http.StatusOK, tx)
 	}))
 
-	mux.HandleFunc("/api/v1/harness/change-contracts", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/harness/change-contracts", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			writeContractJSON(w, http.StatusOK, surfaces.ListHarnessChanges())
@@ -534,7 +552,7 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			api.WriteMethodNotAllowed(w)
 		}
 	}))
-	mux.HandleFunc("/api/v1/harness/change-contracts/", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/harness/change-contracts/", protectConfiguredTenantStore(func(w http.ResponseWriter, r *http.Request) {
 		suffix := strings.TrimPrefix(r.URL.Path, "/api/v1/harness/change-contracts/")
 		id, verify := strings.CutSuffix(suffix, "/verify")
 		if verify {
@@ -586,14 +604,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			return
 		}
 		writeContractJSON(w, http.StatusOK, contract)
-	}))
-
-	mux.HandleFunc("/api/v1/gui/receipts/verify", protectRuntimeHandler(RouteAuthTenant, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/gui/receipts/verify")
 	}))
 
 	mux.HandleFunc("/api/v1/evidence/envelopes", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -716,30 +726,6 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 		checks["replay"] = checks["causal_chain"]
 		writeContractJSON(w, http.StatusOK, result)
 	})
-
-	mux.HandleFunc("/api/v1/conformance/run", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/conformance/run")
-	}))
-
-	mux.HandleFunc("/api/v1/conformance/reports", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/conformance/reports")
-	}))
-
-	mux.HandleFunc("/api/v1/conformance/reports/", protectRuntimeHandler(RouteAuthAdmin, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			api.WriteMethodNotAllowed(w)
-			return
-		}
-		writeRetiredVerificationRoute(w, "/api/v1/conformance/reports/{report_id}")
-	}))
 
 	mux.HandleFunc("/api/v1/conformance/vectors", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -892,11 +878,11 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			Risk:                string(record.Risk),
 			State:               string(record.State),
 			ToolCount:           len(record.ToolNames),
-			Findings:            []string{"unknown MCP server defaults to quarantine", "schema pins required before call-time dispatch"},
+			Findings:            []string{"unknown MCP server defaults to quarantine"},
 			RecommendedAction:   "approve or revoke after review",
 			QuarantineRecordID:  record.ServerID,
 			RequiresApproval:    true,
-			SchemaPinRequired:   true,
+			SchemaPinRequired:   false,
 			AuthorizationNeeded: true,
 			ScannedAt:           time.Now().UTC(),
 		})
@@ -959,15 +945,13 @@ func registerContractRoutes(mux routeMux, svc *Services) {
 			}
 		}
 		firewall := mcppkg.NewExecutionFirewall(catalog, mcpQuarantine, "api")
-		firewall.RequirePinnedSchema = true
 		record, err := firewall.AuthorizeToolCall(r.Context(), mcppkg.ToolCallAuthorization{
-			ServerID:         req.ServerID,
-			ToolName:         req.ToolName,
-			ArgsHash:         req.ArgsHash,
-			GrantedScopes:    req.GrantedScopes,
-			PinnedSchemaHash: req.PinnedSchemaHash,
-			OAuthResource:    req.OAuthResource,
-			ReceiptID:        req.ReceiptID,
+			ServerID:      req.ServerID,
+			ToolName:      req.ToolName,
+			ArgsHash:      req.ArgsHash,
+			GrantedScopes: req.GrantedScopes,
+			OAuthResource: req.OAuthResource,
+			ReceiptID:     req.ReceiptID,
 		})
 		if err != nil {
 			api.WriteInternalR(w, r, err)
@@ -2442,26 +2426,4 @@ func telemetryConfig() contracts.TelemetryOTelConfig {
 		},
 		ExportedSignals: []string{"traces", "metrics", "logs"},
 	}
-}
-
-// retiredVerificationRoutes maps each public route retired by HELM-742 to the
-// reason it answers 501. Each route used to report a verification result that
-// no check produced. They stay in the OpenAPI contract, marked deprecated, so a
-// later release can drop them without failing the breaking-change gate.
-var retiredVerificationRoutes = map[string]string{
-	"/api/v1/conformance/run":                 retiredConformanceReason,
-	"/api/v1/conformance/reports":             retiredConformanceReason,
-	"/api/v1/conformance/reports/{report_id}": retiredConformanceReason,
-	"/api/v1/gui/receipts/verify":             "GUI action receipts carry no signature, so the runtime has no trust root to verify them against",
-	"/api/v1/trust/keys/add":                  retiredTrustKeysReason,
-	"/api/v1/trust/keys/revoke":               retiredTrustKeysReason,
-}
-
-const (
-	retiredConformanceReason = "the runtime API does not run conformance gates; run `helm-ai-kernel conform` against an evidence pack"
-	retiredTrustKeysReason   = "trust-key mutation was never wired to a verifier; configure trusted keys in the verifier trust configuration"
-)
-
-func writeRetiredVerificationRoute(w http.ResponseWriter, path string) {
-	api.WriteError(w, http.StatusNotImplemented, "Not implemented", retiredVerificationRoutes[path])
 }

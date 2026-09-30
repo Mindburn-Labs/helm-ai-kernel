@@ -1,7 +1,9 @@
 # Task Capability Tokens (R4)
 
 **Status:** core in-process signed mint, verification, use consumption, and
-Guardian wiring are implemented. The bundled in-memory token store is
+a Guardian option (`WithCapabilityTokenVerifier`) are implemented and tested. No
+shipped binary installs the option, so no token is checked in `serve`, `proxy` or
+`mcp serve` today (`controls.yaml` CTL-042). The bundled in-memory token store is
 process-local; durable shared token state, cross-process revocation,
 permit-ceremony mint authority, and emergency-stop fan-out remain follow-up.
 **Origin:** Step AOS 可控 ("权限按需授予、用完即收" — granted on demand,

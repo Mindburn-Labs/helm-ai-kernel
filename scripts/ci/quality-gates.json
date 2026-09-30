@@ -29,55 +29,80 @@
         "java-sdk",
         "json-schemas",
         "contract-breaking-self-test",
+        "release-rehearsal-self-test",
         "proto-breaking",
         "openapi-breaking",
         "secrets",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "deadcode",
+        "dead-packages",
+        "control-registry"
       ]
     },
     "merge": {
-      "description": "Full merge gate for retained OSS surfaces.",
+      "description": "Full merge gate: `make check` runs it with every gate blocking, and `ci / gate` runs `make check`.",
       "gates": [
         "quality-self-test",
+        "gate-self-tests",
+        "concept-change-markers",
         "docs-truth",
+        "docs-openapi-parity",
         "version-drift",
         "console-sidecar-pin",
         "release-workflow-contract",
+        "scorecard-workflow-contract",
         "presentation-hygiene",
         "tracked-file-hygiene",
+        "unfinished-markers",
         "go-lint",
+        "proofgraph-signature-writes",
+        "reason-code-reachability",
         "build",
         "go-test",
+        "postgres-proofs",
+        "tcb-coverage",
         "command-tests",
+        "go-module-tests",
+        "launchpad-promotion",
         "verify-fixtures",
+        "release-no-mock-tee",
         "tcb-imports",
         "boundary-manifest",
+        "boundary-regression",
         "quantum-crypto-inventory",
         "docker-smoke-hardening",
         "helm-smoke-hardening",
         "tla-tools-hardening",
         "crucible",
+        "benchmark-report",
         "go-race",
-        "go-sdk",
         "python-sdk",
         "ts-sdk",
         "rust-sdk",
         "java-sdk",
+        "sdk-manifest-tests",
+        "sdk-drift",
         "json-schemas",
         "sdk-openapi-check",
         "codegen-drift",
         "proto-lint",
         "contract-breaking-self-test",
+        "release-rehearsal-self-test",
         "proto-gates-self-test",
+        "idl-breaking-release",
         "proto-breaking",
+        "openapi-breaking",
         "deployment-smoke",
+        "kind-smoke",
         "release-smoke",
         "secrets",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "deadcode",
+        "control-registry"
       ]
     },
     "release": {
@@ -112,6 +137,7 @@
         "codegen-drift",
         "proto-lint",
         "contract-breaking-self-test",
+        "release-rehearsal-self-test",
         "proto-gates-self-test",
         "contract-breaking-release",
         "benchmark-report",
@@ -124,7 +150,8 @@
         "secrets",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "deadcode"
       ]
     },
     "nightly": {
@@ -145,7 +172,8 @@
         "dead-packages",
         "gosec",
         "govulncheck",
-        "pip-audit"
+        "pip-audit",
+        "release-rehearsal"
       ]
     },
     "typecheck": {
@@ -342,6 +370,24 @@
       "timeout_seconds": 1200,
       "paths": [
         "core/**",
+        "protocols/conformance/gateway/**",
+        "docs/architecture/gateway-effect-api.md",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "postgres-proofs",
+      "title": "Postgres-gated proofs",
+      "description": "Runs every proof in scripts/ci/postgres-proofs.txt against PostgreSQL 16 (HELM_TEST_POSTGRES_URL, else a disposable UTC cluster) and fails on a skip, a failure, a short count, an unlisted gated test or a missing database. Positive controls first prove the runner refuses a run without a database and an unlisted test.",
+      "command": "make postgres-proofs",
+      "timeout_seconds": 1800,
+      "paths": [
+        "core/**",
+        "protocols/conformance/gateway/**",
+        "scripts/ci/postgres_proofs.sh",
+        "scripts/ci/postgres_proofs_gate.sh",
+        "scripts/ci/postgres-proofs.txt",
+        "scripts/ci/check_postgres_proofs.py",
         "Makefile"
       ]
     },
@@ -507,6 +553,7 @@
         "schemas/**",
         "protocols/json-schemas/**",
         "protocols/specs/**",
+        "protocols/conformance/gateway/**",
         "api/openapi/**",
         ".github/schema-requirements.txt",
         "scripts/ci/check_json_schemas.py",
@@ -568,6 +615,41 @@
         "scripts/ci/quality-gates.json",
         "scripts/ci/quality.py",
         "Makefile"
+      ]
+    },
+    {
+      "id": "release-rehearsal-self-test",
+      "title": "Release rehearsal regression test",
+      "description": "Hermetic: computes the next version through the real contract gate in a fixture repository, proves catalog fetch errors are UNKNOWN (never PASS), a missing pin row is ACTION-NEEDED, and a planted half key pair in the chart FAILs, and requires release-rehearsal.yml to report every repository secret and variable release.yml reads.",
+      "command": "make test-release-rehearsal",
+      "timeout_seconds": 180,
+      "paths": [
+        ".github/workflows/release.yml",
+        ".github/workflows/release-rehearsal.yml",
+        "scripts/release/rehearse.py",
+        "scripts/release/rehearse_test.py",
+        "scripts/release/check_version_drift.py",
+        "scripts/release/console_local_sidecar.py",
+        "scripts/ci/contract_breaking.sh",
+        "release/console-local-sidecar-pins.json",
+        "release/version-surfaces.yaml",
+        "Makefile"
+      ]
+    },
+    {
+      "id": "release-rehearsal",
+      "title": "Release rehearsal against main",
+      "description": "Runs scripts/release/rehearse.py: the version the next tag would carry, checked against the pre-publish preconditions of release.yml. Fails only on a defect that blocks any version; ACTION-NEEDED and UNKNOWN rows are printed, not failed. Needs network; release-rehearsal.yml runs it daily with the release toolchain.",
+      "command": "make release-rehearsal",
+      "timeout_seconds": 900,
+      "advisory": true,
+      "paths": [
+        ".github/workflows/release.yml",
+        "scripts/release/rehearse.py",
+        "deploy/helm-chart/**",
+        "release/console-local-sidecar-pins.json",
+        "api/openapi/helm.openapi.yaml",
+        "VERSION"
       ]
     },
     {
@@ -753,7 +835,7 @@
     {
       "id": "vuln-audit",
       "title": "Dependency vulnerability audits",
-      "description": "npm audit and cargo audit. Go (govulncheck) and the Python SDK (pip-audit) have their own blocking gates.",
+      "description": "npm audit of sdk/ts. Go (govulncheck), Python (pip-audit) and Rust (the Rust audit job in codeql.yml) are audited by blocking gates.",
       "command": "bash scripts/ci/vuln_audit.sh",
       "timeout_seconds": 1800,
       "advisory": true,
@@ -793,7 +875,8 @@
       "paths": [
         "core/pkg/**",
         "scripts/ci/mutation-test.sh"
-      ]
+      ],
+      "description": "avito-tech/go-mutesting over core/pkg/firewall, threshold 80%; no parsable score or zero mutants fails."
     },
     {
       "id": "flake-core",
@@ -882,22 +965,183 @@
       ]
     },
     {
+      "id": "deadcode",
+      "title": "Unreachable code in shipped binaries",
+      "description": "golang.org/x/tools deadcode from scripts/ci/deadcode-roots.txt. A planted-function positive control runs first; unreachable functions not in scripts/ci/deadcode-allowlist.txt, and allowlisted functions that are no longer unreachable, fail.",
+      "command": "bash scripts/ci/deadcode_gate.sh",
+      "timeout_seconds": 1200
+    },
+    {
       "id": "dead-packages",
       "title": "Importer-less package census",
-      "description": "Lists core/pkg packages no other package imports. Advisory until docs/architecture/dead-package-decisions.md has zero open rows, then drop this flag.",
+      "description": "Importer-less core/pkg packages must be allowlisted (deliberate library surface) or listed in scripts/ci/dead-packages-frozen.txt; a stale line on either list fails, so deletion PRs must remove it. Runs in the pr profile so the deletion PR, not the nightly, carries that edit.",
       "command": "make dead-packages",
       "timeout_seconds": 300,
-      "advisory": true,
       "paths": [
         "core/**",
-        "tools/**",
-        "tests/**",
-        "sdk/go/**",
-        "examples/**",
         "scripts/ci/check_dead_packages.py",
-        "scripts/ci/dead-packages.sh",
-        "scripts/ci/dead-packages-allowlist.txt"
+        "scripts/ci/dead-packages*"
       ]
+    },
+    {
+      "id": "unfinished-markers",
+      "title": "Unfinished markers in .github and sdk",
+      "command": "bash scripts/ci/check_unfinished_markers.sh",
+      "timeout_seconds": 120,
+      "paths": [
+        "**"
+      ]
+    },
+    {
+      "id": "proofgraph-signature-writes",
+      "title": "ProofGraph signature write guard",
+      "command": "bash scripts/ci/check_proofgraph_signature_writes.sh",
+      "timeout_seconds": 120,
+      "paths": [
+        "core/**/*.go"
+      ]
+    },
+    {
+      "id": "reason-code-reachability",
+      "title": "Reason-code reachability",
+      "command": "python3 scripts/ci/check_reason_code_reachability.py",
+      "timeout_seconds": 300,
+      "paths": [
+        "core/**",
+        "scripts/ci/check_reason_code_reachability.py"
+      ]
+    },
+    {
+      "id": "go-module-tests",
+      "title": "Every Go module tested without the workspace",
+      "command": "bash scripts/ci/go_module_tests.sh",
+      "timeout_seconds": 2400,
+      "paths": [
+        "**/*.go",
+        "**/go.mod",
+        "**/go.sum"
+      ]
+    },
+    {
+      "id": "launchpad-promotion",
+      "title": "Launchpad promotion drift",
+      "command": "make launchpad-promotion-check",
+      "timeout_seconds": 600,
+      "paths": [
+        "core/**",
+        "registry/launchpad/**"
+      ]
+    },
+    {
+      "id": "release-no-mock-tee",
+      "title": "Release TEE mock attestation guard",
+      "command": "bash scripts/ci/check_release_no_mock_tee.sh",
+      "timeout_seconds": 120,
+      "paths": [
+        ".github/workflows/**",
+        "scripts/release/**"
+      ]
+    },
+    {
+      "id": "boundary-regression",
+      "title": "Boundary gate regression suite",
+      "command": "make test-boundary",
+      "timeout_seconds": 1200,
+      "paths": [
+        "core/**",
+        "tools/boundary/**"
+      ]
+    },
+    {
+      "id": "sdk-manifest-tests",
+      "title": "SDK manifest unit tests",
+      "command": "make test-sdk-manifest",
+      "timeout_seconds": 300,
+      "paths": [
+        "scripts/sdk/**"
+      ]
+    },
+    {
+      "id": "sdk-drift",
+      "title": "SDK regenerate-and-diff",
+      "command": "make sdk-gen-check",
+      "timeout_seconds": 1200,
+      "paths": [
+        "sdk/**",
+        "scripts/sdk/**",
+        "api/openapi/**",
+        "protocols/**"
+      ]
+    },
+    {
+      "id": "kind-smoke",
+      "title": "kind install smoke",
+      "command": "make kind-smoke",
+      "timeout_seconds": 2400,
+      "paths": [
+        "Dockerfile*",
+        "deploy/**",
+        "core/**",
+        "scripts/ci/kind_smoke.sh"
+      ]
+    },
+    {
+      "id": "docs-openapi-parity",
+      "title": "Public docs and OpenAPI parity",
+      "command": "make docs-openapi-parity",
+      "timeout_seconds": 600,
+      "paths": [
+        "docs/**",
+        "api/openapi/**",
+        "core/cmd/helm-ai-kernel/**"
+      ]
+    },
+    {
+      "id": "gate-self-tests",
+      "title": "Gate script self-tests",
+      "command": "python3 -m unittest discover -s scripts/ci -p '*_test.py' && python3 -m unittest discover -s scripts/ci -p 'test_*.py'",
+      "timeout_seconds": 600,
+      "paths": [
+        "scripts/ci/**"
+      ]
+    },
+    {
+      "id": "concept-change-markers",
+      "title": "Invariant amendment markers over the change",
+      "command": "bash scripts/ci/concept_gate_range.sh",
+      "timeout_seconds": 300,
+      "paths": [
+        "HELM_INVARIANTS.md",
+        "tools/invcheck/**"
+      ]
+    },
+    {
+      "id": "idl-breaking-release",
+      "title": "protocols/proto buf breaking against the last release tag",
+      "command": "bash scripts/ci/contract_breaking.sh proto release",
+      "timeout_seconds": 600,
+      "paths": [
+        "protocols/**",
+        "scripts/ci/contract_breaking.sh"
+      ]
+    },
+    {
+      "id": "tcb-coverage",
+      "title": "TCB package coverage floors",
+      "command": "make coverage-tcb",
+      "timeout_seconds": 1200,
+      "paths": [
+        "core/**",
+        "scripts/ci/check_tcb_coverage.py",
+        "scripts/ci/tcb-coverage-floors.txt"
+      ]
+    },
+    {
+      "id": "control-registry",
+      "title": "Control registry and generated coverage map",
+      "description": "Binding rule R1 (HELM-746). Resolves the invariant hints, self-tests on planted registry entries, then fails on an invalid controls.yaml entry, an enforced entry point unreachable from scripts/ci/deadcode-roots.txt, a named test that go test -list does not report, a removal mutation the tests survive, or a HELM_INVARIANTS.md or coverage-map.json that differs from the registry.",
+      "command": "make controls-check",
+      "timeout_seconds": 900
     }
   ]
 }

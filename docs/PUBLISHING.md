@@ -72,25 +72,49 @@ The repository retains packaging metadata for the kernel binaries, container ima
 | TypeScript SDK | `@mindburn/helm-ai-kernel` |
 | Python SDK | `helm-sdk` |
 | Rust SDK | `helm-sdk` |
-| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.8.5` |
-| Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.5`; publish with the subdirectory tag `sdk/go/v0.8.5` |
+| Java SDK | Maven Central coordinate `io.github.mindburnlabs:helm-sdk:0.10.5` |
+| Go SDK | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.10.5`; publish with the subdirectory tag `sdk/go/v0.10.5` |
+
+## Rehearse Before Tagging
+
+`make release-rehearsal` (`scripts/release/rehearse.py`) answers, before a
+tag exists, whether the next release would pass `release.yml`. It picks the
+version the tag would carry: `VERSION` when it is ahead of the latest `v*`
+tag, otherwise the smallest bump the contract gates accept (a break needs a
+major bump, or a minor bump while the version is `0.y.z`). It then checks the
+contract gates against the last tag, the `contracts-catalog` spec blob, the
+Console sidecar pin row and its annotated `helm-console-sidecar-v<version>`
+tag, version lockstep, the npm, PyPI and crates.io packages, the production
+chart render and its key pairs, the deployment environments, and every
+repository secret and variable `release.yml` reads.
+
+Each row is `PASS`, `FAIL`, `ACTION-NEEDED` (a per-release step, printed with
+its remedy) or `UNKNOWN` (not readable here, never a pass). Trusted-publisher
+settings are always `UNKNOWN`, because no registry exposes them; the row names
+the exact settings each registry must hold. The command exits non-zero only on
+a `FAIL`, a defect that blocks any version; `REHEARSAL_ARGS=--strict` fails on
+`ACTION-NEEDED` too. `.github/workflows/release-rehearsal.yml` runs it on
+`main` every day and on demand, and writes the table to the run summary.
 
 ## Release Inputs
 
 Before tagging a release:
 
-1. run `make prepare-version VERSION=<version>` and review the coordinated
+1. run `make release-rehearsal`: fix every `FAIL` row first; its
+   `ACTION-NEEDED` rows name which of the steps below this release needs, so
+   re-run it after step 3 until none is left
+2. run `make prepare-version VERSION=<version>` and review the coordinated
    bump across `VERSION`, chart metadata, SDK manifests, OpenAPI metadata,
    generated SDK headers, and release docs
-2. synchronize `api/openapi/helm.openapi.yaml` into
+3. synchronize `api/openapi/helm.openapi.yaml` into
    `Mindburn-Labs/contracts-catalog` and merge the catalog change to `main`
-3. update `CHANGELOG.md`
-4. run `make docs-coverage docs-truth`
-5. run `make quality-merge`
-6. run `make quality-release`
-7. run `make release-readiness`
-8. run `make release-assets`
-9. after publication, run or confirm `make version-drift-published`
+4. update `CHANGELOG.md`
+5. run `make docs-coverage docs-truth`
+6. run `make quality-merge`
+7. run `make quality-release`
+8. run `make release-readiness`
+9. run `make release-assets`
+10. after publication, run or confirm `make version-drift-published`
 
 Tag-triggered release workflows fail if the tag `v<version>` does not match
 the checked-in `VERSION` file, the tag's peeled commit is not reachable from
@@ -108,14 +132,15 @@ The retained workflow set under `.github/workflows/` covers:
 - GitHub Release creation for tagged versions
 - Homebrew formula generation for `Mindburn-Labs/homebrew-tap`
 - GHCR image publication for `latest`, version tag, and slim tag
-- Go SDK subdirectory tag publication for `sdk/go/v0.8.5`
+- Go SDK subdirectory tag publication for `sdk/go/v0.10.5`
 - tag-triggered npm, PyPI, crates.io, and Maven-compatible SDK publication
 - daily published registry drift monitoring through `make version-drift-published`
+- a daily release rehearsal of `main` through `make release-rehearsal`
 
-Release target: `v0.8.5`. The release is complete only after the tagged
+Release target: `v0.10.5`. The release is complete only after the tagged
 workflow publishes every lockstep channel, attaches `version-status.json` to
 the GitHub Release, and `make version-drift-published` passes for that version:
-<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.8.5>.
+<https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.5>.
 
 There is no public GitHub Release object for `v0.4.1`; use `v0.4.0` as the
 actual release baseline when auditing the `v0.5.0` delta.
@@ -129,7 +154,7 @@ The release workflow attaches these assets:
 - `helm-ai-kernel-windows-amd64.exe`
 - `SHA256SUMS.txt`
 - `sbom.json`
-- `v0.8.5.openvex.json`
+- `v0.10.5.openvex.json`
 - `release-attestation.json`
 - `evidence-pack.tar`
 - `release.high_risk.v3.toml`
@@ -140,14 +165,14 @@ The release workflow attaches these assets:
 - `helm-ai-kernel-*-console.tar.gz`
 - `CONSOLE-SHA256SUMS.txt`
 - `helm-ai-kernel.rb`
-- `v0.8.5.json`
+- `v0.10.5.json`
 - matching `*.cosign.bundle` files for every primary asset
 
 `sample-policy-material.tar` includes the sample policy and its referenced EU
 AI Act high-risk reference pack. The local Console sidecars and standalone
 browser UI layouts are Kernel release assets; the Homebrew formula does not
 install them.
-The retained release workflow attaches a `helm-ai-kernel.rb` formula asset for version `0.8.5`
+The retained release workflow attaches a `helm-ai-kernel.rb` formula asset for version `0.10.5`
 and publishes the same version to `Mindburn-Labs/homebrew-tap`;
 `version-status.json` must include a passing `homebrew-tap` surface before
 documenting `brew install mindburn-labs/tap/helm-ai-kernel` as current.
@@ -158,8 +183,9 @@ publishing from `release.yml`, with no stored registry token; Maven Central and
 Homebrew publication use the `MAVEN_*` and `HOMEBREW_TAP_TOKEN` secrets. If a
 registry rejects the workflow identity or a secret is absent, the release
 workflow must fail instead of documenting a partial release as complete. A
-failed channel is repaired by re-running the failed jobs of the same tag run;
-channels that already carry the version are skipped.
+failure before any publication may be retried as a complete unchanged workflow.
+After an immutable channel publishes, preserve the partial release and fix
+forward in a new version. Never selectively rerun publishers or move a tag.
 
 Do not document an asset as published unless it appears on the GitHub release
 or is produced by a retained workflow and attached to that release.
@@ -175,7 +201,7 @@ writes the final `SHA256SUMS.txt`.
 
 Every public release must include enough material to verify what was downloaded.
 For the current release target, use `SHA256SUMS.txt`, `sbom.json`,
-`v0.8.5.openvex.json`, `release-attestation.json`, the platform binary assets,
+`v0.10.5.openvex.json`, `release-attestation.json`, the platform binary assets,
 attached `*.cosign.bundle` files, and the offline `evidence-pack.tar`.
 
 Every release signature is made by the tag release workflow, so its signing

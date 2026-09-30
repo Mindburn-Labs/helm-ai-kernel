@@ -65,11 +65,11 @@ are client libraries, not executable Kernel installs.
 | OpenClaw / Hermes adapters | [tool runtime adapters](INTEGRATIONS/tool-runtime-adapters.md) |
 | Framework adapters | [framework adapters](INTEGRATIONS/framework-adapters.md) |
 | Skill Packs | `helm-ai-kernel skills search --json` |
-| Agent risk scan | `helm-ai-kernel scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` |
+| Agent risk scan | `helm-risk-scan scan --path . --risk-envelope out/risk-envelope.json --preview out/risk-report.md` (separate `helm-risk-scan` binary) |
 | MCP quarantine and recovery | `mcp authorize-call`, `mcp quarantine`, `mcp pending`, `mcp receipts`, `mcp revoke`; `mcp approve` rejects opaque local approval metadata |
 | OpenAI proxy | `helm-ai-kernel proxy --port 9090` |
 | Receipts | `helm-ai-kernel receipts status --format json`, `mcp receipts --json`, `boundary records --json` |
-| Conformance | `helm-ai-kernel conform --level L1 --json` and `--level L2` |
+| Conformance | `helm-ai-kernel conform vectors --json` and `conform negative --json` |
 | SDKs | source clients under `sdk/` with local test targets |
 
 ## Prove The Boundary
@@ -100,7 +100,7 @@ helm-ai-kernel verify --bundle ~/.helm-ai-kernel/proofs/<run-id>/evidencepacks/<
 The explicit opt-in is required because this local proof creates its own
 signing key. It proves internal consistency, not provenance.
 
-When the `v0.8.5` GitHub Release publishes an `evidence-pack.tar`, use that
+When the `v0.10.5` GitHub Release publishes an `evidence-pack.tar`, use that
 release asset for release verification instead of a local proof bundle. Until
 then, the local proof bundle above is the verifiable path.
 

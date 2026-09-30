@@ -465,7 +465,7 @@ func commandSectionSpecs() []commandSectionSpec {
 			ID:    "operate",
 			Title: "Operate",
 			Commands: []string{
-				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "credential-keys", "did", "freeze", "identity", "import", "incident", "policy", "secret", "tee", "telemetry", "trust", "unfreeze", "workstation",
+				"approvals", "authz", "boundary", "budget", "bundle", "coexistence", "counterfactual", "credential-keys", "did", "freeze", "identity", "import", "incident", "policy", "secret", "telemetry", "trust", "unfreeze", "workstation",
 			},
 		},
 	}
@@ -485,7 +485,7 @@ func completionContexts() []completionContext {
 		{Path: []string{"receipts", "list"}, Candidates: []string{"--server", "--limit", "--json", "--format", "text", "json"}},
 		{Path: []string{"receipts", "show"}, Candidates: []string{"--id", "--file", "--server", "--json", "--format", "text", "json"}},
 		{Path: []string{"receipts", "status"}, Candidates: []string{"--json", "--format", "text", "json"}},
-		{Path: []string{"scan"}, Candidates: []string{"--path", "--from-receipts", "--cohort", "unknown", "1-10repos", "11-50repos", "51-200repos", "201plusrepos", "--salt-file", "--risk-envelope", "--preview", "--evidence-pack", "--no-user-config", "--upload", "--upload-url", "--yes"}},
+		{Path: []string{"scan"}, Candidates: []string{"--path", "--from-receipts", "--cohort", "unknown", "1-10repos", "11-50repos", "51-200repos", "201plusrepos", "--salt-file", "--risk-envelope", "--preview", "--evidence-pack", "--no-user-config"}},
 		{Path: []string{"setup"}, Candidates: []string{"claude-code", "codex", "hermes", "deepseek", "status", "repair", "remove", "--client", "--print-config", "--json", "--quickstart", "--profile", "claude", "codex", "mcp", "openai-compatible", "--yes", "--dry-run", "--data-dir", "--console", "--console-port", "--no-open", "--offline", "--reset"}},
 		{Path: []string{"setup", "claude-code"}, Candidates: []string{"--scope", "user", "project", "--workspace", "--data-dir", "--dry-run", "--json", "--yes", "--no-quickstart", "--quickstart", "--console", "--console-port", "--no-open", "--signing-seed-file", "--policy-profile", "--policy-profile-sha256"}},
 		{Path: []string{"setup", "codex"}, Candidates: []string{"--scope", "user", "project", "--workspace", "--data-dir", "--dry-run", "--json", "--yes", "--no-quickstart", "--quickstart", "--console", "--console-port", "--no-open", "--signing-seed-file", "--policy-profile", "--policy-profile-sha256"}},

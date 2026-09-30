@@ -28,7 +28,7 @@ func runMCPWrap(args []string, stdout, stderr io.Writer) int {
 	cmd.StringVar(&upstreamCommand, "upstream-command", "", "Command used to launch an upstream stdio MCP server")
 	cmd.StringVar(&upstreamURL, "upstream-url", "", "HTTP URL for an upstream remote MCP server")
 	cmd.StringVar(&policyEpoch, "policy-epoch", "local", "Policy epoch to bind into execution-boundary records")
-	cmd.BoolVar(&requirePinnedSchema, "require-pinned-schema", true, "Deny tool calls unless the caller supplies the pinned schema hash")
+	cmd.BoolVar(&requirePinnedSchema, "require-pinned-schema", false, "Deprecated and ignored (HELM-756): no dispatch path enforces a schema pin")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output wrapper profile as JSON")
 	if err := cmd.Parse(args); err != nil {
 		return 2
@@ -43,13 +43,12 @@ func runMCPWrap(args []string, stdout, stderr io.Writer) int {
 	}
 
 	profile := map[string]any{
-		"server_id":             serverID,
-		"policy_epoch":          policyEpoch,
-		"require_pinned_schema": requirePinnedSchema,
-		"quarantine_default":    "quarantined",
-		"list_time_controls":    []string{"quarantine", "scope_filtering"},
-		"call_time_controls":    []string{"quarantine", "scope_check", "schema_pin", "deny_receipt"},
-		"receipt_binding":       []string{"policy_epoch", "mcp_server_id", "oauth_resource", "oauth_scopes", "args_hash", "record_hash"},
+		"server_id":          serverID,
+		"policy_epoch":       policyEpoch,
+		"quarantine_default": "quarantined",
+		"list_time_controls": []string{"quarantine", "scope_filtering"},
+		"call_time_controls": []string{"quarantine", "scope_check", "deny_receipt"},
+		"receipt_binding":    []string{"policy_epoch", "mcp_server_id", "oauth_resource", "oauth_scopes", "args_hash", "record_hash"},
 	}
 	if upstreamCommand != "" {
 		profile["transport"] = "stdio"

@@ -268,11 +268,9 @@ func consoleSurfaceDefinitions() []consoleSurfaceDefinition {
 		{ID: "receipts", Label: "Receipts", Group: "Proof", Source: "/api/v1/receipts"},
 		{ID: "evidence", Label: "Evidence", Group: "Proof", Source: "/api/v1/evidence/export"},
 		{ID: "replay", Label: "Replay", Group: "Proof", Source: "/api/v1/replay/verify"},
-		{ID: "conformance", Label: "Conformance", Group: "Proof", Source: "/api/v1/conformance/reports", Status: "unsupported", UnsupportedReason: retiredConformanceReason},
 		{ID: "proofgraph", Label: "ProofGraph", Group: "Proof", Source: "/api/v1/proofgraph/sessions"},
 		{ID: "harness", Label: "Harness", Group: "Developer", Source: "/api/v1/harness/change-contracts"},
 		{ID: "launchpad", Label: "Launchpad", Group: "Runtime", Source: "/api/v1/launchpad/matrix"},
-		{ID: "trust", Label: "Trust Keys", Group: "Policy", Source: "/api/v1/trust/keys/add", Status: "unsupported", UnsupportedReason: retiredTrustKeysReason},
 		{ID: "telemetry", Label: "Telemetry", Group: "Developer", Source: "/api/v1/telemetry/otel/config"},
 		{ID: "coexistence", Label: "Coexistence", Group: "Developer", Source: "/api/v1/coexistence/capabilities"},
 		{ID: "audit", Label: "Audit", Group: "Proof", Source: "/api/v1/console/surfaces/audit"},
@@ -309,10 +307,9 @@ func buildConsoleSurfaceState(ctx context.Context, svc *Services, opts serverOpt
 		base["records"] = aggregateActions(receipts)
 	case "approvals":
 		base["status"] = "not_configured"
-		base["source"] = "/api/v1/kernel/approve"
+		base["source"] = "/api/v1/approvals"
 		base["summary"] = map[string]any{
-			"pending": 0,
-			"reason":  "approval submission is wired; pending approval queue persistence is not configured in this runtime",
+			"reason": "this surface does not read the approval ceremony store; list ceremonies through GET /api/v1/approvals",
 		}
 		base["records"] = []any{}
 	case "policies":
@@ -573,9 +570,6 @@ func consoleRouteDiagnosticForSpec(spec RuntimeRouteSpec) consoleRouteDiagnostic
 }
 
 func routeUICoverage(spec RuntimeRouteSpec) (string, string) {
-	if reason, retired := retiredVerificationRoutes[spec.Path]; retired {
-		return "unsupported", reason
-	}
 	if spec.Auth == RouteAuthService || spec.ContractStatus == RouteContractInternal {
 		return "unsupported", "service-internal route is not callable from the OSS Console"
 	}

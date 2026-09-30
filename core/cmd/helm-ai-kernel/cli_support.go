@@ -59,7 +59,7 @@ func printFrontDoor(out io.Writer) {
 	renderer.WriteCompletion(ui.CompletionCard{
 		Title: "Useful next commands",
 		Fields: []ui.KeyValue{
-			{Key: "Inspect", Value: "helm-ai-kernel scan --path . --preview out.md"},
+			{Key: "Inspect", Value: "helm-risk-scan scan --path . --preview out.md"},
 			{Key: "Receipts", Value: "helm-ai-kernel receipts status  (list|show|verify|export; tail needs --agent)"},
 			{Key: "Automation", Value: "helm-ai-kernel help --json"},
 		},

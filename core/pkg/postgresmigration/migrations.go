@@ -15,6 +15,7 @@ import (
 	generatedspecapprovalceremony "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary/generatedspecapprovalceremony"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/credentials"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry"
 	connectorregistry "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/registry/connectors"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/store"
@@ -166,6 +167,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		{"scoped emergency-stop store", kernel.MigratePostgres},
 		{"approval ceremony stores", approvalceremony.MigratePostgres},
 		{"generated spec approval ceremony store", generatedspecapprovalceremony.MigratePostgres},
+		{"authority rows", migrateAuthorityRows},
 	}
 	for _, step := range steps {
 		if err := step.fn(ctx, db); err != nil {
@@ -174,6 +176,20 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO kernel_schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT (version) DO UPDATE SET name = EXCLUDED.name`, kernelPostgresSchemaVersion, kernelPostgresMigrationName); err != nil {
 		return fmt.Errorf("record kernel migration journal: %w", err)
+	}
+	return nil
+}
+
+// AuthorityRowTables are the ADR-0001 authority rows (HELM-750). Each has a
+// tenant_id column and is under forced row security with the tenant policy,
+// so the startup check in ValidateRuntime covers them once they exist. The
+// kernel does not read them; the effect gateway's admission transaction
+// (HELM-751, cmd/helm-gateway) does, from its own database.
+var AuthorityRowTables = mandates.Tables
+
+func migrateAuthorityRows(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, mandates.SchemaDDL()); err != nil {
+		return fmt.Errorf("apply authority rows migration: %w", err)
 	}
 	return nil
 }
@@ -316,7 +332,131 @@ func ValidateRuntime(ctx context.Context, db *sql.DB, options RuntimeOptions) er
 			}
 		}
 	}
-	return validateRuntimeRole(ctx, db)
+	if err := validateRuntimeRole(ctx, db); err != nil {
+		return err
+	}
+	unforced, err := TenantTablesWithoutForcedRowSecurity(ctx, db)
+	if err != nil {
+		return err
+	}
+	if len(unforced) > 0 {
+		return fmt.Errorf("kernel postgres tenant tables %v lack forced row security with the tenant policy; run the owner migration command", unforced)
+	}
+	// Without principal_lookup, forced row security hides every other tenant's
+	// binding from the Control Plane token cross-check, which would then treat
+	// a principal bound elsewhere as unbound and let it through (ADR-0005 §3).
+	lookup, err := principalLookupPolicyPresent(ctx, db)
+	if err != nil {
+		return err
+	}
+	if !lookup {
+		return errors.New("kernel postgres principal_bindings lacks the principal_lookup policy the Control Plane token check relies on; run the owner migration command")
+	}
+	return nil
+}
+
+// principalLookupPolicyPresent reports whether principal_bindings carries the
+// principal_lookup policy exactly as the migration installs it.
+func principalLookupPolicyPresent(ctx context.Context, db *sql.DB) (bool, error) {
+	var present bool
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1 FROM pg_catalog.pg_policy AS policy
+		JOIN pg_catalog.pg_class AS relation ON relation.oid = policy.polrelid
+		JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+		WHERE namespace.nspname = current_schema() AND `+principalLookupPolicyMatch+`)`, store.PrincipalLookupPolicyExpr).Scan(&present); err != nil {
+		return false, fmt.Errorf("inspect principal_bindings lookup policy: %w", err)
+	}
+	return present, nil
+}
+
+// principalLookupPolicyMatch selects the principal_lookup policy exactly as
+// store.MigratePostgresPrincipalBindings installs it; $1 is its predicate.
+const principalLookupPolicyMatch = `relation.relname = 'principal_bindings'
+		AND policy.polname = 'principal_lookup'
+		AND policy.polcmd = 'r'
+		AND policy.polpermissive
+		AND policy.polroles = '{0}'
+		AND policy.polwithcheck IS NULL
+		AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) = $1`
+
+// The deparsed predicates a tenant policy may carry besides
+// store.TenantRowSecurityPolicyExpr, for TEXT columns. The scope policies of
+// the emergency-stop, approval-ceremony and generated-spec stores add the
+// workspace; connector_release_authorities also admits its global rows.
+// They are literals because ValidateRuntime is SELECT-only and cannot derive
+// them by creating a policy; the Postgres catalog test derives them from the
+// real migration on every run, so a Postgres release that deparses them
+// differently fails that proof, and serving fails closed.
+const (
+	tenantWorkspacePolicyExpr  = "((tenant_id = current_setting('app.current_tenant'::text, true)) AND (workspace_id = current_setting('app.current_workspace'::text, true)))"
+	releaseAuthorityPolicyExpr = "((scope_kind = 'global'::text) OR ((scope_kind = 'tenant_workspace'::text) AND (tenant_id = current_setting('app.current_tenant'::text, true)) AND (workspace_id = current_setting('app.current_workspace'::text, true))))"
+)
+
+// tenantPolicyMatch selects a policy that isolates its table by tenant exactly
+// as the kernel migrations install it: for all commands, permissive, for
+// PUBLIC, with a WITH CHECK identical to its USING, and that predicate
+// store.TenantRowSecurityPolicyExpr ($2) or tenantWorkspacePolicyExpr ($3) on
+// any tenant table, or releaseAuthorityPolicyExpr ($4) on
+// connector_release_authorities. It is NULL for a policy without USING or
+// WITH CHECK, which the caller must treat as no match. The policy name is not
+// matched: it does not change what a policy admits, and the stores name theirs
+// differently.
+const tenantPolicyMatch = `policy.polcmd = '*'
+		AND policy.polpermissive
+		AND policy.polroles = '{0}'
+		AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid) = pg_catalog.pg_get_expr(policy.polqual, policy.polrelid)
+		AND (pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) IN ($2, $3)
+		     OR (relation.relname = 'connector_release_authorities'
+		         AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid) = $4))`
+
+// TenantTablesWithoutForcedRowSecurity lists the tables in the current schema
+// that have a tenant_id column but are not isolated by it: row security not
+// enabled or not forced, no exact tenant policy (tenantPolicyMatch), or any
+// other policy at all, since a permissive one would widen the tenant policy.
+// principal_bindings' principal_lookup policy is the single allowed extra,
+// matched exactly (principalLookupPolicyMatch).
+// Serving refuses to start on a non-empty result, and the Postgres catalog
+// test asserts it is empty after a full migration (ADR-0004 B-I3).
+func TenantTablesWithoutForcedRowSecurity(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT relation.relname
+		FROM pg_catalog.pg_class AS relation
+		JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+		JOIN pg_catalog.pg_attribute AS attribute
+		  ON attribute.attrelid = relation.oid AND attribute.attname = 'tenant_id' AND NOT attribute.attisdropped
+		WHERE namespace.nspname = current_schema()
+		  AND relation.relkind IN ('r', 'p')
+		  AND NOT (
+		      relation.relrowsecurity
+		      AND relation.relforcerowsecurity
+		      AND EXISTS (
+		          SELECT 1 FROM pg_catalog.pg_policy AS policy
+		          WHERE policy.polrelid = relation.oid AND `+tenantPolicyMatch+`
+		      )
+		      AND NOT EXISTS (
+		          SELECT 1 FROM pg_catalog.pg_policy AS policy
+		          WHERE policy.polrelid = relation.oid
+		            -- A match that is NULL (no USING or no WITH CHECK) is none.
+		            AND NOT COALESCE((`+tenantPolicyMatch+`) OR (`+principalLookupPolicyMatch+`), false)
+		      )
+		  )
+		ORDER BY relation.relname`,
+		store.PrincipalLookupPolicyExpr, store.TenantRowSecurityPolicyExpr, tenantWorkspacePolicyExpr, releaseAuthorityPolicyExpr)
+	if err != nil {
+		return nil, fmt.Errorf("inspect kernel postgres row security: %w", err)
+	}
+	defer rows.Close()
+	var unforced []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			return nil, fmt.Errorf("scan kernel postgres row security: %w", err)
+		}
+		unforced = append(unforced, table)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read kernel postgres row security: %w", err)
+	}
+	return unforced, nil
 }
 
 func kernelTableRequired(table string, options RuntimeOptions) bool {

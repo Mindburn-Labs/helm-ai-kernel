@@ -72,15 +72,10 @@ func TestExecutionFirewallEscalatesUnknownServerBeforeDispatch(t *testing.T) {
 	}
 	firewall := NewExecutionFirewall(catalog, NewQuarantineRegistry(), "epoch-42")
 	firewall.Clock = boundaryFixedClock()
-	hash, err := ToolSchemaHash(tool)
-	if err != nil {
-		t.Fatalf("schema hash: %v", err)
-	}
 	record, err := firewall.AuthorizeToolCall(ctx, ToolCallAuthorization{
-		ServerID:         "srv-unknown",
-		ToolName:         "local.echo",
-		ArgsHash:         "sha256:args",
-		PinnedSchemaHash: hash,
+		ServerID: "srv-unknown",
+		ToolName: "local.echo",
+		ArgsHash: "sha256:args",
 	})
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
@@ -115,102 +110,45 @@ func TestExecutionFirewallDeniesScopeMismatch(t *testing.T) {
 	}
 }
 
-func TestExecutionFirewallDeniesMissingSchemaPin(t *testing.T) {
+// HELM-756: a caller-supplied schema pin bound nothing (the same caller
+// supplied the schema), so the firewall no longer reads one. A schema that
+// cannot be hashed is still refused.
+func TestExecutionFirewallDeniesUnhashableSchema(t *testing.T) {
 	ctx := context.Background()
 	firewall := approvedFirewall(t)
-	firewall.RequirePinnedSchema = true
 	if err := firewall.Catalog.Register(ctx, ToolRef{
-		Name:     "local.echo",
+		Name:     "write",
 		ServerID: "srv-1",
-		Schema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"text": map[string]any{"type": "string"},
-			},
-			"required": []string{"text"},
-		},
+		Schema:   map[string]any{"bad": func() {}},
 	}); err != nil {
-		t.Fatalf("register: %v", err)
+		t.Skipf("catalog rejects an unhashable schema at registration: %v", err)
 	}
 	record, err := firewall.AuthorizeToolCall(ctx, ToolCallAuthorization{
 		ServerID: "srv-1",
-		ToolName: "local.echo",
+		ToolName: "write",
 		ArgsHash: "sha256:args",
 	})
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if record.Verdict != contracts.VerdictEscalate || record.ReasonCode != contracts.ReasonSchemaViolation {
-		t.Fatalf("expected missing pin escalation, got %s/%s", record.Verdict, record.ReasonCode)
-	}
-}
-
-func TestExecutionFirewallDeniesSchemaDrift(t *testing.T) {
-	ctx := context.Background()
-	firewall := approvedFirewall(t)
-	tool := ToolRef{
-		Name:     "write",
-		ServerID: "srv-1",
-		Schema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"path": map[string]any{"type": "string"},
-			},
-		},
-	}
-	if err := firewall.Catalog.Register(ctx, tool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-	hash, err := ToolSchemaHash(tool)
-	if err != nil {
-		t.Fatalf("schema hash: %v", err)
-	}
-	if err := firewall.Catalog.Register(ctx, ToolRef{
-		Name:     "write",
-		ServerID: "srv-1",
-		Schema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"path":    map[string]any{"type": "string"},
-				"content": map[string]any{"type": "string"},
-			},
-		},
-	}); err != nil {
-		t.Fatalf("register drift: %v", err)
-	}
-	record, err := firewall.AuthorizeToolCall(ctx, ToolCallAuthorization{
-		ServerID:         "srv-1",
-		ToolName:         "write",
-		ArgsHash:         "sha256:args",
-		PinnedSchemaHash: hash,
-	})
-	if err != nil {
-		t.Fatalf("authorize: %v", err)
-	}
 	if record.Verdict != contracts.VerdictDeny || record.ReasonCode != contracts.ReasonSchemaViolation {
-		t.Fatalf("expected schema drift denial, got %s/%s", record.Verdict, record.ReasonCode)
+		t.Fatalf("expected schema violation denial, got %s/%s", record.Verdict, record.ReasonCode)
 	}
 }
 
-func TestExecutionFirewallAllowsApprovedScopedPinnedCall(t *testing.T) {
+func TestExecutionFirewallAllowsApprovedScopedCall(t *testing.T) {
 	ctx := context.Background()
 	firewall := approvedFirewall(t)
 	tool := ToolRef{Name: "write", ServerID: "srv-1", RequiredScopes: []string{"tools.write"}}
 	if err := firewall.Catalog.Register(ctx, tool); err != nil {
 		t.Fatalf("register: %v", err)
 	}
-	hash, err := ToolSchemaHash(tool)
-	if err != nil {
-		t.Fatalf("schema hash: %v", err)
-	}
-	firewall.RequirePinnedSchema = true
 	record, err := firewall.AuthorizeToolCall(ctx, ToolCallAuthorization{
-		ServerID:         "srv-1",
-		ToolName:         "write",
-		ArgsHash:         "sha256:args",
-		GrantedScopes:    []string{"tools.write"},
-		PinnedSchemaHash: hash,
-		OAuthResource:    "https://helm.local/mcp",
+		ServerID:      "srv-1",
+		ToolName:      "write",
+		ArgsHash:      "sha256:args",
+		GrantedScopes: []string{"tools.write"},
+		OAuthResource: "https://helm.local/mcp",
 	})
 	if err != nil {
 		t.Fatalf("authorize: %v", err)

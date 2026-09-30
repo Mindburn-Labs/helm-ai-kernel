@@ -295,6 +295,9 @@ ecosystems, making Renovate the only dependency path into the repo with no human
 in the loop. Auto-merge is now limited to patch, TCB packages (x/crypto, x/net,
 circl, filippo.io, cel-go, open-policy-agent) never auto-merge at any update
 type, and vulnerability alerts are raised for review rather than merged.
+On 2026-09-24 `renovate.json` was removed: no Renovate App was installed, so it
+never ran. Dependabot version updates now come from the Mindburn-Labs
+`platform-actions` template and merge only through the required `ci / gate`.
 
 ### Remaining after this session
 
@@ -627,7 +630,8 @@ rather than implied.
 **Needs review, not blindly silenced:**
 
 - `G115` integer-overflow conversions in `crypto/tee/nitro.go` and
-  `nitro_cose.go` (7 sites). These parse attestation documents from an enclave,
+  `nitro_cose.go` (7 sites). Resolved by deletion: `crypto/tee` was removed in
+  HELM-756 after its only caller, the `tee` CLI, was retired. These parse attestation documents from an enclave,
   so a truncating conversion on a length or index field is exactly where a
   malformed document would do damage. They should be read individually before
   the gate goes blocking; suppressing them wholesale would defeat the point.

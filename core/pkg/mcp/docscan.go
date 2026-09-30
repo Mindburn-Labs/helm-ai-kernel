@@ -128,6 +128,13 @@ func NewDocScanner(opts ...DocScanOption) *DocScanner {
 	return s
 }
 
+// ToolDefinition is the input representation of an MCP tool for scanning.
+type ToolDefinition struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"input_schema,omitempty"`
+}
+
 // ScanToolDescription scans a single tool description string for DDIPE patterns.
 func (s *DocScanner) ScanToolDescription(serverID, toolName, description string) []DocScanFinding {
 	return s.scanText(serverID, toolName, description, "description")

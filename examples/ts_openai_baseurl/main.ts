@@ -13,7 +13,7 @@ async function main() {
   console.log('=== Chat Completions ===');
   try {
     const res = await helm.chatCompletions({
-      model: 'gpt-4',
+      model: 'gpt-6-sol',
       messages: [{ role: 'user', content: 'List files in /tmp' }],
     });
     console.log('Response:', res.choices[0]?.message?.content ?? 'no content');
@@ -35,17 +35,6 @@ async function main() {
   } catch (err) {
     if (err instanceof HelmApiError) {
       console.log('Evidence error:', err.reasonCode);
-    }
-  }
-
-  // 3. Conformance
-  console.log('\n=== Conformance ===');
-  try {
-    const conf = await helm.conformanceRun({ level: 'L2' });
-    console.log('Verdict:', conf.verdict, 'Gates:', conf.gates, 'Failed:', conf.failed);
-  } catch (err) {
-    if (err instanceof HelmApiError) {
-      console.log('Conformance error:', err.reasonCode);
     }
   }
 

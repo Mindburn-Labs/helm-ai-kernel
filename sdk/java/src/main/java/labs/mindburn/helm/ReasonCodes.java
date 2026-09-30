@@ -265,9 +265,6 @@ public final class ReasonCodes {
     /** DENY: Sandboxed execution exceeded the configured wall-clock time budget */
     public static final String ERR_COMPUTE_TIME_EXHAUSTED = "ERR_COMPUTE_TIME_EXHAUSTED";
 
-    /** DENY: Medium or high risk execution is missing a VerificationScope */
-    public static final String ERR_VERIFICATION_SCOPE_REQUIRED = "ERR_VERIFICATION_SCOPE_REQUIRED";
-
     /** DENY: Side-effectful execution is missing a hash-linked HarnessTrace */
     public static final String ERR_HARNESS_TRACE_REQUIRED = "ERR_HARNESS_TRACE_REQUIRED";
 
@@ -283,9 +280,6 @@ public final class ReasonCodes {
     /** ESCALATE: Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state
     /** requires explicit approval */
     public static final String ERR_HARNESS_MUTATION_REQUIRES_APPROVAL = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL";
-
-    /** DENY: Harness mutation lacks a valid HarnessChangeContract */
-    public static final String ERR_HARNESS_CHANGE_CONTRACT_INVALID = "ERR_HARNESS_CHANGE_CONTRACT_INVALID";
 
     /** DENY: Passing tests were submitted without a declared verification scope */
     public static final String ERR_GREEN_TEST_SCOPE_MISSING = "ERR_GREEN_TEST_SCOPE_MISSING";
@@ -337,6 +331,68 @@ public final class ReasonCodes {
     /** DENY: Irreversible effect class cannot dispatch without an authoritative approval
     /** integration */
     public static final String CAPABILITY_IRREVERSIBLE = "CAPABILITY_IRREVERSIBLE";
+
+    /** DENY: A precondition the effect type declares does not hold, so no attempt was created */
+    public static final String PRECONDITION_FAILED = "PRECONDITION_FAILED";
+
+    /** DENY: The adapter's read-back of the provider does not match the proposed effect, so the
+    /** outcome is FAILED */
+    public static final String READBACK_MISMATCH = "READBACK_MISMATCH";
+
+    /** DENY: The arguments an adapter was about to send are not the bytes the permit's argument
+    /** digest covers */
+    public static final String PERMIT_ARGUMENT_MISMATCH = "PERMIT_ARGUMENT_MISMATCH";
+
+    /** DENY: The connection's credential is unavailable, or the provider rejected it as invalid,
+    /** revoked or lacking permission */
+    public static final String PROVIDER_CREDENTIAL_REJECTED = "PROVIDER_CREDENTIAL_REJECTED";
+
+    /** DENY: A provider response exceeded the adapter's size limit and was not read */
+    public static final String PROVIDER_RESPONSE_TOO_LARGE = "PROVIDER_RESPONSE_TOO_LARGE";
+
+    /** DENY: The provider failed or refused the call for a reason other than its credential */
+    public static final String PROVIDER_ERROR = "PROVIDER_ERROR";
+
+    /** DENY: The requesting principal is unknown to the tenant or disabled */
+    public static final String PRINCIPAL_INACTIVE = "PRINCIPAL_INACTIVE";
+
+    /** DENY: No active mandate held by the principal covers the effect, or a mandate of its chain
+    /** is revoked */
+    public static final String MANDATE_INACTIVE = "MANDATE_INACTIVE";
+
+    /** DENY: A mandate of the chain is outside its validity window */
+    public static final String MANDATE_OUTSIDE_VALIDITY = "MANDATE_OUTSIDE_VALIDITY";
+
+    /** DENY: A mandate of the chain does not cover the effect type or target, or the effect type
+    /** has no control row */
+    public static final String EFFECT_OUT_OF_SCOPE = "EFFECT_OUT_OF_SCOPE";
+
+    /** DENY: The effect's amount exceeds a per-call limit of the mandate chain */
+    public static final String PER_CALL_LIMIT = "PER_CALL_LIMIT";
+
+    /** DENY: An amount or counter total overflows a 64-bit integer */
+    public static final String ARITHMETIC_OVERFLOW = "ARITHMETIC_OVERFLOW";
+
+    /** DENY: The idempotency key was already used with a different request */
+    public static final String IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT";
+
+    /** DENY: The approver is the requester; an approval needs a distinct principal */
+    public static final String APPROVER_NOT_DISTINCT = "APPROVER_NOT_DISTINCT";
+
+    /** DENY: A distinct human approver rejected the escalated effect */
+    public static final String APPROVAL_REJECTED = "APPROVAL_REJECTED";
+
+    /** DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
+    /** assertion the request did not carry */
+    public static final String STEP_UP_REQUIRED = "STEP_UP_REQUIRED";
+
+    /** DENY: An authority row the permit was issued under changed before the dispatch claim; the
+    /** permit is voided and the effect must be proposed again */
+    public static final String AUTHORITY_CHANGED = "AUTHORITY_CHANGED";
+
+    /** DENY: The permit expired before the dispatch claim; it is voided and the effect must be
+    /** proposed again */
+    public static final String PERMIT_EXPIRED = "PERMIT_EXPIRED";
 
     /** Every registered reason code. */
     public static final Set<String> ALL = Set.of(
@@ -423,13 +479,11 @@ public final class ReasonCodes {
             ERR_CONNECTOR_CONTRACT_DRIFT,
             ERR_COMPUTE_GAS_EXHAUSTED,
             ERR_COMPUTE_TIME_EXHAUSTED,
-            ERR_VERIFICATION_SCOPE_REQUIRED,
             ERR_HARNESS_TRACE_REQUIRED,
             ERR_PLAN_TRANSACTION_REQUIRED,
             ERR_PLAN_TRANSACTION_CONFLICT,
             ERR_ASSUMPTION_STALE,
             ERR_HARNESS_MUTATION_REQUIRES_APPROVAL,
-            ERR_HARNESS_CHANGE_CONTRACT_INVALID,
             ERR_GREEN_TEST_SCOPE_MISSING,
             ERR_GROUNDED_ACTION_REF_REQUIRED,
             ERR_GUI_POSTCONDITION_UNVERIFIED,
@@ -445,7 +499,25 @@ public final class ReasonCodes {
             CAPABILITY_MANIFEST_DRIFT,
             CAPABILITY_TOKEN_INVALID,
             CAPABILITY_ROLLBACK_PLAN_INVALID,
-            CAPABILITY_IRREVERSIBLE);
+            CAPABILITY_IRREVERSIBLE,
+            PRECONDITION_FAILED,
+            READBACK_MISMATCH,
+            PERMIT_ARGUMENT_MISMATCH,
+            PROVIDER_CREDENTIAL_REJECTED,
+            PROVIDER_RESPONSE_TOO_LARGE,
+            PROVIDER_ERROR,
+            PRINCIPAL_INACTIVE,
+            MANDATE_INACTIVE,
+            MANDATE_OUTSIDE_VALIDITY,
+            EFFECT_OUT_OF_SCOPE,
+            PER_CALL_LIMIT,
+            ARITHMETIC_OVERFLOW,
+            IDEMPOTENCY_CONFLICT,
+            APPROVER_NOT_DISTINCT,
+            APPROVAL_REJECTED,
+            STEP_UP_REQUIRED,
+            AUTHORITY_CHANGED,
+            PERMIT_EXPIRED);
 
     /** Whether {@code code} is in the registry. */
     public static boolean isRegistered(String code) {

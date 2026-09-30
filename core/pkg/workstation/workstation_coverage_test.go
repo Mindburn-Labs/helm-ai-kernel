@@ -473,8 +473,7 @@ func TestWorkstationDecisionReceiptAndClassifierCoverage(t *testing.T) {
 	normalizeReceiptCollections(&contracts.AgentRunReceipt{})
 }
 
-func TestWorkstationCertificationBranchesAndPolicyLoadErrors(t *testing.T) {
-	root := filepath.Join(repoRoot(t), "fixtures", "workstation")
+func TestWorkstationPolicyLoadErrors(t *testing.T) {
 	defaultProfile, err := LoadPolicyProfileFile("")
 	if err != nil {
 		t.Fatal(err)
@@ -529,31 +528,6 @@ func TestWorkstationCertificationBranchesAndPolicyLoadErrors(t *testing.T) {
 	}
 	if _, err := readToolEvents(t.TempDir()); err == nil {
 		t.Fatal("expected directory tool event scan error")
-	}
-
-	observe := CertifyAdapterFixtures("", root, "")
-	if !observe.Passed || observe.AdapterID != "workstation-manifest-adapter" || observe.CertifiedAs != CertificationObserveOnly || !observe.ObservedOnly {
-		t.Fatalf("observe certification = %+v", observe)
-	}
-	enforceable := CertifyAdapterFixtures("adapter", root, CertificationEnforceable)
-	if !enforceable.Passed || enforceable.CertifiedAs != CertificationEnforceable {
-		t.Fatalf("enforceable certification = %+v", enforceable)
-	}
-	missing := CertifyAdapterFixtures("adapter", t.TempDir(), CertificationObserveOnly)
-	if missing.Passed {
-		t.Fatalf("expected missing fixtures certification failure: %+v", missing)
-	}
-	if requiredFixtureFilesExist(t.TempDir(), "missing") {
-		t.Fatal("requiredFixtureFilesExist unexpectedly passed")
-	}
-	if allChecksPass([]CertificationCheck{{Status: "PASS"}, {Status: "FAIL"}}) {
-		t.Fatal("allChecksPass accepted a failing check")
-	}
-	if ok, msg := certifyObserveOnly(t.TempDir(), workstationTestSigningSeed()); ok || msg == "" {
-		t.Fatalf("expected observe-only certification failure, got ok=%v msg=%q", ok, msg)
-	}
-	if ok, msg := certifyHighRiskFixtures(t.TempDir(), workstationTestSigningSeed()); ok || msg == "" {
-		t.Fatalf("expected high-risk certification failure, got ok=%v msg=%q", ok, msg)
 	}
 }
 

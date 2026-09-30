@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jcs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize/legacyjson"
 	"github.com/google/uuid"
 )
 
@@ -311,13 +311,13 @@ func (p *CELPolicyDecisionPoint) UpdatePolicyBundle(newVersionHash string) {
 // --- Helpers ---
 
 func hashRequest(req PDPRequest) string {
-	data, _ := jcs.Marshal(req) // Use Canonical encoding
+	data, _ := legacyjson.Marshal(req) // Use Canonical encoding
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
 }
 
 func hashInputs(inputs map[string]string) string {
-	data, _ := jcs.Marshal(inputs)
+	data, _ := legacyjson.Marshal(inputs)
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
 }

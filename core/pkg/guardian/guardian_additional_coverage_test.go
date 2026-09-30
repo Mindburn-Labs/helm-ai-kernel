@@ -180,10 +180,17 @@ func TestExt_EmptyRequestFailsClosed(t *testing.T) {
 // ─── 10: Freeze verdict is always DENY ────────────────────────
 
 func TestExt_FreezeVerdictIsDeny(t *testing.T) {
+	// The policy allows the action, so the DENY below can only come from the
+	// freeze. With no policy the Guardian denies anyway, and the test would
+	// pass with the freeze gate deleted.
 	fc := kernel.NewFreezeController()
+	g := NewGuardian(&testSigner{}, allowGraphFor("test-resource"), pkg_artifact.NewRegistry(newTestStore(), nil), WithFreezeController(fc))
+	req := DecisionRequest{Principal: "p", Action: "EXECUTE_TOOL", Resource: "test-resource"}
+	if dec, _ := g.EvaluateDecision(context.Background(), req); dec.Verdict != string(contracts.VerdictAllow) {
+		t.Fatalf("precondition: the unfrozen Guardian must allow, got %s (%s)", dec.Verdict, dec.ReasonCode)
+	}
 	fc.Freeze("admin")
-	g := newMinimalGuardian(WithFreezeController(fc))
-	dec, _ := g.EvaluateDecision(context.Background(), DecisionRequest{Principal: "p", Action: "a", Resource: "test-resource"})
+	dec, _ := g.EvaluateDecision(context.Background(), req)
 	if dec.Verdict != string(contracts.VerdictDeny) {
 		t.Fatalf("expected DENY, got %s", dec.Verdict)
 	}

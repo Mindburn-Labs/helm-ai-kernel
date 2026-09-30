@@ -4,13 +4,13 @@ Typed Go client for the HELM kernel HTTP API.
 
 ## Install
 
-After the `sdk/go/v0.8.5` subdirectory tag is published and verified:
+After the `sdk/go/v0.10.5` subdirectory tag is published and verified:
 
 ```bash
-go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.8.5
+go get github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.10.5
 ```
 
-Version truth is the repository `VERSION` file (`0.8.5` for this source target).
+Version truth is the repository `VERSION` file (`0.10.5` for this source target).
 Tagged Go module releases use the subdirectory tag form shown above; this
 source target does not claim that the tag already exists.
 
@@ -55,7 +55,7 @@ func main() {
 
     // Chat completions via the HELM boundary.
     res, err := c.ChatCompletions(helm.ChatCompletionRequest{
-        Model:    "gpt-4",
+        Model:    "gpt-6-sol",
         Messages: []helm.ChatMessage{{Role: "user", Content: "List files in /tmp"}},
     })
     if err != nil {
@@ -66,10 +66,6 @@ func main() {
         log.Fatal(err)
     }
     fmt.Println(res.Choices[0].Message.Content)
-
-    // Conformance
-    conf, _ := c.ConformanceRun(helm.ConformanceRequest{Level: "L2"})
-    fmt.Println(conf.Verdict, conf.Gates, "gates")
 }
 ```
 
@@ -91,9 +87,6 @@ func main() {
 | `VerifyEvidence(bundle)` | `POST /api/v1/evidence/verify` |
 | `ReplayVerify(bundle)` | `POST /api/v1/replay/verify` |
 | `CreateEvidenceEnvelopeManifest(req)` | `POST /api/v1/evidence/envelopes` |
-| `ConformanceRun(req)` | `POST /api/v1/conformance/run` |
-| `GetConformanceReport(reportID)` | `GET /api/v1/conformance/reports/{id}` |
-| `ListConformanceReports()` | `GET /api/v1/conformance/reports` |
 | `ListNegativeConformanceVectors()` | `GET /api/v1/conformance/negative` |
 | `ListConformanceVectors()` | `GET /api/v1/conformance/vectors` |
 | `ListMCPRegistry()` | `GET /api/v1/mcp/registry` |

@@ -5,7 +5,7 @@ Typed Java client for the retained HELM kernel API.
 ## Package Status
 
 Package metadata in this source tree targets a future Maven Central coordinate.
-The current source target is `0.8.5`.
+The current source target is `0.10.5`.
 This source target does not claim that remote artifacts have been published or
 that the endpoint surface is conformance-certified; verify Maven Central and
 tagged release evidence before using a coordinate. After the tag-driven
@@ -59,7 +59,7 @@ class Example {
   public static void main(String[] args) {
     HelmClient client = new HelmClient("http://127.0.0.1:7714");
     ChatCompletionRequest req = new ChatCompletionRequest()
-        .model("gpt-4")
+        .model("gpt-6-sol")
         .messages(List.of(new ChatCompletionRequestMessagesInner()
             .role(ChatCompletionRequestMessagesInner.RoleEnum.USER)
             .content("hello")));

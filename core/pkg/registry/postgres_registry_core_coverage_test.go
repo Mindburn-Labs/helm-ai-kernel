@@ -144,9 +144,15 @@ func TestPostgresRegistryListAndInstall(t *testing.T) {
 	mock.ExpectQuery("SELECT EXISTS").
 		WithArgs("app").
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	// The install runs in a transaction bound to the tenant (forced row security).
+	mock.ExpectBegin()
+	mock.ExpectExec("SELECT set_config").
+		WithArgs("tenant-1").
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO registry_installations").
 		WithArgs("tenant-1", "app", sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 	if err := registry.Install("tenant-1", "app"); err != nil {
 		t.Fatalf("Install: %v", err)
 	}

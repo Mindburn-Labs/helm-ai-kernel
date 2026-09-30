@@ -1,0 +1,251 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-022",
+  "title": "An operator's stop token cancels only the attempt its authorization_details names",
+  "rule": {
+    "statement": "Cancel with a helm.gateway.stop token requires exactly one helm_effect_cancel authorization_details entry naming the attempt. An unbound stop token, or one bound to another attempt, is permission_denied with INSUFFICIENT_PRIVILEGE and changes nothing; the bound one cancels.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Binding decide and lift tokens (RFC 9396)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "rpc Cancel("
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "stop-unbound": {
+      "scope": "helm.gateway.stop",
+      "sub": "human-c",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "stop-unbound"
+    },
+    "stop-other": {
+      "scope": "helm.gateway.stop",
+      "sub": "human-c",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "stop-other",
+      "authorization_details": [
+        {
+          "type": "helm_effect_cancel",
+          "attempt_id": "{{attempt_id:other}}"
+        }
+      ]
+    },
+    "stop-bound": {
+      "scope": "helm.gateway.stop",
+      "sub": "human-c",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "stop-bound",
+      "authorization_details": [
+        {
+          "type": "helm_effect_cancel",
+          "attempt_id": "{{attempt_id:target}}"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "label": "target",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "target",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/target",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "label": "other",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "other",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/other",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": ""
+        }
+      }
+    },
+    {
+      "rpc": "Cancel",
+      "token": "stop-unbound",
+      "request": {
+        "attempt_id": "{{attempt_id:target}}"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "INSUFFICIENT_PRIVILEGE"
+        }
+      }
+    },
+    {
+      "rpc": "Cancel",
+      "token": "stop-other",
+      "request": {
+        "attempt_id": "{{attempt_id:target}}"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "INSUFFICIENT_PRIVILEGE"
+        }
+      }
+    },
+    {
+      "rpc": "Cancel",
+      "token": "stop-bound",
+      "request": {
+        "attempt_id": "{{attempt_id:target}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "CANCELLED",
+          "reason_code": ""
+        },
+        "existing": false
+      }
+    }
+  ]
+}

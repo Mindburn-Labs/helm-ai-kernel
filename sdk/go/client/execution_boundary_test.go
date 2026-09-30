@@ -265,9 +265,6 @@ func TestGoClientEndpointCoverageMatrix(t *testing.T) {
 			_, err := client.VerifyBoundaryCheckpoint("checkpoint/a b")
 			return err
 		}},
-		{"conformance run", "POST /api/v1/conformance/run", func() error { _, err := client.ConformanceRun(ConformanceRequest{}); return err }},
-		{"get conformance report", "GET /api/v1/conformance/reports/report-1", func() error { _, err := client.GetConformanceReport("report-1"); return err }},
-		{"list conformance reports", "GET /api/v1/conformance/reports", func() error { _, err := client.ListConformanceReports(); return err }},
 		{"list conformance vectors", "GET /api/v1/conformance/vectors", func() error { _, err := client.ListConformanceVectors(); return err }},
 		{"list negative vectors", "GET /api/v1/conformance/negative", func() error { _, err := client.ListNegativeConformanceVectors(); return err }},
 		{"list mcp registry", "GET /api/v1/mcp/registry", func() error { _, err := client.ListMCPRegistry(); return err }},
@@ -368,7 +365,6 @@ func responseForClientMatrix(method string, u *url.URL) any {
 	case "/api/v1/proofgraph/sessions",
 		"/api/v1/boundary/capabilities",
 		"/api/v1/boundary/records",
-		"/api/v1/conformance/reports",
 		"/api/v1/conformance/vectors",
 		"/api/v1/conformance/negative",
 		"/api/v1/mcp/auth-profiles",

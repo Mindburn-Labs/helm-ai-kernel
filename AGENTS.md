@@ -3,6 +3,7 @@
 Welcome to the **helm-ai-kernel** repository. This is the core, open-source execution firewall daemon.
 
 ## Developer Runbook
+* Run what CI runs (the required `ci / gate`): `make check`
 * Build daemon binary: `make build`
 * Unit tests: `make test`
 * Docs coverage and truth lint: `make lint`

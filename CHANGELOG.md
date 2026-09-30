@@ -1,6 +1,6 @@
 ---
 title: HELM AI Kernel Changelog
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-28
 ---
 
 # Changelog
@@ -88,10 +88,381 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-No public feature claim is active in this section. Keep future work, research
-scaffolds, and hardware-backed enforcement language out of the public changelog
-until a tagged release ships source-owned tests, verifier evidence, and release
-artifacts for that exact capability.
+No changes yet.
+
+## [0.10.4] - 2026-09-29
+
+### Added
+
+- Pass the authenticated gateway attempt, consumed permit and admitted quote to
+  adapters after the dispatch claim commits, and reconstruct that context during
+  observation. Effect arguments cannot supply or widen this context.
+- Expose the existing gateway lifecycle through `pkg/gateway/runtime.Run` so a
+  product-owned binary can register adapters without depending on commercial
+  components inside Kernel. The OSS gateway uses the same runtime.
+
+### Validation and scope
+
+- The source change passed all PR and merge-group gates, including PostgreSQL
+  proofs, control-removal tests, build/race checks and deployment smoke.
+- Paired Control Plane proof traverses authenticated admission, finance, a
+  synthetic provider, OrganizationRuntime and durable Console readback. This
+  release does not activate a hosted provider or qualify model accuracy.
+
+## [0.10.3] - 2026-09-29
+
+### Fixed
+
+- Generate binary provenance with the upstream-supported SLSA generator version
+  tag, bind that tag to its reviewed commit, and verify the signed checksum
+  manifest with standard SLSA policy plus exact source and identity checks
+  before registry publication.
+- Require the existing public documentation release metadata and linked routes
+  to pass before publishing immutable artifacts. The final check still requires
+  the newly released documentation version.
+
+### Release scope
+
+- Fix forward after v0.10.2 failed final docs acceptance. Its artifacts and
+  failed workflow receipt remain unchanged; source changes do not qualify old
+  provenance for the standard verifier.
+- Reuse the reviewed Console source and preserve gateway and trusted-core
+  behavior. Publication and the governed runtime journey remain separate gates.
+
+## [0.10.2] - 2026-09-29
+
+### Fixed
+
+- Wait up to 15 minutes for npm publication to expose both the exact SDK
+  version and its `latest` tag before producing the release version receipt.
+  Authentication failures, malformed responses and conflicting versions fail
+  immediately; an exhausted propagation budget still blocks the release.
+
+### Release scope
+
+- Fix-forward release after npm accepted v0.10.1 but its registry propagation
+  outlasted the one-shot version check. Published v0.10.1 artifacts remain intact.
+- Reuses the reviewed Console source and preserves gateway and trusted-core
+  behavior. Artifact publication and runtime acceptance remain separate gates.
+
+## [0.10.1] - 2026-09-28
+
+### Fixed
+
+- Let Homebrew infer the formula version from immutable release URLs, avoiding
+  the strict audit failure that blocked the v0.10.0 tap update.
+- Check inferred Homebrew versions in release drift monitoring while rejecting
+  mixed release URLs and conflicting explicit versions. The release dry run
+  rejects redundant formula version directives before publication.
+
+### Release scope
+
+- Fix-forward release after v0.10.0 published immutable packages and artifacts
+  but failed Homebrew delivery. Published v0.10.0 tags and assets remain intact.
+- Reuses the reviewed Console source from v0.10.0; gateway and trusted-core
+  behavior is unchanged.
+
+## [0.10.0] - 2026-09-27
+
+This minor release introduces the gateway service and typed GitHub effect API.
+Publication and the qa-arm walking-skeleton acceptance are recorded separately
+in the release evidence and HELM-789.
+
+### Added — governed GitHub effects (HELM-751, HELM-753)
+
+- `helm-gateway` serves Propose, GetAttempt, GetAttemptContent, Approve,
+  Reject, Cancel, Dispatch and Observe over the authenticated gateway API.
+  Admission resolves mandates and records the attempt, reservation and permit
+  in one Postgres transaction.
+- `github.repository.get`, `github.branch.create_from_changes` and
+  `github.pull_request.create_draft` have typed arguments and observation
+  results. A draft PR is medium risk and escalates when the mandate requires
+  approval. Approval requires a distinct human and a single-use decide token.
+- Dispatch consumes the permit before provider I/O and permits only the
+  proposing workload to dispatch. The GitHub App credential stays in the
+  gateway; installation tokens request the permissions the effect needs.
+  Observe verifies the provider result, while an uncertain dispatch becomes
+  UNKNOWN and is reconciled through read-back.
+- The release rehearsal checks contracts, version surfaces, Console pins,
+  chart configuration and publication prerequisites before tagging, and runs
+  daily on main (HELM-745).
+
+### Added — deployable gateway and database bootstrap (HELM-789)
+
+- The release image ships `/usr/local/bin/helm-gateway` beside
+  `helm-ai-kernel`. The chart gains a `gateway:` block, off by default, that
+  deploys `helm-gateway serve` with TLS, Control Plane identity tokens, a
+  NetworkPolicy, and a pre-install/pre-upgrade migrate hook. An optional
+  database bootstrap creates the ADR-0004 owner role (`helm_owner`) and runtime
+  role (`helm_gateway`) with least-privilege grants
+  (`deploy/helm-chart/files/gateway-db`), closes the gateway database to
+  PUBLIC, and sets the runtime password only as a client-side SCRAM-SHA-256
+  verifier (`helm-gateway db scram-verifier`). Default chart renders are
+  unchanged. HELM-789.
+
+### Added — gateway conformance, Stop and durable jobs (HELM-751)
+
+- The versioned gateway conformance pack defines 23 scenarios shared by
+  the real gateway and Control Plane fakes. Its runner verifies both the
+  declared outcomes and a deliberately flipped expectation.
+- River persists escalation-expiry and UNKNOWN-reconciliation jobs in the
+  gateway database. Approval and expiry make one transition; reconciliation
+  respects the dispatch fence and hands an unresolved final attempt to a
+  human. `helm-gateway migrate` installs River's schema and `/readyz` checks it.
+- `Stop` blocks new work at tenant, principal, mandate or effect-type scope, checking the
+  proposing actor, approval participants and dispatcher at their respective
+  transitions. Calls already sent to a provider cannot be retracted.
+- Stop and operator Cancel require single-use tokens bound to their exact
+  target. Replay of the same idempotent request remains safe; a changed
+  principal or payload cannot reuse the recorded result.
+- `Lift` creates an escalated, high-risk authority-change attempt. Approval
+  fails closed until passkey step-up is available; this release does not
+  apply a lift. Other active stops continue to block the attempt.
+
+- Admission rejects a quote that omits a unit counted by a summed mandate
+  limit, including zero-cost reads that must quote that unit explicitly.
+  Authority-change effects do not consume those limits.
+
+### Fixed — Postgres sessions use UTC (HELM-776)
+
+- Every Postgres DSN pins the session timezone to UTC, so admission and
+  approval timestamps remain consistent when the database default uses a
+  local timezone.
+
+### Changed — the chart wires the organization-runtime key only with the activation public key (HELM-786)
+
+- New value `helm.auth.controlPlaneActivationPublicKey`: the Control Plane
+  activation public key (`HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY`), 64
+  lowercase hex characters.
+- The Kernel needs that key and `HELM_ORGANIZATION_RUNTIME_API_KEY` together;
+  one without the other fails its service init. The chart now renders the
+  organization-runtime key only with the activation public key, and refuses to
+  render the activation public key without the organization-runtime key.
+- A 0.9.0 deployment that set the organization-runtime key without the
+  activation public key ran in degraded mode; with this chart it renders
+  without the organization-runtime key until
+  `helm.auth.controlPlaneActivationPublicKey` is set.
+
+## [0.9.0] - 2026-09-26
+
+Source-prepared v0.9.0 notes for the current Kernel tree. These entries do not
+claim tag publication, registry availability, hosted or production telemetry,
+customer use, GA status, live OrganizationRuntime proof, or positive savings.
+The minor version moves because several public routes, commands and SDK
+methods are removed or now answer 501; each is listed below.
+
+### Added — native TLS with optional client certificates; public receipt keyring (HELM-786)
+
+- `serve` listens over TLS when `HELM_TLS_CERT_FILE` and `HELM_TLS_KEY_FILE`
+  are both set (TLS 1.2 minimum; the certificate is re-read on rotation). Setting
+  only one fails at startup. `HELM_TLS_CLIENT_AUTH=require|verify-if-given` with
+  `HELM_TLS_CLIENT_CA_FILE` verifies client certificates. Without TLS
+  configuration the listener stays plain HTTP, as before.
+- The chart gains `helm.tls.existingSecret` (cert-manager compatible, optional
+  client CA; probes follow the scheme) and
+  `helm.auth.organizationRuntimeAPIKeySecretKey`. Defaults render as before.
+- `GET /api/v1/receipt-keyring` is public and read-only. It returns the public
+  half of the running receipt signer in the `kernel-evaluate-receipt-keyring.v1`
+  shape the Control Plane pins, and answers 503 when no signer is configured.
+
+### Changed — tenant and principal from the Control Plane token (HELM-755, ADR-0005)
+
+- Phase 1 (dual-accept): the Control Plane-called routes accept a signed
+  Control Plane token (`HELM_CP_IDENTITY_*`) that names tenant, workspace and
+  principal, and cross-check it against the registered principal binding.
+  Header identity keeps working while the Control Plane switches over.
+- A principal is bound in one tenant only. Binding it into a second tenant is
+  refused with 409 `TENANT_ISOLATION`, except for principals listed in
+  `HELM_CROSS_TENANT_PRINCIPALS`.
+- Every kernel tenant table has forced row-level security, and the tenant is
+  bound at connection checkout.
+- The route guard derives from the route registry, every served route is in
+  that registry, and forwarded client IPs are trusted only from configured
+  proxy CIDRs.
+- Launchpad routes are off by default; stores without tenant columns serve
+  the configured tenant only.
+
+### Changed — one error model; reason codes as strings (HELM-747)
+
+- Errors are Connect errors carrying one HELM detail with `reason_code` and
+  `retryable`.
+- Reason codes are open strings generated from the one registry
+  (`protocols/json-schemas/reason-codes/reason-codes-v1.json`), not closed enums.
+- The `helm.gateway.v1` effect API contract (HELM-751) is published as proto
+  and generated Go. No server implements it in this release.
+
+### Security — audit remediation (HELM-734 to HELM-743)
+
+- `proxy` and `mcp serve` refuse an unauthenticated bind to a non-loopback
+  address (HELM-741).
+- The proxy governs non-streaming tool calls and refuses streams it cannot
+  govern instead of passing them through (HELM-739).
+- The spend proxy checks idempotency, reserves and applies an output ceiling
+  before dispatch (HELM-734).
+- Evidence verification requires an explicit trust root, and anchors bind that
+  root (HELM-738). The evidence signing seed is per install, no longer a
+  published literal (HELM-754).
+- The credential keystore binds ciphertexts to their context (AAD) with safe
+  rotation and revocation (HELM-754).
+- Sandbox secrets stay out of docker argv, receipts and compose defaults
+  (HELM-754).
+- Skill-pack install and revoke are contained to the repository root (HELM-737).
+- Launchpad teardown and cloud launch no longer record outcomes that did not
+  happen, and egress is enforced on the dialed IP, not SNI (HELM-740, HELM-735).
+- Release signing identities are anchored and the SLSA repair lane is removed
+  (HELM-733). Dependencies are bumped and every Go module is scanned (HELM-743).
+
+### Added — protocol and telemetry updates
+
+- MCP 2026-07-28 is served beside the earlier handshake revisions (HELM-710).
+- RFC 9421 HTTP Message Signatures, proven against the RFC's test vector
+  (HELM-711).
+- OTel GenAI: `gen_ai.provider.name` and the upstream `execute_tool` span
+  (HELM-712).
+
+### Changed — one stop state for serve, proxy and mcp serve (HELM-780)
+
+Breaking for fenced deployments and for `serve --data-dir`.
+
+- **The freeze follows the data directory.** `serve --data-dir` and
+  `mcp serve --data-dir` read `freeze_state.json` from that directory, not
+  from `./data` under the working directory. `freeze` and `unfreeze` take
+  `--data-dir` to write it there. Without the flag both still use
+  `$HELM_DATA_DIR`, then `./data`.
+- **The emergency-stop fence reaches `proxy` and `mcp serve`.** With
+  `HELM_EMERGENCY_STOP_FENCE_ENABLED` on, both open the same fence store as
+  `serve` (`DATABASE_URL`, or the Lite Mode `helm.db` in their data directory)
+  and bind `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_WORKSPACE_ID`.
+  - They refuse to start without that scope.
+  - `proxy --tenant-id` must equal `HELM_RUNTIME_TENANT_ID`.
+  - MCP tool calls, including those through `serve`'s `/mcp` gateway, are
+    decided for the configured scope. Tenant and workspace names in tool
+    arguments no longer reach the fence check.
+
+### Removed — the budget status route and `budget verify`; kernel approve retired to 501 (HELM-780)
+
+Breaking.
+
+- **`GET /api/v1/budget/status` is removed.** It answered a constant
+  `enforcer: postgres, status: active`, but no shipped binary wires a budget
+  tracker into the Guardian. The route was an implementation route, not part
+  of the public OpenAPI contract.
+- **`helm-ai-kernel budget verify` is removed.** It printed a constant
+  `Budget verification: PASS` without checking anything. `budget list` and
+  `budget set` are unchanged; the ceilings they record are not enforced.
+- **`POST /api/v1/kernel/approve` always answers 501.** Nothing registered a
+  pending approval, so every well-formed submission answered 404 and no
+  approval could succeed.
+  - The operation stays in the OpenAPI contract, marked deprecated, and will be
+    removed in a later release together with the SDK `ApproveIntent` methods.
+  - Use the approval ceremony operations under `/api/v1/approvals`.
+  - `HELM_APPROVER_PUBLIC_KEYS` is no longer read.
+  - `ApproveHandler` in `core/pkg/api` and the approval receipt types in
+    `core/pkg/contracts` are removed.
+
+### Changed — MCP gateway receipts in the configured tenant (HELM-780)
+
+Breaking for MCP clients that send tenant or principal headers.
+
+- **`/mcp`, `/mcp/v1/capabilities` and `/mcp/v1/execute` on `serve` bind the
+  configured tenant.** They take the same `HELM_ADMIN_API_KEY`, now through the
+  configured-tenant gate that `/v1/chat/completions` uses.
+  - An `X-Helm-Tenant-ID` or `X-Helm-Principal-ID` header that differs from
+    `HELM_RUNTIME_TENANT_ID` / `HELM_RUNTIME_PRINCIPAL_ID` is refused with 403.
+  - The gateway is single-tenant. Registered principal bindings do not extend
+    it.
+- **Gateway decision receipts are written in that tenant.** Before this change
+  they were written outside tenant scope, so `GET /api/v1/receipts` could not
+  list them. Now it lists them for the configured tenant. A decision without an
+  authenticated tenant is refused rather than receipted.
+
+### Fixed — the chat proxy never forwards a kernel credential (HELM-780)
+
+- `POST /v1/chat/completions` forwards `Authorization` to the model provider
+  as the provider credential.
+- A legacy caller that authenticated with `HELM_ADMIN_API_KEY` as a bearer
+  token therefore sent the kernel's key to the provider.
+- An `Authorization` value that is the admin, service or organization-runtime
+  key is now dropped before forwarding. A provider key sent beside
+  `X-HELM-API-Key` is still forwarded.
+
+### Removed — `core/pkg/crypto/tee` and its collateral verifier (HELM-756)
+
+<!-- quantum_posture: this entry names a removed attestation package; it adds no cryptographic control. -->
+
+- `core/pkg/crypto/tee` (the SEV-SNP, TDX and Nitro attesters and appraisal)
+  and `core/pkg/crypto/tee/collateral` are removed. Nothing has called them
+  since the `tee` CLI was retired.
+- `make tee-collateral-verify` and its CI step are gone with them.
+- `verify --require-tee` still checks the attestation metadata that receipts
+  declare. It never used this package.
+
+### Removed — `workstation certify` and the unrouted trust-key handler (HELM-756)
+
+Breaking.
+
+- **`helm-ai-kernel workstation certify` is removed.** It printed an adapter
+  certification (`observe-only`, `enforceable`, `high-risk-effect-capable`)
+  that it computed from checked-in fixtures, not from a running adapter.
+  - The workstation conformance pack no longer lists it.
+  - The adapter levels remain as vocabulary.
+- **`TrustKeyHandler` in `core/pkg/api` is removed.** Nothing had routed it
+  since HELM-742.
+- **`GovernedGateway`'s internal-error response now carries the request.**
+  Log lines for that response are therefore joined to their trace.
+
+### Removed — TLA+ specifications not tied to code (HELM-756)
+
+- Seven TLA+ specs are removed: six in `proofs/`
+  (`CSNFDeterminism`, `DelegationModel`, `ProofGraphConsistency`,
+  `SafeDeprecationMode`, `TenantIsolation`, `TrustPropagation`) and
+  `protocols/specs/tla/HelmKernel.tla`. None was tied to the code it
+  described; four were never model-checked.
+- `proofs/GuardianPipeline.tla` stays and is still model-checked by the `tla`
+  workflow. `core/pkg/guardian/spec_roster_test.go` ties its gate set to the Go
+  `GateID` declarations.
+- The workflow now checks only that spec, and the `tla-tools-hardening` gate
+  still guards its toolchain download.
+- The Lean proof is unchanged.
+
+### Removed — conformance gates G1–G15 and GX, channels; LaunchKit off by default (HELM-756)
+
+Breaking.
+
+- **Conformance gates.** `helm-ai-kernel conform` runs only G0, build
+  identity, which is used for the signed release report (`--profile SMB`).
+  - G1–G15, GX, the `CORE`/`ENTERPRISE`/`L3`/regulated/agentic profiles and
+    `--level L1|L2` are retired: no EvidencePack could pass G1 and G7
+    together, and several gates passed without checking anything.
+  - `--level` still parses, but exits `2` and points to
+    `conform vectors --json`.
+  - `conform vectors`, `conform negative` and `conform managed-agents` are
+    unchanged.
+- **Channels.** `core/pkg/channels`, `channel_gateway` and
+  `core/pkg/packs/antispoof` are removed; nothing called them.
+- **LaunchKit.** `helm-ai-kernel up` is off by default. Set
+  `HELM_LAUNCHKIT_ENABLED=1` to run it.
+
+### Removed — the MCP rug-pull detector, the caller-supplied schema pin and the `tee` CLI (HELM-756)
+
+Breaking.
+
+- The `RugPullDetector` in `core/pkg/mcp` is removed. No code path called
+  it, and `mcp-bundle.json` no longer advertises `rug-pull-detection`.
+- The MCP firewall no longer reads a caller-supplied schema pin, because the
+  same caller supplied both the schema and its pin, so the check bound
+  nothing.
+  - `mcp authorize-call` no longer escalates a call that omits a pin. It
+    still denies a tool schema that is not valid JSON Schema.
+  - `--pinned-schema-hash` and `mcp wrap --require-pinned-schema` are still
+    accepted, so existing scripts keep parsing, but both are ignored and
+    `--require-pinned-schema` defaults to `false`.
+  - The HTTP request field `pinned_schema_hash` is deprecated and ignored.
+    The discovery field `schema_pin_required` is deprecated and always
+    `false`.
+- `helm-ai-kernel tee` and the `tee-collateral` command are removed, along
+  with the `tee-collateral` workflow. `make tee-collateral-verify` still runs
+  the collateral package tests.
 
 ### Removed — verification outputs that no check produced (HELM-742)
 
@@ -112,6 +483,44 @@ revoked without running the check they named:
 The six operations stay in the OpenAPI contract marked `deprecated` so the
 breaking-change gate permits removing them in a later release. The Console
 surface catalog marks the Conformance and Trust Keys surfaces `unsupported`.
+
+### Changed — the agent risk scan is its own binary, `helm-risk-scan` (HELM-756)
+
+Breaking.
+
+- `helm-ai-kernel scan` and `helm-ai-kernel verify-scan` move to a separate
+  binary built from `tools/riskscan`:
+  - `helm-risk-scan scan` takes the same options, except `--upload`,
+    `--upload-url` and `--yes`, which are removed;
+  - `helm-risk-scan verify` replaces `verify-scan`.
+- For one release the kernel keeps both old commands as stubs. They print the
+  new command and exit `2`.
+- Nothing leaves the machine any more: no service in the target architecture
+  receives the upload.
+- The default salt file keeps its location, so pseudonyms stay stable.
+- The EvidencePack producer that only the scan used moves out of
+  `core/pkg/executor` with it.
+
+### Removed — the six retired verification routes (HELM-756)
+
+Breaking. The six operations that answered `501` since HELM-742 are no longer
+routed; they now answer `404`. They also leave the OpenAPI contract.
+
+The routes are:
+- `POST /api/v1/conformance/run`;
+- `GET /api/v1/conformance/reports` and `GET /api/v1/conformance/reports/{report_id}`;
+- `POST /api/v1/gui/receipts/verify`;
+- `POST /api/v1/trust/keys/add` and `POST /api/v1/trust/keys/revoke`.
+
+The SDK methods that called them are removed:
+- Go: `ConformanceRun`, `GetConformanceReport` and `ListConformanceReports`;
+- TypeScript and Java: `conformanceRun`, `getConformanceReport` and
+  `listConformanceReports`;
+- Python and Rust: `conformance_run`, `get_conformance_report` and
+  `list_conformance_reports`.
+
+The Console surface catalog drops its Conformance and Trust Keys entries. Run
+conformance with `helm-ai-kernel conform` against an evidence pack.
 
 ### Changed — verification commands require a trust root (HELM-742)
 

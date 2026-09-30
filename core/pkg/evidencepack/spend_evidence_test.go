@@ -20,19 +20,19 @@ func buildSpendReceiptSet(t *testing.T) SpendReceiptSet {
 	decision := economicAllow(50_000, "sha256:env")
 	quote := economic.NewRouteQuote(
 		"rq-1", "tenant-1", "intent-1", "env-1", "agent-1",
-		economic.ModelRoute{ProviderID: "openai", ModelID: "gpt-4o", PriceSnapshotHash: "sha256:price"},
+		economic.ModelRoute{ProviderID: "openai", ModelID: "gpt-6-sol", PriceSnapshotHash: "sha256:price"},
 		1_500, 3_000, "USD", "sha256:route-policy", now.Add(time.Hour), decision,
 	)
 	quote.PrincipalID = "user:alice"
 	quote.Reseal()
 
 	budget := economic.NewBudgetVerdictReceipt(
-		"bv-1", "tenant-1", "intent-1", "env-1", "agent-1", "openai", "gpt-4o",
+		"bv-1", "tenant-1", "intent-1", "env-1", "agent-1", "openai", "gpt-6-sol",
 		1_500, 3_000, "USD", "sha256:price", "sha256:route-policy", "evidence://pack-1", decision,
 	)
 
 	usage := economic.NewUsageReceipt(
-		"ur-1", "tenant-1", "rq-1", "intent-1", "env-1", "agent-1", "openai", "gpt-4o",
+		"ur-1", "tenant-1", "rq-1", "intent-1", "env-1", "agent-1", "openai", "gpt-6-sol",
 		1_500, 1_000, 100, "USD", "sha256:policy", "evidence://pack-1",
 	)
 	usage.ProviderRequestID = "prov-req-1"

@@ -78,6 +78,11 @@ type Binding struct {
 	CredentialHash string
 	// SessionID names the caller session the call belongs to, for audit.
 	SessionID string
+	// TenantID and WorkspaceID are the emergency-stop scope the transport
+	// governs, from its configuration. When both are set they become the
+	// Guardian's tenant_id and workspace_id, so a scoped fence reaches the call.
+	TenantID    string
+	WorkspaceID string
 }
 
 // GovernBound is Govern for a caller behind a trusted transport: the binding
@@ -155,6 +160,11 @@ func (kb *KernelBridge) govern(ctx context.Context, toolName string, argsHash st
 			if sessionID := strings.TrimSpace(binding.SessionID); sessionID != "" {
 				req.Context[guardian.ContextSessionID] = sessionID
 			}
+		}
+		tenantID, workspaceID := strings.TrimSpace(binding.TenantID), strings.TrimSpace(binding.WorkspaceID)
+		if tenantID != "" && workspaceID != "" {
+			req.Context["tenant_id"] = tenantID
+			req.Context["workspace_id"] = workspaceID
 		}
 	}
 

@@ -8,7 +8,7 @@ Typed Rust client for the retained HELM kernel API.
 cargo add helm-sdk
 ```
 
-Package metadata identifies source target `0.8.5`; verify registry state
+Package metadata identifies source target `0.10.5`; verify registry state
 before publishing a pinned install claim.
 
 ## Local Development
@@ -32,7 +32,7 @@ use helm_sdk::{ChatCompletionRequest, ChatCompletionRequestMessagesInner, HelmCl
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = HelmClient::new("http://127.0.0.1:7714");
     let result = client.chat_completions(&ChatCompletionRequest::new(
-        "gpt-4".to_string(),
+        "gpt-6-sol".to_string(),
         vec![ChatCompletionRequestMessagesInner::new(
             Role::User,
             "hello".to_string(),

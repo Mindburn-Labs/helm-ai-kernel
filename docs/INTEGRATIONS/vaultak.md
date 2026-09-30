@@ -2,7 +2,7 @@
 
 > Status: source-backed adapter candidate. This page documents the source-owned adapter path between Vaultak transaction boundaries and the HELM Warm Sandbox Leasing subsystem; it is not release or runtime evidence.
 
-HELM integrates with Vaultak to bind isolated sandboxed runners to transactional undo logs. By linking runner lifecycles directly to Vaultak transaction IDs, HELM guarantees state reversibility and rapid execution rollback capability.
+HELM integrates with Vaultak to bind isolated sandboxed runners to transactional undo logs. The adapter is written to link runner lifecycles to Vaultak transaction IDs for state reversibility and rollback. No shipped binary binds a lease to Vaultak today, so HELM guarantees no reversibility through it (`controls.yaml` CTL-043).
 
 ## Architecture & Reversibility Logic
 

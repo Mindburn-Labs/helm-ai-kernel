@@ -33,8 +33,30 @@ builds:
       - -X main.commit={{.Commit}}
       - -X main.buildTime={{.Date}}
 
+  # helm-risk-scan: the local agent risk scan, moved out of the kernel in
+  # HELM-756. Its own module; observes configuration and enforces nothing.
+  - id: helm-risk-scan
+    dir: tools/riskscan
+    main: .
+    binary: helm-risk-scan
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+
 archives:
   - id: default
+    ids: [helm-ai-kernel]
     format: tar.gz
     name_template: "helm-ai-kernel-{{ .Os }}-{{ .Arch }}"
     format_overrides:
@@ -44,6 +66,16 @@ archives:
       - LICENSE
       - README.md
       - docs/QUICKSTART.md
+  - id: helm-risk-scan
+    ids: [helm-risk-scan]
+    format: tar.gz
+    name_template: "helm-risk-scan-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - docs/reference/agent-risk-scan.md
 
 checksum:
   name_template: "SHA256SUMS.txt"
@@ -73,6 +105,7 @@ docker_signs:
 
 brews:
   - name: helm-ai-kernel
+    ids: [default]
     repository:
       owner: Mindburn-Labs
       name: homebrew-tap
@@ -85,6 +118,20 @@ brews:
       bin.install "helm-ai-kernel"
     test: |
       system "#{bin}/helm-ai-kernel", "--help"
+  - name: helm-risk-scan
+    ids: [helm-risk-scan]
+    repository:
+      owner: Mindburn-Labs
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/Mindburn-Labs/helm-ai-kernel"
+    description: "Local, anonymized AI agent risk scan for HELM"
+    license: "Apache-2.0"
+    install: |
+      bin.install "helm-risk-scan"
+    test: |
+      system "#{bin}/helm-risk-scan", "help"
 
 changelog:
   sort: asc

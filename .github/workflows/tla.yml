@@ -1,5 +1,9 @@
 name: TLA Specs
 
+# Only GuardianPipeline.tla remains (HELM-756): core/pkg/guardian/spec_roster_test.go
+# ties its gate set to the Go GateID declarations. The other specs were not tied
+# to code and were retired.
+
 on:
   workflow_dispatch:
   pull_request:
@@ -36,7 +40,3 @@ jobs:
           echo "jar=$jar" >> "$GITHUB_OUTPUT"
       - name: Guardian pipeline spec
         run: java -cp "${{ steps.tlc.outputs.jar }}" tlc2.TLC -deadlock -config proofs/guardian.cfg proofs/GuardianPipeline.tla
-      - name: Safe Deprecation Mode spec
-        run: java -cp "${{ steps.tlc.outputs.jar }}" tlc2.TLC -deadlock -config proofs/safe_deprecation.cfg proofs/SafeDeprecationMode.tla
-      - name: Protocol kernel spec
-        run: java -cp "${{ steps.tlc.outputs.jar }}" tlc2.TLC -deadlock -config protocols/specs/tla/HelmKernel.cfg protocols/specs/tla/HelmKernel.tla

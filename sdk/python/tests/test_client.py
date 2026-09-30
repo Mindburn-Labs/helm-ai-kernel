@@ -116,12 +116,12 @@ class TestChatCompletions:
             "id": "chatcmpl-1",
             "object": "chat.completion",
             "created": 1,
-            "model": "gpt-4",
+            "model": "gpt-6-sol",
             "choices": [],
         })
 
         client = HelmClient(base_url="http://h")
-        req = ChatCompletionRequest(model="gpt-4", messages=[ChatMessage(role="user", content="hi")])
+        req = ChatCompletionRequest(model="gpt-6-sol", messages=[ChatMessage(role="user", content="hi")])
         result = client.chat_completions(req)
 
         mock_client.post.assert_called_once()

@@ -12,6 +12,7 @@ canonical local interface; `scripts/ci/quality.py` executes the gate registry in
 ## Quick Start
 
 ```bash
+make check            # what CI runs: the merge profile, every gate blocking
 make quality-pr
 make quality-merge
 make quality-release
@@ -73,9 +74,10 @@ nothing, so it is not a pass. It blocks in CI through the required
 (`before..after`). The nightly profile re-inspects the last 50 commits on
 `main` (`CONCEPT_RANGE=HEAD~50..HEAD`).
 
-`inv-check` is still an **advisory** gate in the `nightly` profile and does not
-block PR or merge today. Promote it with `QUALITY_STRICT=1` locally, or move it
-into the `pr` profile once the constitution has settled.
+`inv-check` runs in the `nightly` profile, which is strict: a failure turns
+the nightly red. It also runs as the first step of `make controls-check`,
+which blocks in the `pr` and `merge` profiles (see Control Registry below), so
+a dangling hint fails a pull request.
 
 ## TCB Coverage
 
@@ -84,8 +86,8 @@ make coverage-tcb
 ```
 
 Runs the kernel TCB packages listed in `scripts/ci/tcb-coverage-floors.txt`
-with coverage and holds each to its floor. It is a step in the required
-`kernel` CI job. A listed package must reach the `default` floor (85% of
+with coverage and holds each to its floor. It is the `tcb-coverage` gate of
+`make check` (the required `ci / gate`). A listed package must reach the `default` floor (85% of
 statements) unless the file gives it its own lower number. Those numbers are
 frozen at the coverage measured when the gate landed; raise them as tests land,
 never lower them. The gate fails when a package is below its floor, when a
@@ -93,17 +95,75 @@ listed package has no measured statements, when the profile is empty, and when a
 package with its own floor has reached the default, so the exceptions list only
 shrinks. `scripts/ci/check_tcb_coverage_test.py` holds the known-bad inputs.
 
+## Unreachable Code
+
+```bash
+make deadcode
+```
+
+Runs `golang.org/x/tools/cmd/deadcode` from the shipped binaries listed in
+`scripts/ci/deadcode-roots.txt` (today `core/cmd/helm-ai-kernel`) for
+linux/amd64, and blocks in the `pr`, `merge` and `release` profiles. A planted
+unreachable function in a throwaway program must be reported first, or the gate
+exits 2. The functions that were unreachable when the gate landed are frozen in
+`scripts/ci/deadcode-allowlist.txt`, keyed by package and function. New dead code
+fails the gate: wire it, delete it, or declare its binary as a root. A listed
+function that is no longer dead also fails the gate, and the message says to
+delete that line in the same PR, so deletion work shrinks the list.
+
+## Control Registry
+
+```bash
+make controls          # regenerate HELM_INVARIANTS.md and coverage-map.json
+make controls-check    # inv-check, then the registry gate
+```
+
+`controls.yaml` is the control registry (binding rule R1). Every claimed control
+and every invariant is an entry naming its owner, entry points, configuration,
+protected operations, bypass assumptions and the Go tests for the allowed,
+forbidden, removal and bypass cases. `HELM_INVARIANTS.md` and `coverage-map.json`
+are generated from it.
+
+`controls-check` blocks in the `pr` and `merge` profiles. It fails on:
+
+- an invalid or missing field, or a gap in the id sequence;
+- an `enforced` runtime entry whose entry point no binary in
+  `scripts/ci/deadcode-roots.txt` reaches. A symbol is reachable when its package
+  is in the roots' `go list -deps` graph for linux/amd64 and it is not in
+  `scripts/ci/deadcode-allowlist.txt`, which the deadcode gate keeps equal to the
+  measured unreachable set;
+- a named test that does not run and pass. The gate runs every named test with
+  `go test -run` (the Go test cache replays unchanged passes) and with
+  `HELM_TEST_POSTGRES_URL` cleared, so an unlisted Postgres-gated test shows up as
+  a skip and fails. Tests listed in `scripts/ci/postgres-proofs.txt` are left to
+  the approval-ceremony workflow, which runs them against Postgres and fails on a
+  skip;
+- an `enforced` runtime entry without removal proofs. Each proof in
+  `removal_proofs` deletes the control from one file through `go test -overlay`,
+  and every removal test it names must then fail. Together an entry's proofs
+  must name all of its removal tests, and an anchor that no longer matches
+  exactly once fails;
+- a `build`-plane entry (a control CI holds rather than a binary, such as
+  INV-025) whose gates do not block pull requests. A `quality:<id>` gate must be
+  in the `pr` profile and not advisory; a `workflow:<file>#<job>` job must run on
+  `pull_request` with no job-level condition or `continue-on-error`;
+- a generated file that differs from the registry.
+
+Planted bad entries must each fail, and a planted good one must pass, before the
+real registry is judged. A full run takes under a minute locally with a warm
+build cache.
+
 ## Profiles
 
 | Profile | Command | Purpose |
 | --- | --- | --- |
 | PR | `make quality-pr` | Fast documentation, hygiene, Go, TCB, boundary, fixture, and impacted SDK/UI checks. |
-| Merge | `make quality-merge` | Full retained-surface gate with race tests, SDKs, contracts, deployment smoke, and release smoke. |
+| Merge | `make quality-merge` | Full retained-surface gate with race tests, coverage floor, every Go module, SDKs and SDK drift, contracts, docs parity, deployment, kind and release smoke. `make check` runs it with `--strict`, and CI's required `ci / gate` runs `make check`. |
 | Release | `make quality-release` | Release-readiness gate plus prior-release OpenAPI and Proto compatibility checks, reproducible binaries, SBOM, VEX, Cosign bundle verification when available, and release smoke. |
-| Nightly | `make quality-nightly` | Advisory mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, and benchmark checks. |
+| Nightly | `make quality-nightly` | Strict (`QUALITY_STRICT=1`) mutation, flake, vulnerability, runbook, migration, dependency hygiene, schema, benchmark, invariant and dead-package checks. |
 
-`make quality-pr` runs path-scoped package gates only when changed files impact
-that surface. Override detection with `QUALITY_CHANGED_FILES`, using newline or
+`make quality-pr` is a fast local pre-check; CI does not use it. It runs
+path-scoped package gates only when changed files impact that surface. Override detection with `QUALITY_CHANGED_FILES`, using newline or
 comma-separated paths.
 
 ## Blocking and Advisory Gates
@@ -124,14 +184,19 @@ the gate exits 2. Findings that existed when the gates landed are frozen in
 finding missing from the list fails, and so does a listed finding that no
 longer occurs, so the lists only shrink.
 
-New noisy gates are Advisory by default: `vuln-audit` (npm and cargo),
-`mutation-core`, `flake-core`, `runbooks`, `migrations`,
-`dependency-hygiene`, and `benchmark-report`. Promote them to blocking locally
-or in CI with:
+New noisy gates are Advisory in the PR-facing profiles: `vuln-audit` (npm),
+`mutation-core`, `flake-core`, `runbooks`, `migrations`, `dependency-hygiene`,
+`benchmark-report`, `invariant-constitution` and `concept-change-marker`. The
+scheduled nightly runs them strict, so a failure, a crash, a timeout or a
+missing tool turns the nightly red instead of printing a warning:
 
 ```bash
 QUALITY_STRICT=1 make quality-nightly
 ```
+
+`dead-packages` blocks in the `pr` profile: importer-less packages must be
+allowlisted or listed in `scripts/ci/dead-packages-frozen.txt`, and a stale line
+on either list fails, so the PR that deletes a package removes its line.
 
 ## Gate Registry
 

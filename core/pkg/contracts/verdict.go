@@ -93,6 +93,20 @@ const (
 	ReasonDelegationScopeViolation    ReasonCode = "DELEGATION_SCOPE_VIOLATION"
 	ReasonDelegationPrincipalMismatch ReasonCode = "DELEGATION_PRINCIPAL_MISMATCH"
 
+	// ── Effect gateway admission (HELM-751, ADR-0001 §6) ───
+	ReasonPrincipalInactive      ReasonCode = "PRINCIPAL_INACTIVE"
+	ReasonMandateInactive        ReasonCode = "MANDATE_INACTIVE"
+	ReasonMandateOutsideValidity ReasonCode = "MANDATE_OUTSIDE_VALIDITY"
+	ReasonEffectOutOfScope       ReasonCode = "EFFECT_OUT_OF_SCOPE"
+	ReasonPerCallLimit           ReasonCode = "PER_CALL_LIMIT"
+	ReasonArithmeticOverflow     ReasonCode = "ARITHMETIC_OVERFLOW"
+	ReasonIdempotencyConflict    ReasonCode = "IDEMPOTENCY_CONFLICT"
+	ReasonApproverNotDistinct    ReasonCode = "APPROVER_NOT_DISTINCT"
+	ReasonApprovalRejected       ReasonCode = "APPROVAL_REJECTED"
+	ReasonStepUpRequired         ReasonCode = "STEP_UP_REQUIRED"
+	ReasonAuthorityChanged       ReasonCode = "AUTHORITY_CHANGED"
+	ReasonPermitExpired          ReasonCode = "PERMIT_EXPIRED"
+
 	// ── Privilege Tier Reasons ──────────────
 	ReasonInsufficientPrivilege ReasonCode = "INSUFFICIENT_PRIVILEGE"
 
@@ -140,13 +154,11 @@ const (
 	ReasonComputeTimeExhausted               ReasonCode = "ERR_COMPUTE_TIME_EXHAUSTED"
 
 	// ── Harness Engineering Reasons (v1.4) ─────────────────────
-	ReasonVerificationScopeRequired       ReasonCode = "ERR_VERIFICATION_SCOPE_REQUIRED"
 	ReasonHarnessTraceRequired            ReasonCode = "ERR_HARNESS_TRACE_REQUIRED"
 	ReasonPlanTransactionRequired         ReasonCode = "ERR_PLAN_TRANSACTION_REQUIRED"
 	ReasonPlanTransactionConflict         ReasonCode = "ERR_PLAN_TRANSACTION_CONFLICT"
 	ReasonAssumptionStale                 ReasonCode = "ERR_ASSUMPTION_STALE"
 	ReasonHarnessMutationRequiresApproval ReasonCode = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL"
-	ReasonHarnessChangeContractInvalid    ReasonCode = "ERR_HARNESS_CHANGE_CONTRACT_INVALID"
 	ReasonGreenTestScopeMissing           ReasonCode = "ERR_GREEN_TEST_SCOPE_MISSING"
 	ReasonGroundedActionRefRequired       ReasonCode = "ERR_GROUNDED_ACTION_REF_REQUIRED"
 	ReasonGUIPostconditionUnverified      ReasonCode = "ERR_GUI_POSTCONDITION_UNVERIFIED"
@@ -176,6 +188,14 @@ const (
 	ReasonCapabilityTokenInvalid        ReasonCode = "CAPABILITY_TOKEN_INVALID"
 	ReasonCapabilityRollbackPlanInvalid ReasonCode = "CAPABILITY_ROLLBACK_PLAN_INVALID"
 	ReasonCapabilityIrreversible        ReasonCode = "CAPABILITY_IRREVERSIBLE"
+
+	// ── Effect adapters (HELM-753, target architecture §9) ────────────────
+	ReasonPreconditionFailed         ReasonCode = "PRECONDITION_FAILED"
+	ReasonReadbackMismatch           ReasonCode = "READBACK_MISMATCH"
+	ReasonPermitArgumentMismatch     ReasonCode = "PERMIT_ARGUMENT_MISMATCH"
+	ReasonProviderCredentialRejected ReasonCode = "PROVIDER_CREDENTIAL_REJECTED" //nolint:gosec // G101: a reason-code name, not a credential
+	ReasonProviderResponseTooLarge   ReasonCode = "PROVIDER_RESPONSE_TOO_LARGE"
+	ReasonProviderError              ReasonCode = "PROVIDER_ERROR"
 )
 
 // CanonicalVerdicts returns the full normative verdict vocabulary.

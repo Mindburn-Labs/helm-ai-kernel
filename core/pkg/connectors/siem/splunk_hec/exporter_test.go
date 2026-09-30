@@ -31,7 +31,7 @@ func sampleSpan(t *testing.T) sdktrace.ReadOnlySpan {
 		EndTime:   time.Date(2026, 4, 28, 10, 0, 0, 1_500_000, time.UTC),
 		Attributes: []attribute.KeyValue{
 			attribute.String(observability.GenAISystem, "openai"),
-			attribute.String(observability.GenAIRequestModel, "gpt-4o"),
+			attribute.String(observability.GenAIRequestModel, "gpt-6-sol"),
 			attribute.String(observability.GenAIToolName, "search_web"),
 			attribute.String(observability.GenAIToolCallID, "corr-1"),
 			attribute.Int64(observability.GenAIUsageInputTokens, 120),
@@ -88,7 +88,7 @@ func TestExportSpans_ProducesHECEventBatch(t *testing.T) {
 		t.Errorf("verdict = %v", body["verdict"])
 	}
 	gen, _ := body["gen_ai"].(map[string]any)
-	if gen["request.model"] != "gpt-4o" {
+	if gen["request.model"] != "gpt-6-sol" {
 		t.Errorf("gen_ai.request.model = %v", gen["request.model"])
 	}
 	helm, _ := body["helm"].(map[string]any)

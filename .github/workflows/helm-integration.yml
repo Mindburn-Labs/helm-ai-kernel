@@ -2,6 +2,8 @@ name: Helm Integration — Launchpad k8s smoke
 
 on:
   pull_request:
+    # `labeled` re-runs the workflow when launchpad-live-test is added.
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - "deploy/helm-chart/**"
       - "scripts/ci/launchpad_k8s_smoke.sh"
@@ -86,8 +88,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [baseline]
-    env:
-      RUN_LIVE_POSITIVE: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'launchpad-live-test') }}
+    # Runs for real or not at all: on a pull request it needs the
+    # launchpad-live-test label (it spends OpenRouter tokens); without the label
+    # the job is skipped, so it never reports a success it did not earn.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'launchpad-live-test')
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -132,12 +136,8 @@ jobs:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${RUN_LIVE_POSITIVE}" != "true" ]]; then
-            echo "::notice::launchpad-live-test label not present; required positive check recorded without burning OpenRouter tokens"
-            exit 0
-          fi
           if [[ -z "${OPENROUTER_API_KEY}" ]]; then
-            echo "::error::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured; main/dispatch positive smoke cannot be release proof"
+            echo "::error::HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY secret not configured; the positive smoke cannot run"
             exit 1
           fi
           python3 scripts/ci/openrouter_token_meter.py probe \
@@ -148,7 +148,7 @@ jobs:
           bash scripts/ci/launchpad_k8s_smoke.sh --mode positive
 
       - name: Upload OpenRouter token evidence
-        if: ${{ always() && env.RUN_LIVE_POSITIVE == 'true' }}
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: helm-integration-openrouter-token-evidence

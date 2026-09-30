@@ -7,6 +7,10 @@
 //	                        actually resolves in this tree
 //	invcheck concept-gate   a commit that changes an INV-NNN block carries a
 //	                        CONCEPT-CHANGE(INV-NNN) marker naming that invariant
+//	invcheck controls       controls.yaml is valid, every enforced entry point is
+//	                        reachable from a shipped binary, every named test
+//	                        exists, and HELM_INVARIANTS.md and coverage-map.json
+//	                        are what the registry generates (controls.go)
 //
 // verify runs synthetic negative controls BEFORE it reads the real constitution.
 // A gate that has silently stopped discriminating is worse than no gate: it
@@ -64,6 +68,8 @@ func main() {
 		os.Exit(runVerify(os.Args[2:]))
 	case "concept-gate":
 		os.Exit(runConceptGate(os.Args[2:]))
+	case "controls":
+		os.Exit(runControls(os.Args[2:]))
 	case "-h", "--help", "help":
 		usage()
 		os.Exit(0)
@@ -83,6 +89,12 @@ func usage() {
   invcheck concept-gate [-root DIR] [-range REV..REV] [-strict-any-edit]
       Require a CONCEPT-CHANGE(INV-NNN) commit marker on any commit in the
       range that adds, edits, or retires an invariant. An empty range exits 2.
+
+  invcheck controls [-root DIR] [-write]
+      Self-test on planted registry entries, then check controls.yaml: fields,
+      reachability of enforced entry points from scripts/ci/deadcode-roots.txt,
+      named tests, removal proofs, and that HELM_INVARIANTS.md and
+      coverage-map.json match the registry. -write regenerates both files.
 `)
 }
 

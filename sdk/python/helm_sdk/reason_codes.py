@@ -266,9 +266,6 @@ ERR_COMPUTE_GAS_EXHAUSTED = "ERR_COMPUTE_GAS_EXHAUSTED"
 ERR_COMPUTE_TIME_EXHAUSTED = "ERR_COMPUTE_TIME_EXHAUSTED"
 # DENY: Sandboxed execution exceeded the configured wall-clock time budget
 
-ERR_VERIFICATION_SCOPE_REQUIRED = "ERR_VERIFICATION_SCOPE_REQUIRED"
-# DENY: Medium or high risk execution is missing a VerificationScope
-
 ERR_HARNESS_TRACE_REQUIRED = "ERR_HARNESS_TRACE_REQUIRED"
 # DENY: Side-effectful execution is missing a hash-linked HarnessTrace
 
@@ -285,9 +282,6 @@ ERR_ASSUMPTION_STALE = "ERR_ASSUMPTION_STALE"
 ERR_HARNESS_MUTATION_REQUIRES_APPROVAL = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL"
 # ESCALATE: Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing
 # state requires explicit approval
-
-ERR_HARNESS_CHANGE_CONTRACT_INVALID = "ERR_HARNESS_CHANGE_CONTRACT_INVALID"
-# DENY: Harness mutation lacks a valid HarnessChangeContract
 
 ERR_GREEN_TEST_SCOPE_MISSING = "ERR_GREEN_TEST_SCOPE_MISSING"
 # DENY: Passing tests were submitted without a declared verification scope
@@ -343,6 +337,68 @@ CAPABILITY_ROLLBACK_PLAN_INVALID = "CAPABILITY_ROLLBACK_PLAN_INVALID"
 CAPABILITY_IRREVERSIBLE = "CAPABILITY_IRREVERSIBLE"
 # DENY: Irreversible effect class cannot dispatch without an authoritative approval
 # integration
+
+PRECONDITION_FAILED = "PRECONDITION_FAILED"
+# DENY: A precondition the effect type declares does not hold, so no attempt was created
+
+READBACK_MISMATCH = "READBACK_MISMATCH"
+# DENY: The adapter's read-back of the provider does not match the proposed effect, so
+# the outcome is FAILED
+
+PERMIT_ARGUMENT_MISMATCH = "PERMIT_ARGUMENT_MISMATCH"
+# DENY: The arguments an adapter was about to send are not the bytes the permit's
+# argument digest covers
+
+PROVIDER_CREDENTIAL_REJECTED = "PROVIDER_CREDENTIAL_REJECTED"
+# DENY: The connection's credential is unavailable, or the provider rejected it as
+# invalid, revoked or lacking permission
+
+PROVIDER_RESPONSE_TOO_LARGE = "PROVIDER_RESPONSE_TOO_LARGE"
+# DENY: A provider response exceeded the adapter's size limit and was not read
+
+PROVIDER_ERROR = "PROVIDER_ERROR"
+# DENY: The provider failed or refused the call for a reason other than its credential
+
+PRINCIPAL_INACTIVE = "PRINCIPAL_INACTIVE"
+# DENY: The requesting principal is unknown to the tenant or disabled
+
+MANDATE_INACTIVE = "MANDATE_INACTIVE"
+# DENY: No active mandate held by the principal covers the effect, or a mandate of its
+# chain is revoked
+
+MANDATE_OUTSIDE_VALIDITY = "MANDATE_OUTSIDE_VALIDITY"
+# DENY: A mandate of the chain is outside its validity window
+
+EFFECT_OUT_OF_SCOPE = "EFFECT_OUT_OF_SCOPE"
+# DENY: A mandate of the chain does not cover the effect type or target, or the effect
+# type has no control row
+
+PER_CALL_LIMIT = "PER_CALL_LIMIT"
+# DENY: The effect's amount exceeds a per-call limit of the mandate chain
+
+ARITHMETIC_OVERFLOW = "ARITHMETIC_OVERFLOW"
+# DENY: An amount or counter total overflows a 64-bit integer
+
+IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT"
+# DENY: The idempotency key was already used with a different request
+
+APPROVER_NOT_DISTINCT = "APPROVER_NOT_DISTINCT"
+# DENY: The approver is the requester; an approval needs a distinct principal
+
+APPROVAL_REJECTED = "APPROVAL_REJECTED"
+# DENY: A distinct human approver rejected the escalated effect
+
+STEP_UP_REQUIRED = "STEP_UP_REQUIRED"
+# DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up
+# assertion the request did not carry
+
+AUTHORITY_CHANGED = "AUTHORITY_CHANGED"
+# DENY: An authority row the permit was issued under changed before the dispatch claim;
+# the permit is voided and the effect must be proposed again
+
+PERMIT_EXPIRED = "PERMIT_EXPIRED"
+# DENY: The permit expired before the dispatch claim; it is voided and the effect must
+# be proposed again
 
 ALL: frozenset[str] = frozenset(
     {
@@ -429,13 +485,11 @@ ALL: frozenset[str] = frozenset(
         ERR_CONNECTOR_CONTRACT_DRIFT,
         ERR_COMPUTE_GAS_EXHAUSTED,
         ERR_COMPUTE_TIME_EXHAUSTED,
-        ERR_VERIFICATION_SCOPE_REQUIRED,
         ERR_HARNESS_TRACE_REQUIRED,
         ERR_PLAN_TRANSACTION_REQUIRED,
         ERR_PLAN_TRANSACTION_CONFLICT,
         ERR_ASSUMPTION_STALE,
         ERR_HARNESS_MUTATION_REQUIRES_APPROVAL,
-        ERR_HARNESS_CHANGE_CONTRACT_INVALID,
         ERR_GREEN_TEST_SCOPE_MISSING,
         ERR_GROUNDED_ACTION_REF_REQUIRED,
         ERR_GUI_POSTCONDITION_UNVERIFIED,
@@ -452,6 +506,24 @@ ALL: frozenset[str] = frozenset(
         CAPABILITY_TOKEN_INVALID,
         CAPABILITY_ROLLBACK_PLAN_INVALID,
         CAPABILITY_IRREVERSIBLE,
+        PRECONDITION_FAILED,
+        READBACK_MISMATCH,
+        PERMIT_ARGUMENT_MISMATCH,
+        PROVIDER_CREDENTIAL_REJECTED,
+        PROVIDER_RESPONSE_TOO_LARGE,
+        PROVIDER_ERROR,
+        PRINCIPAL_INACTIVE,
+        MANDATE_INACTIVE,
+        MANDATE_OUTSIDE_VALIDITY,
+        EFFECT_OUT_OF_SCOPE,
+        PER_CALL_LIMIT,
+        ARITHMETIC_OVERFLOW,
+        IDEMPOTENCY_CONFLICT,
+        APPROVER_NOT_DISTINCT,
+        APPROVAL_REJECTED,
+        STEP_UP_REQUIRED,
+        AUTHORITY_CHANGED,
+        PERMIT_EXPIRED,
     }
 )
 

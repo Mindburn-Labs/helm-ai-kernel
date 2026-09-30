@@ -50,6 +50,7 @@ var publicRoutes = map[string]string{
 	"/__helm/config.json":                       "local quickstart bootstrap; identity fields only to loopback peers (F-13)",
 	"/api/v1/local-session/exchange":            "local quickstart token exchange; loopback peers only",
 	desktopReadyPath:                            "Desktop launch proof: HMAC of the caller's nonce; mounted only when Desktop launched the Kernel",
+	receiptKeyringPath:                          "receipt-signing public keys and key ids for the Control Plane's receipt pin; no private material (HELM-786)",
 }
 
 const (
@@ -188,9 +189,17 @@ func (emptyReconciliationCandidates) ListReconciliationCandidates(context.Contex
 // runtime present. The union of their catalogs must equal the registry.
 func runtimeRouteConfigs(t *testing.T) map[string]*runtimeRouteMux {
 	t.Helper()
+	return runtimeRouteConfigsWithIdentity(t, nil)
+}
+
+// runtimeRouteConfigsWithIdentity is runtimeRouteConfigs with the Control
+// Plane token path set to identity (nil: off).
+func runtimeRouteConfigsWithIdentity(t *testing.T, identity *controlPlaneIdentity) map[string]*runtimeRouteMux {
+	t.Helper()
 	chdirTempDir(t)
 	svc, cleanup := newContractRouteTestServices(t)
 	t.Cleanup(cleanup)
+	svc.ControlPlaneIdentity = identity
 	t.Setenv(serviceAPIKeyEnv, probeServiceKey)
 	t.Setenv(organizationRuntimeAPIKeyEnv, probeOrganizationRuntimeKey)
 	t.Setenv(runtimeTenantIDEnv, probeTenant)
@@ -211,12 +220,20 @@ func runtimeRouteConfigs(t *testing.T) map[string]*runtimeRouteMux {
 	svc.GeneratedSpecApproval = generatedSpecApprovalRouteTestRuntime(reject, reject)
 
 	configs := map[string]serverOptions{
-		"serve":              {Mode: "serve", PolicyPath: "policy.toml"},
-		"quickstart":         {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime()},
-		"quickstart console": {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime(), ConsoleMode: true, ConsolePeerProof: &localConsolePeerProof{}},
+		"serve":                {Mode: "serve", PolicyPath: "policy.toml"},
+		"quickstart":           {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime()},
+		"quickstart console":   {Mode: "quickstart", BindAddr: "127.0.0.1", Port: 7714, Quickstart: quickstartRouteRuntime(), ConsoleMode: true, ConsolePeerProof: &localConsolePeerProof{}},
+		"serve with Launchpad": {Mode: "serve", PolicyPath: "policy.toml"},
 	}
+	t.Setenv(launchpadRoutesEnabledEnv, "")
 	muxes := make(map[string]*runtimeRouteMux, len(configs))
 	for name, opts := range configs {
+		// Launchpad is mounted only on explicit opt-in (HELM-755 S-05).
+		if name == "serve with Launchpad" {
+			t.Setenv(launchpadRoutesEnabledEnv, "1")
+		} else {
+			t.Setenv(launchpadRoutesEnabledEnv, "")
+		}
 		mux := newRuntimeRouteMux()
 		// main mounts the Desktop routes before the service routes.
 		registerDesktopReadyRoute(mux, "probe-desktop-token")
@@ -355,7 +372,7 @@ func TestPublicRoutesAreDeclaredWithAReason(t *testing.T) {
 		}
 	}
 	// Growth needs a reviewed edit to this number, not a quiet append.
-	const maxPublic = 19
+	const maxPublic = 20
 	if len(declared) > maxPublic {
 		t.Fatalf("%d public paths (limit %d): every unauthenticated endpoint is attack surface on a 0.0.0.0 deployment", len(declared), maxPublic)
 	}

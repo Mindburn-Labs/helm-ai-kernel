@@ -14,9 +14,11 @@ receipts, and durable JSONL receipt persistence.
 - `dogfood.config.json` — the HELM-615 dogfood price book and envelope set.
   The sha256 of the raw file bytes is the price-source hash bound into every
   quote and receipt, so the exact prices behind a capture window are provable
-  from this file alone. Prices were captured manually from
-  <https://openrouter.ai/models> on 2026-08-17; re-capture and update this file
-  (the hash changes with it) when prices move.
+  from this file alone. The `openai/gpt-4o*` rows were captured manually from
+  <https://openrouter.ai/models> on 2026-08-17; the `openai/gpt-6-sol` and
+  `openai/gpt-6-luna` rows, which the envelopes now route to, come from
+  <https://developers.openai.com/api/docs/pricing> on 2026-09-25. Re-capture and
+  update this file (the hash changes with it) when prices move.
 - `dogfood.do-gradient.config.json` — the HELM-618 DigitalOcean Gradient
   serverless-inference price book and paired-replay envelope set (baseline
   `openai-gpt-oss-120b` plus three substitute-candidate envelopes). Prices from
@@ -57,7 +59,7 @@ curl -X POST http://127.0.0.1:9095/v1/chat/completions \
   -H 'X-HELM-Agent: agent-live-traffic' \
   -H 'X-HELM-Spend-Envelope: env-baseline' \
   -H 'X-HELM-Idempotency-Key: task-001-baseline' \
-  -d '{"model":"openai/gpt-4o","max_tokens":512,"messages":[{"role":"user","content":"..."}]}'
+  -d '{"model":"openai/gpt-6-sol","max_tokens":512,"messages":[{"role":"user","content":"..."}]}'
 
 # Substitute route: same requested model, envelope substitutes and the
 # RouteQuote records model_substituted=true.
@@ -66,7 +68,7 @@ curl -X POST http://127.0.0.1:9095/v1/chat/completions \
   -H 'X-HELM-Agent: agent-paired-replay' \
   -H 'X-HELM-Spend-Envelope: env-substitute' \
   -H 'X-HELM-Idempotency-Key: task-001-substitute' \
-  -d '{"model":"openai/gpt-4o","max_tokens":512,"messages":[{"role":"user","content":"..."}]}'
+  -d '{"model":"openai/gpt-6-sol","max_tokens":512,"messages":[{"role":"user","content":"..."}]}'
 ```
 
 Every chat request must set `max_tokens` (or `max_completion_tokens`), and

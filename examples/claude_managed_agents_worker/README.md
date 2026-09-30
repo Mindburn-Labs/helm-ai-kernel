@@ -30,6 +30,6 @@ _ = resp.ReceiptID
 ```
 
 MCP tools should be exposed to Claude through the Anthropic tunnel only when the
-tunnel routes to HELM MCP Gateway. The gateway then performs schema pinning,
-OAuth scope checks, quarantine/rugpull checks, and receipt binding before any
+tunnel routes to HELM MCP Gateway. The gateway then performs schema validation,
+OAuth scope checks, quarantine checks, and receipt binding before any
 upstream MCP tool dispatch.

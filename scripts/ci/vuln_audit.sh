@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Advisory npm and cargo audits when the tools are available.
+# npm audit of the TypeScript SDK lockfile.
+# Rust (cargo audit) runs in the `Rust audit` job of codeql.yml on every PR.
 # Go (govulncheck, every module) and the Python SDK (pip-audit) are blocking
 # gates in scripts/ci/security_gates.sh.
 set -euo pipefail
@@ -34,21 +35,15 @@ run_step() {
 }
 
 if command -v npm >/dev/null 2>&1; then
-    for dir in "$ROOT/sdk/ts"; do
-        if [ -f "$dir/package-lock.json" ]; then
-            rel="${dir#"$ROOT"/}"
-            run_step "npm audit $rel" \
-                bash -lc "cd '$dir' && npm audit --audit-level=moderate"
-        fi
-    done
+    if [ -f "$ROOT/sdk/ts/package-lock.json" ]; then
+        run_step "npm audit sdk/ts" \
+            bash -c "cd '$ROOT/sdk/ts' && npm audit --audit-level=moderate"
+    else
+        echo "::error::sdk/ts/package-lock.json is missing; nothing to audit"
+        mark_failure
+    fi
 else
     warn_missing "npm" "Node package audits were skipped."
-fi
-
-if command -v cargo-audit >/dev/null 2>&1; then
-    run_step "Rust cargo audit" bash -lc "cd '$ROOT/sdk/rust' && cargo audit"
-else
-    warn_missing "cargo-audit" "Install with: cargo install cargo-audit --locked"
 fi
 
 exit "$STATUS"

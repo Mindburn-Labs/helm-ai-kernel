@@ -446,10 +446,6 @@ func TestDecisionReceiptsOperatorViewEvidenceAndCertification(t *testing.T) {
 		t.Fatalf("operator view counts = runs %d denied %d loops %d", len(view.Runs), len(view.DeniedTimeline), len(view.RecurringLoops))
 	}
 
-	cert := CertifyAdapterFixtures("codex", filepath.Join(root, "fixtures", "workstation"), CertificationHighRiskEffectCapable)
-	if !cert.Passed || cert.CertifiedAs != CertificationHighRiskEffectCapable {
-		t.Fatalf("certification = passed %v as %s checks=%+v", cert.Passed, cert.CertifiedAs, cert.Checks)
-	}
 }
 
 func TestWorkstationSchemas(t *testing.T) {

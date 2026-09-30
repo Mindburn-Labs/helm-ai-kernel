@@ -280,10 +280,10 @@ func TestArtifactReceiptRefsRequireCanonicalTenantOwnership(t *testing.T) {
 	defer cleanup()
 	bindingStore, cleanupBindings := newRouteAuthTestBindingStore(t)
 	defer cleanupBindings()
-	if err := bindingStore.Upsert(context.Background(), store.PrincipalBinding{
+	if _, err := bindingStore.Bind(context.Background(), store.PrincipalBinding{
 		TenantID:    "tenant-b",
 		PrincipalID: "operator-tenant-b",
-	}); err != nil {
+	}, false); err != nil {
 		t.Fatalf("seed tenant-b principal binding: %v", err)
 	}
 	SetPrincipalBindingStore(bindingStore)
@@ -324,7 +324,9 @@ func TestArtifactReceiptRefsRequireCanonicalTenantOwnership(t *testing.T) {
 		return rec
 	}
 
-	if rec := postScope("tenant-b", "scope-forged-by-tenant-b"); rec.Code != http.StatusBadRequest {
+	// The registry has no tenant dimension, so another tenant is refused before
+	// its receipt references are even checked (HELM-755 S-05).
+	if rec := postScope("tenant-b", "scope-forged-by-tenant-b"); rec.Code != http.StatusForbidden {
 		t.Fatalf("cross-tenant artifact reference status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if _, ok := registry.GetVerificationScope("scope-forged-by-tenant-b"); ok {
@@ -1769,11 +1771,11 @@ func TestProtectedRuntimeRoutesFailClosedWithoutCredentials(t *testing.T) {
 
 	contractMux := http.NewServeMux()
 	registerContractRoutes(contractMux, &Services{})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/conformance/run", strings.NewReader(`{"level":"L1"}`))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/evidence/envelopes", nil)
 	rec := httptest.NewRecorder()
 	contractMux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("conformance run without credentials status = %d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("evidence envelopes without credentials status = %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	receiptMux := http.NewServeMux()

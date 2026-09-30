@@ -9,7 +9,32 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_RE = re.compile(r"^\d{3}_[a-z0-9_]+\.sql$")
-DESTRUCTIVE_RE = re.compile(r"\b(DROP|TRUNCATE)\b", re.IGNORECASE)
+# Statements that destroy data, or drop an object without putting it back.
+# `DROP TRIGGER t ... ; CREATE TRIGGER t ...` is how an idempotent migration
+# replaces an object and loses nothing, so a DROP of a trigger, function, index,
+# policy or view counts as destructive only when the file never recreates that
+# name. (Matching every DROP flagged the generated-spec migration's trigger
+# re-creation, so the nightly failed on it every night.)
+DATA_LOSS_RE = re.compile(
+    r"\bTRUNCATE\b|\bDROP\s+(?:TABLE|SCHEMA|DATABASE|COLUMN|MATERIALIZED\s+VIEW)\b|\bDELETE\s+FROM\b",
+    re.IGNORECASE,
+)
+OBJECT_DROP_RE = re.compile(
+    r"\bDROP\s+(TRIGGER|FUNCTION|INDEX|POLICY|VIEW)\s+(?:IF\s+EXISTS\s+)?([\w.\"]+)", re.IGNORECASE
+)
+
+
+def destructive(text: str) -> list[str]:
+    found = [m.group(0) for m in DATA_LOSS_RE.finditer(text)]
+    for match in OBJECT_DROP_RE.finditer(text):
+        kind, name = match.group(1), match.group(2)
+        recreate = re.compile(
+            rf"\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+)?{kind}\s+(?:IF\s+NOT\s+EXISTS\s+)?{re.escape(name)}\b",
+            re.IGNORECASE,
+        )
+        if not recreate.search(text, match.end()):
+            found.append(match.group(0))
+    return found
 
 
 def coverage_sources() -> set[str]:
@@ -34,7 +59,7 @@ def main() -> int:
         if rel not in sources:
             failures.append(f"{rel} is missing from docs/documentation-coverage.csv")
         text = path.read_text(errors="ignore")
-        if DESTRUCTIVE_RE.search(text) and "irreversible" not in text.lower():
+        if destructive(text) and "irreversible" not in text.lower():
             failures.append(f"{rel} contains DROP/TRUNCATE without an irreversible migration note")
 
     for directory, paths in by_dir.items():

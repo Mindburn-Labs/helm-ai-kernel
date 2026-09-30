@@ -7,6 +7,7 @@ moves code does not look like a new finding:
 
   gosec     <rule> <file> <sha256 of the offending source line, 12 hex>
   gitleaks  <rule> <file> <sha256 of the matched secret, 12 hex>
+  deadcode  <package path> <function>
 
 The secret itself is never printed. `compare` fails on any finding not in the
 allowlist (new) and on any allowlist line no finding matches (stale), so the
@@ -17,6 +18,7 @@ Usage:
   security_findings.py gosec-keys REPORT ROOT         golangci-lint JSON (--path-mode abs)
   security_findings.py gitleaks-keys REPORT           gitleaks JSON report
   security_findings.py govulncheck-called REPORT      OSV ids reachable from code
+  security_findings.py deadcode-keys REPORT           deadcode -json report
   security_findings.py compare ALLOWLIST KEYS         exit 1 on new or stale keys
 """
 
@@ -74,6 +76,15 @@ def gitleaks_keys(report: list[dict[str, Any]]) -> list[str]:
     return sorted(f"{f['RuleID']} {f['File']} {digest(f['Secret'])}" for f in report)
 
 
+def deadcode_keys(report: list[dict[str, Any]] | None) -> list[str]:
+    # deadcode -json prints `null` when nothing is unreachable.
+    if report is None:
+        return []
+    if not isinstance(report, list):
+        raise ReportError("deadcode report is not a list of packages")
+    return sorted(f"{pkg['Path']} {fn['Name']}" for pkg in report for fn in pkg.get("Funcs") or [])
+
+
 def json_stream(text: str) -> Iterable[dict[str, Any]]:
     decoder = json.JSONDecoder()
     index = 0
@@ -117,6 +128,8 @@ def main(argv: list[str]) -> int:
             print("\n".join(gosec_keys(json.loads(Path(args[0]).read_text()), args[1])))
         elif command == "gitleaks-keys" and len(args) == 1:
             print("\n".join(gitleaks_keys(json.loads(Path(args[0]).read_text()))))
+        elif command == "deadcode-keys" and len(args) == 1:
+            print("\n".join(deadcode_keys(json.loads(Path(args[0]).read_text()))))
         elif command == "govulncheck-called" and len(args) == 1:
             print("\n".join(govulncheck_called(Path(args[0]).read_text())))
         elif command == "compare" and len(args) == 2:
@@ -127,6 +140,9 @@ def main(argv: list[str]) -> int:
                 print(f"::error::new finding, not in {args[0]}: {key}")
             for key in stale:
                 print(f"::error::allowlisted finding no longer occurs; delete this line from {args[0]}: {key}")
+            if stale:
+                print(f"::error::{len(stale)} stale allowlist line(s): the findings are gone (fixed or deleted code). "
+                      f"Remove exactly those lines from {args[0]}; the list only shrinks.")
             print(f"{sum(found.values())} finding(s), {sum(allowed.values())} allowlisted, {len(new)} new, {len(stale)} stale")
             return 1 if new or stale else 0
         else:

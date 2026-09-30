@@ -9,7 +9,7 @@ import os
 import sys
 sys.path.insert(0, "../../sdk/python")
 
-from helm_sdk import HelmClient, HelmApiError, ChatCompletionRequest, ConformanceRequest
+from helm_sdk import HelmClient, HelmApiError, ChatCompletionRequest
 from helm_sdk.types_gen import ChatMessage
 
 HELM_URL = os.environ.get("HELM_URL", "http://127.0.0.1:7714")
@@ -21,7 +21,7 @@ def main():
     print("=== Chat Completions ===")
     try:
         res = helm.chat_completions(ChatCompletionRequest(
-            model="gpt-4",
+            model="gpt-6-sol",
             messages=[ChatMessage(role="user", content="List files in /tmp")],
         ))
         print(f"Response: {res.choices[0].message.content if res.choices else 'no choices'}")
@@ -37,14 +37,6 @@ def main():
         print(f"Verification: {result.verdict}")
     except HelmApiError as e:
         print(f"Evidence error: {e.reason_code}")
-
-    # 3. Conformance
-    print("\n=== Conformance ===")
-    try:
-        conf = helm.conformance_run(ConformanceRequest(level="L2"))
-        print(f"Verdict: {conf.verdict}, Gates: {conf.gates}, Failed: {conf.failed}")
-    except HelmApiError as e:
-        print(f"Conformance error: {e.reason_code}")
 
     # 4. Health
     print("\n=== Health ===")

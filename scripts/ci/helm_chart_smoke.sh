@@ -12,8 +12,9 @@ NAMESPACE="${HELM_CHART_NAMESPACE:-helm-smoke}"
 KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
 SIGNING_KEY="${HELM_CHART_SMOKE_SIGNING_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 TRUST_PUBLIC_KEY="${HELM_CHART_SMOKE_POLICY_TRUST_PUBLIC_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
-ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
-SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}"
+# The kernel refuses the published literals, so each run generates its own keys.
+ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-$(openssl rand -hex 24)}"
+SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-$(openssl rand -hex 24)}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 PRODUCTION_IMAGE_DIGEST="${HELM_CHART_SMOKE_IMAGE_DIGEST:-sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
@@ -334,7 +335,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set launchpadApps.openclaw.enabled=true >"$openclaw_rendered"
 assert_contains "$openclaw_rendered" 'openclaw models set "$OPENCLAW_MODEL"'
-assert_contains "$openclaw_rendered" 'value: "openrouter/openai/gpt-4o-mini"'
+assert_contains "$openclaw_rendered" 'value: "openrouter/openai/gpt-6-luna"'
 assert_contains "$openclaw_rendered" "OPENROUTER_API_KEY"
 assert_not_contains "$openclaw_rendered" "OPENAI_API_KEY"
 assert_not_contains "$openclaw_rendered" "OPENAI_BASE_URL"
@@ -361,7 +362,7 @@ openclaw_provider_fail_log="$RENDER_DIR/openclaw-invalid-provider.log"
 if helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set launchpadApps.openclaw.enabled=true \
-    --set-string launchpadApps.openclaw.model=openai/gpt-5.5 >"$RENDER_DIR/openclaw-invalid-provider.yaml" 2>"$openclaw_provider_fail_log"; then
+    --set-string launchpadApps.openclaw.model=openai/gpt-6-sol >"$RENDER_DIR/openclaw-invalid-provider.yaml" 2>"$openclaw_provider_fail_log"; then
     echo "::error::OpenClaw render with a provider outside the OpenRouter egress boundary unexpectedly succeeded"
     exit 1
 fi
@@ -372,7 +373,7 @@ helm_runner template "$RELEASE" "$CHART" \
     --namespace "$NAMESPACE" \
     --set launchpadApps.hermes.enabled=true \
     --set launchpadApps.hermes.provider=anthropic \
-    --set-string launchpadApps.hermes.model=anthropic/claude-3-5-haiku \
+    --set-string launchpadApps.hermes.model=anthropic/claude-haiku-4.5 \
     --set-string launchpadApps.hermes.query="chart smoke" >"$hermes_job_rendered"
 assert_contains "$hermes_job_rendered" "kind: Job"
 assert_contains "$hermes_job_rendered" "helm-ai-kernel-hermes"
@@ -383,7 +384,7 @@ if grep -Eq 'kube_helm[[:space:]]+test[[:space:]][^#]*--logs' "$ROOT/scripts/ci/
     echo "::error::launchpad smoke requests Helm test logs after successful hooks are deleted"
     exit 1
 fi
-assert_contains "$hermes_job_rendered" "anthropic/claude-3-5-haiku"
+assert_contains "$hermes_job_rendered" "anthropic/claude-haiku-4.5"
 assert_contains "$hermes_job_rendered" "chart smoke"
 assert_contains "$hermes_job_rendered" "--provider"
 
@@ -821,5 +822,396 @@ assert_contains "$crd_rendered" "HelmPolicyBundle"
 assert_contains "$crd_rendered" "kind: Role"
 assert_contains "$crd_rendered" "helmpolicybundles"
 assert_contains "$crd_rendered" "automountServiceAccountToken: true"
+
+# Native API-listener TLS and the organization-runtime key (HELM-786). The
+# default render above must carry none of it; these renders turn each on.
+assert_not_contains "$default_rendered" "HELM_TLS_CERT_FILE"
+assert_not_contains "$default_rendered" "name: api-tls"
+assert_not_contains "$default_rendered" "HELM_ORGANIZATION_RUNTIME_API_KEY"
+
+tls_rendered="$RENDER_DIR/rendered-api-tls.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.tls.existingSecret=helm-kernel-tls >"$tls_rendered"
+assert_contains "$tls_rendered" 'value: "/var/run/secrets/helm-tls/tls.crt"'
+assert_contains "$tls_rendered" 'value: "/var/run/secrets/helm-tls/tls.key"'
+assert_contains "$tls_rendered" "secretName: helm-kernel-tls"
+assert_contains "$tls_rendered" "mountPath: /var/run/secrets/helm-tls"
+assert_not_contains "$tls_rendered" "HELM_TLS_CLIENT_AUTH"
+assert_not_contains "$tls_rendered" "path: ca.crt"
+# The probes hit the plain-HTTP health listener, so TLS leaves them alone.
+assert_not_contains "$tls_rendered" "scheme: HTTPS"
+assert_contains "$tls_rendered" "port: health"
+
+mtls_rendered="$RENDER_DIR/rendered-api-mtls.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.tls.existingSecret=helm-kernel-tls \
+    --set helm.tls.clientAuth=require >"$mtls_rendered"
+assert_contains "$mtls_rendered" 'value: "/var/run/secrets/helm-tls/ca.crt"'
+assert_contains "$mtls_rendered" "HELM_TLS_CLIENT_AUTH"
+assert_contains "$mtls_rendered" 'value: "require"'
+assert_contains "$mtls_rendered" "path: ca.crt"
+
+mtls_without_secret_log="$RENDER_DIR/api-mtls-without-secret.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.tls.clientAuth=require >"$RENDER_DIR/api-mtls-without-secret.yaml" 2>"$mtls_without_secret_log"; then
+    echo "::error::client auth without a TLS Secret unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$mtls_without_secret_log" "helm.tls.clientAuth requires helm.tls.existingSecret"
+
+tls_reloader_log="$RENDER_DIR/api-tls-with-reloader.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.tls.existingSecret=helm-kernel-tls \
+    --set helm.policy.reloadHints.configReloaderSidecar.enabled=true >"$RENDER_DIR/api-tls-with-reloader.yaml" 2>"$tls_reloader_log"; then
+    echo "::error::TLS with the plain-HTTP config-reloader sidecar unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$tls_reloader_log" "cannot be combined with the config-reloader sidecar"
+
+# A well-formed placeholder: 64 lowercase hex characters, built rather than
+# written out so the secret scanner does not read it as a key.
+activation_key="$(printf 'ab%.0s' $(seq 1 32))"
+org_runtime_rendered="$RENDER_DIR/rendered-org-runtime-key.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.existingSecret=helm-kernel-auth \
+    --set helm.auth.controlPlaneActivationPublicKey="$activation_key" >"$org_runtime_rendered"
+assert_contains "$org_runtime_rendered" "HELM_ORGANIZATION_RUNTIME_API_KEY"
+assert_contains "$org_runtime_rendered" "key: HELM_ORGANIZATION_RUNTIME_API_KEY"
+assert_contains "$org_runtime_rendered" "HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY"
+assert_contains "$org_runtime_rendered" "$activation_key"
+
+# Without the activation public key the organization-runtime key is not wired:
+# the Kernel refuses one without the other (degraded service init).
+org_runtime_no_activation="$RENDER_DIR/rendered-org-runtime-no-activation.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.existingSecret=helm-kernel-auth >"$org_runtime_no_activation"
+assert_not_contains "$org_runtime_no_activation" "HELM_ORGANIZATION_RUNTIME_API_KEY"
+assert_not_contains "$org_runtime_no_activation" "HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY"
+
+activation_without_key_log="$RENDER_DIR/activation-without-org-runtime-key.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.controlPlaneActivationPublicKey="$activation_key" >"$RENDER_DIR/activation-without-org-runtime-key.yaml" 2>"$activation_without_key_log"; then
+    echo "::error::the activation public key without the organization-runtime key unexpectedly rendered"
+    exit 1
+fi
+assert_contains "$activation_without_key_log" "requires the organization-runtime key"
+
+activation_bad_log="$RENDER_DIR/activation-bad-key.log"
+if helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.existingSecret=helm-kernel-auth \
+    --set helm.auth.controlPlaneActivationPublicKey=NOTHEX >"$RENDER_DIR/activation-bad-key.yaml" 2>"$activation_bad_log"; then
+    echo "::error::a malformed activation public key unexpectedly rendered"
+    exit 1
+fi
+
+org_runtime_off_rendered="$RENDER_DIR/rendered-org-runtime-key-off.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.auth.existingSecret=helm-kernel-auth \
+    --set helm.auth.organizationRuntimeAPIKeySecretKey= >"$org_runtime_off_rendered"
+assert_not_contains "$org_runtime_off_rendered" "HELM_ORGANIZATION_RUNTIME_API_KEY"
+
+# Effect gateway (helm-gateway, HELM-789). Off by default: the default render
+# carries no gateway object. Enabled, every object renders, each required value
+# is enforced at render time, and the GitHub App Secret reaches only the
+# gateway Pod.
+assert_not_contains "$default_rendered" "helm-gateway"
+assert_not_contains "$default_rendered" "effect-gateway"
+assert_not_contains "$default_rendered" "HELM_GATEWAY_"
+
+GATEWAY_NAME="${RELEASE}-helm-ai-kernel-gateway"
+GATEWAY_ARGS=(
+    --set gateway.enabled=true
+    --set gateway.tls.existingSecret=gw-tls
+    --set gateway.controlPlaneIdentity.jwksURL=https://cp.example.internal/.well-known/jwks.json
+    --set gateway.controlPlaneIdentity.issuer=https://cp.example.internal
+    --set gateway.controlPlaneIdentity.audience=helm-gateway:smoke
+    --set gateway.controlPlaneIdentity.actor=spiffe://helm/control-plane
+    --set gateway.database.existingSecret=gw-db
+    --set gateway.networkPolicy.controlPlane.namespaceSelector.matchLabels.helm-cp=enabled
+    --set gateway.networkPolicy.database.to[0].ipBlock.cidr=10.20.30.40/32
+)
+
+# gateway_args_without KEY sets GATEWAY_ARGS_WITHOUT to GATEWAY_ARGS (--set
+# VALUE pairs) minus the pair whose value starts with KEY.
+gateway_args_without() {
+    local i
+    GATEWAY_ARGS_WITHOUT=()
+    for ((i = 0; i < ${#GATEWAY_ARGS[@]}; i += 2)); do
+        if [[ "${GATEWAY_ARGS[i + 1]}" != "$1"* ]]; then
+            GATEWAY_ARGS_WITHOUT+=("${GATEWAY_ARGS[i]}" "${GATEWAY_ARGS[i + 1]}")
+        fi
+    done
+}
+
+# docs_containing FILE PATTERN prints the "# Source:" template of every
+# rendered document that contains PATTERN.
+docs_containing() {
+    awk -v pattern="$2" '
+        /^---/ { if (hit) print source; hit = 0; source = ""; next }
+        /^# Source: / { source = $3 }
+        index($0, pattern) { hit = 1 }
+        END { if (hit) print source }
+    ' "$1"
+}
+
+# Installations files live in the repository, not RENDER_DIR, because the
+# containerized Helm runner sees only the repository (-v "$ROOT:/work").
+# installations.json has the shape helm-gateway's custody reads (HELM-751 s3):
+# exactly tenant_id, owner, installation_id and repositories.
+GATEWAY_TESTDATA="scripts/ci/testdata/helm-gateway"
+gateway_rendered="$RENDER_DIR/rendered-gateway.yaml"
+helm_runner template "$RELEASE" "$CHART" \
+    --namespace "$NAMESPACE" \
+    "${GATEWAY_ARGS[@]}" \
+    --set gateway.database.bootstrap.enabled=true \
+    --set gateway.database.bootstrap.existingSecret=gw-db-admin \
+    --set gateway.github.existingSecret=gw-github-app \
+    --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations.json" \
+    --set gateway.github.apiURL=https://ghe.example.internal/api/v3 \
+    --set gateway.dispatchTimeout=90s \
+    --set gateway.controlPlaneIdentity.caBundleConfigMap=cp-jwks-ca >"$gateway_rendered"
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_GITHUB_API_URL"
+assert_contains "$gateway_rendered" 'value: "https://ghe.example.internal/api/v3"'
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_DISPATCH_TIMEOUT"
+assert_contains "$gateway_rendered" 'value: "90s"'
+assert_contains "$gateway_rendered" '"installation_id\":1,\"repositories\":[\"example/repo\"]'
+# Secret file modes (s3a review L2): the GitHub App Secret, the TLS key and
+# the bootstrap password are mounted 0400 (defaultMode 256). The Pod's
+# fsGroup 65534 is what lets the non-root user read them: kubelet adds group
+# read for the fsGroup.
+for secret_volume in github-app gateway-tls bootstrap-password; do
+    volume_mode="$(awk -v name="- name: ${secret_volume}" '
+        index($0, name) && $0 ~ ("name: " v "$") { hit = NR }
+        hit && NR > hit && NR <= hit + 4 && /defaultMode:/ { print $2; exit }
+    ' v="$secret_volume" "$gateway_rendered")"
+    if [ "$volume_mode" != "256" ]; then
+        echo "::error::gateway Secret volume ${secret_volume} has defaultMode '${volume_mode}', want 256 (0400)"
+        exit 1
+    fi
+done
+assert_contains "$gateway_rendered" "fsGroup: 65534"
+# Every object: Deployment, Service, ServiceAccount, NetworkPolicy, the
+# installations ConfigMap and the migrate hook Job.
+assert_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-deployment.yaml"
+assert_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-service.yaml"
+assert_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-serviceaccount.yaml"
+assert_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-networkpolicy.yaml"
+assert_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-configmap.yaml"
+assert_contains "$gateway_rendered" "# Source: helm-ai-kernel/templates/gateway-migrate-job.yaml"
+assert_contains "$gateway_rendered" "name: ${GATEWAY_NAME}"
+assert_contains "$gateway_rendered" "name: ${GATEWAY_NAME}-migrate"
+assert_contains "$gateway_rendered" "serviceAccountName: ${GATEWAY_NAME}"
+assert_contains "$gateway_rendered" "kind: NetworkPolicy"
+# Same image and tag as the kernel; the gateway binary by command.
+assert_contains "$gateway_rendered" 'command: ["/usr/local/bin/helm-gateway"]'
+assert_contains "$gateway_rendered" 'command: ["/usr/local/bin/helm-gateway", "migrate"]'
+assert_equals_count() {
+    local file="$1" pattern="$2" want="$3" got
+    got="$(grep -cF -- "$pattern" "$file" || true)"
+    if [ "$got" != "$want" ]; then
+        echo "::error::expected $want occurrences of '$pattern', found $got"
+        exit 1
+    fi
+}
+# Kernel Deployment, gateway Deployment, and the scram and migrate init
+# containers.
+assert_equals_count "$gateway_rendered" 'image: "ghcr.io/mindburn-labs/helm-ai-kernel:v' 4
+# The gateway Pod: TLS with client auth, probes on the health port, identity.
+assert_contains "$gateway_rendered" 'value: "/var/run/secrets/helm-gateway-tls/tls.crt"'
+assert_contains "$gateway_rendered" 'value: "/var/run/secrets/helm-gateway-tls/ca.crt"'
+assert_contains "$gateway_rendered" 'secretName: "gw-tls"'
+assert_contains "$gateway_rendered" "path: /readyz"
+assert_contains "$gateway_rendered" "path: /healthz"
+assert_contains "$gateway_rendered" "containerPort: 8443"
+assert_contains "$gateway_rendered" "targetPort: https"
+assert_contains "$gateway_rendered" 'value: "helm-gateway:smoke"'
+assert_contains "$gateway_rendered" "HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE"
+assert_contains "$gateway_rendered" "name: HELM_GATEWAY_DATABASE_URL"
+assert_contains "$gateway_rendered" 'name: "gw-db"'
+assert_not_contains "$gateway_rendered" "--dev-insecure-listen"
+# Its ServiceAccount and Pod carry no API token (kernel default render: 1;
+# gateway: ServiceAccount, Pod and migrate Job).
+assert_equals_count "$gateway_rendered" "automountServiceAccountToken: false" 4
+# NetworkPolicy: ingress to 8443 from the Control Plane selector only, and to
+# the health port 8081 from anywhere (kubelet probes); egress to DNS, the
+# database peer and TCP 443. The ingress block is compared whole.
+gateway_ingress="$(helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --show-only templates/gateway-networkpolicy.yaml | sed -n '/^  ingress:$/,/^  egress:$/p')"
+gateway_ingress_want='  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              helm-cp: enabled
+      ports:
+        - protocol: TCP
+          port: 8443
+    - ports:
+        - protocol: TCP
+          port: 8081
+  egress:'
+if [ "$gateway_ingress" != "$gateway_ingress_want" ]; then
+    echo "::error::gateway NetworkPolicy ingress differs from: API port from the Control Plane only, health port open"
+    printf '%s\n' "$gateway_ingress"
+    exit 1
+fi
+assert_contains "$gateway_rendered" "helm-cp: enabled"
+assert_contains "$gateway_rendered" "cidr: 10.20.30.40/32"
+assert_contains "$gateway_rendered" "k8s-app: kube-dns"
+assert_contains "$gateway_rendered" "port: 443"
+# The migrate hook: roles as the administrator, migrate and grants as the owner.
+assert_contains "$gateway_rendered" '"helm.sh/hook": pre-install,pre-upgrade'
+assert_contains "$gateway_rendered" "- name: roles"
+assert_contains "$gateway_rendered" "- name: grants"
+assert_contains "$gateway_rendered" 'value: "-c role=helm_owner -c search_path=helm_gateway"'
+assert_contains "$gateway_rendered" "CREATE ROLE %I NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION"
+assert_contains "$gateway_rendered" "has no helm_gateway grant rule"
+assert_contains "$gateway_rendered" '"docker.io/library/postgres:16-alpine@sha256:'
+# The runtime password reaches only the scram container, as a file, and
+# leaves it as a SCRAM-SHA-256 verifier; no psql container gets the
+# plaintext, and no container gets it as an environment variable.
+assert_contains "$gateway_rendered" "- name: scram"
+assert_contains "$gateway_rendered" "- scram-verifier"
+assert_contains "$gateway_rendered" "- --password-file=/var/run/secrets/helm-gateway-bootstrap/runtime-password"
+assert_contains "$gateway_rendered" 'key: "HELM_GATEWAY_ROLE_PASSWORD"'
+assert_contains "$gateway_rendered" "helm_gateway_bootstrap.runtime_verifier"
+assert_not_contains "$gateway_rendered" "name: HELM_GATEWAY_ROLE_PASSWORD"
+assert_not_contains "$gateway_rendered" "runtime_password"
+# The password volume: its definition and one mount, in the scram container.
+assert_equals_count "$gateway_rendered" "name: bootstrap-password" 2
+gateway_unmanaged_password_rendered="$RENDER_DIR/rendered-gateway-unmanaged-password.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --set gateway.database.bootstrap.enabled=true \
+    --set gateway.database.bootstrap.existingSecret=gw-db-admin \
+    --set-string gateway.database.bootstrap.runtimePasswordKey= >"$gateway_unmanaged_password_rendered"
+assert_contains "$gateway_unmanaged_password_rendered" "- name: roles"
+assert_not_contains "$gateway_unmanaged_password_rendered" "- name: scram"
+assert_not_contains "$gateway_unmanaged_password_rendered" "bootstrap-password"
+# The GitHub App Secret and the installations file reach the gateway
+# Deployment and no other object.
+gateway_github_docs="$(docs_containing "$gateway_rendered" "gw-github-app")"
+if [ "$gateway_github_docs" != "helm-ai-kernel/templates/gateway-deployment.yaml" ]; then
+    echo "::error::the GitHub App Secret is referenced outside the gateway Deployment: ${gateway_github_docs}"
+    exit 1
+fi
+assert_contains "$gateway_rendered" 'value: "/var/run/secrets/helm-gateway-github/private-key.pem"'
+assert_contains "$gateway_rendered" 'value: "/etc/helm-gateway/github/installations.json"'
+gateway_installations_docs="$(docs_containing "$gateway_rendered" "${GATEWAY_NAME}-github-installations" | sort | tr '\n' ' ')"
+if [ "$gateway_installations_docs" != "helm-ai-kernel/templates/gateway-configmap.yaml helm-ai-kernel/templates/gateway-deployment.yaml " ]; then
+    echo "::error::the installations ConfigMap is referenced outside the gateway Deployment: ${gateway_installations_docs}"
+    exit 1
+fi
+
+# Without the bootstrap, migrate runs with the runtime DSN, or the migrate DSN.
+gateway_plain_rendered="$RENDER_DIR/rendered-gateway-plain.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" >"$gateway_plain_rendered"
+assert_not_contains "$gateway_plain_rendered" "- name: roles"
+assert_not_contains "$gateway_plain_rendered" "name: PGOPTIONS"
+assert_not_contains "$gateway_plain_rendered" "HELM_GATEWAY_GITHUB_"
+assert_equals_count "$gateway_plain_rendered" 'name: "gw-db"' 2
+gateway_migrate_dsn_rendered="$RENDER_DIR/rendered-gateway-migrate-dsn.yaml"
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "${GATEWAY_ARGS[@]}" \
+    --set gateway.database.migrate.existingSecret=gw-db-owner >"$gateway_migrate_dsn_rendered"
+assert_contains "$gateway_migrate_dsn_rendered" 'name: "gw-db-owner"'
+assert_contains "$gateway_migrate_dsn_rendered" 'key: "HELM_GATEWAY_MIGRATE_DATABASE_URL"'
+
+# Development: plain HTTP on the Pod loopback, never with production.
+gateway_dev_rendered="$RENDER_DIR/rendered-gateway-dev.yaml"
+gateway_args_without gateway.tls.existingSecret
+helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
+    "${GATEWAY_ARGS_WITHOUT[@]}" \
+    --set gateway.tls.devInsecureLoopback=true >"$gateway_dev_rendered"
+assert_contains "$gateway_dev_rendered" "- --dev-insecure-listen=127.0.0.1:8443"
+assert_not_contains "$gateway_dev_rendered" "HELM_TLS_CLIENT_AUTH"
+
+# expect_gateway_render_failure NAME MESSAGE ARGS... renders with ARGS and
+# requires the render to fail with MESSAGE.
+expect_gateway_render_failure() {
+    local name="$1" message="$2" log="$RENDER_DIR/gateway-$1.log"
+    shift 2
+    if helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" "$@" >"$RENDER_DIR/gateway-$name.yaml" 2>"$log"; then
+        echo "::error::gateway render ${name} unexpectedly succeeded"
+        exit 1
+    fi
+    assert_contains "$log" "$message"
+}
+for required in \
+    "gateway.tls.existingSecret|requires gateway.tls.existingSecret" \
+    "gateway.controlPlaneIdentity.jwksURL|requires gateway.controlPlaneIdentity.jwksURL" \
+    "gateway.controlPlaneIdentity.issuer|requires gateway.controlPlaneIdentity.issuer" \
+    "gateway.controlPlaneIdentity.audience|requires gateway.controlPlaneIdentity.audience" \
+    "gateway.controlPlaneIdentity.actor|requires gateway.controlPlaneIdentity.actor" \
+    "gateway.database.existingSecret|requires gateway.database.existingSecret" \
+    "gateway.networkPolicy.controlPlane.namespaceSelector|requires gateway.networkPolicy.controlPlane.namespaceSelector or podSelector" \
+    "gateway.networkPolicy.database.to|requires gateway.networkPolicy.database.to"; do
+    key="${required%%|*}"
+    gateway_args_without "$key"
+    expect_gateway_render_failure "missing-${key##*.}" "${required#*|}" "${GATEWAY_ARGS_WITHOUT[@]}"
+done
+expect_gateway_render_failure bootstrap-without-secret "requires gateway.database.bootstrap.existingSecret" \
+    "${GATEWAY_ARGS[@]}" --set gateway.database.bootstrap.enabled=true
+expect_gateway_render_failure bootstrap-and-migrate-dsn "are mutually exclusive" \
+    "${GATEWAY_ARGS[@]}" --set gateway.database.bootstrap.enabled=true \
+    --set gateway.database.bootstrap.existingSecret=gw-db-admin --set gateway.database.migrate.existingSecret=gw-db-owner
+expect_gateway_render_failure bootstrap-same-roles "ownerRole and runtimeRole must differ" \
+    "${GATEWAY_ARGS[@]}" --set gateway.database.bootstrap.enabled=true \
+    --set gateway.database.bootstrap.existingSecret=gw-db-admin --set gateway.database.bootstrap.ownerRole=helm_gateway
+expect_gateway_render_failure cnf-without-client-auth "requireCNF requires gateway.tls.clientAuth" \
+    "${GATEWAY_ARGS[@]}" --set gateway.tls.clientAuth= --set gateway.controlPlaneIdentity.requireCNF=true
+# The GitHub App files are all or none, and the installations file has the
+# custody's exact shape.
+expect_gateway_render_failure github-secret-only "are set together or not at all" \
+    "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app
+expect_gateway_render_failure github-installations-only "are set together or not at all" \
+    "${GATEWAY_ARGS[@]}" --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations.json"
+expect_gateway_render_failure github-api-url-alone "gateway.github.apiURL requires" \
+    "${GATEWAY_ARGS[@]}" --set gateway.github.apiURL=https://ghe.example.internal/api/v3
+for bad in extra short; do
+    expect_gateway_render_failure "installations-${bad}" "exactly tenant_id, owner, installation_id and repositories are allowed" \
+        "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app \
+        --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations-${bad}.json"
+done
+expect_gateway_render_failure installations-top 'must be {"installations": [...]}' \
+    "${GATEWAY_ARGS[@]}" --set gateway.github.existingSecret=gw-github-app \
+    --set-file gateway.github.installationsFile="$GATEWAY_TESTDATA/installations-top.json"
+
+gateway_production_args=(
+    --set helm.production=true
+    --set helm.signing.key="$SIGNING_KEY"
+    --set helm.auth.adminAPIKey="$ADMIN_KEY"
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY"
+)
+gateway_production_log="$RENDER_DIR/gateway-production-dev.log"
+gateway_args_without gateway.tls.existingSecret
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
+    "${gateway_production_args[@]}" "${GATEWAY_ARGS_WITHOUT[@]}" \
+    --set gateway.tls.devInsecureLoopback=true \
+    --set gateway.database.migrate.existingSecret=gw-db-owner >"$RENDER_DIR/gateway-production-dev.yaml" 2>"$gateway_production_log"; then
+    echo "::error::a production gateway render with plain HTTP unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$gateway_production_log" "gateway.tls.devInsecureLoopback is refused when helm.production=true"
+gateway_production_owner_log="$RENDER_DIR/gateway-production-owner.log"
+if production_controlplane_helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
+    "${gateway_production_args[@]}" "${GATEWAY_ARGS[@]}" >"$RENDER_DIR/gateway-production-owner.yaml" 2>"$gateway_production_owner_log"; then
+    echo "::error::a production gateway render migrating with the runtime DSN unexpectedly succeeded"
+    exit 1
+fi
+assert_contains "$gateway_production_owner_log" "requires an owner DSN for migrate"
+gateway_production_rendered="$RENDER_DIR/rendered-gateway-production.yaml"
+production_controlplane_helm_runner template "$RELEASE" "$CHART" --namespace "$NAMESPACE" \
+    "${gateway_production_args[@]}" "${GATEWAY_ARGS[@]}" \
+    --set gateway.database.bootstrap.enabled=true \
+    --set gateway.database.bootstrap.existingSecret=gw-db-admin >"$gateway_production_rendered"
+assert_contains "$gateway_production_rendered" "image: \"ghcr.io/mindburn-labs/helm-ai-kernel@${PRODUCTION_IMAGE_DIGEST}\""
+assert_equals_count "$gateway_production_rendered" "@${PRODUCTION_IMAGE_DIGEST}" 4
 
 echo "helm chart smoke passed"

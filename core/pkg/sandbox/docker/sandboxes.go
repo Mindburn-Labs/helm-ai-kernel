@@ -81,6 +81,9 @@ func (r *SandboxesRunner) Validate(spec *sandbox.SandboxSpec) error {
 	if len(spec.Command) == 0 {
 		return fmt.Errorf("sandbox spec: command is required")
 	}
+	if err := validateEnvNames(spec.Env); err != nil {
+		return err
+	}
 	timeout := spec.Limits.Timeout
 	if timeout == 0 {
 		timeout = r.config.DefaultTimeout
@@ -113,6 +116,7 @@ func (r *SandboxesRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sand
 	defer cancel()
 
 	cmd := r.buildCommand(ctx, args...)
+	cmd.Env = commandEnv(spec.Env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -146,7 +150,7 @@ func (r *SandboxesRunner) Run(spec *sandbox.SandboxSpec) (*sandbox.Result, *sand
 
 	receipt := &sandbox.ExecutionReceipt{
 		ExecutionID: execID,
-		Spec:        *spec,
+		Spec:        receiptSpec(spec),
 		Result:      *result,
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
@@ -207,9 +211,7 @@ func (r *SandboxesRunner) buildRunArgs(spec *sandbox.SandboxSpec, execID string)
 	// No privileged mode (security invariant).
 
 	// Environment variables.
-	for k, v := range spec.Env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
-	}
+	args = append(args, envFlags(spec.Env)...)
 
 	// Mounts — enforced read-only unless explicitly allowed.
 	for _, m := range spec.Mounts {

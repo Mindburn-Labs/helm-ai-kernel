@@ -36,7 +36,6 @@ after it is a target.
 | The rule those bytes follow | [`protocols/specs/rfc/canonical-json-v1.md`](../../specs/rfc/canonical-json-v1.md) — RFC 8785 with one stated number-serialization deviation | same target; vectors in [`reference_packs/canonical-json-v1/vectors.json`](../../../reference_packs/canonical-json-v1/vectors.json), independently verified by `verify_vectors.py` |
 | Signing preimages | `core/pkg/crypto/canonical.go`, `core/pkg/crypto/canonical_v5.go` | per-family reference packs; see ADR 0003 §D4 for which families are SPECIFIED |
 | Policy-stack validation ("CPI") | `core/pkg/kernel/cpi/cpi.go` — pure Go, unconditionally compiled, and the only CPI implementation | `core/pkg/kernel/cpi/cpi_test.go` |
-| WASM policy execution | `core/pkg/policy/wasm/` — Go + wazero, modules content-addressed by SHA-256 of the binary | `core/pkg/policy/wasm/executor_test.go` |
 
 Two divergences an integrator must not miss:
 
@@ -48,9 +47,10 @@ Two divergences an integrator must not miss:
   Its JSON tags (`name`, `priority`, `rules`, `verdict`, `hash`, `conflicts`,
   `layers`) are the actual field names on the wire; no field named in §§3–6
   exists in code.
-- **The WASM path is not a second implementation of these rules.**
-  `core/pkg/policy/wasm` runs caller-supplied compiled modules; it defines no
-  canonicalization of its own and shares no code with §2.
+- **There is no WASM policy path.** The Go/wazero host that used to live in
+  `core/pkg/policy/wasm` never had a production caller and was removed in
+  HELM-756. Policy is evaluated by the CEL `decide` in
+  `core/pkg/kernel/authority`, which defines no canonicalization of its own.
 
 ## 1. General Principles
 
@@ -165,9 +165,8 @@ set. It was deleted in #821, together with the complementary
 now the only CPI implementation, compiled unconditionally. After this page is
 corrected, no reference to `helm-policy-vm` remains in the repository.
 
-There is likewise no WASM leg to compare against: the only WASM in the policy
-path is the Go/wazero host in `core/pkg/policy/wasm`, which executes modules
-rather than canonicalizing anything.
+There is likewise no WASM leg to compare against: no WASM remains in the policy
+path.
 
 **What CI does verify today** — the nearest shipped analogue, and the model to
 copy:

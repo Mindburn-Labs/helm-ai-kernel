@@ -15,7 +15,7 @@ public class Main {
         System.out.println("=== Chat Completions ===");
         try {
             var req = new ChatCompletionRequest();
-            req.model = "gpt-4";
+            req.model = "gpt-6-sol";
             req.messages = List.of(new ChatMessage("user", "List files in /tmp"));
             var res = helm.chatCompletions(req);
             if (res.choices != null && !res.choices.isEmpty()) {
@@ -23,15 +23,6 @@ public class Main {
             }
         } catch (HelmClient.HelmApiException e) {
             System.out.println("Denied: " + e.reasonCode + " — " + e.getMessage());
-        }
-
-        // 2. Conformance
-        System.out.println("\n=== Conformance ===");
-        try {
-            var conf = helm.conformanceRun(new ConformanceRequest("L2"));
-            System.out.println("Verdict: " + conf.verdict + " Gates: " + conf.gates + " Failed: " + conf.failed);
-        } catch (HelmClient.HelmApiException e) {
-            System.out.println("Conformance error: " + e.reasonCode);
         }
 
         // 3. Health

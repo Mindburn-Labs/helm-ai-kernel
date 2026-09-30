@@ -55,7 +55,7 @@ func TestSandboxesRunnerConfigValidateArgsAndCommand(t *testing.T) {
 		s.Mounts = []sandbox.Mount{{Source: "/host", Target: "/guest", ReadOnly: true}}
 		s.WorkDir = "/workspace"
 	}), "exec-1")
-	for _, want := range []string{"--memory", "128m", "--cpus", "0.75", "--pids-limit", "8", "--storage-opt", "size=64M", "--network", "bridge", "--dns", "0.0.0.0", "-e", "A=B", "-v", "/host:/guest:ro", "-w", "/workspace"} {
+	for _, want := range []string{"--memory", "128m", "--cpus", "0.75", "--pids-limit", "8", "--storage-opt", "size=64M", "--network", "bridge", "--dns", "0.0.0.0", "-e", "A", "-v", "/host:/guest:ro", "-w", "/workspace"} {
 		if !containsArg(args, want) {
 			t.Fatalf("buildRunArgs() missing %q in %#v", want, args)
 		}

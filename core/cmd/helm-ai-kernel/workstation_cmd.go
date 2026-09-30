@@ -17,7 +17,7 @@ import (
 
 func runWorkstationCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel workstation <import|view|decide|enforce|verify-decision|operator|list|denied|memory|loops|evidence|certify|capture> [flags]")
+		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel workstation <import|view|decide|enforce|verify-decision|operator|list|denied|memory|loops|evidence|capture> [flags]")
 		return 2
 	}
 	switch args[0] {
@@ -43,13 +43,11 @@ func runWorkstationCmd(args []string, stdout, stderr io.Writer) int {
 		return runWorkstationOperatorCmd("loops", args[1:], stdout, stderr)
 	case "evidence":
 		return runWorkstationEvidenceCmd(args[1:], stdout, stderr)
-	case "certify":
-		return runWorkstationCertifyCmd(args[1:], stdout, stderr)
 	case "capture":
 		return runWorkstationCaptureCmd(args[1:], stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "Unknown workstation command: %s\n", args[0])
-		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel workstation <import|view|decide|enforce|verify-decision|operator|list|denied|memory|loops|evidence|certify|capture> [flags]")
+		_, _ = fmt.Fprintln(stderr, "Usage: helm-ai-kernel workstation <import|view|decide|enforce|verify-decision|operator|list|denied|memory|loops|evidence|capture> [flags]")
 		return 2
 	}
 }

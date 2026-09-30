@@ -6,9 +6,11 @@ last_reviewed: 2026-07-01
 # OpenAI Proxy
 
 Use the OpenAI-compatible proxy when an app already speaks the OpenAI API shape
-and can set a custom base URL. HELM stays local, evaluates requests before they
-reach the upstream, and writes receipts for allowed, denied, or escalated
-decisions.
+and can set a custom base URL. HELM stays local, forwards the request, then holds
+every tool call in the response for a Guardian decision: a denied call never
+reaches the client, and each decision gets a receipt. A stream that declares
+tools is refused, and a stream without tools passes through without a receipt
+(`controls.yaml` CTL-031).
 
 ## Start Locally
 

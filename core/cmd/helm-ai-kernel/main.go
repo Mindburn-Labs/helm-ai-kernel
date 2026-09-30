@@ -30,6 +30,7 @@ import (
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
 	policyreconcile "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/policy/reconcile"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/postgresmigration"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/prg"
@@ -364,6 +365,13 @@ func runServerWithOptions(opts serverOptions) error {
 	if healthConfigErr != nil {
 		return fmt.Errorf("desktop transport v1 configuration: %w", healthConfigErr)
 	}
+	apiTLSConfig, tlsConfigErr := serveTLSConfigFromEnv()
+	if tlsConfigErr != nil {
+		return fmt.Errorf("API listener TLS configuration: %w", tlsConfigErr)
+	}
+	if apiTLSConfig != nil && desktopTransport != nil {
+		return errors.New("API listener TLS configuration: HELM_TLS_* is not supported with desktop transport v1")
+	}
 	apiAddr := net.JoinHostPort(bindAddr, strconv.Itoa(port))
 	var (
 		apiListener net.Listener
@@ -428,7 +436,11 @@ func runServerWithOptions(opts serverOptions) error {
 		if err := validateRuntimePostgresURL(dbURL); err != nil {
 			return fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
 		}
-		db, err = sql.Open("postgres", dbURL)
+		utcURL, err := pgdsn.WithUTCTimeZone(dbURL)
+		if err != nil {
+			return fmt.Errorf("invalid postgres DATABASE_URL: %w", err)
+		}
+		db, err = sql.Open("postgres", utcURL)
 		if err != nil {
 			return fmt.Errorf("connect to DB: %w", err)
 		}
@@ -475,6 +487,9 @@ func runServerWithOptions(opts serverOptions) error {
 	artRegistry := artifacts.NewRegistry(artStore, verifier)
 
 	// === SUBSYSTEM WIRING ===
+	if err := ensureLocalAPIKeys(dataDir, logger); err != nil {
+		return err
+	}
 	services, svcErr := NewServices(ctx, db, artStore, logger, dataDir, databaseMode)
 	if svcErr != nil {
 		// In production we refuse to start in a degraded state. Subsystems are
@@ -574,9 +589,6 @@ func runServerWithOptions(opts serverOptions) error {
 	if policyStore != nil {
 		guardianOpts = append(guardianOpts, guardian.WithPolicySnapshots(policyStore, policyScope))
 	}
-	if services != nil && services.EmergencyStops != nil {
-		guardianOpts = append(guardianOpts, guardian.WithScopedStopReader(services.EmergencyStops))
-	}
 	if services != nil && services.Observability != nil {
 		guardianOpts = append(guardianOpts, guardian.WithOTel())
 	}
@@ -608,7 +620,11 @@ func runServerWithOptions(opts serverOptions) error {
 		guardianOpts = append(guardianOpts, guardian.WithWarmLeaseManager(warmMgr))
 	}
 
-	guard, err := newProductionGuardian(signer, ruleGraph, artRegistry, runtimeClock, guardianOpts...)
+	guardianState := productionGuardianState{DataDir: dataDir}
+	if services != nil && services.EmergencyStops != nil {
+		guardianState.Stops = services.EmergencyStops
+	}
+	guard, err := newProductionGuardian(signer, ruleGraph, artRegistry, runtimeClock, guardianState, guardianOpts...)
 	if err != nil {
 		return fmt.Errorf("initialize production Guardian: %w", err)
 	}
@@ -634,6 +650,10 @@ func runServerWithOptions(opts serverOptions) error {
 		services.GeneratedSpecApproval, err = newGeneratedSpecApprovalRuntime(ctx, db, databaseMode, signer, services.EmergencyStops)
 		if err != nil {
 			return fmt.Errorf("initialize GeneratedSpec approval runtime: %w", err)
+		}
+		services.ControlPlaneIdentity, err = newControlPlaneIdentityFromEnv()
+		if err != nil {
+			return fmt.Errorf("initialize Control Plane identity: %w", err)
 		}
 
 		// Receipt transparency log: anchor decision-record receipt hashes at
@@ -679,13 +699,22 @@ func runServerWithOptions(opts serverOptions) error {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		TLSConfig:         apiTLSConfig,
 	}
 	if bindAddr == "0.0.0.0" {
 		logger.Warn("API server binding to all interfaces; ensure firewall rules are in place", "port", port)
 	}
 	go func() {
-		log.Printf("[helm] API server: %s:%d", bindAddr, port)
-		if err := server.Serve(apiListener); err != nil && err != http.ErrServerClosed {
+		var err error
+		if apiTLSConfig != nil {
+			log.Printf("[helm] API server: %s:%d (TLS, client auth %s)", bindAddr, port, apiTLSConfig.ClientAuth)
+			// The certificate comes from TLSConfig.GetCertificate, so no files here.
+			err = server.ServeTLS(apiListener, "", "")
+		} else {
+			log.Printf("[helm] API server: %s:%d", bindAddr, port)
+			err = server.Serve(apiListener)
+		}
+		if err != nil && err != http.ErrServerClosed {
 			logger.Error("API server failed", "error", err)
 		}
 	}()
@@ -697,16 +726,12 @@ func runServerWithOptions(opts serverOptions) error {
 
 	var healthServer *http.Server
 	if !suppressAuxiliaryHealth {
-		healthMux := http.NewServeMux()
-		healthHandler := func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("OK"))
-		}
-		healthMux.HandleFunc("/health", healthHandler)
-		healthMux.HandleFunc("/healthz", healthHandler)
+		healthMux := newListenerRouteMux(listenerHealth)
+		var healthMetrics http.HandlerFunc
 		if metricsEnabled && metricsPort == healthPort {
-			healthMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
+			healthMetrics = protectedMetricsHandler(services, metricsToken)
 		}
+		registerHealthRoutes(healthMux, healthMetrics)
 		healthServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, healthPort),
 			Handler:           healthMux,
@@ -724,8 +749,8 @@ func runServerWithOptions(opts serverOptions) error {
 	}
 	var metricsServer *http.Server
 	if metricsEnabled && metricsPort != healthPort {
-		metricsMux := http.NewServeMux()
-		metricsMux.HandleFunc("/metrics", protectedMetricsHandler(services, metricsToken))
+		metricsMux := newListenerRouteMux(listenerMetrics)
+		registerMetricsRoutes(metricsMux, protectedMetricsHandler(services, metricsToken))
 		metricsServer = &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", bindAddr, metricsPort),
 			Handler:           metricsMux,
@@ -810,7 +835,7 @@ func metricsHandler(services *Services) http.HandlerFunc {
 			gatherers = append(gatherers, gatherer)
 		}
 	}
-	gatherers = append(gatherers, verificationMetrics.PrometheusGatherer())
+	gatherers = append(gatherers, verificationMetrics.PrometheusGatherer(), controlPlaneIdentityMetrics.PrometheusGatherer())
 	return promhttp.HandlerFor(gatherers, promhttp.HandlerOpts{EnableOpenMetrics: true}).ServeHTTP
 }
 

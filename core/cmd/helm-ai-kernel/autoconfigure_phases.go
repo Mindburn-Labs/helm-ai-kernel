@@ -127,11 +127,10 @@ func runBlastRadius(ctx context.Context, inv AutoconfigureInventory) (BlastRadiu
 		}
 		for attempt := 1; attempt <= attempts; attempt++ {
 			record, err := firewall.AuthorizeToolCall(ctx, mcp.ToolCallAuthorization{
-				ServerID:         v.ServerID,
-				ToolName:         v.Tool,
-				ArgsHash:         "sha256:sim-args",
-				GrantedScopes:    v.Scopes,
-				PinnedSchemaHash: v.PinnedSchemaHash,
+				ServerID:      v.ServerID,
+				ToolName:      v.Tool,
+				ArgsHash:      "sha256:sim-args",
+				GrantedScopes: v.Scopes,
 			})
 			if err != nil {
 				return report, nil, fmt.Errorf("vector %s attempt %d: %w", v.ID, attempt, err)

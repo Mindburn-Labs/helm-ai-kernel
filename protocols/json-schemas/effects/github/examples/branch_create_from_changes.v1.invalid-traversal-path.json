@@ -1,0 +1,14 @@
+{
+  "schema": "helm.github.branch.create_from_changes.v1",
+  "base": "main",
+  "base_sha": "0123456789abcdef0123456789abcdef01234567",
+  "head": "helm/run-0192f0c4",
+  "message": "docs: add the skeleton note",
+  "files": [
+    {
+      "path": "docs/../../etc/x",
+      "mode": "100644",
+      "content_utf8": "# Skeleton\n"
+    }
+  ]
+}

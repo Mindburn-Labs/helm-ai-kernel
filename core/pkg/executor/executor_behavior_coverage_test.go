@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
 // --- Merkle Tree ---
@@ -132,59 +129,6 @@ func TestEvidenceView_MissingPathErrors(t *testing.T) {
 }
 
 // --- EvidencePack ---
-
-func TestEvidencePack_ProduceCreatesPackID(t *testing.T) {
-	p := NewEvidencePackProducer("v1.0")
-	pack, err := p.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "agent-1", DecisionID: "d-1", EffectID: "e-1", Status: "SUCCESS",
-	})
-	if err != nil || pack.PackID == "" {
-		t.Fatalf("pack should have ID: err=%v", err)
-	}
-}
-
-func TestEvidencePack_AttestationHashSet(t *testing.T) {
-	p := NewEvidencePackProducer("v1.0")
-	pack, _ := p.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-	})
-	if !strings.HasPrefix(pack.Attestation.PackHash, "sha256:") {
-		t.Fatalf("expected sha256: prefix, got %s", pack.Attestation.PackHash)
-	}
-}
-
-func TestEvidencePack_DurationComputed(t *testing.T) {
-	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	end := start.Add(500 * time.Millisecond)
-	p := NewEvidencePackProducer("v1.0")
-	pack, _ := p.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-		StartedAt: start, CompletedAt: end,
-	})
-	if pack.Execution.DurationMs != 500 {
-		t.Fatalf("expected 500ms, got %d", pack.Execution.DurationMs)
-	}
-}
-
-func TestEvidencePack_ValidateEmpty(t *testing.T) {
-	issues := ValidateEvidencePack(&contracts.EvidencePack{})
-	if len(issues) == 0 {
-		t.Fatal("empty pack should have validation issues")
-	}
-}
-
-func TestEvidencePack_ValidateComplete(t *testing.T) {
-	p := NewEvidencePackProducer("v1.0")
-	pack, _ := p.Produce(context.Background(), &EvidencePackInput{
-		ActorID: "a", DecisionID: "d", EffectID: "e", Status: "SUCCESS",
-	})
-	issues := ValidateEvidencePack(pack)
-	if len(issues) != 0 {
-		t.Fatalf("complete pack should have no issues: %v", issues)
-	}
-}
-
-// --- Receipt signing / hash ---
 
 func TestReceiptHashDeterministic(t *testing.T) {
 	data := []byte("receipt-content")

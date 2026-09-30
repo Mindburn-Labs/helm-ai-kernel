@@ -13,8 +13,6 @@
 #   core/pkg/saga                (orchestrator_fuzz_test.go)
 #   core/pkg/threatscan          (scanner_fuzz_test.go)
 #   core/pkg/guardian            (decision_fuzz_test.go)
-#   core/pkg/compliance/jkg      (jkg_fuzz_test.go)
-#   core/pkg/compliance/compiler (compiler_fuzz_test.go)
 #   core/pkg/kernel              (csnf_fuzz_test.go)
 # Net-new harnesses for parser, builder, store, and egress packages will
 # be picked up automatically once they ship.

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/httperr"
 )
 
 // Sidecar listeners (`proxy`, `mcp serve --transport http`) each read their
@@ -93,7 +94,7 @@ func wrapProxyAuth(next http.Handler, token string) http.Handler {
 		provided, ok := bearerToken(r)
 		if !ok || !secretEqual(provided, token) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="helm-proxy"`)
-			http.Error(w, "missing or invalid HELM proxy token", http.StatusUnauthorized)
+			httperr.WriteError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized), "missing or invalid HELM proxy token")
 			return
 		}
 		r.Header.Del("Authorization")
@@ -113,7 +114,7 @@ func protectedMetricsHandler(services *Services, token string) http.HandlerFunc 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if token == "" {
 			if !requestFromLoopback(r) {
-				http.Error(w, "metrics are served to loopback clients only; set "+metricsBearerTokenEnv+" to scrape remotely", http.StatusForbidden)
+				httperr.WriteError(w, http.StatusForbidden, http.StatusText(http.StatusForbidden), "metrics are served to loopback clients only; set "+metricsBearerTokenEnv+" to scrape remotely")
 				return
 			}
 			next(w, r)
@@ -121,7 +122,7 @@ func protectedMetricsHandler(services *Services, token string) http.HandlerFunc 
 		}
 		if provided, ok := bearerToken(r); !ok || !secretEqual(provided, token) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="helm-metrics"`)
-			http.Error(w, "missing or invalid metrics bearer token", http.StatusUnauthorized)
+			httperr.WriteError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized), "missing or invalid metrics bearer token")
 			return
 		}
 		next(w, r)

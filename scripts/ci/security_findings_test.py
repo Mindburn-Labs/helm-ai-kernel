@@ -16,6 +16,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from security_findings import (  # noqa: E402
     ReportError,
     compare,
+    deadcode_keys,
     gitleaks_keys,
     gosec_keys,
     govulncheck_called,
@@ -60,6 +61,13 @@ class KeysTest(unittest.TestCase):
         self.assertEqual(len(keys), 1)
         self.assertNotIn(secret, keys[0])
         self.assertNotIn("abab", keys[0])
+
+    def test_deadcode_keys_name_package_and_function(self) -> None:
+        report = [{"Path": "example.com/p", "Funcs": [{"Name": "(*T).M", "Position": {"Line": 9}}, {"Name": "F"}]}]
+        self.assertEqual(deadcode_keys(report), ["example.com/p (*T).M", "example.com/p F"])
+        self.assertEqual(deadcode_keys(None), [])
+        with self.assertRaises(ReportError):
+            deadcode_keys({"Path": "x"})
 
     def test_govulncheck_counts_only_called_symbols(self) -> None:
         stream = "".join(

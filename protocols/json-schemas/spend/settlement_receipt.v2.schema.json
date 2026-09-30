@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mindburn.org/schemas/spend/settlement_receipt.v2.schema.json",
+  "title": "settlement_receipt v2",
+  "description": "Exact provider tariff accrual; not a verified invoice or customer charge. Producer validation additionally enforces int64 bounds and conservation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "tenant_id",
+    "workspace_id",
+    "route_quote_id",
+    "reserved_nano_cents",
+    "accrued_nano_cents",
+    "currency",
+    "cost_basis",
+    "evidence_pack_ref",
+    "created_at",
+    "content_hash",
+    "usage_receipt_id",
+    "source_usage_receipt_hash",
+    "ledger_entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "helm.settlement-receipt.v2"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "route_quote_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "reserved_nano_cents": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "maxLength": 19
+    },
+    "accrued_nano_cents": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "maxLength": 19
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "cost_basis": {
+      "const": "TARIFF_ESTIMATE"
+    },
+    "evidence_pack_ref": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "usage_receipt_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "source_usage_receipt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "ledger_entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "account_id",
+          "direction",
+          "amount_nano_cents"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": ".*\\S.*"
+          },
+          "account_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": ".*\\S.*"
+          },
+          "direction": {
+            "enum": [
+              "DEBIT",
+              "CREDIT"
+            ]
+          },
+          "amount_nano_cents": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "maxLength": 19
+          }
+        }
+      }
+    }
+  }
+}

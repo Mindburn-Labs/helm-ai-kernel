@@ -243,6 +243,8 @@ if sbom.get("bomFormat") != "CycloneDX":
     raise SystemExit("sbom.json is not CycloneDX")
 
 formula = (assets / "helm-ai-kernel.rb").read_text(encoding="utf-8")
+if re.search(r'^\s*version\s+"', formula, re.MULTILINE):
+    raise SystemExit("Homebrew formula must infer its version from the release URL")
 if version not in formula:
     raise SystemExit("Homebrew formula does not include the release version")
 if "Mindburn-Labs/helm-ai-kernel" not in formula:

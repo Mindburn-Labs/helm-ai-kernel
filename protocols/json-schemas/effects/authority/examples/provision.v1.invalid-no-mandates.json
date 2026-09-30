@@ -1,0 +1,70 @@
+{
+  "schema": "helm.authority.provision.v1",
+  "org_ref": "org:0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d",
+  "version_ref": "0192f0c5-1111-7c3b-9d2a-5b8e4f1a2c3d",
+  "stage": "approval-required",
+  "base_plan_digest": "",
+  "valid_from": "2026-10-01T00:00:00Z",
+  "valid_until": "2026-12-30T00:00:00Z",
+  "effect_types": [
+    {
+      "effect_type": "github.repository.get",
+      "risk_class": "low"
+    },
+    {
+      "effect_type": "github.branch.create_from_changes",
+      "risk_class": "medium"
+    },
+    {
+      "effect_type": "github.pull_request.create_draft",
+      "risk_class": "medium"
+    }
+  ],
+  "principals": [
+    {
+      "id": "org:0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d",
+      "kind": "service"
+    },
+    {
+      "id": "dept:0192f0c5-2222-7c3b-9d2a-5b8e4f1a2c3d",
+      "kind": "service"
+    },
+    {
+      "id": "team:0192f0c5-3333-7c3b-9d2a-5b8e4f1a2c3d",
+      "kind": "service"
+    },
+    {
+      "id": "agt:0192f0c5-4444-7c3b-9d2a-5b8e4f1a2c3d",
+      "kind": "agent"
+    },
+    {
+      "id": "usr_owner",
+      "kind": "human",
+      "ensure_only": true,
+      "external_subject": {
+        "system": "helm-control-plane",
+        "id": "usr_owner"
+      }
+    }
+  ],
+  "disable_principals": [],
+  "mandates": [],
+  "limits": [
+    {
+      "node": "team:0192f0c5-3333-7c3b-9d2a-5b8e4f1a2c3d",
+      "unit": "count",
+      "measure": "count",
+      "window": "day",
+      "value": 50,
+      "span": 1
+    },
+    {
+      "node": "seat:0192f0c5-4444-7c3b-9d2a-5b8e4f1a2c3d#g1",
+      "unit": "usd_micros",
+      "measure": "sum",
+      "window": "day",
+      "value": 20000000,
+      "span": 1
+    }
+  ]
+}

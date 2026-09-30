@@ -57,6 +57,7 @@ func TestLaunchpadServeRuntimeUsesConfiguredStore(t *testing.T) {
 	svc.LaunchpadStore = launchsession.NewStore(storeRoot)
 
 	mux := http.NewServeMux()
+	t.Setenv(launchpadRoutesEnabledEnv, "1")
 	RegisterSubsystemRoutes(mux, svc)
 
 	body := []byte(`{"app_id":"openclaw","substrate_id":"local-container","principal":"console-test"}`)
@@ -101,6 +102,7 @@ func TestLaunchpadImportRoutesAnalyzeLocalRepoAndBlockUnsafeLaunch(t *testing.T)
 	writeLaunchpadImportFixture(t, repoRoot)
 
 	mux := http.NewServeMux()
+	t.Setenv(launchpadRoutesEnabledEnv, "1")
 	RegisterSubsystemRoutes(mux, svc)
 
 	importBody, err := json.Marshal(map[string]string{
@@ -208,6 +210,7 @@ func TestLaunchpadEntitlementDenialBlocksBeforeRunWrite(t *testing.T) {
 	t.Setenv("HELM_ACCOUNT_ENTITLEMENTS_URL", accountServer.URL)
 
 	mux := http.NewServeMux()
+	t.Setenv(launchpadRoutesEnabledEnv, "1")
 	RegisterSubsystemRoutes(mux, svc)
 
 	body := []byte(`{"app_id":"openclaw","substrate_id":"local-container","principal":"console-test"}`)
@@ -238,6 +241,7 @@ func TestLaunchpadTeardownRoutesDeleteCloudResourcesAndSurfaceCleanupFailure(t *
 	svc.DatabaseStatus = "ready"
 	svc.LaunchpadStore = launchsession.NewStore(t.TempDir())
 	mux := http.NewServeMux()
+	t.Setenv(launchpadRoutesEnabledEnv, "1")
 	RegisterSubsystemRoutes(mux, svc)
 
 	var calls []string

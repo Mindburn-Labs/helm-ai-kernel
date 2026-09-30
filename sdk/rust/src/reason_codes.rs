@@ -175,8 +175,6 @@ pub const ERR_CONNECTOR_CONTRACT_DRIFT: &str = "ERR_CONNECTOR_CONTRACT_DRIFT";
 pub const ERR_COMPUTE_GAS_EXHAUSTED: &str = "ERR_COMPUTE_GAS_EXHAUSTED";
 /// DENY: Sandboxed execution exceeded the configured wall-clock time budget
 pub const ERR_COMPUTE_TIME_EXHAUSTED: &str = "ERR_COMPUTE_TIME_EXHAUSTED";
-/// DENY: Medium or high risk execution is missing a VerificationScope
-pub const ERR_VERIFICATION_SCOPE_REQUIRED: &str = "ERR_VERIFICATION_SCOPE_REQUIRED";
 /// DENY: Side-effectful execution is missing a hash-linked HarnessTrace
 pub const ERR_HARNESS_TRACE_REQUIRED: &str = "ERR_HARNESS_TRACE_REQUIRED";
 /// DENY: Multi-artifact or write-bearing execution is missing a PlanTransaction
@@ -188,8 +186,6 @@ pub const ERR_ASSUMPTION_STALE: &str = "ERR_ASSUMPTION_STALE";
 /// ESCALATE: Mutation of connector, tool, sandbox, policy, verifier, evidence, or routing state
 /// requires explicit approval
 pub const ERR_HARNESS_MUTATION_REQUIRES_APPROVAL: &str = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL";
-/// DENY: Harness mutation lacks a valid HarnessChangeContract
-pub const ERR_HARNESS_CHANGE_CONTRACT_INVALID: &str = "ERR_HARNESS_CHANGE_CONTRACT_INVALID";
 /// DENY: Passing tests were submitted without a declared verification scope
 pub const ERR_GREEN_TEST_SCOPE_MISSING: &str = "ERR_GREEN_TEST_SCOPE_MISSING";
 /// DENY: GUI or computer-use action is missing grounded screenshot and DOM/accessibility evidence
@@ -223,6 +219,50 @@ pub const CAPABILITY_TOKEN_INVALID: &str = "CAPABILITY_TOKEN_INVALID";
 pub const CAPABILITY_ROLLBACK_PLAN_INVALID: &str = "CAPABILITY_ROLLBACK_PLAN_INVALID";
 /// DENY: Irreversible effect class cannot dispatch without an authoritative approval integration
 pub const CAPABILITY_IRREVERSIBLE: &str = "CAPABILITY_IRREVERSIBLE";
+/// DENY: A precondition the effect type declares does not hold, so no attempt was created
+pub const PRECONDITION_FAILED: &str = "PRECONDITION_FAILED";
+/// DENY: The adapter's read-back of the provider does not match the proposed effect, so the outcome
+/// is FAILED
+pub const READBACK_MISMATCH: &str = "READBACK_MISMATCH";
+/// DENY: The arguments an adapter was about to send are not the bytes the permit's argument digest
+/// covers
+pub const PERMIT_ARGUMENT_MISMATCH: &str = "PERMIT_ARGUMENT_MISMATCH";
+/// DENY: The connection's credential is unavailable, or the provider rejected it as invalid,
+/// revoked or lacking permission
+pub const PROVIDER_CREDENTIAL_REJECTED: &str = "PROVIDER_CREDENTIAL_REJECTED";
+/// DENY: A provider response exceeded the adapter's size limit and was not read
+pub const PROVIDER_RESPONSE_TOO_LARGE: &str = "PROVIDER_RESPONSE_TOO_LARGE";
+/// DENY: The provider failed or refused the call for a reason other than its credential
+pub const PROVIDER_ERROR: &str = "PROVIDER_ERROR";
+/// DENY: The requesting principal is unknown to the tenant or disabled
+pub const PRINCIPAL_INACTIVE: &str = "PRINCIPAL_INACTIVE";
+/// DENY: No active mandate held by the principal covers the effect, or a mandate of its chain is
+/// revoked
+pub const MANDATE_INACTIVE: &str = "MANDATE_INACTIVE";
+/// DENY: A mandate of the chain is outside its validity window
+pub const MANDATE_OUTSIDE_VALIDITY: &str = "MANDATE_OUTSIDE_VALIDITY";
+/// DENY: A mandate of the chain does not cover the effect type or target, or the effect type has no
+/// control row
+pub const EFFECT_OUT_OF_SCOPE: &str = "EFFECT_OUT_OF_SCOPE";
+/// DENY: The effect's amount exceeds a per-call limit of the mandate chain
+pub const PER_CALL_LIMIT: &str = "PER_CALL_LIMIT";
+/// DENY: An amount or counter total overflows a 64-bit integer
+pub const ARITHMETIC_OVERFLOW: &str = "ARITHMETIC_OVERFLOW";
+/// DENY: The idempotency key was already used with a different request
+pub const IDEMPOTENCY_CONFLICT: &str = "IDEMPOTENCY_CONFLICT";
+/// DENY: The approver is the requester; an approval needs a distinct principal
+pub const APPROVER_NOT_DISTINCT: &str = "APPROVER_NOT_DISTINCT";
+/// DENY: A distinct human approver rejected the escalated effect
+pub const APPROVAL_REJECTED: &str = "APPROVAL_REJECTED";
+/// DENY: Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion
+/// the request did not carry
+pub const STEP_UP_REQUIRED: &str = "STEP_UP_REQUIRED";
+/// DENY: An authority row the permit was issued under changed before the dispatch claim; the permit
+/// is voided and the effect must be proposed again
+pub const AUTHORITY_CHANGED: &str = "AUTHORITY_CHANGED";
+/// DENY: The permit expired before the dispatch claim; it is voided and the effect must be proposed
+/// again
+pub const PERMIT_EXPIRED: &str = "PERMIT_EXPIRED";
 
 /// Every registered reason code, in registry order.
 pub const ALL: &[&str] = &[
@@ -309,13 +349,11 @@ pub const ALL: &[&str] = &[
     ERR_CONNECTOR_CONTRACT_DRIFT,
     ERR_COMPUTE_GAS_EXHAUSTED,
     ERR_COMPUTE_TIME_EXHAUSTED,
-    ERR_VERIFICATION_SCOPE_REQUIRED,
     ERR_HARNESS_TRACE_REQUIRED,
     ERR_PLAN_TRANSACTION_REQUIRED,
     ERR_PLAN_TRANSACTION_CONFLICT,
     ERR_ASSUMPTION_STALE,
     ERR_HARNESS_MUTATION_REQUIRES_APPROVAL,
-    ERR_HARNESS_CHANGE_CONTRACT_INVALID,
     ERR_GREEN_TEST_SCOPE_MISSING,
     ERR_GROUNDED_ACTION_REF_REQUIRED,
     ERR_GUI_POSTCONDITION_UNVERIFIED,
@@ -332,6 +370,24 @@ pub const ALL: &[&str] = &[
     CAPABILITY_TOKEN_INVALID,
     CAPABILITY_ROLLBACK_PLAN_INVALID,
     CAPABILITY_IRREVERSIBLE,
+    PRECONDITION_FAILED,
+    READBACK_MISMATCH,
+    PERMIT_ARGUMENT_MISMATCH,
+    PROVIDER_CREDENTIAL_REJECTED,
+    PROVIDER_RESPONSE_TOO_LARGE,
+    PROVIDER_ERROR,
+    PRINCIPAL_INACTIVE,
+    MANDATE_INACTIVE,
+    MANDATE_OUTSIDE_VALIDITY,
+    EFFECT_OUT_OF_SCOPE,
+    PER_CALL_LIMIT,
+    ARITHMETIC_OVERFLOW,
+    IDEMPOTENCY_CONFLICT,
+    APPROVER_NOT_DISTINCT,
+    APPROVAL_REJECTED,
+    STEP_UP_REQUIRED,
+    AUTHORITY_CHANGED,
+    PERMIT_EXPIRED,
 ];
 
 /// Whether `code` is in the registry.

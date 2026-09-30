@@ -30,8 +30,12 @@ flowchart TD
 
 ## One-command path
 ```bash
-helm-ai-kernel up hermes --target local --live --json
+HELM_LAUNCHKIT_ENABLED=1 helm-ai-kernel up hermes --target local --live --json
 ```
+
+`helm-ai-kernel up` (LaunchKit) is off by default since HELM-756, because the
+target architecture retires LaunchKit as a platform (§14.4, HELM-762). Set
+`HELM_LAUNCHKIT_ENABLED=1` to run it.
 
 ## Headless path
 ```bash
@@ -51,7 +55,7 @@ helm-ai-kernel launch hermes local-container --headless --output json
 | Launch fails before install | Verify the signed OCI image digest pinned in `registry/launchpad/apps/hermes.yaml`. |
 | Healthcheck times out | Confirm the `model_gateway` secret is bound; the healthcheck sends one OpenRouter query through the launch-scoped egress proxy. |
 | Hermes cannot write config or cache files | `HOME` is redirected to the writable app-state mount at `/var/lib/hermes`; check the filesystem policy mounts and state directory. |
-| An MCP tool is refused | Unknown MCP servers are quarantined and unknown MCP tools return `ESCALATE`; add a pinned schema before broadening access. |
+| An MCP tool is refused | Unknown MCP servers are quarantined and unknown MCP tools return `ESCALATE`; register the tool and approve the server before broadening access. |
 
 ## Claim boundary
 Hermes public status is local app proof. Do not expand this page into managed,

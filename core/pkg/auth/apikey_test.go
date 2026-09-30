@@ -9,12 +9,17 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 )
 
+// requireAdmin wraps one handler in the admin API key middleware.
+func requireAdmin(handler http.HandlerFunc) http.Handler {
+	return auth.AdminAPIKeyMiddleware()(handler)
+}
+
 func TestAdminAPIKeyMiddleware_ValidKey(t *testing.T) {
 	os.Setenv("HELM_ADMIN_API_KEY", "test-secret-key-32chars-minimum!")
 	defer os.Unsetenv("HELM_ADMIN_API_KEY")
 
 	var capturedPrincipal auth.Principal
-	handler := auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		p, err := auth.GetPrincipal(r.Context())
 		if err != nil {
 			t.Errorf("expected principal: %v", err)
@@ -47,7 +52,7 @@ func TestAdminAPIKeyMiddleware_InvalidKey(t *testing.T) {
 	os.Setenv("HELM_ADMIN_API_KEY", "correct-key")
 	defer os.Unsetenv("HELM_ADMIN_API_KEY")
 
-	handler := auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called with invalid key")
 	})
 
@@ -66,7 +71,7 @@ func TestAdminAPIKeyMiddleware_MissingHeader(t *testing.T) {
 	os.Setenv("HELM_ADMIN_API_KEY", "some-key")
 	defer os.Unsetenv("HELM_ADMIN_API_KEY")
 
-	handler := auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called without auth header")
 	})
 
@@ -83,7 +88,7 @@ func TestAdminAPIKeyMiddleware_MissingHeader(t *testing.T) {
 func TestAdminAPIKeyMiddleware_NoKeyConfigured_FailClosed(t *testing.T) {
 	os.Unsetenv("HELM_ADMIN_API_KEY")
 
-	handler := auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called when no key configured")
 	})
 
@@ -102,7 +107,7 @@ func TestAdminAPIKeyMiddleware_MalformedAuthHeader(t *testing.T) {
 	os.Setenv("HELM_ADMIN_API_KEY", "some-key")
 	defer os.Unsetenv("HELM_ADMIN_API_KEY")
 
-	handler := auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called with malformed header")
 	})
 
@@ -122,7 +127,7 @@ func TestAdminAPIKeyMiddleware_TimingSafe(t *testing.T) {
 	os.Setenv("HELM_ADMIN_API_KEY", "correct-key-with-specific-length")
 	defer os.Unsetenv("HELM_ADMIN_API_KEY")
 
-	handler := auth.RequireAdminAuth(func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAdmin(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("handler should not be called")
 	})
 

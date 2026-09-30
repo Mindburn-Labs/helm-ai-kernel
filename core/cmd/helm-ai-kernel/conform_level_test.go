@@ -2,73 +2,48 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestConformLevelAliasesSeedBaselineEvidence(t *testing.T) {
+// HELM-756: --level L1/L2 ran gates that could not return a truthful result,
+// so the levels are retired. The flag still parses and says what to run.
+func TestConformLevelsAreRetired(t *testing.T) {
 	projectRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectRoot, "go.sum"), []byte("module lock\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
 	t.Chdir(projectRoot)
-
 	for _, level := range []string{"L1", "L2"} {
-		t.Run(level, func(t *testing.T) {
-			var stdout, stderr bytes.Buffer
-			outputDir := filepath.Join(projectRoot, "artifacts", "conformance-"+level)
-			code := runConform([]string{"--level", level, "--output", outputDir, "--signed"}, &stdout, &stderr)
-			if code != 1 {
-				t.Fatalf("runConform level %s exit=%d stderr=%s stdout=%s, want fail-closed exit 1", level, code, stderr.String(), stdout.String())
-			}
-			reportPath := filepath.Join(outputDir, "conform_report.json")
-			if _, err := os.Stat(reportPath); err == nil {
-				data, err := os.ReadFile(reportPath)
-				if err != nil {
-					t.Fatalf("read report: %v", err)
-				}
-				var report struct {
-					Metadata    map[string]any `json:"metadata"`
-					GateResults []struct {
-						GateID  string   `json:"gate_id"`
-						Pass    bool     `json:"pass"`
-						Reasons []string `json:"reasons"`
-					} `json:"gate_results"`
-				}
-				if err := json.Unmarshal(data, &report); err != nil {
-					t.Fatalf("decode report: %v", err)
-				}
-				if report.Metadata["evidence_mode"] != "seeded-local-baseline" {
-					t.Fatalf("level alias report evidence_mode = %v, want seeded-local-baseline", report.Metadata["evidence_mode"])
-				}
-				foundG1 := false
-				for _, gate := range report.GateResults {
-					if gate.GateID != "G1" {
-						continue
-					}
-					foundG1 = true
-					if gate.Pass {
-						t.Fatalf("G1 unexpectedly passed without signed receipts")
-					}
-					if !stringSliceContains(gate.Reasons, "SIGNATURE_INVALID") {
-						t.Fatalf("G1 reasons = %v, want SIGNATURE_INVALID", gate.Reasons)
-					}
-				}
-				if !foundG1 {
-					t.Fatalf("report did not include G1 result")
-				}
-			}
-		})
+		var stdout, stderr bytes.Buffer
+		outputDir := filepath.Join(projectRoot, "artifacts", "conformance-"+level)
+		code := runConform([]string{"--level", level, "--output", outputDir, "--signed"}, &stdout, &stderr)
+		if code != 2 {
+			t.Fatalf("level %s exit=%d, want 2; stderr=%s", level, code, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "retired in HELM-756") || !strings.Contains(stderr.String(), "conform vectors") {
+			t.Fatalf("level %s stderr does not explain the retirement: %s", level, stderr.String())
+		}
+		if _, err := os.Stat(filepath.Join(outputDir, "conform_report.json")); err == nil {
+			t.Fatalf("level %s wrote a conformance report", level)
+		}
 	}
 }
 
-func stringSliceContains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
+// Only the release gate, G0, still runs; retired profiles and gates fail closed.
+func TestConformRejectsRetiredProfilesAndGates(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, args := range [][]string{
+		{"--profile", "CORE"},
+		{"--profile", "REGULATED_FINANCE"},
+		{"--profile", "SMB", "--gate", "G1"},
+		{"--profile", "SMB", "--gate", "GX_TENANT"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := runConform(args, &stdout, &stderr); code != 2 {
+			t.Fatalf("%v exit=%d, want 2; stderr=%s", args, code, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "HELM-756") {
+			t.Fatalf("%v stderr does not name the retirement: %s", args, stderr.String())
 		}
 	}
-	return false
 }

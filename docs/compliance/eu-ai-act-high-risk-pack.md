@@ -142,5 +142,4 @@ legal sign-off remain outside the pack.
 ```bash
 cd core
 GOWORK=off go test ./cmd/helm-ai-kernel -run '^TestCanonicalEUAIActMappingPackContract$'
-GOWORK=off go test ./pkg/compliance/euaiact ./pkg/compliance/regwatch
 ```

@@ -15,9 +15,10 @@ surface for the `helm-ai-kernel` project.
 
 ## Local Commands
 
+- `make check` is exactly what the required `ci / gate` check runs.
 - `make docs-coverage` from the repository root verifies coverage for this surface.
-- `make quality-pr` mirrors the CI summary gate for pull requests.
-- `make quality-nightly` mirrors the scheduled advisory assurance workflow.
+- `make quality-pr` is a fast, path-scoped local pre-check.
+- `make quality-nightly` mirrors the scheduled strict assurance workflow (`QUALITY_STRICT=1`).
 - `make quality-release` mirrors release validation before tag publication.
 - `make openapi-breaking` / `make proto-breaking` run the contract
   breaking-change gate (HELM-151 GATE 1) against the PR base branch —
@@ -29,17 +30,28 @@ surface for the `helm-ai-kernel` project.
 
 ## Active Quality Workflows
 
-- `approval-ceremony.yml` runs the durable approval lifecycle against a real
-  PostgreSQL service under a `NOSUPERUSER NOBYPASSRLS` runtime role. It pins
-  ceremony/signing golden vectors and repeats the atomic issue/consume,
-  tenant/workspace/audience isolation, signed-expiry, and tamper proofs. It also
-  verifies connector release-authority schemas/vectors and repeats the
-  append-only, forced-RLS PostgreSQL registry proof under least-privilege writer
-  and runtime roles. The
-  workflow is source-owned CI evidence; it does not by itself establish branch
-  protection or GA release authority.
-- `ci.yml` runs the retained per-surface jobs and the Make-first
-  `quality-pr` summary job.
+- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml@v2`. Its `gate`
+  job, reported as `ci / gate`, is the only required status check. It runs
+  `make check` (the `merge` profile of `scripts/ci/quality-gates.json`, every
+  gate blocking) after `scripts/ci/install_check_tools.sh` installs pinned
+  protoc, buf, oasdiff, kind, ripgrep, PostgreSQL 16 and the Python gate
+  dependencies, plus a diff-aware dependency scan that fails only on HIGH or
+  CRITICAL advisories a change introduces. It runs on every pull request, merge
+  group and push to `main`, with no path filters. Its `postgres-proofs` gate
+  (`make postgres-proofs`) starts a disposable PostgreSQL 16 cluster in UTC and
+  runs every Postgres-gated proof in `scripts/ci/postgres-proofs.txt`, among
+  them the approval lifecycle, connector release-authority and forced-RLS
+  tenant proofs under `NOSUPERUSER NOBYPASSRLS` roles; a skip, a missing
+  database or an unlisted gated test fails it. The golden vectors those proofs
+  pair with run in the `verify-fixtures` gate.
+- `codeql.yml` is the single CodeQL code-scanning run (Go, JavaScript and
+  TypeScript, Python, Java and Kotlin). It is not required.
+- `helm-integration.yml` runs the minikube Launchpad smoke when the chart or
+  smoke driver changes. The positive lane spends OpenRouter tokens, so on a
+  pull request it runs only with the `launchpad-live-test` label and is
+  skipped otherwise; it never reports success without running. Not required.
+- `lean.yml` and `tla.yml` check the Lean proof and the GuardianPipeline TLA+
+  spec. Neither is required.
 - `claude-managed-agents-live-evidence.yml` runs the protected Daytona live
   evidence fixture for Claude Managed Agents self-hosted verification, writes a
   signed evidence pack, verifies it offline, and uploads the redacted artifacts.
@@ -58,8 +70,9 @@ surface for the `helm-ai-kernel` project.
 - `launchpad-clean-install.yml` validates the published Homebrew package on a
   macOS runner, launches OpenClaw and Hermes through `local-container`, verifies
   produced EvidencePacks, and uploads redacted GA evidence.
-- `nightly-quality.yml` runs advisory mutation, flake, vulnerability, runbook,
-  migration, dependency hygiene, schema, and benchmark checks.
+- `nightly-quality.yml` runs mutation, flake, vulnerability, runbook,
+  migration, dependency hygiene, schema, benchmark, invariant and dead-package
+  checks with `QUALITY_STRICT=1`: any failure, crash or missing tool is red.
 - `release.yml` calls `make quality-release` before producing binaries,
   container images, SBOM, VEX, attestations, SDK packages, signatures, and
   `version-status.json`. It runs only on `v*` tag pushes, so every keyless
@@ -67,12 +80,18 @@ surface for the `helm-ai-kernel` project.
   `https://github.com/Mindburn-Labs/helm-ai-kernel/.github/workflows/release.yml@refs/tags/v<version>`.
   SLSA provenance is generated only by this tag run; there is no manual
   workflow that re-attests assets already attached to a release.
+- `release-rehearsal.yml` runs `make release-rehearsal` on `main` daily and
+  on demand, and writes its table to the run summary: the version the next
+  tag would carry, checked against the pre-publish preconditions of
+  `release.yml`. It is advisory and not a required check. It holds
+  `contents: read`, passes `DOWNSTREAM_FANOUT_TOKEN` only to read
+  `contracts-catalog`, and reports every other secret and variable
+  `release.yml` reads as a presence boolean (`secrets.<NAME> != ''`), so no
+  other secret value enters the job.
 - `scorecard.yml` carries only the trusted `main` and scheduled runs that
-  publish Scorecard SARIF through OIDC and code-scanning authority;
-  `scorecard-pr.yml` keeps pull-request analysis read-only and retains SARIF
-  as artifact evidence. The OpenSSF results webapp rejects a publishing
-  workflow that defines any other job, so the lanes live in separate files
-  with unchanged job names.
+  publish Scorecard SARIF through OIDC and code-scanning authority. The
+  OpenSSF results webapp rejects a publishing workflow that defines any other
+  job. There is no pull-request Scorecard lane.
 - `version-drift.yml` runs the published registry drift check daily and opens or
   updates one issue when any public channel falls behind `VERSION`. A channel
   that could not be read after the bounded rate-limit retries is reported as

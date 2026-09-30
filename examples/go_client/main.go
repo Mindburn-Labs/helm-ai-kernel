@@ -22,7 +22,7 @@ func main() {
 	// 1. Chat completions (governed by HELM)
 	fmt.Println("=== Chat Completions ===")
 	res, err := client.ChatCompletions(helm.ChatCompletionRequest{
-		Model:    "gpt-4",
+		Model:    "gpt-6-sol",
 		Messages: []helm.ChatCompletionRequestMessagesInner{{Role: "user", Content: "List files in /tmp"}},
 	})
 	if err != nil {
@@ -46,17 +46,6 @@ func main() {
 		fmt.Printf("Evidence error: %v\n", err)
 	} else {
 		fmt.Printf("Exported: %d bytes\n", len(pack))
-	}
-
-	// 3. Conformance
-	fmt.Println("\n=== Conformance ===")
-	conf, err := client.ConformanceRun(helm.ConformanceRequest{Level: "L2"})
-	if err != nil {
-		if apiErr, ok := err.(*helm.HelmApiError); ok {
-			fmt.Printf("Conformance error: %s\n", apiErr.ReasonCode)
-		}
-	} else {
-		fmt.Printf("Verdict: %s Gates: %d Failed: %d\n", conf.GetVerdict(), conf.GetGates(), conf.GetFailed())
 	}
 
 	// 4. Health

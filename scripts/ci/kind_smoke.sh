@@ -10,7 +10,9 @@ FULLNAME="${HELM_SMOKE_FULLNAME:-${RELEASE}-helm-ai-kernel}"
 IMAGE="${HELM_SMOKE_IMAGE:-ghcr.io/mindburn-labs/helm-ai-kernel:local}"
 SIGNING_KEY="${HELM_CHART_SMOKE_SIGNING_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
 API_PORT="${HELM_SMOKE_API_PORT:-18080}"
-ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-helm-admin-smoke}"
+# The kernel refuses the published literals (helm-admin-smoke, ...), so each run generates its own keys.
+ADMIN_KEY="${HELM_SMOKE_ADMIN_KEY:-$(openssl rand -hex 24)}"
+SERVICE_KEY="${HELM_SMOKE_SERVICE_KEY:-$(openssl rand -hex 24)}"
 TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
@@ -192,7 +194,7 @@ helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --set helm.production=true \
     --set helm.signing.key="$SIGNING_KEY" \
     --set helm.auth.adminAPIKey="$ADMIN_KEY" \
-    --set helm.auth.serviceAPIKey="${HELM_SMOKE_SERVICE_KEY:-helm-service-smoke}" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
     --set helm.auth.tenantID="$TENANT_ID" \
     --set helm.auth.principalID="$AGENT_ID" \
     --set helm.policy.source.kind=controlplane \

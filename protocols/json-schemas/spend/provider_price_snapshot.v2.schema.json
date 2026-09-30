@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/spend/provider_price_snapshot.v2.schema.json",
+  "title": "Provider price snapshot v2",
+  "description": "Exact integer nano-cent tariff and its validity-bound content digest. A tariff estimate is distinct from an actual provider bill or a whole-cent reservation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "provider_id", "model_id", "currency", "provider_terms_profile_id", "source_hash", "captured_at", "effective_at", "expires_at", "content_hash"],
+  "anyOf": [
+    {"required": ["input_token_nano_cents"], "properties": {"input_token_nano_cents": {"minimum": 1}}},
+    {"required": ["output_token_nano_cents"], "properties": {"output_token_nano_cents": {"minimum": 1}}},
+    {"required": ["request_nano_cents"], "properties": {"request_nano_cents": {"minimum": 1}}}
+  ],
+  "properties": {
+    "schema_version": {"const": "helm.provider-price-snapshot.v2"},
+    "id": {"type": "string", "minLength": 1},
+    "provider_id": {"type": "string", "minLength": 1},
+    "model_id": {"type": "string", "minLength": 1},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "input_token_nano_cents": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "output_token_nano_cents": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "request_nano_cents": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "provider_terms_profile_id": {"type": "string", "minLength": 1},
+    "source_uri": {"type": "string"},
+    "source_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "captured_at": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"},
+    "effective_at": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"},
+    "expires_at": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"},
+    "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+  }
+}

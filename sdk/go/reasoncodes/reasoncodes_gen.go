@@ -319,10 +319,6 @@ const ErrComputeGasExhausted = "ERR_COMPUTE_GAS_EXHAUSTED"
 // wall-clock time budget
 const ErrComputeTimeExhausted = "ERR_COMPUTE_TIME_EXHAUSTED"
 
-// ErrVerificationScopeRequired DENY: Medium or high risk execution is missing a
-// VerificationScope
-const ErrVerificationScopeRequired = "ERR_VERIFICATION_SCOPE_REQUIRED"
-
 // ErrHarnessTraceRequired DENY: Side-effectful execution is missing a hash-
 // linked HarnessTrace
 const ErrHarnessTraceRequired = "ERR_HARNESS_TRACE_REQUIRED"
@@ -343,10 +339,6 @@ const ErrAssumptionStale = "ERR_ASSUMPTION_STALE"
 // sandbox, policy, verifier, evidence, or routing state requires explicit
 // approval
 const ErrHarnessMutationRequiresApproval = "ERR_HARNESS_MUTATION_REQUIRES_APPROVAL"
-
-// ErrHarnessChangeContractInvalid DENY: Harness mutation lacks a valid
-// HarnessChangeContract
-const ErrHarnessChangeContractInvalid = "ERR_HARNESS_CHANGE_CONTRACT_INVALID"
 
 // ErrGreenTestScopeMissing DENY: Passing tests were submitted without a
 // declared verification scope
@@ -411,6 +403,79 @@ const CapabilityRollbackPlanInvalid = "CAPABILITY_ROLLBACK_PLAN_INVALID"
 // CapabilityIrreversible DENY: Irreversible effect class cannot dispatch
 // without an authoritative approval integration
 const CapabilityIrreversible = "CAPABILITY_IRREVERSIBLE"
+
+// PreconditionFailed DENY: A precondition the effect type declares does not
+// hold, so no attempt was created
+const PreconditionFailed = "PRECONDITION_FAILED"
+
+// ReadbackMismatch DENY: The adapter's read-back of the provider does not match
+// the proposed effect, so the outcome is FAILED
+const ReadbackMismatch = "READBACK_MISMATCH"
+
+// PermitArgumentMismatch DENY: The arguments an adapter was about to send are
+// not the bytes the permit's argument digest covers
+const PermitArgumentMismatch = "PERMIT_ARGUMENT_MISMATCH"
+
+// ProviderCredentialRejected DENY: The connection's credential is unavailable,
+// or the provider rejected it as invalid, revoked or lacking permission
+const ProviderCredentialRejected = "PROVIDER_CREDENTIAL_REJECTED"
+
+// ProviderResponseTooLarge DENY: A provider response exceeded the adapter's
+// size limit and was not read
+const ProviderResponseTooLarge = "PROVIDER_RESPONSE_TOO_LARGE"
+
+// ProviderError DENY: The provider failed or refused the call for a reason
+// other than its credential
+const ProviderError = "PROVIDER_ERROR"
+
+// PrincipalInactive DENY: The requesting principal is unknown to the tenant or
+// disabled
+const PrincipalInactive = "PRINCIPAL_INACTIVE"
+
+// MandateInactive DENY: No active mandate held by the principal covers the
+// effect, or a mandate of its chain is revoked
+const MandateInactive = "MANDATE_INACTIVE"
+
+// MandateOutsideValidity DENY: A mandate of the chain is outside its validity
+// window
+const MandateOutsideValidity = "MANDATE_OUTSIDE_VALIDITY"
+
+// EffectOutOfScope DENY: A mandate of the chain does not cover the effect type
+// or target, or the effect type has no control row
+const EffectOutOfScope = "EFFECT_OUT_OF_SCOPE"
+
+// PerCallLimit DENY: The effect's amount exceeds a per-call limit of the
+// mandate chain
+const PerCallLimit = "PER_CALL_LIMIT"
+
+// ArithmeticOverflow DENY: An amount or counter total overflows a 64-bit
+// integer
+const ArithmeticOverflow = "ARITHMETIC_OVERFLOW"
+
+// IdempotencyConflict DENY: The idempotency key was already used with a
+// different request
+const IdempotencyConflict = "IDEMPOTENCY_CONFLICT"
+
+// ApproverNotDistinct DENY: The approver is the requester; an approval needs a
+// distinct principal
+const ApproverNotDistinct = "APPROVER_NOT_DISTINCT"
+
+// ApprovalRejected DENY: A distinct human approver rejected the escalated
+// effect
+const ApprovalRejected = "APPROVAL_REJECTED"
+
+// StepUpRequired DENY: Approving a high-risk, irreversible or authority-
+// widening effect needs a step-up assertion the request did not carry
+const StepUpRequired = "STEP_UP_REQUIRED"
+
+// AuthorityChanged DENY: An authority row the permit was issued under changed
+// before the dispatch claim; the permit is voided and the effect must be
+// proposed again
+const AuthorityChanged = "AUTHORITY_CHANGED"
+
+// PermitExpired DENY: The permit expired before the dispatch claim; it is
+// voided and the effect must be proposed again
+const PermitExpired = "PERMIT_EXPIRED"
 
 var all = [...]string{
 	PolicyViolation,
@@ -496,13 +561,11 @@ var all = [...]string{
 	ErrConnectorContractDrift,
 	ErrComputeGasExhausted,
 	ErrComputeTimeExhausted,
-	ErrVerificationScopeRequired,
 	ErrHarnessTraceRequired,
 	ErrPlanTransactionRequired,
 	ErrPlanTransactionConflict,
 	ErrAssumptionStale,
 	ErrHarnessMutationRequiresApproval,
-	ErrHarnessChangeContractInvalid,
 	ErrGreenTestScopeMissing,
 	ErrGroundedActionRefRequired,
 	ErrGuiPostconditionUnverified,
@@ -519,6 +582,24 @@ var all = [...]string{
 	CapabilityTokenInvalid,
 	CapabilityRollbackPlanInvalid,
 	CapabilityIrreversible,
+	PreconditionFailed,
+	ReadbackMismatch,
+	PermitArgumentMismatch,
+	ProviderCredentialRejected,
+	ProviderResponseTooLarge,
+	ProviderError,
+	PrincipalInactive,
+	MandateInactive,
+	MandateOutsideValidity,
+	EffectOutOfScope,
+	PerCallLimit,
+	ArithmeticOverflow,
+	IdempotencyConflict,
+	ApproverNotDistinct,
+	ApprovalRejected,
+	StepUpRequired,
+	AuthorityChanged,
+	PermitExpired,
 }
 
 // All returns every registered reason code, in registry order.

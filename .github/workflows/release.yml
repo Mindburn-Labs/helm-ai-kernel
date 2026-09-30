@@ -10,9 +10,9 @@ name: Release
 # dev-image.yml so its signatures carry a different identity.
 #
 # No job waits for a person: validation and smoke jobs are the only gate. To
-# repair a failed publish, re-run the failed jobs of the same tag run
-# (`gh run rerun <run-id> --failed`); re-runs keep the refs/tags/v* identity,
-# and every registry publisher skips a version that is already published.
+# repair a failure before publication, rerun the complete unchanged workflow.
+# After any immutable channel publishes, preserve its evidence and fix forward
+# in a new version; never selectively rerun publishers or move a release tag.
 on:
   push:
     tags: ["v*"]
@@ -87,6 +87,13 @@ jobs:
             echo "::error::Annotated release tag resolves to ${target_commit}, not workflow commit ${WORKFLOW_COMMIT}."
             exit 1
           fi
+      - name: Verify the supported SLSA generator tag resolves to the reviewed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api repos/slsa-framework/slsa-github-generator/commits/v2.1.0 --jq .sha)"
+          test "$actual" = f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
       - name: Require tagged commit to be on origin/main
         run: |
           set -euo pipefail
@@ -106,6 +113,8 @@ jobs:
             echo "::error::Refusing to release ${GITHUB_REF_NAME}: tag commit ${tag_commit} is not reachable from origin/main ${main_commit}."
             exit 1
           fi
+      - name: Require the public docs origin to serve a working release
+        run: python3 scripts/release/check_docs_readiness.py
       - name: Require contracts catalog OpenAPI to already match
         env:
           GH_TOKEN: ${{ secrets.DOWNSTREAM_FANOUT_TOKEN }}
@@ -174,6 +183,7 @@ jobs:
           python -m pip install --require-hashes -r .github/codegen-requirements.txt
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.0
       - name: Install json-schemas gate dependency (HELM-374)
         run: "python -m pip install --only-binary=:all: --require-hashes -r .github/schema-requirements.txt"
       - name: Build and test retained surfaces
@@ -486,11 +496,12 @@ jobs:
     runs-on: ubuntu-latest
     # Public registry publication starts only after the EvidencePack-backed
     # release assets and the exact Console source closure both succeed.
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, verify-slsa]
     permissions:
       contents: read
       id-token: write
       packages: write
+      attestations: write
     outputs:
       image-digest: ${{ steps.push.outputs.digest }}
       slim-digest: ${{ steps.push-slim.outputs.digest }}
@@ -523,6 +534,10 @@ jobs:
           provenance: true
           sbom: true
           platforms: linux/amd64,linux/arm64
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
           build-args: |
             BUILD_VERSION=${{ steps.build-meta.outputs.version }}
             BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}
@@ -540,12 +555,57 @@ jobs:
           provenance: true
           sbom: true
           platforms: linux/amd64,linux/arm64
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
           build-args: |
             BUILD_VERSION=${{ steps.build-meta.outputs.version }}
             BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}
             BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-slim
+
+      # BuildKit provenance above is not a signed attestation of the final
+      # multi-platform index. Bind each published digest to this release run.
+      - name: Attest main image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest slim image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push-slim.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Verify image provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_DIGEST: ${{ steps.push.outputs.digest }}
+          SLIM_DIGEST: ${{ steps.push-slim.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p image-provenance
+          for variant in main slim; do
+            digest="${MAIN_DIGEST}"
+            if [[ "${variant}" == slim ]]; then digest="${SLIM_DIGEST}"; fi
+            gh attestation verify "oci://${REGISTRY}/${IMAGE_NAME}@${digest}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --cert-identity "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+              --source-digest "${GITHUB_SHA}" --source-ref "${GITHUB_REF}" \
+              --predicate-type https://slsa.dev/provenance/v1 \
+              --format json > "image-provenance/${variant}.json"
+          done
+      - name: Upload verified image provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-provenance
+          path: image-provenance/*.json
+          if-no-files-found: error
 
   cosign-container:
     runs-on: ubuntu-latest
@@ -752,7 +812,7 @@ jobs:
 
   go-sdk-tag:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, verify-slsa]
     permissions:
       contents: write
     steps:
@@ -799,7 +859,7 @@ jobs:
 
   npm-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, verify-slsa]
     environment: npm-production
     permissions:
       contents: read
@@ -852,7 +912,7 @@ jobs:
 
   python-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, verify-slsa]
     environment: pypi-production
     permissions:
       contents: read
@@ -925,7 +985,7 @@ jobs:
 
   crates-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, verify-slsa]
     environment: crates-production
     permissions:
       contents: read
@@ -995,7 +1055,7 @@ jobs:
 
   maven-sdk:
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, verify-slsa]
     # Maven Central has no OIDC trusted publishing, so these MAVEN_* secrets
     # are the only long-lived registry credentials left in the release.
     environment: maven-central
@@ -1097,6 +1157,7 @@ jobs:
 
   version-status:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs:
       - container
       - chart
@@ -1116,6 +1177,7 @@ jobs:
             --expected-version "$VERSION" \
             --write-status dist/version-status/version-status.json \
             published \
+            --npm-propagation-timeout 900 \
             --only ghcr-image \
             --only ghcr-chart \
             --only npm-sdk \
@@ -1129,7 +1191,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets]
+    needs: [release-preflight, binaries, container, cosign-binaries, cosign-container, reproducibility-check, benchmark-pin, chart, artifacthub-repo, npm-sdk, python-sdk, crates-sdk, maven-sdk, version-status, deployment-smoke, kind-smoke, release-smoke, console-release-assets, verify-slsa]
     permissions:
       actions: read
       contents: write
@@ -1154,12 +1216,22 @@ jobs:
         with:
           name: console-release-assets
           path: console-release-assets/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: image-provenance
+          path: image-provenance/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-slsa-provenance
+          path: slsa-provenance/
       - name: Create GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           generate_release_notes: true
           files: |
             dist/*
+            slsa-provenance/multiple.intoto.jsonl
+            image-provenance/*.json
             cosign/**/*.cosign.bundle
             benchmarks-release/*.json
             version-status/version-status.json
@@ -1173,7 +1245,7 @@ jobs:
     # v0.8.0 includes the local Console. Build and verify every Console asset
     # before the one public GitHub release step consumes this artifact.
     runs-on: ubuntu-latest
-    needs: [binaries, console-local-sidecar]
+    needs: [binaries, console-local-sidecar, verify-slsa]
     permissions:
       actions: read
       contents: read
@@ -1315,17 +1387,63 @@ jobs:
           if-no-files-found: error
 
   slsa-provenance:
-    needs: [binaries, github-release]
+    needs: binaries
     permissions:
       actions: read
       contents: write
       id-token: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    # Upstream verifier requires a full version tag. Preflight binds this tag
+    # to the reviewed commit; verify-slsa checks identity, source, tag and bytes.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: "${{ needs.binaries.outputs.slsa-subjects }}"
-      upload-assets: true
-      upload-tag-name: ${{ github.ref_name }}
+      upload-assets: false
       compile-generator: true
+
+  verify-slsa:
+    runs-on: ubuntu-latest
+    needs: [binaries, slsa-provenance]
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: "1.25.13"
+          cache: false
+      - name: Install standard SLSA verifier
+        run: go install github.com/slsa-framework/slsa-verifier/v2/cli/slsa-verifier@v2.7.1
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: dist/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ needs.slsa-provenance.outputs.provenance-name }}
+          path: slsa-provenance/
+      - name: Verify standard SLSA policy and exact source binding
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check SHA256SUMS.txt)
+          slsa-verifier verify-artifact dist/SHA256SUMS.txt \
+            --provenance-path slsa-provenance/multiple.intoto.jsonl \
+            --source-uri github.com/Mindburn-Labs/helm-ai-kernel \
+            --source-tag "$GITHUB_REF_NAME" \
+            --builder-id 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0'
+          cosign verify-blob-attestation dist/SHA256SUMS.txt \
+            --bundle slsa-provenance/multiple.intoto.jsonl \
+            --type slsaprovenance02 \
+            --certificate-identity 'https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-github-workflow-repository "$GITHUB_REPOSITORY" \
+            --certificate-github-workflow-ref "$GITHUB_REF" \
+            --certificate-github-workflow-sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-slsa-provenance
+          path: slsa-provenance/multiple.intoto.jsonl
+          if-no-files-found: error
 
   post-release-version-drift:
     runs-on: ubuntu-latest

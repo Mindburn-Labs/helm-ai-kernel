@@ -31,7 +31,7 @@ func newHarness(t *testing.T, opts ...func(*EngineConfig)) *harness {
 	clock := now
 
 	prices := NewMemoryPriceBook()
-	if err := prices.Put(buildSnapshot("price-openai-gpt", "openai", "gpt-4o", "terms-openai", "sha256:src-openai", now.Add(-time.Minute), now.Add(time.Hour), 500, 1500)); err != nil {
+	if err := prices.Put(buildSnapshot("price-openai-gpt", "openai", "gpt-6-sol", "terms-openai", "sha256:src-openai", now.Add(-time.Minute), now.Add(time.Hour), 500, 1500)); err != nil {
 		t.Fatalf("put openai snapshot: %v", err)
 	}
 	if err := prices.Put(buildSnapshot("price-anthropic-haiku", "anthropic", "claude-haiku", "terms-anthropic", "sha256:src-anthropic", now.Add(-time.Minute), now.Add(time.Hour), 300, 900)); err != nil {
@@ -94,9 +94,9 @@ func buildSnapshot(id, provider, model, termsID, sourceHash string, effective, e
 func buildEnvelope() *economic.AgentSpendEnvelope {
 	env := economic.NewAgentSpendEnvelope("env-1", "tenant-1", "agent-1", "principal-1", "budget-1", "USD", economic.SpendPeriodDaily, 50_000, 10_000, "sha256:policy")
 	env.AllowedProviders = []string{"openai", "anthropic"}
-	env.AllowedModels = []string{"gpt-4o", "claude-haiku"}
+	env.AllowedModels = []string{"gpt-6-sol", "claude-haiku"}
 	env.FallbackModels = []economic.ModelRoute{
-		{ProviderID: "openai", ModelID: "gpt-4o", PriceSnapshotHash: "sha256:src-openai"},
+		{ProviderID: "openai", ModelID: "gpt-6-sol", PriceSnapshotHash: "sha256:src-openai"},
 		{ProviderID: "anthropic", ModelID: "claude-haiku", PriceSnapshotHash: "sha256:src-anthropic"},
 	}
 	return resealEnvelope(env)
@@ -151,15 +151,15 @@ func asQuote(t *testing.T, err error) *QuoteError {
 
 func TestQuoteAndSettleHappyPath(t *testing.T) {
 	h := newHarness(t)
-	res, err := h.engine.Quote(h.env, h.req("idem-ok", "gpt-4o", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-ok", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v, want nil", err)
 	}
 	if res.Decision.Verdict != economic.BudgetVerdictAllow {
 		t.Fatalf("verdict = %s, want ALLOW", res.Decision.Verdict)
 	}
-	if res.Quote.SelectedModelID != "gpt-4o" || res.Quote.SelectedProviderID != "openai" {
-		t.Fatalf("route = %s/%s, want openai/gpt-4o", res.Quote.SelectedProviderID, res.Quote.SelectedModelID)
+	if res.Quote.SelectedModelID != "gpt-6-sol" || res.Quote.SelectedProviderID != "openai" {
+		t.Fatalf("route = %s/%s, want openai/gpt-6-sol", res.Quote.SelectedProviderID, res.Quote.SelectedModelID)
 	}
 	// 1000*500 + 500*1500 = 1_250_000 micro-cents -> ceil to 2 cents.
 	if res.Quote.QuotedAmountCents != 2 {
@@ -196,7 +196,7 @@ func TestQuoteAndSettleHappyPath(t *testing.T) {
 
 func TestSettlePreservesCanonicalProviderRequestID(t *testing.T) {
 	h := newHarness(t)
-	res, err := h.engine.Quote(h.env, h.req("idem-provider-id", "gpt-4o", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-provider-id", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestSettlePreservesCanonicalProviderRequestID(t *testing.T) {
 
 func TestSettleFailsOnExpiredQuote(t *testing.T) {
 	h := newHarness(t)
-	res, err := h.engine.Quote(h.env, h.req("idem-exp", "gpt-4o", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-exp", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -234,7 +234,7 @@ func TestSettleFailsOnExpiredQuote(t *testing.T) {
 
 func TestQuoteExpiresDeterministically(t *testing.T) {
 	h := newHarness(t)
-	res, err := h.engine.Quote(h.env, h.req("idem-det", "gpt-4o", 10, 10))
+	res, err := h.engine.Quote(h.env, h.req("idem-det", "gpt-6-sol", 10, 10))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -254,11 +254,11 @@ func TestQuoteExpiresDeterministically(t *testing.T) {
 
 func TestStalePriceFailsClosed(t *testing.T) {
 	h := newHarness(t)
-	stale := buildSnapshot("price-openai-gpt", "openai", "gpt-4o", "terms-openai", "sha256:src-openai", h.now.Add(-2*time.Hour), h.now.Add(-time.Hour), 500, 1500)
+	stale := buildSnapshot("price-openai-gpt", "openai", "gpt-6-sol", "terms-openai", "sha256:src-openai", h.now.Add(-2*time.Hour), h.now.Add(-time.Hour), 500, 1500)
 	if err := h.prices.Put(stale); err != nil {
 		t.Fatalf("put stale: %v", err)
 	}
-	_, err := h.engine.Quote(h.env, h.req("idem-stale", "gpt-4o", 10, 10))
+	_, err := h.engine.Quote(h.env, h.req("idem-stale", "gpt-6-sol", 10, 10))
 	requireErrContains(t, err, "stale")
 	qe := asQuote(t, err)
 	if qe.Verdict != economic.BudgetVerdictDeny || qe.ReasonCode != economic.SpendReasonProviderPriceStale {
@@ -268,11 +268,11 @@ func TestStalePriceFailsClosed(t *testing.T) {
 
 func TestStalePriceEscalates(t *testing.T) {
 	h := newHarness(t, func(c *EngineConfig) { c.StalePrice = StalePriceEscalate })
-	stale := buildSnapshot("price-openai-gpt", "openai", "gpt-4o", "terms-openai", "sha256:src-openai", h.now.Add(-2*time.Hour), h.now.Add(-time.Hour), 500, 1500)
+	stale := buildSnapshot("price-openai-gpt", "openai", "gpt-6-sol", "terms-openai", "sha256:src-openai", h.now.Add(-2*time.Hour), h.now.Add(-time.Hour), 500, 1500)
 	if err := h.prices.Put(stale); err != nil {
 		t.Fatalf("put stale: %v", err)
 	}
-	_, err := h.engine.Quote(h.env, h.req("idem-stale-esc", "gpt-4o", 10, 10))
+	_, err := h.engine.Quote(h.env, h.req("idem-stale-esc", "gpt-6-sol", 10, 10))
 	if asQuote(t, err).Verdict != economic.BudgetVerdictEscalate {
 		t.Fatalf("expected ESCALATE on stale price, got %v", err)
 	}
@@ -293,7 +293,7 @@ func TestTermsBlockBeforeDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new engine: %v", err)
 	}
-	_, err = eng.Quote(h.env, h.req("idem-terms", "gpt-4o", 10, 10))
+	_, err = eng.Quote(h.env, h.req("idem-terms", "gpt-6-sol", 10, 10))
 	requireErrContains(t, err, "terms profile is required")
 	if asQuote(t, err).ReasonCode != economic.SpendReasonProviderContractNeeded {
 		t.Fatalf("expected PROVIDER_CONTRACT_NEEDED, got %v", err)
@@ -307,7 +307,7 @@ func TestTermsSnapshotBindingMismatchBlocks(t *testing.T) {
 	h := newHarness(t)
 	// Overwrite openai terms with a different id than the snapshot binds.
 	_ = h.terms.Put(economic.NewProviderTermsProfile("terms-openai-OTHER", "openai", economic.ProviderAccountDirect, "2026-01-01", "legal-x"))
-	_, err := h.engine.Quote(h.env, h.req("idem-bind", "gpt-4o", 10, 10))
+	_, err := h.engine.Quote(h.env, h.req("idem-bind", "gpt-6-sol", 10, 10))
 	requireErrContains(t, err, "not bound to the reviewed terms profile")
 }
 
@@ -315,7 +315,7 @@ func TestTermsSnapshotBindingMismatchBlocks(t *testing.T) {
 
 func TestActualCostCappedAtCeiling(t *testing.T) {
 	h := newHarness(t)
-	res, err := h.engine.Quote(h.env, h.req("idem-cap", "gpt-4o", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-cap", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -340,7 +340,7 @@ func TestActualCostCappedAtCeiling(t *testing.T) {
 
 func TestActualCostEscalatesWhenPolicyEscalate(t *testing.T) {
 	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapEscalate })
-	res, err := h.engine.Quote(h.env, h.req("idem-esc", "gpt-4o", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-esc", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -360,7 +360,7 @@ func TestActualCostEscalatesWhenPolicyEscalate(t *testing.T) {
 
 func TestIdempotentDebitDoesNotDoubleCharge(t *testing.T) {
 	h := newHarness(t)
-	res, err := h.engine.Quote(h.env, h.req("idem-once", "gpt-4o", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-once", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -395,7 +395,7 @@ func TestIdempotentDebitDoesNotDoubleCharge(t *testing.T) {
 
 func TestLedgerRejectsUnbalancedSettlement(t *testing.T) {
 	h := newHarness(t)
-	usage := economic.NewUsageReceipt("ur-x", "tenant-1", "rq-x", "si-x", "env-1", "agent-1", "openai", "gpt-4o", 10, 5, 1, "USD", "sha256:policy", "evidence://x")
+	usage := economic.NewUsageReceipt("ur-x", "tenant-1", "rq-x", "si-x", "env-1", "agent-1", "openai", "gpt-6-sol", 10, 5, 1, "USD", "sha256:policy", "evidence://x")
 	usage.ProviderRequestID = "prov-x"
 	usage.ProviderPriceSnapshotHash = "sha256:src-openai"
 	usage.SettlementReceiptHash = "placeholder"
@@ -418,7 +418,7 @@ func TestLedgerConservationAcrossManyDebits(t *testing.T) {
 	start := h.ledger.BalanceCents()
 	var totalDebit int64
 	for i, idem := range []string{"a", "b", "c", "d"} {
-		res, err := h.engine.Quote(h.env, h.req("idem-"+idem, "gpt-4o", int64(100*(i+1)), int64(50*(i+1))))
+		res, err := h.engine.Quote(h.env, h.req("idem-"+idem, "gpt-6-sol", int64(100*(i+1)), int64(50*(i+1))))
 		if err != nil {
 			t.Fatalf("Quote(%s) = %v", idem, err)
 		}
@@ -445,17 +445,17 @@ func TestFallbackSubstitutionIsExplicit(t *testing.T) {
 
 	// Request a model that is not on the allow-list; the engine must substitute
 	// to the first allowed fallback route and mark it explicitly.
-	res, err := h.engine.Quote(h.env, h.req("idem-fallback", "gpt-4o-mini", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-fallback", "gpt-6-luna", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
 	if !res.ModelSubstituted {
 		t.Fatal("expected explicit model substitution")
 	}
-	if res.Quote.RequestedModelID != "gpt-4o-mini" {
+	if res.Quote.RequestedModelID != "gpt-6-luna" {
 		t.Fatalf("requested model not preserved: %s", res.Quote.RequestedModelID)
 	}
-	if res.Quote.SelectedModelID == "gpt-4o-mini" {
+	if res.Quote.SelectedModelID == "gpt-6-luna" {
 		t.Fatal("selected model must differ from the unsupported requested model")
 	}
 	if !h.env.AllowsModel(res.Quote.SelectedModelID) {
@@ -481,8 +481,8 @@ func TestFallbackToSecondProviderWhenFirstUnpriced(t *testing.T) {
 	h.env.AllowModelSubstitution = true
 	h.env = resealEnvelope(h.env)
 	// Request claude-haiku directly but make only the anthropic snapshot live
-	// after forcing the requested model to require substitution: drop gpt-4o
-	// from the price book so a request for gpt-4o substitutes to claude-haiku.
+	// after forcing the requested model to require substitution: drop gpt-6-sol
+	// from the price book so a request for gpt-6-sol substitutes to claude-haiku.
 	prices := NewMemoryPriceBook()
 	_ = prices.Put(buildSnapshot("price-anthropic-haiku", "anthropic", "claude-haiku", "terms-anthropic", "sha256:src-anthropic", h.now.Add(-time.Minute), h.now.Add(time.Hour), 300, 900))
 	eng, err := NewEngine(EngineConfig{
@@ -493,7 +493,7 @@ func TestFallbackToSecondProviderWhenFirstUnpriced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new engine: %v", err)
 	}
-	res, err := eng.Quote(h.env, h.req("idem-cross", "gpt-4o", 1000, 500))
+	res, err := eng.Quote(h.env, h.req("idem-cross", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -509,7 +509,7 @@ func TestSubstitutionDeniedWhenDisabled(t *testing.T) {
 	h := newHarness(t)
 	h.env.AllowModelSubstitution = false
 	h.env = resealEnvelope(h.env)
-	_, err := h.engine.Quote(h.env, h.req("idem-nosub", "gpt-4o-mini", 10, 10))
+	_, err := h.engine.Quote(h.env, h.req("idem-nosub", "gpt-6-luna", 10, 10))
 	if asQuote(t, err).ReasonCode != economic.SpendReasonModelNotAllowed {
 		t.Fatalf("expected MODEL_NOT_ALLOWED with substitution disabled, got %v", err)
 	}
@@ -522,7 +522,7 @@ func TestDeniedWhenBalanceInsufficient(t *testing.T) {
 	h.env.MaxAmountCents = 1
 	h.env.PerRequestMaxCents = 1
 	h.env = resealEnvelope(h.env)
-	_, err := h.engine.Quote(h.env, h.req("idem-poor", "gpt-4o", 100000, 100000))
+	_, err := h.engine.Quote(h.env, h.req("idem-poor", "gpt-6-sol", 100000, 100000))
 	if asQuote(t, err).Verdict != economic.BudgetVerdictDeny {
 		t.Fatalf("expected DENY on insufficient balance, got %v", err)
 	}
@@ -534,7 +534,7 @@ func TestEscalatesWhenApprovalRequired(t *testing.T) {
 	h := newHarness(t)
 	h.env.ApprovalRequiredAboveCents = 1
 	h.env = resealEnvelope(h.env)
-	res, err := h.engine.Quote(h.env, h.req("idem-approve", "gpt-4o", 1000, 500))
+	res, err := h.engine.Quote(h.env, h.req("idem-approve", "gpt-6-sol", 1000, 500))
 	qe := asQuote(t, err)
 	if qe.Verdict != economic.BudgetVerdictEscalate || qe.ReasonCode != economic.SpendReasonApprovalRequired {
 		t.Fatalf("expected ESCALATE/APPROVAL_REQUIRED, got %v", err)
@@ -566,7 +566,7 @@ func TestLookupFindsSettledKeyBeforeDispatch(t *testing.T) {
 
 func TestReserveForDispatchIsExclusivePerKey(t *testing.T) {
 	h := newHarness(t)
-	q, err := h.engine.Quote(h.env, h.req("idem-excl", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-excl", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -602,7 +602,7 @@ func TestReserveForDispatchIsExclusivePerKey(t *testing.T) {
 
 func TestReserveForDispatchRefusesExpiredQuote(t *testing.T) {
 	h := newHarness(t)
-	q, err := h.engine.Quote(h.env, h.req("idem-late", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-late", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -614,7 +614,7 @@ func TestReserveForDispatchRefusesExpiredQuote(t *testing.T) {
 
 func TestReservedDispatchSettlesAfterQuoteExpiry(t *testing.T) {
 	h := newHarness(t)
-	q, err := h.engine.Quote(h.env, h.req("idem-slow", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-slow", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -632,7 +632,7 @@ func TestReservedDispatchSettlesAfterQuoteExpiry(t *testing.T) {
 
 func TestDebitActualDebitsAndReportsOverage(t *testing.T) {
 	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
-	q, err := h.engine.Quote(h.env, h.req("idem-over", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-over", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -661,7 +661,7 @@ func TestDebitActualDebitsAndReportsOverage(t *testing.T) {
 
 func TestFailedSettlementKeepsTheHold(t *testing.T) {
 	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
-	q, err := h.engine.Quote(h.env, h.req("idem-broke", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-broke", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -680,7 +680,7 @@ func TestFailedSettlementKeepsTheHold(t *testing.T) {
 
 func TestSettleRejectsArithmeticOverflow(t *testing.T) {
 	h := newHarness(t, func(c *EngineConfig) { c.CostCap = CostCapDebitActual })
-	q, err := h.engine.Quote(h.env, h.req("idem-wrap", "gpt-4o", 1000, 500))
+	q, err := h.engine.Quote(h.env, h.req("idem-wrap", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("quote: %v", err)
 	}
@@ -695,8 +695,8 @@ func TestSettleRejectsArithmeticOverflow(t *testing.T) {
 
 func TestQuoteClampsOutputToMandate(t *testing.T) {
 	h := newHarness(t)
-	// The envelope allows 10_000 cents per request; gpt-4o output is 1500 µ¢.
-	req := h.req("idem-mandate", "gpt-4o", 1000, 3443392227092449635)
+	// The envelope allows 10_000 cents per request; gpt-6-sol output is 1500 µ¢.
+	req := h.req("idem-mandate", "gpt-6-sol", 1000, 3443392227092449635)
 	if _, err := h.engine.Quote(h.env, req); err == nil {
 		t.Fatal("an unclamped estimate beyond the mandate must not be allowed")
 	}
@@ -712,7 +712,7 @@ func TestQuoteClampsOutputToMandate(t *testing.T) {
 	}
 
 	// A ceiling inside the mandate is left alone.
-	req = h.req("idem-mandate-small", "gpt-4o", 1000, 500)
+	req = h.req("idem-mandate-small", "gpt-6-sol", 1000, 500)
 	req.ClampOutputToMandate = true
 	if res, err := h.engine.Quote(h.env, req); err != nil || res.Quote.OutputTokens != 500 {
 		t.Fatalf("small ceiling = %+v, %v; want 500 unchanged", res, err)

@@ -7,7 +7,6 @@ package main
 import (
 	"bytes"
 	"crypto/ed25519"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,14 +23,15 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	boundarypkg "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/boundary"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto/tee"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/guardian"
 )
 
-// HELM-742: routes whose answer claimed a verification that no check
-// produced must answer 501 instead (findings 01-01, 01-06, 02-04, 04-07,
-// 05-01, 23-03).
-func TestRetiredVerificationRoutesReturnNotImplemented(t *testing.T) {
+// HELM-742 retired these routes to 501 because each reported a verification
+// that no check produced (findings 01-01, 01-06, 02-04, 04-07, 05-01, 23-03).
+// HELM-756 removes them: none is routed any more, so no caller can reach a
+// fabricated PASS, a hash-recompute "verified", or a trust-key mutation that no
+// verifier reads.
+func TestRetiredVerificationRoutesAreNotRouted(t *testing.T) {
 	svc, cleanup := newContractRouteTestServices(t)
 	defer cleanup()
 	surfaces := boundarypkg.NewSurfaceRegistry(time.Now)
@@ -64,8 +64,8 @@ func TestRetiredVerificationRoutesReturnNotImplemented(t *testing.T) {
 			authorizeTestRequest(req)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
-			if rec.Code != http.StatusNotImplemented {
-				t.Fatalf("status = %d, want 501; body=%s", rec.Code, rec.Body.String())
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404 (not routed); body=%s", rec.Code, rec.Body.String())
 			}
 			body := rec.Body.String()
 			for _, claim := range []string{`"PASS"`, `"verified":true`, "key_revoked", "key_added"} {
@@ -77,23 +77,6 @@ func TestRetiredVerificationRoutesReturnNotImplemented(t *testing.T) {
 	}
 	if reports := surfaces.ListReports(); len(reports) != 0 {
 		t.Fatalf("retired conformance routes persisted reports: %v", reports)
-	}
-}
-
-// HELM-742: the retired routes still require an admin credential, so the 501
-// never answers an unauthenticated caller.
-func TestRetiredVerificationRoutesStillRequireAdmin(t *testing.T) {
-	svc, cleanup := newContractRouteTestServices(t)
-	defer cleanup()
-	mux := http.NewServeMux()
-	RegisterSubsystemRoutes(mux, svc)
-	for _, path := range []string{"/api/v1/conformance/run", "/api/v1/trust/keys/revoke"} {
-		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, req)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("%s without credentials status = %d, want 401", path, rec.Code)
-		}
 	}
 }
 
@@ -112,39 +95,6 @@ func TestFabricatedVerificationCommandsAreRemoved(t *testing.T) {
 		}
 		if strings.Contains(stdout.String(), "PASS") {
 			t.Fatalf("%v still prints a PASS: %s", args, stdout.String())
-		}
-	}
-}
-
-// HELM-742 / 04-01, 12-03: a forged SEV-SNP report (right size, version and
-// nonce, all-zero signature) must not verify.
-func TestTeeVerifyRejectsForgedSEVSNPReport(t *testing.T) {
-	nonce := make([]byte, tee.NonceSize)
-	for i := range nonce {
-		nonce[i] = byte(i)
-	}
-	report := make([]byte, tee.SEVSNPReportSize)
-	binary.LittleEndian.PutUint32(report[0:4], 2)
-	copy(report[0x50:], nonce)                          // REPORT_DATA
-	copy(report[0x90:], bytes.Repeat([]byte{0xde}, 48)) // MEASUREMENT
-	path := filepath.Join(t.TempDir(), "forged_sevsnp.bin")
-	if err := os.WriteFile(path, report, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, jsonOut := range []bool{false, true} {
-		args := []string{"--platform=sevsnp", "--nonce=" + hex.EncodeToString(nonce)}
-		if jsonOut {
-			args = append(args, "--json")
-		}
-		var stdout, stderr bytes.Buffer
-		code := runTeeVerify(append(args, path), &stdout, &stderr)
-		out := stdout.String() + stderr.String()
-		if code != 1 {
-			t.Fatalf("json=%v: exit %d, want 1; out=%s", jsonOut, code, out)
-		}
-		if strings.Contains(out, "tee verify: ok") || strings.Contains(out, `"ok": true`) {
-			t.Fatalf("json=%v: forged report reported ok: %s", jsonOut, out)
 		}
 	}
 }

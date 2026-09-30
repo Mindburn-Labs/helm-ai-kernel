@@ -54,7 +54,7 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 	clk := now
 
 	prices := inferencegateway.NewMemoryPriceBook()
-	mustPut(t, prices, gwSnapshot("price-openai", "openai", "gpt-4o", "terms-openai", "sha256:src-openai", now.Add(-time.Minute), now.Add(time.Hour), 500, 1500))
+	mustPut(t, prices, gwSnapshot("price-openai", "openai", "gpt-6-sol", "terms-openai", "sha256:src-openai", now.Add(-time.Minute), now.Add(time.Hour), 500, 1500))
 	mustPut(t, prices, gwSnapshot("price-anthropic", "anthropic", "claude-haiku", "terms-anthropic", "sha256:src-anthropic", now.Add(-time.Minute), now.Add(time.Hour), 300, 900))
 
 	terms := inferencegateway.NewMemoryTermsBook()
@@ -117,7 +117,7 @@ func newGatewayFixture(t *testing.T, stale inferencegateway.StalePricePolicy, co
 		Resolver: resolver,
 		Dispatch: dispatch,
 		TenantID: func(r *http.Request) string { return "tenant-1" },
-		Models:   []GatewayModel{{ID: "gpt-4o", Object: "model", OwnedBy: "helm", Provider: "openai"}},
+		Models:   []GatewayModel{{ID: "gpt-6-sol", Object: "model", OwnedBy: "helm", Provider: "openai"}},
 	})
 	if err != nil {
 		t.Fatalf("gateway: %v", err)
@@ -149,9 +149,9 @@ func gwSnapshot(id, provider, model, termsID, sourceHash string, eff, exp time.T
 func gwEnvelope() *economic.AgentSpendEnvelope {
 	env := economic.NewAgentSpendEnvelope("env-1", "tenant-1", "agent-1", "principal-1", "budget-1", "USD", economic.SpendPeriodDaily, 50_000, 10_000, "sha256:policy")
 	env.AllowedProviders = []string{"openai", "anthropic"}
-	env.AllowedModels = []string{"gpt-4o", "claude-haiku"}
+	env.AllowedModels = []string{"gpt-6-sol", "claude-haiku"}
 	env.FallbackModels = []economic.ModelRoute{
-		{ProviderID: "openai", ModelID: "gpt-4o", PriceSnapshotHash: "sha256:src-openai"},
+		{ProviderID: "openai", ModelID: "gpt-6-sol", PriceSnapshotHash: "sha256:src-openai"},
 		{ProviderID: "anthropic", ModelID: "claude-haiku", PriceSnapshotHash: "sha256:src-anthropic"},
 	}
 	env.AllowModelSubstitution = true
@@ -220,7 +220,7 @@ func decodeHELM(t *testing.T, rr *httptest.ResponseRecorder) GatewayMetadata {
 
 func TestGatewaySuccessfulRoute(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-ok", "gpt-4o"))
+	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-ok", "gpt-6-sol"))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
@@ -245,9 +245,9 @@ func TestGatewaySuccessfulRoute(t *testing.T) {
 func TestGatewayProtectsProviderRequestAndResponse(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	f.dispatch.responseBody = json.RawMessage(`{"id":"chatcmpl-privacy","choices":[{"message":{"role":"assistant","content":"reply to person@example.com"}}]}`)
-	body := []byte(`{"model":"gpt-4o","max_tokens":64,"messages":[{"role":"user","content":"contact person@example.com"}]}`)
+	body := []byte(`{"model":"gpt-6-sol","max_tokens":64,"messages":[{"role":"user","content":"contact person@example.com"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
-	for key, value := range helmHeaders("idem-privacy", "gpt-4o") {
+	for key, value := range helmHeaders("idem-privacy", "gpt-6-sol") {
 		req.Header.Set(key, value)
 	}
 	rec := httptest.NewRecorder()
@@ -267,9 +267,9 @@ func TestGatewayProtectsProviderRequestAndResponse(t *testing.T) {
 func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 	t.Run("request", func(t *testing.T) {
 		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-		body := []byte(`{"model":"gpt-4o","max_tokens":64,"messages":[{"role":"user","content":"api_key=sk_live_example1234"}]}`)
+		body := []byte(`{"model":"gpt-6-sol","max_tokens":64,"messages":[{"role":"user","content":"api_key=sk_live_example1234"}]}`)
 		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
-		for key, value := range helmHeaders("idem-privacy-request", "gpt-4o") {
+		for key, value := range helmHeaders("idem-privacy-request", "gpt-6-sol") {
 			req.Header.Set(key, value)
 		}
 		rec := httptest.NewRecorder()
@@ -283,7 +283,7 @@ func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"content":"api_key=sk_live_example1234"}}]}`)
 		f.dispatch.requestID = "ghp_12345678901234567890"
-		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-privacy-response", "gpt-4o"))
+		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-privacy-response", "gpt-6-sol"))
 		if rec.Code != http.StatusBadGateway || f.dispatch.called != 1 || bytes.Contains(rec.Body.Bytes(), []byte("sk_live")) || bytes.Contains(rec.Body.Bytes(), []byte("ghp_")) {
 			t.Fatalf("status=%d dispatch=%d body=%s", rec.Code, f.dispatch.called, rec.Body.String())
 		}
@@ -306,9 +306,9 @@ func TestGatewayPrivacyFailuresDoNotLeakOrSkipSettlement(t *testing.T) {
 
 func TestGatewayAllowsRestrictedNamesOnlyInModelSchemas(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	body := []byte(`{"model":"gpt-4o","max_tokens":64,"messages":[{"role":"user","content":"use the tool"}],"tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string"},"api_key":{"type":"string"}},"required":["password"]}}}]}`)
+	body := []byte(`{"model":"gpt-6-sol","max_tokens":64,"messages":[{"role":"user","content":"use the tool"}],"tools":[{"type":"function","function":{"name":"login","parameters":{"type":"object","properties":{"password":{"type":"string"},"api_key":{"type":"string"}},"required":["password"]}}}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
-	for key, value := range helmHeaders("idem-schema", "gpt-4o") {
+	for key, value := range helmHeaders("idem-schema", "gpt-6-sol") {
 		req.Header.Set(key, value)
 	}
 	rec := httptest.NewRecorder()
@@ -327,9 +327,9 @@ func TestGatewaySettlesBeforeProviderResponsePrivacyScan(t *testing.T) {
 		armed:   &armed,
 		advance: func() { *f.clk = f.now.Add(2 * time.Hour) },
 	}
-	body := []byte(`{"model":"gpt-4o","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`)
+	body := []byte(`{"model":"gpt-6-sol","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
-	for key, value := range helmHeaders("idem-settle-before-privacy", "gpt-4o") {
+	for key, value := range helmHeaders("idem-settle-before-privacy", "gpt-6-sol") {
 		req.Header.Set(key, value)
 	}
 	rec := httptest.NewRecorder()
@@ -342,7 +342,7 @@ func TestGatewaySettlesBeforeProviderResponsePrivacyScan(t *testing.T) {
 func TestGatewayReturnsBadRequestForMalformedJSON(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{`))
-	for key, value := range helmHeaders("idem-malformed", "gpt-4o") {
+	for key, value := range helmHeaders("idem-malformed", "gpt-6-sol") {
 		req.Header.Set(key, value)
 	}
 	rec := httptest.NewRecorder()
@@ -361,7 +361,7 @@ func TestGatewaySupportsBatchedEmbeddingsAndLogprobs(t *testing.T) {
 			data[index] = map[string]any{"object": "embedding", "index": index, "embedding": vector}
 		}
 		f.dispatch.responseBody, _ = json.Marshal(map[string]any{"object": "list", "data": data})
-		rec := f.do(t, http.MethodPost, "/v1/embeddings", "gpt-4o", helmHeaders("idem-embeddings", "gpt-4o"))
+		rec := f.do(t, http.MethodPost, "/v1/embeddings", "gpt-6-sol", helmHeaders("idem-embeddings", "gpt-6-sol"))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
@@ -370,7 +370,7 @@ func TestGatewaySupportsBatchedEmbeddingsAndLogprobs(t *testing.T) {
 	t.Run("logprobs", func(t *testing.T) {
 		f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 		f.dispatch.responseBody = json.RawMessage(`{"choices":[{"message":{"role":"assistant","content":"hello"},"logprobs":{"content":[{"token":"hello","logprob":-0.1,"bytes":[104,101,108,108,111],"top_logprobs":[]}]}}]}`)
-		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-logprobs", "gpt-4o"))
+		rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-logprobs", "gpt-6-sol"))
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"token":"hello"`) {
 			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
@@ -403,7 +403,7 @@ func TestGatewayEscalationRoute(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	f.env.ApprovalRequiredAboveCents = 1
 	*f.env = *rebuildEnvelope(f.env)
-	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-esc", "gpt-4o"))
+	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-esc", "gpt-6-sol"))
 	if rr.Code != http.StatusPaymentRequired {
 		t.Fatalf("status = %d, want 402; body=%s", rr.Code, rr.Body.String())
 	}
@@ -422,7 +422,7 @@ func TestGatewayStalePriceFailure(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	// Advance the clock past both snapshots' expiry so the live route is stale.
 	*f.clk = f.now.Add(2 * time.Hour)
-	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-stale", "gpt-4o"))
+	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-stale", "gpt-6-sol"))
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body=%s", rr.Code, rr.Body.String())
 	}
@@ -441,7 +441,7 @@ func TestGatewayFallbackReceipt(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	// Request a model not on the allow-list; substitution is enabled by default
 	// in the fixture envelope, so the gateway substitutes and dispatches.
-	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o-mini", helmHeaders("idem-fallback", "gpt-4o-mini"))
+	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-luna", helmHeaders("idem-fallback", "gpt-6-luna"))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
@@ -452,7 +452,7 @@ func TestGatewayFallbackReceipt(t *testing.T) {
 	if meta.Quote == nil || len(meta.Quote.FallbackChain) == 0 {
 		t.Fatal("fallback receipt must include the fallback chain")
 	}
-	if meta.UsageReceiptView == nil || meta.UsageReceiptView.ModelID == "gpt-4o-mini" {
+	if meta.UsageReceiptView == nil || meta.UsageReceiptView.ModelID == "gpt-6-luna" {
 		t.Fatal("usage receipt must record the substituted model, not the requested one")
 	}
 }
@@ -464,15 +464,15 @@ func TestGatewayFallbackReceipt(t *testing.T) {
 // provider a second time (the replay used to re-dispatch without a debit).
 func TestGatewayIdempotentReplayOverHTTP(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 50)
-	hdr := helmHeaders("idem-replay", "gpt-4o")
+	hdr := helmHeaders("idem-replay", "gpt-6-sol")
 
-	first := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", hdr)
+	first := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr)
 	if first.Code != http.StatusOK {
 		t.Fatalf("first status = %d; body=%s", first.Code, first.Body.String())
 	}
 	balAfterFirst := f.ledger.BalanceCents()
 
-	second := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", hdr)
+	second := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr)
 	if second.Code != http.StatusOK {
 		t.Fatalf("second status = %d; body=%s", second.Code, second.Body.String())
 	}
@@ -498,8 +498,8 @@ func TestGatewayIdempotentReplayOverHTTP(t *testing.T) {
 // the request: reusing it for a new prompt or model is refused, not dispatched.
 func TestGatewayReplayWithDifferentRequestConflicts(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	hdr := helmHeaders("idem-reuse", "gpt-4o")
-	if first := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", hdr); first.Code != http.StatusOK {
+	hdr := helmHeaders("idem-reuse", "gpt-6-sol")
+	if first := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr); first.Code != http.StatusOK {
 		t.Fatalf("first status = %d; body=%s", first.Code, first.Body.String())
 	}
 	body := []byte(`{"model":"claude-haiku","max_tokens":64,"messages":[{"role":"user","content":"a different prompt"}]}`)
@@ -519,16 +519,16 @@ func TestGatewayReplayWithDifferentRequestConflicts(t *testing.T) {
 // reservation for a key, a duplicate with the same key is refused.
 func TestGatewayConcurrentDuplicateKeyNeverDispatches(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	hdr := helmHeaders("idem-inflight", "gpt-4o")
+	hdr := helmHeaders("idem-inflight", "gpt-6-sol")
 	var nested *httptest.ResponseRecorder
 	f.dispatch.afterDispatch = func() {
 		if nested != nil {
 			return
 		}
 		nested = httptest.NewRecorder()
-		nested = f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", hdr)
+		nested = f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr)
 	}
-	first := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", hdr)
+	first := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr)
 	if first.Code != http.StatusOK {
 		t.Fatalf("first status = %d; body=%s", first.Code, first.Body.String())
 	}
@@ -546,14 +546,14 @@ func TestGatewayRequiresOutputTokenLimit(t *testing.T) {
 	for _, tc := range []struct {
 		name, path, body, want string
 	}{
-		{"chat without max_tokens", "/v1/chat/completions", `{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}`, "max_tokens is required"},
-		{"chat with zero max_tokens", "/v1/chat/completions", `{"model":"gpt-4o","max_tokens":0,"messages":[{"role":"user","content":"hi"}]}`, "max_tokens must be a positive integer"},
-		{"responses without max_output_tokens", "/v1/responses", `{"model":"gpt-4o","input":"hi"}`, "max_output_tokens is required"},
-		{"responses with the chat field only", "/v1/responses", `{"model":"gpt-4o","max_tokens":64,"input":"hi"}`, "max_output_tokens is required"},
+		{"chat without max_tokens", "/v1/chat/completions", `{"model":"gpt-6-sol","messages":[{"role":"user","content":"hi"}]}`, "max_tokens is required"},
+		{"chat with zero max_tokens", "/v1/chat/completions", `{"model":"gpt-6-sol","max_tokens":0,"messages":[{"role":"user","content":"hi"}]}`, "max_tokens must be a positive integer"},
+		{"responses without max_output_tokens", "/v1/responses", `{"model":"gpt-6-sol","input":"hi"}`, "max_output_tokens is required"},
+		{"responses with the chat field only", "/v1/responses", `{"model":"gpt-6-sol","max_tokens":64,"input":"hi"}`, "max_output_tokens is required"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-			rec := f.doBody(t, tc.path, []byte(tc.body), helmHeaders("idem-limit", "gpt-4o"))
+			rec := f.doBody(t, tc.path, []byte(tc.body), helmHeaders("idem-limit", "gpt-6-sol"))
 			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), tc.want) {
 				t.Fatalf("status = %d, body=%s; want 400 containing %q", rec.Code, rec.Body.String(), tc.want)
 			}
@@ -568,13 +568,13 @@ func TestGatewayClampsAndForwardsOutputLimit(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	// An absurd ceiling (the 12-01 double-wrap value) is clamped to what the
 	// envelope's 10_000-cent per-request limit can pay for, then forwarded.
-	body := []byte(`{"model":"gpt-4o","max_tokens":3443392227092449635,"max_completion_tokens":1000000000,"messages":[{"role":"user","content":"hello"}]}`)
-	rec := f.doBody(t, "/v1/chat/completions", body, helmHeaders("idem-clamp", "gpt-4o"))
+	body := []byte(`{"model":"gpt-6-sol","max_tokens":3443392227092449635,"max_completion_tokens":1000000000,"messages":[{"role":"user","content":"hello"}]}`)
+	rec := f.doBody(t, "/v1/chat/completions", body, helmHeaders("idem-clamp", "gpt-6-sol"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d; body=%s", rec.Code, rec.Body.String())
 	}
 	quote := decodeHELM(t, rec).Quote
-	const affordable = 10_000 * 1_000_000 / 1500 // gpt-4o output price, input ignored
+	const affordable = 10_000 * 1_000_000 / 1500 // gpt-6-sol output price, input ignored
 	if quote == nil || quote.OutputTokens <= 0 || quote.OutputTokens > affordable {
 		t.Fatalf("authorized output tokens = %+v, want 1..%d", quote, affordable)
 	}
@@ -587,7 +587,7 @@ func TestGatewayClampsAndForwardsOutputLimit(t *testing.T) {
 	}
 
 	// A ceiling inside the mandate is forwarded unchanged.
-	if rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-small", "gpt-4o")); rec.Code != http.StatusOK {
+	if rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-small", "gpt-6-sol")); rec.Code != http.StatusOK {
 		t.Fatalf("status = %d; body=%s", rec.Code, rec.Body.String())
 	}
 	if sent := sentOutputLimits(t, f.dispatch.body); sent.MaxTokens != 64 {
@@ -601,7 +601,7 @@ func TestGatewayReservesBeforeDispatch(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	var holdAtDispatch int64
 	f.dispatch.afterDispatch = func() { holdAtDispatch = f.ledger.HoldCents() }
-	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-hold", "gpt-4o"))
+	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-hold", "gpt-6-sol"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d; body=%s", rec.Code, rec.Body.String())
 	}
@@ -619,7 +619,7 @@ func TestGatewayInsufficientBalanceNeverDispatches(t *testing.T) {
 	if _, err := f.ledger.Reserve("other-dispatch", 100_000, "sha256:other"); err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-broke", "gpt-4o"))
+	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-broke", "gpt-6-sol"))
 	if rec.Code != http.StatusForbidden || f.dispatch.called != 0 {
 		t.Fatalf("status = %d, dispatch = %d; want 403 and no dispatch; body=%s", rec.Code, f.dispatch.called, rec.Body.String())
 	}
@@ -634,7 +634,7 @@ func TestGatewayInsufficientBalanceNeverDispatches(t *testing.T) {
 func TestGatewaySettlesDispatchThatOutlivesQuote(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	f.dispatch.afterDispatch = func() { *f.clk = f.now.Add(10 * time.Minute) }
-	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", helmHeaders("idem-slow", "gpt-4o"))
+	rec := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", helmHeaders("idem-slow", "gpt-6-sol"))
 	if rec.Code != http.StatusOK || debitEntries(f.ledger) != 1 {
 		t.Fatalf("status = %d, ledger entries = %d; want 200 and a settled debit; body=%s", rec.Code, debitEntries(f.ledger), rec.Body.String())
 	}
@@ -692,9 +692,9 @@ func sentOutputLimits(t *testing.T, body []byte) outputLimits {
 
 func TestGatewayMissingHeadersRejected(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
-	hdr := helmHeaders("idem-x", "gpt-4o")
+	hdr := helmHeaders("idem-x", "gpt-6-sol")
 	delete(hdr, inferencegateway.HeaderSpendEnvelope)
-	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-4o", hdr)
+	rr := f.do(t, http.MethodPost, "/v1/chat/completions", "gpt-6-sol", hdr)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for missing header", rr.Code)
 	}
@@ -713,7 +713,7 @@ func TestGatewayModelsEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if out.Object != "list" || len(out.Data) != 1 || out.Data[0].ID != "gpt-4o" {
+	if out.Object != "list" || len(out.Data) != 1 || out.Data[0].ID != "gpt-6-sol" {
 		t.Fatalf("unexpected models payload: %s", rr.Body.String())
 	}
 }
@@ -722,7 +722,7 @@ func TestGatewayEmbeddingsAndResponsesRouted(t *testing.T) {
 	f := newGatewayFixture(t, inferencegateway.StalePriceFailClosed, inferencegateway.CostCapClamp, 2)
 	for i, path := range []string{"/v1/embeddings", "/v1/responses"} {
 		idem := "idem-path-" + string(rune('a'+i))
-		rr := f.do(t, http.MethodPost, path, "gpt-4o", helmHeaders(idem, "gpt-4o"))
+		rr := f.do(t, http.MethodPost, path, "gpt-6-sol", helmHeaders(idem, "gpt-6-sol"))
 		if rr.Code != http.StatusOK {
 			t.Fatalf("%s status = %d, want 200; body=%s", path, rr.Code, rr.Body.String())
 		}

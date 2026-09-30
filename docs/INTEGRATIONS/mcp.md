@@ -20,7 +20,6 @@ HELM or that arbitrary tool calls cross the boundary.
 helm-ai-kernel mcp wrap \
   --server-id helm-demo-shell \
   --upstream-command "npx -y shell-mcp-server" \
-  --require-pinned-schema=true \
   --json
 ```
 
@@ -64,7 +63,7 @@ Use the local MCP risk scanner before granting a new server/tool bundle:
 
 ```bash
 mkdir -p out
-helm-ai-kernel scan \
+helm-risk-scan scan \
   --path . \
   --risk-envelope out/risk-envelope.json \
   --preview out/risk-report.md

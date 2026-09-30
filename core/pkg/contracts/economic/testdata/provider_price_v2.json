@@ -1,0 +1,15 @@
+{
+  "schema_version": "helm.provider-price-snapshot.v2",
+  "id": "price-jev",
+  "provider_id": "typesafe",
+  "model_id": "jev-1.13.0",
+  "currency": "USD",
+  "input_token_nano_cents": 4200,
+  "provider_terms_profile_id": "reviewed-terms",
+  "source_uri": "https://docs.typesafe.ai/models",
+  "source_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "captured_at": "2026-09-29T00:00:00Z",
+  "effective_at": "2026-09-29T00:00:00Z",
+  "expires_at": "2026-09-29T01:00:00Z",
+  "content_hash": "sha256:28efd90507185ac82448cb4cdd898d2eeef00033437941786b8d2747d01ec45d"
+}

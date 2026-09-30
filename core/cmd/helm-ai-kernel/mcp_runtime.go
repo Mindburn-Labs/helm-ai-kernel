@@ -67,7 +67,12 @@ func newLocalMCPRuntimeWithDataDirAndPolicy(dataDir string, policyGraph *prg.Gra
 	if err != nil {
 		return nil, mcppkg.GovernedExecutor{}, err
 	}
-	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, githubEffects)
+	// The fence database stays open for the life of the mcp serve process.
+	fence, err := openStandaloneEmergencyStopFence(context.Background(), dataDir)
+	if err != nil {
+		return nil, mcppkg.GovernedExecutor{}, err
+	}
+	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, githubEffects, fence.guardianState(dataDir))
 }
 
 func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
@@ -80,17 +85,17 @@ func newLocalMCPRuntimeWithSigner(signer helmcrypto.Signer) (*mcppkg.ToolCatalog
 // denied, because an empty graph carries no allow rule. Pass a compiled graph
 // (see `mcp serve --policy`) to authorize the actions it declares.
 func newLocalMCPRuntimeWithSignerAndPolicy(signer helmcrypto.Signer, policyGraph *prg.Graph) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
-	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, nil)
+	return newLocalMCPRuntimeWithSignerPolicyAndEffects(signer, policyGraph, nil, productionGuardianState{})
 }
 
-func newLocalMCPRuntimeWithSignerPolicyAndEffects(signer helmcrypto.Signer, policyGraph *prg.Graph, githubEffects *githubEffectsRuntime) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
+func newLocalMCPRuntimeWithSignerPolicyAndEffects(signer helmcrypto.Signer, policyGraph *prg.Graph, githubEffects *githubEffectsRuntime, state productionGuardianState) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if signer == nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp signer is required")
 	}
 	if policyGraph == nil {
 		policyGraph = prg.NewGraph()
 	}
-	guard, err := newProductionGuardian(signer, policyGraph, nil, utcRuntimeClock{})
+	guard, err := newProductionGuardian(signer, policyGraph, nil, utcRuntimeClock{}, state)
 	if err != nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("initialize local MCP production Guardian: %w", err)
 	}
@@ -109,6 +114,10 @@ func newLocalMCPRuntimeWithEvaluator(evaluator mcppkg.PolicyEvaluator) (*mcppkg.
 func newLocalMCPRuntimeWithEvaluatorAndEffects(evaluator mcppkg.PolicyEvaluator, githubEffects *githubEffectsRuntime) (*mcppkg.ToolCatalog, mcppkg.GovernedExecutor, error) {
 	if evaluator == nil {
 		return nil, mcppkg.GovernedExecutor{}, fmt.Errorf("mcp policy evaluator is required")
+	}
+	evaluator, err := bindEmergencyStopScope(evaluator)
+	if err != nil {
+		return nil, mcppkg.GovernedExecutor{}, err
 	}
 	catalog := mcppkg.NewInMemoryCatalog()
 	catalog.RegisterCommonTools()
@@ -177,28 +186,27 @@ func newLocalMCPGatewayWithEvaluatorAndEffects(cfg mcppkg.GatewayConfig, evaluat
 // that cannot be receipted surfaces as a governance error and blocks the call,
 // matching the /api/v1/evaluate route and the transparency-anchor posture.
 //
-// These receipts are durable and signed but NOT retrievable through
-// /api/v1/receipts. The gateway routes are mounted under RouteAuthAdmin
-// (see registerDeployedMCPRoutes), which authenticates a principal and never
-// establishes a tenant binding, so there is no independently authenticated
-// tenant to scope by. persistDecisionReceipt therefore writes an unscoped
-// causal row on purpose rather than deriving a durable namespace from
-// caller-controlled decision context, while every /api/v1/receipts read
-// filters on the tenant-qualified scope prefix. Tenant-authenticated receipt
-// HTTP APIs, Console views, and onboarding state/export exclude these unscoped
-// rows. Local operators with direct SQLite access can still include them in
-// offline report and rollup workflows, which intentionally read the local
-// store without an HTTP tenant principal.
-//
-// Making them tenant-retrievable requires moving the gateway routes to
-// RouteAuthTenant, which is a breaking change for MCP clients; that is tracked
-// on HELM-363 and deliberately not done here.
+// Receipts are written in the tenant of the authenticated principal (R9), so
+// that tenant reads them through /api/v1/receipts. The gateway routes are
+// mounted under RouteAuthConfiguredTenant (see registerDeployedMCPRoutes),
+// which binds the one configured tenant, HELM_RUNTIME_TENANT_ID, to the
+// credential. The gateway is therefore single-tenant: a caller asserting
+// another tenant is refused, and registered principal bindings do not extend
+// it. A decision without an authenticated tenant is refused, never receipted
+// outside tenant scope.
 type receiptPersistingEvaluator struct {
 	svc   *Services
 	inner mcppkg.PolicyEvaluator
 }
 
 func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
+	tenantID := ""
+	if principal, err := helmauth.GetPrincipal(ctx); err == nil && principal != nil {
+		tenantID = strings.TrimSpace(principal.GetTenantID())
+	}
+	if tenantID == "" {
+		return nil, fmt.Errorf("gateway decision has no authenticated tenant to receipt it under")
+	}
 	decision, err := e.inner.EvaluateDecision(ctx, req)
 	if err != nil || decision == nil {
 		return decision, err
@@ -207,7 +215,7 @@ func (e *receiptPersistingEvaluator) EvaluateDecision(ctx context.Context, req g
 	if err != nil {
 		return nil, fmt.Errorf("canonicalize gateway decision request: %w", err)
 	}
-	if err := persistDecisionReceipt(ctx, e.svc, decision, req.Principal, body, map[string]any{
+	if err := persistDecisionReceiptForTenant(ctx, e.svc, decision, req.Principal, tenantID, body, map[string]any{
 		"source":   "mcp.gateway",
 		"action":   req.Action,
 		"resource": req.Resource,
@@ -683,23 +691,8 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 		AuthMode: authMode,
 	}, mcppkg.WithGovernedExecutor(executor))
 
-	mux := http.NewServeMux()
-	gateway.RegisterRoutes(mux)
-
-	// A2A agent card discovery (/.well-known/agent-card.json)
-	a2a.RegisterWellKnownRoute(mux, a2a.NewKernelCardProvider(a2a.KernelCardConfig{
-		EndpointURL: baseURL,
-	}))
-
-	healthHandler := func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":    "ok",
-			"transport": "http",
-		})
-	}
-	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/healthz", healthHandler)
+	mux := newListenerRouteMux(listenerMCP)
+	registerLocalMCPRoutes(mux, gateway, baseURL)
 
 	handler, err := wrapMCPAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mux.ServeHTTP(w, r)
@@ -716,6 +709,32 @@ func newLocalMCPHTTPServerWithDataDirAndPolicy(port int, authMode, dataDir strin
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}, nil
+}
+
+// registerLocalMCPRoutes mounts the mcp serve listener's routes. The gateway
+// registers on its own mux, so the listener forwards the gateway paths it
+// declares; a path the gateway adds is not served until it is declared here.
+func registerLocalMCPRoutes(mux routeMux, gateway *mcppkg.Gateway, baseURL string) {
+	gatewayMux := http.NewServeMux()
+	gateway.RegisterRoutes(gatewayMux)
+	for _, route := range []string{"/mcp", "/mcp/v1/capabilities", "/mcp/v1/execute", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
+		mux.Handle(route, gatewayMux)
+	}
+
+	// A2A agent card discovery (/.well-known/agent-card.json)
+	a2a.RegisterWellKnownRoute(mux, a2a.NewKernelCardProvider(a2a.KernelCardConfig{
+		EndpointURL: baseURL,
+	}))
+
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":    "ok",
+			"transport": "http",
+		})
+	}
+	mux.HandleFunc("/health", healthHandler)
+	mux.HandleFunc("/healthz", healthHandler)
 }
 
 func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, error) {

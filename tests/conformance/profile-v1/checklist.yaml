@@ -10,7 +10,7 @@
 #   id            — stable identifier (do not rename between v1.x minor releases)
 #   axis          — 1..6 per the six-axis profile (see README.md)
 #   title         — human-readable one-liner
-#   verification  — { kind, target } where kind ∈ {go_test, shell, fixture, tla}
+#   verification  — { kind, target } where kind ∈ {go_test, shell, fixture}
 #   references    — links into the repo that implement or prove the check
 #   required      — must-pass for v1 certification (default true)
 
@@ -129,13 +129,16 @@ checks:
       axis: 4
       title: "P2 overlay can narrow but never widen P1; P1 bounded by P0 ceilings"
       verification:
-        kind: tla
-        target: "proofs/DelegationModel.tla"
-        invariant: "NarrowingOnly"
+        kind: go_test
+        target: "./core/pkg/identity/..."
+        match: "TestDelegationSession_EffectiveTools"
       references:
-        - "proofs/DelegationModel.tla"
         - "core/pkg/identity/delegation.go"
-      required: true
+      # HELM-756: this used to point at proofs/DelegationModel.tla, which never
+      # defined NarrowingOnly and was never model-checked. The session test
+      # above shows a delegate cannot use more than it was granted; the overlay
+      # rule itself has no dedicated test yet, so the check is not required.
+      required: false
 
     - id: delegation.continuous_aith
       axis: 4

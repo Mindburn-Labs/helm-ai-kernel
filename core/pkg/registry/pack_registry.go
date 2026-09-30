@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/compliance/jcs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize/legacyjson"
 	"github.com/google/uuid"
 )
 
@@ -381,7 +381,7 @@ func (r *PackRegistry) Hash() string {
 		return entries[i].PackID < entries[j].PackID
 	})
 
-	data, _ := jcs.Marshal(map[string]interface{}{
+	data, _ := legacyjson.Marshal(map[string]interface{}{
 		"pack_count": len(r.entries),
 		"entries":    entries,
 	})

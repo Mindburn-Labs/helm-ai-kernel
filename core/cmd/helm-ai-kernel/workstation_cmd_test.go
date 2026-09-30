@@ -161,16 +161,6 @@ func TestWorkstationRemainingPhaseCommands(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(packDir, "00_INDEX.json")); err != nil {
 		t.Fatalf("sample EvidencePack index missing: %v", err)
 	}
-
-	stdout.Reset()
-	stderr.Reset()
-	code = Run([]string{"helm-ai-kernel", "workstation", "certify", "--fixtures", fixtureRoot, "--mode", "high-risk-effect-capable"}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("certify exit = %d stderr = %s stdout = %s", code, stderr.String(), stdout.String())
-	}
-	if !strings.Contains(stdout.String(), "passed:    true") {
-		t.Fatalf("certify output missing pass: %s", stdout.String())
-	}
 }
 
 func TestWorkstationCLIRejectsArgvSigningSeed(t *testing.T) {

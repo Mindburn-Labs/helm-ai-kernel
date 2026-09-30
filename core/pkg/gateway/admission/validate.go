@@ -1,6 +1,8 @@
 package admission
 
 import (
+	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -8,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
@@ -77,9 +81,33 @@ func validateProposal(in ProposeInput) (map[string]any, error) {
 			return nil, bad("distinct value for %q must be a 32-byte SHA-256 digest", d.Unit)
 		}
 	}
-	args, err := effectargs.Validate(in.EffectType, in.Target, in.Arguments)
+	args, err := validateArguments(in.EffectType, in.Target, in.Arguments)
 	if err != nil {
 		return nil, bad("effect.arguments: %v", err)
 	}
 	return args, nil
+}
+
+// validateArguments checks an effect's arguments against its closed schema and
+// returns the parsed object. The two authority plans are also compiled against
+// the store's rules (provision.Check), so a plan that cannot apply whatever the
+// database holds is refused before an approver is asked. Every error wraps
+// effectargs.ErrInvalid.
+func validateArguments(effectType, target string, raw []byte) (map[string]any, error) {
+	if !effectargs.IsAuthorityPlan(effectType) {
+		return effectargs.Validate(effectType, target, raw)
+	}
+	c, err := provision.Check(effectType, raw)
+	if err != nil {
+		detail := err.Error()
+		var refusal *adapters.Refusal
+		if errors.As(err, &refusal) {
+			detail = refusal.Detail
+		}
+		return nil, fmt.Errorf("%w: %s", effectargs.ErrInvalid, detail)
+	}
+	if target != c.Plan.OrgRef {
+		return nil, fmt.Errorf("%w: target must be the plan's org_ref %q", effectargs.ErrInvalid, c.Plan.OrgRef)
+	}
+	return map[string]any{"schema": c.Plan.Schema, "org_ref": c.Plan.OrgRef}, nil
 }

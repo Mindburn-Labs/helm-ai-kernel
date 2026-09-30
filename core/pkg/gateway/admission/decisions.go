@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -144,11 +143,11 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 }
 
 // needsStepUp: §10.1 step-up covers high and irreversible effects and
-// authority widening (helm.authority.*). A medium effect a mandate escalates
-// is approved without it.
+// authority widening (helm.authority.*, except a plan that only narrows and is
+// never approved). A medium effect a mandate escalates is approved without it.
 func needsStepUp(risk, effectType string) bool {
 	return risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||
-		strings.HasPrefix(effectType, "helm.authority.")
+		effectargs.WidensAuthority(effectType)
 }
 
 var errStepUp = refuse(CodePermissionDenied, contracts.ReasonStepUpRequired,
@@ -166,7 +165,7 @@ func (s *Service) readmit(ctx context.Context, tx *sql.Tx, a lockedAttempt, appr
 	if err != nil {
 		return err
 	}
-	args, err := effectargs.Validate(a.effectType, a.target, content)
+	args, err := validateArguments(a.effectType, a.target, content)
 	if err != nil {
 		return err
 	}

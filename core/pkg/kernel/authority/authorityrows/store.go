@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -22,6 +21,14 @@ var (
 	// ErrStopped reports a delegation under an active stop on the tenant, the
 	// delegator, or a mandate of the chain.
 	ErrStopped = errors.New("authority rows: stopped")
+	// ErrIdentityConflict reports a principal presented as another kind than
+	// it was registered as, or with another external subject, or an external
+	// subject already held by another principal.
+	ErrIdentityConflict = errors.New("authority rows: identity conflict")
+	// ErrPrincipalInactive and ErrMandateInactive are the two ErrInactive
+	// causes a caller acts on differently.
+	ErrPrincipalInactive = fmt.Errorf("%w: principal", ErrInactive)
+	ErrMandateInactive   = fmt.Errorf("%w: mandate", ErrInactive)
 )
 
 // ScopeKind names the control row a stop applies to.
@@ -153,28 +160,11 @@ func (s *Store) CreateEffectType(ctx context.Context, tenantID, effectType strin
 // CreateMandate activates a root mandate for holderID. Activation widens
 // authority, so it needs an approval (architecture §4.1 item 7).
 func (s *Store) CreateMandate(ctx context.Context, tenantID, holderID string, terms Terms, approval WideningApproval) (Mandate, error) {
-	if err := approval.check(); err != nil {
-		return Mandate{}, err
-	}
-	if approval.ApproverID == holderID {
-		return Mandate{}, fmt.Errorf("%w: the approver would hold the mandate", ErrApproverNotDistinct)
-	}
-	terms, err := normalized(terms)
-	if err != nil {
-		return Mandate{}, err
-	}
-	m := Mandate{HolderID: holderID, Terms: terms, Active: true, CreatedBy: approval.RequesterID, ApprovedBy: approval.ApproverID, Version: 1}
-	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		if err := approval.verify(ctx, tx, tenantID); err != nil {
-			return err
-		}
-		if err := requireActivePrincipal(ctx, tx, tenantID, holderID); err != nil {
-			return err
-		}
-		if err := requireEffectTypes(ctx, tx, tenantID, terms.EffectTypes); err != nil {
-			return err
-		}
-		return insertMandate(ctx, tx, tenantID, &m)
+	var m Mandate
+	err := s.InTenant(ctx, tenantID, func(t *Tx) error {
+		var err error
+		m, err = t.CreateMandate(ctx, holderID, terms, approval)
+		return err
 	})
 	return m, err
 }
@@ -183,61 +173,14 @@ func (s *Store) CreateMandate(ctx context.Context, tenantID, holderID string, te
 // holder may delegate, every mandate in the chain must be active, and the
 // child's terms must be within the terms of every mandate above it: delegation
 // only narrows. No active stop may cover the tenant, the delegator, or a
-// mandate of the chain, so a stop cannot be sidestepped by delegating.
-//
-// Locks follow ADR-0001 §1: the tenant row, the two principals, then the chain
-// root to leaf, all FOR SHARE, and stops are read after them. A concurrent
-// narrowing or stop of any of those rows commits first and is seen, or waits.
+// mandate of the chain, so a stop cannot be sidestepped by delegating (see
+// Tx.Delegate for the locks).
 func (s *Store) Delegate(ctx context.Context, tenantID string, parentID uuid.UUID, delegatorID, holderID string, terms Terms) (Mandate, error) {
-	terms, err := normalized(terms)
-	if err != nil {
-		return Mandate{}, err
-	}
-	m := Mandate{HolderID: holderID, Terms: terms, Active: true, CreatedBy: delegatorID, Version: 1}
-	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, `SELECT 1 FROM authority_tenants WHERE tenant_id = $1 FOR SHARE`, tenantID).Scan(new(int)); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("%w: tenant %q", ErrNotFound, tenantID)
-			}
-			return err
-		}
-		if err := lockActivePrincipals(ctx, tx, tenantID, delegatorID, holderID); err != nil {
-			return err
-		}
-		chain, err := readChain(ctx, tx, tenantID, parentID, true)
-		if err != nil {
-			return err
-		}
-		parent := chain[len(chain)-1]
-		if parent.HolderID != delegatorID {
-			return ErrNotDelegator
-		}
-		stopKeys := []string{string(ScopeTenant) + ":" + tenantID, string(ScopePrincipal) + ":" + delegatorID}
-		for _, link := range chain {
-			if !link.Active {
-				return fmt.Errorf("%w: mandate %s is revoked", ErrInactive, link.ID)
-			}
-			if err := terms.Within(link.Terms); err != nil {
-				return err
-			}
-			stopKeys = append(stopKeys, string(ScopeMandate)+":"+link.ID.String())
-		}
-		var stopped bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_stops
-				WHERE tenant_id = $1 AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())
-				  AND scope_kind || ':' || scope_key = ANY($2::text[]))`,
-			tenantID, pq.Array(stopKeys)).Scan(&stopped); err != nil {
-			return err
-		}
-		if stopped {
-			return ErrStopped
-		}
-		if parent.Depth == math.MaxInt32 {
-			return fmt.Errorf("%w: delegation depth overflows", ErrInvalid)
-		}
-		m.ParentID = &parent.ID
-		m.Depth = parent.Depth + 1
-		return insertMandate(ctx, tx, tenantID, &m)
+	var m Mandate
+	err := s.InTenant(ctx, tenantID, func(t *Tx) error {
+		var err error
+		m, err = t.Delegate(ctx, parentID, delegatorID, holderID, terms)
+		return err
 	})
 	return m, err
 }
@@ -246,60 +189,18 @@ func (s *Store) Delegate(ctx context.Context, tenantID string, parentID uuid.UUI
 // mandate is its own control row, and its version is bumped. Every mandate
 // delegated from it stops admitting too, because admission checks every link.
 func (s *Store) Revoke(ctx context.Context, tenantID string, mandateID uuid.UUID) error {
-	return s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE authority_mandates SET status = 'revoked', version = version + 1
-			WHERE tenant_id = $1 AND mandate_id = $2 AND status = 'active'`, tenantID, mandateID)
-		if err != nil {
-			return classify(err)
-		}
-		if affected(res) == 1 {
-			return nil
-		}
-		if _, err := readMandate(ctx, tx, tenantID, mandateID); err != nil {
-			return err
-		}
-		return fmt.Errorf("%w: mandate %s is already revoked", ErrInactive, mandateID)
-	})
+	return s.InTenant(ctx, tenantID, func(t *Tx) error { return t.Revoke(ctx, mandateID) })
 }
 
 // Narrow replaces an active mandate's terms with terms within them, and bumps
 // its version. Mandates delegated from it keep their rows; admission checks
 // every link, so they cannot admit more than the narrowed mandate allows.
 func (s *Store) Narrow(ctx context.Context, tenantID string, mandateID uuid.UUID, terms Terms) (Mandate, error) {
-	terms, err := normalized(terms)
-	if err != nil {
-		return Mandate{}, err
-	}
 	var m Mandate
-	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		current, err := mandates.ScanMandate(tx.QueryRowContext(ctx, `SELECT `+mandates.MandateColumns+` FROM authority_mandates m
-			WHERE tenant_id = $1 AND mandate_id = $2 FOR NO KEY UPDATE`, tenantID, mandateID))
-		if err != nil {
-			return err
-		}
-		if !current.Active {
-			return fmt.Errorf("%w: mandate %s is revoked", ErrInactive, mandateID)
-		}
-		if err := terms.Within(current.Terms); err != nil {
-			return err
-		}
-		// A replaced condition could admit what the old one refused; only
-		// adding one, or keeping it, narrows.
-		if current.Terms.Condition != "" && terms.Condition != current.Terms.Condition {
-			return &WidensError{Field: "condition"}
-		}
-		m = current
-		m.Terms = terms
-		targets, condition, risks, required, err := termsColumns(terms)
-		if err != nil {
-			return err
-		}
-		return tx.QueryRowContext(ctx, `UPDATE authority_mandates
-			SET effect_types = $3, per_call_limit = $4, approval_threshold = $5, valid_from = $6, valid_until = $7,
-			    targets = $8, condition = $9, risk_classes = $10, approval_required = $11, version = version + 1
-			WHERE tenant_id = $1 AND mandate_id = $2 RETURNING version`,
-			tenantID, mandateID, pq.Array(terms.EffectTypes), nullAmount(terms.PerCallLimit), nullAmount(terms.ApprovalThreshold),
-			terms.ValidFrom, terms.ValidUntil, targets, condition, risks, required).Scan(&m.Version)
+	err := s.InTenant(ctx, tenantID, func(t *Tx) error {
+		var err error
+		m, err = t.Narrow(ctx, mandateID, terms)
+		return err
 	})
 	return m, err
 }
@@ -317,7 +218,8 @@ func (s *Store) Chain(ctx context.Context, tenantID string, mandateID uuid.UUID)
 
 var unitPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
-func (spec LimitSpec) validate() error {
+// Validate checks a limit before it is written.
+func (spec LimitSpec) Validate() error {
 	switch {
 	case !unitPattern.MatchString(spec.Unit):
 		return fmt.Errorf("%w: limit unit %q", ErrInvalid, spec.Unit)
@@ -340,44 +242,11 @@ func (spec LimitSpec) validate() error {
 // account. A limit on a delegated mandate must be no higher than any limit
 // with the same unit, measure and window above it.
 func (s *Store) CreateLimit(ctx context.Context, tenantID string, spec LimitSpec) (Limit, error) {
-	if err := spec.validate(); err != nil {
-		return Limit{}, err
-	}
-	id, err := uuid.NewV7()
-	if err != nil {
-		return Limit{}, err
-	}
-	limit := Limit{ID: id, Spec: spec, Version: 1}
-	err = s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		if spec.MandateID == nil {
-			return bumpControlRow(ctx, tx, tenantID, Scope{Kind: ScopeTenant, Key: tenantID}, func() error {
-				return insertLimit(ctx, tx, tenantID, limit)
-			})
-		}
-		mandateScope := Scope{Kind: ScopeMandate, Key: spec.MandateID.String()}
-		return bumpControlRow(ctx, tx, tenantID, mandateScope, func() error {
-			chain, err := readChain(ctx, tx, tenantID, *spec.MandateID, false)
-			if err != nil {
-				return err
-			}
-			ancestors := make([]uuid.UUID, 0, len(chain)-1)
-			for _, link := range chain[:len(chain)-1] {
-				ancestors = append(ancestors, link.ID)
-			}
-			var ceiling sql.NullInt64
-			if err := tx.QueryRowContext(ctx, `SELECT min(limit_value) FROM (
-					SELECT limit_value FROM authority_limits
-					WHERE tenant_id = $1 AND mandate_id = ANY($2::uuid[])
-					  AND unit = $3 AND measure = $4 AND window_kind = $5 AND span = $6
-					ORDER BY limit_id FOR SHARE) AS ancestor_limits`,
-				tenantID, pq.Array(uuidStrings(ancestors)), spec.Unit, spec.Measure, spec.Window, spec.Span).Scan(&ceiling); err != nil {
-				return classify(err)
-			}
-			if ceiling.Valid && spec.Value > ceiling.Int64 {
-				return &WidensError{Field: "limit_value"}
-			}
-			return insertLimit(ctx, tx, tenantID, limit)
-		})
+	var limit Limit
+	err := s.InTenant(ctx, tenantID, func(t *Tx) error {
+		var err error
+		limit, err = t.CreateLimit(ctx, spec)
+		return err
 	})
 	return limit, err
 }
@@ -385,28 +254,7 @@ func (s *Store) CreateLimit(ctx context.Context, tenantID string, spec LimitSpec
 // LowerLimit lowers a limit to value (or keeps it) and bumps the limit's
 // version. Raising a limit widens authority and is not offered.
 func (s *Store) LowerLimit(ctx context.Context, tenantID string, limitID uuid.UUID, value int64) error {
-	if value < 0 {
-		return fmt.Errorf("%w: negative limit", ErrInvalid)
-	}
-	return s.inTenant(ctx, tenantID, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE authority_limits SET limit_value = $3, version = version + 1
-			WHERE tenant_id = $1 AND limit_id = $2 AND limit_value >= $3`, tenantID, limitID, value)
-		if err != nil {
-			return classify(err)
-		}
-		if affected(res) == 1 {
-			return nil
-		}
-		var exists bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_limits WHERE tenant_id = $1 AND limit_id = $2)`,
-			tenantID, limitID).Scan(&exists); err != nil {
-			return err
-		}
-		if !exists {
-			return fmt.Errorf("%w: limit %s", ErrNotFound, limitID)
-		}
-		return &WidensError{Field: "limit_value"}
-	})
+	return s.InTenant(ctx, tenantID, func(t *Tx) error { return t.LowerLimit(ctx, limitID, value) })
 }
 
 // Stop issues a stop on scope. It narrows, so it needs no approval. It bumps
@@ -705,7 +553,7 @@ func lockActivePrincipals(ctx context.Context, tx *sql.Tx, tenantID string, prin
 		case !ok:
 			return fmt.Errorf("%w: principal %q", ErrNotFound, id)
 		case state != "active":
-			return fmt.Errorf("%w: principal %q is %s", ErrInactive, id, state)
+			return fmt.Errorf("%w: principal %q is %s", ErrPrincipalInactive, id, state)
 		}
 	}
 	return nil
@@ -721,7 +569,7 @@ func requireActivePrincipal(ctx context.Context, tx *sql.Tx, tenantID, principal
 		return err
 	}
 	if status != "active" {
-		return fmt.Errorf("%w: principal %q is %s", ErrInactive, principalID, status)
+		return fmt.Errorf("%w: principal %q is %s", ErrPrincipalInactive, principalID, status)
 	}
 	return nil
 }

@@ -219,7 +219,7 @@ func TestWideningApprovalMustNameTwoDistinctPrincipals(t *testing.T) {
 
 func TestLimitSpecValidation(t *testing.T) {
 	valid := LimitSpec{Unit: "usd_cents", Measure: "sum", Window: "day", Value: 100, Span: 1}
-	if err := valid.validate(); err != nil {
+	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid limit refused: %v", err)
 	}
 	for name, mutate := range map[string]func(*LimitSpec){
@@ -234,7 +234,7 @@ func TestLimitSpecValidation(t *testing.T) {
 	} {
 		spec := valid
 		mutate(&spec)
-		if err := spec.validate(); !errors.Is(err, ErrInvalid) {
+		if err := spec.Validate(); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
 	}

@@ -84,6 +84,12 @@ func SchemaDDL() string { return mandates.SchemaDDL() }
 
 var effectTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
 
+// NormalizeTerms validates t and returns it in the form the database stores:
+// sorted, de-duplicated sets and UTC times at microsecond precision. The
+// provisioning API digests this form, so that two requests that would write the
+// same mandate have one digest.
+func NormalizeTerms(t Terms) (Terms, error) { return normalized(t) }
+
 // normalized validates t and returns it in the form the database stores:
 // sorted, de-duplicated effect types, and UTC times at microsecond precision.
 func normalized(t Terms) (Terms, error) {

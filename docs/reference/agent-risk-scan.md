@@ -5,7 +5,7 @@ last_reviewed: 2026-08-11
 
 # Agent Risk Scan
 
-`helm-ai-kernel scan` is the local-first AI agent risk audit command. It reads
+`helm-risk-scan` is the local-first AI agent risk audit command. It reads
 local Claude, Codex, MCP, source, and optional workstation receipt evidence,
 then emits an anonymized `RiskEnvelope` plus local preview and evidence-pack
 artifacts.
@@ -32,13 +32,12 @@ After running `scan`, you can show:
 
 | Capability | Command or artifact |
 | --- | --- |
-| Static local scan | `helm-ai-kernel scan --path .` |
+| Static local scan | `helm-risk-scan scan --path .` |
 | RiskEnvelope JSON | `--risk-envelope out.json` |
 | Markdown preview | `--preview out.md` |
 | HTML preview | `--preview out.html` |
 | Evidence pack tar | `--evidence-pack pack.tar` |
-| Offline evidence-pack verification | `helm-ai-kernel verify-scan --bundle pack.tar` |
-| Explicit upload | `--upload --upload-url <url> --yes` |
+| Offline evidence-pack verification | `helm-risk-scan verify --bundle pack.tar` |
 | Receipt projection | `--from-receipts <dir>` |
 | Local salt | `--salt-file <path>` |
 | Exclude user config | `--no-user-config` |
@@ -72,7 +71,7 @@ rather than a static tree, so they omit it rather than report a default letter.
 
 The reason is not a free-text field. The envelope and the schema both accept
 only the grader's own deterministic sentences, so no scanned path, repository
-name, or secret can reach an upload body through it.
+name, or secret can reach an exported envelope through it.
 
 Scope, as with the rest of a static scan: the grade describes declared and
 locally discoverable configuration. It does not establish what an agent
@@ -80,10 +79,10 @@ executed at runtime.
 
 ## Static Scan
 
-Run a local scan without upload:
+Run a local scan:
 
 ```bash
-helm-ai-kernel scan \
+helm-risk-scan scan \
   --path . \
   --cohort unknown \
   --salt-file ~/.config/helm-ai-kernel/scan_salt.hex \
@@ -133,7 +132,7 @@ It also uses the local shadow scanner findings to project risk codes such as
 Project observe-mode receipts into the same envelope shape:
 
 ```bash
-helm-ai-kernel scan \
+helm-risk-scan scan \
   --from-receipts ./receipts \
   --salt-file ~/.config/helm-ai-kernel/scan_salt.hex \
   --risk-envelope out/risk-envelope.json \
@@ -150,7 +149,7 @@ enforce behavior.
 
 `scan` is private by non-collection plus a local-only salt. The salt is
 generated with CSPRNG bytes, persisted with `0600` permissions, and never
-serialized into the envelope, preview, evidence pack, or upload body.
+serialized into the envelope, preview, or evidence pack.
 
 These values are not exported:
 
@@ -186,11 +185,11 @@ source pack, raw config files, and raw receipts stay local.
 
 ## Offline Verification
 
-Verify an archive without uploading it:
+Verify an archive:
 
 ```bash
-helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar
-helm-ai-kernel verify-scan --bundle out/risk-scan-pack.tar --json
+helm-risk-scan verify --bundle out/risk-scan-pack.tar
+helm-risk-scan verify --bundle out/risk-scan-pack.tar --json
 ```
 
 The verifier checks:
@@ -201,7 +200,7 @@ The verifier checks:
   object, including `attestation.kernel_version`, and also omits
   `correlation_id`, `threat_scan`, `security_findings`, `network_logs`,
   `secret_events`, `port_exposures`, `git_diffs`, and `replay_manifest`;
-  `verify-scan` separately rejects `attestation.signature` and
+  `verify` separately rejects `attestation.signature` and
   `attestation.signer_id`, but this path does not independently apply the
   complete EvidencePack JSON Schema or bind those omitted fields;
 - the canonical RiskEnvelope representation, content hash, schema, and privacy
@@ -221,37 +220,38 @@ it does not establish artifact integrity against an actor who can rewrite that
 archive. It also does not prove that execution occurred or was governed or
 authorized, nor does it establish runtime provenance or live posture.
 
-## Upload Contract
+## Where It Runs
 
-Upload is off by default. When `--upload` is used, `--upload-url` is required.
-The command prints the destination URL, exact body hash, body size, and privacy
-summary before sending. Without `--yes`, upload is not sent.
-
-Only the anonymized RiskEnvelope JSON body is posted. No backend ingestion route
-is implied by this command; operators must provide the explicit upload URL.
+`helm-risk-scan` is its own binary, built from `tools/riskscan`. It moved out of
+`helm-ai-kernel` in HELM-756 because it observes configuration and enforces
+nothing. `helm-ai-kernel scan` and `helm-ai-kernel verify-scan` remain for one
+release as stubs that print the new command and exit `2`. Nothing leaves the
+machine: the former `--upload` path was removed. The default salt file keeps its
+old location, so pseudonyms stay stable across the move.
 
 ## Test Coverage
 
 | Behavior | Test |
 | --- | --- |
-| salt generation, `0600` persistence, and local-only salt behavior | `core/pkg/riskenvelope/envelope_test.go` |
-| Go enum to JSON Schema parity | `core/pkg/riskenvelope/envelope_test.go` |
-| grade reason is a closed sentence set in both Go and the schema | `core/pkg/riskenvelope/envelope_test.go`, `core/pkg/riskscan/scan_test.go` |
-| grade reaches the envelope, previews, and stdout | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
-| content hash changes when findings or any posture field changes, and stale hashes fail validation | `core/pkg/riskenvelope/envelope_test.go` |
-| static projection omits raw paths, repo names, commands, and secrets | `core/pkg/riskscan/scan_test.go` |
-| Markdown, HTML, and evidence pack outputs omit raw inputs | `core/pkg/riskscan/scan_test.go` |
-| deterministic evidence pack tar contents | `core/pkg/riskscan/scan_test.go` |
-| upload sends the exact printed envelope body | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
-| `--upload-url` and `--yes` gates | `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
-| user config opt-in, project-over-user precedence, and CLI opt-out | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
-| receipt-derived risk mapping and raw receipt leakage checks | `core/pkg/riskscan/scan_test.go`, `core/cmd/helm-ai-kernel/scan_cmd_test.go` |
+| salt generation, `0600` persistence, and local-only salt behavior | `tools/riskscan/internal/riskenvelope/envelope_test.go` |
+| Go enum to JSON Schema parity | `tools/riskscan/internal/riskenvelope/envelope_test.go` |
+| grade reason is a closed sentence set in both Go and the schema | `tools/riskscan/internal/riskenvelope/envelope_test.go`, `tools/riskscan/internal/riskscan/scan_test.go` |
+| grade reaches the envelope, previews, and stdout | `tools/riskscan/internal/riskscan/scan_test.go`, `tools/riskscan/main_test.go` |
+| content hash changes when findings or any posture field changes, and stale hashes fail validation | `tools/riskscan/internal/riskenvelope/envelope_test.go` |
+| static projection omits raw paths, repo names, commands, and secrets | `tools/riskscan/internal/riskscan/scan_test.go` |
+| Markdown, HTML, and evidence pack outputs omit raw inputs | `tools/riskscan/internal/riskscan/scan_test.go` |
+| deterministic evidence pack tar contents | `tools/riskscan/internal/riskscan/scan_test.go` |
+| `--upload` is rejected; nothing leaves the machine | `tools/riskscan/main_test.go` |
+| user config opt-in, project-over-user precedence, and CLI opt-out | `tools/riskscan/internal/riskscan/scan_test.go`, `tools/riskscan/main_test.go` |
+| receipt-derived risk mapping and raw receipt leakage checks | `tools/riskscan/internal/riskscan/scan_test.go`, `tools/riskscan/main_test.go` |
 
 Run the focused test set:
 
 ```bash
-cd core
-go test ./pkg/riskenvelope ./pkg/riskscan ./pkg/shadow ./cmd/helm-ai-kernel
+cd tools/riskscan
+GOWORK=off go test ./...
+cd ../../core
+go test ./pkg/shadow ./cmd/helm-ai-kernel
 ```
 
 Then run repository gates:

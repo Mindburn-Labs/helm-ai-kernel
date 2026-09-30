@@ -1,0 +1,226 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-021",
+  "title": "A sum limit refuses a quote that names no amount for its unit",
+  "rule": {
+    "statement": "Admission refuses a quote with no amount for a unit that a sum limit counts, with invalid_argument and SCHEMA_VIOLATION, and creates no attempt; it never reads the missing unit as zero. A zero amount of the unit is admitted and holds nothing.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Stop, Lift and jobs (slice 3b)"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        },
+        "limits": [
+          {
+            "unit": "effects",
+            "window": "day",
+            "value": 5
+          }
+        ]
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    }
+  },
+  "steps": [
+    {
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "unquoted",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/unquoted",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "code": "invalid_argument",
+          "reason_code": "SCHEMA_VIOLATION"
+        }
+      }
+    },
+    {
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "unquoted",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/unquoted",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        },
+        "quote": [
+          {
+            "unit": "effects",
+            "amount": 0
+          }
+        ]
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "exposure": "NONE"
+        },
+        "existing": false
+      }
+    },
+    {
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "quoted",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/quoted",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        },
+        "quote": [
+          {
+            "unit": "effects",
+            "amount": 1
+          }
+        ]
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "exposure": "HELD"
+        }
+      }
+    }
+  ]
+}

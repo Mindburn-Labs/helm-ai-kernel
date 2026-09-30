@@ -14,7 +14,7 @@ import (
 // replay the original receipts without touching the balance.
 func TestRestoreSettlementReplaysWithoutDoubleDebit(t *testing.T) {
 	first := newHarness(t)
-	quote, err := first.engine.Quote(first.env, first.req("idem-restore", "gpt-4o", 1000, 500))
+	quote, err := first.engine.Quote(first.env, first.req("idem-restore", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -43,7 +43,7 @@ func TestRestoreSettlementReplaysWithoutDoubleDebit(t *testing.T) {
 	}
 
 	second := newHarness(t, func(cfg *EngineConfig) { cfg.Ledger = ledger })
-	replayQuote, err := second.engine.Quote(second.env, second.req("idem-restore", "gpt-4o", 1000, 500))
+	replayQuote, err := second.engine.Quote(second.env, second.req("idem-restore", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("replay Quote() = %v", err)
 	}
@@ -72,7 +72,7 @@ func TestRestoreSettlementReplaysWithoutDoubleDebit(t *testing.T) {
 // canonical content hash no longer matches) cannot be restored.
 func TestRestoreSettlementRejectsTamperedReceipts(t *testing.T) {
 	h := newHarness(t)
-	quote, err := h.engine.Quote(h.env, h.req("idem-tamper", "gpt-4o", 1000, 500))
+	quote, err := h.engine.Quote(h.env, h.req("idem-tamper", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}
@@ -96,7 +96,7 @@ func TestRestoreSettlementRejectsTamperedReceipts(t *testing.T) {
 	}
 
 	// A settlement that does not bind the usage hash must also be refused.
-	otherQuote, err := h.engine.Quote(h.env, h.req("idem-tamper-2", "gpt-4o", 1000, 500))
+	otherQuote, err := h.engine.Quote(h.env, h.req("idem-tamper-2", "gpt-6-sol", 1000, 500))
 	if err != nil {
 		t.Fatalf("Quote() = %v", err)
 	}

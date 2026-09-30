@@ -22,7 +22,7 @@ func main() {
 	// 1. Chat completions (governed by HELM)
 	fmt.Println("=== Chat Completions ===")
 	res, err := client.ChatCompletions(helm.ChatCompletionRequest{
-		Model:    "gpt-4",
+		Model:    "gpt-6-sol",
 		Messages: []helm.ChatCompletionRequestMessagesInner{{Role: "user", Content: "List files in /tmp"}},
 	})
 	if err != nil {

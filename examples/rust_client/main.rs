@@ -10,7 +10,7 @@ fn main() {
     // 1. Chat completions (governed by HELM)
     println!("=== Chat Completions ===");
     match client.chat_completions(&ChatCompletionRequest {
-        model: "gpt-4".into(),
+        model: "gpt-6-sol".into(),
         messages: vec![ChatMessage {
             role: "user".into(),
             content: "List files in /tmp".into(),

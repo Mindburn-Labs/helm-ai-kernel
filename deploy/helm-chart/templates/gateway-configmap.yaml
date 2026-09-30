@@ -1,0 +1,11 @@
+{{- if and .Values.gateway.enabled .Values.gateway.github.installationsFile }}
+{{- include "helm-ai-kernel.gatewayValidate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "helm-ai-kernel.gatewayName" . }}-github-installations
+  labels:
+    {{- include "helm-ai-kernel.gatewayLabels" . | nindent 4 }}
+data:
+  installations.json: {{ .Values.gateway.github.installationsFile | quote }}
+{{- end }}

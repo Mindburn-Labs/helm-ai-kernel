@@ -80,11 +80,13 @@ flowchart TD
 ## Required Secret
 
 Live local-container conformance uses one scoped BYO model-provider test key
-from `core/pkg/launchpad/modelproviders/catalog.json`. CI may continue to store
-an OpenRouter-only compatibility key as `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY`;
-the gate maps it to `OPENROUTER_API_KEY` inside the live Launchpad test step.
-For provider-agnostic CI, set `HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON` to
-a JSON object keyed by catalog env names.
+from `core/pkg/launchpad/modelproviders/catalog.json`. CI stores it as the
+OpenRouter key `HELM_LAUNCHPAD_CI_OPENROUTER_API_KEY`, and the workflows pass it
+to the live Launchpad test step as `OPENROUTER_API_KEY`; no other provider
+secret is read. The gate and the live test also accept
+`HELM_LAUNCHPAD_CI_MODEL_PROVIDER_SECRET_JSON`, a JSON object keyed by catalog
+env names; to use another provider in CI, create that secret and add it to the
+step's `env`.
 Do not commit provider keys, fragments, screenshots, or raw logs.
 
 ## Clean Machine Commands

@@ -31,16 +31,30 @@ helm-ai-kernel log verify-inclusion         # prove a receipt is in the log
 helm-ai-kernel verify --bundle <path> --json  # verify an exported EvidencePack
 ```
 
-## Stopping everything
+## Stopping governed calls
 
 ```bash
-helm-ai-kernel freeze --principal <id>
-helm-ai-kernel unfreeze --principal <id>
+helm-ai-kernel freeze --principal <id> --data-dir <dir>
+helm-ai-kernel unfreeze --principal <id> --data-dir <dir>
 ```
 
-Global freeze is the deliberate stop lever. Use it when you need dispatch to stop
-before you have diagnosed why — freezing is cheap, and a fail-closed kernel that
-denies is behaving correctly, not malfunctioning.
+Global freeze is the deliberate stop lever. Use it when you need governed calls
+to stop before you have diagnosed why — freezing is cheap, and a fail-closed
+kernel that denies is behaving correctly, not malfunctioning.
+
+The freeze denies every Guardian evaluation, with `SYSTEM_FROZEN`, in each
+process that reads that data directory: `serve`, `proxy` and `mcp serve` on this
+host. It does not stop approval-grant consumption, dispatch admission or effect
+reservation, which do not ask the Guardian, and it does not cancel work already
+in flight. The scoped emergency-stop fence
+([EMERGENCY_STOP_FENCE.md](EMERGENCY_STOP_FENCE.md)) covers consumption and
+admission for one tenant and workspace.
+
+The freeze is `freeze_state.json` in the kernel data directory. Pass the same
+`--data-dir` the server runs with (`serve --data-dir`, `mcp serve --data-dir`).
+Without it both sides use `$HELM_DATA_DIR`, then `./data` under the working
+directory. `proxy` reads `$HELM_DATA_DIR`. The file holds per host, not across
+replicas.
 
 ## Policy
 

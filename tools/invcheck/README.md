@@ -8,6 +8,10 @@ constitution in `HELM_INVARIANTS.md`: every `INV-NNN` carries a `verify:` hint,
 ids are unique, machine-checkable references resolve, and amendments arrive with
 a `CONCEPT-CHANGE(INV-NNN)` commit marker.
 
+It also owns the control registry, `controls.yaml` (binding rule R1). The
+registry holds every claimed control and the text of every invariant;
+`HELM_INVARIANTS.md` and `coverage-map.json` are generated from it.
+
 ## Canonical Interface
 
 - Source path: `tools/invcheck`
@@ -21,9 +25,23 @@ a `CONCEPT-CHANGE(INV-NNN)` commit marker.
 - `make concept-gate` runs the amendment-marker gate over `CONCEPT_RANGE`
   (default `origin/main..HEAD`). A range with no commits exits 2 rather than
   passing; CI passes the pull request's `base..head`.
+- `make controls` regenerates `HELM_INVARIANTS.md` and `coverage-map.json`
+  from `controls.yaml`.
+- `make controls-check` runs `inv-check`, then the registry gate. It fails on an
+  invalid entry; an `enforced` entry point that no binary in
+  `scripts/ci/deadcode-roots.txt` reaches; a named test that does not run and
+  pass (only tests listed in `scripts/ci/postgres-proofs.txt` are left to the
+  Postgres job); an `enforced` runtime entry whose `removal_proofs` do not make
+  every removal test fail under `go test -overlay`; a `build`-plane entry whose
+  gates do not block pull requests; or a generated file that differs from the
+  registry. Reachability reuses the deadcode gate: a symbol is reachable when
+  its package is in the roots' `go list -deps` graph for linux/amd64 and it is
+  absent from `scripts/ci/deadcode-allowlist.txt`, which that gate keeps equal
+  to the measured unreachable set.
 - `GOWORK=off go test ./...` in this directory runs the concept-gate controls
   against throwaway git repositories: an unmarked invariant edit must fail, a
-  marked one must pass, and an empty range must be refused.
+  marked one must pass, and an empty range must be refused. It also checks the
+  registry rules against planted entries.
 - `make docs-coverage` from the repository root verifies coverage for this surface.
 
 `inv-check` self-tests against synthetic negative and positive controls before it
@@ -32,6 +50,12 @@ non-zero without scanning, on the grounds that a checker which has stopped
 discriminating would report a green constitution it never inspected.
 
 Free-prose hints are reported as human-owned and are never counted as verified.
+
+`controls` does the same: planted registry entries (no owner, an unknown status,
+an unreachable or missing entry point, a missing, failing or skipping test, a
+missing removal proof, a non-blocking gate, a removed entry, a stale generated
+file, a stale proof anchor) must each fail, and planted good runtime and build
+entries must pass, before it judges the real registry.
 
 ## Documentation Contract
 

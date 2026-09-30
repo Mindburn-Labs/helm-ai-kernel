@@ -192,28 +192,24 @@ func TestEngine_DeterministicClock(t *testing.T) {
 	require.Equal(t, fixed, report.Timestamp)
 }
 
-func TestEngineMarksSeededBaselineAsLocalCompatibilityEvidence(t *testing.T) {
+// HELM-756: the seeded local baseline was retired with the gates it fed, so a
+// run's evidence is always the project's own and is release-eligible.
+func TestEngineMarksReleaseEvidenceMode(t *testing.T) {
 	withEngineEvidenceDataDir(t)
 	e := NewEngine()
 	e.RegisterGate(&fakeGate{id: "G0", name: "Build", pass: true})
 
 	dir := t.TempDir()
 	report, err := e.Run(&RunOptions{
-		Profile:      ProfileCore,
-		ProjectRoot:  dir,
-		OutputDir:    filepath.Join(dir, "evidence"),
-		GateFilter:   []string{"G0"},
-		SeedBaseline: true,
+		Profile:     ProfileSMB,
+		ProjectRoot: dir,
+		OutputDir:   filepath.Join(dir, "evidence"),
+		GateFilter:  []string{"G0"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, true, report.Metadata["seed_baseline"])
-	require.Equal(t, "seeded-local-baseline", report.Metadata["evidence_mode"])
-	require.Equal(t, false, report.Metadata["release_certification_eligible"])
-
-	scorePath := filepath.Join(dir, "evidence", report.Timestamp.Format("2006-01-02"), report.RunID, "01_SCORE.json")
-	data, err := os.ReadFile(scorePath)
-	require.NoError(t, err)
-	require.Contains(t, string(data), "seeded-local-baseline")
+	require.Equal(t, false, report.Metadata["seed_baseline"])
+	require.Equal(t, "release-evidencepack", report.Metadata["evidence_mode"])
+	require.Equal(t, true, report.Metadata["release_certification_eligible"])
 }
 
 func withEngineEvidenceDataDir(t *testing.T) {

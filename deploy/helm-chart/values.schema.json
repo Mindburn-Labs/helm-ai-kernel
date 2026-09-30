@@ -348,6 +348,24 @@
           "default": false,
           "description": "Demo mode disables real connectors and uses ephemeral signing keys. Useful for local trials; must be false in production."
         },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Native TLS on the API listener. The health and metrics listeners stay plain HTTP.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Existing kubernetes.io/tls Secret whose tls.crt and tls.key serve the API listener (HELM_TLS_CERT_FILE, HELM_TLS_KEY_FILE). Empty keeps plain HTTP."
+            },
+            "clientAuth": {
+              "type": "string",
+              "enum": ["", "require", "verify-if-given"],
+              "default": "",
+              "description": "Client-certificate verification (HELM_TLS_CLIENT_AUTH). Non-empty mounts ca.crt from existingSecret as HELM_TLS_CLIENT_CA_FILE."
+            }
+          }
+        },
         "auth": {
           "type": "object",
           "additionalProperties": false,
@@ -375,6 +393,17 @@
               "default": "HELM_SERVICE_API_KEY",
               "description": "Key inside existingSecret that contains the service API key."
             },
+            "organizationRuntimeAPIKeySecretKey": {
+              "type": "string",
+              "default": "HELM_ORGANIZATION_RUNTIME_API_KEY",
+              "description": "Key inside existingSecret that holds the organization-runtime credential (HELM_ORGANIZATION_RUNTIME_API_KEY). Wired only together with controlPlaneActivationPublicKey. Empty disables it."
+            },
+            "controlPlaneActivationPublicKey": {
+              "type": "string",
+              "default": "",
+              "pattern": "^([0-9a-f]{64})?$",
+              "description": "The Control Plane activation public key (HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY), 64 lowercase hex characters. Requires existingSecret with organizationRuntimeAPIKeySecretKey."
+            },
             "tenantID": {
               "type": "string",
               "minLength": 1,
@@ -392,6 +421,58 @@
               "minLength": 1,
               "default": "default",
               "description": "Server-bound workspace ID used by governed evaluation when the scoped emergency-stop fence is enabled. The request body never selects this value."
+            },
+            "crossTenantPrincipals": {
+              "type": "array",
+              "default": [],
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[^,\\s]+$"
+              },
+              "description": "Principal IDs that may hold bindings in more than one tenant (HELM_CROSS_TENANT_PRINCIPALS, ADR-0005 §11). Empty refuses every cross-tenant bind with 409. Each listed principal passes the ADR-0005 §3 token cross-check in every tenant it is bound to."
+            },
+            "controlPlaneIdentity": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Control Plane identity tokens (ADR-0005). All four strings empty disables the token path; set them together.",
+              "properties": {
+                "jwksURL": {
+                  "type": "string",
+                  "default": "",
+                  "description": "https URL of the Control Plane workload identity JWKS (HELM_CP_IDENTITY_JWKS_URL)."
+                },
+                "issuer": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Exact iss of the Control Plane issuer (HELM_CP_IDENTITY_ISSUER)."
+                },
+                "audience": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Exact aud, helm-kernel:<deployment id>, one per environment (HELM_CP_IDENTITY_AUDIENCE)."
+                },
+                "actor": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Exact act.sub of the Control Plane workload (HELM_CP_IDENTITY_ACTOR)."
+                },
+                "requireCNF": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Require cnf.x5t#S256 to match the TLS client certificate (HELM_CP_IDENTITY_REQUIRE_CNF). Only for mTLS deployments."
+                },
+                "caBundleConfigMap": {
+                  "type": "string",
+                  "default": "",
+                  "description": "ConfigMap holding the PEM CA that signs the JWKS endpoint's certificate; mounted and passed as HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE. Empty uses the system roots."
+                },
+                "caBundleKey": {
+                  "type": "string",
+                  "default": "ca.crt",
+                  "description": "Key of the CA PEM inside caBundleConfigMap."
+                }
+              }
             }
           }
         },
@@ -959,6 +1040,343 @@
         }
       }
     },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Effect gateway (helm-gateway serve, Zone C). Off by default.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Render the effect gateway (helm-gateway serve): Deployment, Service, ServiceAccount, NetworkPolicy and the migrate hook Job. Off by default; the default render is unchanged."
+        },
+        "replicaCount": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Gateway replicas. Admission state is in Postgres, so replicas share nothing in process."
+        },
+        "podAnnotations": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": true,
+          "description": "Annotations for the gateway Pod."
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Resources for the gateway container and the migrate hook containers."
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Gateway Service.",
+          "properties": {
+            "type": {
+              "type": "string",
+              "default": "ClusterIP",
+              "description": "Gateway Service type."
+            },
+            "port": {
+              "type": "integer",
+              "default": 8443,
+              "description": "Service port for the Connect/gRPC API (container port 8443)."
+            }
+          }
+        },
+        "approvalWindow": {
+          "type": "string",
+          "default": "",
+          "description": "HELM_GATEWAY_APPROVAL_WINDOW, a Go duration. Empty keeps the binary default (24h)."
+        },
+        "permitTTL": {
+          "type": "string",
+          "default": "",
+          "description": "HELM_GATEWAY_PERMIT_TTL, a Go duration. Empty keeps the binary default (10m)."
+        },
+        "dispatchTimeout": {
+          "type": "string",
+          "default": "",
+          "description": "HELM_GATEWAY_DISPATCH_TIMEOUT, a Go duration. Empty keeps the binary default (2m)."
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "TLS on the gateway API listener.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Existing kubernetes.io/tls Secret for the API listener: tls.crt, tls.key, and ca.crt when clientAuth is set. Required unless devInsecureLoopback."
+            },
+            "clientAuth": {
+              "type": "string",
+              "enum": [
+                "",
+                "require",
+                "verify-if-given"
+              ],
+              "default": "require",
+              "description": "HELM_TLS_CLIENT_AUTH. Non-empty mounts ca.crt from existingSecret as HELM_TLS_CLIENT_CA_FILE."
+            },
+            "devInsecureLoopback": {
+              "type": "boolean",
+              "default": false,
+              "description": "Development only: serve plain HTTP on 127.0.0.1:8443 (--dev-insecure-listen), reachable through kubectl port-forward only. Refused when helm.production=true."
+            }
+          }
+        },
+        "controlPlaneIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "ADR-0005 Control Plane identity tokens; jwksURL, issuer, audience and actor are required when the gateway is enabled.",
+          "properties": {
+            "jwksURL": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_JWKS_URL. Required."
+            },
+            "issuer": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_ISSUER. Required."
+            },
+            "audience": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_AUDIENCE, helm-gateway:<deployment id>. Required."
+            },
+            "actor": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_CP_IDENTITY_ACTOR, the Control Plane workload identity (act.sub). Required."
+            },
+            "requireCNF": {
+              "type": "boolean",
+              "default": false,
+              "description": "HELM_CP_IDENTITY_REQUIRE_CNF. Requires tls.clientAuth."
+            },
+            "caBundleConfigMap": {
+              "type": "string",
+              "default": "",
+              "description": "ConfigMap holding a pinned CA for the JWKS endpoint (HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE)."
+            },
+            "caBundleKey": {
+              "type": "string",
+              "default": "ca.crt",
+              "description": "Key of the CA bundle in caBundleConfigMap."
+            }
+          }
+        },
+        "database": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The gateway's PostgreSQL database.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Secret holding HELM_GATEWAY_DATABASE_URL, the serving role's DSN. Required."
+            },
+            "existingSecretKey": {
+              "type": "string",
+              "default": "HELM_GATEWAY_DATABASE_URL",
+              "description": "Key of the runtime DSN in existingSecret."
+            },
+            "migrate": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The migrate hook's DSN without the bootstrap.",
+              "properties": {
+                "existingSecret": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Secret holding the owner DSN `helm-gateway migrate` runs with when the bootstrap is off. Empty uses the runtime DSN, which helm.production=true refuses."
+                },
+                "existingSecretKey": {
+                  "type": "string",
+                  "default": "HELM_GATEWAY_MIGRATE_DATABASE_URL",
+                  "description": "Key of the migrate DSN."
+                }
+              }
+            },
+            "bootstrap": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Database role bootstrap (ADR-0004).",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Create the ADR-0004 owner and runtime roles, the schema and the runtime grants in the migrate hook (files/gateway-db)."
+                },
+                "existingSecret": {
+                  "type": "string",
+                  "default": "",
+                  "description": "Secret holding the administrator DSN and, optionally, the runtime role's password."
+                },
+                "adminDatabaseURLKey": {
+                  "type": "string",
+                  "default": "HELM_GATEWAY_ADMIN_DATABASE_URL",
+                  "description": "Key of the administrator DSN (a superuser, or a CREATEROLE role that owns the gateway database)."
+                },
+                "runtimePasswordKey": {
+                  "type": "string",
+                  "default": "HELM_GATEWAY_ROLE_PASSWORD",
+                  "description": "Key of the runtime role's password in existingSecret, required there when set. It is sent to PostgreSQL only as a client-side SCRAM-SHA-256 verifier. Empty leaves the password unmanaged."
+                },
+                "ownerRole": {
+                  "type": "string",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "default": "helm_owner",
+                  "description": "NOLOGIN role that owns the schema and every table; migrate and the grants run as it."
+                },
+                "runtimeRole": {
+                  "type": "string",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "default": "helm_gateway",
+                  "description": "LOGIN role of the runtime DSN; DML grants only."
+                },
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "default": "helm_gateway",
+                  "description": "Schema of the gateway tables, owned by ownerRole; the runtime role's search_path."
+                },
+                "image": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[0-9a-f]{64}$",
+                  "default": "docker.io/library/postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+                  "description": "Digest-pinned image providing psql for the role and grant steps."
+                }
+              }
+            }
+          }
+        },
+        "github": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "GitHub App credentials for the gateway's connection custody (HELM-751 s3): existingSecret and installationsFile together or not at all.",
+          "properties": {
+            "existingSecret": {
+              "type": "string",
+              "default": "",
+              "description": "Secret with the GitHub App id and private key, mounted into the gateway Pod only at /var/run/secrets/helm-gateway-github/{app-id,private-key.pem}."
+            },
+            "appIdKey": {
+              "type": "string",
+              "default": "app-id",
+              "description": "Key of the App id in existingSecret."
+            },
+            "privateKeyKey": {
+              "type": "string",
+              "default": "private-key.pem",
+              "description": "Key of the App private key in existingSecret."
+            },
+            "installationsFile": {
+              "type": "string",
+              "default": "",
+              "description": "Installations file contents (JSON): {\"installations\": [{\"tenant_id\", \"owner\", \"installation_id\", \"repositories\": [\"owner/name\"]}]}, no other fields. Rendered into a ConfigMap and mounted at /etc/helm-gateway/github/installations.json. Set together with existingSecret or not at all."
+            },
+            "apiURL": {
+              "type": "string",
+              "default": "",
+              "description": "HELM_GATEWAY_GITHUB_API_URL, the GitHub Enterprise Server API root (https). Empty uses https://api.github.com. Requires existingSecret and installationsFile."
+            }
+          }
+        },
+        "networkPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Gateway NetworkPolicy. The API port admits the Control Plane selector only; the health port 8081 is open for kubelet probes. TCP 443 egress is port-only: a NetworkPolicy cannot name api.github.com or the JWKS host.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Render the gateway NetworkPolicy. helm.production=true requires it."
+            },
+            "controlPlane": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The only peers admitted to port 8443; at least one selector is required.",
+              "properties": {
+                "namespaceSelector": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "default": {},
+                  "description": "Namespaces whose Pods may call the API port."
+                },
+                "podSelector": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "default": {},
+                  "description": "Pods that may call the API port; combined with namespaceSelector when both are set."
+                }
+              }
+            },
+            "database": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Egress to the database.",
+              "properties": {
+                "to": {
+                  "type": "array",
+                  "default": [],
+                  "description": "Database peers (NetworkPolicy peers). Required when the NetworkPolicy is enabled.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "port": {
+                  "type": "integer",
+                  "default": 5432,
+                  "description": "Database TCP port."
+                }
+              }
+            },
+            "dns": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Egress to DNS.",
+              "properties": {
+                "to": {
+                  "type": "array",
+                  "default": [
+                    {
+                      "namespaceSelector": {
+                        "matchLabels": {
+                          "kubernetes.io/metadata.name": "kube-system"
+                        }
+                      },
+                      "podSelector": {
+                        "matchLabels": {
+                          "k8s-app": "kube-dns"
+                        }
+                      }
+                    }
+                  ],
+                  "description": "DNS peers for UDP and TCP 53.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "extraEgress": {
+              "type": "array",
+              "default": [],
+              "description": "Additional egress rules, e.g. a JWKS endpoint on a port other than 443. TCP 443 is already open to any address.",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
     "telemetry": {
       "type": "object",
       "additionalProperties": false,
@@ -1242,7 +1660,7 @@
         "model": {
           "type": "string",
           "pattern": "^openrouter/.+",
-          "default": "openrouter/openai/gpt-4o-mini",
+          "default": "openrouter/openai/gpt-6-luna",
           "description": "OpenClaw provider/model reference. The provider must remain openrouter because the chart projects only an OpenRouter credential and allows only the OpenRouter egress origin."
         },
         "tmpfsSize": {
@@ -1297,7 +1715,7 @@
         "model": {
           "type": "string",
           "minLength": 1,
-          "default": "openai/gpt-4o-mini",
+          "default": "openai/gpt-6-luna",
           "description": "Model passed to the default Hermes Job command."
         },
         "query": {

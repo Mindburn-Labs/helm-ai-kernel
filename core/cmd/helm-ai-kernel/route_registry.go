@@ -16,6 +16,9 @@ const (
 	RouteAuthOrganizationRuntime RouteAuth = "organization_runtime_service"
 	RouteAuthConfiguredTenant    RouteAuth = "configured_tenant"
 	RouteAuthLoopback            RouteAuth = "loopback_peer_proof"
+	// RouteAuthControlPlaneToken is a Control Plane identity token (ADR-0005).
+	// It is only ever a route's AlternateAuth during the dual-accept phases.
+	RouteAuthControlPlaneToken RouteAuth = "control_plane_token"
 
 	RouteRatePublic   RouteRateLimit = "public"
 	RouteRateKernel   RouteRateLimit = "kernel"
@@ -38,6 +41,10 @@ type RuntimeRouteSpec struct {
 	ContractStatus RouteContractStatus
 	OperationID    string
 	Owner          string
+	// AlternateAuth is a second accepted credential tier, set only on the
+	// Control Plane routes that accept a Control Plane token alongside their
+	// legacy tier (ADR-0005 phase 1). Empty everywhere else.
+	AlternateAuth RouteAuth
 }
 
 func RuntimeRouteSpecs() []RuntimeRouteSpec {
@@ -52,8 +59,9 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodGet, Path: "/api/v1/economic/allocations", MuxPattern: "/api/v1/economic/allocations", Auth: RouteAuthAdmin, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "listEconomicAllocations", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/governance/edge/status", MuxPattern: "/api/v1/governance/edge/status", Auth: RouteAuthAdmin, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "getEdgeGovernanceStatus", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/compatibility", MuxPattern: "/api/v1/compatibility", Auth: RouteAuthAdmin, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "getCompatibility", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodPost, Path: "/v1/chat/completions", MuxPattern: "/v1/chat/completions", Auth: RouteAuthConfiguredTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "chatCompletions", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: "/v1/chat/completions", MuxPattern: "/v1/chat/completions", Auth: RouteAuthConfiguredTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "chatCompletions", Owner: "core/cmd/helm-ai-kernel", AlternateAuth: RouteAuthControlPlaneToken},
 		{Method: http.MethodPost, Path: "/internal/policy/reconcile", MuxPattern: "/internal/policy/reconcile", Auth: RouteAuthService, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "wakePolicyReconciler", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodGet, Path: receiptKeyringPath, MuxPattern: receiptKeyringPath, Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractInternal, OperationID: "getReceiptKeyring", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: emergencyStopFencePath, MuxPattern: emergencyStopFencePath, Auth: RouteAuthService, RateLimit: RouteRateAdmin, ContractStatus: RouteContractInternal, OperationID: "fenceEmergencyStop", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/v1/extauthz/authorize", MuxPattern: "/api/v1/extauthz/authorize", Auth: RouteAuthService, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "authorizeExtAuthz", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: approvalGrantConsumePath, MuxPattern: approvalGrantConsumePath, Auth: RouteAuthWorkload, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "consumeApprovalGrant", Owner: "core/cmd/helm-ai-kernel"},
@@ -70,16 +78,16 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodGet, Path: localConsolePeerProofPath, MuxPattern: localConsolePeerProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "getLocalConsolePeerProof", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodHead, Path: localConsolePeerProofPath, MuxPattern: localConsolePeerProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "checkLocalConsolePeerProof", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: desktopTransportV1ProofPath, MuxPattern: desktopTransportV1ProofPath, Auth: RouteAuthLoopback, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "proveDesktopTransport", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodPost, Path: "/api/v1/kernel/approve", MuxPattern: "/api/v1/kernel/approve", Auth: RouteAuthService, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "approveIntent", Owner: "core/pkg/api"},
+		{Method: http.MethodPost, Path: "/api/v1/kernel/approve", MuxPattern: "/api/v1/kernel/approve", Auth: RouteAuthService, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "approveIntent", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/health", MuxPattern: "/api/health", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getPublicDemoHealth", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/demo/run", MuxPattern: "/api/demo/run", Auth: RouteAuthPublic, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "runPublicDemo", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/demo/verify", MuxPattern: "/api/demo/verify", Auth: RouteAuthPublic, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "verifyPublicDemoReceipt", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/demo/tamper", MuxPattern: "/api/demo/tamper", Auth: RouteAuthPublic, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "tamperPublicDemoReceipt", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodPost, Path: "/api/v1/evaluate", MuxPattern: "/api/v1/evaluate", Auth: RouteAuthTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "evaluateDecision", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodPost, Path: companyActivationOrganizationRuntimePath, MuxPattern: companyActivationOrganizationRuntimePath, Auth: RouteAuthOrganizationRuntime, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "evaluateOrganizationRuntimeDecision", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodGet, Path: "/api/v1/receipts", MuxPattern: "/api/v1/receipts", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "listReceipts", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodGet, Path: "/api/v1/receipts/tail", MuxPattern: "/api/v1/receipts/tail", Auth: RouteAuthTenant, RateLimit: RouteRateStream, ContractStatus: RouteContractPublic, OperationID: "tailReceipts", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodGet, Path: "/api/v1/receipts/{receipt_id}", MuxPattern: "/api/v1/receipts/", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "getConsoleReceipt", Owner: "core/cmd/helm-ai-kernel"},
+		{Method: http.MethodPost, Path: "/api/v1/evaluate", MuxPattern: "/api/v1/evaluate", Auth: RouteAuthTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "evaluateDecision", Owner: "core/cmd/helm-ai-kernel", AlternateAuth: RouteAuthControlPlaneToken},
+		{Method: http.MethodPost, Path: companyActivationOrganizationRuntimePath, MuxPattern: companyActivationOrganizationRuntimePath, Auth: RouteAuthOrganizationRuntime, RateLimit: RouteRateKernel, ContractStatus: RouteContractInternal, OperationID: "evaluateOrganizationRuntimeDecision", Owner: "core/cmd/helm-ai-kernel", AlternateAuth: RouteAuthControlPlaneToken},
+		{Method: http.MethodGet, Path: "/api/v1/receipts", MuxPattern: "/api/v1/receipts", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "listReceipts", Owner: "core/cmd/helm-ai-kernel", AlternateAuth: RouteAuthControlPlaneToken},
+		{Method: http.MethodGet, Path: "/api/v1/receipts/tail", MuxPattern: "/api/v1/receipts/tail", Auth: RouteAuthTenant, RateLimit: RouteRateStream, ContractStatus: RouteContractPublic, OperationID: "tailReceipts", Owner: "core/cmd/helm-ai-kernel", AlternateAuth: RouteAuthControlPlaneToken},
+		{Method: http.MethodGet, Path: "/api/v1/receipts/{receipt_id}", MuxPattern: "/api/v1/receipts/", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "getConsoleReceipt", Owner: "core/cmd/helm-ai-kernel", AlternateAuth: RouteAuthControlPlaneToken},
 		{Method: http.MethodGet, Path: "/__helm/config.json", MuxPattern: "/__helm/config.json", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getLocalConsoleRuntimeConfig", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/v1/local-session/exchange", MuxPattern: "/api/v1/local-session/exchange", Auth: RouteAuthPublic, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "exchangeLocalQuickstartSession", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/onboarding/state", MuxPattern: "/api/v1/onboarding/state", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "getLocalOnboardingState", Owner: "core/cmd/helm-ai-kernel"},
@@ -122,8 +130,8 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodPost, Path: "/api/v1/launchpad/secrets", MuxPattern: "/api/v1/launchpad/", Auth: RouteAuthTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "bindLaunchpadSecretGrant", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/ag-ui/info", MuxPattern: "/api/ag-ui/info", Auth: RouteAuthTenant, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getAGUIRuntimeInfoCompat", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/ag-ui/run", MuxPattern: "/api/ag-ui/run", Auth: RouteAuthTenant, RateLimit: RouteRateStream, ContractStatus: RouteContractPublic, OperationID: "runAGUIRuntimeCompat", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodGet, Path: "/mcp", MuxPattern: "/mcp", Auth: RouteAuthAdmin, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "getMCPTransport", Owner: "core/pkg/mcp"},
-		{Method: http.MethodPost, Path: "/mcp", MuxPattern: "/mcp", Auth: RouteAuthAdmin, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "postMCPJSONRPC", Owner: "core/pkg/mcp"},
+		{Method: http.MethodGet, Path: "/mcp", MuxPattern: "/mcp", Auth: RouteAuthConfiguredTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "getMCPTransport", Owner: "core/pkg/mcp"},
+		{Method: http.MethodPost, Path: "/mcp", MuxPattern: "/mcp", Auth: RouteAuthConfiguredTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "postMCPJSONRPC", Owner: "core/pkg/mcp"},
 		{Method: http.MethodGet, Path: "/.well-known/oauth-protected-resource/mcp", MuxPattern: "/.well-known/oauth-protected-resource/mcp", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getMCPProtectedResourceMetadata", Owner: "core/pkg/mcp"},
 		{Method: http.MethodGet, Path: "/.well-known/agent-card.json", MuxPattern: "/.well-known/agent-card.json", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getA2AAgentCard", Owner: "core/pkg/a2a"},
 		{Method: http.MethodGet, Path: "/api/v1/proofgraph/sessions", MuxPattern: "/api/v1/proofgraph/sessions", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "listSessions", Owner: "core/cmd/helm-ai-kernel"},
@@ -149,8 +157,8 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodPost, Path: "/api/v1/harness/change-contracts/{change_id}/approve", MuxPattern: "/api/v1/harness/change-contracts/", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "approveHarnessChangeContract", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/v1/harness/change-contracts/{change_id}/verify", MuxPattern: "/api/v1/harness/change-contracts/", Auth: RouteAuthTenant, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "verifyHarnessChangeContract", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodPost, Path: "/api/v1/replay/verify", MuxPattern: "/api/v1/replay/verify", Auth: RouteAuthPublic, RateLimit: RouteRateEvidence, ContractStatus: RouteContractPublic, OperationID: "replayVerify", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodGet, Path: "/mcp/v1/capabilities", MuxPattern: "/mcp/v1/capabilities", Auth: RouteAuthAdmin, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "listMCPCapabilities", Owner: "core/pkg/mcp"},
-		{Method: http.MethodPost, Path: "/mcp/v1/execute", MuxPattern: "/mcp/v1/execute", Auth: RouteAuthAdmin, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "executeMCPTool", Owner: "core/pkg/mcp"},
+		{Method: http.MethodGet, Path: "/mcp/v1/capabilities", MuxPattern: "/mcp/v1/capabilities", Auth: RouteAuthConfiguredTenant, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "listMCPCapabilities", Owner: "core/pkg/mcp"},
+		{Method: http.MethodPost, Path: "/mcp/v1/execute", MuxPattern: "/mcp/v1/execute", Auth: RouteAuthConfiguredTenant, RateLimit: RouteRateKernel, ContractStatus: RouteContractPublic, OperationID: "executeMCPTool", Owner: "core/pkg/mcp"},
 		{Method: http.MethodGet, Path: "/healthz", MuxPattern: "/healthz", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "healthCheck", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/version", MuxPattern: "/version", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getVersion", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/v1/meta/capabilities", MuxPattern: "/v1/meta/capabilities", Auth: RouteAuthPublic, RateLimit: RouteRatePublic, ContractStatus: RouteContractPublic, OperationID: "getCanonicalMetaCapabilities", Owner: "core/cmd/helm-ai-kernel"},
@@ -205,7 +213,6 @@ func RuntimeRouteSpecs() []RuntimeRouteSpec {
 		{Method: http.MethodPost, Path: "/api/v1/telemetry/export", MuxPattern: "/api/v1/telemetry/export", Auth: RouteAuthAdmin, RateLimit: RouteRateAdmin, ContractStatus: RouteContractPublic, OperationID: "exportTelemetry", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/evidence/soc2", MuxPattern: "/api/v1/evidence/soc2", Auth: RouteAuthAdmin, RateLimit: RouteRateEvidence, ContractStatus: RouteContractImplementation, OperationID: "exportSOC2Evidence", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/merkle/root", MuxPattern: "/api/v1/merkle/root", Auth: RouteAuthAdmin, RateLimit: RouteRateAdmin, ContractStatus: RouteContractImplementation, OperationID: "getMerkleRoot", Owner: "core/cmd/helm-ai-kernel"},
-		{Method: http.MethodGet, Path: "/api/v1/budget/status", MuxPattern: "/api/v1/budget/status", Auth: RouteAuthAdmin, RateLimit: RouteRateAdmin, ContractStatus: RouteContractImplementation, OperationID: "getBudgetStatus", Owner: "core/cmd/helm-ai-kernel"},
 		{Method: http.MethodGet, Path: "/api/v1/authz/check", MuxPattern: "/api/v1/authz/check", Auth: RouteAuthAdmin, RateLimit: RouteRateAdmin, ContractStatus: RouteContractImplementation, OperationID: "getAuthzStatus", Owner: "core/cmd/helm-ai-kernel"},
 		// Mounted routes that had no registry entry before HELM-755. Their rate
 		// class records the bucket they already fell into (unmatched paths are
@@ -242,4 +249,72 @@ func PublicRuntimeRouteSpecs() []RuntimeRouteSpec {
 		}
 	}
 	return public
+}
+
+// The binary's other HTTP listeners. RuntimeRouteSpecs() declares the API
+// listener; ListenerRouteSpecs() declares these, and each mounts its routes on
+// a newListenerRouteMux that refuses a pattern not declared for it.
+const (
+	listenerHealth     = "health"      // server: HELM_HEALTH_PORT
+	listenerMetrics    = "metrics"     // server: HELM_METRICS_PORT when it differs from the health port
+	listenerMCP        = "mcp serve"   // mcp serve --transport http
+	listenerProxy      = "proxy"       // proxy
+	listenerSpendProxy = "spend-proxy" // spend-proxy
+)
+
+const (
+	// RouteAuthMetricsToken is HELM_METRICS_BEARER_TOKEN; without one the route
+	// answers loopback peers only (protectedMetricsHandler).
+	RouteAuthMetricsToken RouteAuth = "metrics_token"
+	// RouteAuthListenerCredential is the subcommand's own credential: mcp serve
+	// --auth static-header|oauth, or the proxy's HELM_PROXY_TOKEN. Without one,
+	// requireListenerAuth refuses a non-loopback bind.
+	RouteAuthListenerCredential RouteAuth = "listener_credential"
+)
+
+// ListenerRouteSpec declares a route on a listener other than the API
+// listener. None of these listeners binds a tenant per request, so Scope says
+// whose data the route serves.
+type ListenerRouteSpec struct {
+	Listener   string
+	MuxPattern string
+	Auth       RouteAuth
+	Scope      string
+}
+
+func ListenerRouteSpecs() []ListenerRouteSpec {
+	const (
+		liveness      = "liveness only; no data"
+		processWide   = "process-wide metrics across every tenant"
+		localMCP      = "the local MCP catalog, policy and data directory; no tenant"
+		proxyTenant   = "the proxy's single --tenant-id"
+		spendEnvelope = "the spend-proxy's configured envelopes; no caller credential, bound to --addr (127.0.0.1 by default)"
+	)
+	return []ListenerRouteSpec{
+		{Listener: listenerHealth, MuxPattern: "/health", Auth: RouteAuthPublic, Scope: liveness},
+		{Listener: listenerHealth, MuxPattern: "/healthz", Auth: RouteAuthPublic, Scope: liveness},
+		{Listener: listenerHealth, MuxPattern: "/metrics", Auth: RouteAuthMetricsToken, Scope: processWide + "; mounted here when the metrics port is the health port"},
+		{Listener: listenerMetrics, MuxPattern: "/metrics", Auth: RouteAuthMetricsToken, Scope: processWide},
+
+		{Listener: listenerMCP, MuxPattern: "/mcp", Auth: RouteAuthListenerCredential, Scope: localMCP},
+		{Listener: listenerMCP, MuxPattern: "/mcp/v1/capabilities", Auth: RouteAuthListenerCredential, Scope: localMCP},
+		{Listener: listenerMCP, MuxPattern: "/mcp/v1/execute", Auth: RouteAuthListenerCredential, Scope: localMCP},
+		{Listener: listenerMCP, MuxPattern: "/.well-known/oauth-protected-resource", Auth: RouteAuthListenerCredential, Scope: "RFC 9728 metadata, no data; --auth oauth exempts it"},
+		{Listener: listenerMCP, MuxPattern: "/.well-known/oauth-protected-resource/mcp", Auth: RouteAuthListenerCredential, Scope: "RFC 9728 metadata, no data; --auth oauth exempts it"},
+		{Listener: listenerMCP, MuxPattern: "/.well-known/agent-card.json", Auth: RouteAuthListenerCredential, Scope: "A2A agent card; no data"},
+		{Listener: listenerMCP, MuxPattern: "/health", Auth: RouteAuthListenerCredential, Scope: liveness},
+		{Listener: listenerMCP, MuxPattern: "/healthz", Auth: RouteAuthListenerCredential, Scope: liveness},
+
+		{Listener: listenerProxy, MuxPattern: "/health", Auth: RouteAuthPublic, Scope: "liveness; names the upstream URL"},
+		{Listener: listenerProxy, MuxPattern: "/healthz", Auth: RouteAuthPublic, Scope: "liveness; names the upstream URL"},
+		{Listener: listenerProxy, MuxPattern: "/helm/receipts", Auth: RouteAuthListenerCredential, Scope: "the receipt log of " + proxyTenant},
+		{Listener: listenerProxy, MuxPattern: "/helm/proofgraph", Auth: RouteAuthListenerCredential, Scope: "the ProofGraph of " + proxyTenant},
+		{Listener: listenerProxy, MuxPattern: "/", Auth: RouteAuthListenerCredential, Scope: "every other path, forwarded to --upstream under governance as " + proxyTenant},
+
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/chat/completions", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/responses", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/embeddings", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/v1/models", Auth: RouteAuthPublic, Scope: spendEnvelope},
+		{Listener: listenerSpendProxy, MuxPattern: "/helm/spend/health", Auth: RouteAuthPublic, Scope: "liveness, balance and receipt-log path"},
+	}
 }

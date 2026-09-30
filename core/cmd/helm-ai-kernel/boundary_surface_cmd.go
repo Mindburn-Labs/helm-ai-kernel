@@ -636,10 +636,10 @@ func runApprovalsTransition(args []string, registry *boundarypkg.SurfaceRegistry
 
 func runBudgetSurfaceCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "Usage: helm-ai-kernel budget <list|set|verify> [flags]")
+		fmt.Fprintln(stderr, "Usage: helm-ai-kernel budget <list|set> [flags]")
 		return 2
 	}
-	if answeredSurfaceHelp("Usage: helm-ai-kernel budget <list|set|verify> [flags]", args, stdout) {
+	if answeredSurfaceHelp("Usage: helm-ai-kernel budget <list|set> [flags]", args, stdout) {
 		return 0
 	}
 	registry := newLocalSurfaceRegistry()
@@ -648,8 +648,6 @@ func runBudgetSurfaceCmd(args []string, stdout, stderr io.Writer) int {
 		return runBudgetList(args[1:], registry, stdout, stderr)
 	case "set":
 		return runBudgetSet(args[1:], registry, stdout, stderr)
-	case "verify":
-		return runBudgetVerify(args[1:], registry, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "Unknown budget subcommand: %s\n", args[0])
 		return 2
@@ -705,21 +703,6 @@ func runBudgetSet(args []string, registry *boundarypkg.SurfaceRegistry, stdout, 
 		return writeSurfaceJSON(stdout, budget)
 	}
 	fmt.Fprintf(stdout, "Set budget %s subject=%s\n", budget.BudgetID, budget.Subject)
-	return 0
-}
-
-func runBudgetVerify(args []string, registry *boundarypkg.SurfaceRegistry, stdout, stderr io.Writer) int {
-	cmd := flag.NewFlagSet("budget verify", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
-	jsonOutput := cmd.Bool("json", false, "Output as JSON")
-	if err := cmd.Parse(args); err != nil {
-		return 2
-	}
-	result := map[string]any{"verdict": "PASS", "budgets": len(registry.ListBudgets()), "checks": map[string]string{"ceilings_present": "PASS", "policy_epoch": "PASS"}}
-	if *jsonOutput {
-		return writeSurfaceJSON(stdout, result)
-	}
-	fmt.Fprintln(stdout, "Budget verification: PASS")
 	return 0
 }
 

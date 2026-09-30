@@ -1,0 +1,232 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-011",
+  "title": "A repeated Dispatch returns the attempt unchanged and never calls the adapter again",
+  "rule": {
+    "statement": "The permit is consumed once by the dispatch claim. Dispatch of an attempt already DISPATCHING or later returns it unchanged with existing true: one provider call, one read-back, however often the caller repeats.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Dispatch and Observe (slice 3)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "rpc Dispatch("
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        },
+        "limits": [
+          {
+            "unit": "effects",
+            "window": "day",
+            "value": 5
+          }
+        ]
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    }
+  },
+  "steps": [
+    {
+      "label": "branch",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "branch-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/skeleton",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        },
+        "quote": [
+          {
+            "unit": "effects",
+            "amount": 1
+          }
+        ]
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "permit": "ISSUED",
+          "exposure": "HELD"
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "OBSERVED",
+          "reason_code": "",
+          "outcome": "SUCCEEDED",
+          "permit": "CONSUMED",
+          "exposure": "CONFIRMED"
+        },
+        "existing": false,
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 1
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "OBSERVED",
+          "reason_code": "",
+          "outcome": "SUCCEEDED"
+        },
+        "existing": true,
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 1
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:branch}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "OBSERVED",
+          "reason_code": ""
+        },
+        "existing": true,
+        "adapter_calls": {
+          "dispatch": 1,
+          "observe": 1
+        }
+      }
+    }
+  ]
+}

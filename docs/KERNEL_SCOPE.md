@@ -83,8 +83,8 @@ non-TCB supporting infrastructure:
 | `executor/`        | SafeExecutor with receipt generation                          | ✅ Active |
 | `proofgraph/`      | Cryptographic ProofGraph DAG                                  | ✅ Active |
 | `trust/registry/`  | Event-sourced trust registry                                  | ✅ Active |
-| `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default)                        | ✅ Active |
-| `receipts/`        | Receipt policy enforcement (fail-closed)                      | ✅ Active |
+| `runtime/sandbox/` | WASI sandbox (wazero, deny-by-default); the shipped server runs no pack (CTL-044) | Library only |
+| `receipts/`        | Receipt policy enforcement (fail-closed); not linked into `core/cmd/helm-ai-kernel` | Library only |
 
 ### Supporting Infrastructure (Non-TCB)
 
@@ -92,13 +92,13 @@ non-TCB supporting infrastructure:
 | ---------------------- | ------------------------------------------ | --------- |
 | `canonicalize/`        | RFC 8785 JCS implementation                | ✅ Active |
 | `manifest/`            | Tool args/output validation (PEP boundary) | ✅ Active |
-| `agent/adapter.go`     | KernelBridge choke point                   | ✅ Active |
-| `runtime/budget/`      | Compute budget enforcement                 | ✅ Active |
-| `escalation/ceremony/` | RFC-005 Approval Ceremony                  | ✅ Active |
+| `bridge/`              | KernelBridge choke point                   | ✅ Active |
+| `runtime/budget/`      | Compute budget enforcement; not linked into `core/cmd/helm-ai-kernel` | Library only |
+| `escalation/ceremony/` | RFC-005 Approval Ceremony; not linked into `core/cmd/helm-ai-kernel` | Library only |
 | `evidence/`            | Evidence pack export/verify                | ✅ Active |
-| `replay/`              | Replay engine for verification             | ✅ Active |
+| `replay/`              | Replay engine for verification; not linked into `core/cmd/helm-ai-kernel` | Library only |
 | `mcp/`                 | Tool catalog + MCP gateway                 | ✅ Active |
-| `kernel/`              | Rate limiting, backpressure                | ✅ Active |
+| `kernel/`              | Freeze, scoped-stop fences, context guard; request rate limiting lives in `api/` (CTL-013) | ✅ Active |
 | `a2a/`                 | Agent-to-Agent trust protocol              | ✅ Active |
 | `otel/`                | OpenTelemetry governance telemetry         | ✅ Active |
 | `identity/did/`        | W3C DID-based agent identity               | ✅ Active |
@@ -193,7 +193,7 @@ The OSS kernel includes configurable surface containment primitives
 OSS includes:
 
 - **Surface containment** — capability manifests, tool bundles, sandbox profiles
-- **Dispatch enforcement** — fail-closed PEP, policy evaluation, budget gates
+- **Dispatch enforcement** — fail-closed PEP and policy evaluation; the Guardian budget gate has no tracker in a shipped binary (CTL-011)
 - **Verifiable receipts** — signed receipts, ProofGraph, replay
 - **MCP interceptor** — first-class governed MCP surface
 - **OpenAI proxy** — governed proxy for OpenAI-compatible SDKs

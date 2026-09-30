@@ -15,7 +15,28 @@ func init() {
 	Register(Subcommand{Name: "up", Usage: "Launch an AppSpec through HELM LaunchKit", RunFn: runUpCmd})
 }
 
+// launchKitEnableEnv opts in to LaunchKit. Target architecture §14.4 retires
+// LaunchKit and Launchpad as a platform (HELM-762), and §14.7 prefers turning a
+// retired component off by default to repairing it, so `up` refuses to launch
+// unless an operator sets this explicitly (HELM-756).
+const launchKitEnableEnv = "HELM_LAUNCHKIT_ENABLED"
+
+func launchKitEnabled() bool { return envBool(launchKitEnableEnv) }
+
+func isHelpArg(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "help" {
+			return true
+		}
+	}
+	return false
+}
+
 func runUpCmd(args []string, stdout, stderr io.Writer) int {
+	if !launchKitEnabled() && !isHelpArg(args) {
+		fmt.Fprintf(stderr, "helm-ai-kernel up: LaunchKit is off by default (HELM-756); set %s=1 to launch anyway.\n", launchKitEnableEnv)
+		return 2
+	}
 	opts, jsonOut, code := parseUpArgs(args, stderr)
 	if code != 0 {
 		return code

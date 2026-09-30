@@ -672,13 +672,18 @@ def main() -> int:
 
     validate_source_inventory(failures, public_slugs)
 
+    # CI runs the documentation gates through `make check`, which runs the
+    # merge profile of scripts/ci/quality-gates.json (`ci / gate`).
     workflows_dir = ROOT / '.github' / 'workflows'
     if workflows_dir.exists() and list(workflows_dir.glob('*.yml')):
-        docs_workflow = workflows_dir / 'docs.yml'
-        if not docs_workflow.exists():
-            failures.append('.github/workflows/docs.yml is missing')
-        elif 'docs' not in read_text(docs_workflow).lower():
-            failures.append('.github/workflows/docs.yml does not appear to run documentation gates')
+        ci_workflow = workflows_dir / 'ci.yml'
+        if not ci_workflow.exists():
+            failures.append('.github/workflows/ci.yml is missing')
+        registry_path = ROOT / 'scripts' / 'ci' / 'quality-gates.json'
+        merge_gates = json.loads(read_text(registry_path)).get('profiles', {}).get('merge', {}).get('gates', []) if registry_path.exists() else []
+        for gate_id in ('docs-truth', 'docs-openapi-parity'):
+            if gate_id not in merge_gates:
+                failures.append(f'the merge quality profile (make check) does not run {gate_id}')
 
     if failures:
         print('Documentation truth check failed:')

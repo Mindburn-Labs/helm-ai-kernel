@@ -10,10 +10,15 @@ acknowledgement profile binding fails closed and this foundation makes no PQ gua
 # Scoped Emergency-Stop Fence
 
 The Kernel has an internal, opt-in fence for a specific tenant/workspace. When
-active, the Kernel-owned guarded evaluation, approval-consumption, and
-dispatch-admission paths deny their covered new transitions for that scope.
+active, three Kernel-owned paths deny their covered new transitions for that
+scope:
+- Guardian evaluation in `serve`, `proxy` and `mcp serve`;
+- approval-grant consumption;
+- dispatch admission.
+
 This is not end-to-end connector enforcement or an operator-ready Emergency
-Stop yet.
+Stop yet. Work already in flight and calls that never reach one of those paths
+are not stopped.
 
 ## Activation boundary
 
@@ -91,11 +96,21 @@ persisted state is rejected fail-closed rather than repackaged under a new key.
 - The fence covers only the configured scope, so it requires
   `HELM_RUNTIME_TENANT_ID` and `HELM_RUNTIME_WORKSPACE_ID`. Without a
   configured workspace, governed evaluation fails closed while the fence is on.
-- With the fence on, evaluate, receipt reads and the governed
-  OpenAI-compatible proxy accept only the configured tenant and workspace.
-  With it off they do not bind the configured scope, which is a known gap
-  pending tenant-from-token. Ext-authz binds the configured scope in both
-  modes. See
+- `serve`, `proxy` and `mcp serve` read the same fence store and bind the same
+  configured scope, so a fence recorded through the Kernel route denies through
+  all three. `proxy` and `mcp serve` open the store in `DATABASE_URL`, or in
+  the Lite Mode database `<data dir>/helm.db` (`mcp serve --data-dir`;
+  `$HELM_DATA_DIR` for `proxy`), and refuse to start while the fence is on
+  without the configured scope. `proxy --tenant-id` must equal
+  `HELM_RUNTIME_TENANT_ID`. Tenant and workspace names in MCP tool arguments are
+  replaced by the configured scope.
+- With the fence on, `serve` accepts only the configured tenant and workspace
+  on `POST /api/v1/evaluate`, the receipt reads and `POST /v1/chat/completions`,
+  whether the caller authenticates with a Control Plane token or the legacy
+  headers. Its `/mcp` gateway decides every tool call for the configured scope.
+  With the fence off, evaluate, receipt reads and chat completions do not bind
+  the configured scope, which is a known gap pending tenant-from-token.
+  Ext-authz binds the configured scope in both modes. See
   [Tenant and Workspace Binding](reference/http-api.md#tenant-and-workspace-binding).
   No route trusts a workspace supplied in JSON.
 - The intended fence coverage is new governed dispatches only. Current proven

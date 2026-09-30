@@ -1545,7 +1545,7 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	}
 	markCodexProjectTrusted(t, home, workspace)
 	configPath := filepath.Join(workspace, ".codex", "config.toml")
-	if err := os.WriteFile(configPath, []byte("model = \"gpt-5\"\n\n[mcp_servers.other]\ncommand = \"other-mcp\"\nargs = [\"serve\"]\n"), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte("model = \"gpt-6-sol\"\n\n[mcp_servers.other]\ncommand = \"other-mcp\"\nargs = [\"serve\"]\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	hookPath := filepath.Join(workspace, ".codex", "hooks.json")
@@ -1642,7 +1642,7 @@ func TestSetupCodexProjectRemoveUndoLocalConfig(t *testing.T) {
 	if strings.Contains(string(raw), "helm-ai-kernel-governance") {
 		t.Fatalf("codex config still contains HELM server:\n%s", string(raw))
 	}
-	if !strings.Contains(string(raw), "[mcp_servers.other]") || !strings.Contains(string(raw), "model = \"gpt-5\"") {
+	if !strings.Contains(string(raw), "[mcp_servers.other]") || !strings.Contains(string(raw), "model = \"gpt-6-sol\"") {
 		t.Fatalf("remove did not preserve unrelated Codex config:\n%s", string(raw))
 	}
 	raw, err = os.ReadFile(hookPath)
@@ -1982,7 +1982,7 @@ func TestSetupCodexProjectPreservesSymlinkedConfigFiles(t *testing.T) {
 	}
 	configTarget := filepath.Join(targetDir, "config.toml")
 	hookTarget := filepath.Join(targetDir, "hooks.json")
-	if err := os.WriteFile(configTarget, []byte("model = \"gpt-5\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(configTarget, []byte("model = \"gpt-6-sol\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(hookTarget, []byte("{\"hooks\":{\"PreToolUse\":[]}}\n"), 0o644); err != nil {
@@ -2015,7 +2015,7 @@ func TestSetupCodexProjectPreservesSymlinkedConfigFiles(t *testing.T) {
 	if err := removeSetupMCP(opts); err != nil {
 		t.Fatalf("remove symlinked Codex MCP config: %v", err)
 	}
-	assertSetupSymlinkTarget(t, configLink, configTarget, 0o600, "model = \"gpt-5\"")
+	assertSetupSymlinkTarget(t, configLink, configTarget, 0o600, "model = \"gpt-6-sol\"")
 	assertSetupSymlinkTarget(t, hookLink, hookTarget, 0o600, "")
 	for path, forbidden := range map[string]string{
 		configTarget: setupMCPServerName,
@@ -2099,7 +2099,7 @@ func TestSetupProjectRejectsConfigSymlinkEscapes(t *testing.T) {
 			}
 		}
 		target := filepath.Join(outside, "config.toml")
-		original := []byte("model = \"gpt-5\"\n")
+		original := []byte("model = \"gpt-6-sol\"\n")
 		if err := os.WriteFile(target, original, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -2525,7 +2525,7 @@ func TestSetupCodexProjectTrustPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(workspace, ".codex", "config.toml"),
-		[]byte("model = \"gpt-5\"\n"), 0o600); err != nil {
+		[]byte("model = \"gpt-6-sol\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// Untrusted: no ~/.codex/config.toml projects entry → pending.

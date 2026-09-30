@@ -118,6 +118,18 @@ helm:
   # Demo mode (disables real connectors, uses ephemeral keys)
   demoMode: false
 
+  # Native TLS on the API listener (service.port). Name an existing
+  # kubernetes.io/tls Secret, such as one cert-manager issues; its tls.crt and
+  # tls.key are mounted and re-read when rotated. Empty keeps plain HTTP. The
+  # health and metrics listeners stay plain HTTP, so the probes do not change.
+  tls:
+    existingSecret: ""
+    # Client certificates: "" (off), "require" or "verify-if-given". Anything
+    # but "" also mounts ca.crt from existingSecret as the client CA. The
+    # verified certificate feeds the Control Plane token cnf check
+    # (auth.controlPlaneIdentity.requireCNF).
+    clientAuth: ""
+
   # Runtime API authentication. Production rendering refuses to omit these keys
   # because protected evidence, receipt, tenant, and service-internal routes fail
   # closed when no key material is configured.
@@ -127,6 +139,17 @@ helm:
     existingSecret: ""
     adminAPIKeySecretKey: "HELM_ADMIN_API_KEY"
     serviceAPIKeySecretKey: "HELM_SERVICE_API_KEY"
+    # Key inside existingSecret holding the Control Plane's organization-runtime
+    # credential (HELM_ORGANIZATION_RUNTIME_API_KEY). It is wired only together
+    # with controlPlaneActivationPublicKey, because the Kernel needs the pair;
+    # without the public key the organization-runtime route stays closed.
+    organizationRuntimeAPIKeySecretKey: "HELM_ORGANIZATION_RUNTIME_API_KEY"
+    # The Control Plane's activation public key
+    # (HELM_CONTROL_PLANE_ACTIVATION_PUBLIC_KEY): 64 lowercase hex characters,
+    # the Ed25519 public key of the Control Plane's HELM_SIGNING_KEY. Public, so
+    # a plain value. Setting it requires existingSecret with the
+    # organization-runtime key; the chart refuses the one without the other.
+    controlPlaneActivationPublicKey: ""
     # Server-bound tenant/principal for tenant-scoped runtime routes. Incoming
     # tenant/principal headers must match these values and cannot select
     # another tenant or principal.
@@ -135,6 +158,25 @@ helm:
     # Server-owned workspace binding used by governed evaluation when the
     # scoped emergency-stop fence is enabled.
     workspaceID: "default"
+    # Control Plane identity tokens (ADR-0005, dual-accept). Empty disables the
+    # token path; the Control Plane routes then take the shared key and
+    # X-Helm-* headers as before. Set all four together.
+    controlPlaneIdentity:
+      jwksURL: ""   # https JWKS of the Control Plane workload identity issuer
+      issuer: ""    # exact "iss" of that issuer
+      audience: ""  # "helm-kernel:<deployment id>", one per environment
+      actor: ""     # exact "act.sub", e.g. spiffe://helm/control-plane
+      requireCNF: false  # require cnf.x5t#S256 to match the client certificate (mTLS only)
+      # Pinned CA for the JWKS endpoint when it is served under a private CA:
+      # a ConfigMap in this namespace holding the PEM under caBundleKey.
+      caBundleConfigMap: ""
+      caBundleKey: "ca.crt"
+    # Principals that may hold bindings in more than one tenant
+    # (HELM_CROSS_TENANT_PRINCIPALS, ADR-0005 §11), e.g. the Control Plane's
+    # "helm-workflow-runner". Empty: a principal already bound in one tenant is
+    # refused (409) in any other. Listing a principal widens the ADR-0005 §3
+    # token cross-check for exactly that principal to every tenant it is bound to.
+    crossTenantPrincipals: []
 
   # Governed GitHub effects. Supplying an existing Secret arms the shipped
   # signed-permit connector; an empty Secret name keeps every github.* tool
@@ -324,6 +366,123 @@ helm:
     # fail-closed. Prefer signed control-plane/CRD policy for production.
     runtimeActions: []
 
+# Effect gateway (helm-gateway serve, Zone C; HELM-751, HELM-789). Off by
+# default. Enabled, it adds a Deployment from the same image and tag as the
+# kernel, a Service on 8443, its own ServiceAccount, a NetworkPolicy, and a
+# pre-install/pre-upgrade hook Job that runs `helm-gateway migrate`. See
+# docs/KUBERNETES_DEPLOYMENT.md, "Effect gateway (helm-gateway)".
+gateway:
+  enabled: false
+  replicaCount: 1
+  podAnnotations: {}
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  service:
+    type: ClusterIP
+    port: 8443
+  # HELM_GATEWAY_APPROVAL_WINDOW, HELM_GATEWAY_PERMIT_TTL and
+  # HELM_GATEWAY_DISPATCH_TIMEOUT as Go durations. Empty keeps the binary's
+  # defaults (24h, 10m and 2m).
+  approvalWindow: ""
+  permitTTL: ""
+  dispatchTimeout: ""
+  # TLS on the API listener, required: an existing kubernetes.io/tls Secret
+  # (tls.crt, tls.key; ca.crt is the client CA when clientAuth is set).
+  tls:
+    existingSecret: ""
+    # "require", "verify-if-given" or "" (no client certificates).
+    clientAuth: "require"
+    # Development only, refused when helm.production=true: serve plain HTTP
+    # on the Pod's loopback (reachable through kubectl port-forward only)
+    # instead of TLS.
+    devInsecureLoopback: false
+  # ADR-0005 Control Plane identity tokens, all four required. The audience
+  # is the gateway's own, helm-gateway:<deployment id>.
+  controlPlaneIdentity:
+    jwksURL: ""
+    issuer: ""
+    audience: ""
+    actor: ""
+    requireCNF: false  # needs tls.clientAuth
+    # Pinned CA for the JWKS endpoint: a ConfigMap in this namespace.
+    caBundleConfigMap: ""
+    caBundleKey: "ca.crt"
+  database:
+    # Required: the serving role's (helm_gateway) DSN.
+    existingSecret: ""
+    existingSecretKey: "HELM_GATEWAY_DATABASE_URL"
+    # The DSN `helm-gateway migrate` runs with when the bootstrap is off. It
+    # should connect as the table owner, not the serving role; empty uses the
+    # runtime DSN, which production refuses.
+    migrate:
+      existingSecret: ""
+      existingSecretKey: "HELM_GATEWAY_MIGRATE_DATABASE_URL"
+    # Creates the ADR-0004 roles and grants in the migrate hook: ownerRole
+    # (NOLOGIN, owns the schema and tables; migrations SET ROLE to it) and
+    # runtimeRole (LOGIN, DML grants only). Neither gets SUPERUSER,
+    # BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION. The gateway database is
+    # closed to PUBLIC (CONNECT, TEMPORARY); only runtimeRole may connect.
+    # existingSecret holds the administrator DSN (a superuser, or a CREATEROLE
+    # role that owns the gateway database) and the runtime role's password,
+    # which reaches the server only as a SCRAM-SHA-256 verifier computed by
+    # `helm-gateway db scram-verifier`. Set runtimePasswordKey to "" to leave
+    # the password unmanaged.
+    bootstrap:
+      enabled: false
+      existingSecret: ""
+      adminDatabaseURLKey: "HELM_GATEWAY_ADMIN_DATABASE_URL"
+      runtimePasswordKey: "HELM_GATEWAY_ROLE_PASSWORD"
+      ownerRole: "helm_owner"
+      runtimeRole: "helm_gateway"
+      schema: "helm_gateway"
+      # psql for the role and grant steps.
+      image: "docker.io/library/postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
+  # GitHub App credentials for the connection custody (HELM-751 s3), mounted
+  # as files into the gateway Pod only (R8). existingSecret (App id and
+  # private key) and installationsFile are set together or not at all; the
+  # binary refuses a partial set, and so does the chart. Without them every
+  # GitHub dispatch is refused (PROVIDER_CREDENTIAL_REJECTED).
+  github:
+    existingSecret: ""
+    appIdKey: "app-id"
+    privateKeyKey: "private-key.pem"
+    # Installations file contents (JSON), rendered into a ConfigMap and
+    # mounted at /etc/helm-gateway/github/installations.json. The shape, with
+    # no other fields:
+    #   {"installations": [{"tenant_id": "...", "owner": "...",
+    #     "installation_id": 123, "repositories": ["owner/name"]}]}
+    installationsFile: ""
+    # HELM_GATEWAY_GITHUB_API_URL: GitHub Enterprise Server's API root
+    # (https). Empty uses https://api.github.com.
+    apiURL: ""
+  networkPolicy:
+    enabled: true
+    # The API port admits these peers only. Set one or both; together they
+    # select Pods matching podSelector in namespaces matching
+    # namespaceSelector. The health port (8081) is open to kubelet probes.
+    controlPlane:
+      namespaceSelector: {}
+      podSelector: {}
+    database:
+      to: []
+      port: 5432
+    dns:
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+    # TCP 443 egress is open to any address (GitHub and an https JWKS); add
+    # rules here for a JWKS endpoint on another port.
+    extraEgress: []
+
 # Telemetry (HELM-453). Off by default and it must stay that way: the
 # Application Readiness Gate is closed, and a stand handed an endpoint starts
 # exporting the moment it boots. Enabled per stand, never in a chart default.
@@ -458,7 +617,7 @@ launchpadApps:
     gatewayPort: 18789
     # OpenClaw routes by provider/model prefix. Keep the provider explicit so
     # the workload uses the OpenRouter credential and allowed egress origin.
-    model: "openrouter/openai/gpt-4o-mini"
+    model: "openrouter/openai/gpt-6-luna"
     tmpfsSize: "256Mi"
     appStateSize: "1Gi"
     # Resources sized for the ~6.36 GiB OCI image plus 8-plugin warm-up. Trim
@@ -508,7 +667,7 @@ launchpadApps:
     # until separate runtime evidence lands.
     mode: "job"
     provider: "openrouter"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-6-luna"
     query: "ping"
     # Full command replacement for operators who need a provider-specific or
     # custom Hermes invocation. Leave empty to use the chart-managed command

@@ -61,5 +61,113 @@ class JsonSchemaGateFailsClosedTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+GITHUB_EFFECTS = CHECKER.parents[2] / "protocols" / "json-schemas" / "effects" / "github"
+
+
+class GitHubEffectArgumentFixturesTest(unittest.TestCase):
+    """Each GitHub effect schema accepts its known-good fixture and rejects every
+    known-bad one (TA §13.1): a schema that accepted anything, or nothing, fails
+    here rather than in the gateway (HELM-753)."""
+
+    def test_fixtures(self) -> None:
+        import json
+
+        import jsonschema
+
+        schemas = sorted(GITHUB_EFFECTS.glob("*.v1.json"))
+        self.assertEqual(len(schemas), 3, "expected the repository, branch and draft pull request schemas")
+        for schema_path in schemas:
+            stem = schema_path.name.removesuffix(".json")
+            schema = json.loads(schema_path.read_text())
+            validator = jsonschema.Draft202012Validator(schema)
+            valid = GITHUB_EFFECTS / "examples" / f"{stem}.valid.json"
+            errors = list(validator.iter_errors(json.loads(valid.read_text())))
+            self.assertEqual(errors, [], f"{valid.name} must validate")
+            invalid = sorted((GITHUB_EFFECTS / "examples").glob(f"{stem}.invalid-*.json"))
+            self.assertGreaterEqual(len(invalid), 4, f"{stem} needs known-bad fixtures")
+            for path in invalid:
+                with self.subTest(fixture=path.name):
+                    self.assertFalse(validator.is_valid(json.loads(path.read_text())), f"{path.name} must be rejected")
+
+
+GATEWAY_CONFORMANCE = CHECKER.parents[2] / "protocols" / "conformance" / "gateway" / "v1"
+REASON_CODES = CHECKER.parents[2] / "protocols" / "json-schemas" / "reason-codes" / "reason-codes-v1.json"
+
+
+class GatewayConformanceScenariosTest(unittest.TestCase):
+    """Every gateway conformance scenario validates against the scenario schema
+    and names only registered reason codes, and the schema rejects a malformed
+    scenario (HELM-751). The Go runner in core/pkg/gateway/conformance proves
+    the expectations against the real gateway; this gate proves the shape a fake
+    gateway reads."""
+
+    def test_scenarios(self) -> None:
+        import json
+
+        import jsonschema
+
+        schema = json.loads((GATEWAY_CONFORMANCE / "scenario.schema.json").read_text())
+        jsonschema.Draft202012Validator.check_schema(schema)
+        validator = jsonschema.Draft202012Validator(schema)
+        registered = {c["code"] for c in json.loads(REASON_CODES.read_text())["codes"]}
+        scenarios = sorted((GATEWAY_CONFORMANCE / "scenarios").glob("*.json"))
+        self.assertGreaterEqual(len(scenarios), 18, "the HELM-751 minimum set is 18 scenarios")
+
+        def reason_codes(node):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key == "reason_code" and value:
+                        yield value
+                    yield from reason_codes(value)
+            elif isinstance(node, list):
+                for item in node:
+                    yield from reason_codes(item)
+
+        for path in scenarios:
+            with self.subTest(scenario=path.name):
+                scenario = json.loads(path.read_text())
+                errors = [f"{list(e.absolute_path)}: {e.message}" for e in validator.iter_errors(scenario)]
+                self.assertEqual(errors, [], f"{path.name} must validate")
+                unregistered = set(reason_codes(scenario)) - registered
+                self.assertEqual(unregistered, set(), f"{path.name} names unregistered reason codes")
+
+        # Known bad: each mutation of a valid scenario is rejected.
+        good = json.loads(scenarios[0].read_text())
+        self.assertTrue(validator.is_valid(good))
+
+        def mutated(edit):
+            copy = json.loads(json.dumps(good))
+            edit(copy)
+            return copy
+
+        def set_error_and_attempt(s):
+            s["steps"][0]["expect"]["error"] = {"code": "not_found", "reason_code": ""}
+
+        def bad_state(s):
+            s["steps"][0]["expect"]["attempt"]["state"] = "APPROVED_ISH"
+
+        def signed_token(s):
+            s["tokens"]["propose-a"]["signature"] = "eyJ..."
+
+        def control_with_rpc(s):
+            s["steps"].append({"rpc": "GetAttempt", "request": {}, "expect": {}, "control": {"kind": "set_adapter", "observe": {"status": "ABSENT"}}})
+
+        def not_sent_without_reason(s):
+            s["fixtures"]["adapter"]["dispatch"] = {"status": "NOT_SENT"}
+
+        for edit in (
+            lambda s: s.pop("rule"),
+            lambda s: s.update(id="GW-1"),
+            lambda s: s["steps"][0].pop("expect"),
+            set_error_and_attempt,
+            bad_state,
+            signed_token,
+            control_with_rpc,
+            not_sent_without_reason,
+        ):
+            with self.subTest(mutation=getattr(edit, "__name__", "lambda")):
+                self.assertFalse(validator.is_valid(mutated(edit)), "a malformed scenario must be rejected")
+
+
 if __name__ == "__main__":
     unittest.main()

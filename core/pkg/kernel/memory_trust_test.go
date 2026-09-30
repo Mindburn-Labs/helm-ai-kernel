@@ -31,7 +31,7 @@ func TestMemoryTrust_TrustedPrincipalScoresHigh(t *testing.T) {
 	)
 	scorer.SetPrincipalTrust("agent-admin", 0.9)
 
-	entry := makeEntry("config", "model=gpt-4", "agent-admin", trustTestBaseTime)
+	entry := makeEntry("config", "model=gpt-6-sol", "agent-admin", trustTestBaseTime)
 	score := scorer.ScoreEntry(entry)
 
 	require.NotNil(t, score)

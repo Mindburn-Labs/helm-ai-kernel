@@ -38,6 +38,20 @@
       "input_token_micro_cents": 15,
       "output_token_micro_cents": 60,
       "source_uri": "https://openrouter.ai/models (captured 2026-08-17)"
+    },
+    {
+      "provider_id": "openrouter",
+      "model_id": "openai/gpt-6-sol",
+      "input_token_micro_cents": 200,
+      "output_token_micro_cents": 1000,
+      "source_uri": "https://developers.openai.com/api/docs/pricing (captured 2026-09-25)"
+    },
+    {
+      "provider_id": "openrouter",
+      "model_id": "openai/gpt-6-luna",
+      "input_token_micro_cents": 10,
+      "output_token_micro_cents": 50,
+      "source_uri": "https://developers.openai.com/api/docs/pricing (captured 2026-09-25)"
     }
   ],
   "envelopes": [
@@ -49,10 +63,10 @@
       "max_amount_cents": 1000,
       "per_request_max_cents": 50,
       "allowed_providers": ["openrouter"],
-      "allowed_models": ["openai/gpt-4o", "openai/gpt-4o-mini"],
+      "allowed_models": ["openai/gpt-6-sol", "openai/gpt-6-luna"],
       "fallback_routes": [
-        { "provider_id": "openrouter", "model_id": "openai/gpt-4o" },
-        { "provider_id": "openrouter", "model_id": "openai/gpt-4o-mini" }
+        { "provider_id": "openrouter", "model_id": "openai/gpt-6-sol" },
+        { "provider_id": "openrouter", "model_id": "openai/gpt-6-luna" }
       ],
       "allow_model_substitution": false
     },
@@ -64,9 +78,9 @@
       "max_amount_cents": 1000,
       "per_request_max_cents": 50,
       "allowed_providers": ["openrouter"],
-      "allowed_models": ["openai/gpt-4o-mini"],
+      "allowed_models": ["openai/gpt-6-luna"],
       "fallback_routes": [
-        { "provider_id": "openrouter", "model_id": "openai/gpt-4o-mini" }
+        { "provider_id": "openrouter", "model_id": "openai/gpt-6-luna" }
       ],
       "allow_model_substitution": true
     }

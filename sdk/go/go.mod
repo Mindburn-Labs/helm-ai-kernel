@@ -3,6 +3,7 @@ module github.com/Mindburn-Labs/helm-ai-kernel/sdk/go
 go 1.25.13
 
 require (
+	connectrpc.com/connect v1.21.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 )

@@ -170,24 +170,6 @@ func TestRFC7807_ContextEnrichedError(t *testing.T) {
 	}
 }
 
-// TestApproveHandler_MethodEnforcement validates that the approval endpoint rejects non-POST methods.
-func TestApproveHandler_MethodEnforcement(t *testing.T) {
-	h := NewApproveHandler(nil)
-
-	methods := []string{"GET", "PUT", "DELETE", "PATCH"}
-	for _, method := range methods {
-		t.Run(method, func(t *testing.T) {
-			r := httptest.NewRequest(method, "/api/v1/kernel/approve", nil)
-			w := httptest.NewRecorder()
-			h.HandleApprove(w, r)
-
-			if w.Code != http.StatusMethodNotAllowed {
-				t.Errorf("%s: status = %d, want 405", method, w.Code)
-			}
-		})
-	}
-}
-
 // TestOpenAPISpec_EndpointCoverage extends the basic drift test with console route coverage.
 func TestOpenAPISpec_EndpointCoverage(t *testing.T) {
 	// These are the critical API endpoints that must be documented in OpenAPI.
@@ -198,7 +180,6 @@ func TestOpenAPISpec_EndpointCoverage(t *testing.T) {
 	}{
 		{"/health", "infrastructure"},
 		{"/api/v1/kernel/dispatch", "governance"},
-		{"/api/v1/kernel/approve", "governance"},
 		{"/api/v1/console/bootstrap", "console"},
 		{"/api/v1/evaluate", "console"},
 		{"/api/v1/receipts", "console"},
@@ -214,14 +195,5 @@ func TestOpenAPISpec_EndpointCoverage(t *testing.T) {
 			t.Errorf("duplicate endpoint in contract: %s", ep.path)
 		}
 		seen[ep.path] = true
-	}
-
-	// Verify expected group counts
-	groups := make(map[string]int)
-	for _, ep := range endpoints {
-		groups[ep.group]++
-	}
-	if groups["governance"] < 2 {
-		t.Error("governance group should have at least 2 endpoints")
 	}
 }

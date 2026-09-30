@@ -27,8 +27,8 @@ type recordingPrincipalBindingStore struct {
 	existsErr error
 }
 
-func (s *recordingPrincipalBindingStore) Upsert(ctx context.Context, b store.PrincipalBinding) error {
-	return nil
+func (s *recordingPrincipalBindingStore) Bind(ctx context.Context, b store.PrincipalBinding, allowCrossTenant bool) (store.BindResult, error) {
+	return store.BindResult{Outcome: store.BindCreated}, nil
 }
 
 func (s *recordingPrincipalBindingStore) Exists(ctx context.Context, tenantID, principalID string) (bool, error) {
@@ -341,10 +341,10 @@ func TestTenantScopedRuntimeAuthAllowsRegisteredNonEnvBinding(t *testing.T) {
 
 	bindingStore, cleanup := newRouteAuthTestBindingStore(t)
 	defer cleanup()
-	if err := bindingStore.Upsert(context.Background(), store.PrincipalBinding{
+	if _, err := bindingStore.Bind(context.Background(), store.PrincipalBinding{
 		TenantID:    "tenant-b",
 		PrincipalID: "principal-b",
-	}); err != nil {
+	}, false); err != nil {
 		t.Fatalf("seeding binding store: %v", err)
 	}
 	SetPrincipalBindingStore(bindingStore)

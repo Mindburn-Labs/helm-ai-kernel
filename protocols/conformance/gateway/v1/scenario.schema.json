@@ -1,0 +1,304 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/conformance/gateway/v1/scenario.schema.json",
+  "title": "Gateway effect API conformance scenario v1",
+  "description": "One scenario of the gateway conformance table (HELM-751): fixtures, a sequence of RPC calls with abstract token claims, and the outcome each call must produce. The real helm-gateway and every fake gateway (for example the Control Plane's) must pass every scenario. Tokens are abstract claims, never signatures: a fake reads the claims directly, and the real runner (core/pkg/gateway/conformance) mints ADR-0005 tokens from them. See README.md in this directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "title", "rule", "fixtures", "tokens", "steps"],
+  "properties": {
+    "schema": {"const": "helm.gateway.conformance.scenario.v1"},
+    "id": {
+      "description": "Stable identifier. Never reused for another rule.",
+      "type": "string",
+      "pattern": "^GW-[0-9]{3}$"
+    },
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "cites"],
+      "properties": {
+        "statement": {"description": "The rule the scenario proves, in one or two sentences.", "type": "string", "minLength": 1},
+        "cites": {
+          "description": "Where the rule is written. In a Markdown file, section is a heading's exact text; in any other file, a string the file contains, such as 'rpc Dispatch('. The runner checks both.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["doc", "section"],
+            "properties": {
+              "doc": {"type": "string", "pattern": "^(docs|protocols)/[A-Za-z0-9._/-]+$"},
+              "section": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "fixtures": {"$ref": "#/$defs/fixtures"},
+    "tokens": {
+      "description": "Named tokens. A step that names a token presents that exact token: using a name twice reuses its jti.",
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+      "additionalProperties": {"$ref": "#/$defs/token"}
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/step"}
+    }
+  },
+  "$defs": {
+    "principalId": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "label": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$"},
+    "reasonCode": {
+      "description": "A code of protocols/json-schemas/reason-codes/reason-codes-v1.json, or empty for none.",
+      "type": "string",
+      "pattern": "^([A-Z][A-Z0-9_]*)?$"
+    },
+    "effectType": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,127}$"},
+    "risk": {"enum": ["low", "medium", "high", "irreversible"]},
+    "fixtures": {
+      "description": "Authority rows and provider behaviour, seeded identically in every tenant listed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenants", "principals", "configured_actor", "effect_types", "mandates", "adapter"],
+      "properties": {
+        "tenants": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^tenant-[a-z0-9-]+$"}},
+        "principals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "kind"],
+            "properties": {
+              "id": {"$ref": "#/$defs/principalId"},
+              "kind": {"enum": ["human", "agent", "service"]}
+            }
+          }
+        },
+        "configured_actor": {
+          "description": "The one workload actor a token's act.sub may name (HELM_CP_IDENTITY_ACTOR): the Control Plane runner. It must be a service or agent principal.",
+          "$ref": "#/$defs/principalId"
+        },
+        "effect_types": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["effect_type", "risk"],
+            "properties": {
+              "effect_type": {"$ref": "#/$defs/effectType"},
+              "risk": {"$ref": "#/$defs/risk"}
+            }
+          }
+        },
+        "mandates": {
+          "description": "Root mandates as data (HELM-750). Each is valid from one hour before the scenario starts to one hour after.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["holder", "effect_types", "activation"],
+            "properties": {
+              "holder": {"$ref": "#/$defs/principalId"},
+              "effect_types": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/effectType"}},
+              "targets": {"description": "Exact targets allowed. Absent: any target.", "type": "array", "items": {"type": "string", "minLength": 1}},
+              "condition": {"description": "CEL over input.effect_type, input.target and input.args. Empty: none.", "type": "string"},
+              "approval_required": {"description": "Effect types that escalate under this mandate whatever their risk.", "type": "array", "items": {"$ref": "#/$defs/effectType"}},
+              "risk_classes": {"description": "Raises an effect type's risk under this mandate.", "type": "object", "additionalProperties": {"$ref": "#/$defs/risk"}},
+              "limits": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["unit", "window", "value"],
+                  "properties": {
+                    "unit": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"},
+                    "window": {"enum": ["none", "hour", "day", "month"]},
+                    "value": {"type": "integer", "minimum": 0}
+                  }
+                }
+              },
+              "activation": {
+                "description": "The widening approval that activated the mandate: a requester and a distinct human approver other than the holder.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["requester", "approver"],
+                "properties": {
+                  "requester": {"$ref": "#/$defs/principalId"},
+                  "approver": {"$ref": "#/$defs/principalId"}
+                }
+              }
+            }
+          }
+        },
+        "adapter": {
+          "description": "The fake provider adapter behind the gateway.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["effect_types", "dispatch", "observe", "provider"],
+          "properties": {
+            "effect_types": {"description": "The effect types an adapter performs. Dispatch of any other is failed_precondition.", "type": "array", "items": {"$ref": "#/$defs/effectType"}},
+            "dispatch": {"$ref": "#/$defs/dispatchBehaviour"},
+            "observe": {"$ref": "#/$defs/observeBehaviour"},
+            "provider": {
+              "description": "What a SUCCEEDED read-back reports, so arguments can name it.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["default_branch", "default_branch_sha", "branch_commit_sha"],
+              "properties": {
+                "default_branch": {"type": "string", "minLength": 1},
+                "default_branch_sha": {"$ref": "#/$defs/sha1"},
+                "branch_commit_sha": {"$ref": "#/$defs/sha1"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "sha1": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "dispatchBehaviour": {
+      "description": "The adapter's Dispatch answer. SENT: the provider accepted the write. NOT_SENT: nothing was written (certain failure). INDEFINITE: the write may have happened.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["SENT", "NOT_SENT", "INDEFINITE"]},
+        "reason_code": {"$ref": "#/$defs/reasonCode"}
+      },
+      "if": {"properties": {"status": {"enum": ["NOT_SENT", "INDEFINITE"]}}},
+      "then": {"required": ["status", "reason_code"]}
+    },
+    "observeBehaviour": {
+      "description": "The adapter's read-back. SUCCEEDED: the object is this effect. ABSENT: no object found (FAILED resting on absence, READBACK_MISMATCH). CONTRADICTING: an object that is not this effect (FAILED, READBACK_MISMATCH). INCONCLUSIVE: the read-back could not tell.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["SUCCEEDED", "ABSENT", "CONTRADICTING", "INCONCLUSIVE"]}
+      }
+    },
+    "authorizationDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["helm_effect_decision", "helm_stop_lift", "helm_effect_cancel"]},
+        "attempt_id": {"type": "string"},
+        "action": {"enum": ["approve", "reject"]},
+        "stop_id": {"type": "string"}
+      }
+    },
+    "token": {
+      "description": "Abstract ADR-0005 token claims for the gateway audience. The runner signs them; a fake reads them. Every token names exactly one scope.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "sub", "tenant", "workspace", "jti"],
+      "properties": {
+        "scope": {"enum": ["helm.gateway.propose", "helm.gateway.decide", "helm.gateway.read", "helm.gateway.stop", "helm.gateway.execute"]},
+        "sub": {"$ref": "#/$defs/principalId"},
+        "act_sub": {"description": "RFC 8693 act.sub: the workload carrying the call. Absent: the principal calls directly.", "$ref": "#/$defs/principalId"},
+        "tenant": {"type": "string", "pattern": "^tenant-[a-z0-9-]+$"},
+        "workspace": {"type": "string", "pattern": "^ws-[a-z0-9-]+$"},
+        "jti": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"},
+        "authorization_details": {"description": "RFC 9396 claim. String values may hold placeholders.", "type": "array", "items": {"$ref": "#/$defs/authorizationDetail"}}
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "note": {"type": "string"},
+        "label": {"description": "Names the attempt this step's response returns, for {{attempt_id:<label>}} and {{approval_digest:<label>}}.", "$ref": "#/$defs/label"},
+        "rpc": {"enum": ["Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent"]},
+        "token": {"description": "A name from tokens. Absent: the call carries no Authorization header.", "type": "string"},
+        "request": {
+          "description": "The request message in proto3 JSON (snake_case names), after placeholder substitution. ProposeRequest.effect takes arguments_json, a JSON object whose compact serialization in document order is the argument bytes, in place of base64 arguments.",
+          "type": "object"
+        },
+        "expect": {"$ref": "#/$defs/expect"},
+        "control": {"$ref": "#/$defs/control"}
+      },
+      "oneOf": [
+        {"required": ["rpc", "request", "expect"], "not": {"required": ["control"]}},
+        {"required": ["control"], "not": {"anyOf": [{"required": ["rpc"]}, {"required": ["request"]}, {"required": ["expect"]}, {"required": ["token"]}, {"required": ["label"]}]}}
+      ]
+    },
+    "control": {
+      "description": "A step outside the RPC surface. stop: an operator's stop row takes effect (the runner writes the row directly; the table does not drive the Stop RPC yet). pass_dispatch_fence: the attempt's dispatch fence (dispatch_deadline) is now in the past. set_adapter: the adapter's behaviour changes from the next call on.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["stop", "pass_dispatch_fence", "set_adapter"]},
+        "tenant": {"type": "string", "pattern": "^tenant-[a-z0-9-]+$"},
+        "scope_kind": {"enum": ["tenant", "principal", "effect_type"]},
+        "scope_key": {"type": "string"},
+        "issued_by": {"$ref": "#/$defs/principalId"},
+        "attempt_id": {"type": "string"},
+        "dispatch": {"$ref": "#/$defs/dispatchBehaviour"},
+        "observe": {"$ref": "#/$defs/observeBehaviour"}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"const": "stop"}}}, "then": {"required": ["kind", "tenant", "scope_kind", "scope_key", "issued_by"]}},
+        {"if": {"properties": {"kind": {"const": "pass_dispatch_fence"}}}, "then": {"required": ["kind", "tenant", "attempt_id"]}},
+        {"if": {"properties": {"kind": {"const": "set_adapter"}}}, "then": {"anyOf": [{"required": ["dispatch"]}, {"required": ["observe"]}]}}
+      ]
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attempt": {"$ref": "#/$defs/expectedAttempt"},
+        "existing": {"description": "The response's existing flag.", "type": "boolean"},
+        "error": {
+          "description": "A Connect error and its one helm.errors.v1.ErrorDetail.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "reason_code"],
+          "properties": {
+            "code": {"enum": ["invalid_argument", "unauthenticated", "permission_denied", "not_found", "already_exists", "failed_precondition"]},
+            "reason_code": {"$ref": "#/$defs/reasonCode"}
+          }
+        },
+        "adapter_calls": {
+          "description": "Adapter calls since the scenario started, counted after this step. Where it matters.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dispatch": {"type": "integer", "minimum": 0},
+            "observe": {"type": "integer", "minimum": 0}
+          }
+        }
+      },
+      "oneOf": [
+        {"required": ["attempt"], "not": {"required": ["error"]}},
+        {"required": ["error"], "not": {"anyOf": [{"required": ["attempt"]}, {"required": ["existing"]}]}},
+        {"not": {"anyOf": [{"required": ["attempt"]}, {"required": ["error"]}]}}
+      ]
+    },
+    "expectedAttempt": {
+      "description": "The attempt in the response. state and reason_code are always compared; the rest only when present.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason_code"],
+      "properties": {
+        "state": {"enum": ["DENIED", "ESCALATED", "REJECTED", "EXPIRED", "ADMITTED", "CANCELLED", "DISPATCHING", "DISPATCHED", "UNKNOWN", "OBSERVED", "RECONCILED", "ESCALATED_TO_HUMAN", "SETTLED", "COMPENSATED"]},
+        "reason_code": {"$ref": "#/$defs/reasonCode"},
+        "outcome": {"enum": ["UNSPECIFIED", "SUCCEEDED", "FAILED"]},
+        "outcome_basis": {"enum": ["UNSPECIFIED", "OBSERVED", "RECONCILED"]},
+        "risk_class": {"enum": ["LOW", "MEDIUM", "HIGH", "IRREVERSIBLE"]},
+        "requester_principal_id": {"type": "string"},
+        "requester_actor_id": {"type": "string"},
+        "approver_principal_id": {"type": "string"},
+        "pending_approval": {"description": "Whether pending_approval is set.", "type": "boolean"},
+        "permit": {"description": "NONE: no permit. ISSUED: unused. CONSUMED: consumed_at set. VOIDED: void_reason_code set.", "enum": ["NONE", "ISSUED", "CONSUMED", "VOIDED"]},
+        "exposure": {"description": "The kind every exposure has; NONE when there are none.", "enum": ["NONE", "HELD", "ESTIMATED", "CONFIRMED", "RELEASED"]},
+        "same_attempt_as": {"description": "The attempt_id equals the one this label names.", "$ref": "#/$defs/label"}
+      }
+    }
+  }
+}

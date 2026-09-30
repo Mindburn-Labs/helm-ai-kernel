@@ -21,6 +21,8 @@ specific GitHub release attached a matching asset.
 | `distribute.sh` | Legacy/manual multi-package publication helper. | Manual only; do not treat as automatic release proof. |
 | `check_version_drift.py` | Checks local source versions and published release channels with bounded per-surface requests. | `make version-drift`, `make version-drift-published`, scheduled monitor. |
 | `check_version_drift_test.py` | Self-test for required published-channel coverage and drift-monitor error shaping. | Manual validation for release monitor edits. |
+| `rehearse.py` | Computes the version the next tag would carry and checks the pre-publish preconditions of `release.yml`; prints PASS / FAIL / ACTION-NEEDED / UNKNOWN rows. | `make release-rehearsal`, `release-rehearsal.yml`. |
+| `rehearse_test.py` | Hermetic self-test for the rehearsal: version computation through the real contract gate, catalog and pin outcomes, a planted chart defect. | `make test-release-rehearsal`, `release-rehearsal-self-test` gate. |
 
 ## Drift, unknown, and exit codes
 
@@ -68,10 +70,10 @@ manifest.
 
 The local Console browser sidecar is a standalone-release asset, never a
 Homebrew resource. A tag release first dispatches the Console's native closure
-builder from a checked-in exact source pin. The immutable source tuple is
-separate from the Console producer workflow identity: that signature is trusted
-at `refs/heads/main` under the Console repository's protected-branch controls;
-it does not claim an immutable workflow revision. `console_local_sidecar.py`
+builder from a checked-in exact source pin. The producer workflow runs from the
+pin's immutable `refs/tags/...` ref, which must resolve to the pinned source
+commit. Its keyless signature identity must name that same ref; a Console
+`main` workflow identity is rejected. `console_local_sidecar.py`
 requires the Console keyless manifest signature, all four native targets,
 archive and inventory integrity, and source/provenance agreement before the
 files enter `dist/release-assets/`. The Kernel release signs that manifest once

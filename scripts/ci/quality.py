@@ -32,6 +32,7 @@ EXPECTED_GATE_IDS = {
     "quantum-crypto-inventory",
     "codegen-drift",
     "contract-breaking-self-test",
+    "release-rehearsal-self-test",
     "contract-breaking-release",
     "proto-breaking",
     "json-schemas",

@@ -14,6 +14,8 @@ Active tooling surface for the `helm-ai-kernel` project.
 
 ## Local Commands
 
+- `make check` runs what CI's required `ci / gate` check runs: the `merge`
+  profile from `scripts/ci/quality-gates.json` with every gate blocking.
 - `make docs-coverage` from the repository root verifies coverage for this surface.
 - `make quality-pr` runs the Make-first PR quality profile from
   `scripts/ci/quality-gates.json`.

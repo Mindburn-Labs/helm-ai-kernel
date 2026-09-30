@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	helmauth "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/canonicalize"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	helmcrypto "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/crypto"
@@ -224,16 +225,15 @@ func TestDeployedMCPGatewayEnforcesReconciledSnapshot(t *testing.T) {
 	}
 }
 
-// TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope covers the
-// part of HELM-363 that is actually true: every governed decision through the
-// MCP gateway — ALLOW and DENY — persists a signed, durable receipt.
-//
-// It deliberately does NOT claim those receipts are readable through
-// /api/v1/receipts. They are written unscoped, because the gateway routes run
-// under RouteAuthAdmin and so carry no authenticated tenant to scope by, while
-// that route reads through ListByTenantCursor. The final assertion pins that
-// boundary so the gap cannot silently reappear as a green test.
-func TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope(t *testing.T) {
+// TestMCPGatewayDecisionsPersistSignedReceiptsInTheConfiguredTenant covers
+// HELM-363 and HELM-780 (R9): every governed decision through the MCP gateway,
+// ALLOW and DENY, persists a signed receipt in the tenant the gateway's auth
+// gate bound. That tenant reads them through /api/v1/receipts.
+func TestMCPGatewayDecisionsPersistSignedReceiptsInTheConfiguredTenant(t *testing.T) {
+	const tenantID, principalID = "tenant-mcp", "principal-mcp"
+	t.Setenv("HELM_ADMIN_API_KEY", testAdminAPIKey)
+	t.Setenv(runtimeTenantIDEnv, tenantID)
+	t.Setenv(runtimePrincipalIDEnv, principalID)
 	dir := t.TempDir()
 	policyPath, _ := writeMountedServePolicyFixture(t, dir, `{
   "pack_id": "runtime-pack",
@@ -270,8 +270,16 @@ func TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The shipped mounting: the gateway behind its auth gate, beside the
+	// receipt routes.
+	routes := http.NewServeMux()
+	registerDeployedMCPRoutes(routes, gateway)
+	registerReceiptRoutes(routes, svc)
 	mux := http.NewServeMux()
-	gateway.RegisterRoutes(mux)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+testAdminAPIKey)
+		routes.ServeHTTP(w, r)
+	})
 	sessionID := initializeLocalMCPTestSession(t, mux)
 
 	callTool := func(t *testing.T, name string, args map[string]any) string {
@@ -307,53 +315,22 @@ func TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope(t *testing.T
 		t.Fatalf("expected DENY for file_write: %s", body)
 	}
 
-	// Sequence-ordered read. This is NOT the read path /api/v1/receipts uses —
-	// that route goes through listReceiptsForCursor -> ListByTenantCursor, which
-	// filters on the tenant-qualified scope prefix. See the scope assertion at
-	// the end of this test.
-	receipts, err := receiptStore.ListSince(context.Background(), 0, 10)
-	if err != nil {
-		t.Fatalf("list receipts: %v", err)
-	}
-	verdicts := map[string]string{}
-	for _, receipt := range receipts {
-		resource, _ := receipt.Metadata["resource"].(string)
-		verdicts[resource] = receipt.Status
-		if receipt.Signature == "" {
-			t.Fatalf("receipt %s is unsigned", receipt.ReceiptID)
-		}
-	}
-	if verdicts["file_read"] != string(contracts.VerdictAllow) {
-		t.Fatalf("missing ALLOW receipt for file_read: %+v", verdicts)
-	}
-	if verdicts["file_write"] != string(contracts.VerdictDeny) {
-		t.Fatalf("missing DENY receipt for file_write: %+v", verdicts)
-	}
-
-	// Pin the scope boundary this test used to misdescribe (HELM-363). The
-	// gateway runs under RouteAuthAdmin, which establishes no tenant binding, so
-	// persistDecisionReceipt writes these rows unscoped by design, and every
-	// /api/v1/receipts read filters on the "tenant:" scope prefix — which is why
-	// these receipts cannot be reached there.
-	//
-	// This asserts on the durable scope actually stored rather than on a guessed
-	// tenant id, so it fails for any tenant if a future change starts scoping
-	// these rows. When that happens, rewrite it; do not delete it to make a
-	// build green.
+	// Every durable row is in the configured tenant's scope.
 	scopeRows, err := db.QueryContext(context.Background(), `SELECT COALESCE(causal_session_id, '') FROM receipts`)
 	if err != nil {
 		t.Fatalf("read durable receipt scopes: %v", err)
 	}
 	defer scopeRows.Close()
 	scopes := 0
+	tenantPrefix := "tenant:" + strconv.Itoa(len(tenantID)) + ":" + tenantID + ":"
 	for scopeRows.Next() {
 		var scope string
 		if err := scopeRows.Scan(&scope); err != nil {
 			t.Fatalf("scan receipt scope: %v", err)
 		}
 		scopes++
-		if strings.HasPrefix(scope, "tenant:") {
-			t.Fatalf("gateway receipt is tenant-scoped (%q); the route has no authenticated tenant to derive that from, and this test's claim about /api/v1/receipts needs revisiting (HELM-363)", scope)
+		if !strings.HasPrefix(scope, tenantPrefix) {
+			t.Fatalf("gateway receipt scope = %q, want the configured tenant's %q", scope, tenantPrefix)
 		}
 	}
 	if err := scopeRows.Err(); err != nil {
@@ -362,6 +339,81 @@ func TestMCPGatewayDecisionsPersistSignedReceiptsOutsideTenantScope(t *testing.T
 	if scopes == 0 {
 		t.Fatal("expected the gateway to have persisted receipts")
 	}
+
+	// The tenant reads them through the tenant-scoped receipt route.
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/receipts?limit=10", nil)
+	listReq.Header.Set(tenantHeader, tenantID)
+	listReq.Header.Set(principalHeader, principalID)
+	listRec := httptest.NewRecorder()
+	mux.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list receipts status = %d body=%s", listRec.Code, listRec.Body.String())
+	}
+	var listed struct {
+		Receipts []contracts.Receipt `json:"receipts"`
+	}
+	if err := json.Unmarshal(listRec.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode receipts: %v body=%s", err, listRec.Body.String())
+	}
+	verdicts := map[string]string{}
+	for _, receipt := range listed.Receipts {
+		if source, _ := receipt.Metadata["source"].(string); source != "mcp.gateway" {
+			continue
+		}
+		if receipt.Signature == "" {
+			t.Fatalf("receipt %s is unsigned", receipt.ReceiptID)
+		}
+		resource, _ := receipt.Metadata["resource"].(string)
+		verdicts[resource] = receipt.Status
+	}
+	if verdicts["file_read"] != string(contracts.VerdictAllow) || verdicts["file_write"] != string(contracts.VerdictDeny) {
+		t.Fatalf("tenant-readable gateway receipts = %+v, want ALLOW file_read and DENY file_write; body=%s", verdicts, listRec.Body.String())
+	}
+
+	// The gateway serves only the configured tenant.
+	spoofed := httptest.NewRequest(http.MethodGet, "/mcp/v1/capabilities", nil)
+	spoofed.Header.Set(tenantHeader, "tenant-other")
+	spoofedRec := httptest.NewRecorder()
+	mux.ServeHTTP(spoofedRec, spoofed)
+	if spoofedRec.Code != http.StatusForbidden {
+		t.Fatalf("gateway call asserting another tenant: status = %d body=%s", spoofedRec.Code, spoofedRec.Body.String())
+	}
+}
+
+// A gateway decision with no authenticated tenant is refused before it is
+// evaluated, so nothing is receipted outside tenant scope.
+func TestReceiptPersistingEvaluatorRefusesADecisionWithoutATenant(t *testing.T) {
+	signer, err := helmcrypto.NewEd25519Signer("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts := &captureReceiptStore{}
+	inner := &countingMCPDecisionEvaluator{decision: &contracts.DecisionRecord{ID: "mcp-decision", Verdict: string(contracts.VerdictAllow)}}
+	evaluator := &receiptPersistingEvaluator{svc: &Services{ReceiptStore: receipts, ReceiptSigner: signer}, inner: inner}
+	for name, ctx := range map[string]context.Context{
+		"no principal":               context.Background(),
+		"principal without a tenant": helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "agent.test"}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			decision, err := evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{Principal: "agent.test", Action: "EXECUTE_TOOL", Resource: "file_read"})
+			if decision != nil || err == nil {
+				t.Fatalf("untenanted decision = (%+v, %v), want a refusal", decision, err)
+			}
+		})
+	}
+	if inner.calls != 0 || receipts.stored != nil {
+		t.Fatalf("an untenanted decision was evaluated (%d) or receipted (%+v)", inner.calls, receipts.stored)
+	}
+}
+
+type countingMCPDecisionEvaluator struct {
+	decision *contracts.DecisionRecord
+	calls    int
+}
+
+func (e *countingMCPDecisionEvaluator) EvaluateDecision(context.Context, guardian.DecisionRequest) (*contracts.DecisionRecord, error) {
+	e.calls++
+	return e.decision, nil
 }
 
 func TestReceiptPersistingEvaluatorFailsClosedWhenStoreFails(t *testing.T) {
@@ -380,7 +432,8 @@ func TestReceiptPersistingEvaluatorFailsClosedWhenStoreFails(t *testing.T) {
 			Verdict: string(contracts.VerdictAllow),
 		}},
 	}
-	decision, err := evaluator.EvaluateDecision(context.Background(), guardian.DecisionRequest{
+	ctx := helmauth.WithPrincipal(context.Background(), &helmauth.BasePrincipal{ID: "agent.test", TenantID: "tenant-a"})
+	decision, err := evaluator.EvaluateDecision(ctx, guardian.DecisionRequest{
 		Principal: "agent.test",
 		Action:    "EXECUTE_TOOL",
 		Resource:  "file_read",
@@ -434,10 +487,10 @@ func TestDeployedMCPRouteRegistryMatchesHandlerAuthentication(t *testing.T) {
 		wantAuth                 RouteAuth
 		protected                bool
 	}{
-		{name: "mcp transport get", method: http.MethodGet, path: "/mcp", wantAuth: RouteAuthAdmin, protected: true},
-		{name: "mcp transport post", method: http.MethodPost, path: "/mcp", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, wantAuth: RouteAuthAdmin, protected: true},
-		{name: "mcp capabilities", method: http.MethodGet, path: "/mcp/v1/capabilities", wantAuth: RouteAuthAdmin, protected: true},
-		{name: "mcp execute", method: http.MethodPost, path: "/mcp/v1/execute", body: `{"method":"missing"}`, wantAuth: RouteAuthAdmin, protected: true},
+		{name: "mcp transport get", method: http.MethodGet, path: "/mcp", wantAuth: RouteAuthConfiguredTenant, protected: true},
+		{name: "mcp transport post", method: http.MethodPost, path: "/mcp", body: `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, wantAuth: RouteAuthConfiguredTenant, protected: true},
+		{name: "mcp capabilities", method: http.MethodGet, path: "/mcp/v1/capabilities", wantAuth: RouteAuthConfiguredTenant, protected: true},
+		{name: "mcp execute", method: http.MethodPost, path: "/mcp/v1/execute", body: `{"method":"missing"}`, wantAuth: RouteAuthConfiguredTenant, protected: true},
 		{name: "mcp protected-resource metadata", method: http.MethodGet, path: "/.well-known/oauth-protected-resource/mcp", wantAuth: RouteAuthPublic},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

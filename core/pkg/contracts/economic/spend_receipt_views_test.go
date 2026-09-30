@@ -17,7 +17,7 @@ func buildRouteQuoteWithPromptMetadata(t *testing.T) *RouteQuote {
 	decision := newSpendAuthorityDecision(BudgetVerdictAllow, SpendReasonOKWithinEnvelope, "within envelope", 50_000, "sha256:env")
 	q := NewRouteQuote(
 		"rq-1", "tenant-1", "intent-1", "env-1", "agent-1",
-		ModelRoute{ProviderID: "openai", ModelID: "gpt-4o", PriceSnapshotHash: "sha256:price"},
+		ModelRoute{ProviderID: "openai", ModelID: "gpt-6-sol", PriceSnapshotHash: "sha256:price"},
 		1_500, 3_000, "USD", "sha256:route-policy", now.Add(time.Hour), decision,
 	)
 	q.PrincipalID = "user:alice"
@@ -69,7 +69,7 @@ func TestDefaultRedactionProfile_KeepsPromptBodyOffGraph(t *testing.T) {
 }
 
 func TestUsageReceiptView_RedactsPromptMetadataAndDerivesSettlement(t *testing.T) {
-	r := NewUsageReceipt("ur-1", "tenant-1", "rq-1", "intent-1", "env-1", "agent-1", "openai", "gpt-4o", 1_500, 1_000, 100, "USD", "sha256:policy", "evidence://ur-1")
+	r := NewUsageReceipt("ur-1", "tenant-1", "rq-1", "intent-1", "env-1", "agent-1", "openai", "gpt-6-sol", 1_500, 1_000, 100, "USD", "sha256:policy", "evidence://ur-1")
 	r.ProviderRequestID = "prov-req-1"
 	r.ProviderPriceSnapshotHash = "sha256:price"
 	r.Metadata = map[string]string{
@@ -98,7 +98,7 @@ func TestUsageReceiptView_RedactsPromptMetadataAndDerivesSettlement(t *testing.T
 }
 
 func TestUsageReceiptView_InvoiceAccrualWhenNoDebit(t *testing.T) {
-	r := NewUsageReceipt("ur-2", "tenant-1", "rq-2", "intent-2", "env-1", "agent-1", "openai", "gpt-4o", 1_500, 1_000, 100, "USD", "sha256:policy", "evidence://ur-2")
+	r := NewUsageReceipt("ur-2", "tenant-1", "rq-2", "intent-2", "env-1", "agent-1", "openai", "gpt-6-sol", 1_500, 1_000, 100, "USD", "sha256:policy", "evidence://ur-2")
 	r.BalanceDebitCents = 0 // invoice accrual path
 	r.Reseal()
 	view := NewUsageReceiptView(r, DefaultRedactionProfile())
@@ -109,7 +109,7 @@ func TestUsageReceiptView_InvoiceAccrualWhenNoDebit(t *testing.T) {
 
 func TestBudgetVerdictView_EscalateSurfacesApprovers(t *testing.T) {
 	decision := newSpendAuthorityDecision(BudgetVerdictEscalate, SpendReasonApprovalRequired, "needs approval", 0, "sha256:env")
-	r := NewBudgetVerdictReceipt("bv-1", "tenant-1", "intent-1", "env-1", "agent-1", "openai", "gpt-4o", 1_500, 3_000, "USD", "sha256:price", "sha256:route-policy", "evidence://bv-1", decision)
+	r := NewBudgetVerdictReceipt("bv-1", "tenant-1", "intent-1", "env-1", "agent-1", "openai", "gpt-6-sol", 1_500, 3_000, "USD", "sha256:price", "sha256:route-policy", "evidence://bv-1", decision)
 	r.PrincipalID = "user:alice"
 
 	view := NewBudgetVerdictView(r, []string{"role:finance-approver"}, DefaultRedactionProfile())

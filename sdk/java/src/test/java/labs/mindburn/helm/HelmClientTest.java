@@ -78,7 +78,7 @@ public class HelmClientTest {
     @DisplayName("TypesGen: ChatCompletionRequest serialization")
     void testChatCompletionRequestSerialization() throws Exception {
         TypesGen.ChatCompletionRequest req = new TypesGen.ChatCompletionRequest();
-        req.setModel("gpt-4");
+        req.setModel("gpt-6-sol");
         TypesGen.ChatCompletionRequestMessagesInner msg = new TypesGen.ChatCompletionRequestMessagesInner();
         msg.setRole(TypesGen.ChatCompletionRequestMessagesInner.RoleEnum.USER);
         msg.setContent("Hello");
@@ -86,7 +86,7 @@ public class HelmClientTest {
 
         String json = mapper.writeValueAsString(req);
         assertNotNull(json);
-        assertTrue(json.contains("\"model\":\"gpt-4\""));
+        assertTrue(json.contains("\"model\":\"gpt-6-sol\""));
     }
 
     @Test
@@ -244,7 +244,7 @@ public class HelmClientTest {
         server.createContext("/v1/chat/completions", exchange -> {
             body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             byte[] response = ("{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\",\"created\":1784900000,"
-                    + "\"model\":\"gpt-4\",\"choices\":[{\"index\":0,"
+                    + "\"model\":\"gpt-6-sol\",\"choices\":[{\"index\":0,"
                     + "\"message\":{\"role\":\"assistant\",\"content\":\"hello back\"},"
                     + "\"finish_reason\":\"stop\"}],"
                     + "\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}")
@@ -258,7 +258,7 @@ public class HelmClientTest {
         try {
             HelmClient client = new HelmClient("http://127.0.0.1:" + server.getAddress().getPort());
             TypesGen.ChatCompletionResponse response = client.chatCompletions(new TypesGen.ChatCompletionRequest()
-                    .model("gpt-4")
+                    .model("gpt-6-sol")
                     .messages(java.util.List.of(new TypesGen.ChatCompletionRequestMessagesInner()
                             .role(TypesGen.ChatCompletionRequestMessagesInner.RoleEnum.USER)
                             .content("hello")))

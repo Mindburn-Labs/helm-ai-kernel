@@ -14,7 +14,9 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  QUALITY_STRICT: "0"
+  # Strict: an advisory gate that fails, crashes or cannot run (a missing tool)
+  # fails the nightly instead of printing a warning (target architecture §13.2).
+  QUALITY_STRICT: "1"
   # concept-gate rejects an empty range, and origin/main..HEAD is empty on a
   # main checkout. Re-inspect the last 50 commits on main instead; the PR
   # workflow checks each change as it lands.
@@ -22,7 +24,7 @@ env:
 
 jobs:
   quality-nightly:
-    name: Advisory nightly quality profile
+    name: Nightly quality profile (strict)
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -46,5 +48,5 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-      - name: Run advisory nightly quality profile
+      - name: Run the nightly quality profile, strict
         run: make quality-nightly

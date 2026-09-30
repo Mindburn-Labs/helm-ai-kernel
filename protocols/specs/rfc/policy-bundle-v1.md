@@ -19,9 +19,9 @@ authors:
 >
 > Implementation of record: [`core/pkg/bundles/loader.go`](../../../core/pkg/bundles/loader.go)
 > (the whole package), [`core/cmd/helm-ai-kernel/bundle_cmd.go`](../../../core/cmd/helm-ai-kernel/bundle_cmd.go)
-> (CLI), and [`core/pkg/conform/gates/g14_bundle_integrity.go`](../../../core/pkg/conform/gates/g14_bundle_integrity.go)
-> (the conformance gate). These are the only three places in the repository that
-> read the policy bundle format.
+> (CLI). These are the only two places in the repository that read the policy
+> bundle format; the G14 conformance gate that also read it was retired in
+> HELM-756.
 
 ## 1. Abstract
 

@@ -1,0 +1,182 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-003",
+  "title": "An effect on a repository outside the mandate's targets is DENIED",
+  "rule": {
+    "statement": "Every link of the chain must allow the target: a branch on a repository the mandate does not list is DENIED with EFFECT_OUT_OF_SCOPE.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "The server (slice 2)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "[reason_code: EFFECT_OUT_OF_SCOPE]"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    }
+  },
+  "steps": [
+    {
+      "label": "other",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "branch-other",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.branch.create_from_changes",
+          "target": "github.com/Mindburn-Labs/other",
+          "arguments_json": {
+            "schema": "helm.github.branch.create_from_changes.v1",
+            "base": "main",
+            "base_sha": "0123456789abcdef0123456789abcdef01234567",
+            "head": "helm/skeleton",
+            "message": "Add skeleton",
+            "files": [
+              {
+                "path": "docs/skeleton.md",
+                "mode": "100644",
+                "content_utf8": "# Skeleton\n"
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "DENIED",
+          "reason_code": "EFFECT_OUT_OF_SCOPE",
+          "permit": "NONE"
+        }
+      }
+    },
+    {
+      "note": "A read is scoped the same way.",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "read-other",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.repository.get",
+          "target": "github.com/Mindburn-Labs/other",
+          "arguments_json": {
+            "schema": "helm.github.repository.get.v1"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "DENIED",
+          "reason_code": "EFFECT_OUT_OF_SCOPE"
+        }
+      }
+    }
+  ]
+}

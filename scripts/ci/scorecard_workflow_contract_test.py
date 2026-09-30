@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Guard the trusted and untrusted OpenSSF Scorecard workflow lanes.
+"""Guard the trusted OpenSSF Scorecard workflow.
 
-The lanes live in separate files because the OpenSSF results webapp
+Scorecard runs only on main pushes and on schedule. The OpenSSF results webapp
 statically rejects a publishing workflow that defines any job beyond the
 trusted scorecard job (observed as a 400 "workflow has a non-scorecard job
-with id-token permissions" on every main push while both lanes shared
-scorecard.yml).
+with id-token permissions" on every main push). The former pull-request lane
+(scorecard-pr.yml) produced an artifact nobody read and a check that only
+confirmed the file existed, so it was removed.
 """
 from __future__ import annotations
 
@@ -34,7 +35,6 @@ class ScorecardWorkflowContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.trusted_workflow = WORKFLOW.read_text()
-        cls.pr_workflow = WORKFLOW_PR.read_text()
 
     def job(self, source: str, name: str) -> str:
         match = re.search(
@@ -45,32 +45,8 @@ class ScorecardWorkflowContractTest(unittest.TestCase):
         self.assertIsNotNone(match, f"missing {name} job")
         return match.group("body")  # type: ignore[union-attr]
 
-    def test_pull_request_lane_is_read_only_and_artifact_only(self) -> None:
-        analysis = self.job(self.pr_workflow, "pull-request-analysis")
-        self.assertIn("if: github.event_name == 'pull_request'", analysis)
-        self.assertIn("permissions:\n      contents: read\n      actions: read", analysis)
-        self.assertNotIn("id-token:", analysis)
-        self.assertNotIn("security-events:", analysis)
-        self.assertIn("publish_results: false", analysis)
-        self.assertIn("name: scorecard-pr-results", analysis)
-        self.assertNotIn("upload-sarif", analysis)
-
-        evidence = self.job(self.pr_workflow, "pull-request-evidence")
-        self.assertIn("name: Upload pull request SARIF", evidence)
-        self.assertIn("if: github.event_name == 'pull_request'", evidence)
-        self.assertIn("needs: pull-request-analysis", evidence)
-        self.assertIn("permissions:\n      contents: read", evidence)
-        self.assertNotIn("actions:", evidence)
-        self.assertNotIn("id-token:", evidence)
-        self.assertNotIn("security-events:", evidence)
-        self.assertIn("name: scorecard-pr-results", evidence)
-        self.assertIn("test -s scorecard-pr-results/results.sarif", evidence)
-        self.assertNotIn("upload-sarif", evidence)
-
-    def test_pull_request_workflow_never_publishes(self) -> None:
-        self.assertNotIn("id-token:", self.pr_workflow)
-        self.assertNotIn("publish_results: true", self.pr_workflow)
-        self.assertIn("  pull_request:\n    branches: [main]", self.pr_workflow)
+    def test_pull_request_lane_stays_removed(self) -> None:
+        self.assertFalse(WORKFLOW_PR.exists())
 
     def test_only_default_branch_and_schedule_runs_publish_sarif(self) -> None:
         self.assertIn("  push:\n    branches: [main]", self.trusted_workflow)

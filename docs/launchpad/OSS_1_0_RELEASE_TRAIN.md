@@ -22,7 +22,7 @@ published drift evidence for that exact version.
 | EvidencePack structure | Mandatory pack structure, optional host evidence, and declared `99_EXT/` extensions exist. | `core/pkg/conform/evidencepack.go:13` | `v0.7.0` should freeze authority and compatibility, not invent a pack layout. |
 | EvidencePack seal and verifier | Native seal and verification paths exist. | `core/pkg/evidence/seal.go:191`, `core/pkg/evidence/seal.go:349` | `v0.7.0` must define exact verifier success and tamper-failure requirements. |
 | ProofGraph | ProofGraph refs are used by runtime adapters, exports, and evidence packs. | `core/pkg/evidence/arc/pack_builder.go:39`, `core/pkg/workstation/evidence.go:63` | `v0.7.0` must freeze ref grammar, pack placement, and replay semantics. |
-| Agent risk scan | `helm-ai-kernel scan` exists with RiskEnvelope, preview, evidence-pack, receipt projection, and upload gates. | `core/cmd/helm-ai-kernel/scan_cmd.go:31`, `core/pkg/riskscan/scan.go:56` | `v0.8.0` should stabilize and contract-freeze the scan surface. |
+| Agent risk scan | `helm-risk-scan scan` exists with RiskEnvelope, preview, evidence-pack and receipt projection; upload was removed in HELM-756. | `tools/riskscan/main.go`, `tools/riskscan/internal/riskscan/scan.go` | `v0.8.0` should stabilize and contract-freeze the scan surface. |
 | RiskEnvelope schema | JSON Schema and Go model exist with raw-data non-collection fields. | `protocols/json-schemas/risk-envelope/v1.json:19`, `core/pkg/riskenvelope/envelope.go:142` | `v0.8.0` must decide SDK/API parity and lock schema compatibility. |
 | RiskEnvelope SDK parity | OpenAPI/SDKs expose MCP scan, not the local RiskEnvelope contract. | `api/openapi/helm.openapi.yaml:3204` | Add OpenAPI component and SDK generated types, or explicitly declare CLI-only scope. |
 | Release gates | Maintained gates exist: `quality-merge`, `quality-release`, `release-readiness`, `release-assets`, `version-drift-published`. | `Makefile:88`, `Makefile:130`, `Makefile:143`, `Makefile:146`, `Makefile:262` | Keep the per-release loop gate-driven. |
@@ -33,7 +33,7 @@ published drift evidence for that exact version.
 | --- | --- | --- | --- |
 | `v0.7.0` | EvidencePack and ProofGraph beta | Freeze EvidencePack authority, ProofGraph refs, transparency proofs, offline verifier, conformance oracle, and tamper-failure coverage. | Downloaded release pack verifies offline; tampered pack fails. |
 | `v0.7.1` | Evidence hardening | Verifier UX, pack compatibility, docs/examples, and conformance regressions only. | Focused verifier/proofgraph tests plus release gates pass. |
-| `v0.8.0` | RiskEnvelope and agent risk scan beta | Stabilize `helm-ai-kernel scan`, RiskEnvelope schema, local preview, EvidencePack export, optional anonymized upload, observe/shadow/enforce mapping, and SDK parity. | Redaction tests prove no raw secret, prompt, command body, source snippet, or sensitive path leakage. |
+| `v0.8.0` | RiskEnvelope and agent risk scan beta | Stabilize `helm-risk-scan scan`, RiskEnvelope schema, local preview, EvidencePack export, optional anonymized upload, observe/shadow/enforce mapping, and SDK parity. | Redaction tests prove no raw secret, prompt, command body, source snippet, or sensitive path leakage. |
 | `v0.8.1` | Risk scan hardening | Redaction, schema parity, SDK examples, upload/privacy docs only. | Scan CLI/API, SDK, docs-truth, and RiskEnvelope tests pass. |
 | `v0.9.0` | Release candidate freeze | No net-new features. Refresh OpenAPI, proto, schemas, SDKs, chart, Homebrew, VEX, changelog, release docs, repo manifest, and fanout readiness. | `make quality-release`, `make release-readiness`, and `make release-assets` pass from clean `origin/main`. |
 | `v0.9.1` | RC fix pass | Only release, asset, fanout, token, Homebrew, docs-truth, or contract-drift fixes. | Clean downloaded release verifies across all published surfaces. |
@@ -187,13 +187,12 @@ make release-assets
 
 Current source already has:
 
-- `helm-ai-kernel scan`;
+- `helm-risk-scan scan`;
 - static local scan;
 - receipt projection;
 - RiskEnvelope JSON;
 - Markdown and HTML preview;
 - anonymized scan EvidencePack tar;
-- explicit upload URL plus `--yes` gate;
 - local-only salt file.
 
 Required implementation:
@@ -224,7 +223,7 @@ Required implementation:
 Focused validation:
 
 ```bash
-go test ./core/pkg/riskenvelope ./core/pkg/riskscan ./core/pkg/shadow ./core/cmd/helm-ai-kernel
+(cd tools/riskscan && GOWORK=off go test ./...) && go test ./core/pkg/shadow ./core/cmd/helm-ai-kernel
 make sdk-openapi-check
 make test-sdk-go-standalone
 make test-sdk-ts
@@ -262,7 +261,7 @@ Not allowed:
 Focused validation:
 
 ```bash
-go test ./core/pkg/riskenvelope ./core/pkg/riskscan ./core/cmd/helm-ai-kernel
+(cd tools/riskscan && GOWORK=off go test ./...) && go test ./core/cmd/helm-ai-kernel
 make sdk-openapi-check
 make docs-coverage docs-truth
 make quality-merge

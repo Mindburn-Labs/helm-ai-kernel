@@ -40,8 +40,6 @@ echo ""
 
 # 6. Conformance
 echo "▸ Running conformance..."
-./bin/helm-ai-kernel conform --level L1 --json > "$GOLDEN_DIR/conformance-l1.json" 2>/dev/null || true
-./bin/helm-ai-kernel conform --level L2 --json > "$GOLDEN_DIR/conformance-l2.json" 2>/dev/null || true
 echo ""
 
 echo "══════════════════════════════════════════"

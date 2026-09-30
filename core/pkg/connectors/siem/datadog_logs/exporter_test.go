@@ -31,7 +31,7 @@ func sampleSpan(t *testing.T, verdict string) sdktrace.ReadOnlySpan {
 		EndTime:   time.Date(2026, 4, 28, 10, 0, 0, 1_500_000, time.UTC),
 		Attributes: []attribute.KeyValue{
 			attribute.String(observability.GenAISystem, "anthropic"),
-			attribute.String(observability.GenAIRequestModel, "claude-3-5-sonnet"),
+			attribute.String(observability.GenAIRequestModel, "claude-sonnet-5"),
 			attribute.String(observability.GenAIToolName, "search_web"),
 			attribute.String(observability.GenAIToolCallID, "corr-1"),
 			attribute.String(observability.HelmVerdict, verdict),
@@ -89,7 +89,7 @@ func TestExportSpans_ProducesDatadogLogs(t *testing.T) {
 		t.Errorf("tags missing gen_ai.system: %s", log.Tags)
 	}
 	gen, _ := log.Attributes["gen_ai"].(map[string]any)
-	if gen["request.model"] != "claude-3-5-sonnet" {
+	if gen["request.model"] != "claude-sonnet-5" {
 		t.Errorf("gen_ai.request.model = %v", gen["request.model"])
 	}
 }

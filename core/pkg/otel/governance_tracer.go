@@ -190,7 +190,7 @@ type DecisionEvent struct {
 
 	// GenAI semconv fields (optional). See core/pkg/observability/genai_attrs.go.
 	GenAISystem        string // e.g. "openai", "anthropic", "aws.bedrock"
-	GenAIRequestModel  string // e.g. "gpt-4o", "claude-3-5-sonnet"
+	GenAIRequestModel  string // e.g. "gpt-6-sol", "claude-sonnet-5"
 	GenAIOperationName string // e.g. "chat", "execute_tool"; legacy "tool_call" is mapped on emission
 	GenAIToolCallID    string // upstream tool_call id; mirrors helm correlation_id
 	GenAIInputTokens   int64

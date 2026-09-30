@@ -35,6 +35,10 @@ TARGET_PREFIX = MODULE_PREFIX + "pkg/"
 CMD_PREFIX = MODULE_PREFIX + "cmd/"
 SKIP_DIRS = {"node_modules", "vendor", ".git", "target", "dist"}
 DEFAULT_ALLOWLIST = Path("scripts/ci/dead-packages-allowlist.txt")
+# Importer-less packages with no decision yet, frozen when the nightly went strict
+# (HELM-745). Same format and stale rule as the allowlist, so it only shrinks as
+# the deletion waves remove packages or a KEEP moves a row to the allowlist.
+DEFAULT_FROZEN = Path("scripts/ci/dead-packages-frozen.txt")
 
 GO_LIST_FIELDS = (
     "ImportPath,Name,Dir,GoFiles,TestGoFiles,XTestGoFiles,"
@@ -240,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", default=".", help="repository root (default: cwd)")
     parser.add_argument("--allowlist", default=str(DEFAULT_ALLOWLIST), help="allowlist file; '-' disables it")
+    parser.add_argument("--frozen", default=str(DEFAULT_FROZEN), help="frozen undecided list; '-' disables it")
     parser.add_argument("--format", choices=("text", "json", "markdown"), default="text")
     args = parser.parse_args(argv)
 
@@ -247,6 +252,10 @@ def main(argv: list[str] | None = None) -> int:
     allow_path = None if args.allowlist == "-" else (root / args.allowlist)
     try:
         allowlist = load_allowlist(allow_path)
+        frozen = load_allowlist(None if args.frozen == "-" else (root / args.frozen))
+        if overlap := sorted(set(allowlist) & set(frozen)):
+            raise ValueError(f"packages both allowlisted and frozen: {', '.join(overlap)}")
+        allowlist.update({pkg: f"frozen, undecided: {reason}" for pkg, reason in frozen.items()})
         findings, summary = census(root, allowlist)
     except (RuntimeError, ValueError) as exc:
         print(f"dead-packages: {exc}", file=sys.stderr)

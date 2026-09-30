@@ -47,7 +47,7 @@ and agent config files:
 
 ```bash
 mkdir -p out
-helm-ai-kernel scan \
+helm-risk-scan scan \
   --path . \
   --risk-envelope out/risk-envelope.json \
   --preview out/risk-report.md

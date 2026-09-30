@@ -62,7 +62,7 @@ EXTERNAL_MUTATION_MARKERS = (
     "push: true",
     "pypa/gh-action-pypi-publish@",
     "run: cargo publish",
-    "slsa-framework/slsa-github-generator/",
+    "uses: slsa-framework/slsa-github-generator/",
     "softprops/action-gh-release@",
 )
 
@@ -115,6 +115,43 @@ PROTECTED_SECRET_ENVIRONMENTS = {
 
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
+    def test_pre_release_registry_receipt_waits_without_bypassing_failure(self) -> None:
+        job = self.job("version-status")
+        self.assertIn("timeout-minutes: 25", job)
+        self.assertIn("--npm-propagation-timeout 900", job)
+        self.assertNotIn("--report", job)
+        self.assertNotIn("continue-on-error", job)
+        self.assertNotIn("|| true", job)
+        for surface in ("ghcr-image", "ghcr-chart", "npm-sdk", "pypi-sdk", "crates-sdk", "go-proxy-sdk"):
+            self.assertIn(f"--only {surface}", job)
+
+    def test_slsa_is_verified_before_github_publication(self) -> None:
+        producer = self.job("slsa-provenance")
+        self.assertIn("generator_generic_slsa3.yml@v2.1.0", producer)
+        self.assertIn("upload-assets: false", producer)
+        self.assertNotIn("github-release", self.job_needs("slsa-provenance"))
+        self.assertIn("verify-slsa", self.job_needs("github-release"))
+        self.assertIn("slsa-provenance", self.job_needs("verify-slsa"))
+        for publisher in ("container", "go-sdk-tag", "npm-sdk", "python-sdk",
+                          "crates-sdk", "maven-sdk", "console-release-assets"):
+            self.assertIn("verify-slsa", self.job_needs(publisher))
+        verifier = self.job("verify-slsa")
+        for marker in ("slsa-verifier verify-artifact dist/SHA256SUMS.txt",
+                       '--source-tag "$GITHUB_REF_NAME"',
+                       '--certificate-github-workflow-sha "$GITHUB_SHA"',
+                       '--certificate-github-workflow-ref "$GITHUB_REF"',
+                       '--certificate-github-workflow-repository "$GITHUB_REPOSITORY"',
+                       "--certificate-oidc-issuer https://token.actions.githubusercontent.com",
+                       "generator_generic_slsa3.yml@refs/tags/v2.1.0",
+                       "sha256sum --check SHA256SUMS.txt"):
+            self.assertIn(marker, verifier)
+        self.assertNotIn("continue-on-error", verifier)
+        self.assertNotIn("|| true", verifier)
+        self.assertIn("python3 scripts/release/check_docs_readiness.py",
+                      self.job("release-preflight"))
+        self.assertIn("commits/v2.1.0", self.job("release-preflight"))
+        self.assertIn("f7dd8c54c2067bafc12ca7a55595d5ee9b75204a", self.job("release-preflight"))
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -210,6 +247,42 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                 seen.add(need)
                 pending.extend(self.job_needs(need))
         return seen
+
+    def test_each_image_build_labels_its_exact_source(self) -> None:
+        container = self.job("container")
+        for name in ("Build and push main image", "Build and push slim image"):
+            match = re.search(
+                rf"^        name: {re.escape(name)}\n(?P<body>.*?)(?=^      -|\Z)",
+                container, re.MULTILINE | re.DOTALL,
+            )
+            self.assertIsNotNone(match, f"missing {name} step")
+            assert match is not None
+            build = match.group("body")
+            self.assertIn("org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}", build)
+            self.assertIn("org.opencontainers.image.revision=${{ github.sha }}", build)
+            self.assertIn("org.opencontainers.image.version=${{ github.ref_name }}", build)
+
+    def test_images_have_signed_exact_digest_provenance(self) -> None:
+        container = self.job("container")
+        self.assertIn("attestations: write", container)
+        for variant, push_id in (("main", "push"), ("slim", "push-slim")):
+            attestation = self.step(container, f"Attest {variant} image provenance")
+            self.assertIn("actions/attest-build-provenance@", attestation)
+            self.assertIn("subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}", attestation)
+            self.assertIn("subject-digest: ${{ steps." + push_id + ".outputs.digest }}", attestation)
+            self.assertIn("push-to-registry: true", attestation)
+            self.assertNotIn("continue-on-error", attestation)
+        verification = self.step(container, "Verify image provenance")
+        for binding in (
+            'oci://${REGISTRY}/${IMAGE_NAME}@${digest}',
+            '--repo "${GITHUB_REPOSITORY}"',
+            'release.yml@${GITHUB_REF}',
+            '--source-digest "${GITHUB_SHA}"',
+            '--source-ref "${GITHUB_REF}"',
+            '--predicate-type https://slsa.dev/provenance/v1',
+        ):
+            self.assertIn(binding, verification)
+        self.assertIn("container", self.transitive_needs("github-release"))
 
     def test_release_has_no_human_or_single_attempt_gate(self) -> None:
         self.assertNotIn("release-authority", self.job_blocks)
@@ -409,11 +482,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             "maven-sdk",
             "console-release-assets",
         ):
-            self.assertIn(
-                "needs: [binaries, console-local-sidecar]",
-                self.job(publisher),
-                publisher,
-            )
+            self.assertTrue({"binaries", "console-local-sidecar"}.issubset(
+                self.job_needs(publisher)), publisher)
 
         self.assertIn("needs: container", self.job("cosign-container"))
         self.assertIn("container", self.job("chart"))
@@ -444,10 +514,8 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_console_assets_are_verified_before_publication(self) -> None:
         console_assets = self.job("console-release-assets")
-        self.assertIn(
-            "needs: [binaries, console-local-sidecar]",
-            console_assets,
-        )
+        self.assertTrue({"binaries", "console-local-sidecar"}.issubset(
+            self.job_needs("console-release-assets")))
         self.assertNotIn("github-release", console_assets)
         self.assertNotIn("always()", console_assets)
         self.assertIn("make release-binaries-reproducible", console_assets)

@@ -13,7 +13,7 @@ async function main() {
   console.log('=== Chat Completions ===');
   try {
     const res = await helm.chatCompletions({
-      model: 'gpt-4',
+      model: 'gpt-6-sol',
       messages: [{ role: 'user', content: 'List files in /tmp' }],
     });
     console.log('Response:', res.choices[0]?.message?.content ?? 'no content');

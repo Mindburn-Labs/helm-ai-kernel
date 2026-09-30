@@ -13,13 +13,12 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel"
 )
 
-// statePath returns the path to the freeze state file.
-func freezeStatePath() string {
-	dir := os.Getenv("HELM_DATA_DIR")
-	if dir == "" {
-		dir = "data"
-	}
-	return filepath.Join(dir, "freeze_state.json")
+// freezeStatePath returns the freeze state file in dataDir. An empty dataDir
+// means HELM_DATA_DIR, then ./data. A server started with --data-dir reads its
+// freeze state from that directory, so `freeze --data-dir` must name the same
+// one.
+func freezeStatePath(dataDir string) string {
+	return filepath.Join(normalizedDataDir(dataDir), "freeze_state.json")
 }
 
 // persistedFreezeState is the on-disk representation of freeze state.
@@ -30,8 +29,8 @@ type persistedFreezeState struct {
 	Receipts []kernel.FreezeReceipt `json:"receipts"`
 }
 
-func loadFreezeState() (*persistedFreezeState, error) {
-	data, err := os.ReadFile(freezeStatePath())
+func loadFreezeState(dataDir string) (*persistedFreezeState, error) {
+	data, err := os.ReadFile(freezeStatePath(dataDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &persistedFreezeState{}, nil
@@ -45,8 +44,9 @@ func loadFreezeState() (*persistedFreezeState, error) {
 	return &state, nil
 }
 
-func saveFreezeState(state *persistedFreezeState) error {
-	dir := filepath.Dir(freezeStatePath())
+func saveFreezeState(dataDir string, state *persistedFreezeState) error {
+	path := freezeStatePath(dataDir)
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
@@ -54,16 +54,16 @@ func saveFreezeState(state *persistedFreezeState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(freezeStatePath(), data, 0600)
+	return os.WriteFile(path, data, 0600)
 }
 
 // runFreezeCmd implements `helm-ai-kernel freeze` and `helm-ai-kernel unfreeze`.
 //
 // Usage:
 //
-//	helm-ai-kernel freeze   --principal <who>  [--json]
-//	helm-ai-kernel unfreeze --principal <who>  [--json]
-//	helm-ai-kernel freeze   --status           [--json]
+//	helm-ai-kernel freeze   --principal <who>  [--data-dir DIR] [--json]
+//	helm-ai-kernel unfreeze --principal <who>  [--data-dir DIR] [--json]
+//	helm-ai-kernel freeze   --status           [--data-dir DIR] [--json]
 func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 	cmd := flag.NewFlagSet("freeze", flag.ContinueOnError)
 	cmd.SetOutput(stderr)
@@ -72,8 +72,10 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 		principal  string
 		status     bool
 		jsonOutput bool
+		dataDir    string
 	)
 	cmd.StringVar(&principal, "principal", "", "Principal performing the action (REQUIRED for freeze/unfreeze)")
+	cmd.StringVar(&dataDir, "data-dir", "", "Kernel data directory holding freeze_state.json; use the server's --data-dir (default $HELM_DATA_DIR, then ./data)")
 	cmd.BoolVar(&status, "status", false, "Show freeze status only")
 	cmd.BoolVar(&jsonOutput, "json", false, "Output as JSON (alias for --format=json)")
 	formatFlag := cliui.RegisterFormat(cmd, cliui.FormatText)
@@ -85,7 +87,7 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 
 	// Status mode
 	if status || action == "freeze-status" {
-		state, err := loadFreezeState()
+		state, err := loadFreezeState(dataDir)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "Error loading freeze state: %v\n", err)
 			return 2
@@ -112,7 +114,7 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 	}
 
 	// Load existing state
-	state, err := loadFreezeState()
+	state, err := loadFreezeState(dataDir)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error loading freeze state: %v\n", err)
 		return 2
@@ -151,7 +153,7 @@ func runFreezeCmd(args []string, stdout, stderr io.Writer, action string) int {
 
 	state.Receipts = append(state.Receipts, *receipt)
 
-	if err := saveFreezeState(state); err != nil {
+	if err := saveFreezeState(dataDir, state); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error saving freeze state: %v\n", err)
 		return 2
 	}

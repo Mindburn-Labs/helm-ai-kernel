@@ -3,50 +3,13 @@ package gates
 
 import "github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/conform"
 
-// RegistryOptions configures gate registration for callers with external trust roots.
-type RegistryOptions struct {
-	G1ReceiptVerifier func(data []byte, sig string) error
-}
-
-// DefaultEngine returns a conformance engine pre-loaded with all gates
-// in canonical registration order (G0 → G12, G13–G15 L3, GX extensions).
-// This is the standard way to create an engine for CLI or CI usage.
+// DefaultEngine returns a conformance engine with the one gate that still runs:
+// G0, build identity. The release pipeline signs a G0 report
+// (`make conformance-release-report`). G1–G15 and the GX gates were retired in
+// HELM-756: no EvidencePack could pass G1 and G7 together (audit 08-01), and
+// several gates passed vacuously or by probing an in-process library.
 func DefaultEngine() *conform.Engine {
-	return DefaultEngineWithOptions(RegistryOptions{})
-}
-
-// DefaultEngineWithOptions returns a conformance engine with caller-supplied
-// trust-root integrations. Missing security verifiers remain fail-closed.
-func DefaultEngineWithOptions(opts RegistryOptions) *conform.Engine {
 	e := conform.NewEngine()
-
-	// L1/L2 core gates
 	e.RegisterGate(&G0BuildIdentity{})
-	e.RegisterGate(&G1ProofReceipts{Verifier: opts.G1ReceiptVerifier})
-	e.RegisterGate(&G2Replay{})
-	e.RegisterGate(&G2ASchemaFirst{})
-	e.RegisterGate(&G3Policy{})
-	e.RegisterGate(&G3ABudget{})
-	e.RegisterGate(&G4Secrets{})
-	e.RegisterGate(&G5ToolTrust{})
-	e.RegisterGate(&G6Taint{})
-	e.RegisterGate(&G7Incident{})
-	e.RegisterGate(&G8HITL{})
-	e.RegisterGate(&G9Jurisdiction{})
-	e.RegisterGate(&G11Operability{})
-	e.RegisterGate(&G12SupplyChain{})
-
-	// L3 gates (higher assurance)
-	e.RegisterGate(&G13HSM{})
-	e.RegisterGate(&G14BundleIntegrity{})
-	e.RegisterGate(&G15Condensation{})
-
-	// Extension gates
-	e.RegisterGate(&GXTenantIsolation{})
-	e.RegisterGate(&GXEnvelopeBound{})
-	e.RegisterGate(&GXSDKDrift{})
-	e.RegisterGate(&GXThreatScan{})
-	e.RegisterGate(&GXDelegation{})
-
 	return e
 }

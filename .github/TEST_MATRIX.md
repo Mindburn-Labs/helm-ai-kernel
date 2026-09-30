@@ -37,23 +37,21 @@ gh api /repos/Mindburn-Labs/helm-ai-kernel/rulesets/16024605 \
         | {type, parameters}'
 ```
 
-As inspected on 2026-08-03 the ruleset is `active` on `refs/heads/main`,
-requires a pull request with all review threads resolved (and zero required
-approvals), requires linear history, blocks deletion and non-fast-forward
-pushes, and requires these 18 status checks in strict mode, so a branch must
-also be up to date with `main` before it can merge:
+The ruleset is `active` on `refs/heads/main` and requires a pull request with
+all review threads resolved (and zero required approvals), linear history, and
+no deletion or non-fast-forward pushes.
 
-`Quality PR profile`, `hygiene`, `kernel`, `contract-drift`, `python-sdk`,
-`ts-sdk`, `rust-sdk`, `java-sdk`, `deployment-smoke`, `kind-smoke`,
-`release-smoke`, `Coverage and truth`, `OpenSSF Scorecard`, `CodeQL (go)`,
-`CodeQL (javascript-typescript)`, `CodeQL (python)`, `CodeQL (java-kotlin)`,
-`Rust audit`.
+CI v2 (2026-09-24) reports one required check, `ci / gate`, from
+`.github/workflows/ci.yml`. It runs `make check`, which is the `merge` quality
+profile with every gate blocking, plus the diff-aware dependency scan. The
+ruleset should require `ci / gate` alone; the 18 per-job contexts it listed
+before (`Quality PR profile`, `kernel`, the SDK jobs, `Coverage and truth`,
+`OpenSSF Scorecard`, the CodeQL matrix, `Rust audit` and others) are no longer
+reported.
 
 These are not waivable. The ruleset's `bypass_actors` list is empty, so no
 role — maintainer, admin, or app — can merge past a red required check.
-Advisory suppression operates inside the quality profiles, on individual checks
-that have not been promoted to blocking; it is not a route around the contexts
-above.
+`make check` runs with `--strict`, so no gate in the merge profile is advisory.
 
 Nightly runs `make quality-nightly`. New noisy gates remain Advisory until
 their baselines are clean or `QUALITY_STRICT=1` promotes them to blocking.

@@ -2,6 +2,9 @@
 
 This sequence shows the intended OSS flow using typed HELM Acton actions.
 
+> Status: preview. The Acton connector is not linked into `core/cmd/helm-ai-kernel`,
+> so this flow does not run through a shipped binary today (`controls.yaml` CTL-045).
+
 1. An agent generates a Tolk contract.
 2. HELM runs:
 

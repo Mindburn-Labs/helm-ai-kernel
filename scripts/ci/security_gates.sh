@@ -183,7 +183,12 @@ PY
     # Scan exactly the tracked files, at their working-tree content.
     local tree="$WORK/tree"
     mkdir -p "$tree"
-    (cd "$ROOT" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$tree"
+    # bsdtar can close an archive pipe after reading its end marker while the
+    # writer is still flushing padding, producing a false Write error. Keep
+    # archive creation and extraction separate so both failures remain visible.
+    local archive="$WORK/tracked-tree.tar"
+    (cd "$ROOT" && git ls-files -z | tar --null -T - -cf "$archive")
+    tar -xf "$archive" -C "$tree"
     (cd "$tree" && "$gitleaks" dir . --config "$config" --no-banner --log-level error \
         --report-format json --report-path "$WORK/gitleaks.json" --exit-code 0)
     python3 "$FINDINGS" gitleaks-keys "$WORK/gitleaks.json" >"$WORK/gitleaks.keys"

@@ -250,38 +250,6 @@ func runWorkstationEvidenceCmd(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runWorkstationCertifyCmd(args []string, stdout, stderr io.Writer) int {
-	cmd := flag.NewFlagSet("workstation certify", flag.ContinueOnError)
-	cmd.SetOutput(stderr)
-	var fixtures, adapterID, mode string
-	var jsonOut bool
-	cmd.StringVar(&fixtures, "fixtures", defaultWorkstationFixtureRoot(), "Workstation fixture root")
-	cmd.StringVar(&adapterID, "adapter", "workstation-manifest-adapter", "Adapter identifier")
-	cmd.StringVar(&mode, "mode", workstation.CertificationHighRiskEffectCapable, "observe-only, enforceable, or high-risk-effect-capable")
-	cmd.BoolVar(&jsonOut, "json", false, "Print JSON")
-	if err := cmd.Parse(args); err != nil {
-		return 2
-	}
-	result := workstation.CertifyAdapterFixtures(adapterID, fixtures, mode)
-	if jsonOut {
-		data, _ := json.MarshalIndent(result, "", "  ")
-		_, _ = fmt.Fprintln(stdout, string(data))
-	} else {
-		_, _ = fmt.Fprintf(stdout, "%sWorkstation Adapter Certification%s\n", ColorBold, ColorReset)
-		_, _ = fmt.Fprintf(stdout, "  adapter:   %s\n", result.AdapterID)
-		_, _ = fmt.Fprintf(stdout, "  requested: %s\n", result.Requested)
-		_, _ = fmt.Fprintf(stdout, "  certified: %s\n", result.CertifiedAs)
-		_, _ = fmt.Fprintf(stdout, "  passed:    %v\n", result.Passed)
-		for _, check := range result.Checks {
-			_, _ = fmt.Fprintf(stdout, "  %s: %s\n", check.ID, check.Status)
-		}
-	}
-	if !result.Passed {
-		return 1
-	}
-	return 0
-}
-
 func buildDecisionFromFlags(name string, args []string, stderr io.Writer) (*contracts.WorkstationPolicyDecisionReceipt, string, string, bool, error) {
 	cmd := flag.NewFlagSet(name, flag.ContinueOnError)
 	cmd.SetOutput(stderr)
@@ -465,10 +433,6 @@ func splitInputs(input string) []string {
 		}
 	}
 	return out
-}
-
-func defaultWorkstationFixtureRoot() string {
-	return filepath.Clean(filepath.Join("..", "fixtures", "workstation"))
 }
 
 func firstNonEmptyString(values ...string) string {

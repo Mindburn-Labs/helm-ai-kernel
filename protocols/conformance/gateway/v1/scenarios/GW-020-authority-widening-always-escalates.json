@@ -1,0 +1,291 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-020",
+  "title": "Every helm.authority.* widening escalates, whatever its risk row or the mandate's approval_required",
+  "rule": {
+    "statement": "An authority change widens authority, so it always needs a distinct human approver with step-up (§4.1 item 7, §10.1): a low-risk helm.authority.* effect that the mandate does not list in approval_required is ESCALATED with APPROVAL_REQUIRED, never ADMITTED. The requester cannot approve it, a distinct human's approval fails closed with STEP_UP_REQUIRED until step-up exists, and it stays ESCALATED and undispatchable. helm.authority.lift is created only through the Lift RPC: a Propose of it is invalid_argument (SCHEMA_VIOLATION).",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Stop, Lift and jobs (slice 3b)"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "rpc Lift("
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "[reason_code: STEP_UP_REQUIRED]"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.repository.get",
+        "risk": "low"
+      },
+      {
+        "effect_type": "github.branch.create_from_changes",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "github.pull_request.create_draft",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "helm.authority.grant",
+        "risk": "low"
+      },
+      {
+        "effect_type": "helm.authority.lift",
+        "risk": "low"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.repository.get",
+          "github.branch.create_from_changes",
+          "github.pull_request.create_draft"
+        ],
+        "targets": [
+          "github.com/Mindburn-Labs/example"
+        ],
+        "condition": "input.effect_type == \"github.repository.get\" || input.args.head.startsWith(\"helm/\")",
+        "approval_required": [
+          "github.pull_request.create_draft"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        },
+        "limits": [
+          {
+            "unit": "effects",
+            "window": "day",
+            "value": 5
+          }
+        ]
+      },
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "helm.authority.grant",
+          "helm.authority.lift"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [
+        "github.repository.get",
+        "github.branch.create_from_changes",
+        "github.pull_request.create_draft"
+      ],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "execute-runner": {
+      "scope": "helm.gateway.execute",
+      "sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "execute-runner"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    },
+    "approve-self": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "decide-a",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:grant}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-b": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "decide-b",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:grant}}",
+          "action": "approve"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "label": "grant",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "grant-1",
+        "effect": {
+          "effect_type": "helm.authority.grant",
+          "target": "tenant-a",
+          "arguments_json": {
+            "principal": "agent-a"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "LOW",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "lift-1",
+        "effect": {
+          "effect_type": "helm.authority.lift",
+          "target": "stop:0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d",
+          "arguments_json": {
+            "schema": "helm.authority.lift.v1",
+            "stop_id": "0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d"
+          }
+        }
+      },
+      "expect": {
+        "error": {
+          "code": "invalid_argument",
+          "reason_code": "SCHEMA_VIOLATION"
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-self",
+      "request": {
+        "attempt_id": "{{attempt_id:grant}}",
+        "approval_digest": "{{approval_digest:grant}}",
+        "reason": "mine"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "APPROVER_NOT_DISTINCT"
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-b",
+      "request": {
+        "attempt_id": "{{attempt_id:grant}}",
+        "approval_digest": "{{approval_digest:grant}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "rpc": "GetAttempt",
+      "token": "read-a",
+      "request": {
+        "attempt_id": "{{attempt_id:grant}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "permit": "NONE"
+        }
+      }
+    },
+    {
+      "rpc": "Dispatch",
+      "token": "execute-runner",
+      "request": {
+        "attempt_id": "{{attempt_id:grant}}"
+      },
+      "expect": {
+        "error": {
+          "code": "failed_precondition",
+          "reason_code": ""
+        },
+        "adapter_calls": {
+          "dispatch": 0,
+          "observe": 0
+        }
+      }
+    }
+  ]
+}

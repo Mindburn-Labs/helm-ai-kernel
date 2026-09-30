@@ -786,6 +786,142 @@
       "domain": "capability",
       "description": "Irreversible effect class cannot dispatch without an authoritative approval integration",
       "since": "1.7.0"
+    },
+    {
+      "code": "PRECONDITION_FAILED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "A precondition the effect type declares does not hold, so no attempt was created",
+      "since": "1.8.0"
+    },
+    {
+      "code": "READBACK_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The adapter's read-back of the provider does not match the proposed effect, so the outcome is FAILED",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PERMIT_ARGUMENT_MISMATCH",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The arguments an adapter was about to send are not the bytes the permit's argument digest covers",
+      "since": "1.8.0",
+      "finality": "class_forbidden",
+      "disclosure": "none"
+    },
+    {
+      "code": "PROVIDER_CREDENTIAL_REJECTED",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The connection's credential is unavailable, or the provider rejected it as invalid, revoked or lacking permission",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PROVIDER_RESPONSE_TOO_LARGE",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "A provider response exceeded the adapter's size limit and was not read",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PROVIDER_ERROR",
+      "applies_to": ["DENY"],
+      "domain": "connector",
+      "description": "The provider failed or refused the call for a reason other than its credential",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PRINCIPAL_INACTIVE",
+      "applies_to": ["DENY"],
+      "domain": "identity",
+      "description": "The requesting principal is unknown to the tenant or disabled",
+      "since": "1.8.0",
+      "finality": "class_forbidden"
+    },
+    {
+      "code": "MANDATE_INACTIVE",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "No active mandate held by the principal covers the effect, or a mandate of its chain is revoked",
+      "since": "1.8.0",
+      "finality": "ungranted"
+    },
+    {
+      "code": "MANDATE_OUTSIDE_VALIDITY",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "A mandate of the chain is outside its validity window",
+      "since": "1.8.0",
+      "finality": "instance_context"
+    },
+    {
+      "code": "EFFECT_OUT_OF_SCOPE",
+      "applies_to": ["DENY"],
+      "domain": "delegation",
+      "description": "A mandate of the chain does not cover the effect type or target, or the effect type has no control row",
+      "since": "1.8.0",
+      "finality": "ungranted"
+    },
+    {
+      "code": "PER_CALL_LIMIT",
+      "applies_to": ["DENY"],
+      "domain": "budget",
+      "description": "The effect's amount exceeds a per-call limit of the mandate chain",
+      "since": "1.8.0",
+      "finality": "instance_parameter"
+    },
+    {
+      "code": "ARITHMETIC_OVERFLOW",
+      "applies_to": ["DENY"],
+      "domain": "budget",
+      "description": "An amount or counter total overflows a 64-bit integer",
+      "since": "1.8.0",
+      "finality": "instance_parameter"
+    },
+    {
+      "code": "IDEMPOTENCY_CONFLICT",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "The idempotency key was already used with a different request",
+      "since": "1.8.0"
+    },
+    {
+      "code": "APPROVER_NOT_DISTINCT",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "The approver is the requester; an approval needs a distinct principal",
+      "since": "1.8.0",
+      "finality": "class_forbidden"
+    },
+    {
+      "code": "APPROVAL_REJECTED",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "A distinct human approver rejected the escalated effect",
+      "since": "1.8.0"
+    },
+    {
+      "code": "STEP_UP_REQUIRED",
+      "applies_to": ["DENY"],
+      "domain": "approval",
+      "description": "Approving a high-risk, irreversible or authority-widening effect needs a step-up assertion the request did not carry",
+      "since": "1.8.0",
+      "finality": "ungranted"
+    },
+    {
+      "code": "AUTHORITY_CHANGED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "An authority row the permit was issued under changed before the dispatch claim; the permit is voided and the effect must be proposed again",
+      "since": "1.8.0"
+    },
+    {
+      "code": "PERMIT_EXPIRED",
+      "applies_to": ["DENY"],
+      "domain": "operations",
+      "description": "The permit expired before the dispatch claim; it is voided and the effect must be proposed again",
+      "since": "1.8.0"
     }
   ]
 }

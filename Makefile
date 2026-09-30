@@ -1,6 +1,7 @@
-.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres test-effect-reservation-postgres verify-receipt-v5-vectors verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-evidence-pack-successor-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation tee-collateral-verify test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
+.PHONY: build test test-cli test-race test-approval-ceremony test-approval-ceremony-postgres test-receipt-store-postgres-migration test-connector-release-authority-postgres test-effect-reservation-postgres verify-receipt-v5-vectors verify-approval-ceremony-vectors verify-generated-spec-approval-ceremony-vectors verify-connector-release-authority-vectors verify-effect-close-vectors verify-effect-disposition-vectors verify-evidence-pack-successor-vectors verify-boundary-profile-vectors verify-update-bundle-vectors test-sdk-go-standalone test-sdk-ts test-platform test-sdk-py test-sdk-rust test-sdk-java sdk-openapi-check sdk-gen-check sdk-manifest-verify test-sdk-manifest sdk-examples-smoke verify-fixtures verify-presentation test-all bench bench-report lint proto-lint proto-breaking openapi-breaking docker-verify release-readiness crucible proxy docker docker-up docker-smoke compose-smoke helm-chart-smoke kind-smoke deployment-smoke release-smoke version-drift version-drift-report version-drift-published version-status prepare-version sbom vex provenance onboard demo-cli mcp-pack mcp-install release-binaries release-binaries-reproducible release-assets build-release release-all verify-boundary verify-cosign bench-pin codegen codegen-go codegen-python codegen-ts codegen-java codegen-rust codegen-check quality-pr quality-merge quality-release quality-nightly quality-list quality-explain quality-self-test quality-typecheck quality-contracts quality-security quality-runbooks quality-mutation quality-flake quality-impact clean docs-coverage docs-truth docs-openapi-parity launch-record-assets real-use-assets launch-release-dry-run launch-ready conformance-release-report conformance-release-gate
 .PHONY: test-generated-spec-approval-ceremony-postgres
-.PHONY: contract-breaking-release test-contract-breaking
+.PHONY: contract-breaking-release test-contract-breaking release-rehearsal test-release-rehearsal
+.PHONY: check
 
 # VERSION is source-controlled release truth. Tag-triggered workflows must
 # check that GITHUB_REF_NAME equals v$(VERSION) before any publish step.
@@ -18,8 +19,11 @@ build:
 	cd core && go build -ldflags "$(LDFLAGS)" -o ../bin/helm-ai-kernel ./cmd/helm-ai-kernel/
 	cp bin/helm-ai-kernel bin/helm
 
+# test also enforces the 40% statement-coverage floor on core/pkg.
 test:
-	cd core && go test ./pkg/... ./cmd/release-permit-verify/... ./cmd/receipt_verify/... -count=1
+	cd core && go test ./pkg/... -count=1 -covermode=atomic -coverprofile=coverage.out
+	cd core && go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/, "", $$3); printf("core/pkg coverage %.1f%%\n", $$3); if ($$3 + 0 < 40) { print "coverage below the 40.0% floor"; exit 1 } }'
+	cd core && go test ./cmd/release-permit-verify/... ./cmd/receipt_verify/... -count=1
 
 test-cli:
 	cd core && go test ./cmd/helm-ai-kernel ./cmd/release-permit-verify -count=1
@@ -38,10 +42,12 @@ test-receipt-store-postgres-migration:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
 	cd core && go test -race ./pkg/store -run '^(TestPostgresReceiptMigrationBackfillsOrRejectsV5DecisionHash|TestPostgresTenantReceiptFiltersPreserveScopeBoundsAndCursor)$$' -count=1
 # postgres-proofs runs every Postgres-gated proof in scripts/ci/postgres-proofs.txt
-# against HELM_TEST_POSTGRES_URL and fails on any skip, failure or short count.
+# and fails on any skip, failure or short count. It uses HELM_TEST_POSTGRES_URL
+# when set, else a disposable PostgreSQL 16 cluster; no PostgreSQL 16 fails it.
+# The postgres-proofs quality gate runs it in `make check`.
 .PHONY: postgres-proofs
 postgres-proofs:
-	bash scripts/ci/postgres_proofs.sh
+	bash scripts/ci/postgres_proofs_gate.sh
 
 test-generated-spec-approval-ceremony-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
@@ -58,7 +64,7 @@ test-effect-reservation-postgres:
 .PHONY: test-tenant-rls-postgres
 test-tenant-rls-postgres:
 	@test -n "$$HELM_TEST_POSTGRES_URL" || (echo "HELM_TEST_POSTGRES_URL is required" && exit 2)
-	cd core && go test -race ./pkg/postgresmigration -run '^(TestKernelTenantTablesHaveForcedRowSecurity|TestTenantRowSecurityCheckDetectsWeakenedTables|TestTenantRowSecurityIsolatesTenantsForARestrictedRole)$$' -count=1 -v
+	cd core && go test -race ./pkg/postgresmigration -run '^(TestKernelTenantTablesHaveForcedRowSecurity|TestPrincipalLookupExceptionIsExact|TestTenantRowSecurityCheckDetectsWeakenedTables|TestTenantRowSecurityIsolatesTenantsForARestrictedRole)$$' -count=1 -v
 
 .PHONY: verify-canonical-json-vectors
 
@@ -177,8 +183,6 @@ verify-fixtures:
 	python3 reference_packs/approval/verify_approval_vectors.py
 	protoc -Iprotocols/proto --descriptor_set_out="$${TMPDIR:-/tmp}/helm-extauthz-v1.pb" protocols/proto/boundary/extauthz/v1/extauthz.proto
 
-tee-collateral-verify:
-	cd core && go test ./pkg/crypto/tee/collateral -count=1
 
 verify-presentation:
 	bash tools/verify-presentation.sh
@@ -275,9 +279,20 @@ release-smoke:
 	bash scripts/ci/release_smoke.sh
 
 version-drift:
+	python3 scripts/release/check_docs_readiness_test.py
 	python3 scripts/release/check_version_drift_test.py
 	python3 scripts/release/prepare_version_test.py
 	python3 scripts/release/check_version_drift.py local
+
+# release-rehearsal checks main against every pre-publish precondition of
+# release.yml for the version the next tag would carry. It exits non-zero only
+# on a defect that blocks any version; pass REHEARSAL_ARGS=--strict to fail on
+# ACTION-NEEDED items as well.
+release-rehearsal:
+	python3 scripts/release/rehearse.py $(REHEARSAL_ARGS)
+
+test-release-rehearsal:
+	python3 scripts/release/rehearse_test.py
 
 version-drift-report:
 	python3 scripts/release/check_version_drift.py --report --write-status version-status.json local
@@ -291,6 +306,13 @@ version-status:
 prepare-version:
 	@test -n "$(PREPARE_VERSION)" || (echo "Usage: make prepare-version VERSION=0.5.6" && exit 2)
 	python3 scripts/release/prepare_version.py "$(PREPARE_VERSION)"
+
+# check is the CI gate: `ci / gate` in .github/workflows/ci.yml runs exactly
+# this on every pull request, merge group and push to main. It runs the merge
+# profile of scripts/ci/quality-gates.json with every gate blocking. CI installs
+# the tools it needs with scripts/ci/install_check_tools.sh.
+check:
+	$(QUALITY) run merge --strict
 
 quality-pr:
 	$(QUALITY) run pr --impact
@@ -506,6 +528,15 @@ bench-pin:
 
 PROTO_DIR := protocols/proto
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto' 2>/dev/null)
+# helm.gateway.v1, the gateway effect API (HELM-751), is served through
+# ConnectRPC (target architecture §11.1), so its Go stubs come from
+# protoc-gen-connect-go, in the same package as the messages, instead of
+# protoc-gen-go-grpc. It has no Python, TypeScript, Java or Rust binding yet:
+# the TS and Python clients are generated for it in their own slice (§11.3),
+# and Java and Rust are being retired (HELM-756). Publishing a gRPC-shaped
+# binding first would freeze a client shape that slice has not chosen.
+CONNECT_PROTO_FILES := $(filter $(PROTO_DIR)/helm/gateway/%,$(PROTO_FILES))
+GRPC_PROTO_FILES := $(filter-out $(CONNECT_PROTO_FILES),$(PROTO_FILES))
 
 codegen: codegen-go codegen-python codegen-ts codegen-java codegen-rust
 
@@ -513,14 +544,17 @@ codegen-go:
 	@mkdir -p sdk/go/gen/kernelv1
 	protoc --go_out=sdk/go/gen --go-grpc_out=sdk/go/gen \
 		--go_opt=paths=source_relative --go-grpc_opt=paths=source_relative \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
+	protoc --go_out=sdk/go/gen --connect-go_out=sdk/go/gen \
+		--go_opt=paths=source_relative --connect-go_opt=paths=source_relative,package_suffix \
+		-I$(PROTO_DIR) $(CONNECT_PROTO_FILES)
 
 codegen-python:
 	@mkdir -p sdk/python/helm_sdk/generated
 	python -m grpc_tools.protoc --python_out=sdk/python/helm_sdk/generated \
 		--grpc_python_out=sdk/python/helm_sdk/generated \
 		--pyi_out=sdk/python/helm_sdk/generated \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
 
 codegen-ts:
 	@mkdir -p sdk/ts/src/generated
@@ -528,12 +562,12 @@ codegen-ts:
 	protoc --plugin=./sdk/ts/node_modules/.bin/protoc-gen-ts_proto \
 		--ts_proto_out=sdk/ts/src/generated \
 		--ts_proto_opt=outputServices=grpc-js \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
 
 codegen-java:
 	@mkdir -p sdk/java/src/main/java
 	protoc --java_out=sdk/java/src/main/java \
-		-I$(PROTO_DIR) $(PROTO_FILES)
+		-I$(PROTO_DIR) $(GRPC_PROTO_FILES)
 	@find sdk/java/src/main/java -name '*.java' -print0 | xargs -0 perl -pi -e 's/[ \t]+$$//'
 
 codegen-rust:
@@ -596,10 +630,24 @@ CONCEPT_RANGE ?= origin/main..HEAD
 # inv-check self-tests against synthetic bad input before it reads
 # HELM_INVARIANTS.md, and fails itself if a control comes back wrong.
 inv-check:
-	go run tools/invcheck/main.go verify
+	cd tools/invcheck && GOWORK=off go run . verify -root ../..
 
 concept-gate:
-	go run tools/invcheck/main.go concept-gate -range "$(CONCEPT_RANGE)"
+	cd tools/invcheck && GOWORK=off go run . concept-gate -root ../.. -range "$(CONCEPT_RANGE)"
+
+.PHONY: controls controls-check
+
+# controls.yaml is the control registry (binding rule R1). `controls` rewrites
+# HELM_INVARIANTS.md and coverage-map.json from it. `controls-check` resolves
+# the invariant hints, self-tests on planted registry entries, then fails on an
+# invalid entry, an enforced entry point no shipped binary reaches, a named test
+# `go test -list` does not report, a removal mutation the tests survive, or a
+# generated file that differs from the registry.
+controls:
+	cd tools/invcheck && GOWORK=off go run . controls -root ../.. -write
+
+controls-check:
+	cd tools/invcheck && GOWORK=off go run . verify -root ../.. && GOWORK=off go run . controls -root ../..
 
 .PHONY: launchpad-promotion-check
 launchpad-promotion-check:

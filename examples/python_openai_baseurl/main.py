@@ -21,7 +21,7 @@ def main():
     print("=== Chat Completions ===")
     try:
         res = helm.chat_completions(ChatCompletionRequest(
-            model="gpt-4",
+            model="gpt-6-sol",
             messages=[ChatMessage(role="user", content="List files in /tmp")],
         ))
         print(f"Response: {res.choices[0].message.content if res.choices else 'no choices'}")

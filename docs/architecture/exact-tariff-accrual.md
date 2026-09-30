@@ -25,9 +25,7 @@ receipts at the existing receipt paths, with the bound tariff in
 ledger bindings. Legacy wire bytes and hashes remain unchanged. The cent-only
 savings comparison refuses v2 rather than reporting a zero-cent saving.
 
-`ExactSpendBalance` supplies checked reservation and settlement arithmetic.
-It is a value type, not a store or authority grant. Control Plane owns the
-PostgreSQL transaction across the existing company account, project budget,
+Control Plane owns checked balance transitions and the PostgreSQL transaction across the existing company account, project budget,
 agent envelope, reservation, receipts and ledger. Admission, idempotency and
 recovery remain separate from these arithmetic checks.
 

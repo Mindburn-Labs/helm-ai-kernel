@@ -37,51 +37,27 @@ func exactSettlementFixture(t *testing.T, r *UsageReceiptV2) *SettlementReceiptV
 	return s
 }
 
-func TestExactAccrualConservesOneThousandTinyCalls(t *testing.T) {
+func TestExactTariffConservesOneThousandTinyCalls(t *testing.T) {
 	p := exactPriceFixture()
-	b := ExactSpendBalance{LimitNanoCents: 2 * NanoCentsPerCent}
+	var total int64
 	for i := 0; i < 1000; i++ {
-		var err error
-		b, err = b.Reserve(NanoCentsPerCent)
-		if err != nil {
-			t.Fatal(err)
-		}
 		amount, err := p.ExactCostNanoCents(1, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		b, err = b.Settle(NanoCentsPerCent, amount)
-		if err != nil {
-			t.Fatal(err)
-		}
+		total += amount
 	}
 	batch, err := p.ExactCostNanoCents(1000, 0)
-	if err != nil || b.ConsumedNanoCents != 4_200_000 || b.ConsumedNanoCents != batch || b.ReservedNanoCents != 0 {
-		t.Fatalf("accrual lost precision: %+v batch=%d err=%v", b, batch, err)
+	if err != nil || total != 4_200_000 || total != batch {
+		t.Fatalf("tariff lost precision: total=%d batch=%d err=%v", total, batch, err)
 	}
 }
 
-func TestExactBalanceRejectsOverflowOverageAndDoubleRelease(t *testing.T) {
+func TestExactCentConversionRejectsOverflow(t *testing.T) {
 	for _, cents := range []int64{-1, math.MaxInt64/NanoCentsPerCent + 1} {
 		if _, err := CentsToNanoCents(cents); err == nil {
 			t.Fatal("invalid conversion accepted")
 		}
-	}
-	b := ExactSpendBalance{LimitNanoCents: math.MaxInt64, ConsumedNanoCents: math.MaxInt64 - 100, ReservedNanoCents: 100}
-	if next, err := b.Reserve(1); err == nil || next != b {
-		t.Fatal("reservation overflow changed state")
-	}
-	for _, pair := range [][2]int64{{101, 1}, {100, 101}, {0, 0}, {100, -1}} {
-		if next, err := b.Settle(pair[0], pair[1]); err == nil || next != b {
-			t.Fatal("invalid settlement changed state")
-		}
-	}
-	next, err := b.Settle(100, 0)
-	if err != nil || next.ReservedNanoCents != 0 || next.ConsumedNanoCents != b.ConsumedNanoCents {
-		t.Fatal("zero accrual did not release hold")
-	}
-	if _, err := next.Settle(100, 0); err == nil {
-		t.Fatal("double release accepted")
 	}
 }
 

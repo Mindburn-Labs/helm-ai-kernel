@@ -650,17 +650,6 @@ func (p *Plan) checkTree() error {
 	return nil
 }
 
-// Holders returns the holders of the plan's mandates, each once.
-func (p *Plan) Holders() []string {
-	var out []string
-	for _, m := range p.Mandates {
-		if !slices.Contains(out, m.Holder) {
-			out = append(out, m.Holder)
-		}
-	}
-	return out
-}
-
 // object is a JSON object read by exact key: encoding/json would fold case
 // ("Head", "HEAD" and "ſchema" match "head" and "schema"), so a plan is read
 // through its raw members and never through struct tags.

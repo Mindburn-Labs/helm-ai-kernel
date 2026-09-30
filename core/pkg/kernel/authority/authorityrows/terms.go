@@ -14,7 +14,7 @@
 // through the gateway (HELM-751), which replaces the argument with the
 // verified approval record.
 //
-// The schema is schema.sql (SchemaDDL). The effect gateway's admission
+// The schema is schema.sql (mandates.SchemaDDL). The effect gateway's admission
 // transaction (HELM-751, HELM-750 s2b, core/pkg/gateway/admission) reads these
 // rows: it locks them, evaluates the mandate chain, and re-checks that each
 // link is within the one above it.
@@ -78,9 +78,6 @@ const (
 
 // Tables are the authority rows (mandates.Tables).
 var Tables = mandates.Tables
-
-// SchemaDDL returns the authority rows' DDL (mandates.SchemaDDL).
-func SchemaDDL() string { return mandates.SchemaDDL() }
 
 var effectTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
 

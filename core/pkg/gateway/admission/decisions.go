@@ -385,6 +385,9 @@ type lockedAttempt struct {
 	argumentDigest, targetDigest    []byte
 	quote                           []Amount
 	distinct                        []DistinctValue
+	// fence, when set, replaces the configured dispatch fence for the claim
+	// (ClaimModelCall: a model call may run for minutes).
+	fence time.Duration
 }
 
 func lockAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID string) (lockedAttempt, error) {

@@ -46,6 +46,12 @@ type Authenticator struct {
 	// RequireCNF requires the token's cnf.x5t#S256 to name the TLS client
 	// certificate.
 	RequireCNF bool
+	// RequireEpisode is the worker listener's profile (HELM-752 K7): the token
+	// must carry a helm_episode claim, the bounded worker run it was minted
+	// for. The worker profile also sets no RequireCNF, validates a longer
+	// lifetime and a different audience (jwks.WorkerValidator), and is only
+	// ever mounted on the worker listener.
+	RequireEpisode bool
 }
 
 // Identity is a verified token.
@@ -60,6 +66,8 @@ type Identity struct {
 	ExpiresAt time.Time
 	// AuthorizationDetails is the RFC 9396 claim, when the token has one.
 	AuthorizationDetails json.RawMessage
+	// Episode is the token's helm_episode claim, when it has one.
+	Episode *jwks.EpisodeClaim
 }
 
 type tlsStateKey struct{}
@@ -74,6 +82,12 @@ func withTLSState(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// WithTLSState is the wrapper the API handler carries: it records the
+// connection's TLS state in the request context for the certificate binding
+// check. Any other handler that authenticates with an Authenticator on the same
+// listener needs it too.
+func WithTLSState(next http.Handler) http.Handler { return withTLSState(next) }
 
 // Authenticate verifies the bearer token in header for an RPC that accepts
 // one of scopes. Tenant, workspace and principal come from the token alone
@@ -108,6 +122,7 @@ func (a *Authenticator) Authenticate(ctx context.Context, header http.Header, sc
 		Issuer:               claims.RegisteredClaims.Issuer,
 		TokenID:              strings.TrimSpace(claims.RegisteredClaims.ID),
 		AuthorizationDetails: claims.AuthorizationDetails,
+		Episode:              claims.Episode,
 	}
 	if claims.RegisteredClaims.ExpiresAt != nil {
 		id.ExpiresAt = claims.RegisteredClaims.ExpiresAt.Time
@@ -131,6 +146,9 @@ func (a *Authenticator) Authenticate(ctx context.Context, header http.Header, sc
 	id.Scope = claims.Scopes[0]
 	for _, scope := range scopes {
 		if id.Scope == scope {
+			if a.RequireEpisode && id.Episode == nil {
+				return Identity{}, permissionDenied("the token names no episode; this listener serves episode tokens only")
+			}
 			return id, nil
 		}
 	}

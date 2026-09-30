@@ -197,6 +197,9 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 		return nil, err
 	}
 	fence := s.cfg.DispatchTimeout + s.cfg.DispatchGrace
+	if a.fence > 0 {
+		fence = a.fence
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts
 		SET state = 'DISPATCHING', dispatch_deadline = now() + $3 * interval '1 millisecond', version = version + 1, updated_at = now()
 		WHERE tenant_id = $1 AND attempt_id = $2 AND state = 'ADMITTED'`, a.tenantID, a.id, fence.Milliseconds())

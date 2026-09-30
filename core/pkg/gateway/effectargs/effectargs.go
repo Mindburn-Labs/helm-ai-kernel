@@ -36,6 +36,16 @@ const (
 	// AuthorityLift lifts one stop (Lift, HELM-751 s3b). Its target is
 	// "stop:<stop_id>".
 	AuthorityLift = "helm.authority.lift"
+	// ModelInference is one call to a model API through the model gateway
+	// (HELM-752). Its target is the priced route.
+	ModelInference = "model.inference"
+)
+
+// The model APIs the model gateway passes through in their native formats.
+const (
+	APIOpenAIResponses   = "openai-responses"
+	APIOpenAIChat        = "openai-chat"
+	APIAnthropicMessages = "anthropic-messages"
 )
 
 // maxRepositoryGetBytes caps github.repository.get's arguments.
@@ -121,6 +131,17 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 		if target != "stop:"+*args.StopID {
 			return nil, invalid("target must be stop:<stop_id>")
 		}
+	case ModelInference:
+		var args ModelInferenceArgs
+		if err := requireExactKeys(raw, "schema", "api", "route", "request_sha256", "input_bytes", "max_output_tokens", "stream"); err != nil {
+			return nil, err
+		}
+		if err := strictDecode(raw, &args); err != nil {
+			return nil, err
+		}
+		if err := args.validate(target); err != nil {
+			return nil, err
+		}
 	case GitHubPullRequestCreateDraft:
 		if err := checkGitHubTarget(target); err != nil {
 			return nil, err
@@ -170,6 +191,19 @@ type RepositoryGet struct {
 	Branch *string `json:"branch"`
 }
 
+// ModelInferenceArgs is model.inference v1: what the model gateway proposes
+// for one call. The request body is not carried, only its digest and size,
+// so an attempt's content never holds a prompt. route repeats the target.
+type ModelInferenceArgs struct {
+	Schema          *string `json:"schema"`
+	API             *string `json:"api"`
+	Route           *string `json:"route"`
+	RequestSHA256   *string `json:"request_sha256"`
+	InputBytes      *int64  `json:"input_bytes"`
+	MaxOutputTokens *int64  `json:"max_output_tokens"`
+	Stream          *bool   `json:"stream"`
+}
+
 // PullRequestCreateDraft is github.pull_request.create_draft v1.
 type PullRequestCreateDraft struct {
 	Schema          *string `json:"schema"`
@@ -182,6 +216,7 @@ type PullRequestCreateDraft struct {
 }
 
 var (
+	sha256HexPattern    = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	gitHubTargetPattern = regexp.MustCompile(`^github\.com/[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$`)
 	shaPattern          = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	headPattern         = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
@@ -232,6 +267,31 @@ func (a BranchCreateFromChanges) validate() error {
 		if len(*f.ContentUTF8) > maxContentBytes {
 			return invalid("files[%d].content_utf8 is more than %d bytes", i, maxContentBytes)
 		}
+	}
+	return nil
+}
+
+func (a ModelInferenceArgs) validate(target string) error {
+	if err := constant("schema", a.Schema, "model.inference.v1"); err != nil {
+		return err
+	}
+	if a.API == nil || !slices.Contains([]string{APIOpenAIResponses, APIOpenAIChat, APIAnthropicMessages}, *a.API) {
+		return invalid("api must be one of %s, %s, %s", APIOpenAIResponses, APIOpenAIChat, APIAnthropicMessages)
+	}
+	if err := constant("route", a.Route, target); err != nil {
+		return invalid("route must equal the target")
+	}
+	if err := match("request_sha256", a.RequestSHA256, sha256HexPattern); err != nil {
+		return err
+	}
+	if a.InputBytes == nil || *a.InputBytes < 0 {
+		return invalid("input_bytes must be a non-negative integer")
+	}
+	if a.MaxOutputTokens == nil || *a.MaxOutputTokens < 1 {
+		return invalid("max_output_tokens must be a positive integer")
+	}
+	if a.Stream == nil {
+		return invalid("stream is required")
 	}
 	return nil
 }

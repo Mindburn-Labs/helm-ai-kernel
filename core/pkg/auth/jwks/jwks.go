@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -106,7 +107,23 @@ type OAuthTokenClaims struct {
 	// the token carries it, when present. Callers that bind a token to one
 	// object decode and check it themselves.
 	AuthorizationDetails json.RawMessage
+	// Episode is the "helm_episode" claim of an episode token, when present.
+	Episode *EpisodeClaim
 }
+
+// EpisodeClaim is the "helm_episode" claim: the bounded worker run, the work
+// item it serves and the organization version it runs under. An episode token
+// is minted for exactly one episode, so the ids are the token's scope of work,
+// never a request's.
+type EpisodeClaim struct {
+	EpisodeID             string
+	WorkItemID            string
+	OrganizationVersionID string
+}
+
+// claimID bounds an id a token names: printable, no separator a stored key
+// or a log line could be confused by.
+var claimID = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 
 type jwksClaims struct {
 	Scope       string   `json:"scope"`
@@ -122,6 +139,11 @@ type jwksClaims struct {
 	} `json:"cnf,omitempty"`
 	Txn                  string          `json:"txn"`
 	AuthorizationDetails json.RawMessage `json:"authorization_details,omitempty"`
+	HelmEpisode          *struct {
+		EpisodeID             string `json:"episode_id"`
+		WorkItemID            string `json:"work_item_id"`
+		OrganizationVersionID string `json:"organization_version_id"`
+	} `json:"helm_episode,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -301,6 +323,15 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 	}
 	if claims.Cnf != nil {
 		out.CertificateThumbprint = strings.TrimSpace(claims.Cnf.X5tS256)
+	}
+	if e := claims.HelmEpisode; e != nil {
+		episode := &EpisodeClaim{EpisodeID: strings.TrimSpace(e.EpisodeID), WorkItemID: strings.TrimSpace(e.WorkItemID),
+			OrganizationVersionID: strings.TrimSpace(e.OrganizationVersionID)}
+		if !claimID.MatchString(episode.EpisodeID) || !claimID.MatchString(episode.WorkItemID) ||
+			(episode.OrganizationVersionID != "" && !claimID.MatchString(episode.OrganizationVersionID)) {
+			return nil, &JWKSValidationError{Kind: JWKSErrMalformedToken, Message: "helm_episode must name an episode and a work item"}
+		}
+		out.Episode = episode
 	}
 	return out, nil
 }

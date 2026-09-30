@@ -278,3 +278,37 @@ func TestStopTokenBindings(t *testing.T) {
 		}
 	}
 }
+
+// The worker listener's profile: a token must name its episode, and a token
+// that does is identified with it.
+func TestTheWorkerProfileRequiresAnEpisode(t *testing.T) {
+	withEpisode := goodClaims()
+	withEpisode.Episode = &jwks.EpisodeClaim{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "v-1"}
+	worker := &Authenticator{Validator: fakeValidator{claims: withEpisode}, Actor: testActor, RequireEpisode: true}
+	id, err := worker.Authenticate(context.Background(), bearer(), ScopePropose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Episode == nil || id.Episode.EpisodeID != "ep-1" || id.Episode.WorkItemID != "work-1" {
+		t.Fatalf("identity = %+v", id)
+	}
+	// No episode: this listener serves episode tokens only, and the refusal is
+	// permission_denied (the token is valid, it is not for here).
+	bare := &Authenticator{Validator: fakeValidator{claims: goodClaims()}, Actor: testActor, RequireEpisode: true}
+	_, err = bare.Authenticate(context.Background(), bearer(), ScopePropose)
+	if code, reason, _ := errorDetail(t, err); code != connect.CodePermissionDenied || reason != "INSUFFICIENT_PRIVILEGE" {
+		t.Fatalf("a worker listener given a token with no episode: %v", err)
+	}
+	// The main profile does not ask for one, and still reports one that is there.
+	main := &Authenticator{Validator: fakeValidator{claims: goodClaims()}, Actor: testActor}
+	if id, err := main.Authenticate(context.Background(), bearer(), ScopePropose); err != nil || id.Episode != nil {
+		t.Fatalf("the main profile: %+v %v", id, err)
+	}
+	// The episode requirement never replaces the scope check.
+	wrongScope := goodClaims()
+	wrongScope.Episode = withEpisode.Episode
+	wrongScope.Scopes = []string{ScopeRead}
+	if _, err := (&Authenticator{Validator: fakeValidator{claims: wrongScope}, Actor: testActor, RequireEpisode: true}).Authenticate(context.Background(), bearer(), ScopePropose); err == nil {
+		t.Fatal("an episode token with the wrong scope was accepted")
+	}
+}

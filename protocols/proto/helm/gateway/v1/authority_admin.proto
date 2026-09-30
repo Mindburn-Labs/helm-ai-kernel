@@ -1,0 +1,276 @@
+syntax = "proto3";
+
+// The gateway's authority administration API. Authority itself is provisioned
+// as effects, through the effect API: helm.authority.provision.v1 applies a
+// whole organization's principals, effect types, mandates and limits behind a
+// distinct human's approval, and helm.authority.narrow.v1 applies a change that
+// only narrows (docs/architecture/gateway-provisioning-api.md). This service is
+// what that path cannot do for itself:
+//
+//   - EnsurePrincipals registers a tenant's first principals, so that an
+//     effect can be proposed (its requester is a registered service principal)
+//     and approved (its approver is a registered human principal) at all;
+//   - GetProvisioning reads what a provision effect applied;
+//   - ListEffectTypes reads the catalog of effect types the gateway performs,
+//     with their argument schemas.
+//
+// Wire rules, as for gateway.proto (rule R9, ADR-0005):
+//
+//   - Identity. The tenant comes only from the caller's token. No request
+//     message carries a tenant or a workspace.
+//   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
+//     Control Plane's issuer mints for its service principal only, and which no
+//     other RPC takes. GetProvisioning and ListEffectTypes take
+//     helm.gateway.read. ADR-0005 allows one scope per token.
+//   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
+//
+// quantum_posture: this contract carries SHA-256 digests as opaque strings and
+// no signatures or keys. Token verification is ADR-0005's and adds no
+// cryptographic control here; no post-quantum claim is made.
+package helm.gateway.v1;
+
+import "google/protobuf/timestamp.proto";
+import "helm/gateway/v1/gateway.proto";
+
+option go_package = "helm.mindburn.run/gateway/v1;gatewayv1";
+
+// AuthorityAdminService registers principals and reads what the gateway's
+// authority effects applied.
+//
+// Connect errors used by every RPC, each with a helm.errors.v1.ErrorDetail:
+//
+//   - unauthenticated: no token, or one the gateway cannot verify.
+//   - permission_denied: a valid token whose scope does not cover the RPC
+//     [reason_code: INSUFFICIENT_PRIVILEGE]; a provisioner the tenant's own
+//     rows register as a human [reason_code: INSUFFICIENT_PRIVILEGE].
+//   - invalid_argument: a malformed request [reason_code: SCHEMA_VIOLATION].
+//   - not_found: no provisioning for the organization in the token's tenant.
+//   - already_exists: a principal presented as another kind, or with another
+//     external subject, than it was registered with, or an external subject
+//     that already names another principal
+//     [reason_code: IDENTITY_ISOLATION_VIOLATION].
+//   - failed_precondition: a disabled principal
+//     [reason_code: PRINCIPAL_INACTIVE].
+//   - unavailable, aborted: transient; ErrorDetail.retryable is true and the
+//     caller retries with the same request.
+service AuthorityAdminService {
+  // EnsurePrincipals makes the token's tenant and the listed principals exist,
+  // in one transaction. It creates the tenant's control row if it has none,
+  // and each principal that is not registered, active. It changes nothing that
+  // exists: a principal that is registered as the same kind, with the same
+  // external subject or none, is returned as it is.
+  //
+  // It is idempotent by its nature and takes no idempotency key: repeating a
+  // request answers the same principals.
+  //
+  // Registering grants no authority: authority comes from mandates. A
+  // registered human is, however, eligible to approve: the gateway takes an
+  // approver's kind from these rows and never from a token claim (ADR-0001
+  // I6), so the Control Plane that calls this RPC is trusted to register only
+  // people, exactly once each. To hold it to that, a human must carry an
+  // external subject and one external subject names one principal in a tenant:
+  // a second principal presenting the same subject, or a principal presented
+  // with another subject than it has, is already_exists
+  // [reason_code: IDENTITY_ISOLATION_VIOLATION]. So is a principal presented as
+  // another kind than it is registered as, and a disabled principal is
+  // failed_precondition [reason_code: PRINCIPAL_INACTIVE]: neither is ever
+  // re-enabled or re-typed here. A subject may be attached, once, to a
+  // principal that has none.
+  //
+  // The gateway reads authority_principals and nothing else: the kernel's
+  // principal_bindings registry (ADR-0005 §3) is not consulted or written. The
+  // principal_id is the sub of the tokens minted for the principal.
+  //
+  // Token scope: helm.gateway.provision.
+  rpc EnsurePrincipals(EnsurePrincipalsRequest) returns (EnsurePrincipalsResponse);
+
+  // GetProvisioning returns what the latest helm.authority.provision.v1 or
+  // helm.authority.narrow.v1 effect applied for an organization: the digest of
+  // the applied plan, which the next plan's base_plan_digest must equal, and
+  // the mandate each plan node became, with the mandate's current status.
+  // not_found when the organization has never been provisioned in the tenant.
+  //
+  // Token scope: helm.gateway.read.
+  rpc GetProvisioning(GetProvisioningRequest) returns (GetProvisioningResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListEffectTypes returns the catalog of effect types this gateway performs:
+  // for each, its risk class, its declaration (idempotency, observability,
+  // reversibility and mediation), and the JSON Schema of its arguments. It is
+  // the same for every tenant. An effect type a mandate may grant has
+  // grantable set; the gateway's own authority effects do not.
+  //
+  // Token scope: helm.gateway.read.
+  rpc ListEffectTypes(ListEffectTypesRequest) returns (ListEffectTypesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// PrincipalKind is what a principal is. Only a human can approve
+// (ADR-0001 I6); an agent or a service is a workload.
+enum PrincipalKind {
+  // Not set. Refused.
+  PRINCIPAL_KIND_UNSPECIFIED = 0;
+  // A person. Carries an external subject.
+  PRINCIPAL_KIND_HUMAN = 1;
+  // An agent seat.
+  PRINCIPAL_KIND_AGENT = 2;
+  // A service or workload.
+  PRINCIPAL_KIND_SERVICE = 3;
+}
+
+// PrincipalStatus is whether admission accepts a principal.
+enum PrincipalStatus {
+  // Not set.
+  PRINCIPAL_STATUS_UNSPECIFIED = 0;
+  // Accepted.
+  PRINCIPAL_STATUS_ACTIVE = 1;
+  // Disabled by a plan's disable_principals. Final.
+  PRINCIPAL_STATUS_DISABLED = 2;
+}
+
+// ExternalSubject names a principal in the system that vouches for it, so
+// that enrolment is idempotent and one person maps to one principal.
+message ExternalSubject {
+  // The system, for example "helm-control-plane". 1 to 64 bytes of
+  // [a-z0-9._:-], starting with a letter or digit.
+  string system = 1;
+  // The subject's id in that system, for example the Control Plane's user id.
+  // 1 to 255 bytes of UTF-8 without control characters.
+  string id = 2;
+}
+
+// PrincipalSpec is a principal to register.
+message PrincipalSpec {
+  // The principal: the sub of the tokens minted for it. 1 to 255 bytes of
+  // UTF-8 without control characters or edge whitespace.
+  string principal_id = 1;
+  // What the principal is. Required.
+  PrincipalKind kind = 2;
+  // The external subject. Required for a human; optional otherwise.
+  ExternalSubject external_subject = 3;
+}
+
+// EnsurePrincipalsRequest registers principals.
+message EnsurePrincipalsRequest {
+  // 1 to 64 principals, each named once.
+  repeated PrincipalSpec principals = 1;
+}
+
+// EnsurePrincipalsResponse returns the principals as stored.
+message EnsurePrincipalsResponse {
+  // Every principal of the request, in its order.
+  repeated AuthorityPrincipal principals = 1;
+  // True when this call created the tenant's control row.
+  bool tenant_created = 2;
+}
+
+// AuthorityPrincipal is a principal row.
+message AuthorityPrincipal {
+  // The principal.
+  string principal_id = 1;
+  // What it is.
+  PrincipalKind kind = 2;
+  // Whether admission accepts it.
+  PrincipalStatus status = 3;
+  // The row's version. It increases with every narrowing of the principal.
+  int64 version = 4;
+  // Its external subject, when it has one.
+  ExternalSubject external_subject = 5;
+}
+
+// GetProvisioningRequest names an organization.
+message GetProvisioningRequest {
+  // The organization, as its plans name it: "org:<id>".
+  string org_ref = 1;
+}
+
+// GetProvisioningResponse returns the provisioning.
+message GetProvisioningResponse {
+  // What the latest applied plan made.
+  Provisioning provisioning = 1;
+}
+
+// Provisioning is the state a plan left an organization in.
+message Provisioning {
+  // The organization.
+  string org_ref = 1;
+  // The digest of the applied plan: lower-case hex SHA-256 of the RFC 8785
+  // form of its arguments without base_plan_digest. The next plan carries it
+  // as base_plan_digest.
+  string plan_digest = 2;
+  // The plan's version_ref.
+  string version_ref = 3;
+  // The plan's stage.
+  string stage = 4;
+  // One node per mandate of the plan, in the plan's order.
+  repeated ProvisionedNode nodes = 5;
+  // The effect attempt that applied the plan.
+  string attempt_id = 6;
+  // Counts the plans applied to the organization, starting at 1.
+  int64 revision = 7;
+  // Database time of the apply.
+  google.protobuf.Timestamp applied_at = 8;
+  // The service principal that requested the applied plan: the organization's
+  // provisioner. A helm.authority.narrow.v1 plan, which needs no approval,
+  // is accepted only from it.
+  string provisioner = 9;
+}
+
+// ProvisionedNode is a plan node and the mandate it became.
+message ProvisionedNode {
+  // The node, as the plan names it.
+  string node = 1;
+  // The mandate, UUIDv7. A node the plan left unchanged keeps its mandate.
+  string mandate_id = 2;
+  // The principal that holds the mandate.
+  string holder_id = 3;
+  // The node above it in the delegation chain. Empty for the root.
+  string parent_node = 4;
+  // Whether the mandate is active now. A mandate revoked since the plan was
+  // applied is not.
+  bool active = 5;
+  // The mandate row's version. It increases with every narrowing of it.
+  int64 mandate_version = 6;
+}
+
+// ListEffectTypesRequest asks for the catalog.
+message ListEffectTypesRequest {}
+
+// ListEffectTypesResponse returns the catalog.
+message ListEffectTypesResponse {
+  // Every effect type the gateway performs, ordered by name.
+  repeated EffectTypeDeclaration effect_types = 1;
+}
+
+// EffectTypeDeclaration is one effect type of the catalog: the adapter's
+// declaration for it (target architecture §9.1).
+message EffectTypeDeclaration {
+  // The effect type, for example "github.pull_request.create_draft".
+  string effect_type = 1;
+  // Its default risk class. A tenant registers the class its plan gives it;
+  // a mandate may raise it.
+  RiskClass risk_class = 2;
+  // Whether repeating the dispatch is safe: "yes", "no" or "conditional".
+  string idempotent = 3;
+  // How far Observe establishes the outcome: "yes", "partial" or "no".
+  string observable = 4;
+  // Whether the effect can be undone: "yes", "no" or "not applicable".
+  string reversible = 5;
+  // Whether the gateway is the only path to the effect: "enforced" or
+  // "observed-only".
+  string mediation = 6;
+  // The form of EffectDescriptor.target, for example
+  // "github.com/{owner}/{repo}".
+  string target_form = 7;
+  // One or two sentences on what the effect does.
+  string description = 8;
+  // The JSON Schema (draft 2020-12) of EffectDescriptor.arguments, as UTF-8
+  // JSON. It is closed: the gateway refuses what it does not allow. Rules JSON
+  // Schema cannot express are in its description.
+  bytes argument_schema = 9;
+  // Whether a mandate may grant the effect type. False for the gateway's own
+  // authority effects (helm.authority.*), which no mandate grants.
+  bool grantable = 10;
+}

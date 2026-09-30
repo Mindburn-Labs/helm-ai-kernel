@@ -1,12 +1,37 @@
 package economic
 
 import (
+	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"math"
 	"strings"
 	"time"
 )
+
+// DecodeProviderPriceV2 preserves the closed tariff boundary when verifying an
+// exported exact-accrual receipt. Numeric tariff fields retain their v2 wire
+// representation; duplicate and unknown fields are refused before hashing.
+func DecodeProviderPriceV2(raw []byte) (*ProviderPriceSnapshot, error) {
+	if err := uniqueJSONValue(json.NewDecoder(bytes.NewReader(raw))); err != nil {
+		return nil, err
+	}
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	p := new(ProviderPriceSnapshot)
+	if err := d.Decode(p); err != nil {
+		return nil, err
+	}
+	if err := d.Decode(new(any)); err != io.EOF {
+		return nil, errors.New("provider price v2: trailing JSON")
+	}
+	if p.SchemaVersion != ProviderPriceSchemaV2 {
+		return nil, errors.New("provider price v2: unsupported schema")
+	}
+	return p, p.Validate()
+}
 
 // quantum_posture: versioned classical SHA-256 price commitments; no signatures
 // or provider billing authority are created by a price snapshot.

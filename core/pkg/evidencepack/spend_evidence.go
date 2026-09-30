@@ -52,10 +52,13 @@ const (
 // and SettlementReceipt post-dispatch. A pack may be built pre-dispatch (route
 // + budget only) or for the completed lifecycle (all four).
 type SpendReceiptSet struct {
-	RouteQuote *economic.RouteQuote
-	Budget     *economic.BudgetVerdictReceipt
-	Usage      *economic.UsageReceipt
-	Settlement *economic.SettlementReceipt
+	RouteQuote   *economic.RouteQuote
+	Budget       *economic.BudgetVerdictReceipt
+	Usage        *economic.UsageReceipt
+	Settlement   *economic.SettlementReceipt
+	UsageV2      *economic.UsageReceiptV2
+	SettlementV2 *economic.SettlementReceiptV2
+	PriceV2      *economic.ProviderPriceSnapshot
 	// Approvers carries required approver roles/ids for an ESCALATE verdict so
 	// the BudgetVerdict view can answer "who must approve". May be nil.
 	Approvers []string
@@ -66,11 +69,14 @@ type SpendReceiptSet struct {
 // business views never contain a prompt body. Pass packID/actorDID/intentID and
 // the governing policy hash so the pack manifest binds to the kernel intent.
 func BuildSpendEvidencePack(packID, actorDID, intentID, policyHash string, set SpendReceiptSet, profile economic.RedactionProfile) (*Manifest, map[string][]byte, error) {
-	if set.RouteQuote == nil && set.Budget == nil && set.Usage == nil && set.Settlement == nil {
+	if set.RouteQuote == nil && set.Budget == nil && set.Usage == nil && set.Settlement == nil && set.UsageV2 == nil && set.SettlementV2 == nil {
 		return nil, nil, errors.New("spend evidence pack: at least one receipt is required")
 	}
 
 	b := NewBuilder(packID, actorDID, intentID, policyHash)
+	if err := addExactSpendReceipts(b, set); err != nil {
+		return nil, nil, err
+	}
 
 	// Receipt layer (cryptographic proof) + view layer (business readable).
 	if set.RouteQuote != nil {
@@ -221,6 +227,11 @@ func verifyManifestIntegrity(manifest *Manifest, contents map[string][]byte) err
 // canonical content hash and re-validates the cross-receipt invariants.
 func verifySpendReceipts(contents map[string][]byte, invariants *[]string) ([]string, error) {
 	var verified []string
+	exact, err := verifyExactSpendReceipts(contents, invariants)
+	if err != nil {
+		return nil, err
+	}
+	verified = append(verified, exact...)
 
 	if raw, ok := contents[spendRouteReceiptPath]; ok {
 		route := &economic.RouteQuote{}
@@ -245,7 +256,7 @@ func verifySpendReceipts(contents map[string][]byte, invariants *[]string) ([]st
 	}
 
 	var usage *economic.UsageReceipt
-	if raw, ok := contents[spendUsageReceiptPath]; ok {
+	if raw, ok := contents[spendUsageReceiptPath]; ok && len(exact) == 0 {
 		usage = &economic.UsageReceipt{}
 		if err := json.Unmarshal(raw, usage); err != nil {
 			return nil, fmt.Errorf("spend evidence verify: decode usage receipt: %w", err)
@@ -264,7 +275,7 @@ func verifySpendReceipts(contents map[string][]byte, invariants *[]string) ([]st
 		verified = append(verified, spendUsageReceiptPath)
 	}
 
-	if raw, ok := contents[spendSettlementReceiptPath]; ok {
+	if raw, ok := contents[spendSettlementReceiptPath]; ok && len(exact) == 0 {
 		settlement := &economic.SettlementReceipt{}
 		if err := json.Unmarshal(raw, settlement); err != nil {
 			return nil, fmt.Errorf("spend evidence verify: decode settlement receipt: %w", err)

@@ -21,6 +21,9 @@ and `Lift`, and the River jobs that expire escalations and reconcile
   messages; `gateway.connect.go`, from `protoc-gen-connect-go`, sits in the
   same package.
 - Contract tests: `sdk/go/gen/helm/gateway/v1/gateway_contract_test.go`.
+- The authority rows admission reads are written through a second service in the
+  same package, `AuthorityAdminService`: see
+  [Gateway provisioning API](gateway-provisioning-api.md).
 - Binding references: rev 3.4 §4.1–§4.6, §8, §10.1, §11 and the §12.3
   contract list; ADR-0001 (admission), ADR-0003 (settlement) and ADR-0005
   (tenant from the token). All of them live under
@@ -430,6 +433,10 @@ names:
 | `helm.gateway.read` | `GetAttempt` (§4.2's `Get`), `GetAttemptContent`, `ListAttempts` in s2, `result_ref` blobs | any principal with workspace read | — |
 | `helm.gateway.stop` | `Stop`, `Lift`; `Cancel` of another principal's attempt | human operators and admins only | single-use; a `Lift` token is bound by `authorization_details` |
 | `helm.gateway.execute` | `Dispatch`, `Observe`, and the model gateway's inference endpoint (§8) | workload principals only: the Control Plane backend and SDK agent runtimes. Never a human session, and never a worker's propose token | — |
+
+A sixth scope, `helm.gateway.provision`, belongs to `AuthorityAdminService`
+alone: the Control Plane's service principal holds it, and none of the RPCs
+above takes it (see [Gateway provisioning API](gateway-provisioning-api.md)).
 
 WS-B's table lists "Get, GetAttempt" for `helm.gateway.read`. They are one RPC:
 §4.2's `Get` is `GetAttempt`.

@@ -31,6 +31,10 @@ const (
 	ScopeRead    = "helm.gateway.read"
 	ScopeStop    = "helm.gateway.stop"
 	ScopeExecute = "helm.gateway.execute"
+	// ScopeProvision registers a tenant's first principals
+	// (AuthorityAdminService.EnsurePrincipals). No other RPC takes it, and the
+	// Control Plane's issuer mints it for its service principal only.
+	ScopeProvision = "helm.gateway.provision"
 	// ScopeStepUp is the scope of the step-up proof an Approve may carry
 	// (ApproveRequest.step_up_proof). No RPC takes it as its own credential.
 	ScopeStepUp = "helm.gateway.stepup"

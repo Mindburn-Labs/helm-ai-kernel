@@ -29,6 +29,7 @@ var Tables = []string{
 	"authority_observations",
 	"authority_approvals",
 	"authority_token_replay",
+	"authority_provisions",
 }
 
 // migration is one version of the gateway schema.
@@ -43,7 +44,7 @@ var migrations = []migration{
 		return withRowSecurity(mandates.SchemaDDL(), "schema/001_admission.sql", Tables[:8])
 	}},
 	{2, "approvals and single-use tokens", func() (string, error) {
-		return withRowSecurity("", "schema/002_decisions.sql", Tables[8:])
+		return withRowSecurity("", "schema/002_decisions.sql", Tables[8:10])
 	}},
 	{3, "dispatch claim fence", func() (string, error) {
 		return withRowSecurity("", "schema/003_dispatch.sql", nil)
@@ -51,8 +52,11 @@ var migrations = []migration{
 	{4, "idempotent stops", func() (string, error) {
 		return withRowSecurity("", "schema/004_stops.sql", nil)
 	}},
-	{7, "step-up proof on approvals", func() (string, error) {
-		return withRowSecurity("", "schema/007_step_up.sql", nil)
+	{5, "provisioning: principal external subjects and the applied plans", func() (string, error) {
+		return withRowSecurity(mandates.SchemaDDL(), "schema/005_provisions.sql", Tables[10:])
+	}},
+	{6, "step-up proof on approvals", func() (string, error) {
+		return withRowSecurity("", "schema/006_step_up.sql", nil)
 	}},
 }
 

@@ -166,6 +166,18 @@ func TestServeOverDevInsecureLoopbackAnswersGRPC(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("an unauthenticated gRPC call = %v, want unauthenticated", err)
 	}
+	// The authority administration API is served on the same listener: its
+	// three RPCs answer the token check, not unimplemented.
+	admin := gatewayv1.NewAuthorityAdminServiceClient(h2c, "http://"+api, connect.WithGRPC())
+	if _, err := admin.EnsurePrincipals(context.Background(), connect.NewRequest(&gatewayv1.EnsurePrincipalsRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("an unauthenticated EnsurePrincipals = %v, want unauthenticated", err)
+	}
+	if _, err := admin.GetProvisioning(context.Background(), connect.NewRequest(&gatewayv1.GetProvisioningRequest{OrgRef: "org:x"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("an unauthenticated GetProvisioning = %v, want unauthenticated", err)
+	}
+	if _, err := admin.ListEffectTypes(context.Background(), connect.NewRequest(&gatewayv1.ListEffectTypesRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("an unauthenticated ListEffectTypes = %v, want unauthenticated", err)
+	}
 }
 
 type pki struct {

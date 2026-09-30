@@ -735,7 +735,10 @@ human operator's single-use `helm.gateway.stop` token.
 - `DISPATCHING` and later are `failed_precondition`.
 
 A request message is capped at 128 KiB after decompression, and a request
-body at 132 KiB as sent, before authentication or any handler runs.
+body at 132 KiB as sent, before authentication or any handler runs. Propose
+alone has a larger cap, because it alone carries an authority plan (at most
+524288 bytes, which a JSON client sends base64-encoded): 764588 bytes of message
+and 768684 bytes of body.
 
 Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
 `SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's
@@ -745,9 +748,8 @@ code; a gateway failure is `unavailable` with `retryable` set.
 
 ### Slice 2 decisions and open points
 
-- **`ListAttempts` is defined and not served yet.** The proto carries the RPC
-  and its messages (see "ListAttempts"); `helm-gateway` answers
-  `unimplemented` until the change that follows this one.
+- **`ListAttempts` is served.** The proto carries the RPC and its messages (see
+  "ListAttempts"); `helm-gateway` answers it under a `helm.gateway.read` token.
 - **The approval window is gateway configuration.** The proto clamps
   `approval_expires_at` to "the mandate's approval window", but mandates have
   no such term yet; `HELM_GATEWAY_APPROVAL_WINDOW` stands in for it.
@@ -1094,9 +1096,11 @@ the Control Plane syncs its projection incrementally.
   last changed the attempt began. Transactions commit out of that order, so an
   attempt can first appear with an `updated_at` earlier than one already
   listed, and the last `updated_at` a reader saw is not a safe place to resume.
-  Every page carries `settled_before`: a time later than the longest a gateway
+  The first page captures `settled_before`: a time later than the longest a gateway
   transaction may run (every one is bounded), before the moment the page was
-  read. An attempt whose `updated_at` is before `settled_before` is final in
+  read. Its continuation tokens preserve that same watermark on every later
+  page, even when traversal spans the safety margin. An attempt whose
+  `updated_at` is before `settled_before` is final in
   the listing: none appears later with an earlier position. A reader that has
   read to the end asks again with `updated_after` set to the `settled_before`
   of its last page, never misses a change, and sees the changes after that
@@ -1104,8 +1108,8 @@ the Control Plane syncs its projection incrementally.
   again is listed again at its new position.
 - **Content.** Each entry is the attempt `GetAttempt` returns. The arguments
   stay behind `GetAttemptContent`.
-- **Status.** The contract is defined; `helm-gateway` answers `unimplemented`
-  until the change that follows.
+- **Status.** Served: `helm-gateway` answers `ListAttempts` under a
+  `helm.gateway.read` token.
 
 ## Step-up proof
 

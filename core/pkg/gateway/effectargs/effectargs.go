@@ -1,7 +1,8 @@
 // Package effectargs checks an effect's argument bytes before admission.
 //
-// Every effect's arguments are one JSON object of at most MaxBytes of UTF-8,
-// with no duplicate key at any depth. The effect types of the HELM-789
+// Every effect's arguments are one JSON object of at most MaxBytes of UTF-8
+// (MaxPlanBytes for the two authority plans, plan.go), with no duplicate key at
+// any depth. The effect types of the HELM-789
 // walking skeleton also have closed schemas (HELM-753,
 // protocols/json-schemas/effects/github/*.v1.json): unknown or missing fields,
 // wrong types and out-of-range values are refused, and so are the rules the
@@ -51,6 +52,18 @@ func invalid(format string, args ...any) error {
 // Validate checks raw as the arguments of effectType on target and returns the
 // parsed object.
 func Validate(effectType, target string, raw []byte) (map[string]any, error) {
+	if IsAuthorityPlan(effectType) {
+		// A plan has its own size cap and closed schema (plan.go). No mandate
+		// condition reads it: authority for a plan is the approval of its bytes.
+		plan, err := ParsePlan(effectType, raw)
+		if err != nil {
+			return nil, err
+		}
+		if target != plan.OrgRef {
+			return nil, invalid("target must be the plan's org_ref %q", plan.OrgRef)
+		}
+		return map[string]any{"schema": plan.Schema, "org_ref": plan.OrgRef}, nil
+	}
 	if len(raw) > MaxBytes {
 		return nil, invalid("arguments are %d bytes, more than %d", len(raw), MaxBytes)
 	}

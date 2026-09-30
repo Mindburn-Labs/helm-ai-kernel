@@ -1157,7 +1157,8 @@ jobs:
 
   version-status:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # npm and PyPI waits run one after the other, 15 minutes each at most.
+    timeout-minutes: 40
     needs:
       - container
       - chart
@@ -1178,6 +1179,7 @@ jobs:
             --write-status dist/version-status/version-status.json \
             published \
             --npm-propagation-timeout 900 \
+            --pypi-propagation-timeout 900 \
             --only ghcr-image \
             --only ghcr-chart \
             --only npm-sdk \

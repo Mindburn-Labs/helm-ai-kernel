@@ -76,6 +76,74 @@ class VersionDriftMonitorTests(unittest.TestCase):
                 drift.urlopen_with_retry(drift.http_request("https://registry.test/pkg"), deadline=100)
             open_url.assert_not_called()
 
+    def test_pypi_waits_for_exact_version_and_project_version(self) -> None:
+        # v0.10.5 run 36760790191: PyPI accepted the upload but the project
+        # JSON still named 0.10.4 when version-status read it.
+        surface = {"id": "pypi-sdk", "url": "https://pypi.test/pypi/helm-sdk/json", "human_url": "https://pypi.test/project/helm-sdk/"}
+        exact_url = "https://pypi.test/pypi/helm-sdk/0.10.5/json"
+        missing = drift.urllib.error.HTTPError(exact_url, 404, "not found", {}, None)
+        now = [0.0]
+        def sleep(seconds: float) -> None:
+            now[0] += seconds
+        responses = [
+            {"info": {"version": "0.10.4"}}, missing,
+            {"info": {"version": "0.10.4"}}, {"info": {"version": "0.10.5"}},
+            {"info": {"version": "0.10.5"}}, {"info": {"version": "0.10.5"}},
+        ]
+        with mock.patch.object(drift, "PYPI_PROPAGATION_TIMEOUT_SECONDS", 90), mock.patch.object(drift.time, "monotonic", side_effect=lambda: now[0]), mock.patch.object(drift.time, "sleep", side_effect=sleep), mock.patch.object(drift, "request_json", side_effect=responses) as read:
+            result = drift.check_pypi(surface, "0.10.5")
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(now[0], 60)
+        self.assertEqual(read.call_count, 6)
+        self.assertEqual(read.call_args.args[0], exact_url)
+        self.assertEqual(read.call_args.kwargs["deadline"], 90)
+
+    def test_pypi_stale_version_exhausts_budget_without_pass(self) -> None:
+        surface = {"id": "pypi-sdk", "url": "https://pypi.test/pypi/helm-sdk/json", "human_url": "https://pypi.test/project/helm-sdk/"}
+        now = [0.0]
+        def sleep(seconds: float) -> None:
+            now[0] += seconds
+        def read(url: str, **kwargs: object) -> dict:
+            return {"info": {"version": "0.10.5" if url.endswith("/0.10.5/json") else "0.10.4"}}
+        with mock.patch.object(drift, "PYPI_PROPAGATION_TIMEOUT_SECONDS", 45), mock.patch.object(drift.time, "monotonic", side_effect=lambda: now[0]), mock.patch.object(drift.time, "sleep", side_effect=sleep), mock.patch.object(drift, "request_json", side_effect=read):
+            result = drift.check_pypi(surface, "0.10.5")
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.actual, "0.10.4")
+        self.assertEqual(now[0], 45)
+        self.assertIn("budget exhausted", result.detail)
+
+    def test_pypi_without_budget_reads_once(self) -> None:
+        surface = {"id": "pypi-sdk", "url": "https://pypi.test/pypi/helm-sdk/json", "human_url": "https://pypi.test/project/helm-sdk/"}
+        with mock.patch.object(drift, "PYPI_PROPAGATION_TIMEOUT_SECONDS", 0.0), mock.patch.object(drift.time, "sleep") as sleep, mock.patch.object(drift, "request_json", side_effect=[{"info": {"version": "0.10.5"}}, {"info": {"version": "0.10.5"}}]):
+            self.assertEqual(drift.check_pypi(surface, "0.10.5").status, "pass")
+        with mock.patch.object(drift, "PYPI_PROPAGATION_TIMEOUT_SECONDS", 0.0), mock.patch.object(drift.time, "sleep") as stale_sleep, mock.patch.object(drift, "request_json", side_effect=[{"info": {"version": "0.10.4"}}, {"info": {"version": "0.10.5"}}]):
+            self.assertEqual(drift.check_pypi(surface, "0.10.5").status, "fail")
+        sleep.assert_not_called()
+        stale_sleep.assert_not_called()
+
+    def test_pypi_real_errors_do_not_wait(self) -> None:
+        surface = {"id": "pypi-sdk", "url": "https://pypi.test/pypi/helm-sdk/json", "human_url": "https://pypi.test/project/helm-sdk/"}
+        cases = [
+            ([{"info": {"version": "0.10.6"}}], None),
+            ([{"info": {"version": "0.10.5"}}, {"info": {"version": "0.10.4"}}], None),
+            ([{"info": {"version": "garbage"}}], ValueError),
+            ([{"info": {"version": None}}], ValueError),
+            ([{"info": None}], ValueError),
+            ([None], ValueError),
+            ([{"info": {"version": "0.10.5"}}, None], ValueError),
+            ([{"info": {"version": "0.10.5"}}, {"info": []}], ValueError),
+        ]
+        for code in (401, 403, 500):
+            cases.append(([{"info": {"version": "0.10.4"}}, drift.urllib.error.HTTPError(surface["url"], code, "error", {}, None)], drift.urllib.error.HTTPError))
+        for responses, error in cases:
+            with self.subTest(responses=responses), mock.patch.object(drift, "PYPI_PROPAGATION_TIMEOUT_SECONDS", 900), mock.patch.object(drift.time, "sleep") as sleep, mock.patch.object(drift, "request_json", side_effect=responses):
+                if error:
+                    with self.assertRaises(error):
+                        drift.check_pypi(surface, "0.10.5")
+                else:
+                    self.assertEqual(drift.check_pypi(surface, "0.10.5").status, "fail")
+                sleep.assert_not_called()
+
     def test_homebrew_accepts_inferred_version_and_rejects_drift(self) -> None:
         surface = {"id": "homebrew-tap", "url": "https://example.test/formula", "human_url": "https://example.test"}
         def url(version: str) -> str:

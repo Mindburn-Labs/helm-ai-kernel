@@ -36,6 +36,7 @@ RATE_LIMIT_RETRY_ATTEMPTS = 3
 RATE_LIMIT_BACKOFF_SECONDS = 2.0
 RATE_LIMIT_MAX_BACKOFF_SECONDS = 30.0
 NPM_PROPAGATION_TIMEOUT_SECONDS = 0.0
+PYPI_PROPAGATION_TIMEOUT_SECONDS = 0.0
 # A surface the checker could not read. It is not a drift verdict: the published
 # value is unknown, so it must never be reported as a version mismatch.
 STATUS_UNKNOWN = "unknown"
@@ -304,7 +305,7 @@ def remaining_timeout(deadline: float | None) -> float:
         return REQUEST_TIMEOUT_SECONDS
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        raise TimeoutError("npm propagation deadline expired")
+        raise TimeoutError("registry propagation deadline expired")
     return min(REQUEST_TIMEOUT_SECONDS, remaining)
 
 
@@ -546,9 +547,38 @@ def check_npm(surface: dict[str, Any], version: str) -> SurfaceResult:
 
 
 def check_pypi(surface: dict[str, Any], version: str) -> SurfaceResult:
-    payload = request_json(surface["url"])
-    actual = payload.get("info", {}).get("version")
-    return SurfaceResult(surface["id"], "pass" if actual == version else "fail", version, actual, url=surface["human_url"])
+    # PyPI serves the project JSON from a CDN cache, so after an accepted
+    # upload the exact release can 404 and info.version can still name the
+    # previous release. Only those two propagation states may wait.
+    deadline = time.monotonic() + PYPI_PROPAGATION_TIMEOUT_SECONDS if PYPI_PROPAGATION_TIMEOUT_SECONDS else None
+    while True:
+        payload = request_json(surface["url"], deadline=deadline)
+        if not isinstance(payload, dict) or not isinstance(payload.get("info"), dict):
+            raise ValueError("malformed PyPI project metadata")
+        actual = payload["info"].get("version")
+        if not isinstance(actual, str) or not SEMVER_RE.fullmatch(actual):
+            raise ValueError(f"unexpected PyPI version: {actual!r}")
+        if semver_parts(actual, "PyPI version") > semver_parts(version, "expected version"):
+            return SurfaceResult(surface["id"], "fail", version, actual, url=surface["human_url"], detail="PyPI version is newer than the release")
+        exact_visible = True
+        try:
+            exact = request_json(f"{surface['url'].removesuffix('/json').rstrip('/')}/{version}/json", deadline=deadline)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise
+            exact_visible = False
+            exact = None
+        if exact_visible and (not isinstance(exact, dict) or not isinstance(exact.get("info"), dict)):
+            raise ValueError("malformed PyPI exact-version metadata")
+        if exact_visible and exact["info"].get("version") != version:
+            return SurfaceResult(surface["id"], "fail", version, exact["info"].get("version"), url=surface["human_url"], detail="PyPI exact-version response mismatch")
+        if exact_visible and actual == version:
+            return SurfaceResult(surface["id"], "pass", version, actual, url=surface["human_url"], detail="exact version and project version both match")
+        detail = f"pending PyPI propagation: version={actual!r}, exact_version_visible={exact_visible}"
+        if deadline is None or time.monotonic() >= deadline:
+            return SurfaceResult(surface["id"], "fail", version, actual, url=surface["human_url"], detail=detail + "; wait budget exhausted")
+        print(detail, file=sys.stderr, flush=True)
+        time.sleep(max(0.0, min(30.0, deadline - time.monotonic())))
 
 
 def check_crates(surface: dict[str, Any], version: str) -> SurfaceResult:
@@ -874,6 +904,7 @@ def parse_args() -> argparse.Namespace:
     published.add_argument("--only", action="append", default=[], help="published surface id to check; when passed, all other published surfaces are skipped")
     published.add_argument("--surface-timeout", type=float, default=REQUEST_TIMEOUT_SECONDS, help="timeout in seconds for each public surface request")
     published.add_argument("--npm-propagation-timeout", type=float, default=0.0, help="bounded wait in seconds for npm exact version and latest after a successful publish; default disables waiting")
+    published.add_argument("--pypi-propagation-timeout", type=float, default=0.0, help="bounded wait in seconds for the PyPI exact version and project version after a successful upload; default disables waiting")
     published.add_argument(
         "--rate-limit-retries",
         type=int,
@@ -884,13 +915,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
-    global REQUEST_TIMEOUT_SECONDS, RATE_LIMIT_RETRY_ATTEMPTS, NPM_PROPAGATION_TIMEOUT_SECONDS
+    global REQUEST_TIMEOUT_SECONDS, RATE_LIMIT_RETRY_ATTEMPTS, NPM_PROPAGATION_TIMEOUT_SECONDS, PYPI_PROPAGATION_TIMEOUT_SECONDS
     args = parse_args()
     contract = load_contract(args.contract)
     version = expected_version(contract, args.expected_version)
     NPM_PROPAGATION_TIMEOUT_SECONDS = float(getattr(args, "npm_propagation_timeout", 0.0))
     if not math.isfinite(NPM_PROPAGATION_TIMEOUT_SECONDS) or not 0 <= NPM_PROPAGATION_TIMEOUT_SECONDS <= 900:
         raise SystemExit("--npm-propagation-timeout must be between 0 and 900 seconds")
+    PYPI_PROPAGATION_TIMEOUT_SECONDS = float(getattr(args, "pypi_propagation_timeout", 0.0))
+    if not math.isfinite(PYPI_PROPAGATION_TIMEOUT_SECONDS) or not 0 <= PYPI_PROPAGATION_TIMEOUT_SECONDS <= 900:
+        raise SystemExit("--pypi-propagation-timeout must be between 0 and 900 seconds")
     if getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS) <= 0:
         raise SystemExit("--surface-timeout must be greater than 0")
     REQUEST_TIMEOUT_SECONDS = float(getattr(args, "surface_timeout", REQUEST_TIMEOUT_SECONDS))

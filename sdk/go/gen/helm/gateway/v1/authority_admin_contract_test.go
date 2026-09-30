@@ -1,18 +1,17 @@
-// Contract tests for the gateway provisioning API (AuthorityAdminService,
-// docs/architecture/gateway-provisioning-api.md). They pin the wire shape the
-// Control Plane builds against: the RPCs, the idempotency key on every request,
-// the absence of any tenant on the wire, the one token scope, the reason codes
-// the proto names, and activation digest v1. Every checker also runs on a
+// Contract tests for the gateway's authority administration API
+// (AuthorityAdminService, docs/architecture/gateway-provisioning-api.md). They
+// pin the wire shape the Control Plane builds against: the RPCs, the absence of
+// any tenant on the wire, the token scope of each RPC, the reason codes the
+// proto names, and the closed vocabularies. Every checker also runs on a
 // planted violation first, so a checker that cannot fail fails the test.
 //
 // quantum_posture: contract test only; it reads descriptors and the proto
-// source, computes SHA-256 activation-digest vectors, and signs or verifies
-// nothing.
+// source, and signs or verifies nothing.
 package gatewayv1
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"os/exec"
@@ -20,12 +19,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const adminProtoRel = "protocols/proto/helm/gateway/v1/authority_admin.proto"
@@ -39,10 +36,11 @@ func adminService(t *testing.T) protoreflect.ServiceDescriptor {
 	return svc
 }
 
-// The eight provisioning RPCs, unary, each with its own request and response.
+// The three RPCs, unary, each with its own request and response. Only the
+// reads may be marked NO_SIDE_EFFECTS, which lets Connect serve them over GET.
 func TestAuthorityAdminServiceHasItsRPCs(t *testing.T) {
-	want := []string{"UpsertTenant", "UpsertPrincipal", "DeactivatePrincipal", "RegisterEffectTypes", "ActivateRootMandate",
-		"DelegateMandate", "RevokeMandate", "SetLimit"}
+	want := []string{"EnsurePrincipals", "GetProvisioning", "ListEffectTypes"}
+	reads := map[string]bool{"GetProvisioning": true, "ListEffectTypes": true}
 	methods := adminService(t).Methods()
 	var got []string
 	for i := 0; i < methods.Len(); i++ {
@@ -50,7 +48,7 @@ func TestAuthorityAdminServiceHasItsRPCs(t *testing.T) {
 		name := string(m.Name())
 		got = append(got, name)
 		if m.IsStreamingClient() || m.IsStreamingServer() {
-			t.Errorf("%s streams; every provisioning RPC is unary", name)
+			t.Errorf("%s streams; every RPC is unary", name)
 		}
 		if in := string(m.Input().Name()); in != name+"Request" {
 			t.Errorf("%s takes %s, want %sRequest", name, in, name)
@@ -58,10 +56,12 @@ func TestAuthorityAdminServiceHasItsRPCs(t *testing.T) {
 		if out := string(m.Output().Name()); out != name+"Response" {
 			t.Errorf("%s returns %s, want %sResponse", name, out, name)
 		}
-		// Writes: none is a read, so none may be marked NO_SIDE_EFFECTS, which
-		// would let Connect serve it over GET.
-		if level := m.Options().(*descriptorpb.MethodOptions).GetIdempotencyLevel(); level != descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN {
-			t.Errorf("%s idempotency_level = %v, want unset", name, level)
+		wantLevel := descriptorpb.MethodOptions_IDEMPOTENCY_UNKNOWN
+		if reads[name] {
+			wantLevel = descriptorpb.MethodOptions_NO_SIDE_EFFECTS
+		}
+		if level := m.Options().(*descriptorpb.MethodOptions).GetIdempotencyLevel(); level != wantLevel {
+			t.Errorf("%s idempotency_level = %v, want %v", name, level, wantLevel)
 		}
 	}
 	if !slices.Equal(got, want) {
@@ -69,14 +69,9 @@ func TestAuthorityAdminServiceHasItsRPCs(t *testing.T) {
 	}
 
 	procedures := map[string]string{
-		AuthorityAdminServiceUpsertTenantProcedure:        "UpsertTenant",
-		AuthorityAdminServiceUpsertPrincipalProcedure:     "UpsertPrincipal",
-		AuthorityAdminServiceDeactivatePrincipalProcedure: "DeactivatePrincipal",
-		AuthorityAdminServiceRegisterEffectTypesProcedure: "RegisterEffectTypes",
-		AuthorityAdminServiceActivateRootMandateProcedure: "ActivateRootMandate",
-		AuthorityAdminServiceDelegateMandateProcedure:     "DelegateMandate",
-		AuthorityAdminServiceRevokeMandateProcedure:       "RevokeMandate",
-		AuthorityAdminServiceSetLimitProcedure:            "SetLimit",
+		AuthorityAdminServiceEnsurePrincipalsProcedure: "EnsurePrincipals",
+		AuthorityAdminServiceGetProvisioningProcedure:  "GetProvisioning",
+		AuthorityAdminServiceListEffectTypesProcedure:  "ListEffectTypes",
 	}
 	if len(procedures) != len(want) {
 		t.Errorf("%d procedure constants checked, want %d", len(procedures), len(want))
@@ -103,34 +98,17 @@ func TestAuthorityAdminImportsOnlyItsSiblings(t *testing.T) {
 	}
 }
 
-// Every request opens with the tenant-scoped idempotency key (R6).
-func TestEveryAdminRequestCarriesAnIdempotencyKey(t *testing.T) {
-	// Planted violation: ApproveRequest's first field is not a key.
-	planted := (&ApproveRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(1)
-	if planted.Name() == "idempotency_key" {
-		t.Fatal("the planted message already has a key; the check below could not fail")
-	}
-	methods := adminService(t).Methods()
-	for i := 0; i < methods.Len(); i++ {
-		in := methods.Get(i).Input()
-		f := in.Fields().ByNumber(1)
-		if f == nil || f.Name() != "idempotency_key" || f.Kind() != protoreflect.StringKind {
-			t.Errorf("%s field 1 is %v, want the string idempotency_key", in.FullName(), f)
-		}
-	}
-}
-
 // adminIdentityFieldAllowed names the request fields the identity rule of
-// gateway.proto would flag but that provisioning needs: they name the object
-// being provisioned, and the gateway checks them against its own rows. No
+// gateway.proto would flag but that this API needs: they name the principal
+// being registered, and the gateway checks them against its own rows. No
 // request may name a tenant or a workspace.
 var adminIdentityFieldAllowed = map[string]string{
-	"helm.gateway.v1.UpsertPrincipalRequest.principal_id":     "the principal being registered",
-	"helm.gateway.v1.DeactivatePrincipalRequest.principal_id": "the principal being disabled",
+	"helm.gateway.v1.PrincipalSpec.principal_id": "the principal being registered",
+	"helm.gateway.v1.ExternalSubject.id":         "the external subject's id in the system that vouches for it",
 }
 
 func TestNoAdminRequestNamesATenantOrWorkspace(t *testing.T) {
-	// Planted violation: a field that names a tenant is flagged.
+	// Planted violation: a field that names a principal is flagged.
 	if got := identityFields((&EffectAttempt{}).ProtoReflect().Descriptor(), map[protoreflect.FullName]bool{}); len(got) == 0 {
 		t.Fatal("the identity checker cannot fail")
 	}
@@ -148,7 +126,7 @@ func TestNoAdminRequestNamesATenantOrWorkspace(t *testing.T) {
 	}
 }
 
-// Amounts and limits are integers: no float anywhere in the file.
+// No float anywhere in the file.
 func TestAdminMessagesHaveNoFloatingPoint(t *testing.T) {
 	if got := floatFields((&structpb.Value{}).ProtoReflect().Descriptor(), map[protoreflect.FullName]bool{}); len(got) == 0 {
 		t.Fatal("checker missed the planted double field")
@@ -161,26 +139,30 @@ func TestAdminMessagesHaveNoFloatingPoint(t *testing.T) {
 	}
 }
 
-// Every RPC takes the one provisioning scope.
-func TestAuthorityAdminTokenScope(t *testing.T) {
+// Each RPC names its one token scope: the provision scope for the write, the
+// read scope for the reads.
+func TestAuthorityAdminTokenScopes(t *testing.T) {
+	want := map[string][]string{
+		"EnsurePrincipals": {"helm.gateway.provision"},
+		"GetProvisioning":  {"helm.gateway.read"},
+		"ListEffectTypes":  {"helm.gateway.read"},
+	}
 	got, err := rpcScopes(readRepoFile(t, adminProtoRel))
 	if err != nil {
 		t.Fatal(err)
 	}
-	methods := adminService(t).Methods()
-	if len(got) != methods.Len() {
-		t.Errorf("found scopes for %d RPCs, want %d: %v", len(got), methods.Len(), got)
+	if len(got) != len(want) {
+		t.Errorf("found scopes for %d RPCs, want %d: %v", len(got), len(want), got)
 	}
-	for i := 0; i < methods.Len(); i++ {
-		name := string(methods.Get(i).Name())
-		if s := got[name]; !slices.Equal(s, []string{"helm.gateway.provision"}) {
-			t.Errorf("rpc %s names token scopes %v, want [helm.gateway.provision]", name, s)
+	for rpc, scopes := range want {
+		if s := got[rpc]; !slices.Equal(s, scopes) {
+			t.Errorf("rpc %s names token scopes %v, want %v", rpc, s, scopes)
 		}
 	}
 }
 
-// Every reason code the proto names is registered today (ADR-0001 §6): the
-// provisioning API emits only codes the registry already has.
+// Every reason code the proto names is registered today (ADR-0001 §6): this
+// API emits only codes the registry already has.
 func TestAuthorityAdminReasonCodesAreRegistered(t *testing.T) {
 	registry := registeredCodes(t)
 	registered, pending, problems := checkReasonCodes(readRepoFile(t, adminProtoRel), registry)
@@ -188,11 +170,9 @@ func TestAuthorityAdminReasonCodesAreRegistered(t *testing.T) {
 		t.Error(p)
 	}
 	if len(pending) != 0 {
-		t.Errorf("reason_code_pending markers %v: the provisioning API registers no new code", pending)
+		t.Errorf("reason_code_pending markers %v: this API registers no new code", pending)
 	}
-	for _, code := range []string{"SCHEMA_VIOLATION", "IDEMPOTENCY_CONFLICT", "INSUFFICIENT_PRIVILEGE", "TENANT_ISOLATION",
-		"IDENTITY_ISOLATION_VIOLATION", "DELEGATION_SCOPE_VIOLATION", "PRINCIPAL_INACTIVE", "MANDATE_INACTIVE",
-		"EMERGENCY_STOP_FENCED", "APPROVER_NOT_DISTINCT", "APPROVAL_REQUIRED", "AUTHORITY_CHANGED"} {
+	for _, code := range []string{"SCHEMA_VIOLATION", "INSUFFICIENT_PRIVILEGE", "IDENTITY_ISOLATION_VIOLATION", "PRINCIPAL_INACTIVE"} {
 		if !slices.Contains(registered, code) {
 			t.Errorf("the proto no longer names %s", code)
 		}
@@ -207,9 +187,6 @@ func TestAuthorityAdminEnums(t *testing.T) {
 	}{
 		{PrincipalKind(0).Descriptor(), []string{"0:PRINCIPAL_KIND_UNSPECIFIED", "1:PRINCIPAL_KIND_HUMAN", "2:PRINCIPAL_KIND_AGENT", "3:PRINCIPAL_KIND_SERVICE"}},
 		{PrincipalStatus(0).Descriptor(), []string{"0:PRINCIPAL_STATUS_UNSPECIFIED", "1:PRINCIPAL_STATUS_ACTIVE", "2:PRINCIPAL_STATUS_DISABLED"}},
-		{MandateStatus(0).Descriptor(), []string{"0:MANDATE_STATUS_UNSPECIFIED", "1:MANDATE_STATUS_ACTIVE", "2:MANDATE_STATUS_REVOKED"}},
-		{LimitMeasure(0).Descriptor(), []string{"0:LIMIT_MEASURE_UNSPECIFIED", "1:LIMIT_MEASURE_SUM", "2:LIMIT_MEASURE_COUNT", "3:LIMIT_MEASURE_DISTINCT"}},
-		{LimitWindow(0).Descriptor(), []string{"0:LIMIT_WINDOW_UNSPECIFIED", "1:LIMIT_WINDOW_NONE", "2:LIMIT_WINDOW_HOUR", "3:LIMIT_WINDOW_DAY", "4:LIMIT_WINDOW_MONTH"}},
 	}
 	for _, c := range cases {
 		if got := enumValues(c.enum); !slices.Equal(got, c.want) {
@@ -218,193 +195,113 @@ func TestAuthorityAdminEnums(t *testing.T) {
 	}
 }
 
-// activationDigestV1 is the reference construction of activation digest v1, as
-// the design note specifies it, over the wire messages. It is independent of
-// the gateway's implementation and of testdata/activation_digest.py.
-func activationDigestV1(holder, requestedBy string, terms *MandateTerms, limits []*LimitTerms) []byte {
-	h := sha256.New()
-	u64 := func(v uint64) {
-		var b [8]byte
-		binary.BigEndian.PutUint64(b[:], v)
-		h.Write(b[:])
+// The step-up proof is ApproveRequest field 4, the number the effect API held
+// for it, and a string: a compact token.
+func TestApproveRequestCarriesTheStepUpProof(t *testing.T) {
+	f := (&ApproveRequest{}).ProtoReflect().Descriptor().Fields().ByNumber(4)
+	if f == nil || f.Name() != "step_up_proof" || f.Kind() != protoreflect.StringKind {
+		t.Fatalf("ApproveRequest field 4 is %v, want the string step_up_proof", f)
 	}
-	field := func(b []byte) {
-		u64(uint64(len(b)))
-		h.Write(b)
+	if (&RejectRequest{}).ProtoReflect().Descriptor().Fields().ByName("step_up_proof") != nil {
+		t.Error("RejectRequest carries a step-up proof; a rejection narrows and needs none")
 	}
-	sortedSet := func(values []string) {
-		set := slices.Clone(values)
-		slices.Sort(set)
-		set = slices.Compact(set)
-		u64(uint64(len(set)))
-		for _, v := range set {
-			field([]byte(v))
-		}
-	}
-	optional := func(v *int64) {
-		if v == nil {
-			h.Write([]byte{0})
-			return
-		}
-		h.Write([]byte{1})
-		u64(uint64(*v))
-	}
-	field([]byte("helm.gateway.v1.mandate-activation-digest.v1"))
-	field([]byte(holder))
-	field([]byte(requestedBy))
-	sortedSet(terms.GetEffectTypes())
-	optional(terms.PerCallLimit)
-	optional(terms.ApprovalThreshold)
-	field([]byte(microsText(terms.GetValidFrom())))
-	field([]byte(microsText(terms.GetValidUntil())))
-	sortedSet(terms.GetTargets())
-	field([]byte(terms.GetCondition()))
-	sortedSet(terms.GetApprovalRequired())
-	types := make([]string, 0, len(terms.GetRiskClasses()))
-	for effectType := range terms.GetRiskClasses() {
-		types = append(types, effectType)
-	}
-	slices.Sort(types)
-	u64(uint64(len(types)))
-	for _, effectType := range types {
-		field([]byte(effectType))
-		field([]byte(strings.ToLower(strings.TrimPrefix(terms.GetRiskClasses()[effectType].String(), "RISK_CLASS_"))))
-	}
-	ordered := slices.Clone(limits)
-	slices.SortFunc(ordered, func(a, b *LimitTerms) int {
-		for _, c := range []int{
-			strings.Compare(a.GetUnit(), b.GetUnit()),
-			strings.Compare(measureName(a.GetMeasure()), measureName(b.GetMeasure())),
-			strings.Compare(windowName(a.GetWindow()), windowName(b.GetWindow())),
-			int(a.GetSpan()) - int(b.GetSpan()),
-		} {
-			if c != 0 {
-				return c
-			}
-		}
-		switch {
-		case a.GetValue() < b.GetValue():
-			return -1
-		case a.GetValue() > b.GetValue():
-			return 1
-		}
-		return 0
-	})
-	u64(uint64(len(ordered)))
-	for _, l := range ordered {
-		field([]byte(l.GetUnit()))
-		field([]byte(measureName(l.GetMeasure())))
-		field([]byte(windowName(l.GetWindow())))
-		u64(uint64(l.GetSpan()))
-		u64(uint64(l.GetValue()))
-	}
-	return h.Sum(nil)
 }
 
-func measureName(m LimitMeasure) string {
-	return strings.ToLower(strings.TrimPrefix(m.String(), "LIMIT_MEASURE_"))
-}
-
-func windowName(w LimitWindow) string {
-	return strings.ToLower(strings.TrimPrefix(w.String(), "LIMIT_WINDOW_"))
-}
-
-// microsText is a timestamp as the digest encodes it: RFC 3339, UTC, exactly
-// six fractional digits, truncated to microseconds, never rounded.
-func microsText(ts *timestamppb.Timestamp) string {
-	return ts.AsTime().UTC().Truncate(time.Microsecond).Format("2006-01-02T15:04:05.000000Z")
-}
-
-func activationVector() (string, string, *MandateTerms, []*LimitTerms) {
-	threshold := int64(0)
-	terms := &MandateTerms{
-		EffectTypes:       []string{"github.repository.get", "github.branch.create_from_changes", "github.repository.get"},
-		ApprovalThreshold: &threshold,
-		ValidFrom:         timestamppb.New(time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)),
-		ValidUntil:        timestamppb.New(time.Date(2026, 10, 30, 12, 30, 45, 123456789, time.UTC)),
-		Targets:           []string{"github.com/Mindburn-Labs/example", "github.com/Mindburn-Labs/other"},
-		Condition:         `input.args.head.startsWith("helm/")`,
-		ApprovalRequired:  []string{"github.branch.create_from_changes"},
-		RiskClasses: map[string]RiskClass{
-			"github.repository.get":             RiskClass_RISK_CLASS_LOW,
-			"github.branch.create_from_changes": RiskClass_RISK_CLASS_MEDIUM,
-		},
+// ListAttempts filters and pages: the shape the design note gives, on the
+// field numbers it took.
+func TestListAttemptsShape(t *testing.T) {
+	req := (&ListAttemptsRequest{}).ProtoReflect().Descriptor()
+	want := map[protoreflect.Name]protoreflect.FieldNumber{
+		"states": 1, "commitment_id": 2, "case_id": 3, "requester_principal_id": 4, "effect_type": 5,
+		"updated_after": 6, "page_size": 7, "page_token": 8,
 	}
-	limits := []*LimitTerms{
-		{Unit: "usd_cents", Measure: LimitMeasure_LIMIT_MEASURE_SUM, Window: LimitWindow_LIMIT_WINDOW_MONTH, Span: 1, Value: 50000},
-		{Unit: "count", Measure: LimitMeasure_LIMIT_MEASURE_COUNT, Window: LimitWindow_LIMIT_WINDOW_DAY, Span: 1, Value: 20},
+	if req.Fields().Len() != len(want) {
+		t.Errorf("ListAttemptsRequest has %d fields, want %d", req.Fields().Len(), len(want))
 	}
-	return "agent-a", "human-a", terms, limits
-}
-
-// The activation digest test vector. testdata/activation_digest.py is a
-// separate Python implementation of the design note's construction; the Go
-// reference, the Python one and the note must carry the same value, so the
-// Control Plane can check its own encoder before it mints an approval token.
-func TestActivationDigestVector(t *testing.T) {
-	const want = "fe6393c4a564545f1e6b835f0e06eddc7d555120272158e578f8ca6a1908c527"
-	holder, requestedBy, terms, limits := activationVector()
-	got := hex.EncodeToString(activationDigestV1(holder, requestedBy, terms, limits))
-	if got != want {
-		t.Fatalf("activation digest = %s, want %s", got, want)
-	}
-	// Planted: the digest ignores the order of set-like fields and the
-	// nanoseconds below a microsecond; it must follow every other field.
-	reordered := &MandateTerms{}
-	reordered.EffectTypes = slices.Clone(terms.EffectTypes)
-	slices.Reverse(reordered.EffectTypes)
-	reordered.ApprovalThreshold, reordered.ValidFrom, reordered.ValidUntil = terms.ApprovalThreshold, terms.ValidFrom, terms.ValidUntil
-	reordered.Targets = []string{terms.Targets[1], terms.Targets[0]}
-	reordered.Condition, reordered.ApprovalRequired, reordered.RiskClasses = terms.Condition, terms.ApprovalRequired, terms.RiskClasses
-	if hex.EncodeToString(activationDigestV1(holder, requestedBy, reordered, []*LimitTerms{limits[1], limits[0]})) != want {
-		t.Error("the digest depends on the order of effect types, targets or limits; they are sorted before encoding")
-	}
-	trimmed := &MandateTerms{
-		EffectTypes: terms.EffectTypes, ApprovalThreshold: terms.ApprovalThreshold, ValidFrom: terms.ValidFrom,
-		ValidUntil: timestamppb.New(time.Date(2026, 10, 30, 12, 30, 45, 123456000, time.UTC)), Targets: terms.Targets,
-		Condition: terms.Condition, ApprovalRequired: terms.ApprovalRequired, RiskClasses: terms.RiskClasses,
-	}
-	if hex.EncodeToString(activationDigestV1(holder, requestedBy, trimmed, limits)) != want {
-		t.Error("nanoseconds below a microsecond change the digest; they are truncated")
-	}
-	for name, digest := range map[string][]byte{
-		"holder":       activationDigestV1("agent-b", requestedBy, terms, limits),
-		"requested_by": activationDigestV1(holder, "human-b", terms, limits),
-		"limit value":  activationDigestV1(holder, requestedBy, terms, []*LimitTerms{limits[0], {Unit: "count", Measure: LimitMeasure_LIMIT_MEASURE_COUNT, Window: LimitWindow_LIMIT_WINDOW_DAY, Span: 1, Value: 21}}),
-		"no limits":    activationDigestV1(holder, requestedBy, terms, nil),
-	} {
-		if hex.EncodeToString(digest) == want {
-			t.Errorf("the digest ignores the %s", name)
+	for name, number := range want {
+		if f := req.Fields().ByName(name); f == nil || f.Number() != number {
+			t.Errorf("ListAttemptsRequest.%s: got %v, want field %d", name, f, number)
 		}
 	}
+	if oneof := req.Oneofs().ByName("work_ref"); oneof == nil || oneof.Fields().Len() != 2 {
+		t.Error("ListAttemptsRequest names at most one work_ref")
+	}
+	resp := (&ListAttemptsResponse{}).ProtoReflect().Descriptor()
+	if f := resp.Fields().ByName("attempts"); f == nil || f.Number() != 1 || !f.IsList() {
+		t.Error("ListAttemptsResponse.attempts is not repeated field 1")
+	}
+	if f := resp.Fields().ByName("next_page_token"); f == nil || f.Number() != 2 {
+		t.Error("ListAttemptsResponse.next_page_token is not field 2")
+	}
+}
 
-	// The independent Python implementation. A missing interpreter fails the
-	// test: a vector nobody recomputed proves nothing.
+// planDigest is the reference plan digest: SHA-256 of the RFC 8785 form of the
+// plan without base_plan_digest. For the ASCII strings and integers a plan
+// carries, that form is compact JSON with the members sorted by name, which is
+// what encoding/json writes for a map. Numbers keep their digits.
+func planDigest(t *testing.T, raw []byte) string {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var plan map[string]any
+	if err := dec.Decode(&plan); err != nil {
+		t.Fatal(err)
+	}
+	delete(plan, "base_plan_digest")
+	canonical, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:])
+}
+
+// The plan digest test vector. testdata/plan_digest.py is a separate Python
+// implementation; the Go reference, the Python one and the design note must
+// carry the same value, so the Control Plane can check its own encoder before
+// it sends a plan, and the gateway's implementation (core/pkg/gateway/effectargs,
+// over core/pkg/canonicalize) is held to the same value by its own test.
+func TestPlanDigestVector(t *testing.T) {
+	const want = "70d6c47ca51186780504038bdadb939319455ee16c14f59d4829fd1a8bdee5af"
+	plan := []byte(readRepoFile(t, "protocols/json-schemas/effects/authority/examples/provision.v1.valid.json"))
+	if got := planDigest(t, plan); got != want {
+		t.Fatalf("plan digest = %s, want %s", got, want)
+	}
+	// Planted: base_plan_digest is not part of the digest; any other byte is.
+	var doc map[string]any
+	if err := json.Unmarshal(plan, &doc); err != nil {
+		t.Fatal(err)
+	}
+	doc["base_plan_digest"] = strings.Repeat("f", 64)
+	other, _ := json.Marshal(doc)
+	if got := planDigest(t, other); got != want {
+		t.Errorf("base_plan_digest changed the digest to %s", got)
+	}
+	doc["version_ref"] = "another"
+	changed, _ := json.Marshal(doc)
+	if planDigest(t, changed) == want {
+		t.Error("the digest ignores version_ref")
+	}
+
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Fatalf("python3 is required for the cross-implementation check: %v", err)
 	}
-	out, err := exec.Command(python, filepath.Join("testdata", "activation_digest.py")).Output()
+	out, err := exec.Command(python, filepath.Join("testdata", "plan_digest.py"), repoRoot(t)).Output()
 	if err != nil {
-		t.Fatalf("testdata/activation_digest.py: %v", err)
+		t.Fatalf("testdata/plan_digest.py: %v", err)
 	}
 	var py struct {
-		Digest         string `json:"digest"`
-		Truncated      string `json:"truncated"`
-		Reordered      string `json:"reordered"`
-		ValidUntilText string `json:"valid_until_text"`
+		Digest        string `json:"digest"`
+		WithOtherBase string `json:"with_other_base"`
 	}
 	if err := json.Unmarshal(out, &py); err != nil {
-		t.Fatalf("testdata/activation_digest.py output: %v", err)
+		t.Fatalf("testdata/plan_digest.py output: %v", err)
 	}
-	if py.Digest != want || py.Truncated != want || py.Reordered != want || py.ValidUntilText != "2026-10-30T12:30:45.123456Z" {
+	if py.Digest != want || py.WithOtherBase != want {
 		t.Errorf("the Python reference disagrees with Go: %+v, want %s", py, want)
 	}
-
-	doc := readRepoFile(t, "docs/architecture/gateway-provisioning-api.md")
-	for _, v := range []string{want, "2026-10-30T12:30:45.123456Z"} {
-		if !strings.Contains(doc, v) {
-			t.Errorf("docs/architecture/gateway-provisioning-api.md does not carry %s", v)
-		}
+	if doc := readRepoFile(t, "docs/architecture/gateway-provisioning-api.md"); !strings.Contains(doc, want) {
+		t.Errorf("docs/architecture/gateway-provisioning-api.md does not carry %s", want)
 	}
 }

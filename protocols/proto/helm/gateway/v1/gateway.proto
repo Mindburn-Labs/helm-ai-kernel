@@ -84,8 +84,6 @@ option go_package = "helm.mindburn.run/gateway/v1;gatewayv1";
 //   - unavailable, aborted: transient; ErrorDetail.retryable is true and the
 //     caller retries with the same request.
 //
-// Slice 2 adds ListAttempts (token scope helm.gateway.read); the name is
-// taken. Its shape is in the design note.
 service EffectGatewayService {
   // Propose prepares and admits one effect in a single transaction
   // (ADR-0001 §1): idempotency first, authority rows locked, stops read after
@@ -146,9 +144,8 @@ service EffectGatewayService {
   //   - approval_digest must equal the pending approval's digest, or the call
   //     is failed_precondition.
   //   - Approvals that need step-up (§10.1: risk class high or irreversible,
-  //     authority widening, stop lifts) fail closed with permission_denied
-  //     [reason_code: STEP_UP_REQUIRED] until the step-up assertion
-  //     field exists (held field number 4).
+  //     authority widening) need the step_up_proof and fail closed without a
+  //     valid one, with permission_denied [reason_code: STEP_UP_REQUIRED].
   //
   // An attempt that is no longer ESCALATED is returned unchanged with
   // existing true.
@@ -256,6 +253,25 @@ service EffectGatewayService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // ListAttempts lists the attempts of the token's tenant and workspace that
+  // match its filters, oldest change first: ordered by (updated_at,
+  // attempt_id). It finds what the caller did not create, such as the
+  // ESCALATED attempts of SDK agents that propose directly, and lets the
+  // Control Plane sync its projection incrementally: it keeps the last
+  // updated_at it saw and asks again with updated_after.
+  //
+  // Token scope: helm.gateway.read.
+  //
+  // Every filter narrows and none widens: an attempt of another tenant or
+  // workspace is never listed. A page holds at most page_size attempts; a
+  // response with a next_page_token has more, and the same request with that
+  // token continues where the page ended. An attempt that changes while the
+  // caller pages is listed again at its new position if it moves past the
+  // cursor.
+  rpc ListAttempts(ListAttemptsRequest) returns (ListAttemptsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // Stop writes a stop row and bumps the version of its scope's control row
   // (ADR-0001 §1, narrowing transitions). Narrowing needs no approval
   // (§4.1 item 7). Admissions after the commit are DENIED and admitted
@@ -331,9 +347,6 @@ message ProposeResponse {
 }
 
 // ApproveRequest approves one ESCALATED attempt.
-//
-// Field number 4 is held for the §10.1 step-up assertion. Until that field
-// exists, approvals that need step-up fail closed.
 message ApproveRequest {
   // The attempt to approve.
   string attempt_id = 1;
@@ -345,6 +358,19 @@ message ApproveRequest {
   // Optional, at most 2000 bytes of UTF-8. The log carries its digest
   // (R13).
   string reason = 3;
+  // The §10.1 step-up proof, required to approve an effect that needs step-up
+  // (risk class high or irreversible, and every helm.authority.* widening) and
+  // ignored otherwise. A compact token that the Control Plane's issuer signs
+  // after it verified the approver's WebAuthn assertion over the approval
+  // digest. It carries the scope helm.gateway.stepup, the approver as sub, and
+  // one authorization_details entry
+  //   {"type": "helm_step_up", "attempt_id": "<attempt_id>",
+  //    "approval_digest": "<hex>", "method": "webauthn"}
+  // naming exactly this attempt and the digest the approver was shown; it is
+  // single-use, and it must be of the decide token's tenant and principal.
+  // Without a valid proof the approval is permission_denied
+  // [reason_code: STEP_UP_REQUIRED] and the attempt stays ESCALATED.
+  string step_up_proof = 4;
 }
 
 // ApproveResponse returns the attempt after the approval.
@@ -443,6 +469,39 @@ message GetAttemptContentResponse {
   // The exact argument bytes that were proposed. SHA-256 of them equals the
   // attempt's argument_digest; a client checks that before it trusts them.
   bytes arguments = 2;
+}
+
+// ListAttemptsRequest filters the attempts to list.
+message ListAttemptsRequest {
+  // Only attempts in one of these states. Empty: every state.
+  repeated EffectAttemptState states = 1;
+  // Only attempts that serve this commitment or this case. At most one is set.
+  oneof work_ref {
+    string commitment_id = 2;
+    string case_id = 3;
+  }
+  // Only attempts proposed by this principal: the sub of their Propose token.
+  // A filter on other principals' attempts, not an assertion of the caller's
+  // identity, which comes only from the token.
+  string requester_principal_id = 4;
+  // Only attempts of this effect type.
+  string effect_type = 5;
+  // Only attempts whose updated_at is after this instant, exclusive: the
+  // incremental cursor. Unset: from the beginning.
+  google.protobuf.Timestamp updated_after = 6;
+  // At most this many attempts per page, 1 to 200. Zero means 50.
+  int32 page_size = 7;
+  // The next_page_token of the previous page, unchanged. Empty for the first
+  // page. A token belongs to one set of filters.
+  string page_token = 8;
+}
+
+// ListAttemptsResponse is one page of attempts.
+message ListAttemptsResponse {
+  // The attempts as stored, oldest change first.
+  repeated EffectAttempt attempts = 1;
+  // Set when more attempts follow; empty on the last page.
+  string next_page_token = 2;
 }
 
 // StopRequest stops new effects in one scope.

@@ -114,6 +114,9 @@ const (
 	// EffectGatewayServiceGetAttemptContentProcedure is the fully-qualified name of the
 	// EffectGatewayService's GetAttemptContent RPC.
 	EffectGatewayServiceGetAttemptContentProcedure = "/helm.gateway.v1.EffectGatewayService/GetAttemptContent"
+	// EffectGatewayServiceListAttemptsProcedure is the fully-qualified name of the
+	// EffectGatewayService's ListAttempts RPC.
+	EffectGatewayServiceListAttemptsProcedure = "/helm.gateway.v1.EffectGatewayService/ListAttempts"
 	// EffectGatewayServiceStopProcedure is the fully-qualified name of the EffectGatewayService's Stop
 	// RPC.
 	EffectGatewayServiceStopProcedure = "/helm.gateway.v1.EffectGatewayService/Stop"
@@ -184,9 +187,8 @@ type EffectGatewayServiceClient interface {
 	//   - approval_digest must equal the pending approval's digest, or the call
 	//     is failed_precondition.
 	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
-	//     authority widening, stop lifts) fail closed with permission_denied
-	//     [reason_code: STEP_UP_REQUIRED] until the step-up assertion
-	//     field exists (held field number 4).
+	//     authority widening) need the step_up_proof and fail closed without a
+	//     valid one, with permission_denied [reason_code: STEP_UP_REQUIRED].
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.
@@ -284,6 +286,22 @@ type EffectGatewayServiceClient interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetAttemptContent(context.Context, *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error)
+	// ListAttempts lists the attempts of the token's tenant and workspace that
+	// match its filters, oldest change first: ordered by (updated_at,
+	// attempt_id). It finds what the caller did not create, such as the
+	// ESCALATED attempts of SDK agents that propose directly, and lets the
+	// Control Plane sync its projection incrementally: it keeps the last
+	// updated_at it saw and asks again with updated_after.
+	//
+	// Token scope: helm.gateway.read.
+	//
+	// Every filter narrows and none widens: an attempt of another tenant or
+	// workspace is never listed. A page holds at most page_size attempts; a
+	// response with a next_page_token has more, and the same request with that
+	// token continues where the page ended. An attempt that changes while the
+	// caller pages is listed again at its new position if it moves past the
+	// cursor.
+	ListAttempts(context.Context, *connect.Request[ListAttemptsRequest]) (*connect.Response[ListAttemptsResponse], error)
 	// Stop writes a stop row and bumps the version of its scope's control row
 	// (ADR-0001 §1, narrowing transitions). Narrowing needs no approval
 	// (§4.1 item 7). Admissions after the commit are DENIED and admitted
@@ -377,6 +395,13 @@ func NewEffectGatewayServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listAttempts: connect.NewClient[ListAttemptsRequest, ListAttemptsResponse](
+			httpClient,
+			baseURL+EffectGatewayServiceListAttemptsProcedure,
+			connect.WithSchema(effectGatewayServiceMethods.ByName("ListAttempts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		stop: connect.NewClient[StopRequest, StopResponse](
 			httpClient,
 			baseURL+EffectGatewayServiceStopProcedure,
@@ -402,6 +427,7 @@ type effectGatewayServiceClient struct {
 	observe           *connect.Client[ObserveRequest, ObserveResponse]
 	getAttempt        *connect.Client[GetAttemptRequest, GetAttemptResponse]
 	getAttemptContent *connect.Client[GetAttemptContentRequest, GetAttemptContentResponse]
+	listAttempts      *connect.Client[ListAttemptsRequest, ListAttemptsResponse]
 	stop              *connect.Client[StopRequest, StopResponse]
 	lift              *connect.Client[LiftRequest, LiftResponse]
 }
@@ -444,6 +470,11 @@ func (c *effectGatewayServiceClient) GetAttempt(ctx context.Context, req *connec
 // GetAttemptContent calls helm.gateway.v1.EffectGatewayService.GetAttemptContent.
 func (c *effectGatewayServiceClient) GetAttemptContent(ctx context.Context, req *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error) {
 	return c.getAttemptContent.CallUnary(ctx, req)
+}
+
+// ListAttempts calls helm.gateway.v1.EffectGatewayService.ListAttempts.
+func (c *effectGatewayServiceClient) ListAttempts(ctx context.Context, req *connect.Request[ListAttemptsRequest]) (*connect.Response[ListAttemptsResponse], error) {
+	return c.listAttempts.CallUnary(ctx, req)
 }
 
 // Stop calls helm.gateway.v1.EffectGatewayService.Stop.
@@ -519,9 +550,8 @@ type EffectGatewayServiceHandler interface {
 	//   - approval_digest must equal the pending approval's digest, or the call
 	//     is failed_precondition.
 	//   - Approvals that need step-up (§10.1: risk class high or irreversible,
-	//     authority widening, stop lifts) fail closed with permission_denied
-	//     [reason_code: STEP_UP_REQUIRED] until the step-up assertion
-	//     field exists (held field number 4).
+	//     authority widening) need the step_up_proof and fail closed without a
+	//     valid one, with permission_denied [reason_code: STEP_UP_REQUIRED].
 	//
 	// An attempt that is no longer ESCALATED is returned unchanged with
 	// existing true.
@@ -619,6 +649,22 @@ type EffectGatewayServiceHandler interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetAttemptContent(context.Context, *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error)
+	// ListAttempts lists the attempts of the token's tenant and workspace that
+	// match its filters, oldest change first: ordered by (updated_at,
+	// attempt_id). It finds what the caller did not create, such as the
+	// ESCALATED attempts of SDK agents that propose directly, and lets the
+	// Control Plane sync its projection incrementally: it keeps the last
+	// updated_at it saw and asks again with updated_after.
+	//
+	// Token scope: helm.gateway.read.
+	//
+	// Every filter narrows and none widens: an attempt of another tenant or
+	// workspace is never listed. A page holds at most page_size attempts; a
+	// response with a next_page_token has more, and the same request with that
+	// token continues where the page ended. An attempt that changes while the
+	// caller pages is listed again at its new position if it moves past the
+	// cursor.
+	ListAttempts(context.Context, *connect.Request[ListAttemptsRequest]) (*connect.Response[ListAttemptsResponse], error)
 	// Stop writes a stop row and bumps the version of its scope's control row
 	// (ADR-0001 §1, narrowing transitions). Narrowing needs no approval
 	// (§4.1 item 7). Admissions after the commit are DENIED and admitted
@@ -708,6 +754,13 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	effectGatewayServiceListAttemptsHandler := connect.NewUnaryHandler(
+		EffectGatewayServiceListAttemptsProcedure,
+		svc.ListAttempts,
+		connect.WithSchema(effectGatewayServiceMethods.ByName("ListAttempts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	effectGatewayServiceStopHandler := connect.NewUnaryHandler(
 		EffectGatewayServiceStopProcedure,
 		svc.Stop,
@@ -738,6 +791,8 @@ func NewEffectGatewayServiceHandler(svc EffectGatewayServiceHandler, opts ...con
 			effectGatewayServiceGetAttemptHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceGetAttemptContentProcedure:
 			effectGatewayServiceGetAttemptContentHandler.ServeHTTP(w, r)
+		case EffectGatewayServiceListAttemptsProcedure:
+			effectGatewayServiceListAttemptsHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceStopProcedure:
 			effectGatewayServiceStopHandler.ServeHTTP(w, r)
 		case EffectGatewayServiceLiftProcedure:
@@ -781,6 +836,10 @@ func (UnimplementedEffectGatewayServiceHandler) GetAttempt(context.Context, *con
 
 func (UnimplementedEffectGatewayServiceHandler) GetAttemptContent(context.Context, *connect.Request[GetAttemptContentRequest]) (*connect.Response[GetAttemptContentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.GetAttemptContent is not implemented"))
+}
+
+func (UnimplementedEffectGatewayServiceHandler) ListAttempts(context.Context, *connect.Request[ListAttemptsRequest]) (*connect.Response[ListAttemptsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.EffectGatewayService.ListAttempts is not implemented"))
 }
 
 func (UnimplementedEffectGatewayServiceHandler) Stop(context.Context, *connect.Request[StopRequest]) (*connect.Response[StopResponse], error) {

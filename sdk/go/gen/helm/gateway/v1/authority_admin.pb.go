@@ -4,44 +4,32 @@
 // 	protoc        v7.34.1
 // source: helm/gateway/v1/authority_admin.proto
 
-// The gateway provisioning API: the writes that make a tenant's authority rows
-// (docs/architecture/authority-rows.md) exist on helm-gateway. The Control
-// Plane calls it to enrol a tenant, register its principals and effect types,
-// activate and delegate mandates and set limits; admission
-// (EffectGatewayService.Propose) then reads exactly those rows. Design note:
-// docs/architecture/gateway-provisioning-api.md.
+// The gateway's authority administration API. Authority itself is provisioned
+// as effects, through the effect API: helm.authority.provision.v1 applies a
+// whole organization's principals, effect types, mandates and limits behind a
+// distinct human's approval, and helm.authority.narrow.v1 applies a change that
+// only narrows (docs/architecture/gateway-provisioning-api.md). This service is
+// what that path cannot do for itself:
+//
+//   - EnsurePrincipals registers a tenant's first principals, so that an
+//     effect can be proposed (its requester is a registered service principal)
+//     and approved (its approver is a registered human principal) at all;
+//   - GetProvisioning reads what a provision effect applied;
+//   - ListEffectTypes reads the catalog of effect types the gateway performs,
+//     with their argument schemas.
 //
 // Wire rules, as for gateway.proto (rule R9, ADR-0005):
 //
 //   - Identity. The tenant comes only from the caller's token. No request
-//     message carries a tenant or workspace. The principal ids and mandate ids
-//     that appear in requests are the objects being provisioned, or selectors
-//     the gateway checks against its own rows; they never grant authority (R3).
-//   - Token scope. Every RPC takes the scope helm.gateway.provision, which the
-//     Control Plane's issuer mints for its service principal only. ADR-0005
-//     allows one scope per token. A principal that the gateway's own rows
-//     register as a human is refused, whatever its token says.
-//   - Idempotency (R6). Every RPC carries a tenant-scoped idempotency key.
-//     The gateway stores the key with a digest of the request (every field
-//     except the key and the approval token, and the calling principal) in the
-//     transaction that makes the write.
-//       * New key: the write happens, in one transaction.
-//       * Same key, same digest: nothing is written; the current state of what
-//         the key named is returned, with existing = true. A repeated
-//         ActivateRootMandate needs no valid approval token.
-//       * Same key, different digest: already_exists
-//         [reason_code: IDEMPOTENCY_CONFLICT].
-//   - Narrowing needs no approval; widening does. Registering a principal or an
-//     effect type, delegating, revoking, disabling and lowering a limit only
-//     narrow or add nothing a mandate has not already granted. Activating a
-//     root mandate widens authority, so it carries the proof of a distinct
-//     human's approval (ActivateRootMandateRequest.approval_token). Nothing
-//     here raises a limit, lowers a risk class or re-enables a principal;
-//     those widenings are refused.
+//     message carries a tenant or a workspace.
+//   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
+//     Control Plane's issuer mints for its service principal only, and which no
+//     other RPC takes. GetProvisioning and ListEffectTypes take
+//     helm.gateway.read. ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
-// quantum_posture: this contract carries SHA-256 digests as opaque values and
-// bearer tokens as opaque strings. Token verification is ADR-0005's and adds no
+// quantum_posture: this contract carries SHA-256 digests as opaque strings and
+// no signatures or keys. Token verification is ADR-0005's and adds no
 // cryptographic control here; no post-quantum claim is made.
 
 package gatewayv1
@@ -128,7 +116,7 @@ const (
 	PrincipalStatus_PRINCIPAL_STATUS_UNSPECIFIED PrincipalStatus = 0
 	// Accepted.
 	PrincipalStatus_PRINCIPAL_STATUS_ACTIVE PrincipalStatus = 1
-	// Disabled by DeactivatePrincipal. Final.
+	// Disabled by a plan's disable_principals. Final.
 	PrincipalStatus_PRINCIPAL_STATUS_DISABLED PrincipalStatus = 2
 )
 
@@ -171,177 +159,6 @@ func (x PrincipalStatus) Number() protoreflect.EnumNumber {
 // Deprecated: Use PrincipalStatus.Descriptor instead.
 func (PrincipalStatus) EnumDescriptor() ([]byte, []int) {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{1}
-}
-
-// MandateStatus is whether a mandate admits.
-type MandateStatus int32
-
-const (
-	// Not set.
-	MandateStatus_MANDATE_STATUS_UNSPECIFIED MandateStatus = 0
-	// Admits, while its validity window holds and every mandate above it does.
-	MandateStatus_MANDATE_STATUS_ACTIVE MandateStatus = 1
-	// Revoked by RevokeMandate. Final.
-	MandateStatus_MANDATE_STATUS_REVOKED MandateStatus = 2
-)
-
-// Enum value maps for MandateStatus.
-var (
-	MandateStatus_name = map[int32]string{
-		0: "MANDATE_STATUS_UNSPECIFIED",
-		1: "MANDATE_STATUS_ACTIVE",
-		2: "MANDATE_STATUS_REVOKED",
-	}
-	MandateStatus_value = map[string]int32{
-		"MANDATE_STATUS_UNSPECIFIED": 0,
-		"MANDATE_STATUS_ACTIVE":      1,
-		"MANDATE_STATUS_REVOKED":     2,
-	}
-)
-
-func (x MandateStatus) Enum() *MandateStatus {
-	p := new(MandateStatus)
-	*p = x
-	return p
-}
-
-func (x MandateStatus) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (MandateStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_helm_gateway_v1_authority_admin_proto_enumTypes[2].Descriptor()
-}
-
-func (MandateStatus) Type() protoreflect.EnumType {
-	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[2]
-}
-
-func (x MandateStatus) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use MandateStatus.Descriptor instead.
-func (MandateStatus) EnumDescriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{2}
-}
-
-// LimitMeasure is what a limit counts.
-type LimitMeasure int32
-
-const (
-	// Not set. Refused.
-	LimitMeasure_LIMIT_MEASURE_UNSPECIFIED LimitMeasure = 0
-	// The sum of the quoted amounts of one unit.
-	LimitMeasure_LIMIT_MEASURE_SUM LimitMeasure = 1
-	// The number of effects.
-	LimitMeasure_LIMIT_MEASURE_COUNT LimitMeasure = 2
-	// The number of distinct values of one unit (a distinct-value limit).
-	LimitMeasure_LIMIT_MEASURE_DISTINCT LimitMeasure = 3
-)
-
-// Enum value maps for LimitMeasure.
-var (
-	LimitMeasure_name = map[int32]string{
-		0: "LIMIT_MEASURE_UNSPECIFIED",
-		1: "LIMIT_MEASURE_SUM",
-		2: "LIMIT_MEASURE_COUNT",
-		3: "LIMIT_MEASURE_DISTINCT",
-	}
-	LimitMeasure_value = map[string]int32{
-		"LIMIT_MEASURE_UNSPECIFIED": 0,
-		"LIMIT_MEASURE_SUM":         1,
-		"LIMIT_MEASURE_COUNT":       2,
-		"LIMIT_MEASURE_DISTINCT":    3,
-	}
-)
-
-func (x LimitMeasure) Enum() *LimitMeasure {
-	p := new(LimitMeasure)
-	*p = x
-	return p
-}
-
-func (x LimitMeasure) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (LimitMeasure) Descriptor() protoreflect.EnumDescriptor {
-	return file_helm_gateway_v1_authority_admin_proto_enumTypes[3].Descriptor()
-}
-
-func (LimitMeasure) Type() protoreflect.EnumType {
-	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[3]
-}
-
-func (x LimitMeasure) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use LimitMeasure.Descriptor instead.
-func (LimitMeasure) EnumDescriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{3}
-}
-
-// LimitWindow is the period a limit's counter covers.
-type LimitWindow int32
-
-const (
-	// Not set. Refused.
-	LimitWindow_LIMIT_WINDOW_UNSPECIFIED LimitWindow = 0
-	// No window: one counter for good.
-	LimitWindow_LIMIT_WINDOW_NONE LimitWindow = 1
-	// Per UTC hour.
-	LimitWindow_LIMIT_WINDOW_HOUR LimitWindow = 2
-	// Per UTC day.
-	LimitWindow_LIMIT_WINDOW_DAY LimitWindow = 3
-	// Per UTC month.
-	LimitWindow_LIMIT_WINDOW_MONTH LimitWindow = 4
-)
-
-// Enum value maps for LimitWindow.
-var (
-	LimitWindow_name = map[int32]string{
-		0: "LIMIT_WINDOW_UNSPECIFIED",
-		1: "LIMIT_WINDOW_NONE",
-		2: "LIMIT_WINDOW_HOUR",
-		3: "LIMIT_WINDOW_DAY",
-		4: "LIMIT_WINDOW_MONTH",
-	}
-	LimitWindow_value = map[string]int32{
-		"LIMIT_WINDOW_UNSPECIFIED": 0,
-		"LIMIT_WINDOW_NONE":        1,
-		"LIMIT_WINDOW_HOUR":        2,
-		"LIMIT_WINDOW_DAY":         3,
-		"LIMIT_WINDOW_MONTH":       4,
-	}
-)
-
-func (x LimitWindow) Enum() *LimitWindow {
-	p := new(LimitWindow)
-	*p = x
-	return p
-}
-
-func (x LimitWindow) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (LimitWindow) Descriptor() protoreflect.EnumDescriptor {
-	return file_helm_gateway_v1_authority_admin_proto_enumTypes[4].Descriptor()
-}
-
-func (LimitWindow) Type() protoreflect.EnumType {
-	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[4]
-}
-
-func (x LimitWindow) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use LimitWindow.Descriptor instead.
-func (LimitWindow) EnumDescriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{4}
 }
 
 // ExternalSubject names a principal in the system that vouches for it, so
@@ -402,203 +219,35 @@ func (x *ExternalSubject) GetId() string {
 	return ""
 }
 
-// UpsertTenantRequest provisions the token's tenant.
-type UpsertTenantRequest struct {
+// PrincipalSpec is a principal to register.
+type PrincipalSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *UpsertTenantRequest) Reset() {
-	*x = UpsertTenantRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpsertTenantRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpsertTenantRequest) ProtoMessage() {}
-
-func (x *UpsertTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpsertTenantRequest.ProtoReflect.Descriptor instead.
-func (*UpsertTenantRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *UpsertTenantRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-// UpsertTenantResponse returns the tenant control row.
-type UpsertTenantResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The tenant.
-	Tenant *AuthorityTenant `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
-	// True when the idempotency key already named this request.
-	Existing      bool `protobuf:"varint,2,opt,name=existing,proto3" json:"existing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpsertTenantResponse) Reset() {
-	*x = UpsertTenantResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpsertTenantResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpsertTenantResponse) ProtoMessage() {}
-
-func (x *UpsertTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpsertTenantResponse.ProtoReflect.Descriptor instead.
-func (*UpsertTenantResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *UpsertTenantResponse) GetTenant() *AuthorityTenant {
-	if x != nil {
-		return x.Tenant
-	}
-	return nil
-}
-
-func (x *UpsertTenantResponse) GetExisting() bool {
-	if x != nil {
-		return x.Existing
-	}
-	return false
-}
-
-// AuthorityTenant is a tenant's control row.
-type AuthorityTenant struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The tenant, as the token names it.
-	TenantId string `protobuf:"bytes,1,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
-	// The row's version. It increases with every narrowing of the tenant
-	// itself, such as a tenant stop.
-	Version int64 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	// Database time of the row's creation.
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorityTenant) Reset() {
-	*x = AuthorityTenant{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorityTenant) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorityTenant) ProtoMessage() {}
-
-func (x *AuthorityTenant) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorityTenant.ProtoReflect.Descriptor instead.
-func (*AuthorityTenant) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *AuthorityTenant) GetTenantId() string {
-	if x != nil {
-		return x.TenantId
-	}
-	return ""
-}
-
-func (x *AuthorityTenant) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
-func (x *AuthorityTenant) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return nil
-}
-
-// UpsertPrincipalRequest registers one principal.
-type UpsertPrincipalRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	// The principal: the sub of the tokens minted for it. 1 to 255 bytes of
 	// UTF-8 without control characters or edge whitespace.
-	PrincipalId string `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	PrincipalId string `protobuf:"bytes,1,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
 	// What the principal is. Required.
-	Kind PrincipalKind `protobuf:"varint,3,opt,name=kind,proto3,enum=helm.gateway.v1.PrincipalKind" json:"kind,omitempty"`
+	Kind PrincipalKind `protobuf:"varint,2,opt,name=kind,proto3,enum=helm.gateway.v1.PrincipalKind" json:"kind,omitempty"`
 	// The external subject. Required for a human; optional otherwise.
-	ExternalSubject *ExternalSubject `protobuf:"bytes,4,opt,name=external_subject,json=externalSubject,proto3" json:"external_subject,omitempty"`
+	ExternalSubject *ExternalSubject `protobuf:"bytes,3,opt,name=external_subject,json=externalSubject,proto3" json:"external_subject,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *UpsertPrincipalRequest) Reset() {
-	*x = UpsertPrincipalRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
+func (x *PrincipalSpec) Reset() {
+	*x = PrincipalSpec{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpsertPrincipalRequest) String() string {
+func (x *PrincipalSpec) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpsertPrincipalRequest) ProtoMessage() {}
+func (*PrincipalSpec) ProtoMessage() {}
 
-func (x *UpsertPrincipalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
+func (x *PrincipalSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -609,65 +258,56 @@ func (x *UpsertPrincipalRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpsertPrincipalRequest.ProtoReflect.Descriptor instead.
-func (*UpsertPrincipalRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use PrincipalSpec.ProtoReflect.Descriptor instead.
+func (*PrincipalSpec) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *UpsertPrincipalRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *UpsertPrincipalRequest) GetPrincipalId() string {
+func (x *PrincipalSpec) GetPrincipalId() string {
 	if x != nil {
 		return x.PrincipalId
 	}
 	return ""
 }
 
-func (x *UpsertPrincipalRequest) GetKind() PrincipalKind {
+func (x *PrincipalSpec) GetKind() PrincipalKind {
 	if x != nil {
 		return x.Kind
 	}
 	return PrincipalKind_PRINCIPAL_KIND_UNSPECIFIED
 }
 
-func (x *UpsertPrincipalRequest) GetExternalSubject() *ExternalSubject {
+func (x *PrincipalSpec) GetExternalSubject() *ExternalSubject {
 	if x != nil {
 		return x.ExternalSubject
 	}
 	return nil
 }
 
-// UpsertPrincipalResponse returns the principal as stored.
-type UpsertPrincipalResponse struct {
+// EnsurePrincipalsRequest registers principals.
+type EnsurePrincipalsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The principal.
-	Principal *AuthorityPrincipal `protobuf:"bytes,1,opt,name=principal,proto3" json:"principal,omitempty"`
-	// True when the idempotency key already named this request.
-	Existing      bool `protobuf:"varint,2,opt,name=existing,proto3" json:"existing,omitempty"`
+	// 1 to 64 principals, each named once.
+	Principals    []*PrincipalSpec `protobuf:"bytes,1,rep,name=principals,proto3" json:"principals,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *UpsertPrincipalResponse) Reset() {
-	*x = UpsertPrincipalResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
+func (x *EnsurePrincipalsRequest) Reset() {
+	*x = EnsurePrincipalsRequest{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *UpsertPrincipalResponse) String() string {
+func (x *EnsurePrincipalsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*UpsertPrincipalResponse) ProtoMessage() {}
+func (*EnsurePrincipalsRequest) ProtoMessage() {}
 
-func (x *UpsertPrincipalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
+func (x *EnsurePrincipalsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,21 +318,69 @@ func (x *UpsertPrincipalResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use UpsertPrincipalResponse.ProtoReflect.Descriptor instead.
-func (*UpsertPrincipalResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{5}
+// Deprecated: Use EnsurePrincipalsRequest.ProtoReflect.Descriptor instead.
+func (*EnsurePrincipalsRequest) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *UpsertPrincipalResponse) GetPrincipal() *AuthorityPrincipal {
+func (x *EnsurePrincipalsRequest) GetPrincipals() []*PrincipalSpec {
 	if x != nil {
-		return x.Principal
+		return x.Principals
 	}
 	return nil
 }
 
-func (x *UpsertPrincipalResponse) GetExisting() bool {
+// EnsurePrincipalsResponse returns the principals as stored.
+type EnsurePrincipalsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Every principal of the request, in its order.
+	Principals []*AuthorityPrincipal `protobuf:"bytes,1,rep,name=principals,proto3" json:"principals,omitempty"`
+	// True when this call created the tenant's control row.
+	TenantCreated bool `protobuf:"varint,2,opt,name=tenant_created,json=tenantCreated,proto3" json:"tenant_created,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnsurePrincipalsResponse) Reset() {
+	*x = EnsurePrincipalsResponse{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnsurePrincipalsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnsurePrincipalsResponse) ProtoMessage() {}
+
+func (x *EnsurePrincipalsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
 	if x != nil {
-		return x.Existing
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnsurePrincipalsResponse.ProtoReflect.Descriptor instead.
+func (*EnsurePrincipalsResponse) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *EnsurePrincipalsResponse) GetPrincipals() []*AuthorityPrincipal {
+	if x != nil {
+		return x.Principals
+	}
+	return nil
+}
+
+func (x *EnsurePrincipalsResponse) GetTenantCreated() bool {
+	if x != nil {
+		return x.TenantCreated
 	}
 	return false
 }
@@ -716,7 +404,7 @@ type AuthorityPrincipal struct {
 
 func (x *AuthorityPrincipal) Reset() {
 	*x = AuthorityPrincipal{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -728,7 +416,7 @@ func (x *AuthorityPrincipal) String() string {
 func (*AuthorityPrincipal) ProtoMessage() {}
 
 func (x *AuthorityPrincipal) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -741,7 +429,7 @@ func (x *AuthorityPrincipal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorityPrincipal.ProtoReflect.Descriptor instead.
 func (*AuthorityPrincipal) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{6}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *AuthorityPrincipal) GetPrincipalId() string {
@@ -779,31 +467,137 @@ func (x *AuthorityPrincipal) GetExternalSubject() *ExternalSubject {
 	return nil
 }
 
-// DeactivatePrincipalRequest disables one principal.
-type DeactivatePrincipalRequest struct {
+// GetProvisioningRequest names an organization.
+type GetProvisioningRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// The principal to disable.
-	PrincipalId   string `protobuf:"bytes,2,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	// The organization, as its plans name it: "org:<id>".
+	OrgRef        string `protobuf:"bytes,1,opt,name=org_ref,json=orgRef,proto3" json:"org_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DeactivatePrincipalRequest) Reset() {
-	*x = DeactivatePrincipalRequest{}
+func (x *GetProvisioningRequest) Reset() {
+	*x = GetProvisioningRequest{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProvisioningRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProvisioningRequest) ProtoMessage() {}
+
+func (x *GetProvisioningRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProvisioningRequest.ProtoReflect.Descriptor instead.
+func (*GetProvisioningRequest) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetProvisioningRequest) GetOrgRef() string {
+	if x != nil {
+		return x.OrgRef
+	}
+	return ""
+}
+
+// GetProvisioningResponse returns the provisioning.
+type GetProvisioningResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the latest applied plan made.
+	Provisioning  *Provisioning `protobuf:"bytes,1,opt,name=provisioning,proto3" json:"provisioning,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProvisioningResponse) Reset() {
+	*x = GetProvisioningResponse{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProvisioningResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProvisioningResponse) ProtoMessage() {}
+
+func (x *GetProvisioningResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProvisioningResponse.ProtoReflect.Descriptor instead.
+func (*GetProvisioningResponse) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetProvisioningResponse) GetProvisioning() *Provisioning {
+	if x != nil {
+		return x.Provisioning
+	}
+	return nil
+}
+
+// Provisioning is the state a plan left an organization in.
+type Provisioning struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The organization.
+	OrgRef string `protobuf:"bytes,1,opt,name=org_ref,json=orgRef,proto3" json:"org_ref,omitempty"`
+	// The digest of the applied plan: lower-case hex SHA-256 of the RFC 8785
+	// form of its arguments without base_plan_digest. The next plan carries it
+	// as base_plan_digest.
+	PlanDigest string `protobuf:"bytes,2,opt,name=plan_digest,json=planDigest,proto3" json:"plan_digest,omitempty"`
+	// The plan's version_ref.
+	VersionRef string `protobuf:"bytes,3,opt,name=version_ref,json=versionRef,proto3" json:"version_ref,omitempty"`
+	// The plan's stage.
+	Stage string `protobuf:"bytes,4,opt,name=stage,proto3" json:"stage,omitempty"`
+	// One node per mandate of the plan, in the plan's order.
+	Nodes []*ProvisionedNode `protobuf:"bytes,5,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	// The effect attempt that applied the plan.
+	AttemptId string `protobuf:"bytes,6,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// Counts the plans applied to the organization, starting at 1.
+	Revision int64 `protobuf:"varint,7,opt,name=revision,proto3" json:"revision,omitempty"`
+	// Database time of the apply.
+	AppliedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=applied_at,json=appliedAt,proto3" json:"applied_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Provisioning) Reset() {
+	*x = Provisioning{}
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeactivatePrincipalRequest) String() string {
+func (x *Provisioning) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeactivatePrincipalRequest) ProtoMessage() {}
+func (*Provisioning) ProtoMessage() {}
 
-func (x *DeactivatePrincipalRequest) ProtoReflect() protoreflect.Message {
+func (x *Provisioning) ProtoReflect() protoreflect.Message {
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -815,50 +609,101 @@ func (x *DeactivatePrincipalRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeactivatePrincipalRequest.ProtoReflect.Descriptor instead.
-func (*DeactivatePrincipalRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use Provisioning.ProtoReflect.Descriptor instead.
+func (*Provisioning) Descriptor() ([]byte, []int) {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *DeactivatePrincipalRequest) GetIdempotencyKey() string {
+func (x *Provisioning) GetOrgRef() string {
 	if x != nil {
-		return x.IdempotencyKey
+		return x.OrgRef
 	}
 	return ""
 }
 
-func (x *DeactivatePrincipalRequest) GetPrincipalId() string {
+func (x *Provisioning) GetPlanDigest() string {
 	if x != nil {
-		return x.PrincipalId
+		return x.PlanDigest
 	}
 	return ""
 }
 
-// DeactivatePrincipalResponse returns the principal as stored.
-type DeactivatePrincipalResponse struct {
+func (x *Provisioning) GetVersionRef() string {
+	if x != nil {
+		return x.VersionRef
+	}
+	return ""
+}
+
+func (x *Provisioning) GetStage() string {
+	if x != nil {
+		return x.Stage
+	}
+	return ""
+}
+
+func (x *Provisioning) GetNodes() []*ProvisionedNode {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *Provisioning) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *Provisioning) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *Provisioning) GetAppliedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AppliedAt
+	}
+	return nil
+}
+
+// ProvisionedNode is a plan node and the mandate it became.
+type ProvisionedNode struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The principal, disabled.
-	Principal *AuthorityPrincipal `protobuf:"bytes,1,opt,name=principal,proto3" json:"principal,omitempty"`
-	// True when the idempotency key already named this request.
-	Existing      bool `protobuf:"varint,2,opt,name=existing,proto3" json:"existing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The node, as the plan names it.
+	Node string `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
+	// The mandate, UUIDv7. A node the plan left unchanged keeps its mandate.
+	MandateId string `protobuf:"bytes,2,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
+	// The principal that holds the mandate.
+	HolderId string `protobuf:"bytes,3,opt,name=holder_id,json=holderId,proto3" json:"holder_id,omitempty"`
+	// The node above it in the delegation chain. Empty for the root.
+	ParentNode string `protobuf:"bytes,4,opt,name=parent_node,json=parentNode,proto3" json:"parent_node,omitempty"`
+	// Whether the mandate is active now. A mandate revoked since the plan was
+	// applied is not.
+	Active bool `protobuf:"varint,5,opt,name=active,proto3" json:"active,omitempty"`
+	// The mandate row's version. It increases with every narrowing of it.
+	MandateVersion int64 `protobuf:"varint,6,opt,name=mandate_version,json=mandateVersion,proto3" json:"mandate_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
-func (x *DeactivatePrincipalResponse) Reset() {
-	*x = DeactivatePrincipalResponse{}
+func (x *ProvisionedNode) Reset() {
+	*x = ProvisionedNode{}
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeactivatePrincipalResponse) String() string {
+func (x *ProvisionedNode) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeactivatePrincipalResponse) ProtoMessage() {}
+func (*ProvisionedNode) ProtoMessage() {}
 
-func (x *DeactivatePrincipalResponse) ProtoReflect() protoreflect.Message {
+func (x *ProvisionedNode) ProtoReflect() protoreflect.Message {
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -870,51 +715,74 @@ func (x *DeactivatePrincipalResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeactivatePrincipalResponse.ProtoReflect.Descriptor instead.
-func (*DeactivatePrincipalResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProvisionedNode.ProtoReflect.Descriptor instead.
+func (*ProvisionedNode) Descriptor() ([]byte, []int) {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *DeactivatePrincipalResponse) GetPrincipal() *AuthorityPrincipal {
+func (x *ProvisionedNode) GetNode() string {
 	if x != nil {
-		return x.Principal
+		return x.Node
 	}
-	return nil
+	return ""
 }
 
-func (x *DeactivatePrincipalResponse) GetExisting() bool {
+func (x *ProvisionedNode) GetMandateId() string {
 	if x != nil {
-		return x.Existing
+		return x.MandateId
+	}
+	return ""
+}
+
+func (x *ProvisionedNode) GetHolderId() string {
+	if x != nil {
+		return x.HolderId
+	}
+	return ""
+}
+
+func (x *ProvisionedNode) GetParentNode() string {
+	if x != nil {
+		return x.ParentNode
+	}
+	return ""
+}
+
+func (x *ProvisionedNode) GetActive() bool {
+	if x != nil {
+		return x.Active
 	}
 	return false
 }
 
-// EffectTypeSpec is one effect type to register.
-type EffectTypeSpec struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The effect type, for example "github.pull_request.create_draft".
-	// 1 to 128 bytes of [a-z0-9_.-], starting with a letter.
-	EffectType string `protobuf:"bytes,1,opt,name=effect_type,json=effectType,proto3" json:"effect_type,omitempty"`
-	// Its risk class. Required. High and irreversible escalate to approval.
-	RiskClass     RiskClass `protobuf:"varint,2,opt,name=risk_class,json=riskClass,proto3,enum=helm.gateway.v1.RiskClass" json:"risk_class,omitempty"`
+func (x *ProvisionedNode) GetMandateVersion() int64 {
+	if x != nil {
+		return x.MandateVersion
+	}
+	return 0
+}
+
+// ListEffectTypesRequest asks for the catalog.
+type ListEffectTypesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *EffectTypeSpec) Reset() {
-	*x = EffectTypeSpec{}
+func (x *ListEffectTypesRequest) Reset() {
+	*x = ListEffectTypesRequest{}
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EffectTypeSpec) String() string {
+func (x *ListEffectTypesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EffectTypeSpec) ProtoMessage() {}
+func (*ListEffectTypesRequest) ProtoMessage() {}
 
-func (x *EffectTypeSpec) ProtoReflect() protoreflect.Message {
+func (x *ListEffectTypesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -926,50 +794,34 @@ func (x *EffectTypeSpec) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EffectTypeSpec.ProtoReflect.Descriptor instead.
-func (*EffectTypeSpec) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListEffectTypesRequest.ProtoReflect.Descriptor instead.
+func (*ListEffectTypesRequest) Descriptor() ([]byte, []int) {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *EffectTypeSpec) GetEffectType() string {
-	if x != nil {
-		return x.EffectType
-	}
-	return ""
-}
-
-func (x *EffectTypeSpec) GetRiskClass() RiskClass {
-	if x != nil {
-		return x.RiskClass
-	}
-	return RiskClass_RISK_CLASS_UNSPECIFIED
-}
-
-// RegisterEffectTypesRequest registers effect types.
-type RegisterEffectTypesRequest struct {
+// ListEffectTypesResponse returns the catalog.
+type ListEffectTypesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// 1 to 64 effect types, each named once.
-	EffectTypes   []*EffectTypeSpec `protobuf:"bytes,2,rep,name=effect_types,json=effectTypes,proto3" json:"effect_types,omitempty"`
+	// Every effect type the gateway performs, ordered by name.
+	EffectTypes   []*EffectTypeDeclaration `protobuf:"bytes,1,rep,name=effect_types,json=effectTypes,proto3" json:"effect_types,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RegisterEffectTypesRequest) Reset() {
-	*x = RegisterEffectTypesRequest{}
+func (x *ListEffectTypesResponse) Reset() {
+	*x = ListEffectTypesResponse{}
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RegisterEffectTypesRequest) String() string {
+func (x *ListEffectTypesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RegisterEffectTypesRequest) ProtoMessage() {}
+func (*ListEffectTypesResponse) ProtoMessage() {}
 
-func (x *RegisterEffectTypesRequest) ProtoReflect() protoreflect.Message {
+func (x *ListEffectTypesResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -981,50 +833,66 @@ func (x *RegisterEffectTypesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterEffectTypesRequest.ProtoReflect.Descriptor instead.
-func (*RegisterEffectTypesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListEffectTypesResponse.ProtoReflect.Descriptor instead.
+func (*ListEffectTypesResponse) Descriptor() ([]byte, []int) {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *RegisterEffectTypesRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *RegisterEffectTypesRequest) GetEffectTypes() []*EffectTypeSpec {
+func (x *ListEffectTypesResponse) GetEffectTypes() []*EffectTypeDeclaration {
 	if x != nil {
 		return x.EffectTypes
 	}
 	return nil
 }
 
-// RegisterEffectTypesResponse returns the effect types as stored.
-type RegisterEffectTypesResponse struct {
+// EffectTypeDeclaration is one effect type of the catalog: the adapter's
+// declaration for it (target architecture §9.1).
+type EffectTypeDeclaration struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Every effect type of the request, in its order.
-	EffectTypes []*AuthorityEffectType `protobuf:"bytes,1,rep,name=effect_types,json=effectTypes,proto3" json:"effect_types,omitempty"`
-	// True when the idempotency key already named this request.
-	Existing      bool `protobuf:"varint,2,opt,name=existing,proto3" json:"existing,omitempty"`
+	// The effect type, for example "github.pull_request.create_draft".
+	EffectType string `protobuf:"bytes,1,opt,name=effect_type,json=effectType,proto3" json:"effect_type,omitempty"`
+	// Its default risk class. A tenant registers the class its plan gives it;
+	// a mandate may raise it.
+	RiskClass RiskClass `protobuf:"varint,2,opt,name=risk_class,json=riskClass,proto3,enum=helm.gateway.v1.RiskClass" json:"risk_class,omitempty"`
+	// Whether repeating the dispatch is safe: "yes", "no" or "conditional".
+	Idempotent string `protobuf:"bytes,3,opt,name=idempotent,proto3" json:"idempotent,omitempty"`
+	// How far Observe establishes the outcome: "yes", "partial" or "no".
+	Observable string `protobuf:"bytes,4,opt,name=observable,proto3" json:"observable,omitempty"`
+	// Whether the effect can be undone: "yes", "no" or "not applicable".
+	Reversible string `protobuf:"bytes,5,opt,name=reversible,proto3" json:"reversible,omitempty"`
+	// Whether the gateway is the only path to the effect: "enforced" or
+	// "observed-only".
+	Mediation string `protobuf:"bytes,6,opt,name=mediation,proto3" json:"mediation,omitempty"`
+	// The form of EffectDescriptor.target, for example
+	// "github.com/{owner}/{repo}".
+	TargetForm string `protobuf:"bytes,7,opt,name=target_form,json=targetForm,proto3" json:"target_form,omitempty"`
+	// One or two sentences on what the effect does.
+	Description string `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
+	// The JSON Schema (draft 2020-12) of EffectDescriptor.arguments, as UTF-8
+	// JSON. It is closed: the gateway refuses what it does not allow. Rules JSON
+	// Schema cannot express are in its description.
+	ArgumentSchema []byte `protobuf:"bytes,9,opt,name=argument_schema,json=argumentSchema,proto3" json:"argument_schema,omitempty"`
+	// Whether a mandate may grant the effect type. False for the gateway's own
+	// authority effects (helm.authority.*), which no mandate grants.
+	Grantable     bool `protobuf:"varint,10,opt,name=grantable,proto3" json:"grantable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RegisterEffectTypesResponse) Reset() {
-	*x = RegisterEffectTypesResponse{}
+func (x *EffectTypeDeclaration) Reset() {
+	*x = EffectTypeDeclaration{}
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RegisterEffectTypesResponse) String() string {
+func (x *EffectTypeDeclaration) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RegisterEffectTypesResponse) ProtoMessage() {}
+func (*EffectTypeDeclaration) ProtoMessage() {}
 
-func (x *RegisterEffectTypesResponse) ProtoReflect() protoreflect.Message {
+func (x *EffectTypeDeclaration) ProtoReflect() protoreflect.Message {
 	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1036,1043 +904,77 @@ func (x *RegisterEffectTypesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RegisterEffectTypesResponse.ProtoReflect.Descriptor instead.
-func (*RegisterEffectTypesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use EffectTypeDeclaration.ProtoReflect.Descriptor instead.
+func (*EffectTypeDeclaration) Descriptor() ([]byte, []int) {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *RegisterEffectTypesResponse) GetEffectTypes() []*AuthorityEffectType {
-	if x != nil {
-		return x.EffectTypes
-	}
-	return nil
-}
-
-func (x *RegisterEffectTypesResponse) GetExisting() bool {
-	if x != nil {
-		return x.Existing
-	}
-	return false
-}
-
-// AuthorityEffectType is an effect-type control row.
-type AuthorityEffectType struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The effect type.
-	EffectType string `protobuf:"bytes,1,opt,name=effect_type,json=effectType,proto3" json:"effect_type,omitempty"`
-	// Its risk class.
-	RiskClass RiskClass `protobuf:"varint,2,opt,name=risk_class,json=riskClass,proto3,enum=helm.gateway.v1.RiskClass" json:"risk_class,omitempty"`
-	// The row's version. It increases with every narrowing of the effect type,
-	// such as a stop or a raised risk class.
-	Version       int64 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorityEffectType) Reset() {
-	*x = AuthorityEffectType{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorityEffectType) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorityEffectType) ProtoMessage() {}
-
-func (x *AuthorityEffectType) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorityEffectType.ProtoReflect.Descriptor instead.
-func (*AuthorityEffectType) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *AuthorityEffectType) GetEffectType() string {
+func (x *EffectTypeDeclaration) GetEffectType() string {
 	if x != nil {
 		return x.EffectType
 	}
 	return ""
 }
 
-func (x *AuthorityEffectType) GetRiskClass() RiskClass {
+func (x *EffectTypeDeclaration) GetRiskClass() RiskClass {
 	if x != nil {
 		return x.RiskClass
 	}
 	return RiskClass_RISK_CLASS_UNSPECIFIED
 }
 
-func (x *AuthorityEffectType) GetVersion() int64 {
+func (x *EffectTypeDeclaration) GetIdempotent() string {
 	if x != nil {
-		return x.Version
+		return x.Idempotent
 	}
-	return 0
+	return ""
 }
 
-// MandateTerms are a mandate's typed grant (authority-rows.md). Amounts are
-// integer minor units.
-type MandateTerms struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The scope: the effect types the mandate may admit. 1 to 64, each
-	// registered.
-	EffectTypes []string `protobuf:"bytes,1,rep,name=effect_types,json=effectTypes,proto3" json:"effect_types,omitempty"`
-	// Caps the amount of one call. Unset: none.
-	PerCallLimit *int64 `protobuf:"varint,2,opt,name=per_call_limit,json=perCallLimit,proto3,oneof" json:"per_call_limit,omitempty"`
-	// A call whose amount is at least this needs approval; 0 means every call.
-	// Unset: approval follows the effect type's risk class.
-	ApprovalThreshold *int64 `protobuf:"varint,3,opt,name=approval_threshold,json=approvalThreshold,proto3,oneof" json:"approval_threshold,omitempty"`
-	// The validity window, [valid_from, valid_until). Both required. Truncated
-	// to microseconds.
-	ValidFrom *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=valid_from,json=validFrom,proto3" json:"valid_from,omitempty"`
-	// The end of the validity window.
-	ValidUntil *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
-	// The allowlisted targets, as exact strings, at most 256. Empty: any target.
-	Targets []string `protobuf:"bytes,6,rep,name=targets,proto3" json:"targets,omitempty"`
-	// A CEL condition over the effect (input.args, input.target,
-	// input.effect_type), compiled when the mandate is activated or delegated;
-	// one that does not compile is invalid_argument. At most 4096 bytes. Empty:
-	// none.
-	Condition string `protobuf:"bytes,7,opt,name=condition,proto3" json:"condition,omitempty"`
-	// The effect types for which every call under this mandate needs approval,
-	// whatever their risk class. Each must be in effect_types. Empty: none.
-	ApprovalRequired []string `protobuf:"bytes,8,rep,name=approval_required,json=approvalRequired,proto3" json:"approval_required,omitempty"`
-	// Raises the risk class of an effect type for this mandate; it never lowers
-	// the effect-type row's. Each key must be in effect_types.
-	RiskClasses   map[string]RiskClass `protobuf:"bytes,9,rep,name=risk_classes,json=riskClasses,proto3" json:"risk_classes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value,enum=helm.gateway.v1.RiskClass"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MandateTerms) Reset() {
-	*x = MandateTerms{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MandateTerms) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MandateTerms) ProtoMessage() {}
-
-func (x *MandateTerms) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
+func (x *EffectTypeDeclaration) GetObservable() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
+		return x.Observable
 	}
-	return mi.MessageOf(x)
+	return ""
 }
 
-// Deprecated: Use MandateTerms.ProtoReflect.Descriptor instead.
-func (*MandateTerms) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *MandateTerms) GetEffectTypes() []string {
+func (x *EffectTypeDeclaration) GetReversible() string {
 	if x != nil {
-		return x.EffectTypes
+		return x.Reversible
+	}
+	return ""
+}
+
+func (x *EffectTypeDeclaration) GetMediation() string {
+	if x != nil {
+		return x.Mediation
+	}
+	return ""
+}
+
+func (x *EffectTypeDeclaration) GetTargetForm() string {
+	if x != nil {
+		return x.TargetForm
+	}
+	return ""
+}
+
+func (x *EffectTypeDeclaration) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *EffectTypeDeclaration) GetArgumentSchema() []byte {
+	if x != nil {
+		return x.ArgumentSchema
 	}
 	return nil
 }
 
-func (x *MandateTerms) GetPerCallLimit() int64 {
-	if x != nil && x.PerCallLimit != nil {
-		return *x.PerCallLimit
-	}
-	return 0
-}
-
-func (x *MandateTerms) GetApprovalThreshold() int64 {
-	if x != nil && x.ApprovalThreshold != nil {
-		return *x.ApprovalThreshold
-	}
-	return 0
-}
-
-func (x *MandateTerms) GetValidFrom() *timestamppb.Timestamp {
+func (x *EffectTypeDeclaration) GetGrantable() bool {
 	if x != nil {
-		return x.ValidFrom
-	}
-	return nil
-}
-
-func (x *MandateTerms) GetValidUntil() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ValidUntil
-	}
-	return nil
-}
-
-func (x *MandateTerms) GetTargets() []string {
-	if x != nil {
-		return x.Targets
-	}
-	return nil
-}
-
-func (x *MandateTerms) GetCondition() string {
-	if x != nil {
-		return x.Condition
-	}
-	return ""
-}
-
-func (x *MandateTerms) GetApprovalRequired() []string {
-	if x != nil {
-		return x.ApprovalRequired
-	}
-	return nil
-}
-
-func (x *MandateTerms) GetRiskClasses() map[string]RiskClass {
-	if x != nil {
-		return x.RiskClasses
-	}
-	return nil
-}
-
-// LimitTerms describe one limit: a cap of value units per window.
-type LimitTerms struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The unit counted, for example "count" or "usd_cents".
-	// [a-z][a-z0-9_]{0,31}.
-	Unit string `protobuf:"bytes,1,opt,name=unit,proto3" json:"unit,omitempty"`
-	// What is counted. Required.
-	Measure LimitMeasure `protobuf:"varint,2,opt,name=measure,proto3,enum=helm.gateway.v1.LimitMeasure" json:"measure,omitempty"`
-	// The window. Required.
-	Window LimitWindow `protobuf:"varint,3,opt,name=window,proto3,enum=helm.gateway.v1.LimitWindow" json:"window,omitempty"`
-	// The number of window buckets a sliding window covers: 1 for a fixed
-	// window, at most 744. It is 1 for the windowless and the distinct-value
-	// limit.
-	Span int32 `protobuf:"varint,4,opt,name=span,proto3" json:"span,omitempty"`
-	// The cap, non-negative.
-	Value         int64 `protobuf:"varint,5,opt,name=value,proto3" json:"value,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *LimitTerms) Reset() {
-	*x = LimitTerms{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *LimitTerms) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*LimitTerms) ProtoMessage() {}
-
-func (x *LimitTerms) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use LimitTerms.ProtoReflect.Descriptor instead.
-func (*LimitTerms) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *LimitTerms) GetUnit() string {
-	if x != nil {
-		return x.Unit
-	}
-	return ""
-}
-
-func (x *LimitTerms) GetMeasure() LimitMeasure {
-	if x != nil {
-		return x.Measure
-	}
-	return LimitMeasure_LIMIT_MEASURE_UNSPECIFIED
-}
-
-func (x *LimitTerms) GetWindow() LimitWindow {
-	if x != nil {
-		return x.Window
-	}
-	return LimitWindow_LIMIT_WINDOW_UNSPECIFIED
-}
-
-func (x *LimitTerms) GetSpan() int32 {
-	if x != nil {
-		return x.Span
-	}
-	return 0
-}
-
-func (x *LimitTerms) GetValue() int64 {
-	if x != nil {
-		return x.Value
-	}
-	return 0
-}
-
-// AuthorityLimit is a stored limit.
-type AuthorityLimit struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// UUIDv7.
-	LimitId string `protobuf:"bytes,1,opt,name=limit_id,json=limitId,proto3" json:"limit_id,omitempty"`
-	// The mandate it limits. Empty for a tenant-level resource account.
-	MandateId string `protobuf:"bytes,2,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
-	// What it counts and its cap.
-	Terms *LimitTerms `protobuf:"bytes,3,opt,name=terms,proto3" json:"terms,omitempty"`
-	// The row's version. It increases every time the limit is lowered.
-	Version       int64 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorityLimit) Reset() {
-	*x = AuthorityLimit{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorityLimit) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorityLimit) ProtoMessage() {}
-
-func (x *AuthorityLimit) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorityLimit.ProtoReflect.Descriptor instead.
-func (*AuthorityLimit) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *AuthorityLimit) GetLimitId() string {
-	if x != nil {
-		return x.LimitId
-	}
-	return ""
-}
-
-func (x *AuthorityLimit) GetMandateId() string {
-	if x != nil {
-		return x.MandateId
-	}
-	return ""
-}
-
-func (x *AuthorityLimit) GetTerms() *LimitTerms {
-	if x != nil {
-		return x.Terms
-	}
-	return nil
-}
-
-func (x *AuthorityLimit) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
-// AuthorityMandate is a stored mandate.
-type AuthorityMandate struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// UUIDv7.
-	MandateId string `protobuf:"bytes,1,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
-	// The mandate it was delegated from. Empty for a root mandate.
-	ParentMandateId string `protobuf:"bytes,2,opt,name=parent_mandate_id,json=parentMandateId,proto3" json:"parent_mandate_id,omitempty"`
-	// 0 for a root mandate, otherwise the parent's depth plus one.
-	Depth int32 `protobuf:"varint,3,opt,name=depth,proto3" json:"depth,omitempty"`
-	// The principal that holds it.
-	HolderId string `protobuf:"bytes,4,opt,name=holder_id,json=holderId,proto3" json:"holder_id,omitempty"`
-	// Its terms.
-	Terms *MandateTerms `protobuf:"bytes,5,opt,name=terms,proto3" json:"terms,omitempty"`
-	// Whether it admits.
-	Status MandateStatus `protobuf:"varint,6,opt,name=status,proto3,enum=helm.gateway.v1.MandateStatus" json:"status,omitempty"`
-	// The principal that requested a root mandate, or delegated a child.
-	RequestedBy string `protobuf:"bytes,7,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
-	// The human that approved a root mandate. Empty for a delegated one.
-	ApprovedBy string `protobuf:"bytes,8,opt,name=approved_by,json=approvedBy,proto3" json:"approved_by,omitempty"`
-	// The row's version. It increases with every narrowing of the mandate.
-	Version       int64 `protobuf:"varint,9,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuthorityMandate) Reset() {
-	*x = AuthorityMandate{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuthorityMandate) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuthorityMandate) ProtoMessage() {}
-
-func (x *AuthorityMandate) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuthorityMandate.ProtoReflect.Descriptor instead.
-func (*AuthorityMandate) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *AuthorityMandate) GetMandateId() string {
-	if x != nil {
-		return x.MandateId
-	}
-	return ""
-}
-
-func (x *AuthorityMandate) GetParentMandateId() string {
-	if x != nil {
-		return x.ParentMandateId
-	}
-	return ""
-}
-
-func (x *AuthorityMandate) GetDepth() int32 {
-	if x != nil {
-		return x.Depth
-	}
-	return 0
-}
-
-func (x *AuthorityMandate) GetHolderId() string {
-	if x != nil {
-		return x.HolderId
-	}
-	return ""
-}
-
-func (x *AuthorityMandate) GetTerms() *MandateTerms {
-	if x != nil {
-		return x.Terms
-	}
-	return nil
-}
-
-func (x *AuthorityMandate) GetStatus() MandateStatus {
-	if x != nil {
-		return x.Status
-	}
-	return MandateStatus_MANDATE_STATUS_UNSPECIFIED
-}
-
-func (x *AuthorityMandate) GetRequestedBy() string {
-	if x != nil {
-		return x.RequestedBy
-	}
-	return ""
-}
-
-func (x *AuthorityMandate) GetApprovedBy() string {
-	if x != nil {
-		return x.ApprovedBy
-	}
-	return ""
-}
-
-func (x *AuthorityMandate) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
-// ActivateRootMandateRequest activates a root mandate.
-type ActivateRootMandateRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// The principal that will hold the mandate. Active.
-	HolderId string `protobuf:"bytes,2,opt,name=holder_id,json=holderId,proto3" json:"holder_id,omitempty"`
-	// The principal that asked for it. Active. Neither this nor the holder may
-	// approve.
-	RequestedBy string `protobuf:"bytes,3,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
-	// The grant.
-	Terms *MandateTerms `protobuf:"bytes,4,opt,name=terms,proto3" json:"terms,omitempty"`
-	// The limits created with the mandate, in the same transaction, so that no
-	// admission ever sees the mandate without them. At most 16.
-	Limits []*LimitTerms `protobuf:"bytes,5,rep,name=limits,proto3" json:"limits,omitempty"`
-	// The approver's helm.gateway.decide token: a bearer token the Control Plane
-	// mints for the approving human, from an interactive session, once per
-	// decision. It must be a token of this tenant, name the approver as its
-	// sub, and carry exactly one authorization_details entry
-	//
-	//	{"type": "helm_mandate_activation", "activation_digest": "<hex>"}
-	//
-	// where activation_digest is the lower-case hex of activation digest v1
-	// over holder_id, requested_by, terms and limits (the design note gives the
-	// construction and a test vector). It is single-use; a refused call uses none
-	// up. Ignored when the key already names this request.
-	ApprovalToken string `protobuf:"bytes,6,opt,name=approval_token,json=approvalToken,proto3" json:"approval_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivateRootMandateRequest) Reset() {
-	*x = ActivateRootMandateRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivateRootMandateRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivateRootMandateRequest) ProtoMessage() {}
-
-func (x *ActivateRootMandateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivateRootMandateRequest.ProtoReflect.Descriptor instead.
-func (*ActivateRootMandateRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *ActivateRootMandateRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *ActivateRootMandateRequest) GetHolderId() string {
-	if x != nil {
-		return x.HolderId
-	}
-	return ""
-}
-
-func (x *ActivateRootMandateRequest) GetRequestedBy() string {
-	if x != nil {
-		return x.RequestedBy
-	}
-	return ""
-}
-
-func (x *ActivateRootMandateRequest) GetTerms() *MandateTerms {
-	if x != nil {
-		return x.Terms
-	}
-	return nil
-}
-
-func (x *ActivateRootMandateRequest) GetLimits() []*LimitTerms {
-	if x != nil {
-		return x.Limits
-	}
-	return nil
-}
-
-func (x *ActivateRootMandateRequest) GetApprovalToken() string {
-	if x != nil {
-		return x.ApprovalToken
-	}
-	return ""
-}
-
-// ActivateRootMandateResponse returns the mandate and its limits.
-type ActivateRootMandateResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The mandate, active.
-	Mandate *AuthorityMandate `protobuf:"bytes,1,opt,name=mandate,proto3" json:"mandate,omitempty"`
-	// Its limits, in the order of the request.
-	Limits []*AuthorityLimit `protobuf:"bytes,2,rep,name=limits,proto3" json:"limits,omitempty"`
-	// True when the idempotency key already named this request: the stored
-	// mandate is returned as it now is, revoked or narrowed included.
-	Existing      bool `protobuf:"varint,3,opt,name=existing,proto3" json:"existing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivateRootMandateResponse) Reset() {
-	*x = ActivateRootMandateResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivateRootMandateResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivateRootMandateResponse) ProtoMessage() {}
-
-func (x *ActivateRootMandateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivateRootMandateResponse.ProtoReflect.Descriptor instead.
-func (*ActivateRootMandateResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *ActivateRootMandateResponse) GetMandate() *AuthorityMandate {
-	if x != nil {
-		return x.Mandate
-	}
-	return nil
-}
-
-func (x *ActivateRootMandateResponse) GetLimits() []*AuthorityLimit {
-	if x != nil {
-		return x.Limits
-	}
-	return nil
-}
-
-func (x *ActivateRootMandateResponse) GetExisting() bool {
-	if x != nil {
-		return x.Existing
-	}
-	return false
-}
-
-// DelegateMandateRequest delegates a child mandate.
-type DelegateMandateRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// The mandate to delegate from.
-	ParentMandateId string `protobuf:"bytes,2,opt,name=parent_mandate_id,json=parentMandateId,proto3" json:"parent_mandate_id,omitempty"`
-	// The parent's holder. Any other principal is permission_denied
-	// [reason_code: INSUFFICIENT_PRIVILEGE].
-	DelegatorId string `protobuf:"bytes,3,opt,name=delegator_id,json=delegatorId,proto3" json:"delegator_id,omitempty"`
-	// The principal that will hold the child. Active.
-	HolderId string `protobuf:"bytes,4,opt,name=holder_id,json=holderId,proto3" json:"holder_id,omitempty"`
-	// The child's terms, within the parent's.
-	Terms *MandateTerms `protobuf:"bytes,5,opt,name=terms,proto3" json:"terms,omitempty"`
-	// The child's limits, each within any limit of the same shape above it. At
-	// most 16.
-	Limits        []*LimitTerms `protobuf:"bytes,6,rep,name=limits,proto3" json:"limits,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DelegateMandateRequest) Reset() {
-	*x = DelegateMandateRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[19]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DelegateMandateRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DelegateMandateRequest) ProtoMessage() {}
-
-func (x *DelegateMandateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[19]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DelegateMandateRequest.ProtoReflect.Descriptor instead.
-func (*DelegateMandateRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *DelegateMandateRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *DelegateMandateRequest) GetParentMandateId() string {
-	if x != nil {
-		return x.ParentMandateId
-	}
-	return ""
-}
-
-func (x *DelegateMandateRequest) GetDelegatorId() string {
-	if x != nil {
-		return x.DelegatorId
-	}
-	return ""
-}
-
-func (x *DelegateMandateRequest) GetHolderId() string {
-	if x != nil {
-		return x.HolderId
-	}
-	return ""
-}
-
-func (x *DelegateMandateRequest) GetTerms() *MandateTerms {
-	if x != nil {
-		return x.Terms
-	}
-	return nil
-}
-
-func (x *DelegateMandateRequest) GetLimits() []*LimitTerms {
-	if x != nil {
-		return x.Limits
-	}
-	return nil
-}
-
-// DelegateMandateResponse returns the child and its limits.
-type DelegateMandateResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The child mandate, active.
-	Mandate *AuthorityMandate `protobuf:"bytes,1,opt,name=mandate,proto3" json:"mandate,omitempty"`
-	// Its limits, in the order of the request.
-	Limits []*AuthorityLimit `protobuf:"bytes,2,rep,name=limits,proto3" json:"limits,omitempty"`
-	// True when the idempotency key already named this request.
-	Existing      bool `protobuf:"varint,3,opt,name=existing,proto3" json:"existing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DelegateMandateResponse) Reset() {
-	*x = DelegateMandateResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[20]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DelegateMandateResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DelegateMandateResponse) ProtoMessage() {}
-
-func (x *DelegateMandateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[20]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DelegateMandateResponse.ProtoReflect.Descriptor instead.
-func (*DelegateMandateResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{20}
-}
-
-func (x *DelegateMandateResponse) GetMandate() *AuthorityMandate {
-	if x != nil {
-		return x.Mandate
-	}
-	return nil
-}
-
-func (x *DelegateMandateResponse) GetLimits() []*AuthorityLimit {
-	if x != nil {
-		return x.Limits
-	}
-	return nil
-}
-
-func (x *DelegateMandateResponse) GetExisting() bool {
-	if x != nil {
-		return x.Existing
-	}
-	return false
-}
-
-// RevokeMandateRequest revokes one mandate.
-type RevokeMandateRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// The mandate to revoke.
-	MandateId     string `protobuf:"bytes,2,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevokeMandateRequest) Reset() {
-	*x = RevokeMandateRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevokeMandateRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevokeMandateRequest) ProtoMessage() {}
-
-func (x *RevokeMandateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevokeMandateRequest.ProtoReflect.Descriptor instead.
-func (*RevokeMandateRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *RevokeMandateRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *RevokeMandateRequest) GetMandateId() string {
-	if x != nil {
-		return x.MandateId
-	}
-	return ""
-}
-
-// RevokeMandateResponse returns the mandate as stored.
-type RevokeMandateResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The mandate, revoked.
-	Mandate *AuthorityMandate `protobuf:"bytes,1,opt,name=mandate,proto3" json:"mandate,omitempty"`
-	// True when the idempotency key already named this request.
-	Existing      bool `protobuf:"varint,2,opt,name=existing,proto3" json:"existing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevokeMandateResponse) Reset() {
-	*x = RevokeMandateResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevokeMandateResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevokeMandateResponse) ProtoMessage() {}
-
-func (x *RevokeMandateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevokeMandateResponse.ProtoReflect.Descriptor instead.
-func (*RevokeMandateResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *RevokeMandateResponse) GetMandate() *AuthorityMandate {
-	if x != nil {
-		return x.Mandate
-	}
-	return nil
-}
-
-func (x *RevokeMandateResponse) GetExisting() bool {
-	if x != nil {
-		return x.Existing
-	}
-	return false
-}
-
-// SetLimitRequest adds or lowers one limit.
-type SetLimitRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant-scoped idempotency key, 1 to 255 bytes.
-	IdempotencyKey string `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// The mandate to limit. Empty: a tenant-level resource account.
-	MandateId string `protobuf:"bytes,2,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
-	// The limit.
-	Limit         *LimitTerms `protobuf:"bytes,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetLimitRequest) Reset() {
-	*x = SetLimitRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetLimitRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetLimitRequest) ProtoMessage() {}
-
-func (x *SetLimitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetLimitRequest.ProtoReflect.Descriptor instead.
-func (*SetLimitRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *SetLimitRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *SetLimitRequest) GetMandateId() string {
-	if x != nil {
-		return x.MandateId
-	}
-	return ""
-}
-
-func (x *SetLimitRequest) GetLimit() *LimitTerms {
-	if x != nil {
-		return x.Limit
-	}
-	return nil
-}
-
-// SetLimitResponse returns the limit as stored.
-type SetLimitResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The limit.
-	Limit *AuthorityLimit `protobuf:"bytes,1,opt,name=limit,proto3" json:"limit,omitempty"`
-	// True when the idempotency key already named this request.
-	Existing      bool `protobuf:"varint,2,opt,name=existing,proto3" json:"existing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetLimitResponse) Reset() {
-	*x = SetLimitResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetLimitResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetLimitResponse) ProtoMessage() {}
-
-func (x *SetLimitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetLimitResponse.ProtoReflect.Descriptor instead.
-func (*SetLimitResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *SetLimitResponse) GetLimit() *AuthorityLimit {
-	if x != nil {
-		return x.Limit
-	}
-	return nil
-}
-
-func (x *SetLimitResponse) GetExisting() bool {
-	if x != nil {
-		return x.Existing
+		return x.Grantable
 	}
 	return false
 }
@@ -2084,133 +986,76 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"%helm/gateway/v1/authority_admin.proto\x12\x0fhelm.gateway.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dhelm/gateway/v1/gateway.proto\"9\n" +
 	"\x0fExternalSubject\x12\x16\n" +
 	"\x06system\x18\x01 \x01(\tR\x06system\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\">\n" +
-	"\x13UpsertTenantRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\"l\n" +
-	"\x14UpsertTenantResponse\x128\n" +
-	"\x06tenant\x18\x01 \x01(\v2 .helm.gateway.v1.AuthorityTenantR\x06tenant\x12\x1a\n" +
-	"\bexisting\x18\x02 \x01(\bR\bexisting\"\x83\x01\n" +
-	"\x0fAuthorityTenant\x12\x1b\n" +
-	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\x129\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xb3\x01\n" +
+	"\rPrincipalSpec\x12!\n" +
+	"\fprincipal_id\x18\x01 \x01(\tR\vprincipalId\x122\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x1e.helm.gateway.v1.PrincipalKindR\x04kind\x12K\n" +
+	"\x10external_subject\x18\x03 \x01(\v2 .helm.gateway.v1.ExternalSubjectR\x0fexternalSubject\"Y\n" +
+	"\x17EnsurePrincipalsRequest\x12>\n" +
 	"\n" +
-	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xe5\x01\n" +
-	"\x16UpsertPrincipalRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12!\n" +
-	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\x122\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x1e.helm.gateway.v1.PrincipalKindR\x04kind\x12K\n" +
-	"\x10external_subject\x18\x04 \x01(\v2 .helm.gateway.v1.ExternalSubjectR\x0fexternalSubject\"x\n" +
-	"\x17UpsertPrincipalResponse\x12A\n" +
-	"\tprincipal\x18\x01 \x01(\v2#.helm.gateway.v1.AuthorityPrincipalR\tprincipal\x12\x1a\n" +
-	"\bexisting\x18\x02 \x01(\bR\bexisting\"\x8c\x02\n" +
+	"principals\x18\x01 \x03(\v2\x1e.helm.gateway.v1.PrincipalSpecR\n" +
+	"principals\"\x86\x01\n" +
+	"\x18EnsurePrincipalsResponse\x12C\n" +
+	"\n" +
+	"principals\x18\x01 \x03(\v2#.helm.gateway.v1.AuthorityPrincipalR\n" +
+	"principals\x12%\n" +
+	"\x0etenant_created\x18\x02 \x01(\bR\rtenantCreated\"\x8c\x02\n" +
 	"\x12AuthorityPrincipal\x12!\n" +
 	"\fprincipal_id\x18\x01 \x01(\tR\vprincipalId\x122\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1e.helm.gateway.v1.PrincipalKindR\x04kind\x128\n" +
 	"\x06status\x18\x03 \x01(\x0e2 .helm.gateway.v1.PrincipalStatusR\x06status\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\x03R\aversion\x12K\n" +
-	"\x10external_subject\x18\x05 \x01(\v2 .helm.gateway.v1.ExternalSubjectR\x0fexternalSubject\"h\n" +
-	"\x1aDeactivatePrincipalRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12!\n" +
-	"\fprincipal_id\x18\x02 \x01(\tR\vprincipalId\"|\n" +
-	"\x1bDeactivatePrincipalResponse\x12A\n" +
-	"\tprincipal\x18\x01 \x01(\v2#.helm.gateway.v1.AuthorityPrincipalR\tprincipal\x12\x1a\n" +
-	"\bexisting\x18\x02 \x01(\bR\bexisting\"l\n" +
-	"\x0eEffectTypeSpec\x12\x1f\n" +
+	"\x10external_subject\x18\x05 \x01(\v2 .helm.gateway.v1.ExternalSubjectR\x0fexternalSubject\"1\n" +
+	"\x16GetProvisioningRequest\x12\x17\n" +
+	"\aorg_ref\x18\x01 \x01(\tR\x06orgRef\"\\\n" +
+	"\x17GetProvisioningResponse\x12A\n" +
+	"\fprovisioning\x18\x01 \x01(\v2\x1d.helm.gateway.v1.ProvisioningR\fprovisioning\"\xad\x02\n" +
+	"\fProvisioning\x12\x17\n" +
+	"\aorg_ref\x18\x01 \x01(\tR\x06orgRef\x12\x1f\n" +
+	"\vplan_digest\x18\x02 \x01(\tR\n" +
+	"planDigest\x12\x1f\n" +
+	"\vversion_ref\x18\x03 \x01(\tR\n" +
+	"versionRef\x12\x14\n" +
+	"\x05stage\x18\x04 \x01(\tR\x05stage\x126\n" +
+	"\x05nodes\x18\x05 \x03(\v2 .helm.gateway.v1.ProvisionedNodeR\x05nodes\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x06 \x01(\tR\tattemptId\x12\x1a\n" +
+	"\brevision\x18\a \x01(\x03R\brevision\x129\n" +
+	"\n" +
+	"applied_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\"\xc3\x01\n" +
+	"\x0fProvisionedNode\x12\x12\n" +
+	"\x04node\x18\x01 \x01(\tR\x04node\x12\x1d\n" +
+	"\n" +
+	"mandate_id\x18\x02 \x01(\tR\tmandateId\x12\x1b\n" +
+	"\tholder_id\x18\x03 \x01(\tR\bholderId\x12\x1f\n" +
+	"\vparent_node\x18\x04 \x01(\tR\n" +
+	"parentNode\x12\x16\n" +
+	"\x06active\x18\x05 \x01(\bR\x06active\x12'\n" +
+	"\x0fmandate_version\x18\x06 \x01(\x03R\x0emandateVersion\"\x18\n" +
+	"\x16ListEffectTypesRequest\"d\n" +
+	"\x17ListEffectTypesResponse\x12I\n" +
+	"\feffect_types\x18\x01 \x03(\v2&.helm.gateway.v1.EffectTypeDeclarationR\veffectTypes\"\xfb\x02\n" +
+	"\x15EffectTypeDeclaration\x12\x1f\n" +
 	"\veffect_type\x18\x01 \x01(\tR\n" +
 	"effectType\x129\n" +
 	"\n" +
-	"risk_class\x18\x02 \x01(\x0e2\x1a.helm.gateway.v1.RiskClassR\triskClass\"\x89\x01\n" +
-	"\x1aRegisterEffectTypesRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12B\n" +
-	"\feffect_types\x18\x02 \x03(\v2\x1f.helm.gateway.v1.EffectTypeSpecR\veffectTypes\"\x82\x01\n" +
-	"\x1bRegisterEffectTypesResponse\x12G\n" +
-	"\feffect_types\x18\x01 \x03(\v2$.helm.gateway.v1.AuthorityEffectTypeR\veffectTypes\x12\x1a\n" +
-	"\bexisting\x18\x02 \x01(\bR\bexisting\"\x8b\x01\n" +
-	"\x13AuthorityEffectType\x12\x1f\n" +
-	"\veffect_type\x18\x01 \x01(\tR\n" +
-	"effectType\x129\n" +
+	"risk_class\x18\x02 \x01(\x0e2\x1a.helm.gateway.v1.RiskClassR\triskClass\x12\x1e\n" +
 	"\n" +
-	"risk_class\x18\x02 \x01(\x0e2\x1a.helm.gateway.v1.RiskClassR\triskClass\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversion\"\xc6\x04\n" +
-	"\fMandateTerms\x12!\n" +
-	"\feffect_types\x18\x01 \x03(\tR\veffectTypes\x12)\n" +
-	"\x0eper_call_limit\x18\x02 \x01(\x03H\x00R\fperCallLimit\x88\x01\x01\x122\n" +
-	"\x12approval_threshold\x18\x03 \x01(\x03H\x01R\x11approvalThreshold\x88\x01\x01\x129\n" +
+	"idempotent\x18\x03 \x01(\tR\n" +
+	"idempotent\x12\x1e\n" +
 	"\n" +
-	"valid_from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tvalidFrom\x12;\n" +
-	"\vvalid_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"validUntil\x12\x18\n" +
-	"\atargets\x18\x06 \x03(\tR\atargets\x12\x1c\n" +
-	"\tcondition\x18\a \x01(\tR\tcondition\x12+\n" +
-	"\x11approval_required\x18\b \x03(\tR\x10approvalRequired\x12Q\n" +
-	"\frisk_classes\x18\t \x03(\v2..helm.gateway.v1.MandateTerms.RiskClassesEntryR\vriskClasses\x1aZ\n" +
-	"\x10RiskClassesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\x0e2\x1a.helm.gateway.v1.RiskClassR\x05value:\x028\x01B\x11\n" +
-	"\x0f_per_call_limitB\x15\n" +
-	"\x13_approval_threshold\"\xb9\x01\n" +
+	"observable\x18\x04 \x01(\tR\n" +
+	"observable\x12\x1e\n" +
 	"\n" +
-	"LimitTerms\x12\x12\n" +
-	"\x04unit\x18\x01 \x01(\tR\x04unit\x127\n" +
-	"\ameasure\x18\x02 \x01(\x0e2\x1d.helm.gateway.v1.LimitMeasureR\ameasure\x124\n" +
-	"\x06window\x18\x03 \x01(\x0e2\x1c.helm.gateway.v1.LimitWindowR\x06window\x12\x12\n" +
-	"\x04span\x18\x04 \x01(\x05R\x04span\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\x03R\x05value\"\x97\x01\n" +
-	"\x0eAuthorityLimit\x12\x19\n" +
-	"\blimit_id\x18\x01 \x01(\tR\alimitId\x12\x1d\n" +
-	"\n" +
-	"mandate_id\x18\x02 \x01(\tR\tmandateId\x121\n" +
-	"\x05terms\x18\x03 \x01(\v2\x1b.helm.gateway.v1.LimitTermsR\x05terms\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\x03R\aversion\"\xdb\x02\n" +
-	"\x10AuthorityMandate\x12\x1d\n" +
-	"\n" +
-	"mandate_id\x18\x01 \x01(\tR\tmandateId\x12*\n" +
-	"\x11parent_mandate_id\x18\x02 \x01(\tR\x0fparentMandateId\x12\x14\n" +
-	"\x05depth\x18\x03 \x01(\x05R\x05depth\x12\x1b\n" +
-	"\tholder_id\x18\x04 \x01(\tR\bholderId\x123\n" +
-	"\x05terms\x18\x05 \x01(\v2\x1d.helm.gateway.v1.MandateTermsR\x05terms\x126\n" +
-	"\x06status\x18\x06 \x01(\x0e2\x1e.helm.gateway.v1.MandateStatusR\x06status\x12!\n" +
-	"\frequested_by\x18\a \x01(\tR\vrequestedBy\x12\x1f\n" +
-	"\vapproved_by\x18\b \x01(\tR\n" +
-	"approvedBy\x12\x18\n" +
-	"\aversion\x18\t \x01(\x03R\aversion\"\x96\x02\n" +
-	"\x1aActivateRootMandateRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x1b\n" +
-	"\tholder_id\x18\x02 \x01(\tR\bholderId\x12!\n" +
-	"\frequested_by\x18\x03 \x01(\tR\vrequestedBy\x123\n" +
-	"\x05terms\x18\x04 \x01(\v2\x1d.helm.gateway.v1.MandateTermsR\x05terms\x123\n" +
-	"\x06limits\x18\x05 \x03(\v2\x1b.helm.gateway.v1.LimitTermsR\x06limits\x12%\n" +
-	"\x0eapproval_token\x18\x06 \x01(\tR\rapprovalToken\"\xaf\x01\n" +
-	"\x1bActivateRootMandateResponse\x12;\n" +
-	"\amandate\x18\x01 \x01(\v2!.helm.gateway.v1.AuthorityMandateR\amandate\x127\n" +
-	"\x06limits\x18\x02 \x03(\v2\x1f.helm.gateway.v1.AuthorityLimitR\x06limits\x12\x1a\n" +
-	"\bexisting\x18\x03 \x01(\bR\bexisting\"\x97\x02\n" +
-	"\x16DelegateMandateRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12*\n" +
-	"\x11parent_mandate_id\x18\x02 \x01(\tR\x0fparentMandateId\x12!\n" +
-	"\fdelegator_id\x18\x03 \x01(\tR\vdelegatorId\x12\x1b\n" +
-	"\tholder_id\x18\x04 \x01(\tR\bholderId\x123\n" +
-	"\x05terms\x18\x05 \x01(\v2\x1d.helm.gateway.v1.MandateTermsR\x05terms\x123\n" +
-	"\x06limits\x18\x06 \x03(\v2\x1b.helm.gateway.v1.LimitTermsR\x06limits\"\xab\x01\n" +
-	"\x17DelegateMandateResponse\x12;\n" +
-	"\amandate\x18\x01 \x01(\v2!.helm.gateway.v1.AuthorityMandateR\amandate\x127\n" +
-	"\x06limits\x18\x02 \x03(\v2\x1f.helm.gateway.v1.AuthorityLimitR\x06limits\x12\x1a\n" +
-	"\bexisting\x18\x03 \x01(\bR\bexisting\"^\n" +
-	"\x14RevokeMandateRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x1d\n" +
-	"\n" +
-	"mandate_id\x18\x02 \x01(\tR\tmandateId\"p\n" +
-	"\x15RevokeMandateResponse\x12;\n" +
-	"\amandate\x18\x01 \x01(\v2!.helm.gateway.v1.AuthorityMandateR\amandate\x12\x1a\n" +
-	"\bexisting\x18\x02 \x01(\bR\bexisting\"\x8c\x01\n" +
-	"\x0fSetLimitRequest\x12'\n" +
-	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\x12\x1d\n" +
-	"\n" +
-	"mandate_id\x18\x02 \x01(\tR\tmandateId\x121\n" +
-	"\x05limit\x18\x03 \x01(\v2\x1b.helm.gateway.v1.LimitTermsR\x05limit\"e\n" +
-	"\x10SetLimitResponse\x125\n" +
-	"\x05limit\x18\x01 \x01(\v2\x1f.helm.gateway.v1.AuthorityLimitR\x05limit\x12\x1a\n" +
-	"\bexisting\x18\x02 \x01(\bR\bexisting*\x7f\n" +
+	"reversible\x18\x05 \x01(\tR\n" +
+	"reversible\x12\x1c\n" +
+	"\tmediation\x18\x06 \x01(\tR\tmediation\x12\x1f\n" +
+	"\vtarget_form\x18\a \x01(\tR\n" +
+	"targetForm\x12 \n" +
+	"\vdescription\x18\b \x01(\tR\vdescription\x12'\n" +
+	"\x0fargument_schema\x18\t \x01(\fR\x0eargumentSchema\x12\x1c\n" +
+	"\tgrantable\x18\n" +
+	" \x01(\bR\tgrantable*\x7f\n" +
 	"\rPrincipalKind\x12\x1e\n" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14PRINCIPAL_KIND_HUMAN\x10\x01\x12\x18\n" +
@@ -2219,31 +1064,11 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\x0fPrincipalStatus\x12 \n" +
 	"\x1cPRINCIPAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PRINCIPAL_STATUS_ACTIVE\x10\x01\x12\x1d\n" +
-	"\x19PRINCIPAL_STATUS_DISABLED\x10\x02*f\n" +
-	"\rMandateStatus\x12\x1e\n" +
-	"\x1aMANDATE_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
-	"\x15MANDATE_STATUS_ACTIVE\x10\x01\x12\x1a\n" +
-	"\x16MANDATE_STATUS_REVOKED\x10\x02*y\n" +
-	"\fLimitMeasure\x12\x1d\n" +
-	"\x19LIMIT_MEASURE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11LIMIT_MEASURE_SUM\x10\x01\x12\x17\n" +
-	"\x13LIMIT_MEASURE_COUNT\x10\x02\x12\x1a\n" +
-	"\x16LIMIT_MEASURE_DISTINCT\x10\x03*\x87\x01\n" +
-	"\vLimitWindow\x12\x1c\n" +
-	"\x18LIMIT_WINDOW_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11LIMIT_WINDOW_NONE\x10\x01\x12\x15\n" +
-	"\x11LIMIT_WINDOW_HOUR\x10\x02\x12\x14\n" +
-	"\x10LIMIT_WINDOW_DAY\x10\x03\x12\x16\n" +
-	"\x12LIMIT_WINDOW_MONTH\x10\x042\xc7\x06\n" +
-	"\x15AuthorityAdminService\x12[\n" +
-	"\fUpsertTenant\x12$.helm.gateway.v1.UpsertTenantRequest\x1a%.helm.gateway.v1.UpsertTenantResponse\x12d\n" +
-	"\x0fUpsertPrincipal\x12'.helm.gateway.v1.UpsertPrincipalRequest\x1a(.helm.gateway.v1.UpsertPrincipalResponse\x12p\n" +
-	"\x13DeactivatePrincipal\x12+.helm.gateway.v1.DeactivatePrincipalRequest\x1a,.helm.gateway.v1.DeactivatePrincipalResponse\x12p\n" +
-	"\x13RegisterEffectTypes\x12+.helm.gateway.v1.RegisterEffectTypesRequest\x1a,.helm.gateway.v1.RegisterEffectTypesResponse\x12p\n" +
-	"\x13ActivateRootMandate\x12+.helm.gateway.v1.ActivateRootMandateRequest\x1a,.helm.gateway.v1.ActivateRootMandateResponse\x12d\n" +
-	"\x0fDelegateMandate\x12'.helm.gateway.v1.DelegateMandateRequest\x1a(.helm.gateway.v1.DelegateMandateResponse\x12^\n" +
-	"\rRevokeMandate\x12%.helm.gateway.v1.RevokeMandateRequest\x1a&.helm.gateway.v1.RevokeMandateResponse\x12O\n" +
-	"\bSetLimit\x12 .helm.gateway.v1.SetLimitRequest\x1a!.helm.gateway.v1.SetLimitResponseB(Z&helm.mindburn.run/gateway/v1;gatewayv1b\x06proto3"
+	"\x19PRINCIPAL_STATUS_DISABLED\x10\x022\xd6\x02\n" +
+	"\x15AuthorityAdminService\x12g\n" +
+	"\x10EnsurePrincipals\x12(.helm.gateway.v1.EnsurePrincipalsRequest\x1a).helm.gateway.v1.EnsurePrincipalsResponse\x12i\n" +
+	"\x0fGetProvisioning\x12'.helm.gateway.v1.GetProvisioningRequest\x1a(.helm.gateway.v1.GetProvisioningResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fListEffectTypes\x12'.helm.gateway.v1.ListEffectTypesRequest\x1a(.helm.gateway.v1.ListEffectTypesResponse\"\x03\x90\x02\x01B(Z&helm.mindburn.run/gateway/v1;gatewayv1b\x06proto3"
 
 var (
 	file_helm_gateway_v1_authority_admin_proto_rawDescOnce sync.Once
@@ -2257,98 +1082,50 @@ func file_helm_gateway_v1_authority_admin_proto_rawDescGZIP() []byte {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescData
 }
 
-var file_helm_gateway_v1_authority_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_helm_gateway_v1_authority_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_helm_gateway_v1_authority_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_helm_gateway_v1_authority_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_helm_gateway_v1_authority_admin_proto_goTypes = []any{
-	(PrincipalKind)(0),                  // 0: helm.gateway.v1.PrincipalKind
-	(PrincipalStatus)(0),                // 1: helm.gateway.v1.PrincipalStatus
-	(MandateStatus)(0),                  // 2: helm.gateway.v1.MandateStatus
-	(LimitMeasure)(0),                   // 3: helm.gateway.v1.LimitMeasure
-	(LimitWindow)(0),                    // 4: helm.gateway.v1.LimitWindow
-	(*ExternalSubject)(nil),             // 5: helm.gateway.v1.ExternalSubject
-	(*UpsertTenantRequest)(nil),         // 6: helm.gateway.v1.UpsertTenantRequest
-	(*UpsertTenantResponse)(nil),        // 7: helm.gateway.v1.UpsertTenantResponse
-	(*AuthorityTenant)(nil),             // 8: helm.gateway.v1.AuthorityTenant
-	(*UpsertPrincipalRequest)(nil),      // 9: helm.gateway.v1.UpsertPrincipalRequest
-	(*UpsertPrincipalResponse)(nil),     // 10: helm.gateway.v1.UpsertPrincipalResponse
-	(*AuthorityPrincipal)(nil),          // 11: helm.gateway.v1.AuthorityPrincipal
-	(*DeactivatePrincipalRequest)(nil),  // 12: helm.gateway.v1.DeactivatePrincipalRequest
-	(*DeactivatePrincipalResponse)(nil), // 13: helm.gateway.v1.DeactivatePrincipalResponse
-	(*EffectTypeSpec)(nil),              // 14: helm.gateway.v1.EffectTypeSpec
-	(*RegisterEffectTypesRequest)(nil),  // 15: helm.gateway.v1.RegisterEffectTypesRequest
-	(*RegisterEffectTypesResponse)(nil), // 16: helm.gateway.v1.RegisterEffectTypesResponse
-	(*AuthorityEffectType)(nil),         // 17: helm.gateway.v1.AuthorityEffectType
-	(*MandateTerms)(nil),                // 18: helm.gateway.v1.MandateTerms
-	(*LimitTerms)(nil),                  // 19: helm.gateway.v1.LimitTerms
-	(*AuthorityLimit)(nil),              // 20: helm.gateway.v1.AuthorityLimit
-	(*AuthorityMandate)(nil),            // 21: helm.gateway.v1.AuthorityMandate
-	(*ActivateRootMandateRequest)(nil),  // 22: helm.gateway.v1.ActivateRootMandateRequest
-	(*ActivateRootMandateResponse)(nil), // 23: helm.gateway.v1.ActivateRootMandateResponse
-	(*DelegateMandateRequest)(nil),      // 24: helm.gateway.v1.DelegateMandateRequest
-	(*DelegateMandateResponse)(nil),     // 25: helm.gateway.v1.DelegateMandateResponse
-	(*RevokeMandateRequest)(nil),        // 26: helm.gateway.v1.RevokeMandateRequest
-	(*RevokeMandateResponse)(nil),       // 27: helm.gateway.v1.RevokeMandateResponse
-	(*SetLimitRequest)(nil),             // 28: helm.gateway.v1.SetLimitRequest
-	(*SetLimitResponse)(nil),            // 29: helm.gateway.v1.SetLimitResponse
-	nil,                                 // 30: helm.gateway.v1.MandateTerms.RiskClassesEntry
-	(*timestamppb.Timestamp)(nil),       // 31: google.protobuf.Timestamp
-	(RiskClass)(0),                      // 32: helm.gateway.v1.RiskClass
+	(PrincipalKind)(0),               // 0: helm.gateway.v1.PrincipalKind
+	(PrincipalStatus)(0),             // 1: helm.gateway.v1.PrincipalStatus
+	(*ExternalSubject)(nil),          // 2: helm.gateway.v1.ExternalSubject
+	(*PrincipalSpec)(nil),            // 3: helm.gateway.v1.PrincipalSpec
+	(*EnsurePrincipalsRequest)(nil),  // 4: helm.gateway.v1.EnsurePrincipalsRequest
+	(*EnsurePrincipalsResponse)(nil), // 5: helm.gateway.v1.EnsurePrincipalsResponse
+	(*AuthorityPrincipal)(nil),       // 6: helm.gateway.v1.AuthorityPrincipal
+	(*GetProvisioningRequest)(nil),   // 7: helm.gateway.v1.GetProvisioningRequest
+	(*GetProvisioningResponse)(nil),  // 8: helm.gateway.v1.GetProvisioningResponse
+	(*Provisioning)(nil),             // 9: helm.gateway.v1.Provisioning
+	(*ProvisionedNode)(nil),          // 10: helm.gateway.v1.ProvisionedNode
+	(*ListEffectTypesRequest)(nil),   // 11: helm.gateway.v1.ListEffectTypesRequest
+	(*ListEffectTypesResponse)(nil),  // 12: helm.gateway.v1.ListEffectTypesResponse
+	(*EffectTypeDeclaration)(nil),    // 13: helm.gateway.v1.EffectTypeDeclaration
+	(*timestamppb.Timestamp)(nil),    // 14: google.protobuf.Timestamp
+	(RiskClass)(0),                   // 15: helm.gateway.v1.RiskClass
 }
 var file_helm_gateway_v1_authority_admin_proto_depIdxs = []int32{
-	8,  // 0: helm.gateway.v1.UpsertTenantResponse.tenant:type_name -> helm.gateway.v1.AuthorityTenant
-	31, // 1: helm.gateway.v1.AuthorityTenant.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 2: helm.gateway.v1.UpsertPrincipalRequest.kind:type_name -> helm.gateway.v1.PrincipalKind
-	5,  // 3: helm.gateway.v1.UpsertPrincipalRequest.external_subject:type_name -> helm.gateway.v1.ExternalSubject
-	11, // 4: helm.gateway.v1.UpsertPrincipalResponse.principal:type_name -> helm.gateway.v1.AuthorityPrincipal
-	0,  // 5: helm.gateway.v1.AuthorityPrincipal.kind:type_name -> helm.gateway.v1.PrincipalKind
-	1,  // 6: helm.gateway.v1.AuthorityPrincipal.status:type_name -> helm.gateway.v1.PrincipalStatus
-	5,  // 7: helm.gateway.v1.AuthorityPrincipal.external_subject:type_name -> helm.gateway.v1.ExternalSubject
-	11, // 8: helm.gateway.v1.DeactivatePrincipalResponse.principal:type_name -> helm.gateway.v1.AuthorityPrincipal
-	32, // 9: helm.gateway.v1.EffectTypeSpec.risk_class:type_name -> helm.gateway.v1.RiskClass
-	14, // 10: helm.gateway.v1.RegisterEffectTypesRequest.effect_types:type_name -> helm.gateway.v1.EffectTypeSpec
-	17, // 11: helm.gateway.v1.RegisterEffectTypesResponse.effect_types:type_name -> helm.gateway.v1.AuthorityEffectType
-	32, // 12: helm.gateway.v1.AuthorityEffectType.risk_class:type_name -> helm.gateway.v1.RiskClass
-	31, // 13: helm.gateway.v1.MandateTerms.valid_from:type_name -> google.protobuf.Timestamp
-	31, // 14: helm.gateway.v1.MandateTerms.valid_until:type_name -> google.protobuf.Timestamp
-	30, // 15: helm.gateway.v1.MandateTerms.risk_classes:type_name -> helm.gateway.v1.MandateTerms.RiskClassesEntry
-	3,  // 16: helm.gateway.v1.LimitTerms.measure:type_name -> helm.gateway.v1.LimitMeasure
-	4,  // 17: helm.gateway.v1.LimitTerms.window:type_name -> helm.gateway.v1.LimitWindow
-	19, // 18: helm.gateway.v1.AuthorityLimit.terms:type_name -> helm.gateway.v1.LimitTerms
-	18, // 19: helm.gateway.v1.AuthorityMandate.terms:type_name -> helm.gateway.v1.MandateTerms
-	2,  // 20: helm.gateway.v1.AuthorityMandate.status:type_name -> helm.gateway.v1.MandateStatus
-	18, // 21: helm.gateway.v1.ActivateRootMandateRequest.terms:type_name -> helm.gateway.v1.MandateTerms
-	19, // 22: helm.gateway.v1.ActivateRootMandateRequest.limits:type_name -> helm.gateway.v1.LimitTerms
-	21, // 23: helm.gateway.v1.ActivateRootMandateResponse.mandate:type_name -> helm.gateway.v1.AuthorityMandate
-	20, // 24: helm.gateway.v1.ActivateRootMandateResponse.limits:type_name -> helm.gateway.v1.AuthorityLimit
-	18, // 25: helm.gateway.v1.DelegateMandateRequest.terms:type_name -> helm.gateway.v1.MandateTerms
-	19, // 26: helm.gateway.v1.DelegateMandateRequest.limits:type_name -> helm.gateway.v1.LimitTerms
-	21, // 27: helm.gateway.v1.DelegateMandateResponse.mandate:type_name -> helm.gateway.v1.AuthorityMandate
-	20, // 28: helm.gateway.v1.DelegateMandateResponse.limits:type_name -> helm.gateway.v1.AuthorityLimit
-	21, // 29: helm.gateway.v1.RevokeMandateResponse.mandate:type_name -> helm.gateway.v1.AuthorityMandate
-	19, // 30: helm.gateway.v1.SetLimitRequest.limit:type_name -> helm.gateway.v1.LimitTerms
-	20, // 31: helm.gateway.v1.SetLimitResponse.limit:type_name -> helm.gateway.v1.AuthorityLimit
-	32, // 32: helm.gateway.v1.MandateTerms.RiskClassesEntry.value:type_name -> helm.gateway.v1.RiskClass
-	6,  // 33: helm.gateway.v1.AuthorityAdminService.UpsertTenant:input_type -> helm.gateway.v1.UpsertTenantRequest
-	9,  // 34: helm.gateway.v1.AuthorityAdminService.UpsertPrincipal:input_type -> helm.gateway.v1.UpsertPrincipalRequest
-	12, // 35: helm.gateway.v1.AuthorityAdminService.DeactivatePrincipal:input_type -> helm.gateway.v1.DeactivatePrincipalRequest
-	15, // 36: helm.gateway.v1.AuthorityAdminService.RegisterEffectTypes:input_type -> helm.gateway.v1.RegisterEffectTypesRequest
-	22, // 37: helm.gateway.v1.AuthorityAdminService.ActivateRootMandate:input_type -> helm.gateway.v1.ActivateRootMandateRequest
-	24, // 38: helm.gateway.v1.AuthorityAdminService.DelegateMandate:input_type -> helm.gateway.v1.DelegateMandateRequest
-	26, // 39: helm.gateway.v1.AuthorityAdminService.RevokeMandate:input_type -> helm.gateway.v1.RevokeMandateRequest
-	28, // 40: helm.gateway.v1.AuthorityAdminService.SetLimit:input_type -> helm.gateway.v1.SetLimitRequest
-	7,  // 41: helm.gateway.v1.AuthorityAdminService.UpsertTenant:output_type -> helm.gateway.v1.UpsertTenantResponse
-	10, // 42: helm.gateway.v1.AuthorityAdminService.UpsertPrincipal:output_type -> helm.gateway.v1.UpsertPrincipalResponse
-	13, // 43: helm.gateway.v1.AuthorityAdminService.DeactivatePrincipal:output_type -> helm.gateway.v1.DeactivatePrincipalResponse
-	16, // 44: helm.gateway.v1.AuthorityAdminService.RegisterEffectTypes:output_type -> helm.gateway.v1.RegisterEffectTypesResponse
-	23, // 45: helm.gateway.v1.AuthorityAdminService.ActivateRootMandate:output_type -> helm.gateway.v1.ActivateRootMandateResponse
-	25, // 46: helm.gateway.v1.AuthorityAdminService.DelegateMandate:output_type -> helm.gateway.v1.DelegateMandateResponse
-	27, // 47: helm.gateway.v1.AuthorityAdminService.RevokeMandate:output_type -> helm.gateway.v1.RevokeMandateResponse
-	29, // 48: helm.gateway.v1.AuthorityAdminService.SetLimit:output_type -> helm.gateway.v1.SetLimitResponse
-	41, // [41:49] is the sub-list for method output_type
-	33, // [33:41] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	0,  // 0: helm.gateway.v1.PrincipalSpec.kind:type_name -> helm.gateway.v1.PrincipalKind
+	2,  // 1: helm.gateway.v1.PrincipalSpec.external_subject:type_name -> helm.gateway.v1.ExternalSubject
+	3,  // 2: helm.gateway.v1.EnsurePrincipalsRequest.principals:type_name -> helm.gateway.v1.PrincipalSpec
+	6,  // 3: helm.gateway.v1.EnsurePrincipalsResponse.principals:type_name -> helm.gateway.v1.AuthorityPrincipal
+	0,  // 4: helm.gateway.v1.AuthorityPrincipal.kind:type_name -> helm.gateway.v1.PrincipalKind
+	1,  // 5: helm.gateway.v1.AuthorityPrincipal.status:type_name -> helm.gateway.v1.PrincipalStatus
+	2,  // 6: helm.gateway.v1.AuthorityPrincipal.external_subject:type_name -> helm.gateway.v1.ExternalSubject
+	9,  // 7: helm.gateway.v1.GetProvisioningResponse.provisioning:type_name -> helm.gateway.v1.Provisioning
+	10, // 8: helm.gateway.v1.Provisioning.nodes:type_name -> helm.gateway.v1.ProvisionedNode
+	14, // 9: helm.gateway.v1.Provisioning.applied_at:type_name -> google.protobuf.Timestamp
+	13, // 10: helm.gateway.v1.ListEffectTypesResponse.effect_types:type_name -> helm.gateway.v1.EffectTypeDeclaration
+	15, // 11: helm.gateway.v1.EffectTypeDeclaration.risk_class:type_name -> helm.gateway.v1.RiskClass
+	4,  // 12: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:input_type -> helm.gateway.v1.EnsurePrincipalsRequest
+	7,  // 13: helm.gateway.v1.AuthorityAdminService.GetProvisioning:input_type -> helm.gateway.v1.GetProvisioningRequest
+	11, // 14: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:input_type -> helm.gateway.v1.ListEffectTypesRequest
+	5,  // 15: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:output_type -> helm.gateway.v1.EnsurePrincipalsResponse
+	8,  // 16: helm.gateway.v1.AuthorityAdminService.GetProvisioning:output_type -> helm.gateway.v1.GetProvisioningResponse
+	12, // 17: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:output_type -> helm.gateway.v1.ListEffectTypesResponse
+	15, // [15:18] is the sub-list for method output_type
+	12, // [12:15] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_helm_gateway_v1_authority_admin_proto_init() }
@@ -2357,14 +1134,13 @@ func file_helm_gateway_v1_authority_admin_proto_init() {
 		return
 	}
 	file_helm_gateway_v1_gateway_proto_init()
-	file_helm_gateway_v1_authority_admin_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helm_gateway_v1_authority_admin_proto_rawDesc), len(file_helm_gateway_v1_authority_admin_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   26,
+			NumEnums:      2,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

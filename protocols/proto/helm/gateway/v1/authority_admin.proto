@@ -1,43 +1,31 @@
 syntax = "proto3";
 
-// The gateway provisioning API: the writes that make a tenant's authority rows
-// (docs/architecture/authority-rows.md) exist on helm-gateway. The Control
-// Plane calls it to enrol a tenant, register its principals and effect types,
-// activate and delegate mandates and set limits; admission
-// (EffectGatewayService.Propose) then reads exactly those rows. Design note:
-// docs/architecture/gateway-provisioning-api.md.
+// The gateway's authority administration API. Authority itself is provisioned
+// as effects, through the effect API: helm.authority.provision.v1 applies a
+// whole organization's principals, effect types, mandates and limits behind a
+// distinct human's approval, and helm.authority.narrow.v1 applies a change that
+// only narrows (docs/architecture/gateway-provisioning-api.md). This service is
+// what that path cannot do for itself:
+//
+//   - EnsurePrincipals registers a tenant's first principals, so that an
+//     effect can be proposed (its requester is a registered service principal)
+//     and approved (its approver is a registered human principal) at all;
+//   - GetProvisioning reads what a provision effect applied;
+//   - ListEffectTypes reads the catalog of effect types the gateway performs,
+//     with their argument schemas.
 //
 // Wire rules, as for gateway.proto (rule R9, ADR-0005):
 //
 //   - Identity. The tenant comes only from the caller's token. No request
-//     message carries a tenant or workspace. The principal ids and mandate ids
-//     that appear in requests are the objects being provisioned, or selectors
-//     the gateway checks against its own rows; they never grant authority (R3).
-//   - Token scope. Every RPC takes the scope helm.gateway.provision, which the
-//     Control Plane's issuer mints for its service principal only. ADR-0005
-//     allows one scope per token. A principal that the gateway's own rows
-//     register as a human is refused, whatever its token says.
-//   - Idempotency (R6). Every RPC carries a tenant-scoped idempotency key.
-//     The gateway stores the key with a digest of the request (every field
-//     except the key and the approval token, and the calling principal) in the
-//     transaction that makes the write.
-//       * New key: the write happens, in one transaction.
-//       * Same key, same digest: nothing is written; the current state of what
-//         the key named is returned, with existing = true. A repeated
-//         ActivateRootMandate needs no valid approval token.
-//       * Same key, different digest: already_exists
-//         [reason_code: IDEMPOTENCY_CONFLICT].
-//   - Narrowing needs no approval; widening does. Registering a principal or an
-//     effect type, delegating, revoking, disabling and lowering a limit only
-//     narrow or add nothing a mandate has not already granted. Activating a
-//     root mandate widens authority, so it carries the proof of a distinct
-//     human's approval (ActivateRootMandateRequest.approval_token). Nothing
-//     here raises a limit, lowers a risk class or re-enables a principal;
-//     those widenings are refused.
+//     message carries a tenant or a workspace.
+//   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
+//     Control Plane's issuer mints for its service principal only, and which no
+//     other RPC takes. GetProvisioning and ListEffectTypes take
+//     helm.gateway.read. ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
-// quantum_posture: this contract carries SHA-256 digests as opaque values and
-// bearer tokens as opaque strings. Token verification is ADR-0005's and adds no
+// quantum_posture: this contract carries SHA-256 digests as opaque strings and
+// no signatures or keys. Token verification is ADR-0005's and adds no
 // cryptographic control here; no post-quantum claim is made.
 package helm.gateway.v1;
 
@@ -46,125 +34,77 @@ import "helm/gateway/v1/gateway.proto";
 
 option go_package = "helm.mindburn.run/gateway/v1;gatewayv1";
 
-// AuthorityAdminService manages a tenant's authority rows on helm-gateway.
+// AuthorityAdminService registers principals and reads what the gateway's
+// authority effects applied.
 //
 // Connect errors used by every RPC, each with a helm.errors.v1.ErrorDetail:
 //
 //   - unauthenticated: no token, or one the gateway cannot verify.
-//   - permission_denied: a valid token whose scope is not helm.gateway.provision
-//     [reason_code: INSUFFICIENT_PRIVILEGE]; a provisioner the gateway's rows
-//     register as a human [reason_code: INSUFFICIENT_PRIVILEGE]; a tenant with
-//     no authority rows yet, on every RPC but UpsertTenant
-//     [reason_code: TENANT_ISOLATION].
+//   - permission_denied: a valid token whose scope does not cover the RPC
+//     [reason_code: INSUFFICIENT_PRIVILEGE]; a provisioner the tenant's own
+//     rows register as a human [reason_code: INSUFFICIENT_PRIVILEGE].
 //   - invalid_argument: a malformed request [reason_code: SCHEMA_VIOLATION].
-//   - not_found: a principal, mandate or limit the tenant does not have. An
-//     object of another tenant is indistinguishable from a missing one.
-//   - already_exists: an idempotency key reused with a different request
-//     [reason_code: IDEMPOTENCY_CONFLICT]; an identity conflict
+//   - not_found: no provisioning for the organization in the token's tenant.
+//   - already_exists: a principal presented as another kind, or with another
+//     external subject, than it was registered with, or an external subject
+//     that already names another principal
 //     [reason_code: IDENTITY_ISOLATION_VIOLATION].
-//   - failed_precondition: a widening [reason_code: DELEGATION_SCOPE_VIOLATION];
-//     an inactive principal [reason_code: PRINCIPAL_INACTIVE] or mandate
-//     [reason_code: MANDATE_INACTIVE]; an active stop
-//     [reason_code: EMERGENCY_STOP_FENCED].
+//   - failed_precondition: a disabled principal
+//     [reason_code: PRINCIPAL_INACTIVE].
 //   - unavailable, aborted: transient; ErrorDetail.retryable is true and the
 //     caller retries with the same request.
 service AuthorityAdminService {
-  // UpsertTenant creates the token's tenant control row if it does not exist.
-  // Every other RPC needs it first. A tenant is never deleted or renamed.
+  // EnsurePrincipals makes the token's tenant and the listed principals exist,
+  // in one transaction. It creates the tenant's control row if it has none,
+  // and each principal that is not registered, active. It changes nothing that
+  // exists: a principal that is registered as the same kind, with the same
+  // external subject or none, is returned as it is.
+  //
+  // It is idempotent by its nature and takes no idempotency key: repeating a
+  // request answers the same principals.
+  //
+  // Registering grants no authority: authority comes from mandates. A
+  // registered human is, however, eligible to approve: the gateway takes an
+  // approver's kind from these rows and never from a token claim (ADR-0001
+  // I6), so the Control Plane that calls this RPC is trusted to register only
+  // people, exactly once each. To hold it to that, a human must carry an
+  // external subject and one external subject names one principal in a tenant:
+  // a second principal presenting the same subject, or a principal presented
+  // with another subject than it has, is already_exists
+  // [reason_code: IDENTITY_ISOLATION_VIOLATION]. So is a principal presented as
+  // another kind than it is registered as, and a disabled principal is
+  // failed_precondition [reason_code: PRINCIPAL_INACTIVE]: neither is ever
+  // re-enabled or re-typed here. A subject may be attached, once, to a
+  // principal that has none.
+  //
+  // The gateway reads authority_principals and nothing else: the kernel's
+  // principal_bindings registry (ADR-0005 §3) is not consulted or written. The
+  // principal_id is the sub of the tokens minted for the principal.
   //
   // Token scope: helm.gateway.provision.
-  rpc UpsertTenant(UpsertTenantRequest) returns (UpsertTenantResponse);
+  rpc EnsurePrincipals(EnsurePrincipalsRequest) returns (EnsurePrincipalsResponse);
 
-  // UpsertPrincipal registers a principal, or returns the one already
-  // registered. A principal_id is the sub of the tokens the Control Plane mints
-  // for it; the row the gateway reads at admission is this one, and no other
-  // registry (the kernel's principal_bindings included) is consulted.
+  // GetProvisioning returns what the latest helm.authority.provision.v1 or
+  // helm.authority.narrow.v1 effect applied for an organization: the digest of
+  // the applied plan, which the next plan's base_plan_digest must equal, and
+  // the mandate each plan node became, with the mandate's current status.
+  // not_found when the organization has never been provisioned in the tenant.
   //
-  // A principal's kind never changes, and a disabled principal is not
-  // re-enabled: either is already_exists / failed_precondition. External
-  // subject: a human principal must carry one, and one external subject names
-  // exactly one principal in a tenant, so a person cannot hold two identities
-  // that count as two people (approver != requester, ADR-0001 I6). A second
-  // principal claiming the same external subject, or a principal presented
-  // with another external subject than the one it has, is already_exists
-  // [reason_code: IDENTITY_ISOLATION_VIOLATION].
-  //
-  // Registering grants nothing: authority comes from mandates.
-  //
-  // Token scope: helm.gateway.provision.
-  rpc UpsertPrincipal(UpsertPrincipalRequest) returns (UpsertPrincipalResponse);
+  // Token scope: helm.gateway.read.
+  rpc GetProvisioning(GetProvisioningRequest) returns (GetProvisioningResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
-  // DeactivatePrincipal disables a principal. It narrows: admission denies the
-  // principal's proposals [reason_code: PRINCIPAL_INACTIVE], the principal row's
-  // version is bumped, and every permit issued under it fails its dispatch
-  // claim [reason_code: AUTHORITY_CHANGED]. Its mandates stay as rows, inert.
-  // Disabling a disabled principal changes nothing.
+  // ListEffectTypes returns the catalog of effect types this gateway performs:
+  // for each, its risk class, its declaration (idempotency, observability,
+  // reversibility and mediation), and the JSON Schema of its arguments. It is
+  // the same for every tenant. An effect type a mandate may grant has
+  // grantable set; the gateway's own authority effects do not.
   //
-  // Token scope: helm.gateway.provision.
-  rpc DeactivatePrincipal(DeactivatePrincipalRequest) returns (DeactivatePrincipalResponse);
-
-  // RegisterEffectTypes registers the effect types available to the tenant,
-  // each with its risk class. A mandate can name an effect type only once it
-  // is registered, and admission reads the risk class from this row, never
-  // from a request. A registered type keeps its class, or has it raised (which
-  // narrows, and bumps the version); lowering it widens, and is
-  // failed_precondition [reason_code: DELEGATION_SCOPE_VIOLATION].
-  //
-  // Token scope: helm.gateway.provision.
-  rpc RegisterEffectTypes(RegisterEffectTypesRequest) returns (RegisterEffectTypesResponse);
-
-  // ActivateRootMandate activates a root mandate, one that is not delegated
-  // from another, for a holder, together with its limits, in one transaction.
-  // It widens authority, so it needs the approval of a human principal who is
-  // neither the requester (requested_by) nor the holder: the approval is a
-  // helm.gateway.decide token, the same kind that approves an effect attempt,
-  // bound to exactly these terms (ActivateRootMandateRequest.approval_token).
-  // The token is single-use: its jti is recorded in the transaction that
-  // activates the mandate, so a reused token is refused, and a refused
-  // activation uses none up.
-  //
-  //   - No approval, or one that does not verify, is unusable, or is bound to
-  //     other terms: permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]
-  //     ([reason_code: APPROVAL_REQUIRED] when none is given on a new key).
-  //   - The approver must be an active human principal of the tenant, not
-  //     stopped, distinct from requested_by and holder_id: permission_denied
-  //     [reason_code: APPROVER_NOT_DISTINCT] or
-  //     [reason_code: INSUFFICIENT_PRIVILEGE].
-  //   - The holder and requested_by are active principals, and every effect
-  //     type is registered.
-  //
-  // Token scope: helm.gateway.provision.
-  rpc ActivateRootMandate(ActivateRootMandateRequest) returns (ActivateRootMandateResponse);
-
-  // DelegateMandate delegates a child of a mandate to a holder, with limits.
-  // Delegation only narrows: every term of the child, and every limit, is
-  // within those of every mandate above it, else failed_precondition
-  // [reason_code: DELEGATION_SCOPE_VIOLATION]. Only the parent's holder may
-  // delegate it (delegator_id), every mandate of the chain must be active, and
-  // no active stop may cover the tenant, the delegator or the chain
-  // [reason_code: EMERGENCY_STOP_FENCED]. Narrowing needs no approval.
-  //
-  // Token scope: helm.gateway.provision.
-  rpc DelegateMandate(DelegateMandateRequest) returns (DelegateMandateResponse);
-
-  // RevokeMandate revokes a mandate, and with it, at admission, every mandate
-  // delegated from it. It narrows: the mandate's version is bumped, and every
-  // permit issued under it fails its dispatch claim
-  // [reason_code: AUTHORITY_CHANGED]. Revoking a revoked mandate changes
-  // nothing.
-  //
-  // Token scope: helm.gateway.provision.
-  rpc RevokeMandate(RevokeMandateRequest) returns (RevokeMandateResponse);
-
-  // SetLimit adds a limit to a mandate, or to the tenant when mandate_id is
-  // empty, or lowers the limit that already has the same unit, measure, window
-  // and span. Both narrow, and bump the version of the row they change. A
-  // higher value than the stored one widens, and is failed_precondition
-  // [reason_code: DELEGATION_SCOPE_VIOLATION]; so is a limit on a delegated
-  // mandate above one of its ancestors'. The same value changes nothing.
-  //
-  // Token scope: helm.gateway.provision.
-  rpc SetLimit(SetLimitRequest) returns (SetLimitResponse);
+  // Token scope: helm.gateway.read.
+  rpc ListEffectTypes(ListEffectTypesRequest) returns (ListEffectTypesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // PrincipalKind is what a principal is. Only a human can approve
@@ -186,44 +126,8 @@ enum PrincipalStatus {
   PRINCIPAL_STATUS_UNSPECIFIED = 0;
   // Accepted.
   PRINCIPAL_STATUS_ACTIVE = 1;
-  // Disabled by DeactivatePrincipal. Final.
+  // Disabled by a plan's disable_principals. Final.
   PRINCIPAL_STATUS_DISABLED = 2;
-}
-
-// MandateStatus is whether a mandate admits.
-enum MandateStatus {
-  // Not set.
-  MANDATE_STATUS_UNSPECIFIED = 0;
-  // Admits, while its validity window holds and every mandate above it does.
-  MANDATE_STATUS_ACTIVE = 1;
-  // Revoked by RevokeMandate. Final.
-  MANDATE_STATUS_REVOKED = 2;
-}
-
-// LimitMeasure is what a limit counts.
-enum LimitMeasure {
-  // Not set. Refused.
-  LIMIT_MEASURE_UNSPECIFIED = 0;
-  // The sum of the quoted amounts of one unit.
-  LIMIT_MEASURE_SUM = 1;
-  // The number of effects.
-  LIMIT_MEASURE_COUNT = 2;
-  // The number of distinct values of one unit (a distinct-value limit).
-  LIMIT_MEASURE_DISTINCT = 3;
-}
-
-// LimitWindow is the period a limit's counter covers.
-enum LimitWindow {
-  // Not set. Refused.
-  LIMIT_WINDOW_UNSPECIFIED = 0;
-  // No window: one counter for good.
-  LIMIT_WINDOW_NONE = 1;
-  // Per UTC hour.
-  LIMIT_WINDOW_HOUR = 2;
-  // Per UTC day.
-  LIMIT_WINDOW_DAY = 3;
-  // Per UTC month.
-  LIMIT_WINDOW_MONTH = 4;
 }
 
 // ExternalSubject names a principal in the system that vouches for it, so
@@ -237,50 +141,29 @@ message ExternalSubject {
   string id = 2;
 }
 
-// UpsertTenantRequest provisions the token's tenant.
-message UpsertTenantRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
-}
-
-// UpsertTenantResponse returns the tenant control row.
-message UpsertTenantResponse {
-  // The tenant.
-  AuthorityTenant tenant = 1;
-  // True when the idempotency key already named this request.
-  bool existing = 2;
-}
-
-// AuthorityTenant is a tenant's control row.
-message AuthorityTenant {
-  // The tenant, as the token names it.
-  string tenant_id = 1;
-  // The row's version. It increases with every narrowing of the tenant
-  // itself, such as a tenant stop.
-  int64 version = 2;
-  // Database time of the row's creation.
-  google.protobuf.Timestamp created_at = 3;
-}
-
-// UpsertPrincipalRequest registers one principal.
-message UpsertPrincipalRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
+// PrincipalSpec is a principal to register.
+message PrincipalSpec {
   // The principal: the sub of the tokens minted for it. 1 to 255 bytes of
   // UTF-8 without control characters or edge whitespace.
-  string principal_id = 2;
+  string principal_id = 1;
   // What the principal is. Required.
-  PrincipalKind kind = 3;
+  PrincipalKind kind = 2;
   // The external subject. Required for a human; optional otherwise.
-  ExternalSubject external_subject = 4;
+  ExternalSubject external_subject = 3;
 }
 
-// UpsertPrincipalResponse returns the principal as stored.
-message UpsertPrincipalResponse {
-  // The principal.
-  AuthorityPrincipal principal = 1;
-  // True when the idempotency key already named this request.
-  bool existing = 2;
+// EnsurePrincipalsRequest registers principals.
+message EnsurePrincipalsRequest {
+  // 1 to 64 principals, each named once.
+  repeated PrincipalSpec principals = 1;
+}
+
+// EnsurePrincipalsResponse returns the principals as stored.
+message EnsurePrincipalsResponse {
+  // Every principal of the request, in its order.
+  repeated AuthorityPrincipal principals = 1;
+  // True when this call created the tenant's control row.
+  bool tenant_created = 2;
 }
 
 // AuthorityPrincipal is a principal row.
@@ -297,235 +180,93 @@ message AuthorityPrincipal {
   ExternalSubject external_subject = 5;
 }
 
-// DeactivatePrincipalRequest disables one principal.
-message DeactivatePrincipalRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
-  // The principal to disable.
-  string principal_id = 2;
+// GetProvisioningRequest names an organization.
+message GetProvisioningRequest {
+  // The organization, as its plans name it: "org:<id>".
+  string org_ref = 1;
 }
 
-// DeactivatePrincipalResponse returns the principal as stored.
-message DeactivatePrincipalResponse {
-  // The principal, disabled.
-  AuthorityPrincipal principal = 1;
-  // True when the idempotency key already named this request.
-  bool existing = 2;
+// GetProvisioningResponse returns the provisioning.
+message GetProvisioningResponse {
+  // What the latest applied plan made.
+  Provisioning provisioning = 1;
 }
 
-// EffectTypeSpec is one effect type to register.
-message EffectTypeSpec {
+// Provisioning is the state a plan left an organization in.
+message Provisioning {
+  // The organization.
+  string org_ref = 1;
+  // The digest of the applied plan: lower-case hex SHA-256 of the RFC 8785
+  // form of its arguments without base_plan_digest. The next plan carries it
+  // as base_plan_digest.
+  string plan_digest = 2;
+  // The plan's version_ref.
+  string version_ref = 3;
+  // The plan's stage.
+  string stage = 4;
+  // One node per mandate of the plan, in the plan's order.
+  repeated ProvisionedNode nodes = 5;
+  // The effect attempt that applied the plan.
+  string attempt_id = 6;
+  // Counts the plans applied to the organization, starting at 1.
+  int64 revision = 7;
+  // Database time of the apply.
+  google.protobuf.Timestamp applied_at = 8;
+}
+
+// ProvisionedNode is a plan node and the mandate it became.
+message ProvisionedNode {
+  // The node, as the plan names it.
+  string node = 1;
+  // The mandate, UUIDv7. A node the plan left unchanged keeps its mandate.
+  string mandate_id = 2;
+  // The principal that holds the mandate.
+  string holder_id = 3;
+  // The node above it in the delegation chain. Empty for the root.
+  string parent_node = 4;
+  // Whether the mandate is active now. A mandate revoked since the plan was
+  // applied is not.
+  bool active = 5;
+  // The mandate row's version. It increases with every narrowing of it.
+  int64 mandate_version = 6;
+}
+
+// ListEffectTypesRequest asks for the catalog.
+message ListEffectTypesRequest {}
+
+// ListEffectTypesResponse returns the catalog.
+message ListEffectTypesResponse {
+  // Every effect type the gateway performs, ordered by name.
+  repeated EffectTypeDeclaration effect_types = 1;
+}
+
+// EffectTypeDeclaration is one effect type of the catalog: the adapter's
+// declaration for it (target architecture §9.1).
+message EffectTypeDeclaration {
   // The effect type, for example "github.pull_request.create_draft".
-  // 1 to 128 bytes of [a-z0-9_.-], starting with a letter.
   string effect_type = 1;
-  // Its risk class. Required. High and irreversible escalate to approval.
+  // Its default risk class. A tenant registers the class its plan gives it;
+  // a mandate may raise it.
   RiskClass risk_class = 2;
-}
-
-// RegisterEffectTypesRequest registers effect types.
-message RegisterEffectTypesRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
-  // 1 to 64 effect types, each named once.
-  repeated EffectTypeSpec effect_types = 2;
-}
-
-// RegisterEffectTypesResponse returns the effect types as stored.
-message RegisterEffectTypesResponse {
-  // Every effect type of the request, in its order.
-  repeated AuthorityEffectType effect_types = 1;
-  // True when the idempotency key already named this request.
-  bool existing = 2;
-}
-
-// AuthorityEffectType is an effect-type control row.
-message AuthorityEffectType {
-  // The effect type.
-  string effect_type = 1;
-  // Its risk class.
-  RiskClass risk_class = 2;
-  // The row's version. It increases with every narrowing of the effect type,
-  // such as a stop or a raised risk class.
-  int64 version = 3;
-}
-
-// MandateTerms are a mandate's typed grant (authority-rows.md). Amounts are
-// integer minor units.
-message MandateTerms {
-  // The scope: the effect types the mandate may admit. 1 to 64, each
-  // registered.
-  repeated string effect_types = 1;
-  // Caps the amount of one call. Unset: none.
-  optional int64 per_call_limit = 2;
-  // A call whose amount is at least this needs approval; 0 means every call.
-  // Unset: approval follows the effect type's risk class.
-  optional int64 approval_threshold = 3;
-  // The validity window, [valid_from, valid_until). Both required. Truncated
-  // to microseconds.
-  google.protobuf.Timestamp valid_from = 4;
-  // The end of the validity window.
-  google.protobuf.Timestamp valid_until = 5;
-  // The allowlisted targets, as exact strings, at most 256. Empty: any target.
-  repeated string targets = 6;
-  // A CEL condition over the effect (input.args, input.target,
-  // input.effect_type), compiled when the mandate is activated or delegated;
-  // one that does not compile is invalid_argument. At most 4096 bytes. Empty:
-  // none.
-  string condition = 7;
-  // The effect types for which every call under this mandate needs approval,
-  // whatever their risk class. Each must be in effect_types. Empty: none.
-  repeated string approval_required = 8;
-  // Raises the risk class of an effect type for this mandate; it never lowers
-  // the effect-type row's. Each key must be in effect_types.
-  map<string, RiskClass> risk_classes = 9;
-}
-
-// LimitTerms describe one limit: a cap of value units per window.
-message LimitTerms {
-  // The unit counted, for example "count" or "usd_cents".
-  // [a-z][a-z0-9_]{0,31}.
-  string unit = 1;
-  // What is counted. Required.
-  LimitMeasure measure = 2;
-  // The window. Required.
-  LimitWindow window = 3;
-  // The number of window buckets a sliding window covers: 1 for a fixed
-  // window, at most 744. It is 1 for the windowless and the distinct-value
-  // limit.
-  int32 span = 4;
-  // The cap, non-negative.
-  int64 value = 5;
-}
-
-// AuthorityLimit is a stored limit.
-message AuthorityLimit {
-  // UUIDv7.
-  string limit_id = 1;
-  // The mandate it limits. Empty for a tenant-level resource account.
-  string mandate_id = 2;
-  // What it counts and its cap.
-  LimitTerms terms = 3;
-  // The row's version. It increases every time the limit is lowered.
-  int64 version = 4;
-}
-
-// AuthorityMandate is a stored mandate.
-message AuthorityMandate {
-  // UUIDv7.
-  string mandate_id = 1;
-  // The mandate it was delegated from. Empty for a root mandate.
-  string parent_mandate_id = 2;
-  // 0 for a root mandate, otherwise the parent's depth plus one.
-  int32 depth = 3;
-  // The principal that holds it.
-  string holder_id = 4;
-  // Its terms.
-  MandateTerms terms = 5;
-  // Whether it admits.
-  MandateStatus status = 6;
-  // The principal that requested a root mandate, or delegated a child.
-  string requested_by = 7;
-  // The human that approved a root mandate. Empty for a delegated one.
-  string approved_by = 8;
-  // The row's version. It increases with every narrowing of the mandate.
-  int64 version = 9;
-}
-
-// ActivateRootMandateRequest activates a root mandate.
-message ActivateRootMandateRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
-  // The principal that will hold the mandate. Active.
-  string holder_id = 2;
-  // The principal that asked for it. Active. Neither this nor the holder may
-  // approve.
-  string requested_by = 3;
-  // The grant.
-  MandateTerms terms = 4;
-  // The limits created with the mandate, in the same transaction, so that no
-  // admission ever sees the mandate without them. At most 16.
-  repeated LimitTerms limits = 5;
-  // The approver's helm.gateway.decide token: a bearer token the Control Plane
-  // mints for the approving human, from an interactive session, once per
-  // decision. It must be a token of this tenant, name the approver as its
-  // sub, and carry exactly one authorization_details entry
-  //   {"type": "helm_mandate_activation", "activation_digest": "<hex>"}
-  // where activation_digest is the lower-case hex of activation digest v1
-  // over holder_id, requested_by, terms and limits (the design note gives the
-  // construction and a test vector). It is single-use; a refused call uses none
-  // up. Ignored when the key already names this request.
-  string approval_token = 6;
-}
-
-// ActivateRootMandateResponse returns the mandate and its limits.
-message ActivateRootMandateResponse {
-  // The mandate, active.
-  AuthorityMandate mandate = 1;
-  // Its limits, in the order of the request.
-  repeated AuthorityLimit limits = 2;
-  // True when the idempotency key already named this request: the stored
-  // mandate is returned as it now is, revoked or narrowed included.
-  bool existing = 3;
-}
-
-// DelegateMandateRequest delegates a child mandate.
-message DelegateMandateRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
-  // The mandate to delegate from.
-  string parent_mandate_id = 2;
-  // The parent's holder. Any other principal is permission_denied
-  // [reason_code: INSUFFICIENT_PRIVILEGE].
-  string delegator_id = 3;
-  // The principal that will hold the child. Active.
-  string holder_id = 4;
-  // The child's terms, within the parent's.
-  MandateTerms terms = 5;
-  // The child's limits, each within any limit of the same shape above it. At
-  // most 16.
-  repeated LimitTerms limits = 6;
-}
-
-// DelegateMandateResponse returns the child and its limits.
-message DelegateMandateResponse {
-  // The child mandate, active.
-  AuthorityMandate mandate = 1;
-  // Its limits, in the order of the request.
-  repeated AuthorityLimit limits = 2;
-  // True when the idempotency key already named this request.
-  bool existing = 3;
-}
-
-// RevokeMandateRequest revokes one mandate.
-message RevokeMandateRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
-  // The mandate to revoke.
-  string mandate_id = 2;
-}
-
-// RevokeMandateResponse returns the mandate as stored.
-message RevokeMandateResponse {
-  // The mandate, revoked.
-  AuthorityMandate mandate = 1;
-  // True when the idempotency key already named this request.
-  bool existing = 2;
-}
-
-// SetLimitRequest adds or lowers one limit.
-message SetLimitRequest {
-  // Tenant-scoped idempotency key, 1 to 255 bytes.
-  string idempotency_key = 1;
-  // The mandate to limit. Empty: a tenant-level resource account.
-  string mandate_id = 2;
-  // The limit.
-  LimitTerms limit = 3;
-}
-
-// SetLimitResponse returns the limit as stored.
-message SetLimitResponse {
-  // The limit.
-  AuthorityLimit limit = 1;
-  // True when the idempotency key already named this request.
-  bool existing = 2;
+  // Whether repeating the dispatch is safe: "yes", "no" or "conditional".
+  string idempotent = 3;
+  // How far Observe establishes the outcome: "yes", "partial" or "no".
+  string observable = 4;
+  // Whether the effect can be undone: "yes", "no" or "not applicable".
+  string reversible = 5;
+  // Whether the gateway is the only path to the effect: "enforced" or
+  // "observed-only".
+  string mediation = 6;
+  // The form of EffectDescriptor.target, for example
+  // "github.com/{owner}/{repo}".
+  string target_form = 7;
+  // One or two sentences on what the effect does.
+  string description = 8;
+  // The JSON Schema (draft 2020-12) of EffectDescriptor.arguments, as UTF-8
+  // JSON. It is closed: the gateway refuses what it does not allow. Rules JSON
+  // Schema cannot express are in its description.
+  bytes argument_schema = 9;
+  // Whether a mandate may grant the effect type. False for the gateway's own
+  // authority effects (helm.authority.*), which no mandate grants.
+  bool grantable = 10;
 }

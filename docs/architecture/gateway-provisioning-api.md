@@ -1,109 +1,196 @@
-# Gateway provisioning API (contract 5a)
+# Gateway authority provisioning (contract 5)
 
 <!-- quantum_posture: this note describes a wire contract that carries SHA-256
-digests and bearer tokens as opaque values and no signatures or keys. It adds no
-cryptographic control and makes no post-quantum claim; token verification is
-ADR-0005's. -->
+digests as opaque values and no signatures or keys. It adds no cryptographic
+control and makes no post-quantum claim; token verification is ADR-0005's. -->
 
 Status: wire contract, 2026-09-30. `helm-gateway` serves it from the change that
-follows this one; until then every RPC answers `unimplemented`.
+follows this one: until then `helm.authority.provision.v1` and
+`helm.authority.narrow.v1` are refused as unregistered effect types, and the
+three RPCs of `AuthorityAdminService` answer `unimplemented`.
 
+- Effect argument schemas:
+  [`protocols/json-schemas/effects/authority/provision.v1.json`](../../protocols/json-schemas/effects/authority/provision.v1.json)
+  and [`narrow.v1.json`](../../protocols/json-schemas/effects/authority/narrow.v1.json),
+  with valid and invalid examples beside them.
 - IDL: [`protocols/proto/helm/gateway/v1/authority_admin.proto`](../../protocols/proto/helm/gateway/v1/authority_admin.proto),
-  package `helm.gateway.v1`, service `AuthorityAdminService`.
-- Go bindings: `sdk/go/gen/helm/gateway/v1` (`authority_admin.pb.go`,
-  `authority_admin.connect.go`), generated like the effect API's.
+  package `helm.gateway.v1`, service `AuthorityAdminService`; Go bindings in
+  `sdk/go/gen/helm/gateway/v1`.
 - Contract tests: `sdk/go/gen/helm/gateway/v1/authority_admin_contract_test.go`.
-- Related: [Gateway effect API](gateway-effect-api.md) (Propose and the rest),
-  [Authority rows](authority-rows.md) (the tables these RPCs write).
+- Related: [Gateway effect API](gateway-effect-api.md) (Propose, Approve,
+  Dispatch and Observe, which carry these effects) and
+  [Authority rows](authority-rows.md) (the tables a plan writes).
 
 ## What it is for
 
 Admission (`EffectGatewayService.Propose`) reads a tenant's authority rows:
 principals, effect types, mandates and limits. Until now nothing shipped wrote
-them, so a tenant on a real gateway could not exist. This service is the one
-place they are written: the Control Plane calls it when a company is enrolled,
-when its organization is activated and when a mandate is delegated, narrowed or
-revoked. It exposes `authorityrows.Store` (HELM-750) and adds no rule of its
-own: delegation only narrows, widening needs a distinct human, a stop cannot be
-bypassed by delegating.
+them, so a tenant on a real gateway could not exist. Authority is written the
+way every other consequential change is: as an effect that passes admission, a
+distinct human's approval, a single-use dispatch claim and a read-back. There is
+no second, administrative path that widens authority.
 
-## Operations
+- **`helm.authority.provision.v1`** applies one organization's whole authority
+  plan: its effect types, its principals, its mandates (a tree, delegated from
+  the organization's root mandate) and their limits. It widens authority, so it
+  is `ESCALATED` and needs a distinct human's approval with step-up.
+- **`helm.authority.narrow.v1`** applies a plan that only narrows the one
+  applied. It needs no approval and is `ADMITTED` at once.
+- **`AuthorityAdminService`** does what an effect cannot do for itself:
+  `EnsurePrincipals` registers the first principals, so that an effect has a
+  requester and an approver; `GetProvisioning` reads what a plan applied;
+  `ListEffectTypes` is the catalog of effect types with their argument schemas.
 
-All eight are unary. Each takes the token scope `helm.gateway.provision` and an
-`idempotency_key`.
+## The path of a plan
 
-| RPC | Effect | Direction | Approval |
-|---|---|---|---|
-| `UpsertTenant` | creates the token's tenant control row | adds a tenant with no authority | none |
-| `UpsertPrincipal` | registers a principal of a kind, with an external subject | registering grants nothing | none |
-| `DeactivatePrincipal` | disables a principal; bumps its row version | narrows | none |
-| `RegisterEffectTypes` | registers effect types with their risk class; may raise a class | narrows or adds nothing a mandate grants | none |
-| `ActivateRootMandate` | activates a root mandate and its limits in one transaction | **widens** | a distinct human's single-use decide token, bound to the terms |
-| `DelegateMandate` | a child mandate and its limits, within every mandate above it | narrows | none |
-| `RevokeMandate` | revokes a mandate; bumps its version | narrows | none |
-| `SetLimit` | adds a limit, or lowers the one of the same shape | narrows | none |
+| Step | Who | What the gateway does |
+|---|---|---|
+| 0 | the Control Plane (`helm.gateway.provision`) | `EnsurePrincipals`: the tenant, the organization's service principal and the owner (a human) exist. Once per tenant. |
+| 1 | the organization's service principal, carried by the Control Plane (`helm.gateway.propose`) | `Propose` with `effect_type` `helm.authority.provision.v1`, `target` the `org_ref`, `arguments` the plan. It is `ESCALATED` and shows the plan to the approver through `GetAttemptContent`. |
+| 2 | a distinct human (`helm.gateway.decide`) | `Approve` with the approval digest and a step-up proof. The approver is an active human principal of the tenant, not the requester. Approval re-admits the attempt: `ADMITTED`, with a permit. |
+| 3 | the requester's workload (`helm.gateway.execute`) | `Dispatch` claims the permit once and calls the authority adapter, which applies the plan in one transaction. |
+| 4 | the same workload | `Observe` reads the applied plan back: `OBSERVED(SUCCEEDED)` when the organization's applied digest is this plan's. |
 
-Nothing here raises a limit, lowers a risk class or re-enables a principal. Each
-of those widens, and needs an approved authority change (`helm.authority.*`,
-contract 5), which this contract does not define. The service refuses them.
+`helm.authority.narrow.v1` skips step 2. Nothing else differs.
 
-Every write runs in one PostgreSQL transaction bound to the token's tenant under
-forced row security, and bumps the version of the control row of what it
-narrows in that same transaction (ADR-0001 §5.1), so a permit issued under the
-old row fails its dispatch claim with `AUTHORITY_CHANGED`.
+Admission treats these two effect types differently from every other, in three
+ways, because they are how authority begins:
 
-## Identity and the token
+1. **No proposer mandate.** A mandate is what a plan creates; the first plan
+   cannot need one. Authority for a provision attempt is the approver's
+   approval of the exact plan bytes, which the approval digest binds (attempt
+   id, target, argument digest, expiry).
+2. **The requester is a registered service principal.** A human, an agent or an
+   unregistered principal proposing either effect is `DENIED`
+   (`INSUFFICIENT_PRIVILEGE`). A stop on the requester or the tenant still
+   denies (`EMERGENCY_STOP_FENCED`).
+3. **No effect-type row and no limit.** They spend nothing and are the
+   gateway's own (`grantable` is false in the catalog). A mandate never grants
+   them: a plan whose terms name a `helm.authority.*` effect type is refused.
 
-The tenant comes only from the token (R9, ADR-0005). No request message carries
-a tenant or a workspace, and the contract test enforces that. The principal and
-mandate ids that requests do carry name the objects being provisioned, or
-selectors the gateway checks against its own rows.
+Every other rule of the effect API holds: idempotency key and request digest
+(R6), approver != requester, the single-use decide token, the approval digest,
+the escalation window, the dispatch claim's authority-version check, stops, the
+UNKNOWN reconciliation. A permit's authority versions include the tenant and
+the requester's rows, so a stop or a change to them between approval and
+dispatch cancels the attempt.
 
-| Token rule | Value |
+## The plan
+
+One JSON object, closed by its schema, at most 524288 bytes, with no duplicate
+key at any depth. The fields:
+
+| Field | Meaning |
 |---|---|
-| Scope | `helm.gateway.provision`, the only scope any of these RPCs takes. One scope per token, as everywhere. |
-| Minted for | the Control Plane's service principal, by its workload-identity issuer. |
-| Audience, issuer, `act.sub`, `cnf` | as for the effect API: `helm-gateway:<env>`, `HELM_CP_IDENTITY_*`. `act.sub`, when present, must be the configured workload actor. |
-| `sub` | the caller. It needs no principal row of its own, so that `UpsertTenant` can be the first call. If the tenant has a row for it, that row must not be a human's: a human is `permission_denied` (`INSUFFICIENT_PRIVILEGE`) whatever its token says. |
-| `tenant_id` | the tenant provisioned. A tenant with no control row is `permission_denied` (`TENANT_ISOLATION`) on every RPC but `UpsertTenant`. |
-| `workspace_id` | required of every gateway token; provisioning is tenant-wide and does not use it. |
+| `schema` | `helm.authority.provision.v1` or `helm.authority.narrow.v1`, matching the effect type. |
+| `org_ref` | `org:<id>`. The effect's target, and the key of the provisioning the plan updates. |
+| `version_ref`, `stage` | Recorded and returned by `GetProvisioning`; never interpreted. |
+| `base_plan_digest` | The applied plan's digest, or empty when the organization has none. |
+| `valid_from`, `valid_until` | The validity window of every mandate of the plan. |
+| `effect_types` | `{effect_type, risk_class}`: registered in the tenant. |
+| `principals` | `{id, kind, ensure_only?, external_subject?}`: registered if missing. |
+| `disable_principals` | Principals to disable. |
+| `mandates` | `{node, holder, parent, terms}`: one mandate per node. `terms` has `effect_types`, `targets` (null: any), and optionally `approval_required`, `approval_threshold`, `per_call_limit`, `condition` (CEL) and `risk_classes`. |
+| `limits` | `{node, unit, measure, window, value, span?}`: a limit of a node's mandate. |
 
-Only the scope separates this API from the rest, so the issuer must mint it for
-nobody but the Control Plane's service principal. A token of another scope is
-`permission_denied`, and so is a token of this scope on any other RPC.
+Rules the schema cannot state, which the gateway refuses a plan for (the effect
+is `invalid_argument` at Propose, or `FAILED` at Dispatch, and nothing applies):
 
-## Idempotency
+- principals and nodes are listed once each; exactly one mandate has a null
+  parent, its node is the `org_ref`, every other parent is a node of the plan and
+  the parents form a tree;
+- every holder is a principal of the plan or one already registered and active;
+- every limit names a node of the plan, and a node has at most one limit of a
+  given unit, measure, window and span;
+- no principal is both listed and disabled, and no holder of a plan mandate is
+  disabled;
+- `valid_until` is after `valid_from`; a condition compiles; no terms name a
+  `helm.authority.*` effect type; a human principal the plan creates carries an
+  `external_subject`;
+- the effect's target equals `org_ref`.
 
-Every RPC carries a tenant-scoped `idempotency_key` (1 to 255 bytes). The gateway
-stores it in `authority_provisioning` with a SHA-256 digest of the request, in
-the transaction that makes the write (R6):
+### The digest and compare-and-set
 
-- **New key.** The write happens.
-- **Same key, same digest.** Nothing is written. The response is the current
-  state of what the key named, with `existing = true`: a mandate that has been
-  revoked since comes back revoked. `ActivateRootMandate` needs no valid
-  approval token then, so a retry after the approval token expired still
-  answers.
-- **Same key, different digest.** `already_exists`,
-  `IDEMPOTENCY_CONFLICT`. The key belongs to one operation of one tenant.
+The **plan digest** is the lower-case hex SHA-256 of the RFC 8785 (JCS) form of
+the arguments without `base_plan_digest`. The gateway computes it and never
+trusts one it is given. Vector, checked by `TestPlanDigestVector` against the
+Go reference and an independent Python one:
 
-The digest covers the operation, the calling principal and every field except
-the key and the approval token, after the gateway normalizes it: sets
-(effect types, targets, approval-required entries) are sorted and
-de-duplicated, timestamps are truncated to microseconds, and limits are sorted.
-Two requests that would write the same rows therefore have one digest. A
-concurrent duplicate waits for the first to commit, then replays it.
+| Input | Value |
+|---|---|
+| plan | `protocols/json-schemas/effects/authority/examples/provision.v1.valid.json` |
+| **plan digest** | `70d6c47ca51186780504038bdadb939319455ee16c14f59d4829fd1a8bdee5af` |
 
-A refused call rolls back with everything else: it stores no key, and a
-refused activation uses no approval token up.
+An organization has at most one applied plan. Applying a plan is a
+compare-and-set: it applies only if its `base_plan_digest` is the applied
+plan's digest, or empty when there is none; otherwise the effect fails with
+`PRECONDITION_FAILED` and nothing changes. `Propose` makes the same check, so a
+stale base is refused before an approver is asked (`failed_precondition`, no
+attempt). Applying a plan whose digest is already the applied one changes
+nothing and succeeds, whatever its base: a lost response is safe to retry.
 
-## Principals: one registry, and the mapping to the kernel's
+### What applying does
+
+Everything below runs in one transaction bound to the token's tenant under
+forced row security: a plan applies whole or not at all. Principals and effect
+types first, then the mandates from the root down, then limits, then
+`disable_principals`.
+
+- **Principals.** A principal that is missing is created, active. One that
+  exists must be the same kind (`ensure_only` or not), and a disabled one is
+  refused: nothing is re-enabled or re-typed. `disable_principals` disables
+  (narrows: the principal row's version is bumped).
+- **Effect types.** Registered with the plan's class. A class raised narrows and
+  bumps the row's version; a class lowered widens, so only `provision` may do it.
+- **Mandates.** A node the applied plan has, unchanged (same holder, parent,
+  terms and limits), **keeps its mandate id**. A node whose change only narrows
+  (terms within the old, a condition kept or added, limits added or lowered) is
+  **narrowed in place**: the mandate keeps its id and its version is bumped. Any
+  other change (a wider term, a limit raised or dropped, another holder or
+  parent) **revokes and re-creates** the node's mandate, and every mandate below
+  it in the plan, because a limit only ever lowers and a child follows its
+  parent's id. A node the plan no longer has is revoked. A new node is created:
+  the root by the store's `CreateMandate`, with the requester as `created_by`
+  and the human who approved the attempt as `approved_by`, so the schema's
+  constraint that a root's approver is neither its requester nor its holder
+  holds; the others by delegation from the parent's holder, which only narrows
+  and is refused under an active stop on the tenant, the delegator or the chain.
+- **Limits.** Added with the mandate, or added or lowered on one that stays.
+- **Record.** The organization's row in `authority_provisions` (digest,
+  `version_ref`, `stage`, the node to mandate map, the applying attempt, a
+  revision counter) is written by a compare-and-set on the base digest.
+
+`helm.authority.narrow.v1` runs the same algorithm with widening forbidden: a
+node that is not in the applied plan, a change that would revoke and re-create,
+an effect-type class lowered, a principal that is not registered, or a stale
+base fails the whole plan (`PRECONDITION_FAILED` or `DELEGATION_SCOPE_VIOLATION`
+in the outcome, nothing applied). It can revoke nodes, disable principals, lower
+or add limits and narrow terms.
+
+A dispatch that fails before it writes is `NOT_SENT`: the outcome is a certain
+`FAILED` with its reason and the reservation is released. A database error
+around the commit is `INDEFINITE`: the attempt is `UNKNOWN`, and `Observe` finds
+the plan applied or not by its digest; it is never dispatched twice.
+
+## The RPCs
+
+`AuthorityAdminService` (Connect, on the gateway's listener):
+
+| RPC | Scope | What it does |
+|---|---|---|
+| `EnsurePrincipals` | `helm.gateway.provision` | Creates the tenant's control row if it has none, and each listed principal that is not registered. Changes nothing that exists. Idempotent by nature, so it has no idempotency key. |
+| `GetProvisioning` | `helm.gateway.read` | The applied plan of an organization: digest, `version_ref`, `stage`, `revision`, the applying attempt, and each node with its mandate id, holder, parent, current status and version. `not_found` when it has none. |
+| `ListEffectTypes` | `helm.gateway.read` | The catalog: each effect type the gateway performs, with its risk class, declaration, target form, JSON Schema of its arguments and whether a mandate may grant it. The same for every tenant. |
+
+The tenant comes only from the token. No request names a tenant or a workspace.
+
+### One registry: the mapping to the kernel's
 
 `helm-gateway` reads `authority_principals` and nothing else. The kernel's
 `principal_bindings` table (ADR-0005 §3, written by
 `POST /api/v1/admin/principal-bindings`) is the legacy runtime's registry of
-which principals belong to which tenant; the gateway never reads it and this API
-never writes it. They meet on one identifier only:
+which principals belong to which tenant; the gateway never reads or writes it.
+They meet on one identifier only:
 
 | Where | Field | Value |
 |---|---|---|
@@ -111,185 +198,81 @@ never writes it. They meet on one identifier only:
 | Gateway | `authority_principals.principal_id` | the same string, per tenant |
 | Kernel | `principal_bindings.principal_id` | the same string, per tenant |
 | Gateway | `authority_principals.kind` | `human`, `agent` or `service`: the gateway's own fact, never taken from a token claim |
-| Gateway | `authority_principals.external_system`, `external_subject` | who vouches for the principal, e.g. `helm-control-plane` and the Control Plane's user id |
+| Gateway | `external_system`, `external_subject` | who vouches for the principal, e.g. `helm-control-plane` and the Control Plane's user id |
 
-Consequences for the Control Plane:
-
-- Enrolment calls `UpsertPrincipal` for the gateway, and keeps binding the same
-  id in the kernel while a legacy route still needs it. Neither call implies the
-  other; when the legacy routes are retired (ADR-0005 phase 4) only the gateway
-  call remains.
-- `UpsertPrincipal` is idempotent on the principal: the same id with the same
-  kind returns the row. A **kind never changes** and a **disabled principal is
-  not re-enabled**; a new person or seat gets a new id.
-- **A human carries an external subject, and one subject names one principal
-  per tenant.** Approver != requester (ADR-0001 I6) is checked on principal ids,
-  so a person registered twice would count as two people. The unique index on
+- Enrolment calls `EnsurePrincipals` for the gateway, and keeps binding the same
+  id in the kernel while a legacy route still needs it. When the legacy routes
+  are retired (ADR-0005 phase 4) only the gateway call remains.
+- A **kind never changes**, a **disabled principal is never re-enabled**, and an
+  external subject, once set, is never changed: each is an error
+  (`IDENTITY_ISOLATION_VIOLATION`, `PRINCIPAL_INACTIVE`).
+- **A human carries an external subject, and one subject names one principal per
+  tenant.** Approver != requester (ADR-0001 I6) is checked on principal ids, so
+  a person registered twice would count as two people. A unique index on
   `(tenant_id, external_system, external_subject)` refuses the second
-  registration, and a principal presented with another subject than the one it
-  has: `already_exists`, `IDENTITY_ISOLATION_VIOLATION`. A subject may be attached
-  once to a principal that has none; it is never changed.
-- The gateway does not enforce the kernel's one-tenant rule for a principal
-  (ADR-0005 §11); the same id in two tenants is two rows. That rule stays where
-  the shared kernel registry is.
+  registration. The same holds for a human a plan creates. A subject may be
+  attached, once, to a principal that has none.
+- The kernel's one-tenant rule for a principal (ADR-0005 §11) is not enforced by
+  the gateway: the same id in two tenants is two rows.
 
-## Activating a root mandate
+### What registering a human establishes
 
-A root mandate widens authority. `ActivateRootMandate` therefore takes the proof
-of a distinct human's approval, and the gateway checks it inside the activating
-transaction.
-
-1. The Control Plane shows the approver the terms and limits. The approver is an
-   active **human** principal of the tenant, neither `requested_by` nor
-   `holder_id`.
-2. The Control Plane computes the **activation digest** over what it will send
-   (below), and mints a `helm.gateway.decide` token for the approver: `sub` the
-   approver, `tenant_id` the tenant, `act.sub` the configured workload actor when
-   it carries the decision, and exactly one `authorization_details` entry
-   ```json
-   {"type": "helm_mandate_activation", "activation_digest": "<lower-case hex>"}
-   ```
-   It mints one per decision and never caches it.
-3. It calls `ActivateRootMandate` with that token in `approval_token`.
-
-The gateway then requires all of these, and a failure changes nothing:
-
-- the token verifies as any gateway token does, has the scope
-  `helm.gateway.decide` and no other, and is of the same tenant as the provision
-  token;
-- it names the digest of exactly this holder, requester, terms and limits, so an
-  approval of one mandate cannot activate another;
-- its `jti` is new: the gateway records `(tenant, issuer, jti)` in
-  `authority_token_replay` in this transaction, like a decide token on
-  `Approve`. A token used by any operation is spent for all of them;
-- the approver is, in the gateway's own rows, an active human principal, not
-  under an active principal stop, and distinct from the requester and the holder
-  (`APPROVER_NOT_DISTINCT` otherwise; the store's checks and the
-  `authority_mandates` constraints hold the same rule twice);
-- the holder and requester are active principals of the tenant, and every effect
-  type is registered.
-
-The mandate and its limits are created together, so admission never sees the
-mandate without them.
-
-### Activation digest v1
-
-SHA-256 over the concatenation of the fields below, in order. `u64(n)` is an
-8-byte big-endian unsigned integer and `field(b)` is `u64(len(b)) || b`. A *set*
-is `u64(count)` then each member as a `field`, members sorted by their bytes and
-each once. `optional(x)` is the byte `0x00` when `x` is unset, and `0x01`
-followed by `u64(x)` when it is set.
-
-1. `field("helm.gateway.v1.mandate-activation-digest.v1")`: the domain tag;
-2. `field(holder_id)`;
-3. `field(requested_by)`;
-4. the set of `terms.effect_types`;
-5. `optional(terms.per_call_limit)`;
-6. `optional(terms.approval_threshold)`;
-7. `field(valid_from)`, then `field(valid_until)`: RFC 3339 text in UTC with
-   exactly six fractional digits and a `Z` suffix, truncated to microseconds,
-   never rounded, for example `2026-10-30T12:30:45.123456Z`;
-8. the set of `terms.targets` (empty: any target);
-9. `field(terms.condition)`;
-10. the set of `terms.approval_required`;
-11. `u64(count)` of `terms.risk_classes`, then for each entry sorted by effect
-    type bytes: `field(effect_type)` and `field(class)`, the class in lower case
-    (`low`, `medium`, `high`, `irreversible`);
-12. `u64(count)` of `limits`, then each limit, sorted by unit bytes, measure,
-    window, span and value: `field(unit)`, `field(measure)` (`sum`, `count`,
-    `distinct`), `field(window)` (`none`, `hour`, `day`, `month`), `u64(span)`
-    and `u64(value)`.
-
-The token carries the digest as 64 lower-case hexadecimal characters. Amounts are
-non-negative integers before hashing.
-
-Test vector (`TestActivationDigestVector`):
-
-| Field | Value |
-|---|---|
-| `holder_id` | `agent-a` |
-| `requested_by` | `human-a` |
-| `effect_types` | `github.repository.get`, `github.branch.create_from_changes`, `github.repository.get` |
-| `per_call_limit` | unset |
-| `approval_threshold` | `0` |
-| `valid_from` | `2026-09-30T00:00:00Z`, encoded `2026-09-30T00:00:00.000000Z` |
-| `valid_until` | `2026-10-30T12:30:45.123456789Z`, encoded `2026-10-30T12:30:45.123456Z` |
-| `targets` | `github.com/Mindburn-Labs/example`, `github.com/Mindburn-Labs/other` |
-| `condition` | `input.args.head.startsWith("helm/")` |
-| `approval_required` | `github.branch.create_from_changes` |
-| `risk_classes` | `github.repository.get`: `low`, `github.branch.create_from_changes`: `medium` |
-| `limits` | `usd_cents` sum month span 1 value 50000; `count` count day span 1 value 20 |
-| **activation digest** | `fe6393c4a564545f1e6b835f0e06eddc7d555120272158e578f8ca6a1908c527` |
-
-The test checks the Go reference and an independent Python implementation,
-`sdk/go/gen/helm/gateway/v1/testdata/activation_digest.py`, which it runs. It
-also checks that reordering effect types, targets and limits, and the
-nanoseconds below a microsecond, leave the digest unchanged, and that the
-holder, the requester and a limit value change it.
-
-## Delegation, revocation and limits
-
-- **Delegation only narrows.** The child's terms and limits are within every
-  mandate above it: a subset of effect types and targets, a per-call limit and
-  approval threshold no higher, a window inside the parent's, every
-  approval requirement and risk class kept, and a limit of a given shape no
-  higher than any ancestor's. A widening is `failed_precondition`,
-  `DELEGATION_SCOPE_VIOLATION`, naming the term. Only the parent's holder
-  delegates it (`delegator_id`; anyone else is `permission_denied`), every
-  mandate in the chain must be active, and no active stop may cover the tenant,
-  the delegator or the chain (`EMERGENCY_STOP_FENCED`).
-- **Revocation** is final and cascades at admission, which checks every link.
-  Revoking a revoked mandate answers with it, unchanged.
-- **Limits** are keyed by mandate (or the tenant, when `mandate_id` is empty),
-  unit, measure, window and span. `SetLimit` adds one, or lowers the one of that
-  shape; the same value changes nothing. A higher value, or one above an
-  ancestor's, is `DELEGATION_SCOPE_VIOLATION`. Amounts are integers: money is
-  minor units.
-
-## Errors
-
-Each error carries one `helm.errors.v1.ErrorDetail`, as in the effect API.
-
-| Connect code | Reason code | When |
-|---|---|---|
-| `unauthenticated` | none | no token, or one that does not verify |
-| `permission_denied` | `INSUFFICIENT_PRIVILEGE` | another scope; the provisioner is a human; an approval token that is missing, invalid, spent, of another tenant, or bound to other terms; a delegator that is not the parent's holder |
-| `permission_denied` | `TENANT_ISOLATION` | the tenant has no control row yet |
-| `permission_denied` | `APPROVER_NOT_DISTINCT` | the approver is the requester or the holder |
-| `permission_denied` | `APPROVAL_REQUIRED` | a new activation without an approval token |
-| `invalid_argument` | `SCHEMA_VIOLATION` | a malformed request; a condition that does not compile |
-| `not_found` | none | a principal, mandate or limit the tenant does not have, or another tenant's |
-| `already_exists` | `IDEMPOTENCY_CONFLICT` | the key was used with another request |
-| `already_exists` | `IDENTITY_ISOLATION_VIOLATION` | a kind change, or a second principal for one external subject |
-| `failed_precondition` | `DELEGATION_SCOPE_VIOLATION` | a widening: a limit raised, a risk class lowered, a child wider than its parent |
-| `failed_precondition` | `PRINCIPAL_INACTIVE`, `MANDATE_INACTIVE` | a disabled principal, a revoked mandate |
-| `failed_precondition` | `EMERGENCY_STOP_FENCED` | delegation under an active stop |
-| `unavailable`, `aborted` | none, `retryable` | transient; retry with the same request |
+Registering grants no authority: authority comes from mandates. It does make a
+human **eligible to approve**, because the gateway takes an approver's kind from
+these rows and never from a token. The Control Plane is trusted to register only
+people, exactly once each: it calls `EnsurePrincipals`, and it mints the decide
+tokens and the step-up proofs those people present. A compromised Control Plane
+issuer could register a human it controls and approve with it. The external
+subject rule stops a person from being two principals; it does not stop the
+issuer from inventing a person. Closing that gap needs the gateway to verify the
+approver's passkey itself, against a credential registry it holds (§10.1 of the
+target architecture); the step-up proof of this contract is the issuer's
+attestation of that check, and says so.
 
 ## Bootstrapping a tenant
 
-The order the Control Plane follows for a new company:
+1. `EnsurePrincipals`: the organization's service principal (kind `service`,
+   the requester of every plan), the workload principal that dispatches, and the
+   owner and other humans (kind `human`, each with the Control Plane's user id as
+   external subject).
+2. `Propose` `helm.authority.provision.v1` with `base_plan_digest` empty. The
+   owner approves with step-up. The Control Plane dispatches and observes.
+3. Later plans carry the applied digest as `base_plan_digest`. A plan that only
+   narrows goes as `helm.authority.narrow.v1` and needs no approval.
+4. `GetProvisioning` shows the applied digest and the mandate of each node; the
+   Control Plane compares the digest with its plan's.
 
-1. `UpsertTenant`.
-2. `UpsertPrincipal` for the owner and every other human (kind `human`, with the
-   Control Plane's user id as the external subject), for each agent seat (kind
-   `agent`), and for the Control Plane's workload principals (kind `service`).
-3. `RegisterEffectTypes` with the tenant's effect types and their risk classes,
-   including `helm.authority.lift` where operators may lift stops.
-4. `ActivateRootMandate` for each holder, with the approval of a human who is
-   neither the requester nor the holder, and the mandate's limits.
-5. `DelegateMandate` down the organization, `SetLimit` and `RevokeMandate` as it
-   changes, and `DeactivatePrincipal` when a seat is retired.
+## Errors and reason codes
 
-## Not in this contract
+Effects report through the effect API: a `DENIED` attempt with its reason code, a
+`FAILED` outcome with the reason of the adapter's refusal. The reasons a plan can
+carry:
 
-- **Reads.** Every response carries what the write produced. There is no
-  `ListMandates` or `GetPrincipal`; a replay of a key answers with the current
-  state of what it named.
-- **In-place narrowing of a mandate's terms** (`authorityrows.Store.Narrow`).
-  Revoke and delegate narrower instead.
-- **The `helm.authority.*` effects** of contract 5, which will carry widenings
-  such as raising a limit or re-enabling a principal through the approval
-  path of the effect API.
-- **Step-up** for the approval of a root mandate. It is a decide token of a
-  human principal; the passkey slice of the effect API adds the assertion.
+| Where | Reason | When |
+|---|---|---|
+| Propose (`invalid_argument`) | `SCHEMA_VIOLATION` | the arguments break their closed schema or one of the rules above |
+| Propose (`failed_precondition`) | `PRECONDITION_FAILED` | `base_plan_digest` is not the applied plan's digest |
+| Propose (`DENIED`) | `INSUFFICIENT_PRIVILEGE`, `PRINCIPAL_INACTIVE`, `EMERGENCY_STOP_FENCED` | the requester is not an active service principal; a stop covers it or the tenant |
+| Approve | `APPROVER_NOT_DISTINCT`, `INSUFFICIENT_PRIVILEGE`, `STEP_UP_REQUIRED` | the effect API's rules for approval |
+| Dispatch outcome (`FAILED`) | `PRECONDITION_FAILED` | the base moved after Propose; a holder is not registered or is disabled; the plan does not fit the organization |
+| Dispatch outcome (`FAILED`) | `DELEGATION_SCOPE_VIOLATION` | a child mandate is wider than its parent, or a narrow plan would widen |
+| Dispatch outcome (`FAILED`) | `EMERGENCY_STOP_FENCED` | delegation under an active stop |
+| Dispatch outcome (`FAILED`) | `IDENTITY_ISOLATION_VIOLATION` | a plan re-types a principal or gives a human's subject to another |
+
+`AuthorityAdminService` errors carry the codes in the service comment of the
+proto; an `EnsurePrincipals` conflict is `already_exists`
+(`IDENTITY_ISOLATION_VIOLATION`).
+
+## Limits and trust
+
+- A plan is at most 524288 bytes: the effect API's argument cap is 64 KiB for
+  every other effect. The transport's request cap grows with it.
+- Authority effects are the only path that widens authority, and the only one
+  that narrows it in bulk. `Stop` (an operator's single-use token) and `Lift`
+  are unchanged, and `helm.authority.lift` remains the one way to end a stop.
+- What the approval establishes: the approver approved the plan bytes whose
+  digest the approval digest names, and presented a step-up proof for it. It does
+  not establish that the approver's client rendered those bytes truthfully
+  (§10.1 of the target architecture).
+- The plan digest compares plans, not authority: two plans with the same effect
+  have different digests if they differ in any byte after JCS.

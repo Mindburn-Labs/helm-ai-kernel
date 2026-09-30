@@ -2,44 +2,32 @@
 //
 // Source: helm/gateway/v1/authority_admin.proto
 
-// The gateway provisioning API: the writes that make a tenant's authority rows
-// (docs/architecture/authority-rows.md) exist on helm-gateway. The Control
-// Plane calls it to enrol a tenant, register its principals and effect types,
-// activate and delegate mandates and set limits; admission
-// (EffectGatewayService.Propose) then reads exactly those rows. Design note:
-// docs/architecture/gateway-provisioning-api.md.
+// The gateway's authority administration API. Authority itself is provisioned
+// as effects, through the effect API: helm.authority.provision.v1 applies a
+// whole organization's principals, effect types, mandates and limits behind a
+// distinct human's approval, and helm.authority.narrow.v1 applies a change that
+// only narrows (docs/architecture/gateway-provisioning-api.md). This service is
+// what that path cannot do for itself:
+//
+//   - EnsurePrincipals registers a tenant's first principals, so that an
+//     effect can be proposed (its requester is a registered service principal)
+//     and approved (its approver is a registered human principal) at all;
+//   - GetProvisioning reads what a provision effect applied;
+//   - ListEffectTypes reads the catalog of effect types the gateway performs,
+//     with their argument schemas.
 //
 // Wire rules, as for gateway.proto (rule R9, ADR-0005):
 //
 //   - Identity. The tenant comes only from the caller's token. No request
-//     message carries a tenant or workspace. The principal ids and mandate ids
-//     that appear in requests are the objects being provisioned, or selectors
-//     the gateway checks against its own rows; they never grant authority (R3).
-//   - Token scope. Every RPC takes the scope helm.gateway.provision, which the
-//     Control Plane's issuer mints for its service principal only. ADR-0005
-//     allows one scope per token. A principal that the gateway's own rows
-//     register as a human is refused, whatever its token says.
-//   - Idempotency (R6). Every RPC carries a tenant-scoped idempotency key.
-//     The gateway stores the key with a digest of the request (every field
-//     except the key and the approval token, and the calling principal) in the
-//     transaction that makes the write.
-//   - New key: the write happens, in one transaction.
-//   - Same key, same digest: nothing is written; the current state of what
-//     the key named is returned, with existing = true. A repeated
-//     ActivateRootMandate needs no valid approval token.
-//   - Same key, different digest: already_exists
-//     [reason_code: IDEMPOTENCY_CONFLICT].
-//   - Narrowing needs no approval; widening does. Registering a principal or an
-//     effect type, delegating, revoking, disabling and lowering a limit only
-//     narrow or add nothing a mandate has not already granted. Activating a
-//     root mandate widens authority, so it carries the proof of a distinct
-//     human's approval (ActivateRootMandateRequest.approval_token). Nothing
-//     here raises a limit, lowers a risk class or re-enables a principal;
-//     those widenings are refused.
+//     message carries a tenant or a workspace.
+//   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
+//     Control Plane's issuer mints for its service principal only, and which no
+//     other RPC takes. GetProvisioning and ListEffectTypes take
+//     helm.gateway.read. ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
-// quantum_posture: this contract carries SHA-256 digests as opaque values and
-// bearer tokens as opaque strings. Token verification is ADR-0005's and adds no
+// quantum_posture: this contract carries SHA-256 digests as opaque strings and
+// no signatures or keys. Token verification is ADR-0005's and adds no
 // cryptographic control here; no post-quantum claim is made.
 package gatewayv1
 
@@ -71,123 +59,64 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AuthorityAdminServiceUpsertTenantProcedure is the fully-qualified name of the
-	// AuthorityAdminService's UpsertTenant RPC.
-	AuthorityAdminServiceUpsertTenantProcedure = "/helm.gateway.v1.AuthorityAdminService/UpsertTenant"
-	// AuthorityAdminServiceUpsertPrincipalProcedure is the fully-qualified name of the
-	// AuthorityAdminService's UpsertPrincipal RPC.
-	AuthorityAdminServiceUpsertPrincipalProcedure = "/helm.gateway.v1.AuthorityAdminService/UpsertPrincipal"
-	// AuthorityAdminServiceDeactivatePrincipalProcedure is the fully-qualified name of the
-	// AuthorityAdminService's DeactivatePrincipal RPC.
-	AuthorityAdminServiceDeactivatePrincipalProcedure = "/helm.gateway.v1.AuthorityAdminService/DeactivatePrincipal"
-	// AuthorityAdminServiceRegisterEffectTypesProcedure is the fully-qualified name of the
-	// AuthorityAdminService's RegisterEffectTypes RPC.
-	AuthorityAdminServiceRegisterEffectTypesProcedure = "/helm.gateway.v1.AuthorityAdminService/RegisterEffectTypes"
-	// AuthorityAdminServiceActivateRootMandateProcedure is the fully-qualified name of the
-	// AuthorityAdminService's ActivateRootMandate RPC.
-	AuthorityAdminServiceActivateRootMandateProcedure = "/helm.gateway.v1.AuthorityAdminService/ActivateRootMandate"
-	// AuthorityAdminServiceDelegateMandateProcedure is the fully-qualified name of the
-	// AuthorityAdminService's DelegateMandate RPC.
-	AuthorityAdminServiceDelegateMandateProcedure = "/helm.gateway.v1.AuthorityAdminService/DelegateMandate"
-	// AuthorityAdminServiceRevokeMandateProcedure is the fully-qualified name of the
-	// AuthorityAdminService's RevokeMandate RPC.
-	AuthorityAdminServiceRevokeMandateProcedure = "/helm.gateway.v1.AuthorityAdminService/RevokeMandate"
-	// AuthorityAdminServiceSetLimitProcedure is the fully-qualified name of the AuthorityAdminService's
-	// SetLimit RPC.
-	AuthorityAdminServiceSetLimitProcedure = "/helm.gateway.v1.AuthorityAdminService/SetLimit"
+	// AuthorityAdminServiceEnsurePrincipalsProcedure is the fully-qualified name of the
+	// AuthorityAdminService's EnsurePrincipals RPC.
+	AuthorityAdminServiceEnsurePrincipalsProcedure = "/helm.gateway.v1.AuthorityAdminService/EnsurePrincipals"
+	// AuthorityAdminServiceGetProvisioningProcedure is the fully-qualified name of the
+	// AuthorityAdminService's GetProvisioning RPC.
+	AuthorityAdminServiceGetProvisioningProcedure = "/helm.gateway.v1.AuthorityAdminService/GetProvisioning"
+	// AuthorityAdminServiceListEffectTypesProcedure is the fully-qualified name of the
+	// AuthorityAdminService's ListEffectTypes RPC.
+	AuthorityAdminServiceListEffectTypesProcedure = "/helm.gateway.v1.AuthorityAdminService/ListEffectTypes"
 )
 
 // AuthorityAdminServiceClient is a client for the helm.gateway.v1.AuthorityAdminService service.
 type AuthorityAdminServiceClient interface {
-	// UpsertTenant creates the token's tenant control row if it does not exist.
-	// Every other RPC needs it first. A tenant is never deleted or renamed.
+	// EnsurePrincipals makes the token's tenant and the listed principals exist,
+	// in one transaction. It creates the tenant's control row if it has none,
+	// and each principal that is not registered, active. It changes nothing that
+	// exists: a principal that is registered as the same kind, with the same
+	// external subject or none, is returned as it is.
+	//
+	// It is idempotent by its nature and takes no idempotency key: repeating a
+	// request answers the same principals.
+	//
+	// Registering grants no authority: authority comes from mandates. A
+	// registered human is, however, eligible to approve: the gateway takes an
+	// approver's kind from these rows and never from a token claim (ADR-0001
+	// I6), so the Control Plane that calls this RPC is trusted to register only
+	// people, exactly once each. To hold it to that, a human must carry an
+	// external subject and one external subject names one principal in a tenant:
+	// a second principal presenting the same subject, or a principal presented
+	// with another subject than it has, is already_exists
+	// [reason_code: IDENTITY_ISOLATION_VIOLATION]. So is a principal presented as
+	// another kind than it is registered as, and a disabled principal is
+	// failed_precondition [reason_code: PRINCIPAL_INACTIVE]: neither is ever
+	// re-enabled or re-typed here. A subject may be attached, once, to a
+	// principal that has none.
+	//
+	// The gateway reads authority_principals and nothing else: the kernel's
+	// principal_bindings registry (ADR-0005 §3) is not consulted or written. The
+	// principal_id is the sub of the tokens minted for the principal.
 	//
 	// Token scope: helm.gateway.provision.
-	UpsertTenant(context.Context, *connect.Request[UpsertTenantRequest]) (*connect.Response[UpsertTenantResponse], error)
-	// UpsertPrincipal registers a principal, or returns the one already
-	// registered. A principal_id is the sub of the tokens the Control Plane mints
-	// for it; the row the gateway reads at admission is this one, and no other
-	// registry (the kernel's principal_bindings included) is consulted.
+	EnsurePrincipals(context.Context, *connect.Request[EnsurePrincipalsRequest]) (*connect.Response[EnsurePrincipalsResponse], error)
+	// GetProvisioning returns what the latest helm.authority.provision.v1 or
+	// helm.authority.narrow.v1 effect applied for an organization: the digest of
+	// the applied plan, which the next plan's base_plan_digest must equal, and
+	// the mandate each plan node became, with the mandate's current status.
+	// not_found when the organization has never been provisioned in the tenant.
 	//
-	// A principal's kind never changes, and a disabled principal is not
-	// re-enabled: either is already_exists / failed_precondition. External
-	// subject: a human principal must carry one, and one external subject names
-	// exactly one principal in a tenant, so a person cannot hold two identities
-	// that count as two people (approver != requester, ADR-0001 I6). A second
-	// principal claiming the same external subject, or a principal presented
-	// with another external subject than the one it has, is already_exists
-	// [reason_code: IDENTITY_ISOLATION_VIOLATION].
+	// Token scope: helm.gateway.read.
+	GetProvisioning(context.Context, *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error)
+	// ListEffectTypes returns the catalog of effect types this gateway performs:
+	// for each, its risk class, its declaration (idempotency, observability,
+	// reversibility and mediation), and the JSON Schema of its arguments. It is
+	// the same for every tenant. An effect type a mandate may grant has
+	// grantable set; the gateway's own authority effects do not.
 	//
-	// Registering grants nothing: authority comes from mandates.
-	//
-	// Token scope: helm.gateway.provision.
-	UpsertPrincipal(context.Context, *connect.Request[UpsertPrincipalRequest]) (*connect.Response[UpsertPrincipalResponse], error)
-	// DeactivatePrincipal disables a principal. It narrows: admission denies the
-	// principal's proposals [reason_code: PRINCIPAL_INACTIVE], the principal row's
-	// version is bumped, and every permit issued under it fails its dispatch
-	// claim [reason_code: AUTHORITY_CHANGED]. Its mandates stay as rows, inert.
-	// Disabling a disabled principal changes nothing.
-	//
-	// Token scope: helm.gateway.provision.
-	DeactivatePrincipal(context.Context, *connect.Request[DeactivatePrincipalRequest]) (*connect.Response[DeactivatePrincipalResponse], error)
-	// RegisterEffectTypes registers the effect types available to the tenant,
-	// each with its risk class. A mandate can name an effect type only once it
-	// is registered, and admission reads the risk class from this row, never
-	// from a request. A registered type keeps its class, or has it raised (which
-	// narrows, and bumps the version); lowering it widens, and is
-	// failed_precondition [reason_code: DELEGATION_SCOPE_VIOLATION].
-	//
-	// Token scope: helm.gateway.provision.
-	RegisterEffectTypes(context.Context, *connect.Request[RegisterEffectTypesRequest]) (*connect.Response[RegisterEffectTypesResponse], error)
-	// ActivateRootMandate activates a root mandate, one that is not delegated
-	// from another, for a holder, together with its limits, in one transaction.
-	// It widens authority, so it needs the approval of a human principal who is
-	// neither the requester (requested_by) nor the holder: the approval is a
-	// helm.gateway.decide token, the same kind that approves an effect attempt,
-	// bound to exactly these terms (ActivateRootMandateRequest.approval_token).
-	// The token is single-use: its jti is recorded in the transaction that
-	// activates the mandate, so a reused token is refused, and a refused
-	// activation uses none up.
-	//
-	//   - No approval, or one that does not verify, is unusable, or is bound to
-	//     other terms: permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]
-	//     ([reason_code: APPROVAL_REQUIRED] when none is given on a new key).
-	//   - The approver must be an active human principal of the tenant, not
-	//     stopped, distinct from requested_by and holder_id: permission_denied
-	//     [reason_code: APPROVER_NOT_DISTINCT] or
-	//     [reason_code: INSUFFICIENT_PRIVILEGE].
-	//   - The holder and requested_by are active principals, and every effect
-	//     type is registered.
-	//
-	// Token scope: helm.gateway.provision.
-	ActivateRootMandate(context.Context, *connect.Request[ActivateRootMandateRequest]) (*connect.Response[ActivateRootMandateResponse], error)
-	// DelegateMandate delegates a child of a mandate to a holder, with limits.
-	// Delegation only narrows: every term of the child, and every limit, is
-	// within those of every mandate above it, else failed_precondition
-	// [reason_code: DELEGATION_SCOPE_VIOLATION]. Only the parent's holder may
-	// delegate it (delegator_id), every mandate of the chain must be active, and
-	// no active stop may cover the tenant, the delegator or the chain
-	// [reason_code: EMERGENCY_STOP_FENCED]. Narrowing needs no approval.
-	//
-	// Token scope: helm.gateway.provision.
-	DelegateMandate(context.Context, *connect.Request[DelegateMandateRequest]) (*connect.Response[DelegateMandateResponse], error)
-	// RevokeMandate revokes a mandate, and with it, at admission, every mandate
-	// delegated from it. It narrows: the mandate's version is bumped, and every
-	// permit issued under it fails its dispatch claim
-	// [reason_code: AUTHORITY_CHANGED]. Revoking a revoked mandate changes
-	// nothing.
-	//
-	// Token scope: helm.gateway.provision.
-	RevokeMandate(context.Context, *connect.Request[RevokeMandateRequest]) (*connect.Response[RevokeMandateResponse], error)
-	// SetLimit adds a limit to a mandate, or to the tenant when mandate_id is
-	// empty, or lowers the limit that already has the same unit, measure, window
-	// and span. Both narrow, and bump the version of the row they change. A
-	// higher value than the stored one widens, and is failed_precondition
-	// [reason_code: DELEGATION_SCOPE_VIOLATION]; so is a limit on a delegated
-	// mandate above one of its ancestors'. The same value changes nothing.
-	//
-	// Token scope: helm.gateway.provision.
-	SetLimit(context.Context, *connect.Request[SetLimitRequest]) (*connect.Response[SetLimitResponse], error)
+	// Token scope: helm.gateway.read.
+	ListEffectTypes(context.Context, *connect.Request[ListEffectTypesRequest]) (*connect.Response[ListEffectTypesResponse], error)
 }
 
 // NewAuthorityAdminServiceClient constructs a client for the helm.gateway.v1.AuthorityAdminService
@@ -201,52 +130,24 @@ func NewAuthorityAdminServiceClient(httpClient connect.HTTPClient, baseURL strin
 	baseURL = strings.TrimRight(baseURL, "/")
 	authorityAdminServiceMethods := File_helm_gateway_v1_authority_admin_proto.Services().ByName("AuthorityAdminService").Methods()
 	return &authorityAdminServiceClient{
-		upsertTenant: connect.NewClient[UpsertTenantRequest, UpsertTenantResponse](
+		ensurePrincipals: connect.NewClient[EnsurePrincipalsRequest, EnsurePrincipalsResponse](
 			httpClient,
-			baseURL+AuthorityAdminServiceUpsertTenantProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("UpsertTenant")),
+			baseURL+AuthorityAdminServiceEnsurePrincipalsProcedure,
+			connect.WithSchema(authorityAdminServiceMethods.ByName("EnsurePrincipals")),
 			connect.WithClientOptions(opts...),
 		),
-		upsertPrincipal: connect.NewClient[UpsertPrincipalRequest, UpsertPrincipalResponse](
+		getProvisioning: connect.NewClient[GetProvisioningRequest, GetProvisioningResponse](
 			httpClient,
-			baseURL+AuthorityAdminServiceUpsertPrincipalProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("UpsertPrincipal")),
+			baseURL+AuthorityAdminServiceGetProvisioningProcedure,
+			connect.WithSchema(authorityAdminServiceMethods.ByName("GetProvisioning")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
-		deactivatePrincipal: connect.NewClient[DeactivatePrincipalRequest, DeactivatePrincipalResponse](
+		listEffectTypes: connect.NewClient[ListEffectTypesRequest, ListEffectTypesResponse](
 			httpClient,
-			baseURL+AuthorityAdminServiceDeactivatePrincipalProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("DeactivatePrincipal")),
-			connect.WithClientOptions(opts...),
-		),
-		registerEffectTypes: connect.NewClient[RegisterEffectTypesRequest, RegisterEffectTypesResponse](
-			httpClient,
-			baseURL+AuthorityAdminServiceRegisterEffectTypesProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("RegisterEffectTypes")),
-			connect.WithClientOptions(opts...),
-		),
-		activateRootMandate: connect.NewClient[ActivateRootMandateRequest, ActivateRootMandateResponse](
-			httpClient,
-			baseURL+AuthorityAdminServiceActivateRootMandateProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("ActivateRootMandate")),
-			connect.WithClientOptions(opts...),
-		),
-		delegateMandate: connect.NewClient[DelegateMandateRequest, DelegateMandateResponse](
-			httpClient,
-			baseURL+AuthorityAdminServiceDelegateMandateProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("DelegateMandate")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeMandate: connect.NewClient[RevokeMandateRequest, RevokeMandateResponse](
-			httpClient,
-			baseURL+AuthorityAdminServiceRevokeMandateProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("RevokeMandate")),
-			connect.WithClientOptions(opts...),
-		),
-		setLimit: connect.NewClient[SetLimitRequest, SetLimitResponse](
-			httpClient,
-			baseURL+AuthorityAdminServiceSetLimitProcedure,
-			connect.WithSchema(authorityAdminServiceMethods.ByName("SetLimit")),
+			baseURL+AuthorityAdminServiceListEffectTypesProcedure,
+			connect.WithSchema(authorityAdminServiceMethods.ByName("ListEffectTypes")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -254,148 +155,74 @@ func NewAuthorityAdminServiceClient(httpClient connect.HTTPClient, baseURL strin
 
 // authorityAdminServiceClient implements AuthorityAdminServiceClient.
 type authorityAdminServiceClient struct {
-	upsertTenant        *connect.Client[UpsertTenantRequest, UpsertTenantResponse]
-	upsertPrincipal     *connect.Client[UpsertPrincipalRequest, UpsertPrincipalResponse]
-	deactivatePrincipal *connect.Client[DeactivatePrincipalRequest, DeactivatePrincipalResponse]
-	registerEffectTypes *connect.Client[RegisterEffectTypesRequest, RegisterEffectTypesResponse]
-	activateRootMandate *connect.Client[ActivateRootMandateRequest, ActivateRootMandateResponse]
-	delegateMandate     *connect.Client[DelegateMandateRequest, DelegateMandateResponse]
-	revokeMandate       *connect.Client[RevokeMandateRequest, RevokeMandateResponse]
-	setLimit            *connect.Client[SetLimitRequest, SetLimitResponse]
+	ensurePrincipals *connect.Client[EnsurePrincipalsRequest, EnsurePrincipalsResponse]
+	getProvisioning  *connect.Client[GetProvisioningRequest, GetProvisioningResponse]
+	listEffectTypes  *connect.Client[ListEffectTypesRequest, ListEffectTypesResponse]
 }
 
-// UpsertTenant calls helm.gateway.v1.AuthorityAdminService.UpsertTenant.
-func (c *authorityAdminServiceClient) UpsertTenant(ctx context.Context, req *connect.Request[UpsertTenantRequest]) (*connect.Response[UpsertTenantResponse], error) {
-	return c.upsertTenant.CallUnary(ctx, req)
+// EnsurePrincipals calls helm.gateway.v1.AuthorityAdminService.EnsurePrincipals.
+func (c *authorityAdminServiceClient) EnsurePrincipals(ctx context.Context, req *connect.Request[EnsurePrincipalsRequest]) (*connect.Response[EnsurePrincipalsResponse], error) {
+	return c.ensurePrincipals.CallUnary(ctx, req)
 }
 
-// UpsertPrincipal calls helm.gateway.v1.AuthorityAdminService.UpsertPrincipal.
-func (c *authorityAdminServiceClient) UpsertPrincipal(ctx context.Context, req *connect.Request[UpsertPrincipalRequest]) (*connect.Response[UpsertPrincipalResponse], error) {
-	return c.upsertPrincipal.CallUnary(ctx, req)
+// GetProvisioning calls helm.gateway.v1.AuthorityAdminService.GetProvisioning.
+func (c *authorityAdminServiceClient) GetProvisioning(ctx context.Context, req *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error) {
+	return c.getProvisioning.CallUnary(ctx, req)
 }
 
-// DeactivatePrincipal calls helm.gateway.v1.AuthorityAdminService.DeactivatePrincipal.
-func (c *authorityAdminServiceClient) DeactivatePrincipal(ctx context.Context, req *connect.Request[DeactivatePrincipalRequest]) (*connect.Response[DeactivatePrincipalResponse], error) {
-	return c.deactivatePrincipal.CallUnary(ctx, req)
-}
-
-// RegisterEffectTypes calls helm.gateway.v1.AuthorityAdminService.RegisterEffectTypes.
-func (c *authorityAdminServiceClient) RegisterEffectTypes(ctx context.Context, req *connect.Request[RegisterEffectTypesRequest]) (*connect.Response[RegisterEffectTypesResponse], error) {
-	return c.registerEffectTypes.CallUnary(ctx, req)
-}
-
-// ActivateRootMandate calls helm.gateway.v1.AuthorityAdminService.ActivateRootMandate.
-func (c *authorityAdminServiceClient) ActivateRootMandate(ctx context.Context, req *connect.Request[ActivateRootMandateRequest]) (*connect.Response[ActivateRootMandateResponse], error) {
-	return c.activateRootMandate.CallUnary(ctx, req)
-}
-
-// DelegateMandate calls helm.gateway.v1.AuthorityAdminService.DelegateMandate.
-func (c *authorityAdminServiceClient) DelegateMandate(ctx context.Context, req *connect.Request[DelegateMandateRequest]) (*connect.Response[DelegateMandateResponse], error) {
-	return c.delegateMandate.CallUnary(ctx, req)
-}
-
-// RevokeMandate calls helm.gateway.v1.AuthorityAdminService.RevokeMandate.
-func (c *authorityAdminServiceClient) RevokeMandate(ctx context.Context, req *connect.Request[RevokeMandateRequest]) (*connect.Response[RevokeMandateResponse], error) {
-	return c.revokeMandate.CallUnary(ctx, req)
-}
-
-// SetLimit calls helm.gateway.v1.AuthorityAdminService.SetLimit.
-func (c *authorityAdminServiceClient) SetLimit(ctx context.Context, req *connect.Request[SetLimitRequest]) (*connect.Response[SetLimitResponse], error) {
-	return c.setLimit.CallUnary(ctx, req)
+// ListEffectTypes calls helm.gateway.v1.AuthorityAdminService.ListEffectTypes.
+func (c *authorityAdminServiceClient) ListEffectTypes(ctx context.Context, req *connect.Request[ListEffectTypesRequest]) (*connect.Response[ListEffectTypesResponse], error) {
+	return c.listEffectTypes.CallUnary(ctx, req)
 }
 
 // AuthorityAdminServiceHandler is an implementation of the helm.gateway.v1.AuthorityAdminService
 // service.
 type AuthorityAdminServiceHandler interface {
-	// UpsertTenant creates the token's tenant control row if it does not exist.
-	// Every other RPC needs it first. A tenant is never deleted or renamed.
+	// EnsurePrincipals makes the token's tenant and the listed principals exist,
+	// in one transaction. It creates the tenant's control row if it has none,
+	// and each principal that is not registered, active. It changes nothing that
+	// exists: a principal that is registered as the same kind, with the same
+	// external subject or none, is returned as it is.
+	//
+	// It is idempotent by its nature and takes no idempotency key: repeating a
+	// request answers the same principals.
+	//
+	// Registering grants no authority: authority comes from mandates. A
+	// registered human is, however, eligible to approve: the gateway takes an
+	// approver's kind from these rows and never from a token claim (ADR-0001
+	// I6), so the Control Plane that calls this RPC is trusted to register only
+	// people, exactly once each. To hold it to that, a human must carry an
+	// external subject and one external subject names one principal in a tenant:
+	// a second principal presenting the same subject, or a principal presented
+	// with another subject than it has, is already_exists
+	// [reason_code: IDENTITY_ISOLATION_VIOLATION]. So is a principal presented as
+	// another kind than it is registered as, and a disabled principal is
+	// failed_precondition [reason_code: PRINCIPAL_INACTIVE]: neither is ever
+	// re-enabled or re-typed here. A subject may be attached, once, to a
+	// principal that has none.
+	//
+	// The gateway reads authority_principals and nothing else: the kernel's
+	// principal_bindings registry (ADR-0005 §3) is not consulted or written. The
+	// principal_id is the sub of the tokens minted for the principal.
 	//
 	// Token scope: helm.gateway.provision.
-	UpsertTenant(context.Context, *connect.Request[UpsertTenantRequest]) (*connect.Response[UpsertTenantResponse], error)
-	// UpsertPrincipal registers a principal, or returns the one already
-	// registered. A principal_id is the sub of the tokens the Control Plane mints
-	// for it; the row the gateway reads at admission is this one, and no other
-	// registry (the kernel's principal_bindings included) is consulted.
+	EnsurePrincipals(context.Context, *connect.Request[EnsurePrincipalsRequest]) (*connect.Response[EnsurePrincipalsResponse], error)
+	// GetProvisioning returns what the latest helm.authority.provision.v1 or
+	// helm.authority.narrow.v1 effect applied for an organization: the digest of
+	// the applied plan, which the next plan's base_plan_digest must equal, and
+	// the mandate each plan node became, with the mandate's current status.
+	// not_found when the organization has never been provisioned in the tenant.
 	//
-	// A principal's kind never changes, and a disabled principal is not
-	// re-enabled: either is already_exists / failed_precondition. External
-	// subject: a human principal must carry one, and one external subject names
-	// exactly one principal in a tenant, so a person cannot hold two identities
-	// that count as two people (approver != requester, ADR-0001 I6). A second
-	// principal claiming the same external subject, or a principal presented
-	// with another external subject than the one it has, is already_exists
-	// [reason_code: IDENTITY_ISOLATION_VIOLATION].
+	// Token scope: helm.gateway.read.
+	GetProvisioning(context.Context, *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error)
+	// ListEffectTypes returns the catalog of effect types this gateway performs:
+	// for each, its risk class, its declaration (idempotency, observability,
+	// reversibility and mediation), and the JSON Schema of its arguments. It is
+	// the same for every tenant. An effect type a mandate may grant has
+	// grantable set; the gateway's own authority effects do not.
 	//
-	// Registering grants nothing: authority comes from mandates.
-	//
-	// Token scope: helm.gateway.provision.
-	UpsertPrincipal(context.Context, *connect.Request[UpsertPrincipalRequest]) (*connect.Response[UpsertPrincipalResponse], error)
-	// DeactivatePrincipal disables a principal. It narrows: admission denies the
-	// principal's proposals [reason_code: PRINCIPAL_INACTIVE], the principal row's
-	// version is bumped, and every permit issued under it fails its dispatch
-	// claim [reason_code: AUTHORITY_CHANGED]. Its mandates stay as rows, inert.
-	// Disabling a disabled principal changes nothing.
-	//
-	// Token scope: helm.gateway.provision.
-	DeactivatePrincipal(context.Context, *connect.Request[DeactivatePrincipalRequest]) (*connect.Response[DeactivatePrincipalResponse], error)
-	// RegisterEffectTypes registers the effect types available to the tenant,
-	// each with its risk class. A mandate can name an effect type only once it
-	// is registered, and admission reads the risk class from this row, never
-	// from a request. A registered type keeps its class, or has it raised (which
-	// narrows, and bumps the version); lowering it widens, and is
-	// failed_precondition [reason_code: DELEGATION_SCOPE_VIOLATION].
-	//
-	// Token scope: helm.gateway.provision.
-	RegisterEffectTypes(context.Context, *connect.Request[RegisterEffectTypesRequest]) (*connect.Response[RegisterEffectTypesResponse], error)
-	// ActivateRootMandate activates a root mandate, one that is not delegated
-	// from another, for a holder, together with its limits, in one transaction.
-	// It widens authority, so it needs the approval of a human principal who is
-	// neither the requester (requested_by) nor the holder: the approval is a
-	// helm.gateway.decide token, the same kind that approves an effect attempt,
-	// bound to exactly these terms (ActivateRootMandateRequest.approval_token).
-	// The token is single-use: its jti is recorded in the transaction that
-	// activates the mandate, so a reused token is refused, and a refused
-	// activation uses none up.
-	//
-	//   - No approval, or one that does not verify, is unusable, or is bound to
-	//     other terms: permission_denied [reason_code: INSUFFICIENT_PRIVILEGE]
-	//     ([reason_code: APPROVAL_REQUIRED] when none is given on a new key).
-	//   - The approver must be an active human principal of the tenant, not
-	//     stopped, distinct from requested_by and holder_id: permission_denied
-	//     [reason_code: APPROVER_NOT_DISTINCT] or
-	//     [reason_code: INSUFFICIENT_PRIVILEGE].
-	//   - The holder and requested_by are active principals, and every effect
-	//     type is registered.
-	//
-	// Token scope: helm.gateway.provision.
-	ActivateRootMandate(context.Context, *connect.Request[ActivateRootMandateRequest]) (*connect.Response[ActivateRootMandateResponse], error)
-	// DelegateMandate delegates a child of a mandate to a holder, with limits.
-	// Delegation only narrows: every term of the child, and every limit, is
-	// within those of every mandate above it, else failed_precondition
-	// [reason_code: DELEGATION_SCOPE_VIOLATION]. Only the parent's holder may
-	// delegate it (delegator_id), every mandate of the chain must be active, and
-	// no active stop may cover the tenant, the delegator or the chain
-	// [reason_code: EMERGENCY_STOP_FENCED]. Narrowing needs no approval.
-	//
-	// Token scope: helm.gateway.provision.
-	DelegateMandate(context.Context, *connect.Request[DelegateMandateRequest]) (*connect.Response[DelegateMandateResponse], error)
-	// RevokeMandate revokes a mandate, and with it, at admission, every mandate
-	// delegated from it. It narrows: the mandate's version is bumped, and every
-	// permit issued under it fails its dispatch claim
-	// [reason_code: AUTHORITY_CHANGED]. Revoking a revoked mandate changes
-	// nothing.
-	//
-	// Token scope: helm.gateway.provision.
-	RevokeMandate(context.Context, *connect.Request[RevokeMandateRequest]) (*connect.Response[RevokeMandateResponse], error)
-	// SetLimit adds a limit to a mandate, or to the tenant when mandate_id is
-	// empty, or lowers the limit that already has the same unit, measure, window
-	// and span. Both narrow, and bump the version of the row they change. A
-	// higher value than the stored one widens, and is failed_precondition
-	// [reason_code: DELEGATION_SCOPE_VIOLATION]; so is a limit on a delegated
-	// mandate above one of its ancestors'. The same value changes nothing.
-	//
-	// Token scope: helm.gateway.provision.
-	SetLimit(context.Context, *connect.Request[SetLimitRequest]) (*connect.Response[SetLimitResponse], error)
+	// Token scope: helm.gateway.read.
+	ListEffectTypes(context.Context, *connect.Request[ListEffectTypesRequest]) (*connect.Response[ListEffectTypesResponse], error)
 }
 
 // NewAuthorityAdminServiceHandler builds an HTTP handler from the service implementation. It
@@ -405,72 +232,34 @@ type AuthorityAdminServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewAuthorityAdminServiceHandler(svc AuthorityAdminServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	authorityAdminServiceMethods := File_helm_gateway_v1_authority_admin_proto.Services().ByName("AuthorityAdminService").Methods()
-	authorityAdminServiceUpsertTenantHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceUpsertTenantProcedure,
-		svc.UpsertTenant,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("UpsertTenant")),
+	authorityAdminServiceEnsurePrincipalsHandler := connect.NewUnaryHandler(
+		AuthorityAdminServiceEnsurePrincipalsProcedure,
+		svc.EnsurePrincipals,
+		connect.WithSchema(authorityAdminServiceMethods.ByName("EnsurePrincipals")),
 		connect.WithHandlerOptions(opts...),
 	)
-	authorityAdminServiceUpsertPrincipalHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceUpsertPrincipalProcedure,
-		svc.UpsertPrincipal,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("UpsertPrincipal")),
+	authorityAdminServiceGetProvisioningHandler := connect.NewUnaryHandler(
+		AuthorityAdminServiceGetProvisioningProcedure,
+		svc.GetProvisioning,
+		connect.WithSchema(authorityAdminServiceMethods.ByName("GetProvisioning")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
-	authorityAdminServiceDeactivatePrincipalHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceDeactivatePrincipalProcedure,
-		svc.DeactivatePrincipal,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("DeactivatePrincipal")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authorityAdminServiceRegisterEffectTypesHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceRegisterEffectTypesProcedure,
-		svc.RegisterEffectTypes,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("RegisterEffectTypes")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authorityAdminServiceActivateRootMandateHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceActivateRootMandateProcedure,
-		svc.ActivateRootMandate,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("ActivateRootMandate")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authorityAdminServiceDelegateMandateHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceDelegateMandateProcedure,
-		svc.DelegateMandate,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("DelegateMandate")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authorityAdminServiceRevokeMandateHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceRevokeMandateProcedure,
-		svc.RevokeMandate,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("RevokeMandate")),
-		connect.WithHandlerOptions(opts...),
-	)
-	authorityAdminServiceSetLimitHandler := connect.NewUnaryHandler(
-		AuthorityAdminServiceSetLimitProcedure,
-		svc.SetLimit,
-		connect.WithSchema(authorityAdminServiceMethods.ByName("SetLimit")),
+	authorityAdminServiceListEffectTypesHandler := connect.NewUnaryHandler(
+		AuthorityAdminServiceListEffectTypesProcedure,
+		svc.ListEffectTypes,
+		connect.WithSchema(authorityAdminServiceMethods.ByName("ListEffectTypes")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/helm.gateway.v1.AuthorityAdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case AuthorityAdminServiceUpsertTenantProcedure:
-			authorityAdminServiceUpsertTenantHandler.ServeHTTP(w, r)
-		case AuthorityAdminServiceUpsertPrincipalProcedure:
-			authorityAdminServiceUpsertPrincipalHandler.ServeHTTP(w, r)
-		case AuthorityAdminServiceDeactivatePrincipalProcedure:
-			authorityAdminServiceDeactivatePrincipalHandler.ServeHTTP(w, r)
-		case AuthorityAdminServiceRegisterEffectTypesProcedure:
-			authorityAdminServiceRegisterEffectTypesHandler.ServeHTTP(w, r)
-		case AuthorityAdminServiceActivateRootMandateProcedure:
-			authorityAdminServiceActivateRootMandateHandler.ServeHTTP(w, r)
-		case AuthorityAdminServiceDelegateMandateProcedure:
-			authorityAdminServiceDelegateMandateHandler.ServeHTTP(w, r)
-		case AuthorityAdminServiceRevokeMandateProcedure:
-			authorityAdminServiceRevokeMandateHandler.ServeHTTP(w, r)
-		case AuthorityAdminServiceSetLimitProcedure:
-			authorityAdminServiceSetLimitHandler.ServeHTTP(w, r)
+		case AuthorityAdminServiceEnsurePrincipalsProcedure:
+			authorityAdminServiceEnsurePrincipalsHandler.ServeHTTP(w, r)
+		case AuthorityAdminServiceGetProvisioningProcedure:
+			authorityAdminServiceGetProvisioningHandler.ServeHTTP(w, r)
+		case AuthorityAdminServiceListEffectTypesProcedure:
+			authorityAdminServiceListEffectTypesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -480,34 +269,14 @@ func NewAuthorityAdminServiceHandler(svc AuthorityAdminServiceHandler, opts ...c
 // UnimplementedAuthorityAdminServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAuthorityAdminServiceHandler struct{}
 
-func (UnimplementedAuthorityAdminServiceHandler) UpsertTenant(context.Context, *connect.Request[UpsertTenantRequest]) (*connect.Response[UpsertTenantResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.UpsertTenant is not implemented"))
+func (UnimplementedAuthorityAdminServiceHandler) EnsurePrincipals(context.Context, *connect.Request[EnsurePrincipalsRequest]) (*connect.Response[EnsurePrincipalsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.EnsurePrincipals is not implemented"))
 }
 
-func (UnimplementedAuthorityAdminServiceHandler) UpsertPrincipal(context.Context, *connect.Request[UpsertPrincipalRequest]) (*connect.Response[UpsertPrincipalResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.UpsertPrincipal is not implemented"))
+func (UnimplementedAuthorityAdminServiceHandler) GetProvisioning(context.Context, *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.GetProvisioning is not implemented"))
 }
 
-func (UnimplementedAuthorityAdminServiceHandler) DeactivatePrincipal(context.Context, *connect.Request[DeactivatePrincipalRequest]) (*connect.Response[DeactivatePrincipalResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.DeactivatePrincipal is not implemented"))
-}
-
-func (UnimplementedAuthorityAdminServiceHandler) RegisterEffectTypes(context.Context, *connect.Request[RegisterEffectTypesRequest]) (*connect.Response[RegisterEffectTypesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.RegisterEffectTypes is not implemented"))
-}
-
-func (UnimplementedAuthorityAdminServiceHandler) ActivateRootMandate(context.Context, *connect.Request[ActivateRootMandateRequest]) (*connect.Response[ActivateRootMandateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.ActivateRootMandate is not implemented"))
-}
-
-func (UnimplementedAuthorityAdminServiceHandler) DelegateMandate(context.Context, *connect.Request[DelegateMandateRequest]) (*connect.Response[DelegateMandateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.DelegateMandate is not implemented"))
-}
-
-func (UnimplementedAuthorityAdminServiceHandler) RevokeMandate(context.Context, *connect.Request[RevokeMandateRequest]) (*connect.Response[RevokeMandateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.RevokeMandate is not implemented"))
-}
-
-func (UnimplementedAuthorityAdminServiceHandler) SetLimit(context.Context, *connect.Request[SetLimitRequest]) (*connect.Response[SetLimitResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.SetLimit is not implemented"))
+func (UnimplementedAuthorityAdminServiceHandler) ListEffectTypes(context.Context, *connect.Request[ListEffectTypesRequest]) (*connect.Response[ListEffectTypesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.ListEffectTypes is not implemented"))
 }

@@ -86,6 +86,9 @@ func newAdminWire(t *testing.T) *adminWire {
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
 		`GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA ` + schema + ` TO ` + role,
 		`REVOKE UPDATE ON authority_distinct_values, authority_token_replay FROM ` + role,
+		// A decide token is used up in a transaction that also clears expired
+		// replay rows: the grant the chart's 002_grants.sql gives helm_gateway.
+		`GRANT DELETE ON authority_token_replay TO ` + role,
 	} {
 		_, err = owner.Exec(stmt)
 		must(t, err)

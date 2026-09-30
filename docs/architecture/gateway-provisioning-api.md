@@ -100,13 +100,17 @@ is `invalid_argument` at Propose, or `FAILED` at Dispatch, and nothing applies):
   parent, its node is the `org_ref`, every other parent is a node of the plan and
   the parents form a tree;
 - every holder is a principal of the plan or one already registered and active;
+- every effect type a mandate names is listed in `effect_types`, and every
+  child's terms are within its parent's, and its limits no higher than the same
+  limit above it;
 - every limit names a node of the plan, and a node has at most one limit of a
   given unit, measure, window and span;
 - no principal is both listed and disabled, and no holder of a plan mandate is
   disabled;
 - `valid_until` is after `valid_from`; a condition compiles; no terms name a
-  `helm.authority.*` effect type; a human principal the plan creates carries an
-  `external_subject`;
+  `helm.authority.*` effect type; a human principal the plan may create carries
+  an `external_subject`, and one that must already be registered is
+  `ensure_only`;
 - the effect's target equals `org_ref`.
 
 ### The digest and compare-and-set

@@ -6,7 +6,12 @@
   "base_plan_digest": "",
   "valid_from": "2026-10-01T00:00:00Z",
   "valid_until": "2026-10-02T00:00:00Z",
-  "effect_types": [],
+  "effect_types": [
+    {
+      "effect_type": "github.repository.get",
+      "risk_class": "low"
+    }
+  ],
   "principals": [
     {
       "id": "org:acme",

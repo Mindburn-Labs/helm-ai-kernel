@@ -69,7 +69,7 @@ type tokenClaims struct {
 	Act         *struct {
 		Sub string `json:"sub"`
 	} `json:"act,omitempty"`
-	AuthorizationDetails []map[string]string `json:"authorization_details,omitempty"`
+	AuthorizationDetails []map[string]any `json:"authorization_details,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -279,7 +279,7 @@ func TestPostgresGatewayAPIOnTheWire(t *testing.T) {
 
 func decision(attemptID, action string) func(*tokenClaims) {
 	return func(c *tokenClaims) {
-		c.AuthorizationDetails = []map[string]string{{"type": "helm_effect_decision", "attempt_id": attemptID, "action": action}}
+		c.AuthorizationDetails = []map[string]any{{"type": "helm_effect_decision", "attempt_id": attemptID, "action": action}}
 	}
 }
 

@@ -7,8 +7,10 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -29,6 +31,22 @@ const (
 	ScopeRead    = "helm.gateway.read"
 	ScopeStop    = "helm.gateway.stop"
 	ScopeExecute = "helm.gateway.execute"
+	// ScopeProvision registers a tenant's first principals
+	// (AuthorityAdminService.EnsurePrincipals). No other RPC takes it, and the
+	// Control Plane's issuer mints it for its service principal only.
+	ScopeProvision = "helm.gateway.provision"
+	// ScopeStepUp is the scope of the step-up proof an Approve may carry
+	// (ApproveRequest.step_up_proof). No RPC takes it as its own credential.
+	ScopeStepUp = "helm.gateway.stepup"
+)
+
+// The step-up proof's method and lifetime (§10.1). The method is the one the
+// Control Plane's issuer attests: it verified the approver's WebAuthn
+// assertion over the approval digest. The lifetime bounds exp - iat of a proof
+// whatever the validator's own limit is.
+const (
+	stepUpMethod      = "webauthn"
+	stepUpMaxLifetime = 300 * time.Second
 )
 
 // TokenValidator verifies a token's signature, issuer, audience, algorithm
@@ -62,6 +80,8 @@ type Identity struct {
 	Issuer string
 	// TokenID is the jti.
 	TokenID string
+	// IssuedAt is the token's iat; zero when it has none.
+	IssuedAt time.Time
 	// ExpiresAt is the token's exp.
 	ExpiresAt time.Time
 	// AuthorizationDetails is the RFC 9396 claim, when the token has one.
@@ -99,6 +119,12 @@ func (a *Authenticator) Authenticate(ctx context.Context, header http.Header, sc
 	if !ok || !strings.EqualFold(scheme, "Bearer") || token == "" {
 		return Identity{}, unauthenticated("a bearer token is required")
 	}
+	return a.verify(ctx, token, scopes...)
+}
+
+// verify checks one compact token for an RPC, or a proof, that accepts one of
+// scopes.
+func (a *Authenticator) verify(ctx context.Context, token string, scopes ...string) (Identity, error) {
 	claims, err := a.Validator.ValidateAuthorization(token)
 	if err != nil {
 		var validation *jwks.JWKSValidationError
@@ -126,6 +152,9 @@ func (a *Authenticator) Authenticate(ctx context.Context, header http.Header, sc
 	}
 	if claims.RegisteredClaims.ExpiresAt != nil {
 		id.ExpiresAt = claims.RegisteredClaims.ExpiresAt.Time
+	}
+	if claims.RegisteredClaims.IssuedAt != nil {
+		id.IssuedAt = claims.RegisteredClaims.IssuedAt.Time
 	}
 	if id.TenantID == "" || id.WorkspaceID == "" || id.PrincipalID == "" {
 		return Identity{}, unauthenticated("the token lacks its principal, tenant or workspace")
@@ -163,7 +192,8 @@ func permissionDenied(message string) error {
 	return rpcError(connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege, false, errors.New(message))
 }
 
-// token is what a single-use decide or stop token contributes to admission.
+// token is what a single-use decide, stop or step-up token contributes to
+// admission.
 func (id Identity) token() admission.Token {
 	return admission.Token{Issuer: id.Issuer, ID: id.TokenID, Scope: id.Scope, ExpiresAt: id.ExpiresAt}
 }
@@ -176,6 +206,88 @@ func checkDecisionBinding(raw json.RawMessage, attemptID, action string) error {
 	return checkBinding(raw, "helm_effect_decision", map[string]string{"attempt_id": attemptID, "action": action})
 }
 
+// checkStepUpBinding requires exactly one helm_step_up entry in a step-up
+// proof's authorization_details, naming this attempt, the approval digest the
+// approver was shown (lower-case hex) and the method the issuer attests, and
+// stating that the issuer saw the authenticator's user-verification flag set:
+// user_verified is exactly boolean true (§10.1). A proof cannot approve
+// another attempt or another digest, nor one whose approver only touched a key.
+func checkStepUpBinding(raw json.RawMessage, attemptID string, approvalDigest []byte) error {
+	if err := checkBinding(raw, "helm_step_up", map[string]string{
+		"attempt_id": attemptID, "approval_digest": hex.EncodeToString(approvalDigest), "method": stepUpMethod,
+	}); err != nil {
+		return err
+	}
+	if !stepUpUserVerified(raw) {
+		return permissionDenied("the proof does not state that the approver was user-verified")
+	}
+	return nil
+}
+
+// stepUpUserVerified reports whether the helm_step_up entry of raw has
+// user_verified set to boolean true. Missing, false and any other type is not
+// verified. checkBinding has already found the one entry.
+func stepUpUserVerified(raw json.RawMessage) bool {
+	var entries []map[string]any
+	if json.Unmarshal(raw, &entries) != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry["type"] == "helm_step_up" {
+			verified, ok := entry["user_verified"].(bool)
+			return ok && verified
+		}
+	}
+	return false
+}
+
+// stepUpFresh reports whether a proof is fresh (§10.1): it has an iat, and
+// its exp is after it and at most stepUpMaxLifetime later. The validator has
+// checked that the call falls between iat and exp, within its clock skew.
+func stepUpFresh(id Identity) bool {
+	return !id.IssuedAt.IsZero() && id.ExpiresAt.After(id.IssuedAt) && id.ExpiresAt.Sub(id.IssuedAt) <= stepUpMaxLifetime
+}
+
+// stepUp verifies the step-up proof of an Approve before its transaction, so
+// no row lock is held while signing keys are fetched, and returns what
+// admission spends: nil when there is no proof or it does not verify. A proof
+// that does not verify is the same as none. Admission then refuses an effect
+// that needs step-up (STEP_UP_REQUIRED), and ignores the proof of one that
+// needs none, whatever that proof holds.
+//
+// The proof is a compact token like any other (one audience, the issuer's
+// keys, the configured actor, the certificate binding when required), with
+// the scope helm.gateway.stepup, the decide token's approver and tenant, a
+// lifetime of at most 300 seconds from its iat, and one helm_step_up entry
+// naming the attempt and the digest and stating user verification. The proof
+// as received goes with the verified claims: the approval record keeps it.
+func (a *Authenticator) stepUp(ctx context.Context, decide Identity, attemptID string, approvalDigest []byte, proof string) *admission.StepUp {
+	if proof == "" {
+		return nil
+	}
+	refused := func(reason string) *admission.StepUp {
+		slog.WarnContext(ctx, "a step-up proof was not accepted", "attempt_id", attemptID, "reason", reason)
+		return nil
+	}
+	if len(proof) > admission.MaxStepUpProofBytes {
+		return refused("the proof is longer than the gateway keeps")
+	}
+	id, err := a.verify(ctx, proof, ScopeStepUp)
+	if err != nil {
+		return refused(err.Error())
+	}
+	if id.PrincipalID != decide.PrincipalID || id.TenantID != decide.TenantID {
+		return refused("the proof names another approver or tenant than the decide token")
+	}
+	if !stepUpFresh(id) {
+		return refused("the proof is not fresh: it needs an iat, and an exp at most 300 seconds after it")
+	}
+	if err := checkStepUpBinding(id.AuthorizationDetails, attemptID, approvalDigest); err != nil {
+		return refused(err.Error())
+	}
+	return &admission.StepUp{Token: id.token(), Method: stepUpMethod, Raw: proof}
+}
+
 // checkBinding requires exactly one RFC 9396 authorization_details entry of
 // detailType, whose fields equal want. A single-use decide or stop token
 // names the one object it was minted for (ADR-0005 §10 amendment):
@@ -184,6 +296,7 @@ func checkDecisionBinding(raw json.RawMessage, attemptID, action string) error {
 //	helm_stop_lift       {stop_id}             Lift
 //	helm_effect_cancel   {attempt_id}          Cancel with a stop token
 //	helm_stop            {idempotency_key, scope_kind, scope_key}  Stop
+//	helm_step_up         {attempt_id, approval_digest, method, user_verified}  Approve's step-up proof
 func checkBinding(raw json.RawMessage, detailType string, want map[string]string) error {
 	var entries []map[string]any
 	if len(raw) == 0 || json.Unmarshal(raw, &entries) != nil {

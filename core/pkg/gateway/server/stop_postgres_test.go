@@ -21,11 +21,11 @@ import (
 
 func bound(detailType string, fields map[string]string) func(*tokenClaims) {
 	return func(c *tokenClaims) {
-		entry := map[string]string{"type": detailType}
+		entry := map[string]any{"type": detailType}
 		for k, v := range fields {
 			entry[k] = v
 		}
-		c.AuthorizationDetails = []map[string]string{entry}
+		c.AuthorizationDetails = []map[string]any{entry}
 	}
 }
 

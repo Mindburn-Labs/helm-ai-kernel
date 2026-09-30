@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -25,18 +24,45 @@ type Token struct {
 	ExpiresAt time.Time
 }
 
+// MaxStepUpProofBytes bounds the compact proof an approval record keeps.
+const MaxStepUpProofBytes = 8192
+
+// StepUp is a verified step-up proof (§10.1): a compact token whose signature,
+// audience, scope, approver, tenant, freshness and user verification the
+// server checked, and whose binding to the attempt and the approval digest it
+// approved. The Control Plane's issuer signs it after it verified the
+// approver's WebAuthn assertion. Token carries the proof's own iss, jti and
+// exp; Method is what the issuer attests; Raw is the compact token exactly as
+// received. Admission uses the jti up in the approval's transaction, like the
+// decide token's, and the approval record keeps Raw with it, so the proof can
+// be verified again against the issuer's keys.
+type StepUp struct {
+	Token  Token
+	Method string
+	Raw    string
+}
+
 // DecideInput is an ApproveRequest or a RejectRequest.
 type DecideInput struct {
 	AttemptID      string
 	ApprovalDigest []byte
 	Reason         string
+	// StepUp is the approver's verified step-up proof; nil when there is none
+	// or it did not verify. Approve uses it up when the effect needs
+	// step-up, and ignores it otherwise. Reject ignores it.
+	StepUp *StepUp
 }
 
-// The scopes that reach Cancel.
+// The scopes that reach Cancel, and the scope of a step-up proof.
 const (
 	scopePropose = "helm.gateway.propose"
 	scopeStop    = "helm.gateway.stop"
+	scopeStepUp  = "helm.gateway.stepup"
 )
+
+// stepUpMethodWebAuthn is the one method a proof attests: the issuer verified
+// the approver's WebAuthn assertion over the approval digest.
+const stepUpMethodWebAuthn = "webauthn"
 
 // maxReasonBytes bounds an approver's reason.
 const maxReasonBytes = 2000
@@ -115,26 +141,34 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 		if !a.now.Before(a.approvalExpiresAt) {
 			return refuse(CodeFailedPrecondition, contracts.ReasonApprovalTimeout, "the escalation expired")
 		}
-		// Step-up is decided again in readmit on the risk it recomputes, so a
-		// class raised since the escalation still needs it; this check only
-		// refuses early on the stored one.
-		if approve && needsStepUp(a.risk, a.effectType) {
-			return errStepUp
-		}
-		decision := "REJECTED"
-		if approve {
-			decision = "APPROVED"
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO authority_approvals
-				(tenant_id, attempt_id, approver_principal_id, approver_actor_id, decision, approval_digest, reason)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			caller.TenantID, a.id, caller.PrincipalID, caller.ActorID, decision, in.ApprovalDigest, in.Reason); err != nil {
-			return err
-		}
 		if !approve {
+			if err := insertApproval(ctx, tx, caller, a.id, "REJECTED", in, nil); err != nil {
+				return err
+			}
 			return transition(ctx, tx, caller.TenantID, a.id, "ESCALATED", "REJECTED", contracts.ReasonApprovalRejected)
 		}
-		return s.readmit(ctx, tx, a, &ApprovalState{ApproverID: caller.PrincipalID, Approved: true})
+		// An effect that needs step-up on the risk stored at escalation is
+		// approved only with a proof, used up here, after the decide token.
+		// The risk is judged again in readmit, on the one it recomputes, so a
+		// class raised since the escalation needs it too (and takes the proof
+		// from the approval state there).
+		state := &ApprovalState{ApproverID: caller.PrincipalID, Approved: true, proof: in.StepUp}
+		if needsStepUp(a.risk, a.effectType) {
+			if err := spendStepUp(ctx, tx, caller.TenantID, in.StepUp); err != nil {
+				return err
+			}
+			state.StepUpVerified = true
+		}
+		if err := s.readmit(ctx, tx, a, state); err != nil {
+			return err
+		}
+		// The record keeps the proof it used up, once readmit has settled
+		// whether the effect needed one.
+		var used *StepUp
+		if state.StepUpVerified {
+			used = in.StepUp
+		}
+		return insertApproval(ctx, tx, caller, a.id, "APPROVED", in, used)
 	})
 	if err != nil {
 		return Attempt{}, false, err
@@ -144,15 +178,60 @@ func (s *Service) decide(ctx context.Context, caller Caller, token Token, in Dec
 }
 
 // needsStepUp: §10.1 step-up covers high and irreversible effects and
-// authority widening (helm.authority.*). A medium effect a mandate escalates
-// is approved without it.
+// authority widening (helm.authority.*, except a plan that only narrows and is
+// never approved). A medium effect a mandate escalates is approved without it.
 func needsStepUp(risk, effectType string) bool {
 	return risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||
-		strings.HasPrefix(effectType, "helm.authority.")
+		effectargs.WidensAuthority(effectType)
 }
 
 var errStepUp = refuse(CodePermissionDenied, contracts.ReasonStepUpRequired,
-	"approving a high-risk, irreversible or authority-widening effect needs a step-up assertion")
+	"approving a high-risk, irreversible or authority-widening effect needs a valid step-up proof")
+
+// usable reports whether p is a proof of this contract: a helm.gateway.stepup
+// token of method webauthn, with the compact token to keep. The server checks
+// the scope and the method on the verified token; this is the backstop for a
+// caller that skipped it.
+func (p *StepUp) usable() bool {
+	return p != nil && p.Token.Scope == scopeStepUp && p.Method == stepUpMethodWebAuthn &&
+		p.Raw != "" && len(p.Raw) <= MaxStepUpProofBytes
+}
+
+// spendStepUp uses a step-up proof up in the approval's own transaction,
+// after the decide token. No proof, one that is not usable, and one that
+// cannot be recorded (no iss, jti or exp; expired; already used) are all
+// STEP_UP_REQUIRED. The transaction then rolls back, so neither the proof nor
+// the decide token is used up.
+func spendStepUp(ctx context.Context, tx *sql.Tx, tenantID string, proof *StepUp) error {
+	if !proof.usable() {
+		return errStepUp
+	}
+	if err := consumeToken(ctx, tx, tenantID, proof.Token); err != nil {
+		var refusal *Error
+		if errors.As(err, &refusal) {
+			return errStepUp
+		}
+		return err
+	}
+	return nil
+}
+
+// insertApproval records an approval or a rejection. A step-up proof the
+// approval used up is kept with it, exactly as received: the compact token,
+// and its issuer, jti and method, which name the authority_token_replay row
+// that spent it (§10.1).
+func insertApproval(ctx context.Context, tx *sql.Tx, caller Caller, attemptID, decision string, in DecideInput, proof *StepUp) error {
+	var issuer, jti, method, raw any // NULL: the effect needed no step-up
+	if proof != nil {
+		issuer, jti, method, raw = proof.Token.Issuer, proof.Token.ID, proof.Method, proof.Raw
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO authority_approvals
+			(tenant_id, attempt_id, approver_principal_id, approver_actor_id, decision, approval_digest, reason,
+			 step_up_issuer, step_up_jti, step_up_method, step_up_proof)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		caller.TenantID, attemptID, caller.PrincipalID, caller.ActorID, decision, in.ApprovalDigest, in.Reason, issuer, jti, method, raw)
+	return err
+}
 
 // readmit re-runs admission for an ESCALATED attempt with its approval, on
 // the request the attempt stored.
@@ -166,7 +245,7 @@ func (s *Service) readmit(ctx context.Context, tx *sql.Tx, a lockedAttempt, appr
 	if err != nil {
 		return err
 	}
-	args, err := effectargs.Validate(a.effectType, a.target, content)
+	args, err := validateArguments(a.effectType, a.target, content)
 	if err != nil {
 		return err
 	}

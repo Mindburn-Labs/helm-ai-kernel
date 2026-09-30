@@ -43,6 +43,11 @@ func (Adapter) Declarations() []adapters.Declaration {
 		Mediation:  adapters.MediationEnforced,
 		Notes: "One call to a model API, priced at its worst case and settled from the usage the provider reports. " +
 			"Dispatched by the model gateway's inference endpoints; a repeat in the same episode replays the stored response.",
+		// The catalog entry (AuthorityAdminService.ListEffectTypes). The gateway
+		// proposes the call itself, so no client holds an argument schema for it.
+		TargetForm:  "a priced route id of the model routes file",
+		Description: "One call to a model API through the model gateway, priced at its worst case and settled from reported usage.",
+		Grantable:   true,
 	}}
 }
 

@@ -192,10 +192,13 @@ func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
+	// Propose alone may carry an authority plan, so its cap is the larger one;
+	// every other RPC keeps the 128 KiB cap.
 	big := &gatewayv1.ProposeRequest{
 		IdempotencyKey: "k",
-		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), MaxMessageBytes+1)},
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), MaxProposeMessageBytes+1)},
 	}
+	bigAttempt := &gatewayv1.GetAttemptRequest{AttemptId: string(bytes.Repeat([]byte("a"), MaxMessageBytes+1))}
 	for name, opts := range map[string][]connect.ClientOption{
 		"plain":        {connect.WithGRPC()},
 		"gzip":         {connect.WithGRPC(), connect.WithSendGzip()},
@@ -206,9 +209,27 @@ func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
 		req.Header().Set("Authorization", "Bearer a.b.c")
 		_, err := client.Propose(context.Background(), req)
 		if code := connect.CodeOf(err); code != connect.CodeResourceExhausted && code != connect.CodeInvalidArgument {
-			t.Errorf("%s: an oversize request = %v (%v), want it refused for its size", name, code, err)
+			t.Errorf("%s: an oversize Propose = %v (%v), want it refused for its size", name, code, err)
+		}
+		readReq := connect.NewRequest(bigAttempt)
+		readReq.Header().Set("Authorization", "Bearer a.b.c")
+		_, err = client.GetAttempt(context.Background(), readReq)
+		if code := connect.CodeOf(err); code != connect.CodeResourceExhausted && code != connect.CodeInvalidArgument {
+			t.Errorf("%s: an oversize GetAttempt = %v (%v), want it refused for its size", name, code, err)
 		}
 	}
+	// A Propose past 128 KiB and under its own cap reaches authentication, so a
+	// plan can be proposed; any other RPC of that size is refused before it.
+	plan := connect.NewRequest(&gatewayv1.ProposeRequest{
+		IdempotencyKey: "k",
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), 2*MaxMessageBytes)},
+	})
+	plan.Header().Set("Authorization", "Bearer a.b.c")
+	_, _ = gatewayv1.NewEffectGatewayServiceClient(server.Client(), server.URL, connect.WithGRPC()).Propose(context.Background(), plan)
+	if calls != 1 {
+		t.Fatalf("a Propose of %d KiB ran authentication %d times, want 1", 2*MaxMessageBytes>>10, calls)
+	}
+	calls = 0
 	// A valid ProposeRequest of 4 MiB, gzipped far under the wire cap: only
 	// the cap after decompression can refuse it.
 	bomb, err := proto.Marshal(&gatewayv1.ProposeRequest{
@@ -224,6 +245,9 @@ func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
 	_ = zw.Close()
 	if inflated.Len() >= MaxBodyBytes {
 		t.Fatalf("the gzip bomb is %d bytes on the wire; the test needs it under the body cap", inflated.Len())
+	}
+	if len(bomb) <= MaxProposeMessageBytes {
+		t.Fatalf("the gzip bomb inflates to %d bytes; the test needs it over Propose's cap", len(bomb))
 	}
 	var req *http.Request
 	req, err = http.NewRequest(http.MethodPost, server.URL+gatewayv1.EffectGatewayServiceProposeProcedure, &inflated)

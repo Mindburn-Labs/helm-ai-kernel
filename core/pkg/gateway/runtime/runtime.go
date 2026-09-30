@@ -1,5 +1,7 @@
 // Command helm-gateway is the effect gateway (Zone C, HELM-751): the server
-// of the gateway effect API, helm.gateway.v1.EffectGatewayService.
+// of the gateway effect API, helm.gateway.v1.EffectGatewayService, and of its
+// authority administration API, helm.gateway.v1.AuthorityAdminService, on the
+// same listener.
 //
 //	helm-gateway migrate   apply the gateway schema and River's to HELM_GATEWAY_DATABASE_URL
 //	helm-gateway serve     serve the API on :8443 (TLS) and health on :8081
@@ -53,6 +55,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/auth/jwks"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/jobs"
@@ -189,6 +192,13 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	// The gateway's own authority effects (helm.authority.provision.v1 and
+	// narrow.v1) act on its own database, so their adapter needs no credential.
+	provisioner, err := provision.New(db)
+	if err != nil {
+		return err
+	}
+	admissionConfig.Adapters = append(admissionConfig.Adapters, provisioner)
 	for _, configure := range extensions {
 		if configure != nil {
 			if err := configure(ctx, db, &admissionConfig); err != nil {
@@ -216,12 +226,20 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		defer cancel()
 		_ = runner.Stop(stopping)
 	}()
+	// Every adapter is configured by now, the compositions' included: the
+	// catalog lists what this process performs.
+	catalog, err := server.BuildCatalog(admissionConfig.Adapters)
+	if err != nil {
+		return fmt.Errorf("effect-type catalog: %w", err)
+	}
 	api := &server.Server{
 		Admission: svc,
 		Auth:      &server.Authenticator{Validator: identity.Validator(false), Actor: identity.Actor, RequireCNF: identity.RequireCNF},
 	}
+	admin := &server.AdminServer{Rows: provisioner.Store(), Auth: api.Auth, Catalog: catalog}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
+	mux.Handle(admin.Handler())
 	plain := cfg.devInsecureListen != ""
 
 	// The model gateway: on the main listener for the Control Plane's calls,

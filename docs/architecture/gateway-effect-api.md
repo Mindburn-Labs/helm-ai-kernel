@@ -712,7 +712,8 @@ attempt `ESCALATED`:
 - the escalation has not expired (`failed_precondition`,
   `APPROVAL_TIMEOUT`);
 - Approve only: a high, irreversible or `helm.authority.*` effect needs
-  step-up, which fails closed (`STEP_UP_REQUIRED`). The risk is the one
+  step-up: a valid `step_up_proof` (see "Step-up proof"), and without one the
+  approval fails closed (`STEP_UP_REQUIRED`). The risk is the one
   re-admission computes, so a class raised since the escalation counts. A
   medium effect that a
   mandate escalates through `approval_required`, such as the skeleton's draft
@@ -734,7 +735,10 @@ human operator's single-use `helm.gateway.stop` token.
 - `DISPATCHING` and later are `failed_precondition`.
 
 A request message is capped at 128 KiB after decompression, and a request
-body at 132 KiB as sent, before authentication or any handler runs.
+body at 132 KiB as sent, before authentication or any handler runs. Propose
+alone has a larger cap, because it alone carries an authority plan (at most
+524288 bytes, which a JSON client sends base64-encoded): 764588 bytes of message
+and 768684 bytes of body.
 
 Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
 `SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's
@@ -744,9 +748,8 @@ code; a gateway failure is `unavailable` with `retryable` set.
 
 ### Slice 2 decisions and open points
 
-- **`ListAttempts` is defined and not served yet.** The proto carries the RPC
-  and its messages (see "ListAttempts"); `helm-gateway` answers
-  `unimplemented` until the change that follows this one.
+- **`ListAttempts` is served.** The proto carries the RPC and its messages (see
+  "ListAttempts"); `helm-gateway` answers it under a `helm.gateway.read` token.
 - **The approval window is gateway configuration.** The proto clamps
   `approval_expires_at` to "the mandate's approval window", but mandates have
   no such term yet; `HELM_GATEWAY_APPROVAL_WINDOW` stands in for it.
@@ -978,8 +981,9 @@ target `stop:<stop_id>` and the arguments
 operator's mandate for that effect type.
 
 - **Approval.** Every `helm.authority.*` effect escalates, whatever its risk
-  row says. It needs a distinct human approver with step-up, and step-up
-  fails closed (`STEP_UP_REQUIRED`) until the passkey slice.
+  row says. It needs a distinct human approver with a step-up proof (see
+  "Step-up proof"), and without one the approval fails closed
+  (`STEP_UP_REQUIRED`).
 - **Stops.** A lift is not blocked by the one stop it lifts. Every other
   stop, the operator's own and the tenant's included, still applies, at
   admission and at the claim.
@@ -1063,11 +1067,12 @@ fixture grants exactly these:
 - **Lift is bound to the stop.** The proto binds a lift token to the stop,
   not to the attempt. The lift attempt is approved with a decide token bound
   to it, like any other attempt.
-- **No lift can be applied yet.** A `helm.authority.lift` attempt cannot
-  reach `ADMITTED` until step-up exists, so this slice has no dispatch-time
-  applier for it (`Dispatch` answers `failed_precondition`: no adapter). A
-  gateway stop lasts until it expires, or until the authority-row store lifts
-  it with a distinct approver. The applier comes with step-up.
+- **No lift can be applied yet.** A `helm.authority.lift` attempt reaches
+  `ADMITTED` when a distinct approver approves it with a step-up proof, but
+  there is no dispatch-time applier for it (`Dispatch` answers
+  `failed_precondition`: no adapter). A gateway stop lasts until it expires,
+  or until the authority-row store lifts it with a distinct approver. The
+  applier is a separate change.
 - **A last try whose own hand-off transaction fails** (the database is
   unreachable) is discarded by River. The attempt stays `UNKNOWN`, with its
   hold, for `Observe`.
@@ -1091,9 +1096,11 @@ the Control Plane syncs its projection incrementally.
   last changed the attempt began. Transactions commit out of that order, so an
   attempt can first appear with an `updated_at` earlier than one already
   listed, and the last `updated_at` a reader saw is not a safe place to resume.
-  Every page carries `settled_before`: a time later than the longest a gateway
+  The first page captures `settled_before`: a time later than the longest a gateway
   transaction may run (every one is bounded), before the moment the page was
-  read. An attempt whose `updated_at` is before `settled_before` is final in
+  read. Its continuation tokens preserve that same watermark on every later
+  page, even when traversal spans the safety margin. An attempt whose
+  `updated_at` is before `settled_before` is final in
   the listing: none appears later with an earlier position. A reader that has
   read to the end asks again with `updated_after` set to the `settled_before`
   of its last page, never misses a change, and sees the changes after that
@@ -1101,8 +1108,8 @@ the Control Plane syncs its projection incrementally.
   again is listed again at its new position.
 - **Content.** Each entry is the attempt `GetAttempt` returns. The arguments
   stay behind `GetAttemptContent`.
-- **Status.** The contract is defined; `helm-gateway` answers `unimplemented`
-  until the change that follows.
+- **Status.** Served: `helm-gateway` answers `ListAttempts` under a
+  `helm.gateway.read` token.
 
 ## Step-up proof
 
@@ -1133,8 +1140,11 @@ with one bound to another attempt or digest, is `permission_denied`
 (`STEP_UP_REQUIRED`), the attempt stays `ESCALATED`, and no token is used up.
 The approval record keeps the proof exactly as received, with its `jti` and
 method, so that it can be verified again against the issuer's keys. A `Reject`
-needs no proof. Status: the field is defined; `helm-gateway` still fails closed on every
-approval that needs step-up until the change that serves the proof.
+needs no proof. Status: served. The server verifies the proof before the
+approval's transaction and treats one that does not verify, or is longer than
+8192 bytes, as none; admission uses its `jti` up in that transaction, after the
+decide token's, when the effect needs step-up, keeps the proof on the approval
+record, and ignores a proof for an effect that needs none.
 
 ## Conformance table
 

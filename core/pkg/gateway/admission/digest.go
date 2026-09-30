@@ -80,6 +80,14 @@ func requestDigest(caller Caller, in ProposeInput) []byte {
 		expires = in.ApprovalExpiresAt.UTC().Truncate(time.Second).Format("2006-01-02T15:04:05Z")
 	}
 	field(&m, []byte(expires))
+	// An attempt proposed under an episode claim is that episode's: the same
+	// key and request from another episode is another request. Appended only
+	// when there is a claim, so the digest of every other request is unchanged.
+	if e := caller.Episode; e != nil {
+		field(&m, []byte(e.EpisodeID))
+		field(&m, []byte(e.WorkItemID))
+		field(&m, []byte(e.OrganizationVersionID))
+	}
 	sum := sha256.Sum256(m.Bytes())
 	return sum[:]
 }

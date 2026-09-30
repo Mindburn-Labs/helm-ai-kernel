@@ -624,7 +624,8 @@ func rebookHeld(ctx context.Context, tx *sql.Tx, tenantID, attemptID, kind strin
 
 // ModelCallReplay returns the response a settled call kept, for the caller's
 // tenant and workspace: nil when there is none, when it was too large to keep
-// or when it has expired.
+// or when it has expired. A caller with an episode claim is held to its own
+// episode's calls, like every other read of an attempt.
 func (s *Service) ModelCallReplay(ctx context.Context, caller Caller, attemptID string) (*ModelCallReplay, error) {
 	if err := checkCaller(caller); err != nil {
 		return nil, err
@@ -640,8 +641,9 @@ func (s *Service) ModelCallReplay(ctx context.Context, caller Caller, attemptID 
 		err := tx.QueryRowContext(ctx, `SELECT r.status_code, r.headers, r.body, r.body_sha256, r.expires_at, r.expires_at > now()
 			FROM authority_model_replays r
 			JOIN authority_effect_attempts a ON a.tenant_id = r.tenant_id AND a.attempt_id = r.attempt_id
-			WHERE r.tenant_id = $1 AND r.attempt_id = $2 AND a.workspace_id = $3 AND r.body IS NOT NULL`,
-			caller.TenantID, attemptID, caller.WorkspaceID).Scan(&r.StatusCode, &headers, &r.Body, &r.BodySHA256, &r.ExpiresAt, &live)
+			WHERE r.tenant_id = $1 AND r.attempt_id = $2 AND a.workspace_id = $3 AND r.body IS NOT NULL
+				AND ($4 = '' OR (a.episode_id = $4 AND a.requester_principal_id = $5))`,
+			caller.TenantID, attemptID, caller.WorkspaceID, episodeScope(caller), caller.PrincipalID).Scan(&r.StatusCode, &headers, &r.Body, &r.BodySHA256, &r.ExpiresAt, &live)
 		if errors.Is(err, sql.ErrNoRows) || (err == nil && !live) {
 			return nil
 		}

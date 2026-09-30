@@ -29,7 +29,9 @@
 // listener for episode workers: server TLS without client certificates, the
 // worker audience HELM_GATEWAY_WORKER_AUDIENCE (helm-gateway-worker:<env>) and
 // tokens of up to HELM_GATEWAY_WORKER_MAX_TTL (at most one hour). A token minted
-// for one listener is not valid on the other.
+// for one listener is not valid on the other. The worker listener also serves
+// the gateway's effect types as MCP tools at /mcp (package mcpserver), to the
+// same episode tokens.
 package runtime
 
 // quantum_posture: the listener serves classical TLS 1.2+ (pkg/servetls) and
@@ -59,6 +61,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/jobs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/mcpserver"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/modelgw"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/server"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
@@ -245,14 +248,22 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	// The model gateway: on the main listener for the Control Plane's calls,
 	// and on the worker listener for episode workers. One gateway, two
 	// authentications: a token is valid on the listener its audience names.
+	// The worker listener also serves the effect types as MCP tools (package
+	// mcpserver) at /mcp, to the same episode tokens, so a worker has one
+	// network exit for its model calls and its effects.
 	var workerServer *http.Server
 	if models != nil {
 		gateway := &modelgw.Gateway{Config: models.config, Ledger: svc, Keys: models.keys}
 		mux.Handle("/v1/", server.WithTLSState(gateway.Handler(modelgw.Listener{Name: "main", Auth: api.Auth})))
 		if models.worker != nil {
 			workerAuth := &server.Authenticator{Validator: models.worker, Actor: identity.Actor, RequireEpisode: true}
+			tools, err := mcpserver.NewGateway(svc, admissionConfig.Adapters)
+			if err != nil {
+				return fmt.Errorf("MCP tools: %w", err)
+			}
 			workerMux := http.NewServeMux()
 			workerMux.Handle("/v1/", gateway.Handler(modelgw.Listener{Name: "worker", Auth: workerAuth, Worker: true}))
+			workerMux.Handle("/mcp", &mcpserver.Handler{Authenticate: mcpAuthenticate(workerAuth), Backend: tools})
 			workerServer = newAPIServer(workerMux, workerTLS(tlsConfig), plain)
 		}
 	}
@@ -324,6 +335,19 @@ func newAPIServer(handler http.Handler, tlsConfig *tls.Config, plain bool) *http
 	}
 	return &http.Server{Handler: handler, TLSConfig: tlsConfig, Protocols: protocols, ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
+}
+
+// mcpAuthenticate is the MCP endpoint's token check: the worker listener's own,
+// for a token that proposes or reads. The endpoint takes its identity from
+// nothing else.
+func mcpAuthenticate(auth *server.Authenticator) mcpserver.Authenticate {
+	return func(ctx context.Context, header http.Header) (mcpserver.Caller, error) {
+		id, err := auth.Authenticate(ctx, header, server.ScopePropose, server.ScopeRead)
+		if err != nil {
+			return mcpserver.Caller{}, err
+		}
+		return mcpserver.Caller{Caller: id.Caller, Scope: id.Scope}, nil
+	}
 }
 
 // workerTLS is the worker listener's TLS configuration: the same serving

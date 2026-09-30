@@ -163,8 +163,8 @@ func jwksServer(t *testing.T) (map[string]string, func(audience string, lifetime
 }
 
 // Two listeners, two audiences: a token minted for one is not valid on the
-// other, and the worker listener serves the model endpoints and nothing else
-// (HELM-752 K7).
+// other, and the worker listener serves the model endpoints and the MCP
+// endpoint and no effect API (HELM-752 K7).
 func TestServeKeepsTheWorkerAndMainListenersApart(t *testing.T) {
 	identity, sign := jwksServer(t)
 	main, worker := freeAddress(t), freeAddress(t)
@@ -214,7 +214,7 @@ func TestServeKeepsTheWorkerAndMainListenersApart(t *testing.T) {
 	if code, _ := get(worker, "/v1/models", sign("helm-gateway-worker:test", 20*time.Minute, nil)); code != 403 {
 		t.Fatalf("a worker token with no episode: %d, want 403", code)
 	}
-	// The worker listener serves no effect API: only the model endpoints.
+	// The worker listener serves no effect API: only the model endpoints and MCP.
 	req, _ := http.NewRequest(http.MethodPost, "http://"+worker+"/helm.gateway.v1.EffectGatewayService/Propose", strings.NewReader("{}"))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+workerToken)

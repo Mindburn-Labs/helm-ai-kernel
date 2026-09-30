@@ -299,6 +299,7 @@ func listInput(msg *gatewayv1.ListAttemptsRequest) (admission.ListInput, error) 
 	in := admission.ListInput{
 		RequesterPrincipalID: msg.GetRequesterPrincipalId(),
 		EffectType:           msg.GetEffectType(),
+		EpisodeID:            msg.GetEpisodeId(),
 		PageSize:             int(msg.GetPageSize()),
 		PageToken:            msg.GetPageToken(),
 	}

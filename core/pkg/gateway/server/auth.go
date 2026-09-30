@@ -72,7 +72,8 @@ type Authenticator struct {
 	RequireEpisode bool
 }
 
-// Identity is a verified token.
+// Identity is a verified token. Its Caller carries the token's episode claim
+// when it has one (Caller.Episode, the same claim as Episode below).
 type Identity struct {
 	admission.Caller
 	Scope string
@@ -155,6 +156,11 @@ func (a *Authenticator) verify(ctx context.Context, token string, scopes ...stri
 	}
 	if claims.RegisteredClaims.IssuedAt != nil {
 		id.IssuedAt = claims.RegisteredClaims.IssuedAt.Time
+	}
+	// The episode reaches admission through the caller, and only from the
+	// verified claim: it is what an attempt records and what a read is held to.
+	if e := claims.Episode; e != nil {
+		id.Caller.Episode = &admission.Episode{EpisodeID: e.EpisodeID, WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID}
 	}
 	if id.TenantID == "" || id.WorkspaceID == "" || id.PrincipalID == "" {
 		return Identity{}, unauthenticated("the token lacks its principal, tenant or workspace")

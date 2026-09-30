@@ -33,6 +33,9 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 		WorkspaceId:          a.WorkspaceID,
 		RequesterActorId:     a.RequesterActorID,
 	}
+	if e := a.Episode; e != nil {
+		out.Episode = &gatewayv1.EpisodeRef{EpisodeId: e.EpisodeID, WorkItemId: e.WorkItemID, OrganizationVersionId: e.OrganizationVersionID}
+	}
 	switch {
 	case a.CommitmentID != "":
 		out.WorkRef = &gatewayv1.EffectAttempt_CommitmentId{CommitmentId: a.CommitmentID}

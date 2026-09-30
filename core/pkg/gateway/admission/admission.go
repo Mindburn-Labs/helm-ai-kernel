@@ -88,6 +88,21 @@ type Caller struct {
 	// ActorID is the token's act.sub: the workload that carries a
 	// principal's call. Empty for a direct call.
 	ActorID string
+	// Episode is the token's helm_episode claim, verified: the bounded worker
+	// run the token was minted for. Nil for every other token. It is the only
+	// source of an attempt's episode: Propose records it, and a caller that has
+	// one proposes under its work item and reads only its own episode's
+	// attempts.
+	Episode *Episode
+}
+
+// Episode is a worker token's helm_episode claim (jwks.EpisodeClaim), and what
+// an attempt records of it. The work item is the attempt's case_id.
+type Episode struct {
+	EpisodeID  string
+	WorkItemID string
+	// OrganizationVersionID is empty when the token names none.
+	OrganizationVersionID string
 }
 
 // ProposeInput is a ProposeRequest.
@@ -224,6 +239,10 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 		return Attempt{}, false, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
 			"helm.authority.lift is proposed through Lift, which binds the operator's stop token to the stop")
 	}
+	in, err := bindEpisode(caller.Episode, in)
+	if err != nil {
+		return Attempt{}, false, err
+	}
 	args, err := validateProposal(in)
 	if err != nil {
 		return Attempt{}, false, err
@@ -269,16 +288,24 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	if err != nil {
 		return "", false, err
 	}
+	// The episode is the verified claim's and nothing else's: the attempt row
+	// records it with itself, and nothing ever changes it.
+	var episodeID, organizationVersionID string
+	if e := caller.Episode; e != nil {
+		episodeID, organizationVersionID = e.EpisodeID, e.OrganizationVersionID
+	}
 	// 1. Idempotency first. A duplicate never locks or changes anything.
 	err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
 			(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
 			 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
-			 distinct_values, state)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15, 'PROPOSED')
+			 distinct_values, episode_id, organization_version_id, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15,
+			NULLIF($16, ''), NULLIF($17, ''), 'PROPOSED')
 		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
 		RETURNING attempt_id`,
 		caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
-		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct).Scan(&attemptID)
+		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct,
+		episodeID, organizationVersionID).Scan(&attemptID)
 	if errors.Is(err, sql.ErrNoRows) {
 		var stored []byte
 		if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
@@ -955,6 +982,9 @@ func checkBranchAttempt(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 func checkCaller(c Caller) error {
 	if strings.TrimSpace(c.TenantID) == "" || strings.TrimSpace(c.WorkspaceID) == "" || strings.TrimSpace(c.PrincipalID) == "" {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token names no tenant, workspace or principal")
+	}
+	if e := c.Episode; e != nil && !validEpisode(e) {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token's episode claim is not well formed")
 	}
 	return nil
 }

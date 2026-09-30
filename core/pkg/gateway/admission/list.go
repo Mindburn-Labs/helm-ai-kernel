@@ -57,6 +57,10 @@ type ListInput struct {
 	RequesterPrincipalID string
 	// EffectType keeps the attempts of that effect type.
 	EffectType string
+	// EpisodeID keeps the attempts proposed in that episode. Like every filter
+	// it only narrows: a caller with an episode claim lists its own episode's
+	// attempts, the ones its own principal proposed, whatever it sets here.
+	EpisodeID string
 	// UpdatedAfter keeps the attempts whose updated_at is later, exclusive:
 	// the incremental cursor.
 	UpdatedAfter *time.Time
@@ -181,16 +185,21 @@ func listPositions(ctx context.Context, tx *sql.Tx, statement string, args []any
 
 // listQuery is a ListInput that passed validation.
 type listQuery struct {
-	states        []string // distinct and sorted
-	commitmentID  string
-	caseID        string
-	requester     string
-	effectType    string
-	after         *time.Time // in UTC, truncated to the microsecond
-	pageSize      int
-	cursor        *listPosition // where the page token continues, if there is one
-	settledBefore *time.Time    // safe resume point captured by the first page
-	digest        []byte        // of the filters and the scope a page token belongs to
+	states       []string // distinct and sorted
+	commitmentID string
+	caseID       string
+	requester    string
+	effectType   string
+	episodeID    string // the filter
+	episodeScope string // the caller's own episode, which restricts it
+	// episodePrincipal is the caller's principal, which an episode restricts the
+	// listing to as well; set with episodeScope.
+	episodePrincipal string
+	after            *time.Time // in UTC, truncated to the microsecond
+	pageSize         int
+	cursor           *listPosition // where the page token continues, if there is one
+	settledBefore    *time.Time    // safe resume point captured by the first page
+	digest           []byte        // of the filters and the scope a page token belongs to
 }
 
 // parseList validates in, before anything is read, and binds its page token
@@ -199,7 +208,11 @@ func parseList(caller Caller, in ListInput) (listQuery, error) {
 	bad := func(format string, args ...any) error {
 		return refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation, format, args...)
 	}
-	q := listQuery{commitmentID: in.CommitmentID, caseID: in.CaseID, requester: in.RequesterPrincipalID, effectType: in.EffectType}
+	q := listQuery{commitmentID: in.CommitmentID, caseID: in.CaseID, requester: in.RequesterPrincipalID, effectType: in.EffectType,
+		episodeID: in.EpisodeID, episodeScope: episodeScope(caller)}
+	if q.episodeScope != "" {
+		q.episodePrincipal = caller.PrincipalID
+	}
 	for _, state := range in.States {
 		if !attemptStates[state] {
 			return q, bad("states holds a state that is not an attempt state")
@@ -215,6 +228,8 @@ func parseList(caller Caller, in ListInput) (listQuery, error) {
 		return q, bad("commitment_id and case_id are at most %d bytes of UTF-8 without NUL", maxWorkRefBytes)
 	case !listValueOK(in.RequesterPrincipalID):
 		return q, bad("requester_principal_id is at most %d bytes of UTF-8 without NUL", maxWorkRefBytes)
+	case !listValueOK(in.EpisodeID):
+		return q, bad("episode_id is at most %d bytes of UTF-8 without NUL", maxWorkRefBytes)
 	case in.EffectType != "" && !effectTypePattern.MatchString(in.EffectType):
 		return q, bad("effect_type is not an effect type")
 	}
@@ -290,6 +305,14 @@ func (q listQuery) statement(caller Caller) (string, []any) {
 	if q.effectType != "" {
 		and("effect_type = $%d", q.effectType)
 	}
+	if q.episodeID != "" {
+		and("episode_id = $%d", q.episodeID)
+	}
+	if q.episodeScope != "" {
+		// The caller's own episode, and the attempts its own principal proposed.
+		and("episode_id = $%d", q.episodeScope)
+		and("requester_principal_id = $%d", q.episodePrincipal)
+	}
 	if q.after != nil {
 		and("updated_at > $%d", *q.after)
 	}
@@ -325,6 +348,14 @@ func listFilterDigest(caller Caller, q listQuery) []byte {
 		after = q.after.Format("2006-01-02T15:04:05.000000Z")
 	}
 	field(&m, []byte(after))
+	// The episode filter and the caller's episode, only when there is one, so
+	// the digest of every other listing, and the tokens issued for it, are
+	// unchanged.
+	if q.episodeID != "" || q.episodeScope != "" {
+		field(&m, []byte(q.episodeID))
+		field(&m, []byte(q.episodeScope))
+		field(&m, []byte(q.episodePrincipal))
+	}
 	sum := sha256.Sum256(m.Bytes())
 	return sum[:]
 }

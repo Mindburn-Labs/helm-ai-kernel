@@ -477,8 +477,9 @@ func lockAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 	err := tx.QueryRowContext(ctx, `SELECT attempt_id, workspace_id, requester_principal_id, requester_actor_id, state, risk_class,
 			effect_type, target, mandate_id::text, approval_digest, approval_expires_at, argument_digest, target_digest,
 			quote, distinct_values, dispatch_deadline, now()
-		FROM authority_effect_attempts WHERE tenant_id = $1 AND attempt_id = $2 AND workspace_id = $3 FOR UPDATE`,
-		caller.TenantID, attemptID, caller.WorkspaceID).Scan(&a.id, &a.workspaceID, &a.requester, &a.requesterActor, &a.state, &risk,
+		FROM authority_effect_attempts WHERE tenant_id = $1 AND attempt_id = $2 AND workspace_id = $3
+			AND ($4 = '' OR (episode_id = $4 AND requester_principal_id = $5)) FOR UPDATE`,
+		caller.TenantID, attemptID, caller.WorkspaceID, episodeScope(caller), caller.PrincipalID).Scan(&a.id, &a.workspaceID, &a.requester, &a.requesterActor, &a.state, &risk,
 		&a.effectType, &a.target, &mandate, &a.approvalDigest, &expires, &a.argumentDigest, &a.targetDigest, &quote, &distinct,
 		&a.dispatchDeadline, &a.now)
 	if errors.Is(err, sql.ErrNoRows) {

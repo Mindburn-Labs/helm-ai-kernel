@@ -2,7 +2,8 @@ package admission
 
 // HELM-789 against real PostgreSQL 16 (listed in
 // scripts/ci/postgres-proofs.txt): the chart's database bootstrap
-// (deploy/helm-chart/files/gateway-db) run the way the migrate hook runs it,
+// (deploy/helm-chart/files/gateway-db), extracted from the rendered migrate
+// Job after kubelet env expansion, run the way the migrate hook runs it,
 // in a gateway database of its own on a shared instance. 001_roles.sql as an
 // administrator, Migrate as the owner role through a startup `role` option,
 // 002_grants.sql as the owner, each SQL file twice. The runtime role then
@@ -22,7 +23,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -32,14 +32,6 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/authorityrows"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 )
-
-// chartSQL reads one of the chart's gateway database files.
-func chartSQL(t *testing.T, name string) string {
-	t.Helper()
-	body, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "deploy", "helm-chart", "files", "gateway-db", name))
-	must(t, err)
-	return string(body)
-}
 
 // dsnFor returns raw pointed at database (when set), with the user replaced
 // (when set) and the given query parameters added.
@@ -65,6 +57,7 @@ func dsnFor(t *testing.T, raw, database, user, password string, params map[strin
 // settings the hook sets.
 type bootstrapRun struct {
 	owner, runtime, schema, verifier string
+	sql                              map[string]string
 }
 
 func (b bootstrapRun) try(t *testing.T, dsn, file string) error {
@@ -80,7 +73,10 @@ func (b bootstrapRun) try(t *testing.T, dsn, file string) error {
 		set_config('helm_gateway_bootstrap.schema', $3, true),
 		set_config('helm_gateway_bootstrap.runtime_verifier', $4, true)`, b.owner, b.runtime, b.schema, b.verifier)
 	must(t, err)
-	if _, err := tx.Exec(chartSQL(t, file)); err != nil {
+	if b.sql[file] == "" {
+		t.Fatalf("no rendered bootstrap SQL for %s", file)
+	}
+	if _, err := tx.Exec(b.sql[file]); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -123,12 +119,13 @@ func TestPostgresChartBootstrapGivesTheRuntimeRoleOnlyItsGrants(t *testing.T) {
 	if base == "" {
 		t.Skip("set HELM_TEST_POSTGRES_URL to run the chart database bootstrap proof")
 	}
+	sql := renderedBootstrapSQL(t, gatewayChartPath(t), false)
 	for _, admin := range []string{"superuser", "createrole"} {
-		t.Run(admin, func(t *testing.T) { chartBootstrapProof(t, base, admin) })
+		t.Run(admin, func(t *testing.T) { chartBootstrapProof(t, base, admin, sql) })
 	}
 }
 
-func chartBootstrapProof(t *testing.T, base, adminKind string) {
+func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[string]string) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	owner, runtime, schema := "helm_owner_"+suffix, "helm_gateway_"+suffix, "helm_gateway_"+suffix
 	gatewayDB, controlPlane := "helm_gw_"+suffix, "helm_cp_"+suffix
@@ -178,7 +175,7 @@ func chartBootstrapProof(t *testing.T, base, adminKind string) {
 	password := randomToken(t, "pw-")
 	verifier, err := pgscram.New(password)
 	must(t, err)
-	run := bootstrapRun{owner: owner, runtime: runtime, schema: schema, verifier: verifier}
+	run := bootstrapRun{owner: owner, runtime: runtime, schema: schema, verifier: verifier, sql: sqlFiles}
 
 	// The hook's order, each SQL file twice: a re-run must converge, not fail.
 	for range 2 {

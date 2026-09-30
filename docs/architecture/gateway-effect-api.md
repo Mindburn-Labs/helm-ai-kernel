@@ -21,6 +21,9 @@ and `Lift`, and the River jobs that expire escalations and reconcile
   messages; `gateway.connect.go`, from `protoc-gen-connect-go`, sits in the
   same package.
 - Contract tests: `sdk/go/gen/helm/gateway/v1/gateway_contract_test.go`.
+- The authority rows admission reads are written through a second service in the
+  same package, `AuthorityAdminService`: see
+  [Gateway provisioning API](gateway-provisioning-api.md).
 - Binding references: rev 3.4 §4.1–§4.6, §8, §10.1, §11 and the §12.3
   contract list; ADR-0001 (admission), ADR-0003 (settlement) and ADR-0005
   (tenant from the token). All of them live under
@@ -104,9 +107,11 @@ Two rules apply everywhere:
 Some fields wait on another slice's design. Their numbers are kept free, and
 `TestHeldFieldNumbersStayFree` fails if anything takes them:
 
-- `ApproveRequest` field 4: the §10.1 step-up assertion.
-- `Observation` fields 7–15: typed, bounded result payloads, such as a pull
-  request URL and merge commit for R1's outcome check.
+- `Observation` fields 10–15: typed, bounded result payloads for later effect
+  types (fields 7–9 carry the GitHub results).
+
+`ApproveRequest` field 4 was held for the §10.1 step-up assertion until the
+step-up proof took it (see "Step-up proof").
 
 They are not declared `reserved`. Under the `FILE` category, buf breaking would
 reject the later change that uses such a number, because it deletes a reserved
@@ -427,9 +432,16 @@ names:
 |---|---|---|---|
 | `helm.gateway.propose` | `Propose`; `Cancel` of one's own attempt | any principal, humans included | — |
 | `helm.gateway.decide` | `Approve`, `Reject` | a human principal only, from an interactive session, never a worker | single-use; bound by `authorization_details` |
-| `helm.gateway.read` | `GetAttempt` (§4.2's `Get`), `GetAttemptContent`, `ListAttempts` in s2, `result_ref` blobs | any principal with workspace read | — |
+| `helm.gateway.read` | `GetAttempt` (§4.2's `Get`), `GetAttemptContent`, `ListAttempts`, `result_ref` blobs, and `GetProvisioning` and `ListEffectTypes` of `AuthorityAdminService` | any principal with workspace read | — |
 | `helm.gateway.stop` | `Stop`, `Lift`; `Cancel` of another principal's attempt | human operators and admins only | single-use; a `Lift` token is bound by `authorization_details` |
 | `helm.gateway.execute` | `Dispatch`, `Observe`, and the model gateway's inference endpoint (§8) | workload principals only: the Control Plane backend and SDK agent runtimes. Never a human session, and never a worker's propose token | — |
+
+Two scopes serve one RPC each. `helm.gateway.provision` belongs to
+`AuthorityAdminService.EnsurePrincipals` alone: the Control Plane's service
+principal holds it, and none of the RPCs above takes it (see
+[Gateway authority provisioning](gateway-provisioning-api.md)).
+`helm.gateway.stepup` is the scope of the step-up proof that `Approve` may
+carry (see "Step-up proof"); no RPC takes it as its own credential.
 
 WS-B's table lists "Get, GetAttempt" for `helm.gateway.read`. They are one RPC:
 §4.2's `Get` is `GetAttempt`.
@@ -591,12 +603,12 @@ conflicted with rev 3.4 or the ADRs. They are resolved as follows.
    verifies both before it submits a decision.
 6. **Step-up fails closed.** Approvals that need it (high or irreversible risk,
    authority widening, stop lifts) are `permission_denied` with
-   `STEP_UP_REQUIRED` until the assertion field, held at `ApproveRequest`
-   field 4, exists.
-   - Consequence: the passkey slice must land before R1's first high-risk
-     approval (a GitHub merge).
-   - The Control Plane already has WebAuthn, so WS-B can build its side in
-     parallel once the field shape is fixed.
+   `STEP_UP_REQUIRED` unless `ApproveRequest.step_up_proof`, field 4, carries a
+   valid proof (see "Step-up proof").
+   - Consequence: the proof must be served before R1's first high-risk
+     approval (a GitHub merge) and before any authority widening.
+   - The Control Plane already has WebAuthn, so WS-B builds its side in
+     parallel: it verifies the assertion and signs the proof.
 7. **Correlation for authority changes.** `work_ref` is optional for
    `helm.authority.*` types until contract 5 settles it.
 8. **Units.** `ResourceAmount.unit` names a unit declared by the tenant's
@@ -732,9 +744,9 @@ code; a gateway failure is `unavailable` with `retryable` set.
 
 ### Slice 2 decisions and open points
 
-- **`ListAttempts` is not served.** The service comment reserves the name and
-  this note gives its shape, but the proto defines no RPC or messages for it.
-  Adding it is a contract change for a later slice.
+- **`ListAttempts` is defined and not served yet.** The proto carries the RPC
+  and its messages (see "ListAttempts"); `helm-gateway` answers
+  `unimplemented` until the change that follows this one.
 - **The approval window is gateway configuration.** The proto clamps
   `approval_expires_at` to "the mandate's approval window", but mandates have
   no such term yet; `HELM_GATEWAY_APPROVAL_WINDOW` stands in for it.
@@ -1041,13 +1053,13 @@ fixture grants exactly these:
 
 ### Slice 3b decisions and open points
 
-- **Every `helm.authority.*` type is a widening.** The proto and this note
-  name no `helm.authority.*` narrowing. A stop is the `Stop` RPC, and
-  revoking or narrowing a mandate has no effect type until contract 5. So
-  admission escalates every `helm.authority.*` effect, whatever its risk row
-  or the mandate's `approval_required`, and `Approve` requires step-up for
-  it. A narrowing type that contract 5 adds must be listed as one explicitly.
-  The conformance table's GW-020 asserts this rule.
+- **Every `helm.authority.*` type is a widening, except the one that says it
+  narrows.** Admission escalates every `helm.authority.*` effect, whatever its
+  risk row or the mandate's `approval_required`, and `Approve` requires step-up
+  for it. A narrowing type must be listed as one explicitly: contract 5 lists
+  `helm.authority.narrow.v1`, which is `ADMITTED` without approval (see
+  [Gateway authority provisioning](gateway-provisioning-api.md)). The
+  conformance table's GW-020 asserts the rule for the widening types.
 - **Lift is bound to the stop.** The proto binds a lift token to the stop,
   not to the attempt. The lift attempt is approved with a decide token bound
   to it, like any other attempt.
@@ -1059,6 +1071,70 @@ fixture grants exactly these:
 - **A last try whose own hand-off transaction fails** (the database is
   unreachable) is discarded by River. The attempt stays `UNKNOWN`, with its
   hold, for `Observe`.
+
+## ListAttempts
+
+`ListAttempts` (token scope `helm.gateway.read`) lists the attempts of the
+token's tenant and workspace, ordered by (`updated_at`, `attempt_id`), oldest
+change first. It exists because SDK agents propose directly, so the Console
+must find `ESCALATED` attempts the Control Plane never created, and because
+the Control Plane syncs its projection incrementally.
+
+- **Filters**, all optional, all narrowing: `states` (any of), `commitment_id`
+  or `case_id`, `requester_principal_id`, `effect_type`, and `updated_after`
+  (exclusive). A filter cannot reach another tenant's or workspace's attempts.
+- **Paging.** `page_size` is 1 to 200 (0 means 50); a response with a
+  `next_page_token` has more, and the same request with that token continues
+  after the last attempt returned. A token belongs to one set of filters; one
+  from another set, or a malformed one, is `invalid_argument`.
+- **Cursor.** `updated_at` is the database time at which the transaction that
+  last changed the attempt began. Transactions commit out of that order, so an
+  attempt can first appear with an `updated_at` earlier than one already
+  listed, and the last `updated_at` a reader saw is not a safe place to resume.
+  Every page carries `settled_before`: a time later than the longest a gateway
+  transaction may run (every one is bounded), before the moment the page was
+  read. An attempt whose `updated_at` is before `settled_before` is final in
+  the listing: none appears later with an earlier position. A reader that has
+  read to the end asks again with `updated_after` set to the `settled_before`
+  of its last page, never misses a change, and sees the changes after that
+  instant again, so it applies an attempt idempotently. An attempt that changes
+  again is listed again at its new position.
+- **Content.** Each entry is the attempt `GetAttempt` returns. The arguments
+  stay behind `GetAttemptContent`.
+- **Status.** The contract is defined; `helm-gateway` answers `unimplemented`
+  until the change that follows.
+
+## Step-up proof
+
+An approval of an effect that needs step-up (risk class high or irreversible,
+and every `helm.authority.*` widening) carries `ApproveRequest.step_up_proof`.
+The proof is the Control Plane issuer's attestation that it verified the
+approver's WebAuthn assertion, whose challenge is the approval digest. The
+gateway does not hold the approver's credential and does not verify WebAuthn
+itself: it verifies the issuer's signature, as it does for every token, and the
+binding below. That is a trust choice, recorded here: a compromised issuer can
+mint a proof, as it can mint a decide token. Independent verification needs a
+credential registry in the gateway and is not part of this contract.
+
+The proof is a compact token verified like any other gateway token (one
+audience, the issuer's keys, the configured actor, the certificate binding when
+required), with these rules:
+
+| Claim | Rule |
+|---|---|
+| `scope` | `helm.gateway.stepup`, and only that. |
+| `sub`, `tenant_id` | the decide token's own: the same approver, the same tenant. |
+| `authorization_details` | exactly one entry `{"type": "helm_step_up", "attempt_id": "<attempt_id>", "approval_digest": "<lower-case hex>", "method": "webauthn", "user_verified": true}`, naming the attempt approved and the digest the approver was shown, and stating that the issuer saw the authenticator's user-verification flag set. |
+| `iat`, `exp` | fresh: `exp` is at most 300 seconds after `iat`, and the call is between them (within the usual clock skew). |
+| `jti` | single-use: recorded in `authority_token_replay` in the approval's own transaction, like the decide token's. |
+
+`Approve` without a proof for an effect that needs one, with an invalid one, or
+with one bound to another attempt or digest, is `permission_denied`
+(`STEP_UP_REQUIRED`), the attempt stays `ESCALATED`, and no token is used up.
+The approval record keeps the proof exactly as received, with its `jti` and
+method, so that it can be verified again against the issuer's keys. A `Reject`
+needs no proof. Status: the field is defined; `helm-gateway` still fails closed on every
+approval that needs step-up until the change that serves the proof.
 
 ## Conformance table
 

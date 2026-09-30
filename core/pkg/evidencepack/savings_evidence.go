@@ -589,6 +589,11 @@ func ComputeSavingsView(sets map[string]SpendReceiptSet, man *SavingsTaskSplitMa
 }
 
 func validateSavingsReceiptSets(sets map[string]SpendReceiptSet) error {
+	for _, set := range sets {
+		if set.UsageV2 != nil || set.SettlementV2 != nil || set.PriceV2 != nil {
+			return errors.New("savings evidence: exact tariff accrual requires a versioned savings comparison; cent-only comparison refused")
+		}
+	}
 	if len(sets) == 0 {
 		return errors.New("savings evidence: at least one receipt set is required")
 	}

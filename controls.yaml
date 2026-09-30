@@ -2766,12 +2766,15 @@ controls:
       whose authority widens (HELM-750, ADR-0001).
     status: observed-only
     reason: >-
-      The write store has no shipped caller: no binary imports
-      core/pkg/kernel/authority/authorityrows (a declared library root in
-      scripts/ci/dead-packages-allowlist.txt), so delegation, narrowing,
-      stops and lifts happen only through the library. Their shipped caller
-      is the authority-change effect (helm.authority.*, contract 5) that a
-      later HELM-751 slice dispatches. The read side is shipped: helm-gateway
+      The write store is shipped only on the plan path: helm-gateway's
+      authority adapter (core/pkg/gateway/adapters/provision, contract 5)
+      writes the rows through authorityrows.Tx when it applies a
+      helm.authority.provision.v1 or narrow.v1 plan (root mandate,
+      delegation, narrowing, revocation, limits, principals), and
+      AuthorityAdminService.EnsurePrincipals registers principals. The entry
+      points named here (Store.Delegate, Store.Stop, Store.Lift) still have no
+      shipped caller: the gateway's own stops and lifts are admission.Service
+      Stop and Lift (CTL-055). The read side is shipped: helm-gateway
       admission (CTL-052) reads the same rows through
       core/pkg/kernel/authority/mandates, re-checks that every link of the
       chain is within the one above it (DELEGATION_SCOPE_VIOLATION), and
@@ -2784,8 +2787,8 @@ controls:
     protected_operations:
       - "Delegating, narrowing and revoking a mandate; adding and lowering limits; issuing and lifting stops."
     bypass_assumptions:
-      - "No shipped caller writes the rows; admission enforces what they say (CTL-052), not how they were written."
-      - "The approval argument names principals; it is not yet a verified approval record (HELM-751)."
+      - "Only a plan applied by the authority adapter, and EnsurePrincipals, write the rows in a shipped binary; admission enforces what they say (CTL-052), not how they were written."
+      - "A plan's root mandate takes its requester and approver from the gateway's approval record of the plan attempt (CTL-053); the WideningApproval argument stays a bare pair of principal ids for any other caller of the library."
     tests:
       allowed:
         - "core/pkg/kernel/authority/authorityrows.TestPostgresDelegationOnlyNarrowsOverRandomChains"
@@ -3026,7 +3029,7 @@ controls:
       - "Propose, GetAttempt, GetAttemptContent and ListAttempts of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
       - "The dispatch-claim half of ADR-0001 (version re-check, stops after admission) is CTL-054; Approve, Reject and Cancel are CTL-053; Stop and Lift are CTL-055."
-      - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which no shipped binary calls yet (CTL-046); the gateway trusts the rows it finds."
+      - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which the gateway's authority adapter and EnsurePrincipals call (CTL-046); the gateway trusts the rows it finds."
       - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2)."
       - "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR)."
       - "helm-gateway has no container image or chart yet; it is enforced where it runs, and nothing deploys it."

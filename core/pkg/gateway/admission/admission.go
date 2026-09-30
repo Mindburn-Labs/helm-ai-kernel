@@ -101,6 +101,13 @@ type ProposeInput struct {
 	ApprovalExpiresAt *time.Time
 }
 
+// MaxTransaction is the longest a gateway database transaction may run. Every
+// transaction runs under a context this long, so the driver cancels whatever
+// it is waiting for and rolls it back. ListAttempts relies on it: an attempt's
+// updated_at is the time its transaction began, so a listing is final for the
+// times before its settled_before, which lies further back than this.
+const MaxTransaction = 2 * time.Minute
+
 // Config tunes admission. Zero values take the defaults.
 type Config struct {
 	// PermitTTL is how long an issued permit stays claimable. Default 10m.
@@ -126,6 +133,10 @@ type Config struct {
 	// transaction that makes them due (TA §6.2). helm-gateway serve always
 	// sets it; nil enqueues nothing, for tests of admission alone.
 	Jobs Enqueuer
+	// MaxTransaction bounds every database transaction the service runs (a
+	// provider call is never inside one). Default the package's MaxTransaction,
+	// 2m; a test may set a shorter one.
+	MaxTransaction time.Duration
 }
 
 // Service runs admission over one database. It holds no tenant data: the
@@ -156,6 +167,9 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 	if cfg.DispatchGrace <= 0 {
 		cfg.DispatchGrace = time.Minute
 	}
+	if cfg.MaxTransaction <= 0 {
+		cfg.MaxTransaction = MaxTransaction
+	}
 	byType := map[string]adapters.Adapter{}
 	for _, a := range cfg.Adapters {
 		for _, d := range a.Declarations() {
@@ -168,9 +182,22 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 	return &Service{db: db, cfg: cfg, adapters: byType}, nil
 }
 
-// inTenant runs fn in one READ COMMITTED transaction bound to tenantID.
+// inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and
+// aborts it at Config.MaxTransaction.
 func (s *Service) inTenant(ctx context.Context, tenantID string, fn func(*sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	return s.inTenantWith(ctx, tenantID, &sql.TxOptions{Isolation: sql.LevelReadCommitted}, fn)
+}
+
+// inTenantWith is inTenant with the transaction's options: a read of several
+// statements that must agree runs REPEATABLE READ and READ ONLY, so all of them
+// see one snapshot. It is the one place a gateway transaction begins, and the
+// context it begins under ends at Config.MaxTransaction: the driver watches it
+// for the life of the transaction, cancels the statement in flight and rolls
+// back, whichever context fn's own statements were given.
+func (s *Service) inTenantWith(ctx context.Context, tenantID string, opts *sql.TxOptions, fn func(*sql.Tx) error) error {
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.MaxTransaction)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, opts)
 	if err != nil {
 		return err
 	}

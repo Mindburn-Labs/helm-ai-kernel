@@ -55,6 +55,7 @@ expectation of each kind (state, error reason, adapter call count, exposure,
 | GW-021 | A sum limit refuses a quote that names no amount for its unit (`SCHEMA_VIOLATION`); a zero amount is admitted |
 | GW-022 | An operator's stop token cancels only the attempt its `helm_effect_cancel` entry names |
 | GW-023 | A principal stop covers the workload that carries a call (its Propose and Dispatch) and a stopped approver's Approve |
+| GW-024 | A step-up proof (user-verified, bound to the attempt and digest) admits a high, irreversible or `helm.authority.*` approval; any other proof is `STEP_UP_REQUIRED`, leaves the attempt ESCALATED and uses up neither token; a proof's jti is single-use; an effect that needs no step-up ignores a proof |
 
 ## How a fake consumes the table
 
@@ -80,14 +81,21 @@ Run each scenario in a fresh state.
 
    A fake reads them directly, with no signature. A step that names a token
    presents that token, so a name used twice is the same jti twice. A step
-   with no `token` sends no `Authorization` header. The real runner signs
-   each token once, as an RS256 JWT for audience `helm-gateway:conformance`
-   that expires two minutes later.
+   with no `token` sends no `Authorization` header. An `Approve` step may
+   also name a `step_up_token`, which it presents as
+   `ApproveRequest.step_up_proof` where `token` is the bearer: a token of
+   scope `helm.gateway.stepup` whose `authorization_details` holds one
+   `helm_step_up` entry (`attempt_id`, `approval_digest`, `method`,
+   `user_verified`). The real
+   runner signs each token once, as an RS256 JWT for audience
+   `helm-gateway:conformance` that expires two minutes later.
 3. **Placeholders.** Resolve the placeholders in requests, token claims and
    controls from the attempt that an earlier step's `label` names:
    - `{{attempt_id:<label>}}` becomes that attempt's `attempt_id`;
    - `{{approval_digest:<label>}}` becomes its
-     `pending_approval.approval_digest`, in base64.
+     `pending_approval.approval_digest`, in base64;
+   - `{{approval_digest_hex:<label>}}` becomes the same digest in lower-case
+     hex, the form a `helm_step_up` entry carries.
 4. **Requests.** `request` is the request message in proto3 JSON with
    snake_case names. The one exception is `ProposeRequest.effect`, which
    carries `arguments_json`, a JSON object, instead of base64 `arguments`.

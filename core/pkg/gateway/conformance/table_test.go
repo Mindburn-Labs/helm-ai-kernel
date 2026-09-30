@@ -119,13 +119,15 @@ type token struct {
 }
 
 type step struct {
-	Note    string          `json:"note"`
-	Label   string          `json:"label"`
-	RPC     string          `json:"rpc"`
-	Token   string          `json:"token"`
-	Request json.RawMessage `json:"request"`
-	Expect  *expect         `json:"expect"`
-	Control *control        `json:"control"`
+	Note  string `json:"note"`
+	Label string `json:"label"`
+	RPC   string `json:"rpc"`
+	Token string `json:"token"`
+	// StepUpToken names the token an Approve presents as its step-up proof.
+	StepUpToken string          `json:"step_up_token"`
+	Request     json.RawMessage `json:"request"`
+	Expect      *expect         `json:"expect"`
+	Control     *control        `json:"control"`
 }
 
 type control struct {
@@ -197,7 +199,7 @@ func loadScenario(path string) (scenario, error) {
 	return sc, nil
 }
 
-var placeholder = regexp.MustCompile(`\{\{(attempt_id|approval_digest):([a-z0-9-]+)\}\}`)
+var placeholder = regexp.MustCompile(`\{\{(attempt_id|approval_digest|approval_digest_hex):([a-z0-9-]+)\}\}`)
 
 // otherEscape is any JSON string escape but \", \\ and \n. The table uses
 // only those three, so a fake's JSON.stringify of arguments_json and Go's
@@ -310,6 +312,16 @@ func checkScenario(root string, sc scenario) []string {
 				bad("%s names token %q, which tokens does not define", where, st.Token)
 			}
 			resolves(where+" token "+st.Token, tk.AuthorizationDetails)
+		}
+		if st.StepUpToken != "" {
+			if st.RPC != "Approve" {
+				bad("%s presents a step-up token on %s; only Approve carries a proof", where, st.RPC)
+			}
+			tk, ok := sc.Tokens[st.StepUpToken]
+			if !ok {
+				bad("%s names step-up token %q, which tokens does not define", where, st.StepUpToken)
+			}
+			resolves(where+" step-up token "+st.StepUpToken, tk.AuthorizationDetails)
 		}
 		resolves(where, st.Request)
 		if otherEscape.Match(st.Request) {

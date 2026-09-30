@@ -13,6 +13,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
 // Attempt is the stored effect attempt.
@@ -42,9 +43,11 @@ type Attempt struct {
 	Permit               *Permit
 	Exposures            []Exposure
 	LatestObservation    *Observation
-	Version              int64
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	// ModelCall is the money side of a claimed model.inference attempt.
+	ModelCall *ModelCall
+	Version   int64
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Approval is the recorded decision on an escalated attempt.
@@ -261,6 +264,11 @@ func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 			return Attempt{}, err
 		}
 		a.LatestObservation = &o
+	}
+	if a.EffectType == effectargs.ModelInference {
+		if a.ModelCall, err = loadModelCall(ctx, tx, caller.TenantID, attemptID); err != nil {
+			return Attempt{}, err
+		}
 	}
 	return a, nil
 }

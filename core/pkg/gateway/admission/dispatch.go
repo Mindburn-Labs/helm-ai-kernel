@@ -135,14 +135,18 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 
 	// Re-lock the authority rows in the global order, then read the stops
 	// (ADR-0001 §1: a stop committed after admission is seen here).
-	leaf, err := uuid.Parse(a.mandateID)
-	if err != nil {
-		return nil, errors.New("an admitted attempt has no mandate")
-	}
 	requester := Caller{TenantID: a.tenantID, WorkspaceID: a.workspaceID, PrincipalID: a.requester, ActorID: a.requesterActor}
-	chain, err := mandates.ChainInTx(ctx, tx, a.tenantID, leaf, false)
-	if err != nil {
-		return nil, err
+	// An authority plan has no mandate; every other admitted attempt has one.
+	var leaf uuid.UUID
+	var chain []mandates.Mandate
+	if !effectargs.IsAuthorityPlan(a.effectType) {
+		var err error
+		if leaf, err = uuid.Parse(a.mandateID); err != nil {
+			return nil, errors.New("an admitted attempt has no mandate")
+		}
+		if chain, err = mandates.ChainInTx(ctx, tx, a.tenantID, leaf, false); err != nil {
+			return nil, err
+		}
 	}
 	auth, err := lockAuthority(ctx, tx, requester, a.effectType, leaf, chain)
 	if err != nil {
@@ -197,6 +201,9 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 		return nil, err
 	}
 	fence := s.cfg.DispatchTimeout + s.cfg.DispatchGrace
+	if a.fence > 0 {
+		fence = a.fence
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts
 		SET state = 'DISPATCHING', dispatch_deadline = now() + $3 * interval '1 millisecond', version = version + 1, updated_at = now()
 		WHERE tenant_id = $1 AND attempt_id = $2 AND state = 'ADMITTED'`, a.tenantID, a.id, fence.Milliseconds())

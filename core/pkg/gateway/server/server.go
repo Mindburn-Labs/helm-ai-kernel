@@ -17,9 +17,11 @@ import (
 	"connectrpc.com/connect"
 	errorsv1 "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/gen/helm/errors/v1"
 	gatewayv1 "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/gen/helm/gateway/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
 // Server implements EffectGatewayServiceHandler.
@@ -35,10 +37,21 @@ type Server struct {
 // A request message is capped at MaxMessageBytes after decompression, and the
 // request body at MaxBodyBytes on the wire, both before the message reaches a
 // handler, so an unauthenticated caller cannot make the gateway buffer or
-// inflate more than that.
+// inflate more than that. Propose alone has the larger caps of
+// MaxProposeMessageBytes and MaxProposeBodyBytes, because it alone carries an
+// authority plan.
 func (s *Server) Handler() (string, http.Handler) {
 	path, handler := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxMessageBytes))
-	return path, http.MaxBytesHandler(withTLSState(handler), MaxBodyBytes)
+	_, propose := gatewayv1.NewEffectGatewayServiceHandler(s, connect.WithReadMaxBytes(MaxProposeMessageBytes))
+	handler = http.MaxBytesHandler(withTLSState(handler), MaxBodyBytes)
+	propose = http.MaxBytesHandler(withTLSState(propose), MaxProposeBodyBytes)
+	return path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == gatewayv1.EffectGatewayServiceProposeProcedure {
+			propose.ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // MaxMessageBytes caps one decoded request message: twice the 64 KiB argument
@@ -48,6 +61,15 @@ const MaxMessageBytes = 128 << 10
 // MaxBodyBytes caps a request body as sent, envelope and compression
 // included.
 const MaxBodyBytes = MaxMessageBytes + 4<<10
+
+// MaxProposeMessageBytes caps a decoded ProposeRequest. The largest argument
+// is an authority plan (effectargs.MaxPlanBytes; every other effect is held to
+// 64 KiB), which a JSON client sends base64-encoded; 64 KiB beside it cover the
+// rest of the request.
+const MaxProposeMessageBytes = (effectargs.MaxPlanBytes+2)/3*4 + 64<<10
+
+// MaxProposeBodyBytes caps a Propose body as sent.
+const MaxProposeBodyBytes = MaxProposeMessageBytes + 4<<10
 
 // Propose admits one effect (token scope helm.gateway.propose).
 func (s *Server) Propose(ctx context.Context, req *connect.Request[gatewayv1.ProposeRequest]) (*connect.Response[gatewayv1.ProposeResponse], error) {
@@ -67,7 +89,8 @@ func (s *Server) Propose(ctx context.Context, req *connect.Request[gatewayv1.Pro
 }
 
 // Approve approves an ESCALATED attempt and re-runs admission (token scope
-// helm.gateway.decide, single-use, bound to the attempt and "approve").
+// helm.gateway.decide, single-use, bound to the attempt and "approve"). An
+// effect that needs step-up is approved only with a valid step_up_proof.
 func (s *Server) Approve(ctx context.Context, req *connect.Request[gatewayv1.ApproveRequest]) (*connect.Response[gatewayv1.ApproveResponse], error) {
 	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeDecide)
 	if err != nil {
@@ -78,6 +101,7 @@ func (s *Server) Approve(ctx context.Context, req *connect.Request[gatewayv1.App
 	}
 	attempt, existing, err := s.Admission.Approve(ctx, id.Caller, id.token(), admission.DecideInput{
 		AttemptID: req.Msg.GetAttemptId(), ApprovalDigest: req.Msg.GetApprovalDigest(), Reason: req.Msg.GetReason(),
+		StepUp: s.Auth.stepUp(ctx, id, req.Msg.GetAttemptId(), req.Msg.GetApprovalDigest(), req.Msg.GetStepUpProof()),
 	})
 	if err != nil {
 		return nil, toRPCError(ctx, "Approve", err)
@@ -240,6 +264,73 @@ func (s *Server) GetAttemptContent(ctx context.Context, req *connect.Request[gat
 		return nil, toRPCError(ctx, "GetAttemptContent", err)
 	}
 	return connect.NewResponse(&gatewayv1.GetAttemptContentResponse{AttemptId: req.Msg.GetAttemptId(), Arguments: content}), nil
+}
+
+// ListAttempts lists the attempts of the token's tenant and workspace that
+// match the request's filters, oldest change first (token scope
+// helm.gateway.read).
+func (s *Server) ListAttempts(ctx context.Context, req *connect.Request[gatewayv1.ListAttemptsRequest]) (*connect.Response[gatewayv1.ListAttemptsResponse], error) {
+	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeRead)
+	if err != nil {
+		return nil, err
+	}
+	in, err := listInput(req.Msg)
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.Admission.List(ctx, id.Caller, in)
+	if err != nil {
+		return nil, toRPCError(ctx, "ListAttempts", err)
+	}
+	out := &gatewayv1.ListAttemptsResponse{NextPageToken: page.NextPageToken, SettledBefore: timestamppb.New(page.SettledBefore)}
+	for _, attempt := range page.Attempts {
+		out.Attempts = append(out.Attempts, attemptProto(attempt))
+	}
+	return connect.NewResponse(out), nil
+}
+
+// listInput carries a ListAttemptsRequest into admission. What the wire types
+// can say and admission cannot see is refused here: a state that is not one of
+// the enum's, and a work reference set to "".
+func listInput(msg *gatewayv1.ListAttemptsRequest) (admission.ListInput, error) {
+	bad := func(what string) error {
+		return rpcError(connect.CodeInvalidArgument, contracts.ReasonSchemaViolation, false, errors.New(what))
+	}
+	in := admission.ListInput{
+		RequesterPrincipalID: msg.GetRequesterPrincipalId(),
+		EffectType:           msg.GetEffectType(),
+		PageSize:             int(msg.GetPageSize()),
+		PageToken:            msg.GetPageToken(),
+	}
+	for _, state := range msg.GetStates() {
+		name, ok := stateName(state)
+		if !ok {
+			return in, bad("states holds an unknown or unspecified state")
+		}
+		in.States = append(in.States, name)
+	}
+	// A oneof member set to "" is still a choice: it is a malformed
+	// reference, not a listing of every attempt.
+	switch ref := msg.GetWorkRef().(type) {
+	case *gatewayv1.ListAttemptsRequest_CommitmentId:
+		if ref.CommitmentId == "" {
+			return in, bad("commitment_id is empty")
+		}
+		in.CommitmentID = ref.CommitmentId
+	case *gatewayv1.ListAttemptsRequest_CaseId:
+		if ref.CaseId == "" {
+			return in, bad("case_id is empty")
+		}
+		in.CaseID = ref.CaseId
+	}
+	if ts := msg.GetUpdatedAfter(); ts != nil {
+		if err := ts.CheckValid(); err != nil {
+			return in, bad("updated_after is not a valid timestamp")
+		}
+		t := ts.AsTime().UTC()
+		in.UpdatedAfter = &t
+	}
+	return in, nil
 }
 
 func proposeInput(msg *gatewayv1.ProposeRequest) (admission.ProposeInput, error) {

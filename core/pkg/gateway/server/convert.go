@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	gatewayv1 "github.com/Mindburn-Labs/helm-ai-kernel/sdk/go/gen/helm/gateway/v1"
@@ -81,6 +82,12 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 	if o := a.LatestObservation; o != nil {
 		out.LatestObservation = observationProto(o)
 	}
+	if m := a.ModelCall; m != nil {
+		out.ModelCall = &gatewayv1.ModelCallSettlement{
+			Route: m.Route, State: settlementProto(m.State), CurrencyCode: m.CurrencyCode, HeldMicros: m.HeldMicros,
+			EstimatedMicros: m.EstimatedMicros, ConfirmedMicros: m.ConfirmedMicros, BillableMicros: m.BillableMicros,
+		}
+	}
 	return out
 }
 
@@ -137,6 +144,16 @@ func stateProto(state string) gatewayv1.EffectAttemptState {
 	return gatewayv1.EffectAttemptState(gatewayv1.EffectAttemptState_value["EFFECT_ATTEMPT_STATE_"+state])
 }
 
+// stateName is the name an attempt state is stored under, the inverse of
+// stateProto. UNSPECIFIED and a number outside the enum have none.
+func stateName(state gatewayv1.EffectAttemptState) (string, bool) {
+	name, known := gatewayv1.EffectAttemptState_name[int32(state)]
+	if !known || state == gatewayv1.EffectAttemptState_EFFECT_ATTEMPT_STATE_UNSPECIFIED {
+		return "", false
+	}
+	return strings.TrimPrefix(name, "EFFECT_ATTEMPT_STATE_"), true
+}
+
 func riskProto(risk string) gatewayv1.RiskClass {
 	return map[string]gatewayv1.RiskClass{
 		"low": gatewayv1.RiskClass_RISK_CLASS_LOW, "medium": gatewayv1.RiskClass_RISK_CLASS_MEDIUM,
@@ -150,6 +167,10 @@ func outcomeProto(outcome string) gatewayv1.EffectOutcome {
 
 func basisProto(basis string) gatewayv1.OutcomeBasis {
 	return gatewayv1.OutcomeBasis(gatewayv1.OutcomeBasis_value["OUTCOME_BASIS_"+basis])
+}
+
+func settlementProto(state string) gatewayv1.SettlementState {
+	return gatewayv1.SettlementState(gatewayv1.SettlementState_value["SETTLEMENT_STATE_"+state])
 }
 
 func rowKindProto(kind string) gatewayv1.AuthorityRowKind {

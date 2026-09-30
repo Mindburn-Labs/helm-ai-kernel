@@ -101,7 +101,8 @@ spec:
             - name: HELM_GATEWAY_BOOTSTRAP_SETTINGS
               value: {{ printf "%s\n%s" $settings $verifierSetting | quote }}
             - name: HELM_GATEWAY_BOOTSTRAP_SQL
-              value: {{ .Files.Get "files/gateway-db/001_roles.sql" | quote }}
+              # Kubelet expands env.value: double literal $ so SQL reaches psql unchanged.
+              value: {{ .Files.Get "files/gateway-db/001_roles.sql" | replace "$" "$$" | quote }}
           {{- if $managePassword }}
           volumeMounts:
             - name: bootstrap-work
@@ -156,7 +157,7 @@ spec:
             - name: HELM_GATEWAY_BOOTSTRAP_SETTINGS
               value: {{ $settings | quote }}
             - name: HELM_GATEWAY_BOOTSTRAP_SQL
-              value: {{ .Files.Get "files/gateway-db/002_grants.sql" | quote }}
+              value: {{ .Files.Get "files/gateway-db/002_grants.sql" | replace "$" "$$" | quote }}
           resources:
             {{- toYaml $g.resources | nindent 12 }}
         {{- else }}

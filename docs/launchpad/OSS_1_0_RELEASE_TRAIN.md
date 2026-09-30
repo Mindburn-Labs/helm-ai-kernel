@@ -71,8 +71,8 @@ published drift evidence for that exact version.
 1. Create a fresh worktree from `origin/main`; record branch, upstream, dirty
    state, `VERSION`, latest release tag, current head SHA, and open PR
    dependencies.
-2. Run scoped `/helm-audit`; use codebase-memory or CodeGraph for structural
-   code discovery.
+2. Run scoped `/helm-audit`; use CodeGraph (or `rg`) for structural code
+   discovery.
 3. Collect the current Governance merge evidence for prerequisite PRs,
    preserving attribution; do not treat advisory review or the R&D interlock as
    merge authority.

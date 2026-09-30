@@ -3,7 +3,7 @@ package authorityrows
 // HELM-750 s2a against real Postgres (listed in scripts/ci/postgres-proofs.txt):
 // narrowing-only delegation over random chains, stop expiry and approved lift,
 // a version bump on every narrowing, and tenant isolation under a restricted
-// role. Each test migrates a fresh schema with SchemaDDL, the statements
+// role. Each test migrates a fresh schema with mandates.SchemaDDL, the statements
 // both migrate commands run.
 
 import (
@@ -21,6 +21,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 )
 
 const tenantA = "tenant-a"
@@ -56,7 +58,7 @@ func postgresStore(t *testing.T) (*Store, *sql.DB, string, string) {
 	t.Cleanup(func() { _ = db.Close() })
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	if _, err := db.ExecContext(ctx, SchemaDDL()); err != nil {
+	if _, err := db.ExecContext(ctx, mandates.SchemaDDL()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	store, err := New(db)

@@ -473,6 +473,42 @@ removal_proofs:
     replace: "\treturn false && risk == string(mandates.RiskHigh) || risk == string(mandates.RiskIrreversible) ||\n"
     tests:
       - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+  - control: CTL-053
+    file: core/pkg/gateway/server/auth.go
+    find: "\tid, err := a.verify(ctx, proof, ScopeStepUp)\n"
+    replace: "\tid, err := a.verify(ctx, proof, ScopeStepUp, ScopeDecide)\n"
+    tests:
+      - "core/pkg/gateway/server.TestStepUpProofIsBoundToTheApproval"
+  - control: CTL-053
+    file: core/pkg/gateway/server/auth.go
+    find: "\tif id.PrincipalID != decide.PrincipalID || id.TenantID != decide.TenantID {\n"
+    replace: "\tif false && (id.PrincipalID != decide.PrincipalID || id.TenantID != decide.TenantID) {\n"
+    tests:
+      - "core/pkg/gateway/server.TestStepUpProofIsBoundToTheApproval"
+  - control: CTL-053
+    file: core/pkg/gateway/server/auth.go
+    find: "\t\t\"attempt_id\": attemptID, \"approval_digest\": hex.EncodeToString(approvalDigest), \"method\": stepUpMethod,\n"
+    replace: "\t\t\"attempt_id\": attemptID, \"method\": stepUpMethod, \"type\": hex.EncodeToString(approvalDigest)[:0] + \"helm_step_up\",\n"
+    tests:
+      - "core/pkg/gateway/server.TestStepUpProofIsBoundToTheApproval"
+  - control: CTL-053
+    file: core/pkg/gateway/admission/decisions.go
+    find: "\treturn p != nil && p.Token.Scope == scopeStepUp && p.Method == stepUpMethodWebAuthn &&\n\t\tp.Raw != \"\" && len(p.Raw) <= MaxStepUpProofBytes\n"
+    replace: "\treturn p != nil\n"
+    tests:
+      - "core/pkg/gateway/admission.TestStepUpProofIsUsableOnlyAsTheContractSays"
+  - control: CTL-053
+    file: core/pkg/gateway/server/auth.go
+    find: "\tif !stepUpUserVerified(raw) {\n"
+    replace: "\tif false && !stepUpUserVerified(raw) {\n"
+    tests:
+      - "core/pkg/gateway/server.TestStepUpProofIsBoundToTheApproval"
+  - control: CTL-053
+    file: core/pkg/gateway/server/auth.go
+    find: "\tif !stepUpFresh(id) {\n"
+    replace: "\tif false && !stepUpFresh(id) {\n"
+    tests:
+      - "core/pkg/gateway/server.TestStepUpProofIsBoundToTheApproval"
 
   - control: CTL-054
     file: core/pkg/gateway/admission/dispatch.go
@@ -3059,10 +3095,20 @@ controls:
       authorization_details to that attempt and action and used once: its
       jti is recorded in Postgres in the decision's transaction. The
       approval digest must equal the attempt's, the escalation must not have
-      expired, and high, irreversible or authority-widening effects fail
-      closed until step-up exists (STEP_UP_REQUIRED), judged on the risk
-      re-admission computes. A token past exp plus the skew by the database
-      clock is refused, so a purge never makes one replayable. Approve re-runs
+      expired, and an approval of a high, irreversible or authority-widening
+      effect, judged on the risk re-admission computes, needs a step-up proof:
+      a compact helm.gateway.stepup token of the decide token's approver and
+      tenant, verified like any gateway token, fresh (an iat, and an exp at
+      most 300 seconds after it) and bound by authorization_details
+      (helm_step_up) to the attempt, the approval digest and the method
+      webauthn, stating user_verified true. Its jti is used once, recorded in
+      Postgres in the approval's transaction after the decide token's, and the
+      approval record keeps the proof exactly as received with its issuer, jti
+      and method. Without a valid, unused proof the approval fails closed
+      (STEP_UP_REQUIRED), the attempt stays ESCALATED and neither token is used
+      up; a proof for an effect that needs none is ignored. A token past exp
+      plus the skew by the database clock is refused, so a purge never makes
+      one replayable. Approve re-runs
       admission in the same transaction, re-reading stops, the mandate chain
       and counters, so the attempt becomes ADMITTED or DENIED; a refused
       precondition leaves it ESCALATED. Cancel follows ESCALATED or ADMITTED
@@ -3078,11 +3124,12 @@ controls:
       - "core/pkg/gateway/server.Server.Approve"
       - "core/pkg/gateway/server.Server.Cancel"
     config:
-      - "The HELM_CP_IDENTITY_* token configuration of CTL-052; decide and stop tokens are minted per decision by the Control Plane and carry iss, jti and exp."
+      - "The HELM_CP_IDENTITY_* token configuration of CTL-052; decide and stop tokens are minted per decision by the Control Plane and carry iss, jti and exp. A step-up proof is one more such token (one audience, the issuer's keys, the configured actor, the certificate binding when required) and needs no configuration of its own."
     protected_operations:
       - "Approve, Reject and Cancel of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
-      - "Step-up does not exist yet, so a high, irreversible or helm.authority.* effect cannot be approved at all; a medium effect a mandate escalates (approval_required) is approved without it."
+      - "A step-up proof is the issuer's attestation that it verified the approver's WebAuthn assertion over the approval digest, not the gateway's own check: the gateway holds no credential registry, so a compromised Control Plane issuer can mint a proof as it can mint a decide token (the trust limits of CTL-052 apply)."
+      - "A medium effect a mandate escalates (approval_required) is approved without step-up, and a proof presented for it is ignored: it cannot refuse the approval, and it is not used up or recorded."
       - "An escalation past its expiry is refused; the River job of CTL-056 moves it to EXPIRED."
       - "A decide token binds the attempt and action; the approver sees and hashes the arguments through GetAttemptContent, which this slice serves but cannot force a client to use."
       - "Releasing an ADMITTED attempt keeps its distinct-value rows, so the value still counts as seen in its bucket."
@@ -3092,6 +3139,9 @@ controls:
         - "core/pkg/gateway/admission.TestPostgresApproveByADistinctHumanAdmits"
         - "core/pkg/gateway/server.TestPostgresGatewayDecisionsOnTheWire"
         - "core/pkg/gateway/admission.TestPostgresCancelReleasesAndFollowsTheAllowedEdges"
+        - "core/pkg/gateway/admission.TestPostgresStepUpProofAdmitsHighIrreversibleAndAuthorityChange"
+        - "core/pkg/gateway/server.TestPostgresStepUpProofOnTheWire"
+        - "core/pkg/gateway/admission.TestPostgresStepUpProofIsIgnoredWhenNoneIsNeeded"
       forbidden:
         - "core/pkg/gateway/admission.TestPostgresApprovalPreconditionsLeaveTheAttemptEscalated"
         - "core/pkg/gateway/admission.TestPostgresDecideAndStopTokensAreSingleUse"
@@ -3101,12 +3151,21 @@ controls:
         - "core/pkg/gateway/admission.TestPostgresStepUpFollowsARiskRaisedAfterEscalation"
         - "core/pkg/gateway/admission.TestPostgresSingleUseSurvivesClockSkew"
         - "core/pkg/gateway/server.TestDecisionBinding"
+        - "core/pkg/gateway/admission.TestPostgresStepUpProofRefusalsSpendNothing"
+        - "core/pkg/gateway/server.TestPostgresStepUpProofRefusalsOnTheWireSpendNothing"
+        - "core/pkg/gateway/server.TestStepUpProofIsBoundToTheApproval"
+        - "core/pkg/gateway/admission.TestPostgresApprovalRecordKeepsTheWholeProofOrNone"
       removal:
         - "core/pkg/gateway/server.TestDecisionBinding"
         - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
         - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+        - "core/pkg/gateway/server.TestStepUpProofIsBoundToTheApproval"
+        - "core/pkg/gateway/admission.TestStepUpProofIsUsableOnlyAsTheContractSays"
       bypass:
         - "core/pkg/gateway/admission.TestStepUpCoversHighIrreversibleAndAuthorityChanges"
+        - "core/pkg/gateway/admission.TestPostgresStepUpProofIsSingleUse"
+        - "core/pkg/gateway/admission.TestPostgresStepUpProofFollowsARiskChangedAfterEscalation"
+        - "core/pkg/gateway/server.TestPostgresStepUpProofRefusalsOnTheWireSpendNothing"
   - id: CTL-054
     title: "Gateway dispatch claim and observation"
     owner: Mindburn Labs core team (kernel)

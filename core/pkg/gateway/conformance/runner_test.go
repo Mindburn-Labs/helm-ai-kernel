@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -84,6 +85,8 @@ func TestPostgresConformanceRunnerRejectsAFlippedExpectation(t *testing.T) {
 		{"GW-011-double-dispatch-calls-the-adapter-once.json", `"dispatch": 1,`, `"dispatch": 2,`, "step 2 (Dispatch)"},
 		{"GW-014-contradicting-readback-consumes-the-reservation.json", `"exposure": "CONFIRMED"`, `"exposure": "RELEASED"`, "step 2 (Dispatch)"},
 		{"GW-016-idempotent-propose.json", `"existing": true`, `"existing": false`, "step 2 (Propose)"},
+		{"GW-024-step-up-proof-admits-and-is-single-use.json", `"reason_code": "STEP_UP_REQUIRED"`, `"reason_code": "INSUFFICIENT_PRIVILEGE"`, "step 3 (Approve)"},
+		{"GW-024-step-up-proof-admits-and-is-single-use.json", `"state": "ADMITTED"`, `"state": "ESCALATED"`, "step 13 (Approve)"},
 	} {
 		t.Run(flip.file, func(t *testing.T) {
 			source := filepath.Join(tableDir(t), "scenarios", flip.file)
@@ -312,8 +315,9 @@ func (r *run) token(name string) (string, error) {
 	return signed, nil
 }
 
-// substitute resolves {{attempt_id:L}} and {{approval_digest:L}} (base64)
-// from the attempts earlier steps labelled.
+// substitute resolves {{attempt_id:L}}, {{approval_digest:L}} (base64) and
+// {{approval_digest_hex:L}} (lower-case hex, the form a helm_step_up entry
+// carries) from the attempts earlier steps labelled.
 func (r *run) substitute(raw []byte) ([]byte, error) {
 	var missing error
 	out := placeholder.ReplaceAllFunc(raw, func(m []byte) []byte {
@@ -323,10 +327,14 @@ func (r *run) substitute(raw []byte) ([]byte, error) {
 			missing = fmt.Errorf("label %q is not defined yet", parts[2])
 			return m
 		}
-		if string(parts[1]) == "attempt_id" {
+		digest := a.GetPendingApproval().GetApprovalDigest()
+		switch string(parts[1]) {
+		case "attempt_id":
 			return []byte(a.GetAttemptId())
+		case "approval_digest_hex":
+			return []byte(hex.EncodeToString(digest))
 		}
-		return []byte(base64.StdEncoding.EncodeToString(a.GetPendingApproval().GetApprovalDigest()))
+		return []byte(base64.StdEncoding.EncodeToString(digest))
 	})
 	return out, missing
 }
@@ -412,6 +420,13 @@ func (r *run) call(st step, header http.Header) (*gatewayv1.EffectAttempt, *bool
 		msg := &gatewayv1.ApproveRequest{}
 		if err := r.request(st, msg); err != nil {
 			return nil, nil, fmt.Errorf("request: %w", err)
+		}
+		if st.StepUpToken != "" {
+			proof, err := r.token(st.StepUpToken)
+			if err != nil {
+				return nil, nil, fmt.Errorf("step-up token: %w", err)
+			}
+			msg.StepUpProof = proof
 		}
 		resp, err := r.client.Approve(ctx, withHeader(msg, header))
 		if err != nil {

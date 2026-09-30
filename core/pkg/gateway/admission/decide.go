@@ -93,6 +93,14 @@ func liftedStop(effectType, target string) string {
 type ApprovalState struct {
 	ApproverID string
 	Approved   bool
+	// StepUpVerified: the approval used up a verified step-up proof in this
+	// transaction (§10.1). Re-admission accepts an approval of an effect that
+	// needs step-up only with it.
+	StepUpVerified bool
+
+	// proof is the proof Approve was given. Re-admission uses it up when the
+	// risk it recomputes needs step-up and the stored one did not.
+	proof *StepUp
 }
 
 // Decision is decide's output. Reason is a registry code (§11.1).

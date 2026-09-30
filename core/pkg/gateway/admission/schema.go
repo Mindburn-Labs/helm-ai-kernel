@@ -51,6 +51,9 @@ var migrations = []migration{
 	{4, "idempotent stops", func() (string, error) {
 		return withRowSecurity("", "schema/004_stops.sql", nil)
 	}},
+	{7, "step-up proof on approvals", func() (string, error) {
+		return withRowSecurity("", "schema/007_step_up.sql", nil)
+	}},
 }
 
 // HeadVersion is the schema version this binary serves.

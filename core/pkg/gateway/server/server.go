@@ -67,7 +67,8 @@ func (s *Server) Propose(ctx context.Context, req *connect.Request[gatewayv1.Pro
 }
 
 // Approve approves an ESCALATED attempt and re-runs admission (token scope
-// helm.gateway.decide, single-use, bound to the attempt and "approve").
+// helm.gateway.decide, single-use, bound to the attempt and "approve"). An
+// effect that needs step-up is approved only with a valid step_up_proof.
 func (s *Server) Approve(ctx context.Context, req *connect.Request[gatewayv1.ApproveRequest]) (*connect.Response[gatewayv1.ApproveResponse], error) {
 	id, err := s.Auth.Authenticate(ctx, req.Header(), ScopeDecide)
 	if err != nil {
@@ -78,6 +79,7 @@ func (s *Server) Approve(ctx context.Context, req *connect.Request[gatewayv1.App
 	}
 	attempt, existing, err := s.Admission.Approve(ctx, id.Caller, id.token(), admission.DecideInput{
 		AttemptID: req.Msg.GetAttemptId(), ApprovalDigest: req.Msg.GetApprovalDigest(), Reason: req.Msg.GetReason(),
+		StepUp: s.Auth.stepUp(ctx, id, req.Msg.GetAttemptId(), req.Msg.GetApprovalDigest(), req.Msg.GetStepUpProof()),
 	})
 	if err != nil {
 		return nil, toRPCError(ctx, "Approve", err)

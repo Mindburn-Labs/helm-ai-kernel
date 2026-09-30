@@ -331,9 +331,14 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	}
 
 	// An approval of an effect whose risk is now high, irreversible or an
-	// authority change needs step-up, whatever the risk was at escalation.
-	if approval != nil && approval.Approved && needsStepUp(string(auth.riskClass), in.EffectType) {
-		return errStepUp
+	// authority change needs step-up, whatever the risk was at escalation:
+	// one whose proof decide already used up passes, and otherwise it uses up
+	// the proof the approval carries or is refused (STEP_UP_REQUIRED).
+	if approval != nil && approval.Approved && !approval.StepUpVerified && needsStepUp(string(auth.riskClass), in.EffectType) {
+		if err := spendStepUp(ctx, tx, caller.TenantID, approval.proof); err != nil {
+			return err
+		}
+		approval.StepUpVerified = true
 	}
 
 	// 4. Stops, read in a statement after the locks were granted.

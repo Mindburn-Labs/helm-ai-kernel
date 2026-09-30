@@ -186,10 +186,13 @@
       "additionalProperties": false,
       "required": ["type"],
       "properties": {
-        "type": {"enum": ["helm_effect_decision", "helm_stop_lift", "helm_effect_cancel"]},
+        "type": {"enum": ["helm_effect_decision", "helm_stop_lift", "helm_effect_cancel", "helm_step_up"]},
         "attempt_id": {"type": "string"},
         "action": {"enum": ["approve", "reject"]},
-        "stop_id": {"type": "string"}
+        "stop_id": {"type": "string"},
+        "approval_digest": {"description": "helm_step_up: the approval digest shown, in lower-case hex ({{approval_digest_hex:<label>}}).", "type": "string"},
+        "method": {"description": "helm_step_up: the method the issuer attests; the contract has webauthn.", "type": "string"},
+        "user_verified": {"description": "helm_step_up: the issuer saw the authenticator's user-verification flag set. The gateway needs exactly true; leaving it out is a case of the table.", "type": "boolean"}
       }
     },
     "token": {
@@ -198,7 +201,7 @@
       "additionalProperties": false,
       "required": ["scope", "sub", "tenant", "workspace", "jti"],
       "properties": {
-        "scope": {"enum": ["helm.gateway.propose", "helm.gateway.decide", "helm.gateway.read", "helm.gateway.stop", "helm.gateway.execute"]},
+        "scope": {"enum": ["helm.gateway.propose", "helm.gateway.decide", "helm.gateway.read", "helm.gateway.stop", "helm.gateway.execute", "helm.gateway.stepup"]},
         "sub": {"$ref": "#/$defs/principalId"},
         "act_sub": {"description": "RFC 8693 act.sub: the workload carrying the call. Absent: the principal calls directly.", "$ref": "#/$defs/principalId"},
         "tenant": {"type": "string", "pattern": "^tenant-[a-z0-9-]+$"},
@@ -215,6 +218,7 @@
         "label": {"description": "Names the attempt this step's response returns, for {{attempt_id:<label>}} and {{approval_digest:<label>}}.", "$ref": "#/$defs/label"},
         "rpc": {"enum": ["Propose", "Approve", "Reject", "Cancel", "Dispatch", "Observe", "GetAttempt", "GetAttemptContent"]},
         "token": {"description": "A name from tokens. Absent: the call carries no Authorization header.", "type": "string"},
+        "step_up_token": {"description": "Approve only: a name from tokens, presented as ApproveRequest.step_up_proof (a token of scope helm.gateway.stepup) where token is the bearer. Absent: the request carries no proof.", "type": "string"},
         "request": {
           "description": "The request message in proto3 JSON (snake_case names), after placeholder substitution. ProposeRequest.effect takes arguments_json, a JSON object whose compact serialization in document order is the argument bytes, in place of base64 arguments.",
           "type": "object"
@@ -224,8 +228,10 @@
       },
       "oneOf": [
         {"required": ["rpc", "request", "expect"], "not": {"required": ["control"]}},
-        {"required": ["control"], "not": {"anyOf": [{"required": ["rpc"]}, {"required": ["request"]}, {"required": ["expect"]}, {"required": ["token"]}, {"required": ["label"]}]}}
-      ]
+        {"required": ["control"], "not": {"anyOf": [{"required": ["rpc"]}, {"required": ["request"]}, {"required": ["expect"]}, {"required": ["token"]}, {"required": ["label"]}, {"required": ["step_up_token"]}]}}
+      ],
+      "if": {"required": ["step_up_token"]},
+      "then": {"properties": {"rpc": {"const": "Approve"}}}
     },
     "control": {
       "description": "A step outside the RPC surface. stop: an operator's stop row takes effect (the runner writes the row directly; the table does not drive the Stop RPC yet). pass_dispatch_fence: the attempt's dispatch fence (dispatch_deadline) is now in the past. set_adapter: the adapter's behaviour changes from the next call on.",

@@ -454,6 +454,18 @@ removal_proofs:
     replace: "gatewayv1.NewEffectGatewayServiceHandler(s)"
     tests:
       - "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
+  - control: CTL-052
+    file: core/pkg/gateway/admission/list.go
+    find: "\tif !bytes.Equal(raw[pageTokenSize-sha256.Size:], filters) {\n"
+    replace: "\tif false && !bytes.Equal(raw[pageTokenSize-sha256.Size:], filters) {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestListAttemptsRefusesMalformedRequestsBeforeTheDatabase"
+  - control: CTL-052
+    file: core/pkg/gateway/admission/list.go
+    find: "\tcase in.PageSize < 0 || in.PageSize > maxListPageSize:\n"
+    replace: "\tcase in.PageSize < 0:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestListAttemptsRefusesMalformedRequestsBeforeTheDatabase"
 
   - control: CTL-053
     file: core/pkg/gateway/server/auth.go
@@ -2986,12 +2998,15 @@ controls:
       permit, DENY records DENIED, and high risk or an approval threshold
       records ESCALATED with approval digest v1. Tenant, workspace and
       principal come only from an ADR-0005 token with the RPC's one scope;
-      reads outside the token's tenant or workspace are not found; malformed
-      requests and closed-schema argument violations (field names matched
-      exactly and case-sensitively) create no attempt, and a request message
-      over 128 KiB, compressed or not, is refused before authentication, but
-      for Propose, which carries an authority plan and has a cap of 764588
-      bytes (HELM-751 s2, HELM-750 s2b).
+      reads outside the token's tenant or workspace are not found, and
+      ListAttempts lists only the token's tenant and workspace, from one
+      snapshot, with a page token that belongs to one set of filters and that
+      scope; malformed requests, including list filters, and closed-schema
+      argument violations (field names matched exactly and case-sensitively)
+      create no attempt and read nothing, and a request message over 128 KiB,
+      compressed or not, is refused before authentication, but for Propose,
+      which carries an authority plan and has a cap of 764588 bytes (HELM-751
+      s2, HELM-750 s2b).
     status: enforced
     entry_points:
       - "core/pkg/gateway/runtime.serve"
@@ -3001,19 +3016,21 @@ controls:
       - "core/pkg/gateway/effectargs.Validate"
       - "core/pkg/gateway/admission.Service.Get"
       - "core/pkg/gateway/admission.Service.GetContent"
+      - "core/pkg/gateway/admission.Service.List"
     config:
       - "HELM_GATEWAY_DATABASE_URL, the gateway's database; helm-gateway migrate applies the schema and /readyz requires it at head."
       - "HELM_CP_IDENTITY_JWKS_URL, HELM_CP_IDENTITY_ISSUER, HELM_CP_IDENTITY_AUDIENCE (helm-gateway:<env>), HELM_CP_IDENTITY_ACTOR, HELM_CP_IDENTITY_MAX_TTL, HELM_CP_IDENTITY_REQUIRE_CNF and HELM_CP_IDENTITY_OUTBOUND_CA_BUNDLE_FILE; serve refuses to start without the first four."
       - "HELM_TLS_CERT_FILE, HELM_TLS_KEY_FILE, HELM_TLS_CLIENT_AUTH and HELM_TLS_CLIENT_CA_FILE; serve refuses to start without TLS unless --dev-insecure-listen names a loopback IP."
       - "HELM_GATEWAY_PERMIT_TTL (default 10m) and HELM_GATEWAY_APPROVAL_WINDOW (default 24h)."
     protected_operations:
-      - "Propose, GetAttempt and GetAttemptContent of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
+      - "Propose, GetAttempt, GetAttemptContent and ListAttempts of helm.gateway.v1.EffectGatewayService on helm-gateway serve."
     bypass_assumptions:
       - "The dispatch-claim half of ADR-0001 (version re-check, stops after admission) is CTL-054; Approve, Reject and Cancel are CTL-053; Stop and Lift are CTL-055."
       - "Authority rows (tenants, principals, effect types, mandates, limits, stops) are written by core/pkg/kernel/authority/authorityrows, which no shipped binary calls yet (CTL-046); the gateway trusts the rows it finds."
       - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint a token for any tenant; row security by session variable does not protect against a compromised gateway process (ADR-0004 §5.2)."
       - "A mandate condition is compiled at activation and once per condition text per gateway process; a condition that fails there is denied (PRG_EVALUATION_ERROR)."
       - "helm-gateway has no container image or chart yet; it is enforced where it runs, and nothing deploys it."
+      - "ListAttempts is not a change feed: updated_at is the start time of the transaction that wrote the row, so a row written by a long transaction can commit behind an updated_at a client already holds. A client that syncs with updated_after re-reads a window before its cursor."
     tests:
       allowed:
         - "core/pkg/gateway/admission.TestPostgresProposeAdmitsDeniesAndEscalates"
@@ -3022,6 +3039,8 @@ controls:
         - "core/pkg/gateway/effectargs.TestValidateAcceptsTheSkeletonArguments"
         - "core/pkg/gateway/server.TestAuthenticateTakesIdentityOnlyFromAValidToken"
         - "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"
+        - "core/pkg/gateway/admission.TestPostgresListAttemptsFiltersOrderAndPaging"
+        - "core/pkg/gateway/server.TestPostgresListAttemptsOnTheWire"
       forbidden:
         - "core/pkg/gateway/admission.TestPostgresStopsDenyAdmission"
         - "core/pkg/gateway/admission.TestPostgresProposeIsIdempotent"
@@ -3039,6 +3058,13 @@ controls:
         - "core/pkg/gateway/runtime.TestDevInsecureListenRefusesAnythingButLoopback"
         - "core/pkg/gateway/runtime.TestServeRefusesToStartWithoutItsConfiguration"
         - "core/pkg/gateway/runtime.TestServeRequiresAClientCertificateWhenConfigured"
+        - "core/pkg/gateway/admission.TestPostgresListAttemptsAreTenantAndWorkspaceScoped"
+        - "core/pkg/gateway/admission.TestPostgresListAttemptsPageIsOneSnapshot"
+        - "core/pkg/gateway/admission.TestPostgresListAttemptsPageSizeDefaultsAndCaps"
+        - "core/pkg/gateway/admission.TestListAttemptsRefusesMalformedRequestsBeforeTheDatabase"
+        - "core/pkg/gateway/admission.TestListPageTokenIsBoundToItsFilters"
+        - "core/pkg/gateway/admission.TestListStatementBindsEveryValueAsAParameter"
+        - "core/pkg/gateway/server.TestListInputCarriesTheRequestAndRefusesWhatOnlyTheWireCanSay"
       removal:
         - "core/pkg/gateway/admission.TestDecideAllowsDeniesAndEscalatesInOrder"
         - "core/pkg/gateway/admission.TestApprovalDigestV1MatchesTheDesignNoteVector"
@@ -3046,6 +3072,7 @@ controls:
         - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
         - "core/pkg/gateway/effectargs.TestValidateRefusesKeysThatOnlyFoldToAFieldName"
         - "core/pkg/gateway/server.TestOversizeRequestsAreRefusedBeforeAuthentication"
+        - "core/pkg/gateway/admission.TestListAttemptsRefusesMalformedRequestsBeforeTheDatabase"
       bypass:
         - "core/pkg/gateway/server.TestAuthenticateBindsTheTokenToTheClientCertificateWhenRequired"
         - "core/pkg/gateway/admission.TestGatewayDoesNotImportTheLegacyRuntime"

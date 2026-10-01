@@ -27,7 +27,8 @@ and `Lift`, and the River jobs that expire escalations and reconcile
 - Binding references: rev 3.4 §4.1–§4.6, §8, §10.1, §11 and the §12.3
   contract list; ADR-0001 (admission), ADR-0003 (settlement) and ADR-0005
   (tenant from the token). All of them live under
-  `output/helm-rebuild-strategy-2026-09-23/` in the workspace.
+  `architecture/helm-rebuild-strategy-2026-09-23/` in the `Mindburn-Labs/docs`
+  repository.
 
 ## Operations
 

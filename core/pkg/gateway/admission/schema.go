@@ -63,9 +63,6 @@ var migrations = []migration{
 	{7, "model-call settlement and replay", func() (string, error) {
 		return withRowSecurity("", "schema/007_model_calls.sql", []string{"authority_model_calls", "authority_model_replays"})
 	}},
-	{6, "step-up proof on approvals", func() (string, error) {
-		return withRowSecurity("", "schema/006_step_up.sql", nil)
-	}},
 }
 
 // HeadVersion is the schema version this binary serves.

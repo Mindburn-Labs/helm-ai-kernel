@@ -274,7 +274,9 @@ type EffectGatewayServiceClient interface {
 	// prove failure. An uncertain reservation is not released to make the
 	// state terminal (§4.3).
 	Observe(context.Context, *connect.Request[ObserveRequest]) (*connect.Response[ObserveResponse], error)
-	// GetAttempt returns one attempt. It is rev 3.4 §4.2's "Get".
+	// GetAttempt returns one attempt. It is rev 3.4 §4.2's "Get". A token that
+	// carries an episode claim (a worker token) reads only the attempts of its
+	// own episode; any other attempt is not_found for it.
 	//
 	// Token scope: helm.gateway.read.
 	GetAttempt(context.Context, *connect.Request[GetAttemptRequest]) (*connect.Response[GetAttemptResponse], error)
@@ -299,11 +301,12 @@ type EffectGatewayServiceClient interface {
 	// Token scope: helm.gateway.read.
 	//
 	// Every filter narrows and none widens: an attempt of another tenant or
-	// workspace is never listed. A page holds at most page_size attempts; a
-	// response with a next_page_token has more, and the same request with that
-	// token continues where the page ended. An attempt that changes while the
-	// caller pages is listed again at its new position if it moves past the
-	// cursor.
+	// workspace is never listed, and a token that carries an episode claim (a
+	// worker token) lists only the attempts of its own episode. A page holds at
+	// most page_size attempts; a response with a next_page_token has more, and
+	// the same request with that token continues where the page ended. An
+	// attempt that changes while the caller pages is listed again at its new
+	// position if it moves past the cursor.
 	ListAttempts(context.Context, *connect.Request[ListAttemptsRequest]) (*connect.Response[ListAttemptsResponse], error)
 	// Stop writes a stop row and bumps the version of its scope's control row
 	// (ADR-0001 §1, narrowing transitions). Narrowing needs no approval
@@ -640,7 +643,9 @@ type EffectGatewayServiceHandler interface {
 	// prove failure. An uncertain reservation is not released to make the
 	// state terminal (§4.3).
 	Observe(context.Context, *connect.Request[ObserveRequest]) (*connect.Response[ObserveResponse], error)
-	// GetAttempt returns one attempt. It is rev 3.4 §4.2's "Get".
+	// GetAttempt returns one attempt. It is rev 3.4 §4.2's "Get". A token that
+	// carries an episode claim (a worker token) reads only the attempts of its
+	// own episode; any other attempt is not_found for it.
 	//
 	// Token scope: helm.gateway.read.
 	GetAttempt(context.Context, *connect.Request[GetAttemptRequest]) (*connect.Response[GetAttemptResponse], error)
@@ -665,11 +670,12 @@ type EffectGatewayServiceHandler interface {
 	// Token scope: helm.gateway.read.
 	//
 	// Every filter narrows and none widens: an attempt of another tenant or
-	// workspace is never listed. A page holds at most page_size attempts; a
-	// response with a next_page_token has more, and the same request with that
-	// token continues where the page ended. An attempt that changes while the
-	// caller pages is listed again at its new position if it moves past the
-	// cursor.
+	// workspace is never listed, and a token that carries an episode claim (a
+	// worker token) lists only the attempts of its own episode. A page holds at
+	// most page_size attempts; a response with a next_page_token has more, and
+	// the same request with that token continues where the page ended. An
+	// attempt that changes while the caller pages is listed again at its new
+	// position if it moves past the cursor.
 	ListAttempts(context.Context, *connect.Request[ListAttemptsRequest]) (*connect.Response[ListAttemptsResponse], error)
 	// Stop writes a stop row and bumps the version of its scope's control row
 	// (ADR-0001 §1, narrowing transitions). Narrowing needs no approval

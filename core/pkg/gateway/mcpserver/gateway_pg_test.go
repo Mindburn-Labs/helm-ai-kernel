@@ -2,8 +2,8 @@ package mcpserver
 
 // The MCP endpoint end to end on real PostgreSQL 16 (HELM-751 K3, N1). Every
 // request here is HTTP through the real handler and the real token check;
-// nothing calls the gateway's Go API in place of a worker except the Control
-// Plane's own reads.
+// direct ledger calls are limited to CP decisions/reads and an explicit
+// negative check of the worker dispatch backstop.
 //
 // quantum_posture: fake token claims; nothing here signs or verifies, and no
 // post-quantum claim is made.
@@ -11,6 +11,7 @@ package mcpserver
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"reflect"
 	"sort"
@@ -201,8 +202,8 @@ func TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval(t *
 		t.Fatalf("the escalation is not tied to the episode: %+v", a.Episode)
 	}
 
-	// A human decides; the worker's same call carries on from there, and sends
-	// it once.
+	// A human decides. A worker retry may read the approved attempt but must
+	// leave the single-use permit to the CP's authenticated resume path.
 	approver := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "human-b", ActorID: cpActor}
 	_, _, err := e.svc.Approve(ctx, approver, admission.Token{Issuer: "https://control-plane.test", ID: "jti-1", Scope: "helm.gateway.decide",
 		ExpiresAt: time.Now().Add(time.Minute)}, admission.DecideInput{AttemptID: id, ApprovalDigest: a.ApprovalDigest, Reason: "ok"})
@@ -211,12 +212,32 @@ func TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval(t *
 		t.Fatal("the approval dispatched by itself")
 	}
 	again, isError := e.callTool(t, tokenSeat1Ep1, "b-1", "github_branch_create_from_changes", branchCall(repoA, "helm/skeleton")).structured(t)
-	if isError || again["status"] != "succeeded" || again["attempt_id"] != id || again["result_kind"] != "github_branch" || e.adapter.dispatched.Load() != 1 {
+	if isError || again["status"] != "reconciling" || again["state"] != "ADMITTED" || again["attempt_id"] != id || e.adapter.dispatched.Load() != 0 {
 		t.Fatalf("the replay after the approval = %v, %d dispatched", again, e.adapter.dispatched.Load())
+	}
+	worker := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agt:seat-1", ActorID: cpActor,
+		Episode: &admission.Episode{EpisodeID: "ep-1", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-1"}}
+	_, _, err = e.svc.Dispatch(ctx, worker, id)
+	var refusal *admission.Error
+	if !errors.As(err, &refusal) || refusal.Code != admission.CodePermissionDenied || e.adapter.dispatched.Load() != 0 {
+		t.Fatalf("worker claimed an approved escalation: %v, %d dispatched", err, e.adapter.dispatched.Load())
+	}
+	if unused := e.count(tenantA, `SELECT count(*) FROM authority_permits WHERE consumed_at IS NULL AND voided_at IS NULL`); unused != 1 {
+		t.Fatalf("worker replay changed the CP resume permit: %d unused", unused)
+	}
+	cpAPI := &server.Server{Admission: e.svc, Auth: &server.Authenticator{Actor: cpActor,
+		Validator: testValidator{"cp-execute": claims(tenantA, cpActor, server.ScopeExecute, nil)}}}
+	dispatch := connect.NewRequest(&gatewayv1.DispatchRequest{AttemptId: id})
+	dispatch.Header().Set("Authorization", "Bearer cp-execute")
+	_, err = cpAPI.Dispatch(ctx, dispatch)
+	must(t, err)
+	again, isError = e.callTool(t, tokenSeat1Ep1, "b-1", "github_branch_create_from_changes", branchCall(repoA, "helm/skeleton")).structured(t)
+	if isError || again["status"] != "succeeded" || again["attempt_id"] != id || again["result_kind"] != "github_branch" || e.adapter.dispatched.Load() != 1 {
+		t.Fatalf("replay after CP resume = %v, %d dispatched", again, e.adapter.dispatched.Load())
 	}
 	var by string
 	must(t, e.owner.QueryRow(`SELECT claimed_by_principal_id FROM authority_permits WHERE tenant_id = $1 AND attempt_id = $2`, tenantA, id).Scan(&by))
-	if by != "agt:seat-1" {
+	if by != cpActor {
 		t.Fatalf("the permit was claimed by %q", by)
 	}
 	// And once more: nothing is sent twice.
@@ -404,7 +425,7 @@ func TestPostgresAnotherEpisodesAttemptIsNotFound(t *testing.T) {
 		t.Fatalf("episode 2's call-1 = %v, episode 1's attempt was %s", second, id)
 	}
 	a2 := e.attempt(tenantA, second["attempt_id"].(string))
-	if a2.IdempotencyKey != "mcp:ep-2:s:call-1" || a2.Episode == nil || a2.Episode.EpisodeID != "ep-2" || a2.CaseID != "work-ep-2" {
+	if a2.IdempotencyKey == e.attempt(tenantA, id).IdempotencyKey || a2.Episode == nil || a2.Episode.EpisodeID != "ep-2" || a2.CaseID != "work-ep-2" {
 		t.Fatalf("episode 2's attempt = %+v", a2)
 	}
 	if got, isError := e.callTool(t, tokenSeat1Ep1, "g", AttemptGetTool, map[string]any{"attempt_id": a2.ID}).structured(t); !isError || got["status"] != "not_found" {
@@ -455,15 +476,15 @@ func TestPostgresAReplayedCallIsTheSameAttempt(t *testing.T) {
 		t.Fatalf("%d sent, %d attempts", e.adapter.dispatched.Load(), e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts`))
 	}
 
-	// The same id for a different request is a conflict, never the first
-	// request's attempt.
+	// Clients may reuse ids after a completed request. Different content is a
+	// new call, never a replay of the earlier effect.
 	changed := call("r-1", map[string]any{"target": repoA, "arguments": map[string]any{"schema": "helm.github.repository.get.v1", "branch": "main"}})
-	if changed["status"] != "conflict" || changed["reason_code"] != "IDEMPOTENCY_CONFLICT" || changed["attempt_id"] != nil {
+	if changed["status"] != "succeeded" || changed["attempt_id"] == first["attempt_id"] {
 		t.Fatalf("a changed request under the same id = %v", changed)
 	}
 	// Another id, the same request, is another call; so is the integer 1 against
 	// the string "1".
-	ids := map[any]bool{first["attempt_id"]: true}
+	ids := map[any]bool{first["attempt_id"]: true, changed["attempt_id"]: true}
 	for _, id := range []any{"r-2", 1, "1", -1} {
 		content := call(id, getArgs(repoA))
 		if content["status"] != "succeeded" || ids[content["attempt_id"]] {
@@ -471,8 +492,8 @@ func TestPostgresAReplayedCallIsTheSameAttempt(t *testing.T) {
 		}
 		ids[content["attempt_id"]] = true
 	}
-	if e.adapter.dispatched.Load() != 5 {
-		t.Fatalf("%d sent, want 5", e.adapter.dispatched.Load())
+	if e.adapter.dispatched.Load() != 6 {
+		t.Fatalf("%d sent, want 6", e.adapter.dispatched.Load())
 	}
 
 	// Concurrent replays of one call are one attempt sent once.
@@ -496,8 +517,8 @@ func TestPostgresAReplayedCallIsTheSameAttempt(t *testing.T) {
 			t.Fatalf("a concurrent replay = %v", r)
 		}
 	}
-	if e.adapter.dispatched.Load() != 6 {
-		t.Fatalf("%d sent after the race, want 6", e.adapter.dispatched.Load())
+	if e.adapter.dispatched.Load() != 7 {
+		t.Fatalf("%d sent after the race, want 7", e.adapter.dispatched.Load())
 	}
 }
 

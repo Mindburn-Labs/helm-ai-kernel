@@ -46,8 +46,10 @@ work reference of every attempt is the claim's work item (`case_id`).
 
 The endpoint is stateless and serves both eras of MCP at once, as a dual-era
 server may (MCP versioning, "Backward Compatibility with Initialization-Based
-Versions"). No session id is minted, `Mcp-Session-Id` is ignored, there is no
-GET stream (405) and nothing is resumable.
+Versions"). Legacy initialization returns a random opaque `Mcp-Session-Id`
+used to partition call identities inside the verified episode. It grants no
+authority and requires no session store. The stateless revision uses no
+session. There is no GET stream (405) and nothing is resumable.
 
 | | 2026-07-28 | 2025-03-26, 2025-06-18, 2025-11-25 |
 |---|---|---|
@@ -106,7 +108,10 @@ so a permit that was issued is never left unclaimed:
    in the same call. The permit is claimed by the worker's own principal, which
    is what the attempt was proposed through, and the claim records it with the
    workload that carried the token.
-3. **Escalated:** stop. Nothing is held or sent.
+3. **Escalated:** stop. Nothing is held or sent. After approval, only the
+   Control Plane's execute-scoped resume path dispatches and observes the
+   attempt, then starts a continuation episode. Worker retries cannot claim
+   that permit or drive its reconciliation.
 4. **Denied:** stop, with the reason.
 
 The result is `structuredContent` with the same JSON as text for older
@@ -116,7 +121,7 @@ clients. `status` says what happened, and `isError` whether the call did not:
 |---|---|---|
 | `succeeded` | false | observed or reconciled as succeeded; `result` and `result_kind` hold the typed result the effect defines |
 | `escalated` | false | a human must approve; `attempt_id`. The attempt stays `ESCALATED` until a human decides, and the worker stops and reports it |
-| `reconciling` | false | dispatched and not yet known (`UNKNOWN`, in flight): read it again with `helm_attempt_get`, or repeat the call |
+| `reconciling` | false | awaiting CP resume after approval, or dispatched and not yet known (`UNKNOWN`, in flight): read it again with `helm_attempt_get` |
 | `failed` | true | observed as failed, `reason_code` says why |
 | `denied` | true | `reason_code` and `message` say which part of authority refused |
 | `rejected`, `expired`, `cancelled` | true | an approver rejected it, nobody decided in time, a stop or an expired permit cancelled it |
@@ -129,15 +134,18 @@ call, which the key makes safe.
 
 ### Replay
 
-The key is `mcp:<episode_id>:<s|n>:<request id>`, `s` for a string id and `n`
-for an integer. Repeating a request with the same id finds the same attempt
-and carries it on from wherever it is: one admitted and never sent is sent now
-(including one a human approved since), one in flight is read back, and
-nothing is ever sent twice. The same id with a different request is a
-`conflict`, never the first request's attempt, and another episode, tenant or
-id is another call. A client that re-issues a request with a new id (as the
-stateless revision asks of a broken stream) makes a new attempt; the id is the
-call's identity.
+The key is scoped to the episode and a SHA-256 digest of the legacy session
+(when present), typed request id, effect type, target and exact argument
+bytes. Repeating that request finds the same attempt. A directly admitted
+attempt that was never sent may continue in the same worker call; an attempt
+that required approval always remains on the CP resume path, even after a
+human approves it. Nothing is sent twice.
+
+Clients can restart request ids in each legacy session and reuse an id for
+different content after a completed request without receiving an earlier
+call's result. A different session, request id or content denotes another
+call and is admitted independently; string and integer ids remain distinct.
+Retries must preserve those fields to recover the original attempt.
 
 ## Episode attempts (N1) and read isolation
 

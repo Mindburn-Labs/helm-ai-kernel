@@ -443,6 +443,33 @@ func TestEscalatedDeniedAndReplayedCallsAreNotDispatchedTwice(t *testing.T) {
 	}
 }
 
+func TestApprovedEscalationReplayDoesNotDispatchOrObserve(t *testing.T) {
+	for _, state := range []string{"ADMITTED", "DISPATCHING", "UNKNOWN", "OBSERVED"} {
+		t.Run(state, func(t *testing.T) {
+			l := &fakeLedger{grants: admission.Grants{PrincipalKind: "agent"}}
+			l.propose = func(int, admission.ProposeInput) (admission.Attempt, bool, error) {
+				a := attemptIn(state, "SUCCEEDED")
+				a.ApprovalDigest = make([]byte, 32)
+				return a, true, nil
+			}
+			never := func(string) (admission.Attempt, error) {
+				t.Fatal("a worker retry drove an escalation on the control plane resume path")
+				return admission.Attempt{}, nil
+			}
+			l.dispatch, l.observe = never, never
+			got, err := newGateway(t, l).Call(context.Background(), workerCaller(), call("1", repoCall))
+			want := "reconciling"
+			if state == "OBSERVED" {
+				want = "succeeded"
+			}
+			if err != nil || got.IsError || got.StructuredContent["status"] != want ||
+				got.StructuredContent["attempt_id"] == "" || l.dispatched != 0 || l.observed != 0 {
+				t.Fatalf("approved replay = %+v, %v; dispatch %d, observe %d", got, err, l.dispatched, l.observed)
+			}
+		})
+	}
+}
+
 func TestRefusalsAreAnswersAndFailuresAreRetried(t *testing.T) {
 	refusal := func(code admission.Code, reason contracts.ReasonCode, message string) error {
 		return &admission.Error{Code: code, Reason: reason, Message: message}

@@ -644,10 +644,22 @@ removal_proofs:
       - "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
   - control: CTL-057
     file: core/pkg/gateway/mcpserver/gateway.go
-    find: "\treturn \"mcp:\" + scope + \":\" + tag\n"
-    replace: "\treturn \"mcp:\" + tag\n"
+    find: "\treturn \"mcp:\" + scope + \":\" + hex.EncodeToString(digest.Sum(nil))[:48]\n"
+    replace: "\treturn \"mcp:\" + hex.EncodeToString(digest.Sum(nil))[:48]\n"
     tests:
-      - "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheRequest"
+      - "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheCall"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif len(attempt.ApprovalDigest) != 0 {\n"
+    replace: "\tif false && len(attempt.ApprovalDigest) != 0 {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\t\tif caller.Episode != nil && len(a.approvalDigest) != 0 {\n"
+    replace: "\t\tif false && caller.Episode != nil && len(a.approvalDigest) != 0 {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
   - control: CTL-057
     file: core/pkg/gateway/mcpserver/gateway.go
     find: "\tif attempt.State == \"ADMITTED\" {\n"
@@ -3562,6 +3574,8 @@ controls:
         - "core/pkg/gateway/modelgw.TestPostgresModelCallsRecordTheEpisodeOfTheirToken"
       forbidden:
         - "core/pkg/gateway/mcpserver.TestPostgresADeniedCallIsAToolErrorWithItsReasonCode"
+        - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
+        - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
         - "core/pkg/gateway/mcpserver.TestPostgresATokenOfAnotherTenantReachesNothingOfThisOne"
         - "core/pkg/gateway/mcpserver.TestPostgresAnotherEpisodesAttemptIsNotFound"
         - "core/pkg/gateway/mcpserver.TestPostgresTheEpisodeComesFromTheClaimNotTheBody"
@@ -3582,7 +3596,9 @@ controls:
         - "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
         - "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
         - "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
-        - "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheRequest"
+        - "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheCall"
+        - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
+        - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
         - "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall"
         - "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults"
         - "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"

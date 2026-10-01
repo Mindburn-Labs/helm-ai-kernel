@@ -138,9 +138,14 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 	if err != nil {
 		return g.refusal(err, "")
 	}
-	// A replayed call finds its attempt wherever the first call left it, and
-	// carries it on from there: an attempt admitted and never dispatched is
-	// dispatched, one in flight is read back.
+	// An escalation stays on the CP's resume path even after approval. Its
+	// retained approval digest distinguishes it from a same-call admission;
+	// a worker retry must neither claim its permit nor reconcile its dispatch.
+	if len(attempt.ApprovalDigest) != 0 {
+		return resultFor(attempt), nil
+	}
+	// A replayed, directly admitted call finds the same attempt: one admitted
+	// and never dispatched is dispatched, one in flight is read back.
 	id := attempt.ID
 	if attempt.State == "ADMITTED" {
 		if attempt, _, err = g.ledger.Dispatch(ctx, c.Caller, id); err != nil {

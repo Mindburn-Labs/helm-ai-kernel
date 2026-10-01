@@ -77,6 +77,14 @@ func (s *Service) Dispatch(ctx context.Context, caller Caller, attemptID string)
 		}
 		switch a.state {
 		case "ADMITTED":
+			// Worker same-call dispatch covers direct admission only. Once an
+			// attempt has needed approval, CP resumes it with execute authority
+			// and starts a continuation episode. Check the retained digest while
+			// holding the row lock, before consuming a permit or doing I/O.
+			if caller.Episode != nil && len(a.approvalDigest) != 0 {
+				return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
+					"an approved escalation must be dispatched by the control plane")
+			}
 		case "PROPOSED", "DENIED", "ESCALATED", "APPROVED", "REJECTED", "EXPIRED":
 			return refuse(CodeFailedPrecondition, "", "an attempt in %s cannot be dispatched", a.state)
 		default:

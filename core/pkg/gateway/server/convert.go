@@ -82,6 +82,12 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 	if o := a.LatestObservation; o != nil {
 		out.LatestObservation = observationProto(o)
 	}
+	if m := a.ModelCall; m != nil {
+		out.ModelCall = &gatewayv1.ModelCallSettlement{
+			Route: m.Route, State: settlementProto(m.State), CurrencyCode: m.CurrencyCode, HeldMicros: m.HeldMicros,
+			EstimatedMicros: m.EstimatedMicros, ConfirmedMicros: m.ConfirmedMicros, BillableMicros: m.BillableMicros,
+		}
+	}
 	return out
 }
 
@@ -161,6 +167,10 @@ func outcomeProto(outcome string) gatewayv1.EffectOutcome {
 
 func basisProto(basis string) gatewayv1.OutcomeBasis {
 	return gatewayv1.OutcomeBasis(gatewayv1.OutcomeBasis_value["OUTCOME_BASIS_"+basis])
+}
+
+func settlementProto(state string) gatewayv1.SettlementState {
+	return gatewayv1.SettlementState(gatewayv1.SettlementState_value["SETTLEMENT_STATE_"+state])
 }
 
 func rowKindProto(kind string) gatewayv1.AuthorityRowKind {

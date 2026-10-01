@@ -8,9 +8,10 @@ Status: served, 2026-09-30. `helm-gateway serve` dispatches
 `helm.authority.provision.v1` and `helm.authority.narrow.v1` through the
 authority adapter and mounts the three RPCs of `AuthorityAdminService` on its
 API listener, beside `EffectGatewayService`. Approving a provision plan needs
-a step-up proof, which the approval path takes in its own change: until then
-`Approve` of a provision plan fails closed with `STEP_UP_REQUIRED`, and only a
-narrowing plan, which needs no approval, applies end to end.
+a step-up proof (`ApproveRequest.step_up_proof`, see
+[Step-up proof](gateway-effect-api.md#step-up-proof)): without a valid one
+`Approve` fails closed with `STEP_UP_REQUIRED`. A narrowing plan needs no
+approval.
 
 - Effect argument schemas:
   [`protocols/json-schemas/effects/authority/provision.v1.json`](../../protocols/json-schemas/effects/authority/provision.v1.json)

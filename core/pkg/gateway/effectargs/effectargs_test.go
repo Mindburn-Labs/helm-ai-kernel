@@ -162,3 +162,51 @@ func TestValidateRefusesKeysThatOnlyFoldToAFieldName(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+const modelRoute = "anthropic/claude-sonnet-5-5"
+
+func modelArgs(edit func(string) string) string {
+	return edit(`{"schema":"model.inference.v1","api":"anthropic-messages","route":"` + modelRoute +
+		`","request_sha256":"` + strings.Repeat("ab", 32) + `","input_bytes":1200,"max_output_tokens":8192,"stream":true}`)
+}
+
+func TestValidateModelInferenceArguments(t *testing.T) {
+	same := func(s string) string { return s }
+	args, err := Validate(ModelInference, modelRoute, []byte(modelArgs(same)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A mandate condition reads these as input.args.
+	if args["max_output_tokens"] != float64(8192) || args["route"] != modelRoute || args["stream"] != true || args["api"] != APIAnthropicMessages {
+		t.Fatalf("parsed arguments = %v", args)
+	}
+	for _, api := range []string{APIOpenAIResponses, APIOpenAIChat} {
+		if _, err := Validate(ModelInference, modelRoute, []byte(strings.Replace(modelArgs(same), APIAnthropicMessages, api, 1))); err != nil {
+			t.Fatalf("%s: %v", api, err)
+		}
+	}
+	for name, edit := range map[string]func(string) string{
+		"another schema":                 func(s string) string { return strings.Replace(s, "model.inference.v1", "model.inference.v2", 1) },
+		"an unknown api":                 func(s string) string { return strings.Replace(s, "anthropic-messages", "gemini", 1) },
+		"a route that is not the target": func(s string) string { return strings.Replace(s, modelRoute, "openai/gpt-6-sol", 1) },
+		"a short digest":                 func(s string) string { return strings.Replace(s, strings.Repeat("ab", 32), "abcd", 1) },
+		"an uppercase digest": func(s string) string {
+			return strings.Replace(s, strings.Repeat("ab", 32), strings.Repeat("AB", 32), 1)
+		},
+		"negative input bytes":   func(s string) string { return strings.Replace(s, `"input_bytes":1200`, `"input_bytes":-1`, 1) },
+		"fractional input bytes": func(s string) string { return strings.Replace(s, `"input_bytes":1200`, `"input_bytes":1.5`, 1) },
+		"no output tokens": func(s string) string {
+			return strings.Replace(s, `"max_output_tokens":8192`, `"max_output_tokens":0`, 1)
+		},
+		"a missing stream": func(s string) string { return strings.Replace(s, `,"stream":true`, ``, 1) },
+		"an unknown field": func(s string) string {
+			return strings.Replace(s, `"stream":true`, `"stream":true,"prompt":"secret"`, 1)
+		},
+		"a folded field name": func(s string) string { return strings.Replace(s, `"stream"`, `"Stream"`, 1) },
+		"a repeated field":    func(s string) string { return strings.Replace(s, `"stream":true`, `"stream":true,"stream":false`, 1) },
+	} {
+		if _, err := Validate(ModelInference, modelRoute, []byte(modelArgs(edit))); err == nil || !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: err = %v, want a refusal", name, err)
+		}
+	}
+}

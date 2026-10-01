@@ -58,6 +58,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody/siwc"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/jobs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/modelgw"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/server"
@@ -104,6 +105,8 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stderr 
 		return serve(ctx, args[1:], getenv, stderr, extensions...)
 	case "db":
 		return runDB(args[1:], os.Stdin, os.Stdout, stderr)
+	case "chatgpt":
+		return siwc.Run(ctx, args[1:], getenv, os.Stdout, stderr)
 	}
 	return fmt.Errorf("unknown command %q", args[0])
 }

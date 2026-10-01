@@ -73,8 +73,8 @@ review threads resolved.
 Human identity, formal approvals, CODEOWNERS, labels, commit signing, and
 commit trailers carry no additional merge-authority weight. No per-PR
 model-review or third-party-billed review checks are part of the merge path.
-A distinct-provider exact-head machine interlock remains an R&D track in
-`contracts-autonomous-release-lab`/`-canary`; it may be adopted here through
+A distinct-provider exact-head machine interlock remains an R&D track (its
+lab and canary repositories have been retired); it may be adopted here through
 a governance change once live-proven.
 
 This applies to repository code changes. Product-level approval ceremonies and

@@ -14,13 +14,13 @@
 //     which must match the body. server/discover answers what the server is.
 //   - 2025-03-26 to 2025-11-25: the initialize handshake. Nothing is kept from
 //     it. The server mints a random session id for the client to send back, which
-//     partitions idempotency keys and is never looked up, and serves each request
+//     is transport metadata only and is never looked up, and serves each request
 //     on its own.
 //
 // This file is the protocol; gateway.go is what the tools do.
 //
 // quantum_posture: a session id is 128 random bits from crypto/rand that only
-// partitions idempotency keys; nothing here signs or verifies, and no
+// correlates legacy transport requests; nothing here signs or verifies, and no
 // post-quantum claim is made.
 package mcpserver
 

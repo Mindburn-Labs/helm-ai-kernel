@@ -165,6 +165,19 @@ func checkAttemptID(id string) error {
 // loadAttempt reads the attempt, its permit, exposures and latest
 // observation in the caller's transaction.
 func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID string) (Attempt, error) {
+	return loadAttemptScoped(ctx, tx, caller, attemptID, "", nil)
+}
+
+// The work scope is private to ProposeWorkEffect: both its work id and digest
+// are derived from the authenticated claim and validated intent. No read API
+// accepts this alternative scope.
+func loadAttemptScoped(ctx context.Context, tx *sql.Tx, caller Caller, attemptID, workID string, workDigest []byte) (Attempt, error) {
+	scope := `AND ($4 = '' OR (episode_id = $4 AND requester_principal_id = $5))`
+	args := []any{caller.TenantID, attemptID, caller.WorkspaceID, episodeScope(caller), caller.PrincipalID}
+	if workID != "" {
+		scope = `AND episode_id IS NOT NULL AND case_id = $4 AND request_digest = $5`
+		args[3], args[4] = workID, workDigest
+	}
 	var a Attempt
 	var mandate, commitment, caseID, risk, outcome, basis, episodeID, organizationVersionID sql.NullString
 	var quote []byte
@@ -174,8 +187,7 @@ func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 			risk_class, quote, state, reason_code, outcome, outcome_basis, approval_digest, approval_expires_at, version,
 			created_at, updated_at, episode_id, organization_version_id
 		FROM authority_effect_attempts WHERE tenant_id = $1 AND attempt_id = $2 AND workspace_id = $3
-			AND ($4 = '' OR (episode_id = $4 AND requester_principal_id = $5))`,
-		caller.TenantID, attemptID, caller.WorkspaceID, episodeScope(caller), caller.PrincipalID).Scan(&a.ID, &a.WorkspaceID, &a.IdempotencyKey, &a.RequestDigest,
+			`+scope, args...).Scan(&a.ID, &a.WorkspaceID, &a.IdempotencyKey, &a.RequestDigest,
 		&a.RequesterPrincipalID, &a.RequesterActorID, &mandate, &commitment, &caseID, &a.EffectType, &a.Target,
 		&a.TargetDigest, &a.ArgumentDigest, &risk, &quote, &a.State, &a.ReasonCode, &outcome, &basis, &a.ApprovalDigest,
 		&expires, &a.Version, &a.CreatedAt, &a.UpdatedAt, &episodeID, &organizationVersionID)

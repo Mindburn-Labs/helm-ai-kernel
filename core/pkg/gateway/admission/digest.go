@@ -51,6 +51,9 @@ func ApprovalDigestV1(attemptID string, targetDigest, argumentDigest []byte, quo
 // length-prefixed encoding. Quote and distinct entries are sorted, so their
 // order does not make two equal requests differ.
 func requestDigest(caller Caller, in ProposeInput) []byte {
+	if in.workEffect {
+		return workEffectDigest(caller, in)
+	}
 	var m bytes.Buffer
 	field(&m, []byte("helm.gateway.v1.request-digest.v1"))
 	field(&m, []byte(caller.PrincipalID))

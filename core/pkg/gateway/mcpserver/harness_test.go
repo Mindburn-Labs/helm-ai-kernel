@@ -48,15 +48,17 @@ const (
 	repoB = "github.com/other/app"
 
 	// The tokens callers hold: a worker's episode token by seat and episode.
-	tokenSeat1Ep1 = "canary-seat-1-episode-1"
-	tokenSeat1Ep2 = "canary-seat-1-episode-2"
-	tokenSeat1Ro  = "canary-seat-1-episode-1-reads"
-	tokenSeat2    = "canary-seat-2-episode-1"
-	tokenNoSeat   = "canary-seat-without-mandates"
-	tokenTenantB  = "canary-tenant-b-seat-1-episode-1"
-	tokenService  = "canary-service-with-episode"
-	tokenHuman    = "canary-human-with-episode"
-	tokenNoEp     = "canary-seat-1-no-episode"
+	tokenSeat1Ep1     = "canary-seat-1-episode-1"
+	tokenContinuation = "canary-seat-1-continuation"
+	tokenReassigned   = "canary-seat-2-continuation"
+	tokenSeat1Ep2     = "canary-seat-1-episode-2"
+	tokenSeat1Ro      = "canary-seat-1-episode-1-reads"
+	tokenSeat2        = "canary-seat-2-episode-1"
+	tokenNoSeat       = "canary-seat-without-mandates"
+	tokenTenantB      = "canary-tenant-b-seat-1-episode-1"
+	tokenService      = "canary-service-with-episode"
+	tokenHuman        = "canary-human-with-episode"
+	tokenNoEp         = "canary-seat-1-no-episode"
 )
 
 // scriptedAdapter performs the three GitHub effect types without GitHub. By
@@ -258,15 +260,17 @@ func newEnv(t *testing.T) *env {
 	// The worker listener's own token check, as runtime mounts it: the same
 	// Authenticator as the model endpoints, for a token that proposes or reads.
 	auth := &server.Authenticator{Actor: cpActor, RequireEpisode: true, Validator: testValidator{
-		tokenSeat1Ep1: claims(tenantA, "agt:seat-1", server.ScopePropose, episode("ep-1")),
-		tokenSeat1Ep2: claims(tenantA, "agt:seat-1", server.ScopePropose, episode("ep-2")),
-		tokenSeat1Ro:  claims(tenantA, "agt:seat-1", server.ScopeRead, episode("ep-1")),
-		tokenSeat2:    claims(tenantA, "agt:seat-2", server.ScopePropose, episode("ep-1")),
-		tokenNoSeat:   claims(tenantA, "agt:seat-none", server.ScopePropose, episode("ep-1")),
-		tokenTenantB:  claims(tenantB, "agt:seat-1", server.ScopePropose, episode("ep-1")),
-		tokenService:  claims(tenantA, "svc:compiler", server.ScopePropose, episode("ep-1")),
-		tokenHuman:    claims(tenantA, "human-a", server.ScopePropose, episode("ep-1")),
-		tokenNoEp:     claims(tenantA, "agt:seat-1", server.ScopePropose, nil),
+		tokenSeat1Ep1:     claims(tenantA, "agt:seat-1", server.ScopePropose, episode("ep-1")),
+		tokenContinuation: claims(tenantA, "agt:seat-1", server.ScopePropose, &jwks.EpisodeClaim{EpisodeID: "ep-continuation", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-2"}),
+		tokenReassigned:   claims(tenantA, "agt:seat-2", server.ScopePropose, &jwks.EpisodeClaim{EpisodeID: "ep-reassigned", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-2"}),
+		tokenSeat1Ep2:     claims(tenantA, "agt:seat-1", server.ScopePropose, episode("ep-2")),
+		tokenSeat1Ro:      claims(tenantA, "agt:seat-1", server.ScopeRead, episode("ep-1")),
+		tokenSeat2:        claims(tenantA, "agt:seat-2", server.ScopePropose, episode("ep-1")),
+		tokenNoSeat:       claims(tenantA, "agt:seat-none", server.ScopePropose, episode("ep-1")),
+		tokenTenantB:      claims(tenantB, "agt:seat-1", server.ScopePropose, episode("ep-1")),
+		tokenService:      claims(tenantA, "svc:compiler", server.ScopePropose, episode("ep-1")),
+		tokenHuman:        claims(tenantA, "human-a", server.ScopePropose, episode("ep-1")),
+		tokenNoEp:         claims(tenantA, "agt:seat-1", server.ScopePropose, nil),
 	}}
 	e.auth = auth
 	e.srv = httptest.NewServer(&Handler{Backend: gw, Version: "test", Authenticate: func(ctx context.Context, header http.Header) (Caller, error) {

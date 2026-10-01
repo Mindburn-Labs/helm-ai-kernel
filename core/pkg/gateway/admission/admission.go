@@ -117,6 +117,9 @@ type ProposeInput struct {
 	Quote             []Amount
 	Distinct          []DistinctValue
 	ApprovalExpiresAt *time.Time
+	// Set only by ProposeWorkEffect after validating and canonicalizing the
+	// intent. It is not a caller-supplied transport field or read privilege.
+	workEffect bool
 }
 
 // MaxTransaction is the longest a gateway database transaction may run. Every
@@ -260,12 +263,34 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	var attemptID string
 	var existing bool
 	err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+		if in.workEffect {
+			var activeAgent bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_principals
+				WHERE tenant_id = $1 AND principal_id = $2 AND kind = 'agent' AND status = 'active')`,
+				caller.TenantID, caller.PrincipalID).Scan(&activeAgent); err != nil {
+				return err
+			}
+			if !activeAgent {
+				return refuse(CodePermissionDenied, contracts.ReasonPrincipalInactive, "a work effect requires an active agent principal")
+			}
+		}
 		var err error
 		attemptID, existing, err = s.proposeTx(ctx, tx, caller, in, args)
 		return err
 	})
 	if err != nil {
 		return Attempt{}, false, err
+	}
+	if in.workEffect {
+		// Only replay of this exact verified work intent may recover a result
+		// from an earlier episode. Get/GetContent/List remain episode-scoped.
+		var attempt Attempt
+		err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+			var err error
+			attempt, err = loadAttemptScoped(ctx, tx, caller, attemptID, caller.Episode.WorkItemID, workEffectDigest(caller, in))
+			return err
+		})
+		return attempt, existing, err
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err

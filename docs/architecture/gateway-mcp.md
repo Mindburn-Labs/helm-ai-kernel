@@ -134,18 +134,26 @@ call, which the key makes safe.
 
 ### Replay
 
-The key is scoped to the episode and a SHA-256 digest of the legacy session
-(when present), typed request id, effect type, target and exact argument
-bytes. Repeating that request finds the same attempt. A directly admitted
-attempt that was never sent may continue in the same worker call; an attempt
-that required approval always remains on the CP resume path, even after a
-human approves it. Nothing is sent twice.
+The gateway derives the key from the authenticated tenant/workspace, the
+verified claim's work item, the effect type, canonical target and intent
+digest (D8). The argument object is validated before canonicalization: key
+order and whitespace do not create new intent, duplicate keys are refused.
+GitHub owner/repository names are case-insensitive for identity; admission
+still evaluates the originally supplied target against the mandate.
 
-Clients can restart request ids in each legacy session and reuse an id for
-different content after a completed request without receiving an earlier
-call's result. A different session, request id or content denotes another
-call and is admitted independently; string and integer ids remain distinct.
-Retries must preserve those fields to recover the original attempt.
+MCP request ids, legacy sessions, episode ids, seat changes and framework
+changes do not split the effect. After a lost tool response, replay returns
+the original attempt. A directly admitted attempt may dispatch or observe in
+the same original worker episode only. An earlier episode's attempt, an
+attempt proposed by another seat, or any attempt that required approval stays
+on the CP reconciliation/resume path under its original authority binding.
+Neither the original episode nor organization version is rewritten.
+
+This exact-intent replay is private to tool admission. GetAttempt,
+GetAttemptContent, ListAttempts and helm_attempt_get retain episode/principal
+isolation; a worker cannot recover an arbitrary earlier attempt by id.
+A different work item, workspace, tenant, effect, target or intent is a new
+admission. A new request id alone never requests another execution.
 
 ## Episode attempts (N1) and read isolation
 

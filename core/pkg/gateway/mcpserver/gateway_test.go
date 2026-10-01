@@ -191,51 +191,6 @@ func TestEveryAttemptStateHasItsResult(t *testing.T) {
 	}
 }
 
-func TestIdempotencyKeyIsScopedToTheEpisodeAndTheCall(t *testing.T) {
-	const effect, target = "github.repository.get", "github.com/o/r"
-	args := []byte(`{"schema":"helm.github.repository.get.v1"}`)
-	call := func(session, id string) Call { return Call{Session: session, RequestID: json.RawMessage(id)} }
-	key := idempotencyKey("ep-1", call("", `7`), effect, target, args)
-	if !strings.HasPrefix(key, "mcp:ep-1:") || key != idempotencyKey("ep-1", call("", `7`), effect, target, args) {
-		t.Fatalf("key = %q", key)
-	}
-	// The same request again is one call; each thing that tells a call apart does.
-	seen := map[string]string{}
-	for what, k := range map[string]string{
-		"the call":                      key,
-		"a string id that prints alike": idempotencyKey("ep-1", call("", `"7"`), effect, target, args),
-		"another request id":            idempotencyKey("ep-1", call("", `8`), effect, target, args),
-		"a negative id":                 idempotencyKey("ep-1", call("", `-7`), effect, target, args),
-		"a string id with a colon":      idempotencyKey("ep-1", call("", `"n:7"`), effect, target, args),
-		"another episode":               idempotencyKey("ep-2", call("", `7`), effect, target, args),
-		"a longer episode":              idempotencyKey(strings.Repeat("e", 128), call("", `7`), effect, target, args),
-		"another session":               idempotencyKey("ep-1", call("AAAAAAAAAAAAAAAAAAAAAA", `7`), effect, target, args),
-		"a third session":               idempotencyKey("ep-1", call("BBBBBBBBBBBBBBBBBBBBBB", `7`), effect, target, args),
-		"another effect type":           idempotencyKey("ep-1", call("", `7`), "github.branch.create_from_changes", target, args),
-		"another target":                idempotencyKey("ep-1", call("", `7`), effect, "github.com/o/other", args),
-		"other arguments":               idempotencyKey("ep-1", call("", `7`), effect, target, []byte(`{"schema":"helm.github.repository.get.v1","branch":"b"}`)),
-		"the same bytes spaced":         idempotencyKey("ep-1", call("", `7`), effect, target, []byte(`{"schema": "helm.github.repository.get.v1"}`)),
-	} {
-		if other, dup := seen[k]; dup {
-			t.Errorf("%s and %s share the key %q", what, other, k)
-		}
-		seen[k] = what
-	}
-	// Parts that run together are not the same parts: a length is digested with
-	// each, so moving a byte between two of them moves the key.
-	if idempotencyKey("ep-1", call("", `"ab"`), "c", "d", nil) == idempotencyKey("ep-1", call("", `"a"`), "bc", "d", nil) {
-		t.Fatal("two calls whose parts run together share a key")
-	}
-	// However long the ids and arguments are, the key is one the ledger stores.
-	longest := idempotencyKey(strings.Repeat("e", 128), call(strings.Repeat("s", 64), `"`+strings.Repeat("r", 128)+`"`), effect, strings.Repeat("t", 512), make([]byte, 64<<10))
-	if len(longest) > 255 {
-		t.Fatalf("the key is %d bytes, the ledger keeps 255", len(longest))
-	}
-	if idempotencyKey(strings.Repeat("e", 128), call("", `7`), effect, target, args) == idempotencyKey(strings.Repeat("e", 127)+"f", call("", `7`), effect, target, args) {
-		t.Fatal("two long episode ids share a key")
-	}
-}
-
 // fakeLedger scripts admission for the sequencing tests.
 type fakeLedger struct {
 	effects                                admission.PrincipalEffects
@@ -258,7 +213,7 @@ func (l *fakeLedger) ModelGrants(context.Context, admission.Caller, string) (adm
 	return l.grants, nil
 }
 
-func (l *fakeLedger) Propose(_ context.Context, _ admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error) {
+func (l *fakeLedger) ProposeWorkEffect(_ context.Context, _ admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error) {
 	l.proposed = append(l.proposed, in)
 	return l.propose(len(l.proposed)-1, in)
 }
@@ -281,7 +236,7 @@ func (l *fakeLedger) Get(_ context.Context, _ admission.Caller, id string) (admi
 }
 
 func attemptIn(state, outcome string) admission.Attempt {
-	return admission.Attempt{ID: "11111111-1111-7111-8111-111111111111", EffectType: "github.repository.get", Target: "github.com/o/r", State: state, Outcome: outcome}
+	return admission.Attempt{Episode: workerCaller().Episode, RequesterPrincipalID: "agt:seat", ID: "11111111-1111-7111-8111-111111111111", EffectType: "github.repository.get", Target: "github.com/o/r", State: state, Outcome: outcome}
 }
 
 func newGateway(t *testing.T, l *fakeLedger) *Gateway {
@@ -378,7 +333,7 @@ func TestAdmittedCallsAreDispatchedAndObservedInTheSameCall(t *testing.T) {
 	}
 	in := l.proposed[0]
 	if in.EffectType != "github.repository.get" || in.Target != "github.com/o/r" ||
-		in.IdempotencyKey != idempotencyKey("episode", call("1", repoCall), "github.repository.get", "github.com/o/r", []byte(`{"schema":"helm.github.repository.get.v1"}`)) ||
+		in.IdempotencyKey != "" ||
 		string(in.Arguments) != `{"schema":"helm.github.repository.get.v1"}` || in.CaseID != "" || in.CommitmentID != "" || in.MandateID != "" {
 		t.Fatalf("proposal = %+v", in)
 	}

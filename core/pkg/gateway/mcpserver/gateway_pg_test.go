@@ -12,6 +12,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
 	"sort"
@@ -419,7 +420,7 @@ func TestPostgresAnotherEpisodesAttemptIsNotFound(t *testing.T) {
 		t.Fatalf("another seat's read = %v", got)
 	}
 
-	// The same call id in another episode is another call, not a replay.
+	// This token names a DIFFERENT work item, so its effect is not a replay.
 	second, _ := e.callTool(t, tokenSeat1Ep2, "call-1", "github_repository_get", getArgs(repoA)).structured(t)
 	if second["attempt_id"] == id || second["status"] != "succeeded" {
 		t.Fatalf("episode 2's call-1 = %v, episode 1's attempt was %s", second, id)
@@ -482,18 +483,15 @@ func TestPostgresAReplayedCallIsTheSameAttempt(t *testing.T) {
 	if changed["status"] != "succeeded" || changed["attempt_id"] == first["attempt_id"] {
 		t.Fatalf("a changed request under the same id = %v", changed)
 	}
-	// Another id, the same request, is another call; so is the integer 1 against
-	// the string "1".
-	ids := map[any]bool{first["attempt_id"]: true, changed["attempt_id"]: true}
+	// Transport identities never split one governed intent.
 	for _, id := range []any{"r-2", 1, "1", -1} {
 		content := call(id, getArgs(repoA))
-		if content["status"] != "succeeded" || ids[content["attempt_id"]] {
-			t.Fatalf("id %v = %v, want a new attempt", id, content)
+		if content["status"] != "succeeded" || content["attempt_id"] != first["attempt_id"] {
+			t.Fatalf("id %v = %v, want original attempt", id, content)
 		}
-		ids[content["attempt_id"]] = true
 	}
-	if e.adapter.dispatched.Load() != 6 {
-		t.Fatalf("%d sent, want 6", e.adapter.dispatched.Load())
+	if e.adapter.dispatched.Load() != 2 {
+		t.Fatalf("%d sent, want 2 distinct intents", e.adapter.dispatched.Load())
 	}
 
 	// Concurrent replays of one call are one attempt sent once.
@@ -503,7 +501,7 @@ func TestPostgresAReplayedCallIsTheSameAttempt(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results <- call("race", getArgs(repoA))
+			results <- call("race", map[string]any{"target": repoA, "arguments": map[string]any{"schema": "helm.github.repository.get.v1", "branch": "race"}})
 		}()
 	}
 	wg.Wait()
@@ -517,8 +515,66 @@ func TestPostgresAReplayedCallIsTheSameAttempt(t *testing.T) {
 			t.Fatalf("a concurrent replay = %v", r)
 		}
 	}
-	if e.adapter.dispatched.Load() != 7 {
-		t.Fatalf("%d sent after the race, want 7", e.adapter.dispatched.Load())
+	if e.adapter.dispatched.Load() != 3 {
+		t.Fatalf("%d sent after the race, want 3", e.adapter.dispatched.Load())
+	}
+}
+
+func TestPostgresLostToolResponseReplaysAcrossEpisodesWithoutRedispatch(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		t.Run(fmt.Sprintf("unknown_%t", pending), func(t *testing.T) {
+			e := newEnv(t)
+			if pending {
+				e.adapter.script(func(adapters.Effect) adapters.DispatchResult {
+					return adapters.DispatchResult{Status: adapters.DispatchIndefinite}
+				}, func(adapters.Effect) adapters.ObserveResult {
+					return adapters.ObserveResult{Outcome: adapters.OutcomeUnknown}
+				})
+			}
+			// The first response is lost to the worker. Read the retained id as
+			// the test's operator, then start a fresh framework/episode request.
+			e.callTool(t, tokenSeat1Ep1, "lost", "github_repository_get", getArgs(repoA))
+			var id string
+			must(t, e.owner.QueryRow(`SELECT attempt_id::text FROM authority_effect_attempts WHERE tenant_id = $1`, tenantA).Scan(&id))
+			observed := e.adapter.observed.Load()
+			for _, token := range []string{tokenContinuation, tokenReassigned} {
+				got, failed := e.callTool(t, token, 901, "github_repository_get", getArgs(repoA)).structured(t)
+				want := "succeeded"
+				if pending {
+					want = "reconciling"
+				}
+				if failed || got["attempt_id"] != id || got["status"] != want {
+					t.Fatalf("lost-response recovery = %v error=%v", got, failed)
+				}
+				// Knowing the retained id still grants no generic read access.
+				read, failed := e.callTool(t, token, "read", AttemptGetTool, map[string]any{"attempt_id": id}).structured(t)
+				if !failed || read["status"] != "not_found" {
+					t.Fatalf("continuation bypassed N1 read isolation: %v", read)
+				}
+			}
+			if e.adapter.dispatched.Load() != 1 || e.adapter.observed.Load() != observed || e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts`) != 1 {
+				t.Fatalf("replay executed/reconciled again: dispatch=%d observe=%d", e.adapter.dispatched.Load(), e.adapter.observed.Load())
+			}
+			original := e.attempt(tenantA, id)
+			if original.Episode.EpisodeID != "ep-1" || original.Episode.OrganizationVersionID != "ver-1" || original.RequesterPrincipalID != "agt:seat-1" {
+				t.Fatalf("replay rewrote original authority binding: %+v", original)
+			}
+		})
+	}
+}
+
+func TestPostgresEscalationReplayKeepsOneApprovalAcrossEpisodes(t *testing.T) {
+	e := newEnv(t)
+	first, failed := e.callTool(t, tokenSeat1Ep1, "lost", "github_branch_create_from_changes", branchCall(repoA, "helm/one")).structured(t)
+	if failed || first["status"] != "escalated" {
+		t.Fatalf("first = %v", first)
+	}
+	again, failed := e.callTool(t, tokenContinuation, 71, "github_branch_create_from_changes", branchCall(repoA, "helm/one")).structured(t)
+	if failed || again["status"] != "escalated" || again["attempt_id"] != first["attempt_id"] {
+		t.Fatalf("retry created another approval: %v", again)
+	}
+	if e.count(tenantA, `SELECT count(*) FROM authority_effect_attempts WHERE state = 'ESCALATED'`) != 1 || e.adapter.dispatched.Load() != 0 {
+		t.Fatal("escalation retry duplicated or executed the effect")
 	}
 }
 

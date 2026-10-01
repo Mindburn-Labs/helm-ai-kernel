@@ -1,17 +1,9 @@
 package mcpserver
 
-// quantum_posture: SHA-256 digests the identity of a tool call into its
-// idempotency key and shortens an over-long episode id inside it; nothing here
-// signs or verifies, and no post-quantum claim is made.
-
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
@@ -28,7 +20,7 @@ type Ledger interface {
 	// ModelGrants reads what the caller's mandates allow for one effect type; it
 	// is named for its first user and reads any.
 	ModelGrants(ctx context.Context, caller admission.Caller, effectType string) (admission.Grants, error)
-	Propose(ctx context.Context, caller admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error)
+	ProposeWorkEffect(ctx context.Context, caller admission.Caller, in admission.ProposeInput) (admission.Attempt, bool, error)
 	Dispatch(ctx context.Context, caller admission.Caller, attemptID string) (admission.Attempt, bool, error)
 	Observe(ctx context.Context, caller admission.Caller, attemptID string) (admission.Attempt, bool, error)
 	Get(ctx context.Context, caller admission.Caller, attemptID string) (admission.Attempt, error)
@@ -83,7 +75,7 @@ func (g *Gateway) Tools(ctx context.Context, c Caller) ([]Tool, error) {
 }
 
 // Call runs one tool. An effect tool is proposed under a key derived from the
-// episode and the call's identity (idempotencyKey), and when it is admitted it is dispatched and
+// verified work item and canonical effect intent. When first admitted it is dispatched and
 // observed in the same call, by the worker's own verified identity. The worker's
 // token never carries helm.gateway.execute: the permit is claimed here, inside
 // the gateway, by the principal the attempt was proposed through.
@@ -121,10 +113,9 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 		return Result{}, ErrForbidden
 	}
 	propose := admission.ProposeInput{
-		IdempotencyKey: idempotencyKey(c.Episode.EpisodeID, call, t.effectType, in.Target, in.Arguments),
-		EffectType:     t.effectType, Target: in.Target, Arguments: []byte(in.Arguments), Quote: quoteFor(grants),
+		EffectType: t.effectType, Target: in.Target, Arguments: []byte(in.Arguments), Quote: quoteFor(grants),
 	}
-	attempt, _, err := g.ledger.Propose(ctx, c.Caller, propose)
+	attempt, _, err := g.ledger.ProposeWorkEffect(ctx, c.Caller, propose)
 	var refusal *admission.Error
 	if errors.As(err, &refusal) && refusal.Code == admission.CodeInvalidArgument && strings.Contains(refusal.Message, "quote carries no amount") {
 		// A sum limit was added to the chain since the grants were read: price
@@ -133,7 +124,7 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 			return Result{}, refusedOr(err)
 		}
 		propose.Quote = quoteFor(grants)
-		attempt, _, err = g.ledger.Propose(ctx, c.Caller, propose)
+		attempt, _, err = g.ledger.ProposeWorkEffect(ctx, c.Caller, propose)
 	}
 	if err != nil {
 		return g.refusal(err, "")
@@ -141,7 +132,10 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 	// An escalation stays on the CP's resume path even after approval. Its
 	// retained approval digest distinguishes it from a same-call admission;
 	// a worker retry must neither claim its permit nor reconcile its dispatch.
-	if len(attempt.ApprovalDigest) != 0 {
+	// A result retained from an earlier episode or another seat likewise stays
+	// on CP reconciliation under its ORIGINAL binding; replay never widens it.
+	if len(attempt.ApprovalDigest) != 0 || attempt.Episode == nil ||
+		attempt.Episode.EpisodeID != c.Episode.EpisodeID || attempt.RequesterPrincipalID != c.PrincipalID {
 		return resultFor(attempt), nil
 	}
 	// A replayed, directly admitted call finds the same attempt: one admitted
@@ -228,44 +222,6 @@ func quoteFor(g admission.Grants) []admission.Amount {
 		quote = append(quote, admission.Amount{Unit: unit})
 	}
 	return quote
-}
-
-// idempotencyKey is the key of a tool call: the episode, then a digest of what
-// identifies the call inside it.
-//
-// MCP gives a call no id of its own. The request id is unique only among the
-// requests a client has in flight, and a client that opens a new session for
-// every call (langchain-mcp-adapters does) sends id 1 each time, so the id alone
-// would make unrelated calls one. The call is therefore its session (the id the
-// server minted at initialize, for the eras that have one), its request id and
-// its content: the effect type, the target and the exact argument bytes. The
-// same request sent again, which is what a retry is, is the same call and finds
-// the same attempt. A request that differs in any of the four is another call,
-// which admission decides on its own, and never another call's attempt. A string
-// id and an integer id that print alike stay apart.
-func idempotencyKey(episodeID string, call Call, effectType, target string, arguments []byte) string {
-	var id string
-	if len(call.RequestID) > 0 && call.RequestID[0] == '"' {
-		var s string
-		_ = json.Unmarshal(call.RequestID, &s) // the transport only passes a valid id
-		id = "s:" + s
-	} else {
-		n, _ := strconv.ParseInt(string(call.RequestID), 10, 64)
-		id = "n:" + strconv.FormatInt(n, 10)
-	}
-	digest := sha256.New()
-	for _, part := range []string{call.Session, id, effectType, target, string(arguments)} {
-		var length [8]byte
-		binary.BigEndian.PutUint64(length[:], uint64(len(part)))
-		digest.Write(length[:])
-		digest.Write([]byte(part))
-	}
-	scope := episodeID
-	if len(scope) > 100 {
-		sum := sha256.Sum256([]byte(scope))
-		scope = "h" + hex.EncodeToString(sum[:20])
-	}
-	return "mcp:" + scope + ":" + hex.EncodeToString(digest.Sum(nil))[:48]
 }
 
 // failed is a tool error: the call did not happen, or did not succeed, and the

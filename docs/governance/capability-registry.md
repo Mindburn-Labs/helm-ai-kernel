@@ -8,7 +8,7 @@ registered capability facts before downstream policy evaluation. A durable regis
 service, certification lifecycle API, import adapters, and protocol-dispatch
 integration remain follow-up work.
 **Origin:** Step AOS alignment workstream (2026-07-24), research:
-`research/step-aos-2026-07/STEP-AOS-DEEP-RESEARCH.md`.
+`Mindburn-Labs/docs:research/step-aos-2026-07/STEP-AOS-DEEP-RESEARCH.md`.
 
 ## Problem
 

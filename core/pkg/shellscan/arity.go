@@ -10,7 +10,7 @@
 // decision-worthy, never as safe.
 //
 // The design follows the opencode shell permission scan (see
-// research/opencode-study/03-core-tools.md and 25-helm-map-agent-side.md):
+// Mindburn-Labs/docs:research/opencode-study/03-core-tools.md and 25-helm-map-agent-side.md):
 // parse the command into a bash AST, walk every command node (including
 // pipelines, substitutions and subshells), and classify each command's
 // arity-aware prefix instead of matching needles against the raw string.
@@ -22,7 +22,7 @@ import "strings"
 // "human-meaningful command". Flags never count as tokens; only subcommands
 // do. Longest matching prefix wins. Ported from opencode
 // packages/opencode/src/permission/arity.ts (generated dictionary; see
-// research/opencode-study/03-core-tools.md section c).
+// Mindburn-Labs/docs:research/opencode-study/03-core-tools.md section c).
 var arity = map[string]int{
 	"cat":     1,
 	"cd":      1,

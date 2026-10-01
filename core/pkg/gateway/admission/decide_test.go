@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -240,6 +241,36 @@ func TestStepUpCoversHighIrreversibleAndAuthorityChanges(t *testing.T) {
 	} {
 		if got := needsStepUp(test.risk, test.effectType); got != test.want {
 			t.Errorf("%s %s: needsStepUp = %v, want %v", test.risk, test.effectType, got, test.want)
+		}
+	}
+}
+
+// A step-up proof is a helm.gateway.stepup token of method webauthn (§10.1).
+// The server checks both on the verified token; admission refuses anything
+// else, so a caller that skipped the server's checks cannot use up a decide
+// or stop token as a proof.
+func TestStepUpProofIsUsableOnlyAsTheContractSays(t *testing.T) {
+	proof := func(scope, method string) *StepUp {
+		return &StepUp{Token: Token{Scope: scope}, Method: method, Raw: "compact"}
+	}
+	for _, test := range []struct {
+		name  string
+		proof *StepUp
+		want  bool
+	}{
+		{"a step-up token of method webauthn", proof("helm.gateway.stepup", "webauthn"), true},
+		{"no proof", nil, false},
+		{"a decide token", proof("helm.gateway.decide", "webauthn"), false},
+		{"a stop token", proof("helm.gateway.stop", "webauthn"), false},
+		{"no scope", proof("", "webauthn"), false},
+		{"another method", proof("helm.gateway.stepup", "totp"), false},
+		{"no method", proof("helm.gateway.stepup", ""), false},
+		{"no compact token to keep", &StepUp{Token: Token{Scope: "helm.gateway.stepup"}, Method: "webauthn"}, false},
+		{"a compact token of 8192 bytes", &StepUp{Token: Token{Scope: "helm.gateway.stepup"}, Method: "webauthn", Raw: strings.Repeat("a", MaxStepUpProofBytes)}, true},
+		{"a compact token of 8193 bytes", &StepUp{Token: Token{Scope: "helm.gateway.stepup"}, Method: "webauthn", Raw: strings.Repeat("a", MaxStepUpProofBytes+1)}, false},
+	} {
+		if got := test.proof.usable(); got != test.want {
+			t.Errorf("%s: usable = %v, want %v", test.name, got, test.want)
 		}
 	}
 }

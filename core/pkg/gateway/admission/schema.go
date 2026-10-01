@@ -55,6 +55,9 @@ var migrations = []migration{
 	{5, "provisioning: principal external subjects and the applied plans", func() (string, error) {
 		return withRowSecurity(mandates.SchemaDDL(), "schema/005_provisions.sql", Tables[10:])
 	}},
+	{6, "step-up proof on approvals", func() (string, error) {
+		return withRowSecurity("", "schema/006_step_up.sql", nil)
+	}},
 }
 
 // HeadVersion is the schema version this binary serves.

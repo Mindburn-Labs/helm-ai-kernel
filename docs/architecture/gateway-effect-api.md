@@ -713,7 +713,8 @@ attempt `ESCALATED`:
 - the escalation has not expired (`failed_precondition`,
   `APPROVAL_TIMEOUT`);
 - Approve only: a high, irreversible or `helm.authority.*` effect needs
-  step-up, which fails closed (`STEP_UP_REQUIRED`). The risk is the one
+  step-up: a valid `step_up_proof` (see "Step-up proof"), and without one the
+  approval fails closed (`STEP_UP_REQUIRED`). The risk is the one
   re-admission computes, so a class raised since the escalation counts. A
   medium effect that a
   mandate escalates through `approval_required`, such as the skeleton's draft
@@ -981,8 +982,9 @@ target `stop:<stop_id>` and the arguments
 operator's mandate for that effect type.
 
 - **Approval.** Every `helm.authority.*` effect escalates, whatever its risk
-  row says. It needs a distinct human approver with step-up, and step-up
-  fails closed (`STEP_UP_REQUIRED`) until the passkey slice.
+  row says. It needs a distinct human approver with a step-up proof (see
+  "Step-up proof"), and without one the approval fails closed
+  (`STEP_UP_REQUIRED`).
 - **Stops.** A lift is not blocked by the one stop it lifts. Every other
   stop, the operator's own and the tenant's included, still applies, at
   admission and at the claim.
@@ -1066,11 +1068,12 @@ fixture grants exactly these:
 - **Lift is bound to the stop.** The proto binds a lift token to the stop,
   not to the attempt. The lift attempt is approved with a decide token bound
   to it, like any other attempt.
-- **No lift can be applied yet.** A `helm.authority.lift` attempt cannot
-  reach `ADMITTED` until step-up exists, so this slice has no dispatch-time
-  applier for it (`Dispatch` answers `failed_precondition`: no adapter). A
-  gateway stop lasts until it expires, or until the authority-row store lifts
-  it with a distinct approver. The applier comes with step-up.
+- **No lift can be applied yet.** A `helm.authority.lift` attempt reaches
+  `ADMITTED` when a distinct approver approves it with a step-up proof, but
+  there is no dispatch-time applier for it (`Dispatch` answers
+  `failed_precondition`: no adapter). A gateway stop lasts until it expires,
+  or until the authority-row store lifts it with a distinct approver. The
+  applier is a separate change.
 - **A last try whose own hand-off transaction fails** (the database is
   unreachable) is discarded by River. The attempt stays `UNKNOWN`, with its
   hold, for `Observe`.
@@ -1167,8 +1170,11 @@ with one bound to another attempt or digest, is `permission_denied`
 (`STEP_UP_REQUIRED`), the attempt stays `ESCALATED`, and no token is used up.
 The approval record keeps the proof exactly as received, with its `jti` and
 method, so that it can be verified again against the issuer's keys. A `Reject`
-needs no proof. Status: the field is defined; `helm-gateway` still fails closed on every
-approval that needs step-up until the change that serves the proof.
+needs no proof. Status: served. The server verifies the proof before the
+approval's transaction and treats one that does not verify, or is longer than
+8192 bytes, as none; admission uses its `jti` up in that transaction, after the
+decide token's, when the effect needs step-up, keeps the proof on the approval
+record, and ignores a proof for an effect that needs none.
 
 ## Conformance table
 

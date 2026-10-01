@@ -1,6 +1,6 @@
 {
   "pack_id": "helm-gateway-effect-api-v1",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "status": "active",
   "scope": "The gateway effect API (helm.gateway.v1 EffectGatewayService) as the real helm-gateway serves it over Connect. Every gateway implementation, real or fake, must pass every scenario.",
   "contract": "protocols/proto/helm/gateway/v1/gateway.proto",
@@ -8,7 +8,7 @@
   "runner": "core/pkg/gateway/conformance",
   "scenario_schema": {
     "file": "scenario.schema.json",
-    "sha256": "fde5202d3223ec84277336ebdf08269715192a1e065a0f587ede0c2394c06f68"
+    "sha256": "1cb9e164779b589b607b72782949d3b04867fd13320cfa7a3e1789abb73ccc8e"
   },
   "scenarios": [
     {
@@ -125,6 +125,11 @@
       "id": "GW-023",
       "file": "scenarios/GW-023-principal-stop-covers-the-workload-and-the-approver.json",
       "sha256": "83b5e10be3f675699b10bc0a131bdef0943767825176e88f0ed7ad5bc665c1a1"
+    },
+    {
+      "id": "GW-024",
+      "file": "scenarios/GW-024-step-up-proof-admits-and-is-single-use.json",
+      "sha256": "67c4b3c3cdd497e4306060f7d81a76bc6582c7827796c0f21616f075a6ecf800"
     }
   ]
 }

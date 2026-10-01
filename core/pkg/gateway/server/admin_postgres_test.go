@@ -45,8 +45,11 @@ const (
 )
 
 type adminWire struct {
-	t       *testing.T
-	client  gatewayv1.AuthorityAdminServiceClient
+	t      *testing.T
+	client gatewayv1.AuthorityAdminServiceClient
+	// effects is the effect API of the same gateway, which dispatches the
+	// authority plans through the adapter.
+	effects gatewayv1.EffectGatewayServiceClient
 	iss     *issuer
 	rows    *authorityrows.Store
 	adapter *provision.Adapter
@@ -83,6 +86,9 @@ func newAdminWire(t *testing.T) *adminWire {
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
 		`GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA ` + schema + ` TO ` + role,
 		`REVOKE UPDATE ON authority_distinct_values, authority_token_replay FROM ` + role,
+		// A decide token is used up in a transaction that also clears expired
+		// replay rows: the grant the chart's 002_grants.sql gives helm_gateway.
+		`GRANT DELETE ON authority_token_replay TO ` + role,
 	} {
 		_, err = owner.Exec(stmt)
 		must(t, err)
@@ -101,16 +107,22 @@ func newAdminWire(t *testing.T) *adminWire {
 	must(t, err)
 	catalog, err := BuildCatalog([]adapters.Adapter{github.New(), adapter})
 	must(t, err)
+	svc, err := admission.New(db, admission.Config{Adapters: []adapters.Adapter{adapter}})
+	must(t, err)
 	iss := newIssuer(t)
-	api := &AdminServer{Rows: adapter.Store(), Auth: &Authenticator{Validator: iss.validator(), Actor: testActor}, Catalog: catalog}
+	auth := &Authenticator{Validator: iss.validator(), Actor: testActor}
+	api := &AdminServer{Rows: adapter.Store(), Auth: auth, Catalog: catalog}
+	effects := &Server{Admission: svc, Auth: auth}
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
+	mux.Handle(effects.Handler())
 	srv := httptest.NewUnstartedServer(mux)
 	srv.EnableHTTP2 = true
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return &adminWire{t: t, client: gatewayv1.NewAuthorityAdminServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
-		iss: iss, rows: adapter.Store(), adapter: adapter}
+		effects: gatewayv1.NewEffectGatewayServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
+		iss:     iss, rows: adapter.Store(), adapter: adapter}
 }
 
 func (w *adminWire) token(tenant, principal, scope string) string {

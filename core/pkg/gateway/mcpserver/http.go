@@ -13,14 +13,21 @@
 //     must agree, and the Mcp-Method (and, for tools/call, Mcp-Name) header,
 //     which must match the body. server/discover answers what the server is.
 //   - 2025-03-26 to 2025-11-25: the initialize handshake. Nothing is kept from
-//     it: no session id is minted, and the server serves each request on its own.
+//     it. The server mints a random session id for the client to send back, which
+//     partitions idempotency keys and is never looked up, and serves each request
+//     on its own.
 //
 // This file is the protocol; gateway.go is what the tools do.
+//
+// quantum_posture: a session id is 128 random bits from crypto/rand that only
+// partitions idempotency keys; nothing here signs or verifies, and no
+// post-quantum claim is made.
 package mcpserver
 
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -29,6 +36,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -101,7 +109,14 @@ type Tool struct {
 type Call struct {
 	// RequestID is the JSON-RPC id, as a valid string or integer literal.
 	RequestID json.RawMessage
-	Name      string
+	// Session is the id this server minted when the client initialized, for the
+	// eras that have an initialize handshake, or "" (the stateless revision keeps
+	// none, and a client that sends a value that is not one of ours has none). It
+	// names nothing the server remembers: it only tells two sessions of one
+	// episode apart, so a client that restarts its request ids in every session
+	// does not make its calls one.
+	Session string
+	Name    string
 	// Arguments is the call's arguments object, byte for byte as the client
 	// sent it.
 	Arguments json.RawMessage
@@ -336,7 +351,11 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request, req envelope, mo
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(h.callTimeout() + time.Minute))
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), h.callTimeout())
 		defer cancel()
-		result, err := h.Backend.Call(ctx, caller, Call{RequestID: id, Name: params.Name, Arguments: params.Arguments})
+		call := Call{RequestID: id, Name: params.Name, Arguments: params.Arguments}
+		if !modern {
+			call.Session = sessionID(r.Header)
+		}
+		result, err := h.Backend.Call(ctx, caller, call)
 		if err != nil {
 			h.backendFailure(w, id, err)
 			return
@@ -381,11 +400,34 @@ func (h *Handler) initialize(w http.ResponseWriter, req envelope) {
 	if slices.Contains(legacyProtocols, params.ProtocolVersion) {
 		version = params.ProtocolVersion
 	}
+	w.Header().Set("Mcp-Session-Id", newSessionID())
 	writeResult(w, req.ID, map[string]any{
 		"protocolVersion": version, "capabilities": capabilities(),
 		"serverInfo":   map[string]string{"name": "helm-gateway", "version": h.build()},
 		"instructions": instructions,
 	})
+}
+
+// sessionIDPattern is a session id as newSessionID makes it, base64url of 16
+// random bytes.
+var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{22}$`)
+
+// newSessionID is a fresh id for a client that initialized.
+func newSessionID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("mcpserver: no randomness: " + err.Error()) // crypto/rand does not fail on a healthy host
+	}
+	return base64.RawURLEncoding.EncodeToString(b[:])
+}
+
+// sessionID is the session a request names, or "" when it names none or one that
+// is not shaped like ours.
+func sessionID(h http.Header) string {
+	if id := h.Get("Mcp-Session-Id"); sessionIDPattern.MatchString(id) {
+		return id
+	}
+	return ""
 }
 
 func capabilities() map[string]any {
@@ -406,7 +448,7 @@ func (h *Handler) modernResult(m map[string]any) map[string]any {
 func (h *Handler) backendFailure(w http.ResponseWriter, id json.RawMessage, err error) {
 	switch {
 	case errors.Is(err, ErrForbidden):
-		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		http.Error(w, "the worker endpoint serves agent principals of the token's tenant only", http.StatusForbidden)
 	case errors.Is(err, ErrUnknownTool):
 		writeFailure(w, id, invalidParams(http.StatusOK, "unknown tool"))
 	default:

@@ -126,10 +126,12 @@ func (r response) failure(t *testing.T, status, code int) map[string]any {
 
 // The handshake of the initialization-based revisions, which nothing is kept
 // from: each of the three revisions is answered with itself, an unknown one with
-// the newest, and no session is minted.
+// the newest, and the session id the client is given is a fresh random one the
+// server never looks up.
 func TestLegacyHandshakeNegotiatesAndKeepsNothing(t *testing.T) {
 	b := newFake()
 	h := newHandler(b)
+	sessions := map[string]bool{}
 	for _, version := range []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2026-07-28", "2099-01-01"} {
 		want := version
 		if !strings.HasPrefix(version, "2025-") {
@@ -139,11 +141,13 @@ func TestLegacyHandshakeNegotiatesAndKeepsNothing(t *testing.T) {
 		r.Header.Set("Mcp-Session-Id", "client-made-up")
 		got := serve(t, h, r)
 		result := got.result(t)
+		if session := got.Header.Get("Mcp-Session-Id"); !sessionIDPattern.MatchString(session) || session == "client-made-up" || sessions[session] {
+			t.Errorf("session id %q is not a fresh one of the server's own", session)
+		} else {
+			sessions[session] = true
+		}
 		if result["protocolVersion"] != want {
 			t.Errorf("initialize %s answered %v, want %s", version, result["protocolVersion"], want)
-		}
-		if got.Header.Get("Mcp-Session-Id") != "" {
-			t.Error("the server minted or echoed a session id")
 		}
 		if _, ok := result["resultType"]; ok {
 			t.Error("a legacy result carries resultType")
@@ -554,5 +558,46 @@ func TestBackendFailuresBecomeTheRightAnswer(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The session the server minted reaches the backend with a legacy call, and
+// nothing else does: a value that is not one of the server's shape, and any
+// value in the stateless revision, which has no sessions, are "".
+func TestLegacySessionsPartitionCallsAndNothingElse(t *testing.T) {
+	session := newSessionID()
+	for name, test := range map[string]struct {
+		request func() *http.Request
+		want    string
+	}{
+		"a legacy call with a minted session": {func() *http.Request {
+			r := legacy(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"helm_work_report","arguments":{}}}`, "2025-11-25")
+			r.Header.Set("Mcp-Session-Id", session)
+			return r
+		}, session},
+		"a legacy call with no session": {func() *http.Request {
+			return legacy(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"helm_work_report","arguments":{}}}`, "2025-11-25")
+		}, ""},
+		"a legacy call with a session of another shape": {func() *http.Request {
+			r := legacy(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"helm_work_report","arguments":{}}}`, "2025-11-25")
+			r.Header.Set("Mcp-Session-Id", "x y")
+			return r
+		}, ""},
+		"a stateless call that sends one anyway": {func() *http.Request {
+			r := modern(1, "tools/call", map[string]any{"name": "helm_work_report", "arguments": map[string]any{}})
+			r.Header.Set("Mcp-Session-Id", session)
+			return r
+		}, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			b := newFake()
+			serve(t, newHandler(b), test.request()).result(t)
+			if b.call.Session != test.want {
+				t.Fatalf("the backend got session %q, want %q", b.call.Session, test.want)
+			}
+		})
+	}
+	if a, b := newSessionID(), newSessionID(); a == b || len(a) != 22 {
+		t.Fatalf("session ids %q and %q are not fresh 22-character ids", a, b)
 	}
 }

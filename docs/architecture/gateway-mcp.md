@@ -159,6 +159,11 @@ and list-change notifications (`listChanged` is false); the tasks extension;
 multi round-trip results; pagination (a cursor is refused); resumable streams;
 and `ping` in the stateless revision, which removed it.
 
+A call is quoted at zero in every unit its chains sum, so a mandate that limits
+an effect by a distinct-value limit (which needs a value digest the tool input
+cannot carry) is refused at admission with `invalid`, and such an effect is not
+callable as a tool until its input can name the value.
+
 The work tools of the Control Plane's composition (`helm.work.*`) are offered
 the same way once their adapter declares them. The typed result an observation
 can carry is the set the kernel defines (the GitHub results); an effect type

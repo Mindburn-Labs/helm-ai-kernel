@@ -1,12 +1,13 @@
 package mcpserver
 
-// quantum_posture: SHA-256 shortens an over-long episode id inside an
-// idempotency key; nothing here signs or verifies, and no post-quantum claim is
-// made.
+// quantum_posture: SHA-256 digests the identity of a tool call into its
+// idempotency key and shortens an over-long episode id inside it; nothing here
+// signs or verifies, and no post-quantum claim is made.
 
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -82,7 +83,7 @@ func (g *Gateway) Tools(ctx context.Context, c Caller) ([]Tool, error) {
 }
 
 // Call runs one tool. An effect tool is proposed under a key derived from the
-// episode and the request's id, and when it is admitted it is dispatched and
+// episode and the call's identity (idempotencyKey), and when it is admitted it is dispatched and
 // observed in the same call, by the worker's own verified identity. The worker's
 // token never carries helm.gateway.execute: the permit is claimed here, inside
 // the gateway, by the principal the attempt was proposed through.
@@ -120,7 +121,7 @@ func (g *Gateway) effect(ctx context.Context, c Caller, t effectTool, call Call)
 		return Result{}, ErrForbidden
 	}
 	propose := admission.ProposeInput{
-		IdempotencyKey: idempotencyKey(c.Episode.EpisodeID, call.RequestID),
+		IdempotencyKey: idempotencyKey(c.Episode.EpisodeID, call, t.effectType, in.Target, in.Arguments),
 		EffectType:     t.effectType, Target: in.Target, Arguments: []byte(in.Arguments), Quote: quoteFor(grants),
 	}
 	attempt, _, err := g.ledger.Propose(ctx, c.Caller, propose)
@@ -224,27 +225,42 @@ func quoteFor(g admission.Grants) []admission.Amount {
 	return quote
 }
 
-// idempotencyKey is the key of a tool call: the episode, and the id of the
-// request. The same request sent again is the same call and finds the same
-// attempt; a different request under the same id is refused as a conflict
-// rather than answered with another call's attempt. A string id and an integer
-// id that print alike stay apart.
-func idempotencyKey(episodeID string, requestID json.RawMessage) string {
-	var tag string
-	if len(requestID) > 0 && requestID[0] == '"' {
+// idempotencyKey is the key of a tool call: the episode, then a digest of what
+// identifies the call inside it.
+//
+// MCP gives a call no id of its own. The request id is unique only among the
+// requests a client has in flight, and a client that opens a new session for
+// every call (langchain-mcp-adapters does) sends id 1 each time, so the id alone
+// would make unrelated calls one. The call is therefore its session (the id the
+// server minted at initialize, for the eras that have one), its request id and
+// its content: the effect type, the target and the exact argument bytes. The
+// same request sent again, which is what a retry is, is the same call and finds
+// the same attempt. A request that differs in any of the four is another call,
+// which admission decides on its own, and never another call's attempt. A string
+// id and an integer id that print alike stay apart.
+func idempotencyKey(episodeID string, call Call, effectType, target string, arguments []byte) string {
+	var id string
+	if len(call.RequestID) > 0 && call.RequestID[0] == '"' {
 		var s string
-		_ = json.Unmarshal(requestID, &s) // the transport only passes a valid id
-		tag = "s:" + s
+		_ = json.Unmarshal(call.RequestID, &s) // the transport only passes a valid id
+		id = "s:" + s
 	} else {
-		n, _ := strconv.ParseInt(string(requestID), 10, 64)
-		tag = "n:" + strconv.FormatInt(n, 10)
+		n, _ := strconv.ParseInt(string(call.RequestID), 10, 64)
+		id = "n:" + strconv.FormatInt(n, 10)
+	}
+	digest := sha256.New()
+	for _, part := range []string{call.Session, id, effectType, target, string(arguments)} {
+		var length [8]byte
+		binary.BigEndian.PutUint64(length[:], uint64(len(part)))
+		digest.Write(length[:])
+		digest.Write([]byte(part))
 	}
 	scope := episodeID
 	if len(scope) > 100 {
 		sum := sha256.Sum256([]byte(scope))
 		scope = "h" + hex.EncodeToString(sum[:20])
 	}
-	return "mcp:" + scope + ":" + tag
+	return "mcp:" + scope + ":" + hex.EncodeToString(digest.Sum(nil))[:48]
 }
 
 // failed is a tool error: the call did not happen, or did not succeed, and the

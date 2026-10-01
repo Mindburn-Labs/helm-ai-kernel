@@ -3918,11 +3918,15 @@
         "Who can reach the worker listener is the deployment's network policy, not this code: the listener has no client certificate, so a token is all it asks for.",
         "An attempt proposed without an episode token, such as the Control Plane's own, records no episode, and the isolation binds only a token that carries one.",
         "A worker can make any call its mandates admit: the endpoint limits what a call may name, not what a model chooses to ask for within its authority.",
-        "An effect's typed result is one of the members the kernel defines (the GitHub results); an effect type of a composition that returns more needs its member in Observation first.",
+        "A composition declares its closed, versioned JSON result schema at startup. An Artifact result is accepted only when its canonical bytes, content digest and declared schema agree; the schema does not upgrade the provider trust class. Results are limited to 1 MiB and oversized snapshots must fail explicitly.",
         "tools/call runs the dispatch in the request: a client that hangs up does not stop it, and a call that outlives CallTimeout is answered as a failure to repeat, with the attempt left for a read-back or the reconciliation job."
       ],
       "tests": {
         "allowed": [
+          "core/pkg/gateway/admission.TestPostgresDeclaredResultSurvivesReplayAndRestart",
+          "core/pkg/gateway/mcpserver.TestArtifactResultReachesTheWorkerAsItsDeclaredPayload",
+          "core/pkg/gateway/server.TestArtifactObservationPreservesItsCanonicalWireContent",
+          "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact",
           "core/pkg/gateway/mcpserver.TestPostgresToolsListReflectsTheCallersMandates",
           "core/pkg/gateway/mcpserver.TestPostgresAnAllowedCallIsDispatchedAndObservedInTheSameCall",
           "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall",
@@ -3932,7 +3936,14 @@
           "core/pkg/gateway/modelgw.TestPostgresModelCallsRecordTheEpisodeOfTheirToken"
         ],
         "forbidden": [
+          "core/pkg/gateway/admission.TestPostgresDeclaredResultCannotSettleWithAnUnexpectedShape",
+          "core/pkg/gateway/adapters.TestResultSchemasFailClosedWithoutExternalResolution",
+          "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes",
+          "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema",
+          "core/pkg/gateway/admission.TestStoredArtifactRetainsItsOriginalSchemaAndContentAddress",
           "core/pkg/gateway/mcpserver.TestPostgresADeniedCallIsAToolErrorWithItsReasonCode",
+          "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve",
+          "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval",
           "core/pkg/gateway/mcpserver.TestPostgresATokenOfAnotherTenantReachesNothingOfThisOne",
           "core/pkg/gateway/mcpserver.TestPostgresAnotherEpisodesAttemptIsNotFound",
           "core/pkg/gateway/mcpserver.TestPostgresTheEpisodeComesFromTheClaimNotTheBody",
@@ -3951,10 +3962,16 @@
           "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
         ],
         "removal": [
+          "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact",
+          "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema",
+          "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes",
+          "core/pkg/gateway/admission.TestStoredArtifactRetainsItsOriginalSchemaAndContentAddress",
           "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract",
           "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk",
           "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope",
-          "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheRequest",
+          "core/pkg/gateway/admission.TestWorkEffectIdentitySeparatesAuthorityScopesAndIntent",
+          "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve",
+          "core/pkg/gateway/admission.TestApprovalDispatchRefusal",
           "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall",
           "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults",
           "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds",
@@ -4004,9 +4021,27 @@
           ]
         },
         {
+          "file": "core/pkg/gateway/admission/workeffect.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestWorkEffectIdentitySeparatesAuthorityScopesAndIntent"
+          ]
+        },
+        {
           "file": "core/pkg/gateway/mcpserver/gateway.go",
           "tests": [
-            "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheRequest"
+            "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/dispatch.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestApprovalDispatchRefusal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/adapters/artifact_result.go",
+          "tests": [
+            "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes"
           ]
         },
         {
@@ -4097,6 +4132,24 @@
           "file": "core/pkg/gateway/admission/list.go",
           "tests": [
             "core/pkg/gateway/admission.TestListStatementHoldsAnEpisodeCallerToItsEpisodeAndPrincipal"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/adapters/artifact_result.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/adapters/artifact_result.go",
+          "tests": [
+            "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact"
+          ]
+        },
+        {
+          "file": "core/pkg/gateway/admission/read.go",
+          "tests": [
+            "core/pkg/gateway/admission.TestStoredArtifactRetainsItsOriginalSchemaAndContentAddress"
           ]
         }
       ]

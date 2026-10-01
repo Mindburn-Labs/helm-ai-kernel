@@ -174,10 +174,11 @@ func TestPostgresAnAllowedCallIsDispatchedAndObservedInTheSameCall(t *testing.T)
 		}
 	}
 
-	// The initialization-based revisions make the same call the same way.
+	// A different protocol revision and request ID still replay this work's
+	// exact governed intent. Changing transport cannot send the effect twice.
 	old := e.legacy(t, tokenSeat1Ep1, "2025-11-25", 2, "tools/call", map[string]any{"name": "github_repository_get", "arguments": getArgs(repoA)})
 	oldContent, isError := old.structured(t)
-	if isError || oldContent["status"] != "succeeded" || oldContent["attempt_id"] == content["attempt_id"] || e.adapter.dispatched.Load() != 2 {
+	if isError || oldContent["status"] != "succeeded" || oldContent["attempt_id"] != content["attempt_id"] || e.adapter.dispatched.Load() != 1 {
 		t.Fatalf("legacy call = %v", oldContent)
 	}
 	if _, ok := old.result(t)["resultType"]; ok {
@@ -354,9 +355,15 @@ func TestPostgresAnUnknownOutcomeIsReconcilingUntilItIsKnown(t *testing.T) {
 	e.adapter.script(func(adapters.Effect) adapters.DispatchResult {
 		return adapters.DispatchResult{Status: adapters.DispatchNotSent, Reason: "PRECONDITION_FAILED", Detail: "no"}
 	}, nil)
-	failed, isError := e.callTool(t, tokenSeat1Ep1, "f-1", "github_repository_get", getArgs(repoA)).structured(t)
+	// A genuinely different intent reaches Dispatch; a new wire ID alone
+	// would replay the successful observation above under D8.
+	newIntent := map[string]any{"target": repoA, "arguments": map[string]any{"schema": "helm.github.repository.get.v1", "branch": "blocked"}}
+	failed, isError := e.callTool(t, tokenSeat1Ep1, "f-1", "github_repository_get", newIntent).structured(t)
 	if !isError || failed["status"] != "failed" || failed["reason_code"] != "PRECONDITION_FAILED" {
 		t.Fatalf("a refused dispatch = %v", failed)
+	}
+	if failed["attempt_id"] == done["attempt_id"] || e.adapter.dispatched.Load() != 2 {
+		t.Fatalf("a different intent did not get its own dispatch: %v", failed)
 	}
 }
 

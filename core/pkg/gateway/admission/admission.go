@@ -161,9 +161,10 @@ type Config struct {
 // only state it keeps is compiled mandate conditions, keyed by the digest of
 // their text.
 type Service struct {
-	db       *sql.DB
-	cfg      Config
-	adapters map[string]adapters.Adapter
+	db            *sql.DB
+	cfg           Config
+	adapters      map[string]adapters.Adapter
+	resultSchemas map[string]*adapters.ResultSchema
 
 	conditions sync.Map // [32]byte -> *authority.Snapshot
 }
@@ -189,15 +190,24 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 		cfg.MaxTransaction = MaxTransaction
 	}
 	byType := map[string]adapters.Adapter{}
+	resultSchemas := map[string]*adapters.ResultSchema{}
 	for _, a := range cfg.Adapters {
 		for _, d := range a.Declarations() {
 			if _, dup := byType[d.EffectType]; dup {
 				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
 			}
 			byType[d.EffectType] = a
+			resultSchema, err := adapters.CompileResultSchema(d)
+			if err != nil {
+				return nil, fmt.Errorf("%s result contract: %w", d.EffectType, err)
+			}
+			if resultSchema != nil && fixedResultKind(d.EffectType) != "" {
+				return nil, fmt.Errorf("%s already has a fixed result contract", d.EffectType)
+			}
+			resultSchemas[d.EffectType] = resultSchema
 		}
 	}
-	return &Service{db: db, cfg: cfg, adapters: byType}, nil
+	return &Service{db: db, cfg: cfg, adapters: byType, resultSchemas: resultSchemas}, nil
 }
 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and

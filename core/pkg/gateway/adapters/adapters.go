@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 )
 
 // Adapter performs the effect types it declares.
@@ -154,6 +155,11 @@ type Declaration struct {
 	// arguments, as UTF-8 JSON. It is closed: the gateway refuses what it does
 	// not allow.
 	ArgumentSchema []byte
+	// ResultSchemaID and ResultSchema declare a composition-owned, versioned
+	// JSON result. Both must be present together. They are compiled once by
+	// the gateway, never accepted from an effect's arguments or observation.
+	ResultSchemaID string
+	ResultSchema   []byte
 	// Grantable is whether a mandate may grant the effect type. It is false for
 	// the gateway's own authority effects (helm.authority.*).
 	Grantable bool
@@ -242,6 +248,10 @@ type Observation struct {
 	GitHubPullRequest *GitHubPullRequestResult
 	GitHubBranch      *GitHubBranchResult
 	GitHubRepository  *GitHubRepositoryResult
+	// Artifact carries an effect's declared JSON result using HELM's existing
+	// canonical content model. Its schema and bytes are validated before any
+	// outcome or result_ref is recorded.
+	Artifact *interfaces.Artifact
 }
 
 // GitHubPullRequestResult mirrors helm.gateway.v1.GitHubPullRequestResult;

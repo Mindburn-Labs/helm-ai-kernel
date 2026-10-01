@@ -172,10 +172,30 @@ an effect by a distinct-value limit (which needs a value digest the tool input
 cannot carry) is refused at admission with `invalid`, and such an effect is not
 callable as a tool until its input can name the value.
 
+## Declared results
+
 The work tools of the Control Plane's composition (`helm.work.*`) are offered
-the same way once their adapter declares them. The typed result an observation
-can carry is the set the kernel defines (the GitHub results); an effect type
-that returns more needs its member in `Observation` first.
+once their adapter declares them. Existing GitHub result members keep their
+fixed contracts. Other effect types declare `ResultSchemaID` and a closed
+`ResultSchema` at gateway startup; a provider cannot choose a different output
+contract in its response. Schema references cannot load network or local files.
+
+The observation carries the canonical `interfaces.Artifact`: a versioned schema
+id, `application/json`, interoperable canonical JSON bytes and their SHA-256
+content digest. The result must be one complete object of at most 1 MiB. An
+oversized snapshot fails explicitly; it is never silently truncated. Output
+outside the declaration becomes an unknown outcome requiring reconciliation,
+and cannot be recorded as a successful settled effect.
+
+`structuredContent` exposes `result_kind: "artifact"`, the original object as
+`result`, and `result_schema_id` / `result_digest`. Its `observation` includes
+source, trust class, evidence digest, observed time and result reference. This
+retains provenance without treating a provider claim as independent evidence.
+
+The existing observation ledger persists the exact artifact. A restart or
+replay reads those original bytes and verifies their content address, including
+after that adapter has been removed; it never reconstructs a result from the
+current organization state. Episode and tenant isolation apply to these reads.
 
 ## Evidence
 

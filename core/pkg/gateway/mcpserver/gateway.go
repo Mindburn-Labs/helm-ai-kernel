@@ -331,6 +331,14 @@ func addResult(out map[string]any, o *admission.Observation) {
 		out["result_kind"], out["result"] = "github_branch", o.GitHubBranch
 	case o.GitHubRepository != nil:
 		out["result_kind"], out["result"] = "github_repository", o.GitHubRepository
+	case o.Artifact != nil:
+		out["result_kind"], out["result"] = "artifact", json.RawMessage(o.Artifact.CanonicalBytes)
+		out["result_schema_id"], out["result_digest"] = o.Artifact.SchemaID, o.Artifact.Digest
+	}
+	if o != nil {
+		out["observation"] = map[string]any{"source": o.Source, "trust_class": o.TrustClass,
+			"evidence_digest": hex.EncodeToString(o.EvidenceDigest), "observed_at": o.ObservedAt,
+			"result_ref": o.ResultRef}
 	}
 }
 

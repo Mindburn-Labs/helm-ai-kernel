@@ -14,6 +14,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 )
 
 // Attempt is the stored effect attempt.
@@ -107,6 +108,7 @@ type Observation struct {
 	GitHubPullRequest *adapters.GitHubPullRequestResult
 	GitHubBranch      *adapters.GitHubBranchResult
 	GitHubRepository  *adapters.GitHubRepositoryResult
+	Artifact          *interfaces.Artifact
 }
 
 // Get returns an attempt of the caller's tenant and workspace. Any other
@@ -300,8 +302,22 @@ func (o *Observation) decodeResult(kind string, raw []byte) error {
 	case "github_repository":
 		o.GitHubRepository = &adapters.GitHubRepositoryResult{}
 		target = o.GitHubRepository
+	case "artifact":
+		o.Artifact = &interfaces.Artifact{}
+		target = o.Artifact
 	default:
 		return fmt.Errorf("observation result kind %q is not one this gateway reads", kind)
 	}
-	return json.Unmarshal(raw, target)
+	if err := json.Unmarshal(raw, target); err != nil {
+		return err
+	}
+	if o.Artifact != nil {
+		if err := adapters.ValidateResultArtifact(o.Artifact); err != nil {
+			return err
+		}
+		if o.Artifact.Digest != o.ResultRef {
+			return errors.New("stored artifact content does not match the observation result_ref")
+		}
+	}
+	return nil
 }

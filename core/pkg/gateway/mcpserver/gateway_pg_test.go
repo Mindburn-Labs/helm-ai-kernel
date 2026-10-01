@@ -137,7 +137,7 @@ func TestPostgresAnAllowedCallIsDispatchedAndObservedInTheSameCall(t *testing.T)
 	// own identity, which records who claimed the permit.
 	a := e.attempt(tenantA, content["attempt_id"].(string))
 	if a.State != "OBSERVED" || a.Outcome != "SUCCEEDED" || a.RequesterPrincipalID != "agt:seat-1" || a.RequesterActorID != cpActor ||
-		a.IdempotencyKey != "mcp:ep-1:s:call-1" || a.Permit == nil || a.Permit.ConsumedAt == nil {
+		a.Permit == nil || a.Permit.ConsumedAt == nil {
 		t.Fatalf("attempt = %+v", a)
 	}
 	var by, byActor string

@@ -119,6 +119,11 @@ func observationProto(o *admission.Observation) *gatewayv1.Observation {
 			DefaultBranch: r.DefaultBranch, DefaultBranchSha: r.DefaultBranchSHA, Branch: r.Branch, BranchSha: r.BranchSHA,
 			BranchExists: r.BranchExists,
 		}}
+	case o.Artifact != nil:
+		r := o.Artifact
+		out.Result = &gatewayv1.Observation_Artifact{Artifact: &gatewayv1.ArtifactResult{
+			SchemaId: r.SchemaID, ContentType: r.ContentType, CanonicalBytes: r.CanonicalBytes, Digest: r.Digest,
+		}}
 	}
 	return out
 }

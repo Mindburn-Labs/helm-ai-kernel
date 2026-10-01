@@ -545,7 +545,7 @@ func TestHeldFieldNumbersStayFree(t *testing.T) {
 		msg     protoreflect.MessageDescriptor
 		numbers []protoreflect.FieldNumber
 	}{
-		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{10, 11, 12, 13, 14, 15}},
+		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{11, 12, 13, 14, 15}},
 	}
 	for _, h := range held {
 		for _, n := range h.numbers {
@@ -665,14 +665,14 @@ func TestApprovalDigestVector(t *testing.T) {
 }
 
 // Observation's typed results: one oneof, one member per effect type, on the
-// field numbers HELM-753 took from the held range (7, 8 and 9).
+// stable fixed members (7, 8 and 9) and the declared Artifact result (10).
 func TestObservationTypedResults(t *testing.T) {
 	md := (&Observation{}).ProtoReflect().Descriptor()
 	oneof := md.Oneofs().ByName("result")
 	if oneof == nil {
 		t.Fatal("Observation has no result oneof")
 	}
-	want := map[protoreflect.Name]protoreflect.FieldNumber{"github_pull_request": 7, "github_branch": 8, "github_repository": 9}
+	want := map[protoreflect.Name]protoreflect.FieldNumber{"github_pull_request": 7, "github_branch": 8, "github_repository": 9, "artifact": 10}
 	if oneof.Fields().Len() != len(want) {
 		t.Fatalf("result has %d members, want %d", oneof.Fields().Len(), len(want))
 	}

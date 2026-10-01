@@ -643,23 +643,29 @@ removal_proofs:
     tests:
       - "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
   - control: CTL-057
-    file: core/pkg/gateway/mcpserver/gateway.go
-    find: "\treturn \"mcp:\" + scope + \":\" + hex.EncodeToString(digest.Sum(nil))[:48]\n"
-    replace: "\treturn \"mcp:\" + hex.EncodeToString(digest.Sum(nil))[:48]\n"
+    file: core/pkg/gateway/admission/workeffect.go
+    find: "\t\tcaller.Episode.WorkItemID, in.EffectType, target} {\n"
+    replace: "\t\tin.EffectType, target} {\n"
     tests:
-      - "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheCall"
+      - "core/pkg/gateway/admission.TestWorkEffectIdentitySeparatesAuthorityScopesAndIntent"
   - control: CTL-057
     file: core/pkg/gateway/mcpserver/gateway.go
-    find: "\tif len(attempt.ApprovalDigest) != 0 {\n"
-    replace: "\tif false && len(attempt.ApprovalDigest) != 0 {\n"
+    find: "\tif len(attempt.ApprovalDigest) != 0 || attempt.Episode == nil ||\n"
+    replace: "\tif false && len(attempt.ApprovalDigest) != 0 || attempt.Episode == nil ||\n"
     tests:
       - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
   - control: CTL-057
     file: core/pkg/gateway/admission/dispatch.go
-    find: "\t\tif caller.Episode != nil && len(a.approvalDigest) != 0 {\n"
-    replace: "\t\tif false && caller.Episode != nil && len(a.approvalDigest) != 0 {\n"
+    find: "\tif caller.Episode != nil && len(approvalDigest) != 0 {\n"
+    replace: "\tif false && caller.Episode != nil && len(approvalDigest) != 0 {\n"
     tests:
-      - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
+      - "core/pkg/gateway/admission.TestApprovalDispatchRefusal"
+  - control: CTL-057
+    file: core/pkg/gateway/adapters/artifact_result.go
+    find: "if err != nil || !bytes.Equal(canonical, a.CanonicalBytes) {"
+    replace: "if false && (err != nil || !bytes.Equal(canonical, a.CanonicalBytes)) {"
+    tests:
+      - "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes"
   - control: CTL-057
     file: core/pkg/gateway/mcpserver/gateway.go
     find: "\tif attempt.State == \"ADMITTED\" {\n"
@@ -3628,9 +3634,9 @@ controls:
         - "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
         - "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
         - "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
-        - "core/pkg/gateway/mcpserver.TestIdempotencyKeyIsScopedToTheEpisodeAndTheCall"
+        - "core/pkg/gateway/admission.TestWorkEffectIdentitySeparatesAuthorityScopesAndIntent"
         - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
-        - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
+        - "core/pkg/gateway/admission.TestApprovalDispatchRefusal"
         - "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall"
         - "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults"
         - "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"

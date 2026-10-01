@@ -104,8 +104,19 @@ func (s *ResultSchema) Validate(a *interfaces.Artifact) error {
 // today's adapter registry. A historical observation remains readable after
 // its adapter is removed or superseded; its recorded schema id stays intact.
 func ValidateResultArtifact(a *interfaces.Artifact) error {
-	_, err := resultValue(a)
-	return err
+	// Validate the original envelope before reconstructing the canonical
+	// content address. Never normalize away metadata or a retained bad digest.
+	if a == nil || a.ContentType != "application/json" || a.Preview != "" || len(a.Metadata) != 0 {
+		return errors.New("the result is not a bounded JSON artifact")
+	}
+	checked, err := NewJSONResult(a.SchemaID, a.CanonicalBytes)
+	if err != nil {
+		return err
+	}
+	if a.Digest != checked.Digest {
+		return errors.New("the result digest does not bind its canonical bytes")
+	}
+	return nil
 }
 
 func resultValue(a *interfaces.Artifact) (any, error) {

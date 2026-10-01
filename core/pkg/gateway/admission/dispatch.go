@@ -81,9 +81,8 @@ func (s *Service) Dispatch(ctx context.Context, caller Caller, attemptID string)
 			// attempt has needed approval, CP resumes it with execute authority
 			// and starts a continuation episode. Check the retained digest while
 			// holding the row lock, before consuming a permit or doing I/O.
-			if caller.Episode != nil && len(a.approvalDigest) != 0 {
-				return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
-					"an approved escalation must be dispatched by the control plane")
+			if err := approvalDispatchRefusal(caller, a.approvalDigest); err != nil {
+				return err
 			}
 		case "PROPOSED", "DENIED", "ESCALATED", "APPROVED", "REJECTED", "EXPIRED":
 			return refuse(CodeFailedPrecondition, "", "an attempt in %s cannot be dispatched", a.state)
@@ -109,6 +108,14 @@ func (s *Service) Dispatch(ctx context.Context, caller Caller, attemptID string)
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err
+}
+
+func approvalDispatchRefusal(caller Caller, approvalDigest []byte) error {
+	if caller.Episode != nil && len(approvalDigest) != 0 {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
+			"an approved escalation must be dispatched by the control plane")
+	}
+	return nil
 }
 
 // claimed is a committed dispatch claim: what the adapter call needs.

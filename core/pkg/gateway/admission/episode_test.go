@@ -20,6 +20,20 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 )
 
+func TestApprovalDispatchRefusal(t *testing.T) {
+	worker := Caller{Episode: &Episode{EpisodeID: "ep-1", WorkItemID: "work-1"}}
+	wantRefusal(t, "worker cannot resume an approved escalation", approvalDispatchRefusal(worker, []byte("approval")),
+		CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	if err := approvalDispatchRefusal(worker, nil); err != nil {
+		t.Fatalf("direct admission rejected: %v", err)
+	}
+	// The enclosing transaction still checks CP's workload and requester
+	// authority; this restriction applies only to the worker same-call path.
+	if err := approvalDispatchRefusal(Caller{}, []byte("approval")); err != nil {
+		t.Fatalf("control-plane approval resume rejected: %v", err)
+	}
+}
+
 func TestBindEpisodeTakesTheWorkReferenceFromTheClaim(t *testing.T) {
 	e := &Episode{EpisodeID: "ep-1", WorkItemID: "work-1"}
 	in := ProposeInput{IdempotencyKey: "k", EffectType: noteType, Target: "ops"}

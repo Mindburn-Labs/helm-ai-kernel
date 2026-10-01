@@ -34,6 +34,9 @@ type oidcFixture struct {
 	scope, subject, clientID string
 	tokens, refreshes        atomic.Int32
 	revocationStatus         int
+	jwksStatus, tokenStatus  atomic.Int32
+	tokenError, revokedToken atomic.Value
+	retryRegistration        bool
 }
 
 func newOIDC(t *testing.T) *oidcFixture {
@@ -43,6 +46,8 @@ func newOIDC(t *testing.T) *oidcFixture {
 		t.Fatal(err)
 	}
 	f := &oidcFixture{t: t, key: key, scope: requestedScope, subject: "verified-subject", clientID: "oaiapp_fixture", revocationStatus: http.StatusOK}
+	f.tokenError.Store("")
+	f.revokedToken.Store("")
 	f.server = httptest.NewTLSServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	f.client = NewClient()
@@ -60,6 +65,10 @@ func newOIDC(t *testing.T) *oidcFixture {
 func (f *oidcFixture) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/jwks":
+		if status := f.jwksStatus.Load(); status != 0 {
+			w.WriteHeader(int(status))
+			return
+		}
 		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &f.key.PublicKey, KeyID: "issuer-key", Algorithm: "RS256", Use: "sig"}}})
 	case "/discovery":
 		_ = json.NewEncoder(w).Encode(map[string]string{"issuer": f.server.URL, "revocation_endpoint": f.server.URL + "/revoke"})
@@ -70,6 +79,7 @@ func (f *oidcFixture) serve(w http.ResponseWriter, r *http.Request) {
 		if r.Form.Get("token_type_hint") != "refresh_token" || r.Form.Get("client_id") != f.clientID || r.Form.Get("token") == "" {
 			f.t.Error("unbound revocation")
 		}
+		f.revokedToken.Store(r.Form.Get("token"))
 		w.WriteHeader(f.revocationStatus)
 	case "/token":
 		f.tokens.Add(1)
@@ -94,6 +104,11 @@ func (f *oidcFixture) serve(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "invalid grant", http.StatusBadRequest)
 				return
 			}
+		}
+		if status := f.tokenStatus.Load(); status != 0 {
+			w.WriteHeader(int(status))
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": f.tokenError.Load().(string), "error_description": "must-not-leak-fixture-secret"})
+			return
 		}
 		claims := idClaims{RegisteredClaims: jwt.RegisteredClaims{Issuer: f.server.URL, Subject: f.subject,
 			Audience: []string{f.clientID}, ExpiresAt: jwt.NewNumericDate(f.client.now().Add(time.Hour)), IssuedAt: jwt.NewNumericDate(f.client.now())}, Nonce: f.request.Get("nonce"), Email: "same-display@example.test"}
@@ -134,10 +149,10 @@ func (f *oidcFixture) login(s *Store, selected string, modify func(url.Values)) 
 			return err
 		}
 		f.request = u.Query()
-		if selected == "" && (f.request.Get("client_id") != dynamicClient || f.request.Get("agent_name_hint") != "HELM AI OS") {
+		if selected == "" && !f.retryRegistration && (f.request.Get("client_id") != dynamicClient || f.request.Get("agent_name_hint") != "HELM AI OS") {
 			f.t.Error("new registration did not use the public dynamic client")
 		}
-		if selected != "" && (f.request.Get("client_id") != f.clientID || f.request.Has("agent_name_hint")) {
+		if (selected != "" || f.retryRegistration) && (f.request.Get("client_id") != f.clientID || f.request.Has("agent_name_hint")) {
 			f.t.Error("reauthorization created another registration")
 		}
 		if f.request.Has("id_token_hint") || f.request.Get("ext_agent_host_id") != s.hostID || f.request.Get("code_challenge_method") != "S256" {
@@ -224,7 +239,7 @@ func TestLoginRefusesWrongIssuerAudienceNonceAndExpiry(t *testing.T) {
 
 func TestCallbackRefusesWrongStateBeforeExchangingCode(t *testing.T) {
 	f := newOIDC(t)
-	p, _, err := f.client.begin("local-host", "http://127.0.0.1:54321/auth/callback", nil)
+	p, _, err := f.client.begin("local-host", "http://127.0.0.1:54321/auth/callback", nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,6 +389,173 @@ func TestRefreshIsSerializedAcrossStoreInstancesAndPersistsRotation(t *testing.T
 	r, err = s.load(a.ID)
 	if err != nil || r.RefreshToken != "fixture-refresh-renewed" || r.Generation != a.Generation {
 		t.Fatal("rotation was not retained atomically", err)
+	}
+}
+
+func expireAccount(t *testing.T, s *Store, c *Client, a Account) {
+	t.Helper()
+	r, err := s.load(a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.ExpiresAt = c.now().Add(-time.Minute)
+	if err := s.write("account-"+a.ID+".json", r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRefreshRetainsRotatedTokensAcrossJWKSFailureAndRestart(t *testing.T) {
+	for name, status := range map[string]int32{"unavailable": 503, "not-found": 404, "forbidden": 403} {
+		t.Run(name, func(t *testing.T) {
+			f, s := newOIDC(t), newStore(t)
+			a, err := f.login(s, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expireAccount(t, s, f.client, a)
+			receivedAt := f.client.now()
+			f.jwksStatus.Store(status)
+			for i := 0; i < 2; i++ {
+				if token, err := s.AccessToken(context.Background(), f.client, a.Reference()); token != "" || !errors.Is(err, ErrUnavailable) {
+					t.Fatal("unvalidated rotated token escaped custody", err)
+				}
+			}
+			r, err := s.load(a.ID)
+			if err != nil || r.PendingRefresh == nil || r.RefreshToken != "fixture-refresh-renewed" || r.AccessToken != "" || !r.SignedIn || r.PlanUse || !r.RenewalPending {
+				t.Fatal("replacement was not durably quarantined", err)
+			}
+			accounts, err := s.Accounts(context.Background())
+			if err != nil || len(accounts) != 1 || !accounts[0].RenewalPending || accounts[0].PlanUse {
+				t.Fatal("pending validation missing from safe status", err)
+			}
+			statusJSON, err := json.Marshal(accounts)
+			if err != nil || strings.Contains(string(statusJSON), "fixture-refresh") || strings.Contains(string(statusJSON), "fixture-access") {
+				t.Fatal("pending status exposed credentials", err)
+			}
+			other, err := OpenStore(s.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.jwksStatus.Store(0)
+			f.client.now = func() time.Time { return receivedAt.Add(30 * time.Second) }
+			if token, err := other.AccessToken(context.Background(), f.client, a.Reference()); err != nil || token != "fixture-access-renewed" {
+				t.Fatal("restart did not finish retained validation", err)
+			}
+			r, err = other.load(a.ID)
+			if err != nil || r.PendingRefresh != nil || r.RenewalPending || !r.PlanUse || r.Generation != a.Generation || !r.ExpiresAt.Equal(receivedAt.Add(time.Hour)) {
+				t.Fatal("recovery changed expiry or account generation", err)
+			}
+			if f.refreshes.Load() != 1 {
+				t.Fatal("recovery replayed a consumed refresh token")
+			}
+		})
+	}
+}
+
+func TestRefreshOnlyConfirmedTerminalOAuthErrorsClearCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		code     string
+		status   int32
+		terminal bool
+	}{
+		{"invalid_grant", 400, true},
+		{"invalid_refresh_token", 400, true},
+		{"token_expired", 401, true},
+		{"refresh_token_expired", 400, true},
+		{"refresh_token_invalidated", 400, true},
+		{"refresh_token_reused", 400, true},
+		{"invalid_client", 400, false},
+		{"temporarily_unavailable", 503, false},
+		{"invalid_grant", 503, false},
+		{"", 404, false},
+	} {
+		t.Run(tc.code+"/"+http.StatusText(int(tc.status)), func(t *testing.T) {
+			f, s := newOIDC(t), newStore(t)
+			a, err := f.login(s, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expireAccount(t, s, f.client, a)
+			f.tokenError.Store(tc.code)
+			f.tokenStatus.Store(tc.status)
+			token, err := s.AccessToken(context.Background(), f.client, a.Reference())
+			if token != "" || err == nil || errors.Is(err, ErrReauthorize) != tc.terminal || strings.Contains(err.Error(), "must-not-leak-fixture-secret") {
+				t.Fatal("OAuth error lost its bounded meaning", err)
+			}
+			r, err := s.load(a.ID)
+			if err != nil || r.ClientID != a.ClientID || r.Generation != a.Generation {
+				t.Fatal("failure lost retained registration", err)
+			}
+			if tc.terminal {
+				if r.SignedIn || r.PlanUse || r.AccessToken != "" || r.RefreshToken != "" || r.IDToken != "" {
+					t.Fatal("terminal refresh rejection retained credentials")
+				}
+			} else if !r.SignedIn || r.RefreshToken != "fixture-refresh-original" || r.AccessToken != "fixture-access-original" {
+				t.Fatal("recoverable server/configuration failure erased credentials")
+			}
+		})
+	}
+}
+
+func TestFailedInitialExchangeReusesIssuedRegistrationAfterRestart(t *testing.T) {
+	f, s := newOIDC(t), newStore(t)
+	f.tokenError.Store("invalid_grant")
+	f.tokenStatus.Store(http.StatusBadRequest)
+	if _, err := f.login(s, "", nil); err == nil {
+		t.Fatal("failed exchange accepted")
+	}
+	accounts, err := s.Accounts(context.Background())
+	if err != nil || len(accounts) != 0 {
+		t.Fatal("unvalidated registration became an account", err)
+	}
+	var registration incompleteRegistration
+	if err := s.read("registration.json", &registration); err != nil || registration.ClientID != f.clientID || registration.HostID != s.hostID || registration.Issuer != f.server.URL {
+		t.Fatal("issued registration was lost", err)
+	}
+	info, err := os.Stat(filepath.Join(s.dir, "registration.json"))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatal("incomplete registration is not private", err)
+	}
+	other, err := OpenStore(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.retryRegistration = true
+	f.tokenStatus.Store(0)
+	if _, err := f.login(other, "", func(q url.Values) { q.Set("client_id", "oaiapp_foreign") }); !errors.Is(err, ErrIdentity) {
+		t.Fatal("retry replaced the retained client identity", err)
+	}
+	if f.tokens.Load() != 1 {
+		t.Fatal("mismatched retry reached token exchange")
+	}
+	a, err := f.login(other, "", nil)
+	if err != nil || !a.SignedIn || a.ClientID != f.clientID {
+		t.Fatal("issued registration retry failed", err)
+	}
+	registration = incompleteRegistration{}
+	if err := other.read("registration.json", &registration); err != nil || registration.ClientID != "" {
+		t.Fatal("validated registration remained incomplete", err)
+	}
+}
+
+func TestLogoutRevokesPendingReplacementAndClearsQuarantine(t *testing.T) {
+	f, s := newOIDC(t), newStore(t)
+	a, err := f.login(s, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expireAccount(t, s, f.client, a)
+	f.jwksStatus.Store(http.StatusServiceUnavailable)
+	if token, err := s.AccessToken(context.Background(), f.client, a.Reference()); token != "" || !errors.Is(err, ErrUnavailable) {
+		t.Fatal("expected pending identity validation", err)
+	}
+	confirmed, err := s.Logout(context.Background(), f.client, a.Reference())
+	if err != nil || !confirmed || f.revokedToken.Load().(string) != "fixture-refresh-renewed" {
+		t.Fatal("logout did not revoke the retained replacement", err)
+	}
+	r, err := s.load(a.ID)
+	if err != nil || r.PendingRefresh != nil || r.RenewalPending || r.RefreshToken != "" || r.AccessToken != "" || r.SignedIn {
+		t.Fatal("logout retained quarantined credentials", err)
 	}
 }
 

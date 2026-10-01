@@ -68,6 +68,7 @@ func NewClient() *Client {
 
 type pending struct {
 	state, nonce, verifier, redirectURI, hostID string
+	clientID                                    string
 	previous                                    *record
 }
 
@@ -79,12 +80,19 @@ func randomValue() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(value[:]), nil
 }
 
-func (c *Client) begin(hostID, redirect string, previous *record) (*pending, string, error) {
+func (c *Client) begin(hostID, redirect string, previous *record, registeredClient string) (*pending, string, error) {
 	u, err := url.Parse(redirect)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" || u.Path != callbackPath || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return nil, "", ErrAuthorization
 	}
 	p := &pending{hostID: hostID, redirectURI: redirect, previous: previous}
+	if registeredClient != "" && !validClientID(registeredClient) {
+		return nil, "", ErrIdentity
+	}
+	p.clientID = registeredClient
+	if previous != nil {
+		p.clientID = previous.ClientID
+	}
 	if p.state, err = randomValue(); err != nil {
 		return nil, "", err
 	}
@@ -99,8 +107,8 @@ func (c *Client) begin(hostID, redirect string, previous *record) (*pending, str
 		"response_type": {"code"}, "redirect_uri": {redirect}, "scope": {requestedScope}, "resource": {resource},
 		"state": {p.state}, "nonce": {p.nonce}, "code_challenge_method": {"S256"},
 		"code_challenge": {base64.RawURLEncoding.EncodeToString(challenge[:])}}
-	if previous != nil {
-		q.Set("client_id", previous.ClientID)
+	if p.clientID != "" {
+		q.Set("client_id", p.clientID)
 		q.Del("agent_name_hint")
 		// Hints are optional. Omitting id_token_hint keeps credentials out of
 		// terminal/browser-launch diagnostics; identity is still checked below.
@@ -112,19 +120,27 @@ func (p *pending) matchesState(q url.Values) bool {
 	return len(q["state"]) == 1 && subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(p.state)) == 1
 }
 
-func (c *Client) complete(ctx context.Context, p *pending, q url.Values) (*record, error) {
+func (p *pending) issuedClient(q url.Values) (string, error) {
 	if !p.matchesState(q) || len(q["error"]) > 0 || len(q["code"]) != 1 || q.Get("code") == "" || len(q["client_id"]) > 1 {
-		return nil, ErrAuthorization
+		return "", ErrAuthorization
 	}
 	clientID := q.Get("client_id")
-	if p.previous != nil {
-		if clientID != "" && clientID != p.previous.ClientID {
-			return nil, ErrIdentity
+	if p.clientID != "" {
+		if clientID != "" && clientID != p.clientID {
+			return "", ErrIdentity
 		}
-		clientID = p.previous.ClientID
+		clientID = p.clientID
 	}
 	if !validClientID(clientID) {
-		return nil, ErrAuthorization
+		return "", ErrAuthorization
+	}
+	return clientID, nil
+}
+
+func (c *Client) complete(ctx context.Context, p *pending, q url.Values) (*record, error) {
+	clientID, err := p.issuedClient(q)
+	if err != nil {
+		return nil, err
 	}
 	tokens, err := c.token(ctx, url.Values{"grant_type": {"authorization_code"}, "client_id": {clientID},
 		"code": {q.Get("code")}, "code_verifier": {p.verifier}, "redirect_uri": {p.redirectURI}, "resource": {resource}})
@@ -182,6 +198,13 @@ func (c *Client) token(ctx context.Context, form url.Values) (*tokenResponse, er
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	var result tokenResponse
 	if err := c.readJSON(req, &result); err != nil {
+		var failure *oauthError
+		if form.Get("grant_type") == "refresh_token" && errors.As(err, &failure) {
+			switch failure.code {
+			case "invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_invalidated", "refresh_token_reused":
+				return nil, ErrReauthorize
+			}
+		}
 		return nil, err
 	}
 	if !cleanToken(result.AccessToken) || result.TokenType != "Bearer" || result.ExpiresIn <= 0 || result.ExpiresIn > 3600 ||
@@ -203,6 +226,14 @@ func cleanToken(s string) bool {
 	return true
 }
 
+// Error descriptions and arbitrary provider response bodies can contain
+// sensitive data. Keep only a machine code internally; never log the body.
+type oauthError struct{ code string }
+
+func (*oauthError) Error() string {
+	return "ChatGPT OAuth request was rejected; check the client configuration or restart sign-in"
+}
+
 func (c *Client) readJSON(req *http.Request, target any) error {
 	res, err := c.http.Do(req)
 	if err != nil {
@@ -213,7 +244,17 @@ func (c *Client) readJSON(req *http.Request, target any) error {
 		if res.StatusCode >= 500 || res.StatusCode == http.StatusTooManyRequests {
 			return ErrUnavailable
 		}
-		return ErrReauthorize
+		if req.Method == http.MethodPost && req.URL.String() == c.tokenURL {
+			var failure struct {
+				Error string `json:"error"`
+			}
+			body, readErr := io.ReadAll(io.LimitReader(res.Body, maxResponseBytes+1))
+			if readErr == nil && len(body) <= maxResponseBytes && json.Unmarshal(body, &failure) == nil && failure.Error != "" {
+				return &oauthError{code: failure.Error}
+			}
+		}
+		// A JWKS/discovery 4xx says nothing about refresh-token validity.
+		return ErrUnavailable
 	}
 	b, err := io.ReadAll(io.LimitReader(res.Body, maxResponseBytes+1))
 	if err != nil || len(b) > maxResponseBytes {
@@ -269,31 +310,44 @@ func (c *Client) identity(ctx context.Context, raw, clientID, nonce string) (*id
 	return claims, nil
 }
 
-func (c *Client) refresh(ctx context.Context, r *record) error {
-	tokens, err := c.token(ctx, url.Values{"grant_type": {"refresh_token"}, "client_id": {r.ClientID},
-		"refresh_token": {r.RefreshToken}, "resource": {resource}})
-	if err != nil {
-		return err
+func (c *Client) refresh(ctx context.Context, r *record, persist func() error) error {
+	if r.PendingRefresh == nil {
+		tokens, err := c.token(ctx, url.Values{"grant_type": {"refresh_token"}, "client_id": {r.ClientID},
+			"refresh_token": {r.RefreshToken}, "resource": {resource}})
+		if err != nil {
+			return err
+		}
+		if tokens.RefreshToken == "" {
+			return ErrReauthorize
+		}
+		pending := &refreshRotation{Tokens: *tokens, ReceivedAt: c.now().UTC(), CheckIdentity: tokens.IDToken != ""}
+		if pending.Tokens.IDToken == "" {
+			pending.Tokens.IDToken = r.IDToken
+		}
+		if pending.Tokens.Scope == "" {
+			pending.Tokens.Scope = strings.Join(r.Scopes, " ")
+		}
+		// Persist the replacement BEFORE the next network operation. It is
+		// quarantined and cannot authorize inference until identity validates.
+		r.PendingRefresh, r.RenewalPending = pending, true
+		r.RefreshToken, r.AccessToken, r.PlanUse = tokens.RefreshToken, "", false
+		if err := persist(); err != nil {
+			return err
+		}
 	}
-	if tokens.RefreshToken == "" {
-		return ErrReauthorize
-	}
-	if tokens.IDToken != "" {
-		identity, err := c.identity(ctx, tokens.IDToken, r.ClientID, "")
+	pending := r.PendingRefresh
+	if pending.CheckIdentity {
+		identity, err := c.identity(ctx, pending.Tokens.IDToken, r.ClientID, "")
 		if err != nil {
 			return err
 		}
 		if identity.Subject != r.Subject || identity.Issuer != r.Issuer {
 			return ErrIdentity
 		}
-	} else {
-		tokens.IDToken = r.IDToken
 	}
-	if tokens.Scope == "" {
-		tokens.Scope = strings.Join(r.Scopes, " ")
-	}
-	r.replaceTokens(tokens, c.now())
-	return nil
+	r.replaceTokens(&pending.Tokens, pending.ReceivedAt)
+	r.PendingRefresh, r.RenewalPending = nil, false
+	return persist()
 }
 
 func (c *Client) revoke(ctx context.Context, r *record) error {

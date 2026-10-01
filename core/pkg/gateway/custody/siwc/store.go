@@ -35,13 +35,29 @@ type Account struct {
 	SignedIn                    bool      `json:"signed_in"`
 	PlanUse                     bool      `json:"plan_use"`
 	RemoteRevocationUnconfirmed bool      `json:"remote_revocation_unconfirmed,omitempty"`
+	RenewalPending              bool      `json:"renewal_pending,omitempty"`
 }
 
 type record struct {
 	Account
-	AccessToken  string `json:"access_token,omitempty"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	IDToken      string `json:"id_token,omitempty"`
+	AccessToken    string           `json:"access_token,omitempty"`
+	RefreshToken   string           `json:"refresh_token,omitempty"`
+	IDToken        string           `json:"id_token,omitempty"`
+	PendingRefresh *refreshRotation `json:"pending_refresh,omitempty"`
+}
+
+type refreshRotation struct {
+	Tokens        tokenResponse `json:"tokens"`
+	ReceivedAt    time.Time     `json:"received_at"`
+	CheckIdentity bool          `json:"check_identity"`
+}
+
+// An issued but not yet validated registration is not an Account and grants
+// no inference authority. Its ID survives a failed authorization-code exchange.
+type incompleteRegistration struct {
+	ClientID string `json:"client_id,omitempty"`
+	Issuer   string `json:"issuer"`
+	HostID   string `json:"host_id"`
 }
 
 func (*record) String() string   { return "<ChatGPT credential record: redacted>" }
@@ -205,6 +221,23 @@ func (s *Store) Login(ctx context.Context, c *Client, selectedID string, showURL
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	var previous *record
+	registeredClient := ""
+	if selectedID == "" {
+		unlock, err := s.lock(ctx, "registration")
+		if err != nil {
+			return Account{}, err
+		}
+		defer unlock()
+		var registration incompleteRegistration
+		if err := s.read("registration.json", &registration); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return Account{}, err
+		} else if err == nil {
+			if registration.HostID != s.hostID || registration.Issuer != c.issuer || (registration.ClientID != "" && !validClientID(registration.ClientID)) {
+				return Account{}, ErrStorage
+			}
+			registeredClient = registration.ClientID
+		}
+	}
 	if selectedID != "" {
 		unlock, err := s.lock(ctx, selectedID)
 		if err != nil {
@@ -222,7 +255,7 @@ func (s *Store) Login(ctx context.Context, c *Client, selectedID string, showURL
 	}
 	defer func() { _ = listener.Close() }()
 	callback := "http://" + listener.Addr().String() + callbackPath
-	p, authorizationURL, err := c.begin(s.hostID, callback, previous)
+	p, authorizationURL, err := c.begin(s.hostID, callback, previous, registeredClient)
 	if err != nil {
 		return Account{}, err
 	}
@@ -263,6 +296,15 @@ func (s *Store) Login(ctx context.Context, c *Client, selectedID string, showURL
 		return Account{}, ErrUnavailable
 	}
 	_ = server.Close()
+	if selectedID == "" {
+		clientID, err := p.issuedClient(q)
+		if err != nil {
+			return Account{}, err
+		}
+		if err := s.write("registration.json", incompleteRegistration{ClientID: clientID, HostID: s.hostID, Issuer: c.issuer}); err != nil {
+			return Account{}, err
+		}
+	}
 	r, err := c.complete(ctx, p, q)
 	if err != nil {
 		return Account{}, err
@@ -282,6 +324,11 @@ func (s *Store) Login(ctx context.Context, c *Client, selectedID string, showURL
 	}
 	if err := s.write("account-"+r.ID+".json", r); err != nil {
 		return Account{}, err
+	}
+	if selectedID == "" {
+		if err := s.write("registration.json", incompleteRegistration{HostID: s.hostID, Issuer: c.issuer}); err != nil {
+			return Account{}, err
+		}
 	}
 	return r.Account, nil
 }
@@ -305,11 +352,11 @@ func (s *Store) AccessToken(ctx context.Context, c *Client, ref Reference) (stri
 	if !r.SignedIn || r.Issuer != c.issuer {
 		return "", ErrReauthorize
 	}
-	if !r.PlanUse {
+	if !r.PlanUse && r.PendingRefresh == nil {
 		return "", ErrPermission
 	}
-	if !c.now().Add(time.Minute).Before(r.ExpiresAt) {
-		if err := c.refresh(ctx, r); err != nil {
+	if r.PendingRefresh != nil || !c.now().Add(time.Minute).Before(r.ExpiresAt) {
+		if err := c.refresh(ctx, r, func() error { return s.write("account-"+r.ID+".json", r) }); err != nil {
 			if errors.Is(err, ErrReauthorize) || errors.Is(err, ErrIdentity) {
 				r.clearTokens()
 				if writeErr := s.write("account-"+r.ID+".json", r); writeErr != nil {
@@ -318,9 +365,9 @@ func (s *Store) AccessToken(ctx context.Context, c *Client, ref Reference) (stri
 			}
 			return "", err
 		}
-		if err := s.write("account-"+r.ID+".json", r); err != nil {
-			return "", err
-		}
+	}
+	if !c.now().Before(r.ExpiresAt) {
+		return "", ErrUnavailable
 	}
 	if !r.PlanUse {
 		return "", ErrPermission
@@ -362,6 +409,7 @@ func (s *Store) Logout(ctx context.Context, c *Client, ref Reference) (bool, err
 func (r *record) clearTokens() {
 	r.AccessToken, r.RefreshToken, r.IDToken = "", "", ""
 	r.Scopes, r.ExpiresAt, r.SignedIn, r.PlanUse = nil, time.Time{}, false, false
+	r.PendingRefresh, r.RenewalPending = nil, false
 }
 
 func (a Account) Reference() Reference {
@@ -369,7 +417,7 @@ func (a Account) Reference() Reference {
 }
 
 func (s *Store) lock(ctx context.Context, name string) (func(), error) {
-	if name != "host" && !accountPattern.MatchString(name) {
+	if name != "host" && name != "registration" && !accountPattern.MatchString(name) {
 		return nil, fmt.Errorf("%w: invalid account reference", ErrIdentity)
 	}
 	return lockFile(ctx, filepath.Join(s.dir, name+".lock"))

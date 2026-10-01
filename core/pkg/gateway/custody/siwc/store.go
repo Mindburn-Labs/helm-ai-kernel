@@ -236,6 +236,23 @@ func (s *Store) Login(ctx context.Context, c *Client, selectedID string, showURL
 				return Account{}, ErrStorage
 			}
 			registeredClient = registration.ClientID
+			if registeredClient != "" {
+				// A crash may leave the registration after the validated account
+				// was committed. Retire only that proven completed registration.
+				accounts, err := s.Accounts(ctx)
+				if err != nil {
+					return Account{}, err
+				}
+				for _, account := range accounts {
+					if account.ClientID == registeredClient && account.Issuer == c.issuer && account.HostID == s.hostID {
+						if err := s.write("registration.json", incompleteRegistration{HostID: s.hostID, Issuer: c.issuer}); err != nil {
+							return Account{}, err
+						}
+						registeredClient = ""
+						break
+					}
+				}
+			}
 		}
 	}
 	if selectedID != "" {
@@ -355,14 +372,28 @@ func (s *Store) AccessToken(ctx context.Context, c *Client, ref Reference) (stri
 	if !r.PlanUse && r.PendingRefresh == nil {
 		return "", ErrPermission
 	}
-	if r.PendingRefresh != nil || !c.now().Add(time.Minute).Before(r.ExpiresAt) {
-		if err := c.refresh(ctx, r, func() error { return s.write("account-"+r.ID+".json", r) }); err != nil {
+	refresh := func() error {
+		err := c.refresh(ctx, r, func() error { return s.write("account-"+r.ID+".json", r) })
+		if err != nil {
 			if errors.Is(err, ErrReauthorize) || errors.Is(err, ErrIdentity) {
 				r.clearTokens()
 				if writeErr := s.write("account-"+r.ID+".json", r); writeErr != nil {
-					return "", writeErr
+					return writeErr
 				}
 			}
+		}
+		return err
+	}
+	wasPending := r.PendingRefresh != nil
+	if wasPending || !c.now().Add(time.Minute).Before(r.ExpiresAt) {
+		if err := refresh(); err != nil {
+			return "", err
+		}
+	}
+	if wasPending && !c.now().Before(r.ExpiresAt) {
+		// A long key-service outage can outlast the quarantined access token.
+		// Its now-verified replacement refresh token remains renewable.
+		if err := refresh(); err != nil {
 			return "", err
 		}
 	}

@@ -274,6 +274,10 @@ type idClaims struct {
 }
 
 func (c *Client) identity(ctx context.Context, raw, clientID, nonce string) (*idClaims, error) {
+	return c.identityAt(ctx, raw, clientID, nonce, c.now())
+}
+
+func (c *Client) identityAt(ctx context.Context, raw, clientID, nonce string, receivedAt time.Time) (*idClaims, error) {
 	if len(raw) == 0 || len(raw) > 32<<10 {
 		return nil, ErrIdentity
 	}
@@ -301,7 +305,7 @@ func (c *Client) identity(ctx context.Context, raw, clientID, nonce string) (*id
 		}
 		return key, nil
 	}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(c.issuer), jwt.WithAudience(clientID),
-		jwt.WithExpirationRequired(), jwt.WithIssuedAt(), jwt.WithTimeFunc(c.now), jwt.WithLeeway(30*time.Second))
+		jwt.WithExpirationRequired(), jwt.WithIssuedAt(), jwt.WithTimeFunc(func() time.Time { return receivedAt }), jwt.WithLeeway(30*time.Second))
 	if err != nil || token == nil || !token.Valid || claims.IssuedAt == nil || claims.Subject == "" || len(claims.Subject) > 512 ||
 		(len(claims.Audience) > 1 && claims.AuthorizedParty != clientID) ||
 		(nonce != "" && subtle.ConstantTimeCompare([]byte(nonce), []byte(claims.Nonce)) != 1) {
@@ -337,7 +341,9 @@ func (c *Client) refresh(ctx context.Context, r *record, persist func() error) e
 	}
 	pending := r.PendingRefresh
 	if pending.CheckIdentity {
-		identity, err := c.identity(ctx, pending.Tokens.IDToken, r.ClientID, "")
+		// Validate the saved response at its durable receipt time. An expired
+		// access token is never returned; Store renews it after this check.
+		identity, err := c.identityAt(ctx, pending.Tokens.IDToken, r.ClientID, "", pending.ReceivedAt)
 		if err != nil {
 			return err
 		}

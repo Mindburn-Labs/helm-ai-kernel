@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,7 @@ type oidcFixture struct {
 	revocationStatus         int
 	jwksStatus, tokenStatus  atomic.Int32
 	tokenError, revokedToken atomic.Value
+	expectedRefresh          atomic.Value
 	retryRegistration        bool
 }
 
@@ -48,6 +50,7 @@ func newOIDC(t *testing.T) *oidcFixture {
 	f := &oidcFixture{t: t, key: key, scope: requestedScope, subject: "verified-subject", clientID: "oaiapp_fixture", revocationStatus: http.StatusOK}
 	f.tokenError.Store("")
 	f.revokedToken.Store("")
+	f.expectedRefresh.Store("fixture-refresh-original")
 	f.server = httptest.NewTLSServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	f.client = NewClient()
@@ -95,7 +98,7 @@ func (f *oidcFixture) serve(w http.ResponseWriter, r *http.Request) {
 			if _, ok := r.Form["scope"]; ok {
 				f.t.Error("refresh widened or changed scope")
 			}
-			if r.Form.Get("refresh_token") != "fixture-refresh-original" {
+			if r.Form.Get("refresh_token") != f.expectedRefresh.Load().(string) {
 				f.t.Error("refresh did not use the retained current token")
 			}
 		} else {
@@ -126,6 +129,10 @@ func (f *oidcFixture) serve(w http.ResponseWriter, r *http.Request) {
 		access, renewal := "fixture-access-original", "fixture-refresh-original"
 		if refresh {
 			access, renewal = "fixture-access-renewed", "fixture-refresh-renewed"
+			if count := f.refreshes.Load(); count > 1 {
+				renewal += "-" + strconv.Itoa(int(count))
+			}
+			f.expectedRefresh.Store(renewal)
 		}
 		_ = json.NewEncoder(w).Encode(tokenResponse{AccessToken: access, RefreshToken: renewal, IDToken: signed, TokenType: "Bearer", ExpiresIn: 3600, Scope: f.scope})
 	default:
@@ -497,6 +504,47 @@ func TestRefreshOnlyConfirmedTerminalOAuthErrorsClearCredentials(t *testing.T) {
 	}
 }
 
+func TestExpiredQuarantinedIdentityRenewsOnlyAfterIdentityValidation(t *testing.T) {
+	for _, mismatch := range []bool{false, true} {
+		t.Run(strconv.FormatBool(mismatch), func(t *testing.T) {
+			f, s := newOIDC(t), newStore(t)
+			a, err := f.login(s, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expireAccount(t, s, f.client, a)
+			if mismatch {
+				f.mutate = func(c *idClaims) { c.Subject = "different-account" }
+			}
+			f.jwksStatus.Store(http.StatusServiceUnavailable)
+			if token, err := s.AccessToken(context.Background(), f.client, a.Reference()); token != "" || !errors.Is(err, ErrUnavailable) {
+				t.Fatal("expected quarantined rotation", err)
+			}
+			recoveredAt := f.client.now().Add(61 * time.Minute)
+			f.client.now = func() time.Time { return recoveredAt }
+			f.jwksStatus.Store(0)
+			other, err := OpenStore(s.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			token, err := other.AccessToken(context.Background(), f.client, a.Reference())
+			if mismatch {
+				if token != "" || !errors.Is(err, ErrIdentity) || f.refreshes.Load() != 1 {
+					t.Fatal("old mismatched identity authorized another renewal", err)
+				}
+				return
+			}
+			if err != nil || token != "fixture-access-renewed" || f.refreshes.Load() != 2 {
+				t.Fatal("long outage destroyed the renewable session", err)
+			}
+			r, err := other.load(a.ID)
+			if err != nil || r.RefreshToken != "fixture-refresh-renewed-2" || r.PendingRefresh != nil || !r.ExpiresAt.Equal(recoveredAt.Add(time.Hour)) || r.Generation != a.Generation {
+				t.Fatal("renewal did not persist the fresh response", err)
+			}
+		})
+	}
+}
+
 func TestFailedInitialExchangeReusesIssuedRegistrationAfterRestart(t *testing.T) {
 	f, s := newOIDC(t), newStore(t)
 	f.tokenError.Store("invalid_grant")
@@ -535,6 +583,36 @@ func TestFailedInitialExchangeReusesIssuedRegistrationAfterRestart(t *testing.T)
 	registration = incompleteRegistration{}
 	if err := other.read("registration.json", &registration); err != nil || registration.ClientID != "" {
 		t.Fatal("validated registration remained incomplete", err)
+	}
+}
+
+func TestCompletedRegistrationIsReconciledAfterInterruptedRetirement(t *testing.T) {
+	f, s := newOIDC(t), newStore(t)
+	a, err := f.login(s, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// This is the exact on-disk state after the account's atomic write and
+	// before retirement of its incomplete-registration marker.
+	if err := s.write("registration.json", incompleteRegistration{ClientID: a.ClientID, Issuer: a.Issuer, HostID: a.HostID}); err != nil {
+		t.Fatal(err)
+	}
+	other, err := OpenStore(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.clientID, f.subject = "oaiapp_second", "second-account"
+	second, err := f.login(other, "", nil)
+	if err != nil || second.ID == a.ID || second.ClientID != "oaiapp_second" {
+		t.Fatal("completed registration blocked another account", err)
+	}
+	first, err := other.load(a.ID)
+	if err != nil || first.Generation != a.Generation || first.Subject != a.Subject || !first.SignedIn {
+		t.Fatal("registration reconciliation changed the existing account", err)
+	}
+	accounts, err := other.Accounts(context.Background())
+	if err != nil || len(accounts) != 2 {
+		t.Fatal("account addition lost a registration", err)
 	}
 }
 

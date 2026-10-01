@@ -35,7 +35,6 @@ const (
 	// (AuthorityAdminService.EnsurePrincipals). No other RPC takes it, and the
 	// Control Plane's issuer mints it for its service principal only.
 	ScopeProvision = "helm.gateway.provision"
-<<<<<<< HEAD
 	// ScopeStepUp is the scope of the step-up proof an Approve may carry
 	// (ApproveRequest.step_up_proof). No RPC takes it as its own credential.
 	ScopeStepUp = "helm.gateway.stepup"
@@ -48,8 +47,6 @@ const (
 const (
 	stepUpMethod      = "webauthn"
 	stepUpMaxLifetime = 300 * time.Second
-=======
->>>>>>> origin/main
 )
 
 // TokenValidator verifies a token's signature, issuer, audience, algorithm

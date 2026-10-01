@@ -45,16 +45,11 @@ const (
 )
 
 type adminWire struct {
-<<<<<<< HEAD
 	t      *testing.T
 	client gatewayv1.AuthorityAdminServiceClient
 	// effects is the effect API of the same gateway, which dispatches the
 	// authority plans through the adapter.
 	effects gatewayv1.EffectGatewayServiceClient
-=======
-	t       *testing.T
-	client  gatewayv1.AuthorityAdminServiceClient
->>>>>>> origin/main
 	iss     *issuer
 	rows    *authorityrows.Store
 	adapter *provision.Adapter
@@ -91,12 +86,9 @@ func newAdminWire(t *testing.T) *adminWire {
 		`GRANT USAGE ON SCHEMA ` + schema + ` TO ` + role,
 		`GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA ` + schema + ` TO ` + role,
 		`REVOKE UPDATE ON authority_distinct_values, authority_token_replay FROM ` + role,
-<<<<<<< HEAD
 		// A decide token is used up in a transaction that also clears expired
 		// replay rows: the grant the chart's 002_grants.sql gives helm_gateway.
 		`GRANT DELETE ON authority_token_replay TO ` + role,
-=======
->>>>>>> origin/main
 	} {
 		_, err = owner.Exec(stmt)
 		must(t, err)
@@ -115,7 +107,6 @@ func newAdminWire(t *testing.T) *adminWire {
 	must(t, err)
 	catalog, err := BuildCatalog([]adapters.Adapter{github.New(), adapter})
 	must(t, err)
-<<<<<<< HEAD
 	svc, err := admission.New(db, admission.Config{Adapters: []adapters.Adapter{adapter}})
 	must(t, err)
 	iss := newIssuer(t)
@@ -125,23 +116,13 @@ func newAdminWire(t *testing.T) *adminWire {
 	mux := http.NewServeMux()
 	mux.Handle(api.Handler())
 	mux.Handle(effects.Handler())
-=======
-	iss := newIssuer(t)
-	api := &AdminServer{Rows: adapter.Store(), Auth: &Authenticator{Validator: iss.validator(), Actor: testActor}, Catalog: catalog}
-	mux := http.NewServeMux()
-	mux.Handle(api.Handler())
->>>>>>> origin/main
 	srv := httptest.NewUnstartedServer(mux)
 	srv.EnableHTTP2 = true
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return &adminWire{t: t, client: gatewayv1.NewAuthorityAdminServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
-<<<<<<< HEAD
 		effects: gatewayv1.NewEffectGatewayServiceClient(srv.Client(), srv.URL, connect.WithGRPC()),
 		iss:     iss, rows: adapter.Store(), adapter: adapter}
-=======
-		iss: iss, rows: adapter.Store(), adapter: adapter}
->>>>>>> origin/main
 }
 
 func (w *adminWire) token(tenant, principal, scope string) string {

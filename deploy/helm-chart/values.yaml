@@ -385,6 +385,23 @@ gateway:
   service:
     type: ClusterIP
     port: 8443
+  # Episode listeners have separate ClusterIP Services; the external edge
+  # targets executor only. Neither exposes privileged Connect RPCs.
+  worker:
+    enabled: false
+    audience: "" # helm-gateway-worker:<env>
+    maxTTLSeconds: 3600
+  executor:
+    enabled: false
+    audience: "" # helm-gateway-executor:<env>; worker tokens are rejected
+    maxTTLSeconds: 900
+  models:
+    # Existing route configuration only; never put provider keys in values.
+    routesConfigMap: ""
+    routesKey: routes.json
+    # Provider key_file paths use this gateway-only Secret mount:
+    # /var/run/secrets/helm-gateway-model-providers/<key>
+    credentialsSecret: ""
   # HELM_GATEWAY_APPROVAL_WINDOW, HELM_GATEWAY_PERMIT_TTL and
   # HELM_GATEWAY_DISPATCH_TIMEOUT as Go durations. Empty keeps the binary's
   # defaults (24h, 10m and 2m).
@@ -466,6 +483,14 @@ gateway:
     # select Pods matching podSelector in namespaces matching
     # namespaceSelector. The health port (8081) is open to kubelet probes.
     controlPlane:
+      namespaceSelector: {}
+      podSelector: {}
+    # Explicit peers for each optional listener. The executor selector is
+    # the public edge Pod/namespace, never the worker namespace.
+    worker:
+      namespaceSelector: {}
+      podSelector: {}
+    executor:
       namespaceSelector: {}
       podSelector: {}
     database:

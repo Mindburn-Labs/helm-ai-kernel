@@ -211,6 +211,32 @@ this, so a missing value fails `helm template` whichever object renders first.
 {{- if and $g.controlPlaneIdentity.requireCNF (or $g.tls.devInsecureLoopback (not $g.tls.clientAuth)) -}}
 {{- fail "gateway.controlPlaneIdentity.requireCNF requires gateway.tls.clientAuth, which supplies the client certificate cnf binds to" -}}
 {{- end -}}
+{{- range $name := list "worker" "executor" -}}
+{{- $listener := index $g $name -}}
+{{- if $listener.enabled -}}
+{{- if not (regexMatch (printf "^helm-gateway-%s:[A-Za-z0-9][A-Za-z0-9._-]*$" $name) $listener.audience) -}}
+{{- fail (printf "gateway.%s.audience must use its own helm-gateway-%s:<env> profile" $name $name) -}}
+{{- end -}}
+{{- if eq $listener.audience $g.controlPlaneIdentity.audience -}}
+{{- fail (printf "gateway.%s.audience must differ from the privileged gateway audience" $name) -}}
+{{- end -}}
+{{- $peers := index $g.networkPolicy $name -}}
+{{- if and $g.networkPolicy.enabled (empty $peers.namespaceSelector) (empty $peers.podSelector) -}}
+{{- fail (printf "gateway.networkPolicy.%s requires explicit namespaceSelector or podSelector" $name) -}}
+{{- end -}}
+{{- else if $listener.audience -}}
+{{- fail (printf "gateway.%s.audience requires that listener to be enabled" $name) -}}
+{{- end -}}
+{{- end -}}
+{{- if and (or $g.worker.enabled $g.executor.enabled) (not $g.models.routesConfigMap) -}}
+{{- fail "gateway worker/executor listener requires gateway.models.routesConfigMap" -}}
+{{- end -}}
+{{- if and $g.models.routesConfigMap (not (or $g.worker.enabled $g.executor.enabled)) -}}
+{{- fail "gateway.models.routesConfigMap requires a worker or executor listener" -}}
+{{- end -}}
+{{- if and $g.models.credentialsSecret (not $g.models.routesConfigMap) -}}
+{{- fail "gateway.models.credentialsSecret requires gateway.models.routesConfigMap" -}}
+{{- end -}}
 {{- if not $g.database.existingSecret -}}
 {{- fail "gateway.enabled=true requires gateway.database.existingSecret holding HELM_GATEWAY_DATABASE_URL (the helm_gateway runtime role's DSN)" -}}
 {{- end -}}

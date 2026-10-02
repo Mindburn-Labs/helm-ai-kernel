@@ -5,6 +5,10 @@
 #
 # <package dir under core> <test> <count> <race|plain>
 # plain: a timing comparison, which the race detector's slowdown would invalidate.
+pkg/gateway/admission TestPostgresModelCallLateUsageConcurrentDelivery 1 race
+pkg/gateway/admission TestPostgresModelCallLateUsageConfirmsEstimateOnce 1 race
+pkg/gateway/admission TestPostgresModelCallLateUsageScopeAndFinalStates 1 race
+pkg/gateway/modelgw TestPostgresModelGatewayLateUsageCorrectsAnEstimateWithoutRedispatch 1 race
 pkg/gateway/runtime TestPostgresGatewayMigrateAndReadiness 1 race
 pkg/boundary TestSQLSurfaceRegistryPersistsRecordsOnPostgres 1 race
 pkg/boundary/approvalceremony TestPostgresEffectReservationOrdersFenceRevocationAndLifecycle 10 race

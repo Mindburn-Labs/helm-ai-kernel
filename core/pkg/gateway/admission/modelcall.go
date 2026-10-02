@@ -380,11 +380,10 @@ func (o ModelCallOutcome) validate() error {
 // SettleModelCall settles a claimed call in one transaction (ADR-0003): it
 // locks the attempt row and then the call's money row, moves the attempt's
 // held exposure as the outcome says, records the observation and, for a
-// completed call, the response to replay. It is idempotent: a call that is
-// no longer HELD, or an attempt that has moved on, is returned unchanged.
-// A confirmation is accepted while the attempt is UNKNOWN, so a response that
-// completes after the fence made it unknown reconciles it. It returns the
-// attempt as settled.
+// completed call, the response to replay. A provider confirmation may replace
+// an ESTIMATED amount once, including after a cut stream left the attempt
+// UNKNOWN. It corrects used exposure without reserving or dispatching again.
+// A final settlement, or an attempt that has otherwise moved on, is unchanged.
 func (s *Service) SettleModelCall(ctx context.Context, c *ModelCallClaim, out ModelCallOutcome) (Attempt, error) {
 	if c == nil {
 		return Attempt{}, errors.New("admission: no model call claim to settle")
@@ -414,11 +413,17 @@ func (s *Service) SettleModelCall(ctx context.Context, c *ModelCallClaim, out Mo
 		if err != nil {
 			return err
 		}
-		if state != SettlementHeld || (a.state != "DISPATCHING" && a.state != "DISPATCHED" && a.state != "UNKNOWN") {
+		heldCall := state == SettlementHeld && (a.state == "DISPATCHING" || a.state == "DISPATCHED" || a.state == "UNKNOWN")
+		lateConfirmation := state == SettlementEstimated && out.Result == ModelCallConfirmed && (a.state == "OBSERVED" || a.state == "UNKNOWN")
+		if !heldCall && !lateConfirmation {
 			settled, err = loadAttempt(ctx, tx, scope, c.AttemptID)
 			return err
 		}
-		if err := s.settleModelCallTx(ctx, tx, a, held, out); err != nil {
+		exposureKind := "held"
+		if lateConfirmation {
+			exposureKind = "estimated"
+		}
+		if err := s.settleModelCallTx(ctx, tx, a, held, exposureKind, out); err != nil {
 			return err
 		}
 		settled, err = loadAttempt(ctx, tx, scope, c.AttemptID)
@@ -427,7 +432,7 @@ func (s *Service) SettleModelCall(ctx context.Context, c *ModelCallClaim, out Mo
 	return settled, err
 }
 
-func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAttempt, held int64, out ModelCallOutcome) error {
+func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAttempt, held int64, exposureKind string, out ModelCallOutcome) error {
 	tenantID, attemptID := a.tenantID, a.id
 	// A response that completes while the attempt is UNKNOWN reconciles it.
 	observedState := "OBSERVED"
@@ -459,7 +464,7 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 	case ModelCallConfirmed:
 		// Consumption above the hold stays on the counter as reported: the
 		// settled call's confirmed amount against its held one is the record.
-		if err := rebookHeld(ctx, tx, tenantID, attemptID, "confirmed", out.ConfirmedMicros, "model-confirmed"); err != nil {
+		if err := rebookModelExposure(ctx, tx, tenantID, attemptID, exposureKind, "confirmed", out.ConfirmedMicros, "model-confirmed"); err != nil {
 			return err
 		}
 		confirmed := out.ConfirmedMicros
@@ -476,7 +481,7 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 			return err
 		}
 	case ModelCallEstimated:
-		if err := rebookHeld(ctx, tx, tenantID, attemptID, "estimated", 0, "model-estimated"); err != nil {
+		if err := rebookModelExposure(ctx, tx, tenantID, attemptID, "held", "estimated", 0, "model-estimated"); err != nil {
 			return err
 		}
 		if err := setCall(SettlementEstimated, &held, nil, 0); err != nil {
@@ -489,7 +494,7 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 			return err
 		}
 	case ModelCallCut:
-		if err := rebookHeld(ctx, tx, tenantID, attemptID, "estimated", 0, "model-cut"); err != nil {
+		if err := rebookModelExposure(ctx, tx, tenantID, attemptID, "held", "estimated", 0, "model-cut"); err != nil {
 			return err
 		}
 		if err := setCall(SettlementEstimated, &held, nil, 0); err != nil {
@@ -514,7 +519,9 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 			return err
 		}
 	}
-	if r := out.Replay; r != nil {
+	// A late usage report corrects accounting only. It cannot fabricate the
+	// response a cut caller never received or replace an expired replay.
+	if r := out.Replay; r != nil && exposureKind == "held" {
 		headers, err := json.Marshal(r.Headers)
 		if err != nil {
 			return err
@@ -546,26 +553,25 @@ func nullInt(v *int64) any {
 	return *v
 }
 
-// rebookHeld moves every held exposure of the attempt to kind (confirmed,
-// estimated or released) in the transaction that settles it.
+// rebookModelExposure moves each held or estimated exposure to its new kind
+// in the transaction that settles the call.
 //
 //   - confirmed: a usd_micros sum exposure takes micros, whatever it held, even
 //     above it (an overage stays on the counter as reported); any other
 //     exposure (a count, another unit's zero quote) is confirmed as held.
 //   - estimated: every exposure keeps its held amount and moves from reserved
 //     to used.
-//   - released: every exposure gives its amount back.
 //
-// Each move is a reversing held posting and, unless released, a posting of the
-// new kind; the counter moves the held amount out of reserved and the new
-// amount into used. Rows are taken in (limit_id, bucket_start) order, the
-// order admission locks its counters in.
-func rebookHeld(ctx context.Context, tx *sql.Tx, tenantID, attemptID, kind string, micros int64, cause string) error {
+// Each move reverses the original posting and appends the new one. Held
+// exposure is debited from reserved; estimated exposure is debited from used.
+// Both credit the new amount to used. Rows retain their original window and
+// limit, in the same lock order as admission.
+func rebookModelExposure(ctx context.Context, tx *sql.Tx, tenantID, attemptID, from, kind string, micros int64, cause string) error {
 	rows, err := tx.QueryContext(ctx, `SELECT e.limit_id::text, e.bucket_start, e.amount, l.unit, l.measure
 		FROM authority_exposures e
 		JOIN authority_limits l ON l.tenant_id = e.tenant_id AND l.limit_id = e.limit_id
-		WHERE e.tenant_id = $1 AND e.attempt_id = $2 AND e.kind = 'held'
-		ORDER BY e.limit_id, e.bucket_start FOR UPDATE OF e`, tenantID, attemptID)
+		WHERE e.tenant_id = $1 AND e.attempt_id = $2 AND e.kind = $3
+		ORDER BY e.limit_id, e.bucket_start FOR UPDATE OF e`, tenantID, attemptID, from)
 	if err != nil {
 		return err
 	}
@@ -575,39 +581,44 @@ func rebookHeld(ctx context.Context, tx *sql.Tx, tenantID, attemptID, kind strin
 		amount        int64
 		unit, measure string
 	}
-	var held []exposure
+	var exposures []exposure
 	for rows.Next() {
 		var e exposure
 		if err := rows.Scan(&e.limitID, &e.start, &e.amount, &e.unit, &e.measure); err != nil {
 			_ = rows.Close()
 			return err
 		}
-		held = append(held, e)
+		exposures = append(exposures, e)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
 	}
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	for _, e := range held {
+	for _, e := range exposures {
 		amount := e.amount
-		switch kind {
-		case "released":
-			amount = 0
-		case "confirmed":
-			if e.unit == UnitUSDMicros && e.measure == "sum" {
-				amount = micros
-			}
+		if kind == "confirmed" && e.unit == UnitUSDMicros && e.measure == "sum" {
+			amount = micros
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE authority_counters SET reserved = reserved - $4, used = used + $5
-			WHERE tenant_id = $1 AND limit_id = $2 AND bucket_start = $3`, tenantID, e.limitID, e.start, e.amount, amount); err != nil {
+		var reservedDebit, usedDebit int64
+		if from == "held" {
+			reservedDebit = e.amount
+		} else {
+			usedDebit = e.amount
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE authority_counters SET reserved = reserved - $4, used = used - $5 + $6
+			WHERE tenant_id = $1 AND limit_id = $2 AND bucket_start = $3`, tenantID, e.limitID, e.start, reservedDebit, usedDebit, amount); err != nil {
 			return err
 		}
 		if e.amount != 0 {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO authority_postings (tenant_id, attempt_id, limit_id, bucket_start, kind, amount, cause)
-				VALUES ($1, $2, $3, $4, 'held', $5, $6)`, tenantID, attemptID, e.limitID, e.start, -e.amount, "reverse:"+cause); err != nil {
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`, tenantID, attemptID, e.limitID, e.start, from, -e.amount, "reverse:"+cause); err != nil {
 				return err
 			}
 		}
-		if kind != "released" && amount != 0 {
+		if amount != 0 {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO authority_postings (tenant_id, attempt_id, limit_id, bucket_start, kind, amount, cause)
 				VALUES ($1, $2, $3, $4, $5, $6, $7)`, tenantID, attemptID, e.limitID, e.start, kind, amount, cause); err != nil {
 				return err

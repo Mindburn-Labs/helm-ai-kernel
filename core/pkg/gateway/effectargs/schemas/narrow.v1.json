@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helm.mindburn.run/schemas/effects/authority/narrow.v1.json",
+  "title": "helm.authority.narrow.v1 arguments",
+  "description": "EffectDescriptor.arguments for effect_type helm.authority.narrow.v1: an organization's authority plan that only narrows the one applied, admitted without approval. Every mandate node is one the applied plan has, with terms within its applied terms; a limit is added or lowered, never raised or dropped; effect types are registered or raised, never lowered; principals listed are already registered and may be disabled; a node the plan leaves out is revoked. A plan that would widen anything is refused whole, and nothing is applied. Rules JSON Schema cannot express, and the gateway enforces before admission: no duplicate object keys at any depth; UTF-8 only; the whole document is at most 524288 bytes; principals are listed once each; mandate nodes are listed once each, exactly one has a null parent and its node is the org_ref, every other parent is a node of the plan, and the parents form a tree; every holder is a principal of the plan or one already registered; every effect type a mandate names is listed in effect_types; every child's terms are within its parent's and each of its limits is no higher than the same limit above it; a human the plan may create carries an external_subject, and one that must already be registered is ensure_only; every limit names a mandate node and each mandate has one limit of a given unit, measure, window and span; no principal is both listed and in disable_principals, and no holder of a plan mandate is disabled; valid_until is after valid_from; the target of the effect is the org_ref. amounts, limit values and spans are plain integer literals of at most 9007199254740991, with no fraction, exponent or sign, even where the value is whole; approval_required and risk_classes name only effect types of their mandate's terms; no effect type in terms or in effect_types is a helm.authority.* effect type; the validity window is part of a mandate's terms, so an earlier valid_from or a later valid_until widens; disable_principals lists only principals the applied plan lists, never the requester; the requester is the organization's provisioner, the service principal that requested the plan applied now, and the organization has an applied plan; disable_principals names no human; no effect type is registered or raised, and a class higher than the registered one refuses the plan; The plan digest is the lower-case hex SHA-256 of the RFC 8785 form of this document without base_plan_digest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "org_ref",
+    "version_ref",
+    "stage",
+    "base_plan_digest",
+    "valid_from",
+    "valid_until",
+    "effect_types",
+    "principals",
+    "mandates"
+  ],
+  "properties": {
+    "schema": {
+      "const": "helm.authority.narrow.v1"
+    },
+    "org_ref": {
+      "description": "The organization: org:<id>. It is the effect's target and the key of the provisioning the plan updates.",
+      "type": "string",
+      "pattern": "^org:[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "version_ref": {
+      "description": "The organization version the plan was compiled from. Recorded, never interpreted.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "stage": {
+      "description": "The activation stage the plan was compiled for. Recorded, never interpreted.",
+      "enum": [
+        "draft",
+        "approval-required",
+        "constrained-live",
+        "certified-live"
+      ]
+    },
+    "base_plan_digest": {
+      "description": "The digest of the plan currently applied to the organization, or empty when none is. A plan applies only on top of that one (compare-and-set).",
+      "type": "string",
+      "pattern": "^([0-9a-f]{64})?$"
+    },
+    "valid_from": {
+      "description": "The start of every mandate's validity window.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "valid_until": {
+      "description": "The end of every mandate's validity window.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "effect_types": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/effectType"
+      }
+    },
+    "principals": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "$ref": "#/$defs/principal"
+      }
+    },
+    "disable_principals": {
+      "type": "array",
+      "maxItems": 2048,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/principalId"
+      }
+    },
+    "mandates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "$ref": "#/$defs/mandate"
+      }
+    },
+    "limits": {
+      "type": "array",
+      "maxItems": 8192,
+      "items": {
+        "$ref": "#/$defs/limit"
+      }
+    }
+  },
+  "$defs": {
+    "principalId": {
+      "description": "A principal id: the sub of the tokens minted for it. 1 to 255 characters without control characters. The gateway also refuses leading and trailing whitespace.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "effectTypeName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+    },
+    "grantableEffectTypeName": {
+      "description": "An effect type a mandate may grant and a plan may register: not one of the gateway's own helm.authority.* effects.",
+      "type": "string",
+      "pattern": "^(?!helm\\.authority\\.)[a-z][a-z0-9_.-]{0,127}$"
+    },
+    "riskClass": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "irreversible"
+      ]
+    },
+    "node": {
+      "description": "A plan node: the name a mandate has in the plan, for example org:<id>, dept:<id>, team:<id> or seat:<id>#g1. A node keeps its mandate across plans while its terms do not widen.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:#-]{0,199}$"
+    },
+    "amount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "effectType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effect_type",
+        "risk_class"
+      ],
+      "properties": {
+        "effect_type": {
+          "$ref": "#/$defs/grantableEffectTypeName"
+        },
+        "risk_class": {
+          "$ref": "#/$defs/riskClass"
+        }
+      }
+    },
+    "externalSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system",
+        "id"
+      ],
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._:-]{0,63}$"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/principalId"
+        },
+        "kind": {
+          "enum": [
+            "human",
+            "agent",
+            "service"
+          ]
+        },
+        "ensure_only": {
+          "description": "Create the principal if it is missing and change nothing if it exists.",
+          "type": "boolean"
+        },
+        "external_subject": {
+          "$ref": "#/$defs/externalSubject"
+        }
+      }
+    },
+    "terms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effect_types",
+        "targets"
+      ],
+      "properties": {
+        "effect_types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/grantableEffectTypeName"
+          }
+        },
+        "targets": {
+          "description": "The allowlisted targets, as exact strings. null allows any target.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            }
+          ]
+        },
+        "approval_required": {
+          "description": "Effect types every call of which needs approval, whatever their risk class.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/grantableEffectTypeName"
+          }
+        },
+        "approval_threshold": {
+          "description": "A call whose amount is at least this needs approval; 0 means every call.",
+          "$ref": "#/$defs/amount"
+        },
+        "per_call_limit": {
+          "description": "Caps the amount of one call.",
+          "$ref": "#/$defs/amount"
+        },
+        "condition": {
+          "description": "A CEL condition over input.args, input.target and input.effect_type. It is compiled when the plan is applied; one that does not compile refuses the plan.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "risk_classes": {
+          "description": "Raises the risk class of an effect type for this mandate; it never lowers the effect type's.",
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "$ref": "#/$defs/grantableEffectTypeName"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/riskClass"
+          }
+        }
+      }
+    },
+    "mandate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "holder",
+        "parent",
+        "terms"
+      ],
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/node"
+        },
+        "holder": {
+          "$ref": "#/$defs/principalId"
+        },
+        "parent": {
+          "description": "The node this mandate is delegated from; null for the root, whose node is the org_ref.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/node"
+            }
+          ]
+        },
+        "terms": {
+          "$ref": "#/$defs/terms"
+        }
+      }
+    },
+    "limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "unit",
+        "measure",
+        "window",
+        "value"
+      ],
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/node"
+        },
+        "unit": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$"
+        },
+        "measure": {
+          "enum": [
+            "sum",
+            "count",
+            "distinct"
+          ]
+        },
+        "window": {
+          "enum": [
+            "none",
+            "hour",
+            "day",
+            "month"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/amount"
+        },
+        "span": {
+          "description": "The number of window buckets a sliding window covers; 1 when absent. 1 for the windowless and the distinct-value limit.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 744
+        }
+      }
+    }
+  },
+  "x-helm": {
+    "effect_type": "helm.authority.narrow.v1",
+    "target": "org:{org_id}",
+    "risk_class": "medium",
+    "idempotent": "conditional: compare-and-set on base_plan_digest; the applied plan applied again changes nothing",
+    "observable": "yes: the applied plan's digest is read back from the organization's provisioning",
+    "reversible": "no: only a provision plan, which needs approval, widens again",
+    "mediation": "enforced",
+    "result": "none"
+  }
+}

@@ -8,7 +8,7 @@ Typed Rust client for the retained HELM kernel API.
 cargo add helm-sdk
 ```
 
-Package metadata identifies source target `0.10.5`; verify registry state
+Package metadata identifies source target `0.11.0`; verify registry state
 before publishing a pinned install claim.
 
 ## Local Development

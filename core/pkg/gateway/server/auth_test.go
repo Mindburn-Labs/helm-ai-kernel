@@ -192,10 +192,13 @@ func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
+	// Propose alone may carry an authority plan, so its cap is the larger one;
+	// every other RPC keeps the 128 KiB cap.
 	big := &gatewayv1.ProposeRequest{
 		IdempotencyKey: "k",
-		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), MaxMessageBytes+1)},
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), MaxProposeMessageBytes+1)},
 	}
+	bigAttempt := &gatewayv1.GetAttemptRequest{AttemptId: string(bytes.Repeat([]byte("a"), MaxMessageBytes+1))}
 	for name, opts := range map[string][]connect.ClientOption{
 		"plain":        {connect.WithGRPC()},
 		"gzip":         {connect.WithGRPC(), connect.WithSendGzip()},
@@ -206,9 +209,27 @@ func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
 		req.Header().Set("Authorization", "Bearer a.b.c")
 		_, err := client.Propose(context.Background(), req)
 		if code := connect.CodeOf(err); code != connect.CodeResourceExhausted && code != connect.CodeInvalidArgument {
-			t.Errorf("%s: an oversize request = %v (%v), want it refused for its size", name, code, err)
+			t.Errorf("%s: an oversize Propose = %v (%v), want it refused for its size", name, code, err)
+		}
+		readReq := connect.NewRequest(bigAttempt)
+		readReq.Header().Set("Authorization", "Bearer a.b.c")
+		_, err = client.GetAttempt(context.Background(), readReq)
+		if code := connect.CodeOf(err); code != connect.CodeResourceExhausted && code != connect.CodeInvalidArgument {
+			t.Errorf("%s: an oversize GetAttempt = %v (%v), want it refused for its size", name, code, err)
 		}
 	}
+	// A Propose past 128 KiB and under its own cap reaches authentication, so a
+	// plan can be proposed; any other RPC of that size is refused before it.
+	plan := connect.NewRequest(&gatewayv1.ProposeRequest{
+		IdempotencyKey: "k",
+		Effect:         &gatewayv1.EffectDescriptor{EffectType: "ops.note", Target: "ops", Arguments: bytes.Repeat([]byte("a"), 2*MaxMessageBytes)},
+	})
+	plan.Header().Set("Authorization", "Bearer a.b.c")
+	_, _ = gatewayv1.NewEffectGatewayServiceClient(server.Client(), server.URL, connect.WithGRPC()).Propose(context.Background(), plan)
+	if calls != 1 {
+		t.Fatalf("a Propose of %d KiB ran authentication %d times, want 1", 2*MaxMessageBytes>>10, calls)
+	}
+	calls = 0
 	// A valid ProposeRequest of 4 MiB, gzipped far under the wire cap: only
 	// the cap after decompression can refuse it.
 	bomb, err := proto.Marshal(&gatewayv1.ProposeRequest{
@@ -224,6 +245,9 @@ func TestOversizeRequestsAreRefusedBeforeAuthentication(t *testing.T) {
 	_ = zw.Close()
 	if inflated.Len() >= MaxBodyBytes {
 		t.Fatalf("the gzip bomb is %d bytes on the wire; the test needs it under the body cap", inflated.Len())
+	}
+	if len(bomb) <= MaxProposeMessageBytes {
+		t.Fatalf("the gzip bomb inflates to %d bytes; the test needs it over Propose's cap", len(bomb))
 	}
 	var req *http.Request
 	req, err = http.NewRequest(http.MethodPost, server.URL+gatewayv1.EffectGatewayServiceProposeProcedure, &inflated)
@@ -276,5 +300,102 @@ func TestStopTokenBindings(t *testing.T) {
 		if err := checkBinding(details(raw), "helm_stop_lift", map[string]string{"stop_id": stop}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+// N1 permits an episode to propose and read its own attempts. This optional
+// read scope must not grant dispatch or weaken the single-scope CP profile.
+func TestEpisodeProposeAndReadScopes(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		scopes    []string
+		wantError bool
+	}{
+		{"propose only", []string{ScopePropose}, false},
+		{"propose and read", []string{ScopePropose, ScopeRead}, false},
+		{"read and propose", []string{ScopeRead, ScopePropose}, false},
+		{"execute", []string{ScopePropose, ScopeExecute}, true},
+		{"decide", []string{ScopePropose, ScopeDecide}, true},
+		{"read only", []string{ScopeRead}, true},
+		{"duplicate", []string{ScopePropose, ScopePropose}, true},
+		{"duplicate read", []string{ScopePropose, ScopeRead, ScopeRead}, true},
+		{"foreign", []string{ScopePropose, "other.read"}, true},
+		{"empty", nil, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			claims := goodClaims()
+			claims.Episode = &jwks.EpisodeClaim{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "v-1"}
+			claims.Scopes = test.scopes
+			a := &Authenticator{Validator: fakeValidator{claims: claims}, Actor: testActor, RequireEpisode: true}
+			id, err := a.Authenticate(context.Background(), bearer(), ScopePropose)
+			if (err != nil) != test.wantError {
+				t.Fatalf("identity=%+v err=%v", id, err)
+			}
+			if err == nil && id.Scope != ScopePropose {
+				t.Fatalf("matched scope=%q", id.Scope)
+			}
+		})
+	}
+}
+
+func TestEpisodeScopeMustAuthorizeTheRequestedRoute(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		scopes    []string
+		requested string
+		allowed   bool
+	}{
+		{"read", []string{ScopePropose, ScopeRead}, ScopeRead, true},
+		{"propose cannot read", []string{ScopePropose}, ScopeRead, false},
+		{"cannot execute", []string{ScopePropose, ScopeRead}, ScopeExecute, false},
+		{"cannot decide", []string{ScopePropose, ScopeRead}, ScopeDecide, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			claims := goodClaims()
+			claims.Episode = &jwks.EpisodeClaim{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "v-1"}
+			claims.Scopes = tc.scopes
+			auth := &Authenticator{Validator: fakeValidator{claims: claims}, Actor: testActor, RequireEpisode: true}
+			id, err := auth.Authenticate(context.Background(), bearer(), tc.requested)
+			if (err == nil) != tc.allowed {
+				t.Fatalf("identity=%+v err=%v", id, err)
+			}
+			if err == nil && id.Scope != tc.requested {
+				t.Fatalf("matched %q want %q", id.Scope, tc.requested)
+			}
+		})
+	}
+}
+
+// The worker listener's profile: a token must name its episode, and a token
+// that does is identified with it.
+func TestTheWorkerProfileRequiresAnEpisode(t *testing.T) {
+	withEpisode := goodClaims()
+	withEpisode.Episode = &jwks.EpisodeClaim{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "v-1"}
+	worker := &Authenticator{Validator: fakeValidator{claims: withEpisode}, Actor: testActor, RequireEpisode: true}
+	id, err := worker.Authenticate(context.Background(), bearer(), ScopePropose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.Episode == nil || id.Episode.EpisodeID != "ep-1" || id.Episode.WorkItemID != "work-1" {
+		t.Fatalf("identity = %+v", id)
+	}
+	// No episode: this listener serves episode tokens only, and the refusal is
+	// permission_denied (the token is valid, it is not for here).
+	bare := &Authenticator{Validator: fakeValidator{claims: goodClaims()}, Actor: testActor, RequireEpisode: true}
+	_, err = bare.Authenticate(context.Background(), bearer(), ScopePropose)
+	if code, reason, _ := errorDetail(t, err); code != connect.CodePermissionDenied || reason != "INSUFFICIENT_PRIVILEGE" {
+		t.Fatalf("a worker listener given a token with no episode: %v", err)
+	}
+	// The main profile does not ask for one, and still reports one that is there.
+	main := &Authenticator{Validator: fakeValidator{claims: goodClaims()}, Actor: testActor}
+	if id, err := main.Authenticate(context.Background(), bearer(), ScopePropose); err != nil || id.Episode != nil {
+		t.Fatalf("the main profile: %+v %v", id, err)
+	}
+	// The episode requirement never replaces the scope check.
+	wrongScope := goodClaims()
+	wrongScope.Episode = withEpisode.Episode
+	wrongScope.Scopes = []string{ScopeRead}
+	if _, err := (&Authenticator{Validator: fakeValidator{claims: wrongScope}, Actor: testActor, RequireEpisode: true}).Authenticate(context.Background(), bearer(), ScopePropose); err == nil {
+		t.Fatal("an episode token with the wrong scope was accepted")
 	}
 }

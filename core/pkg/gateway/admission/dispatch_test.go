@@ -83,11 +83,11 @@ func TestTypedResultFollowsTheEffectType(t *testing.T) {
 	}
 	branch := base()
 	branch.GitHubBranch = &adapters.GitHubBranchResult{CommitSHA: commitSHA}
-	kind, body, err := typedResult(effectargs.GitHubBranchCreateFromChanges, branch)
+	kind, body, err := typedResult(effectargs.GitHubBranchCreateFromChanges, nil, branch)
 	if err != nil || kind != "github_branch" || len(body) == 0 {
 		t.Fatalf("a branch result: %q %s %v", kind, body, err)
 	}
-	if kind, body, err := typedResult(noteType, base()); err != nil || kind != "" || body != nil {
+	if kind, body, err := typedResult(noteType, nil, base()); err != nil || kind != "" || body != nil {
 		t.Fatalf("an effect type without a result: %q %s %v", kind, body, err)
 	}
 	both := base()
@@ -104,7 +104,7 @@ func TestTypedResultFollowsTheEffectType(t *testing.T) {
 		"a short digest":     {noteType, &adapters.Observation{Source: "s", TrustClass: "c", EvidenceDigest: []byte{1}}},
 		"no source or class": {noteType, &adapters.Observation{}},
 	} {
-		if _, _, err := typedResult(c.effectType, c.o); err == nil {
+		if _, _, err := typedResult(c.effectType, nil, c.o); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}

@@ -17,10 +17,9 @@ Security fixes are expected on the current minor version and, when practical, th
 
 | Version | Supported |
 | --- | --- |
-| `0.8.x` | Yes |
-| `0.7.x` | Yes |
-| `0.6.x` | Best effort |
-| Older | No |
+| `0.10.x` | Yes |
+| `0.9.x` | Best effort |
+| `0.8.x` and older | No |
 
 ## Verification Material
 
@@ -59,11 +58,12 @@ The signing identity is the GitHub Actions workflow itself
 Verification commands and the recovery path are documented in
 [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-The current public GitHub release, `v0.8.4`, attaches
-OpenVEX and Cosign bundle material for every primary asset. Verify
-`SHA256SUMS.txt`, `sbom.json`, `v0.8.4.openvex.json`,
+Use the verification material attached to the exact version on the
+[GitHub Releases page](https://github.com/Mindburn-Labs/helm-ai-kernel/releases).
+Verify `SHA256SUMS.txt`, `sbom.json`, the version's `*.openvex.json`,
 `release-attestation.json`, offline `evidence-pack.tar`, and matching
-`*.cosign.bundle` files.
+`*.cosign.bundle` files. A tag or a published image alone does not establish
+that every release channel and verification asset completed successfully.
 
 ## Continuous Fuzzing
 

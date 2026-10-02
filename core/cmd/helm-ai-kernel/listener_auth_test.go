@@ -77,6 +77,7 @@ func TestMCPServeRefusesNonLoopbackBindWithoutAuth(t *testing.T) {
 		t.Fatalf("mcp serve --auth none on 0.0.0.0: exit=%d stderr=%s", code, stderr.String())
 	}
 
+	t.Setenv("MINDBURN_HELM_API_KEY", "")
 	t.Setenv("HELM_API_KEY", "mcp-static-key")
 	server, err := newLocalMCPHTTPServerWithDataDir(9100, "static-header", t.TempDir())
 	if err != nil {
@@ -139,6 +140,7 @@ func TestWrapProxyAuth(t *testing.T) {
 }
 
 func TestWrapMCPAuth_StaticHeaderRequiresKey(t *testing.T) {
+	t.Setenv("MINDBURN_HELM_API_KEY", "")
 	t.Setenv("HELM_API_KEY", "mcp-static-key")
 	handler, err := wrapMCPAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)

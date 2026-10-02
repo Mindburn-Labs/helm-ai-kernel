@@ -16,3 +16,26 @@ spec:
   selector:
     {{- include "helm-ai-kernel.gatewaySelectorLabels" . | nindent 4 }}
 {{- end }}
+
+{{- if .Values.gateway.enabled }}
+{{- range $name := list "worker" "executor" }}
+{{- if (index $.Values.gateway $name).enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helm-ai-kernel.gatewayName" $ | trunc 54 | trimSuffix "-" }}-{{ $name }}
+  labels:
+    {{- include "helm-ai-kernel.gatewayLabels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ ternary 8444 8445 (eq $name "worker") }}
+      targetPort: {{ $name }}
+      protocol: TCP
+      name: {{ $name }}
+  selector:
+    {{- include "helm-ai-kernel.gatewaySelectorLabels" $ | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}

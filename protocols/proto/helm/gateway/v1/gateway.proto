@@ -235,7 +235,9 @@ service EffectGatewayService {
   // state terminal (§4.3).
   rpc Observe(ObserveRequest) returns (ObserveResponse);
 
-  // GetAttempt returns one attempt. It is rev 3.4 §4.2's "Get".
+  // GetAttempt returns one attempt. It is rev 3.4 §4.2's "Get". A token that
+  // carries an episode claim (a worker token) reads only the attempts of its
+  // own episode; any other attempt is not_found for it.
   //
   // Token scope: helm.gateway.read.
   rpc GetAttempt(GetAttemptRequest) returns (GetAttemptResponse) {
@@ -266,11 +268,12 @@ service EffectGatewayService {
   // Token scope: helm.gateway.read.
   //
   // Every filter narrows and none widens: an attempt of another tenant or
-  // workspace is never listed. A page holds at most page_size attempts; a
-  // response with a next_page_token has more, and the same request with that
-  // token continues where the page ended. An attempt that changes while the
-  // caller pages is listed again at its new position if it moves past the
-  // cursor.
+  // workspace is never listed, and a token that carries an episode claim (a
+  // worker token) lists only the attempts of its own episode. A page holds at
+  // most page_size attempts; a response with a next_page_token has more, and
+  // the same request with that token continues where the page ended. An
+  // attempt that changes while the caller pages is listed again at its new
+  // position if it moves past the cursor.
   rpc ListAttempts(ListAttemptsRequest) returns (ListAttemptsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -502,6 +505,12 @@ message ListAttemptsRequest {
   // The next_page_token of the previous page, unchanged. Empty for the first
   // page. A token belongs to one set of filters.
   string page_token = 8;
+  // Only attempts proposed in this episode: EffectAttempt.episode.episode_id.
+  // A filter like the others, not an assertion about the caller. A token that
+  // carries an episode claim of its own lists only that episode's attempts,
+  // whatever it sets here; this filter then narrows nothing further or, for
+  // another episode's id, leaves the page empty.
+  string episode_id = 9;
 }
 
 // ListAttemptsResponse is one page of attempts.
@@ -669,6 +678,23 @@ message EffectAttempt {
   // act.sub of the Propose token (RFC 8693, ADR-0005 §2). Empty when the
   // principal proposed directly.
   string requester_actor_id = 28;
+  // The worker run the attempt was proposed in. Set only for an attempt
+  // proposed with an episode token, from that token's helm_episode claim alone
+  // and never from a request field; unset for every other attempt.
+  EpisodeRef episode = 29;
+}
+
+// EpisodeRef names the bounded worker run an attempt belongs to: the
+// helm_episode claim of the episode token that proposed it, as verified. The
+// claim is the token's scope of work, so these ids are never a request's.
+message EpisodeRef {
+  // The episode, one bounded worker run.
+  string episode_id = 1;
+  // The work item the episode serves. It is also the attempt's case_id.
+  string work_item_id = 2;
+  // The organization version the episode runs under. Empty when the token
+  // names none.
+  string organization_version_id = 3;
 }
 
 // EffectAttemptState is the §4.3 state machine:
@@ -930,7 +956,7 @@ enum SettlementState {
 // source, freshness and trust class (§3).
 //
 // result carries the typed, bounded result of the effect types that define
-// one (HELM-753). Field numbers 10 to 15 stay held for later result types.
+// one (HELM-753). Field numbers 11 to 15 stay held for later result types.
 message Observation {
   // Where it came from, for example the provider's response or an adapter
   // read-back operation.
@@ -958,7 +984,25 @@ message Observation {
     GitHubBranchResult github_branch = 8;
     // github.repository.get.
     GitHubRepositoryResult github_repository = 9;
+    // A composition-owned JSON result, validated against the effect type's
+    // declared, versioned schema. It cannot replace a fixed result above.
+    ArtifactResult artifact = 10;
   }
+}
+
+// ArtifactResult is the JSON transport of HELM's canonical Artifact model.
+// The gateway retains it in the existing observation row; there is no second
+// result store or authority in this payload. Read isolation is the attempt's.
+message ArtifactResult {
+  // Stable versioned schema id fixed by the effect type's declaration.
+  string schema_id = 1;
+  // Always application/json for this observation member.
+  string content_type = 2;
+  // The complete RFC 8785 payload, at most 1 MiB, in the interoperable integer
+  // subset of HELM canonical JSON. Replays return the same retained bytes.
+  bytes canonical_bytes = 3;
+  // sha256:<lowercase hex> of canonical_bytes; equal to Observation.result_ref.
+  string digest = 4;
 }
 
 // GitHubRepositoryResult is a repository read (HELM-753), the source of a

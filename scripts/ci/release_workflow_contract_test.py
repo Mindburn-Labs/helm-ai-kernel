@@ -115,10 +115,18 @@ PROTECTED_SECRET_ENVIRONMENTS = {
 
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
+    def test_complete_github_release_becomes_latest(self) -> None:
+        job = self.job("github-release")
+        self.assertIn("version-status", self.job_needs("github-release"))
+        self.assertIn("draft: false", job)
+        self.assertIn("prerelease: false", job)
+        self.assertIn("make_latest: true", job)
+
     def test_pre_release_registry_receipt_waits_without_bypassing_failure(self) -> None:
         job = self.job("version-status")
-        self.assertIn("timeout-minutes: 25", job)
+        self.assertIn("timeout-minutes: 40", job)
         self.assertIn("--npm-propagation-timeout 900", job)
+        self.assertIn("--pypi-propagation-timeout 900", job)
         self.assertNotIn("--report", job)
         self.assertNotIn("continue-on-error", job)
         self.assertNotIn("|| true", job)

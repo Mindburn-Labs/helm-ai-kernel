@@ -472,6 +472,69 @@ func TestRPCTokenScopes(t *testing.T) {
 	}
 }
 
+// episodeFields walks a message and every message it contains for a field that
+// names an episode or an organization version: the ids of a worker token's
+// helm_episode claim.
+func episodeFields(msg protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool) []string {
+	if seen[msg.FullName()] {
+		return nil
+	}
+	seen[msg.FullName()] = true
+	var out []string
+	for i := 0; i < msg.Fields().Len(); i++ {
+		f := msg.Fields().Get(i)
+		if strings.Contains(string(f.Name()), "episode") || strings.Contains(string(f.Name()), "organization_version") {
+			out = append(out, string(f.FullName()))
+		}
+		if f.Message() != nil {
+			out = append(out, episodeFields(f.Message(), seen)...)
+		}
+	}
+	return out
+}
+
+// An attempt carries the episode it was proposed in (HELM-752 K7, the worker
+// listener's helm_episode claim) as EffectAttempt.episode, on the numbers that
+// were free, and a list can be filtered by it. The episode is the token's, never
+// a request's: no request message but the list filter names one, so a body
+// cannot set what an attempt records.
+func TestEpisodeIsOutputOnlyExceptTheListFilter(t *testing.T) {
+	attempt := (&EffectAttempt{}).ProtoReflect().Descriptor()
+	episode := attempt.Fields().ByName("episode")
+	if episode == nil || episode.Number() != 29 || episode.Message() == nil || episode.Message().FullName() != "helm.gateway.v1.EpisodeRef" {
+		t.Fatalf("EffectAttempt.episode = %v, want field 29 of helm.gateway.v1.EpisodeRef", episode)
+	}
+	ref := episode.Message()
+	want := map[protoreflect.Name]protoreflect.FieldNumber{"episode_id": 1, "work_item_id": 2, "organization_version_id": 3}
+	if ref.Fields().Len() != len(want) {
+		t.Fatalf("EpisodeRef has %d fields, want %d", ref.Fields().Len(), len(want))
+	}
+	for name, number := range want {
+		if f := ref.Fields().ByName(name); f == nil || f.Number() != number || f.Kind() != protoreflect.StringKind {
+			t.Errorf("EpisodeRef.%s: got %v, want string field %d", name, f, number)
+		}
+	}
+	filter := (&ListAttemptsRequest{}).ProtoReflect().Descriptor().Fields().ByName("episode_id")
+	if filter == nil || filter.Number() != 9 || filter.Kind() != protoreflect.StringKind {
+		t.Fatalf("ListAttemptsRequest.episode_id = %v, want string field 9", filter)
+	}
+
+	// Planted violation: an attempt has an episode, which the checker must see.
+	if got := episodeFields(attempt, map[protoreflect.FullName]bool{}); !slices.Contains(got, "helm.gateway.v1.EffectAttempt.episode") ||
+		!slices.Contains(got, "helm.gateway.v1.EpisodeRef.episode_id") {
+		t.Fatalf("checker missed the planted episode field; got %v", got)
+	}
+	methods := service(t).Methods()
+	for i := 0; i < methods.Len(); i++ {
+		in := methods.Get(i).Input()
+		for _, field := range episodeFields(in, map[protoreflect.FullName]bool{}) {
+			if field != "helm.gateway.v1.ListAttemptsRequest.episode_id" {
+				t.Errorf("%s carries the episode field %s; the episode comes only from the token", in.FullName(), field)
+			}
+		}
+	}
+}
+
 // Field numbers held for fields a later slice shapes (typed result payloads).
 // They are not `reserved`, since buf breaking would then reject the field that
 // takes the number, so this test keeps them free. The slice that adds such a
@@ -482,7 +545,7 @@ func TestHeldFieldNumbersStayFree(t *testing.T) {
 		msg     protoreflect.MessageDescriptor
 		numbers []protoreflect.FieldNumber
 	}{
-		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{10, 11, 12, 13, 14, 15}},
+		{(&Observation{}).ProtoReflect().Descriptor(), []protoreflect.FieldNumber{11, 12, 13, 14, 15}},
 	}
 	for _, h := range held {
 		for _, n := range h.numbers {
@@ -602,14 +665,14 @@ func TestApprovalDigestVector(t *testing.T) {
 }
 
 // Observation's typed results: one oneof, one member per effect type, on the
-// field numbers HELM-753 took from the held range (7, 8 and 9).
+// stable fixed members (7, 8 and 9) and the declared Artifact result (10).
 func TestObservationTypedResults(t *testing.T) {
 	md := (&Observation{}).ProtoReflect().Descriptor()
 	oneof := md.Oneofs().ByName("result")
 	if oneof == nil {
 		t.Fatal("Observation has no result oneof")
 	}
-	want := map[protoreflect.Name]protoreflect.FieldNumber{"github_pull_request": 7, "github_branch": 8, "github_repository": 9}
+	want := map[protoreflect.Name]protoreflect.FieldNumber{"github_pull_request": 7, "github_branch": 8, "github_repository": 9, "artifact": 10}
 	if oneof.Fields().Len() != len(want) {
 		t.Fatalf("result has %d members, want %d", oneof.Fields().Len(), len(want))
 	}

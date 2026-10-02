@@ -27,7 +27,8 @@ and `Lift`, and the River jobs that expire escalations and reconcile
 - Binding references: rev 3.4 §4.1–§4.6, §8, §10.1, §11 and the §12.3
   contract list; ADR-0001 (admission), ADR-0003 (settlement) and ADR-0005
   (tenant from the token). All of them live under
-  `output/helm-rebuild-strategy-2026-09-23/` in the workspace.
+  `architecture/helm-rebuild-strategy-2026-09-23/` in the `Mindburn-Labs/docs`
+  repository.
 
 ## Operations
 
@@ -92,6 +93,7 @@ Two rules apply everywhere:
 | `EffectAttempt.risk_class` | Effect-type control row. Never read from the request. |
 | `EffectAttempt.reason_code` | ADR-0001 §6, registry strings. |
 | `EffectAttempt.workspace_id` | The proposer's token (R9, ADR-0005). Output only. |
+| `EffectAttempt.episode` (`EpisodeRef`), `ListAttemptsRequest.episode_id` | The token's `helm_episode` claim (HELM-752 K7): the worker run an attempt was proposed in. Output only, except the list filter; a request cannot name an episode. See "Episode attempts". |
 | `EffectAttempt.requester_actor_id`, `Approval.approver_actor_id` | The token's `act.sub` (RFC 8693, ADR-0005 §2). Output only; empty for a direct call. See "The delegated requester". |
 | `PendingApproval.approval_digest`, `ApproveRequest.approval_digest` | §10.1 approval digest, v1 below. An approval binds to the digest the approver saw. |
 | `ApproveRequest.reason`, `RejectRequest.reason`, `Approval.reason` | WS-B review item 2. At most 2000 bytes; required on `Reject`. The log carries the digest (R13). |
@@ -712,7 +714,8 @@ attempt `ESCALATED`:
 - the escalation has not expired (`failed_precondition`,
   `APPROVAL_TIMEOUT`);
 - Approve only: a high, irreversible or `helm.authority.*` effect needs
-  step-up, which fails closed (`STEP_UP_REQUIRED`). The risk is the one
+  step-up: a valid `step_up_proof` (see "Step-up proof"), and without one the
+  approval fails closed (`STEP_UP_REQUIRED`). The risk is the one
   re-admission computes, so a class raised since the escalation counts. A
   medium effect that a
   mandate escalates through `approval_required`, such as the skeleton's draft
@@ -734,7 +737,10 @@ human operator's single-use `helm.gateway.stop` token.
 - `DISPATCHING` and later are `failed_precondition`.
 
 A request message is capped at 128 KiB after decompression, and a request
-body at 132 KiB as sent, before authentication or any handler runs.
+body at 132 KiB as sent, before authentication or any handler runs. Propose
+alone has a larger cap, because it alone carries an authority plan (at most
+524288 bytes, which a JSON client sends base64-encoded): 764588 bytes of message
+and 768684 bytes of body.
 
 Errors carry one `helm.errors.v1.ErrorDetail`. `invalid_argument` carries
 `SCHEMA_VIOLATION`; `permission_denied` for a scope, an actor or a human's
@@ -744,9 +750,8 @@ code; a gateway failure is `unavailable` with `retryable` set.
 
 ### Slice 2 decisions and open points
 
-- **`ListAttempts` is defined and not served yet.** The proto carries the RPC
-  and its messages (see "ListAttempts"); `helm-gateway` answers
-  `unimplemented` until the change that follows this one.
+- **`ListAttempts` is served.** The proto carries the RPC and its messages (see
+  "ListAttempts"); `helm-gateway` answers it under a `helm.gateway.read` token.
 - **The approval window is gateway configuration.** The proto clamps
   `approval_expires_at` to "the mandate's approval window", but mandates have
   no such term yet; `HELM_GATEWAY_APPROVAL_WINDOW` stands in for it.
@@ -978,8 +983,9 @@ target `stop:<stop_id>` and the arguments
 operator's mandate for that effect type.
 
 - **Approval.** Every `helm.authority.*` effect escalates, whatever its risk
-  row says. It needs a distinct human approver with step-up, and step-up
-  fails closed (`STEP_UP_REQUIRED`) until the passkey slice.
+  row says. It needs a distinct human approver with a step-up proof (see
+  "Step-up proof"), and without one the approval fails closed
+  (`STEP_UP_REQUIRED`).
 - **Stops.** A lift is not blocked by the one stop it lifts. Every other
   stop, the operator's own and the tenant's included, still applies, at
   admission and at the claim.
@@ -1063,11 +1069,12 @@ fixture grants exactly these:
 - **Lift is bound to the stop.** The proto binds a lift token to the stop,
   not to the attempt. The lift attempt is approved with a decide token bound
   to it, like any other attempt.
-- **No lift can be applied yet.** A `helm.authority.lift` attempt cannot
-  reach `ADMITTED` until step-up exists, so this slice has no dispatch-time
-  applier for it (`Dispatch` answers `failed_precondition`: no adapter). A
-  gateway stop lasts until it expires, or until the authority-row store lifts
-  it with a distinct approver. The applier comes with step-up.
+- **No lift can be applied yet.** A `helm.authority.lift` attempt reaches
+  `ADMITTED` when a distinct approver approves it with a step-up proof, but
+  there is no dispatch-time applier for it (`Dispatch` answers
+  `failed_precondition`: no adapter). A gateway stop lasts until it expires,
+  or until the authority-row store lifts it with a distinct approver. The
+  applier is a separate change.
 - **A last try whose own hand-off transaction fails** (the database is
   unreachable) is discarded by River. The attempt stays `UNKNOWN`, with its
   hold, for `Observe`.
@@ -1081,8 +1088,10 @@ must find `ESCALATED` attempts the Control Plane never created, and because
 the Control Plane syncs its projection incrementally.
 
 - **Filters**, all optional, all narrowing: `states` (any of), `commitment_id`
-  or `case_id`, `requester_principal_id`, `effect_type`, and `updated_after`
-  (exclusive). A filter cannot reach another tenant's or workspace's attempts.
+  or `case_id`, `requester_principal_id`, `effect_type`, `episode_id` (the
+  episode an attempt was proposed in; see "Episode attempts"), and
+  `updated_after` (exclusive). A filter cannot reach another tenant's or
+  workspace's attempts.
 - **Paging.** `page_size` is 1 to 200 (0 means 50); a response with a
   `next_page_token` has more, and the same request with that token continues
   after the last attempt returned. A token belongs to one set of filters; one
@@ -1091,9 +1100,11 @@ the Control Plane syncs its projection incrementally.
   last changed the attempt began. Transactions commit out of that order, so an
   attempt can first appear with an `updated_at` earlier than one already
   listed, and the last `updated_at` a reader saw is not a safe place to resume.
-  Every page carries `settled_before`: a time later than the longest a gateway
+  The first page captures `settled_before`: a time later than the longest a gateway
   transaction may run (every one is bounded), before the moment the page was
-  read. An attempt whose `updated_at` is before `settled_before` is final in
+  read. Its continuation tokens preserve that same watermark on every later
+  page, even when traversal spans the safety margin. An attempt whose
+  `updated_at` is before `settled_before` is final in
   the listing: none appears later with an earlier position. A reader that has
   read to the end asks again with `updated_after` set to the `settled_before`
   of its last page, never misses a change, and sees the changes after that
@@ -1101,8 +1112,44 @@ the Control Plane syncs its projection incrementally.
   again is listed again at its new position.
 - **Content.** Each entry is the attempt `GetAttempt` returns. The arguments
   stay behind `GetAttemptContent`.
-- **Status.** The contract is defined; `helm-gateway` answers `unimplemented`
-  until the change that follows.
+- **Status.** Served: `helm-gateway` answers `ListAttempts` under a
+  `helm.gateway.read` token.
+
+## Episode attempts
+
+A worker runs in one bounded episode (HELM-752 K7), and its token carries the
+episode as a `helm_episode` claim: `episode_id`, `work_item_id` and
+`organization_version_id`. An attempt proposed with such a token records them:
+
+- **`EffectAttempt.episode`** (`EpisodeRef`: `episode_id`, `work_item_id`,
+  `organization_version_id`) is set for an attempt proposed with an episode
+  token and unset for every other attempt. The gateway copies it from the
+  verified claim alone. No request message carries an episode, except the list
+  filter, which says which attempts to list and never what an attempt records.
+- **`work_item_id` is the attempt's `case_id`.** For a token with an episode
+  claim the work reference is the claim's work item: a request that names a
+  commitment, or a different case, is refused, and a request that names none
+  takes the claim's.
+- **`ListAttemptsRequest.episode_id`** keeps the attempts of one episode. Like
+  every filter it only narrows.
+- **Read isolation.** A token with the Control Plane's service principal and
+  `helm.gateway.read` reads every attempt of its own tenant and workspace. A
+  token that carries an episode claim reads only the attempts of its own
+  episode that its own principal proposed, through `GetAttempt`,
+  `GetAttemptContent`, `ListAttempts` and the stored response of a model call:
+  any other attempt of the same tenant, another episode's, another seat's under
+  the same episode id and the Control Plane's, is `not_found` for it, the same
+  answer as an attempt that does not exist. `Dispatch`, `Observe` and `Cancel`
+  find only those attempts too.
+- **Request digest.** The episode claim is part of the idempotency digest of a
+  request proposed under one, so the same key and request from another episode
+  is an `IDEMPOTENCY_CONFLICT`. A request with no claim digests as it always
+  did.
+- **Status.** Served: `helm-gateway` records the episode (schema version 8:
+  `episode_id` and `organization_version_id` on the attempt row, with the work
+  item as `case_id`), holds episode tokens to it, and honors the `episode_id`
+  filter. The worker's MCP endpoint ([gateway-mcp.md](gateway-mcp.md)) and the
+  model endpoints both propose under it.
 
 ## Step-up proof
 
@@ -1133,8 +1180,11 @@ with one bound to another attempt or digest, is `permission_denied`
 (`STEP_UP_REQUIRED`), the attempt stays `ESCALATED`, and no token is used up.
 The approval record keeps the proof exactly as received, with its `jti` and
 method, so that it can be verified again against the issuer's keys. A `Reject`
-needs no proof. Status: the field is defined; `helm-gateway` still fails closed on every
-approval that needs step-up until the change that serves the proof.
+needs no proof. Status: served. The server verifies the proof before the
+approval's transaction and treats one that does not verify, or is longer than
+8192 bytes, as none; admission uses its `jti` up in that transaction, after the
+decide token's, when the effect needs step-up, keeps the proof on the approval
+record, and ignores a proof for an effect that needs none.
 
 ## Conformance table
 

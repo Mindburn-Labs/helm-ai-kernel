@@ -745,9 +745,9 @@ func wrapMCPAuth(next http.Handler, authMode, baseURL string) (http.Handler, err
 			next.ServeHTTP(w, r.WithContext(ctx))
 		}), nil
 	case "static-header":
-		expectedKey := os.Getenv("HELM_API_KEY")
+		expectedKey := mindburnAPIKeyFromEnv(os.Getenv, os.Stderr)
 		if expectedKey == "" {
-			return nil, fmt.Errorf("HELM_API_KEY must be set when --auth static-header is used")
+			return nil, fmt.Errorf("MINDBURN_HELM_API_KEY must be set when --auth static-header is used (HELM_API_KEY is a deprecated fallback)")
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			provided := r.Header.Get("X-HELM-API-Key")

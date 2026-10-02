@@ -8,8 +8,10 @@
 //  1. idempotency first: the attempt is inserted with ON CONFLICT DO NOTHING
 //     on (tenant, idempotency key); the same key with the same request digest
 //     returns the stored attempt untouched, a different digest is a conflict;
-//  2. the mandate is resolved from the token's principal and the effect type
-//     (HELM-750 s2b; a mandate_id in the request only selects);
+//  2. the mandate is resolved from the token's principal, the effect type and
+//     the target (HELM-750 s2b; a mandate_id in the request only selects). The
+//     gateway's own authority plans (helm.authority.provision.v1 and narrow.v1)
+//     have none: authority for a plan is the approval of its exact bytes;
 //  3. authority rows are locked FOR SHARE in the global order: the tenant
 //     control row, the principals of the chain (requester, holders,
 //     delegators) by id, the mandates root to leaf, the effect-type row, the
@@ -44,6 +46,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/provision"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
@@ -85,6 +88,21 @@ type Caller struct {
 	// ActorID is the token's act.sub: the workload that carries a
 	// principal's call. Empty for a direct call.
 	ActorID string
+	// Episode is the token's helm_episode claim, verified: the bounded worker
+	// run the token was minted for. Nil for every other token. It is the only
+	// source of an attempt's episode: Propose records it, and a caller that has
+	// one proposes under its work item and reads only its own episode's
+	// attempts.
+	Episode *Episode
+}
+
+// Episode is a worker token's helm_episode claim (jwks.EpisodeClaim), and what
+// an attempt records of it. The work item is the attempt's case_id.
+type Episode struct {
+	EpisodeID  string
+	WorkItemID string
+	// OrganizationVersionID is empty when the token names none.
+	OrganizationVersionID string
 }
 
 // ProposeInput is a ProposeRequest.
@@ -99,7 +117,17 @@ type ProposeInput struct {
 	Quote             []Amount
 	Distinct          []DistinctValue
 	ApprovalExpiresAt *time.Time
+	// Set only by ProposeWorkEffect after validating and canonicalizing the
+	// intent. It is not a caller-supplied transport field or read privilege.
+	workEffect bool
 }
+
+// MaxTransaction is the longest a gateway database transaction may run. Every
+// transaction runs under a context this long, so the driver cancels whatever
+// it is waiting for and rolls it back. ListAttempts relies on it: an attempt's
+// updated_at is the time its transaction began, so a listing is final for the
+// times before its settled_before, which lies further back than this.
+const MaxTransaction = 2 * time.Minute
 
 // Config tunes admission. Zero values take the defaults.
 type Config struct {
@@ -126,15 +154,20 @@ type Config struct {
 	// transaction that makes them due (TA §6.2). helm-gateway serve always
 	// sets it; nil enqueues nothing, for tests of admission alone.
 	Jobs Enqueuer
+	// MaxTransaction bounds every database transaction the service runs (a
+	// provider call is never inside one). Default the package's MaxTransaction,
+	// 2m; a test may set a shorter one.
+	MaxTransaction time.Duration
 }
 
 // Service runs admission over one database. It holds no tenant data: the
 // only state it keeps is compiled mandate conditions, keyed by the digest of
 // their text.
 type Service struct {
-	db       *sql.DB
-	cfg      Config
-	adapters map[string]adapters.Adapter
+	db            *sql.DB
+	cfg           Config
+	adapters      map[string]adapters.Adapter
+	resultSchemas map[string]*adapters.ResultSchema
 
 	conditions sync.Map // [32]byte -> *authority.Snapshot
 }
@@ -156,21 +189,46 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 	if cfg.DispatchGrace <= 0 {
 		cfg.DispatchGrace = time.Minute
 	}
+	if cfg.MaxTransaction <= 0 {
+		cfg.MaxTransaction = MaxTransaction
+	}
 	byType := map[string]adapters.Adapter{}
+	resultSchemas := map[string]*adapters.ResultSchema{}
 	for _, a := range cfg.Adapters {
 		for _, d := range a.Declarations() {
 			if _, dup := byType[d.EffectType]; dup {
 				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
 			}
 			byType[d.EffectType] = a
+			resultSchema, err := adapters.CompileResultSchema(d)
+			if err != nil {
+				return nil, fmt.Errorf("%s result contract: %w", d.EffectType, err)
+			}
+			if resultSchema != nil && fixedResultKind(d.EffectType) != "" {
+				return nil, fmt.Errorf("%s already has a fixed result contract", d.EffectType)
+			}
+			resultSchemas[d.EffectType] = resultSchema
 		}
 	}
-	return &Service{db: db, cfg: cfg, adapters: byType}, nil
+	return &Service{db: db, cfg: cfg, adapters: byType, resultSchemas: resultSchemas}, nil
 }
 
-// inTenant runs fn in one READ COMMITTED transaction bound to tenantID.
+// inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and
+// aborts it at Config.MaxTransaction.
 func (s *Service) inTenant(ctx context.Context, tenantID string, fn func(*sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	return s.inTenantWith(ctx, tenantID, &sql.TxOptions{Isolation: sql.LevelReadCommitted}, fn)
+}
+
+// inTenantWith is inTenant with the transaction's options: a read of several
+// statements that must agree runs REPEATABLE READ and READ ONLY, so all of them
+// see one snapshot. It is the one place a gateway transaction begins, and the
+// context it begins under ends at Config.MaxTransaction: the driver watches it
+// for the life of the transaction, cancels the statement in flight and rolls
+// back, whichever context fn's own statements were given.
+func (s *Service) inTenantWith(ctx context.Context, tenantID string, opts *sql.TxOptions, fn func(*sql.Tx) error) error {
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.MaxTransaction)
+	defer cancel()
+	tx, err := s.db.BeginTx(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -194,6 +252,10 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 		return Attempt{}, false, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
 			"helm.authority.lift is proposed through Lift, which binds the operator's stop token to the stop")
 	}
+	in, err := bindEpisode(caller.Episode, in)
+	if err != nil {
+		return Attempt{}, false, err
+	}
 	args, err := validateProposal(in)
 	if err != nil {
 		return Attempt{}, false, err
@@ -201,12 +263,34 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	var attemptID string
 	var existing bool
 	err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+		if in.workEffect {
+			var activeAgent bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_principals
+				WHERE tenant_id = $1 AND principal_id = $2 AND kind = 'agent' AND status = 'active')`,
+				caller.TenantID, caller.PrincipalID).Scan(&activeAgent); err != nil {
+				return err
+			}
+			if !activeAgent {
+				return refuse(CodePermissionDenied, contracts.ReasonPrincipalInactive, "a work effect requires an active agent principal")
+			}
+		}
 		var err error
 		attemptID, existing, err = s.proposeTx(ctx, tx, caller, in, args)
 		return err
 	})
 	if err != nil {
 		return Attempt{}, false, err
+	}
+	if in.workEffect {
+		// Only replay of this exact verified work intent may recover a result
+		// from an earlier episode. Get/GetContent/List remain episode-scoped.
+		var attempt Attempt
+		err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+			var err error
+			attempt, err = loadAttemptScoped(ctx, tx, caller, attemptID, caller.Episode.WorkItemID, workEffectDigest(caller, in))
+			return err
+		})
+		return attempt, existing, err
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err
@@ -239,16 +323,24 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	if err != nil {
 		return "", false, err
 	}
+	// The episode is the verified claim's and nothing else's: the attempt row
+	// records it with itself, and nothing ever changes it.
+	var episodeID, organizationVersionID string
+	if e := caller.Episode; e != nil {
+		episodeID, organizationVersionID = e.EpisodeID, e.OrganizationVersionID
+	}
 	// 1. Idempotency first. A duplicate never locks or changes anything.
 	err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
 			(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
 			 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
-			 distinct_values, state)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15, 'PROPOSED')
+			 distinct_values, episode_id, organization_version_id, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15,
+			NULLIF($16, ''), NULLIF($17, ''), 'PROPOSED')
 		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
 		RETURNING attempt_id`,
 		caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
-		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct).Scan(&attemptID)
+		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct,
+		episodeID, organizationVersionID).Scan(&attemptID)
 	if errors.Is(err, sql.ErrNoRows) {
 		var stored []byte
 		if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
@@ -307,16 +399,21 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	}
 	now = now.UTC()
 
-	// 2. Resolve the mandate from the principal and the effect type. The read
-	// is unlocked; the chain is locked below in the global order.
-	leaf, err := resolveMandate(ctx, tx, caller, in)
-	if err != nil {
-		return err
-	}
+	// 2. Resolve the mandate from the principal, the effect type and the
+	// target. The read is unlocked; the chain is locked below in the global
+	// order. A plan effect has none.
+	plan := effectargs.IsAuthorityPlan(in.EffectType)
+	var leaf uuid.UUID
 	var chain []mandates.Mandate
-	if leaf != uuid.Nil {
-		if chain, err = mandates.ChainInTx(ctx, tx, caller.TenantID, leaf, false); err != nil {
+	if !plan {
+		var err error
+		if leaf, err = resolveMandate(ctx, tx, caller, in); err != nil {
 			return err
+		}
+		if leaf != uuid.Nil {
+			if chain, err = mandates.ChainInTx(ctx, tx, caller.TenantID, leaf, false); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -329,11 +426,36 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
 			"a human principal proposes through the configured workload actor, not directly")
 	}
+	if plan {
+		// The plan's class is its adapter's declaration, not a tenant row.
+		declared, _ := provision.DeclaredRisk(in.EffectType)
+		auth.riskClass = mandates.RiskClass(declared)
+		if refusal, err := precheckPlan(ctx, tx, caller, in); err != nil {
+			return err
+		} else if refusal != nil {
+			// A plan the applied plan does not admit: refused at Propose, which
+			// leaves no attempt for an approver to be asked about, and denied
+			// when Approve re-admits an attempt it had already escalated.
+			if from == "PROPOSED" {
+				code := CodeFailedPrecondition
+				if refusal.Reason == contracts.ReasonInsufficientPrivilege {
+					code = CodePermissionDenied
+				}
+				return refuse(code, refusal.Reason, "%s", refusal.Detail)
+			}
+			return recordDecision(ctx, tx, caller.TenantID, attemptID, from, "DENIED", refusal.Reason, nil, string(auth.riskClass), nil, nil)
+		}
+	}
 
 	// An approval of an effect whose risk is now high, irreversible or an
-	// authority change needs step-up, whatever the risk was at escalation.
-	if approval != nil && approval.Approved && needsStepUp(string(auth.riskClass), in.EffectType) {
-		return errStepUp
+	// authority change needs step-up, whatever the risk was at escalation:
+	// one whose proof decide already used up passes, and otherwise it uses up
+	// the proof the approval carries or is refused (STEP_UP_REQUIRED).
+	if approval != nil && approval.Approved && !approval.StepUpVerified && needsStepUp(string(auth.riskClass), in.EffectType) {
+		if err := spendStepUp(ctx, tx, caller.TenantID, approval.proof); err != nil {
+			return err
+		}
+		approval.StepUpVerified = true
 	}
 
 	// 4. Stops, read in a statement after the locks were granted.
@@ -359,6 +481,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		EffectType: in.EffectType, EffectTypeFound: auth.effectTypeFound, RiskClass: auth.riskClass,
 		Target: in.Target, Args: args, Quote: in.Quote, ActiveStops: stops, Counters: counters.states,
 		Approval: approval, LiftsStop: liftedStop(in.EffectType, in.Target),
+		MandateFree: plan, PrincipalKind: auth.principalKind,
 	}
 	for _, m := range auth.chain {
 		link := Link{Mandate: m}
@@ -375,7 +498,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 		mandate = leaf
 	}
 	var risk any
-	if auth.effectTypeFound {
+	if auth.effectTypeFound || plan {
 		risk = string(auth.riskClass)
 	}
 	switch decision.Verdict {
@@ -446,7 +569,11 @@ func recordDecision(ctx context.Context, tx *sql.Tx, tenantID, attemptID, from, 
 
 // resolveMandate returns the leaf mandate: the selector when the principal
 // holds it, otherwise the principal's first active mandate that names the
-// effect type, by depth then id. uuid.Nil means none; decide then denies.
+// effect type, preferring one whose targets allow the target (a plan makes
+// one mandate per grant group, so a seat can hold several for one effect type),
+// then by depth and id. When none allows the target the first that names the
+// effect type is returned, and decide denies it as out of scope. uuid.Nil
+// means none; decide then denies.
 func resolveMandate(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput) (uuid.UUID, error) {
 	var id uuid.UUID
 	var err error
@@ -457,8 +584,8 @@ func resolveMandate(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeIn
 	} else {
 		err = tx.QueryRowContext(ctx, `SELECT mandate_id FROM authority_mandates
 			WHERE tenant_id = $1 AND holder_id = $2 AND status = 'active' AND $3 = ANY (effect_types)
-			ORDER BY depth, mandate_id LIMIT 1`,
-			caller.TenantID, caller.PrincipalID, in.EffectType).Scan(&id)
+			ORDER BY (targets IS NULL OR $4 = ANY (targets)) DESC, depth, mandate_id LIMIT 1`,
+			caller.TenantID, caller.PrincipalID, in.EffectType, in.Target).Scan(&id)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return uuid.Nil, nil
@@ -602,8 +729,15 @@ func principalStops(ctx context.Context, tx *sql.Tx, tenantID string, ids ...str
 // activeStops returns the stops on the tenant, any locked principal, any
 // mandate of the chain, or the effect type that are neither lifted nor
 // expired. It must run after lockAuthority.
+//
+// A tenant-wide stop does not cover helm.authority.narrow.v1: the plan only
+// narrows, which is what an operator needs during an incident. A stop on the
+// requester, on the workload that dispatches it or on the effect type does.
 func activeStops(ctx context.Context, tx *sql.Tx, tenantID, effectType string, a lockedAuthority) ([]string, error) {
-	keys := []string{"tenant:" + tenantID, "effect_type:" + effectType}
+	keys := []string{"effect_type:" + effectType}
+	if effectType != effectargs.AuthorityNarrow {
+		keys = append(keys, "tenant:"+tenantID)
+	}
 	for _, v := range a.versions {
 		switch v.Kind {
 		case "principal", "mandate":
@@ -884,6 +1018,9 @@ func checkCaller(c Caller) error {
 	if strings.TrimSpace(c.TenantID) == "" || strings.TrimSpace(c.WorkspaceID) == "" || strings.TrimSpace(c.PrincipalID) == "" {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token names no tenant, workspace or principal")
 	}
+	if e := c.Episode; e != nil && !validEpisode(e) {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token's episode claim is not well formed")
+	}
 	return nil
 }
 
@@ -906,4 +1043,19 @@ func nonNil(q []Amount) []Amount {
 		return []Amount{}
 	}
 	return q
+}
+
+// precheckPlan runs provision.Precheck for an authority plan effect against the
+// organization's applied plan. The read is not locked: Propose only spares an
+// approver a plan that cannot apply, and Apply checks again on the locked row.
+func precheckPlan(ctx context.Context, tx *sql.Tx, caller Caller, in ProposeInput) (*adapters.Refusal, error) {
+	parsed, err := effectargs.ParsePlan(in.EffectType, in.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	applied, err := provision.LoadApplied(ctx, tx, caller.TenantID, parsed.OrgRef, false)
+	if err != nil {
+		return nil, err
+	}
+	return provision.Precheck(&provision.Compiled{Plan: parsed}, applied, caller.PrincipalID), nil
 }

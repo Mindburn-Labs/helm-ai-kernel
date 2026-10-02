@@ -77,6 +77,13 @@ func (s *Service) Dispatch(ctx context.Context, caller Caller, attemptID string)
 		}
 		switch a.state {
 		case "ADMITTED":
+			// Worker same-call dispatch covers direct admission only. Once an
+			// attempt has needed approval, CP resumes it with execute authority
+			// and starts a continuation episode. Check the retained digest while
+			// holding the row lock, before consuming a permit or doing I/O.
+			if err := approvalDispatchRefusal(caller, a.approvalDigest); err != nil {
+				return err
+			}
 		case "PROPOSED", "DENIED", "ESCALATED", "APPROVED", "REJECTED", "EXPIRED":
 			return refuse(CodeFailedPrecondition, "", "an attempt in %s cannot be dispatched", a.state)
 		default:
@@ -101,6 +108,14 @@ func (s *Service) Dispatch(ctx context.Context, caller Caller, attemptID string)
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err
+}
+
+func approvalDispatchRefusal(caller Caller, approvalDigest []byte) error {
+	if caller.Episode != nil && len(approvalDigest) != 0 {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
+			"an approved escalation must be dispatched by the control plane")
+	}
+	return nil
 }
 
 // claimed is a committed dispatch claim: what the adapter call needs.
@@ -135,14 +150,18 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 
 	// Re-lock the authority rows in the global order, then read the stops
 	// (ADR-0001 §1: a stop committed after admission is seen here).
-	leaf, err := uuid.Parse(a.mandateID)
-	if err != nil {
-		return nil, errors.New("an admitted attempt has no mandate")
-	}
 	requester := Caller{TenantID: a.tenantID, WorkspaceID: a.workspaceID, PrincipalID: a.requester, ActorID: a.requesterActor}
-	chain, err := mandates.ChainInTx(ctx, tx, a.tenantID, leaf, false)
-	if err != nil {
-		return nil, err
+	// An authority plan has no mandate; every other admitted attempt has one.
+	var leaf uuid.UUID
+	var chain []mandates.Mandate
+	if !effectargs.IsAuthorityPlan(a.effectType) {
+		var err error
+		if leaf, err = uuid.Parse(a.mandateID); err != nil {
+			return nil, errors.New("an admitted attempt has no mandate")
+		}
+		if chain, err = mandates.ChainInTx(ctx, tx, a.tenantID, leaf, false); err != nil {
+			return nil, err
+		}
 	}
 	auth, err := lockAuthority(ctx, tx, requester, a.effectType, leaf, chain)
 	if err != nil {
@@ -197,6 +216,9 @@ func (s *Service) claim(ctx context.Context, tx *sql.Tx, a lockedAttempt, dispat
 		return nil, err
 	}
 	fence := s.cfg.DispatchTimeout + s.cfg.DispatchGrace
+	if a.fence > 0 {
+		fence = a.fence
+	}
 	res, err := tx.ExecContext(ctx, `UPDATE authority_effect_attempts
 		SET state = 'DISPATCHING', dispatch_deadline = now() + $3 * interval '1 millisecond', version = version + 1, updated_at = now()
 		WHERE tenant_id = $1 AND attempt_id = $2 AND state = 'ADMITTED'`, a.tenantID, a.id, fence.Milliseconds())
@@ -328,7 +350,7 @@ func (s *Service) send(ctx context.Context, c *claimed) {
 	}
 	if sent {
 		s.readBack(ctx, observeTarget{tenantID: c.tenantID, workspaceID: c.workspaceID, attemptID: c.attemptID,
-			from: "DISPATCHED", effect: c.effect, adapter: c.adapter})
+			from: "DISPATCHED", effect: c.effect, adapter: c.adapter, resultSchema: s.resultSchemas[c.effect.EffectType]})
 	}
 }
 
@@ -452,7 +474,7 @@ func (s *Service) observeAttempt(ctx context.Context, tenantID, workspaceID, att
 			Scan(&invocation.PermitID, &invocation.ClaimID, &invocation.ExpiresAt); err != nil {
 			return err
 		}
-		target = &observeTarget{tenantID: a.tenantID, workspaceID: a.workspaceID, attemptID: a.id, from: a.state,
+		target = &observeTarget{tenantID: a.tenantID, workspaceID: a.workspaceID, attemptID: a.id, from: a.state, resultSchema: s.resultSchemas[a.effectType],
 			effect: adapters.Effect{EffectType: a.effectType, Target: a.target, Arguments: content, Invocation: invocation}, adapter: adapter}
 		return nil
 	})
@@ -467,6 +489,7 @@ type observeTarget struct {
 	tenantID, workspaceID, attemptID, from string
 	effect                                 adapters.Effect
 	adapter                                adapters.Adapter
+	resultSchema                           *adapters.ResultSchema
 }
 
 // readBack calls the adapter's Observe outside any transaction, then records
@@ -522,7 +545,7 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 	var body []byte
 	if established {
 		var err error
-		if kind, body, err = typedResult(t.effect.EffectType, result.Observation); err != nil {
+		if kind, body, err = typedResult(t.effect.EffectType, t.resultSchema, result.Observation); err != nil {
 			slog.ErrorContext(ctx, "an adapter's observation breaks the contract; treated as inconclusive",
 				"attempt_id", t.attemptID, "effect_type", t.effect.EffectType, "error", err)
 			established = false
@@ -545,6 +568,11 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 	if body != nil {
 		sum := sha256.Sum256(body)
 		ref, resultCol = "sha256:"+hex.EncodeToString(sum[:]), body
+		if kind == "artifact" {
+			// The artifact's content is its canonical payload, not the
+			// transport envelope stored alongside it in this existing row.
+			ref = o.Artifact.Digest
+		}
 	}
 	var evidence any
 	if len(o.EvidenceDigest) > 0 {
@@ -581,7 +609,7 @@ func recordObservation(ctx context.Context, tx *sql.Tx, t observeTarget, result 
 // typedResult checks an established observation against the contract and
 // returns its typed result as (result_kind, JSON): exactly the member the
 // effect type defines, or none for an effect type that defines none.
-func typedResult(effectType string, o *adapters.Observation) (string, []byte, error) {
+func typedResult(effectType string, schema *adapters.ResultSchema, o *adapters.Observation) (string, []byte, error) {
 	if o == nil {
 		return "", nil, errors.New("an established outcome carries no observation")
 	}
@@ -601,19 +629,37 @@ func typedResult(effectType string, o *adapters.Observation) (string, []byte, er
 	if o.GitHubRepository != nil {
 		members["github_repository"] = o.GitHubRepository
 	}
-	want := map[string]string{
-		effectargs.GitHubPullRequestCreateDraft:  "github_pull_request",
-		effectargs.GitHubBranchCreateFromChanges: "github_branch",
-		effectargs.GitHubRepositoryGet:           "github_repository",
-	}[effectType]
+	if o.Artifact != nil {
+		members["artifact"] = o.Artifact
+	}
+	want := fixedResultKind(effectType)
+	if schema != nil {
+		if want != "" {
+			return "", nil, errors.New("a fixed result contract cannot be replaced by a schema result")
+		}
+		want = "artifact"
+	}
 	switch {
 	case want == "" && len(members) == 0:
 		return "", nil, nil
 	case len(members) != 1 || members[want] == nil:
 		return "", nil, errors.New("the typed result is not the one member the effect type defines")
 	}
+	if want == "artifact" {
+		if err := schema.Validate(o.Artifact); err != nil {
+			return "", nil, err
+		}
+	}
 	body, err := canonicalize.JCS(members[want])
 	return want, body, err
+}
+
+func fixedResultKind(effectType string) string {
+	return map[string]string{
+		effectargs.GitHubPullRequestCreateDraft:  "github_pull_request",
+		effectargs.GitHubBranchCreateFromChanges: "github_branch",
+		effectargs.GitHubRepositoryGet:           "github_repository",
+	}[effectType]
 }
 
 // settleState moves the attempt to OBSERVED or RECONCILED with its outcome.

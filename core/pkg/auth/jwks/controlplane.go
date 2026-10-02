@@ -31,6 +31,13 @@ const (
 	CPIdentityMaxTTLCeiling = 300 * time.Second
 	// CPIdentityClockSkew is the allowance on exp, nbf and iat.
 	CPIdentityClockSkew = 30 * time.Second
+
+	// WorkerTokenMaxTTLCeiling bounds exp - iat of an episode token: an
+	// episode runs at most 60 minutes, and its token must outlive it
+	// (HELM-752 K7). Only the worker listener accepts it.
+	WorkerTokenMaxTTLCeiling = 3600 * time.Second
+	// Public executor credentials cannot inherit the in-cluster worker lease.
+	ExecutorTokenMaxTTLCeiling = 900 * time.Second
 )
 
 // ControlPlaneIdentity is a verified-at-startup ADR-0005 configuration.
@@ -103,6 +110,52 @@ func (c *ControlPlaneIdentity) Validator(requireActor bool) *JWKSValidator {
 		config.RequiredActor = c.Actor
 	}
 	return NewJWKSValidator(config)
+}
+
+// WorkerValidator returns the validator of the worker listener (HELM-752 K7):
+// the same issuer and signing keys as Validator, a different audience (the
+// worker's own, helm-gateway-worker:<env>, so a token minted for one listener
+// is invalid on the other) and the longer lifetime an episode token has, at
+// most WorkerTokenMaxTTLCeiling. The actor is optional in the token, as in
+// Validator(false); the caller checks it.
+func (c *ControlPlaneIdentity) WorkerValidator(audience string, maxTTL time.Duration) (*JWKSValidator, error) {
+	if strings.TrimSpace(audience) == "" || audience != strings.TrimSpace(audience) {
+		return nil, errors.New("the worker audience must be a non-empty value")
+	}
+	if audience == c.config.Audience {
+		return nil, errors.New("the worker audience must differ from the gateway's own: one audience per listener")
+	}
+	if strings.HasPrefix(audience, "helm-gateway-executor:") {
+		return nil, errors.New("the executor audience cannot serve the worker listener")
+	}
+	if maxTTL <= 0 || maxTTL > WorkerTokenMaxTTLCeiling {
+		return nil, fmt.Errorf("the worker token lifetime must be a duration in (0, %s]", WorkerTokenMaxTTLCeiling)
+	}
+	config := c.config
+	config.Audience = audience
+	config.MaxTokenTTL = maxTTL
+	config.RequiredActor = ""
+	config.RejectExecutor = true
+	return NewJWKSValidator(config), nil
+}
+
+// ExecutorValidator is the public ADR-0011/D24 profile. It shares the pinned
+// issuer and keys, but requires its own audience, signed client marker and
+// complete episode. Expiry is strict: a released executor lease cannot remain
+// usable during the normal Control Plane clock-skew allowance.
+func (c *ControlPlaneIdentity) ExecutorValidator(audience string, maxTTL time.Duration) (*JWKSValidator, error) {
+	if !strings.HasPrefix(audience, "helm-gateway-executor:") ||
+		!claimID.MatchString(strings.TrimPrefix(audience, "helm-gateway-executor:")) || audience == c.config.Audience {
+		return nil, errors.New("the executor audience must be helm-gateway-executor:<env>, distinct from the gateway audience")
+	}
+	if maxTTL <= 0 || maxTTL > ExecutorTokenMaxTTLCeiling {
+		return nil, fmt.Errorf("the executor token lifetime must be a duration in (0, %s]", ExecutorTokenMaxTTLCeiling)
+	}
+	config := c.config
+	config.Audience, config.MaxTokenTTL = audience, maxTTL
+	config.RequiredActor, config.RequireExecutor = c.Actor, true
+	config.Leeway = 0
+	return NewJWKSValidator(config), nil
 }
 
 // pinnedCAClient trusts only the CA bundle in caFile, or the system roots when

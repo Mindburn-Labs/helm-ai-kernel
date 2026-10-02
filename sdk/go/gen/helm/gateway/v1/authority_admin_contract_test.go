@@ -210,12 +210,13 @@ func TestApproveRequestCarriesTheStepUpProof(t *testing.T) {
 }
 
 // ListAttempts filters and pages: the shape the design note gives, on the
-// field numbers it took.
+// field numbers it took. episode_id (field 9) is the episode filter of the
+// worker listener's attempts (HELM-752 K7).
 func TestListAttemptsShape(t *testing.T) {
 	req := (&ListAttemptsRequest{}).ProtoReflect().Descriptor()
 	want := map[protoreflect.Name]protoreflect.FieldNumber{
 		"states": 1, "commitment_id": 2, "case_id": 3, "requester_principal_id": 4, "effect_type": 5,
-		"updated_after": 6, "page_size": 7, "page_token": 8,
+		"updated_after": 6, "page_size": 7, "page_token": 8, "episode_id": 9,
 	}
 	if req.Fields().Len() != len(want) {
 		t.Errorf("ListAttemptsRequest has %d fields, want %d", req.Fields().Len(), len(want))

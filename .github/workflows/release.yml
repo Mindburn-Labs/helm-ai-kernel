@@ -1157,7 +1157,8 @@ jobs:
 
   version-status:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # npm and PyPI waits run one after the other, 15 minutes each at most.
+    timeout-minutes: 40
     needs:
       - container
       - chart
@@ -1178,6 +1179,7 @@ jobs:
             --write-status dist/version-status/version-status.json \
             published \
             --npm-propagation-timeout 900 \
+            --pypi-propagation-timeout 900 \
             --only ghcr-image \
             --only ghcr-chart \
             --only npm-sdk \
@@ -1228,6 +1230,9 @@ jobs:
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           generate_release_notes: true
+          draft: false
+          prerelease: false
+          make_latest: true
           files: |
             dist/*
             slsa-provenance/multiple.intoto.jsonl

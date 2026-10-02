@@ -1,0 +1,833 @@
+{
+  "schema": "helm.gateway.conformance.scenario.v1",
+  "id": "GW-024",
+  "title": "A step-up proof admits a high-risk, irreversible or helm.authority.* approval, and any other proof leaves the attempt ESCALATED with both tokens unspent",
+  "rule": {
+    "statement": "An approval of a high-risk, irreversible or helm.authority.* effect is admitted only with a step-up proof: a token of scope helm.gateway.stepup, of the decide token's approver and tenant, whose one helm_step_up entry names the attempt, the approval digest shown (lower-case hex) and the method webauthn, and states user_verified true. With none, or with a proof of another scope, attempt, digest, method, approver or tenant, or one that does not state user verification, the approval is permission_denied (STEP_UP_REQUIRED), the attempt stays ESCALATED and neither the decide token nor the proof is used up, so the same decide token approves once a proper proof comes. A proof's jti is single-use across attempts. A proof presented for an effect that needs none, valid or not, is ignored.",
+    "cites": [
+      {
+        "doc": "docs/architecture/gateway-effect-api.md",
+        "section": "Step-up proof"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "string step_up_proof = 4;"
+      },
+      {
+        "doc": "protocols/proto/helm/gateway/v1/gateway.proto",
+        "section": "[reason_code: STEP_UP_REQUIRED]"
+      }
+    ]
+  },
+  "fixtures": {
+    "tenants": [
+      "tenant-a",
+      "tenant-b"
+    ],
+    "principals": [
+      {
+        "id": "human-a",
+        "kind": "human"
+      },
+      {
+        "id": "human-b",
+        "kind": "human"
+      },
+      {
+        "id": "human-c",
+        "kind": "human"
+      },
+      {
+        "id": "agent-a",
+        "kind": "agent"
+      },
+      {
+        "id": "cp-runner",
+        "kind": "service"
+      }
+    ],
+    "configured_actor": "cp-runner",
+    "effect_types": [
+      {
+        "effect_type": "github.pull_request.merge",
+        "risk": "high"
+      },
+      {
+        "effect_type": "ops.release.publish",
+        "risk": "irreversible"
+      },
+      {
+        "effect_type": "helm.authority.grant",
+        "risk": "medium"
+      },
+      {
+        "effect_type": "ops.ticket.file",
+        "risk": "medium"
+      }
+    ],
+    "mandates": [
+      {
+        "holder": "human-a",
+        "effect_types": [
+          "github.pull_request.merge",
+          "ops.release.publish",
+          "helm.authority.grant",
+          "ops.ticket.file"
+        ],
+        "approval_required": [
+          "ops.ticket.file"
+        ],
+        "activation": {
+          "requester": "agent-a",
+          "approver": "human-c"
+        }
+      }
+    ],
+    "adapter": {
+      "effect_types": [],
+      "dispatch": {
+        "status": "SENT"
+      },
+      "observe": {
+        "status": "SUCCEEDED"
+      },
+      "provider": {
+        "default_branch": "main",
+        "default_branch_sha": "0123456789abcdef0123456789abcdef01234567",
+        "branch_commit_sha": "89abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  },
+  "tokens": {
+    "propose-a": {
+      "scope": "helm.gateway.propose",
+      "sub": "human-a",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "propose-a"
+    },
+    "read-a": {
+      "scope": "helm.gateway.read",
+      "sub": "human-a",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "read-a"
+    },
+    "approve-merge": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-merge",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:merge}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-merge-2": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-merge-2",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:merge-2}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-publish": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-publish",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:publish}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-grant": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-grant",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:grant}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "approve-ticket": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "approve-ticket",
+      "authorization_details": [
+        {
+          "type": "helm_effect_decision",
+          "attempt_id": "{{attempt_id:ticket}}",
+          "action": "approve"
+        }
+      ]
+    },
+    "proof-merge": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-decide-scope": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-decide-scope",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-other-attempt": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-other-attempt",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge-2}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-other-digest": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-other-digest",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-other-method": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-other-method",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "totp",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-other-approver": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-c",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-other-approver",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-other-tenant": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-b",
+      "workspace": "ws-a",
+      "jti": "proof-merge-other-tenant",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-user-not-verified": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-user-not-verified",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "webauthn",
+          "user_verified": false
+        }
+      ]
+    },
+    "proof-merge-user-verification-unstated": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-user-verification-unstated",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge}}",
+          "approval_digest": "{{approval_digest_hex:merge}}",
+          "method": "webauthn"
+        }
+      ]
+    },
+    "proof-merge-2-replayed": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge-2}}",
+          "approval_digest": "{{approval_digest_hex:merge-2}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-merge-2": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-merge-2",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:merge-2}}",
+          "approval_digest": "{{approval_digest_hex:merge-2}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-publish": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-publish",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:publish}}",
+          "approval_digest": "{{approval_digest_hex:publish}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-grant": {
+      "scope": "helm.gateway.stepup",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-grant",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:grant}}",
+          "approval_digest": "{{approval_digest_hex:grant}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    },
+    "proof-ticket-decide-scope": {
+      "scope": "helm.gateway.decide",
+      "sub": "human-b",
+      "act_sub": "cp-runner",
+      "tenant": "tenant-a",
+      "workspace": "ws-a",
+      "jti": "proof-ticket-decide-scope",
+      "authorization_details": [
+        {
+          "type": "helm_step_up",
+          "attempt_id": "{{attempt_id:ticket}}",
+          "approval_digest": "{{approval_digest_hex:ticket}}",
+          "method": "webauthn",
+          "user_verified": true
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "label": "merge",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "merge-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.merge",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "merge_method": "squash"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "HIGH",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "note": "A second attempt, for a proof bound to another attempt and for the replay below.",
+      "label": "merge-2",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "merge-2",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "github.pull_request.merge",
+          "target": "github.com/Mindburn-Labs/example",
+          "arguments_json": {
+            "merge_method": "rebase"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "HIGH",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "note": "No proof: the approval fails closed.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "A decide token is not a proof: only the scope helm.gateway.stepup is.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-decide-scope",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "A proof bound to another attempt.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-other-attempt",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "A proof bound to another digest than the one shown.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-other-digest",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "A proof of a method other than webauthn.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-other-method",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "A proof of another principal than the decide token's approver.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-other-approver",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "Another tenant's proof.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-other-tenant",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "The issuer saw the user-verification flag unset.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-user-not-verified",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "A proof that does not state user verification.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge-user-verification-unstated",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "Every refusal left the attempt as it was.",
+      "rpc": "GetAttempt",
+      "token": "read-a",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "approver_principal_id": "",
+          "pending_approval": true,
+          "permit": "NONE"
+        }
+      }
+    },
+    {
+      "note": "The same decide token, now with a proof bound to this attempt and digest: no refusal above used up either token.",
+      "rpc": "Approve",
+      "token": "approve-merge",
+      "step_up_token": "proof-merge",
+      "request": {
+        "attempt_id": "{{attempt_id:merge}}",
+        "approval_digest": "{{approval_digest:merge}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-b",
+          "permit": "ISSUED"
+        }
+      }
+    },
+    {
+      "note": "A proof is single-use: this one has the jti that approved the first attempt, and is bound to this attempt.",
+      "rpc": "Approve",
+      "token": "approve-merge-2",
+      "step_up_token": "proof-merge-2-replayed",
+      "request": {
+        "attempt_id": "{{attempt_id:merge-2}}",
+        "approval_digest": "{{approval_digest:merge-2}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "error": {
+          "code": "permission_denied",
+          "reason_code": "STEP_UP_REQUIRED"
+        }
+      }
+    },
+    {
+      "note": "The refused replay used up neither the decide token nor a proof.",
+      "rpc": "Approve",
+      "token": "approve-merge-2",
+      "step_up_token": "proof-merge-2",
+      "request": {
+        "attempt_id": "{{attempt_id:merge-2}}",
+        "approval_digest": "{{approval_digest:merge-2}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-b",
+          "permit": "ISSUED"
+        }
+      }
+    },
+    {
+      "label": "publish",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "publish-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "ops.release.publish",
+          "target": "release/v1",
+          "arguments_json": {
+            "tag": "v1.0.0"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "IRREVERSIBLE",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-publish",
+      "step_up_token": "proof-publish",
+      "request": {
+        "attempt_id": "{{attempt_id:publish}}",
+        "approval_digest": "{{approval_digest:publish}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-b",
+          "permit": "ISSUED"
+        }
+      }
+    },
+    {
+      "note": "Authority widening; work_ref is optional for helm.authority.*.",
+      "label": "grant",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "grant-1",
+        "effect": {
+          "effect_type": "helm.authority.grant",
+          "target": "tenant-a",
+          "arguments_json": {
+            "principal": "agent-a"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "MEDIUM",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "rpc": "Approve",
+      "token": "approve-grant",
+      "step_up_token": "proof-grant",
+      "request": {
+        "attempt_id": "{{attempt_id:grant}}",
+        "approval_digest": "{{approval_digest:grant}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-b",
+          "permit": "ISSUED"
+        }
+      }
+    },
+    {
+      "note": "Medium plus approval_required: it needs no step-up.",
+      "label": "ticket",
+      "rpc": "Propose",
+      "token": "propose-a",
+      "request": {
+        "idempotency_key": "ticket-1",
+        "commitment_id": "commitment-1",
+        "effect": {
+          "effect_type": "ops.ticket.file",
+          "target": "ops",
+          "arguments_json": {
+            "title": "Follow up"
+          }
+        }
+      },
+      "expect": {
+        "attempt": {
+          "state": "ESCALATED",
+          "reason_code": "APPROVAL_REQUIRED",
+          "risk_class": "MEDIUM",
+          "pending_approval": true
+        }
+      }
+    },
+    {
+      "note": "A proof that would be refused where step-up is needed is ignored here.",
+      "rpc": "Approve",
+      "token": "approve-ticket",
+      "step_up_token": "proof-ticket-decide-scope",
+      "request": {
+        "attempt_id": "{{attempt_id:ticket}}",
+        "approval_digest": "{{approval_digest:ticket}}",
+        "reason": "ok"
+      },
+      "expect": {
+        "attempt": {
+          "state": "ADMITTED",
+          "reason_code": "",
+          "approver_principal_id": "human-b",
+          "permit": "ISSUED"
+        }
+      }
+    }
+  ]
+}

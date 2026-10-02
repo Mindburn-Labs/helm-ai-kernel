@@ -26,6 +26,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
 // AdapterVersion is the version qualification records name.
@@ -86,6 +87,16 @@ func New(opts ...Option) *Adapter {
 
 var _ adapters.Adapter = (*Adapter)(nil)
 
+// schemaOf is the published argument schema of one of this adapter's effect
+// types.
+func schemaOf(effectType string) []byte {
+	body, _ := effectargs.ArgumentSchema(effectType)
+	return body
+}
+
+// targetForm is the form of every GitHub effect's target.
+const targetForm = "github.com/{owner}/{repo}"
+
 var declarations = []adapters.Declaration{
 	{
 		EffectType:    EffectBranchCreateFromChanges,
@@ -97,6 +108,10 @@ var declarations = []adapters.Declaration{
 		ActivityTrail: false,
 		Notes: "The ref is created only if it does not exist and is never overwritten. The read-back checks the ref, " +
 			"the commit's parents, the compared paths and the blob SHA-1s. Deleting the branch reverses it; v1 has no compensation.",
+		TargetForm:     targetForm,
+		Description:    "Creates a branch from a base commit with one commit that adds or changes files.",
+		ArgumentSchema: schemaOf(EffectBranchCreateFromChanges),
+		Grantable:      true,
 	},
 	{
 		EffectType: EffectPullRequestCreateDraft,
@@ -110,16 +125,24 @@ var declarations = []adapters.Declaration{
 		ActivityTrail: false,
 		Notes: "One open pull request per (head, base). The read-back finds it by head and base and checks draft, " +
 			"head SHA, base and title. Closing it reverses it; v1 has no compensation.",
+		TargetForm:     targetForm,
+		Description:    "Opens a draft pull request from an existing branch.",
+		ArgumentSchema: schemaOf(EffectPullRequestCreateDraft),
+		Grantable:      true,
 	},
 	{
-		EffectType:    EffectRepositoryGet,
-		RiskClass:     adapters.RiskLow,
-		Idempotent:    adapters.IdempotentYes,
-		Observable:    adapters.ObservableYes,
-		Reversible:    adapters.ReversibleNotApplicable,
-		Mediation:     adapters.MediationEnforced,
-		ActivityTrail: false,
-		Notes:         "A read: it writes nothing. Observe reads the default branch and, when asked, one branch.",
+		EffectType:     EffectRepositoryGet,
+		RiskClass:      adapters.RiskLow,
+		Idempotent:     adapters.IdempotentYes,
+		Observable:     adapters.ObservableYes,
+		Reversible:     adapters.ReversibleNotApplicable,
+		Mediation:      adapters.MediationEnforced,
+		ActivityTrail:  false,
+		Notes:          "A read: it writes nothing. Observe reads the default branch and, when asked, one branch.",
+		TargetForm:     targetForm,
+		Description:    "Reads a repository's default branch and head commit, and one named branch's head.",
+		ArgumentSchema: schemaOf(EffectRepositoryGet),
+		Grantable:      true,
 	},
 }
 

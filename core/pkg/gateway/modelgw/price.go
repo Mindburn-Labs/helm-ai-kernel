@@ -26,20 +26,18 @@ func (u Usage) valid() bool {
 	return u.InputTokens >= 0 && u.CacheReadTokens >= 0 && u.CacheWrite5mTokens >= 0 && u.CacheWrite1hTokens >= 0 && u.OutputTokens >= 0
 }
 
-// Quote is the worst-case price of a call in usd_micros: every input byte is a
-// token at the input price and the whole maximum output is generated at the
-// output price. For a byte-level tokenizer one token is never fewer than one
-// byte, so the bound holds, and the provider cannot bill more than it unless it
-// ignores max_output_tokens (an overage, recorded as reported). When the
-// request may write a prompt cache, the input price is the dearest of the
-// input and cache-write prices, so a cache write cannot exceed the quote
-// either. The sum is rounded up once, to whole micros.
+// Quote prices an assumed input-token bound and the whole maximum output in
+// usd_micros. Input uses the dearer of the input and cache-read prices; a
+// cache-writing request also includes both cache-write prices in that maximum.
+// The sum is rounded up once, to whole micros. This arithmetic bound does not
+// establish that request bytes bound provider tokens (for example, for remote
+// media or retained history), or that a provider enforces its output cap.
 func (r *Route) Quote(inputBytes, maxOutputTokens int64, mayWriteCache bool) (int64, error) {
 	if inputBytes < 0 || maxOutputTokens < 0 {
 		return 0, errors.New("a call cannot have a negative size")
 	}
 	rates := r.rates()
-	in := rates.input
+	in := max(rates.input, rates.cacheRead)
 	if mayWriteCache {
 		in = max(in, rates.cacheWrite5m, rates.cacheWrite1h)
 	}

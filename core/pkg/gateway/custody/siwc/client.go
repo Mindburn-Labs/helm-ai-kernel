@@ -51,6 +51,7 @@ type Client struct {
 	http                                                  *http.Client
 	now                                                   func() time.Time
 	issuer, authorizeURL, tokenURL, jwksURL, discoveryURL string
+	modelsURL                                             string
 }
 
 func NewClient() *Client {
@@ -63,6 +64,7 @@ func NewClient() *Client {
 		now: time.Now, issuer: issuer,
 		authorizeURL: issuer + "/api/accounts/authorize", tokenURL: issuer + "/api/accounts/oauth/token",
 		jwksURL: issuer + "/.well-known/jwks.json", discoveryURL: issuer + "/.well-known/openid-configuration",
+		modelsURL: resource + "/models",
 	}
 }
 

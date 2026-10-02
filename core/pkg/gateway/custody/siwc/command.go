@@ -19,10 +19,10 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		return errors.New("ChatGPT plan sign-in is available only in HELM_DEPLOYMENT_MODE=selfhost")
 	}
 	if len(args) == 0 {
-		return errors.New("usage: helm-gateway chatgpt login|status|logout [--store PATH] [--account ID]")
+		return errors.New("usage: helm-gateway chatgpt login|status|models|logout [--store PATH] [--account ID]")
 	}
 	operation := args[0]
-	if operation != "login" && operation != "status" && operation != "logout" {
+	if operation != "login" && operation != "status" && operation != "models" && operation != "logout" {
 		return errors.New("unknown ChatGPT connection operation")
 	}
 	fs := flag.NewFlagSet("chatgpt "+operation, flag.ContinueOnError)
@@ -34,6 +34,9 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	}
 	if fs.NArg() != 0 {
 		return errors.New("unexpected ChatGPT connection arguments")
+	}
+	if operation == "models" && *selected == "" {
+		return errors.New("models requires an explicit --account ID")
 	}
 	if *dir == "" {
 		base, err := os.UserConfigDir()
@@ -72,6 +75,21 @@ func Run(ctx context.Context, args []string, getenv func(string) string, stdout,
 			return ErrIdentity
 		}
 		return encoder.Encode(accounts)
+	case "models":
+		accounts, err := store.Accounts(ctx)
+		if err != nil {
+			return err
+		}
+		for _, account := range accounts {
+			if account.ID == *selected {
+				models, err := store.Models(ctx, client, account.Reference())
+				if err != nil {
+					return err
+				}
+				return encoder.Encode(models)
+			}
+		}
+		return ErrIdentity
 	case "logout":
 		if *selected == "" {
 			return errors.New("logout requires an explicit --account ID")

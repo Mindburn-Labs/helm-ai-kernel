@@ -1,11 +1,18 @@
 # Self-host ChatGPT credential custody
 
-`helm-gateway chatgpt login|status|logout` manages a public OIDC + PKCE
+`helm-gateway chatgpt login|status|models|logout` manages a public OIDC + PKCE
 registration in `HELM_DEPLOYMENT_MODE=selfhost`. Login prints a browser URL
 after starting a literal loopback callback. `--account` selects an existing
 registration; `--store` selects its private local directory. Credentials are
 never printed by these commands. Logout clears local tokens and reports when
 remote revocation cannot be confirmed.
+
+`models --account ID` fetches that account's current catalog directly from
+`https://api.openai.com/v1/models`. It returns only visible model slugs and
+display names, in provider order, without printing credentials. It requires an
+explicit account, rejects a stale account generation, and does not perform
+inference or grant permission to a seat. Network errors do not fall back to a
+cached catalog, a different account or an API key.
 
 Each new store generates a stable canonical UUIDv4 URN (`urn:uuid:...`) for
 the documented `host_id` option. It persists across login and refresh. Older
@@ -26,6 +33,7 @@ Protocol sources:
 - [Public-client sign-in](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
 - [Token lifecycle](https://developers.openai.com/siwc/token-sharing-open-source/token-reference)
 - [Account profiles](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
+- [Account model catalog](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
 
 Tests use a local TLS identity provider and runtime-generated signing keys;
 they never use an account credential or call a model provider.

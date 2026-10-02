@@ -9,6 +9,10 @@ import (
 	"unicode"
 )
 
+// Catalogs include sizeable provider instructions that we intentionally discard.
+// Keep their bound separate from the smaller OAuth credential responses.
+const maxModelCatalogBytes = 2 << 20
+
 // Model is provider catalog metadata, not a grant to use that model. The
 // model gateway must still intersect the selection with the seat's mandate.
 type Model struct {
@@ -44,8 +48,8 @@ func (s *Store) Models(ctx context.Context, c *Client, ref Reference) ([]Model, 
 	default:
 		return nil, ErrUnavailable
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
-	if err != nil || len(body) > maxResponseBytes {
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxModelCatalogBytes+1))
+	if err != nil || len(body) > maxModelCatalogBytes {
 		return nil, ErrUnavailable
 	}
 	var catalog struct {

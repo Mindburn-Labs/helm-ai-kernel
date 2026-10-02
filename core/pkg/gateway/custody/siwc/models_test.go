@@ -44,6 +44,23 @@ func TestAccountModelsUsesCurrentRegistrationAndProviderOrder(t *testing.T) {
 	}
 }
 
+func TestAccountModelsAllowsLargeProviderMetadataWithoutReturningIt(t *testing.T) {
+	f, s := newOIDC(t), newStore(t)
+	a, err := f.login(s, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	api := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"models":[{"slug":"current","display_name":"Current","visibility":"list","base_instructions":"%s"}]}`, strings.Repeat("p", 384<<10))
+	}))
+	defer api.Close()
+	f.client.modelsURL = api.URL
+	models, err := s.Models(context.Background(), f.client, a.Reference())
+	if err != nil || len(models) != 1 || models[0] != (Model{Slug: "current", DisplayName: "Current"}) {
+		t.Fatalf("valid account catalog rejected: %+v, %v", models, err)
+	}
+}
+
 func TestAccountModelsRejectsFailuresWithoutRetryOrFallback(t *testing.T) {
 	f, s := newOIDC(t), newStore(t)
 	a, err := f.login(s, "", nil)
@@ -63,7 +80,7 @@ func TestAccountModelsRejectsFailuresWithoutRetryOrFallback(t *testing.T) {
 		{"wrong schema", 200, `{"data":[]}`, ErrUnavailable},
 		{"null models", 200, `{"models":null}`, ErrUnavailable},
 		{"malformed", 200, `{`, ErrUnavailable},
-		{"oversize", 200, strings.Repeat("x", maxResponseBytes+1), ErrUnavailable},
+		{"oversize", 200, strings.Repeat("x", maxModelCatalogBytes+1), ErrUnavailable},
 		{"duplicate", 200, `{"models":[{"slug":"m","display_name":"M","visibility":"list"},{"slug":"m","display_name":"Again","visibility":"list"}]}`, ErrUnavailable},
 		{"terminal control", 200, `{"models":[{"slug":"m","display_name":"\u001b[31m","visibility":"list"}]}`, ErrUnavailable},
 		{"empty available list", 200, `{"models":[]}`, nil},

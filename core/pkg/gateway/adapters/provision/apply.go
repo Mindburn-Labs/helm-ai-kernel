@@ -303,6 +303,9 @@ func (a *Adapter) applyMandates(ctx context.Context, tx *authorityrows.Tx, in ap
 			}
 			out[n.Name] = finalNode{id: m.ID, holder: n.Holder}
 		}
+		if err := rememberLimits(ctx, tx, in, applied, n.Name, out[n.Name].id); err != nil {
+			return nil, err
+		}
 	}
 	// Every old mandate's mutation lock is now held. Settlement locks counters
 	// in (limit_id, bucket_start) order; follow that order across the whole plan,
@@ -314,6 +317,41 @@ func (a *Adapter) applyMandates(ctx context.Context, tx *authorityrows.Tx, in ap
 		}
 	}
 	return out, nil
+}
+
+// rememberLimits records actual applied limit IDs, not balances. A node may
+// have several limits with the same key, and a later plan may remove and then
+// re-add it. Keeping all memberships preserves the old attempts in both cases
+// without guessing a single predecessor or counting copied counters twice.
+func rememberLimits(ctx context.Context, tx *authorityrows.Tx, in applyInput, applied *Applied, node string, mandate uuid.UUID) error {
+	limits, err := tx.MandateLimits(ctx, mandate)
+	if err != nil {
+		return err
+	}
+	revision := int64(1)
+	if applied != nil {
+		revision = applied.Revision + 1
+	}
+	for _, limit := range limits {
+		if _, err := tx.SQL().ExecContext(ctx, `INSERT INTO authority_provision_limits
+			(tenant_id, limit_id, org_ref, node, mandate_id, first_plan_digest, first_revision, attempt_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (tenant_id, limit_id) DO NOTHING`,
+			tx.TenantID(), limit.ID, in.compiled.Plan.OrgRef, node, mandate, in.compiled.Plan.Digest, revision, in.attemptID); err != nil {
+			return err
+		}
+		// A replay keeps the acquisition metadata. It cannot relabel an
+		// existing limit owned by another organization or plan node.
+		var matches bool
+		if err := tx.SQL().QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_provision_limits
+			WHERE tenant_id = $1 AND limit_id = $2 AND org_ref = $3 AND node = $4 AND mandate_id = $5)`,
+			tx.TenantID(), limit.ID, in.compiled.Plan.OrgRef, node, mandate).Scan(&matches); err != nil {
+			return err
+		}
+		if !matches {
+			return adapters.Refuse(contracts.ReasonPreconditionFailed, "limit %s has another provision binding", limit.ID)
+		}
+	}
+	return nil
 }
 
 func createMandate(ctx context.Context, tx *authorityrows.Tx, in applyInput, n Node, parent *finalNode) (authorityrows.Mandate, error) {
@@ -507,8 +545,8 @@ func writeProvision(ctx context.Context, tx *sql.Tx, tenantID string, in applyIn
 	// accepted only from it.
 	if applied == nil {
 		_, err = tx.ExecContext(ctx, `INSERT INTO authority_provisions
-				(tenant_id, org_ref, plan_digest, version_ref, stage, nodes, principals, requested_by, attempt_id, revision)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)`,
+				(tenant_id, org_ref, plan_digest, version_ref, stage, nodes, principals, requested_by, attempt_id, revision, budget_lineage_complete)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, true)`,
 			tenantID, plan.OrgRef, plan.Digest, plan.VersionRef, plan.Stage, nodesJSON, principalsJSON, in.requester, in.attemptID)
 		return provisionWritten(err, 1)
 	}

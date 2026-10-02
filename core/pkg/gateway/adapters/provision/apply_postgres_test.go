@@ -83,7 +83,7 @@ func newProvisionFixture(t *testing.T) *provisionFixture {
 		`CREATE ROLE ` + pq.QuoteIdentifier(role) + ` NOLOGIN NOSUPERUSER NOBYPASSRLS`,
 		`GRANT USAGE ON SCHEMA ` + pq.QuoteIdentifier(schema) + ` TO ` + pq.QuoteIdentifier(role),
 		`GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA ` + pq.QuoteIdentifier(schema) + ` TO ` + pq.QuoteIdentifier(role),
-		`REVOKE UPDATE ON authority_distinct_values, authority_token_replay FROM ` + pq.QuoteIdentifier(role),
+		`REVOKE UPDATE ON authority_distinct_values, authority_token_replay, authority_provision_limits FROM ` + pq.QuoteIdentifier(role),
 	} {
 		_, err = owner.ExecContext(ctx, stmt)
 		provisionMust(t, err)
@@ -542,6 +542,9 @@ func TestPostgresProvisionRollbackAndRestrictedTenantIsolation(t *testing.T) {
 	}
 	if n := f.scalar(`SELECT count(*) FROM authority_limits`); n != 3 {
 		t.Fatalf("%d limits after rollback", n)
+	}
+	if n := f.scalar(`SELECT count(*) FROM authority_provision_limits`); n != 3 {
+		t.Fatalf("%d memberships after rollback", n)
 	}
 	if n := f.scalar(`SELECT count(*) FROM authority_principals WHERE principal_id = 'svc:rolled-back'`); n != 0 {
 		t.Fatal("principal escaped rollback")

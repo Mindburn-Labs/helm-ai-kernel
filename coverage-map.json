@@ -3860,7 +3860,7 @@
       "id": "CTL-057",
       "title": "Gateway worker endpoint and episode isolation",
       "owner": "Mindburn Labs core team (kernel)",
-      "claim": "helm-gateway serves its effect types to episode workers as MCP tools at /mcp on the worker listener (HELM-751 K3), stateless, in the 2026-07-28 revision and the legacy initialize handshake. Tenant, workspace, principal, actor and episode come only from the verified worker token; only agent principals are served; tools/list names the effect types of the caller's live mandate chains that the gateway performs; and a tool call is proposed, admitted, dispatched and observed under the same admission transaction and permit as any effect, the permit claimed by the worker's own principal and never under a helm.gateway.execute token. An escalation is a structured non-error result, a denial a tool error with its reason code, and the same request replayed is the same attempt. An attempt proposed under an episode token records the claim's episode and takes its work item as its case; a token with an episode claim proposes under that work item only and reads only the attempts of its own episode that its own principal proposed, in every read of an attempt (HELM-751 N1).",
+      "claim": "helm-gateway serves its effect types to episode workers as MCP tools at /mcp on the worker listener (HELM-751 K3), stateless, in the 2026-07-28 revision and the legacy initialize handshake. Tenant, workspace, principal, actor and episode come only from the verified worker token; only agent principals are served; tools/list names the effect types of the caller's live mandate chains that the gateway performs; and a tool call is proposed, admitted, dispatched and observed under the same admission transaction and permit as any effect, the permit claimed by the worker's own principal and never under a helm.gateway.execute token. An escalation is a structured non-error result, a denial a tool error with its reason code, and the same request replayed is the same attempt. An attempt proposed under an episode token records the claim's episode and takes its work item as its case; a token with an episode claim proposes under that work item only and reads only the attempts of its own episode that its own principal proposed, in every read of an attempt (HELM-751 N1). Public executors use a separate listener and audience, a signed canonical client marker, complete episode linkage and a strict 900-second maximum lease. Internal worker tokens, including short ones, cannot authenticate there.",
       "status": "enforced",
       "plane": "runtime",
       "entry_points": [
@@ -3907,6 +3907,7 @@
       ],
       "gates": [],
       "config": [
+        "--executor-listen, HELM_GATEWAY_EXECUTOR_AUDIENCE=helm-gateway-executor:\u003cenv\u003e and HELM_GATEWAY_EXECUTOR_MAX_TTL\u003c=15m: public executor profile, with required CP actor, signed helm_executor client, complete helm_episode, no cnf and strict expiry.",
         "--worker-listen, HELM_GATEWAY_WORKER_AUDIENCE and HELM_GATEWAY_WORKER_MAX_TTL: the worker listener, which serves /mcp and the model endpoints to episode tokens only. It needs HELM_GATEWAY_MODEL_ROUTES_FILE.",
         "Nothing of its own: the tools are the effect types that the gateway's adapters declare as grantable with an argument schema, and serve refuses to start when one cannot be given a tool name."
       ],
@@ -3923,6 +3924,7 @@
       ],
       "tests": {
         "allowed": [
+          "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials",
           "core/pkg/gateway/admission.TestPostgresDeclaredResultSurvivesReplayAndRestart",
           "core/pkg/gateway/mcpserver.TestArtifactResultReachesTheWorkerAsItsDeclaredPayload",
           "core/pkg/gateway/server.TestArtifactObservationPreservesItsCanonicalWireContent",
@@ -3936,6 +3938,8 @@
           "core/pkg/gateway/modelgw.TestPostgresModelCallsRecordTheEpisodeOfTheirToken"
         ],
         "forbidden": [
+          "core/pkg/gateway/server.TestEpisodeScopeMustAuthorizeTheRequestedRoute",
+          "core/pkg/auth/jwks.TestExecutorValidatorRefusesUnsafeConfiguration",
           "core/pkg/gateway/admission.TestPostgresDeclaredResultCannotSettleWithAnUnexpectedShape",
           "core/pkg/gateway/adapters.TestResultSchemasFailClosedWithoutExternalResolution",
           "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes",
@@ -3962,6 +3966,7 @@
           "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
         ],
         "removal": [
+          "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials",
           "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact",
           "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema",
           "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes",
@@ -3983,6 +3988,8 @@
           "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
         ],
         "bypass": [
+          "core/pkg/gateway/runtime.TestExecutorListenerConfigurationAndExecutorOnlyMode",
+          "core/pkg/gateway/runtime.TestServeSeparatesPublicExecutorsFromInternalWorkers",
           "core/pkg/gateway/runtime.TestServeMountsTheMCPEndpointOnTheWorkerListenerOnly",
           "core/pkg/gateway/mcpserver.TestPostgresAReplayedCallIsTheSameAttempt",
           "core/pkg/gateway/mcpserver.TestPostgresAnUnknownOutcomeIsReconcilingUntilItIsKnown",
@@ -4150,6 +4157,18 @@
           "file": "core/pkg/gateway/admission/read.go",
           "tests": [
             "core/pkg/gateway/admission.TestStoredArtifactRetainsItsOriginalSchemaAndContentAddress"
+          ]
+        },
+        {
+          "file": "core/pkg/auth/jwks/controlplane.go",
+          "tests": [
+            "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
+          ]
+        },
+        {
+          "file": "core/pkg/auth/jwks/jwks.go",
+          "tests": [
+            "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
           ]
         }
       ]

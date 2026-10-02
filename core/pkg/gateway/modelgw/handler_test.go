@@ -254,7 +254,7 @@ func TestModelsListsTheRoutesTheCallerMayUse(t *testing.T) {
 	if r := get(t, url+"/v1/models", map[string]string{"X-Api-Key": tokenAgent, "Anthropic-Version": "2023-06-01"}); r.Status != 200 {
 		t.Fatalf("x-api-key: %s", r)
 	}
-	if r := get(t, url+"/v1/models", map[string]string{"Authorization": "Bearer canary-read-worker"}); r.Status != 200 {
+	if r := get(t, url+"/v1/models", map[string]string{"Authorization": "Bearer canary-propose-read-worker"}); r.Status != 200 {
 		t.Fatalf("read scope: %s", r)
 	}
 	if r := get(t, url+"/v1/models", nil); r.Status != 401 {

@@ -52,6 +52,7 @@ const (
 	tokenContinuation = "canary-seat-1-continuation"
 	tokenReassigned   = "canary-seat-2-continuation"
 	tokenSeat1Ep2     = "canary-seat-1-episode-2"
+	tokenSeat1Read    = "canary-seat-1-episode-1-propose-read"
 	tokenSeat1Ro      = "canary-seat-1-episode-1-reads"
 	tokenSeat2        = "canary-seat-2-episode-1"
 	tokenNoSeat       = "canary-seat-without-mandates"
@@ -264,13 +265,18 @@ func newEnv(t *testing.T) *env {
 		tokenContinuation: claims(tenantA, "agt:seat-1", server.ScopePropose, &jwks.EpisodeClaim{EpisodeID: "ep-continuation", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-2"}),
 		tokenReassigned:   claims(tenantA, "agt:seat-2", server.ScopePropose, &jwks.EpisodeClaim{EpisodeID: "ep-reassigned", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-2"}),
 		tokenSeat1Ep2:     claims(tenantA, "agt:seat-1", server.ScopePropose, episode("ep-2")),
-		tokenSeat1Ro:      claims(tenantA, "agt:seat-1", server.ScopeRead, episode("ep-1")),
-		tokenSeat2:        claims(tenantA, "agt:seat-2", server.ScopePropose, episode("ep-1")),
-		tokenNoSeat:       claims(tenantA, "agt:seat-none", server.ScopePropose, episode("ep-1")),
-		tokenTenantB:      claims(tenantB, "agt:seat-1", server.ScopePropose, episode("ep-1")),
-		tokenService:      claims(tenantA, "svc:compiler", server.ScopePropose, episode("ep-1")),
-		tokenHuman:        claims(tenantA, "human-a", server.ScopePropose, episode("ep-1")),
-		tokenNoEp:         claims(tenantA, "agt:seat-1", server.ScopePropose, nil),
+		tokenSeat1Read: func() *jwks.OAuthTokenClaims {
+			c := claims(tenantA, "agt:seat-1", server.ScopePropose, episode("ep-1"))
+			c.Scopes = []string{server.ScopePropose, server.ScopeRead}
+			return c
+		}(),
+		tokenSeat1Ro: claims(tenantA, "agt:seat-1", server.ScopeRead, episode("ep-1")),
+		tokenSeat2:   claims(tenantA, "agt:seat-2", server.ScopePropose, episode("ep-1")),
+		tokenNoSeat:  claims(tenantA, "agt:seat-none", server.ScopePropose, episode("ep-1")),
+		tokenTenantB: claims(tenantB, "agt:seat-1", server.ScopePropose, episode("ep-1")),
+		tokenService: claims(tenantA, "svc:compiler", server.ScopePropose, episode("ep-1")),
+		tokenHuman:   claims(tenantA, "human-a", server.ScopePropose, episode("ep-1")),
+		tokenNoEp:    claims(tenantA, "agt:seat-1", server.ScopePropose, nil),
 	}}
 	e.auth = auth
 	e.srv = httptest.NewServer(&Handler{Backend: gw, Version: "test", Authenticate: func(ctx context.Context, header http.Header) (Caller, error) {

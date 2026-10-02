@@ -10,6 +10,7 @@ package jwks
 // no hybrid or post-quantum path.
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -75,6 +76,10 @@ type JWKSConfig struct {
 	Algorithms []string
 	// RequiredActor, when set, must equal the RFC 8693 "act.sub" claim.
 	RequiredActor string
+	// RequireExecutor selects the public, short-lived episode profile.
+	RequireExecutor bool
+	// RejectExecutor keeps public executor credentials off the worker listener.
+	RejectExecutor bool
 	// MaxTokenTTL, when positive, requires "iat" and bounds exp - iat.
 	MaxTokenTTL time.Duration
 	// Leeway is the clock skew allowed on exp, nbf and iat.
@@ -109,6 +114,34 @@ type OAuthTokenClaims struct {
 	AuthorizationDetails json.RawMessage
 	// Episode is the "helm_episode" claim of an episode token, when present.
 	Episode *EpisodeClaim
+	// Executor is the signed public-executor provenance, never seat authority.
+	Executor *ExecutorClaim
+}
+
+type ExecutorClaim struct {
+	Client string `json:"client"`
+}
+
+// UnmarshalJSON keeps this authority-bearing marker identical to the issuer's
+// closed D24 shape, including refusal of duplicate or differently cased keys.
+func (e *ExecutorClaim) UnmarshalJSON(data []byte) error {
+	d := json.NewDecoder(bytes.NewReader(data))
+	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
+		return errors.New("helm_executor must be an object")
+	}
+	if key, err := d.Token(); err != nil || key != "client" {
+		return errors.New("helm_executor requires client")
+	}
+	value, err := d.Token()
+	client, ok := value.(string)
+	if err != nil || !ok || !executorClient(client) || d.More() {
+		return errors.New("helm_executor must name exactly one canonical client")
+	}
+	if tok, err := d.Token(); err != nil || tok != json.Delim('}') {
+		return errors.New("helm_executor must end after client")
+	}
+	e.Client = client
+	return nil
 }
 
 // EpisodeClaim is the "helm_episode" claim: the bounded worker run, the work
@@ -134,9 +167,7 @@ type jwksClaims struct {
 	Act         *struct {
 		Sub string `json:"sub"`
 	} `json:"act,omitempty"`
-	Cnf *struct {
-		X5tS256 string `json:"x5t#S256"`
-	} `json:"cnf,omitempty"`
+	Cnf                  json.RawMessage `json:"cnf,omitempty"`
 	Txn                  string          `json:"txn"`
 	AuthorizationDetails json.RawMessage `json:"authorization_details,omitempty"`
 	HelmEpisode          *struct {
@@ -144,6 +175,7 @@ type jwksClaims struct {
 		WorkItemID            string `json:"work_item_id"`
 		OrganizationVersionID string `json:"organization_version_id"`
 	} `json:"helm_episode,omitempty"`
+	HelmExecutor *ExecutorClaim `json:"helm_executor,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -209,6 +241,9 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		jwt.WithAudience(v.config.Audience),
 		jwt.WithExpirationRequired(),
 		jwt.WithIssuedAt(),
+	}
+	if v.config.RequireExecutor {
+		options = append(options, jwt.WithTimeFunc(v.now))
 	}
 	if len(v.config.Algorithms) > 0 {
 		options = append(options, jwt.WithValidMethods(v.config.Algorithms))
@@ -298,6 +333,24 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 			}
 		}
 	}
+	if v.config.RejectExecutor && claims.HelmExecutor != nil {
+		return nil, &JWKSValidationError{Kind: JWKSErrInvalidAudience, Message: "executor credentials require the executor listener"}
+	}
+	if v.config.RequireExecutor {
+		if len(claims.Audience) != 1 || claims.Audience[0] != v.config.Audience {
+			return nil, &JWKSValidationError{Kind: JWKSErrInvalidAudience, Message: "executor credentials must name only the executor audience"}
+		}
+		if claims.ExpiresAt == nil || !v.now().Before(claims.ExpiresAt.Time) {
+			return nil, &JWKSValidationError{Kind: JWKSErrExpiredToken, Message: "executor credential has expired"}
+		}
+		e := claims.HelmEpisode
+		if claims.HelmExecutor == nil || !executorClient(claims.HelmExecutor.Client) || e == nil ||
+			!claimID.MatchString(e.EpisodeID) || !claimID.MatchString(e.WorkItemID) || !claimID.MatchString(e.OrganizationVersionID) ||
+			!strings.HasPrefix(claims.Subject, "agt:") || !claimID.MatchString(strings.TrimPrefix(claims.Subject, "agt:")) ||
+			claims.Cnf != nil || !claimID.MatchString(claims.ID) {
+			return nil, &JWKSValidationError{Kind: JWKSErrMalformedToken, Message: "executor credentials require an agent, client, complete episode and jti, without cnf"}
+		}
+	}
 
 	resources := claims.resourceIndicators()
 	if v.config.Resource != "" && !containsString(resources, v.config.Resource) {
@@ -314,6 +367,7 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		TenantID:         strings.TrimSpace(claims.TenantID),
 		WorkspaceID:      strings.TrimSpace(claims.WorkspaceID),
 		TransactionID:    strings.TrimSpace(claims.Txn),
+		Executor:         claims.HelmExecutor,
 	}
 	if len(claims.AuthorizationDetails) > 0 {
 		out.AuthorizationDetails = append(json.RawMessage(nil), claims.AuthorizationDetails...)
@@ -322,7 +376,13 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		out.Actor = strings.TrimSpace(claims.Act.Sub)
 	}
 	if claims.Cnf != nil {
-		out.CertificateThumbprint = strings.TrimSpace(claims.Cnf.X5tS256)
+		var cnf struct {
+			X5tS256 string `json:"x5t#S256"`
+		}
+		if err := json.Unmarshal(claims.Cnf, &cnf); err != nil {
+			return nil, &JWKSValidationError{Kind: JWKSErrMalformedToken, Message: "invalid cnf claim"}
+		}
+		out.CertificateThumbprint = strings.TrimSpace(cnf.X5tS256)
 	}
 	if e := claims.HelmEpisode; e != nil {
 		episode := &EpisodeClaim{EpisodeID: strings.TrimSpace(e.EpisodeID), WorkItemID: strings.TrimSpace(e.WorkItemID),
@@ -334,6 +394,15 @@ func (v *JWKSValidator) ValidateAuthorization(tokenString string) (*OAuthTokenCl
 		out.Episode = episode
 	}
 	return out, nil
+}
+
+func executorClient(client string) bool {
+	switch client {
+	case "claude-code", "codex", "openclaw":
+		return true
+	default:
+		return false
+	}
 }
 
 // CertificateMatchesThumbprint reports whether cert is the certificate a

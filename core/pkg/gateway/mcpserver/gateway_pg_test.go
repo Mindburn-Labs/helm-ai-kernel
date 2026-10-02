@@ -47,11 +47,11 @@ func TestPostgresToolsListReflectsTheCallersMandates(t *testing.T) {
 	// Each seat is offered what its mandates name, the gateway performs and its
 	// tenant holds, in name order, and the attempt tool always.
 	for token, want := range map[string][]string{
-		tokenSeat1Ep1: {"github_branch_create_from_changes", "github_repository_get", "helm_attempt_get"},
-		tokenSeat2:    {"github_repository_get", "helm_attempt_get"},
-		tokenNoSeat:   {"helm_attempt_get"},
-		tokenTenantB:  {"github_repository_get", "helm_attempt_get"},
-		tokenSeat1Ro:  {"github_branch_create_from_changes", "github_repository_get", "helm_attempt_get"},
+		tokenSeat1Ep1:  {"github_branch_create_from_changes", "github_repository_get", "helm_attempt_get"},
+		tokenSeat2:     {"github_repository_get", "helm_attempt_get"},
+		tokenNoSeat:    {"helm_attempt_get"},
+		tokenTenantB:   {"github_repository_get", "helm_attempt_get"},
+		tokenSeat1Read: {"github_branch_create_from_changes", "github_repository_get", "helm_attempt_get"},
 	} {
 		if got := list(token); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s lists %v, want %v", token, got, want)
@@ -409,9 +409,9 @@ func TestPostgresAnotherEpisodesAttemptIsNotFound(t *testing.T) {
 	first, _ := e.callTool(t, tokenSeat1Ep1, "call-1", "github_repository_get", getArgs(repoA)).structured(t)
 	id := first["attempt_id"].(string)
 
-	// Its own episode reads it, with either scope; another episode of the same
+	// Its own episode reads it with propose or propose+read; another episode of the same
 	// seat finds nothing, the same nothing an attempt that was never made gives.
-	for _, token := range []string{tokenSeat1Ep1, tokenSeat1Ro} {
+	for _, token := range []string{tokenSeat1Ep1, tokenSeat1Read} {
 		got, isError := e.callTool(t, token, "g", AttemptGetTool, map[string]any{"attempt_id": id}).structured(t)
 		if isError || got["status"] != "succeeded" || got["attempt_id"] != id {
 			t.Fatalf("%s reading its own attempt: %v", token, got)
@@ -440,10 +440,11 @@ func TestPostgresAnotherEpisodesAttemptIsNotFound(t *testing.T) {
 		t.Fatalf("episode 1 reading episode 2's attempt = %v", got)
 	}
 
-	// A token that only reads cannot propose.
-	denied, isError := e.callTool(t, tokenSeat1Ro, "p", "github_repository_get", getArgs(repoA)).structured(t)
-	if !isError || denied["status"] != "denied" || denied["reason_code"] != "INSUFFICIENT_PRIVILEGE" || denied["attempt_id"] != nil {
-		t.Fatalf("a read token proposing = %v", denied)
+	// D24 rejects a read-only episode credential before it can read or propose.
+	for _, tool := range []string{"github_repository_get", AttemptGetTool} {
+		if denied := e.callTool(t, tokenSeat1Ro, "p", tool, getArgs(repoA)); denied.Status != http.StatusForbidden {
+			t.Fatalf("a read-only episode token calling %s: %d %v", tool, denied.Status, denied.Body)
+		}
 	}
 
 	// The Control Plane, a service principal with read and no episode, sees both

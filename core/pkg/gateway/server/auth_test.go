@@ -318,6 +318,8 @@ func TestEpisodeProposeAndReadScopes(t *testing.T) {
 		{"decide", []string{ScopePropose, ScopeDecide}, true},
 		{"read only", []string{ScopeRead}, true},
 		{"duplicate", []string{ScopePropose, ScopePropose}, true},
+		{"duplicate read", []string{ScopePropose, ScopeRead, ScopeRead}, true},
+		{"foreign", []string{ScopePropose, "other.read"}, true},
 		{"empty", nil, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -331,6 +333,34 @@ func TestEpisodeProposeAndReadScopes(t *testing.T) {
 			}
 			if err == nil && id.Scope != ScopePropose {
 				t.Fatalf("matched scope=%q", id.Scope)
+			}
+		})
+	}
+}
+
+func TestEpisodeScopeMustAuthorizeTheRequestedRoute(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		scopes    []string
+		requested string
+		allowed   bool
+	}{
+		{"read", []string{ScopePropose, ScopeRead}, ScopeRead, true},
+		{"propose cannot read", []string{ScopePropose}, ScopeRead, false},
+		{"cannot execute", []string{ScopePropose, ScopeRead}, ScopeExecute, false},
+		{"cannot decide", []string{ScopePropose, ScopeRead}, ScopeDecide, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			claims := goodClaims()
+			claims.Episode = &jwks.EpisodeClaim{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "v-1"}
+			claims.Scopes = tc.scopes
+			auth := &Authenticator{Validator: fakeValidator{claims: claims}, Actor: testActor, RequireEpisode: true}
+			id, err := auth.Authenticate(context.Background(), bearer(), tc.requested)
+			if (err == nil) != tc.allowed {
+				t.Fatalf("identity=%+v err=%v", id, err)
+			}
+			if err == nil && id.Scope != tc.requested {
+				t.Fatalf("matched %q want %q", id.Scope, tc.requested)
 			}
 		})
 	}

@@ -273,7 +273,12 @@ func (e *env) authenticator(worker bool) *server.Authenticator {
 			tokenHaiku:            claims("agt:seat-haiku", audience, server.ScopePropose, episode("ep-1")),
 			"canary-human-worker": claims("human-a", audience, server.ScopePropose, episode("ep-1")),
 			"canary-svc-worker":   claims("svc:helm-org-compiler", audience, server.ScopePropose, episode("ep-1")),
-			"canary-read-worker":  claims("agt:seat-1", audience, server.ScopeRead, episode("ep-1")),
+			"canary-propose-read-worker": func() *jwks.OAuthTokenClaims {
+				c := claims("agt:seat-1", audience, server.ScopePropose, episode("ep-1"))
+				c.Scopes = []string{server.ScopePropose, server.ScopeRead}
+				return c
+			}(),
+			"canary-read-worker": claims("agt:seat-1", audience, server.ScopeRead, episode("ep-1")),
 		}
 	}
 	return &server.Authenticator{Validator: tokens, Actor: cpActor, RequireEpisode: worker}

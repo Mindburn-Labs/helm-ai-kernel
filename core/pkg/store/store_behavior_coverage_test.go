@@ -874,7 +874,10 @@ func TestPostgresReceiptAppendCausalParallelOutperformsSQLite(t *testing.T) {
 	if postgresURL == "" {
 		t.Skip("set HELM_TEST_POSTGRES_URL to run Postgres receipt throughput gate")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	// The pure-Go SQLite driver is also race-instrumented. Give the race
+	// correctness run time to finish the same workload; the plain throughput
+	// gate keeps its 45-second deadline and the relative performance assertion.
+	ctx, cancel := context.WithTimeout(context.Background(), receiptThroughputTimeout)
 	defer cancel()
 	const sessions = 64
 	const appendsPerSession = 50

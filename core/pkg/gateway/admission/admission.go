@@ -88,6 +88,21 @@ type Caller struct {
 	// ActorID is the token's act.sub: the workload that carries a
 	// principal's call. Empty for a direct call.
 	ActorID string
+	// Episode is the token's helm_episode claim, verified: the bounded worker
+	// run the token was minted for. Nil for every other token. It is the only
+	// source of an attempt's episode: Propose records it, and a caller that has
+	// one proposes under its work item and reads only its own episode's
+	// attempts.
+	Episode *Episode
+}
+
+// Episode is a worker token's helm_episode claim (jwks.EpisodeClaim), and what
+// an attempt records of it. The work item is the attempt's case_id.
+type Episode struct {
+	EpisodeID  string
+	WorkItemID string
+	// OrganizationVersionID is empty when the token names none.
+	OrganizationVersionID string
 }
 
 // ProposeInput is a ProposeRequest.
@@ -102,6 +117,9 @@ type ProposeInput struct {
 	Quote             []Amount
 	Distinct          []DistinctValue
 	ApprovalExpiresAt *time.Time
+	// Set only by ProposeWorkEffect after validating and canonicalizing the
+	// intent. It is not a caller-supplied transport field or read privilege.
+	workEffect bool
 }
 
 // MaxTransaction is the longest a gateway database transaction may run. Every
@@ -146,9 +164,10 @@ type Config struct {
 // only state it keeps is compiled mandate conditions, keyed by the digest of
 // their text.
 type Service struct {
-	db       *sql.DB
-	cfg      Config
-	adapters map[string]adapters.Adapter
+	db            *sql.DB
+	cfg           Config
+	adapters      map[string]adapters.Adapter
+	resultSchemas map[string]*adapters.ResultSchema
 
 	conditions sync.Map // [32]byte -> *authority.Snapshot
 }
@@ -174,15 +193,24 @@ func New(db *sql.DB, cfg Config) (*Service, error) {
 		cfg.MaxTransaction = MaxTransaction
 	}
 	byType := map[string]adapters.Adapter{}
+	resultSchemas := map[string]*adapters.ResultSchema{}
 	for _, a := range cfg.Adapters {
 		for _, d := range a.Declarations() {
 			if _, dup := byType[d.EffectType]; dup {
 				return nil, fmt.Errorf("two adapters declare %s", d.EffectType)
 			}
 			byType[d.EffectType] = a
+			resultSchema, err := adapters.CompileResultSchema(d)
+			if err != nil {
+				return nil, fmt.Errorf("%s result contract: %w", d.EffectType, err)
+			}
+			if resultSchema != nil && fixedResultKind(d.EffectType) != "" {
+				return nil, fmt.Errorf("%s already has a fixed result contract", d.EffectType)
+			}
+			resultSchemas[d.EffectType] = resultSchema
 		}
 	}
-	return &Service{db: db, cfg: cfg, adapters: byType}, nil
+	return &Service{db: db, cfg: cfg, adapters: byType, resultSchemas: resultSchemas}, nil
 }
 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID, and
@@ -224,6 +252,10 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 		return Attempt{}, false, refuse(CodeInvalidArgument, contracts.ReasonSchemaViolation,
 			"helm.authority.lift is proposed through Lift, which binds the operator's stop token to the stop")
 	}
+	in, err := bindEpisode(caller.Episode, in)
+	if err != nil {
+		return Attempt{}, false, err
+	}
 	args, err := validateProposal(in)
 	if err != nil {
 		return Attempt{}, false, err
@@ -231,12 +263,34 @@ func (s *Service) Propose(ctx context.Context, caller Caller, in ProposeInput) (
 	var attemptID string
 	var existing bool
 	err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+		if in.workEffect {
+			var activeAgent bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM authority_principals
+				WHERE tenant_id = $1 AND principal_id = $2 AND kind = 'agent' AND status = 'active')`,
+				caller.TenantID, caller.PrincipalID).Scan(&activeAgent); err != nil {
+				return err
+			}
+			if !activeAgent {
+				return refuse(CodePermissionDenied, contracts.ReasonPrincipalInactive, "a work effect requires an active agent principal")
+			}
+		}
 		var err error
 		attemptID, existing, err = s.proposeTx(ctx, tx, caller, in, args)
 		return err
 	})
 	if err != nil {
 		return Attempt{}, false, err
+	}
+	if in.workEffect {
+		// Only replay of this exact verified work intent may recover a result
+		// from an earlier episode. Get/GetContent/List remain episode-scoped.
+		var attempt Attempt
+		err = s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
+			var err error
+			attempt, err = loadAttemptScoped(ctx, tx, caller, attemptID, caller.Episode.WorkItemID, workEffectDigest(caller, in))
+			return err
+		})
+		return attempt, existing, err
 	}
 	attempt, err := s.Get(ctx, caller, attemptID)
 	return attempt, existing, err
@@ -269,16 +323,24 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	if err != nil {
 		return "", false, err
 	}
+	// The episode is the verified claim's and nothing else's: the attempt row
+	// records it with itself, and nothing ever changes it.
+	var episodeID, organizationVersionID string
+	if e := caller.Episode; e != nil {
+		episodeID, organizationVersionID = e.EpisodeID, e.OrganizationVersionID
+	}
 	// 1. Idempotency first. A duplicate never locks or changes anything.
 	err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
 			(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
 			 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
-			 distinct_values, state)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15, 'PROPOSED')
+			 distinct_values, episode_id, organization_version_id, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15,
+			NULLIF($16, ''), NULLIF($17, ''), 'PROPOSED')
 		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
 		RETURNING attempt_id`,
 		caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
-		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct).Scan(&attemptID)
+		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct,
+		episodeID, organizationVersionID).Scan(&attemptID)
 	if errors.Is(err, sql.ErrNoRows) {
 		var stored []byte
 		if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts
@@ -955,6 +1017,9 @@ func checkBranchAttempt(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 func checkCaller(c Caller) error {
 	if strings.TrimSpace(c.TenantID) == "" || strings.TrimSpace(c.WorkspaceID) == "" || strings.TrimSpace(c.PrincipalID) == "" {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token names no tenant, workspace or principal")
+	}
+	if e := c.Episode; e != nil && !validEpisode(e) {
+		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege, "the token's episode claim is not well formed")
 	}
 	return nil
 }

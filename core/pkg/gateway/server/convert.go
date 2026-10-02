@@ -33,6 +33,9 @@ func attemptProto(a admission.Attempt) *gatewayv1.EffectAttempt {
 		WorkspaceId:          a.WorkspaceID,
 		RequesterActorId:     a.RequesterActorID,
 	}
+	if e := a.Episode; e != nil {
+		out.Episode = &gatewayv1.EpisodeRef{EpisodeId: e.EpisodeID, WorkItemId: e.WorkItemID, OrganizationVersionId: e.OrganizationVersionID}
+	}
 	switch {
 	case a.CommitmentID != "":
 		out.WorkRef = &gatewayv1.EffectAttempt_CommitmentId{CommitmentId: a.CommitmentID}
@@ -115,6 +118,11 @@ func observationProto(o *admission.Observation) *gatewayv1.Observation {
 		out.Result = &gatewayv1.Observation_GithubRepository{GithubRepository: &gatewayv1.GitHubRepositoryResult{
 			DefaultBranch: r.DefaultBranch, DefaultBranchSha: r.DefaultBranchSHA, Branch: r.Branch, BranchSha: r.BranchSHA,
 			BranchExists: r.BranchExists,
+		}}
+	case o.Artifact != nil:
+		r := o.Artifact
+		out.Result = &gatewayv1.Observation_Artifact{Artifact: &gatewayv1.ArtifactResult{
+			SchemaId: r.SchemaID, ContentType: r.ContentType, CanonicalBytes: r.CanonicalBytes, Digest: r.Digest,
 		}}
 	}
 	return out

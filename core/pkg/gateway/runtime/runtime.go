@@ -29,7 +29,12 @@
 // listener for episode workers: server TLS without client certificates, the
 // worker audience HELM_GATEWAY_WORKER_AUDIENCE (helm-gateway-worker:<env>) and
 // tokens of up to HELM_GATEWAY_WORKER_MAX_TTL (at most one hour). A token minted
-// for one listener is not valid on the other.
+// for one listener is not valid on the other. The worker listener also serves
+// the gateway's effect types as MCP tools at /mcp (package mcpserver), to the
+// same episode tokens.
+// --executor-listen serves /v1/ and /mcp for public executors only, using
+// HELM_GATEWAY_EXECUTOR_AUDIENCE=helm-gateway-executor:<env> and a maximum
+// HELM_GATEWAY_EXECUTOR_MAX_TTL of 15m. It never accepts internal worker tokens.
 package runtime
 
 // quantum_posture: the listener serves classical TLS 1.2+ (pkg/servetls) and
@@ -59,6 +64,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/admission"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/custody"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/jobs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/mcpserver"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/modelgw"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/server"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/pgdsn"
@@ -71,8 +77,10 @@ const (
 	envApprovalWindow  = "HELM_GATEWAY_APPROVAL_WINDOW"
 	envDispatchTimeout = "HELM_GATEWAY_DISPATCH_TIMEOUT"
 	// The worker listener's token audience and lifetime (HELM-752 K7).
-	envWorkerAudience = "HELM_GATEWAY_WORKER_AUDIENCE"
-	envWorkerMaxTTL   = "HELM_GATEWAY_WORKER_MAX_TTL"
+	envWorkerAudience   = "HELM_GATEWAY_WORKER_AUDIENCE"
+	envWorkerMaxTTL     = "HELM_GATEWAY_WORKER_MAX_TTL"
+	envExecutorAudience = "HELM_GATEWAY_EXECUTOR_AUDIENCE"
+	envExecutorMaxTTL   = "HELM_GATEWAY_EXECUTOR_MAX_TTL"
 )
 
 // Configure installs gateway-owned adapters in this same server and lifecycle.
@@ -83,7 +91,7 @@ type Configure func(context.Context, *sql.DB, *admission.Config) error
 // Run is the shared gateway command used by the OSS and HELM OS compositions.
 func Run(ctx context.Context, args []string, getenv func(string) string, stderr io.Writer, extensions ...Configure) error {
 	if len(args) == 0 {
-		return errors.New("usage: helm-gateway migrate | serve [--listen :8443] [--worker-listen :8444] [--health-listen :8081] [--dev-insecure-listen 127.0.0.1:PORT] | db scram-verifier")
+		return errors.New("usage: helm-gateway migrate | serve [--listen :8443] [--worker-listen :8444] [--executor-listen :8445] [--health-listen :8081] [--dev-insecure-listen 127.0.0.1:PORT] | db scram-verifier")
 	}
 	switch args[0] {
 	case "migrate":
@@ -113,7 +121,8 @@ type serveConfig struct {
 	// workerListen is the worker listener's address; empty serves none. With
 	// --dev-insecure-listen it is plain HTTP on a loopback address, and
 	// otherwise TLS without client certificates.
-	workerListen string
+	workerListen   string
+	executorListen string
 }
 
 func parseServeFlags(args []string, stderr io.Writer) (serveConfig, error) {
@@ -124,6 +133,7 @@ func parseServeFlags(args []string, stderr io.Writer) (serveConfig, error) {
 	fs.StringVar(&c.healthListen, "health-listen", ":8081", "health listener (/healthz, /readyz)")
 	fs.StringVar(&c.devInsecureListen, "dev-insecure-listen", "", "serve the API over plain HTTP on this loopback address instead of TLS (development only)")
 	fs.StringVar(&c.workerListen, "worker-listen", "", "worker listener for episode workers (TLS without client certificates; plain HTTP on a loopback address with --dev-insecure-listen)")
+	fs.StringVar(&c.executorListen, "executor-listen", "", "public executor listener (executor episode tokens only; TLS, or loopback HTTP with --dev-insecure-listen)")
 	if err := fs.Parse(args); err != nil {
 		return c, err
 	}
@@ -136,6 +146,11 @@ func parseServeFlags(args []string, stderr io.Writer) (serveConfig, error) {
 		}
 		if c.workerListen != "" {
 			if err := requireLoopback("--worker-listen (plain HTTP with --dev-insecure-listen)", c.workerListen); err != nil {
+				return c, err
+			}
+		}
+		if c.executorListen != "" {
+			if err := requireLoopback("--executor-listen (plain HTTP with --dev-insecure-listen)", c.executorListen); err != nil {
 				return c, err
 			}
 		}
@@ -245,15 +260,30 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	// The model gateway: on the main listener for the Control Plane's calls,
 	// and on the worker listener for episode workers. One gateway, two
 	// authentications: a token is valid on the listener its audience names.
-	var workerServer *http.Server
+	// The worker listener also serves the effect types as MCP tools (package
+	// mcpserver) at /mcp, to the same episode tokens, so a worker has one
+	// network exit for its model calls and its effects.
+	var workerServer, executorServer *http.Server
 	if models != nil {
 		gateway := &modelgw.Gateway{Config: models.config, Ledger: svc, Keys: models.keys}
 		mux.Handle("/v1/", server.WithTLSState(gateway.Handler(modelgw.Listener{Name: "main", Auth: api.Auth})))
-		if models.worker != nil {
-			workerAuth := &server.Authenticator{Validator: models.worker, Actor: identity.Actor, RequireEpisode: true}
+		for _, profile := range []struct {
+			name      string
+			validator *jwks.JWKSValidator
+			target    **http.Server
+		}{{"worker", models.worker, &workerServer}, {"executor", models.executor, &executorServer}} {
+			if profile.validator == nil {
+				continue
+			}
+			workerAuth := &server.Authenticator{Validator: profile.validator, Actor: identity.Actor, RequireEpisode: true}
+			tools, err := mcpserver.NewGateway(svc, admissionConfig.Adapters)
+			if err != nil {
+				return fmt.Errorf("MCP tools: %w", err)
+			}
 			workerMux := http.NewServeMux()
-			workerMux.Handle("/v1/", gateway.Handler(modelgw.Listener{Name: "worker", Auth: workerAuth, Worker: true}))
-			workerServer = newAPIServer(workerMux, workerTLS(tlsConfig), plain)
+			workerMux.Handle("/v1/", gateway.Handler(modelgw.Listener{Name: profile.name, Auth: workerAuth, Worker: true}))
+			workerMux.Handle("/mcp", &mcpserver.Handler{Authenticate: mcpAuthenticate(workerAuth), Backend: tools})
+			*profile.target = newAPIServer(workerMux, workerTLS(tlsConfig), plain)
 		}
 	}
 
@@ -270,7 +300,28 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	if err != nil {
 		return err
 	}
-	errs := make(chan error, 3)
+	defer listener.Close()
+	// Bind every episode listener before serving any request. Partial startup
+	// must not leave an API or health listener behind on an error.
+	var workerListener, executorListener net.Listener
+	for _, extra := range []struct {
+		server   *http.Server
+		address  string
+		listener *net.Listener
+	}{{workerServer, cfg.workerListen, &workerListener}, {executorServer, cfg.executorListen, &executorListener}} {
+		if extra.server == nil {
+			continue
+		}
+		l, err := net.Listen("tcp", extra.address)
+		if err != nil {
+			return err
+		}
+		defer l.Close()
+		*extra.listener = l
+	}
+	defer apiServer.Close()
+	defer healthServer.Close()
+	errs := make(chan error, 4)
 	go func() {
 		if tlsConfig != nil {
 			errs <- apiServer.ServeTLS(listener, "", "")
@@ -279,23 +330,23 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 		}
 	}()
 	go func() { errs <- healthServer.ListenAndServe() }()
-	workerAddress := ""
-	if workerServer != nil {
-		workerListener, err := net.Listen("tcp", cfg.workerListen)
-		if err != nil {
-			_ = listener.Close()
-			return err
+	for _, extra := range []struct {
+		server   *http.Server
+		listener net.Listener
+	}{{workerServer, workerListener}, {executorServer, executorListener}} {
+		if extra.server == nil {
+			continue
 		}
-		workerAddress = workerListener.Addr().String()
+		defer extra.server.Close()
 		go func() {
 			if tlsConfig != nil {
-				errs <- workerServer.ServeTLS(workerListener, "", "")
+				errs <- extra.server.ServeTLS(extra.listener, "", "")
 			} else {
-				errs <- workerServer.Serve(workerListener)
+				errs <- extra.server.Serve(extra.listener)
 			}
 		}()
 	}
-	slog.Info("helm-gateway serving", "api", listener.Addr().String(), "worker", workerAddress, "health", cfg.healthListen, "tls", tlsConfig != nil)
+	slog.Info("helm-gateway serving", "api", listener.Addr().String(), "worker", cfg.workerListen, "executor", cfg.executorListen, "health", cfg.healthListen, "tls", tlsConfig != nil)
 
 	select {
 	case <-ctx.Done():
@@ -309,6 +360,9 @@ func serve(ctx context.Context, args []string, getenv func(string) string, stder
 	stopped := []error{apiServer.Shutdown(shutdown), healthServer.Shutdown(shutdown)}
 	if workerServer != nil {
 		stopped = append(stopped, workerServer.Shutdown(shutdown))
+	}
+	if executorServer != nil {
+		stopped = append(stopped, executorServer.Shutdown(shutdown))
 	}
 	return errors.Join(stopped...)
 }
@@ -324,6 +378,19 @@ func newAPIServer(handler http.Handler, tlsConfig *tls.Config, plain bool) *http
 	}
 	return &http.Server{Handler: handler, TLSConfig: tlsConfig, Protocols: protocols, ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
+}
+
+// mcpAuthenticate is the MCP endpoint's token check: the worker listener's own,
+// for a token that proposes or reads. The endpoint takes its identity from
+// nothing else.
+func mcpAuthenticate(auth *server.Authenticator) mcpserver.Authenticate {
+	return func(ctx context.Context, header http.Header) (mcpserver.Caller, error) {
+		id, err := auth.Authenticate(ctx, header, server.ScopePropose, server.ScopeRead)
+		if err != nil {
+			return mcpserver.Caller{}, err
+		}
+		return mcpserver.Caller{Caller: id.Caller, Scope: id.Scope}, nil
+	}
 }
 
 // workerTLS is the worker listener's TLS configuration: the same serving
@@ -342,9 +409,10 @@ func workerTLS(main *tls.Config) *tls.Config {
 // models is the model gateway's startup configuration: the routes, the custody
 // of the provider keys and, with --worker-listen, the worker token validator.
 type models struct {
-	config *modelgw.Config
-	keys   *custody.ProviderKeys
-	worker *jwks.JWKSValidator
+	config   *modelgw.Config
+	keys     *custody.ProviderKeys
+	worker   *jwks.JWKSValidator
+	executor *jwks.JWKSValidator
 }
 
 // install declares model.inference to admission, so the effect type is in the
@@ -362,15 +430,34 @@ func (m *models) install(c *admission.Config) {
 func modelsFromEnv(getenv func(string) string, cfg serveConfig, identity *jwks.ControlPlaneIdentity) (*models, error) {
 	path := strings.TrimSpace(getenv(modelgw.EnvRoutesFile))
 	audience := strings.TrimSpace(getenv(envWorkerAudience))
-	switch {
-	case path == "" && cfg.workerListen != "":
-		return nil, fmt.Errorf("--worker-listen serves the model endpoints and needs %s", modelgw.EnvRoutesFile)
-	case path == "" && audience != "":
-		return nil, fmt.Errorf("%s is set without %s", envWorkerAudience, modelgw.EnvRoutesFile)
-	case path == "":
+	executorAudience := strings.TrimSpace(getenv(envExecutorAudience))
+	for _, profile := range []struct{ listen, audience, ttl, flag, env string }{
+		{cfg.workerListen, audience, getenv(envWorkerMaxTTL), "--worker-listen", envWorkerAudience},
+		{cfg.executorListen, executorAudience, getenv(envExecutorMaxTTL), "--executor-listen", envExecutorAudience},
+	} {
+		if path == "" && profile.audience != "" && profile.listen == "" {
+			return nil, fmt.Errorf("%s is set without %s", profile.env, modelgw.EnvRoutesFile)
+		}
+		if profile.listen == "" && (profile.audience != "" || profile.ttl != "") {
+			return nil, fmt.Errorf("%s profile is set without %s", profile.env, profile.flag)
+		}
+		if profile.listen != "" {
+			if path == "" {
+				return nil, fmt.Errorf("%s needs %s", profile.flag, modelgw.EnvRoutesFile)
+			}
+			if profile.audience == "" {
+				return nil, fmt.Errorf("%s is required with %s", profile.env, profile.flag)
+			}
+			if identity == nil {
+				return nil, errors.New("episode listeners require Control Plane identity")
+			}
+		}
+	}
+	if path == "" {
 		return nil, nil
-	case cfg.workerListen == "" && audience != "":
-		return nil, fmt.Errorf("%s is set without --worker-listen", envWorkerAudience)
+	}
+	if executorAudience != "" && executorAudience == audience {
+		return nil, errors.New("executor and worker audiences must differ")
 	}
 	config, err := modelgw.LoadConfig(path)
 	if err != nil {
@@ -381,20 +468,27 @@ func modelsFromEnv(getenv func(string) string, cfg serveConfig, identity *jwks.C
 		return nil, err
 	}
 	m := &models{config: config, keys: keys}
-	if cfg.workerListen == "" {
-		return m, nil
-	}
-	if audience == "" {
-		return nil, fmt.Errorf("%s is required with --worker-listen: the worker listener accepts only tokens of its own audience", envWorkerAudience)
-	}
-	ttl := jwks.WorkerTokenMaxTTLCeiling
-	if raw := strings.TrimSpace(getenv(envWorkerMaxTTL)); raw != "" {
-		if ttl, err = time.ParseDuration(raw); err != nil {
-			return nil, fmt.Errorf("%s must be a duration: %w", envWorkerMaxTTL, err)
+	for _, profile := range []struct {
+		listen, audience, ttlEnv string
+		ceiling                  time.Duration
+		validator                func(string, time.Duration) (*jwks.JWKSValidator, error)
+		target                   **jwks.JWKSValidator
+	}{
+		{cfg.workerListen, audience, envWorkerMaxTTL, jwks.WorkerTokenMaxTTLCeiling, identity.WorkerValidator, &m.worker},
+		{cfg.executorListen, executorAudience, envExecutorMaxTTL, jwks.ExecutorTokenMaxTTLCeiling, identity.ExecutorValidator, &m.executor},
+	} {
+		if profile.listen == "" {
+			continue
 		}
-	}
-	if m.worker, err = identity.WorkerValidator(audience, ttl); err != nil {
-		return nil, fmt.Errorf("%s: %w", envWorkerAudience, err)
+		ttl := profile.ceiling
+		if raw := strings.TrimSpace(getenv(profile.ttlEnv)); raw != "" {
+			if ttl, err = time.ParseDuration(raw); err != nil {
+				return nil, fmt.Errorf("%s must be a duration: %w", profile.ttlEnv, err)
+			}
+		}
+		if *profile.target, err = profile.validator(profile.audience, ttl); err != nil {
+			return nil, err
+		}
 	}
 	return m, nil
 }

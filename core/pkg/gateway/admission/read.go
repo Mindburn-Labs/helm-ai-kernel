@@ -14,6 +14,7 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/interfaces"
 )
 
 // Attempt is the stored effect attempt.
@@ -45,6 +46,10 @@ type Attempt struct {
 	LatestObservation    *Observation
 	// ModelCall is the money side of a claimed model.inference attempt.
 	ModelCall *ModelCall
+	// Episode is the worker run the attempt was proposed in, recorded from the
+	// proposing token's verified helm_episode claim; nil for any other attempt.
+	// Its WorkItemID is the attempt's CaseID.
+	Episode   *Episode
 	Version   int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -103,10 +108,14 @@ type Observation struct {
 	GitHubPullRequest *adapters.GitHubPullRequestResult
 	GitHubBranch      *adapters.GitHubBranchResult
 	GitHubRepository  *adapters.GitHubRepositoryResult
+	Artifact          *interfaces.Artifact
 }
 
 // Get returns an attempt of the caller's tenant and workspace. Any other
-// attempt, including one of another tenant or workspace, is not found.
+// attempt, including one of another tenant or workspace, is not found. A caller
+// with an episode claim is held to its own episode's attempts, the ones its own
+// principal proposed: any other attempt is as not found to it as one that does
+// not exist.
 func (s *Service) Get(ctx context.Context, caller Caller, attemptID string) (Attempt, error) {
 	if err := checkCaller(caller); err != nil {
 		return Attempt{}, err
@@ -135,8 +144,9 @@ func (s *Service) GetContent(ctx context.Context, caller Caller, attemptID strin
 	err := s.inTenant(ctx, caller.TenantID, func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx, `SELECT c.arguments FROM authority_attempt_contents c
 			JOIN authority_effect_attempts a ON a.tenant_id = c.tenant_id AND a.attempt_id = c.attempt_id
-			WHERE c.tenant_id = $1 AND c.attempt_id = $2 AND a.workspace_id = $3`,
-			caller.TenantID, attemptID, caller.WorkspaceID).Scan(&content)
+			WHERE c.tenant_id = $1 AND c.attempt_id = $2 AND a.workspace_id = $3
+				AND ($4 = '' OR (a.episode_id = $4 AND a.requester_principal_id = $5))`,
+			caller.TenantID, attemptID, caller.WorkspaceID, episodeScope(caller), caller.PrincipalID).Scan(&content)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errNotFound
 		}
@@ -155,19 +165,32 @@ func checkAttemptID(id string) error {
 // loadAttempt reads the attempt, its permit, exposures and latest
 // observation in the caller's transaction.
 func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID string) (Attempt, error) {
+	return loadAttemptScoped(ctx, tx, caller, attemptID, "", nil)
+}
+
+// The work scope is private to ProposeWorkEffect: both its work id and digest
+// are derived from the authenticated claim and validated intent. No read API
+// accepts this alternative scope.
+func loadAttemptScoped(ctx context.Context, tx *sql.Tx, caller Caller, attemptID, workID string, workDigest []byte) (Attempt, error) {
+	scope := `AND ($4 = '' OR (episode_id = $4 AND requester_principal_id = $5))`
+	args := []any{caller.TenantID, attemptID, caller.WorkspaceID, episodeScope(caller), caller.PrincipalID}
+	if workID != "" {
+		scope = `AND episode_id IS NOT NULL AND case_id = $4 AND request_digest = $5`
+		args[3], args[4] = workID, workDigest
+	}
 	var a Attempt
-	var mandate, commitment, caseID, risk, outcome, basis sql.NullString
+	var mandate, commitment, caseID, risk, outcome, basis, episodeID, organizationVersionID sql.NullString
 	var quote []byte
 	var expires sql.NullTime
 	err := tx.QueryRowContext(ctx, `SELECT attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
 			requester_actor_id, mandate_id::text, commitment_id, case_id, effect_type, target, target_digest, argument_digest,
 			risk_class, quote, state, reason_code, outcome, outcome_basis, approval_digest, approval_expires_at, version,
-			created_at, updated_at
-		FROM authority_effect_attempts WHERE tenant_id = $1 AND attempt_id = $2 AND workspace_id = $3`,
-		caller.TenantID, attemptID, caller.WorkspaceID).Scan(&a.ID, &a.WorkspaceID, &a.IdempotencyKey, &a.RequestDigest,
+			created_at, updated_at, episode_id, organization_version_id
+		FROM authority_effect_attempts WHERE tenant_id = $1 AND attempt_id = $2 AND workspace_id = $3
+			`+scope, args...).Scan(&a.ID, &a.WorkspaceID, &a.IdempotencyKey, &a.RequestDigest,
 		&a.RequesterPrincipalID, &a.RequesterActorID, &mandate, &commitment, &caseID, &a.EffectType, &a.Target,
 		&a.TargetDigest, &a.ArgumentDigest, &risk, &quote, &a.State, &a.ReasonCode, &outcome, &basis, &a.ApprovalDigest,
-		&expires, &a.Version, &a.CreatedAt, &a.UpdatedAt)
+		&expires, &a.Version, &a.CreatedAt, &a.UpdatedAt, &episodeID, &organizationVersionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Attempt{}, errNotFound
 	}
@@ -175,6 +198,9 @@ func loadAttempt(ctx context.Context, tx *sql.Tx, caller Caller, attemptID strin
 		return Attempt{}, err
 	}
 	a.MandateID, a.CommitmentID, a.CaseID = mandate.String, commitment.String, caseID.String
+	if episodeID.Valid {
+		a.Episode = &Episode{EpisodeID: episodeID.String, WorkItemID: caseID.String, OrganizationVersionID: organizationVersionID.String}
+	}
 	a.RiskClass, a.Outcome, a.OutcomeBasis = risk.String, outcome.String, basis.String
 	a.CreatedAt, a.UpdatedAt = a.CreatedAt.UTC(), a.UpdatedAt.UTC()
 	if expires.Valid {
@@ -288,8 +314,22 @@ func (o *Observation) decodeResult(kind string, raw []byte) error {
 	case "github_repository":
 		o.GitHubRepository = &adapters.GitHubRepositoryResult{}
 		target = o.GitHubRepository
+	case "artifact":
+		o.Artifact = &interfaces.Artifact{}
+		target = o.Artifact
 	default:
 		return fmt.Errorf("observation result kind %q is not one this gateway reads", kind)
 	}
-	return json.Unmarshal(raw, target)
+	if err := json.Unmarshal(raw, target); err != nil {
+		return err
+	}
+	if o.Artifact != nil {
+		if err := adapters.ValidateResultArtifact(o.Artifact); err != nil {
+			return err
+		}
+		if o.Artifact.Digest != o.ResultRef {
+			return errors.New("stored artifact content does not match the observation result_ref")
+		}
+	}
+	return nil
 }

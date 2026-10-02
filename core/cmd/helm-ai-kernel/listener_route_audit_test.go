@@ -97,6 +97,7 @@ func TestListenerRouteCatalogsEqualRegistry(t *testing.T) {
 // credential-free request from a non-loopback peer to every non-public
 // listener route, on the listener's handler with its credential configured.
 func TestListenerRoutesRefuseCallersWithoutTheirDeclaredCredential(t *testing.T) {
+	t.Setenv("MINDBURN_HELM_API_KEY", "")
 	t.Setenv("HELM_API_KEY", "probe-mcp-key")
 	mcpServer, err := newLocalMCPHTTPServerWithDataDir(9100, "static-header", t.TempDir())
 	if err != nil {

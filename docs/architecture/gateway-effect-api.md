@@ -1135,12 +1135,21 @@ episode as a `helm_episode` claim: `episode_id`, `work_item_id` and
 - **Read isolation.** A token with the Control Plane's service principal and
   `helm.gateway.read` reads every attempt of its own tenant and workspace. A
   token that carries an episode claim reads only the attempts of its own
-  episode, through `GetAttempt`, `GetAttemptContent` and `ListAttempts`: any
-  other attempt of the same tenant is `not_found` for it, the same answer as an
-  attempt that does not exist.
-- **Status.** Wire contract only in this slice: the fields exist, and no
-  gateway sets `episode` or honors `episode_id` until the slice that records
-  episodes on the worker listener.
+  episode that its own principal proposed, through `GetAttempt`,
+  `GetAttemptContent`, `ListAttempts` and the stored response of a model call:
+  any other attempt of the same tenant, another episode's, another seat's under
+  the same episode id and the Control Plane's, is `not_found` for it, the same
+  answer as an attempt that does not exist. `Dispatch`, `Observe` and `Cancel`
+  find only those attempts too.
+- **Request digest.** The episode claim is part of the idempotency digest of a
+  request proposed under one, so the same key and request from another episode
+  is an `IDEMPOTENCY_CONFLICT`. A request with no claim digests as it always
+  did.
+- **Status.** Served: `helm-gateway` records the episode (schema version 8:
+  `episode_id` and `organization_version_id` on the attempt row, with the work
+  item as `case_id`), holds episode tokens to it, and honors the `episode_id`
+  filter. The worker's MCP endpoint ([gateway-mcp.md](gateway-mcp.md)) and the
+  model endpoints both propose under it.
 
 ## Step-up proof
 

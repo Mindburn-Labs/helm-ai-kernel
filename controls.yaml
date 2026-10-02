@@ -438,8 +438,8 @@ removal_proofs:
       - "core/pkg/gateway/effectargs.TestValidateRefusesMalformedArguments"
   - control: CTL-052
     file: core/pkg/gateway/server/auth.go
-    find: "\t\tif id.Scope == scope {\n"
-    replace: "\t\tif true || id.Scope == scope {\n"
+    find: "\t\t\tif tokenScope == scope {\n"
+    replace: "\t\t\tif true || tokenScope == scope {\n"
     tests:
       - "core/pkg/gateway/server.TestAuthenticateRefusesBadTokens"
   - control: CTL-052
@@ -612,7 +612,181 @@ removal_proofs:
     replace: "\tcase false:\n"
     tests:
       - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif grants.PrincipalKind != \"agent\" {\n\t\treturn Result{}, ErrForbidden\n\t}\n\tpropose := admission.ProposeInput{"
+    replace: "\tpropose := admission.ProposeInput{"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif c.Scope != server.ScopePropose {\n"
+    replace: "\tif false && c.Scope != server.ScopePropose {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif pe.Kind != \"agent\" {\n\t\treturn nil, ErrForbidden\n\t}\n"
+    replace: ""
+    tests:
+      - "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tfor _, effectType := range pe.EffectTypes {\n\t\tif t, ok := g.byEffect[effectType]; ok {\n\t\t\tout = append(out, t.Tool)\n\t\t}\n\t}\n"
+    replace: "\tfor _, t := range g.byEffect {\n\t\tout = append(out, t.Tool)\n\t}\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif pe.Kind != \"agent\" {\n\t\treturn Result{}, ErrForbidden\n\t}\n\tattempt, err := g.ledger.Get("
+    replace: "\t_ = pe\n\tattempt, err := g.ledger.Get("
+    tests:
+      - "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/workeffect.go
+    find: "\t\tcaller.Episode.WorkItemID, in.EffectType, target} {\n"
+    replace: "\t\tin.EffectType, target} {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestWorkEffectIdentitySeparatesAuthorityScopesAndIntent"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif len(attempt.ApprovalDigest) != 0 || attempt.Episode == nil ||\n"
+    replace: "\tif false && len(attempt.ApprovalDigest) != 0 || attempt.Episode == nil ||\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/dispatch.go
+    find: "\tif caller.Episode != nil && len(approvalDigest) != 0 {\n"
+    replace: "\tif false && caller.Episode != nil && len(approvalDigest) != 0 {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestApprovalDispatchRefusal"
+  - control: CTL-057
+    file: core/pkg/gateway/adapters/artifact_result.go
+    find: "if err != nil || !bytes.Equal(canonical, a.CanonicalBytes) {"
+    replace: "if false && (err != nil || !bytes.Equal(canonical, a.CanonicalBytes)) {"
+    tests:
+      - "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/gateway.go
+    find: "\tif attempt.State == \"ADMITTED\" {\n"
+    replace: "\tif attempt.State == \"NEVER\" {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/http.go
+    find: "|| caller.PrincipalID == \"\" || caller.Episode == nil {"
+    replace: "|| caller.PrincipalID == \"\" {"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/http.go
+    find: "\tif !validOrigin(r) {\n"
+    replace: "\tif false && !validOrigin(r) {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/http.go
+    find: "\tif r.Method != http.MethodPost {\n"
+    replace: "\tif false && r.Method != http.MethodPost {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/http.go
+    find: "if name, ok := headerValue(header.Get(\"Mcp-Name\")); !ok || name != params.Name {"
+    replace: "if name, ok := headerValue(header.Get(\"Mcp-Name\")); false && (!ok || name != params.Name) {"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestModernRequestValidation"
+  - control: CTL-057
+    file: core/pkg/gateway/mcpserver/http.go
+    find: "\tif mentionsModernVersion(req.Params) {\n"
+    replace: "\tif false && mentionsModernVersion(req.Params) {\n"
+    tests:
+      - "core/pkg/gateway/mcpserver.TestModernRequestValidation"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/episode.go
+    find: "\tin.CaseID = e.WorkItemID\n\treturn in, nil\n"
+    replace: "\treturn in, nil\n"
+    tests:
+      - "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/episode.go
+    find: "\tcase in.CaseID != \"\" && in.CaseID != e.WorkItemID:\n"
+    replace: "\tcase false:\n"
+    tests:
+      - "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/admission.go
+    find: "\tif e := c.Episode; e != nil && !validEpisode(e) {\n"
+    replace: "\tif false {\n"
+    tests:
+      - "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim"
+  - control: CTL-057
+    file: core/pkg/gateway/server/auth.go
+    find: "\tif e := claims.Episode; e != nil {\n\t\tid.Caller.Episode = &admission.Episode{EpisodeID: e.EpisodeID, WorkItemID: e.WorkItemID, OrganizationVersionID: e.OrganizationVersionID}\n\t}\n"
+    replace: ""
+    tests:
+      - "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/read.go
+    find: "AND ($4 = '' OR (episode_id = $4 AND requester_principal_id = $5))"
+    replace: "AND ($4 = '' OR TRUE)"
+    tests:
+      - "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/read.go
+    find: "AND ($4 = '' OR (a.episode_id = $4 AND a.requester_principal_id = $5))"
+    replace: "AND ($4 = '' OR TRUE)"
+    tests:
+      - "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/decisions.go
+    find: "AND ($4 = '' OR (episode_id = $4 AND requester_principal_id = $5)) FOR UPDATE"
+    replace: "AND ($4 = '' OR TRUE) FOR UPDATE"
+    tests:
+      - "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/modelcall.go
+    find: "AND ($4 = '' OR (a.episode_id = $4 AND a.requester_principal_id = $5))"
+    replace: "AND ($4 = '' OR TRUE)"
+    tests:
+      - "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/list.go
+    find: "\t\tand(\"episode_id = $%d\", q.episodeScope)\n\t\tand(\"requester_principal_id = $%d\", q.episodePrincipal)\n"
+    replace: ""
+    tests:
+      - "core/pkg/gateway/admission.TestListStatementHoldsAnEpisodeCallerToItsEpisodeAndPrincipal"
 
+  - control: CTL-057
+    file: core/pkg/gateway/adapters/artifact_result.go
+    find: "if err := s.schema.Validate(value); err != nil {"
+    replace: "if err := s.schema.Validate(value); false && err != nil {"
+    tests:
+      - "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema"
+  - control: CTL-057
+    file: core/pkg/gateway/adapters/artifact_result.go
+    find: 'if a.Digest != "sha256:"+hex.EncodeToString(sum[:]) {'
+    replace: 'if false && a.Digest != "sha256:"+hex.EncodeToString(sum[:]) {'
+    tests:
+      - "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact"
+  - control: CTL-057
+    file: core/pkg/gateway/admission/read.go
+    find: "if o.Artifact.Digest != o.ResultRef {"
+    replace: "if false && o.Artifact.Digest != o.ResultRef {"
+    tests:
+      - "core/pkg/gateway/admission.TestStoredArtifactRetainsItsOriginalSchemaAndContentAddress"
+  - control: CTL-057
+    file: core/pkg/auth/jwks/controlplane.go
+    find: "config.RequiredActor, config.RequireExecutor = c.Actor, true"
+    replace: "config.RequiredActor, config.RequireExecutor = c.Actor, false"
+    tests:
+      - "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
+  - control: CTL-057
+    file: core/pkg/auth/jwks/jwks.go
+    find: "if v.config.RejectExecutor && claims.HelmExecutor != nil {"
+    replace: "if false && v.config.RejectExecutor && claims.HelmExecutor != nil {"
+    tests:
+      - "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
 
 controls:
 
@@ -3382,3 +3556,120 @@ controls:
         - "core/pkg/gateway/jobs.TestReconcileWorkerEscalatesOnlyOnTheLastAttempt"
       bypass:
         - "core/pkg/gateway/runtime.TestPostgresGatewayMigrateAndReadiness"
+
+  - id: CTL-057
+    title: "Gateway worker endpoint and episode isolation"
+    owner: Mindburn Labs core team (kernel)
+    claim: >-
+      helm-gateway serves its effect types to episode workers as MCP tools at
+      /mcp on the worker listener (HELM-751 K3), stateless, in the 2026-07-28
+      revision and the legacy initialize handshake. Tenant, workspace,
+      principal, actor and episode come only from the verified worker token;
+      only agent principals are served; tools/list names the effect types of the
+      caller's live mandate chains that the gateway performs; and a tool call is
+      proposed, admitted, dispatched and observed under the same admission
+      transaction and permit as any effect, the permit claimed by the worker's
+      own principal and never under a helm.gateway.execute token. An escalation
+      is a structured non-error result, a denial a tool error with its reason
+      code, and the same request replayed is the same attempt. An attempt
+      proposed under an episode token records the claim's episode and takes its
+      work item as its case; a token with an episode claim proposes under that
+      work item only and reads only the attempts of its own episode that its own
+      principal proposed, in every read of an attempt (HELM-751 N1). Public
+      executors use a separate listener and audience, a signed canonical client
+      marker, complete episode linkage and a strict 900-second maximum lease.
+      Internal worker tokens, including short ones, cannot authenticate there.
+    status: enforced
+    entry_points:
+      - "core/pkg/gateway/runtime.serve"
+      - "core/pkg/gateway/mcpserver.Handler.ServeHTTP"
+      - "core/pkg/gateway/mcpserver.Gateway.Tools"
+      - "core/pkg/gateway/mcpserver.Gateway.Call"
+      - "core/pkg/gateway/admission.Service.Propose"
+      - "core/pkg/gateway/admission.Service.Get"
+      - "core/pkg/gateway/admission.Service.GetContent"
+      - "core/pkg/gateway/admission.Service.List"
+      - "core/pkg/gateway/admission.Service.PrincipalEffects"
+      - "core/pkg/gateway/admission.Service.ModelCallReplay"
+    config:
+      - "--executor-listen, HELM_GATEWAY_EXECUTOR_AUDIENCE=helm-gateway-executor:<env> and HELM_GATEWAY_EXECUTOR_MAX_TTL<=15m: public executor profile, with required CP actor, signed helm_executor client, complete helm_episode, no cnf and strict expiry."
+      - "--worker-listen, HELM_GATEWAY_WORKER_AUDIENCE and HELM_GATEWAY_WORKER_MAX_TTL: the worker listener, which serves /mcp and the model endpoints to episode tokens only. It needs HELM_GATEWAY_MODEL_ROUTES_FILE."
+      - "Nothing of its own: the tools are the effect types that the gateway's adapters declare as grantable with an argument schema, and serve refuses to start when one cannot be given a tool name."
+    protected_operations:
+      - "tools/list and tools/call of the MCP endpoint on the worker listener of helm-gateway serve, and GetAttempt, GetAttemptContent, ListAttempts and the stored response of a model call for a token that carries an episode claim."
+    bypass_assumptions:
+      - "Token trust is ADR-0005's: a compromised Control Plane issuer can mint an episode token for any seat and episode. The episode is the token's claim, not something the gateway verifies independently."
+      - "Who can reach the worker listener is the deployment's network policy, not this code: the listener has no client certificate, so a token is all it asks for."
+      - "An attempt proposed without an episode token, such as the Control Plane's own, records no episode, and the isolation binds only a token that carries one."
+      - "A worker can make any call its mandates admit: the endpoint limits what a call may name, not what a model chooses to ask for within its authority."
+      - "A composition declares its closed, versioned JSON result schema at startup. An Artifact result is accepted only when its canonical bytes, content digest and declared schema agree; the schema does not upgrade the provider trust class. Results are limited to 1 MiB and oversized snapshots must fail explicitly."
+      - "tools/call runs the dispatch in the request: a client that hangs up does not stop it, and a call that outlives CallTimeout is answered as a failure to repeat, with the attempt left for a read-back or the reconciliation job."
+    tests:
+      allowed:
+        - "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
+        - "core/pkg/gateway/admission.TestPostgresDeclaredResultSurvivesReplayAndRestart"
+        - "core/pkg/gateway/mcpserver.TestArtifactResultReachesTheWorkerAsItsDeclaredPayload"
+        - "core/pkg/gateway/server.TestArtifactObservationPreservesItsCanonicalWireContent"
+        - "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact"
+        - "core/pkg/gateway/mcpserver.TestPostgresToolsListReflectsTheCallersMandates"
+        - "core/pkg/gateway/mcpserver.TestPostgresAnAllowedCallIsDispatchedAndObservedInTheSameCall"
+        - "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall"
+        - "core/pkg/gateway/mcpserver.TestLegacyHandshakeNegotiatesAndKeepsNothing"
+        - "core/pkg/gateway/mcpserver.TestModernDiscoveryAndDeterministicPrivateList"
+        - "core/pkg/gateway/admission.TestPostgresEpisodeAttemptsRecordTheClaimAndNothingElse"
+        - "core/pkg/gateway/modelgw.TestPostgresModelCallsRecordTheEpisodeOfTheirToken"
+      forbidden:
+        - "core/pkg/gateway/server.TestEpisodeScopeMustAuthorizeTheRequestedRoute"
+        - "core/pkg/auth/jwks.TestExecutorValidatorRefusesUnsafeConfiguration"
+        - "core/pkg/gateway/admission.TestPostgresDeclaredResultCannotSettleWithAnUnexpectedShape"
+        - "core/pkg/gateway/adapters.TestResultSchemasFailClosedWithoutExternalResolution"
+        - "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes"
+        - "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema"
+        - "core/pkg/gateway/admission.TestStoredArtifactRetainsItsOriginalSchemaAndContentAddress"
+        - "core/pkg/gateway/mcpserver.TestPostgresADeniedCallIsAToolErrorWithItsReasonCode"
+        - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
+        - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"
+        - "core/pkg/gateway/mcpserver.TestPostgresATokenOfAnotherTenantReachesNothingOfThisOne"
+        - "core/pkg/gateway/mcpserver.TestPostgresAnotherEpisodesAttemptIsNotFound"
+        - "core/pkg/gateway/mcpserver.TestPostgresTheEpisodeComesFromTheClaimNotTheBody"
+        - "core/pkg/gateway/mcpserver.TestPostgresTheEndpointServesOnlyAgentsOfAnEpisode"
+        - "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
+        - "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
+        - "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
+        - "core/pkg/gateway/mcpserver.TestModernRequestValidation"
+        - "core/pkg/gateway/mcpserver.TestTransportRefusesSmuggledIdentityAndAmbiguousJSON"
+        - "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults"
+        - "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"
+        - "core/pkg/gateway/admission.TestPostgresAnEpisodeReadsOnlyItsOwnAttempts"
+        - "core/pkg/gateway/admission.TestPostgresAModelCallsStoredResponseIsReadOnlyByItsOwnEpisode"
+        - "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim"
+        - "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim"
+        - "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
+      removal:
+        - "core/pkg/auth/jwks.TestExecutorProfileRejectsWorkerAndMalformedCredentials"
+        - "core/pkg/gateway/adapters.TestDeclaredResultSchemaBindsTheCanonicalArtifact"
+        - "core/pkg/gateway/admission.TestArtifactResultRequiresTheDeclaredSchema"
+        - "core/pkg/gateway/adapters.TestResultArtifactsRejectAmbiguousUnboundedOrAlteredBytes"
+        - "core/pkg/gateway/admission.TestStoredArtifactRetainsItsOriginalSchemaAndContentAddress"
+        - "core/pkg/gateway/mcpserver.TestCallsAreHeldToTheirContract"
+        - "core/pkg/gateway/mcpserver.TestToolsListTheEffectsOfTheCallersMandatesAndOnlyAgentsAsk"
+        - "core/pkg/gateway/mcpserver.TestAttemptGetReadsThroughTheLedgersEpisodeScope"
+        - "core/pkg/gateway/admission.TestWorkEffectIdentitySeparatesAuthorityScopesAndIntent"
+        - "core/pkg/gateway/mcpserver.TestApprovedEscalationReplayDoesNotDispatchOrObserve"
+        - "core/pkg/gateway/admission.TestApprovalDispatchRefusal"
+        - "core/pkg/gateway/mcpserver.TestAdmittedCallsAreDispatchedAndObservedInTheSameCall"
+        - "core/pkg/gateway/mcpserver.TestAuthenticationFailuresAreHTTPStatusesNotToolResults"
+        - "core/pkg/gateway/mcpserver.TestTransportChecksOriginMethodAuthenticationAndBounds"
+        - "core/pkg/gateway/mcpserver.TestModernRequestValidation"
+        - "core/pkg/gateway/admission.TestBindEpisodeTakesTheWorkReferenceFromTheClaim"
+        - "core/pkg/gateway/admission.TestCheckCallerRefusesAMalformedEpisodeClaim"
+        - "core/pkg/gateway/admission.TestReadStatementsHoldAnEpisodeCallerToItsOwnEpisodeAndPrincipal"
+        - "core/pkg/gateway/admission.TestListStatementHoldsAnEpisodeCallerToItsEpisodeAndPrincipal"
+        - "core/pkg/gateway/server.TestTheEpisodeReachesAdmissionOnlyFromTheVerifiedClaim"
+      bypass:
+        - "core/pkg/gateway/runtime.TestExecutorListenerConfigurationAndExecutorOnlyMode"
+        - "core/pkg/gateway/runtime.TestServeSeparatesPublicExecutorsFromInternalWorkers"
+        - "core/pkg/gateway/runtime.TestServeMountsTheMCPEndpointOnTheWorkerListenerOnly"
+        - "core/pkg/gateway/mcpserver.TestPostgresAReplayedCallIsTheSameAttempt"
+        - "core/pkg/gateway/mcpserver.TestPostgresAnUnknownOutcomeIsReconcilingUntilItIsKnown"
+        - "core/pkg/gateway/mcpserver.TestPostgresAnEscalatedCallIsAStructuredResultAndContinuesAfterApproval"

@@ -956,7 +956,7 @@ enum SettlementState {
 // source, freshness and trust class (§3).
 //
 // result carries the typed, bounded result of the effect types that define
-// one (HELM-753). Field numbers 10 to 15 stay held for later result types.
+// one (HELM-753). Field numbers 11 to 15 stay held for later result types.
 message Observation {
   // Where it came from, for example the provider's response or an adapter
   // read-back operation.
@@ -984,7 +984,25 @@ message Observation {
     GitHubBranchResult github_branch = 8;
     // github.repository.get.
     GitHubRepositoryResult github_repository = 9;
+    // A composition-owned JSON result, validated against the effect type's
+    // declared, versioned schema. It cannot replace a fixed result above.
+    ArtifactResult artifact = 10;
   }
+}
+
+// ArtifactResult is the JSON transport of HELM's canonical Artifact model.
+// The gateway retains it in the existing observation row; there is no second
+// result store or authority in this payload. Read isolation is the attempt's.
+message ArtifactResult {
+  // Stable versioned schema id fixed by the effect type's declaration.
+  string schema_id = 1;
+  // Always application/json for this observation member.
+  string content_type = 2;
+  // The complete RFC 8785 payload, at most 1 MiB, in the interoperable integer
+  // subset of HELM canonical JSON. Replays return the same retained bytes.
+  bytes canonical_bytes = 3;
+  // sha256:<lowercase hex> of canonical_bytes; equal to Observation.result_ref.
+  string digest = 4;
 }
 
 // GitHubRepositoryResult is a repository read (HELM-753), the source of a

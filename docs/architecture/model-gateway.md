@@ -83,8 +83,9 @@ both from the token and never from the request.
 - **Main listener** (`--listen`, default `:8443`): TLS, optionally with client
   certificates. The Control Plane's workload calls here with its existing token
   profile (audience `helm-gateway:<env>`).
-- **Worker listener** (`--worker-listen`, default off): the model endpoints only,
-  for episode workers. Server TLS without a client certificate (unmodified
+- **Worker listener** (`--worker-listen`, default off): the model endpoints and
+  the MCP endpoint (`/mcp`, see [gateway-mcp.md](gateway-mcp.md)), for episode
+  workers. It serves no effect API. Server TLS without a client certificate (unmodified
   frameworks cannot present one), so the listener authenticates by token alone
   and the deployment's network policy admits only the workers' namespace. With
   `--dev-insecure-listen` it is plain HTTP on a loopback address. Its token
@@ -152,5 +153,8 @@ Environment of the serve command beyond the effect gateway's:
   note or its tests.
 - `model.inference` has no published argument schema: the gateway proposes the
   call itself, so no client constructs these arguments.
-- The MCP endpoint of the worker listener, and persisting the verified
-  `helm_episode` claim onto the attempts of other effects, are separate work.
+- An attempt proposed on the worker listener records its token's verified
+  `helm_episode` claim, model calls and the effects of the MCP endpoint alike
+  (`EffectAttempt.episode`, schema version 8); see
+  [gateway-effect-api.md](gateway-effect-api.md#episode-attempts). The MCP
+  endpoint is described in [gateway-mcp.md](gateway-mcp.md).

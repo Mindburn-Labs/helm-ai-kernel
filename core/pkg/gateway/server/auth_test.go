@@ -303,6 +303,69 @@ func TestStopTokenBindings(t *testing.T) {
 	}
 }
 
+// N1 permits an episode to propose and read its own attempts. This optional
+// read scope must not grant dispatch or weaken the single-scope CP profile.
+func TestEpisodeProposeAndReadScopes(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		scopes    []string
+		wantError bool
+	}{
+		{"propose only", []string{ScopePropose}, false},
+		{"propose and read", []string{ScopePropose, ScopeRead}, false},
+		{"read and propose", []string{ScopeRead, ScopePropose}, false},
+		{"execute", []string{ScopePropose, ScopeExecute}, true},
+		{"decide", []string{ScopePropose, ScopeDecide}, true},
+		{"read only", []string{ScopeRead}, true},
+		{"duplicate", []string{ScopePropose, ScopePropose}, true},
+		{"duplicate read", []string{ScopePropose, ScopeRead, ScopeRead}, true},
+		{"foreign", []string{ScopePropose, "other.read"}, true},
+		{"empty", nil, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			claims := goodClaims()
+			claims.Episode = &jwks.EpisodeClaim{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "v-1"}
+			claims.Scopes = test.scopes
+			a := &Authenticator{Validator: fakeValidator{claims: claims}, Actor: testActor, RequireEpisode: true}
+			id, err := a.Authenticate(context.Background(), bearer(), ScopePropose)
+			if (err != nil) != test.wantError {
+				t.Fatalf("identity=%+v err=%v", id, err)
+			}
+			if err == nil && id.Scope != ScopePropose {
+				t.Fatalf("matched scope=%q", id.Scope)
+			}
+		})
+	}
+}
+
+func TestEpisodeScopeMustAuthorizeTheRequestedRoute(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		scopes    []string
+		requested string
+		allowed   bool
+	}{
+		{"read", []string{ScopePropose, ScopeRead}, ScopeRead, true},
+		{"propose cannot read", []string{ScopePropose}, ScopeRead, false},
+		{"cannot execute", []string{ScopePropose, ScopeRead}, ScopeExecute, false},
+		{"cannot decide", []string{ScopePropose, ScopeRead}, ScopeDecide, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			claims := goodClaims()
+			claims.Episode = &jwks.EpisodeClaim{EpisodeID: "ep-1", WorkItemID: "work-1", OrganizationVersionID: "v-1"}
+			claims.Scopes = tc.scopes
+			auth := &Authenticator{Validator: fakeValidator{claims: claims}, Actor: testActor, RequireEpisode: true}
+			id, err := auth.Authenticate(context.Background(), bearer(), tc.requested)
+			if (err == nil) != tc.allowed {
+				t.Fatalf("identity=%+v err=%v", id, err)
+			}
+			if err == nil && id.Scope != tc.requested {
+				t.Fatalf("matched %q want %q", id.Scope, tc.requested)
+			}
+		})
+	}
+}
+
 // The worker listener's profile: a token must name its episode, and a token
 // that does is identified with it.
 func TestTheWorkerProfileRequiresAnEpisode(t *testing.T) {

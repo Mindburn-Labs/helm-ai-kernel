@@ -15,9 +15,12 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var ErrStorage = errors.New("ChatGPT local credential storage is unavailable or not private")
+var ErrHostIdentity = errors.New("unsupported local ChatGPT host identity; preserve this store and use a new --store directory to register again")
 var accountPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Account is safe connection metadata. Issuer/subject/client identify the
@@ -99,13 +102,21 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	err = s.read("host.json", &host)
 	if errors.Is(err, os.ErrNotExist) {
-		host.ID, err = randomValue()
+		var id uuid.UUID
+		id, err = uuid.NewRandom()
 		if err == nil {
+			host.ID = id.URN()
 			err = s.write("host.json", host)
 		}
 	}
-	if err != nil || len(host.ID) != 43 {
+	if err != nil {
 		return nil, ErrStorage
+	}
+	// HELM selects the documented UUIDv4 URN host option. Never rewrite a
+	// persisted host: it binds an issued client and its existing credentials.
+	id, err := uuid.Parse(host.ID)
+	if err != nil || id.Version() != 4 || id.Variant() != uuid.RFC4122 || host.ID != id.URN() {
+		return nil, ErrHostIdentity
 	}
 	s.hostID = host.ID
 	return s, nil

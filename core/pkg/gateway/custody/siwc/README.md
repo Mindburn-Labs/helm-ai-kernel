@@ -7,6 +7,13 @@ registration; `--store` selects its private local directory. Credentials are
 never printed by these commands. Logout clears local tokens and reports when
 remote revocation cannot be confirmed.
 
+Each new store generates a stable canonical UUIDv4 URN (`urn:uuid:...`) for
+the documented `host_id` option. It persists across login and refresh. Older
+development stores with a raw base64 host ID are rejected without rewriting
+their identity, registration or credentials. Preserve that store and choose a
+new private `--store` directory for a fresh registration. Disconnect any old
+registration in ChatGPT Settings; a new store does not revoke it.
+
 The runtime account reference pins the local host, registration and generation.
 It does not prove HELM tenant membership, ownership, consent or a mandate. A
 model-gateway consumer must first resolve the current CP Connection authority

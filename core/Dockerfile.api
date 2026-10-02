@@ -34,7 +34,7 @@ RUN --mount=type=cache,id=helm-ai-kernel-go-mod,target=/go/pkg/mod --mount=type=
       -trimpath -o /app/bin/helm-ai-kernel ./cmd/helm-ai-kernel
 
 # Stage 2: Runtime
-FROM alpine:3.21@sha256:f27cad9117495d32d067133afff942cb2dc745dfe9163e949f6bfe8a6a245339
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 WORKDIR /app
 

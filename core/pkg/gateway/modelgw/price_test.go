@@ -63,6 +63,28 @@ func TestQuoteRefusesOverflowAndNegatives(t *testing.T) {
 	}
 }
 
+func TestQuoteIncludesConfiguredCacheReadSurcharge(t *testing.T) {
+	route := mustRoute(t, routeSonnet)
+	cacheRead := int64(7_000_000) // Allowed tariffs need not discount cache reads.
+	route.Price.CacheRead = &cacheRead
+	for _, mayWriteCache := range []bool{false, true} {
+		quote, err := route.Quote(1_000_000, 10, mayWriteCache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		actual, err := route.Cost(Usage{CacheReadTokens: 1_000_000, OutputTokens: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if quote != 7_000_150 || actual > quote {
+			t.Fatalf("cache write %v: quote %d does not cover allowed cached usage %d", mayWriteCache, quote, actual)
+		}
+	}
+	if _, err := route.Quote(math.MaxInt64/7_000_000+1, 0, false); err != errOverflow {
+		t.Fatalf("cache-read-priced input overflow: got %v, want refusal", err)
+	}
+}
+
 func TestCostPricesReportedUsageAtTheTariff(t *testing.T) {
 	sonnet := mustRoute(t, routeSonnet)
 	got, err := sonnet.Cost(Usage{InputTokens: 100, CacheReadTokens: 1000, CacheWrite5mTokens: 40, CacheWrite1hTokens: 10, OutputTokens: 50})

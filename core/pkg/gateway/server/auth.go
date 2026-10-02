@@ -24,7 +24,7 @@ import (
 
 // The token scopes of the gateway effect API, one per authority class
 // (protocols/proto/helm/gateway/v1/gateway.proto). ADR-0005 allows one scope
-// per token.
+// per ordinary token. Episode tokens additionally permit the N1 read scope.
 const (
 	ScopePropose = "helm.gateway.propose"
 	ScopeDecide  = "helm.gateway.decide"
@@ -175,16 +175,35 @@ func (a *Authenticator) verify(ctx context.Context, token string, scopes ...stri
 	if id.ActorID != "" && id.ActorID != a.Actor {
 		return Identity{}, permissionDenied("the token's actor is not the configured workload actor")
 	}
-	if len(claims.Scopes) != 1 {
+	if a.RequireEpisode {
+		if id.Episode == nil {
+			return Identity{}, permissionDenied("the token names no episode; this listener serves episode tokens only")
+		}
+		// N1 permits propose plus optional read, never execute or decide.
+		// Validate the whole signed scope set before selecting the call's scope.
+		propose, read := false, false
+		for _, scope := range claims.Scopes {
+			switch {
+			case scope == ScopePropose && !propose:
+				propose = true
+			case scope == ScopeRead && !read:
+				read = true
+			default:
+				return Identity{}, permissionDenied("the episode token carries an invalid scope set")
+			}
+		}
+		if !propose {
+			return Identity{}, permissionDenied("the episode token must carry propose scope")
+		}
+	} else if len(claims.Scopes) != 1 {
 		return Identity{}, permissionDenied("the token must carry exactly one scope")
 	}
-	id.Scope = claims.Scopes[0]
 	for _, scope := range scopes {
-		if id.Scope == scope {
-			if a.RequireEpisode && id.Episode == nil {
-				return Identity{}, permissionDenied("the token names no episode; this listener serves episode tokens only")
+		for _, tokenScope := range claims.Scopes {
+			if tokenScope == scope {
+				id.Scope = scope
+				return id, nil
 			}
-			return id, nil
 		}
 	}
 	return Identity{}, permissionDenied("the token's scope does not cover this call")

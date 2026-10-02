@@ -51,7 +51,7 @@ type Client struct {
 	http                                                  *http.Client
 	now                                                   func() time.Time
 	issuer, authorizeURL, tokenURL, jwksURL, discoveryURL string
-	modelsURL                                             string
+	modelsURL, responsesURL                               string
 }
 
 func NewClient() *Client {
@@ -64,7 +64,8 @@ func NewClient() *Client {
 		now: time.Now, issuer: issuer,
 		authorizeURL: issuer + "/api/accounts/authorize", tokenURL: issuer + "/api/accounts/oauth/token",
 		jwksURL: issuer + "/.well-known/jwks.json", discoveryURL: issuer + "/.well-known/openid-configuration",
-		modelsURL: resource + "/models",
+		modelsURL:    resource + "/models",
+		responsesURL: resource + "/responses",
 	}
 }
 
@@ -171,9 +172,10 @@ func validClientID(id string) bool {
 		return false
 	}
 	for _, ch := range id {
-		if !(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_' || ch == '-') {
-			return false
+		if ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_' || ch == '-' {
+			continue
 		}
+		return false
 	}
 	return true
 }

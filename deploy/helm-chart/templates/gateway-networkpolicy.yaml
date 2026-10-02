@@ -31,6 +31,19 @@ spec:
       ports:
         - protocol: TCP
           port: 8443
+    {{- range $name := list "worker" "executor" }}
+    {{- if (index $.Values.gateway $name).enabled }}
+    {{- $peer := dict }}
+    {{- $selectors := index $np $name }}
+    {{- with $selectors.namespaceSelector }}{{- $_ := set $peer "namespaceSelector" . }}{{- end }}
+    {{- with $selectors.podSelector }}{{- $_ := set $peer "podSelector" . }}{{- end }}
+    - from:
+        {{- toYaml (list $peer) | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: {{ ternary 8444 8445 (eq $name "worker") }}
+    {{- end }}
+    {{- end }}
     - ports:
         - protocol: TCP
           port: 8081

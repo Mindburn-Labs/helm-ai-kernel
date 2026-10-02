@@ -48,6 +48,11 @@ spec:
             # port-forward and nothing else.
             - --dev-insecure-listen=127.0.0.1:8443
             {{- end }}
+            {{- range $name := list "worker" "executor" }}
+            {{- if (index $g $name).enabled }}
+            - {{ printf "--%s-listen=%s:%d" $name (ternary "127.0.0.1" "" $g.tls.devInsecureLoopback) (int (ternary 8444 8445 (eq $name "worker"))) | quote }}
+            {{- end }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
@@ -57,7 +62,30 @@ spec:
             - name: health
               containerPort: 8081
               protocol: TCP
+            {{- if $g.worker.enabled }}
+            - name: worker
+              containerPort: 8444
+              protocol: TCP
+            {{- end }}
+            {{- if $g.executor.enabled }}
+            - name: executor
+              containerPort: 8445
+              protocol: TCP
+            {{- end }}
           env:
+            {{- range $name := list "worker" "executor" }}
+            {{- $listener := index $g $name }}
+            {{- if $listener.enabled }}
+            - name: {{ printf "HELM_GATEWAY_%s_AUDIENCE" ($name | upper) }}
+              value: {{ $listener.audience | quote }}
+            - name: {{ printf "HELM_GATEWAY_%s_MAX_TTL" ($name | upper) }}
+              value: {{ printf "%ds" (int $listener.maxTTLSeconds) | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if $g.models.routesConfigMap }}
+            - name: HELM_GATEWAY_MODEL_ROUTES_FILE
+              value: "/etc/helm-gateway/models/routes.json"
+            {{- end }}
             - name: HELM_GATEWAY_DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -163,7 +191,31 @@ spec:
               mountPath: /etc/helm-gateway/github
               readOnly: true
             {{- end }}
+            {{- if $g.models.routesConfigMap }}
+            - name: model-routes
+              mountPath: /etc/helm-gateway/models
+              readOnly: true
+            {{- end }}
+            {{- if $g.models.credentialsSecret }}
+            - name: model-providers
+              mountPath: /var/run/secrets/helm-gateway-model-providers
+              readOnly: true
+            {{- end }}
       volumes:
+        {{- if $g.models.routesConfigMap }}
+        - name: model-routes
+          configMap:
+            name: {{ $g.models.routesConfigMap | quote }}
+            items:
+              - key: {{ $g.models.routesKey | quote }}
+                path: routes.json
+        {{- end }}
+        {{- if $g.models.credentialsSecret }}
+        - name: model-providers
+          secret:
+            secretName: {{ $g.models.credentialsSecret | quote }}
+            defaultMode: 256
+        {{- end }}
         - name: tmp
           emptyDir: {}
         {{- if $g.tls.existingSecret }}

@@ -204,8 +204,8 @@ func TestPostgresModelCallEstimatedAndCutKeepTheHoldAsEstimated(t *testing.T) {
 	}
 	f.ledgerBalances()
 
-	// A cut response: the attempt is UNKNOWN, the hold is estimated, and a
-	// later "confirmation" of the same call changes nothing.
+	// A cut response: the attempt is UNKNOWN and retains estimated exposure.
+	// A duplicate cut report cannot change that exposure or release it.
 	cutClaim, _ := f.claimModel("mi:e1:d5:0", 1_500)
 	cut, err := f.svc.SettleModelCall(ctx, cutClaim, ModelCallOutcome{Result: ModelCallCut, Reason: contracts.ReasonProviderError})
 	must(t, err)
@@ -219,10 +219,10 @@ func TestPostgresModelCallEstimatedAndCutKeepTheHoldAsEstimated(t *testing.T) {
 	if used, reserved := f.counter(limit.ID.String()); used != 3_500 || reserved != 0 {
 		t.Fatalf("after a cut: used %d reserved %d, want 3500 and 0", used, reserved)
 	}
-	late, err := f.svc.SettleModelCall(ctx, cutClaim, ModelCallOutcome{Result: ModelCallConfirmed, ConfirmedMicros: 10})
+	late, err := f.svc.SettleModelCall(ctx, cutClaim, ModelCallOutcome{Result: ModelCallCut, Reason: contracts.ReasonProviderError})
 	must(t, err)
 	if late.State != "UNKNOWN" || late.ModelCall.State != SettlementEstimated {
-		t.Fatalf("a late confirmation of a call already estimated changed it: %s %+v", late.State, late.ModelCall)
+		t.Fatalf("a duplicate cut changed the estimate: %s %+v", late.State, late.ModelCall)
 	}
 	f.ledgerBalances()
 }

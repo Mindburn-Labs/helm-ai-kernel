@@ -31,8 +31,10 @@ The hosted deployment remains BYOK.
 `Store.Responses(ctx, client, reference, body)` is the custody transport for an
 already admitted local inference. It checks the selected account's live model
 catalog, sends one request to `https://api.openai.com/v1/responses`, and returns
-only the full terminal response after `response.completed` and a final account
-generation check. Its response contains model output, not an accepted business
+only the full terminal response after `response.completed`, bounded stream EOF
+and a final account generation check. Completion is staged so a failed,
+incomplete, contradictory or interrupted suffix cannot publish output. Its
+response contains model output, not an accepted business
 result or a money receipt. The next request must include the required history
 in its `input` array. Partial output, failed/incomplete responses, malformed
 streams, interrupted requests and account changes return no completed result.

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -180,6 +182,45 @@ func TestResponseStreamRefusesFalseCompletion(t *testing.T) {
 		t.Fatal("cancelled stream published completion", err)
 	}
 }
+
+func TestResponseStreamRejectsContradictorySuffix(t *testing.T) {
+	complete := responseSSE(responseCompletedFixture)
+	for _, tc := range []struct {
+		name, suffix string
+		want         error
+	}{
+		{"failed after completion", responseSSE(`{"type":"response.failed","response":{"id":"resp_fixture","status":"failed","error":{"code":"subscription_sharing_usage_limit_exceeded","message":"must-not-leak"}}}`), ErrUsageLimited},
+		{"error after completion", responseSSE(`{"type":"error","code":"subscription_sharing_usage_limit_exceeded","message":"must-not-leak"}`), ErrUsageLimited},
+		{"conflicting completion", responseSSE(strings.Replace(responseCompletedFixture, "fixture result", "different result", 1)), ErrResponseProtocol},
+		{"duplicate completion", complete, ErrResponseProtocol},
+		{"incomplete after completion", responseSSE(`{"type":"response.incomplete"}`), ErrResponseIncomplete},
+		{"progress after completion", responseSSE(`{"type":"response.in_progress","response":{"id":"resp_fixture","status":"in_progress"}}`), ErrResponseProtocol},
+		{"unfinished suffix", "data: {\"type\":\"response.failed\"}\n", ErrResponseIncomplete},
+		{"oversize suffix", "data: " + strings.Repeat("x", maxResponseEventBytes+1) + "\n\n", ErrResponseProtocol},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := readResponseStream(context.Background(), strings.NewReader(complete+tc.suffix), 200, "req_suffix")
+			var failure *ResponseFailure
+			if !errors.Is(err, tc.want) || !reflect.DeepEqual(out, Response{}) || !errors.As(err, &failure) || !failure.MayHaveDispatched {
+				t.Fatal("contradictory suffix published completed output or lost dispatch uncertainty", err)
+			}
+			if strings.Contains(err.Error(), "must-not-leak") {
+				t.Fatal("provider error message escaped custody")
+			}
+		})
+	}
+	t.Run("interruption after completion", func(t *testing.T) {
+		out, err := readResponseStream(context.Background(), io.MultiReader(strings.NewReader(complete), responseInterruptedReader{}), 200, "req_suffix")
+		var failure *ResponseFailure
+		if !errors.Is(err, ErrResponseInterrupted) || !reflect.DeepEqual(out, Response{}) || !errors.As(err, &failure) || !failure.MayHaveDispatched {
+			t.Fatal("read interruption published staged completion", err)
+		}
+	})
+}
+
+type responseInterruptedReader struct{}
+
+func (responseInterruptedReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
 func TestResponsesAllowsMissingMediaTypeOnlyWithRealCompletion(t *testing.T) {
 	f, s, a, calls := responseFixture(t, func(w http.ResponseWriter, _ *http.Request) {

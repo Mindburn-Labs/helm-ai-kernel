@@ -45,6 +45,7 @@ func readResponseStream(ctx context.Context, body io.Reader, status int, request
 	scanner := bufio.NewScanner(limited)
 	scanner.Buffer(make([]byte, 4096), maxResponseEventBytes)
 	var event, responseID string
+	var completed Response
 	var data []string
 	dataBytes, events := 0, 0
 	fail := func(code string, cause error) (Response, error) {
@@ -69,6 +70,11 @@ func readResponseStream(ctx context.Context, body io.Reader, status int, request
 			return Response{}, false, ErrResponseProtocol
 		}
 		event = ""
+		// A completed event is staged until bounded EOF. A later failure keeps
+		// its typed recovery; any other event contradicts the terminal result.
+		if completed.ID != "" && kind != "error" && kind != "response.failed" && kind != "response.incomplete" {
+			return Response{}, false, ErrResponseProtocol
+		}
 		switch kind {
 		case "error":
 			code, param := responseErrorFields(json.RawMessage(raw))
@@ -126,7 +132,7 @@ func readResponseStream(ctx context.Context, body io.Reader, status int, request
 				return fail("response_terminal_invalid", err)
 			}
 			if done {
-				return out, nil
+				completed = out
 			}
 			continue
 		}
@@ -155,7 +161,14 @@ func readResponseStream(ctx context.Context, body io.Reader, status int, request
 		}
 		return fail("response_interrupted", ErrResponseInterrupted)
 	}
+	if limited.N <= 0 {
+		return fail("response_stream_too_large", ErrResponseProtocol)
+	}
 	// A terminal event requires its SSE blank-line delimiter. EOF inside an
-	// event or a stream containing only deltas is never a completed response.
+	// event, an interrupted suffix or a stream containing only deltas never
+	// publishes a staged response. The HTTP client/context also bounds EOF wait.
+	if len(data) == 0 && event == "" && completed.ID != "" {
+		return completed, nil
+	}
 	return fail("response_missing_completion", ErrResponseIncomplete)
 }

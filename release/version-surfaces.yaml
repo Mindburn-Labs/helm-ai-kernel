@@ -453,6 +453,48 @@
       "replacement": "The source target is `v{version}` from `Chart.yaml`"
     },
     {
+      "id": "quickstart-source-checkout",
+      "path": "docs/QUICKSTART.md",
+      "kind": "regex",
+      "pattern": "^git checkout v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)$",
+      "replacement": "git checkout v{version}"
+    },
+    {
+      "id": "quickstart-delivery-release",
+      "path": "docs/QUICKSTART.md",
+      "kind": "regex",
+      "pattern": "released `v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)` Kernel",
+      "replacement": "released `v{version}` Kernel"
+    },
+    {
+      "id": "quickstart-release-links",
+      "path": "docs/QUICKSTART.md",
+      "kind": "regex",
+      "pattern": "(?P<prefix>HELM Kernel v|releases/tag/v)(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "\\g<prefix>{version}"
+    },
+    {
+      "id": "quickstart-image-tags",
+      "path": "docs/QUICKSTART.md",
+      "kind": "regex",
+      "pattern": "ghcr\\.io/mindburn-labs/helm-ai-kernel:v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "ghcr.io/mindburn-labs/helm-ai-kernel:v{version}"
+    },
+    {
+      "id": "quickstart-chart-version",
+      "path": "docs/QUICKSTART.md",
+      "kind": "regex",
+      "pattern": "helm pull oci://ghcr\\.io/mindburn-labs/charts/helm-ai-kernel --version (?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "helm pull oci://ghcr.io/mindburn-labs/charts/helm-ai-kernel --version {version}"
+    },
+    {
+      "id": "quickstart-sdk-versions",
+      "path": "docs/QUICKSTART.md",
+      "kind": "regex",
+      "pattern": "(?P<prefix>@mindburn/helm-ai-kernel@|helm-sdk==|helm-sdk@|io\\.github\\.mindburnlabs:helm-sdk:|github\\.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v)(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)",
+      "replacement": "\\g<prefix>{version}"
+    },
+    {
       "id": "quickstart-release-evidence-pack",
       "path": "docs/QUICKSTART.md",
       "kind": "regex",

@@ -231,10 +231,17 @@ func provisioningProto(p *provision.Provisioning) *gatewayv1.Provisioning {
 		AttemptId: p.AttemptID, Revision: p.Revision, AppliedAt: timestamppb.New(p.AppliedAt), Provisioner: p.Provisioner,
 	}
 	for i, n := range p.Nodes {
-		out.Nodes = append(out.Nodes, &gatewayv1.ProvisionedNode{
+		node := &gatewayv1.ProvisionedNode{
 			Node: n.Node, MandateId: n.MandateID, HolderId: n.HolderID, ParentNode: n.ParentNode,
 			Active: p.Status[i].Active, MandateVersion: p.Status[i].Version,
-		})
+		}
+		for _, l := range p.Status[i].Limits {
+			node.Limits = append(node.Limits, &gatewayv1.ProvisionedLimit{
+				LimitId: l.ID.String(), Unit: l.Spec.Unit, Measure: l.Spec.Measure,
+				Window: l.Spec.Window, Span: int64(l.Spec.Span), Value: l.Spec.Value, Version: l.Version,
+			})
+		}
+		out.Nodes = append(out.Nodes, node)
 	}
 	return out
 }
@@ -245,6 +252,10 @@ func provisioningProto(p *provision.Provisioning) *gatewayv1.Provisioning {
 // for the rest, both retryable with the same request.
 func adminError(ctx context.Context, rpc string, err error) error {
 	switch {
+	case errors.Is(err, provision.ErrBudgetReader):
+		return rpcError(connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege, false, err)
+	case errors.Is(err, provision.ErrBudgetBinding):
+		return rpcError(connect.CodeFailedPrecondition, "", false, err)
 	case errors.Is(err, errHumanRegistrar):
 		return rpcError(connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege, false, errHumanRegistrar)
 	case errors.Is(err, authorityrows.ErrInvalid):

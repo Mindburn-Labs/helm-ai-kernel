@@ -6,7 +6,7 @@ control and makes no post-quantum claim; token verification is ADR-0005's. -->
 
 Status: served, 2026-09-30. `helm-gateway serve` dispatches
 `helm.authority.provision.v1` and `helm.authority.narrow.v1` through the
-authority adapter and mounts the three RPCs of `AuthorityAdminService` on its
+authority adapter and mounts the RPCs of `AuthorityAdminService` on its
 API listener, beside `EffectGatewayService`. Approving a provision plan needs
 a step-up proof (`ApproveRequest.step_up_proof`, see
 [Step-up proof](gateway-effect-api.md#step-up-proof)): without a valid one
@@ -244,10 +244,40 @@ the plan applied or not by its digest; it is never dispatched twice.
 | RPC | Scope | What it does |
 |---|---|---|
 | `EnsurePrincipals` | `helm.gateway.provision` | Creates the tenant's control row if it has none, and each listed principal that is not registered. Changes nothing that exists. Idempotent by nature, so it has no idempotency key. |
-| `GetProvisioning` | `helm.gateway.read` | The applied plan of an organization: digest, `version_ref`, `stage`, `revision`, the applying attempt, the provisioner, and each node with its mandate id, holder, parent, current status and version. `not_found` when it has none. |
+| `GetProvisioning` | `helm.gateway.read` | The applied plan of an organization: digest, `version_ref`, `stage`, `revision`, the applying attempt, the provisioner, and each node with its mandate id, holder, parent, current status and version, plus its current limit ids, terms, values and versions. `not_found` when it has none. |
+| `GetProvisionBudget` | `helm.gateway.read`, active service principal | Native lifetime USD model usage for an exact applied provision node. Returns integer USD micros and completeness; missing or unsupported history has no amounts. Does not reserve, grant, settle or dispatch. |
 | `ListEffectTypes` | `helm.gateway.read` | The catalog: each effect type the gateway's adapters declare, with its risk class, declaration, target form, JSON Schema of its arguments and whether a mandate may grant it. The same for every tenant, ordered by effect type. It lists what this process performs: an adapter a deployment composes in (for example the model gateway's) is listed with the declaration it carries. `helm.authority.lift` is proposed through `Lift` and is not listed. |
 
 The tenant comes only from the token. No request names a tenant or a workspace.
+
+### Native budget readback
+
+Construct `ProvisionBudgetBinding` from `GetProvisioning`: the organization,
+version, plan digest, revision, node and mandate, and the node's current
+`usd_micros` limit id and version. A stale binding fails with
+`failed_precondition`. The authenticated token supplies tenant, workspace and
+caller; the caller must also be an active service principal in the ledger.
+
+The reader takes one read-only repeatable PostgreSQL snapshot. It retains the
+limit membership of every applied plan, including replacement mandates, and
+counts each native attempt once. Copied enforcement counters are not added to
+spend. `spent_final` is confirmed billable usage; `set_aside` includes unclaimed
+holds, estimates and unresolved calls. Provider usage above the hold is flagged
+and makes `enforcement_available` false; it does not authorize another call.
+
+Only lifetime USD sum limits (`window=none`, `span=1`) are supported. An earlier
+incompatible monetary window returns `unsupported_budget_history`, incomplete
+coverage and absent amounts, rather than dropping prior activity. Legacy or
+missing membership, workspace disagreement, missing settlement evidence and
+bounded-query overflow also return incomplete coverage. `no_runs_yet` is used
+only for a complete empty read. Unsupported or incomplete reads say
+`not_reported`; they never invent zero spend. Amounts are int64 USD micros,
+encoded as decimal strings in proto JSON. The response digest identifies the
+read snapshot; it is not a signed receipt or a verification verdict.
+
+The native and RPC proofs are `TestPostgresProvisionBudget*` in the provisioning
+adapter and server packages. These qualify the source path; a deployed CP
+consumer and a production budget-enforcement claim require separate evidence.
 
 ### One registry: the mapping to the kernel's
 

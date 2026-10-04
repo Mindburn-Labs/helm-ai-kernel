@@ -60,6 +60,11 @@ func provisionMust(t *testing.T, err error) {
 
 func newProvisionFixture(t *testing.T) *provisionFixture {
 	t.Helper()
+	return newProvisionFixtureWithPlan(t, nil)
+}
+
+func newProvisionFixtureWithPlan(t *testing.T, initial func(*provisionFixture) []byte) *provisionFixture {
+	t.Helper()
 	base := os.Getenv("HELM_TEST_POSTGRES_URL")
 	if base == "" {
 		t.Skip("set HELM_TEST_POSTGRES_URL to run the provisioning transaction proofs")
@@ -124,6 +129,9 @@ func newProvisionFixture(t *testing.T) *provisionFixture {
 		return nil
 	}))
 	f.first = f.plan(effectargs.AuthorityProvision, "", "v1", 100)
+	if initial != nil {
+		f.first = initial(f)
+	}
 	effect := f.effect(f.first)
 	f.firstID = effect.Invocation.AttemptID
 	f.wantSent(f.dispatch(effect))

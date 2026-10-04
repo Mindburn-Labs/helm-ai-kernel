@@ -401,13 +401,17 @@ func (s *Store) ActiveStops(ctx context.Context, tenantID string, at time.Time, 
 // inTenant runs fn in one READ COMMITTED transaction bound to tenantID.
 // set_config(..., true) ends with the transaction.
 func (s *Store) inTenant(ctx context.Context, tenantID string, fn func(*sql.Tx) error) error {
+	return s.inTenantOptions(ctx, tenantID, &sql.TxOptions{Isolation: sql.LevelReadCommitted}, fn)
+}
+
+func (s *Store) inTenantOptions(ctx context.Context, tenantID string, options *sql.TxOptions, fn func(*sql.Tx) error) error {
 	if s == nil || s.db == nil {
 		return errors.New("authority rows store requires a database")
 	}
 	if strings.TrimSpace(tenantID) == "" {
 		return fmt.Errorf("%w: empty tenant id", ErrInvalid)
 	}
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, err := s.db.BeginTx(ctx, options)
 	if err != nil {
 		return err
 	}

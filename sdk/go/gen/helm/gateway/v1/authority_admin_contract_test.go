@@ -38,11 +38,11 @@ func adminService(t *testing.T) protoreflect.ServiceDescriptor {
 	return svc
 }
 
-// The three RPCs, unary, each with its own request and response. Only the
+// The RPCs are unary, each with its own request and response. Only the
 // reads may be marked NO_SIDE_EFFECTS, which lets Connect serve them over GET.
 func TestAuthorityAdminServiceHasItsRPCs(t *testing.T) {
-	want := []string{"EnsurePrincipals", "GetProvisioning", "ListEffectTypes"}
-	reads := map[string]bool{"GetProvisioning": true, "ListEffectTypes": true}
+	want := []string{"EnsurePrincipals", "GetProvisioning", "GetProvisionBudget", "ListEffectTypes"}
+	reads := map[string]bool{"GetProvisioning": true, "GetProvisionBudget": true, "ListEffectTypes": true}
 	methods := adminService(t).Methods()
 	var got []string
 	for i := 0; i < methods.Len(); i++ {
@@ -71,9 +71,10 @@ func TestAuthorityAdminServiceHasItsRPCs(t *testing.T) {
 	}
 
 	procedures := map[string]string{
-		AuthorityAdminServiceEnsurePrincipalsProcedure: "EnsurePrincipals",
-		AuthorityAdminServiceGetProvisioningProcedure:  "GetProvisioning",
-		AuthorityAdminServiceListEffectTypesProcedure:  "ListEffectTypes",
+		AuthorityAdminServiceEnsurePrincipalsProcedure:   "EnsurePrincipals",
+		AuthorityAdminServiceGetProvisioningProcedure:    "GetProvisioning",
+		AuthorityAdminServiceGetProvisionBudgetProcedure: "GetProvisionBudget",
+		AuthorityAdminServiceListEffectTypesProcedure:    "ListEffectTypes",
 	}
 	if len(procedures) != len(want) {
 		t.Errorf("%d procedure constants checked, want %d", len(procedures), len(want))
@@ -145,9 +146,10 @@ func TestAdminMessagesHaveNoFloatingPoint(t *testing.T) {
 // read scope for the reads.
 func TestAuthorityAdminTokenScopes(t *testing.T) {
 	want := map[string][]string{
-		"EnsurePrincipals": {"helm.gateway.provision"},
-		"GetProvisioning":  {"helm.gateway.read"},
-		"ListEffectTypes":  {"helm.gateway.read"},
+		"EnsurePrincipals":   {"helm.gateway.provision"},
+		"GetProvisioning":    {"helm.gateway.read"},
+		"GetProvisionBudget": {"helm.gateway.read"},
+		"ListEffectTypes":    {"helm.gateway.read"},
 	}
 	got, err := rpcScopes(readRepoFile(t, adminProtoRel))
 	if err != nil {

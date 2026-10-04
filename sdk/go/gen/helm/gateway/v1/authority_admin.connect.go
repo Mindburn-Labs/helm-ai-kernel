@@ -13,6 +13,7 @@
 //     effect can be proposed (its requester is a registered service principal)
 //     and approved (its approver is a registered human principal) at all;
 //   - GetProvisioning reads what a provision effect applied;
+//   - GetProvisionBudget reads the applied node's native lifetime USD usage;
 //   - ListEffectTypes reads the catalog of effect types the gateway performs,
 //     with their argument schemas.
 //
@@ -22,7 +23,7 @@
 //     message carries a tenant or a workspace.
 //   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
 //     Control Plane's issuer mints for its service principal only, and which no
-//     other RPC takes. GetProvisioning and ListEffectTypes take
+//     other RPC takes. GetProvisioning, GetProvisionBudget and ListEffectTypes take
 //     helm.gateway.read. ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
@@ -65,6 +66,9 @@ const (
 	// AuthorityAdminServiceGetProvisioningProcedure is the fully-qualified name of the
 	// AuthorityAdminService's GetProvisioning RPC.
 	AuthorityAdminServiceGetProvisioningProcedure = "/helm.gateway.v1.AuthorityAdminService/GetProvisioning"
+	// AuthorityAdminServiceGetProvisionBudgetProcedure is the fully-qualified name of the
+	// AuthorityAdminService's GetProvisionBudget RPC.
+	AuthorityAdminServiceGetProvisionBudgetProcedure = "/helm.gateway.v1.AuthorityAdminService/GetProvisionBudget"
 	// AuthorityAdminServiceListEffectTypesProcedure is the fully-qualified name of the
 	// AuthorityAdminService's ListEffectTypes RPC.
 	AuthorityAdminServiceListEffectTypesProcedure = "/helm.gateway.v1.AuthorityAdminService/ListEffectTypes"
@@ -109,6 +113,14 @@ type AuthorityAdminServiceClient interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetProvisioning(context.Context, *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error)
+	// GetProvisionBudget reads the lifetime USD model budget of an exact
+	// applied provision node. The caller must be an active service principal
+	// with helm.gateway.read. Identity comes exclusively from the token.
+	// A stale binding is failed_precondition. Incomplete history returns no
+	// amounts, never a fabricated zero. This endpoint makes no ledger writes.
+	//
+	// Token scope: helm.gateway.read.
+	GetProvisionBudget(context.Context, *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error)
 	// ListEffectTypes returns the catalog of effect types this gateway performs:
 	// for each, its risk class, its declaration (idempotency, observability,
 	// reversibility and mediation), and the JSON Schema of its arguments. It is
@@ -143,6 +155,13 @@ func NewAuthorityAdminServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getProvisionBudget: connect.NewClient[GetProvisionBudgetRequest, GetProvisionBudgetResponse](
+			httpClient,
+			baseURL+AuthorityAdminServiceGetProvisionBudgetProcedure,
+			connect.WithSchema(authorityAdminServiceMethods.ByName("GetProvisionBudget")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		listEffectTypes: connect.NewClient[ListEffectTypesRequest, ListEffectTypesResponse](
 			httpClient,
 			baseURL+AuthorityAdminServiceListEffectTypesProcedure,
@@ -155,9 +174,10 @@ func NewAuthorityAdminServiceClient(httpClient connect.HTTPClient, baseURL strin
 
 // authorityAdminServiceClient implements AuthorityAdminServiceClient.
 type authorityAdminServiceClient struct {
-	ensurePrincipals *connect.Client[EnsurePrincipalsRequest, EnsurePrincipalsResponse]
-	getProvisioning  *connect.Client[GetProvisioningRequest, GetProvisioningResponse]
-	listEffectTypes  *connect.Client[ListEffectTypesRequest, ListEffectTypesResponse]
+	ensurePrincipals   *connect.Client[EnsurePrincipalsRequest, EnsurePrincipalsResponse]
+	getProvisioning    *connect.Client[GetProvisioningRequest, GetProvisioningResponse]
+	getProvisionBudget *connect.Client[GetProvisionBudgetRequest, GetProvisionBudgetResponse]
+	listEffectTypes    *connect.Client[ListEffectTypesRequest, ListEffectTypesResponse]
 }
 
 // EnsurePrincipals calls helm.gateway.v1.AuthorityAdminService.EnsurePrincipals.
@@ -168,6 +188,11 @@ func (c *authorityAdminServiceClient) EnsurePrincipals(ctx context.Context, req 
 // GetProvisioning calls helm.gateway.v1.AuthorityAdminService.GetProvisioning.
 func (c *authorityAdminServiceClient) GetProvisioning(ctx context.Context, req *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error) {
 	return c.getProvisioning.CallUnary(ctx, req)
+}
+
+// GetProvisionBudget calls helm.gateway.v1.AuthorityAdminService.GetProvisionBudget.
+func (c *authorityAdminServiceClient) GetProvisionBudget(ctx context.Context, req *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error) {
+	return c.getProvisionBudget.CallUnary(ctx, req)
 }
 
 // ListEffectTypes calls helm.gateway.v1.AuthorityAdminService.ListEffectTypes.
@@ -215,6 +240,14 @@ type AuthorityAdminServiceHandler interface {
 	//
 	// Token scope: helm.gateway.read.
 	GetProvisioning(context.Context, *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error)
+	// GetProvisionBudget reads the lifetime USD model budget of an exact
+	// applied provision node. The caller must be an active service principal
+	// with helm.gateway.read. Identity comes exclusively from the token.
+	// A stale binding is failed_precondition. Incomplete history returns no
+	// amounts, never a fabricated zero. This endpoint makes no ledger writes.
+	//
+	// Token scope: helm.gateway.read.
+	GetProvisionBudget(context.Context, *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error)
 	// ListEffectTypes returns the catalog of effect types this gateway performs:
 	// for each, its risk class, its declaration (idempotency, observability,
 	// reversibility and mediation), and the JSON Schema of its arguments. It is
@@ -245,6 +278,13 @@ func NewAuthorityAdminServiceHandler(svc AuthorityAdminServiceHandler, opts ...c
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	authorityAdminServiceGetProvisionBudgetHandler := connect.NewUnaryHandler(
+		AuthorityAdminServiceGetProvisionBudgetProcedure,
+		svc.GetProvisionBudget,
+		connect.WithSchema(authorityAdminServiceMethods.ByName("GetProvisionBudget")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	authorityAdminServiceListEffectTypesHandler := connect.NewUnaryHandler(
 		AuthorityAdminServiceListEffectTypesProcedure,
 		svc.ListEffectTypes,
@@ -258,6 +298,8 @@ func NewAuthorityAdminServiceHandler(svc AuthorityAdminServiceHandler, opts ...c
 			authorityAdminServiceEnsurePrincipalsHandler.ServeHTTP(w, r)
 		case AuthorityAdminServiceGetProvisioningProcedure:
 			authorityAdminServiceGetProvisioningHandler.ServeHTTP(w, r)
+		case AuthorityAdminServiceGetProvisionBudgetProcedure:
+			authorityAdminServiceGetProvisionBudgetHandler.ServeHTTP(w, r)
 		case AuthorityAdminServiceListEffectTypesProcedure:
 			authorityAdminServiceListEffectTypesHandler.ServeHTTP(w, r)
 		default:
@@ -275,6 +317,10 @@ func (UnimplementedAuthorityAdminServiceHandler) EnsurePrincipals(context.Contex
 
 func (UnimplementedAuthorityAdminServiceHandler) GetProvisioning(context.Context, *connect.Request[GetProvisioningRequest]) (*connect.Response[GetProvisioningResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.GetProvisioning is not implemented"))
+}
+
+func (UnimplementedAuthorityAdminServiceHandler) GetProvisionBudget(context.Context, *connect.Request[GetProvisionBudgetRequest]) (*connect.Response[GetProvisionBudgetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("helm.gateway.v1.AuthorityAdminService.GetProvisionBudget is not implemented"))
 }
 
 func (UnimplementedAuthorityAdminServiceHandler) ListEffectTypes(context.Context, *connect.Request[ListEffectTypesRequest]) (*connect.Response[ListEffectTypesResponse], error) {

@@ -108,6 +108,7 @@ type Provisioning struct {
 type NodeStatus struct {
 	Active  bool
 	Version int64
+	Limits  []authorityrows.Limit
 }
 
 // ErrNotProvisioned reports an organization the tenant never provisioned.
@@ -117,7 +118,7 @@ var ErrNotProvisioned = errors.New("the organization has no applied plan in this
 // of its mandates, in one transaction of the tenant.
 func GetProvisioning(ctx context.Context, rows *authorityrows.Store, tenantID, orgRef string) (*Provisioning, error) {
 	var out *Provisioning
-	err := rows.InTenant(ctx, tenantID, func(tx *authorityrows.Tx) error {
+	err := rows.ReadInTenant(ctx, tenantID, func(tx *authorityrows.Tx) error {
 		applied, err := LoadApplied(ctx, tx.SQL(), tenantID, orgRef, false)
 		if err != nil {
 			return err
@@ -138,7 +139,11 @@ func GetProvisioning(ctx context.Context, rows *authorityrows.Store, tenantID, o
 			if err != nil {
 				return err
 			}
-			out.Status[i] = NodeStatus{Active: m.Active, Version: m.Version}
+			limits, err := tx.MandateLimits(ctx, id)
+			if err != nil {
+				return err
+			}
+			out.Status[i] = NodeStatus{Active: m.Active, Version: m.Version, Limits: limits}
 		}
 		return nil
 	})

@@ -18,8 +18,9 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/mandates"
 )
 
-// Tx is the store's write operations inside a transaction the caller owns: one
-// READ COMMITTED transaction bound to one tenant through app.current_tenant.
+// Tx contains operations inside a transaction the caller owns, bound to one
+// tenant through app.current_tenant. InTenant uses READ COMMITTED;
+// ReadInTenant uses a read-only REPEATABLE READ snapshot.
 // The Store's own methods each run one Tx. The gateway's provisioning API runs
 // several operations in one, together with its idempotency record and a
 // single-use approval token, so that they commit or roll back as one.
@@ -32,6 +33,13 @@ type Tx struct {
 // commits when fn returns nil.
 func (s *Store) InTenant(ctx context.Context, tenantID string, fn func(*Tx) error) error {
 	return s.inTenant(ctx, tenantID, func(tx *sql.Tx) error { return fn(&Tx{tx: tx, tenantID: tenantID}) })
+}
+
+// ReadInTenant reads one coherent snapshot even when an effect settles or a
+// provisioning plan changes between queries. PostgreSQL rejects writes.
+func (s *Store) ReadInTenant(ctx context.Context, tenantID string, fn func(*Tx) error) error {
+	return s.inTenantOptions(ctx, tenantID, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true},
+		func(tx *sql.Tx) error { return fn(&Tx{tx: tx, tenantID: tenantID}) })
 }
 
 // SQL returns the underlying transaction, for statements that must commit with

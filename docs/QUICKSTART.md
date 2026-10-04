@@ -21,7 +21,7 @@ From source:
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
-git checkout v0.10.4
+git checkout v0.11.0
 mise trust
 mise install
 mise exec -- make build
@@ -35,7 +35,7 @@ native Go toolchain instead.
 
 ## Delivery Surfaces
 
-These are distinct delivery surfaces for the released `v0.10.4` Kernel. The
+These are distinct delivery surfaces for the released `v0.11.0` Kernel. The
 Homebrew, binary, container, and chart rows install or retrieve the Kernel;
 MCPB/Console bundles are release artifacts and are not CLI substitutes; SDKs
 are client libraries, not executable Kernel installs.
@@ -43,11 +43,11 @@ are client libraries, not executable Kernel installs.
 | Surface | Install or artifact | Verification / boundary |
 | --- | --- | --- |
 | Homebrew CLI formula | `brew tap mindburn-labs/tap` then `brew install mindburn-labs/tap/helm-ai-kernel` | Canonical formula `mindburn-labs/tap/helm-ai-kernel` |
-| GitHub release binaries | [HELM Kernel v0.10.4 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.4): macOS/Linux `amd64` and `arm64`, Windows `amd64` assets | Download `SHA256SUMS.txt` and the matching per-asset Cosign bundle |
-| GHCR images | `docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.10.4` or `docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.10.4-slim` | Verify the image signature before use |
-| OCI chart | `helm pull oci://ghcr.io/mindburn-labs/charts/helm-ai-kernel --version 0.10.4` | Verify the chart signature before deployment |
+| GitHub release binaries | [HELM Kernel v0.11.0 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.11.0): macOS/Linux `amd64` and `arm64`, Windows `amd64` assets | Download `SHA256SUMS.txt` and the matching per-asset Cosign bundle |
+| GHCR images | `docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.11.0` or `docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.11.0-slim` | Verify the image signature before use |
+| OCI chart | `helm pull oci://ghcr.io/mindburn-labs/charts/helm-ai-kernel --version 0.11.0` | Verify the chart signature before deployment |
 | MCPB / Console bundles | `helm-ai-kernel.mcpb` and `helm-console-local-sidecar-*` / `helm-ai-kernel-*-console.tar.gz` release assets | Release artifacts only; they do not replace the CLI install |
-| SDKs | npm `@mindburn/helm-ai-kernel@0.10.4`; PyPI `helm-sdk==0.10.4`; crates `helm-sdk@0.10.4`; Maven `io.github.mindburnlabs:helm-sdk:0.10.4`; Go `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.10.4` | Client libraries only; use the SDK docs for integration, not executable installation |
+| SDKs | npm `@mindburn/helm-ai-kernel@0.11.0`; PyPI `helm-sdk==0.11.0`; crates `helm-sdk@0.11.0`; Maven `io.github.mindburnlabs:helm-sdk:0.11.0`; Go `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.11.0` | Client libraries only; use the SDK docs for integration, not executable installation |
 
 ## Supported CLI Paths
 

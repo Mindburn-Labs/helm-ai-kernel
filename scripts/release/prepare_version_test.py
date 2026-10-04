@@ -47,6 +47,43 @@ class RewriteSdkManifestsTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, f"{sdk_dir}: {result.stdout}{result.stderr}")
 
 
+class QuickstartVersionTests(unittest.TestCase):
+    def test_install_coordinates_follow_release_without_rewriting_go_toolchain(self) -> None:
+        contract = json.loads((ROOT / "release/version-surfaces.yaml").read_text())
+        surfaces = [s for s in contract["local_surfaces"] if s["path"] == "docs/QUICKSTART.md"]
+        # Reproduce the v0.11.0 defect: release evidence was current while every
+        # installation command still selected v0.10.4. The Go version is not a
+        # Kernel release coordinate and must remain unchanged by normalization.
+        fixture = """git checkout v0.10.4
+These are distinct delivery surfaces for the released `v0.10.4` Kernel.
+[HELM Kernel v0.10.4 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.10.4)
+docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.10.4
+docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.10.4-slim
+helm pull oci://ghcr.io/mindburn-labs/charts/helm-ai-kernel --version 0.10.4
+@mindburn/helm-ai-kernel@0.10.4 helm-sdk==0.10.4 helm-sdk@0.10.4
+io.github.mindburnlabs:helm-sdk:0.10.4 github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.10.4
+The source build uses Go 1.25.13.
+When the `v0.11.0` GitHub Release publishes an `evidence-pack.tar`
+"""
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            path = root / "docs/QUICKSTART.md"
+            path.parent.mkdir()
+            path.write_text(fixture)
+            with mock.patch.object(prepare_version, "ROOT", root), mock.patch.object(prepare_version.drift, "ROOT", root):
+                results = prepare_version.drift.check_local({"local_surfaces": surfaces}, "0.11.0", None)
+                self.assertTrue(any(result.status == "fail" for result in results))
+                for surface in surfaces:
+                    prepare_version.update_regex(surface, "0.11.0")
+                updated = path.read_text()
+                self.assertNotIn("0.10.4", updated)
+                self.assertIn("Go 1.25.13", updated)
+                self.assertIn("helm-ai-kernel:v0.11.0-slim", updated)
+                self.assertTrue(all(result.status == "pass" for result in prepare_version.drift.check_local({"local_surfaces": surfaces}, "0.11.0", None)))
+                for surface in surfaces:
+                    self.assertFalse(prepare_version.update_regex(surface, "0.11.0"))
+
+
 class PublicDocsApiContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()

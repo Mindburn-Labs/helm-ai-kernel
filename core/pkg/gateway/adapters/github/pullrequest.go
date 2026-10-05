@@ -48,7 +48,7 @@ func (c *client) dispatchPullRequest(ctx context.Context, args pullRequestArgs) 
 		"body":  args.Body,
 		"head":  args.Head,
 		"base":  args.Base,
-		"draft": true,
+		"draft": args.Draft,
 	}, &created, c.a.maxResponseBytes)
 	return writeResult(err)
 }
@@ -91,8 +91,8 @@ func (c *client) observePullRequest(ctx context.Context, args pullRequestArgs) a
 		State:   pr.State,
 	}
 	var problems []string
-	if !pr.Draft {
-		problems = append(problems, "it is not a draft")
+	if pr.Draft != args.Draft {
+		problems = append(problems, "its draft status differs")
 	}
 	if pr.Head.Repo == nil || !strings.EqualFold(pr.Head.Repo.FullName, c.repo.fullName()) || pr.Head.Ref != args.Head {
 		problems = append(problems, "its head is not "+args.Head+" of "+c.repo.fullName())

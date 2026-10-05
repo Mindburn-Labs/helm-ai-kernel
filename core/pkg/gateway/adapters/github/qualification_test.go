@@ -17,6 +17,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github/githubtest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/qualification"
 )
 
@@ -632,15 +633,15 @@ func TestQualificationSuiteIsImplemented(t *testing.T) {
 // TestQualificationFake runs the suite against the httptest GitHub. It is
 // the qualification record for the environment "fake", and it must qualify.
 func TestQualificationFake(t *testing.T) {
-	fake := newFakeGitHub(t)
+	fake := githubtest.New(t)
 	env := &qualEnv{
-		name:    "fake: httptest GitHub (core/pkg/gateway/adapters/github/fake_github_test.go)",
-		baseURL: fake.server.URL, owner: fake.owner, repo: fake.name, token: fake.token,
-		baseBranch: "main", baseSHA: fake.refs["heads/main"], headPrefix: "helm/qual/",
+		name:    "fake: httptest GitHub (core/pkg/gateway/adapters/github/githubtest/fake.go)",
+		baseURL: fake.URL(), owner: fake.Owner(), repo: fake.Repository(), token: fake.Token(),
+		baseBranch: "main", baseSHA: fake.Head("main"), headPrefix: "helm/qual/",
 		limitations: []string{
 			"The fake models the REST endpoints the adapter calls; it is not GitHub. Only a live run qualifies the adapter against the provider.",
 		},
-		markReady: func(t *testing.T, pr *adapters.GitHubPullRequestResult) { fake.markReady(pr.Number) },
+		markReady: func(t *testing.T, pr *adapters.GitHubPullRequestResult) { fake.MarkReady(pr.Number) },
 	}
 	for _, record := range runQualification(t, env) {
 		if !record.Qualified {

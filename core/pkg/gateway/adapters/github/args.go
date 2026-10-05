@@ -18,6 +18,7 @@ import (
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 )
 
 // The limits of the v1 argument schemas
@@ -100,6 +101,26 @@ type pullRequestArgs struct {
 	HeadSHA         string
 	Title           string
 	Body            string
+	Draft           bool
+}
+
+type mergeArgs struct {
+	Number      int64
+	HeadSHA     string
+	Base        string
+	MergeMethod string
+}
+
+func parseMergeArgs(target string, raw []byte) (mergeArgs, error) {
+	// Share the admission validator, including the exact repository target.
+	if _, err := effectargs.Validate(EffectPullRequestMerge, target, raw); err != nil {
+		return mergeArgs{}, schemaViolation("%v", err)
+	}
+	var a effectargs.PullRequestMerge
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return mergeArgs{}, schemaViolation("%v", err)
+	}
+	return mergeArgs{Number: *a.PullNumber, HeadSHA: *a.HeadSHA, Base: *a.Base, MergeMethod: *a.MergeMethod}, nil
 }
 
 func schemaViolation(format string, args ...any) *adapters.Refusal {
@@ -285,6 +306,13 @@ func parseBranchArgs(raw []byte) (branchArgs, error) {
 }
 
 func parsePullRequestArgs(raw []byte) (pullRequestArgs, error) {
+	return parsePullRequestArgsFor(EffectPullRequestCreateDraft, raw)
+}
+
+func parsePullRequestArgsFor(effectType string, raw []byte) (pullRequestArgs, error) {
+	if effectType != EffectPullRequestCreateDraft && effectType != EffectPullRequestCreate {
+		return pullRequestArgs{}, schemaViolation("not a pull request create effect")
+	}
 	obj, err := decodeObject(raw)
 	if err != nil {
 		return pullRequestArgs{}, err
@@ -292,10 +320,10 @@ func parsePullRequestArgs(raw []byte) (pullRequestArgs, error) {
 	if err := obj.fields("arguments", "schema", "branch_attempt_id", "base", "head", "head_sha", "title", "body"); err != nil {
 		return pullRequestArgs{}, err
 	}
-	if err := obj.schemaConst("helm.github.pull_request.create_draft.v1"); err != nil {
+	if err := obj.schemaConst("helm." + effectType + ".v1"); err != nil {
 		return pullRequestArgs{}, err
 	}
-	var a pullRequestArgs
+	a := pullRequestArgs{Draft: effectType == EffectPullRequestCreateDraft}
 	if a.BranchAttemptID, err = obj.match("branch_attempt_id", attemptRE, 36); err != nil {
 		return pullRequestArgs{}, err
 	}
@@ -446,9 +474,10 @@ type BranchAttemptView struct {
 
 // PullRequestProposal is the draft pull request being proposed.
 type PullRequestProposal struct {
-	TenantID  string
-	Target    string
-	Arguments []byte
+	TenantID   string
+	Target     string
+	EffectType string
+	Arguments  []byte
 }
 
 // CheckBranchAttempt is the draft pull request's Propose precondition
@@ -458,7 +487,11 @@ type PullRequestProposal struct {
 // PRECONDITION_FAILED, or SCHEMA_VIOLATION for unreadable arguments. The
 // gateway calls it; it does no I/O.
 func CheckBranchAttempt(branch BranchAttemptView, pr PullRequestProposal) error {
-	prArgs, err := parsePullRequestArgs(pr.Arguments)
+	effectType := pr.EffectType
+	if effectType == "" { // Compatibility for existing draft-only callers.
+		effectType = EffectPullRequestCreateDraft
+	}
+	prArgs, err := parsePullRequestArgsFor(effectType, pr.Arguments)
 	if err != nil {
 		return err
 	}

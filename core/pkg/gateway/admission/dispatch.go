@@ -657,6 +657,8 @@ func typedResult(effectType string, schema *adapters.ResultSchema, o *adapters.O
 func fixedResultKind(effectType string) string {
 	return map[string]string{
 		effectargs.GitHubPullRequestCreateDraft:  "github_pull_request",
+		effectargs.GitHubPullRequestCreate:       "github_pull_request",
+		effectargs.GitHubPullRequestMerge:        "github_pull_request",
 		effectargs.GitHubBranchCreateFromChanges: "github_branch",
 		effectargs.GitHubRepositoryGet:           "github_repository",
 	}[effectType]

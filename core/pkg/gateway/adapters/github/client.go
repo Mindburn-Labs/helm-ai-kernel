@@ -80,6 +80,9 @@ func (c *client) call(ctx context.Context, method, path string, query url.Values
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", apiVersion)
+	if strings.Contains(path, "/pulls/") {
+		req.Header.Set("X-GitHub-Api-Version", "2026-03-10")
+	}
 	req.Header.Set("User-Agent", "helm-gateway-github-adapter/"+AdapterVersion)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -98,6 +101,15 @@ func (c *client) call(ctx context.Context, method, path string, query url.Values
 	}
 	if int64(len(raw)) > limit {
 		return tooLarge(method, path, resp.StatusCode, limit)
+	}
+	// Async merge409 returns the existing pending request, not a definite
+	// refusal. Decode only this documented endpoint's result, then validate
+	// the pending SHA/options in dispatchMerge before treating it as sent.
+	if _, ok := out.(*mergeReply); ok && resp.StatusCode == http.StatusConflict && method == http.MethodPut && strings.HasSuffix(path, "/merge-async") {
+		if err := json.Unmarshal(raw, out); err != nil {
+			return &providerError{Reason: contracts.ReasonConnectorContractDrift, Status: resp.StatusCode, Detail: "invalid async merge conflict response"}
+		}
+		return nil
 	}
 	switch status := resp.StatusCode; {
 	case status >= 200 && status < 300:
@@ -186,13 +198,16 @@ type comparison struct {
 }
 
 type pullRequest struct {
-	HTMLURL string `json:"html_url"`
-	Number  int64  `json:"number"`
-	NodeID  string `json:"node_id"`
-	State   string `json:"state"`
-	Title   string `json:"title"`
-	Draft   bool   `json:"draft"`
-	Head    struct {
+	HTMLURL        string          `json:"html_url"`
+	Number         int64           `json:"number"`
+	NodeID         string          `json:"node_id"`
+	State          string          `json:"state"`
+	Title          string          `json:"title"`
+	Draft          bool            `json:"draft"`
+	Merged         bool            `json:"merged"`
+	MergeCommitSHA string          `json:"merge_commit_sha"`
+	Stack          json.RawMessage `json:"stack"`
+	Head           struct {
 		Ref  string `json:"ref"`
 		SHA  string `json:"sha"`
 		Repo *struct {
@@ -200,7 +215,10 @@ type pullRequest struct {
 		} `json:"repo"`
 	} `json:"head"`
 	Base struct {
-		Ref string `json:"ref"`
+		Ref  string `json:"ref"`
+		Repo *struct {
+			FullName string `json:"full_name"`
+		} `json:"repo"`
 	} `json:"base"`
 }
 

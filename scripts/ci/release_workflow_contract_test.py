@@ -7,6 +7,7 @@ post-quantum assurance.
 """
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -568,10 +569,48 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             r'--expected-version "\$VERSION" \\\n\s+published \\\n\s+--surface-timeout 10',
         )
         self.assertIn("Published version surfaces did not converge within the bounded retry budget.", post_release)
+        self.assertRegex(post_release, r"(?m)^    timeout-minutes: \d+$")
         self.assertLess(
             post_release.index("- name: Wait for published version convergence"),
+            post_release.index("- name: Wait for eventually consistent surfaces"),
+        )
+        self.assertLess(
+            post_release.index("- name: Wait for eventually consistent surfaces"),
             post_release.index("- name: Check full published version status"),
         )
+
+        eventual_match = re.search(
+            r"(?m)^      EVENTUALLY_CONSISTENT_SURFACES: >-\n(?P<ids>(?:        \S+\n)+)",
+            post_release,
+        )
+        self.assertIsNotNone(eventual_match, "eventually consistent surfaces must be listed at job level")
+        assert eventual_match is not None
+        eventual_ids = eventual_match.group("ids").split()
+        self.assertEqual(
+            eventual_ids,
+            ["pkg-go-dev-sdk", "docs-site-developer-journey", "docs-site-sdk-index", "docs-site-examples"],
+            "only slow indexing/deploy surfaces may lag the release; registries stay blocking",
+        )
+        published_ids = {surface["id"] for surface in json.loads(VERSION_SURFACES.read_text())["published_surfaces"]}
+        self.assertLessEqual(set(eventual_ids), published_ids)
+
+        wait_step = self.step(post_release, "Wait for published version convergence")
+        self.assertIn('skip_args+=(--skip "$surface")', wait_step)
+        self.assertIn('"${skip_args[@]}"', wait_step)
+        self.assertIn("exit 1", wait_step)
+
+        eventual_step = self.step(post_release, "Wait for eventually consistent surfaces")
+        self.assertIn("id: eventual", eventual_step)
+        self.assertIn('only_args+=(--only "$surface")', eventual_step)
+        self.assertIn('"${only_args[@]}"', eventual_step)
+        self.assertIn('echo "converged=true" >> "$GITHUB_OUTPUT"', eventual_step)
+        self.assertIn('echo "converged=false" >> "$GITHUB_OUTPUT"', eventual_step)
+        self.assertIn("::warning::Eventually consistent surfaces", eventual_step)
+        self.assertNotIn("::error::", eventual_step)
+
+        status_step = self.step(post_release, "Check full published version status")
+        self.assertIn("EVENTUAL_CONVERGED: ${{ steps.eventual.outputs.converged }}", status_step)
+        self.assertIn('if [ "$EVENTUAL_CONVERGED" = "false" ]; then', status_step)
         self.assertRegex(post_release, r"- name: Check full published version status\n\s+if: always\(\)")
         self.assert_post_release_status_safety(post_release)
 

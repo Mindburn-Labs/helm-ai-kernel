@@ -54,6 +54,10 @@ CONSOLE_REMOTE = "https://github.com/Mindburn-Labs/app-helm-console.git"
 PINS = "release/console-local-sidecar-pins.json"
 SEMVER_TAG = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$")
 TIMEOUT = 20
+SECRET_REFERENCE = re.compile(
+    r"\bsecrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\])",
+    re.IGNORECASE,
+)
 
 PASS, FAIL, ACTION, UNKNOWN = "PASS", "FAIL", "ACTION-NEEDED", "UNKNOWN"
 
@@ -381,7 +385,8 @@ def release_inputs(workflow: str) -> tuple[dict[str, set[str]], set[str]]:
     variables: set[str] = set()
     for body in workflow_jobs(workflow).values():
         environment = job_environment(body) or ""
-        for name in re.findall(r"secrets\.([A-Z0-9_]+)", body):
+        for match in SECRET_REFERENCE.finditer(body):
+            name = (match[1] or match[2]).upper()
             if name != "GITHUB_TOKEN":
                 secrets.setdefault(name, set()).add(environment)
         variables.update(re.findall(r"vars\.([A-Z0-9_]+)", body))
@@ -456,6 +461,19 @@ def check_secrets(workflow: str, env: dict[str, str]) -> list[Check]:
     """
     secrets, variables = release_inputs(workflow)
     checks: list[Check] = []
+    indirect = []
+    if re.search(r"(?i)\btojson\s*\(\s*secrets\s*\)|\$\{\{\s*secrets\s*\}\}", workflow):
+        indirect.append("whole secrets context")
+    if re.search(r"(?im)^\s*secrets:\s*inherit\s*(?:#.*)?$", workflow):
+        indirect.append("inherited secrets")
+    if re.search(r"(?i)\bsecrets\s*\[", SECRET_REFERENCE.sub("", workflow)):
+        indirect.append("dynamic secret index")
+    if indirect:
+        checks.append(Check(
+            "(g) indirect secret reads", FAIL,
+            f"rehearsal cannot prove presence or scope for {', '.join(indirect)}",
+            "use explicit named secret references in release.yml",
+        ))
     scoped: dict[str, list[str]] = {}
     for name in sorted(secrets):
         if "" not in secrets[name]:

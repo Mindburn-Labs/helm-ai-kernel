@@ -85,9 +85,10 @@ surface for the `helm-ai-kernel` project.
   tag would carry, checked against the pre-publish preconditions of
   `release.yml`. It is advisory and not a required check. It holds
   `contents: read`, passes `DOWNSTREAM_FANOUT_TOKEN` only to read
-  `contracts-catalog`, and reports every other secret and variable
-  `release.yml` reads as a presence boolean (`secrets.<NAME> != ''`), so no
-  other secret value enters the job.
+  `contracts-catalog`, and reports repository-scoped secrets and variables
+  used by `release.yml` as presence booleans (`secrets.<NAME> != ''`). The
+  release-production and Maven environment secrets remain unknown in a
+  rehearsal on `main`; their values do not enter that job.
 - `scorecard.yml` carries only the trusted `main` and scheduled runs that
   publish Scorecard SARIF through OIDC and code-scanning authority. The
   OpenSSF results webapp rejects a publishing workflow that defines any other
@@ -125,11 +126,15 @@ npm (`@mindburn/helm-ai-kernel`), PyPI (`helm-sdk`) and crates.io (`helm-sdk`)
 use OIDC trusted publishing from `release.yml` in the `npm-production`,
 `pypi-production` and `crates-production` environments; no registry token is
 stored. Maven Central has no OIDC trusted publishing, so `MAVEN_*` stay
-secrets of the `maven-central` environment. `HOMEBREW_TAP_TOKEN` and the
-release EvidencePack KMS secrets are repository secrets.
+secrets of the `maven-central` environment. `binaries` and `homebrew` declare
+`release-production` for their KMS/evidence and Homebrew credentials. HELM-732
+tracks the live environment policies and secret-name migration: repository
+copies are removed only after the environment values and release path are
+verified.
 `scripts/ci/release_workflow_contract_test.py` fails when a workflow reads a
 long-lived registry token, when a job reads a `MAVEN_*` secret without
-declaring `maven-central`, or when a publisher can start before validation.
+declaring `maven-central`, when the binary/Homebrew jobs omit
+`release-production`, or when a publisher can start before validation.
 
 ## Documentation Contract
 

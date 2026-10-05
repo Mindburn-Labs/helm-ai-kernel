@@ -11,6 +11,7 @@ syntax = "proto3";
 //     effect can be proposed (its requester is a registered service principal)
 //     and approved (its approver is a registered human principal) at all;
 //   - GetProvisioning reads what a provision effect applied;
+//   - GetProvisionBudget reads the applied node's native lifetime USD usage;
 //   - ListEffectTypes reads the catalog of effect types the gateway performs,
 //     with their argument schemas.
 //
@@ -20,7 +21,7 @@ syntax = "proto3";
 //     message carries a tenant or a workspace.
 //   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
 //     Control Plane's issuer mints for its service principal only, and which no
-//     other RPC takes. GetProvisioning and ListEffectTypes take
+//     other RPC takes. GetProvisioning, GetProvisionBudget and ListEffectTypes take
 //     helm.gateway.read. ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
@@ -95,6 +96,17 @@ service AuthorityAdminService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // GetProvisionBudget reads the lifetime USD model budget of an exact
+  // applied provision node. The caller must be an active service principal
+  // with helm.gateway.read. Identity comes exclusively from the token.
+  // A stale binding is failed_precondition. Incomplete history returns no
+  // amounts, never a fabricated zero. This endpoint makes no ledger writes.
+  //
+  // Token scope: helm.gateway.read.
+  rpc GetProvisionBudget(GetProvisionBudgetRequest) returns (GetProvisionBudgetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
   // ListEffectTypes returns the catalog of effect types this gateway performs:
   // for each, its risk class, its declaration (idempotency, observability,
   // reversibility and mediation), and the JSON Schema of its arguments. It is
@@ -105,6 +117,54 @@ service AuthorityAdminService {
   rpc ListEffectTypes(ListEffectTypesRequest) returns (ListEffectTypesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+}
+
+// ProvisionBudgetBinding pins authority produced by the provisioning readback.
+// CP-only commitment/release identifiers do not establish Kernel membership.
+message ProvisionBudgetBinding {
+  string org_ref = 1;
+  string version_ref = 2;
+  string plan_digest = 3;
+  int64 revision = 4;
+  string node = 5;
+  string mandate_id = 6;
+  string limit_id = 7;
+  int64 limit_version = 8;
+}
+
+message GetProvisionBudgetRequest {
+  ProvisionBudgetBinding binding = 1;
+}
+
+// All amounts are exact integer USD micros (decimal strings in proto JSON).
+// Neither copied enforcement counters nor provider overage is charged twice.
+message ProvisionBudgetAmounts {
+  int64 cap = 1;
+  int64 spent_final = 2;
+  int64 set_aside = 3;
+}
+
+enum ProvisionBudgetActivity {
+  PROVISION_BUDGET_ACTIVITY_UNSPECIFIED = 0;
+  PROVISION_BUDGET_ACTIVITY_NOT_REPORTED = 1;
+  PROVISION_BUDGET_ACTIVITY_NO_RUNS_YET = 2;
+  PROVISION_BUDGET_ACTIVITY_REPORTED = 3;
+}
+
+message GetProvisionBudgetResponse {
+  ProvisionBudgetBinding binding = 1;
+  google.protobuf.Timestamp as_of = 2;
+  bool coverage_complete = 3;
+  ProvisionBudgetActivity activity = 4;
+  string reason = 5;
+  // Absent whenever coverage is incomplete or usage cannot be reported.
+  ProvisionBudgetAmounts amounts = 6;
+  bool overage_detected = 7;
+  // False when evidence is incomplete or provider usage exceeded the hold.
+  // It does not grant dispatch authority or override Stop.
+  bool enforcement_available = 8;
+  // SHA-256 of the read snapshot; not a signed receipt or verifier verdict.
+  bytes evidence_digest = 9;
 }
 
 // PrincipalKind is what a principal is. Only a human can approve
@@ -233,6 +293,21 @@ message ProvisionedNode {
   bool active = 5;
   // The mandate row's version. It increases with every narrowing of it.
   int64 mandate_version = 6;
+  // Current limit rows from the same snapshot. Their ids and versions are
+  // authoritative inputs to ProvisionBudgetBinding; callers do not invent them.
+  repeated ProvisionedLimit limits = 7;
+}
+
+// ProvisionedLimit is a current limit on the node's mandate. Money is kept
+// as integer resource units (decimal strings in proto JSON), never floats.
+message ProvisionedLimit {
+  string limit_id = 1;
+  string unit = 2;
+  string measure = 3;
+  string window = 4;
+  int64 span = 5;
+  int64 value = 6;
+  int64 version = 7;
 }
 
 // ListEffectTypesRequest asks for the catalog.

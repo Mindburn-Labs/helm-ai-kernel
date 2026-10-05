@@ -11,7 +11,8 @@
 --   authority_* tables              SELECT, INSERT, UPDATE; no DELETE: a
 --                                   revocation or cancellation is a state
 --                                   transition
---   authority_postings              SELECT, INSERT (append-only ledger)
+--   authority_postings,             SELECT, INSERT (append-only records)
+--   authority_provision_limits
 --   authority_distinct_values       SELECT, INSERT (INSERT ... ON CONFLICT
 --                                   DO NOTHING and an EXISTS read only)
 --   authority_token_replay          SELECT, INSERT, DELETE (expired
@@ -58,7 +59,7 @@ BEGIN
     LOOP
         privileges := CASE
             WHEN t.relname = 'gateway_schema_migrations' THEN 'SELECT'
-            WHEN t.relname IN ('authority_postings', 'authority_distinct_values') THEN 'SELECT, INSERT'
+            WHEN t.relname IN ('authority_postings', 'authority_distinct_values', 'authority_provision_limits') THEN 'SELECT, INSERT'
             WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, DELETE'
             WHEN t.relname LIKE 'authority\_%' THEN 'SELECT, INSERT, UPDATE'
             WHEN t.relname IN ('river_job', 'river_leader', 'river_queue', 'river_notification')

@@ -388,6 +388,50 @@ func TestPostgresGetProvisioningOnTheWire(t *testing.T) {
 	wantRPCError(t, "no token", err, connect.CodeUnauthenticated, "")
 }
 
+func TestPostgresProvisionBudgetOnTheWire(t *testing.T) {
+	w := newAdminWire(t)
+	ctx := context.Background()
+	_, err := w.ensure("tenant-a", serviceSpec(adminProvision), humanSpec(adminOwner, adminOwner))
+	must(t, err)
+	var plan map[string]any
+	must(t, json.Unmarshal(adminPlan(t, "", "budget-v1", time.Now()), &plan))
+	plan["limits"] = []any{map[string]any{"node": adminOrg, "unit": "usd_micros", "measure": "sum", "window": "none", "span": 1, "value": 5000000}}
+	raw, err := json.Marshal(plan)
+	must(t, err)
+	w.apply("tenant-a", raw)
+	read := w.token("tenant-a", adminProvision, ScopeRead)
+	p, err := w.client.GetProvisioning(ctx, withToken(&gatewayv1.GetProvisioningRequest{OrgRef: adminOrg}, read))
+	must(t, err)
+	applied := p.Msg.GetProvisioning()
+	node := applied.GetNodes()[0]
+	if len(node.GetLimits()) != 1 {
+		t.Fatalf("wire readback cannot construct a budget binding: %+v", node)
+	}
+	l := node.GetLimits()[0]
+	if l.GetUnit() != "usd_micros" || l.GetMeasure() != "sum" || l.GetWindow() != "none" || l.GetSpan() != 1 || l.GetValue() != 5000000 || l.GetVersion() < 1 {
+		t.Fatalf("wire limit metadata: %+v", l)
+	}
+	binding := &gatewayv1.ProvisionBudgetBinding{
+		OrgRef: applied.GetOrgRef(), VersionRef: applied.GetVersionRef(), PlanDigest: applied.GetPlanDigest(), Revision: applied.GetRevision(),
+		Node: node.GetNode(), MandateId: node.GetMandateId(), LimitId: l.GetLimitId(), LimitVersion: l.GetVersion(),
+	}
+	req := &gatewayv1.GetProvisionBudgetRequest{Binding: binding}
+	resp, err := w.client.GetProvisionBudget(ctx, withToken(req, read))
+	must(t, err)
+	x := resp.Msg
+	if !x.GetCoverageComplete() || x.GetAmounts() == nil || x.GetAmounts().GetCap() != 5000000 ||
+		x.GetActivity() != gatewayv1.ProvisionBudgetActivity_PROVISION_BUDGET_ACTIVITY_NO_RUNS_YET || len(x.GetEvidenceDigest()) != sha256.Size {
+		t.Fatalf("wire budget: %+v", x)
+	}
+	for _, principal := range []string{adminOwner, "svc:not-registered"} {
+		_, err = w.client.GetProvisionBudget(ctx, withToken(req, w.token("tenant-a", principal, ScopeRead)))
+		wantRPCError(t, principal+" reader", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	}
+	binding.LimitVersion++
+	_, err = w.client.GetProvisionBudget(ctx, withToken(req, read))
+	wantRPCError(t, "stale wire binding", err, connect.CodeFailedPrecondition, "")
+}
+
 func TestPostgresListEffectTypesOnTheWire(t *testing.T) {
 	w := newAdminWire(t)
 	ctx := context.Background()

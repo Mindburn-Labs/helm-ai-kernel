@@ -32,6 +32,7 @@ var Tables = []string{
 	"authority_provisions",
 	"authority_model_calls",
 	"authority_model_replays",
+	"authority_provision_limits",
 }
 
 // migration is one version of the gateway schema.
@@ -65,6 +66,9 @@ var migrations = []migration{
 	}},
 	{8, "worker episodes on attempts", func() (string, error) {
 		return withRowSecurity("", "schema/008_episodes.sql", nil)
+	}},
+	{9, "durable provision limit membership", func() (string, error) {
+		return withRowSecurity("", "schema/009_provision_limits.sql", []string{"authority_provision_limits"})
 	}},
 }
 

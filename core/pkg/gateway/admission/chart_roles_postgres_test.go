@@ -290,6 +290,7 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 		want[table] = "INSERT,SELECT,UPDATE"
 	}
 	want["authority_postings"] = "INSERT,SELECT"
+	want["authority_provision_limits"] = "INSERT,SELECT"
 	want["authority_distinct_values"] = "INSERT,SELECT"
 	if _, ok := want["authority_token_replay"]; ok {
 		want["authority_token_replay"] = "DELETE,INSERT,SELECT"
@@ -413,6 +414,8 @@ func chartBootstrapProof(t *testing.T, base, adminKind string, sqlFiles map[stri
 		`ALTER TABLE authority_effect_attempts NO FORCE ROW LEVEL SECURITY`,
 		`DELETE FROM authority_postings`,
 		`UPDATE authority_postings SET amount = 0`,
+		`UPDATE authority_provision_limits SET first_revision = 0`,
+		`DELETE FROM authority_provision_limits`,
 		`UPDATE authority_distinct_values SET attempt_id = attempt_id`,
 		`DELETE FROM authority_effect_attempts`,
 		`TRUNCATE authority_postings`,

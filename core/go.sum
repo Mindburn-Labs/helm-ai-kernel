@@ -36,8 +36,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapp
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0/go.mod h1:Mf6O40IAyB9zR/1J8nGDDPirZQQPbYJni8Yisy7NTMc=
 github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1Xbatp0=
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
-github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.10.6-0.20261001111105-b03f9c5e4c44 h1:+Rt7mqPr1P28453BCY5IbkzCWPP6w9CUEVLhN4wThPc=
-github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.10.6-0.20261001111105-b03f9c5e4c44/go.mod h1:SSHBk+9bqsuwC/r+i+dAt6YoldcKLfpdtxCNV7ALyr4=
+github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.1-0.20261004131700-57ac79fc07bf h1:pzdRIMzbkWtBOwmu8DXKJ18bUtjquHDWUCGEF7T/PO0=
+github.com/Mindburn-Labs/helm-ai-kernel/sdk/go v0.11.1-0.20261004131700-57ac79fc07bf/go.mod h1:SSHBk+9bqsuwC/r+i+dAt6YoldcKLfpdtxCNV7ALyr4=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 h1:bvNMNQO63//z+xNgfBlViaCIJKLlCJ6/fmUseuG0wVQ=

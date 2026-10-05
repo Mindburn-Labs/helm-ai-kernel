@@ -15,6 +15,7 @@
 //     effect can be proposed (its requester is a registered service principal)
 //     and approved (its approver is a registered human principal) at all;
 //   - GetProvisioning reads what a provision effect applied;
+//   - GetProvisionBudget reads the applied node's native lifetime USD usage;
 //   - ListEffectTypes reads the catalog of effect types the gateway performs,
 //     with their argument schemas.
 //
@@ -24,7 +25,7 @@
 //     message carries a tenant or a workspace.
 //   - Token scopes. EnsurePrincipals takes helm.gateway.provision, which the
 //     Control Plane's issuer mints for its service principal only, and which no
-//     other RPC takes. GetProvisioning and ListEffectTypes take
+//     other RPC takes. GetProvisioning, GetProvisionBudget and ListEffectTypes take
 //     helm.gateway.read. ADR-0005 allows one scope per token.
 //   - Errors carry one helm.errors.v1.ErrorDetail, as in gateway.proto.
 //
@@ -49,6 +50,58 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type ProvisionBudgetActivity int32
+
+const (
+	ProvisionBudgetActivity_PROVISION_BUDGET_ACTIVITY_UNSPECIFIED  ProvisionBudgetActivity = 0
+	ProvisionBudgetActivity_PROVISION_BUDGET_ACTIVITY_NOT_REPORTED ProvisionBudgetActivity = 1
+	ProvisionBudgetActivity_PROVISION_BUDGET_ACTIVITY_NO_RUNS_YET  ProvisionBudgetActivity = 2
+	ProvisionBudgetActivity_PROVISION_BUDGET_ACTIVITY_REPORTED     ProvisionBudgetActivity = 3
+)
+
+// Enum value maps for ProvisionBudgetActivity.
+var (
+	ProvisionBudgetActivity_name = map[int32]string{
+		0: "PROVISION_BUDGET_ACTIVITY_UNSPECIFIED",
+		1: "PROVISION_BUDGET_ACTIVITY_NOT_REPORTED",
+		2: "PROVISION_BUDGET_ACTIVITY_NO_RUNS_YET",
+		3: "PROVISION_BUDGET_ACTIVITY_REPORTED",
+	}
+	ProvisionBudgetActivity_value = map[string]int32{
+		"PROVISION_BUDGET_ACTIVITY_UNSPECIFIED":  0,
+		"PROVISION_BUDGET_ACTIVITY_NOT_REPORTED": 1,
+		"PROVISION_BUDGET_ACTIVITY_NO_RUNS_YET":  2,
+		"PROVISION_BUDGET_ACTIVITY_REPORTED":     3,
+	}
+)
+
+func (x ProvisionBudgetActivity) Enum() *ProvisionBudgetActivity {
+	p := new(ProvisionBudgetActivity)
+	*p = x
+	return p
+}
+
+func (x ProvisionBudgetActivity) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProvisionBudgetActivity) Descriptor() protoreflect.EnumDescriptor {
+	return file_helm_gateway_v1_authority_admin_proto_enumTypes[0].Descriptor()
+}
+
+func (ProvisionBudgetActivity) Type() protoreflect.EnumType {
+	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[0]
+}
+
+func (x ProvisionBudgetActivity) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProvisionBudgetActivity.Descriptor instead.
+func (ProvisionBudgetActivity) EnumDescriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{0}
+}
 
 // PrincipalKind is what a principal is. Only a human can approve
 // (ADR-0001 I6); an agent or a service is a workload.
@@ -92,11 +145,11 @@ func (x PrincipalKind) String() string {
 }
 
 func (PrincipalKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_helm_gateway_v1_authority_admin_proto_enumTypes[0].Descriptor()
+	return file_helm_gateway_v1_authority_admin_proto_enumTypes[1].Descriptor()
 }
 
 func (PrincipalKind) Type() protoreflect.EnumType {
-	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[0]
+	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[1]
 }
 
 func (x PrincipalKind) Number() protoreflect.EnumNumber {
@@ -105,7 +158,7 @@ func (x PrincipalKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PrincipalKind.Descriptor instead.
 func (PrincipalKind) EnumDescriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{0}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{1}
 }
 
 // PrincipalStatus is whether admission accepts a principal.
@@ -145,11 +198,11 @@ func (x PrincipalStatus) String() string {
 }
 
 func (PrincipalStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_helm_gateway_v1_authority_admin_proto_enumTypes[1].Descriptor()
+	return file_helm_gateway_v1_authority_admin_proto_enumTypes[2].Descriptor()
 }
 
 func (PrincipalStatus) Type() protoreflect.EnumType {
-	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[1]
+	return &file_helm_gateway_v1_authority_admin_proto_enumTypes[2]
 }
 
 func (x PrincipalStatus) Number() protoreflect.EnumNumber {
@@ -158,7 +211,327 @@ func (x PrincipalStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PrincipalStatus.Descriptor instead.
 func (PrincipalStatus) EnumDescriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{2}
+}
+
+// ProvisionBudgetBinding pins authority produced by the provisioning readback.
+// CP-only commitment/release identifiers do not establish Kernel membership.
+type ProvisionBudgetBinding struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgRef        string                 `protobuf:"bytes,1,opt,name=org_ref,json=orgRef,proto3" json:"org_ref,omitempty"`
+	VersionRef    string                 `protobuf:"bytes,2,opt,name=version_ref,json=versionRef,proto3" json:"version_ref,omitempty"`
+	PlanDigest    string                 `protobuf:"bytes,3,opt,name=plan_digest,json=planDigest,proto3" json:"plan_digest,omitempty"`
+	Revision      int64                  `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	Node          string                 `protobuf:"bytes,5,opt,name=node,proto3" json:"node,omitempty"`
+	MandateId     string                 `protobuf:"bytes,6,opt,name=mandate_id,json=mandateId,proto3" json:"mandate_id,omitempty"`
+	LimitId       string                 `protobuf:"bytes,7,opt,name=limit_id,json=limitId,proto3" json:"limit_id,omitempty"`
+	LimitVersion  int64                  `protobuf:"varint,8,opt,name=limit_version,json=limitVersion,proto3" json:"limit_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProvisionBudgetBinding) Reset() {
+	*x = ProvisionBudgetBinding{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProvisionBudgetBinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProvisionBudgetBinding) ProtoMessage() {}
+
+func (x *ProvisionBudgetBinding) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProvisionBudgetBinding.ProtoReflect.Descriptor instead.
+func (*ProvisionBudgetBinding) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ProvisionBudgetBinding) GetOrgRef() string {
+	if x != nil {
+		return x.OrgRef
+	}
+	return ""
+}
+
+func (x *ProvisionBudgetBinding) GetVersionRef() string {
+	if x != nil {
+		return x.VersionRef
+	}
+	return ""
+}
+
+func (x *ProvisionBudgetBinding) GetPlanDigest() string {
+	if x != nil {
+		return x.PlanDigest
+	}
+	return ""
+}
+
+func (x *ProvisionBudgetBinding) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *ProvisionBudgetBinding) GetNode() string {
+	if x != nil {
+		return x.Node
+	}
+	return ""
+}
+
+func (x *ProvisionBudgetBinding) GetMandateId() string {
+	if x != nil {
+		return x.MandateId
+	}
+	return ""
+}
+
+func (x *ProvisionBudgetBinding) GetLimitId() string {
+	if x != nil {
+		return x.LimitId
+	}
+	return ""
+}
+
+func (x *ProvisionBudgetBinding) GetLimitVersion() int64 {
+	if x != nil {
+		return x.LimitVersion
+	}
+	return 0
+}
+
+type GetProvisionBudgetRequest struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Binding       *ProvisionBudgetBinding `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProvisionBudgetRequest) Reset() {
+	*x = GetProvisionBudgetRequest{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProvisionBudgetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProvisionBudgetRequest) ProtoMessage() {}
+
+func (x *GetProvisionBudgetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProvisionBudgetRequest.ProtoReflect.Descriptor instead.
+func (*GetProvisionBudgetRequest) Descriptor() ([]byte, []int) {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GetProvisionBudgetRequest) GetBinding() *ProvisionBudgetBinding {
+	if x != nil {
+		return x.Binding
+	}
+	return nil
+}
+
+// All amounts are exact integer USD micros (decimal strings in proto JSON).
+// Neither copied enforcement counters nor provider overage is charged twice.
+type ProvisionBudgetAmounts struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cap           int64                  `protobuf:"varint,1,opt,name=cap,proto3" json:"cap,omitempty"`
+	SpentFinal    int64                  `protobuf:"varint,2,opt,name=spent_final,json=spentFinal,proto3" json:"spent_final,omitempty"`
+	SetAside      int64                  `protobuf:"varint,3,opt,name=set_aside,json=setAside,proto3" json:"set_aside,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProvisionBudgetAmounts) Reset() {
+	*x = ProvisionBudgetAmounts{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProvisionBudgetAmounts) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProvisionBudgetAmounts) ProtoMessage() {}
+
+func (x *ProvisionBudgetAmounts) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProvisionBudgetAmounts.ProtoReflect.Descriptor instead.
+func (*ProvisionBudgetAmounts) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ProvisionBudgetAmounts) GetCap() int64 {
+	if x != nil {
+		return x.Cap
+	}
+	return 0
+}
+
+func (x *ProvisionBudgetAmounts) GetSpentFinal() int64 {
+	if x != nil {
+		return x.SpentFinal
+	}
+	return 0
+}
+
+func (x *ProvisionBudgetAmounts) GetSetAside() int64 {
+	if x != nil {
+		return x.SetAside
+	}
+	return 0
+}
+
+type GetProvisionBudgetResponse struct {
+	state            protoimpl.MessageState  `protogen:"open.v1"`
+	Binding          *ProvisionBudgetBinding `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
+	AsOf             *timestamppb.Timestamp  `protobuf:"bytes,2,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	CoverageComplete bool                    `protobuf:"varint,3,opt,name=coverage_complete,json=coverageComplete,proto3" json:"coverage_complete,omitempty"`
+	Activity         ProvisionBudgetActivity `protobuf:"varint,4,opt,name=activity,proto3,enum=helm.gateway.v1.ProvisionBudgetActivity" json:"activity,omitempty"`
+	Reason           string                  `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Absent whenever coverage is incomplete or usage cannot be reported.
+	Amounts         *ProvisionBudgetAmounts `protobuf:"bytes,6,opt,name=amounts,proto3" json:"amounts,omitempty"`
+	OverageDetected bool                    `protobuf:"varint,7,opt,name=overage_detected,json=overageDetected,proto3" json:"overage_detected,omitempty"`
+	// False when evidence is incomplete or provider usage exceeded the hold.
+	// It does not grant dispatch authority or override Stop.
+	EnforcementAvailable bool `protobuf:"varint,8,opt,name=enforcement_available,json=enforcementAvailable,proto3" json:"enforcement_available,omitempty"`
+	// SHA-256 of the read snapshot; not a signed receipt or verifier verdict.
+	EvidenceDigest []byte `protobuf:"bytes,9,opt,name=evidence_digest,json=evidenceDigest,proto3" json:"evidence_digest,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetProvisionBudgetResponse) Reset() {
+	*x = GetProvisionBudgetResponse{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProvisionBudgetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProvisionBudgetResponse) ProtoMessage() {}
+
+func (x *GetProvisionBudgetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProvisionBudgetResponse.ProtoReflect.Descriptor instead.
+func (*GetProvisionBudgetResponse) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetProvisionBudgetResponse) GetBinding() *ProvisionBudgetBinding {
+	if x != nil {
+		return x.Binding
+	}
+	return nil
+}
+
+func (x *GetProvisionBudgetResponse) GetAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOf
+	}
+	return nil
+}
+
+func (x *GetProvisionBudgetResponse) GetCoverageComplete() bool {
+	if x != nil {
+		return x.CoverageComplete
+	}
+	return false
+}
+
+func (x *GetProvisionBudgetResponse) GetActivity() ProvisionBudgetActivity {
+	if x != nil {
+		return x.Activity
+	}
+	return ProvisionBudgetActivity_PROVISION_BUDGET_ACTIVITY_UNSPECIFIED
+}
+
+func (x *GetProvisionBudgetResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *GetProvisionBudgetResponse) GetAmounts() *ProvisionBudgetAmounts {
+	if x != nil {
+		return x.Amounts
+	}
+	return nil
+}
+
+func (x *GetProvisionBudgetResponse) GetOverageDetected() bool {
+	if x != nil {
+		return x.OverageDetected
+	}
+	return false
+}
+
+func (x *GetProvisionBudgetResponse) GetEnforcementAvailable() bool {
+	if x != nil {
+		return x.EnforcementAvailable
+	}
+	return false
+}
+
+func (x *GetProvisionBudgetResponse) GetEvidenceDigest() []byte {
+	if x != nil {
+		return x.EvidenceDigest
+	}
+	return nil
 }
 
 // ExternalSubject names a principal in the system that vouches for it, so
@@ -177,7 +550,7 @@ type ExternalSubject struct {
 
 func (x *ExternalSubject) Reset() {
 	*x = ExternalSubject{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[0]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -189,7 +562,7 @@ func (x *ExternalSubject) String() string {
 func (*ExternalSubject) ProtoMessage() {}
 
 func (x *ExternalSubject) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[0]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -202,7 +575,7 @@ func (x *ExternalSubject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExternalSubject.ProtoReflect.Descriptor instead.
 func (*ExternalSubject) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{0}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ExternalSubject) GetSystem() string {
@@ -235,7 +608,7 @@ type PrincipalSpec struct {
 
 func (x *PrincipalSpec) Reset() {
 	*x = PrincipalSpec{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -247,7 +620,7 @@ func (x *PrincipalSpec) String() string {
 func (*PrincipalSpec) ProtoMessage() {}
 
 func (x *PrincipalSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[1]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -260,7 +633,7 @@ func (x *PrincipalSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrincipalSpec.ProtoReflect.Descriptor instead.
 func (*PrincipalSpec) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{1}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *PrincipalSpec) GetPrincipalId() string {
@@ -295,7 +668,7 @@ type EnsurePrincipalsRequest struct {
 
 func (x *EnsurePrincipalsRequest) Reset() {
 	*x = EnsurePrincipalsRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -307,7 +680,7 @@ func (x *EnsurePrincipalsRequest) String() string {
 func (*EnsurePrincipalsRequest) ProtoMessage() {}
 
 func (x *EnsurePrincipalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[2]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -320,7 +693,7 @@ func (x *EnsurePrincipalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsurePrincipalsRequest.ProtoReflect.Descriptor instead.
 func (*EnsurePrincipalsRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{2}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *EnsurePrincipalsRequest) GetPrincipals() []*PrincipalSpec {
@@ -343,7 +716,7 @@ type EnsurePrincipalsResponse struct {
 
 func (x *EnsurePrincipalsResponse) Reset() {
 	*x = EnsurePrincipalsResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -355,7 +728,7 @@ func (x *EnsurePrincipalsResponse) String() string {
 func (*EnsurePrincipalsResponse) ProtoMessage() {}
 
 func (x *EnsurePrincipalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[3]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -368,7 +741,7 @@ func (x *EnsurePrincipalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsurePrincipalsResponse.ProtoReflect.Descriptor instead.
 func (*EnsurePrincipalsResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{3}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *EnsurePrincipalsResponse) GetPrincipals() []*AuthorityPrincipal {
@@ -404,7 +777,7 @@ type AuthorityPrincipal struct {
 
 func (x *AuthorityPrincipal) Reset() {
 	*x = AuthorityPrincipal{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -416,7 +789,7 @@ func (x *AuthorityPrincipal) String() string {
 func (*AuthorityPrincipal) ProtoMessage() {}
 
 func (x *AuthorityPrincipal) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[4]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -429,7 +802,7 @@ func (x *AuthorityPrincipal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorityPrincipal.ProtoReflect.Descriptor instead.
 func (*AuthorityPrincipal) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{4}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AuthorityPrincipal) GetPrincipalId() string {
@@ -478,7 +851,7 @@ type GetProvisioningRequest struct {
 
 func (x *GetProvisioningRequest) Reset() {
 	*x = GetProvisioningRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -490,7 +863,7 @@ func (x *GetProvisioningRequest) String() string {
 func (*GetProvisioningRequest) ProtoMessage() {}
 
 func (x *GetProvisioningRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[5]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -503,7 +876,7 @@ func (x *GetProvisioningRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProvisioningRequest.ProtoReflect.Descriptor instead.
 func (*GetProvisioningRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{5}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetProvisioningRequest) GetOrgRef() string {
@@ -524,7 +897,7 @@ type GetProvisioningResponse struct {
 
 func (x *GetProvisioningResponse) Reset() {
 	*x = GetProvisioningResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -536,7 +909,7 @@ func (x *GetProvisioningResponse) String() string {
 func (*GetProvisioningResponse) ProtoMessage() {}
 
 func (x *GetProvisioningResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[6]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -549,7 +922,7 @@ func (x *GetProvisioningResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProvisioningResponse.ProtoReflect.Descriptor instead.
 func (*GetProvisioningResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{6}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetProvisioningResponse) GetProvisioning() *Provisioning {
@@ -590,7 +963,7 @@ type Provisioning struct {
 
 func (x *Provisioning) Reset() {
 	*x = Provisioning{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -602,7 +975,7 @@ func (x *Provisioning) String() string {
 func (*Provisioning) ProtoMessage() {}
 
 func (x *Provisioning) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[7]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -615,7 +988,7 @@ func (x *Provisioning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provisioning.ProtoReflect.Descriptor instead.
 func (*Provisioning) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{7}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Provisioning) GetOrgRef() string {
@@ -697,13 +1070,16 @@ type ProvisionedNode struct {
 	Active bool `protobuf:"varint,5,opt,name=active,proto3" json:"active,omitempty"`
 	// The mandate row's version. It increases with every narrowing of it.
 	MandateVersion int64 `protobuf:"varint,6,opt,name=mandate_version,json=mandateVersion,proto3" json:"mandate_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Current limit rows from the same snapshot. Their ids and versions are
+	// authoritative inputs to ProvisionBudgetBinding; callers do not invent them.
+	Limits        []*ProvisionedLimit `protobuf:"bytes,7,rep,name=limits,proto3" json:"limits,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProvisionedNode) Reset() {
 	*x = ProvisionedNode{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -715,7 +1091,7 @@ func (x *ProvisionedNode) String() string {
 func (*ProvisionedNode) ProtoMessage() {}
 
 func (x *ProvisionedNode) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[8]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -728,7 +1104,7 @@ func (x *ProvisionedNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvisionedNode.ProtoReflect.Descriptor instead.
 func (*ProvisionedNode) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{8}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ProvisionedNode) GetNode() string {
@@ -773,6 +1149,107 @@ func (x *ProvisionedNode) GetMandateVersion() int64 {
 	return 0
 }
 
+func (x *ProvisionedNode) GetLimits() []*ProvisionedLimit {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+// ProvisionedLimit is a current limit on the node's mandate. Money is kept
+// as integer resource units (decimal strings in proto JSON), never floats.
+type ProvisionedLimit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LimitId       string                 `protobuf:"bytes,1,opt,name=limit_id,json=limitId,proto3" json:"limit_id,omitempty"`
+	Unit          string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	Measure       string                 `protobuf:"bytes,3,opt,name=measure,proto3" json:"measure,omitempty"`
+	Window        string                 `protobuf:"bytes,4,opt,name=window,proto3" json:"window,omitempty"`
+	Span          int64                  `protobuf:"varint,5,opt,name=span,proto3" json:"span,omitempty"`
+	Value         int64                  `protobuf:"varint,6,opt,name=value,proto3" json:"value,omitempty"`
+	Version       int64                  `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProvisionedLimit) Reset() {
+	*x = ProvisionedLimit{}
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProvisionedLimit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProvisionedLimit) ProtoMessage() {}
+
+func (x *ProvisionedLimit) ProtoReflect() protoreflect.Message {
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProvisionedLimit.ProtoReflect.Descriptor instead.
+func (*ProvisionedLimit) Descriptor() ([]byte, []int) {
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ProvisionedLimit) GetLimitId() string {
+	if x != nil {
+		return x.LimitId
+	}
+	return ""
+}
+
+func (x *ProvisionedLimit) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *ProvisionedLimit) GetMeasure() string {
+	if x != nil {
+		return x.Measure
+	}
+	return ""
+}
+
+func (x *ProvisionedLimit) GetWindow() string {
+	if x != nil {
+		return x.Window
+	}
+	return ""
+}
+
+func (x *ProvisionedLimit) GetSpan() int64 {
+	if x != nil {
+		return x.Span
+	}
+	return 0
+}
+
+func (x *ProvisionedLimit) GetValue() int64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *ProvisionedLimit) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
 // ListEffectTypesRequest asks for the catalog.
 type ListEffectTypesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -782,7 +1259,7 @@ type ListEffectTypesRequest struct {
 
 func (x *ListEffectTypesRequest) Reset() {
 	*x = ListEffectTypesRequest{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -794,7 +1271,7 @@ func (x *ListEffectTypesRequest) String() string {
 func (*ListEffectTypesRequest) ProtoMessage() {}
 
 func (x *ListEffectTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[9]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -807,7 +1284,7 @@ func (x *ListEffectTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEffectTypesRequest.ProtoReflect.Descriptor instead.
 func (*ListEffectTypesRequest) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{9}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{14}
 }
 
 // ListEffectTypesResponse returns the catalog.
@@ -821,7 +1298,7 @@ type ListEffectTypesResponse struct {
 
 func (x *ListEffectTypesResponse) Reset() {
 	*x = ListEffectTypesResponse{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +1310,7 @@ func (x *ListEffectTypesResponse) String() string {
 func (*ListEffectTypesResponse) ProtoMessage() {}
 
 func (x *ListEffectTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[10]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +1323,7 @@ func (x *ListEffectTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEffectTypesResponse.ProtoReflect.Descriptor instead.
 func (*ListEffectTypesResponse) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{10}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListEffectTypesResponse) GetEffectTypes() []*EffectTypeDeclaration {
@@ -892,7 +1369,7 @@ type EffectTypeDeclaration struct {
 
 func (x *EffectTypeDeclaration) Reset() {
 	*x = EffectTypeDeclaration{}
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -904,7 +1381,7 @@ func (x *EffectTypeDeclaration) String() string {
 func (*EffectTypeDeclaration) ProtoMessage() {}
 
 func (x *EffectTypeDeclaration) ProtoReflect() protoreflect.Message {
-	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[11]
+	mi := &file_helm_gateway_v1_authority_admin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -917,7 +1394,7 @@ func (x *EffectTypeDeclaration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EffectTypeDeclaration.ProtoReflect.Descriptor instead.
 func (*EffectTypeDeclaration) Descriptor() ([]byte, []int) {
-	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{11}
+	return file_helm_gateway_v1_authority_admin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *EffectTypeDeclaration) GetEffectType() string {
@@ -994,7 +1471,36 @@ var File_helm_gateway_v1_authority_admin_proto protoreflect.FileDescriptor
 
 const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\n" +
-	"%helm/gateway/v1/authority_admin.proto\x12\x0fhelm.gateway.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dhelm/gateway/v1/gateway.proto\"9\n" +
+	"%helm/gateway/v1/authority_admin.proto\x12\x0fhelm.gateway.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dhelm/gateway/v1/gateway.proto\"\x82\x02\n" +
+	"\x16ProvisionBudgetBinding\x12\x17\n" +
+	"\aorg_ref\x18\x01 \x01(\tR\x06orgRef\x12\x1f\n" +
+	"\vversion_ref\x18\x02 \x01(\tR\n" +
+	"versionRef\x12\x1f\n" +
+	"\vplan_digest\x18\x03 \x01(\tR\n" +
+	"planDigest\x12\x1a\n" +
+	"\brevision\x18\x04 \x01(\x03R\brevision\x12\x12\n" +
+	"\x04node\x18\x05 \x01(\tR\x04node\x12\x1d\n" +
+	"\n" +
+	"mandate_id\x18\x06 \x01(\tR\tmandateId\x12\x19\n" +
+	"\blimit_id\x18\a \x01(\tR\alimitId\x12#\n" +
+	"\rlimit_version\x18\b \x01(\x03R\flimitVersion\"^\n" +
+	"\x19GetProvisionBudgetRequest\x12A\n" +
+	"\abinding\x18\x01 \x01(\v2'.helm.gateway.v1.ProvisionBudgetBindingR\abinding\"h\n" +
+	"\x16ProvisionBudgetAmounts\x12\x10\n" +
+	"\x03cap\x18\x01 \x01(\x03R\x03cap\x12\x1f\n" +
+	"\vspent_final\x18\x02 \x01(\x03R\n" +
+	"spentFinal\x12\x1b\n" +
+	"\tset_aside\x18\x03 \x01(\x03R\bsetAside\"\xe7\x03\n" +
+	"\x1aGetProvisionBudgetResponse\x12A\n" +
+	"\abinding\x18\x01 \x01(\v2'.helm.gateway.v1.ProvisionBudgetBindingR\abinding\x12/\n" +
+	"\x05as_of\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x12+\n" +
+	"\x11coverage_complete\x18\x03 \x01(\bR\x10coverageComplete\x12D\n" +
+	"\bactivity\x18\x04 \x01(\x0e2(.helm.gateway.v1.ProvisionBudgetActivityR\bactivity\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12A\n" +
+	"\aamounts\x18\x06 \x01(\v2'.helm.gateway.v1.ProvisionBudgetAmountsR\aamounts\x12)\n" +
+	"\x10overage_detected\x18\a \x01(\bR\x0foverageDetected\x123\n" +
+	"\x15enforcement_available\x18\b \x01(\bR\x14enforcementAvailable\x12'\n" +
+	"\x0fevidence_digest\x18\t \x01(\fR\x0eevidenceDigest\"9\n" +
 	"\x0fExternalSubject\x12\x16\n" +
 	"\x06system\x18\x01 \x01(\tR\x06system\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\"\xb3\x01\n" +
@@ -1034,7 +1540,7 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\brevision\x18\a \x01(\x03R\brevision\x129\n" +
 	"\n" +
 	"applied_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\x12 \n" +
-	"\vprovisioner\x18\t \x01(\tR\vprovisioner\"\xc3\x01\n" +
+	"\vprovisioner\x18\t \x01(\tR\vprovisioner\"\xfe\x01\n" +
 	"\x0fProvisionedNode\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x1d\n" +
 	"\n" +
@@ -1043,7 +1549,16 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\vparent_node\x18\x04 \x01(\tR\n" +
 	"parentNode\x12\x16\n" +
 	"\x06active\x18\x05 \x01(\bR\x06active\x12'\n" +
-	"\x0fmandate_version\x18\x06 \x01(\x03R\x0emandateVersion\"\x18\n" +
+	"\x0fmandate_version\x18\x06 \x01(\x03R\x0emandateVersion\x129\n" +
+	"\x06limits\x18\a \x03(\v2!.helm.gateway.v1.ProvisionedLimitR\x06limits\"\xb7\x01\n" +
+	"\x10ProvisionedLimit\x12\x19\n" +
+	"\blimit_id\x18\x01 \x01(\tR\alimitId\x12\x12\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x18\n" +
+	"\ameasure\x18\x03 \x01(\tR\ameasure\x12\x16\n" +
+	"\x06window\x18\x04 \x01(\tR\x06window\x12\x12\n" +
+	"\x04span\x18\x05 \x01(\x03R\x04span\x12\x14\n" +
+	"\x05value\x18\x06 \x01(\x03R\x05value\x12\x18\n" +
+	"\aversion\x18\a \x01(\x03R\aversion\"\x18\n" +
 	"\x16ListEffectTypesRequest\"d\n" +
 	"\x17ListEffectTypesResponse\x12I\n" +
 	"\feffect_types\x18\x01 \x03(\v2&.helm.gateway.v1.EffectTypeDeclarationR\veffectTypes\"\xfb\x02\n" +
@@ -1067,7 +1582,12 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\vdescription\x18\b \x01(\tR\vdescription\x12'\n" +
 	"\x0fargument_schema\x18\t \x01(\fR\x0eargumentSchema\x12\x1c\n" +
 	"\tgrantable\x18\n" +
-	" \x01(\bR\tgrantable*\x7f\n" +
+	" \x01(\bR\tgrantable*\xc3\x01\n" +
+	"\x17ProvisionBudgetActivity\x12)\n" +
+	"%PROVISION_BUDGET_ACTIVITY_UNSPECIFIED\x10\x00\x12*\n" +
+	"&PROVISION_BUDGET_ACTIVITY_NOT_REPORTED\x10\x01\x12)\n" +
+	"%PROVISION_BUDGET_ACTIVITY_NO_RUNS_YET\x10\x02\x12&\n" +
+	"\"PROVISION_BUDGET_ACTIVITY_REPORTED\x10\x03*\x7f\n" +
 	"\rPrincipalKind\x12\x1e\n" +
 	"\x1aPRINCIPAL_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14PRINCIPAL_KIND_HUMAN\x10\x01\x12\x18\n" +
@@ -1076,10 +1596,11 @@ const file_helm_gateway_v1_authority_admin_proto_rawDesc = "" +
 	"\x0fPrincipalStatus\x12 \n" +
 	"\x1cPRINCIPAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17PRINCIPAL_STATUS_ACTIVE\x10\x01\x12\x1d\n" +
-	"\x19PRINCIPAL_STATUS_DISABLED\x10\x022\xd6\x02\n" +
+	"\x19PRINCIPAL_STATUS_DISABLED\x10\x022\xca\x03\n" +
 	"\x15AuthorityAdminService\x12g\n" +
 	"\x10EnsurePrincipals\x12(.helm.gateway.v1.EnsurePrincipalsRequest\x1a).helm.gateway.v1.EnsurePrincipalsResponse\x12i\n" +
-	"\x0fGetProvisioning\x12'.helm.gateway.v1.GetProvisioningRequest\x1a(.helm.gateway.v1.GetProvisioningResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fGetProvisioning\x12'.helm.gateway.v1.GetProvisioningRequest\x1a(.helm.gateway.v1.GetProvisioningResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12GetProvisionBudget\x12*.helm.gateway.v1.GetProvisionBudgetRequest\x1a+.helm.gateway.v1.GetProvisionBudgetResponse\"\x03\x90\x02\x01\x12i\n" +
 	"\x0fListEffectTypes\x12'.helm.gateway.v1.ListEffectTypesRequest\x1a(.helm.gateway.v1.ListEffectTypesResponse\"\x03\x90\x02\x01B(Z&helm.mindburn.run/gateway/v1;gatewayv1b\x06proto3"
 
 var (
@@ -1094,50 +1615,64 @@ func file_helm_gateway_v1_authority_admin_proto_rawDescGZIP() []byte {
 	return file_helm_gateway_v1_authority_admin_proto_rawDescData
 }
 
-var file_helm_gateway_v1_authority_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_helm_gateway_v1_authority_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_helm_gateway_v1_authority_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_helm_gateway_v1_authority_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_helm_gateway_v1_authority_admin_proto_goTypes = []any{
-	(PrincipalKind)(0),               // 0: helm.gateway.v1.PrincipalKind
-	(PrincipalStatus)(0),             // 1: helm.gateway.v1.PrincipalStatus
-	(*ExternalSubject)(nil),          // 2: helm.gateway.v1.ExternalSubject
-	(*PrincipalSpec)(nil),            // 3: helm.gateway.v1.PrincipalSpec
-	(*EnsurePrincipalsRequest)(nil),  // 4: helm.gateway.v1.EnsurePrincipalsRequest
-	(*EnsurePrincipalsResponse)(nil), // 5: helm.gateway.v1.EnsurePrincipalsResponse
-	(*AuthorityPrincipal)(nil),       // 6: helm.gateway.v1.AuthorityPrincipal
-	(*GetProvisioningRequest)(nil),   // 7: helm.gateway.v1.GetProvisioningRequest
-	(*GetProvisioningResponse)(nil),  // 8: helm.gateway.v1.GetProvisioningResponse
-	(*Provisioning)(nil),             // 9: helm.gateway.v1.Provisioning
-	(*ProvisionedNode)(nil),          // 10: helm.gateway.v1.ProvisionedNode
-	(*ListEffectTypesRequest)(nil),   // 11: helm.gateway.v1.ListEffectTypesRequest
-	(*ListEffectTypesResponse)(nil),  // 12: helm.gateway.v1.ListEffectTypesResponse
-	(*EffectTypeDeclaration)(nil),    // 13: helm.gateway.v1.EffectTypeDeclaration
-	(*timestamppb.Timestamp)(nil),    // 14: google.protobuf.Timestamp
-	(RiskClass)(0),                   // 15: helm.gateway.v1.RiskClass
+	(ProvisionBudgetActivity)(0),       // 0: helm.gateway.v1.ProvisionBudgetActivity
+	(PrincipalKind)(0),                 // 1: helm.gateway.v1.PrincipalKind
+	(PrincipalStatus)(0),               // 2: helm.gateway.v1.PrincipalStatus
+	(*ProvisionBudgetBinding)(nil),     // 3: helm.gateway.v1.ProvisionBudgetBinding
+	(*GetProvisionBudgetRequest)(nil),  // 4: helm.gateway.v1.GetProvisionBudgetRequest
+	(*ProvisionBudgetAmounts)(nil),     // 5: helm.gateway.v1.ProvisionBudgetAmounts
+	(*GetProvisionBudgetResponse)(nil), // 6: helm.gateway.v1.GetProvisionBudgetResponse
+	(*ExternalSubject)(nil),            // 7: helm.gateway.v1.ExternalSubject
+	(*PrincipalSpec)(nil),              // 8: helm.gateway.v1.PrincipalSpec
+	(*EnsurePrincipalsRequest)(nil),    // 9: helm.gateway.v1.EnsurePrincipalsRequest
+	(*EnsurePrincipalsResponse)(nil),   // 10: helm.gateway.v1.EnsurePrincipalsResponse
+	(*AuthorityPrincipal)(nil),         // 11: helm.gateway.v1.AuthorityPrincipal
+	(*GetProvisioningRequest)(nil),     // 12: helm.gateway.v1.GetProvisioningRequest
+	(*GetProvisioningResponse)(nil),    // 13: helm.gateway.v1.GetProvisioningResponse
+	(*Provisioning)(nil),               // 14: helm.gateway.v1.Provisioning
+	(*ProvisionedNode)(nil),            // 15: helm.gateway.v1.ProvisionedNode
+	(*ProvisionedLimit)(nil),           // 16: helm.gateway.v1.ProvisionedLimit
+	(*ListEffectTypesRequest)(nil),     // 17: helm.gateway.v1.ListEffectTypesRequest
+	(*ListEffectTypesResponse)(nil),    // 18: helm.gateway.v1.ListEffectTypesResponse
+	(*EffectTypeDeclaration)(nil),      // 19: helm.gateway.v1.EffectTypeDeclaration
+	(*timestamppb.Timestamp)(nil),      // 20: google.protobuf.Timestamp
+	(RiskClass)(0),                     // 21: helm.gateway.v1.RiskClass
 }
 var file_helm_gateway_v1_authority_admin_proto_depIdxs = []int32{
-	0,  // 0: helm.gateway.v1.PrincipalSpec.kind:type_name -> helm.gateway.v1.PrincipalKind
-	2,  // 1: helm.gateway.v1.PrincipalSpec.external_subject:type_name -> helm.gateway.v1.ExternalSubject
-	3,  // 2: helm.gateway.v1.EnsurePrincipalsRequest.principals:type_name -> helm.gateway.v1.PrincipalSpec
-	6,  // 3: helm.gateway.v1.EnsurePrincipalsResponse.principals:type_name -> helm.gateway.v1.AuthorityPrincipal
-	0,  // 4: helm.gateway.v1.AuthorityPrincipal.kind:type_name -> helm.gateway.v1.PrincipalKind
-	1,  // 5: helm.gateway.v1.AuthorityPrincipal.status:type_name -> helm.gateway.v1.PrincipalStatus
-	2,  // 6: helm.gateway.v1.AuthorityPrincipal.external_subject:type_name -> helm.gateway.v1.ExternalSubject
-	9,  // 7: helm.gateway.v1.GetProvisioningResponse.provisioning:type_name -> helm.gateway.v1.Provisioning
-	10, // 8: helm.gateway.v1.Provisioning.nodes:type_name -> helm.gateway.v1.ProvisionedNode
-	14, // 9: helm.gateway.v1.Provisioning.applied_at:type_name -> google.protobuf.Timestamp
-	13, // 10: helm.gateway.v1.ListEffectTypesResponse.effect_types:type_name -> helm.gateway.v1.EffectTypeDeclaration
-	15, // 11: helm.gateway.v1.EffectTypeDeclaration.risk_class:type_name -> helm.gateway.v1.RiskClass
-	4,  // 12: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:input_type -> helm.gateway.v1.EnsurePrincipalsRequest
-	7,  // 13: helm.gateway.v1.AuthorityAdminService.GetProvisioning:input_type -> helm.gateway.v1.GetProvisioningRequest
-	11, // 14: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:input_type -> helm.gateway.v1.ListEffectTypesRequest
-	5,  // 15: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:output_type -> helm.gateway.v1.EnsurePrincipalsResponse
-	8,  // 16: helm.gateway.v1.AuthorityAdminService.GetProvisioning:output_type -> helm.gateway.v1.GetProvisioningResponse
-	12, // 17: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:output_type -> helm.gateway.v1.ListEffectTypesResponse
-	15, // [15:18] is the sub-list for method output_type
-	12, // [12:15] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	3,  // 0: helm.gateway.v1.GetProvisionBudgetRequest.binding:type_name -> helm.gateway.v1.ProvisionBudgetBinding
+	3,  // 1: helm.gateway.v1.GetProvisionBudgetResponse.binding:type_name -> helm.gateway.v1.ProvisionBudgetBinding
+	20, // 2: helm.gateway.v1.GetProvisionBudgetResponse.as_of:type_name -> google.protobuf.Timestamp
+	0,  // 3: helm.gateway.v1.GetProvisionBudgetResponse.activity:type_name -> helm.gateway.v1.ProvisionBudgetActivity
+	5,  // 4: helm.gateway.v1.GetProvisionBudgetResponse.amounts:type_name -> helm.gateway.v1.ProvisionBudgetAmounts
+	1,  // 5: helm.gateway.v1.PrincipalSpec.kind:type_name -> helm.gateway.v1.PrincipalKind
+	7,  // 6: helm.gateway.v1.PrincipalSpec.external_subject:type_name -> helm.gateway.v1.ExternalSubject
+	8,  // 7: helm.gateway.v1.EnsurePrincipalsRequest.principals:type_name -> helm.gateway.v1.PrincipalSpec
+	11, // 8: helm.gateway.v1.EnsurePrincipalsResponse.principals:type_name -> helm.gateway.v1.AuthorityPrincipal
+	1,  // 9: helm.gateway.v1.AuthorityPrincipal.kind:type_name -> helm.gateway.v1.PrincipalKind
+	2,  // 10: helm.gateway.v1.AuthorityPrincipal.status:type_name -> helm.gateway.v1.PrincipalStatus
+	7,  // 11: helm.gateway.v1.AuthorityPrincipal.external_subject:type_name -> helm.gateway.v1.ExternalSubject
+	14, // 12: helm.gateway.v1.GetProvisioningResponse.provisioning:type_name -> helm.gateway.v1.Provisioning
+	15, // 13: helm.gateway.v1.Provisioning.nodes:type_name -> helm.gateway.v1.ProvisionedNode
+	20, // 14: helm.gateway.v1.Provisioning.applied_at:type_name -> google.protobuf.Timestamp
+	16, // 15: helm.gateway.v1.ProvisionedNode.limits:type_name -> helm.gateway.v1.ProvisionedLimit
+	19, // 16: helm.gateway.v1.ListEffectTypesResponse.effect_types:type_name -> helm.gateway.v1.EffectTypeDeclaration
+	21, // 17: helm.gateway.v1.EffectTypeDeclaration.risk_class:type_name -> helm.gateway.v1.RiskClass
+	9,  // 18: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:input_type -> helm.gateway.v1.EnsurePrincipalsRequest
+	12, // 19: helm.gateway.v1.AuthorityAdminService.GetProvisioning:input_type -> helm.gateway.v1.GetProvisioningRequest
+	4,  // 20: helm.gateway.v1.AuthorityAdminService.GetProvisionBudget:input_type -> helm.gateway.v1.GetProvisionBudgetRequest
+	17, // 21: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:input_type -> helm.gateway.v1.ListEffectTypesRequest
+	10, // 22: helm.gateway.v1.AuthorityAdminService.EnsurePrincipals:output_type -> helm.gateway.v1.EnsurePrincipalsResponse
+	13, // 23: helm.gateway.v1.AuthorityAdminService.GetProvisioning:output_type -> helm.gateway.v1.GetProvisioningResponse
+	6,  // 24: helm.gateway.v1.AuthorityAdminService.GetProvisionBudget:output_type -> helm.gateway.v1.GetProvisionBudgetResponse
+	18, // 25: helm.gateway.v1.AuthorityAdminService.ListEffectTypes:output_type -> helm.gateway.v1.ListEffectTypesResponse
+	22, // [22:26] is the sub-list for method output_type
+	18, // [18:22] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_helm_gateway_v1_authority_admin_proto_init() }
@@ -1151,8 +1686,8 @@ func file_helm_gateway_v1_authority_admin_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_helm_gateway_v1_authority_admin_proto_rawDesc), len(file_helm_gateway_v1_authority_admin_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   12,
+			NumEnums:      3,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

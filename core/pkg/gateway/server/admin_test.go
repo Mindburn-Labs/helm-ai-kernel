@@ -115,6 +115,20 @@ func TestListEffectTypesTakesTheReadScopeAndNoOther(t *testing.T) {
 	}
 }
 
+func TestProvisionBudgetTakesReadScopeBeforeBinding(t *testing.T) {
+	iss := newIssuer(t)
+	admin := &AdminServer{Auth: &Authenticator{Validator: iss.validator(), Actor: testActor}}
+	ctx := context.Background()
+	_, err := admin.GetProvisionBudget(ctx, withToken(&gatewayv1.GetProvisionBudgetRequest{}, ""))
+	wantRPCError(t, "no token", err, connect.CodeUnauthenticated, "")
+	for _, scope := range []string{ScopePropose, ScopeDecide, ScopeStop, ScopeExecute, ScopeProvision} {
+		_, err = admin.GetProvisionBudget(ctx, withToken(&gatewayv1.GetProvisionBudgetRequest{}, iss.token(t, testAudience, "tenant-a", "svc:reader", scope)))
+		wantRPCError(t, scope+" budget token", err, connect.CodePermissionDenied, contracts.ReasonInsufficientPrivilege)
+	}
+	_, err = admin.GetProvisionBudget(ctx, withToken(&gatewayv1.GetProvisionBudgetRequest{}, iss.token(t, testAudience, "tenant-a", "svc:reader", ScopeRead)))
+	wantRPCError(t, "missing binding", err, connect.CodeInvalidArgument, contracts.ReasonSchemaViolation)
+}
+
 // Only helm.gateway.provision registers principals, and no other RPC takes it.
 func TestProvisionScopeIsOnlyForEnsurePrincipals(t *testing.T) {
 	iss := newIssuer(t)

@@ -86,7 +86,6 @@ RELEASE_VALIDATION_JOBS = frozenset(
 REMOVED_GATE_MARKERS = (
     "release-authority",
     "HELM_RELEASE_AUTHORITY_ARMED",
-    "release-production",
     "github.actor ==",
     "github.triggering_actor ==",
     "github.run_attempt",
@@ -104,14 +103,19 @@ LONG_LIVED_REGISTRY_TOKEN_SECRETS = (
     "PYPI_TOKEN",
 )
 
-# Maven Central has no OIDC trusted publishing. Its credentials stay
-# environment secrets, so a job can read them only when it declares the
-# environment that holds them.
+# Maven Central has no OIDC trusted publishing. Its credentials and the
+# release evidence/Homebrew credentials belong to tag-only environments.
+# A job reading one of these names must declare the environment that holds it.
 PROTECTED_SECRET_ENVIRONMENTS = {
     "MAVEN_USERNAME": "maven-central",
     "MAVEN_PASSWORD": "maven-central",
     "MAVEN_GPG_PRIVATE_KEY": "maven-central",
     "MAVEN_GPG_PASSPHRASE": "maven-central",
+    "HELM_EVIDENCE_KMS_KEY_ID": "release-production",
+    "HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX": "release-production",
+    "HELM_EVIDENCE_KMS_SIGN_COMMAND": "release-production",
+    "HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND": "release-production",
+    "HOMEBREW_TAP_TOKEN": "release-production",
 }
 
 
@@ -675,7 +679,11 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                     self.assertEqual(declared, required.pop(), label)
                     checked[label] = declared
         # Guard against a vacuous pass: the known publishers must be seen.
-        self.assertEqual(checked, {"release.yml:maven-sdk": "maven-central"})
+        self.assertEqual(checked, {
+            "release.yml:binaries": "release-production",
+            "release.yml:homebrew": "release-production",
+            "release.yml:maven-sdk": "maven-central",
+        })
 
     def test_console_dispatch_uses_an_immutable_ref_bound_to_the_source_pin(self) -> None:
         console_sidecar = self.job("console-local-sidecar")

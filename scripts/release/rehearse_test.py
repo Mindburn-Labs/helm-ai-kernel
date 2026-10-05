@@ -274,12 +274,11 @@ class ChartAndExitTest(unittest.TestCase):
     def test_secret_presence_is_pass_fail_or_unknown(self) -> None:
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         checks = {c.name: c.status for c in rehearse.check_secrets(workflow, {
-            "REHEARSAL_HAS_HOMEBREW_TAP_TOKEN": "true",
             "REHEARSAL_HAS_CONSOLE_BUNDLE_TOKEN": "false",
         })}
-        self.assertEqual(checks["(g) secret HOMEBREW_TAP_TOKEN"], rehearse.PASS)
         self.assertEqual(checks["(g) secret CONSOLE_BUNDLE_TOKEN"], rehearse.FAIL)
         self.assertEqual(checks["(g) secret DOWNSTREAM_FANOUT_TOKEN"], rehearse.UNKNOWN)
+        self.assertEqual(checks["(g) release-production environment secrets"], rehearse.UNKNOWN)
         self.assertEqual(checks["(g) maven-central environment secrets"], rehearse.UNKNOWN)
 
 

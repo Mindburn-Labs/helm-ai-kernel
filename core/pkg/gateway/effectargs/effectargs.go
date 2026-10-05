@@ -33,6 +33,8 @@ const MaxBytes = 65536
 const (
 	GitHubBranchCreateFromChanges = "github.branch.create_from_changes"
 	GitHubPullRequestCreateDraft  = "github.pull_request.create_draft"
+	GitHubPullRequestCreate       = "github.pull_request.create"
+	GitHubPullRequestMerge        = "github.pull_request.merge"
 	GitHubRepositoryGet           = "github.repository.get"
 	// AuthorityLift lifts one stop (Lift, HELM-751 s3b). Its target is
 	// "stop:<stop_id>".
@@ -155,12 +157,26 @@ func Validate(effectType, target string, raw []byte) (map[string]any, error) {
 		if err := args.validate(target); err != nil {
 			return nil, err
 		}
-	case GitHubPullRequestCreateDraft:
+	case GitHubPullRequestCreateDraft, GitHubPullRequestCreate:
 		if err := checkGitHubTarget(target); err != nil {
 			return nil, err
 		}
 		var args PullRequestCreateDraft
 		if err := requireExactKeys(raw, "schema", "branch_attempt_id", "base", "head", "head_sha", "title", "body"); err != nil {
+			return nil, err
+		}
+		if err := strictDecode(raw, &args); err != nil {
+			return nil, err
+		}
+		if err := args.validateSchema("helm." + effectType + ".v1"); err != nil {
+			return nil, err
+		}
+	case GitHubPullRequestMerge:
+		if err := checkGitHubTarget(target); err != nil {
+			return nil, err
+		}
+		var args PullRequestMerge
+		if err := requireExactKeys(raw, "schema", "pull_number", "head_sha", "base", "merge_method"); err != nil {
 			return nil, err
 		}
 		if err := strictDecode(raw, &args); err != nil {
@@ -226,6 +242,36 @@ type PullRequestCreateDraft struct {
 	HeadSHA         *string `json:"head_sha"`
 	Title           *string `json:"title"`
 	Body            *string `json:"body"`
+}
+
+// PullRequestMerge binds the approval to one pull request and exact head.
+// GitHub's default merge action honors the repository's merge queue and rules.
+// MergeMethod applies to a direct merge; the queue owns its configured method.
+type PullRequestMerge struct {
+	Schema      *string `json:"schema"`
+	PullNumber  *int64  `json:"pull_number"`
+	HeadSHA     *string `json:"head_sha"`
+	Base        *string `json:"base"`
+	MergeMethod *string `json:"merge_method"`
+}
+
+func (a PullRequestMerge) validate() error {
+	if err := constant("schema", a.Schema, "helm.github.pull_request.merge.v1"); err != nil {
+		return err
+	}
+	if a.PullNumber == nil || *a.PullNumber < 1 || *a.PullNumber > 9007199254740991 {
+		return invalid("pull_number must be a positive safe integer")
+	}
+	if err := match("head_sha", a.HeadSHA, shaPattern); err != nil {
+		return err
+	}
+	if err := checkHead(a.Base); err != nil {
+		return err
+	}
+	if a.MergeMethod == nil || (*a.MergeMethod != "merge" && *a.MergeMethod != "squash" && *a.MergeMethod != "rebase") {
+		return invalid("merge_method must be merge, squash or rebase")
+	}
+	return nil
 }
 
 var (
@@ -310,7 +356,11 @@ func (a ModelInferenceArgs) validate(target string) error {
 }
 
 func (a PullRequestCreateDraft) validate() error {
-	if err := constant("schema", a.Schema, "helm.github.pull_request.create_draft.v1"); err != nil {
+	return a.validateSchema("helm.github.pull_request.create_draft.v1")
+}
+
+func (a PullRequestCreateDraft) validateSchema(schema string) error {
+	if err := constant("schema", a.Schema, schema); err != nil {
 		return err
 	}
 	if err := match("branch_attempt_id", a.BranchAttemptID, uuidPattern); err != nil {

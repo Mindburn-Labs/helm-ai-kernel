@@ -19,6 +19,8 @@ var schemaFiles embed.FS
 var schemaFileOf = map[string]string{
 	GitHubBranchCreateFromChanges: "branch_create_from_changes.v1.json",
 	GitHubPullRequestCreateDraft:  "pull_request_create_draft.v1.json",
+	GitHubPullRequestCreate:       "pull_request_create.v1.json",
+	GitHubPullRequestMerge:        "pull_request_merge.v1.json",
 	GitHubRepositoryGet:           "repository_get.v1.json",
 	AuthorityProvision:            "provision.v1.json",
 	AuthorityNarrow:               "narrow.v1.json",

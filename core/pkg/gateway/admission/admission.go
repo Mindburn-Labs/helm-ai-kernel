@@ -360,7 +360,7 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 		caller.TenantID, attemptID, in.Arguments); err != nil {
 		return "", false, err
 	}
-	if in.EffectType == effectargs.GitHubPullRequestCreateDraft {
+	if in.EffectType == effectargs.GitHubPullRequestCreateDraft || in.EffectType == effectargs.GitHubPullRequestCreate {
 		if err := checkBranchAttempt(ctx, tx, caller, in); err != nil {
 			return "", false, err
 		}
@@ -421,6 +421,10 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	auth, err := lockAuthority(ctx, tx, caller, in.EffectType, leaf, chain)
 	if err != nil {
 		return err
+	}
+	// Merge remains high risk even if a tenant catalog row is lowered.
+	if in.EffectType == effectargs.GitHubPullRequestMerge && auth.riskClass != mandates.RiskIrreversible {
+		auth.riskClass = mandates.RiskHigh
 	}
 	if auth.principalFound && auth.principalKind == string(mandates.PrincipalHuman) && caller.ActorID == "" {
 		return refuse(CodePermissionDenied, contracts.ReasonInsufficientPrivilege,
@@ -1005,7 +1009,7 @@ func checkBranchAttempt(ctx context.Context, tx *sql.Tx, caller Caller, in Propo
 	err = github.CheckBranchAttempt(github.BranchAttemptView{
 		AttemptID: *pr.BranchAttemptID, TenantID: tenantID, EffectType: effectType, Target: target,
 		State: state, Outcome: outcome.String, Arguments: raw, CommitSHA: commit.String,
-	}, github.PullRequestProposal{TenantID: tenantID, Target: in.Target, Arguments: in.Arguments})
+	}, github.PullRequestProposal{TenantID: tenantID, Target: in.Target, EffectType: in.EffectType, Arguments: in.Arguments})
 	var refusal *adapters.Refusal
 	if errors.As(err, &refusal) {
 		return refuse(CodeFailedPrecondition, contracts.ReasonPreconditionFailed, "%s", refusal.Detail)

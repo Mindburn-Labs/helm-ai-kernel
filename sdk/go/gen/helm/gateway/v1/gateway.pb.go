@@ -3613,9 +3613,13 @@ type GitHubPullRequestResult struct {
 	BaseRef string `protobuf:"bytes,6,opt,name=base_ref,json=baseRef,proto3" json:"base_ref,omitempty"`
 	Draft   bool   `protobuf:"varint,7,opt,name=draft,proto3" json:"draft,omitempty"`
 	// "open" or "closed".
-	State         string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	State string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
+	// A closed pull request is not necessarily merged.
+	Merged bool `protobuf:"varint,9,opt,name=merged,proto3" json:"merged,omitempty"`
+	// Authoritative merged commit; meaningful only when merged is true.
+	MergeCommitSha string `protobuf:"bytes,10,opt,name=merge_commit_sha,json=mergeCommitSha,proto3" json:"merge_commit_sha,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GitHubPullRequestResult) Reset() {
@@ -3700,6 +3704,20 @@ func (x *GitHubPullRequestResult) GetDraft() bool {
 func (x *GitHubPullRequestResult) GetState() string {
 	if x != nil {
 		return x.State
+	}
+	return ""
+}
+
+func (x *GitHubPullRequestResult) GetMerged() bool {
+	if x != nil {
+		return x.Merged
+	}
+	return false
+}
+
+func (x *GitHubPullRequestResult) GetMergeCommitSha() string {
+	if x != nil {
+		return x.MergeCommitSha
 	}
 	return ""
 }
@@ -4127,7 +4145,7 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\x06branch\x18\x03 \x01(\tR\x06branch\x12\x1d\n" +
 	"\n" +
 	"branch_sha\x18\x04 \x01(\tR\tbranchSha\x12#\n" +
-	"\rbranch_exists\x18\x05 \x01(\bR\fbranchExists\"\xd9\x01\n" +
+	"\rbranch_exists\x18\x05 \x01(\bR\fbranchExists\"\x9b\x02\n" +
 	"\x17GitHubPullRequestResult\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
 	"\x06number\x18\x02 \x01(\x03R\x06number\x12\x17\n" +
@@ -4136,7 +4154,10 @@ const file_helm_gateway_v1_gateway_proto_rawDesc = "" +
 	"\bhead_sha\x18\x05 \x01(\tR\aheadSha\x12\x19\n" +
 	"\bbase_ref\x18\x06 \x01(\tR\abaseRef\x12\x14\n" +
 	"\x05draft\x18\a \x01(\bR\x05draft\x12\x14\n" +
-	"\x05state\x18\b \x01(\tR\x05state\"\x83\x01\n" +
+	"\x05state\x18\b \x01(\tR\x05state\x12\x16\n" +
+	"\x06merged\x18\t \x01(\bR\x06merged\x12(\n" +
+	"\x10merge_commit_sha\x18\n" +
+	" \x01(\tR\x0emergeCommitSha\"\x83\x01\n" +
 	"\x12GitHubBranchResult\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x1d\n" +
 	"\n" +

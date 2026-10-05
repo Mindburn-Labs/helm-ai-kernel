@@ -258,14 +258,16 @@ type Observation struct {
 // the JSON names are the proto field names, and TestResultTypesMirrorTheProto
 // keeps them in step.
 type GitHubPullRequestResult struct {
-	URL     string `json:"url"`
-	Number  int64  `json:"number"`
-	NodeID  string `json:"node_id"`
-	HeadRef string `json:"head_ref"`
-	HeadSHA string `json:"head_sha"`
-	BaseRef string `json:"base_ref"`
-	Draft   bool   `json:"draft"`
-	State   string `json:"state"`
+	URL            string `json:"url"`
+	Number         int64  `json:"number"`
+	NodeID         string `json:"node_id"`
+	HeadRef        string `json:"head_ref"`
+	HeadSHA        string `json:"head_sha"`
+	BaseRef        string `json:"base_ref"`
+	Draft          bool   `json:"draft"`
+	State          string `json:"state"`
+	Merged         bool   `json:"merged"`
+	MergeCommitSHA string `json:"merge_commit_sha"`
 }
 
 // GitHubBranchResult mirrors helm.gateway.v1.GitHubBranchResult.

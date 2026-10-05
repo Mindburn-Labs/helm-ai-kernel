@@ -1,4 +1,6 @@
-package github
+// Package githubtest provides the single in-process GitHub REST double for
+// adapter and gateway conformance. It has no external credentials or I/O.
+package githubtest
 
 import (
 	"crypto/sha1" //nolint:gosec // git object IDs
@@ -9,30 +11,33 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 )
 
-// fakeGitHub is an httptest GitHub that models the REST endpoints the adapter
+// GitHub is an httptest GitHub that models the REST endpoints the adapter
 // uses, with git's content addressing for blobs: a blob's ID is its real
 // SHA-1, so the adapter's blob checks are exercised for real. Trees and
 // commits get stable made-up IDs, and every commit is unique, as on GitHub,
 // where the commit time is part of the ID.
-type fakeGitHub struct {
-	t      *testing.T
+type GitHub struct {
+	t      testing.TB
 	owner  string
 	name   string
 	token  string
 	server *httptest.Server
 
-	mu      sync.Mutex
-	blobs   map[string]string
-	trees   map[string]map[string]fakeEntry
-	commits map[string]fakeCommit
-	refs    map[string]string // "heads/x" -> commit
-	pulls   []*fakePull
-	seq     int
+	mu            sync.Mutex
+	blobs         map[string]string
+	trees         map[string]map[string]fakeEntry
+	commits       map[string]fakeCommit
+	refs          map[string]string // "heads/x" -> commit
+	pulls         []*PullRequest
+	seq           int
+	mergeMode     string
+	mergeRequests int
 }
 
 type fakeEntry struct{ Mode, Blob string }
@@ -43,19 +48,24 @@ type fakeCommit struct {
 	Message string
 }
 
-type fakePull struct {
-	Number     int64
-	Title      string
-	Body       string
-	Head, Base string
-	HeadSHA    string
-	Draft      bool
-	State      string
+type PullRequest struct {
+	Number         int64
+	Title          string
+	Body           string
+	Head, Base     string
+	HeadSHA        string
+	Draft          bool
+	State          string
+	Merged         bool
+	MergeCommitSHA string
+	Stack          json.RawMessage
+	HeadRepository string
+	BaseRepository string
 }
 
-func newFakeGitHub(t *testing.T) *fakeGitHub {
-	f := &fakeGitHub{
-		t: t, owner: "mindburn-qual", name: "sandbox", token: "ghs_fake_installation_token",
+func New(t testing.TB) *GitHub {
+	f := &GitHub{
+		t: t, owner: "mindburn-qual", name: "sandbox", token: "ghs_fake_installation_token", mergeMode: "enqueued",
 		blobs: map[string]string{}, trees: map[string]map[string]fakeEntry{},
 		commits: map[string]fakeCommit{}, refs: map[string]string{},
 	}
@@ -77,7 +87,7 @@ func fakeID(parts ...string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (f *fakeGitHub) putTree(entries map[string]fakeEntry) string {
+func (f *GitHub) putTree(entries map[string]fakeEntry) string {
 	paths := make([]string, 0, len(entries))
 	for p := range entries {
 		paths = append(paths, p)
@@ -92,14 +102,14 @@ func (f *fakeGitHub) putTree(entries map[string]fakeEntry) string {
 	return id
 }
 
-func (f *fakeGitHub) putCommit(c fakeCommit) string {
+func (f *GitHub) putCommit(c fakeCommit) string {
 	f.seq++
 	id := fakeID(append([]string{"commit", c.Tree, c.Message, fmt.Sprint(f.seq)}, c.Parents...)...)
 	f.commits[id] = c
 	return id
 }
 
-func (f *fakeGitHub) write(w http.ResponseWriter, status int, v any) {
+func (f *GitHub) write(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
@@ -107,11 +117,11 @@ func (f *fakeGitHub) write(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-func (f *fakeGitHub) fail(w http.ResponseWriter, status int, msg string) {
+func (f *GitHub) fail(w http.ResponseWriter, status int, msg string) {
 	f.write(w, status, map[string]string{"message": msg, "documentation_url": "https://docs.github.com/rest"})
 }
 
-func (f *fakeGitHub) repoJSON() map[string]any {
+func (f *GitHub) repoJSON() map[string]any {
 	return map[string]any{
 		"id": 1, "node_id": "R_kgDOfake", "name": f.name, "full_name": f.owner + "/" + f.name,
 		"private": true, "default_branch": "main", "visibility": "private",
@@ -120,7 +130,7 @@ func (f *fakeGitHub) repoJSON() map[string]any {
 	}
 }
 
-func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
+func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Authorization") != "Bearer "+f.token {
 		f.fail(w, http.StatusUnauthorized, "Bad credentials")
 		return
@@ -134,7 +144,7 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var body map[string]any
-	if r.Method == http.MethodPost {
+	if r.Method == http.MethodPost || r.Method == http.MethodPut {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			f.fail(w, http.StatusBadRequest, "Problems parsing JSON")
 			return
@@ -185,6 +195,10 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/compare/"):
 		f.compare(w, strings.TrimPrefix(rest, "/compare/"))
+	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/pulls/"):
+		f.getPull(w, strings.TrimPrefix(rest, "/pulls/"))
+	case r.Method == http.MethodPut && strings.HasPrefix(rest, "/pulls/") && strings.HasSuffix(rest, "/merge-async"):
+		f.mergePull(w, r, strings.TrimSuffix(strings.TrimPrefix(rest, "/pulls/"), "/merge-async"), body)
 	case r.Method == http.MethodGet && rest == "/pulls":
 		f.listPulls(w, r)
 	case r.Method == http.MethodPost && rest == "/pulls":
@@ -194,7 +208,7 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *fakeGitHub) refJSON(name, sha string) map[string]any {
+func (f *GitHub) refJSON(name, sha string) map[string]any {
 	return map[string]any{
 		"ref": "refs/" + name, "node_id": "REF_fake",
 		"url":    f.server.URL + "/repos/" + f.owner + "/" + f.name + "/git/refs/" + name,
@@ -202,7 +216,7 @@ func (f *fakeGitHub) refJSON(name, sha string) map[string]any {
 	}
 }
 
-func (f *fakeGitHub) commitJSON(sha string, c fakeCommit) map[string]any {
+func (f *GitHub) commitJSON(sha string, c fakeCommit) map[string]any {
 	parents := []map[string]string{}
 	for _, p := range c.Parents {
 		parents = append(parents, map[string]string{"sha": p})
@@ -216,7 +230,7 @@ func (f *fakeGitHub) commitJSON(sha string, c fakeCommit) map[string]any {
 	}
 }
 
-func (f *fakeGitHub) createTree(w http.ResponseWriter, body map[string]any) {
+func (f *GitHub) createTree(w http.ResponseWriter, body map[string]any) {
 	baseTree, _ := body["base_tree"].(string)
 	base, ok := f.trees[baseTree]
 	if !ok {
@@ -242,7 +256,7 @@ func (f *fakeGitHub) createTree(w http.ResponseWriter, body map[string]any) {
 	f.write(w, http.StatusCreated, map[string]any{"sha": f.putTree(entries), "truncated": false})
 }
 
-func (f *fakeGitHub) createCommit(w http.ResponseWriter, body map[string]any) {
+func (f *GitHub) createCommit(w http.ResponseWriter, body map[string]any) {
 	tree, _ := body["tree"].(string)
 	message, _ := body["message"].(string)
 	if _, ok := f.trees[tree]; !ok {
@@ -266,7 +280,7 @@ func (f *fakeGitHub) createCommit(w http.ResponseWriter, body map[string]any) {
 
 // compare diffs the two commits' trees, as GitHub's three-dot comparison
 // does when base is the merge base.
-func (f *fakeGitHub) compare(w http.ResponseWriter, spec string) {
+func (f *GitHub) compare(w http.ResponseWriter, spec string) {
 	baseSHA, headSHA, ok := strings.Cut(spec, "...")
 	base, okBase := f.commits[baseSHA]
 	head, okHead := f.commits[headSHA]
@@ -311,22 +325,30 @@ func (f *fakeGitHub) compare(w http.ResponseWriter, spec string) {
 	})
 }
 
-func (f *fakeGitHub) pullJSON(p *fakePull) map[string]any {
+func (f *GitHub) pullJSON(p *PullRequest) map[string]any {
 	full := f.owner + "/" + f.name
+	headRepo, baseRepo := p.HeadRepository, p.BaseRepository
+	if headRepo == "" {
+		headRepo = full
+	}
+	if baseRepo == "" {
+		baseRepo = full
+	}
 	return map[string]any{
 		"url":      f.server.URL + "/repos/" + full + "/pulls/" + fmt.Sprint(p.Number),
 		"html_url": "https://github.com/" + full + "/pull/" + fmt.Sprint(p.Number),
 		"id":       1000 + p.Number, "node_id": fmt.Sprintf("PR_kwDOfake%d", p.Number),
 		"number": p.Number, "state": p.State, "title": p.Title, "body": p.Body, "draft": p.Draft,
+		"merged": p.Merged, "merge_commit_sha": p.MergeCommitSHA, "stack": p.Stack,
 		"locked": false, "user": map[string]string{"login": "helm-gateway[bot]"},
 		"head": map[string]any{"label": f.owner + ":" + p.Head, "ref": p.Head, "sha": p.HeadSHA,
-			"repo": map[string]any{"full_name": full}},
+			"repo": map[string]any{"full_name": headRepo}},
 		"base": map[string]any{"label": f.owner + ":" + p.Base, "ref": p.Base,
-			"sha": f.refs["heads/"+p.Base], "repo": map[string]any{"full_name": full}},
+			"sha": f.refs["heads/"+p.Base], "repo": map[string]any{"full_name": baseRepo}},
 	}
 }
 
-func (f *fakeGitHub) listPulls(w http.ResponseWriter, r *http.Request) {
+func (f *GitHub) listPulls(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	state := q.Get("state")
 	if state == "" {
@@ -343,7 +365,7 @@ func (f *fakeGitHub) listPulls(w http.ResponseWriter, r *http.Request) {
 	f.write(w, http.StatusOK, out)
 }
 
-func (f *fakeGitHub) createPull(w http.ResponseWriter, body map[string]any) {
+func (f *GitHub) createPull(w http.ResponseWriter, body map[string]any) {
 	title, _ := body["title"].(string)
 	text, _ := body["body"].(string)
 	head, _ := body["head"].(string)
@@ -360,13 +382,13 @@ func (f *fakeGitHub) createPull(w http.ResponseWriter, body map[string]any) {
 			return
 		}
 	}
-	p := &fakePull{Number: int64(len(f.pulls) + 1), Title: title, Body: text, Head: head, Base: base, HeadSHA: headSHA, Draft: draft, State: "open"}
+	p := &PullRequest{Number: int64(len(f.pulls) + 1), Title: title, Body: text, Head: head, Base: base, HeadSHA: headSHA, Draft: draft, State: "open"}
 	f.pulls = append(f.pulls, p)
 	f.write(w, http.StatusCreated, f.pullJSON(p))
 }
 
 // markReady turns a draft into a ready pull request, as a person would.
-func (f *fakeGitHub) markReady(number int64) {
+func (f *GitHub) MarkReady(number int64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, p := range f.pulls {
@@ -374,4 +396,131 @@ func (f *fakeGitHub) markReady(number int64) {
 			p.Draft = false
 		}
 	}
+}
+
+// URL returns the local REST server origin.
+func (f *GitHub) URL() string { return f.server.URL }
+
+// Owner is the fixture repository's owner.
+func (f *GitHub) Owner() string { return f.owner }
+
+// Repository is the fixture repository's name.
+func (f *GitHub) Repository() string { return f.name }
+
+// Token is a fake-only accepted installation credential.
+func (f *GitHub) Token() string { return f.token }
+
+// Head returns the current fixture branch head.
+func (f *GitHub) Head(branch string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refs["heads/"+branch]
+}
+
+// MergeRequests counts attempted provider merge writes, including refusals.
+func (f *GitHub) MergeRequests() int { f.mu.Lock(); defer f.mu.Unlock(); return f.mergeRequests }
+
+// SetMergeMode selects an acknowledged queue, pending request, or actual merge.
+func (f *GitHub) SetMergeMode(mode string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch mode {
+	case "enqueued", "pending", "merged":
+		f.mergeMode = mode
+	default:
+		f.t.Fatalf("unsupported fake merge mode %q", mode)
+	}
+}
+
+// EditPull models an independent provider-side change under the fixture lock.
+func (f *GitHub) EditPull(number int64, edit func(*PullRequest)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.pulls {
+		if p.Number == number {
+			edit(p)
+			return
+		}
+	}
+	f.t.Fatalf("missing fake pull %d", number)
+}
+
+// CompleteMerge makes the queued effect visible through the authoritative read.
+func (f *GitHub) CompleteMerge(number int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.pulls {
+		if p.Number == number {
+			f.completeMerge(p)
+			return
+		}
+	}
+	f.t.Fatalf("missing fake pull %d", number)
+}
+func (f *GitHub) completeMerge(p *PullRequest) {
+	if p.Merged {
+		return
+	}
+	head := f.commits[p.HeadSHA]
+	sha := f.putCommit(fakeCommit{Tree: head.Tree, Parents: []string{f.refs["heads/"+p.Base], p.HeadSHA}, Message: "merge pull"})
+	p.Merged = true
+	p.State = "closed"
+	p.MergeCommitSHA = sha
+	f.refs["heads/"+p.Base] = sha
+}
+func (f *GitHub) getPull(w http.ResponseWriter, raw string) {
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err == nil {
+		for _, p := range f.pulls {
+			if p.Number == n {
+				f.write(w, http.StatusOK, f.pullJSON(p))
+				return
+			}
+		}
+	}
+	f.fail(w, http.StatusNotFound, "Not Found")
+}
+func (f *GitHub) mergePull(w http.ResponseWriter, r *http.Request, raw string, body map[string]any) {
+	f.mergeRequests++
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		f.fail(w, http.StatusNotFound, "Not Found")
+		return
+	}
+	for _, p := range f.pulls {
+		if p.Number != n {
+			continue
+		}
+		if r.Header.Get("X-GitHub-Api-Version") != "2026-03-10" || body["sha"] != p.HeadSHA || body["merge_action"] != "default" || body["bypass_rules"] != false || p.Draft || p.State != "open" {
+			f.fail(w, http.StatusUnprocessableEntity, "merge precondition refused")
+			return
+		}
+		method, _ := body["merge_method"].(string)
+		if method != "merge" && method != "squash" && method != "rebase" {
+			f.fail(w, http.StatusUnprocessableEntity, "bad merge method")
+			return
+		}
+		status := http.StatusOK
+		details := map[string]any{"message": "merge accepted"}
+		switch f.mergeMode {
+		case "pending":
+			status = http.StatusAccepted
+			details["uuid"] = "fake-merge-request"
+			details["expected_head_sha"] = p.HeadSHA
+			details["merge_method"] = method
+			details["merge_action"] = "default"
+			details["bypass_rules"] = false
+		case "merged":
+			f.completeMerge(p)
+			details["sha"] = p.MergeCommitSHA
+		}
+		f.write(w, status, map[string]any{"status": f.mergeMode, "details": details})
+		return
+	}
+	f.fail(w, http.StatusNotFound, "Not Found")
+}
+func blobSHA1(content string) string {
+	h := sha1.New() //nolint:gosec // git object addressing, independent provider fixture
+	fmt.Fprintf(h, "blob %d\x00%s", len(content), content)
+	return hex.EncodeToString(h.Sum(nil))
 }

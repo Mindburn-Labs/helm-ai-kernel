@@ -1042,6 +1042,10 @@ message GitHubPullRequestResult {
   bool draft = 7;
   // "open" or "closed".
   string state = 8;
+  // A closed pull request is not necessarily merged.
+  bool merged = 9;
+  // Authoritative merged commit; meaningful only when merged is true.
+  string merge_commit_sha = 10;
 }
 
 // GitHubBranchResult is a branch as the adapter read it back (HELM-753).

@@ -105,6 +105,8 @@ type keyState struct {
 var permissions = map[string]map[string]string{
 	"github.repository.get":             {"contents": "read", "metadata": "read"},
 	"github.branch.create_from_changes": {"contents": "write", "metadata": "read"},
+	"github.pull_request.merge":         {"contents": "write", "metadata": "read"},
+	"github.pull_request.create":        {"pull_requests": "write", "contents": "read", "metadata": "read"},
 	"github.pull_request.create_draft":  {"pull_requests": "write", "contents": "read", "metadata": "read"},
 }
 

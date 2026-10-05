@@ -106,7 +106,7 @@ func observationProto(o *admission.Observation) *gatewayv1.Observation {
 		r := o.GitHubPullRequest
 		out.Result = &gatewayv1.Observation_GithubPullRequest{GithubPullRequest: &gatewayv1.GitHubPullRequestResult{
 			Url: r.URL, Number: r.Number, NodeId: r.NodeID, HeadRef: r.HeadRef, HeadSha: r.HeadSHA, BaseRef: r.BaseRef,
-			Draft: r.Draft, State: r.State,
+			Draft: r.Draft, State: r.State, Merged: r.Merged, MergeCommitSha: r.MergeCommitSHA,
 		}}
 	case o.GitHubBranch != nil:
 		r := o.GitHubBranch

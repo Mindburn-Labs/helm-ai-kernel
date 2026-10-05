@@ -215,6 +215,8 @@ func TestDeclarationsMatchTheSchemas(t *testing.T) {
 		"branch_create_from_changes.v1.json": EffectBranchCreateFromChanges,
 		"pull_request_create_draft.v1.json":  EffectPullRequestCreateDraft,
 		"repository_get.v1.json":             EffectRepositoryGet,
+		"pull_request_create.v1.json":        EffectPullRequestCreate,
+		"pull_request_merge.v1.json":         EffectPullRequestMerge,
 	} {
 		raw, err := os.ReadFile(filepath.Join(schemasDir(t), file))
 		if err != nil {
@@ -244,8 +246,8 @@ func TestDeclarationsMatchTheSchemas(t *testing.T) {
 				effectType, d.TargetForm, len(d.ArgumentSchema), d.Grantable, d.Description, x["target"])
 		}
 	}
-	if len(New().Declarations()) != 3 {
-		t.Error("the adapter declares other than its three effects")
+	if len(New().Declarations()) != 5 {
+		t.Error("the adapter declares other than its five effects")
 	}
 }
 

@@ -73,6 +73,8 @@ def check_kind_smoke(path: Path) -> None:
         "--set helm.policy.source.kind=controlplane",
         "--set helm.policy.signature.required=true",
         "policy-controlplane-fixture",
+        'LEGACY_CHART_DIGEST="sha256:942b12984b86b3e54178e54a3a91965af97c61ed6897e29b34e7a018fa50f871"',
+        'Digest: $LEGACY_CHART_DIGEST',
     ]
     for token in required:
         if token not in text:

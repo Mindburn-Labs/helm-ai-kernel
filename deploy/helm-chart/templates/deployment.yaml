@@ -172,8 +172,8 @@ spec:
               watermark="$data_dir/policy-replay-watermarks.json"
               source_key="/var/run/helm-signing-key/root.key"
 
-              if [ ! -r "$source_key" ]; then
-                echo "authority signing Secret is not readable" >&2
+              if [ ! -r "$source_key" ] || [ ! -s "$source_key" ]; then
+                echo "authority signing Secret is missing, empty, or unreadable" >&2
                 exit 1
               fi
 

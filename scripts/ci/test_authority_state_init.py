@@ -79,7 +79,15 @@ def main() -> None:
                 assert "refusing symlinked durable authority root key" in result.stderr
                 assert key.is_symlink() and target.read_bytes() == b""
 
-    print("authority-state init ok: absent and empty copy; matching preserves; differing and symlink refuse")
+        source.write_bytes(b"")
+        empty_source_dir = root / "empty-source"
+        empty_source_dir.mkdir()
+        empty_source_result = run(script, empty_source_dir)
+        assert empty_source_result.returncode != 0
+        assert "signing Secret is missing, empty, or unreadable" in empty_source_result.stderr
+        assert not (empty_source_dir / "root.key").exists()
+
+    print("authority-state init ok: empty source, differing key and symlink refuse; empty durable key repairs")
 
 
 if __name__ == "__main__":

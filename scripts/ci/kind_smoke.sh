@@ -224,8 +224,8 @@ legacy_mounted=0
 for _ in $(seq 1 60); do
     if kubectl -n "$NAMESPACE" get pods \
         -l "app.kubernetes.io/name=helm-ai-kernel,app.kubernetes.io/instance=${RELEASE}" \
-        -o jsonpath='{.items[0].status.containerStatuses[0].name}' 2>/dev/null \
-        | grep -qx 'helm-ai-kernel'; then
+        -o jsonpath='{.items[0].status.containerStatuses[0].state.running.startedAt}' 2>/dev/null \
+        | grep -q .; then
         legacy_mounted=1
         break
     fi

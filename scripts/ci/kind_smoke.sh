@@ -17,6 +17,8 @@ TENANT_ID="${HELM_SMOKE_TENANT_ID:-tenant-smoke}"
 AGENT_ID="${HELM_SMOKE_AGENT_ID:-agent.smoke}"
 KUBE_HELM_IMAGE="${KUBE_HELM_IMAGE:-docker.io/alpine/helm@sha256:105741fa6621ed9a3ea944066de78bb27d4b9bb93a56ce8e7cb4d621e1e4bbf2}"
 POLICY_FIXTURE_IMAGE="${HELM_SMOKE_POLICY_FIXTURE_IMAGE:-docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662}"
+LEGACY_CHART_REF="oci://ghcr.io/mindburn-labs/charts/helm-ai-kernel"
+LEGACY_CHART_DIGEST="sha256:942b12984b86b3e54178e54a3a91965af97c61ed6897e29b34e7a018fa50f871"
 POLICY_FIXTURE_CONFIGMAP="helm-policy-controlplane-fixture"
 POLICY_AUTH_SECRET="helm-policy-reader"
 POLICY_FIXTURE_PORT=18081
@@ -134,6 +136,7 @@ helm_runner() {
     docker run --rm \
         --mount "type=bind,source=${ROOT},target=/work,readonly" \
         --mount "type=bind,source=${HELM_KUBECONFIG},target=/root/.kube/config,readonly" \
+        --mount "type=bind,source=${TMP_DIR},target=${TMP_DIR}" \
         -w /work \
         --network kind \
         "$KUBE_HELM_IMAGE" "$@"
@@ -163,7 +166,7 @@ docker exec "${CLUSTER}-control-plane" \
     ctr --namespace k8s.io images tag --force "$IMAGE" "$IMAGE_DIGEST_REF" >/dev/null
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl label namespace "$NAMESPACE" \
-    pod-security.kubernetes.io/enforce=restricted \
+    pod-security.kubernetes.io/enforce=baseline \
     pod-security.kubernetes.io/enforce-version=latest \
     --overwrite >/dev/null
 
@@ -187,6 +190,109 @@ kubectl -n "$NAMESPACE" create configmap "$POLICY_FIXTURE_CONFIGMAP" \
 kubectl -n "$NAMESPACE" create secret generic "$POLICY_AUTH_SECRET" \
     --from-literal=HELM_POLICY_BEARER_TOKEN=kind-smoke-policy-reader \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
+# Install the published 0.7.2 chart first. Its signing Secret subPath mount
+# leaves a zero-byte root.key on the PVC. Pull by version, verify the OCI
+# manifest digest, and upgrade from the verified local chart archive.
+mkdir -p "$TMP_DIR/charts"
+helm_runner pull "$LEGACY_CHART_REF" --version 0.7.2 --destination "$TMP_DIR/charts" \
+    >"$TMP_DIR/legacy-chart-pull.log" 2>&1
+if ! grep -qF "Digest: $LEGACY_CHART_DIGEST" "$TMP_DIR/legacy-chart-pull.log"; then
+    echo "::error::published 0.7.2 chart digest differs from the upgrade fixture pin"
+    exit 1
+fi
+LEGACY_CHART="$TMP_DIR/charts/helm-ai-kernel-0.7.2.tgz"
+helm_runner template "$RELEASE" "$LEGACY_CHART" --namespace "$NAMESPACE" \
+    >"$TMP_DIR/legacy-chart-render.yaml"
+if ! grep -qF 'subPath: root.key' "$TMP_DIR/legacy-chart-render.yaml"; then
+    echo "::error::published 0.7.2 chart no longer has the root.key subPath mount"
+    exit 1
+fi
+helm_runner upgrade --install "$RELEASE" "$LEGACY_CHART" \
+    --namespace "$NAMESPACE" \
+    --set helm.signing.key="$SIGNING_KEY" \
+    --set helm.auth.adminAPIKey="$ADMIN_KEY" \
+    --set helm.auth.serviceAPIKey="$SERVICE_KEY" \
+    --set helm.auth.tenantID="$TENANT_ID" \
+    --set helm.auth.principalID="$AGENT_ID" \
+    --set image.repository="$IMAGE_REPOSITORY" \
+    --set image.tag=local \
+    --set image.pullPolicy=IfNotPresent \
+    --set persistence.enabled=true
+
+legacy_mounted=0
+for _ in $(seq 1 60); do
+    if kubectl -n "$NAMESPACE" get pods \
+        -l "app.kubernetes.io/name=helm-ai-kernel,app.kubernetes.io/instance=${RELEASE}" \
+        -o jsonpath='{.items[0].status.containerStatuses[0].name}' 2>/dev/null \
+        | grep -qx 'helm-ai-kernel'; then
+        legacy_mounted=1
+        break
+    fi
+    sleep 1
+done
+if [ "$legacy_mounted" != "1" ]; then
+    echo "::error::0.7.2 pod never mounted its durable root.key subPath"
+    exit 1
+fi
+
+# A short restricted Job checks the same PVC and Secret without printing key
+# bytes. The first check proves the legacy placeholder; the second, below,
+# proves the current init replaced it with the signing Secret key.
+check_authority_volume() {
+    local name="$1"
+    local check="$2"
+    kubectl -n "$NAMESPACE" apply -f - >/dev/null <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${name}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: check
+          image: ${POLICY_FIXTURE_IMAGE}
+          command: ["/bin/sh", "-ec"]
+          args: ["${check}"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: signing-key
+              mountPath: /secret
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ${FULLNAME}-data
+        - name: signing-key
+          secret:
+            secretName: ${FULLNAME}-signing
+            items:
+              - key: signing-key
+                path: root.key
+EOF
+    kubectl -n "$NAMESPACE" wait --for=condition=complete "job/${name}" --timeout=180s
+    kubectl -n "$NAMESPACE" delete "job/${name}" --wait=true >/dev/null
+}
+
+check_authority_volume legacy-root-key-empty 'test -f /data/root.key && test ! -s /data/root.key'
+kubectl label namespace "$NAMESPACE" pod-security.kubernetes.io/enforce=restricted --overwrite >/dev/null
 
 helm_runner upgrade --install "$RELEASE" deploy/helm-chart \
     --namespace "$NAMESPACE" \
@@ -255,6 +361,7 @@ kubectl -n "$NAMESPACE" patch "deployment/${FULLNAME}" \
     --patch-file "$TMP_DIR/policy-controlplane-patch.yaml" >/dev/null
 
 kubectl -n "$NAMESPACE" rollout status "deployment/${FULLNAME}" --timeout=180s
+check_authority_volume upgraded-root-key-matches 'test -s /data/root.key && cmp -s /secret/root.key /data/root.key'
 
 # port-forward binds to one pod, so it has to be reopened after a restart.
 start_port_forward() {

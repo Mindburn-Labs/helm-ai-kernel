@@ -204,7 +204,12 @@ spec:
                 exit 1
               fi
 
-              if [ -f "$root_key" ]; then
+              # Chart 0.7.x mounted the Secret with subPath at this path. On a
+              # durable volume kubelet could leave a zero-byte regular file;
+              # that file is not signing authority. Replace it atomically like
+              # an absent key, but keep the mismatch guard for every non-empty
+              # durable key.
+              if [ -f "$root_key" ] && [ -s "$root_key" ]; then
                 if [ ! -r "$root_key" ]; then
                   echo "durable authority root key exists but is not readable by the runtime identity" >&2
                   exit 1

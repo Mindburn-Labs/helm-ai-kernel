@@ -709,6 +709,18 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             for path in WORKFLOWS.glob("*.y*ml")
         })
 
+    def test_secret_scope_rejects_an_unprotected_release_environment(self) -> None:
+        binaries = self.job("binaries")
+        protected = "    environment: release-production\n"
+        self.assertIn(protected, binaries)
+        mutated = self.workflow.replace(
+            binaries,
+            binaries.replace(protected, "    environment: unprotected\n", 1),
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            self.assert_protected_secret_environments({"release.yml": mutated})
+
     def test_secret_scope_rejects_indirect_and_unbound_readers(self) -> None:
         protected = next(iter(PROTECTED_SECRET_ENVIRONMENTS))
         indexed = "secrets[" + repr(protected) + "]"

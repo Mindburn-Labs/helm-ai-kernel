@@ -282,21 +282,24 @@ class ChartAndExitTest(unittest.TestCase):
         self.assertEqual(checks["(g) maven-central environment secrets"], rehearse.UNKNOWN)
 
     def test_indexed_secret_is_reported_with_its_job_environment(self) -> None:
-        reference = "secrets[" + repr("MAVEN_USERNAME") + "]"
-        workflow = "name: fixture\njobs:\n  publish:\n    environment: maven-central\n    env:\n      USER: ${{ " + reference + " }}\n"
-        secrets, _ = rehearse.release_inputs(workflow)
-        self.assertEqual(secrets, {"MAVEN_USERNAME": {"maven-central"}})
-        checks = {check.name: check.status for check in rehearse.check_secrets(workflow, {})}
-        self.assertEqual(checks["(g) maven-central environment secrets"], rehearse.UNKNOWN)
-        self.assertNotIn("(g) indirect secret reads", checks)
+        for reference in ("secrets[" + repr("MAVEN_USERNAME") + "]", "SECRETS . MAVEN_USERNAME"):
+            with self.subTest(reference=reference):
+                workflow = "name: fixture\njobs:\n  publish:\n    environment: maven-central\n    env:\n      USER: ${{ " + reference + " }}\n"
+                secrets, _ = rehearse.release_inputs(workflow)
+                self.assertEqual(secrets, {"MAVEN_USERNAME": {"maven-central"}})
+                checks = {check.name: check.status for check in rehearse.check_secrets(workflow, {})}
+                self.assertEqual(checks["(g) maven-central environment secrets"], rehearse.UNKNOWN)
+                self.assertNotIn("(g) indirect secret reads", checks)
 
     def test_indirect_secret_reads_fail_rehearsal(self) -> None:
         workflow = "name: fixture\njobs:\n  publish:\n    runs-on: ubuntu-latest\n"
         references = {
             "whole context": "    env:\n      ALL: ${{ toJSON(secrets) }}\n",
             "raw context": "    env:\n      ALL: ${{ secrets }}\n",
+            "uppercase raw context": "    env:\n      ALL: ${{ SECRETS }}\n",
             "inherit": "    secrets: inherit\n",
             "dynamic index": "    env:\n      VALUE: ${{ secrets[vars.SECRET_NAME] }}\n",
+            "spaced dynamic index": "    env:\n      VALUE: ${{ SECRETS [ vars.SECRET_NAME ] }}\n",
         }
         for label, reference in references.items():
             with self.subTest(reference=label):

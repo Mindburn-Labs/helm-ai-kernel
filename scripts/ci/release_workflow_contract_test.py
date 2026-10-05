@@ -119,7 +119,8 @@ PROTECTED_SECRET_ENVIRONMENTS = {
 }
 
 SECRET_REFERENCE = re.compile(
-    r"\bsecrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\])"
+    r"\bsecrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\])",
+    re.IGNORECASE,
 )
 
 
@@ -488,6 +489,10 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then', binaries)
         self.assertIn("HOMEBREW_TAP_TOKEN must be configured before publishing a release", binaries)
         self.assertLess(
+            binaries.index('if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then'),
+            binaries.index("Build and stage release assets"),
+        )
+        self.assertLess(
             binaries.index("Require explicit external release EvidencePack trust"),
             binaries.index("Build and stage release assets"),
         )
@@ -660,9 +665,9 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         checked: dict[str, str] = {}
         for filename, text in sorted(workflows.items()):
             self.assertNotRegex(text, r"(?i)\btojson\s*\(\s*secrets\s*\)", filename)
-            self.assertNotRegex(text, r"\$\{\{\s*secrets\s*\}\}", filename)
-            self.assertNotRegex(text, r"(?m)^\s*secrets:\s*inherit\s*(?:#.*)?$", filename)
-            self.assertNotRegex(SECRET_REFERENCE.sub("", text), r"\bsecrets\s*\[", filename)
+            self.assertNotRegex(text, r"(?i)\$\{\{\s*secrets\s*\}\}", filename)
+            self.assertNotRegex(text, r"(?im)^\s*secrets:\s*inherit\s*(?:#.*)?$", filename)
+            self.assertNotRegex(SECRET_REFERENCE.sub("", text), r"(?i)\bsecrets\s*\[", filename)
             if "\njobs:\n" not in text:
                 continue
             jobs = re.finditer(
@@ -710,9 +715,13 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         prefix = "  unbound-reader:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ "
         injections = {
             "indexed protected secret": prefix + indexed + " }}\n",
+            "uppercase protected secret": prefix + "SECRETS." + protected + " }}\n",
+            "spaced protected secret": prefix + "secrets . " + protected + " }}\n",
             "dynamic secret key": prefix + "secrets[vars.SECRET_NAME] }}\n",
+            "spaced dynamic secret key": prefix + "SECRETS [ vars.SECRET_NAME ] }}\n",
             "all secrets serialized": prefix + "toJSON(secrets) }}\n",
             "all secrets passed directly": prefix + "secrets }}\n",
+            "uppercase whole context": prefix + "SECRETS }}\n",
             "inherited secrets": "  reusable:\n    uses: org/repo/.github/workflows/x.yml@main\n    secrets: inherit\n",
         }
         for label, injection in injections.items():

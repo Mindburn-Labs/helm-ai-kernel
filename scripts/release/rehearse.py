@@ -55,7 +55,8 @@ PINS = "release/console-local-sidecar-pins.json"
 SEMVER_TAG = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)$")
 TIMEOUT = 20
 SECRET_REFERENCE = re.compile(
-    r"\bsecrets(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\])"
+    r"\bsecrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\])",
+    re.IGNORECASE,
 )
 
 PASS, FAIL, ACTION, UNKNOWN = "PASS", "FAIL", "ACTION-NEEDED", "UNKNOWN"
@@ -463,9 +464,9 @@ def check_secrets(workflow: str, env: dict[str, str]) -> list[Check]:
     indirect = []
     if re.search(r"(?i)\btojson\s*\(\s*secrets\s*\)|\$\{\{\s*secrets\s*\}\}", workflow):
         indirect.append("whole secrets context")
-    if re.search(r"(?m)^\s*secrets:\s*inherit\s*(?:#.*)?$", workflow):
+    if re.search(r"(?im)^\s*secrets:\s*inherit\s*(?:#.*)?$", workflow):
         indirect.append("inherited secrets")
-    if re.search(r"\bsecrets\s*\[", SECRET_REFERENCE.sub("", workflow)):
+    if re.search(r"(?i)\bsecrets\s*\[", SECRET_REFERENCE.sub("", workflow)):
         indirect.append("dynamic secret index")
     if indirect:
         checks.append(Check(

@@ -127,6 +127,57 @@ type mergeReplyTransport struct {
 	body   string
 }
 
+// damagedMergeAnswer models a provider that accepts the write before the
+// response is truncated or changed. A contract error cannot prove non-delivery.
+type damagedMergeAnswer struct {
+	base   http.RoundTripper
+	status int
+	body   string
+}
+
+func (m damagedMergeAnswer) RoundTrip(r *http.Request) (*http.Response, error) {
+	resp, err := m.base.RoundTrip(r)
+	if err == nil && r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/merge-async") {
+		resp.Body.Close()
+		resp.StatusCode = m.status
+		resp.Body = io.NopCloser(strings.NewReader(m.body))
+		resp.ContentLength = int64(len(m.body))
+		resp.Header.Del("Content-Length")
+	}
+	return resp, err
+}
+
+func TestPullRequestMergeMalformedAnswerRetainsQueuedExposure(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"conflict-failed", http.StatusConflict, `{"status":"failed"}`},
+		{"accepted-failed", http.StatusAccepted, `{"status":"failed","details":{"message":"failure"}}`},
+		{"ok-failed", http.StatusOK, `{"status":"failed","details":{"message":"failure"}}`},
+		{"accepted-enqueued", http.StatusAccepted, `{"status":"enqueued","details":{"message":"queued"}}`},
+		{"unexpected-http", http.StatusCreated, `{"status":"enqueued","details":{"message":"queued"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, e, effect, number := mergeFixture(t)
+			f.SetMergeMode("pending")
+			a, _ := e.adapter(func(base http.RoundTripper) http.RoundTripper {
+				return damagedMergeAnswer{base: base, status: tc.status, body: tc.body}
+			})
+			wantDispatch(t, a.Dispatch(context.Background(), e.creds(), effect, permit(effect)), adapters.DispatchIndefinite, contracts.ReasonConnectorContractDrift)
+			clean, _ := e.adapter(nil)
+			wantObserve(t, clean.Observe(context.Background(), e.creds(), effect), adapters.OutcomeUnknown, "")
+			f.CompleteMerge(number)
+			wantObserve(t, clean.Observe(context.Background(), e.creds(), effect), adapters.OutcomeSucceeded, "")
+			wantDispatch(t, clean.Dispatch(context.Background(), e.creds(), effect, permit(effect)), adapters.DispatchSent, "")
+			if f.MergeRequests() != 1 {
+				t.Fatal("damaged acknowledgement caused another merge write")
+			}
+		})
+	}
+}
+
 func (m mergeReplyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/merge-async") {
 		return &http.Response{StatusCode: m.status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(m.body)), Request: r}, nil

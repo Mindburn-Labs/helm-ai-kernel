@@ -109,12 +109,16 @@ func (c *client) call(ctx context.Context, method, path string, query url.Values
 		if err := json.Unmarshal(raw, out); err != nil {
 			return &providerError{Reason: contracts.ReasonConnectorContractDrift, Status: resp.StatusCode, Detail: "invalid async merge conflict response"}
 		}
+		out.(*mergeReply).HTTPStatus = resp.StatusCode
 		return nil
 	}
 	switch status := resp.StatusCode; {
 	case status >= 200 && status < 300:
 		if err := json.Unmarshal(raw, out); err != nil {
 			return &providerError{Reason: contracts.ReasonConnectorContractDrift, Status: status, Detail: fmt.Sprintf("%s %s: the answer is not the expected JSON", method, path)}
+		}
+		if reply, ok := out.(*mergeReply); ok {
+			reply.HTTPStatus = status
 		}
 		if method == http.MethodGet {
 			c.evidence = append(c.evidence, raw)

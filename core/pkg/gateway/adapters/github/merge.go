@@ -14,8 +14,9 @@ import (
 // mergeReply is the GitHub2026-03-10 asynchronous merge response. Pending and
 // enqueued only acknowledge the request; neither proves the effect happened.
 type mergeReply struct {
-	Status  string `json:"status"`
-	Details struct {
+	HTTPStatus int    `json:"-"`
+	Status     string `json:"status"`
+	Details    struct {
 		Message         string `json:"message"`
 		UUID            string `json:"uuid"`
 		SHA             string `json:"sha"`
@@ -93,6 +94,15 @@ func (c *client) dispatchMerge(ctx context.Context, args mergeArgs) adapters.Dis
 	bad := func(why string) adapters.DispatchResult {
 		return indefinite(adapters.Refuse(contracts.ReasonConnectorContractDrift, "%s", why))
 	}
+	if (reply.HTTPStatus == http.StatusAccepted || reply.HTTPStatus == http.StatusConflict) && reply.Status != "pending" {
+		return bad("async merge HTTP status does not match its pending result")
+	}
+	if reply.HTTPStatus == http.StatusOK && reply.Status != "merged" && reply.Status != "enqueued" {
+		return bad("async merge HTTP status does not match its completed result")
+	}
+	if reply.HTTPStatus != http.StatusOK && reply.HTTPStatus != http.StatusAccepted && reply.HTTPStatus != http.StatusConflict {
+		return bad("unrecognized async merge HTTP status")
+	}
 	switch reply.Status {
 	case "pending":
 		if reply.Details.UUID == "" || reply.Details.ExpectedHeadSHA != args.HeadSHA || reply.Details.MergeMethod != args.MergeMethod || reply.Details.MergeAction != "default" || reply.Details.BypassRules {
@@ -104,8 +114,6 @@ func (c *client) dispatchMerge(ctx context.Context, args mergeArgs) adapters.Dis
 		if !shaRE.MatchString(reply.Details.SHA) {
 			return bad("merge acknowledgement has no valid commit SHA")
 		}
-	case "failed":
-		return notSent(adapters.Refuse(contracts.ReasonPreconditionFailed, "GitHub refused the asynchronous merge"))
 	default:
 		return bad("unrecognized asynchronous merge state")
 	}

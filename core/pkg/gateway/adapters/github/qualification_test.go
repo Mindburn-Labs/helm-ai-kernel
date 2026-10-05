@@ -41,7 +41,11 @@ type qualEnv struct {
 	limitations []string
 	// markReady turns the draft pull request into a ready one.
 	markReady func(t *testing.T, pr *adapters.GitHubPullRequestResult)
-	seq       atomic.Int64
+	markDraft func(t *testing.T, pr *adapters.GitHubPullRequestResult)
+	// Merge qualification is opt-in for the live disposable repository.
+	allowMerge        bool
+	readyPullRequests bool
+	seq               atomic.Int64
 }
 
 func (e *qualEnv) target() string { return "github.com/" + e.owner + "/" + e.repo }
@@ -140,11 +144,15 @@ func (e *qualEnv) branchEffect(head, baseSHA string, files ...file) adapters.Eff
 }
 
 func (e *qualEnv) pullRequestEffect(head, headSHA, title string) adapters.Effect {
+	op, schema := EffectPullRequestCreateDraft, "helm.github.pull_request.create_draft.v1"
+	if e.readyPullRequests {
+		op, schema = EffectPullRequestCreate, "helm.github.pull_request.create.v1"
+	}
 	raw, _ := json.Marshal(map[string]any{
-		"schema": "helm.github.pull_request.create_draft.v1", "branch_attempt_id": "0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d",
+		"schema": schema, "branch_attempt_id": "0192f0c4-7a1e-7c3b-9d2a-5b8e4f1a2c3d",
 		"base": e.baseBranch, "head": head, "head_sha": headSHA, "title": title, "body": "Opened by the HELM qualification suite.",
 	})
-	return adapters.Effect{EffectType: EffectPullRequestCreateDraft, Target: e.target(), Arguments: raw}
+	return adapters.Effect{EffectType: op, Target: e.target(), Arguments: raw}
 }
 
 func (e *qualEnv) repositoryEffect(branch string) adapters.Effect {
@@ -389,7 +397,7 @@ var qualCases = map[string]qualCase{
 	},
 	"pull_request/happy-path": func(t *testing.T, env *qualEnv) {
 		effect, pr := env.createPullRequest(t, "pr-happy")
-		if !pr.Draft || pr.State != "open" || pr.Number <= 0 || !strings.HasPrefix(pr.URL, "https://github.com/"+env.owner+"/"+env.repo+"/pull/") || pr.BaseRef != env.baseBranch {
+		if pr.Draft == env.readyPullRequests || pr.State != "open" || pr.Number <= 0 || !strings.HasPrefix(pr.URL, "https://github.com/"+env.owner+"/"+env.repo+"/pull/") || pr.BaseRef != env.baseBranch {
 			t.Fatalf("pull request result %+v", pr)
 		}
 		a, _ := env.adapter(nil)
@@ -456,18 +464,26 @@ var qualCases = map[string]qualCase{
 		effect, pr := env.createPullRequest(t, "pr-mismatch")
 		a, _ := env.adapter(nil)
 		var args pullRequestArgs
-		args, _ = parsePullRequestArgs(effect.Arguments)
+		if env.readyPullRequests {
+			args, _ = parsePullRequestArgsFor(EffectPullRequestCreate, effect.Arguments)
+		} else {
+			args, _ = parsePullRequestArgs(effect.Arguments)
+		}
 		retitled := env.pullRequestEffect(args.Head, args.HeadSHA, "another title")
 		got := a.Observe(context.Background(), env.creds(), retitled)
 		wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
 		if got.Absent || got.Observation.GitHubPullRequest.URL != pr.URL {
 			t.Fatalf("the mismatch does not record the URL: %+v", got.Observation.GitHubPullRequest)
 		}
-		env.markReady(t, pr)
+		if env.readyPullRequests {
+			env.markDraft(t, pr)
+		} else {
+			env.markReady(t, pr)
+		}
 		got = a.Observe(context.Background(), env.creds(), effect)
 		wantObserve(t, got, adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
-		if r := got.Observation.GitHubPullRequest; r.URL != pr.URL || r.Draft {
-			t.Fatalf("a ready pull request read back as %+v", r)
+		if r := got.Observation.GitHubPullRequest; r.URL != pr.URL || r.Draft != env.readyPullRequests {
+			t.Fatalf("a changed draft state read back as %+v", r)
 		}
 	},
 	"pull_request/oversized-response": func(t *testing.T, env *qualEnv) {
@@ -614,6 +630,8 @@ func TestQualificationSuiteIsImplemented(t *testing.T) {
 	for op, categories := range map[string][]string{
 		EffectBranchCreateFromChanges: writeCases,
 		EffectPullRequestCreateDraft:  writeCases,
+		EffectPullRequestCreate:       writeCases,
+		EffectPullRequestMerge:        writeCases,
 		EffectRepositoryGet:           {"revoked credential", "response exceeding the size limit"},
 	} {
 		covered := map[string]bool{}
@@ -634,6 +652,7 @@ func TestQualificationSuiteIsImplemented(t *testing.T) {
 // the qualification record for the environment "fake", and it must qualify.
 func TestQualificationFake(t *testing.T) {
 	fake := githubtest.New(t)
+	fake.SetMergeMode("merged")
 	env := &qualEnv{
 		name:    "fake: httptest GitHub (core/pkg/gateway/adapters/github/githubtest/fake.go)",
 		baseURL: fake.URL(), owner: fake.Owner(), repo: fake.Repository(), token: fake.Token(),
@@ -642,6 +661,10 @@ func TestQualificationFake(t *testing.T) {
 			"The fake models the REST endpoints the adapter calls; it is not GitHub. Only a live run qualifies the adapter against the provider.",
 		},
 		markReady: func(t *testing.T, pr *adapters.GitHubPullRequestResult) { fake.MarkReady(pr.Number) },
+		markDraft: func(t *testing.T, pr *adapters.GitHubPullRequestResult) {
+			fake.EditPull(pr.Number, func(p *githubtest.PullRequest) { p.Draft = true })
+		},
+		allowMerge: true,
 	}
 	for _, record := range runQualification(t, env) {
 		if !record.Qualified {

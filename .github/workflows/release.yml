@@ -1452,6 +1452,8 @@ jobs:
 
   post-release-version-drift:
     runs-on: ubuntu-latest
+    # Registry wait (~25 min) plus the eventually consistent surface wait (~20 min).
+    timeout-minutes: 75
     needs: [github-release, slsa-provenance, homebrew, go-sdk-tag, console-release-assets]
     if: >-
       always() &&
@@ -1462,6 +1464,16 @@ jobs:
       needs.console-release-assets.result == 'success'
     permissions:
       contents: write
+    env:
+      # pkg.go.dev indexing and the docs-site deploy routinely lag the release by
+      # hours. The release waits for them within a bounded budget and warns if they
+      # still lag; the daily Version Drift Monitor opens a release-blocker issue on
+      # real drift.
+      EVENTUALLY_CONSISTENT_SURFACES: >-
+        pkg-go-dev-sdk
+        docs-site-developer-journey
+        docs-site-sdk-index
+        docs-site-examples
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Wait for published version convergence
@@ -1471,13 +1483,18 @@ jobs:
           set -uo pipefail
           set +e
           VERSION="${GITHUB_REF_NAME#v}"
+          skip_args=()
+          for surface in $EVENTUALLY_CONSISTENT_SURFACES; do
+            skip_args+=(--skip "$surface")
+          done
           status=0
           for attempt in $(seq 1 40); do
             python3 scripts/release/check_version_drift.py \
               --expected-version "$VERSION" \
               published \
               --surface-timeout 10 \
-              --rate-limit-retries 1
+              --rate-limit-retries 1 \
+              "${skip_args[@]}"
             status=$?
             if [ "$status" -eq 0 ]; then
               exit 0
@@ -1493,18 +1510,56 @@ jobs:
           fi
           echo "::error::Published version surfaces did not converge within the bounded retry budget."
           exit 1
-      - name: Check full published version status
-        if: always()
+      - name: Wait for eventually consistent surfaces
+        id: eventual
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           set +e
           VERSION="${GITHUB_REF_NAME#v}"
+          only_args=()
+          for surface in $EVENTUALLY_CONSISTENT_SURFACES; do
+            only_args+=(--only "$surface")
+          done
+          for attempt in $(seq 1 20); do
+            if python3 scripts/release/check_version_drift.py \
+              --expected-version "$VERSION" \
+              published \
+              --surface-timeout 10 \
+              --rate-limit-retries 1 \
+              "${only_args[@]}"; then
+              echo "converged=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [ "$attempt" -lt 20 ]; then
+              echo "Eventually consistent surfaces have not converged (${attempt}/20); retrying."
+              sleep 60
+            fi
+          done
+          echo "converged=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::Eventually consistent surfaces (${EVENTUALLY_CONSISTENT_SURFACES}) have not converged yet; the daily Version Drift Monitor reports drift if they stay behind."
+          exit 0
+      - name: Check full published version status
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENTUAL_CONVERGED: ${{ steps.eventual.outputs.converged }}
+        run: |
+          set -uo pipefail
+          set +e
+          VERSION="${GITHUB_REF_NAME#v}"
+          skip_args=()
+          if [ "$EVENTUAL_CONVERGED" = "false" ]; then
+            for surface in $EVENTUALLY_CONSISTENT_SURFACES; do
+              skip_args+=(--skip "$surface")
+            done
+          fi
           python3 scripts/release/check_version_drift.py \
             --expected-version "$VERSION" \
             --write-status version-status.json \
-            published
+            published \
+            "${skip_args[@]}"
           status=$?
           if [ "$status" -eq 75 ]; then
             echo "::warning::At least one published surface could not be read (rate limited); version-status.json records it as unknown, not drift."

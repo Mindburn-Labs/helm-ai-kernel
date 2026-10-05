@@ -22,6 +22,8 @@ import (
 //	HELM_GITHUB_QUAL_TOKEN  a token that may push branches and open pull
 //	                        requests there, such as a GitHub App installation
 //	                        token (HELM-792)
+//	HELM_GITHUB_QUAL_ALLOW_MERGE=1 explicitly authorizes merging only the
+//	                        run's disposable base branches for E3 qualification.
 //
 // and optionally HELM_GITHUB_QUAL_API (default https://api.github.com) and
 // HELM_GITHUB_QUAL_RECORD, a file for the records. Without the first two it
@@ -67,6 +69,13 @@ func TestQualificationLive(t *testing.T) {
 				"variables": map[string]string{"id": pr.NodeID},
 			}, nil)
 		},
+		markDraft: func(t *testing.T, pr *adapters.GitHubPullRequestResult) {
+			live.do(t, http.MethodPost, "/graphql", map[string]any{
+				"query":     "mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { clientMutationId } }",
+				"variables": map[string]string{"id": pr.NodeID},
+			}, nil)
+		},
+		allowMerge: os.Getenv("HELM_GITHUB_QUAL_ALLOW_MERGE") == "1",
 	}
 	for _, record := range runQualification(t, env) {
 		if !record.Qualified {

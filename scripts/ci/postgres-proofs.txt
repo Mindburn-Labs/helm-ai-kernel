@@ -90,6 +90,7 @@ pkg/gateway/admission TestPostgresProvisionPlanIsEscalatedForADistinctHuman 1 ra
 pkg/gateway/admission TestPostgresReadsAreTenantAndWorkspaceScoped 1 race
 pkg/gateway/admission TestPostgresSingleUseSurvivesClockSkew 3 race
 pkg/gateway/admission TestPostgresStepUpAndExpiryFailClosed 1 race
+pkg/gateway/admission TestPostgresPullRequestMergeRiskFloorAndBoundApproval 1 race
 pkg/gateway/admission TestPostgresStepUpFollowsARiskRaisedAfterEscalation 1 race
 pkg/gateway/admission TestPostgresStepUpProofAdmitsHighIrreversibleAndAuthorityChange 1 race
 pkg/gateway/admission TestPostgresStepUpProofFollowsARiskChangedAfterEscalation 1 race

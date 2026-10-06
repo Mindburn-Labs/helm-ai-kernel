@@ -16,7 +16,6 @@ read-back, and evidence contract.
 ## 1. Install The Pinned CLI
 
 ```bash
-brew tap mindburn-labs/tap
 brew update
 brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version

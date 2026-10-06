@@ -13,8 +13,6 @@ trusting *who* signed is a separate, explicit step — see
 ## Try It
 
 ```bash
-brew tap mindburn-labs/tap
-brew trust mindburn-labs/tap   # recent Homebrew requires trusting third-party taps
 brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel                 # interactive TTY → operator TUI
 # Text catalog: HELM_NO_TUI=1 helm-ai-kernel   (also TERM=dumb / pipes)
@@ -23,6 +21,9 @@ helm-ai-kernel setup claude-code --yes
 # Hermes: helm-ai-kernel setup hermes --scope user --yes
 # DeepSeek: helm-ai-kernel setup deepseek --scope user --yes
 ```
+
+The fully qualified Homebrew install adds the tap and trusts only this formula.
+See [Homebrew Tap Trust](https://docs.brew.sh/Tap-Trust).
 
 Ask your agent to do something risky. HELM blocks or escalates the action before
 it runs, then records the decision.

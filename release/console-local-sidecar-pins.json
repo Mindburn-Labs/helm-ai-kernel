@@ -132,6 +132,17 @@
         "version": "0.3.3",
         "package_lock_sha256": "584c20c756d6b578cf6ae99a1b22e6359dbdeadf842f4bd35e513cdd7f70569a"
       }
+    },
+    {
+      "kernel_release_version": "v0.11.1",
+      "source_repository": "Mindburn-Labs/app-helm-console",
+      "workflow_ref": "refs/tags/helm-console-sidecar-v0.10.4",
+      "source": {
+        "commit": "d336fcc099b709c95912a9027f928883fb975b6b",
+        "tree": "11bfa26dae9e100e75f03e8833218e46d2a30534",
+        "version": "0.3.3",
+        "package_lock_sha256": "584c20c756d6b578cf6ae99a1b22e6359dbdeadf842f4bd35e513cdd7f70569a"
+      }
     }
   ]
 }

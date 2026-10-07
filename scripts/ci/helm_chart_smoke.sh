@@ -168,6 +168,7 @@ assert_contains "$default_rendered" 'chmod 0600 "$watermark"'
 assert_contains "$default_rendered" "could not restore private policy replay watermark mode after fsGroup processing"
 authority_init_script="$RENDER_DIR/rendered-authority-init-script.txt"
 awk '/prepare-authority-state/{capture=1} capture{print} capture && /volumeMounts:/{exit}' "$default_rendered" >"$authority_init_script"
+python3 scripts/ci/test_authority_state_init.py "$default_rendered"
 if [ "$(/usr/bin/grep -c 'chmod 0600 "$root_key"' "$authority_init_script" 2>/dev/null || grep -c 'chmod 0600 "$root_key"' "$authority_init_script")" != "1" ]; then
     echo "::error::expected exactly one existing-key chmod in the authority init, and it must be best-effort"
     exit 1

@@ -307,6 +307,72 @@ class ChartAndExitTest(unittest.TestCase):
                 self.assertEqual(checks["(g) indirect secret reads"].status, rehearse.FAIL)
 
 
+class EnvironmentPostureTest(unittest.TestCase):
+    workflow = "name: fixture\njobs:\n  binaries:\n    environment: release-production\n"
+
+    @staticmethod
+    def fetch(*, protected=True, reviewers=False, policies=None, policy_status=200):
+        environment = {
+            "name": "release-production",
+            "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True} if protected else None,
+            "protection_rules": [{"type": "branch_policy"}] if protected else [],
+        }
+        if reviewers:
+            environment["protection_rules"].append({"type": "required_reviewers"})
+        policies = [{"type": "tag", "name": "v*"}] if policies is None else policies
+
+        def fetch(url):
+            if url == rehearse.ENVIRONMENTS_URL:
+                return 200, json.dumps({"environments": [environment]}).encode()
+            if url.startswith(rehearse.ENVIRONMENTS_URL + "/release-production/deployment-branch-policies"):
+                return policy_status, json.dumps({"total_count": len(policies), "branch_policies": policies}).encode()
+            raise AssertionError(f"unexpected metadata read: {url}")
+
+        return fetch
+
+    def test_tag_only_environment_without_reviewers_passes(self) -> None:
+        check = rehearse.check_environments(self.workflow, self.fetch())
+        self.assertEqual(check.status, rehearse.PASS)
+        self.assertIn("tag:v*", check.detail)
+
+    def test_removing_environment_protection_fails_rehearsal(self) -> None:
+        check = rehearse.check_environments(self.workflow, self.fetch(protected=False))
+        self.assertEqual(check.status, rehearse.FAIL)
+        self.assertEqual(rehearse.exit_code([check]), 1)
+
+    def test_removing_or_broadening_tag_rule_fails_rehearsal(self) -> None:
+        for policies in ([], [{"type": "branch", "name": "v*"}], [{"type": "tag", "name": "*"}],
+                         [{"type": "tag", "name": "v*"}, {"type": "branch", "name": "main"}]):
+            with self.subTest(policies=policies):
+                check = rehearse.check_environments(self.workflow, self.fetch(policies=policies))
+                self.assertEqual(check.status, rehearse.FAIL)
+                self.assertEqual(rehearse.exit_code([check]), 1)
+
+    def test_required_reviewer_is_a_release_blocker(self) -> None:
+        check = rehearse.check_environments(self.workflow, self.fetch(reviewers=True))
+        self.assertEqual(check.status, rehearse.FAIL)
+        self.assertIn("reviewer", check.detail)
+
+    def test_unreadable_tag_policy_is_unknown(self) -> None:
+        check = rehearse.check_environments(self.workflow, self.fetch(policy_status=403))
+        self.assertEqual(check.status, rehearse.UNKNOWN)
+        self.assertIn("HTTP 403", check.detail)
+
+    def test_incomplete_or_malformed_policy_read_never_passes(self) -> None:
+        for body in (b"not JSON", b"{}", b'{"branch_policies":{},"total_count":1}',
+                     b'{"branch_policies":[{"type":"tag","name":"v*"}],"total_count":true}'):
+            with self.subTest(body=body):
+                good = self.fetch()
+                check = rehearse.check_environments(self.workflow, lambda url: good(url) if url == rehearse.ENVIRONMENTS_URL else (200, body))
+                self.assertEqual(check.status, rehearse.UNKNOWN)
+
+    def test_missing_environment_or_no_declaration_fails(self) -> None:
+        missing = rehearse.check_environments(self.workflow, lambda url: (200, b'{"environments":[]}'))
+        self.assertEqual(missing.status, rehearse.FAIL)
+        no_environment = rehearse.check_environments("name: fixture\njobs:\n  publish:\n    runs-on: ubuntu-latest\n", self.fetch())
+        self.assertEqual(no_environment.status, rehearse.FAIL)
+
+
 class WorkflowContractTest(unittest.TestCase):
     workflow = (ROOT / ".github/workflows/release-rehearsal.yml").read_text()
 

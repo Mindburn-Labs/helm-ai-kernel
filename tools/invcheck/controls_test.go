@@ -124,8 +124,8 @@ func TestPRWorkflowRunsCheckFollowsPlatformCI(t *testing.T) {
 		t.Fatal(err)
 	}
 	for body, want := range map[string]bool{
-		"on:\n  pull_request:\njobs:\n  ci:\n    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2\n": true,
-		"on:\n  pull_request:\njobs:\n  ci:\n    uses: other/repo/.github/workflows/ci.yml@v2\n":                     false,
+		"on:\n  pull_request:\njobs:\n  ci:\n    uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2.0.1\n": true,
+		"on:\n  pull_request:\njobs:\n  ci:\n    uses: other/repo/.github/workflows/ci.yml@v2.0.1\n":                     false,
 	} {
 		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 			t.Fatal(err)

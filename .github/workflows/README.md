@@ -30,7 +30,7 @@ surface for the `helm-ai-kernel` project.
 
 ## Active Quality Workflows
 
-- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml@v2`. Its `gate`
+- `ci.yml` calls `Mindburn-Labs/platform-actions` `ci.yml@v2.0.1`. Its `gate`
   job, reported as `ci / gate`, is the only required status check. It runs
   `make check` (the `merge` profile of `scripts/ci/quality-gates.json`, every
   gate blocking) after `scripts/ci/install_check_tools.sh` installs pinned

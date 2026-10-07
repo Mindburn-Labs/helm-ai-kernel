@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs the tools `make check` needs beyond the toolchains that
-# Mindburn-Labs/platform-actions ci.yml@v2 sets up on its own (Go, Node,
+# Mindburn-Labs/platform-actions ci.yml@v2.0.1 sets up on its own (Go, Node,
 # Python, Rust, Helm). The caller runs it as `setup-commands` in
 # .github/workflows/ci.yml. Every download is pinned by version and sha256.
 set -euo pipefail

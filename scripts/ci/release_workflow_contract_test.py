@@ -86,7 +86,6 @@ RELEASE_VALIDATION_JOBS = frozenset(
 REMOVED_GATE_MARKERS = (
     "release-authority",
     "HELM_RELEASE_AUTHORITY_ARMED",
-    "release-production",
     "github.actor ==",
     "github.triggering_actor ==",
     "github.run_attempt",
@@ -104,15 +103,29 @@ LONG_LIVED_REGISTRY_TOKEN_SECRETS = (
     "PYPI_TOKEN",
 )
 
-# Maven Central has no OIDC trusted publishing. Its credentials stay
-# environment secrets, so a job can read them only when it declares the
-# environment that holds them.
+# Maven Central has no OIDC trusted publishing. Its credentials and the
+# release evidence/Homebrew credentials belong to tag-only environments.
+# A job reading one of these names must declare the environment that holds it.
 PROTECTED_SECRET_ENVIRONMENTS = {
     "MAVEN_USERNAME": "maven-central",
     "MAVEN_PASSWORD": "maven-central",
     "MAVEN_GPG_PRIVATE_KEY": "maven-central",
     "MAVEN_GPG_PASSPHRASE": "maven-central",
+    "HELM_EVIDENCE_KMS_KEY_ID": "release-production",
+    "HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX": "release-production",
+    "HELM_EVIDENCE_KMS_SIGN_COMMAND": "release-production",
+    "HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND": "release-production",
+    "HOMEBREW_TAP_TOKEN": "release-production",
 }
+
+SECRET_REFERENCE = re.compile(
+    r"\bsecrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\])",
+    re.IGNORECASE,
+)
+
+
+def secret_names(body: str) -> set[str]:
+    return {(match[1] or match[2]).upper() for match in SECRET_REFERENCE.finditer(body)}
 
 
 class ReleaseWorkflowContractTest(unittest.TestCase):
@@ -348,7 +361,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for secret in LONG_LIVED_REGISTRY_TOKEN_SECRETS:
                 with self.subTest(workflow=path.name, secret=secret):
-                    self.assertNotIn(f"secrets.{secret}", text)
+                    self.assertNotIn(secret, secret_names(text))
         self.assertNotIn("NODE_AUTH_TOKEN", self.workflow)
 
         npm = self.job("npm-sdk")
@@ -470,8 +483,15 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("HELM_EVIDENCE_KMS_KEY_ID: ${{ secrets.HELM_EVIDENCE_KMS_KEY_ID }}", binaries)
         self.assertIn("HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX: ${{ secrets.HELM_EVIDENCE_KMS_PUBLIC_KEY_HEX }}", binaries)
         self.assertIn("HELM_EVIDENCE_KMS_SIGN_COMMAND: ${{ secrets.HELM_EVIDENCE_KMS_SIGN_COMMAND }}", binaries)
+        self.assertIn("HOMEBREW_TAP_TOKEN_PRESENT: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}", binaries)
         self.assertIn("name: Require explicit external release EvidencePack trust", binaries)
         self.assertIn("HELM_RELEASE_EVIDENCE_STORAGE_RECEIPT_COMMAND", binaries)
+        self.assertIn('if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then', binaries)
+        self.assertIn("HOMEBREW_TAP_TOKEN must be configured before publishing a release", binaries)
+        self.assertLess(
+            binaries.index('if [ "$HOMEBREW_TAP_TOKEN_PRESENT" != "true" ]; then'),
+            binaries.index("Build and stage release assets"),
+        )
         self.assertLess(
             binaries.index("Require explicit external release EvidencePack trust"),
             binaries.index("Build and stage release assets"),
@@ -641,10 +661,13 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(AssertionError):
                 self.assert_post_release_status_safety(workflow)
 
-    def test_every_publish_job_declares_the_environment_that_holds_its_secrets(self) -> None:
+    def assert_protected_secret_environments(self, workflows: dict[str, str]) -> None:
         checked: dict[str, str] = {}
-        for path in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
-            text = path.read_text(encoding="utf-8")
+        for filename, text in sorted(workflows.items()):
+            self.assertNotRegex(text, r"(?i)\btojson\s*\(\s*secrets\s*\)", filename)
+            self.assertNotRegex(text, r"(?i)\$\{\{\s*secrets\s*\}\}", filename)
+            self.assertNotRegex(text, r"(?im)^\s*secrets:\s*inherit\s*(?:#.*)?$", filename)
+            self.assertNotRegex(SECRET_REFERENCE.sub("", text), r"(?i)\bsecrets\s*\[", filename)
             if "\njobs:\n" not in text:
                 continue
             jobs = re.finditer(
@@ -656,26 +679,67 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                 body = job.group("body")
                 required = {
                     PROTECTED_SECRET_ENVIRONMENTS[name]
-                    for name in re.findall(r"secrets\.([A-Z0-9_]+)", body)
+                    for name in secret_names(body)
                     if name in PROTECTED_SECRET_ENVIRONMENTS
                 }
                 if not required:
                     continue
-                label = f"{path.name}:{job.group('name')}"
-                with self.subTest(job=label):
-                    self.assertEqual(len(required), 1, f"{label} mixes secrets from {sorted(required)}")
-                    environment = re.search(
-                        r"^    environment:(?: (?P<inline>[A-Za-z0-9_-]+)|\n      name: (?P<named>[A-Za-z0-9_-]+))$",
-                        body,
-                        re.MULTILINE,
-                    )
-                    self.assertIsNotNone(environment, f"{label} reads {sorted(required)} secrets without an environment")
-                    assert environment is not None
-                    declared = environment.group("inline") or environment.group("named")
-                    self.assertEqual(declared, required.pop(), label)
-                    checked[label] = declared
+                label = f"{filename}:{job.group('name')}"
+                self.assertEqual(len(required), 1, f"{label} mixes secrets from {sorted(required)}")
+                environment = re.search(
+                    r"^    environment:(?: (?P<inline>[A-Za-z0-9_-]+)|\n      name: (?P<named>[A-Za-z0-9_-]+))$",
+                    body,
+                    re.MULTILINE,
+                )
+                self.assertIsNotNone(environment, f"{label} reads {sorted(required)} secrets without an environment")
+                assert environment is not None
+                declared = environment.group("inline") or environment.group("named")
+                self.assertEqual(declared, required.pop(), label)
+                checked[label] = declared
         # Guard against a vacuous pass: the known publishers must be seen.
-        self.assertEqual(checked, {"release.yml:maven-sdk": "maven-central"})
+        self.assertEqual(checked, {
+            "release.yml:binaries": "release-production",
+            "release.yml:homebrew": "release-production",
+            "release.yml:maven-sdk": "maven-central",
+        })
+
+    def test_every_publish_job_declares_the_environment_that_holds_its_secrets(self) -> None:
+        self.assert_protected_secret_environments({
+            path.name: path.read_text(encoding="utf-8")
+            for path in WORKFLOWS.glob("*.y*ml")
+        })
+
+    def test_secret_scope_rejects_an_unprotected_release_environment(self) -> None:
+        binaries = self.job("binaries")
+        protected = "    environment: release-production\n"
+        self.assertIn(protected, binaries)
+        mutated = self.workflow.replace(
+            binaries,
+            binaries.replace(protected, "    environment: unprotected\n", 1),
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            self.assert_protected_secret_environments({"release.yml": mutated})
+
+    def test_secret_scope_rejects_indirect_and_unbound_readers(self) -> None:
+        protected = next(iter(PROTECTED_SECRET_ENVIRONMENTS))
+        indexed = "secrets[" + repr(protected) + "]"
+        prefix = "  unbound-reader:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ "
+        injections = {
+            "indexed protected secret": prefix + indexed + " }}\n",
+            "uppercase protected secret": prefix + "SECRETS." + protected + " }}\n",
+            "spaced protected secret": prefix + "secrets . " + protected + " }}\n",
+            "dynamic secret key": prefix + "secrets[vars.SECRET_NAME] }}\n",
+            "spaced dynamic secret key": prefix + "SECRETS [ vars.SECRET_NAME ] }}\n",
+            "all secrets serialized": prefix + "toJSON(secrets) }}\n",
+            "all secrets passed directly": prefix + "secrets }}\n",
+            "uppercase whole context": prefix + "SECRETS }}\n",
+            "inherited secrets": "  reusable:\n    uses: org/repo/.github/workflows/x.yml@main\n    secrets: inherit\n",
+        }
+        for label, injection in injections.items():
+            with self.subTest(mutation=label), self.assertRaises(AssertionError):
+                mutated = self.workflow.replace("\njobs:\n", "\njobs:\n" + injection, 1)
+                self.assert_protected_secret_environments({"release.yml": mutated})
 
     def test_console_dispatch_uses_an_immutable_ref_bound_to_the_source_pin(self) -> None:
         console_sidecar = self.job("console-local-sidecar")

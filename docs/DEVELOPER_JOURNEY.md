@@ -27,8 +27,6 @@ how your agent runs.
 Published macOS CLI:
 
 ```bash
-brew tap mindburn-labs/tap
-brew trust mindburn-labs/tap
 brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version
 ```

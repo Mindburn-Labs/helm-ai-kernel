@@ -11,9 +11,19 @@ No account or model key is required.
 ## Install
 
 ```bash
-brew tap mindburn-labs/tap
 brew install mindburn-labs/tap/helm-ai-kernel
 helm-ai-kernel --version
+```
+
+The fully qualified install adds the tap and trusts only this formula. See
+[Homebrew Tap Trust](https://docs.brew.sh/Tap-Trust).
+
+To upgrade an existing installation with formula-scoped trust:
+
+```bash
+brew trust --formula mindburn-labs/tap/helm-ai-kernel
+brew update
+brew upgrade mindburn-labs/tap/helm-ai-kernel
 ```
 
 From source:
@@ -42,7 +52,7 @@ are client libraries, not executable Kernel installs.
 
 | Surface | Install or artifact | Verification / boundary |
 | --- | --- | --- |
-| Homebrew CLI formula | `brew tap mindburn-labs/tap` then `brew install mindburn-labs/tap/helm-ai-kernel` | Canonical formula `mindburn-labs/tap/helm-ai-kernel` |
+| Homebrew CLI formula | `brew install mindburn-labs/tap/helm-ai-kernel` | Canonical formula `mindburn-labs/tap/helm-ai-kernel` |
 | GitHub release binaries | [HELM Kernel v0.11.0 release](https://github.com/Mindburn-Labs/helm-ai-kernel/releases/tag/v0.11.0): macOS/Linux `amd64` and `arm64`, Windows `amd64` assets | Download `SHA256SUMS.txt` and the matching per-asset Cosign bundle |
 | GHCR images | `docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.11.0` or `docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.11.0-slim` | Verify the image signature before use |
 | OCI chart | `helm pull oci://ghcr.io/mindburn-labs/charts/helm-ai-kernel --version 0.11.0` | Verify the chart signature before deployment |

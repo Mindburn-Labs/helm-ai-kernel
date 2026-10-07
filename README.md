@@ -139,7 +139,7 @@ unavailable, use a compatible native Go toolchain instead.
 ```bash
 git clone https://github.com/Mindburn-Labs/helm-ai-kernel.git
 cd helm-ai-kernel
-git checkout v0.11.0
+git checkout v0.11.1
 mise trust
 mise install
 mise exec -- make build
@@ -155,8 +155,8 @@ Kernel executable installs.
 
 | Release target | SDK pointers after publication |
 | --- | --- |
-| `v0.11.0` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.11.0` |
-| `v0.11.0` | `io.github.mindburnlabs:helm-sdk:0.11.0` |
+| `v0.11.1` | `github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.11.1` |
+| `v0.11.1` | `io.github.mindburnlabs:helm-sdk:0.11.1` |
 
 Apache-2.0. See [LICENSE](LICENSE), [SECURITY.md](SECURITY.md), and
 [CONTRIBUTING.md](CONTRIBUTING.md).

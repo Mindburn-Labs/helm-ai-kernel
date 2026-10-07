@@ -90,6 +90,16 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 No changes yet.
 
+## [0.11.1]
+
+### Fixed
+
+- Recover a zero-byte regular `root.key` left on an existing durable volume by
+  the published 0.7.2 chart. The authority-state init atomically copies the
+  nonempty signing Secret while refusing a nonempty differing key or a symlink.
+- Cover the rendered init states and the published-0.7.2 Kind upgrade, including
+  key matching and receipt persistence across restart.
+
 ## [0.10.4] - 2026-09-29
 
 ### Added

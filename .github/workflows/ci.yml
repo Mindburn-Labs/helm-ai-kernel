@@ -19,6 +19,10 @@ concurrency:
 
 jobs:
   ci:
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     uses: Mindburn-Labs/platform-actions/.github/workflows/ci.yml@v2.0.1
     with:
       setup-commands: bash scripts/ci/install_check_tools.sh

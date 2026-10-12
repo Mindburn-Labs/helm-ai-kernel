@@ -62,7 +62,7 @@ docker pull ghcr.io/mindburn-labs/helm-ai-kernel:v0.10.4-slim
 helm pull oci://ghcr.io/mindburn-labs/charts/helm-ai-kernel --version 0.10.4
 @mindburn/helm-ai-kernel@0.10.4 helm-sdk==0.10.4 helm-sdk@0.10.4
 io.github.mindburnlabs:helm-sdk:0.10.4 github.com/Mindburn-Labs/helm-ai-kernel/sdk/go@v0.10.4
-The source build uses Go 1.25.13.
+The source build uses Go 1.26.9.
 When the `v0.11.0` GitHub Release publishes an `evidence-pack.tar`
 """
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -77,7 +77,7 @@ When the `v0.11.0` GitHub Release publishes an `evidence-pack.tar`
                     prepare_version.update_regex(surface, "0.11.0")
                 updated = path.read_text()
                 self.assertNotIn("0.10.4", updated)
-                self.assertIn("Go 1.25.13", updated)
+                self.assertIn("Go 1.26.9", updated)
                 self.assertIn("helm-ai-kernel:v0.11.0-slim", updated)
                 self.assertTrue(all(result.status == "pass" for result in prepare_version.drift.check_local({"local_surfaces": surfaces}, "0.11.0", None)))
                 for surface in surfaces:

@@ -88,7 +88,13 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
-No changes yet.
+### Changed
+
+- Go toolchain 1.25.13 to 1.26.9 across the workspace, workflows and builder
+  images; `golang.org/x/net` v0.60.0 and `golang.org/x/crypto` v0.57.0 clear
+  the 2026-10-08 govulncheck advisories (GO-2026-6599 through GO-2026-6617).
+  `sdk/go` and every other module now declare `go 1.26.9`, so consumers need
+  Go 1.26.9 or newer.
 
 ## [0.11.1]
 

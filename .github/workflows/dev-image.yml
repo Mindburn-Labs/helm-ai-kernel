@@ -7,11 +7,25 @@ name: Dev image (dev-sha)
 # qa-deploy can pull a registry image instead of side-loading. Mirrors the
 # source_sha dispatch path of svc-helm-control-plane's release-oci.yml.
 #
+# HELM-968 / HELM-963: the same lane also runs on every commit on main whose
+# CI succeeded and publishes, next to dev-sha-<sha>,
+#   ghcr.io/mindburn-labs/helm-ai-kernel:main-<YYYYMMDDHHMMSS>-<sha7>
+# plus a prerelease chart <VERSION>-main.<ts> (appVersion = that image tag)
+# in ghcr.io/mindburn-labs/charts-dev, so the QA stand follows main with chart
+# and binary from one commit (gitops-platform clusters/qa-arm). No tag is cut
+# and release.yml is untouched: the v* release stays the staging and
+# production path, and the public charts/helm-ai-kernel repository (the one
+# registered on ArtifactHub) never sees a prerelease.
+#
 # HELM-733: this lane lives in its own workflow file so that its keyless
 # signing identity (`.../dev-image.yml@refs/heads/main`) can never satisfy a
 # release verification. Release signatures come only from
 # `.../release.yml@refs/tags/v<version>`, and every documented verification
 # recipe pins that exact identity. Do not move this job back into release.yml.
+#
+# `workflows:` matches the CI workflow by its `name:` field, so renaming "CI"
+# silently stops the main lane; the green-CI check below also looks ci.yml up
+# by file name, which is what the dispatch path has always relied on.
 on:
   workflow_dispatch:
     inputs:
@@ -19,6 +33,10 @@ on:
         description: Full commit SHA to publish after green CI
         required: true
         type: string
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
 
 permissions: read-all
 
@@ -26,29 +44,39 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
   IMAGE_NAME: mindburn-labs/helm-ai-kernel
+  CHART_DEV_REPOSITORY: ghcr.io/mindburn-labs/charts-dev
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || inputs.source_sha }}
+  # The main lane fires only for a successful CI run of a main commit of THIS
+  # repository (workflow_run also fires for PR builds, forks included).
+  MAIN_LANE: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository }}
 
 jobs:
   container-sha:
-    # Dispatch-only publisher for an arbitrary commit sha. Guards on a green
-    # CI (ci.yml) run for the sha, then builds, pushes, and cosign-signs
-    # ghcr.io/mindburn-labs/helm-ai-kernel:dev-sha-<sha>. It is a SHA-addressed,
+    # Publisher for a commit sha. Guards on a green CI (ci.yml) run for the
+    # sha, then builds, pushes, and cosign-signs
+    # ghcr.io/mindburn-labs/helm-ai-kernel:dev-sha-<sha>, and on the main lane
+    # also :main-<ts>-<sha7> and the prerelease chart. It is a SHA-addressed,
     # dev-grade QA lane, not a version-tag release publisher.
-    runs-on: ubuntu-latest
+    # Dispatch builds both architectures on a hosted x64 runner as before; the
+    # main lane builds linux/arm64 natively (QA and the dev slots are arm64)
+    # on GitHub's hosted arm runner, free for this public repository. It must
+    # never use a self-hosted runner: this repository is public.
+    runs-on: ${{ (github.event_name == 'workflow_run' && 'ubuntu-24.04-arm') || 'ubuntu-latest' }}
     # Only the reviewed workflow on main may publish, so the signing identity
     # of an honest dev image is always dev-image.yml@refs/heads/main.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    # One publish in flight per sha: the tag is deterministic, so two
-    # concurrent dispatches would race the same ghcr tag to different digests.
+    # && binds tighter than ||: the dispatch clause or the main-lane clause.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
+    # One publish in flight per sha: the dev-sha tag is deterministic, so two
+    # concurrent runs would race the same ghcr tag to different digests.
     concurrency:
-      group: container-sha-${{ inputs.source_sha }}
+      group: container-sha-${{ github.event.workflow_run.head_sha || inputs.source_sha }}
       cancel-in-progress: false
+    timeout-minutes: 40
     permissions:
       actions: read
       contents: read
       id-token: write
       packages: write
-    env:
-      SOURCE_SHA: ${{ inputs.source_sha }}
     steps:
       - name: Validate source SHA format
         run: |
@@ -77,7 +105,20 @@ jobs:
           echo "Found ${matching} successful in-repo CI run(s) for ${SOURCE_SHA}"
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          ref: ${{ inputs.source_sha }}
+          ref: ${{ env.SOURCE_SHA }}
+      - name: Refuse a main-lane commit that is not on main
+        if: env.MAIN_LANE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # compare base=main head=sha: "identical" or "behind" means the sha is
+          # an ancestor of main; "ahead" or "diverged" means it is not.
+          status="$(gh api "/repos/${GITHUB_REPOSITORY}/compare/main...${SOURCE_SHA}" --jq .status)"
+          case "${status}" in
+            identical|behind) echo "${SOURCE_SHA} is on main (${status})" ;;
+            *) echo "::error::${SOURCE_SHA} is not reachable from main (compare status: ${status})"; exit 1 ;;
+          esac
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -90,10 +131,22 @@ jobs:
           # Not a tag build: keep main.version semver with an explicit
           # prerelease marker carrying the short commit.
           short="$(git rev-parse --short=12 HEAD)"
+          ts="$(date -u +%Y%m%d%H%M%S)"
+          main_tag="main-${ts}-${SOURCE_SHA:0:7}"
+          if [[ "${MAIN_LANE}" == "true" ]]; then
+            tags="${REGISTRY}/${IMAGE_NAME}:dev-sha-${SOURCE_SHA}"$'\n'"${REGISTRY}/${IMAGE_NAME}:${main_tag}"
+          else
+            tags="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}"
+          fi
           {
             echo "version=0.0.0-sha.${short}"
             echo "commit=${short}"
             echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "ts=${ts}"
+            echo "main_tag=${main_tag}"
+            echo "tags<<EOF"
+            echo "${tags}"
+            echo "EOF"
           } >> "${GITHUB_OUTPUT}"
       - id: push
         name: Build and push sha image
@@ -104,25 +157,81 @@ jobs:
           push: true
           provenance: true
           sbom: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.MAIN_LANE == 'true' && 'linux/arm64' || 'linux/amd64,linux/arm64' }}
           build-args: |
             BUILD_VERSION=${{ steps.build-meta.outputs.version }}
             BUILD_COMMIT=${{ steps.build-meta.outputs.commit }}
             BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}
+          tags: ${{ steps.build-meta.outputs.tags }}
           # The signing identity already marks this image as dev-grade; the
           # labels repeat that for humans reading the image config.
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ inputs.source_sha }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
             org.opencontainers.image.version=${{ steps.build-meta.outputs.version }}
             org.opencontainers.image.created=${{ steps.build-meta.outputs.build_time }}
             dev.mindburn.build-grade=dev
-            dev.mindburn.build-origin=dev-image.yml/container-sha(workflow_dispatch)
+            dev.mindburn.build-origin=dev-image.yml/container-sha(${{ github.event_name }})
       - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
       - name: Sign sha image keyless
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
           cosign sign --yes "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+      - name: Prove the identity separation (HELM-733)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+          issuer="https://token.actions.githubusercontent.com"
+          cosign verify \
+            --certificate-oidc-issuer "${issuer}" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/dev-image.yml@refs/heads/main" \
+            "${ref}" >/dev/null
+          if cosign verify \
+               --certificate-oidc-issuer "${issuer}" \
+               --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/v.+$" \
+               "${ref}" >/dev/null 2>&1; then
+            echo "::error::${ref} verifies with the release identity; the lanes are not separated"
+            exit 1
+          fi
+      # Main lane only: the chart that carries this image, as a prerelease
+      # version packaged from the same commit. Chart.yaml is not modified;
+      # --version and --app-version are applied at package time, so the
+      # release/version-surfaces.yaml lockstep check (which reads the file)
+      # is unaffected. The destination is charts-dev, never charts/.
+      - name: Package, push and sign the prerelease chart
+        if: env.MAIN_LANE == 'true'
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          MAIN_TAG: ${{ steps.build-meta.outputs.main_tag }}
+          TS: ${{ steps.build-meta.outputs.ts }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          chart_version="${version}-main.${TS}"
+          mkdir -p dist/chart
+          helm package deploy/helm-chart -d dist/chart \
+            --version "${chart_version}" --app-version "${MAIN_TAG}"
+          helm registry login "${REGISTRY}" -u "${GITHUB_ACTOR}" --password-stdin <<< "${GHCR_TOKEN}"
+          helm push "dist/chart/helm-ai-kernel-${chart_version}.tgz" "oci://${CHART_DEV_REPOSITORY}" 2>&1 | tee push.log
+          digest="$(sed -n 's/^Digest: //p' push.log | tr -d '[:space:]')"
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::failed to extract the chart digest from helm push output"
+            exit 1
+          fi
+          cosign sign --yes "${CHART_DEV_REPOSITORY}/helm-ai-kernel@${digest}"
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/dev-image.yml@refs/heads/main" \
+            "${CHART_DEV_REPOSITORY}/helm-ai-kernel@${digest}" >/dev/null
+          {
+            echo "## Main lane published"
+            echo
+            echo "- image: \`${REGISTRY}/${IMAGE_NAME}:${MAIN_TAG}\` (\`${{ steps.push.outputs.digest }}\`)"
+            echo "- chart: \`oci://${CHART_DEV_REPOSITORY}/helm-ai-kernel:${chart_version}\` (\`${digest}\`)"
+            echo "- source: \`${SOURCE_SHA}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

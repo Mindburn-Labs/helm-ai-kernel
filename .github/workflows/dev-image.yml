@@ -27,16 +27,16 @@ name: Dev image (dev-sha)
 # silently stops the main lane; the green-CI check below also looks ci.yml up
 # by file name, which is what the dispatch path has always relied on.
 on:
-  workflow_run:
-    workflows: ['CI']
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       source_sha:
         description: Full commit SHA to publish after green CI
         required: true
         type: string
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
 
 permissions: read-all
 
@@ -47,7 +47,7 @@ env:
   CHART_DEV_REPOSITORY: ghcr.io/mindburn-labs/charts-dev
   SOURCE_SHA: ${{ github.event.workflow_run.head_sha || inputs.source_sha }}
   # The main lane fires only for a successful CI run of a main commit of THIS
-  # repository (workflow_run also fires for pull_request runs, forks included).
+  # repository (workflow_run also fires for PR builds, forks included).
   MAIN_LANE: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository }}
 
 jobs:
@@ -64,12 +64,8 @@ jobs:
     runs-on: ${{ (github.event_name == 'workflow_run' && 'ubuntu-24.04-arm') || 'ubuntu-latest' }}
     # Only the reviewed workflow on main may publish, so the signing identity
     # of an honest dev image is always dev-image.yml@refs/heads/main.
-    if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
-      || (github.event_name == 'workflow_run'
-        && github.event.workflow_run.conclusion == 'success'
-        && github.event.workflow_run.head_branch == 'main'
-        && github.event.workflow_run.head_repository.full_name == github.repository)
+    # && binds tighter than ||: the dispatch clause or the main-lane clause.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
     # One publish in flight per sha: the dev-sha tag is deterministic, so two
     # concurrent runs would race the same ghcr tag to different digests.
     concurrency:
@@ -137,9 +133,10 @@ jobs:
           short="$(git rev-parse --short=12 HEAD)"
           ts="$(date -u +%Y%m%d%H%M%S)"
           main_tag="main-${ts}-${SOURCE_SHA:0:7}"
-          tags="${REGISTRY}/${IMAGE_NAME}:dev-sha-${SOURCE_SHA}"
           if [[ "${MAIN_LANE}" == "true" ]]; then
-            tags="${tags}"$'\n'"${REGISTRY}/${IMAGE_NAME}:${main_tag}"
+            tags="${REGISTRY}/${IMAGE_NAME}:dev-sha-${SOURCE_SHA}"$'\n'"${REGISTRY}/${IMAGE_NAME}:${main_tag}"
+          else
+            tags="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-sha-${{ inputs.source_sha }}"
           fi
           {
             echo "version=0.0.0-sha.${short}"

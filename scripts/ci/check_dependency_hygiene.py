@@ -41,7 +41,6 @@ def manifest_ecosystem(path: str) -> str | None:
     return SDK_MANIFESTS.get(manifest.name)
 
 
-# ADR-0005: parse real YAML and resolve directories against tracked manifests.
 def coverage_failures(root: Path, text: str, manifests: list[str]) -> list[str]:
     config = yaml.safe_load(text)
     if not isinstance(config, dict) or config.get("version") != 2:

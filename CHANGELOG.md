@@ -88,6 +88,12 @@ All notable changes to the retained HELM AI Kernel surface are documented here. 
 
 ## [Unreleased]
 
+### Fixed
+
+- Dependabot coverage now parses singular and plural directories, including
+  globs, and checks every tracked Go module and SDK dependency manifest against
+  its package ecosystem (HELM-972).
+
 ### Changed
 
 - Go toolchain 1.25.13 to 1.26.9 across the workspace, workflows and builder

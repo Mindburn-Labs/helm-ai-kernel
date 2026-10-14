@@ -439,17 +439,59 @@ def check_registries(root: Path, workflow: str, would_be: str, fetch: Fetch = ht
 def check_environments(workflow: str, fetch: Fetch = http_get) -> Check:
     name = "(g) GitHub deployment environments"
     wanted = sorted({env for env in map(job_environment, workflow_jobs(workflow).values()) if env})
+    remedy = "allow exactly tag:v* under Settings > Environments, with no required reviewers"
+    if not wanted:
+        return Check(name, FAIL, "release.yml declares no deployment environments", remedy)
     try:
         status, body = fetch(ENVIRONMENTS_URL)
     except OSError as exc:
         return Check(name, UNKNOWN, f"environments read failed: {exc}")
     if status != 200:
         return Check(name, UNKNOWN, f"environments read returned HTTP {status}")
-    present = {env.get("name") for env in json.loads(body).get("environments", [])}
+    try:
+        environments = json.loads(body)["environments"]
+        if not isinstance(environments, list) or not all(isinstance(env, dict) for env in environments):
+            raise ValueError("invalid environment list")
+        present = {env["name"]: env for env in environments}
+    except (KeyError, TypeError, ValueError):
+        return Check(name, UNKNOWN, "environments read returned invalid metadata")
     missing = [env for env in wanted if env not in present]
     if missing:
         return Check(name, FAIL, f"missing {', '.join(missing)}", "create them under Settings > Environments")
-    return Check(name, PASS, f"{', '.join(wanted)} exist")
+    problems, unreadable = [], []
+    for environment in wanted:
+        metadata = present[environment]
+        rules = metadata.get("protection_rules")
+        if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+            unreadable.append(f"{environment}: invalid protection metadata")
+            continue
+        rule_types = [rule.get("type") for rule in rules]
+        if "required_reviewers" in rule_types:
+            problems.append(f"{environment}: requires a human reviewer")
+        if metadata.get("deployment_branch_policy") != {"protected_branches": False, "custom_branch_policies": True} or "branch_policy" not in rule_types:
+            problems.append(f"{environment}: lacks a custom tag-only deployment policy")
+            continue
+        url = f"{ENVIRONMENTS_URL}/{urllib.parse.quote(environment, safe='')}/deployment-branch-policies?per_page=100"
+        try:
+            status, body = fetch(url)
+            if status != 200:
+                unreadable.append(f"{environment}: tag-policy read returned HTTP {status}")
+                continue
+            policy = json.loads(body)
+            policies = policy["branch_policies"]
+            if not isinstance(policies, list) or not all(isinstance(rule, dict) for rule in policies) or type(policy["total_count"]) is not int:
+                raise ValueError("invalid tag-policy metadata")
+            if policy["total_count"] != 1 or [(rule.get("type"), rule.get("name")) for rule in policies] != [("tag", "v*")]:
+                problems.append(f"{environment}: deployment rules must be exactly tag:v*")
+        except OSError as exc:
+            unreadable.append(f"{environment}: tag-policy read failed: {exc}")
+        except (KeyError, TypeError, ValueError):
+            unreadable.append(f"{environment}: invalid tag-policy metadata")
+    if problems:
+        return Check(name, FAIL, "; ".join(problems + unreadable), remedy)
+    if unreadable:
+        return Check(name, UNKNOWN, "; ".join(unreadable))
+    return Check(name, PASS, f"{', '.join(wanted)} allow only tag:v* with no required reviewers")
 
 
 def check_secrets(workflow: str, env: dict[str, str]) -> list[Check]:

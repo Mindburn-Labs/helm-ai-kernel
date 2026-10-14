@@ -213,7 +213,7 @@ jobs:
         with:
           go-version: "1.26.9"
           cache-dependency-path: "**/go.sum"
-      - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
           cluster_name: helm-ai-kernel-smoke
       - name: kind install smoke

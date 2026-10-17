@@ -329,18 +329,24 @@ func (s *Service) proposeTx(ctx context.Context, tx *sql.Tx, caller Caller, in P
 	if e := caller.Episode; e != nil {
 		episodeID, organizationVersionID = e.EpisodeID, e.OrganizationVersionID
 	}
+	// Migration 10 fences older model gateways at INSERT. Their binaries omit
+	// this column and retain its default of 1; this binary writes protocol 2.
+	modelWriterProtocol := 1
+	if in.EffectType == effectargs.ModelInference {
+		modelWriterProtocol = 2
+	}
 	// 1. Idempotency first. A duplicate never locks or changes anything.
 	err = tx.QueryRowContext(ctx, `INSERT INTO authority_effect_attempts
 			(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
 			 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
-			 distinct_values, episode_id, organization_version_id, state)
+			 distinct_values, episode_id, organization_version_id, model_writer_protocol, state)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12, $13, $14, $15,
-			NULLIF($16, ''), NULLIF($17, ''), 'PROPOSED')
+			NULLIF($16, ''), NULLIF($17, ''), $18, 'PROPOSED')
 		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
 		RETURNING attempt_id`,
 		caller.TenantID, id, caller.WorkspaceID, in.IdempotencyKey, digest, caller.PrincipalID, caller.ActorID,
 		in.CommitmentID, in.CaseID, in.EffectType, in.Target, targetDigest[:], argumentDigest[:], quote, distinct,
-		episodeID, organizationVersionID).Scan(&attemptID)
+		episodeID, organizationVersionID, modelWriterProtocol).Scan(&attemptID)
 	if errors.Is(err, sql.ErrNoRows) {
 		var stored []byte
 		if err := tx.QueryRowContext(ctx, `SELECT attempt_id, request_digest FROM authority_effect_attempts

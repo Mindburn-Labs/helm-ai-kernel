@@ -20,7 +20,128 @@ import (
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/effectargs"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/kernel/authority/authorityrows"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
+
+// legacyModelInsert uses the admission INSERT shape from a pre-fence gateway:
+// it omits model_writer_protocol, so PostgreSQL supplies the legacy default.
+// The other digests are valid placeholders because this tests the INSERT fence
+// and ON CONFLICT path, not the old binary's request-digest calculation. It
+// runs under the real gateway role and tenant RLS, not the migration owner.
+func legacyModelInsert(ctx context.Context, e *env, caller admission.Caller, c *call, key string) error {
+	args, err := json.Marshal(modelArgs{Schema: "model.inference.v1", API: c.API, Route: c.Route.ID,
+		RequestSHA256: sha256hex(c.Body), InputBytes: int64(len(c.Body)), MaxOutputTokens: c.MaxOutputTokens, Stream: c.Stream})
+	if err != nil {
+		return err
+	}
+	amount, err := c.Route.Quote(int64(len(c.Body)), c.MaxOutputTokens, c.MayWriteCache)
+	if err != nil {
+		return err
+	}
+	quote, err := json.Marshal([]admission.Amount{{Unit: admission.UnitUSDMicros, Amount: amount}})
+	if err != nil {
+		return err
+	}
+	requestDigest := sha256.Sum256([]byte("legacy model proposal"))
+	argumentDigest := sha256.Sum256(args)
+	targetDigest := sha256.Sum256([]byte(c.Route.ID))
+	tx, err := e.runtime.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, caller.TenantID); err != nil {
+		return err
+	}
+	episodeID, organizationVersionID, caseID := "", "", ""
+	if caller.Episode != nil {
+		episodeID, organizationVersionID, caseID = caller.Episode.EpisodeID, caller.Episode.OrganizationVersionID, caller.Episode.WorkItemID
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO authority_effect_attempts
+		(tenant_id, attempt_id, workspace_id, idempotency_key, request_digest, requester_principal_id,
+		 requester_actor_id, commitment_id, case_id, effect_type, target, target_digest, argument_digest, quote,
+		 distinct_values, episode_id, organization_version_id, state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULLIF($8, ''), $9, $10, $11, $12, $13, '[]',
+			NULLIF($14, ''), NULLIF($15, ''), 'PROPOSED')
+		ON CONFLICT (tenant_id, idempotency_key) DO NOTHING`,
+		caller.TenantID, uuid.New(), caller.WorkspaceID, key, requestDigest[:], caller.PrincipalID, caller.ActorID,
+		caseID, effectargs.ModelInference, c.Route.ID, targetDigest[:], argumentDigest[:], quote,
+		episodeID, organizationVersionID)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+type pauseAfterLegacyRead struct {
+	*admission.Service
+	read   chan struct{}
+	resume chan struct{}
+}
+
+func (l *pauseAfterLegacyRead) ModelCallAttemptsByKeys(ctx context.Context, caller admission.Caller, keys []string) ([]admission.Attempt, error) {
+	attempts, err := l.Service.ModelCallAttemptsByKeys(ctx, caller, keys)
+	close(l.read)
+	select {
+	case <-l.resume:
+		return attempts, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestPostgresLegacyWriterIsFencedBetweenLookupAndNewAdmission(t *testing.T) {
+	e := newEnvWindow(t, 1_000_000, "none")
+	bridge := &pauseAfterLegacyRead{Service: e.svc, read: make(chan struct{}), resume: make(chan struct{})}
+	resume := func() {
+		select {
+		case <-bridge.resume:
+		default:
+			close(bridge.resume)
+		}
+	}
+	defer resume()
+	e.gw.Ledger = bridge
+	e.anthropic.on(jsonHandler(budgetUsage(1)))
+	body := budgetMessage("mixed-version-overlap", 0)
+	c, refusal := inspect(e.cfg, effectargs.APIAnthropicMessages, []byte(body))
+	if refusal != nil {
+		t.Fatal(refusal)
+	}
+	caller := admission.Caller{TenantID: tenantA, WorkspaceID: workspace, PrincipalID: "agt:seat-1", ActorID: cpActor,
+		Episode: &admission.Episode{EpisodeID: "ep-1", WorkItemID: "work-ep-1", OrganizationVersionID: "ver-1"}}
+	legacyKey := "mi:ep-1:" + sha256hex(c.Body) + ":0"
+	done := make(chan reply, 1)
+	go func() { done <- post(t, e.worker.URL, "/v1/messages", workerHeaders(tokenAgent), body) }()
+	select {
+	case <-bridge.read:
+	case <-time.After(10 * time.Second):
+		t.Fatal("new gateway did not finish its legacy lookup")
+	}
+	// The old writer races after a negative compatibility read. PostgreSQL
+	// rejects its new key before a hold or provider claim can be created.
+	err := legacyModelInsert(context.Background(), e, caller, c, legacyKey)
+	var pgErr *pq.Error
+	if !errors.As(err, &pgErr) || pgErr.Code != "23514" || !strings.Contains(pgErr.Message, "legacy_model_writer_fenced") {
+		t.Fatalf("legacy writer was not fenced: %v", err)
+	}
+	resume()
+	select {
+	case r := <-done:
+		if r.Status != 200 {
+			t.Fatalf("new gateway call: %s", r)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("new gateway did not complete")
+	}
+	if e.anthropic.calls.Load() != 1 || len(e.attempts()) != 1 {
+		t.Fatalf("overlap created %d provider calls and %d attempts", e.anthropic.calls.Load(), len(e.attempts()))
+	}
+	if used, reserved := e.counters(); used <= 0 || used > 1_000_000 || reserved != 0 {
+		t.Fatalf("overlap did not settle within the cap: used=%d reserved=%d", used, reserved)
+	}
+	e.ledgerBalances()
+}
 
 func TestPostgresDefaultRetryRecognizesLegacyInFlightAndSettledKeys(t *testing.T) {
 	e := newEnvWindow(t, 1_000_000, "none")
@@ -44,6 +165,14 @@ func TestPostgresDefaultRetryRecognizesLegacyInFlightAndSettledKeys(t *testing.T
 	must(t, err)
 	if existing || prior.State != "ADMITTED" {
 		t.Fatalf("legacy proposal = %+v existing=%t", prior, existing)
+	}
+	// Model an attempt that was committed before the migration. The fence
+	// applies to INSERT only: this row must still claim, settle and replay.
+	_, err = e.owner.Exec(`UPDATE authority_effect_attempts SET model_writer_protocol=1
+		WHERE tenant_id=$1 AND attempt_id=$2`, tenantA, prior.ID)
+	must(t, err)
+	if err := legacyModelInsert(context.Background(), e, caller, c, prior.IdempotencyKey); err != nil {
+		t.Fatalf("legacy writer could not reuse a pre-existing key: %v", err)
 	}
 	claim, _, err := e.svc.ClaimModelCall(context.Background(), caller, prior.ID, time.Minute)
 	must(t, err)

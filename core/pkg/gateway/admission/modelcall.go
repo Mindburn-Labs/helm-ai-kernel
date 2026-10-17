@@ -449,7 +449,9 @@ func (s *Service) settleModelCallTx(ctx context.Context, tx *sql.Tx, a lockedAtt
 	}
 	observe := func(outcome adapters.Outcome, trust string) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO authority_observations (tenant_id, attempt_id, source, trust_class, outcome, evidence_digest)
-			VALUES ($1, $2, $3, $4, $5, $6)`, tenantID, attemptID, modelObservationSource, trust, string(outcome), evidence)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (tenant_id, attempt_id, evidence_digest) WHERE evidence_digest IS NOT NULL
+			DO NOTHING`, tenantID, attemptID, modelObservationSource, trust, string(outcome), evidence)
 		return err
 	}
 	setCall := func(state string, estimated, confirmed *int64, billable int64) error {

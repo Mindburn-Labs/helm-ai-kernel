@@ -40,6 +40,7 @@ pkg/gateway/admission TestPostgresCancelReleasesAndFollowsTheAllowedEdges 1 race
 pkg/gateway/admission TestPostgresChartBootstrapGivesTheRuntimeRoleOnlyItsGrants 1 race
 pkg/gateway/admission TestPostgresClaimRefusalsCancelAndRelease 1 race
 pkg/gateway/admission TestPostgresConcurrentApprovalsAdmitOnce 10 race
+pkg/gateway/admission TestPostgresConcurrentObservationsDeduplicateAndKeepDistinctFacts 1 race
 pkg/gateway/admission TestPostgresConcurrentProposalsAdmitOnce 10 race
 pkg/gateway/admission TestPostgresConcurrentStopsUnderOneKeyReplay 5 race
 pkg/gateway/admission TestPostgresContradictedReadBackConsumesTheReservation 1 race
@@ -91,6 +92,7 @@ pkg/gateway/admission TestPostgresProposeAdmitsDeniesAndEscalates 1 race
 pkg/gateway/admission TestPostgresProposeIsIdempotent 3 race
 pkg/gateway/admission TestPostgresProvisionPlanIsEscalatedForADistinctHuman 1 race
 pkg/gateway/admission TestPostgresReadsAreTenantAndWorkspaceScoped 1 race
+pkg/gateway/admission TestPostgresReconcileAndManualObserveRaceSettlesOnce 1 race
 pkg/gateway/admission TestPostgresSingleUseSurvivesClockSkew 3 race
 pkg/gateway/admission TestPostgresStepUpAndExpiryFailClosed 1 race
 pkg/gateway/admission TestPostgresPullRequestMergeRiskFloorAndBoundApproval 1 race
@@ -123,6 +125,9 @@ pkg/gateway/mcpserver TestPostgresTheEndpointServesOnlyAgentsOfAnEpisode 1 race
 pkg/gateway/mcpserver TestPostgresTheEpisodeComesFromTheClaimNotTheBody 1 race
 pkg/gateway/mcpserver TestPostgresLostToolResponseReplaysAcrossEpisodesWithoutRedispatch 1 race
 pkg/gateway/mcpserver TestPostgresEscalationReplayKeepsOneApprovalAcrossEpisodes 1 race
+pkg/gateway/mcpserver TestPostgresGitHubApplyThenDropReplayAllDeclaredWrites 1 race
+pkg/gateway/mcpserver TestPostgresGitHubFixedQuoteCannotBeUnderstatedByAPI 1 race
+pkg/gateway/mcpserver TestPostgresGitHubLateReconcileJobFourOutcomes 1 race
 pkg/gateway/mcpserver TestPostgresToolsListReflectsTheCallersMandates 1 race
 pkg/gateway/modelgw TestPostgresAClientThatLeavesCancelsTheProviderCall 1 race
 pkg/gateway/modelgw TestPostgresACutStreamIsUnknownWithItsHoldAsAnEstimate 1 race

@@ -3,6 +3,7 @@
 package testkit
 
 import (
+	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // git object IDs
 	"encoding/hex"
 	"encoding/json"
@@ -38,7 +39,29 @@ type GitHub struct {
 	mergeMode     string
 	mergeRequests int
 	pushRequests  int
+	refWrites     map[string]int
+	pullWrites    map[string]int
+	refReads      map[string]int
+	pullReads     map[string]int
+	mergeReads    int
+	dropRef       bool
+	dropPull      bool
+	branchMode    ReadbackMode
+	pullMode      ReadbackMode
 }
+
+// FakeGitHub is the reconciliation suite's name for the shared adapter fake.
+type FakeGitHub = GitHub
+
+// ReadbackMode controls visibility while preserving applied provider state.
+type ReadbackMode string
+
+const (
+	ReadbackNormal       ReadbackMode = "normal"
+	ReadbackAbsent       ReadbackMode = "absent"
+	ReadbackMismatch     ReadbackMode = "mismatch"
+	ReadbackInconclusive ReadbackMode = "inconclusive"
+)
 
 type fakeEntry struct{ Mode, Blob string }
 
@@ -64,10 +87,26 @@ type PullRequest struct {
 }
 
 func New(t testing.TB) *GitHub {
+	return newGitHub(t, "mindburn-qual", "sandbox")
+}
+
+func NewFakeGitHub(t *testing.T) *GitHub { return newGitHub(t, "mindburn-qual", "sandbox") }
+
+func NewFakeGitHubFor(t *testing.T, owner, name string) *GitHub {
+	return newGitHub(t, owner, name)
+}
+
+func newGitHub(t testing.TB, owner, name string) *GitHub {
+	var tokenBytes [16]byte
+	if _, err := rand.Read(tokenBytes[:]); err != nil {
+		t.Fatalf("fake GitHub: generate token: %v", err)
+	}
 	f := &GitHub{
-		t: t, owner: "mindburn-qual", name: "sandbox", token: "test-token", mergeMode: "enqueued",
+		t: t, owner: owner, name: name, token: hex.EncodeToString(tokenBytes[:]), mergeMode: "enqueued",
 		blobs: map[string]string{}, trees: map[string]map[string]fakeEntry{},
 		commits: map[string]fakeCommit{}, refs: map[string]string{},
+		refWrites: map[string]int{}, pullWrites: map[string]int{},
+		refReads: map[string]int{}, pullReads: map[string]int{},
 	}
 	readme := "# sandbox\n"
 	f.blobs[blobSHA1(readme)] = readme
@@ -159,6 +198,17 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 		f.write(w, http.StatusOK, f.repoJSON())
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/git/ref/"):
 		name := strings.TrimPrefix(rest, "/git/ref/")
+		f.refReads[name]++
+		if name != "heads/main" {
+			switch f.branchMode {
+			case ReadbackAbsent:
+				f.fail(w, http.StatusNotFound, "Not Found")
+				return
+			case ReadbackInconclusive:
+				f.fail(w, http.StatusServiceUnavailable, "Read-back unavailable")
+				return
+			}
+		}
 		sha, ok := f.refs[name]
 		if !ok {
 			f.fail(w, http.StatusNotFound, "Not Found")
@@ -172,7 +222,11 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 			f.fail(w, http.StatusNotFound, "Not Found")
 			return
 		}
-		f.write(w, http.StatusOK, f.commitJSON(sha, c))
+		answer := f.commitJSON(sha, c)
+		if f.branchMode == ReadbackMismatch && sha != f.refs["heads/main"] {
+			answer["parents"] = []map[string]string{{"sha": strings.Repeat("f", 40)}}
+		}
+		f.write(w, http.StatusOK, answer)
 	case r.Method == http.MethodPost && rest == "/git/blobs":
 		content, _ := body["content"].(string)
 		sha := blobSHA1(content)
@@ -195,6 +249,11 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 			f.fail(w, http.StatusUnprocessableEntity, "Object does not exist")
 		default:
 			f.refs[name] = sha
+			f.refWrites[name]++
+			if f.dropRef {
+				dropAnswer(w)
+				return
+			}
 			f.write(w, http.StatusCreated, f.refJSON(name, sha))
 		}
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/compare/"):
@@ -249,6 +308,11 @@ func (f *GitHub) updateRefs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.refs[name] = update.AfterOid
+	f.refWrites[name]++
+	if f.dropRef {
+		dropAnswer(w)
+		return
+	}
 	f.write(w, http.StatusOK, map[string]any{"data": map[string]any{"updateRefs": map[string]string{"clientMutationId": input.ClientMutationID}}})
 }
 
@@ -394,6 +458,18 @@ func (f *GitHub) pullJSON(p *PullRequest) map[string]any {
 
 func (f *GitHub) listPulls(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	if raw := q.Get("head"); raw != "" {
+		_, head, _ := strings.Cut(raw, ":")
+		f.pullReads[head]++
+	}
+	if f.pullMode == ReadbackInconclusive {
+		f.fail(w, http.StatusServiceUnavailable, "Read-back unavailable")
+		return
+	}
+	if f.pullMode == ReadbackAbsent {
+		f.write(w, http.StatusOK, []any{})
+		return
+	}
 	state := q.Get("state")
 	if state == "" {
 		state = "open"
@@ -403,7 +479,11 @@ func (f *GitHub) listPulls(w http.ResponseWriter, r *http.Request) {
 		p := f.pulls[i]
 		if (q.Get("head") == "" || q.Get("head") == f.owner+":"+p.Head) &&
 			(q.Get("base") == "" || q.Get("base") == p.Base) && (state == "all" || state == p.State) {
-			out = append(out, f.pullJSON(p))
+			answer := f.pullJSON(p)
+			if f.pullMode == ReadbackMismatch {
+				answer["draft"] = !p.Draft
+			}
+			out = append(out, answer)
 		}
 	}
 	f.write(w, http.StatusOK, out)
@@ -428,6 +508,11 @@ func (f *GitHub) createPull(w http.ResponseWriter, body map[string]any) {
 	}
 	p := &PullRequest{Number: int64(len(f.pulls) + 1), Title: title, Body: text, Head: head, Base: base, HeadSHA: headSHA, Draft: draft, State: "open"}
 	f.pulls = append(f.pulls, p)
+	f.pullWrites[head]++
+	if f.dropPull {
+		dropAnswer(w)
+		return
+	}
 	f.write(w, http.StatusCreated, f.pullJSON(p))
 }
 
@@ -444,6 +529,85 @@ func (f *GitHub) MarkReady(number int64) {
 
 // URL returns the local REST server origin.
 func (f *GitHub) URL() string { return f.server.URL }
+
+// Name is the fixture repository name.
+func (f *GitHub) Name() string { return f.name }
+
+// BaseSHA is the current main branch head.
+func (f *GitHub) BaseSHA() string { return f.Head("main") }
+
+// HeadSHA is the current head for a branch.
+func (f *GitHub) HeadSHA(head string) string { return f.Head(head) }
+
+// AppliedRef counts successful provider ref writes for the full ref name.
+func (f *GitHub) AppliedRef(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refWrites[head]
+}
+
+// AppliedPull counts successful provider pull creation writes for a branch.
+func (f *GitHub) AppliedPull(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pullWrites[head]
+}
+
+// RefReads counts provider ref readbacks for a branch.
+func (f *GitHub) RefReads(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refReads["heads/"+head]
+}
+
+// PullReads counts provider pull list readbacks for a branch.
+func (f *GitHub) PullReads(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pullReads[head]
+}
+
+// MergeReads counts authoritative pull-number reads for merge reconciliation.
+func (f *GitHub) MergeReads() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mergeReads
+}
+
+// PullNumber returns the pull created from the named fixture branch.
+func (f *GitHub) PullNumber(head string) int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, p := range f.pulls {
+		if p.Head == head {
+			return p.Number
+		}
+	}
+	f.t.Fatalf("missing fake pull for %s", head)
+	return 0
+}
+
+// SetApplyThenDrop drops the response after a successful ref or pull write.
+func (f *GitHub) SetApplyThenDrop(ref, pull bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dropRef, f.dropPull = ref, pull
+}
+
+// SetReadback controls provider read visibility without changing provider state.
+func (f *GitHub) SetReadback(branch, pull ReadbackMode) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.branchMode, f.pullMode = branch, pull
+}
+
+// dropAnswer closes the connection after an applied write.
+func dropAnswer(w http.ResponseWriter) {
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err == nil {
+		_ = conn.Close()
+	}
+}
 
 // Owner is the fixture repository's owner.
 func (f *GitHub) Owner() string { return f.owner }
@@ -542,11 +706,24 @@ func (f *GitHub) completeMerge(p *PullRequest) {
 	f.refs["heads/"+p.Base] = sha
 }
 func (f *GitHub) getPull(w http.ResponseWriter, raw string) {
+	f.mergeReads++
+	if f.pullMode == ReadbackInconclusive {
+		f.fail(w, http.StatusServiceUnavailable, "Read-back unavailable")
+		return
+	}
+	if f.pullMode == ReadbackAbsent {
+		f.fail(w, http.StatusNotFound, "Not Found")
+		return
+	}
 	n, err := strconv.ParseInt(raw, 10, 64)
 	if err == nil {
 		for _, p := range f.pulls {
 			if p.Number == n {
-				f.write(w, http.StatusOK, f.pullJSON(p))
+				answer := f.pullJSON(p)
+				if f.pullMode == ReadbackMismatch {
+					answer["head"].(map[string]any)["sha"] = strings.Repeat("f", 40)
+				}
+				f.write(w, http.StatusOK, answer)
 				return
 			}
 		}
@@ -586,6 +763,10 @@ func (f *GitHub) mergePull(w http.ResponseWriter, r *http.Request, raw string, b
 		case "merged":
 			f.completeMerge(p)
 			details["sha"] = p.MergeCommitSHA
+		}
+		if f.dropPull {
+			dropAnswer(w)
+			return
 		}
 		f.write(w, status, map[string]any{"status": f.mergeMode, "details": details})
 		return

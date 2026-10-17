@@ -156,4 +156,15 @@ func TestPostgresActivityRuntimePollAndSignedIngress(t *testing.T) {
 	if err != nil || len(observations) != 1 || observations[0].ActorLogin != "outside-user" {
 		t.Fatalf("signed actor attribution: items=%+v error=%v", observations, err)
 	}
+	disabled := false
+	a.sources[0].Enabled = &disabled
+	a.pollOnce(context.Background())
+	coverage, err = a.trail.CoverageMap(context.Background(), scope)
+	if err != nil || coverage.Enabled || coverage.Class != activitytrail.CoverageUnmanaged {
+		t.Fatalf("disabled source classification: coverage=%+v error=%v", coverage, err)
+	}
+	observations, _, err = a.trail.ListObservations(context.Background(), scope, activitytrail.Page{})
+	if err != nil || len(observations) != 1 {
+		t.Fatalf("disabled source lost history: items=%+v error=%v", observations, err)
+	}
 }

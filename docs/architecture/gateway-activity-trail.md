@@ -45,15 +45,15 @@ supplies tenant and workspace; the request supplies only the canonical
 default page size 50, maximum 100, and an opaque scope-bound cursor. The owner
 exception projection represents each stored observed-only fact as `change made
 outside HELM`; it does not assert that another system lacked a governed
-attempt. The package and handler require separate runtime migration, provider
-poll scheduling, signed internal ingress, and handler registration before they
-serve production traffic. There is no public activity write RPC.
+attempt. The gateway migration, runtime poller, optional signed internal
+ingress, and authenticated read handler are mounted in the gateway process.
+There is no public activity write RPC.
 
-## Runtime handoff
+## Runtime wiring
 
 The migration command calls `activitytrail.Migrate(ctx, db)` after
 `admission.Migrate(ctx, db)`. Runtime construction uses
-`activitytrail.New(db, githubAPIURL, httpClient)`. Register
+`activitytrail.New(db, githubAPIURL, httpClient)` and registers
 `(&server.ActivityServer{Trail: trail, Auth: authenticator}).Handler()` on the
 existing authenticated gateway mux. The generated Go client is
 `gatewayv1.NewActivityTrailServiceClient(httpClient, gatewayURL)` with methods
@@ -61,10 +61,21 @@ existing authenticated gateway mux. The generated Go client is
 types are `GetCoverageRequest`, `ListObservationsRequest`, and
 `ListOwnerExceptionsRequest`; responses use the matching `Response` suffix.
 
-An internal source runner supplies an authenticated `Scope` and a
-repository-scoped `TokenSource` to `Enable`, `PollDefaultBranch`, and
-`PollRepositoryEvents`. If an existing signed internal GitHub delivery path is
-available, it calls `IngestSignedPush` with its verified tenant/workspace
-mapping, event type, delivery ID, signature, original body, and shared secret.
-That path must not accept tenant or workspace from the GitHub body. Runtime
-registration and provider credentials are separate integration work.
+The operator supplies `gateway.activity.sourcesFile` as JSON with a `sources`
+array. Each entry has `tenant_id`, `workspace_id`, `repository` in
+`github.com/{owner}/{repo}` form, and an explicit `enabled` boolean. The
+gateway binds each source to the existing GitHub App installation allowlist,
+mints a repository-scoped read token, establishes a baseline for new or
+re-enabled sources, and polls the default branch and repository events. A
+disabled entry preserves prior observations; removing an entry leaves its
+stored classification unchanged. The poll interval defaults to one minute and
+can be set with `gateway.activity.pollInterval` from 15 seconds to one hour.
+
+If `gateway.activity.webhookSecretKey` names a key in the gateway GitHub App
+secret, the main gateway listener accepts `POST /internal/github/activity`.
+The handler verifies the GitHub HMAC against the original body before reading
+provider identity. It maps the signed repository to the operator-configured
+tenant/workspace scopes and calls `IngestSignedPush`; tenant and workspace never
+come from the GitHub body. The deployment network policy controls which peers
+can reach the listener. A missing webhook secret leaves the ingress unmounted;
+polling and read RPCs still operate.

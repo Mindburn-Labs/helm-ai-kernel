@@ -27,8 +27,8 @@ func newGitHubClient(baseURL string, client *http.Client) (*githubClient, error)
 		baseURL = "https://api.github.com"
 	}
 	u, err := url.Parse(baseURL)
-	if err != nil || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
-		return nil, errors.New("GitHub API URL must be an absolute origin")
+	if err != nil || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/" && u.Path != "/api/v3") || u.RawQuery != "" || u.Fragment != "" {
+		return nil, errors.New("GitHub API URL must be an absolute API root")
 	}
 	if u.Scheme != "https" {
 		ip := net.ParseIP(u.Hostname())

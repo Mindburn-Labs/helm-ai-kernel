@@ -1,0 +1,11 @@
+{{- if and .Values.gateway.enabled .Values.gateway.activity.sourcesFile }}
+{{- include "helm-ai-kernel.gatewayValidate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "helm-ai-kernel.gatewayName" . }}-activity-sources
+  labels:
+    {{- include "helm-ai-kernel.gatewayLabels" . | nindent 4 }}
+data:
+  sources.json: {{ .Values.gateway.activity.sourcesFile | quote }}
+{{- end }}

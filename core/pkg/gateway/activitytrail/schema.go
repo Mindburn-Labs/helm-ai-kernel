@@ -63,3 +63,16 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	}
 	return tx.Commit()
 }
+
+// Ready checks the activity journal without performing DDL. The runtime role
+// only needs SELECT on this journal.
+func Ready(ctx context.Context, db *sql.DB) error {
+	var version int
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM gateway_activity_schema_migrations`).Scan(&version); err != nil {
+		return err
+	}
+	if version != 1 {
+		return fmt.Errorf("activity trail schema at version %d, want 1", version)
+	}
+	return nil
+}

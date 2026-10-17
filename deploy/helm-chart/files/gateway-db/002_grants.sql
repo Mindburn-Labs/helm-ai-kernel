@@ -20,6 +20,8 @@
 --                                   is never updated). ADR-0004 amendment
 --                                   of 2026-09-26.
 --   gateway_schema_migrations       SELECT (/readyz compares the version)
+--   gateway_activity_schema_migrations SELECT (/readyz compares the version)
+--   gateway_activity_* data tables  SELECT, INSERT, UPDATE; no DELETE
 --
 --   River's tables (HELM-751 s3b; `helm-gateway migrate` creates them and
 --   the job worker inside `serve` uses them):
@@ -59,6 +61,8 @@ BEGIN
     LOOP
         privileges := CASE
             WHEN t.relname = 'gateway_schema_migrations' THEN 'SELECT'
+            WHEN t.relname = 'gateway_activity_schema_migrations' THEN 'SELECT'
+            WHEN t.relname IN ('gateway_activity_sources', 'gateway_activity_observations', 'gateway_activity_evidence') THEN 'SELECT, INSERT, UPDATE'
             WHEN t.relname IN ('authority_postings', 'authority_distinct_values', 'authority_provision_limits') THEN 'SELECT, INSERT'
             WHEN t.relname = 'authority_token_replay' THEN 'SELECT, INSERT, DELETE'
             WHEN t.relname LIKE 'authority\_%' THEN 'SELECT, INSERT, UPDATE'

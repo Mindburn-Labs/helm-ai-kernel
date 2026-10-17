@@ -258,6 +258,9 @@ func (f *GitHub) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/compare/"):
 		f.compare(w, strings.TrimPrefix(rest, "/compare/"))
+	case r.Method == http.MethodGet && rest == "/events":
+		w.Header().Set("X-Poll-Interval", "60")
+		f.write(w, http.StatusOK, []any{})
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/pulls/"):
 		f.getPull(w, strings.TrimPrefix(rest, "/pulls/"))
 	case r.Method == http.MethodPut && strings.HasPrefix(rest, "/pulls/") && strings.HasSuffix(rest, "/merge-async"):

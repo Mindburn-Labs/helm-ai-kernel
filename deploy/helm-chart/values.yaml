@@ -477,6 +477,13 @@ gateway:
     # HELM_GATEWAY_GITHUB_API_URL: GitHub Enterprise Server's API root
     # (https). Empty uses https://api.github.com.
     apiURL: ""
+  # Observed-only activity sources. Each source is an operator-bound
+  # tenant/workspace/repository mapping; disabled entries retain history.
+  activity:
+    sourcesFile: ""
+    pollInterval: "1m"
+    # Optional key in gateway.github.existingSecret for signed push deliveries.
+    webhookSecretKey: ""
   networkPolicy:
     enabled: true
     # The API port admits these peers only. Set one or both; together they

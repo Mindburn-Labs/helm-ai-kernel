@@ -84,9 +84,30 @@ tool_golangci() {
 }
 
 tool_govulncheck() {
-    local dir="$TOOLS/govulncheck-$GOVULNCHECK_VERSION"
-    [ -x "$dir/govulncheck" ] || GOBIN="$dir" GOWORK=off go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION" >&2
-    echo "$dir/govulncheck"
+    local go_version goos goarch dir binary build_info
+    go_version="$(go env GOVERSION)"
+    goos="$(go env GOOS)"
+    goarch="$(go env GOARCH)"
+    # A govulncheck built with an older Go parser can still pass the Go 1.25
+    # positive control while failing to load newer source modules. Cache by
+    # build toolchain and reject a stale or otherwise mismatched executable.
+    dir="$TOOLS/govulncheck-$GOVULNCHECK_VERSION-$go_version-$goos-$goarch"
+    binary="$dir/govulncheck"
+    if [ ! -x "$binary" ]; then
+        mkdir -p "$dir"
+        GOBIN="$dir" GOWORK=off go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION" >&2
+    fi
+    build_info="$(go version -m "$binary")" || { echo "::error::cannot inspect govulncheck build info: $binary" >&2; return 1; }
+    if [ "${build_info%%$'\n'*}" != "$binary: $go_version" ] ||
+       ! printf '%s\n' "$build_info" | awk -F '\t' '$2 == "path" && $3 == "golang.org/x/vuln/cmd/govulncheck" { found = 1 } END { exit !found }' ||
+       ! printf '%s\n' "$build_info" | awk -F '\t' -v version="$GOVULNCHECK_VERSION" '$2 == "mod" && $3 == "golang.org/x/vuln" && $4 == version { found = 1 } END { exit !found }' ||
+       ! printf '%s\n' "$build_info" | awk -F '\t' -v os="$goos" '$2 == "build" && $3 == "GOOS=" os { found = 1 } END { exit !found }' ||
+       ! printf '%s\n' "$build_info" | awk -F '\t' -v arch="$goarch" '$2 == "build" && $3 == "GOARCH=" arch { found = 1 } END { exit !found }'; then
+        echo "::error::cached govulncheck is not $GOVULNCHECK_VERSION built with $go_version for $goos/$goarch: $binary" >&2
+        return 1
+    fi
+    echo "govulncheck tool: $GOVULNCHECK_VERSION built with $go_version for $goos/$goarch ($binary)" >&2
+    echo "$binary"
 }
 
 tool_pip_audit() {
@@ -205,19 +226,37 @@ gate_govulncheck() {
     printf 'module example.com/govulncheckcontrol\n\ngo 1.25\n\nrequire golang.org/x/text v0.3.6\n' >"$control/go.mod"
     printf 'package main\n\nimport "golang.org/x/text/language"\n\nfunc main() { _, _ = language.Parse("en") }\n' >"$control/main.go"
     (cd "$control" && GOWORK=off GOFLAGS=-mod=mod go mod tidy >/dev/null 2>&1) || control_failed govulncheck "could not resolve the fixture module"
-    (cd "$control" && GOWORK=off "$govulncheck" -format json ./... >"$WORK/govulncheck-control.json") || true
+    local scan_rc
+    if (cd "$control" && GOWORK=off "$govulncheck" -format json ./... >"$WORK/govulncheck-control.json"); then
+        :
+    else
+        scan_rc=$?
+        control_failed govulncheck "scanner exited $scan_rc on the fixture"
+    fi
     local called
-    called="$(python3 "$FINDINGS" govulncheck-called "$WORK/govulncheck-control.json" | tr '\n' ' ')"
+    called="$(python3 "$FINDINGS" govulncheck-called "$WORK/govulncheck-control.json" | tr '\n' ' ')" || control_failed govulncheck "the fixture report was incomplete"
     case " $called" in *" GO-2021-0113 "*) ;; *) control_failed govulncheck "GO-2021-0113 in the fixture was not reported (got: $called)" ;; esac
     echo "govulncheck control: flagged $called"
 
-    local modules status=0 count=0
+    local modules status=0 count=0 completed=0
     modules="$(git -C "$ROOT" ls-files ':(glob)**/go.mod' | xargs -n1 dirname | sort -u)"
     for module in $modules; do
         count=$((count + 1))
         echo "==> govulncheck $module"
-        (cd "$ROOT/$module" && GOWORK=off "$govulncheck" -format json ./... >"$WORK/govulncheck.json") || true
-        called="$(python3 "$FINDINGS" govulncheck-called "$WORK/govulncheck.json")" || { status=1; continue; }
+        if (cd "$ROOT/$module" && GOWORK=off "$govulncheck" -format json ./... >"$WORK/govulncheck.json"); then
+            :
+        else
+            scan_rc=$?
+            echo "::error::govulncheck $module exited $scan_rc; module scan incomplete" >&2
+            status=1
+            continue
+        fi
+        called="$(python3 "$FINDINGS" govulncheck-called "$WORK/govulncheck.json")" || {
+            echo "::error::govulncheck $module produced an incomplete report" >&2
+            status=1
+            continue
+        }
+        completed=$((completed + 1))
         if [ -n "$called" ]; then
             echo "::error::$module calls vulnerable code: $(echo "$called" | tr '\n' ' ')"
             (cd "$ROOT/$module" && GOWORK=off "$govulncheck" ./...) || true
@@ -225,7 +264,7 @@ gate_govulncheck() {
         fi
     done
     [ "$count" -gt 0 ] || { echo "::error::no go.mod files found"; exit 2; }
-    echo "govulncheck: $count module(s) scanned"
+    echo "govulncheck: $completed/$count module(s) completed"
     return "$status"
 }
 

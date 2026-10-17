@@ -58,6 +58,16 @@ func (c *client) repoPath(suffix string) string {
 	return "/repos/" + c.repo.Owner + "/" + c.repo.Name + suffix
 }
 
+// graphqlURL resolves the GraphQL endpoint from the configured REST root.
+// Enterprise Server serves REST under /api/v3 and GraphQL under /api/graphql.
+func (c *client) graphqlURL() string {
+	root := strings.TrimRight(c.a.baseURL, "/")
+	if strings.HasSuffix(root, "/api/v3") {
+		return strings.TrimSuffix(root, "/api/v3") + "/api/graphql"
+	}
+	return root + "/graphql"
+}
+
 // call sends one request and decodes a 2xx JSON answer into out. limit bounds
 // the bytes read from the answer, whatever its status (09-04).
 func (c *client) call(ctx context.Context, method, path string, query url.Values, in, out any, limit int64) error {
@@ -70,6 +80,9 @@ func (c *client) call(ctx context.Context, method, path string, query url.Values
 		body = bytes.NewReader(raw)
 	}
 	u := c.a.baseURL + path
+	if path == "/graphql" {
+		u = c.graphqlURL()
+	}
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}

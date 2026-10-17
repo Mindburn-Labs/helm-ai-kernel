@@ -270,8 +270,8 @@ type GitHubPullRequestResult struct {
 	BaseRef        string `json:"base_ref"`
 	Draft          bool   `json:"draft"`
 	State          string `json:"state"`
-	Merged         bool   `json:"merged"`
-	MergeCommitSHA string `json:"merge_commit_sha"`
+	Merged         bool   `json:"merged,omitempty"`
+	MergeCommitSHA string `json:"merge_commit_sha,omitempty"`
 }
 
 // GitHubBranchResult mirrors helm.gateway.v1.GitHubBranchResult.

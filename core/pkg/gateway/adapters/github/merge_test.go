@@ -7,15 +7,16 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/testkit/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github/githubtest"
 )
 
-func mergeFixture(t *testing.T) (*githubtest.GitHub, *qualEnv, adapters.Effect, int64) {
+func mergeFixture(t *testing.T) (*testkit.GitHub, *qualEnv, adapters.Effect, int64) {
 	t.Helper()
-	f := githubtest.New(t)
+	f := testkit.New(t)
 	e := &qualEnv{baseURL: f.URL(), owner: f.Owner(), repo: f.Repository(), token: f.Token(), baseBranch: "main", baseSHA: f.Head("main"), headPrefix: "helm/merge/"}
 	_, pr := e.createPullRequest(t, "approved")
 	f.MarkReady(pr.Number)
@@ -24,6 +25,22 @@ func mergeFixture(t *testing.T) (*githubtest.GitHub, *qualEnv, adapters.Effect, 
 		t.Fatal(err)
 	}
 	return f, e, adapters.Effect{EffectType: EffectPullRequestMerge, Target: e.target(), Arguments: raw}, pr.Number
+}
+
+func TestMergeQualificationWaitsForDelayedAuthoritativeReadback(t *testing.T) {
+	f, env, effect, number := mergeFixture(t)
+	f.SetMergeMode("pending")
+	a, _ := env.adapter(nil)
+	wantDispatch(t, a.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchSent, "")
+	wantObserve(t, a.Observe(context.Background(), env.creds(), effect), adapters.OutcomeUnknown, "")
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		f.CompleteMerge(number)
+		close(done)
+	}()
+	wantObserve(t, awaitMergedReadback(a, env, effect), adapters.OutcomeSucceeded, "")
+	<-done
 }
 
 func TestPullRequestMergeQueueAcknowledgementIsNotSuccess(t *testing.T) {
@@ -82,14 +99,14 @@ func TestPullRequestMergeLostOrOversizedAnswerReconcilesWithoutAnotherWrite(t *t
 }
 
 func TestPullRequestMergeScopeDriftNeverWrites(t *testing.T) {
-	mutations := map[string]func(*githubtest.PullRequest){
-		"head":            func(p *githubtest.PullRequest) { p.HeadSHA = strings.Repeat("a", 40) },
-		"base":            func(p *githubtest.PullRequest) { p.Base = "other" },
-		"draft":           func(p *githubtest.PullRequest) { p.Draft = true },
-		"fork":            func(p *githubtest.PullRequest) { p.HeadRepository = "attacker/fork" },
-		"base repository": func(p *githubtest.PullRequest) { p.BaseRepository = "other/repository" },
-		"stack":           func(p *githubtest.PullRequest) { p.Stack = json.RawMessage(`{"count":2}`) },
-		"malformed stack": func(p *githubtest.PullRequest) { p.Stack = json.RawMessage(`false`) },
+	mutations := map[string]func(*testkit.PullRequest){
+		"head":            func(p *testkit.PullRequest) { p.HeadSHA = strings.Repeat("a", 40) },
+		"base":            func(p *testkit.PullRequest) { p.Base = "other" },
+		"draft":           func(p *testkit.PullRequest) { p.Draft = true },
+		"fork":            func(p *testkit.PullRequest) { p.HeadRepository = "attacker/fork" },
+		"base repository": func(p *testkit.PullRequest) { p.BaseRepository = "other/repository" },
+		"stack":           func(p *testkit.PullRequest) { p.Stack = json.RawMessage(`{"count":2}`) },
+		"malformed stack": func(p *testkit.PullRequest) { p.Stack = json.RawMessage(`false`) },
 	}
 	for name, change := range mutations {
 		t.Run(name, func(t *testing.T) {
@@ -222,7 +239,7 @@ func TestPullRequestMergeExistingPendingMustMatchApprovedOptions(t *testing.T) {
 
 func TestPullRequestMergeClosedWithoutMergeFails(t *testing.T) {
 	f, e, effect, number := mergeFixture(t)
-	f.EditPull(number, func(p *githubtest.PullRequest) { p.State = "closed" })
+	f.EditPull(number, func(p *testkit.PullRequest) { p.State = "closed" })
 	a, _ := e.adapter(nil)
 	wantObserve(t, a.Observe(context.Background(), e.creds(), effect), adapters.OutcomeFailed, contracts.ReasonReadbackMismatch)
 	wantDispatch(t, a.Dispatch(context.Background(), e.creds(), effect, permit(effect)), adapters.DispatchNotSent, contracts.ReasonPreconditionFailed)
@@ -232,7 +249,7 @@ func TestPullRequestMergeClosedWithoutMergeFails(t *testing.T) {
 }
 
 func TestReadyPullRequestIsDistinctAndReplaysWithoutDuplicate(t *testing.T) {
-	f := githubtest.New(t)
+	f := testkit.New(t)
 	e := &qualEnv{baseURL: f.URL(), owner: f.Owner(), repo: f.Repository(), token: f.Token(), baseBranch: "main", baseSHA: f.Head("main"), headPrefix: "helm/create/"}
 	head := e.head("ready")
 	_, branch := e.createBranch(t, head, skeletonFiles...)

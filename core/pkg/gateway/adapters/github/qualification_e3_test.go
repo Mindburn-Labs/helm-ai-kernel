@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
@@ -53,6 +54,26 @@ func init() {
 	}
 }
 
+// A pending or queued answer is never success. Live qualification waits for
+// an actual merged PR readback, with a bound so a stuck queue cannot pass.
+func awaitMergedReadback(a *Adapter, env *qualEnv, effect adapters.Effect) adapters.ObserveResult {
+	deadline := time.NewTimer(90 * time.Second)
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer deadline.Stop()
+	defer tick.Stop()
+	for {
+		got := a.Observe(context.Background(), env.creds(), effect)
+		if got.Outcome != adapters.OutcomeUnknown || got.Reason != "" {
+			return got
+		}
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			return got
+		}
+	}
+}
+
 // Each merge uses its own disposable base branch. Adapter qualification never
 // changes the sandbox's default branch; default-branch rules are a separate
 // governed end-to-end gate. The live run must explicitly authorize merges.
@@ -88,7 +109,7 @@ func qualifyMergeHappy(t *testing.T, env *qualEnv) {
 		t.Fatalf("merge preparation: %+v %v", prepared, err)
 	}
 	wantDispatch(t, a.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchSent, "")
-	got := a.Observe(context.Background(), env.creds(), effect)
+	got := awaitMergedReadback(a, env, effect)
 	wantObserve(t, got, adapters.OutcomeSucceeded, "")
 	if pr := got.Observation.GitHubPullRequest; !pr.Merged || pr.State != "closed" || !shaRE.MatchString(pr.MergeCommitSHA) {
 		t.Fatalf("no actual merged-commit readback: %+v", pr)
@@ -99,11 +120,11 @@ func qualifyMergeDuplicate(t *testing.T, env *qualEnv) {
 	effect := env.mergeEffect(t, "duplicate")
 	a, _ := env.adapter(nil)
 	wantDispatch(t, a.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchSent, "")
-	first := a.Observe(context.Background(), env.creds(), effect)
+	first := awaitMergedReadback(a, env, effect)
 	wantObserve(t, first, adapters.OutcomeSucceeded, "")
 	a, sent := env.adapter(nil)
 	wantDispatch(t, a.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchSent, "")
-	got := a.Observe(context.Background(), env.creds(), effect)
+	got := awaitMergedReadback(a, env, effect)
 	wantObserve(t, got, adapters.OutcomeSucceeded, "")
 	if sent.nonRead.Load() != 0 || got.Observation.GitHubPullRequest.MergeCommitSHA != first.Observation.GitHubPullRequest.MergeCommitSHA {
 		t.Fatal("merged retry wrote again or changed the observed commit")
@@ -117,7 +138,7 @@ func qualifyMergeLost(t *testing.T, env *qualEnv) {
 	})
 	wantDispatch(t, lossy.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchIndefinite, contracts.ReasonProviderError)
 	a, _ := env.adapter(nil)
-	wantObserve(t, a.Observe(context.Background(), env.creds(), effect), adapters.OutcomeSucceeded, "")
+	wantObserve(t, awaitMergedReadback(a, env, effect), adapters.OutcomeSucceeded, "")
 }
 
 func qualifyMergeRevoked(t *testing.T, env *qualEnv) {
@@ -176,7 +197,7 @@ func qualifyMergeOversized(t *testing.T, env *qualEnv) {
 	wantDispatch(t, padded.Dispatch(context.Background(), env.creds(), effect, permit(effect)), adapters.DispatchIndefinite, contracts.ReasonProviderResponseTooLarge)
 	wantObserve(t, tiny.Observe(context.Background(), env.creds(), effect), adapters.OutcomeUnknown, contracts.ReasonProviderResponseTooLarge)
 	a, _ := env.adapter(nil)
-	wantObserve(t, a.Observe(context.Background(), env.creds(), effect), adapters.OutcomeSucceeded, "")
+	wantObserve(t, awaitMergedReadback(a, env, effect), adapters.OutcomeSucceeded, "")
 }
 
 func qualifyMergePermit(t *testing.T, env *qualEnv) {

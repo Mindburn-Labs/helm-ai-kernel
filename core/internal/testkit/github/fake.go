@@ -1,13 +1,12 @@
-// Package githubtest provides the single in-process GitHub API double for
+// Package testkit provides the single in-process GitHub API double for
 // adapter and gateway conformance. It has no external credentials or I/O.
-package githubtest
+package testkit
 
 import (
 	"crypto/sha1" //nolint:gosec // git object IDs
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -66,7 +65,7 @@ type PullRequest struct {
 
 func New(t testing.TB) *GitHub {
 	f := &GitHub{
-		t: t, owner: "mindburn-qual", name: "sandbox", token: "ghs_fake_installation_token", mergeMode: "enqueued",
+		t: t, owner: "mindburn-qual", name: "sandbox", token: "test-token", mergeMode: "enqueued",
 		blobs: map[string]string{}, trees: map[string]map[string]fakeEntry{},
 		commits: map[string]fakeCommit{}, refs: map[string]string{},
 	}
@@ -80,12 +79,12 @@ func New(t testing.TB) *GitHub {
 }
 
 func fakeID(parts ...string) string {
-	h := sha1.New() //nolint:gosec // made-up object IDs
-	for _, p := range parts {
-		io.WriteString(h, p)
-		h.Write([]byte{0})
+	data := ""
+	if len(parts) > 0 {
+		data = strings.Join(parts, "\x00") + "\x00"
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	sum := sha1.Sum([]byte(data)) //nolint:gosec // made-up object IDs
+	return hex.EncodeToString(sum[:])
 }
 
 func (f *GitHub) putTree(entries map[string]fakeEntry) string {

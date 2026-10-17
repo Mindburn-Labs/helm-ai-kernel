@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/testkit/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github/githubtest"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/qualification"
 )
 
@@ -651,10 +651,10 @@ func TestQualificationSuiteIsImplemented(t *testing.T) {
 // TestQualificationFake runs the suite against the httptest GitHub. It is
 // the qualification record for the environment "fake", and it must qualify.
 func TestQualificationFake(t *testing.T) {
-	fake := githubtest.New(t)
+	fake := testkit.New(t)
 	fake.SetMergeMode("merged")
 	env := &qualEnv{
-		name:    "fake: httptest GitHub (core/pkg/gateway/adapters/github/githubtest/fake.go)",
+		name:    "fake: httptest GitHub (core/internal/testkit/github/fake.go)",
 		baseURL: fake.URL(), owner: fake.Owner(), repo: fake.Repository(), token: fake.Token(),
 		baseBranch: "main", baseSHA: fake.Head("main"), headPrefix: "helm/qual/",
 		limitations: []string{
@@ -662,7 +662,7 @@ func TestQualificationFake(t *testing.T) {
 		},
 		markReady: func(t *testing.T, pr *adapters.GitHubPullRequestResult) { fake.MarkReady(pr.Number) },
 		markDraft: func(t *testing.T, pr *adapters.GitHubPullRequestResult) {
-			fake.EditPull(pr.Number, func(p *githubtest.PullRequest) { p.Draft = true })
+			fake.EditPull(pr.Number, func(p *testkit.PullRequest) { p.Draft = true })
 		},
 		allowMerge: true,
 	}

@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mindburn-Labs/helm-ai-kernel/core/internal/testkit/github"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/contracts"
 	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters"
-	"github.com/Mindburn-Labs/helm-ai-kernel/core/pkg/gateway/adapters/github/githubtest"
 )
 
-func pushFixture(t *testing.T) (*githubtest.GitHub, *qualEnv, adapters.Effect) {
+func pushFixture(t *testing.T) (*testkit.GitHub, *qualEnv, adapters.Effect) {
 	t.Helper()
-	fake := githubtest.New(t)
+	fake := testkit.New(t)
 	env := &qualEnv{baseURL: fake.URL(), owner: fake.Owner(), repo: fake.Repository(), token: fake.Token(), baseBranch: "main", baseSHA: fake.Head("main"), headPrefix: "helm/push/"}
 	head := env.head("work")
 	_, initial := env.createBranch(t, head, skeletonFiles...)
@@ -106,7 +106,7 @@ func TestGitPushPermitMismatchAndLostAnswer(t *testing.T) {
 
 type moveBeforeMutation struct {
 	base   http.RoundTripper
-	fake   *githubtest.GitHub
+	fake   *testkit.GitHub
 	head   string
 	rewind bool
 }

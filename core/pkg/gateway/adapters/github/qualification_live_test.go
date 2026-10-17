@@ -98,7 +98,11 @@ func (l liveAPI) do(t *testing.T, method, path string, in, out any) {
 		raw, _ := json.Marshal(in)
 		body = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(context.Background(), method, l.base+path, body)
+	endpoint := l.base + path
+	if path == "/graphql" {
+		endpoint = (&client{a: New(WithBaseURL(l.base))}).graphqlURL()
+	}
+	req, err := http.NewRequestWithContext(context.Background(), method, endpoint, body)
 	if err != nil {
 		t.Fatal(err)
 	}

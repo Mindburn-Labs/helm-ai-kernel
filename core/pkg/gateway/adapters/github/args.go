@@ -320,10 +320,6 @@ func parseBranchArgsFor(effectType string, raw []byte) (branchArgs, error) {
 	return a, nil
 }
 
-func parsePullRequestArgs(raw []byte) (pullRequestArgs, error) {
-	return parsePullRequestArgsFor(EffectPullRequestCreateDraft, raw)
-}
-
 func parsePullRequestArgsFor(effectType string, raw []byte) (pullRequestArgs, error) {
 	if effectType != EffectPullRequestCreateDraft && effectType != EffectPullRequestCreate {
 		return pullRequestArgs{}, schemaViolation("not a pull request create effect")

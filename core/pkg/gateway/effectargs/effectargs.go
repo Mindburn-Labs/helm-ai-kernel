@@ -287,10 +287,6 @@ var (
 // also as bytes).
 const maxContentBytes = 49152
 
-func (a BranchCreateFromChanges) validate() error {
-	return a.validateSchema("helm.github.branch.create_from_changes.v1")
-}
-
 func (a BranchCreateFromChanges) validateSchema(schema string) error {
 	if err := constant("schema", a.Schema, schema); err != nil {
 		return err
@@ -366,10 +362,6 @@ func (a ModelInferenceArgs) validate(target string) error {
 		return invalid("stream is required")
 	}
 	return nil
-}
-
-func (a PullRequestCreateDraft) validate() error {
-	return a.validateSchema("helm.github.pull_request.create_draft.v1")
 }
 
 func (a PullRequestCreateDraft) validateSchema(schema string) error {

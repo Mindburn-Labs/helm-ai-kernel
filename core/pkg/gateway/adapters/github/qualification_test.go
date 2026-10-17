@@ -467,7 +467,7 @@ var qualCases = map[string]qualCase{
 		if env.readyPullRequests {
 			args, _ = parsePullRequestArgsFor(EffectPullRequestCreate, effect.Arguments)
 		} else {
-			args, _ = parsePullRequestArgs(effect.Arguments)
+			args, _ = parsePullRequestArgsFor(EffectPullRequestCreateDraft, effect.Arguments)
 		}
 		retitled := env.pullRequestEffect(args.Head, args.HeadSHA, "another title")
 		got := a.Observe(context.Background(), env.creds(), retitled)

@@ -36,7 +36,7 @@ func TestSchemaExamples(t *testing.T) {
 		parse := func() error { _, err := parseBranchArgs(raw); return err }
 		switch {
 		case strings.HasPrefix(name, "pull_request_create_draft"):
-			parse = func() error { _, err := parsePullRequestArgs(raw); return err }
+			parse = func() error { _, err := parsePullRequestArgsFor(EffectPullRequestCreateDraft, raw); return err }
 		case strings.HasPrefix(name, "pull_request_create"):
 			parse = func() error { _, err := parsePullRequestArgsFor(EffectPullRequestCreate, raw); return err }
 		case strings.HasPrefix(name, "pull_request_merge"):
@@ -68,7 +68,7 @@ func TestArgumentRulesBeyondTheSchema(t *testing.T) {
 	if _, err := parseBranchArgs([]byte(validBranch)); err != nil {
 		t.Fatalf("the valid branch: %v", err)
 	}
-	if _, err := parsePullRequestArgs([]byte(validPullRequest)); err != nil {
+	if _, err := parsePullRequestArgsFor(EffectPullRequestCreateDraft, []byte(validPullRequest)); err != nil {
 		t.Fatalf("the valid pull request: %v", err)
 	}
 	branch := func(old, new string) string { return strings.Replace(validBranch, old, new, 1) }
@@ -109,7 +109,7 @@ func TestArgumentRulesBeyondTheSchema(t *testing.T) {
 	} {
 		var err error
 		if strings.Contains(raw, "pull_request") {
-			_, err = parsePullRequestArgs([]byte(raw))
+			_, err = parsePullRequestArgsFor(EffectPullRequestCreateDraft, []byte(raw))
 		} else {
 			_, err = parseBranchArgs([]byte(raw))
 		}

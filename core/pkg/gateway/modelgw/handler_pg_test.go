@@ -161,10 +161,13 @@ func TestPostgresAnthropicStreamPassesThroughAndSettles(t *testing.T) {
 
 	// One settled attempt: the reported usage consumed, the rest released.
 	a := e.onlyAttempt()
+	// The attempt key follows the original client intent. The request digest
+	// inside its model arguments still follows the exact forwarded body.
+	keyDigest := sha256hex([]byte("anthropic-messages\x00work-ep-1\x00" + messagesRequest))
 	digest := sha256hex([]byte(wantBody))
 	if a.State != "SETTLED" || a.Outcome != "SUCCEEDED" || a.EffectType != "model.inference" || a.Target != routeSonnet ||
 		a.RequesterPrincipalID != "agt:seat-1" || a.RequesterActorID != cpActor || a.CaseID != "work-ep-1" ||
-		a.IdempotencyKey != "mi:ep-1:"+digest+":0" {
+		a.IdempotencyKey != "mi:ep-1:"+keyDigest+":0" {
 		t.Fatalf("attempt = %+v", a)
 	}
 	sonnet, _ := e.cfg.Resolve("anthropic-messages", "claude-sonnet-5-5")
@@ -396,11 +399,12 @@ func TestPostgresDeniedCallsReachNoProvider(t *testing.T) {
 	e.anthropic.on(sseHandler(anthropicStream))
 	e.openai.on(sseHandler(chatDone))
 
-	// A budget that cannot cover the worst case: 403 with the registry reason,
-	// and the denial is an attempt on the record.
+	// An explicit maximum that the budget cannot cover is denied with the
+	// registry reason and an attempt on the record.
 	small := newEnv(t, 1000) // the worst case of a default call is far above 1000 micros
 	small.anthropic.on(sseHandler(anthropicStream))
-	r := post(t, small.worker.URL, "/v1/messages", workerHeaders(tokenAgent), messagesRequest)
+	r := post(t, small.worker.URL, "/v1/messages", workerHeaders(tokenAgent),
+		strings.Replace(messagesRequest, `"stream":true`, `"max_tokens":8192,"stream":true`, 1))
 	if r.Status != 403 || r.Header.Get("X-Helm-Reason-Code") != string(contracts.ReasonBudgetExceeded) ||
 		!strings.Contains(string(r.Body), `"type":"error"`) || !strings.Contains(string(r.Body), `"permission_error"`) || !strings.Contains(string(r.Body), "BUDGET_EXCEEDED") {
 		t.Fatalf("budget: %s %v", r, r.Header)
@@ -415,7 +419,7 @@ func TestPostgresDeniedCallsReachNoProvider(t *testing.T) {
 		t.Fatalf("a denial held budget: used %d reserved %d", used, reserved)
 	}
 	// The same on an OpenAI API: OpenAI's error shape, the reason as the code.
-	r = post(t, small.worker.URL, "/v1/chat/completions", bearerHeader(tokenAgent), `{"model":"gpt-6-sol","messages":[]}`)
+	r = post(t, small.worker.URL, "/v1/chat/completions", bearerHeader(tokenAgent), `{"model":"gpt-6-sol","messages":[],"max_completion_tokens":8192}`)
 	if r.Status != 403 || !strings.Contains(string(r.Body), `"code":"BUDGET_EXCEEDED"`) || !strings.HasPrefix(string(r.Body), `{"error":{`) {
 		t.Fatalf("budget on chat: %s", r)
 	}

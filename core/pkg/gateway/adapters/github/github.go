@@ -112,6 +112,7 @@ var declarations = []adapters.Declaration{
 		Description:    "Creates a branch from a base commit with one commit that adds or changes files.",
 		ArgumentSchema: schemaOf(EffectBranchCreateFromChanges),
 		Grantable:      true,
+		Quote:          []adapters.Amount{{Unit: "count", Amount: 1}},
 	},
 	{
 		EffectType: EffectPullRequestCreateDraft,
@@ -129,6 +130,7 @@ var declarations = []adapters.Declaration{
 		Description:    "Opens a draft pull request from an existing branch.",
 		ArgumentSchema: schemaOf(EffectPullRequestCreateDraft),
 		Grantable:      true,
+		Quote:          []adapters.Amount{{Unit: "count", Amount: 1}},
 	},
 	{
 		EffectType:     EffectRepositoryGet,

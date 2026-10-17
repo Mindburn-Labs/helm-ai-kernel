@@ -1,4 +1,4 @@
-package github
+package testkit
 
 import (
 	"crypto/sha1" //nolint:gosec // git object IDs
@@ -14,26 +14,43 @@ import (
 	"testing"
 )
 
-// fakeGitHub is an httptest GitHub that models the REST endpoints the adapter
+// FakeGitHub is an httptest GitHub that models the REST endpoints the adapter
 // uses, with git's content addressing for blobs: a blob's ID is its real
 // SHA-1, so the adapter's blob checks are exercised for real. Trees and
 // commits get stable made-up IDs, and every commit is unique, as on GitHub,
 // where the commit time is part of the ID.
-type fakeGitHub struct {
+type FakeGitHub struct {
 	t      *testing.T
 	owner  string
 	name   string
 	token  string
 	server *httptest.Server
 
-	mu      sync.Mutex
-	blobs   map[string]string
-	trees   map[string]map[string]fakeEntry
-	commits map[string]fakeCommit
-	refs    map[string]string // "heads/x" -> commit
-	pulls   []*fakePull
-	seq     int
+	mu                   sync.Mutex
+	blobs                map[string]string
+	trees                map[string]map[string]fakeEntry
+	commits              map[string]fakeCommit
+	refs                 map[string]string // "heads/x" -> commit
+	pulls                []*fakePull
+	seq                  int
+	refWrites            map[string]int
+	pullWrites           map[string]int
+	refReads             map[string]int
+	pullReads            map[string]int
+	dropRef, dropPull    bool
+	branchMode, pullMode ReadbackMode
 }
+
+// ReadbackMode controls only provider visibility after a dispatch. The fake
+// keeps its applied state even when an answer is dropped or a read is hidden.
+type ReadbackMode string
+
+const (
+	ReadbackNormal       ReadbackMode = "normal"
+	ReadbackAbsent       ReadbackMode = "absent"
+	ReadbackMismatch     ReadbackMode = "mismatch"
+	ReadbackInconclusive ReadbackMode = "inconclusive"
+)
 
 type fakeEntry struct{ Mode, Blob string }
 
@@ -53,11 +70,17 @@ type fakePull struct {
 	State      string
 }
 
-func newFakeGitHub(t *testing.T) *fakeGitHub {
-	f := &fakeGitHub{
-		t: t, owner: "mindburn-qual", name: "sandbox", token: "ghs_fake_installation_token",
+func NewFakeGitHub(t *testing.T) *FakeGitHub {
+	return NewFakeGitHubFor(t, "mindburn-qual", "sandbox")
+}
+
+func NewFakeGitHubFor(t *testing.T, owner, name string) *FakeGitHub {
+	f := &FakeGitHub{
+		t: t, owner: owner, name: name, token: "ghs_fake_installation_token",
 		blobs: map[string]string{}, trees: map[string]map[string]fakeEntry{},
 		commits: map[string]fakeCommit{}, refs: map[string]string{},
+		refWrites: map[string]int{}, pullWrites: map[string]int{},
+		refReads: map[string]int{}, pullReads: map[string]int{},
 	}
 	readme := "# sandbox\n"
 	f.blobs[blobSHA1(readme)] = readme
@@ -66,6 +89,68 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	return f
+}
+
+func (f *FakeGitHub) URL() string   { return f.server.URL }
+func (f *FakeGitHub) Owner() string { return f.owner }
+func (f *FakeGitHub) Name() string  { return f.name }
+func (f *FakeGitHub) Token() string { return f.token }
+
+func (f *FakeGitHub) BaseSHA() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refs["heads/main"]
+}
+
+func (f *FakeGitHub) AppliedRef(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refWrites[head]
+}
+
+func (f *FakeGitHub) AppliedPull(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pullWrites[head]
+}
+
+func (f *FakeGitHub) RefReads(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refReads["heads/"+head]
+}
+
+func (f *FakeGitHub) PullReads(head string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pullReads[head]
+}
+
+func (f *FakeGitHub) SetApplyThenDrop(ref, pull bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dropRef, f.dropPull = ref, pull
+}
+
+func (f *FakeGitHub) SetReadback(branch, pull ReadbackMode) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.branchMode, f.pullMode = branch, pull
+}
+
+func (f *FakeGitHub) HeadSHA(head string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refs["heads/"+head]
+}
+
+// dropAnswer closes the HTTP connection after state was applied and before a
+// response is sent, exercising the adapter's ambiguous-write classification.
+func dropAnswer(w http.ResponseWriter) {
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err == nil {
+		_ = conn.Close()
+	}
 }
 
 func fakeID(parts ...string) string {
@@ -77,7 +162,14 @@ func fakeID(parts ...string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (f *fakeGitHub) putTree(entries map[string]fakeEntry) string {
+func blobSHA1(content string) string {
+	h := sha1.New() //nolint:gosec // git object IDs
+	fmt.Fprintf(h, "blob %d\x00", len(content))
+	h.Write([]byte(content))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (f *FakeGitHub) putTree(entries map[string]fakeEntry) string {
 	paths := make([]string, 0, len(entries))
 	for p := range entries {
 		paths = append(paths, p)
@@ -92,14 +184,14 @@ func (f *fakeGitHub) putTree(entries map[string]fakeEntry) string {
 	return id
 }
 
-func (f *fakeGitHub) putCommit(c fakeCommit) string {
+func (f *FakeGitHub) putCommit(c fakeCommit) string {
 	f.seq++
 	id := fakeID(append([]string{"commit", c.Tree, c.Message, fmt.Sprint(f.seq)}, c.Parents...)...)
 	f.commits[id] = c
 	return id
 }
 
-func (f *fakeGitHub) write(w http.ResponseWriter, status int, v any) {
+func (f *FakeGitHub) write(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
@@ -107,11 +199,11 @@ func (f *fakeGitHub) write(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-func (f *fakeGitHub) fail(w http.ResponseWriter, status int, msg string) {
+func (f *FakeGitHub) fail(w http.ResponseWriter, status int, msg string) {
 	f.write(w, status, map[string]string{"message": msg, "documentation_url": "https://docs.github.com/rest"})
 }
 
-func (f *fakeGitHub) repoJSON() map[string]any {
+func (f *FakeGitHub) repoJSON() map[string]any {
 	return map[string]any{
 		"id": 1, "node_id": "R_kgDOfake", "name": f.name, "full_name": f.owner + "/" + f.name,
 		"private": true, "default_branch": "main", "visibility": "private",
@@ -120,7 +212,7 @@ func (f *fakeGitHub) repoJSON() map[string]any {
 	}
 }
 
-func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
+func (f *FakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Authorization") != "Bearer "+f.token {
 		f.fail(w, http.StatusUnauthorized, "Bad credentials")
 		return
@@ -145,6 +237,17 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 		f.write(w, http.StatusOK, f.repoJSON())
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/git/ref/"):
 		name := strings.TrimPrefix(rest, "/git/ref/")
+		f.refReads[name]++
+		if name != "heads/main" {
+			switch f.branchMode {
+			case ReadbackAbsent:
+				f.fail(w, http.StatusNotFound, "Not Found")
+				return
+			case ReadbackInconclusive:
+				f.fail(w, http.StatusServiceUnavailable, "Read-back unavailable")
+				return
+			}
+		}
 		sha, ok := f.refs[name]
 		if !ok {
 			f.fail(w, http.StatusNotFound, "Not Found")
@@ -158,7 +261,11 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 			f.fail(w, http.StatusNotFound, "Not Found")
 			return
 		}
-		f.write(w, http.StatusOK, f.commitJSON(sha, c))
+		answer := f.commitJSON(sha, c)
+		if f.branchMode == ReadbackMismatch && sha != f.refs["heads/main"] {
+			answer["parents"] = []map[string]string{{"sha": strings.Repeat("f", 40)}}
+		}
+		f.write(w, http.StatusOK, answer)
 	case r.Method == http.MethodPost && rest == "/git/blobs":
 		content, _ := body["content"].(string)
 		sha := blobSHA1(content)
@@ -181,6 +288,11 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 			f.fail(w, http.StatusUnprocessableEntity, "Object does not exist")
 		default:
 			f.refs[name] = sha
+			f.refWrites[name]++
+			if f.dropRef {
+				dropAnswer(w)
+				return
+			}
 			f.write(w, http.StatusCreated, f.refJSON(name, sha))
 		}
 	case r.Method == http.MethodGet && strings.HasPrefix(rest, "/compare/"):
@@ -194,7 +306,7 @@ func (f *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *fakeGitHub) refJSON(name, sha string) map[string]any {
+func (f *FakeGitHub) refJSON(name, sha string) map[string]any {
 	return map[string]any{
 		"ref": "refs/" + name, "node_id": "REF_fake",
 		"url":    f.server.URL + "/repos/" + f.owner + "/" + f.name + "/git/refs/" + name,
@@ -202,7 +314,7 @@ func (f *fakeGitHub) refJSON(name, sha string) map[string]any {
 	}
 }
 
-func (f *fakeGitHub) commitJSON(sha string, c fakeCommit) map[string]any {
+func (f *FakeGitHub) commitJSON(sha string, c fakeCommit) map[string]any {
 	parents := []map[string]string{}
 	for _, p := range c.Parents {
 		parents = append(parents, map[string]string{"sha": p})
@@ -216,7 +328,7 @@ func (f *fakeGitHub) commitJSON(sha string, c fakeCommit) map[string]any {
 	}
 }
 
-func (f *fakeGitHub) createTree(w http.ResponseWriter, body map[string]any) {
+func (f *FakeGitHub) createTree(w http.ResponseWriter, body map[string]any) {
 	baseTree, _ := body["base_tree"].(string)
 	base, ok := f.trees[baseTree]
 	if !ok {
@@ -242,7 +354,7 @@ func (f *fakeGitHub) createTree(w http.ResponseWriter, body map[string]any) {
 	f.write(w, http.StatusCreated, map[string]any{"sha": f.putTree(entries), "truncated": false})
 }
 
-func (f *fakeGitHub) createCommit(w http.ResponseWriter, body map[string]any) {
+func (f *FakeGitHub) createCommit(w http.ResponseWriter, body map[string]any) {
 	tree, _ := body["tree"].(string)
 	message, _ := body["message"].(string)
 	if _, ok := f.trees[tree]; !ok {
@@ -266,7 +378,7 @@ func (f *fakeGitHub) createCommit(w http.ResponseWriter, body map[string]any) {
 
 // compare diffs the two commits' trees, as GitHub's three-dot comparison
 // does when base is the merge base.
-func (f *fakeGitHub) compare(w http.ResponseWriter, spec string) {
+func (f *FakeGitHub) compare(w http.ResponseWriter, spec string) {
 	baseSHA, headSHA, ok := strings.Cut(spec, "...")
 	base, okBase := f.commits[baseSHA]
 	head, okHead := f.commits[headSHA]
@@ -311,7 +423,7 @@ func (f *fakeGitHub) compare(w http.ResponseWriter, spec string) {
 	})
 }
 
-func (f *fakeGitHub) pullJSON(p *fakePull) map[string]any {
+func (f *FakeGitHub) pullJSON(p *fakePull) map[string]any {
 	full := f.owner + "/" + f.name
 	return map[string]any{
 		"url":      f.server.URL + "/repos/" + full + "/pulls/" + fmt.Sprint(p.Number),
@@ -326,7 +438,19 @@ func (f *fakeGitHub) pullJSON(p *fakePull) map[string]any {
 	}
 }
 
-func (f *fakeGitHub) listPulls(w http.ResponseWriter, r *http.Request) {
+func (f *FakeGitHub) listPulls(w http.ResponseWriter, r *http.Request) {
+	if raw := r.URL.Query().Get("head"); raw != "" {
+		_, head, _ := strings.Cut(raw, ":")
+		f.pullReads[head]++
+	}
+	if f.pullMode == ReadbackInconclusive {
+		f.fail(w, http.StatusServiceUnavailable, "Read-back unavailable")
+		return
+	}
+	if f.pullMode == ReadbackAbsent {
+		f.write(w, http.StatusOK, []any{})
+		return
+	}
 	q := r.URL.Query()
 	state := q.Get("state")
 	if state == "" {
@@ -337,13 +461,17 @@ func (f *fakeGitHub) listPulls(w http.ResponseWriter, r *http.Request) {
 		p := f.pulls[i]
 		if (q.Get("head") == "" || q.Get("head") == f.owner+":"+p.Head) &&
 			(q.Get("base") == "" || q.Get("base") == p.Base) && (state == "all" || state == p.State) {
-			out = append(out, f.pullJSON(p))
+			answer := f.pullJSON(p)
+			if f.pullMode == ReadbackMismatch {
+				answer["draft"] = false
+			}
+			out = append(out, answer)
 		}
 	}
 	f.write(w, http.StatusOK, out)
 }
 
-func (f *fakeGitHub) createPull(w http.ResponseWriter, body map[string]any) {
+func (f *FakeGitHub) createPull(w http.ResponseWriter, body map[string]any) {
 	title, _ := body["title"].(string)
 	text, _ := body["body"].(string)
 	head, _ := body["head"].(string)
@@ -362,11 +490,16 @@ func (f *fakeGitHub) createPull(w http.ResponseWriter, body map[string]any) {
 	}
 	p := &fakePull{Number: int64(len(f.pulls) + 1), Title: title, Body: text, Head: head, Base: base, HeadSHA: headSHA, Draft: draft, State: "open"}
 	f.pulls = append(f.pulls, p)
+	f.pullWrites[head]++
+	if f.dropPull {
+		dropAnswer(w)
+		return
+	}
 	f.write(w, http.StatusCreated, f.pullJSON(p))
 }
 
 // markReady turns a draft into a ready pull request, as a person would.
-func (f *fakeGitHub) markReady(number int64) {
+func (f *FakeGitHub) MarkReady(number int64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, p := range f.pulls {
